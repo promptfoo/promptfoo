@@ -453,9 +453,9 @@ const BEDROCK_INVOKE_PRICING_MODEL_PREFIXES = [
   'openai.gpt-oss-',
 ] as const;
 
-/** Only the documented US and global Grok 4.6 Runtime inference profiles. */
-export function isBedrockGrok46Profile(modelId: string): boolean {
-  return /(?:^|inference-profile\/)(?:us|global)\.xai\.grok-4\.6$/.test(modelId.toLowerCase());
+/** The documented US and global Grok 4.6/4.7 Runtime inference profiles. */
+export function isBedrockGrokRuntimeProfile(modelId: string): boolean {
+  return /(?:^|inference-profile\/)(?:us|global)\.xai\.grok-4\.[67]$/.test(modelId.toLowerCase());
 }
 
 /**
@@ -489,7 +489,12 @@ export function calculateBedrockCost(
   );
   const glm53 = /(?:^|inference-profile\/)(us|global)\.zai\.glm-5\.3$/.exec(normalizedModelId);
   if (grok47 || kimi3 || glm53) {
-    if (grok47 && cacheWriteTokens > 0) {
+    // Kimi Priority/Flex are supported only on Responses and Chat Completions,
+    // not the native Converse/Invoke paths priced here.
+    if (
+      (kimi3 && serviceTier?.type && serviceTier.type !== 'default') ||
+      (grok47 && cacheWriteTokens > 0)
+    ) {
       return undefined;
     }
     const globalProfile = (grok47 ?? kimi3 ?? glm53)?.[1] === 'global';
@@ -510,7 +515,7 @@ export function calculateBedrockCost(
       multiplier
     );
   }
-  if (isBedrockGrok46Profile(normalizedModelId)) {
+  if (isBedrockGrokRuntimeProfile(normalizedModelId)) {
     // AWS publishes Standard rates for these profiles, with a separate cached-input rate.
     // No other service tier or cache-write price is established by the model card.
     if ((serviceTier?.type && serviceTier.type !== 'default') || cacheWriteTokens > 0) {
@@ -597,7 +602,7 @@ export function calculateBedrockInvokeModelCost(
     return undefined;
   }
   if (
-    !isBedrockGrok46Profile(normalizedModelId) &&
+    !isBedrockGrokRuntimeProfile(normalizedModelId) &&
     !isClaudeFableOrMythos5Model(normalizedModelId) &&
     !isClaudeOpus5Model(normalizedModelId) &&
     !isClaudeOpus55Model(normalizedModelId) &&

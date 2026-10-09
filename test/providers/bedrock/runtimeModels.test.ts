@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { AwsBedrockConverseProvider } from '../../../src/providers/bedrock/converse';
-import { BEDROCK_MODEL, getHandlerForModel } from '../../../src/providers/bedrock/index';
+import {
+  AwsBedrockCompletionProvider,
+  BEDROCK_MODEL,
+  getHandlerForModel,
+} from '../../../src/providers/bedrock/index';
 import { calculateBedrockCost, getBedrockPricing } from '../../../src/providers/bedrock/pricing';
 import { isRejectedPrefixedGrokId } from '../../../src/providers/bedrock/routing';
 import { awsProviderFactories } from '../../../src/providers/families/aws';
@@ -23,6 +27,20 @@ describe('Bedrock Runtime model compatibility', () => {
     },
   );
 
+  it.each(['us', 'global'])(
+    'loads bare and explicit completion Grok 4.7 profiles for %s',
+    async (geo) => {
+      for (const prefix of ['', 'completion:']) {
+        const provider = await factory.create(
+          `bedrock:${prefix}${geo}.xai.grok-4.7`,
+          {},
+          {} as never,
+        );
+        expect(provider).toBeInstanceOf(AwsBedrockCompletionProvider);
+      }
+    },
+  );
+
   it.each(['', 'completion:', 'converse:', 'responses:', 'mantle:'])(
     'explains the required Grok 4.7 profile for the %s bare selector',
     async (selector) => {
@@ -33,6 +51,8 @@ describe('Bedrock Runtime model compatibility', () => {
   );
 
   it.each([
+    'us.xai.grok-4.7',
+    'global.xai.grok-4.7',
     'us.zai.glm-5.3',
     'global.zai.glm-5.3',
     'us.moonshotai.kimi-k3',
@@ -58,6 +78,10 @@ describe('Bedrock Runtime model compatibility', () => {
   );
 });
 
+it('includes the India Kimi profile in the bare-ID correction', () => {
+  expect(() => getHandlerForModel('moonshotai.kimi-k3')).toThrow('bedrock:in.moonshotai.kimi-k3');
+});
+
 describe('Bedrock Runtime pricing', () => {
   it.each([
     ['us.xai.grok-4.7', 2.2, 6.6, 0.55, 0],
@@ -73,6 +97,12 @@ describe('Bedrock Runtime pricing', () => {
       ['priority', 1.75],
       ['flex', 0.5],
     ] as const) {
+      if (model.includes('kimi-k3') && type !== 'default') {
+        expect(
+          calculateBedrockCost(model, 800, 500, 200, 0, 'us-east-1', { type }),
+        ).toBeUndefined();
+        continue;
+      }
       const writes = write > 0 ? 100 : 0;
       const expected =
         ((800 * input + 500 * output + 200 * read + writes * write) / 1e6) * multiplier;

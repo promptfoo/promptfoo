@@ -4011,6 +4011,8 @@ describe('AwsBedrockCompletionProvider', () => {
   });
 
   it.each([
+    ['us.xai.grok-4.7', 2.2, 6.6, 0.55],
+    ['global.xai.grok-4.7', 2, 6, 0.5],
     ['us.xai.grok-4.6', 2.2, 6.6, 0.55],
     ['global.xai.grok-4.6', 2, 6, 0.5],
   ])('prices %s InvokeModel cached input once', async (modelId, input, output, cacheRead) => {
@@ -4032,6 +4034,26 @@ describe('AwsBedrockCompletionProvider', () => {
     expect(response.output).toBe('ok');
     expect(response.tokenUsage?.prompt).toBe(1000);
     expect(response.cost).toBeCloseTo((800 * input + 200 * cacheRead + 500 * output) / 1e6, 12);
+  });
+
+  it('leaves Grok 4.7 Invoke cost unknown when AWS reports unpriced cache writes', async () => {
+    const json = JSON.stringify({
+      choices: [{ message: { content: 'ok' } }],
+      usage: {
+        prompt_tokens: 1000,
+        completion_tokens: 50,
+        prompt_tokens_details: { cached_tokens: 200, cache_write_tokens: 100 },
+      },
+    });
+    mockInvokeModel.mockResolvedValueOnce({
+      body: Object.assign(new TextEncoder().encode(json), { transformToString: () => json }),
+    });
+    const provider = new AwsBedrockCompletionProvider('us.xai.grok-4.7', {
+      config: { region: 'us-east-1' },
+    });
+    const response = await provider.callApi('hello');
+    expect(response.output).toBe('ok');
+    expect(response.cost).toBeUndefined();
   });
 
   it('calculates regional pricing for Claude Fable 5 Runtime responses', async () => {

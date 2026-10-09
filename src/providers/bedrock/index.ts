@@ -20,7 +20,7 @@ import {
 } from '../anthropic/util';
 import { parseChatPrompt } from '../shared';
 import { AwsBedrockGenericProvider, type BedrockOptions, createBedrockCacheKeyHash } from './base';
-import { calculateBedrockInvokeModelCost, isBedrockGrok46Profile } from './pricing';
+import { calculateBedrockInvokeModelCost, isBedrockGrokRuntimeProfile } from './pricing';
 import { requiresBedrockAnthropicMessagesModel } from './routing';
 import { INFERENCE_PROFILE_PREFIX, novaOutputFromMessage, novaParseMessages } from './util';
 
@@ -2489,6 +2489,8 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
 
   // Z.AI GLM
   // GLM 5.3 and Kimi K3 require Runtime cross-region inference profiles.
+  'us.xai.grok-4.7': BEDROCK_MODEL.OPENAI_COMPAT,
+  'global.xai.grok-4.7': BEDROCK_MODEL.OPENAI_COMPAT,
   'us.zai.glm-5.3': BEDROCK_MODEL.OPENAI_COMPAT,
   'global.zai.glm-5.3': BEDROCK_MODEL.OPENAI_COMPAT,
   'zai.glm-5': BEDROCK_MODEL.OPENAI_COMPAT,
@@ -2698,13 +2700,9 @@ export function getHandlerForModel(
   if (modelName === 'zai.glm-5.3' || modelName === 'moonshotai.kimi-k3') {
     throw new Error(
       `Amazon Bedrock model "${modelName}" requires a cross-region inference profile. ` +
-        `Use "bedrock:us.${modelName}" or "bedrock:global.${modelName}" in a supported region.`,
-    );
-  }
-  if (/^(?:us|global)\.xai\.grok-4\.7$/.test(modelName)) {
-    throw new Error(
-      `Amazon Bedrock model "${modelName}" supports Converse, not InvokeModel. ` +
-        `Use "bedrock:converse:${modelName}".`,
+        `Use "bedrock:us.${modelName}" or "bedrock:global.${modelName}"` +
+        (modelName === 'moonshotai.kimi-k3' ? ` or "bedrock:in.${modelName}"` : '') +
+        ' in a supported region.',
     );
   }
   if (modelName.startsWith('ai21.')) {
@@ -2963,13 +2961,13 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
       // needs the API's uncached input count because cache tokens are priced separately.
       const cacheReadInputTokens =
         tokenUsage.completionDetails?.cacheReadInputTokens ??
-        (isBedrockGrok46Profile(this.modelName)
+        (isBedrockGrokRuntimeProfile(this.modelName)
           ? coerceStrToNum(output.usage?.prompt_tokens_details?.cached_tokens)
           : coerceStrToNum(output.usage?.cache_read_input_tokens));
       const billablePromptTokens =
         model === BEDROCK_MODEL.CLAUDE_MESSAGES
           ? coerceStrToNum(output.usage?.input_tokens ?? output.usage?.prompt_tokens)
-          : isBedrockGrok46Profile(this.modelName) && tokenUsage.prompt !== undefined
+          : isBedrockGrokRuntimeProfile(this.modelName) && tokenUsage.prompt !== undefined
             ? Math.max(tokenUsage.prompt - (cacheReadInputTokens ?? 0), 0)
             : tokenUsage.prompt;
       const cost = calculateBedrockInvokeModelCost(
@@ -2978,7 +2976,11 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
         tokenUsage.completion,
         cacheReadInputTokens,
         tokenUsage.completionDetails?.cacheCreationInputTokens ??
-          coerceStrToNum(output.usage?.cache_creation_input_tokens),
+          coerceStrToNum(
+            isBedrockGrokRuntimeProfile(this.modelName)
+              ? output.usage?.prompt_tokens_details?.cache_write_tokens
+              : output.usage?.cache_creation_input_tokens,
+          ),
         region,
         coerceStrToNum(output.usage?.cache_creation?.ephemeral_1h_input_tokens),
       );
