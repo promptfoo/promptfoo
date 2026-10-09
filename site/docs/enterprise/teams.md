@@ -62,38 +62,35 @@ Always verify your team context with `promptfoo auth whoami` before sharing eval
 
 ## Track OpenAI spend by team on-prem
 
-On-prem teams can use separate OpenAI API projects to track test generation and grading spend and set project-level alerts. Configure each team's Red Team Provider with a key from its OpenAI project. Requests are billed to the key's OpenAI project. This key is separate from the Promptfoo API key used to log in or upload results.
+On-prem teams can use separate OpenAI API projects to track test generation and grading spend and set project-level alerts. Configure each team's inference providers with a key from its OpenAI project. Requests are billed to the key's OpenAI project. This key is separate from the Promptfoo API key used to log in or upload results.
 
 :::note
-These instructions apply to Promptfoo Enterprise On-Prem versions with team-level Red Team Provider overrides. They do not describe managed Promptfoo Cloud billing. If the controls below are missing, check your permissions and installed version with your administrator or Promptfoo support.
+These instructions apply to Promptfoo Enterprise On-Prem versions with team inference-provider overrides. They do not describe managed Promptfoo Cloud billing. If the controls below are missing, check your permissions and installed version with your administrator or Promptfoo support.
 :::
 
 ### Configure team credentials
 
 1. Create an OpenAI API project for each internal team and an API key scoped to that project. A [project-owned service account](https://developers.openai.com/api/docs/guides/terraform/service-accounts) can provide credentials for automated runs.
-2. As a Promptfoo administrator, open **Organization → Global Providers → Red Team Provider** and enable the team under **Team-level overrides**. You can also enable **Let this team configure its own Red Team Provider** in the team's settings.
-
-   ![Team-level Red Team Provider overrides enabled for Customer Support and disabled for Platform Engineering](/img/enterprise-docs/team-provider-overrides.png)
-
-3. Select the team and open **Red Team Provider** in the sidebar. Choose the OpenAI provider and the model for your red-team workflow.
+2. As a Promptfoo organization administrator, open the team's settings under **Organization → Teams**, enable **Allow custom inference providers**, and save.
+3. Select the team, open **Team Inference** in the sidebar, and select the **Red Team Provider** tab. Choose the OpenAI provider and the model for your red-team workflow.
 4. Under **Advanced Configuration → API Key**, select a team secret containing that project's key, or enter the key directly, then save. Editing requires permission to update providers as well as an enabled team override.
 
 Repeat for each team. A shared deployment-level `OPENAI_API_KEY` alone does not separate spend by team. Changing only the [target's credentials](./red-teams.md#creating-targets) also does not configure the models used for test generation and grading.
 
-For automation, see **Get team red team provider override** and **Update team red team provider override** in the [API reference](/docs/api-reference/) for the provider configuration schema and permissions.
+For automation, see **Get team inference provider overrides** and **Update team inference provider override** in the [API reference](/docs/api-reference/) for the provider configuration schema and permissions.
 
 ### Check generation and grading overrides
 
-The team's Red Team Provider supplies generation and grading unless a separate global provider is configured for that role:
+For each role, enabled team settings take precedence over global settings:
 
-| Workflow        | Provider used                                                                             |
-| --------------- | ----------------------------------------------------------------------------------------- |
-| Test generation | Global **Test Generation Provider**, otherwise the team's effective **Red Team Provider** |
-| Grading         | Global **Grading Provider**, otherwise the team's effective **Red Team Provider**         |
+| Workflow        | Provider selection, in priority order                                                                                                                     |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Test generation | Team **Test Generation Provider** → team **Red Team Provider** → global **Test Generation Provider** → global **Red Team Provider** → deployment defaults |
+| Grading         | Team **Grading Provider** → team **Red Team Provider** → global **Grading Provider** → global **Red Team Provider** → deployment defaults                 |
 
-The effective Red Team Provider is the team's saved override when enabled, otherwise the global Red Team Provider. Deployment-level OpenAI defaults can be used when neither is configured.
+A team Red Team Provider can supply both roles with the same project credentials. To use different models or credentials, save the corresponding **Test Generation Provider** or **Grading Provider** tab under **Team Inference**. If team overrides are disabled, the saved team settings are ignored.
 
-To inherit each team's credentials, leave the separate global generation and grading providers unset. Review existing settings with the administrator before changing them because they affect other teams. Also check explicit scan or grader overrides. Other workflows, such as translation and agent features, can use their own providers.
+Review explicit scan or grader overrides as well. Translation, guardrails, and agent features have their own provider settings. Changing global settings affects teams that inherit them.
 
 ### Verify usage and set alerts
 
@@ -101,7 +98,7 @@ Run a small scan with fresh generation and grading requests for each team, then 
 
 Configure [project spend alerts in OpenAI](https://developers.openai.com/api/docs/guides/terraform/rate-limits-and-spend), with the desired thresholds and recipients. Alerts notify you; [hard spend limits](https://developers.openai.com/api/docs/guides/spend-limits) are a separate control. Promptfoo's [cost estimates](/docs/providers/openai/#cost-estimates) are not a billing record.
 
-If usage appears in a shared project, check the global role overrides, active team, saved team credentials, and any gateway that replaces credentials. For integrations requiring an explicit project header, the OpenAI provider supports `config.headers["OpenAI-Project"]`; see [connection settings](/docs/providers/openai/#connection-settings). The credential must be authorized for that project.
+If usage appears in a shared project, check the selected role, whether team overrides are enabled, the saved scan's team, its team credentials, and any gateway that replaces credentials. For integrations requiring an explicit project header, the OpenAI provider supports `config.headers["OpenAI-Project"]`; see [connection settings](/docs/providers/openai/#connection-settings). The credential must be authorized for that project.
 
 ## Creating Roles
 
