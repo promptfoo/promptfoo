@@ -997,6 +997,41 @@ describe('assertionFromString', () => {
     // This is especially important to test with the nullish coalescing operator (??),
     // since it behaves differently than logical OR (||) for the value 0
   });
+
+  it('should keep colon-qualified assertion types instead of folding them into the shorter type', () => {
+    // `similar` is a prefix of `similar:cosine`, `similar:dot`, and `similar:euclidean`.
+    // A left-to-right alternation lets `similar` consume the metric as the expected value.
+    expect(assertionFromString('similar:cosine:The expected output')).toEqual({
+      type: 'similar:cosine',
+      value: 'The expected output',
+    });
+    expect(assertionFromString('similar:dot(0.8):The expected output')).toEqual({
+      type: 'similar:dot',
+      value: 'The expected output',
+      threshold: 0.8,
+    });
+    expect(assertionFromString('similar:euclidean(0.5):The expected output')).toEqual({
+      type: 'similar:euclidean',
+      value: 'The expected output',
+      threshold: 0.5,
+    });
+    expect(assertionFromString('not-similar:euclidean:The expected output')).toEqual({
+      type: 'not-similar:euclidean',
+      value: 'The expected output',
+    });
+    expect(assertionFromString('trajectory:tool-used:search')).toEqual({
+      type: 'trajectory:tool-used',
+      value: 'search',
+    });
+  });
+
+  it('should not treat a similar value that starts with a metric name as a metric type', () => {
+    expect(assertionFromString('similar:cosine similarity text')).toEqual({
+      type: 'similar',
+      value: 'cosine similarity text',
+      threshold: 0.8,
+    });
+  });
 });
 
 describe('serializeObjectArrayAsCSV', () => {

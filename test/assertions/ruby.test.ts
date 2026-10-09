@@ -3,7 +3,6 @@ import * as path from 'path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { runAssertion } from '../../src/assertions/index';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
-import * as rubyUtils from '../../src/ruby/rubyUtils.js';
 import { runRuby } from '../../src/ruby/rubyUtils.js';
 import { runRubyCode } from '../../src/ruby/wrapper';
 
@@ -48,9 +47,6 @@ describe('Ruby assertions', () => {
     vi.mocked(path.extname).mockReset();
     vi.mocked(runRubyCode).mockReset();
     vi.mocked(runRuby).mockReset();
-    rubyUtils.state.cachedRubyPath = null;
-    rubyUtils.state.validationPromise = null;
-    rubyUtils.state.validatingPath = null;
   };
 
   beforeEach(() => {

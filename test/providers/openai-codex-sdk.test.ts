@@ -11,6 +11,7 @@ import logger from '../../src/logger';
 import { OpenAICodexSDKProvider } from '../../src/providers/openai/codex-sdk';
 import { providerRegistry } from '../../src/providers/providerRegistry';
 import { getTraceparent } from '../../src/tracing/genaiTracer';
+import { getPackageVersion } from '../../src/util/packageVersion';
 import { checkProviderApiKeys } from '../../src/util/provider';
 import { createDeferred, mockProcessEnv } from '../util/utils';
 
@@ -54,6 +55,7 @@ vi.mock('../../src/esm', async (importOriginal) => {
 
 // Mock the SDK package (for type safety)
 vi.mock('@openai/codex-sdk', () => mockCodexSDK);
+vi.mock('../../src/util/packageVersion', () => ({ getPackageVersion: vi.fn() }));
 
 vi.mock('../../src/tracing/genaiTracer', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../src/tracing/genaiTracer')>()),
@@ -144,6 +146,7 @@ describe('OpenAICodexSDKProvider', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(getPackageVersion).mockReturnValue('0.156.1');
     originalBasePath = cliState.basePath;
     cliState.basePath = undefined;
     originalOpenAiApiKey = process.env.OPENAI_API_KEY;
@@ -181,6 +184,18 @@ describe('OpenAICodexSDKProvider', () => {
     restoreEnvVar('CODEX_API_KEY', originalCodexApiKey);
     await clearCache();
   });
+
+  it.each(['0.144.0', '0.157.0', '1.0.0', 'invalid', null])(
+    'rejects incompatible SDK %s before importing it',
+    async (version) => {
+      vi.mocked(getPackageVersion).mockReturnValue(version);
+      const provider = new OpenAICodexSDKProvider({ config: { apiKey: 'test-key' } });
+      const response = await provider.callApi('test');
+      expect(response.error).toContain('requires @openai/codex-sdk@^0.156.1');
+      expect(response.error).toContain('npm install promptfoo @openai/codex-sdk@^0.156.1');
+      expect(importModule).not.toHaveBeenCalled();
+    },
+  );
 
   it.each([false, true])('honors inherit_process_env=%s for file defaults', (inheritProcessEnv) => {
     const provider = new OpenAICodexSDKProvider({ config: {} });
