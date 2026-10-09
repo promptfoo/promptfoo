@@ -3926,6 +3926,41 @@ describe('runAssertion', () => {
       expect(result.pass).toBe(true);
     });
 
+    it.each([
+      { type: 'g-eval', array: false },
+      { type: 'not-g-eval', array: false },
+      { type: 'g-eval', array: true },
+      { type: 'not-g-eval', array: true },
+      { type: 'pi', array: false },
+    ])('renders file criteria for $type (array=$array)', async ({ type, array }) => {
+      const matchers = await import('../../src/matchers/llmGrading');
+      const matcher = type.endsWith('g-eval') ? 'matchesGEval' : 'matchesPiScore';
+      const spy = vi.spyOn(matchers, matcher).mockResolvedValue({
+        pass: true,
+        score: 1,
+        reason: 'graded',
+      });
+      vi.mocked(fs.readFileSync).mockReturnValue('Judge {{topic}}');
+      vi.mocked(path.resolve).mockReturnValue('/base/path/criteria.txt');
+      vi.mocked(path.extname).mockReturnValue('.txt');
+      try {
+        await runAssertion({
+          prompt: 'Question',
+          assertion: {
+            type: type as Assertion['type'],
+            value: array ? ['file://criteria.txt'] : 'file://criteria.txt',
+          },
+          test: { vars: { topic: 'capybaras' } },
+          providerResponse: { output: 'candidate' },
+          provider: createMockProvider(),
+        });
+        expect(spy).toHaveBeenCalledTimes(1);
+        expect(spy.mock.calls[0][0]).toBe('Judge capybaras');
+      } finally {
+        spy.mockRestore();
+      }
+    });
+
     it('should render llm-rubric file references before calling the grader', async () => {
       const capturedPrompt = vi.fn<ApiProvider['callApi']>(async () => ({
         output: JSON.stringify({ pass: true, score: 1, reason: 'graded' }),

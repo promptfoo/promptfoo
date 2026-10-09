@@ -483,6 +483,8 @@ async function runAssertionInternal({
   let renderedValue = assertion.value;
   let valueFromScript: ValueFromScriptType;
   const baseType = getAssertionBaseType(assertion);
+  const renderFileCriteria =
+    MODEL_GRADED_ASSERTION_TYPES.has(baseType) || baseType === 'g-eval' || baseType === 'pi';
   if (typeof renderedValue === 'string') {
     if (renderedValue.startsWith('file://')) {
       const basePath = cliState.basePath || '';
@@ -538,7 +540,7 @@ async function runAssertionInternal({
         }
       } else {
         renderedValue = processFileReference(renderedValue);
-        if (typeof renderedValue === 'string' && MODEL_GRADED_ASSERTION_TYPES.has(baseType)) {
+        if (typeof renderedValue === 'string' && renderFileCriteria) {
           renderedValue = nunjucks.renderString(renderedValue, resolvedVars);
         }
       }
@@ -562,7 +564,7 @@ async function runAssertionInternal({
       if (typeof v === 'string') {
         if (v.startsWith('file://')) {
           const fileValue = processFileReference(v);
-          if (typeof fileValue === 'string' && MODEL_GRADED_ASSERTION_TYPES.has(baseType)) {
+          if (typeof fileValue === 'string' && renderFileCriteria) {
             return nunjucks.renderString(fileValue, resolvedVars);
           }
           return fileValue;
