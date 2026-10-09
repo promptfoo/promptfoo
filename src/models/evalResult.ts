@@ -77,26 +77,25 @@ function projectOutputMetadata<T>(
   responseMetadata: ProviderResponse['metadata'],
   testMetadata?: AtomicTestCase['metadata'],
 ): T {
-  if (options.checkpointOutput && options.stripOutput && !asRecord(metadata)) {
-    return stripMediaReferences(sanitizeForDb(metadata)) as T;
-  }
   const metadataIsMedia =
     options.checkpointOutput &&
     options.stripOutput &&
-    extractBlobHashesFromValue(metadata).length > 0;
+    (options.inheritedMediaOutput || extractBlobHashesFromValue(metadata).length > 0);
   let projected = metadata;
   if (metadataIsMedia) {
-    // A media record can carry bytes under arbitrary payload keys. Keep only
+    // Media output can carry bytes under arbitrary child keys. Keep only
     // an explicitly owned checkpoint wrapper for independent input projection.
-    const record = asRecord(metadata)!;
+    const record = asRecord(metadata);
     projected = (
-      record.interruptedStrategy === true
+      record?.interruptedStrategy === true
         ? {
             interruptedStrategy: true,
             completedTargetResponses: record.completedTargetResponses,
           }
-        : stripMediaReferences(sanitizeForDb(metadata))
+        : '[output stripped]'
     ) as T;
+  } else if (options.checkpointOutput && options.stripOutput && !asRecord(metadata)) {
+    return stripMediaReferences(sanitizeForDb(metadata)) as T;
   } else if (options.stripOutput && metadata && responseMetadata && typeof metadata === 'object') {
     projected = Object.fromEntries(
       Object.entries(metadata).flatMap(([key, value]) => {
@@ -115,6 +114,7 @@ function projectOutputMetadata<T>(
       }),
     ) as T;
   }
+  const childOptions = metadataIsMedia ? { ...options, inheritedMediaOutput: true } : options;
   return mapCompletedTargetResponses(
     sanitizeCompletedTargetResponses(projected),
     (entry) => {
@@ -122,7 +122,9 @@ function projectOutputMetadata<T>(
       // Only prompt/response are declared checkpoint fields. Additional imported
       // fields retain the generic media scrub, including a media-shaped remainder.
       const projectedExtra = options.stripOutput
-        ? stripMediaReferences(sanitizeForDb(extra))
+        ? childOptions.inheritedMediaOutput
+          ? {}
+          : stripMediaReferences(sanitizeForDb(extra))
         : extra;
       return {
         ...(asRecord(projectedExtra) ?? {}),
@@ -130,10 +132,15 @@ function projectOutputMetadata<T>(
           ? { prompt: options.stripPromptText ? '[prompt stripped]' : prompt }
           : {}),
         // Old stored rows and non-persisted JSON/JSONL exports also cross this boundary.
-        response: projectProviderResponse(response, { ...options, checkpointOutput: true })!,
+        response: projectProviderResponse(response, { ...childOptions, checkpointOutput: true })!,
       };
     },
-    options.stripOutput ? (value) => stripMediaReferences(sanitizeForDb(value)) : undefined,
+    options.stripOutput
+      ? (value) =>
+          childOptions.inheritedMediaOutput
+            ? '[output stripped]'
+            : stripMediaReferences(sanitizeForDb(value))
+      : undefined,
   );
 }
 
@@ -142,6 +149,8 @@ interface ResponseProjectionOptions {
   stripOutput: boolean;
   stripPromptText: boolean;
   checkpointOutput?: boolean;
+  // An ancestor was media: child output payloads share its exclusion policy.
+  inheritedMediaOutput?: boolean;
 }
 
 const CHECKPOINT_INPUT_FIELDS = new Set([
@@ -175,7 +184,7 @@ function projectProviderResponse(
   response: ProviderResponse | undefined,
   options: ResponseProjectionOptions,
 ): ProviderResponse | undefined {
-  if (!response) {
+  if (!response || (!asRecord(response) && !options.stripMetadata && !options.stripOutput)) {
     return response;
   }
 
@@ -203,8 +212,13 @@ function projectProviderResponse(
   if (options.stripPromptText && 'prompt' in projectedResponse) {
     projectedResponse.prompt = '[prompt stripped]';
   }
+  const mediaOutput =
+    options.checkpointOutput &&
+    options.stripOutput &&
+    (options.inheritedMediaOutput || extractBlobHashesFromValue(projectedResponse).length > 0);
+  const childOptions = mediaOutput ? { ...options, inheritedMediaOutput: true } : options;
   if (options.checkpointOutput && options.stripOutput) {
-    if (extractBlobHashesFromValue(projectedResponse).length > 0) {
+    if (mediaOutput) {
       // Direct media records may contain unknown inline payload aliases. Retain
       // only declared inputs, controls, and independently projected children.
       const tokenUsage = getErrorTokenUsage(projectedResponse);
@@ -241,24 +255,26 @@ function projectProviderResponse(
   if (projectedResponse.metadata) {
     projectedResponse.metadata = projectOutputMetadata(
       projectedResponse.metadata,
-      options,
+      childOptions,
       projectedResponse.metadata,
     );
   }
 
-  // Legacy multi-turn target responses carry the same prompt/output/media fields
-  // per turn. Project those fields without touching unrelated turn attributes.
+  // Ordinary turns retain unrelated attributes. Turns within media output keep
+  // only their declared input/control fields and projected children.
+  const stripUnsupportedTurn = (turn: unknown) =>
+    mediaOutput ? '[output stripped]' : stripMediaReferences(sanitizeForDb(turn));
   if (Array.isArray(projectedResponse.turns)) {
     projectedResponse.turns = projectedResponse.turns.map((turn) => {
       const record = asRecord(turn);
       return record
-        ? projectProviderResponse(record, options)
+        ? projectProviderResponse(record, childOptions)
         : options.stripOutput
-          ? stripMediaReferences(sanitizeForDb(turn))
+          ? stripUnsupportedTurn(turn)
           : turn;
     });
   } else if (options.stripOutput && projectedResponse.turns !== undefined) {
-    projectedResponse.turns = stripMediaReferences(sanitizeForDb(projectedResponse.turns));
+    projectedResponse.turns = stripUnsupportedTurn(projectedResponse.turns);
   }
 
   return projectedResponse;

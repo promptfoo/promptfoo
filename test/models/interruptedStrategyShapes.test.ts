@@ -586,4 +586,197 @@ describe('interrupted checkpoint JSON and media shapes', () => {
       expect(collectBlobHashes(target).has(outputHash)).toBe(false);
     }
   });
+
+  describe.each(['model', 'jsonl'] as const)('%s projection context', (boundary) => {
+    it.each([undefined, null, false, true, 0, 1, '', 'legacy', [], ['legacy']])(
+      'keeps opaque response shape %# independent of prompt stripping',
+      async (response) => {
+        for (const role of ['ordinary', 'checkpoint', 'turn']) {
+          const metadata = {
+            interruptedStrategy: true,
+            completedTargetResponses: [
+              { response: role === 'turn' ? { turns: [response] } : response },
+            ],
+          };
+          const input =
+            role === 'ordinary' ? legacyResult(response) : legacyResult({ metadata }, metadata);
+          const original = structuredClone(input);
+          const row = await EvalResult.createFromEvaluateResult(randomUUID(), input, {
+            persist: false,
+          });
+          const project = (stripPrompt: boolean, stripOutput: boolean) => {
+            const flags = {
+              ...getStripFlags(),
+              shouldStripPromptText: stripPrompt,
+              shouldStripResponseOutput: stripOutput,
+            };
+            const projected =
+              boundary === 'model'
+                ? row.toEvaluateResult(flags)
+                : sanitizeResultForJsonlArtifact(input, flags);
+            if (role === 'ordinary') {
+              return projected.response;
+            }
+            const target = projected.metadata!.completedTargetResponses[0].response;
+            return role === 'turn' ? target.turns[0] : target;
+          };
+          // Output projection retains its prior behavior; adding the independent
+          // prompt flag must not coerce an opaque response into a record.
+          for (const stripOutput of [false, true]) {
+            expect(project(true, stripOutput)).toEqual(project(false, stripOutput));
+          }
+          expect(input).toEqual(original);
+        }
+      },
+    );
+
+    it.each([
+      { name: 'scalar metadata', fields: { metadata: bytes.toString('base64') } },
+      { name: 'array metadata', fields: { metadata: [bytes.toString('base64')] } },
+      { name: 'metadata data', fields: { metadata: { data: bytes.toString('base64') } } },
+      {
+        name: 'nested metadata payload',
+        fields: { metadata: { nested: { payload: bytes.toString('base64') } } },
+      },
+      { name: 'scalar turns', fields: { turns: bytes.toString('base64') } },
+      { name: 'record turns', fields: { turns: { data: bytes.toString('base64') } } },
+      { name: 'array turns', fields: { turns: [bytes.toString('base64')] } },
+      {
+        name: 'turn output record',
+        fields: {
+          turns: [
+            {
+              prompt: promptMedia,
+              input: inputMedia,
+              cost: 0.125,
+              tokenUsage: { total: 2 },
+              data: bytes.toString('base64'),
+              metadata: { payload: bytes.toString('base64') },
+            },
+          ],
+        },
+      },
+      {
+        name: 'owned nested checkpoint',
+        fields: {
+          metadata: {
+            interruptedStrategy: true,
+            completedTargetResponses: [
+              {
+                prompt: promptMedia,
+                attachment: bytes.toString('base64'),
+                response: {
+                  prompt: promptMedia,
+                  materializedVars: { image: inputMedia },
+                  cost: 0.125,
+                  tokenUsage: { total: 2 },
+                  metadata: { data: bytes.toString('base64') },
+                },
+              },
+            ],
+          },
+        },
+      },
+    ])('strips inherited media children: $name', async ({ name, fields }) => {
+      for (const role of ['checkpoint', 'turn']) {
+        const mediaResponse = {
+          ...outputRef,
+          ...fields,
+          prompt: promptMedia,
+          materializedVars: { image: inputMedia },
+          cost: 0.25,
+          tokenUsage: { total: 5 },
+        };
+        const ordinaryMetadata = { data: bytes.toString('base64'), note: 'ordinary note' };
+        const metadata = {
+          interruptedStrategy: true,
+          completedTargetResponses: [
+            { response: role === 'turn' ? { turns: [mediaResponse] } : mediaResponse },
+            { response: { metadata: ordinaryMetadata, error: 'ordinary diagnostic' } },
+          ],
+        };
+        const input = legacyResult({ metadata }, metadata);
+        const original = structuredClone(input);
+        const row = await EvalResult.createFromEvaluateResult(randomUUID(), input, {
+          persist: false,
+        });
+        for (const stripOutput of [false, true]) {
+          for (const stripPrompt of [false, true]) {
+            const flags = {
+              ...getStripFlags(),
+              shouldStripPromptText: stripPrompt,
+              shouldStripResponseOutput: stripOutput,
+            };
+            const projected =
+              boundary === 'model'
+                ? row.toEvaluateResult(flags)
+                : sanitizeResultForJsonlArtifact(input, flags);
+            for (const copy of [projected.metadata, projected.response?.metadata]) {
+              const response = copy!.completedTargetResponses[0].response;
+              const target = role === 'turn' ? response.turns[0] : response;
+              expect(JSON.stringify(target).includes(bytes.toString('base64'))).toBe(!stripOutput);
+              expect(collectBlobHashes(target).has(outputHash)).toBe(!stripOutput);
+              expect(target).toMatchObject({
+                prompt: stripPrompt ? '[prompt stripped]' : promptMedia,
+                materializedVars: { image: inputMedia },
+                cost: 0.25,
+                tokenUsage: { total: 5 },
+              });
+              expect(copy!.completedTargetResponses[1].response).toMatchObject({
+                metadata: ordinaryMetadata,
+                error: 'ordinary diagnostic',
+              });
+              if (name === 'turn output record') {
+                expect(target.turns[0]).toMatchObject({
+                  prompt: stripPrompt ? '[prompt stripped]' : promptMedia,
+                  input: inputMedia,
+                  cost: 0.125,
+                  tokenUsage: { total: 2 },
+                });
+              }
+              if (name === 'owned nested checkpoint') {
+                const nested = target.metadata.completedTargetResponses[0];
+                expect(nested.prompt).toBe(stripPrompt ? '[prompt stripped]' : promptMedia);
+                expect(nested.response).toMatchObject({
+                  prompt: stripPrompt ? '[prompt stripped]' : promptMedia,
+                  materializedVars: { image: inputMedia },
+                  cost: 0.125,
+                  tokenUsage: { total: 2 },
+                });
+              }
+            }
+          }
+        }
+        expect(input).toEqual(original);
+      }
+    });
+
+    it('keeps media-child context out of the ordinary parent and siblings', async () => {
+      const ordinaryMetadata = { data: bytes.toString('base64'), note: 'ordinary note' };
+      const response = {
+        metadata: { ...outputRef, data: bytes.toString('base64') },
+        error: 'ordinary parent diagnostic',
+        turns: [{ metadata: ordinaryMetadata, error: 'ordinary turn diagnostic' }],
+      };
+      const metadata = { interruptedStrategy: true, completedTargetResponses: [{ response }] };
+      const input = legacyResult({ metadata }, metadata);
+      const original = structuredClone(input);
+      const row = await EvalResult.createFromEvaluateResult(randomUUID(), input, {
+        persist: false,
+      });
+      const flags = { ...getStripFlags(), shouldStripResponseOutput: true };
+      const projected =
+        boundary === 'model'
+          ? row.toEvaluateResult(flags)
+          : sanitizeResultForJsonlArtifact(input, flags);
+      const target = projected.metadata!.completedTargetResponses[0].response;
+      expect(target.metadata).toBe('[output stripped]');
+      expect(target.error).toBe('ordinary parent diagnostic');
+      expect(target.turns[0]).toMatchObject({
+        metadata: ordinaryMetadata,
+        error: 'ordinary turn diagnostic',
+      });
+      expect(input).toEqual(original);
+    });
+  });
 });
