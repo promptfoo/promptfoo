@@ -29,51 +29,51 @@ keywords:
 
 These assertions can check LLM output or provider metadata directly. Configured scripts, webhooks, and grouped assertions may still depend on external services.
 
-| Assertion Type                                                  | Returns true if...                                                 |
-| --------------------------------------------------------------- | ------------------------------------------------------------------ |
-| [assert-set](#assert-set)                                       | A configurable threshold of grouped assertions pass                |
-| [contains](#contains)                                           | output contains substring                                          |
-| [contains-all](#contains-all)                                   | output contains all list of substrings                             |
-| [contains-any](#contains-any)                                   | output contains any of the listed substrings                       |
-| [contains-json](#contains-json)                                 | output contains valid json (optional json schema validation)       |
-| [contains-html](#contains-html)                                 | output contains HTML content                                       |
-| [contains-sql](#contains-sql)                                   | output is valid SQL or contains a valid SQL code block             |
-| [contains-xml](#contains-xml)                                   | output contains valid xml fragment(s)                              |
-| [cost](#cost)                                                   | Inference cost limit or zero-weight cost metric                    |
-| [equals](#equality)                                             | output matches exactly                                             |
-| [finish-reason](#finish-reason)                                 | model stopped for the expected reason                              |
-| [icontains](#contains)                                          | output contains substring, case insensitive                        |
-| [icontains-all](#contains-all)                                  | output contains all list of substrings, case insensitive           |
-| [icontains-any](#contains-any)                                  | output contains any of the listed substrings, case insensitive     |
-| [is-html](#is-html)                                             | output is valid HTML                                               |
-| [is-json](#is-json)                                             | output is valid json (optional json schema validation)             |
-| [is-sql](#is-sql)                                               | output is non-empty valid SQL (optional authority list validation) |
-| [is-valid-function-call](#is-valid-function-call)               | Ensure that the function call matches the function's JSON schema   |
-| [is-valid-openai-function-call](#is-valid-openai-function-call) | Ensure that the function call matches the function's JSON schema   |
-| [is-valid-openai-tools-call](#is-valid-openai-tools-call)       | Ensure all tool calls match the tools JSON schema                  |
-| [tool-call-f1](#tool-call-f1)                                   | F1 score comparing actual vs expected tool calls                   |
-| [skill-used](#skill-used)                                       | Ensure normalized provider skill metadata contains expected skills |
-| [trajectory:tool-used](#trajectorytool-used)                    | Ensure traced tool usage contains expected tools                   |
-| [trajectory:tool-args-match](#trajectorytool-args-match)        | Ensure traced tool calls include expected argument payloads        |
-| [trajectory:tool-sequence](#trajectorytool-sequence)            | Ensure traced tool usage appears in the expected order             |
-| [trajectory:step-count](#trajectorystep-count)                  | Count normalized trajectory steps by type or pattern               |
-| [is-xml](#is-xml)                                               | output is a supported well-formed XML document                     |
-| [javascript](/docs/configuration/expected-outputs/javascript)   | provided Javascript function validates the output                  |
-| [latency](#latency)                                             | Latency is below a threshold (milliseconds)                        |
-| [levenshtein](#levenshtein-distance)                            | Levenshtein distance is below a threshold                          |
-| [perplexity-score](#perplexity-score)                           | Normalized perplexity                                              |
-| [perplexity](#perplexity)                                       | Perplexity is below a threshold                                    |
-| [python](/docs/configuration/expected-outputs/python)           | provided Python function validates the output                      |
-| [regex](#regex)                                                 | output matches regex                                               |
-| [rouge-l](#rouge-l)                                             | Rouge-L (summary-level LCS, ROUGE-Lsum) score is above a threshold |
-| [rouge-n](#rouge-n)                                             | Rouge-N score is above a given threshold                           |
-| [rouge-s](#rouge-s)                                             | Rouge-S (skip-bigram) score is above a threshold                   |
-| [starts-with](#starts-with)                                     | output starts with string                                          |
-| [trace-span-count](#trace-span-count)                           | Count spans matching patterns with min/max thresholds              |
-| [trace-span-duration](#trace-span-duration)                     | Check span durations with percentile support                       |
-| [trace-error-spans](#trace-error-spans)                         | Detect errors in traces by status codes, attributes, and messages  |
-| [webhook](#webhook)                                             | provided webhook returns \{pass: true\}                            |
-| [word-count](#word-count)                                       | output has a specific number of words or falls within a range      |
+| Assertion Type                                                  | Returns true if...                                                      |
+| --------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| [assert-set](#assert-set)                                       | A configurable threshold of grouped assertions pass                     |
+| [contains](#contains)                                           | output contains substring                                               |
+| [contains-all](#contains-all)                                   | output contains all list of substrings                                  |
+| [contains-any](#contains-any)                                   | output contains any of the listed substrings                            |
+| [contains-json](#contains-json)                                 | output contains valid json (optional json schema validation)            |
+| [contains-html](#contains-html)                                 | output contains HTML content                                            |
+| [contains-sql](#contains-sql)                                   | output is valid SQL or contains a valid SQL code block                  |
+| [contains-xml](#contains-xml)                                   | output contains valid xml fragment(s)                                   |
+| [cost](#cost)                                                   | Inference cost limit or zero-weight cost metric                         |
+| [equals](#equality)                                             | output matches exactly                                                  |
+| [finish-reason](#finish-reason)                                 | model stopped for the expected reason                                   |
+| [icontains](#contains)                                          | output contains substring, case insensitive                             |
+| [icontains-all](#contains-all)                                  | output contains all list of substrings, case insensitive                |
+| [icontains-any](#contains-any)                                  | output contains any of the listed substrings, case insensitive          |
+| [is-html](#is-html)                                             | output is valid HTML                                                    |
+| [is-json](#is-json)                                             | output is valid json (optional json schema validation)                  |
+| [is-sql](#is-sql)                                               | output is non-empty valid SQL (optional authority list validation)      |
+| [is-valid-function-call](#is-valid-function-call)               | Ensure that the function call matches the function's JSON schema        |
+| [is-valid-openai-function-call](#is-valid-openai-function-call) | Ensure that the function call matches the function's JSON schema        |
+| [is-valid-openai-tools-call](#is-valid-openai-tools-call)       | Ensure all tool calls match the tools JSON schema                       |
+| [tool-call-f1](#tool-call-f1)                                   | F1 score comparing actual vs expected tool calls                        |
+| [skill-used](#skill-used)                                       | Ensure normalized provider skill metadata contains expected skills      |
+| [trajectory:tool-used](#trajectorytool-used)                    | Ensure traced tool usage contains expected tools                        |
+| [trajectory:tool-args-match](#trajectorytool-args-match)        | Ensure traced tool calls include expected argument payloads             |
+| [trajectory:tool-sequence](#trajectorytool-sequence)            | Ensure traced tool usage appears in the expected order                  |
+| [trajectory:step-count](#trajectorystep-count)                  | Count normalized trajectory steps by type or pattern                    |
+| [is-xml](#is-xml)                                               | output is a supported well-formed XML document                          |
+| [javascript](/docs/configuration/expected-outputs/javascript)   | provided Javascript function validates the output                       |
+| [latency](#latency)                                             | Latency is below a threshold (milliseconds)                             |
+| [levenshtein](#levenshtein-distance)                            | Levenshtein distance is below a threshold                               |
+| [perplexity-score](#perplexity-score)                           | Normalized perplexity                                                   |
+| [perplexity](#perplexity)                                       | Perplexity is below a threshold                                         |
+| [python](/docs/configuration/expected-outputs/python)           | provided Python function validates the output                           |
+| [regex](#regex)                                                 | output matches regex                                                    |
+| [rouge-l](#rouge-l)                                             | Rouge-L (summary-level LCS, ROUGE-Lsum) score is at least the threshold |
+| [rouge-n](#rouge-n)                                             | Rouge-N score is above a given threshold                                |
+| [rouge-s](#rouge-s)                                             | Rouge-S (skip-bigram) score is at least the threshold                   |
+| [starts-with](#starts-with)                                     | output starts with string                                               |
+| [trace-span-count](#trace-span-count)                           | Count spans matching patterns with min/max thresholds                   |
+| [trace-span-duration](#trace-span-duration)                     | Check span durations with percentile support                            |
+| [trace-error-spans](#trace-error-spans)                         | Detect errors in traces by status codes, attributes, and messages       |
+| [webhook](#webhook)                                             | provided webhook returns \{pass: true\}                                 |
+| [word-count](#word-count)                                       | output has a specific number of words or falls within a range           |
 
 The [F-score](#f-score) section describes a derived metric built from named JavaScript assertions, not an assertion type.
 

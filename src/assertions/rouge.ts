@@ -1,18 +1,8 @@
 import * as rouge from 'js-rouge';
 import invariant from '../util/invariant';
+import { countNGrams } from './ngrams';
 
 import type { AssertionParams, GradingResult } from '../types/index';
-
-/**
- * Counts how many times each n-gram occurs.
- */
-function countNGrams(ngrams: string[]): Map<string, number> {
-  const counts = new Map<string, number>();
-  for (const ngram of ngrams) {
-    counts.set(ngram, (counts.get(ngram) ?? 0) + 1);
-  }
-  return counts;
-}
 
 // Keep ROUGE-N's whole-text tokenization. js-rouge's scorers split sentences first,
 // which changes punctuation tokens in existing rouge-n assertions.

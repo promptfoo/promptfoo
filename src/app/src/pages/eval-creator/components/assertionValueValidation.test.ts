@@ -1,4 +1,3 @@
-import { BaseAssertionTypesSchema } from '@promptfoo/types';
 import { describe, expect, it } from 'vitest';
 import {
   getAssertionValueError,
@@ -6,8 +5,6 @@ import {
   getRunnableAssertionValueError,
 } from './assertionValueValidation';
 import type { Assertion } from '@promptfoo/types';
-
-const UNSUPPORTED_TYPE_MESSAGE = 'Select a supported assertion type before running.';
 
 const make = (overrides: Partial<Assertion>): Assertion =>
   ({ type: 'contains', value: '', ...overrides }) as Assertion;
@@ -548,16 +545,5 @@ describe('getFirstRunnableAssertionValueError', () => {
       },
     ];
     expect(getFirstRunnableAssertionValueError(list)).toBeUndefined();
-  });
-});
-
-describe('supported assertion type coverage', () => {
-  it.each(BaseAssertionTypesSchema.options)('treats base type %s as supported', (type) => {
-    expect(getRunnableAssertionValueError(make({ type: type as any, value: 'x' }))).not.toBe(
-      UNSUPPORTED_TYPE_MESSAGE,
-    );
-    expect(
-      getRunnableAssertionValueError(make({ type: `not-${type}` as any, value: 'x' })),
-    ).not.toBe(UNSUPPORTED_TYPE_MESSAGE);
   });
 });

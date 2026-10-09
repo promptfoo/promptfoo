@@ -2,6 +2,7 @@ import { getEnvString } from '../envars';
 import logger from '../logger';
 import { renderVarsInObject } from '../util/render';
 import { OpenAiChatCompletionProvider } from './openai/chat';
+import { serializeProvider } from './serialization';
 import { clampCachedTokens } from './shared';
 
 import type {
@@ -185,14 +186,7 @@ class DeepSeekProvider extends OpenAiChatCompletionProvider {
   }
 
   toJSON() {
-    return {
-      provider: 'deepseek',
-      model: this.modelName,
-      config: {
-        ...this.config,
-        ...(this.apiKey && { apiKey: undefined }),
-      },
-    };
+    return serializeProvider(this, 'deepseek', () => this.apiKey);
   }
 
   override async getOpenAiBody(
