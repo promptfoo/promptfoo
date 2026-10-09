@@ -834,6 +834,7 @@ describe('TrueFoundry', () => {
       expect(onRateLimitBackoff).toEqual(expect.any(Function));
 
       expect(result).toEqual({
+        cached: false,
         embedding: [0.1, 0.2, 0.3],
         latencyMs: expect.any(Number),
         cost: expect.closeTo(0.00000065, 12),
