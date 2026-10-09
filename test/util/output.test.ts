@@ -732,11 +732,36 @@ describe('writeOutput', () => {
             spanId: 'span-strip-bodies',
             name: 'provider',
             startTime: 1,
+            events: [
+              {
+                name: 'request',
+                timestamp: 1,
+                attributes: {
+                  'promptfoo.request.body': 'event-prompt-private',
+                  'promptfoo.response.body': 'event-response-private',
+                  detail: 'visible',
+                },
+              },
+            ],
             attributes: {
               'promptfoo.request.body': 'trace-prompt-secret',
               'promptfoo.response.body': 'trace-response-secret',
               operation: 'provider-call',
             },
+          },
+          {
+            spanId: 'span-only-events',
+            name: 'event-only span',
+            startTime: 1,
+            events: [
+              {
+                name: 'response',
+                timestamp: 2,
+                attributes: {
+                  'promptfoo.response.body': 'event-only-response-private',
+                },
+              },
+            ],
           },
         ],
       },
@@ -748,8 +773,57 @@ describe('writeOutput', () => {
       const written = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
       const parsed = JSON.parse(written);
       expect(parsed.traces[0].spans[0].attributes).toEqual({ operation: 'provider-call' });
+      expect(parsed.traces[0].spans[0].events).toEqual([
+        { name: 'request', timestamp: 1, attributes: { detail: 'visible' } },
+      ]);
+      expect(written).not.toContain('event-prompt-private');
+      expect(written).not.toContain('event-response-private');
+      expect(written).not.toContain('event-only-response-private');
+      expect(parsed.traces[0].spans[1].events).toEqual([{ name: 'response', timestamp: 2 }]);
       expect(written).not.toContain('trace-prompt-secret');
       expect(written).not.toContain('trace-response-secret');
+    } finally {
+      traceSpy.mockRestore();
+      restoreEnv();
+    }
+  });
+
+  it.each([
+    ['PROMPTFOO_STRIP_PROMPT_TEXT', 'promptfoo.request.body', '[prompt stripped]'],
+    ['PROMPTFOO_STRIP_RESPONSE_OUTPUT', 'promptfoo.response.body', '[output stripped]'],
+  ] as const)('masks event-name echoes when %s removes their body', async (flag, key, marker) => {
+    const restoreEnv = mockProcessEnv({ [flag]: 'true' });
+    const traceSpy = vi.spyOn(getTraceStore(), 'getTracesByEvaluation').mockResolvedValue([
+      {
+        traceId: 'trace-event-name',
+        evaluationId: 'eval-event-name',
+        testCaseId: 'case-event-name',
+        spans: [
+          {
+            spanId: 'event-name',
+            name: 'ordinary span',
+            startTime: 1,
+            events: [
+              {
+                name: 'ordinary private body',
+                timestamp: 1,
+                attributes: { [key]: 'ordinary private body', detail: 'visible' },
+              },
+              { name: 'ordinary event', timestamp: 2 },
+            ],
+          },
+        ],
+      },
+    ]);
+    try {
+      await writeOutput('output.json', new Eval({}), null);
+      const written = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+      const parsed = JSON.parse(written);
+      expect(parsed.traces[0].spans[0].events).toEqual([
+        { name: marker, timestamp: 1, attributes: { detail: 'visible' } },
+        { name: 'ordinary event', timestamp: 2 },
+      ]);
+      expect(written).not.toContain('ordinary private body');
     } finally {
       traceSpy.mockRestore();
       restoreEnv();

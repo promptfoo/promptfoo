@@ -83,7 +83,7 @@ async function getExportTraceServiceRequestType(): Promise<protobuf.Type> {
 export interface DecodedAttributeValue {
   stringValue?: string;
   boolValue?: boolean;
-  intValue?: number | Long;
+  intValue?: number | Long | string;
   doubleValue?: number;
   arrayValue?: { values: DecodedAttributeValue[] };
   kvlistValue?: { values: DecodedAttribute[] };
@@ -106,6 +106,12 @@ export interface DecodedStatus {
   message?: string;
 }
 
+export interface DecodedSpanEvent {
+  timeUnixNano?: Long | number | string;
+  name: string;
+  attributes?: DecodedAttribute[];
+}
+
 /**
  * Decoded OTLP span
  */
@@ -115,11 +121,11 @@ export interface DecodedSpan {
   parentSpanId?: Uint8Array;
   name: string;
   kind?: number;
-  startTimeUnixNano: Long | number;
-  endTimeUnixNano?: Long | number;
+  startTimeUnixNano: Long | number | string;
+  endTimeUnixNano?: Long | number | string;
   attributes?: DecodedAttribute[];
   status?: DecodedStatus;
-  events?: any[];
+  events?: DecodedSpanEvent[];
   links?: any[];
   droppedAttributesCount?: number;
   droppedEventsCount?: number;
@@ -180,14 +186,14 @@ interface Long {
 }
 
 /**
- * Convert a Long or number to a JavaScript number
+ * Convert a decoded integer to a JavaScript number
  */
-export function longToNumber(value: Long | number | undefined): number {
+export function longToNumber(value: Long | number | string | undefined): number {
   if (value === undefined) {
     return 0;
   }
-  if (typeof value === 'number') {
-    return value;
+  if (typeof value === 'number' || typeof value === 'string') {
+    return Number(value);
   }
   // It's a Long object
   return value.toNumber();
@@ -220,7 +226,7 @@ export async function decodeExportTraceServiceRequest(
 
     // Convert to plain JavaScript object
     const decoded = messageType.toObject(message, {
-      longs: Number, // Convert longs to numbers (may lose precision for very large values)
+      longs: String, // Preserve nanosecond timestamps until conversion to milliseconds.
       bytes: Uint8Array, // Keep bytes as Uint8Array
       defaults: true, // Include default values
       arrays: true, // Always use arrays for repeated fields

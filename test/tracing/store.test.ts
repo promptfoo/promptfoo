@@ -1,4 +1,5 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import * as traceSanitizer from '../../src/tracing/sanitizeAttributes';
 import { mockGlobal } from '../util/utils';
 
 const mockRandomUUID = vi.fn(() => 'test-uuid');
@@ -68,6 +69,60 @@ describe('TraceStore', () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+  });
+
+  it('normalizes event arrays before persisting imported spans', async () => {
+    const valid = { name: 'ordinary event', timestamp: 12, attributes: { detail: 'ok' } };
+    await traceStore.addSpans(
+      'trace-events',
+      [
+        { spanId: 'one', name: 'span', startTime: 1, events: 'invalid' as any },
+        {
+          spanId: 'two',
+          name: 'span',
+          startTime: 1,
+          events: [null, { name: 'bad', timestamp: NaN }, valid] as any,
+        },
+      ],
+      { skipTraceCheck: true },
+    );
+    const values = mockDb.insert().values.mock.calls[0][0];
+    expect(values[0].events).toBeUndefined();
+    expect(values[1].events).toEqual([valid]);
+  });
+
+  it.each([
+    ['invoice.done', true],
+    ['*done', true],
+    ['display', false],
+  ])('filters stored names before display projection for %s', async (filter, matches) => {
+    const row = {
+      spanId: 'invoice',
+      name: 'invoice.done',
+      startTime: 1,
+      attributes: { summary: 'invoice.done' },
+    };
+    mockDb.select().orderBy = vi.fn().mockResolvedValue([row]);
+    const sanitizer = vi
+      .spyOn(traceSanitizer, 'sanitizeTraceAttributes')
+      .mockImplementation((_attributes, options) => {
+        options?.truncatedValues?.set('invoice.done', 'display');
+        return { summary: 'display' };
+      });
+
+    try {
+      const spans = await traceStore.getSpans('invoice-trace', { spanFilter: [filter] });
+
+      expect(spans).toEqual(
+        matches
+          ? [expect.objectContaining({ name: 'display', attributes: { summary: 'display' } })]
+          : [],
+      );
+      expect(row.name).toBe('invoice.done');
+      expect(row.attributes).toEqual({ summary: 'invoice.done' });
+    } finally {
+      sanitizer.mockRestore();
+    }
   });
 
   describe('createTrace', () => {
@@ -183,6 +238,13 @@ describe('TraceStore', () => {
           startTime: 1000,
           endTime: 2000,
           attributes: { key: 'value' },
+          events: [
+            {
+              name: 'guardrail decision',
+              timestamp: 1500,
+              attributes: { 'guardrails.decision': 'blocked' },
+            },
+          ],
         },
         {
           spanId: 'span-2',
@@ -212,6 +274,13 @@ describe('TraceStore', () => {
           startTime: 1000,
           endTime: 2000,
           attributes: { key: 'value' },
+          events: [
+            {
+              name: 'guardrail decision',
+              timestamp: 1500,
+              attributes: { 'guardrails.decision': 'blocked' },
+            },
+          ],
           statusCode: undefined,
           statusMessage: undefined,
         },
@@ -584,6 +653,16 @@ describe('TraceStore', () => {
               safe: 'ok',
             },
           },
+          events: [
+            {
+              name: 'tool error',
+              timestamp: 2250,
+              attributes: {
+                authorization: 'Bearer event-secret',
+                safe: 'ok',
+              },
+            },
+          ],
           statusCode: 1,
           statusMessage: 'ok',
         },
@@ -645,6 +724,16 @@ describe('TraceStore', () => {
                 safe: 'ok',
               },
             },
+            events: [
+              {
+                name: 'tool error',
+                timestamp: 2250,
+                attributes: {
+                  authorization: '<redacted>',
+                  safe: 'ok',
+                },
+              },
+            ],
             statusCode: 1,
             statusMessage: 'ok',
           },
