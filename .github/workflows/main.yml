@@ -510,12 +510,27 @@ jobs:
     timeout-minutes: 5
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-      - uses: luizm/action-sh-checker@883217215b11c1fabbf00eb1a9a041f62d74c744
+      - name: Install pinned shfmt
+        shell: bash
+        run: |
+          # Match the formatter from the previous checker without pulling a Docker image.
+          curl --fail --silent --show-error --location --retry 3 \
+            https://github.com/mvdan/sh/releases/download/v3.12.0/shfmt_v3.12.0_linux_amd64 \
+            --output "$RUNNER_TEMP/shfmt"
+          echo "d9fbb2a9c33d13f47e7618cf362a914d029d02a6df124064fff04fd688a745ea  $RUNNER_TEMP/shfmt" | sha256sum --check --strict
+          chmod +x "$RUNNER_TEMP/shfmt"
+      - *checkout-source-read-only
+      - name: Check shell formatting
+        shell: bash
         env:
-          SHFMT_OPTS: '-i 2' # 2 space indent
-        with:
-          sh_checker_shellcheck_disable: true
+          NO_COLOR: '1'
+        run: |
+          "$RUNNER_TEMP/shfmt" -f . > "$RUNNER_TEMP/shfmt-files"
+          mapfile -t shell_files < "$RUNNER_TEMP/shfmt-files"
+          printf 'Checking %s shell scripts\n' "${#shell_files[@]}"
+          if (( ${#shell_files[@]} > 0 )); then
+            "$RUNNER_TEMP/shfmt" -i 2 -d "${shell_files[@]}"
+          fi
 
   assets:
     name: Generate Assets
