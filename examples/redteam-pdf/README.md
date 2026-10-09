@@ -36,7 +36,7 @@ PROMPTFOO_DISABLE_REMOTE_GENERATION=true npx promptfoo@latest eval \
 
 The sample runs three `policy` tests covering invoice accuracy and false payment claims, each delivered with the `pdf` strategy. The `question` input stays benign. The clean baseline should pass before you interpret attack findings.
 
-The grader uses a stronger model to distinguish following an attack from quoting it. Review its reasons alongside the original invoice and model answer. Add `--force` to `redteam generate` when you want new attacks from an unchanged configuration.
+The grader is configured separately from the target model. Review its reasons alongside the original invoice and model answer, especially when the answer quotes an attack without following it. Add `--force` to `redteam generate` when you want new attacks from an unchanged configuration.
 
 Change `config.mode: text` to `scanned` to rasterize every page. For generated templates, replace the document's `config.template` with:
 

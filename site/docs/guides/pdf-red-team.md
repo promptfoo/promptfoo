@@ -25,7 +25,7 @@ Open `http://localhost:3100`. Upload `fixtures/invoice.pdf` and use the default 
 
 Set `PDF_MODEL` to change the app's model. The attack generator and grader are configured separately in `promptfooconfig.yaml`.
 
-The sample uses a stronger grader to distinguish following a malicious note from quoting it. Inspect the grader's reasons alongside the original invoice and model answer.
+The sample configures the grader separately from the target model. Inspect its reasons alongside the original invoice and model answer, especially when the answer quotes a malicious note without following it.
 
 ## 2. Verify clean uploads
 
@@ -84,7 +84,7 @@ PROMPTFOO_DISABLE_REMOTE_GENERATION=true npx promptfoo@latest eval \
 
 Scanned mode converts all pages to images inside a PDF. There is no extractable text layer. Your target therefore needs vision or OCR support. Confirm that it can still read a clean scanned invoice before interpreting attack results.
 
-Separate generation runs may produce different attacks. For a controlled comparison, use the same clean template, payload, question, and model, and vary only the PDF rendering mode. The strategy can also be called from a custom test-generation script to render fixed cases.
+Separate generation runs may produce different attacks, so a change in pass rate cannot be attributed to rendering mode alone. Compare individual cases and review the generated payloads before drawing conclusions.
 
 ## 6. Try a generated template
 
