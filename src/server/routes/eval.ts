@@ -1,10 +1,11 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import { runAssertion } from '../../assertions/index';
 import { HUMAN_ASSERTION_TYPE } from '../../constants';
 import { getUserEmail, setUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import Eval, { EvalQueries } from '../../models/eval';
-import EvalResult from '../../models/evalResult';
+import EvalResult, { getStripFlags } from '../../models/evalResult';
 import { evaluateWithSource } from '../../node';
 import { EvalSchemas } from '../../types/api/eval';
 import { deleteEval, deleteEvals, updateResult, writeResultsToDatabase } from '../../util/database';
@@ -683,6 +684,43 @@ evalRouter.post('/replay', async (req: Request, res: Response): Promise<void> =>
     res.status(500).json({ error: 'Failed to replay evaluation' });
   }
 });
+
+evalRouter.post(
+  '/:evalId/results/:id/check',
+  async (req: Request, res: Response): Promise<void> => {
+    const params = EvalSchemas.CheckOutput.Params.safeParse(req.params);
+    const body = EvalSchemas.CheckOutput.Request.safeParse(req.body);
+    if (!params.success || !body.success) {
+      replyValidationError(res, params.success ? body.error! : params.error);
+      return;
+    }
+    try {
+      const config = await EvalQueries.getConfig(params.data.evalId);
+      const result = await EvalResult.findById(params.data.id);
+      if (!config || !result || result.evalId !== params.data.evalId) {
+        res.status(404).json({ error: 'Evaluation result not found' });
+        return;
+      }
+      if (
+        getStripFlags(config.env).shouldStripResponseOutput ||
+        result.response?.output == null ||
+        result.response.error
+      ) {
+        res.status(400).json({ error: 'This result has no saved output to check' });
+        return;
+      }
+      // Check only the literal assertion supplied here; saved scoring and provider settings stay out.
+      const { pass, score, reason } = await runAssertion({
+        assertion: body.data.assertion,
+        test: {},
+        providerResponse: { output: result.response.output },
+      });
+      res.json(EvalSchemas.CheckOutput.Response.parse({ pass, score, reason }));
+    } catch (error) {
+      sendError(res, 500, 'Failed to check saved output', error);
+    }
+  },
+);
 
 evalRouter.post(
   '/:evalId/results/:id/rating',

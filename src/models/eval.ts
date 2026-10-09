@@ -164,6 +164,16 @@ export function combineFilterConditions(
 }
 
 export class EvalQueries {
+  static async getConfig(evalId: string): Promise<Partial<UnifiedConfig> | undefined> {
+    const db = await getDb();
+    const [evaluation] = await db
+      .select({ config: evalsTable.config })
+      .from(evalsTable)
+      .where(eq(evalsTable.id, evalId))
+      .limit(1);
+    return evaluation?.config;
+  }
+
   static async getVarsFromEvals(evals: Eval[]) {
     const db = await getDb();
 

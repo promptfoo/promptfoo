@@ -14,6 +14,17 @@ import EvalOutputCell, { isImageProvider, isVideoProvider } from './EvalOutputCe
 
 import type { EvalOutputCellProps } from './EvalOutputCell';
 
+const hosting = vi.hoisted(() => ({ local: true, cloudEnabled: false }));
+vi.mock('@app/constants', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@app/constants')>()),
+  get IS_RUNNING_LOCALLY() {
+    return hosting.local;
+  },
+}));
+vi.mock('@app/hooks/useCloudConfig', () => ({
+  default: () => ({ data: { isEnabled: hosting.cloudEnabled } }),
+}));
+
 // Mock the EvalOutputPromptDialog component to check what props are passed to it
 vi.mock('./EvalOutputPromptDialog', () => ({
   default: vi.fn(({ gradingResults, metadata, onClose }) => (
@@ -39,6 +50,7 @@ const dispatchClick = (element: Element) => {
 };
 
 const defaultResultsViewSettings = {
+  inComparisonMode: false,
   prettifyJson: false,
   renderMarkdown: true,
   showPassFail: true,
@@ -68,11 +80,15 @@ const resetMockStoreState = () => {
 
 beforeEach(() => {
   resetMockStoreState();
+  hosting.local = true;
+  hosting.cloudEnabled = false;
   window.history.replaceState({}, '', '/');
 });
 
 afterEach(() => {
   resetMockStoreState();
+  hosting.local = true;
+  hosting.cloudEnabled = false;
   window.history.replaceState({}, '', '/');
   restoreTestTimers();
 });
@@ -118,6 +134,7 @@ describe('EvalOutputCell', () => {
       provider: 'test-provider',
       score: 0.8,
       text: 'Test output text',
+      response: { output: 'Test output text' },
       testCase: {},
     },
     maxTextLength: 100,
@@ -161,6 +178,7 @@ describe('EvalOutputCell', () => {
       provider: 'test-provider',
       score: 0.8,
       text: 'Test output text',
+      response: { output: 'Test output text' },
       testCase: {},
       metadata: { testKey: 'testValue' },
     },
@@ -179,6 +197,56 @@ describe('EvalOutputCell', () => {
   afterEach(() => {
     timers?.restore();
     timers = undefined;
+  });
+
+  it('offers a saved-output preview in a local viewer with cloud credentials', async () => {
+    hosting.cloudEnabled = true;
+    renderWithProviders(<EvalOutputCell {...defaultProps} evaluationId="eval-fixture" />);
+    await userEvent.click(screen.getByRole('button', { name: 'Check saved output' }));
+    expect(screen.getByRole('dialog')).toHaveTextContent('Check saved output');
+    expect(screen.getByRole('dialog')).toHaveTextContent('does not change saved assertions');
+  });
+
+  it.each([
+    undefined,
+    {},
+    { output: null },
+    { output: 'Partial output', error: 'Fixture provider error' },
+  ])('hides saved-output previews without usable output (%j)', (response) => {
+    renderWithProviders(
+      <EvalOutputCell
+        {...defaultProps}
+        evaluationId="eval-fixture"
+        output={{ ...defaultProps.output, response }}
+      />,
+    );
+    expect(screen.queryByRole('button', { name: 'Check saved output' })).not.toBeInTheDocument();
+  });
+
+  it.each(['', 0, false, { answer: 'Fixture' }])(
+    'offers saved-output previews for a usable %j output',
+    (output) => {
+      renderWithProviders(
+        <EvalOutputCell
+          {...defaultProps}
+          evaluationId="eval-fixture"
+          output={{ ...defaultProps.output, response: { output } }}
+        />,
+      );
+      expect(screen.getByRole('button', { name: 'Check saved output' })).toBeInTheDocument();
+    },
+  );
+
+  it('hides saved-output previews in a hosted viewer', () => {
+    hosting.local = false;
+    renderWithProviders(<EvalOutputCell {...defaultProps} evaluationId="eval-fixture" />);
+    expect(screen.queryByRole('button', { name: 'Check saved output' })).not.toBeInTheDocument();
+  });
+
+  it('hides saved-output previews in comparison mode', () => {
+    mockResultsViewSettings.inComparisonMode = true;
+    renderWithProviders(<EvalOutputCell {...defaultProps} evaluationId="eval-fixture" />);
+    expect(screen.queryByRole('button', { name: 'Check saved output' })).not.toBeInTheDocument();
   });
 
   it.each([
