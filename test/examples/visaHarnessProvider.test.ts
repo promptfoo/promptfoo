@@ -259,6 +259,7 @@ describe('VVAH example provider', () => {
   );
 
   it('waits for Windows taskkill completion before removing the workspace', async () => {
+    vi.useFakeTimers();
     vi.spyOn(process, 'platform', 'get').mockReturnValue('win32');
     const killer = new EventEmitter();
     const originalSpawn = vi.mocked(spawn).getMockImplementation()!;
@@ -280,7 +281,7 @@ describe('VVAH example provider', () => {
     await started;
     controller.abort();
     child.emit('close', null);
-    await new Promise((resolve) => setTimeout(resolve, 30));
+    await vi.advanceTimersByTimeAsync(30);
     expect(settled).toBe(false);
     await expect(access(cwd)).resolves.toBeUndefined();
     killer.emit('close', 0);
