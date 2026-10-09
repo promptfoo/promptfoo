@@ -1,6 +1,7 @@
 import path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { CallbackPathTraversalError } from '../../../src/util/functions/loadFunction';
 
 // Mock dependencies before importing the base class
 vi.mock('../../../src/envars', () => ({
@@ -336,6 +337,23 @@ describe('GoogleGenericProvider', () => {
   });
 
   describe('loadExternalFunction()', () => {
+    it('preserves callback traversal errors by identity', async () => {
+      const error = new CallbackPathTraversalError('../callback.js', '/test/base/path');
+      vi.mocked(importModule).mockRejectedValueOnce(error);
+      const provider = new TestGoogleProvider('gemini-2.5-pro');
+      await expect(provider['loadExternalFunction']('file://test.js')).rejects.toBe(error);
+    });
+
+    it('preserves callback load failure context and cause', async () => {
+      const error = new Error('module unavailable');
+      vi.mocked(importModule).mockRejectedValueOnce(error);
+      const provider = new TestGoogleProvider('gemini-2.5-pro');
+      await expect(provider['loadExternalFunction']('file://test.js')).rejects.toMatchObject({
+        message: 'Error loading function from file://test.js: module unavailable',
+        cause: error,
+      });
+    });
+
     it('should load function from file', async () => {
       const mockFn = vi.fn().mockReturnValue('result');
       vi.mocked(importModule).mockResolvedValue(mockFn);

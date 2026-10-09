@@ -14,12 +14,14 @@ import {
   getEnvString,
   getMaxEvalTimeMs,
   getProcessEnv,
+  getProviderEnvString,
   isCI,
 } from '../src/envars';
 import { setEnvOverridesProvider } from '../src/envOverrides';
 import { mockProcessEnv } from './util/utils';
 
 import type { EnvVarKey } from '../src/envars';
+import type { EnvOverrides } from '../src/types/env';
 
 describe('envars', () => {
   const originalEnv = { ...process.env };
@@ -52,6 +54,18 @@ describe('envars', () => {
     // at a closure owned by this test file.
     setEnvOverridesProvider(undefined);
   });
+
+  it.each([undefined, '', 0, false, null])(
+    'reads only own provider override values: %s',
+    (value) => {
+      mockProcessEnv({ CUSTOM_KEY: 'ambient' });
+      const key = 'CUSTOM_KEY' as EnvVarKey;
+      const env = { CUSTOM_KEY: value } as unknown as EnvOverrides;
+      expect(getProviderEnvString(env, key)).toBe(value === undefined ? undefined : String(value));
+      expect(getProviderEnvString(Object.create({ CUSTOM_KEY: value }), key)).toBeUndefined();
+      expect(getProviderEnvString(undefined, key)).toBeUndefined();
+    },
+  );
 
   describe('getEnvar', () => {
     it('should return the value of an existing environment variable', () => {
