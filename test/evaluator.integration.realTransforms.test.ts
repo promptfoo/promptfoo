@@ -1,6 +1,13 @@
+import { randomUUID } from 'node:crypto';
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { runAssertions } from '../src/assertions';
+import cliState from '../src/cliState';
 import { evaluate } from '../src/evaluator';
+import logger from '../src/logger';
+import { runDbMigrations } from '../src/migrate';
 import Eval from '../src/models/eval';
+import { ResultFailureReason } from '../src/types/index';
 
 import type { ApiProvider, TestSuite } from '../src/types/index';
 
@@ -45,14 +52,6 @@ vi.mock('../src/evaluatorHelpers', async () => {
   };
 });
 
-vi.mock('../src/util/time', async () => {
-  const actual = await vi.importActual('../src/util/time');
-  return {
-    ...(actual as any),
-    sleep: vi.fn(() => Promise.resolve()),
-  };
-});
-
 const makeSuite = (overrides: Partial<TestSuite>): TestSuite => ({
   prompts: [{ raw: 'Hello {{name}}', label: 'Test' }],
   providers: [
@@ -71,6 +70,9 @@ const makeSuite = (overrides: Partial<TestSuite>): TestSuite => ({
 describe('Transformation integration (real transform)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(runAssertions)
+      .mockReset()
+      .mockResolvedValue({ pass: true, score: 1, reason: 'Fixture passed', namedScores: {} });
   });
 
   afterEach(() => {
@@ -260,44 +262,143 @@ describe('Transformation integration (real transform)', () => {
     expect(results.results[0].success).toBe(true);
   });
 
-  it('runs a loaded ProviderFunction carrying label, delay, config, and transform', async () => {
-    // End-to-end coverage that goes through the package-level wiring:
-    // loadApiProviders wraps a `ProviderFunction` into an `ApiProvider`, and the
-    // evaluator honors every attached metadata field. Mirrors the path a Node.js
-    // package user actually hits.
-    const { loadApiProviders } = await import('../src/providers/index');
-    const { sleep } = await import('../src/util/time');
-    const sleepMock = vi.mocked(sleep);
-    sleepMock.mockClear();
+  it.each(['elapsed delay', 'caller cancellation'] as const)(
+    'runs a loaded ProviderFunction carrying label, delay, config, and transform: %s',
+    async (mode) => {
+      // End-to-end coverage that goes through the package-level wiring:
+      // loadApiProviders wraps a `ProviderFunction` into an `ApiProvider`, and the
+      // evaluator honors every attached metadata field. Mirrors the path a Node.js
+      // package user actually hits.
+      const { loadApiProviders } = await import('../src/providers/index');
 
-    const providerFn: any = async (prompt: string) => ({
-      output: `served:${prompt}`,
-    });
-    providerFn.label = 'fn-provider-with-metadata';
-    providerFn.delay = 250;
-    providerFn.config = { custom: 'value' };
-    providerFn.transform = (output: unknown) => String(output).toUpperCase();
+      const providerFn: any = vi.fn(async (prompt: string) => ({
+        output: `served:${prompt}`,
+        tokenUsage: { total: 5, numRequests: 1 },
+      }));
+      providerFn.label = 'fn-provider-with-metadata';
+      providerFn.delay = 250;
+      providerFn.config = { custom: 'value' };
+      providerFn.transform = vi.fn((output: unknown) => String(output).toUpperCase());
 
-    const [wrapped] = await loadApiProviders([providerFn]);
-    expect(wrapped.id()).toBe('fn-provider-with-metadata');
-    expect(wrapped.label).toBe('fn-provider-with-metadata');
-    expect(wrapped.delay).toBe(250);
-    expect(wrapped.config).toEqual({ custom: 'value' });
-    expect(wrapped.transform).toBe(providerFn.transform);
+      const [wrapped] = await loadApiProviders([providerFn]);
+      expect(wrapped.id()).toBe('fn-provider-with-metadata');
+      expect(wrapped.label).toBe('fn-provider-with-metadata');
+      expect(wrapped.delay).toBe(250);
+      expect(wrapped.config).toEqual({ custom: 'value' });
+      expect(wrapped.transform).toBe(providerFn.transform);
 
-    const results = await evaluate(
-      {
+      let notifyDelayStarted!: () => void;
+      const delayStarted = new Promise<void>((resolve) => {
+        notifyDelayStarted = resolve;
+      });
+      vi.mocked(logger.debug).mockImplementation((message) => {
+        if (message === 'Sleeping for 250ms') {
+          notifyDelayStarted();
+        }
+      });
+      const caller = new AbortController();
+      const abortReason = new Error('cancel the loaded provider delay');
+      let evaluation: ReturnType<typeof evaluate> | undefined;
+      let settled = false;
+      const previousResume = cliState.resume;
+      const suite: TestSuite = {
         prompts: [{ raw: 'hi {{name}}', label: 'p' }],
         providers: [wrapped],
         tests: [{ vars: { name: 'world' } }],
-      } as TestSuite,
-      new Eval({}),
-      { maxConcurrency: 1 },
-    );
+      };
+      await runDbMigrations();
+      const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      try {
+        evaluation = evaluate(suite, record, {
+          maxConcurrency: 1,
+          abortSignal: caller.signal,
+          timeoutMs: -1,
+          maxEvalTimeMs: 0,
+        });
+        void evaluation.then(
+          () => {
+            settled = true;
+          },
+          () => {
+            settled = true;
+          },
+        );
+        await Promise.race([
+          delayStarted,
+          evaluation.then(() => {
+            throw new Error('Evaluation completed before its provider delay');
+          }),
+        ]);
+        await vi.advanceTimersByTimeAsync(249);
+        expect(settled).toBe(false);
+        if (mode === 'caller cancellation') {
+          caller.abort(abortReason);
+          expect(caller.signal.reason).toBe(abortReason);
+        } else {
+          await vi.advanceTimersByTimeAsync(1);
+        }
+        await evaluation;
+        const rows = await record.fetchResultsByTestIdx(0);
+        expect(rows).toHaveLength(1);
+        if (mode === 'caller cancellation') {
+          expect(rows[0]).toMatchObject({
+            success: false,
+            score: 0,
+            failureReason: ResultFailureReason.ERROR,
+            response: { output: 'served:hi world' },
+            metadata: { incomplete: true, __promptfoo: { resumable: true } },
+          });
+          expect(rows[0].error).toContain(abortReason.message);
+          expect(record.prompts[0].metrics).toMatchObject({
+            testErrorCount: 1,
+            tokenUsage: { total: 5, numRequests: 1 },
+          });
+          expect(providerFn.transform).not.toHaveBeenCalled();
+          const beforeLate = rows[0].toEvaluateResult();
+          await vi.advanceTimersByTimeAsync(1000);
+          expect(providerFn.transform).not.toHaveBeenCalled();
+          expect((await record.fetchResultsByTestIdx(0))[0].toEvaluateResult()).toEqual(beforeLate);
 
-    // Provider-level function transform ran against the callApi output.
-    expect(results.results[0].response?.output).toBe('SERVED:HI WORLD');
-    // Delay was honored (passed to the mocked sleep).
-    expect(sleepMock).toHaveBeenCalledWith(250);
-  });
+          const resumeDelayStarted = new Promise<void>((resolve) => {
+            notifyDelayStarted = resolve;
+          });
+          cliState.resume = true;
+          const resumed = (await Eval.findById(record.id))!;
+          const resume = evaluate(suite, resumed, { maxConcurrency: 1 });
+          await resumeDelayStarted;
+          await vi.advanceTimersByTimeAsync(250);
+          await resume;
+          const completedRows = await resumed.fetchResultsByTestIdx(0);
+          expect(completedRows).toHaveLength(1);
+          expect(completedRows[0].id).not.toBe(rows[0].id);
+          expect(completedRows[0]).toMatchObject({
+            success: true,
+            score: 1,
+            response: { output: 'SERVED:HI WORLD' },
+          });
+          expect(resumed.prompts[0].metrics).toMatchObject({
+            testPassCount: 1,
+            testErrorCount: 0,
+            tokenUsage: { total: 5, numRequests: 1 },
+          });
+          expect(providerFn).toHaveBeenCalledTimes(2);
+        } else {
+          expect(rows[0]).toMatchObject({
+            success: true,
+            score: 1,
+            response: { output: 'SERVED:HI WORLD' },
+          });
+          expect(providerFn).toHaveBeenCalledOnce();
+        }
+        expect(providerFn.transform).toHaveBeenCalledOnce();
+      } finally {
+        cliState.resume = previousResume;
+        caller.abort(abortReason);
+        await evaluation?.catch(() => undefined);
+        vi.mocked(logger.debug).mockReset();
+        vi.useRealTimers();
+      }
+    },
+  );
 });

@@ -10,6 +10,7 @@ import cliState from '../../src/cliState';
 import { evaluate } from '../../src/evaluator';
 import Eval from '../../src/models/eval';
 import EvalResult from '../../src/models/evalResult';
+import { EvalEvaluationStore } from '../../src/node/evaluationStore';
 import { nodeEvaluatorRuntime } from '../../src/node/evaluatorRuntime';
 import { recalculatePromptMetrics } from '../../src/node/promptMetrics';
 import { deleteErrorResults } from '../../src/node/retry';
@@ -19,7 +20,8 @@ import { writeMultipleOutputs } from '../../src/util/output';
 import { toPrompt } from './helpers';
 import { describeEvaluator } from './lifecycle';
 
-import type { ApiProvider, PromptMetrics, TestSuite } from '../../src/types/index';
+import type { EvaluationStore } from '../../src/evaluator/runtime';
+import type { ApiProvider, EvaluateResult, PromptMetrics, TestSuite } from '../../src/types/index';
 
 function deferred() {
   let resolve!: () => void;
@@ -30,6 +32,172 @@ function deferred() {
 }
 
 describeEvaluator('resumable checkpoint preparation', () => {
+  it.each(['built-in', 'legacy subclass', 'plain legacy'] as const)(
+    'keeps durable checkpoint rows and metrics consistent for a %s store',
+    async (mode) => {
+      const controller = new AbortController();
+      const started = deferred();
+      let resuming = false;
+      const appends = vi.fn();
+      class LegacyAppendStore extends EvalEvaluationStore {
+        appendResult(result: EvaluateResult): Promise<void> {
+          appends(result);
+          return this.evaluation.addResult(result);
+        }
+      }
+      const runtime = {
+        ...nodeEvaluatorRuntime,
+        createEvaluationStore(evaluation: Eval): EvaluationStore<Eval, EvalResult> {
+          if (mode === 'built-in') {
+            return new EvalEvaluationStore(evaluation);
+          }
+          const store = new LegacyAppendStore(evaluation);
+          if (mode === 'legacy subclass') {
+            return store;
+          }
+          // An implementation of the former interface has no replacement operation.
+          return {
+            evaluation,
+            get id() {
+              return store.id;
+            },
+            get config() {
+              return store.config;
+            },
+            get persisted() {
+              return store.persisted;
+            },
+            get prompts() {
+              return store.prompts;
+            },
+            get results() {
+              return store.results;
+            },
+            get resultPersistenceFailed() {
+              return store.resultPersistenceFailed;
+            },
+            appendResult: store.appendResult.bind(store),
+            appendPrompts: store.appendPrompts.bind(store),
+            hasResultPersistenceFailure: store.hasResultPersistenceFailure.bind(store),
+            readCompletedIndexPairs: store.readCompletedIndexPairs.bind(store),
+            readFailedResultsByTestIdx: store.readFailedResultsByTestIdx.bind(store),
+            readResults: store.readResults.bind(store),
+            readResultsByTestIdx: store.readResultsByTestIdx.bind(store),
+            recordFinalResult: store.recordFinalResult.bind(store),
+            recordResultPersistenceFailure: store.recordResultPersistenceFailure.bind(store),
+            save: store.save.bind(store),
+            saveResult: store.saveResult.bind(store),
+            setDurationMs: store.setDurationMs.bind(store),
+            setVars: store.setVars.bind(store),
+            toEvaluateResult: store.toEvaluateResult.bind(store),
+          };
+        },
+      };
+      const grader: ApiProvider = {
+        id: () => 'checkpoint-comparison',
+        callApi: vi.fn(async () => ({ output: '1' })),
+      };
+      const target: ApiProvider = {
+        id: () => 'legacy-checkpoint-target',
+        callApi: vi.fn(async (prompt, _context, options) => {
+          if (prompt === 'candidate A') {
+            return { output: 'Completed A', tokenUsage: { total: 5, numRequests: 1 } };
+          }
+          if (resuming) {
+            return { output: 'Completed B', tokenUsage: { total: 7, numRequests: 1 } };
+          }
+          options?.onProgress?.({
+            output: 'Checkpoint B',
+            tokenUsage: { total: 11, numRequests: 1 },
+          });
+          started.resolve();
+          return new Promise<never>(() => {});
+        }),
+      };
+      const suite: TestSuite = {
+        providers: [target],
+        prompts: ['candidate A', 'candidate B'].map(toPrompt),
+        tests: [
+          {
+            options: { rubricPrompt: '{{ outputs | dump }}' },
+            assert: [{ type: 'select-best', value: 'Choose B', provider: grader }],
+          },
+        ],
+      };
+      const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+      const running = evaluate(
+        suite,
+        record,
+        {
+          maxConcurrency: 1,
+          abortSignal: controller.signal,
+        },
+        runtime,
+      );
+      await started.promise;
+      controller.abort(new Error('Pause after checkpoint'));
+      await running;
+      const checkpoint = (await record.fetchResultsByTestIdx(0, 1))[0];
+      const checkpointLatency = checkpoint.latencyMs;
+      expect(checkpoint.response?.output).toBe('Checkpoint B');
+      expect(checkpoint.metadata?.__promptfoo?.resumable).toBe(true);
+      appends.mockClear();
+      cliState.resume = true;
+      resuming = true;
+      const resumed = (await Eval.findById(record.id))!;
+      await evaluate(suite, resumed, { maxConcurrency: 1 }, runtime);
+      const saved = (await Eval.findById(record.id))!;
+      const rows = await saved.fetchResultsByTestIdx(0);
+      expect(rows).toHaveLength(2);
+      expect(rows.filter((row) => row.promptIdx === 1)).toHaveLength(1);
+      const row = rows.find((row) => row.promptIdx === 1)!;
+      const unsupported = mode === 'plain legacy';
+      expect(appends).not.toHaveBeenCalled();
+      expect(row.response?.output).toBe(unsupported ? 'Checkpoint B' : 'Completed B');
+      expect(row.failureReason).toBe(
+        unsupported ? ResultFailureReason.ERROR : ResultFailureReason.NONE,
+      );
+      expect(saved.prompts[1].metrics).toMatchObject({
+        testPassCount: unsupported ? 0 : 1,
+        testErrorCount: unsupported ? 1 : 0,
+        testFailCount: 0,
+        totalLatencyMs: unsupported ? checkpointLatency : row.latencyMs,
+        tokenUsage: { total: unsupported ? 11 : 7, numRequests: 1 },
+      });
+      expect(resumed.resultPersistenceFailed).toBe(unsupported);
+      if (unsupported) {
+        expect(await resumed.getFailedResultsByTestIdx(0)).toEqual([
+          expect.objectContaining({ response: expect.objectContaining({ output: 'Completed B' }) }),
+        ]);
+      }
+      expect(grader.callApi).toHaveBeenCalledOnce();
+      expect(JSON.parse(vi.mocked(grader.callApi).mock.calls[0][0])).toEqual([
+        'Completed A',
+        'Completed B',
+      ]);
+
+      // A fresh continuation with a capable store retires the checkpoint exactly once.
+      await evaluate(suite, saved, { maxConcurrency: 1 });
+      const repaired = (await Eval.findById(record.id))!;
+      const repairedRows = await repaired.fetchResultsByTestIdx(0);
+      expect(repairedRows).toHaveLength(2);
+      expect(repairedRows.every((row) => row.failureReason !== ResultFailureReason.ERROR)).toBe(
+        true,
+      );
+      expect(repaired.prompts[1].metrics).toMatchObject({
+        testPassCount: 1,
+        testErrorCount: 0,
+        testFailCount: 0,
+        totalLatencyMs: repairedRows.find((row) => row.promptIdx === 1)!.latencyMs,
+        tokenUsage: { total: 7, numRequests: 1 },
+      });
+      expect(target.callApi).toHaveBeenCalledTimes(unsupported ? 4 : 3);
+      for (const [prompt] of vi.mocked(grader.callApi).mock.calls) {
+        expect(JSON.parse(prompt)).toEqual(['Completed A', 'Completed B']);
+      }
+    },
+  );
+
   it.each([
     { legacyStore: false, filtered: false },
     { legacyStore: true, filtered: false },

@@ -126,6 +126,15 @@ export interface CallApiOptionsParams {
    * Consumers must copy snapshots synchronously; providers may reuse objects.
    */
   onProgress?: (response: ProviderResponse) => void;
+  /**
+   * @internal Notify the scheduler before cancellable post-processing or a
+   * selected target-fetch backoff. Backoff observations retain their original
+   * quota deadline even when a coalesced consumer joins later.
+   */
+  onResponseHeaders?: (
+    headers: Record<string, string>,
+    backoff?: { headers: Record<string, string>; status: number; resetAt: number },
+  ) => void;
 }
 
 export interface ProviderCleanupContext {

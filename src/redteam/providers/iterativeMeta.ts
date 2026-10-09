@@ -46,6 +46,7 @@ import {
   externalizeResponseForRedteamHistory,
   getGraderAssertionValue,
   getTargetResponse,
+  preserveSelectedError,
   redteamProviderManager,
   runRedteamGrader,
   type TargetResponse,
@@ -202,7 +203,9 @@ export async function runMetaAgentRedteam({
   > = [];
   const callOptions = options ? { ...options, onProgress: undefined } : undefined;
   const publishProgress = () => {
-    options?.abortSignal?.throwIfAborted();
+    if (options?.abortSignal?.aborted) {
+      return;
+    }
     const tokenUsage = structuredClone(totalTokenUsage);
     if (storedGraderResult?.tokensUsed) {
       accumulateGradingTokenUsage(tokenUsage, storedGraderResult.tokensUsed, {
@@ -490,7 +493,9 @@ export async function runMetaAgentRedteam({
       : iterationContext;
     let checkpointedTurn: (typeof completedTargetHistory)[number] | undefined;
     const checkpointTargetResponse = (response: TargetResponse) => {
-      options?.abortSignal?.throwIfAborted();
+      if (!response.error) {
+        options?.abortSignal?.throwIfAborted();
+      }
       // Delayed targets checkpoint before pacing; other targets checkpoint on return.
       if (checkpointedTurn) {
         return checkpointedTurn;
@@ -531,6 +536,9 @@ export async function runMetaAgentRedteam({
       checkpointTargetResponse,
     );
     const completedTurn = checkpointTargetResponse(initialTargetResponse);
+    if (initialTargetResponse.error && options?.abortSignal?.aborted) {
+      break;
+    }
     const targetResponse: TargetResponse = await externalizeResponseForRedteamHistory(
       initialTargetResponse,
       {
@@ -775,31 +783,36 @@ export async function runMetaAgentRedteam({
     }
   }
 
-  options?.abortSignal?.throwIfAborted();
+  if (!lastResponse?.error) {
+    options?.abortSignal?.throwIfAborted();
+  }
   const error = agentRequestError || failClosedError || lastResponse?.error;
-  return {
-    output: bestResponse || lastResponse?.output || '',
-    prompt: bestPrompt,
-    ...(error ? { error } : {}),
-    metadata: {
-      finalIteration,
-      vulnerabilityAchieved,
-      // Use the last prompt sent to target (e.g., fetchPrompt for indirect-web-pwn layer)
-      // This ensures UI shows what was actually sent, not the pre-transform jailbreak
-      redteamFinalPrompt: lastFinalAttackPrompt || bestPrompt,
-      storedGraderResult,
-      stopReason,
-      redteamHistory,
-      sessionIds,
-      traceSnapshots:
-        traceSnapshots.length > 0
-          ? traceSnapshots.map((t) => formatTraceForMetadata(t))
-          : undefined,
-      // Include display vars from per-turn layer transforms (e.g., fetchPrompt, webPageUrl)
-      ...(lastTransformDisplayVars && { transformDisplayVars: lastTransformDisplayVars }),
+  return preserveSelectedError(
+    {
+      output: bestResponse || lastResponse?.output || '',
+      prompt: bestPrompt,
+      ...(error ? { error } : {}),
+      metadata: {
+        finalIteration,
+        vulnerabilityAchieved,
+        // Use the last prompt sent to target (e.g., fetchPrompt for indirect-web-pwn layer)
+        // This ensures UI shows what was actually sent, not the pre-transform jailbreak
+        redteamFinalPrompt: lastFinalAttackPrompt || bestPrompt,
+        storedGraderResult,
+        stopReason,
+        redteamHistory,
+        sessionIds,
+        traceSnapshots:
+          traceSnapshots.length > 0
+            ? traceSnapshots.map((t) => formatTraceForMetadata(t))
+            : undefined,
+        // Include display vars from per-turn layer transforms (e.g., fetchPrompt, webPageUrl)
+        ...(lastTransformDisplayVars && { transformDisplayVars: lastTransformDisplayVars }),
+      },
+      tokenUsage: totalTokenUsage,
     },
-    tokenUsage: totalTokenUsage,
-  };
+    agentRequestError || failClosedError ? undefined : lastResponse,
+  );
 }
 
 class RedteamIterativeMetaProvider implements ApiProvider {

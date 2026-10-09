@@ -80,7 +80,7 @@ comparison-result saves, and final evaluation persistence. The default
 dependency-light state implementation for embedded evaluators and focused tests.
 `src/node/evaluatorRuntime.ts` continues to own JSONL writer construction and
 resume append behavior. The evaluator orchestrates evaluation behavior without
-importing the concrete `Eval` model.
+importing the concrete `Eval` model. Checkpoint replacement uses the optional `EvaluationStore.replaceResult` operation, implemented directly by the Node and in-memory stores. Custom stores that omit it retain their durable checkpoint and enter the existing persistence-failure recovery path instead of silently appending a duplicate.
 
 `src/util/envFile.ts` owns plain `.env` file loading as a Node filesystem adapter.
 The imports from `src/envars.ts` and `src/server/server.ts` replace external

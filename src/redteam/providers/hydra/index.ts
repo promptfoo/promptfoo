@@ -52,6 +52,7 @@ import {
   getTargetResponse,
   isConversationEndedResponse,
   type Message,
+  preserveSelectedError,
   runRedteamGrader,
   type TargetResponse,
   type TurnBacktrackingStopReason,
@@ -393,7 +394,9 @@ export class HydraProvider implements ApiProvider {
     > = [];
     const callOptions = options ? { ...options, onProgress: undefined } : undefined;
     const publishProgress = () => {
-      options?.abortSignal?.throwIfAborted();
+      if (options?.abortSignal?.aborted) {
+        return;
+      }
       const tokenUsage = structuredClone(totalTokenUsage);
       if (storedGraderResult?.tokensUsed) {
         accumulateGradingTokenUsage(tokenUsage, storedGraderResult.tokensUsed, {
@@ -411,6 +414,11 @@ export class HydraProvider implements ApiProvider {
         images: lastTargetResponse?.images,
         metadata: {
           redteamHistory: completedTargetHistory,
+          storedGraderResult,
+          [`${this.providerOptions.metadataPrefix}Result`]: vulnerabilityAchieved,
+          stopReason,
+          successfulAttacks,
+          totalSuccessfulAttacks: successfulAttacks.length,
           sessionId: this.sessionId || getSessionId(lastTargetResponse, context),
           messages: lastResponseMessages,
           sessionIds,
@@ -736,7 +744,9 @@ export class HydraProvider implements ApiProvider {
         : context;
       let checkpointedTurn: (typeof completedTargetHistory)[number] | undefined;
       const checkpointTargetResponse = (response: TargetResponse) => {
-        options?.abortSignal?.throwIfAborted();
+        if (!response.error) {
+          options?.abortSignal?.throwIfAborted();
+        }
         // Delayed targets checkpoint before pacing; other targets checkpoint on return.
         if (checkpointedTurn) {
           return checkpointedTurn;
@@ -781,6 +791,9 @@ export class HydraProvider implements ApiProvider {
         checkpointTargetResponse,
       );
       const completedTurn = checkpointTargetResponse(targetResponse);
+      if (targetResponse.error && options?.abortSignal?.aborted) {
+        break;
+      }
 
       // Fetch trace context if tracing is enabled
       let traceContext: TraceContextData | null = null;
@@ -1090,7 +1103,6 @@ export class HydraProvider implements ApiProvider {
       });
 
       completedTurn.graderPassed = graderResult?.pass;
-      publishProgress();
 
       // Check if vulnerability was achieved
       if (graderResult?.pass === false) {
@@ -1105,13 +1117,17 @@ export class HydraProvider implements ApiProvider {
         stopReason = 'Grader failed';
 
         logger.debug(`${this.logPrefix} Vulnerability achieved!`, { turn });
+        publishProgress();
         break;
       }
+      publishProgress();
     }
 
-    options?.abortSignal?.throwIfAborted();
+    if (!lastTargetResponse?.error) {
+      options?.abortSignal?.throwIfAborted();
+    }
     // Update scan learnings
-    if (scanId) {
+    if (scanId && !options?.abortSignal?.aborted) {
       try {
         const turnsCompleted = this.conversationHistory.filter((m) => m.role === 'user').length;
         const learningRequest = {
@@ -1148,7 +1164,9 @@ export class HydraProvider implements ApiProvider {
       }
     }
 
-    options?.abortSignal?.throwIfAborted();
+    if (!lastTargetResponse?.error) {
+      options?.abortSignal?.throwIfAborted();
+    }
     const messages = lastResponseMessages.map((msg) => ({
       role: msg.role,
       content: msg.content,
@@ -1175,33 +1193,36 @@ export class HydraProvider implements ApiProvider {
             hydraResult: vulnerabilityAchieved,
           };
 
-    return {
-      output: lastTargetResponse?.output || '',
-      ...(failClosedError
-        ? { error: failClosedError }
-        : lastTargetResponse?.error
-          ? { error: lastTargetResponse.error }
-          : {}),
-      metadata: {
-        sessionId: this.sessionId || getSessionId(lastTargetResponse, context),
-        messages,
-        ...strategyMetadata,
-        stopReason,
-        successfulAttacks,
-        totalSuccessfulAttacks: successfulAttacks.length,
-        storedGraderResult,
-        redteamHistory,
-        sessionIds,
-        traceSnapshots:
-          traceSnapshots.length > 0
-            ? traceSnapshots.map((t) => formatTraceForMetadata(t))
-            : undefined,
-        ...(lastTransformDisplayVars && { transformDisplayVars: lastTransformDisplayVars }),
-        redteamFinalPrompt: lastFinalAttackPrompt || successfulAttacks[0]?.message,
+    return preserveSelectedError(
+      {
+        output: lastTargetResponse?.output || '',
+        ...(failClosedError
+          ? { error: failClosedError }
+          : lastTargetResponse?.error
+            ? { error: lastTargetResponse.error }
+            : {}),
+        metadata: {
+          sessionId: this.sessionId || getSessionId(lastTargetResponse, context),
+          messages,
+          ...strategyMetadata,
+          stopReason,
+          successfulAttacks,
+          totalSuccessfulAttacks: successfulAttacks.length,
+          storedGraderResult,
+          redteamHistory,
+          sessionIds,
+          traceSnapshots:
+            traceSnapshots.length > 0
+              ? traceSnapshots.map((t) => formatTraceForMetadata(t))
+              : undefined,
+          ...(lastTransformDisplayVars && { transformDisplayVars: lastTransformDisplayVars }),
+          redteamFinalPrompt: lastFinalAttackPrompt || successfulAttacks[0]?.message,
+        },
+        tokenUsage: totalTokenUsage,
+        guardrails: lastTargetResponse?.guardrails,
       },
-      tokenUsage: totalTokenUsage,
-      guardrails: lastTargetResponse?.guardrails,
-    };
+      failClosedError ? undefined : lastTargetResponse,
+    );
   }
 }
 

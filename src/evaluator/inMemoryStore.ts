@@ -71,16 +71,21 @@ export class InMemoryEvaluationStore
     return this.evaluation.resultPersistenceFailed;
   }
 
-  async appendResult(
-    result: EvaluateResult,
-    options?: { replace?: EvaluateResult },
-  ): Promise<void> {
-    const index = options?.replace ? this.evaluation.results.indexOf(options.replace) : -1;
-    if (index >= 0) {
-      this.evaluation.results[index] = result;
-    } else {
-      this.evaluation.results.push(result);
+  async appendResult(result: EvaluateResult): Promise<void> {
+    this.evaluation.results.push(result);
+    this.clearRecoveredResult(result);
+  }
+
+  async replaceResult(result: EvaluateResult, previous: EvaluateResult): Promise<void> {
+    const index = this.evaluation.results.indexOf(previous);
+    if (index < 0) {
+      throw new Error('Cannot replace a checkpoint that is no longer saved');
     }
+    this.evaluation.results[index] = result;
+    this.clearRecoveredResult(result);
+  }
+
+  private clearRecoveredResult(result: EvaluateResult): void {
     const key = getResultIndexKey(result);
     this.failedResultsByIndex.delete(key);
     this.finalResultsByIndex.delete(key);

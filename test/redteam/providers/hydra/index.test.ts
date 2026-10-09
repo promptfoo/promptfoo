@@ -14,12 +14,16 @@ import {
   neverGenerateRemote,
   shouldGenerateRemote,
 } from '../../../../src/redteam/remoteGeneration';
+import { isProviderResponseRateLimited } from '../../../../src/scheduler/types';
+import { isResponseHeadersObserverErrorResponse } from '../../../../src/util/fetch/responseHeadersObserver';
 import { createEvaluateResult } from '../../../factories/eval';
 import {
   createMockProvider,
   createProviderResponse,
   type MockApiProvider,
 } from '../../../factories/provider';
+import { createSelectedObserverErrorResponse } from '../../../util/selectedObserverError';
+import { createSelectedToolErrorTarget } from '../../../util/selectedToolErrorTarget';
 
 import type {
   AtomicTestCase,
@@ -1715,6 +1719,300 @@ describe('HydraProvider', () => {
     });
   });
 
+  describe.each([
+    {
+      strategyName: 'Hydra',
+      strategyId: 'hydra',
+      providerId: 'promptfoo:redteam:hydra',
+      taskId: 'hydra-decision',
+      metadataPrefix: 'hydra',
+    },
+    {
+      strategyName: 'Goblin',
+      strategyId: 'goblin',
+      providerId: 'promptfoo:redteam:goblin',
+      taskId: 'goblin-decision',
+      metadataPrefix: 'goblin',
+    },
+  ] as const)('$strategyName selected target error provenance', (providerOptions) => {
+    beforeEach(() => {
+      mockAgentProvider.callApi.mockResolvedValue({
+        output: 'Say hello',
+        tokenUsage: { total: 3, prompt: 2, completion: 1, numRequests: 1 },
+      });
+    });
+
+    it('finalizes a completed target error before canceled trace, next turn, or learnings', async () => {
+      const fixture = createSelectedToolErrorTarget();
+      mockAgentProvider.callApi.mockImplementation(async (_prompt, _context, options) => {
+        options?.abortSignal?.throwIfAborted();
+        return { output: 'Say hello' };
+      });
+      mockResolveTracingOptions.mockReturnValue({
+        enabled: true,
+        includeInAttack: true,
+        includeInGrading: true,
+        includeInternalSpans: false,
+        maxSpans: 50,
+        maxDepth: 5,
+        maxRetries: 3,
+        retryDelayMs: 500,
+        sanitizeAttributes: true,
+      });
+      mockFetchTraceContext.mockImplementation(async (_traceId, options) => {
+        options?.abortSignal?.throwIfAborted();
+        return null;
+      });
+      try {
+        const provider = new HydraProvider({ injectVar: 'input', maxTurns: 2 }, providerOptions);
+        const result = await fixture.run(() =>
+          provider.callApi(
+            '',
+            {
+              originalProvider: fixture.target,
+              vars: { input: 'Say hello' },
+              prompt: { raw: '{{input}}', label: 'greeting' },
+              traceparent: '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01',
+              test: { metadata: { scanId: 'fixture-scan' } },
+            },
+            { abortSignal: fixture.controller.signal },
+          ),
+        );
+        await fixture.expectSelected(result);
+        expect(mockAgentProvider.callApi).toHaveBeenCalledOnce();
+        expect(mockGrader.getResult).not.toHaveBeenCalled();
+        expect(mockFetchTraceContext).not.toHaveBeenCalled();
+      } finally {
+        await fixture.cleanup();
+      }
+    });
+
+    it.each(['tool', 'http', 'target-local', undefined] as const)(
+      'projects only the selected tool marker from target origin %s',
+      async (errorOrigin) => {
+        // Preserve the external provider payload, including unknown markers.
+        const originMetadata: Record<string, unknown> = errorOrigin ? { errorOrigin } : {};
+        mockTargetProvider.callApi.mockResolvedValue({
+          error: 'Lookup service returned 429 rate limit',
+          tokenUsage: { total: 5, prompt: 2, completion: 3, numRequests: 1 },
+          metadata: {
+            ...originMetadata,
+            http: {
+              status: 429,
+              statusText: 'Too Many Requests',
+              headers: { 'retry-after': '60' },
+            },
+            rateLimit: { retryAfterMs: 60000 },
+            targetOnly: 'private target metadata',
+          },
+        });
+        const provider = new HydraProvider({ injectVar: 'input', maxTurns: 1 }, providerOptions);
+
+        const result = await provider.callApi('', {
+          originalProvider: mockTargetProvider,
+          vars: { input: 'Say hello' },
+          prompt: { raw: '{{input}}', label: 'greeting' },
+        });
+
+        expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(1);
+        expect(JSON.parse(mockTargetProvider.callApi.mock.calls[0][0])).toEqual([
+          { role: 'user', content: 'Say hello' },
+        ]);
+        expect(result.error).toBe('Lookup service returned 429 rate limit');
+        if (errorOrigin === 'tool') {
+          expect(result.metadata).toHaveProperty('errorOrigin', 'tool');
+        } else {
+          expect(result.metadata).not.toHaveProperty('errorOrigin');
+        }
+        expect(result.metadata).not.toHaveProperty('http');
+        expect(result.metadata).not.toHaveProperty('rateLimit');
+        expect(result.metadata).not.toHaveProperty('targetOnly');
+        expect(result.metadata).toHaveProperty(
+          `${providerOptions.metadataPrefix}RoundsCompleted`,
+          1,
+        );
+        expect(result.metadata.redteamHistory).toEqual([]);
+        expect(result.tokenUsage).toMatchObject({ total: 5, numRequests: 1 });
+        expect(mockGrader.getResult).not.toHaveBeenCalled();
+      },
+    );
+
+    it('preserves selected caller-observer provenance on the returned target error', async () => {
+      const targetResponse = createSelectedObserverErrorResponse({
+        tokenUsage: { total: 5, prompt: 2, completion: 3, numRequests: 1 },
+        metadata: { targetOnly: 'private target metadata' },
+      });
+      expect(isResponseHeadersObserverErrorResponse(targetResponse)).toBe(true);
+      mockTargetProvider.callApi.mockResolvedValue(targetResponse);
+      const provider = new HydraProvider({ injectVar: 'input', maxTurns: 1 }, providerOptions);
+
+      const result = await provider.callApi('', {
+        originalProvider: mockTargetProvider,
+        vars: { input: 'Say hello' },
+        prompt: { raw: '{{input}}', label: 'greeting' },
+      });
+
+      expect(mockTargetProvider.callApi).toHaveBeenCalledOnce();
+      expect(result.error).toBe('metrics rate limit exceeded');
+      expect(isResponseHeadersObserverErrorResponse(result)).toBe(true);
+      expect(isProviderResponseRateLimited(result, undefined)).toBe(false);
+      expect(result.metadata).not.toHaveProperty('targetOnly');
+      expect(result.metadata).not.toHaveProperty('errorOrigin');
+      expect(result.metadata.redteamHistory).toEqual([]);
+      expect(result.metadata).toHaveProperty(`${providerOptions.metadataPrefix}RoundsCompleted`, 1);
+      expect(result.tokenUsage).toMatchObject({ total: 5, numRequests: 1 });
+      expect(mockGrader.getResult).not.toHaveBeenCalled();
+    });
+
+    it('clears selected caller-observer provenance when a later target response succeeds', async () => {
+      const priorResponse = createSelectedObserverErrorResponse({});
+      expect(isResponseHeadersObserverErrorResponse(priorResponse)).toBe(true);
+      mockTargetProvider.callApi
+        .mockResolvedValueOnce(priorResponse)
+        .mockResolvedValueOnce({ output: 'Hello' });
+      const provider = new HydraProvider({ injectVar: 'input', maxTurns: 2 }, providerOptions);
+
+      const result = await provider.callApi('', {
+        originalProvider: mockTargetProvider,
+        vars: { input: 'Say hello' },
+        prompt: { raw: '{{input}}', label: 'greeting' },
+      });
+
+      expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(2);
+      expect(result.output).toBe('Hello');
+      expect(result).not.toHaveProperty('error');
+      expect(isResponseHeadersObserverErrorResponse(result)).toBe(false);
+      expect(isProviderResponseRateLimited(result, undefined)).toBe(false);
+      expect(result.metadata.redteamHistory).toHaveLength(1);
+      expect(result.metadata).toHaveProperty(`${providerOptions.metadataPrefix}RoundsCompleted`, 2);
+      expect(result.tokenUsage?.numRequests).toBe(2);
+    });
+
+    it.each(['agent error', 'local no-probe error'] as const)(
+      'keeps selected caller-observer provenance off %s in the zero-probe builder contract',
+      async (selectedError) => {
+        // Matching diagnostic text must not transfer the prior target's provenance.
+        const agentError = 'metrics rate limit exceeded';
+        if (selectedError === 'agent error') {
+          mockAgentProvider.callApi
+            .mockResolvedValueOnce({ output: 'Say hello' })
+            .mockResolvedValueOnce({ error: agentError });
+        }
+        const priorResponse = createSelectedObserverErrorResponse({
+          tokenUsage: { numRequests: 0 },
+        });
+        expect(isResponseHeadersObserverErrorResponse(priorResponse)).toBe(true);
+        mockTargetProvider.callApi.mockResolvedValue(priorResponse);
+        const provider = new HydraProvider(
+          { injectVar: 'input', maxTurns: selectedError === 'agent error' ? 2 : 1 },
+          providerOptions,
+        );
+
+        const result = await provider.callApi('', {
+          originalProvider: mockTargetProvider,
+          vars: { input: 'Say hello' },
+          prompt: { raw: '{{input}}', label: 'greeting' },
+        });
+
+        expect(mockTargetProvider.callApi).toHaveBeenCalledOnce();
+        // The live scan sends one learning update after its attack decisions.
+        expect(mockAgentProvider.callApi).toHaveBeenCalledTimes(
+          selectedError === 'agent error' ? 3 : 2,
+        );
+        expect(
+          mockAgentProvider.callApi.mock.calls.map(([, context]) => context?.prompt.label),
+        ).toEqual([
+          ...Array(selectedError === 'agent error' ? 2 : 1).fill(
+            `${providerOptions.metadataPrefix}-agent`,
+          ),
+          `${providerOptions.metadataPrefix}-learning-update`,
+        ]);
+        expect(result.error).toBe(
+          selectedError === 'agent error'
+            ? agentError
+            : `${providerOptions.strategyName} did not execute any target probes`,
+        );
+        expect(isResponseHeadersObserverErrorResponse(result)).toBe(false);
+        expect(isProviderResponseRateLimited(result, undefined)).toBe(
+          selectedError === 'agent error',
+        );
+        expect(result.metadata.redteamHistory).toEqual([]);
+        expect(result.metadata).toHaveProperty(
+          `${providerOptions.metadataPrefix}RoundsCompleted`,
+          1,
+        );
+        expect(result.tokenUsage?.numRequests).toBe(0);
+      },
+    );
+
+    it('clears the prior tool marker when a later successful target response is selected', async () => {
+      mockTargetProvider.callApi
+        .mockResolvedValueOnce({
+          error: 'Lookup service returned 429 rate limit',
+          metadata: { errorOrigin: 'tool' },
+        })
+        .mockResolvedValueOnce({ output: 'Hello' });
+      const provider = new HydraProvider({ injectVar: 'input', maxTurns: 2 }, providerOptions);
+
+      const result = await provider.callApi('', {
+        originalProvider: mockTargetProvider,
+        vars: { input: 'Say hello' },
+        prompt: { raw: '{{input}}', label: 'greeting' },
+      });
+
+      expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(2);
+      expect(result.output).toBe('Hello');
+      expect(result).not.toHaveProperty('error');
+      expect(result.metadata).not.toHaveProperty('errorOrigin');
+      expect(result.metadata.redteamHistory).toHaveLength(1);
+      expect(result.metadata).toHaveProperty(`${providerOptions.metadataPrefix}RoundsCompleted`, 2);
+      expect(result.tokenUsage?.numRequests).toBe(2);
+    });
+
+    it.each(['agent error', 'local no-probe error'] as const)(
+      'keeps %s independent of a prior target marker in the zero-probe builder contract',
+      async (selectedError) => {
+        const agentError = 'Agent decision service unavailable';
+        if (selectedError === 'agent error') {
+          mockAgentProvider.callApi
+            .mockResolvedValueOnce({ output: 'Say hello' })
+            .mockResolvedValueOnce({ error: agentError });
+        }
+        // A target may explicitly report no executed probes. This exercises the
+        // builder's fail-closed selection, not a completed Chat cancellation.
+        mockTargetProvider.callApi.mockResolvedValue({
+          error: 'Lookup service returned 429 rate limit',
+          tokenUsage: { numRequests: 0 },
+          metadata: { errorOrigin: 'tool' },
+        });
+        const provider = new HydraProvider(
+          { injectVar: 'input', maxTurns: selectedError === 'agent error' ? 2 : 1 },
+          providerOptions,
+        );
+
+        const result = await provider.callApi('', {
+          originalProvider: mockTargetProvider,
+          vars: { input: 'Say hello' },
+          prompt: { raw: '{{input}}', label: 'greeting' },
+        });
+
+        expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(1);
+        expect(result.error).toBe(
+          selectedError === 'agent error'
+            ? agentError
+            : `${providerOptions.strategyName} did not execute any target probes`,
+        );
+        expect(result.metadata).not.toHaveProperty('errorOrigin');
+        expect(result.metadata.redteamHistory).toEqual([]);
+        expect(result.metadata).toHaveProperty(
+          `${providerOptions.metadataPrefix}RoundsCompleted`,
+          1,
+        );
+        expect(result.tokenUsage?.numRequests).toBe(0);
+      },
+    );
+  });
+
   describe('callApi() - conversation history', () => {
     it('should build conversation history correctly', async () => {
       mockAgentProvider.callApi
@@ -2045,6 +2343,119 @@ describe('HydraProvider', () => {
   });
 
   describe('callApi() - scan learning', () => {
+    it.each([false, true])(
+      'checkpoints the completed pass=%s verdict before cancellable learning',
+      async (pass) => {
+        const controller = new AbortController();
+        const snapshots: import('../../../../src/types/index').ProviderResponse[] = [];
+        let ready!: () => void;
+        const learningStarted = new Promise<void>((resolve) => {
+          ready = resolve;
+        });
+        const output = pass ? 'Completed safe response' : 'c3ludGhldGljLWltYWdl';
+        const assertion = { type: 'promptfoo:redteam:pii' } as const;
+        const test: AtomicTestCase = { assert: [assertion], metadata: { pluginId: 'pii' } };
+        mockTargetProvider.callApi.mockResolvedValue({
+          output,
+          ...(!pass && { isBase64: true, format: 'png' }),
+          tokenUsage: { total: 5, numRequests: 1 },
+        });
+        mockGrader.getResult.mockResolvedValue({
+          grade: {
+            pass,
+            score: pass ? 1 : 0,
+            reason: 'Completed fixture verdict',
+            tokensUsed: { total: 11, numRequests: 1 },
+          },
+        });
+        mockAgentProvider.callApi.mockImplementation(async (prompt, _context, options) => {
+          if (!JSON.parse(prompt).testComplete) {
+            return {
+              output: 'Synthetic probe',
+              tokenUsage: { total: 3, numRequests: 1 },
+            };
+          }
+          ready();
+          return new Promise<never>((_resolve, reject) => {
+            options?.abortSignal?.addEventListener(
+              'abort',
+              () => reject(options.abortSignal?.reason),
+              { once: true },
+            );
+          });
+        });
+        const provider = new HydraProvider({ injectVar: 'input', maxTurns: 1 });
+        const attack = provider.callApi(
+          '',
+          {
+            originalProvider: mockTargetProvider,
+            evaluationId: 'learning-checkpoint-fixture',
+            vars: { input: 'Synthetic objective' },
+            prompt: { raw: '{{input}}', label: 'fixture' },
+            test,
+          },
+          {
+            abortSignal: controller.signal,
+            onProgress: (response) => snapshots.push(structuredClone(response)),
+          },
+        );
+        await learningStarted;
+        const snapshot = snapshots.at(-1)!;
+        expect(snapshot.output).toBe(output);
+        expect(snapshot.metadata).toMatchObject({
+          hydraResult: !pass,
+          stopReason: pass ? 'Max turns reached' : 'Grader failed',
+          totalSuccessfulAttacks: pass ? 0 : 1,
+          storedGraderResult: {
+            pass,
+            score: pass ? 1 : 0,
+            reason: 'Completed fixture verdict',
+            metadata: {
+              redteamGradingAssertionHash: getGradingAssertionHash(assertion),
+              redteamGradingInputHash: getGradingInputHash(
+                'Synthetic probe',
+                output,
+                undefined,
+                'pii',
+              ),
+            },
+          },
+          redteamHistory: [expect.objectContaining({ output, graderPassed: pass })],
+        });
+        expect(snapshot.tokenUsage).toMatchObject({
+          total: 5,
+          numRequests: 1,
+          attacker: { total: 3 },
+          assertions: { total: 11 },
+        });
+        if (!pass) {
+          expect(snapshot.metadata?.successfulAttacks[0]).toMatchObject({
+            response: output,
+            isBase64: true,
+          });
+          const stripped = sanitizeResultForJsonlArtifact(
+            createEvaluateResult({ response: snapshot, metadata: snapshot.metadata }),
+            {
+              shouldStripMetadata: false,
+              shouldStripPromptText: false,
+              shouldStripResponseOutput: true,
+              shouldStripTestVars: false,
+              shouldStripGradingResult: false,
+            },
+          );
+          expect(stripped.response?.metadata?.successfulAttacks[0].response).toBe(
+            '[output stripped]',
+          );
+          expect(snapshot.metadata?.successfulAttacks[0].response).toBe(output);
+        }
+        const snapshotCount = snapshots.length;
+        controller.abort(new Error('Cancel pending learning'));
+        await expect(attack).rejects.toThrow('Cancel pending learning');
+        expect(snapshots).toHaveLength(snapshotCount);
+        expect(mockGrader.getResult).toHaveBeenCalledOnce();
+      },
+    );
+
     it('includes aggregated attack-generation and scan-learning model usage', async () => {
       mockAgentProvider.callApi
         .mockResolvedValueOnce({
