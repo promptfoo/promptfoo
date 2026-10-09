@@ -87,6 +87,25 @@ helm template promptfoo ./promptfoo-enterprise-helm --namespace promptfoo \
 
 Keep secret values out of committed values files and `--set` arguments. Mounted server dotenv values still enter the application's process environment. Both services read configuration at startup, so restart the affected Deployment after rotating a mounted Secret; changing the Secret alone does not reload the application.
 
+## Team secret encryption
+
+Before using team secrets, configure `TEAM_SECRET_ENCRYPTION_KEY` in the Promptfoo server environment. Generate a strong random value once, for example with `openssl rand -hex 32`, and store it in your secret manager. Every server instance that reads the same database must use the same value.
+
+For Compose, supply the value through your deployment's environment or protected `.env` file and explicitly pass it to the `promptfoo` service. The supplied Compose files do not currently pass this variable through. Add an override such as:
+
+```yaml title="docker-compose.override.yml"
+services:
+  promptfoo:
+    environment:
+      TEAM_SECRET_ENCRYPTION_KEY: ${TEAM_SECRET_ENCRYPTION_KEY:?Set TEAM_SECRET_ENCRYPTION_KEY}
+```
+
+Recreate the Promptfoo container after applying the override. If you use explicit `-f` arguments, include this override after your base Compose file. Adding the value to `.env` without the service environment entry is insufficient.
+
+For Helm releases with mounted-configuration support, include `TEAM_SECRET_ENCRYPTION_KEY` in the server dotenv Secret referenced by `promptfooServer.envFileSecret`, then restart the Promptfoo Deployment. Preserve the other required entries in that file.
+
+Back up this key securely with the configuration required to restore the database. Losing or replacing it makes existing team secrets unreadable; changing the environment value does not re-encrypt stored secrets. Rotate individual provider credentials through the team secrets API instead of replacing this deployment key.
+
 ## API reference
 
 Use the [interactive API reference](/docs/api-reference/) or the [public OpenAPI specification](https://api.promptfoo.app/static/openapi.json) for endpoint schemas. Your on-prem API also serves its bundled specification at `/static/openapi.json`, for example `https://promptfoo.example.com/static/openapi.json`. Prefer that copy when your installed release differs from the public reference.
