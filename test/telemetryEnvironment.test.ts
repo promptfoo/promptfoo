@@ -7,6 +7,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { loadEnvFiles } from '../src/util/envFile';
 import { createDeferred, mockProcessEnv } from './util/utils';
 
+// Exercise implicit loading with the temporary DOTENV_PATH fixture.
+vi.mock('../src/util/envFile', async (importOriginal) => importOriginal());
+
 const client = vi.hoisted(() => ({
   capture: vi.fn(),
   identify: vi.fn(),
