@@ -159,6 +159,14 @@ export function evalCommand(
     )
     .option('--retry-errors', 'Retry all ERROR results from the latest evaluation')
     .option(
+      '--lock <path>',
+      'Create a tamper-evident lock for the resolved eval bar before running',
+    )
+    .option(
+      '--verify <path>',
+      'Verify a tamper-evident eval lock before running and enforce its pass-rate threshold',
+    )
+    .option(
       '--no-write',
       'Do not write results to promptfoo directory',
       defaultConfig?.commandLineOptions?.write,

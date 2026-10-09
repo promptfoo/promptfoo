@@ -261,6 +261,14 @@ describe('evalCommand', () => {
     );
   });
 
+  it('should include eval lock options in help text', () => {
+    const cmd = evalCommand(program, defaultConfig, defaultConfigPath);
+    const helpText = cmd.helpInformation();
+    expect(helpText).toContain('--lock <path>');
+    expect(helpText).toContain('--verify <path>');
+    expect(helpText).toContain('tamper-evident');
+  });
+
   it('should apply resolved author when --no-write is used', async () => {
     const cmdObj = { table: false, write: false };
     const config = {} as UnifiedConfig;
