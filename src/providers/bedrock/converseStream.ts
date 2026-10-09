@@ -13,6 +13,8 @@ export async function collectConverseStream(
   }
   const blocks = new Map<number, ContentBlock>();
   const toolInputs = new Map<number, string>();
+  const openBlocks = new Set<number>();
+  let receivedMetadata = false;
   const result: ConverseCommandOutput = {
     $metadata: response.$metadata,
     output: undefined,
@@ -35,6 +37,7 @@ export async function collectConverseStream(
     if (event.contentBlockStart) {
       const { contentBlockIndex, start } = event.contentBlockStart;
       const index = contentBlockIndex ?? 0;
+      openBlocks.add(index);
       if (start?.toolUse) {
         blocks.set(index, { toolUse: { ...start.toolUse, input: {} } });
         toolInputs.set(index, '');
@@ -47,6 +50,7 @@ export async function collectConverseStream(
     if (event.contentBlockDelta?.delta) {
       const { delta, contentBlockIndex } = event.contentBlockDelta;
       const index = contentBlockIndex ?? 0;
+      openBlocks.add(index);
       const block = blocks.get(index);
       if (delta.text !== undefined) {
         if (block?.citationsContent) {
@@ -131,16 +135,29 @@ export async function collectConverseStream(
         }
       }
     }
+    if (event.contentBlockStop) {
+      openBlocks.delete(event.contentBlockStop.contentBlockIndex ?? 0);
+    }
     if (event.messageStop) {
+      if (openBlocks.size) {
+        throw new Error('Bedrock response stream ended before contentBlockStop');
+      }
       result.stopReason = event.messageStop.stopReason;
       result.additionalModelResponseFields = event.messageStop.additionalModelResponseFields;
     }
     if (event.metadata) {
+      if (!result.stopReason) {
+        throw new Error('Bedrock response stream returned metadata before messageStop');
+      }
+      receivedMetadata = true;
       Object.assign(result, event.metadata);
     }
   }
   if (!result.stopReason) {
     throw new Error('Bedrock response stream ended before messageStop');
+  }
+  if (!receivedMetadata || openBlocks.size) {
+    throw new Error('Bedrock response stream ended before terminal metadata or contentBlockStop');
   }
   for (const [index, raw] of toolInputs) {
     try {

@@ -185,7 +185,12 @@ describe('Converse native request features', () => {
     };
     const { provider, send } = fixture(config);
     if (streaming) {
-      send.mockResolvedValue(stream([{ messageStop: { stopReason: 'end_turn' } }]));
+      send.mockResolvedValue(
+        stream([
+          { messageStop: { stopReason: 'end_turn' } },
+          { metadata: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } } },
+        ]),
+      );
     }
     expect((await provider.callApi('hello')).error).toBeUndefined();
     const command = send.mock.calls[0][0];
@@ -362,6 +367,7 @@ describe('ConverseStream response parity', () => {
     send.mockResolvedValue(
       stream([
         { contentBlockDelta: { contentBlockIndex: 0, delta: { text: 'READY' } } },
+        { contentBlockStop: { contentBlockIndex: 0 } },
         { messageStop: { stopReason: 'end_turn' } },
         { metadata: { usage: { inputTokens: 3, outputTokens: 2, totalTokens: 5 } } },
       ]),
@@ -386,7 +392,12 @@ describe('ConverseStream response parity', () => {
     cache.enabled = true;
     const { provider, send } = fixture({ streaming });
     if (streaming) {
-      send.mockResolvedValue(stream([{ messageStop: { stopReason: 'end_turn' } }]));
+      send.mockResolvedValue(
+        stream([
+          { messageStop: { stopReason: 'end_turn' } },
+          { metadata: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } } },
+        ]),
+      );
     }
     expect(
       (await provider.callApi('hello', { bustCache: true } as CallApiContextParams)).error,
@@ -425,7 +436,10 @@ describe('ConverseStream response parity', () => {
             delta: { toolResult: [{ text: 'two' }, { json: { source: 'example' } }] },
           },
         },
+        { contentBlockStop: { contentBlockIndex: 0 } },
+        { contentBlockStop: { contentBlockIndex: 1 } },
         { messageStop: { stopReason: 'end_turn' } },
+        { metadata: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } } },
       ]),
     );
     const result = await provider.callApi('hello');
@@ -459,7 +473,9 @@ describe('ConverseStream response parity', () => {
           },
         },
         { contentBlockDelta: { contentBlockIndex: 0, delta: { toolUse: { input: '{broken' } } } },
+        { contentBlockStop: { contentBlockIndex: 0 } },
         { messageStop: { stopReason: 'tool_use' } },
+        { metadata: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } } },
       ]),
     );
     expect((await provider.callApi('hello')).error).toContain('invalid JSON arguments');
@@ -496,6 +512,9 @@ describe('ConverseStream response parity', () => {
           },
         },
         { contentBlockDelta: { contentBlockIndex: 2, delta: { text: ' with evidence' } } },
+        { contentBlockStop: { contentBlockIndex: 0 } },
+        { contentBlockStop: { contentBlockIndex: 1 } },
+        { contentBlockStop: { contentBlockIndex: 2 } },
         {
           messageStop: {
             stopReason: 'guardrail_intervened',
@@ -562,7 +581,10 @@ describe('ConverseStream response parity', () => {
         },
         { contentBlockDelta: { contentBlockIndex: 1, delta: { toolUse: { input: '{"x":' } } } },
         { contentBlockDelta: { contentBlockIndex: 1, delta: { toolUse: { input: '1}' } } } },
+        { contentBlockStop: { contentBlockIndex: 0 } },
+        { contentBlockStop: { contentBlockIndex: 1 } },
         { messageStop: { stopReason: 'tool_use' } },
+        { metadata: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } } },
       ]),
     );
     const result = await provider.callApi('hello');
@@ -685,3 +707,56 @@ describe('native Converse configuration and cached binary parity', () => {
     },
   );
 });
+
+it.each(['metadata', 'contentBlockStop'])(
+  'rejects missing %s without executing or caching a pending tool',
+  async (missing) => {
+    cache.enabled = true;
+    const callback = vi.fn();
+    const { provider, send } = fixture({
+      streaming: true,
+      functionToolCallbacks: { lookup: callback },
+    });
+    const events = [
+      {
+        contentBlockStart: {
+          contentBlockIndex: 0,
+          start: { toolUse: { name: 'lookup', toolUseId: 'id' } },
+        },
+      },
+      { contentBlockDelta: { contentBlockIndex: 0, delta: { toolUse: { input: '{}' } } } },
+      { contentBlockStop: { contentBlockIndex: 0 } },
+      { messageStop: { stopReason: 'tool_use' } },
+      { metadata: { usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } } },
+    ].filter((event) => !(missing in event));
+    send.mockResolvedValue(stream(events));
+    const result = await provider.callApi('hello');
+    expect(result.error).toContain(
+      missing === 'metadata' ? 'terminal metadata' : 'contentBlockStop',
+    );
+    expect(result.output).toBeUndefined();
+    expect(callback).not.toHaveBeenCalled();
+    expect(cache.set).not.toHaveBeenCalled();
+  },
+);
+
+it.each(['toolChoice', 'tool_choice'])(
+  'rejects managed prompt %s overrides from both config levels',
+  async (key) => {
+    for (const promptLevel of [false, true]) {
+      const override = { [key]: 'auto' };
+      const { provider, send } = fixture(
+        promptLevel ? {} : override,
+        'arn:aws:bedrock:us-east-1:123456789012:prompt/ABCDEFGHIJ:1',
+      );
+      const result = await provider.callApi(
+        'hello',
+        promptLevel
+          ? { prompt: { raw: 'hello', label: 'hello', config: override }, vars: {} }
+          : undefined,
+      );
+      expect(result.error).toContain('Prompt management');
+      expect(send).not.toHaveBeenCalled();
+    }
+  },
+);

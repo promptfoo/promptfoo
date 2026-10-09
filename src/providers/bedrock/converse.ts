@@ -1245,6 +1245,8 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
         'system',
         'tools',
         'toolConfig',
+        'toolChoice',
+        'tool_choice',
         'thinking',
         'reasoningConfig',
         'additionalModelRequestFields',
@@ -1253,7 +1255,9 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
         system ||
         conflicting.some((key) => this.config[key] !== undefined) ||
         context?.prompt?.config?.tools ||
-        context?.prompt?.config?.toolConfig
+        context?.prompt?.config?.toolConfig ||
+        context?.prompt?.config?.toolChoice !== undefined ||
+        context?.prompt?.config?.tool_choice !== undefined
       ) {
         throw new Error(
           'Managed Bedrock prompts define system, inferenceConfig, toolConfig, and additionalModelRequestFields in Prompt management; remove these overrides',
