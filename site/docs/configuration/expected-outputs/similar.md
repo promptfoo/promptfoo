@@ -34,6 +34,8 @@ assert:
 
 The negated `not-similar` assertion is the logical inverse: with an array of values it passes only when the output is dissimilar to **every** value (and fails as soon as it is too similar to any one of them). This is the natural way to assert that an output does not resemble any item in a list of forbidden or canned answers.
 
+At the threshold, `similar` passes and `not-similar` fails, including for Euclidean distance. The inverse uses the same floating-point tolerance as the positive comparison. Non-finite similarity or distance results fail both assertions.
+
 ## Similarity Metrics
 
 You can specify which metric to use by including it in the assertion type. The default is `similar` (cosine similarity).

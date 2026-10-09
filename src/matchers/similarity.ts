@@ -230,5 +230,9 @@ export async function matchesSimilarity(
     return similarity;
   }
 
+  if (!Number.isFinite(similarity)) {
+    return fail(`Invalid similarity score: ${similarity}`, tokensUsed);
+  }
+
   return buildSimilarityResult(similarity, threshold, inverse, metric, tokensUsed);
 }

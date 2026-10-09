@@ -280,6 +280,32 @@ describe('matchesSimilarity', () => {
     });
   });
 
+  it.each([
+    ['cosine', false],
+    ['cosine', true],
+    ['dot_product', false],
+    ['dot_product', true],
+    ['euclidean', false],
+    ['euclidean', true],
+  ] as const)(
+    'fails closed when embedding arithmetic overflows (%s, inverse=%s)',
+    async (metric, inverse) => {
+      vi.mocked(DefaultEmbeddingProvider.callEmbeddingApi).mockImplementation(async (text) => ({
+        embedding: [text === 'Expected output' ? Number.MAX_VALUE : -Number.MAX_VALUE],
+        tokenUsage: { total: 5, prompt: 5 },
+      }));
+
+      await expect(
+        matchesSimilarity('Expected output', 'Sample output', 0.5, inverse, undefined, metric),
+      ).resolves.toMatchObject({
+        pass: false,
+        score: 0,
+        reason: expect.stringContaining('Invalid similarity score'),
+        tokensUsed: { total: 10, prompt: 10 },
+      });
+    },
+  );
+
   it('should fail inverted similarity at the exact threshold', async () => {
     await expect(
       matchesSimilarity('Expected output', 'Sample output', 1, true),
