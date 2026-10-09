@@ -1981,6 +1981,9 @@ If you see this error, the cause depends on which model provider you're using:
 
 ## Knowledge Base
 
+Agent Runtime requires AWS credentials (SigV4). Bedrock API keys are unsupported and
+do not override a configured AWS profile or the default credential chain.
+
 AWS Bedrock Knowledge Bases provide Retrieval Augmented Generation (RAG) functionality, allowing you to query a knowledge base with natural language and get responses based on your data.
 
 ### Prerequisites
