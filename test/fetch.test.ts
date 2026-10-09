@@ -58,9 +58,9 @@ vi.mock('../src/logger', () => ({
 
 vi.mock('../src/globalConfig/cloud', () => ({
   cloudConfig: {
-    getApiHost: vi.fn().mockReturnValue('https://api.promptfoo.dev'),
+    getApiHost: vi.fn(),
     getApiKey: vi.fn(),
-    getAuthHeaderName: vi.fn().mockReturnValue('Authorization'),
+    getAuthHeaderName: vi.fn(),
     getCurrentOrganizationId: vi.fn(),
     getCurrentTeamId: vi.fn(),
   },
@@ -158,6 +158,11 @@ vi.mock('../src/cliState', () => ({
   },
 }));
 
+beforeEach(() => {
+  vi.mocked(cloudConfig.getApiHost).mockReset().mockReturnValue('https://api.promptfoo.dev');
+  vi.mocked(cloudConfig.getAuthHeaderName).mockReset().mockReturnValue('Authorization');
+});
+
 describe('fetchWithProxy', () => {
   beforeEach(() => {
     restoreFetchTestEnv();
@@ -165,8 +170,6 @@ describe('fetchWithProxy', () => {
     vi.clearAllMocks();
     clearAgentCache();
     vi.spyOn(global, 'fetch').mockResolvedValue(new Response());
-    vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.promptfoo.dev');
-    vi.mocked(cloudConfig.getAuthHeaderName).mockReturnValue('Authorization');
     vi.mocked(ProxyAgent).mockClear();
     cliState.basePath = undefined;
     cliState.maxConcurrency = undefined;
@@ -192,6 +195,117 @@ describe('fetchWithProxy', () => {
         }),
       }),
     );
+  });
+
+  describe('request-time authentication', () => {
+    it.each(['rate limit', 'network'] as const)(
+      'refreshes credentials after a %s failure',
+      async (failure) => {
+        const getAuthHeaders = vi
+          .fn()
+          .mockResolvedValueOnce({ Authorization: 'Bearer first' })
+          .mockResolvedValueOnce({ Authorization: 'Bearer second' });
+        const fetch = vi.mocked(global.fetch);
+        if (failure === 'rate limit') {
+          fetch.mockResolvedValueOnce(new Response('', { status: 429 }));
+        } else {
+          fetch.mockRejectedValueOnce(new Error('connection reset'));
+        }
+        fetch.mockResolvedValueOnce(new Response('ok'));
+        const headers = { 'Content-Type': 'application/json' };
+        await fetchWithRetries('https://example.com', { headers, getAuthHeaders }, 1000, 1);
+        expect(getAuthHeaders).toHaveBeenCalledTimes(2);
+        expect(
+          fetch.mock.calls.map(([, init]) => new Headers(init?.headers).get('authorization')),
+        ).toEqual(['Bearer first', 'Bearer second']);
+        expect(fetch.mock.calls.every(([, init]) => !('getAuthHeaders' in init!))).toBe(true);
+        expect(headers).toEqual({ 'Content-Type': 'application/json' });
+      },
+    );
+
+    it('refreshes credentials for direct transient retries', async () => {
+      const getAuthHeaders = vi
+        .fn()
+        .mockResolvedValueOnce({ Authorization: 'Bearer first' })
+        .mockResolvedValueOnce({ Authorization: 'Bearer second' });
+      vi.mocked(global.fetch)
+        .mockResolvedValueOnce(new Response('', { status: 503, statusText: 'Service Unavailable' }))
+        .mockResolvedValueOnce(new Response('ok'));
+      await fetchWithProxy('https://example.com', { getAuthHeaders });
+      expect(getAuthHeaders).toHaveBeenCalledTimes(2);
+      expect(
+        new Headers(vi.mocked(global.fetch).mock.calls[1][1]?.headers).get('authorization'),
+      ).toBe('Bearer second');
+    });
+
+    it('preserves explicit authentication headers case-insensitively', async () => {
+      await fetchWithProxy('https://example.com', {
+        headers: { AUTHORIZATION: 'Bearer explicit' },
+        getAuthHeaders: async () => ({ Authorization: 'Bearer generated' }),
+      });
+      expect(
+        new Headers(vi.mocked(global.fetch).mock.calls[0][1]?.headers).get('authorization'),
+      ).toBe('Bearer explicit');
+    });
+
+    it('does not retry or dispatch when credential resolution fails', async () => {
+      const cause = new Error('credential discovery failed');
+      const getAuthHeaders = vi.fn().mockRejectedValue(cause);
+      await expect(
+        fetchWithRetries('https://example.com', { getAuthHeaders }, 1000, 2),
+      ).rejects.toMatchObject({ message: cause.message, cause });
+      expect(getAuthHeaders).toHaveBeenCalledTimes(1);
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
+
+    it('does not dispatch if aborted during credential resolution', async () => {
+      const controller = new AbortController();
+      await expect(
+        fetchWithRetries(
+          'https://example.com',
+          {
+            signal: controller.signal,
+            getAuthHeaders: async (signal) => {
+              expect(signal?.aborted).toBe(false);
+              controller.abort();
+              return { Authorization: 'Bearer stale' };
+            },
+          },
+          1000,
+          2,
+        ),
+      ).rejects.toMatchObject({ name: 'AbortError' });
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
+
+    it('includes credential resolution in the HTTP timeout', async () => {
+      vi.useFakeTimers();
+      let finishAuth!: (headers: HeadersInit) => void;
+      let authSignal: AbortSignal | undefined;
+      const result = fetchWithTimeout(
+        'https://example.com',
+        {
+          getAuthHeaders: (signal) => {
+            authSignal = signal;
+            return new Promise((resolve) => {
+              finishAuth = resolve;
+            });
+          },
+        },
+        100,
+      );
+      const assertion = expect(result).rejects.toThrow('Request timed out after 100 ms');
+      try {
+        await vi.advanceTimersByTimeAsync(100);
+        await assertion;
+        expect(authSignal?.aborted).toBe(true);
+        finishAuth({ Authorization: 'Bearer late' });
+        await vi.runAllTimersAsync();
+        expect(global.fetch).not.toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
   });
 
   it('should preserve Request headers when init headers are absent', async () => {
@@ -984,13 +1098,41 @@ describe('fetchWithProxy', () => {
     expect(dispatchers[1]).not.toBe(dispatchers[0]);
   });
 
-  it('should compose default Agent dispatchers with response decompression', async () => {
-    await fetchWithProxy('https://example.com/api');
+  it.each([
+    { name: 'default Agent', agentClass: Agent, proxyUrl: undefined },
+    { name: 'ProxyAgent', agentClass: ProxyAgent, proxyUrl: 'http://proxy.example.com' },
+  ])(
+    'should compose $name dispatchers with response decompression without a warning',
+    async ({ agentClass, proxyUrl }) => {
+      mockProcessEnv({ HTTPS_PROXY: proxyUrl });
+      const emitWarning = vi.spyOn(process, 'emitWarning').mockImplementation(() => {});
+      const decompressionInterceptor = vi.fn();
+      vi.mocked(interceptors.decompress).mockImplementationOnce(() => {
+        process.emitWarning(
+          'DecompressInterceptor is experimental and subject to change',
+          'ExperimentalWarning',
+        );
+        return decompressionInterceptor;
+      });
 
-    const agent = vi.mocked(Agent).mock.results[0]?.value as { compose: ReturnType<typeof vi.fn> };
-    expect(interceptors.decompress).toHaveBeenCalledTimes(1);
-    expect(agent.compose).toHaveBeenCalledWith({ name: 'decompress' });
-  });
+      try {
+        await fetchWithProxy('https://example.com/api');
+
+        const agent = vi.mocked(agentClass).mock.results[0]?.value as {
+          compose: ReturnType<typeof vi.fn>;
+        };
+        expect(interceptors.decompress).toHaveBeenCalledExactlyOnceWith({
+          skipErrorResponses: false,
+        });
+        expect(agent.compose).toHaveBeenCalledWith(decompressionInterceptor);
+        expect(emitWarning).not.toHaveBeenCalled();
+        expect(process.emitWarning).toBe(emitWarning);
+      } finally {
+        emitWarning.mockRestore();
+        vi.mocked(interceptors.decompress).mockReset();
+      }
+    },
+  );
 
   it('should create a dedicated ProxyAgent dispatcher per proxy URL and maxConcurrency value', async () => {
     const mockProxyUrl = 'http://proxy.example.com';
@@ -1020,18 +1162,6 @@ describe('fetchWithProxy', () => {
         connections: 5,
       }),
     );
-  });
-
-  it('should compose ProxyAgent dispatchers with response decompression', async () => {
-    mockProcessEnv({ HTTPS_PROXY: 'http://proxy.example.com' });
-
-    await fetchWithProxy('https://example.com/api');
-
-    const proxyAgent = vi.mocked(ProxyAgent).mock.results[0]?.value as {
-      compose: ReturnType<typeof vi.fn>;
-    };
-    expect(interceptors.decompress).toHaveBeenCalledTimes(1);
-    expect(proxyAgent.compose).toHaveBeenCalledWith({ name: 'decompress' });
   });
 
   it('should preserve a caller-provided dispatcher instead of overwriting it', async () => {
@@ -1939,6 +2069,24 @@ describe('fetchWithRetries', () => {
       expect(sleep).not.toHaveBeenCalled();
     });
 
+    it('fails fast on OpenRouter gateway billing metadata without an error type', async () => {
+      const quotaResponse = rateLimitedJsonResponse({
+        body: {
+          error: {
+            message: 'Insufficient credits',
+            metadata: { provider_code: 'credit_balance_exhausted' },
+          },
+        },
+      });
+      vi.mocked(global.fetch).mockResolvedValue(quotaResponse);
+
+      const error = await fetchWithRetries('https://example.com', {}, 1000, 4).catch((err) => err);
+      expect(error).toBeInstanceOf(HttpRateLimitError);
+      expect(error).toMatchObject({ kind: 'quota', code: 'credit_balance_exhausted' });
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+      expect(sleep).not.toHaveBeenCalled();
+    });
+
     it('fails fast when only error.type names a hard quota next to an unknown code', async () => {
       const quotaResponse = rateLimitedJsonResponse({
         body: { error: { code: 'new_billing_code', type: 'insufficient_quota' } },
@@ -2713,6 +2861,196 @@ describe('fetchWithRetries with disableTransientRetries', () => {
     expect(mockFetch).toHaveBeenCalledTimes(1);
     expect(result).toBe(transientResponse);
   });
+});
+
+describe('silent fetch diagnostics', () => {
+  const credential = 'gateway-credential-do-not-log';
+  const url = `https://example.com/${credential}`;
+  const silentHeaders = { 'x-promptfoo-silent': 'true' };
+  let restoreEnv = () => {};
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    restoreEnv = mockFetchTestEnv();
+    vi.mocked(getEnvString)
+      .mockReset()
+      .mockImplementation((_, fallback = '') => fallback);
+    vi.mocked(getEnvInt)
+      .mockReset()
+      .mockImplementation((_, fallback = 0) => fallback);
+    vi.mocked(getEnvBool)
+      .mockReset()
+      .mockImplementation((_, fallback = false) => fallback);
+    vi.mocked(sleep).mockReset().mockResolvedValue(undefined);
+    vi.spyOn(global, 'fetch').mockResolvedValue(new Response());
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+  });
+
+  afterEach(() => {
+    restoreEnv();
+    vi.restoreAllMocks();
+    vi.resetAllMocks();
+  });
+
+  it.each(['object', 'Headers', 'tuples', 'Request'] as const)(
+    'honors case-insensitive silent headers from %s without mutating them',
+    async (kind) => {
+      const headerName = 'X-Promptfoo-Silent';
+      const headers: HeadersInit =
+        kind === 'Headers'
+          ? new Headers({ [headerName]: 'true' })
+          : kind === 'tuples'
+            ? [[headerName, 'true']]
+            : { [headerName]: 'true' };
+      Object.freeze(headers);
+      const originalHeaders = Array.from(new Headers(headers));
+      const request = new Request(url, { headers });
+      vi.mocked(global.fetch).mockResolvedValue(
+        new Response(credential, { status: 429, statusText: credential }),
+      );
+
+      const error = await fetchWithRetries(
+        kind === 'Request' ? request : url,
+        kind === 'Request' ? {} : { headers },
+        1000,
+        0,
+      ).catch((error) => error);
+
+      expect(error).toBeInstanceOf(HttpRateLimitError);
+      expect(error).toMatchObject({ status: 429, body: credential });
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+      expect(logger.debug).not.toHaveBeenCalled();
+      expect(logger.warn).not.toHaveBeenCalled();
+      expect(Array.from(new Headers(headers))).toEqual(originalHeaders);
+      expect(Array.from(request.headers)).toEqual(originalHeaders);
+    },
+  );
+
+  it('uses replacement option headers instead of inherited Request headers', async () => {
+    const request = new Request(url, { headers: silentHeaders });
+    vi.mocked(global.fetch).mockResolvedValue(new Response('', { status: 429 }));
+
+    await expect(fetchWithRetries(request, { headers: {} }, 1000, 0)).rejects.toBeInstanceOf(
+      HttpRateLimitError,
+    );
+
+    expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('Rate limited on URL'));
+    expect(request.headers.get('x-promptfoo-silent')).toBe('true');
+  });
+
+  it.each(['success', 'exhaustion'] as const)(
+    'keeps rate-limit retry behavior and numeric wait diagnostics on %s',
+    async (outcome) => {
+      const limited = new Response(JSON.stringify({ error: { message: credential } }), {
+        status: 429,
+        statusText: credential,
+        headers: { 'Retry-After': '1' },
+      });
+      const success = new Response('ok');
+      vi.mocked(global.fetch)
+        .mockResolvedValueOnce(limited)
+        .mockResolvedValueOnce(outcome === 'success' ? success : limited);
+
+      const result = await fetchWithRetries(url, { headers: silentHeaders }, 1000, 1).catch(
+        (error) => error,
+      );
+
+      if (outcome === 'success') {
+        expect(result).toBe(success);
+      } else {
+        expect(result).toBeInstanceOf(HttpRateLimitError);
+        expect(result).toMatchObject({ body: { error: { message: credential } } });
+        expect(result.message).toContain(credential);
+      }
+      expect(global.fetch).toHaveBeenCalledTimes(2);
+      expect(sleep).toHaveBeenCalledExactlyOnceWith(1000);
+      expect(vi.mocked(logger.debug).mock.calls).toEqual([
+        ['Rate limited, waiting 1000ms (base 1000ms + 0ms jitter) before retry'],
+      ]);
+    },
+  );
+
+  it('keeps quota fail-fast classification without logging the response code', async () => {
+    vi.mocked(global.fetch).mockResolvedValue(
+      new Response(JSON.stringify({ error: { code: credential, type: 'billing_not_active' } }), {
+        status: 429,
+      }),
+    );
+
+    const error = await fetchWithRetries(url, { headers: silentHeaders }, 1000, 2).catch(
+      (error) => error,
+    );
+
+    expect(error).toBeInstanceOf(HttpRateLimitError);
+    expect(error).toMatchObject({ kind: 'quota', code: credential });
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(sleep).not.toHaveBeenCalled();
+    expect(logger.debug).not.toHaveBeenCalled();
+  });
+
+  it.each(['5xx', 'transport'] as const)(
+    'keeps %s retries and final errors without logging server-controlled details',
+    async (failure) => {
+      vi.mocked(getEnvBool).mockImplementation((key) => key === 'PROMPTFOO_RETRY_5XX');
+      if (failure === '5xx') {
+        vi.mocked(global.fetch).mockResolvedValue(
+          new Response('', { status: 500, statusText: credential }),
+        );
+      } else {
+        vi.mocked(global.fetch).mockRejectedValue(new Error(credential));
+      }
+
+      await expect(fetchWithRetries(url, { headers: silentHeaders }, 1000, 1)).rejects.toThrow(
+        `Request failed after 1 retries: Error: ${failure === '5xx' ? 'Internal Server Error: 500 ' : ''}${credential}`,
+      );
+
+      expect(global.fetch).toHaveBeenCalledTimes(2);
+      expect(sleep).toHaveBeenCalledExactlyOnceWith(5000);
+      expect(logger.debug).not.toHaveBeenCalled();
+    },
+  );
+
+  it('keeps transient transport retries without logging status text', async () => {
+    const response = new Response('', {
+      status: 503,
+      statusText: `Service Unavailable ${credential}`,
+    });
+    vi.mocked(global.fetch).mockResolvedValue(response);
+
+    expect(await fetchWithProxy(url, { headers: silentHeaders })).toBe(response);
+
+    expect(global.fetch).toHaveBeenCalledTimes(4);
+    expect(vi.mocked(sleep).mock.calls).toEqual([[1000], [2000], [4000]]);
+    expect(logger.debug).not.toHaveBeenCalled();
+  });
+
+  it.each(['clone', 'body read'] as const)(
+    'does not log credentials in rate-limit %s failures',
+    async (failure) => {
+      const response = new Response('', { status: 429 });
+      vi.spyOn(response, 'clone').mockImplementation(() => {
+        if (failure === 'clone') {
+          throw new Error(credential);
+        }
+        return new Response(
+          new ReadableStream({
+            start(controller) {
+              controller.error(new Error(credential));
+            },
+          }),
+        );
+      });
+      vi.mocked(global.fetch).mockResolvedValue(response);
+
+      const error = await fetchWithRetries(url, { headers: silentHeaders }, 1000, 0).catch(
+        (error) => error,
+      );
+
+      expect(error).toBeInstanceOf(HttpRateLimitError);
+      expect(error).toMatchObject({ status: 429, kind: 'rate_limit', body: undefined });
+      expect(logger.debug).not.toHaveBeenCalled();
+    },
+  );
 });
 
 describe('readBoundedText', () => {
