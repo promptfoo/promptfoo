@@ -631,6 +631,7 @@ describe('Anthropic utilities', () => {
         stop_sequence: null,
         type: 'message',
         container: null,
+        diagnostics: null,
         usage: {
           input_tokens: 0,
           output_tokens: 0,
@@ -659,6 +660,7 @@ describe('Anthropic utilities', () => {
         stop_sequence: null,
         type: 'message',
         container: null,
+        diagnostics: null,
         usage: {
           input_tokens: 0,
           output_tokens: 0,
@@ -734,6 +736,7 @@ describe('Anthropic utilities', () => {
         stop_sequence: null,
         type: 'message',
         container: null,
+        diagnostics: null,
         usage: {
           input_tokens: 0,
           output_tokens: 0,
@@ -774,6 +777,7 @@ describe('Anthropic utilities', () => {
         stop_sequence: null,
         type: 'message',
         container: null,
+        diagnostics: null,
         usage: {
           input_tokens: 0,
           output_tokens: 0,
@@ -820,6 +824,7 @@ describe('Anthropic utilities', () => {
         stop_sequence: null,
         type: 'message',
         container: null,
+        diagnostics: null,
         usage: {
           input_tokens: 0,
           output_tokens: 0,
@@ -856,6 +861,7 @@ describe('Anthropic utilities', () => {
         stop_sequence: null,
         type: 'message',
         container: null,
+        diagnostics: null,
         usage: {
           input_tokens: 0,
           output_tokens: 0,
@@ -1098,6 +1104,7 @@ describe('Anthropic utilities', () => {
         stop_sequence: null,
         type: 'message',
         container: null,
+        diagnostics: null,
         usage: {
           input_tokens: 0,
           output_tokens: 0,
@@ -1133,6 +1140,7 @@ describe('Anthropic utilities', () => {
         stop_sequence: null,
         type: 'message',
         container: null,
+        diagnostics: null,
         usage: {
           input_tokens: 0,
           output_tokens: 0,
@@ -1168,6 +1176,7 @@ describe('Anthropic utilities', () => {
         stop_sequence: null,
         type: 'message',
         container: null,
+        diagnostics: null,
         usage: {
           input_tokens: 0,
           output_tokens: 0,

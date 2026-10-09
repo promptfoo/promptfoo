@@ -25,6 +25,7 @@ import {
   resolveClaudeSamplingParams,
 } from '../anthropic/util';
 import { getCredentialCacheNamespace } from '../credentialCache';
+import { resolveProviderEnv } from '../env';
 import { getRequestTimeoutMs, parseChatPrompt } from '../shared';
 import { GoogleAuthManager } from './auth';
 import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
@@ -59,6 +60,7 @@ import type { EnvOverrides } from '../../types/env';
 import type {
   ApiEmbeddingProvider,
   CallApiContextParams,
+  CallApiOptionsParams,
   GuardrailResponse,
   ProviderEmbeddingResponse,
   ProviderResponse,
@@ -227,8 +229,7 @@ function getVertexApiHost(
 ): string {
   return (
     configApiHost ||
-    envOverrides?.VERTEX_API_HOST ||
-    getEnvString('VERTEX_API_HOST') ||
+    resolveProviderEnv(envOverrides, ['VERTEX_API_HOST'])?.value ||
     getVertexApiHostForRegion(region)
   );
 }
@@ -303,10 +304,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
    */
   private getApiVersion(): string {
     return (
-      this.config.apiVersion ||
-      this.env?.VERTEX_API_VERSION ||
-      getEnvString('VERTEX_API_VERSION') ||
-      'v1'
+      this.config.apiVersion || resolveProviderEnv(this.env, ['VERTEX_API_VERSION'])?.value || 'v1'
     );
   }
 
@@ -315,10 +313,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
    */
   private getPublisher(): string {
     return (
-      this.config.publisher ||
-      this.env?.VERTEX_PUBLISHER ||
-      getEnvString('VERTEX_PUBLISHER') ||
-      'google'
+      this.config.publisher || resolveProviderEnv(this.env, ['VERTEX_PUBLISHER'])?.value || 'google'
     );
   }
 
@@ -1407,6 +1402,8 @@ export class VertexChatProvider extends GoogleGenericProvider {
 }
 
 export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
+  readonly supportsEmbeddingCancellation = true;
+
   modelName: string;
   config: VertexEmbeddingProviderConfig;
   env?: EnvOverrides;
@@ -1457,7 +1454,11 @@ export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
     throw new Error('Vertex API does not provide text inference.');
   }
 
-  async callEmbeddingApi(input: string): Promise<ProviderEmbeddingResponse> {
+  async callEmbeddingApi(
+    input: string,
+    _context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderEmbeddingResponse> {
     // See https://cloud.google.com/vertex-ai/generative-ai/docs/embeddings/get-text-embeddings#get_text_embeddings_for_a_snippet_of_text
     const body = {
       instances: [{ content: input }],
@@ -1477,9 +1478,11 @@ export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
         url,
         method: 'POST',
         data: body,
+        ...(options?.abortSignal && { signal: options.abortSignal }),
       });
       data = res.data as VertexEmbeddingPredictResponse;
     } catch (err) {
+      options?.abortSignal?.throwIfAborted();
       logger.error(`Vertex API call error: ${err}`);
       throw err;
     }

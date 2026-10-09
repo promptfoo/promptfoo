@@ -158,7 +158,7 @@ describe('Google scoped ADC inputs', () => {
   it('starts a new Live client for a new resource lifetime under the same environment', async () => {
     await cliState.withEnv({ GOOGLE_APPLICATION_CREDENTIALS: 'scoped.json' }, async () => {
       for (let invocation = 0; invocation < 2; invocation++) {
-        await providerRegistry.withScope(async () => {
+        await providerRegistry.withEvaluation(async () => {
           expect(await getGoogleAccessToken()).toBe('scoped.json');
           expect(await getGoogleAccessToken()).toBe('scoped.json');
         });

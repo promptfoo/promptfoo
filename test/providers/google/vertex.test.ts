@@ -145,6 +145,12 @@ vi.mock('../../../src/esm', async (importOriginal) => {
   };
 });
 
+beforeEach(() => {
+  vi.mocked(GoogleAuthManager.getApiKey)
+    .mockReset()
+    .mockReturnValue({ apiKey: undefined, source: 'none' });
+});
+
 function mockVertexRequest(data: unknown, headers?: Record<string, string>) {
   const mockRequest = vi.fn().mockResolvedValue({ data, ...(headers ? { headers } : {}) });
 
@@ -192,9 +198,6 @@ describe('VertexChatProvider.callGeminiApi', () => {
     mockCacheSet.mockReset();
     mockImportModule.mockReset();
     vi.mocked(fetchWithProxy).mockReset();
-    vi.mocked(GoogleAuthManager.getApiKey)
-      .mockReset()
-      .mockReturnValue({ apiKey: undefined, source: 'none' });
 
     provider = new VertexChatProvider('gemini-pro', {
       config: {
@@ -3072,7 +3075,6 @@ describe('VertexChatProvider.callLlamaApi', () => {
     mockCacheSet.mockReset();
 
     mockIsCacheEnabled.mockReturnValue(true);
-    vi.mocked(GoogleAuthManager.getApiKey).mockReturnValue({ apiKey: undefined, source: 'none' });
   });
 
   afterEach(() => {

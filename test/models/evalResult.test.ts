@@ -2,8 +2,11 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import logger from '../../src/logger';
 import { runDbMigrations } from '../../src/migrate';
 import EvalResult, {
+  getStripFlags,
+  projectPrompt,
   sanitizeProvider,
   sanitizeResultForJsonlArtifact,
+  toSerializableProviderRef,
 } from '../../src/models/evalResult';
 import { hashPrompt } from '../../src/prompts/utils';
 import { WebSocketProvider } from '../../src/providers/websocket';
@@ -68,7 +71,9 @@ describe('EvalResult', () => {
         config: { apiKey: 'test-key' },
       });
 
+      apiProvider.prompts = ['ordinary runtime selector'];
       const result = sanitizeProvider(apiProvider);
+      expect(apiProvider.prompts).toEqual(['ordinary runtime selector']);
       expect(result).toEqual({
         id: 'test-provider',
         label: 'Test Provider',
@@ -82,12 +87,14 @@ describe('EvalResult', () => {
       const providerOptions: ProviderOptions = {
         id: 'test-provider',
         label: 'Test Provider',
+        prompts: ['ordinary runtime selector'],
         config: {
           apiKey: 'test-key',
         },
       };
 
       const result = sanitizeProvider(providerOptions);
+      expect(providerOptions.prompts).toEqual(['ordinary runtime selector']);
       expect(result).toEqual({
         id: 'test-provider',
         label: 'Test Provider',
@@ -101,12 +108,14 @@ describe('EvalResult', () => {
       const provider = {
         id: () => 'test-provider',
         label: 'Test Provider',
+        prompts: ['ordinary runtime selector'],
         config: {
           apiKey: 'test-key',
         },
       } as ApiProvider;
 
       const result = sanitizeProvider(provider);
+      expect(provider.prompts).toEqual(['ordinary runtime selector']);
       expect(result).toEqual({
         id: 'test-provider',
         label: 'Test Provider',
@@ -1276,7 +1285,222 @@ describe('EvalResult', () => {
     });
   });
 
+  describe('projectPrompt', () => {
+    it.each([
+      { mapped: false, strip: true },
+      { mapped: true, strip: true },
+      { mapped: false, strip: false },
+    ])(
+      'preserves live provider serialization (mapped: $mapped, strip: $strip)',
+      ({ mapped, strip }) => {
+        class LocalProvider {
+          prompts = ['ordinary selector'];
+          runtimeOnly = 'ordinary working state';
+          config = { nested: { one: { two: { three: { value: 'public setting' } } } } };
+
+          id(): string {
+            return 'echo';
+          }
+
+          toJSON() {
+            return { id: this.id(), prompts: this.prompts, config: this.config };
+          }
+        }
+        const provider = new LocalProvider();
+        const prompt = createPrompt('Hello', {
+          config: { provider: mapped ? { text: provider } : provider },
+        });
+        const projected = projectPrompt(prompt, strip);
+        const output = JSON.parse(JSON.stringify(projected));
+        const serializedProvider = mapped ? output.config.provider.text : output.config.provider;
+
+        expect(serializedProvider).toEqual({
+          id: 'echo',
+          config: provider.config,
+          ...(!strip && { prompts: provider.prompts }),
+        });
+        expect(provider.runtimeOnly).toBe('ordinary working state');
+        expect(provider.prompts).toEqual(['ordinary selector']);
+        expect(mapped ? prompt.config.provider.text : prompt.config.provider).toBe(provider);
+        if (!strip) {
+          expect(projected).toBe(prompt);
+        }
+      },
+    );
+  });
+
+  it('omits runtime-only provider state and function transforms from replay references', () => {
+    const provider = {
+      id: () => 'echo',
+      callApi: vi.fn(),
+      transform: () => 'runtime transform',
+      inputs: { query: 'A short question' },
+      delay: 0,
+      runtimeOnly: 'ordinary working state',
+    };
+    const saved = toSerializableProviderRef(provider);
+    expect(saved).toEqual({
+      id: 'echo',
+      label: undefined,
+      inputs: { query: 'A short question' },
+      delay: 0,
+    });
+    provider.inputs.query = 'Runtime-only description';
+    expect(saved).toHaveProperty('inputs.query', 'A short question');
+    expect(provider.callApi).not.toHaveBeenCalled();
+  });
+
   describe('toEvaluateResult', () => {
+    it.each(
+      [
+        { boundary: 'model', strip: true },
+        { boundary: 'model', strip: false },
+        { boundary: 'jsonl', strip: true },
+        { boundary: 'jsonl', strip: false },
+        { boundary: 'single', strip: true },
+        { boundary: 'single', strip: false },
+        { boundary: 'batch', strip: true },
+        { boundary: 'batch', strip: false },
+        { boundary: 'save-insert', strip: true },
+        { boundary: 'save-insert', strip: false },
+        { boundary: 'save-update', strip: true },
+        { boundary: 'save-update', strip: false },
+      ].flatMap((entry) => [
+        { ...entry, mapped: true },
+        { ...entry, mapped: false },
+      ]),
+    )(
+      'projects live grading references at $boundary output (strip: $strip, mapped: $mapped)',
+      async ({ boundary, strip, mapped }) => {
+        const provider = {
+          id: 'echo',
+          prompts: ['ordinary nested selector'],
+          config: { prompts: ['ordinary provider configuration'] },
+        };
+        const liveProviderId = 'https://grader.example/run?mode=ordinary';
+        const liveProvider = {
+          id: () => liveProviderId,
+          callApi: vi.fn(),
+          prompts: [...provider.prompts],
+          config: provider.config,
+          transform: 'output',
+          delay: 0,
+          inputs: { query: 'A short question' },
+          runtimeOnly: 'ordinary working state',
+          toJSON: () => ({ id: liveProviderId }),
+        };
+        const providerMap = {
+          text: liveProvider,
+          embedding: liveProvider,
+          classification: liveProvider,
+          moderation: liveProvider,
+          label: 'ordinary map label',
+          config: { prompts: ['ordinary map configuration'] },
+          prompts: ['ordinary application setting'],
+          application: { text: { prompts: ['ordinary application payload'] } },
+        };
+        const gradingProvider = mapped ? providerMap : liveProvider;
+        const assertion: Assertion = { type: 'equals', value: 'ok', provider: gradingProvider };
+        const testCase: AtomicTestCase = {
+          provider: liveProvider,
+          options: {
+            provider: gradingProvider,
+          },
+          assert: [{ type: 'assert-set', assert: [assertion] }],
+          metadata: { prompts: ['ordinary metadata'] },
+        };
+        const input = createEvaluateResult({
+          provider,
+          testCase,
+          prompt: {
+            raw: 'Hello',
+            label: 'Greeting',
+            config: {
+              provider: gradingProvider,
+              options: { provider: { prompts: ['ordinary application options'] } },
+              assert: [{ provider: { prompts: ['ordinary application assertions'] } }],
+            },
+          },
+          gradingResult: {
+            pass: true,
+            score: 1,
+            reason: 'ok',
+            assertion,
+            componentResults: [{ pass: true, score: 1, reason: 'ok', assertion }],
+            metadata: { prompts: ['ordinary grading metadata'] },
+          },
+        });
+        const flags = getStripFlags({ PROMPTFOO_STRIP_PROMPT_TEXT: String(strip) });
+        const evalId = `ordinary-provider-${boundary}-${strip}-${mapped}`;
+        let projected: EvaluateResult;
+        if (boundary === 'jsonl') {
+          projected = sanitizeResultForJsonlArtifact(input, flags);
+        } else {
+          const saved =
+            boundary === 'batch'
+              ? (await EvalResult.createManyFromEvaluateResult([input], evalId))[0]
+              : await EvalResult.createFromEvaluateResult(evalId, input, {
+                  persist: boundary === 'single' || boundary === 'save-update',
+                });
+          if (boundary === 'save-insert' || boundary === 'save-update') {
+            // Save also accepts newly assigned live grading references.
+            saved.testCase = input.testCase;
+            saved.prompt = input.prompt;
+            saved.gradingResult = input.gradingResult ?? null;
+            await saved.save();
+          }
+          const loaded = saved.persisted ? await EvalResult.findById(saved.id) : saved;
+          expect(loaded).not.toBeNull();
+          expect(loaded?.testCase.options?.provider).toMatchObject(
+            mapped
+              ? { text: { id: liveProviderId, prompts: provider.prompts } }
+              : { id: liveProviderId, prompts: provider.prompts },
+          );
+          projected = loaded!.toEvaluateResult(flags);
+        }
+
+        expect(JSON.stringify(projected).includes('ordinary nested selector')).toBe(!strip);
+        expect(projected.testCase.metadata).toEqual(testCase.metadata);
+        const expectedProvider = {
+          id: liveProviderId,
+          config: provider.config,
+          transform: 'output',
+          delay: 0,
+          inputs: { query: 'A short question' },
+          ...(!strip && { prompts: provider.prompts }),
+        };
+        const expectedMap = {
+          ...providerMap,
+          text: expectedProvider,
+          embedding: expectedProvider,
+          classification: expectedProvider,
+          moderation: expectedProvider,
+        };
+        const expectedReference = mapped ? expectedMap : expectedProvider;
+        expect(projected.testCase.provider).toEqual(expectedProvider);
+        expect(projected.testCase.options?.provider).toEqual(expectedReference);
+        expect(projected.prompt.config.provider).toEqual(expectedReference);
+        expect(projected.gradingResult?.assertion?.provider).toEqual(expectedReference);
+        expect(projected.gradingResult?.componentResults?.[0].assertion?.provider).toEqual(
+          expectedReference,
+        );
+        expect(JSON.stringify(projected)).not.toContain('ordinary working state');
+        expect(projected.prompt.config.options).toEqual(input.prompt.config.options);
+        expect(projected.prompt.config.assert).toEqual(input.prompt.config.assert);
+        expect(projected.gradingResult?.metadata).toEqual({
+          prompts: ['ordinary grading metadata'],
+        });
+        expect(provider.prompts).toEqual(['ordinary nested selector']);
+        expect(testCase.options?.provider).toBe(gradingProvider);
+        expect(input.gradingResult?.componentResults?.[0].assertion?.provider).toBe(
+          gradingProvider,
+        );
+        expect(providerMap.text).toBe(liveProvider);
+        expect(liveProvider.id()).toBe(liveProviderId);
+        expect(liveProvider.callApi).not.toHaveBeenCalled();
+      },
+    );
+
     it('should convert EvalResult to EvaluateResult format', async () => {
       const result = await EvalResult.createFromEvaluateResult('test-eval-id', mockEvaluateResult);
 

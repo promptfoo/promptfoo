@@ -112,6 +112,18 @@ describe('Eval Routes - Sharing behavior', () => {
     });
   });
 
+  it('does not forward the internal database test switch from job environment overrides', async () => {
+    await postJob({
+      ...minimalTestSuite,
+      env: { IS_TESTING: 'true', AWS_PROFILE: 'scoped', VAULT_SELECTOR: 'suite-account' },
+    }).expect(200);
+    expect(mockedEvaluateWithSource).toHaveBeenCalledOnce();
+    expect(mockedEvaluateWithSource.mock.calls[0][0].env).toEqual({
+      AWS_PROFILE: 'scoped',
+      VAULT_SELECTOR: 'suite-account',
+    });
+  });
+
   it('rejects malformed known environment values before creating an eval', async () => {
     await postJob({ ...minimalTestSuite, env: { AWS_ACCESS_KEY_ID: null } }).expect(400);
     expect(mockedEvaluateWithSource).not.toHaveBeenCalled();

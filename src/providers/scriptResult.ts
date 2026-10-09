@@ -3,9 +3,9 @@ import logger from '../logger';
 import type { CallApiContextParams, ProviderOptions } from '../types/providers';
 
 const RESULT_FIELDS = {
-  call_api: ['output', 'string/object', 'instead got:'],
-  call_embedding_api: ['embedding', 'array', 'instead got'],
-  call_classification_api: ['classification', 'object', 'instead of'],
+  call_api: 'output',
+  call_embedding_api: 'embedding',
+  call_classification_api: 'classification',
 } as const;
 
 export type ScriptApiType = keyof typeof RESULT_FIELDS;
@@ -76,11 +76,10 @@ export function validateScriptResult(
   result: any,
   language: 'Python' | 'Ruby',
 ): void {
-  const fields = RESULT_FIELDS[apiType];
-  if (!fields) {
+  const propertyName = RESULT_FIELDS[apiType];
+  if (!propertyName) {
     throw new Error(`Unsupported apiType: ${apiType}`);
   }
-  const [propertyName, valueDescription, receivedDescription] = fields;
 
   if (apiType === 'call_api') {
     const resultType = result === null ? 'null' : typeof result;
@@ -97,7 +96,7 @@ export function validateScriptResult(
   if (!hasScriptResultProperty(result, propertyName) && !hasScriptResultProperty(result, 'error')) {
     const containerName = language === 'Python' ? 'dict' : 'hash';
     throw new Error(
-      `The ${language} script \`${functionName}\` function must return a ${containerName} with an own \`${propertyName}\` ${valueDescription} or \`error\` string (inherited prototype properties are rejected), ${receivedDescription} ${JSON.stringify(result)}`,
+      `The ${language} script \`${functionName}\` function must return a ${containerName} with an own \`${propertyName}\` or \`error\` property (inherited prototype properties are rejected), instead got: ${JSON.stringify(result)}`,
     );
   }
 }

@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, realpathSync } from 'node:fs';
 import path from 'node:path';
 
 import { BrowserInventory, listAssetPaths } from '../../../scripts/browser-inventory.mjs';
@@ -8,20 +8,24 @@ import type { Compiler, Module } from 'webpack';
 type ResourceModule = Module & { modules?: Iterable<Module> };
 
 export default function browserInventoryPlugin(context: LoadContext): Plugin {
+  let canonicalSiteDir: string | undefined;
+  // Resolve lazily: config inspection tools instantiate plugins without context.
+  // Webpack resolves module resources through symlinks, including macOS /var.
+  const getSiteDir = () => (canonicalSiteDir ??= realpathSync(context.siteDir));
   const inventory = new BrowserInventory('site');
   const assetPaths = new Set<string>();
   const scriptSources = new Map<string, string>();
 
   function recordScriptSource(file: string) {
     if (/\.[cm]?[jt]sx?$/.test(file)) {
-      scriptSources.set(path.relative(context.siteDir, file).split(path.sep).join('/'), file);
+      scriptSources.set(path.relative(getSiteDir(), file).split(path.sep).join('/'), file);
     }
   }
 
   function recordModule(module: ResourceModule) {
     const resource = module.nameForCondition();
     inventory.addModule(resource);
-    if (resource && path.relative(context.siteDir, resource).startsWith(`src${path.sep}`)) {
+    if (resource && path.relative(getSiteDir(), resource).startsWith(`src${path.sep}`)) {
       recordScriptSource(resource);
     }
     // Production webpack concatenates modules across package boundaries.
@@ -56,10 +60,11 @@ export default function browserInventoryPlugin(context: LoadContext): Plugin {
       };
     },
     async postBuild({ outDir }) {
+      const siteDir = getSiteDir();
       for (const staticDir of context.siteConfig.staticDirectories) {
-        for (const file of await listAssetPaths(path.resolve(context.siteDir, staticDir))) {
+        for (const file of await listAssetPaths(path.resolve(siteDir, staticDir))) {
           assetPaths.add(file);
-          recordScriptSource(path.resolve(context.siteDir, staticDir, file));
+          recordScriptSource(path.resolve(siteDir, staticDir, file));
         }
       }
       // Scan selected first-party client modules and copied scripts, so new loaders
@@ -76,7 +81,7 @@ export default function browserInventoryPlugin(context: LoadContext): Plugin {
         limitations: [
           'Assets cover client webpack output and copied static files. Prerendered HTML and content produced by other postBuild plugins are outside this browser-code inventory.',
           'Components exclude the server-rendering compiler. Concatenated client modules are inspected recursively; build loaders and plugins are excluded unless their code is also emitted.',
-          'Additional runtime-loaded services include Monaco CDN modules, Cloudflare Turnstile, and Cal.com embeds where those features are used; their downstream resources are not inventoried.',
+          'Additional runtime-loaded services include Monaco CDN modules and Cloudflare Turnstile where those features are used; their downstream resources are not inventoried.',
           'External script discovery covers literal .src assignments in first-party client modules and copied scripts. Constructed URLs, including PostHog and Reo loaders, are not enumerated.',
         ],
       });

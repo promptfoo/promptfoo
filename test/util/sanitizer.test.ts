@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  isCredentialHeader,
   isSecretEnvVarName,
   looksLikeSecret,
   preserveTracingCredentialReferences,
@@ -15,6 +16,7 @@ import {
   sanitizeUrl,
   sanitizeUrlEncodedString,
   sanitizeUrlForLogging,
+  stripProviderPromptSelectors,
 } from '../../src/util/sanitizer';
 
 let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
@@ -39,6 +41,135 @@ describe('sanitizeRuntimeOptions', () => {
         providerFilter: 'selected-target',
       }),
     ).toEqual({ providerFilter: 'selected-target' });
+  });
+});
+
+function headerCaseVariants(name: string): Set<string> {
+  const mixed = name.replace(/[a-z]/gi, (letter, index) =>
+    index % 2 === 0 ? letter.toLowerCase() : letter.toUpperCase(),
+  );
+  return new Set([
+    name,
+    name.toLowerCase(),
+    name.toUpperCase(),
+    mixed,
+    mixed.replace(/key$/i, 'Key'),
+  ]);
+}
+
+describe('isCredentialHeader', () => {
+  it.each([
+    'Ocp-Apim-Subscription-Key',
+    'ocp-apim-subscription-key',
+    'X-Subscription-Key',
+    'subscription_key',
+    'subscriptionKey',
+    'OcpApimSubscriptionKey',
+    'X-Functions-Key',
+    'X-Arbitrary-Vendor-Key',
+    'arbitraryVendorKey',
+    'X-Session',
+    'x-session',
+    'X-Session-Id',
+    'X-SessionId',
+    'xSession',
+    'xsession',
+    'XSESSION',
+    'xSeSsIoN',
+    'vendorSession',
+    'vendorSessionId',
+    'vendorsessionid',
+    'VENDORSESSIONID',
+    'vEnDoRsEsSiOnId',
+    'vendor_session_id',
+    'X-Session-Access',
+    'vendorSessionAccess',
+    'vendorsessionaccess',
+    'VENDORSESSIONACCESS',
+    'vEnDoRsEsSiOnAcCeSs',
+    'X-Gateway-Authentication',
+    'X-Gateway-Token',
+    'X-Gateway-Cookie',
+    'GatewayToken',
+    'GatewayTokenV2',
+    'GatewayAuthentication',
+    'GatewaySecret',
+    'GatewayPassword',
+    'GatewayCredentials',
+    'GatewayCookie',
+    'GatewayApiKeyV2',
+    'X-Goog-Iap-Jwt-Assertion',
+    'GatewayJwtV2',
+    '_oauth2_proxy',
+  ])('recognizes credential headers under %s regardless of value shape', (name) => {
+    for (const variant of headerCaseVariants(name)) {
+      expect(isCredentialHeader(variant, 'short'), variant).toBe(true);
+      expect(isCredentialHeader(variant, '9be880e3-e5dc-4be7-8739-a4b587fdfb13'), variant).toBe(
+        true,
+      );
+    }
+  });
+
+  it.each([
+    'X-Subscription-Id',
+    'X-Subscription-Tier',
+    'X-Subscription-Region',
+    'X-Correlation-Id',
+    'Idempotency-Key',
+    'Cache-Key',
+    'X-Routing-Key',
+    'X-Partition-Key',
+    'X-Public-Key',
+    'Sec-WebSocket-Key',
+    'idempotencyKey',
+    'xPublicKey',
+    'secWebSocketKey',
+    'X-Session-Timeout',
+    'X-Session-Type',
+    'X-Session-Mode',
+    'X-Session-Id-Mode',
+    'xsessiontimeout',
+    'XSESSIONTYPE',
+    'xSeSsIoNmOdE',
+    'vendorsessionidmode',
+    'VENDORSESSIONACCESSMODE',
+    'vEnDoRsEsSiOnAcCeSsMoDe',
+    'vendorSessionTimeout',
+    'vendorSessionType',
+    'vendorSessionMode',
+    'X-Access-Region',
+    'X-Session-Access-Mode',
+  ])('preserves ordinary metadata under %s', (name) => {
+    for (const variant of headerCaseVariants(name)) {
+      expect(isCredentialHeader(variant, 'us'), variant).toBe(false);
+      expect(isCredentialHeader(variant, '0123456789abcdef0123456789abcdef'), variant).toBe(false);
+      expect(isCredentialHeader(variant, '9be880e3-e5dc-4be7-8739-a4b587fdfb13'), variant).toBe(
+        false,
+      );
+    }
+  });
+  // HTTP cannot distinguish Monkey/MonKey or Author/AuthOr; credential inference is conservative.
+  it.each(['X-Monkey', 'X-MonKey', 'x-monkey', 'X-MONKEY', 'X-Author', 'X-AuthOr', 'x-author'])(
+    'treats ambiguous credential name %s consistently',
+    (name) => {
+      expect(isCredentialHeader(name, 'short')).toBe(true);
+    },
+  );
+});
+
+describe('credential values under public key-role headers', () => {
+  it.each([
+    'Idempotency-Key',
+    'Cache-Key',
+    'X-Routing-Key',
+    'X-Partition-Key',
+    'X-Public-Key',
+    'Sec-WebSocket-Key',
+  ])('still detects credential value evidence under %s', (name) => {
+    for (const variant of headerCaseVariants(name)) {
+      expect(isCredentialHeader(variant, 'Bearer short-credential'), variant).toBe(true);
+      expect(isCredentialHeader(variant, 'sk-abcdefghijklmnopqrstuvw'), variant).toBe(true);
+    }
   });
 });
 
@@ -70,6 +201,66 @@ describe('looksLikeSecret', () => {
   });
 });
 
+describe('stripProviderPromptSelectors', () => {
+  it.each([
+    {},
+    {
+      label: 'ordinary map label',
+      config: { prompts: ['ordinary map configuration'] },
+      prompts: ['ordinary map setting'],
+    },
+  ])('projects only known grading slots in mixed type maps: %s', (metadata) => {
+    const provider = {
+      id: 'echo',
+      prompts: ['ordinary selector'],
+      config: { prompts: ['ordinary provider payload'] },
+    };
+    const application = { prompts: ['ordinary application payload'] };
+    const map = {
+      text: provider,
+      embedding: 'echo',
+      classification: provider,
+      moderation: provider,
+      application,
+      ...metadata,
+    };
+    const projected = stripProviderPromptSelectors(map);
+    const expectedProvider = { id: 'echo', config: provider.config };
+    expect(projected).toEqual({
+      ...map,
+      text: expectedProvider,
+      classification: expectedProvider,
+      moderation: expectedProvider,
+    });
+    expect(projected.application).toBe(application);
+    expect(map.text).toBe(provider);
+    expect(provider.prompts).toEqual(['ordinary selector']);
+  });
+
+  it.each([{ value: 'echo' }, { value: null }, { value: ['echo'] }])(
+    'preserves a provider serializer non-record result: $value',
+    ({ value }) => {
+      const provider = { id: () => 'echo', toJSON: () => value };
+      expect(stripProviderPromptSelectors(provider)).toEqual(value);
+    },
+  );
+
+  it('uses canonical failure output for a provider serializer error', () => {
+    const error = new Error('Ordinary serialization failure');
+    const provider = {
+      id: () => 'echo',
+      runtimeOnly: 'ordinary working state',
+      toJSON: () => {
+        throw error;
+      },
+    };
+    expect(stripProviderPromptSelectors(provider)).toBe(
+      '[unable to serialize, circular reference is too complex to analyze]',
+    );
+    expect(provider.runtimeOnly).toBe('ordinary working state');
+  });
+});
+
 describe('sanitizeConfigForOutput', () => {
   it.each([
     { prompts: 'private literal' },
@@ -84,6 +275,155 @@ describe('sanitizeConfigForOutput', () => {
       config.prompts,
     );
     expect(JSON.stringify(config)).toContain('private literal');
+  });
+
+  it.each([
+    { providers: { id: 'echo', prompts: ['ordinary selector'] } },
+    { providers: [{ id: 'echo', prompts: ['ordinary selector'] }] },
+    { providers: [{ echo: { prompts: ['ordinary selector'] } }] },
+    { providers: [{ id: () => 'echo', callApi: vi.fn(), prompts: ['ordinary selector'] }] },
+  ])('omits provider selectors only from prompt-redacted config: $providers', (config) => {
+    // A top-level runtime provider is serialized as a single options object too.
+    const providerPromptMap = { echo: ['ordinary selector'] };
+    const input = {
+      ...(config as Parameters<typeof sanitizeConfigForOutput>[0]),
+      providerPromptMap,
+      metadata: { prompts: ['ordinary metadata'] },
+    };
+    const stripped = sanitizeConfigForOutput(input, { shouldStripPromptText: true });
+    expect(JSON.stringify(stripped)).not.toContain('ordinary selector');
+    expect(stripped.metadata).toEqual(input.metadata);
+    expect(stripped).not.toHaveProperty('providerPromptMap');
+    expect(sanitizeConfigForOutput(input)).toMatchObject({ providerPromptMap });
+    expect(input.providerPromptMap).toEqual(providerPromptMap);
+    expect(JSON.stringify(sanitizeConfigForOutput(input))).toContain('ordinary selector');
+    expect(JSON.stringify(input)).toContain('ordinary selector');
+  });
+
+  it.each([true, false])('projects nested provider selectors in config (strip: %s)', (strip) => {
+    const provider = {
+      id: 'echo',
+      prompts: ['ordinary nested selector'],
+      config: { prompts: ['ordinary provider configuration'] },
+    };
+    const test = {
+      provider,
+      options: {
+        provider: {
+          text: provider,
+          embedding: provider,
+          label: 'ordinary map label',
+          config: { prompts: ['ordinary map configuration'] },
+          application: { prompts: ['ordinary application payload'] },
+        },
+      },
+      assert: [
+        {
+          type: 'assert-set' as const,
+          assert: [{ type: 'equals' as const, value: 'ok', provider }],
+        },
+      ],
+      metadata: { prompts: ['ordinary metadata'] },
+    };
+    const config = {
+      tests: [test],
+      defaultTest: test,
+      scenarios: [{ config: [test], tests: [test] }],
+    };
+    const before = structuredClone(config);
+    const output = sanitizeConfigForOutput(config, { shouldStripPromptText: strip });
+
+    expect(JSON.stringify(output).includes('ordinary nested selector')).toBe(!strip);
+    const projectedTest = {
+      metadata: test.metadata,
+      provider: { config: provider.config },
+      options: {
+        provider: {
+          text: { config: provider.config },
+          label: 'ordinary map label',
+          config: { prompts: ['ordinary map configuration'] },
+          application: { prompts: ['ordinary application payload'] },
+        },
+      },
+    };
+    expect(output).toMatchObject({
+      tests: [projectedTest],
+      defaultTest: projectedTest,
+      scenarios: [{ config: [projectedTest], tests: [projectedTest] }],
+    });
+    expect(config).toEqual(before);
+  });
+
+  it.each([true, false])(
+    'projects live grading maps before output serialization (strip: %s)',
+    (strip) => {
+      const provider = {
+        id: () => 'echo',
+        callApi: vi.fn(),
+        prompts: ['ordinary live selector'],
+        config: { prompts: ['ordinary provider payload'] },
+      };
+      const application = { prompts: ['ordinary application payload'] };
+      const map = {
+        text: provider,
+        embedding: provider,
+        classification: provider,
+        moderation: provider,
+        label: 'ordinary map label',
+        config: { prompts: ['ordinary map configuration'] },
+        prompts: ['ordinary map setting'],
+        application,
+      };
+      const test = {
+        options: { provider: map },
+        assert: [
+          { type: 'assert-set' as const, assert: [{ type: 'equals' as const, provider: map }] },
+        ],
+      };
+      const config = {
+        tests: [test],
+        defaultTest: test,
+        scenarios: [{ config: [test], tests: [test] }],
+      };
+      const before = JSON.stringify(config);
+      const projectedProvider = {
+        config: provider.config,
+        ...(!strip && { prompts: provider.prompts }),
+      };
+      const projectedMap = {
+        ...map,
+        text: projectedProvider,
+        embedding: projectedProvider,
+        classification: projectedProvider,
+        moderation: projectedProvider,
+      };
+      const projectedTest = {
+        options: { provider: projectedMap },
+        assert: [{ type: 'assert-set', assert: [{ type: 'equals', provider: projectedMap }] }],
+      };
+
+      expect(sanitizeConfigForOutput(config, { shouldStripPromptText: strip })).toEqual({
+        tests: [projectedTest],
+        defaultTest: projectedTest,
+        scenarios: [{ config: [projectedTest], tests: [projectedTest] }],
+      });
+      expect(JSON.stringify(config)).toBe(before);
+      expect(map.text).toBe(provider);
+      expect(map.application).toBe(application);
+      expect(provider.id()).toBe('echo');
+      expect(provider.callApi).not.toHaveBeenCalled();
+    },
+  );
+
+  it('preserves application prompts on serialized provider options without selectors', () => {
+    const provider = { label: 'grader', config: { prompts: ['ordinary application payload'] } };
+    // A persisted runtime provider can have no id after its method is serialized away.
+    const config = { defaultTest: { options: { provider } } } as Parameters<
+      typeof sanitizeConfigForOutput
+    >[0];
+    const output = sanitizeConfigForOutput(config, { shouldStripPromptText: true });
+    expect(output.defaultTest).toEqual({ options: { provider } });
+    expect(config.defaultTest).toEqual({ options: { provider } });
   });
 
   it('preserves the local replay directory even when it resembles an opaque token', () => {
@@ -2102,6 +2442,64 @@ describe('legacy sanitizer aliases', () => {
 });
 
 describe('sanitizeUrl', () => {
+  describe('subscription-key parameters', () => {
+    it.each([
+      'subscription-key',
+      'subscription_key',
+      'SUBSCRIPTION-KEY',
+      'subscriptionKey',
+      'Ocp-Apim-Subscription-Key',
+      'OcpApimSubscriptionKey',
+      'subscription%2Dkey',
+      '%73ubscription-key',
+      'Ocp%2DApim%2DSubscription%2DKey',
+    ])('redacts %s in form bodies and diagnostic URLs', (key) => {
+      for (const credential of ['short', '0123456789abcdef0123456789abcdef']) {
+        const pair = `${key}=${credential}`;
+        expect(sanitizeUrlEncodedString(`tenant=public&${pair}`)).toBe(
+          `tenant=public&${key}=%5BREDACTED%5D`,
+        );
+        const url = `https://gateway.example/v1?tenant=public&${pair}`;
+        for (const sanitized of [sanitizeUrl(url), sanitizeUrlForLogging(url)]) {
+          const params = new URL(sanitized).searchParams;
+          expect(params.get(decodeURIComponent(key))).toBe('[REDACTED]');
+          expect(params.get('tenant')).toBe('public');
+        }
+        expect(sanitizeUrlForLogging(`http://[::1?${pair}`)).toBe('[REDACTED]');
+      }
+    });
+
+    it('redacts percent-encoded subscription credential values', () => {
+      const pair = 'subscription-key=%30%31%32%33%34%35%36%37%38%39abcdef0123456789abcdef';
+      expect(sanitizeUrlEncodedString(pair)).toBe('subscription-key=%5BREDACTED%5D');
+      expect(sanitizeUrlForLogging(`https://gateway.example/v1?${pair}`)).toBe(
+        'https://gateway.example/v1?subscription-key=%5BREDACTED%5D',
+      );
+    });
+
+    it('preserves subscription metadata and public key roles', () => {
+      const query =
+        'subscription_id=tenant-a&subscription_type=basic&subscriptionEnabled=true&subscriptionKeyType=header&subscriptionKeyEnabled=true&includeSubscriptionKey=false&publicKey=0123456789abcdef0123456789abcdef&idempotencyKey=request-123';
+      const url = `https://gateway.example/v1?${query}`;
+      expect(sanitizeUrlEncodedString(query)).toBe(query);
+      expect(sanitizeUrl(url)).toBe(url);
+      expect(sanitizeUrlForLogging(url)).toBe(url);
+    });
+
+    it('preserves pure subscription-key templates while redacting adjacent literal credentials', () => {
+      const template = 'subscription-key={{ env.GATEWAY_SUBSCRIPTION_KEY }}';
+      expect(sanitizeUrlEncodedString(template)).toBe(template);
+      const url = `https://gateway.example/{{ path }}?${template}`;
+      expect(sanitizeUrl(url)).toBe(url);
+      expect(sanitizeUrlEncodedString(`${template}&subscriptionKey=short`)).toBe(
+        `${template}&subscriptionKey=%5BREDACTED%5D`,
+      );
+      expect(sanitizeUrlEncodedString('subscription-key=literal{{ suffix }}')).toBe(
+        'subscription-key=%5BREDACTED%5D',
+      );
+    });
+  });
+
   it.each([
     'api_key_2',
     'apikey1',

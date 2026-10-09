@@ -201,7 +201,7 @@ describe('RubyProvider', () => {
         mockRunRuby.mockResolvedValue({ invalidKey: 'invalid value' });
 
         await expect(provider.callApi('test prompt')).rejects.toThrow(
-          'The Ruby script `call_api` function must return a hash with an own `output` string/object or `error` string (inherited prototype properties are rejected), instead got: {"invalidKey":"invalid value"}',
+          'The Ruby script `call_api` function must return a hash with an own `output` or `error` property (inherited prototype properties are rejected), instead got: {"invalidKey":"invalid value"}',
         );
       });
 
@@ -217,7 +217,7 @@ describe('RubyProvider', () => {
         mockRunRuby.mockResolvedValue(null as never);
 
         await expect(provider.callApi('test prompt')).rejects.toThrow(
-          'The Ruby script `call_api` function must return a hash with an own `output` string/object or `error` string (inherited prototype properties are rejected), instead got: null',
+          'The Ruby script `call_api` function must return a hash with an own `output` or `error` property (inherited prototype properties are rejected), instead got: null',
         );
       });
 
@@ -226,7 +226,7 @@ describe('RubyProvider', () => {
         mockRunRuby.mockResolvedValue('string result');
 
         await expect(provider.callApi('test prompt')).rejects.toThrow(
-          'The Ruby script `call_api` function must return a hash with an own `output` string/object or `error` string (inherited prototype properties are rejected), instead got: "string result"',
+          'The Ruby script `call_api` function must return a hash with an own `output` or `error` property (inherited prototype properties are rejected), instead got: "string result"',
         );
       });
 
@@ -236,7 +236,7 @@ describe('RubyProvider', () => {
         mockRunRuby.mockResolvedValue(inheritedResult);
 
         await expect(provider.callApi('test prompt')).rejects.toThrow(
-          'The Ruby script `call_api` function must return a hash with an own `output` string/object or `error` string (inherited prototype properties are rejected), instead got: {}',
+          'The Ruby script `call_api` function must return a hash with an own `output` or `error` property (inherited prototype properties are rejected), instead got: {}',
         );
       });
 
@@ -265,12 +265,37 @@ describe('RubyProvider', () => {
       expect(result).toEqual({ embedding: [0.1, 0.2, 0.3] });
     });
 
+    it('cancels an embedding invocation without changing its script arguments', async () => {
+      const provider = new RubyProvider('script.rb');
+      const controller = new AbortController();
+      mockRunRuby.mockImplementation(async (_script, _method, args, options) => {
+        expect(args).toEqual(['test prompt', { config: {} }]);
+        expect(options?.abortSignal).toBe(controller.signal);
+        controller.abort(new Error('embedding cancelled'));
+        options?.abortSignal?.throwIfAborted();
+        return { embedding: [1] };
+      });
+      await expect(
+        provider.callEmbeddingApi('test prompt', undefined, { abortSignal: controller.signal }),
+      ).rejects.toThrow('embedding cancelled');
+      expect(provider.supportsEmbeddingCancellation).toBe(true);
+    });
+
+    it('does not invoke a Ruby embedding after cancellation', async () => {
+      const provider = new RubyProvider('script.rb');
+      const signal = AbortSignal.abort(new Error('already cancelled'));
+      await expect(
+        provider.callEmbeddingApi('test', undefined, { abortSignal: signal }),
+      ).rejects.toThrow('already cancelled');
+      expect(mockRunRuby).not.toHaveBeenCalled();
+    });
+
     it('should throw an error if Ruby script returns invalid result', async () => {
       const provider = new RubyProvider('script.rb');
       mockRunRuby.mockResolvedValue({ invalidKey: 'invalid value' });
 
       await expect(provider.callEmbeddingApi('test prompt')).rejects.toThrow(
-        'The Ruby script `call_embedding_api` function must return a hash with an own `embedding` array or `error` string (inherited prototype properties are rejected), instead got {"invalidKey":"invalid value"}',
+        'The Ruby script `call_embedding_api` function must return a hash with an own `embedding` or `error` property (inherited prototype properties are rejected), instead got: {"invalidKey":"invalid value"}',
       );
     });
 
@@ -280,7 +305,7 @@ describe('RubyProvider', () => {
       mockRunRuby.mockResolvedValue(inheritedResult);
 
       await expect(provider.callEmbeddingApi('test prompt')).rejects.toThrow(
-        'The Ruby script `call_embedding_api` function must return a hash with an own `embedding` array or `error` string (inherited prototype properties are rejected), instead got {}',
+        'The Ruby script `call_embedding_api` function must return a hash with an own `embedding` or `error` property (inherited prototype properties are rejected), instead got: {}',
       );
     });
   });
@@ -306,7 +331,7 @@ describe('RubyProvider', () => {
       mockRunRuby.mockResolvedValue({ invalidKey: 'invalid value' });
 
       await expect(provider.callClassificationApi('test prompt')).rejects.toThrow(
-        'The Ruby script `call_classification_api` function must return a hash with an own `classification` object or `error` string (inherited prototype properties are rejected), instead of {"invalidKey":"invalid value"}',
+        'The Ruby script `call_classification_api` function must return a hash with an own `classification` or `error` property (inherited prototype properties are rejected), instead got: {"invalidKey":"invalid value"}',
       );
     });
 
@@ -316,7 +341,7 @@ describe('RubyProvider', () => {
       mockRunRuby.mockResolvedValue(inheritedResult);
 
       await expect(provider.callClassificationApi('test prompt')).rejects.toThrow(
-        'The Ruby script `call_classification_api` function must return a hash with an own `classification` object or `error` string (inherited prototype properties are rejected), instead of {}',
+        'The Ruby script `call_classification_api` function must return a hash with an own `classification` or `error` property (inherited prototype properties are rejected), instead got: {}',
       );
     });
   });

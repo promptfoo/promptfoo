@@ -1,10 +1,17 @@
 import { createHmac } from 'crypto';
 
-import { fetchWithCache, getCache, getScopedCacheKey, isCacheEnabled } from '../cache';
+import {
+  fetchWithCache,
+  getAbortSignalScopedKey,
+  getCache,
+  getScopedCacheKey,
+  isCacheEnabled,
+} from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
 import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
 import { maybeLoadToolsFromExternalFile } from '../util';
+import { resolveProviderEnv } from './env';
 import { calculateCost, getRequestTimeoutMs, parseChatPrompt } from './shared';
 
 import type { EnvVarKey } from '../envars';
@@ -12,10 +19,30 @@ import type { EnvOverrides } from '../types/env';
 import type {
   ApiProvider,
   CallApiContextParams,
+  CallApiOptionsParams,
   ProviderEmbeddingResponse,
   ProviderResponse,
   TokenUsage,
 } from '../types/index';
+
+function getMistralApiUrl(
+  config: { apiHost?: string; apiBaseUrl?: string },
+  env: EnvOverrides | undefined,
+  defaultUrl: string,
+): string {
+  if (config.apiHost) {
+    return `https://${config.apiHost}/v1`;
+  }
+  if (config.apiBaseUrl) {
+    return config.apiBaseUrl;
+  }
+  const endpoint = resolveProviderEnv(env, ['MISTRAL_API_HOST', 'MISTRAL_API_BASE_URL']);
+  return endpoint
+    ? endpoint.name === 'MISTRAL_API_HOST'
+      ? `https://${endpoint.value}/v1`
+      : endpoint.value
+    : defaultUrl;
+}
 
 const MISTRAL_CHAT_MODELS = [
   // Z.ai GLM 5.3 hosted by Mistral: https://docs.mistral.ai/models/zai-glm-5-3
@@ -325,8 +352,9 @@ function getMistralAuthCacheNamespace(apiKey: string): string {
 function fetchMistralWithDedupe(
   cacheKey: string,
   fetcher: () => Promise<MistralFetchResult>,
+  abortSignal?: AbortSignal,
 ): Promise<MistralFetchResult> {
-  const inflightCacheKey = getScopedCacheKey(cacheKey);
+  const inflightCacheKey = getAbortSignalScopedKey(getScopedCacheKey(cacheKey), abortSignal);
   let inflightRequest = MISTRAL_INFLIGHT_REQUESTS.get(inflightCacheKey);
   if (!inflightRequest) {
     inflightRequest = fetcher().finally(() => {
@@ -582,17 +610,7 @@ export class MistralChatCompletionProvider implements ApiProvider {
   }
 
   getApiUrl(): string {
-    const apiHost =
-      this.config.apiHost || this.env?.MISTRAL_API_HOST || getEnvString('MISTRAL_API_HOST');
-    if (apiHost) {
-      return `https://${apiHost}/v1`;
-    }
-    return (
-      this.config.apiBaseUrl ||
-      this.env?.MISTRAL_API_BASE_URL ||
-      getEnvString('MISTRAL_API_BASE_URL') ||
-      this.getApiUrlDefault()
-    );
+    return getMistralApiUrl(this.config, this.env, this.getApiUrlDefault());
   }
 
   requiresApiKey(): boolean {
@@ -600,16 +618,13 @@ export class MistralChatCompletionProvider implements ApiProvider {
   }
 
   getApiKey(): string | undefined {
-    logger.debug(`Mistral apiKeyEnvar: ${this.config.apiKeyEnvar}`);
-    const apiKeyCandidate =
-      this.config?.apiKey ||
-      (this.config?.apiKeyEnvar
-        ? getEnvString(this.config.apiKeyEnvar as EnvVarKey) ||
-          this.env?.[this.config.apiKeyEnvar as keyof EnvOverrides]
-        : undefined) ||
-      this.env?.MISTRAL_API_KEY ||
-      getEnvString('MISTRAL_API_KEY');
-    return apiKeyCandidate;
+    const namedKey = this.config.apiKeyEnvar
+      ? (this.env?.[this.config.apiKeyEnvar] ?? getEnvString(this.config.apiKeyEnvar as EnvVarKey))
+      : undefined;
+    return (
+      this.config.apiKey ||
+      (namedKey ?? this.env?.MISTRAL_API_KEY ?? getEnvString('MISTRAL_API_KEY'))
+    );
   }
 
   private getCacheIdentityHash(apiUrl: string): string {
@@ -788,6 +803,8 @@ export class MistralChatCompletionProvider implements ApiProvider {
 }
 
 export class MistralEmbeddingProvider implements ApiProvider {
+  readonly supportsEmbeddingCancellation = true;
+
   modelName: string;
   config: MistralChatCompletionOptions;
   env?: EnvOverrides;
@@ -825,17 +842,7 @@ export class MistralEmbeddingProvider implements ApiProvider {
   }
 
   getApiUrl(): string {
-    const apiHost =
-      this.config.apiHost || this.env?.MISTRAL_API_HOST || getEnvString('MISTRAL_API_HOST');
-    if (apiHost) {
-      return `https://${apiHost}/v1`;
-    }
-    return (
-      this.config.apiBaseUrl ||
-      this.env?.MISTRAL_API_BASE_URL ||
-      getEnvString('MISTRAL_API_BASE_URL') ||
-      this.getApiUrlDefault()
-    );
+    return getMistralApiUrl(this.config, this.env, this.getApiUrlDefault());
   }
 
   requiresApiKey(): boolean {
@@ -843,16 +850,13 @@ export class MistralEmbeddingProvider implements ApiProvider {
   }
 
   getApiKey(): string | undefined {
-    logger.debug(`Mistral apiKeyEnvar: ${this.config.apiKeyEnvar}`);
-    const apiKeyCandidate =
-      this.config?.apiKey ||
-      (this.config?.apiKeyEnvar
-        ? getEnvString(this.config.apiKeyEnvar as EnvVarKey) ||
-          this.env?.[this.config.apiKeyEnvar as keyof EnvOverrides]
-        : undefined) ||
-      this.env?.MISTRAL_API_KEY ||
-      getEnvString('MISTRAL_API_KEY');
-    return apiKeyCandidate;
+    const namedKey = this.config.apiKeyEnvar
+      ? (this.env?.[this.config.apiKeyEnvar] ?? getEnvString(this.config.apiKeyEnvar as EnvVarKey))
+      : undefined;
+    return (
+      this.config.apiKey ||
+      (namedKey ?? this.env?.MISTRAL_API_KEY ?? getEnvString('MISTRAL_API_KEY'))
+    );
   }
 
   private getCacheIdentityHash(apiUrl: string): string {
@@ -877,7 +881,11 @@ export class MistralEmbeddingProvider implements ApiProvider {
     }
   }
 
-  async callEmbeddingApi(text: string): Promise<ProviderEmbeddingResponse> {
+  async callEmbeddingApi(
+    text: string,
+    _context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderEmbeddingResponse> {
     const apiKey = this.getApiKey();
     if (!apiKey) {
       throw new Error('Mistral API key must be set for embedding');
@@ -920,24 +928,30 @@ export class MistralEmbeddingProvider implements ApiProvider {
       });
 
       try {
-        ({ data, cached } = await fetchMistralWithDedupe(cacheKey, async () => {
-          return (await fetchWithCache(
-            url,
-            {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'x-promptfoo-silent': 'true',
-                Authorization: `Bearer ${apiKey}`,
+        ({ data, cached } = await fetchMistralWithDedupe(
+          cacheKey,
+          async () => {
+            return (await fetchWithCache(
+              url,
+              {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'x-promptfoo-silent': 'true',
+                  Authorization: `Bearer ${apiKey}`,
+                },
+                body: JSON.stringify(body),
+                ...(options?.abortSignal && { signal: options.abortSignal }),
               },
-              body: JSON.stringify(body),
-            },
-            getRequestTimeoutMs(),
-            'json',
-            true,
-          )) as unknown as MistralFetchResult;
-        }));
+              getRequestTimeoutMs(),
+              'json',
+              true,
+            )) as unknown as MistralFetchResult;
+          },
+          options?.abortSignal,
+        ));
       } catch (err) {
+        options?.abortSignal?.throwIfAborted();
         logger.error(`API call error: ${err}`);
         throw err;
       }

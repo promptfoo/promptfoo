@@ -132,6 +132,7 @@ export function getBedrockMantleResponsesBaseUrl(region: string): string {
 export class BedrockOpenAiResponsesProvider extends OpenAiResponsesProvider {
   private readonly bedrockTokenProvider: BedrockTokenProvider;
   private readonly bedrockRegion: string;
+  private readonly hasExplicitApiBaseUrl: boolean;
   private readonly loggedMantleRegionHints = new Set<string>();
 
   constructor(
@@ -152,6 +153,7 @@ export class BedrockOpenAiResponsesProvider extends OpenAiResponsesProvider {
             : getDefaultBedrockOpenAiRegion(modelName),
       );
     this.bedrockRegion = region;
+    this.hasExplicitApiBaseUrl = Boolean(config.apiBaseUrl);
     // Direct construction must be as isolated from ambient OpenAI endpoints as the factory.
     this.config = {
       ...this.config,
@@ -282,10 +284,9 @@ export class BedrockOpenAiResponsesProvider extends OpenAiResponsesProvider {
       return result;
     }
     const region = getMantleEndpointRegion(new URL(this.getApiUrl()));
-    // A Mantle URL for a Region other than the resolved one came from an explicit apiBaseUrl.
     const hint =
       region &&
-      getMantleRegionHint(this.getRequestModelName(context), region, region !== this.bedrockRegion);
+      getMantleRegionHint(this.getRequestModelName(context), region, this.hasExplicitApiBaseUrl);
     if (!hint) {
       return result;
     }
@@ -492,8 +493,6 @@ export function createBedrockOpenAiResponsesProvider(
         ? DEFAULT_BEDROCK_MANTLE_RESPONSES_REGION
         : getDefaultBedrockOpenAiRegion(modelName),
   );
-  const apiBaseUrl = getBedrockResponsesBaseUrl(modelName, region, config.apiBaseUrl);
-
   const ProviderClass = isGrok
     ? BedrockGrokResponsesProvider
     : isGptOss
@@ -505,7 +504,6 @@ export function createBedrockOpenAiResponsesProvider(
     bedrockRegion: region,
     config: {
       ...config,
-      apiBaseUrl,
       ...(isGrok ? { omitDefaults: true } : {}),
     },
   });

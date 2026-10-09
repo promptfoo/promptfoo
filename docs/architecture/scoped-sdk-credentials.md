@@ -2,7 +2,7 @@
 
 Evaluation environment files are scoped to their invocation. AWS, Google and Azure SDKs receive the effective credential inputs through constructor options; evaluation setup does not copy them into `process.env`. Provider configuration and the public per-key environment precedence remain unchanged.
 
-Ready SDK clients are destroyed during evaluation cleanup. Cleanup does not wait for pending construction, so a timed-out evaluation can return promptly; an abandoned construction that later succeeds still has its client destroyed. Each SageMaker region is cleaned up independently.
+SDK clients follow the shared provider registry: cleanup waits for their last physical provider call, while a timed-out evaluation can return promptly. Nested evaluations share a resource lifetime. New acquisitions after that lifetime closes fail before creating a client; construction already started retains cleanup ownership if it later succeeds. Each SageMaker region is cleaned up independently.
 
 An undefined value in a higher-priority environment layer leaves a lower-priority value intact. Explicit empty strings still clear selected values. SDK credential options and cache identity selection use the same merged layers.
 

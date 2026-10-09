@@ -362,7 +362,11 @@ export class TrueFoundryEmbeddingProvider extends OpenAiEmbeddingProvider {
   /**
    * Override callEmbeddingApi to add TrueFoundry-specific headers
    */
-  async callEmbeddingApi(text: string): Promise<ProviderResponse> {
+  async callEmbeddingApi(
+    text: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
     const tfConfig = this.config as TrueFoundryCompletionOptions;
 
     // Add TrueFoundry-specific headers
@@ -378,17 +382,12 @@ export class TrueFoundryEmbeddingProvider extends OpenAiEmbeddingProvider {
       headers['X-TFY-LOGGING-CONFIG'] = JSON.stringify(tfConfig.loggingConfig);
     }
 
-    // Temporarily set headers in config
-    const originalHeaders = this.config.headers;
-    this.config.headers = headers;
-
-    try {
-      // Call parent implementation
-      return await super.callEmbeddingApi(text);
-    } finally {
-      // Restore original headers
-      this.config.headers = originalHeaders;
-    }
+    // Keep generated headers local to this request.
+    const providerForRequest = new TrueFoundryEmbeddingProvider(this.modelName, {
+      config: { ...this.config, headers },
+      env: this.env,
+    });
+    return super.callEmbeddingApi.call(providerForRequest, text, context, options);
   }
 
   id(): string {
