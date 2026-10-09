@@ -1384,6 +1384,13 @@ Mantle selectors documented here.
 
 Grok reaches Bedrock two different ways, depending on the model.
 
+**Grok 4.7** requires a Runtime inference profile: use
+`bedrock:converse:us.xai.grok-4.7` or `bedrock:converse:global.xai.grok-4.7`, with
+`config.region` set to a supported source region. The bare `xai.grok-4.7` ID is not a
+Mantle model. Promptfoo estimates Standard, Priority (1.75×), and Flex (0.5×) costs,
+including cache reads, using the [AWS model card](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-xai-grok-4-7.html).
+Cache-write and Reserved-capacity costs remain unavailable.
+
 **Grok 4.6** (`xai.grok-4.6`) supports Runtime **Converse** through the
 `us.xai.grok-4.6` and `global.xai.grok-4.6` inference profiles. The current
 [AWS model card](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-xai-grok-4-6.html)
@@ -1578,6 +1585,17 @@ Several Bedrock families speak the OpenAI Chat Completions schema over `InvokeMo
 (`{ messages, max_tokens, ... }` → `{ choices: [{ message: { content } }] }`), so they share
 one handler and the same configuration options. They also work through the [Converse API](#converse-api)
 (`bedrock:converse:<id>`).
+
+[GLM 5.3](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-zai-glm-5-3.html)
+and [Kimi K3](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-moonshot-ai-kimi-k3.html)
+require cross-region inference profiles. Use `bedrock:us.zai.glm-5.3` or
+`bedrock:us.moonshotai.kimi-k3`; both also accept `global.` profiles, and Kimi K3 accepts
+`in.moonshotai.kimi-k3` from supported India regions. GLM 5.3 accepts `reasoning_effort: max`.
+For Converse, add `converse:` after `bedrock:`. Kimi K3 and GLM 5.3 Converse cost estimates
+include cache reads/writes and Standard, Priority, and Flex tiers; their InvokeModel cost
+remains unavailable. Rates follow the model card and [AWS pricing](https://aws.amazon.com/bedrock/pricing/). AWS documents Kimi K3 Converse limitations for document inputs
+and multi-turn history containing reasoning blocks; remove earlier reasoning blocks
+before sending a subsequent Converse turn.
 
 | Family          | Example model IDs                                                                                                         |
 | --------------- | ------------------------------------------------------------------------------------------------------------------------- |
