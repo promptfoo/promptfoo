@@ -41,6 +41,161 @@ describe('sanitizeTraceAttributes', () => {
     });
   });
 
+  it('preserves numeric token counters from application instrumentation', () => {
+    expect(
+      sanitizeTraceAttributes({
+        'prompt.tokens': 150,
+        'response.tokens': 85,
+        'llm.token_count.prompt': 150,
+        'llm.token_count.total': 235,
+        'ai.usage.promptTokens': 150,
+        'ai.usage.completionTokens': 85,
+      }),
+    ).toEqual({
+      'prompt.tokens': 150,
+      'response.tokens': 85,
+      'llm.token_count.prompt': 150,
+      'llm.token_count.total': 235,
+      'ai.usage.promptTokens': 150,
+      'ai.usage.completionTokens': 85,
+    });
+  });
+
+  it('redacts token attributes that do not hold a number', () => {
+    expect(
+      sanitizeTraceAttributes({
+        'session.tokens': 'sk-live-1234567890',
+        'auth.token_count': ['sk-a', 'sk-b'],
+        refresh_token: 'rt-1234567890',
+      }),
+    ).toEqual({
+      'session.tokens': '<redacted>',
+      'auth.token_count': '<redacted>',
+      refresh_token: '<redacted>',
+    });
+  });
+
+  it('keeps redacting keys that name other credential material', () => {
+    expect(
+      sanitizeTraceAttributes({
+        'authorization.tokens': 150,
+        'api_key.token_count': 42,
+        'secret.tokens': 7,
+        'llm.token_count.api_key': 42,
+        'gen_ai.usage.password_tokens': 7,
+      }),
+    ).toEqual({
+      'authorization.tokens': '<redacted>',
+      'api_key.token_count': '<redacted>',
+      'secret.tokens': '<redacted>',
+      'llm.token_count.api_key': '<redacted>',
+      'gen_ai.usage.password_tokens': '<redacted>',
+    });
+  });
+
+  it('redacts numeric credential-like token keys outside the usage namespaces', () => {
+    expect(
+      sanitizeTraceAttributes({
+        access_tokens: 654321,
+        sessionTokens: 123456,
+        'prompt.tokens': 150,
+      }),
+    ).toEqual({
+      access_tokens: '<redacted>',
+      sessionTokens: '<redacted>',
+      'prompt.tokens': 150,
+    });
+  });
+
+  it('redacts numeric token counters outside the recognised names and namespaces', () => {
+    expect(
+      sanitizeTraceAttributes({
+        promptTokenCount: 150,
+        LLMTokenCount: 85,
+        'session.tokens': 42,
+        'auth.token_count': 7,
+      }),
+    ).toEqual({
+      promptTokenCount: '<redacted>',
+      LLMTokenCount: '<redacted>',
+      'session.tokens': '<redacted>',
+      'auth.token_count': '<redacted>',
+    });
+  });
+
+  it('preserves numeric counters under the recognised usage namespaces', () => {
+    expect(
+      sanitizeTraceAttributes({
+        'gen_ai.usage.input_tokens': 150,
+        'gen_ai.usage.output_tokens': 85,
+        'llm.usage.prompt_tokens': 150,
+        'llm.usage.completion_tokens': 85,
+        'llm.token_count.completion': 85,
+        'llm.token_count.prompt_details.cache_read': 20,
+        'ai.usage.inputTokens': 150,
+        'ai.usage.outputTokens': 85,
+        'ai.usage.totalTokens': 235,
+        'completion.tokens': 85,
+      }),
+    ).toEqual({
+      'gen_ai.usage.input_tokens': 150,
+      'gen_ai.usage.output_tokens': 85,
+      'llm.usage.prompt_tokens': 150,
+      'llm.usage.completion_tokens': 85,
+      'llm.token_count.completion': 85,
+      'llm.token_count.prompt_details.cache_read': 20,
+      'ai.usage.inputTokens': 150,
+      'ai.usage.outputTokens': 85,
+      'ai.usage.totalTokens': 235,
+      'completion.tokens': 85,
+    });
+  });
+
+  it('redacts credential-like token keys inside the usage namespaces', () => {
+    expect(
+      sanitizeTraceAttributes({
+        'gen_ai.usage.access_tokens': 654321,
+        'llm.usage.session_tokens': 123456,
+        'llm.token_count.refresh_token': 42,
+        'promptfoo.usage.bearer_tokens': 7,
+        'gen_ai.usage.input_tokens': 150,
+        'llm.token_count.prompt': 150,
+      }),
+    ).toEqual({
+      'gen_ai.usage.access_tokens': '<redacted>',
+      'llm.usage.session_tokens': '<redacted>',
+      'llm.token_count.refresh_token': '<redacted>',
+      'promptfoo.usage.bearer_tokens': '<redacted>',
+      'gen_ai.usage.input_tokens': 150,
+      'llm.token_count.prompt': 150,
+    });
+  });
+
+  it('redacts well-known usage keys that do not hold a number', () => {
+    expect(
+      sanitizeTraceAttributes({
+        'gen_ai.usage.input_tokens': '150',
+        'gen_ai.usage.output_tokens': 85,
+        'llm.token_count.prompt': 'sk-live-1234567890',
+        'ai.usage.promptTokens': Number.NaN,
+      }),
+    ).toEqual({
+      'gen_ai.usage.input_tokens': '<redacted>',
+      'gen_ai.usage.output_tokens': 85,
+      'llm.token_count.prompt': '<redacted>',
+      'ai.usage.promptTokens': '<redacted>',
+    });
+  });
+
+  it('lets explicit redactions override token counters', () => {
+    expect(
+      sanitizeTraceAttributes(
+        { 'prompt.tokens': 150, 'gen_ai.usage.input_tokens': 150 },
+        { redactAttributes: ['tokens'] },
+      ),
+    ).toEqual({ 'prompt.tokens': '[REDACTED]', 'gen_ai.usage.input_tokens': '[REDACTED]' });
+  });
+
   it('applies explicit evaluation redactions even when generic sanitization is disabled', () => {
     expect(
       sanitizeTraceAttributes(

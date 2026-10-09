@@ -43,22 +43,87 @@ const SAFE_TOKEN_ATTRIBUTE_KEYS = new Set([
   'gen_ai.usage.rejected_prediction_tokens',
   'gen_ai.usage.cache_read_input_tokens',
   'gen_ai.usage.cache_creation_input_tokens',
+  // Counters used in the application examples in the tracing docs.
+  'prompt.tokens',
+  'response.tokens',
+  'completion.tokens',
+  // Vercel AI SDK (`ai.usage.*`), v4 and v5 names, matched case-insensitively.
+  'ai.usage.prompttokens',
+  'ai.usage.completiontokens',
+  'ai.usage.inputtokens',
+  'ai.usage.outputtokens',
+  'ai.usage.totaltokens',
+  'ai.usage.reasoningtokens',
+  'ai.usage.cachedinputtokens',
 ]);
 
-function isSensitiveAttributeKey(key: string): boolean {
-  const lowerKey = key.toLowerCase();
+/**
+ * Usage namespaces whose attributes are counters by definition. The exemption is bounded
+ * to these prefixes so a key such as `access_tokens` or `sessionTokens` elsewhere in a
+ * span is still treated as credential material.
+ *
+ * - `gen_ai.usage.*_tokens`, `llm.usage.*_tokens`, `promptfoo.usage.*_tokens`
+ * - `llm.token_count.*` (OpenInference)
+ */
+const SAFE_TOKEN_COUNTER_NAMESPACE_PATTERNS = [
+  /^(?:gen_ai|llm|promptfoo)\.usage\.[a-z0-9_.]*_tokens$/,
+  /^llm\.token_count\.[a-z0-9_.]+$/,
+];
+
+/**
+ * Words that mark a token as credential material even inside a usage namespace, for
+ * example `gen_ai.usage.access_tokens` or `llm.token_count.refresh_token`.
+ */
+const CREDENTIAL_TOKEN_QUALIFIERS = [
+  'access',
+  'session',
+  'refresh',
+  'auth',
+  'bearer',
+  'id_token',
+  'csrf',
+  'otp',
+];
+
+const TOKEN_MARKER = 'token';
+
+function isTokenCountAttribute(lowerKey: string, value: unknown): boolean {
+  // A count is a finite number. Any other value under the same key could be a credential,
+  // including under a recognised usage key.
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return false;
+  }
   if (SAFE_TOKEN_ATTRIBUTE_KEYS.has(lowerKey)) {
+    return true;
+  }
+  return (
+    SAFE_TOKEN_COUNTER_NAMESPACE_PATTERNS.some((pattern) => pattern.test(lowerKey)) &&
+    !CREDENTIAL_TOKEN_QUALIFIERS.some((qualifier) => lowerKey.includes(qualifier))
+  );
+}
+
+function isSensitiveAttributeKey(key: string, value: unknown): boolean {
+  const lowerKey = key.toLowerCase();
+  const normalizedKey = lowerKey.replace(/[^a-z0-9]/g, '');
+
+  const matchedMarkers = SENSITIVE_ATTRIBUTE_KEYS.filter(
+    (sensitiveKey, index) =>
+      lowerKey.includes(sensitiveKey) ||
+      normalizedKey.includes(NORMALIZED_SENSITIVE_ATTRIBUTE_KEYS[index]),
+  );
+
+  if (matchedMarkers.length === 0) {
     return false;
   }
 
-  const normalizedKey = lowerKey.replace(/[^a-z0-9]/g, '');
+  // Only the `token` marker can be waived, and only for a numeric value under a recognised
+  // usage-counter key. A key such as `api_key.token_count` also names credential material,
+  // so it stays redacted whatever its value.
+  if (matchedMarkers.some((marker) => marker !== TOKEN_MARKER)) {
+    return true;
+  }
 
-  return SENSITIVE_ATTRIBUTE_KEYS.some((sensitiveKey, index) => {
-    return (
-      lowerKey.includes(sensitiveKey) ||
-      normalizedKey.includes(NORMALIZED_SENSITIVE_ATTRIBUTE_KEYS[index])
-    );
-  });
+  return !isTokenCountAttribute(lowerKey, value);
 }
 
 export function sanitizeTraceAttributes(
@@ -101,7 +166,7 @@ export function sanitizeTraceAttributes(
       sanitized[key] = '[REDACTED]';
       continue;
     }
-    if (sanitizeSensitiveAttributes && isSensitiveAttributeKey(key)) {
+    if (sanitizeSensitiveAttributes && isSensitiveAttributeKey(key, value)) {
       sanitized[key] = '<redacted>';
       continue;
     }
