@@ -93,6 +93,32 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+function hasNonTextGradingContent(prompt: string): boolean {
+  try {
+    const messages: unknown = JSON.parse(prompt);
+    return (
+      Array.isArray(messages) &&
+      messages.some(
+        (message) =>
+          isPlainObject(message) &&
+          Array.isArray(message.content) &&
+          message.content.some(
+            (part) =>
+              !(
+                isPlainObject(part) &&
+                typeof part.type === 'string' &&
+                ['text', 'input_text', 'output_text'].includes(part.type) &&
+                typeof part.text === 'string'
+              ),
+          ),
+      )
+    );
+  } catch {
+    // Plain-text grading prompts have no structured attachments.
+    return false;
+  }
+}
+
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);
 }
@@ -205,6 +231,13 @@ export class TypeSafeProvider implements ApiProvider {
     // llm-rubric passes the rubric and the graded output as vars. Jev reads those directly
     // instead of the rendered grading prompt, which is written for a text-generation model.
     if (label === 'llm-rubric' && context?.vars?.rubric !== undefined) {
+      // Attachments live in the rendered prompt; vars.output can be only a placeholder.
+      if (hasNonTextGradingContent(prompt)) {
+        return {
+          error:
+            'TypeSafe `llm-rubric` supports text output only; media attachments are not supported.',
+        };
+      }
       return this.grade(context.vars.rubric, context.vars.output, config, bustCache, abortSignal);
     }
     if (label && UNSUPPORTED_GRADER_LABELS.includes(label)) {

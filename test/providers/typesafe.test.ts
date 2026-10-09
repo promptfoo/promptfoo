@@ -128,6 +128,72 @@ describe('TypeSafeProvider', () => {
   });
 
   describe('llm-rubric grading', () => {
+    const imageUrl =
+      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jfN0AAAAASUVORK5CYII=';
+
+    it.each([imageUrl, 'A caption accompanying the image'])(
+      'rejects attached image evidence before requesting a verdict for %s',
+      async (output) => {
+        mockAnswer({ type: 'noul', noul: 0.99 });
+
+        const result = await matchesLlmRubric(
+          'The image contains a red circle',
+          output,
+          { provider: createProvider() },
+          {},
+          undefined,
+          { providerResponse: { output, images: [{ data: imageUrl, mimeType: 'image/png' }] } },
+        );
+
+        expect(result).toMatchObject({
+          pass: false,
+          score: 0,
+          metadata: { graderError: true },
+        });
+        expect(result.reason).toContain('supports text output only');
+        expect(mockedFetchWithCache).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each([
+      { type: 'image_url', image_url: { url: imageUrl } },
+      { type: 'input_image', image_url: imageUrl },
+      { inlineData: { mimeType: 'image/png', data: 'aW1hZ2U=' } },
+      { type: 'input_audio', input_audio: { data: 'YXVkaW8=', format: 'wav' } },
+    ])('rejects nontext grading content %# before network', async (part) => {
+      mockAnswer({ type: 'noul', noul: 0.99 });
+      const prompt = JSON.stringify([
+        { role: 'user', content: [{ type: 'text', text: 'Inspect the attachment' }, part] },
+      ]);
+
+      const result = await createProvider().callApi(
+        prompt,
+        rubricContext('Matches the rubric', '[Attached output]'),
+      );
+
+      expect(result.error).toContain('supports text output only');
+      expect(mockedFetchWithCache).not.toHaveBeenCalled();
+    });
+
+    it.each(['text', 'input_text', 'output_text'])(
+      'allows %s grading content that mentions media part names',
+      async (type) => {
+        mockAnswer({ type: 'noul', noul: 0.9 });
+        const output = { explanation: 'image_url and input_audio describe media content parts' };
+        const prompt = JSON.stringify([
+          { role: 'user', content: [{ type, text: JSON.stringify(output) }] },
+        ]);
+
+        const result = await createProvider().callApi(
+          prompt,
+          rubricContext('Explains the API', output),
+        );
+
+        expect(result.error).toBeUndefined();
+        expect(lastRequest().body.state).toEqual(output);
+      },
+    );
+
     it('asks the rubric as a Noul question about the output', async () => {
       const answer = { type: 'noul', noul: 0.95 };
       mockAnswer(answer);
