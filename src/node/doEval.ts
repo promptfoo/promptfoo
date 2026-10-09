@@ -62,7 +62,11 @@ import { TokenUsageTracker } from '../util/tokenUsage';
 import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import { isUuid } from '../util/uuid';
 import { recalculatePromptMetrics } from './promptMetrics';
-import { deleteErrorResults, getErrorResultIds } from './retry';
+import {
+  deleteErrorResults,
+  getErrorResultIds,
+  restoreJsonlOutputsAfterPersistenceFailure,
+} from './retry';
 import { notCloudEnabledShareInstructions } from './shareInstructions';
 import type { FSWatcher } from 'chokidar';
 import type { Command } from 'commander';
@@ -949,12 +953,24 @@ async function doEvalWithEnv(
       if (retryErrors && cliState._retryErrorResultIds && !paused) {
         const errorResultIds = cliState._retryErrorResultIds;
         try {
+          if (ret.resultPersistenceFailed) {
+            const outputPath = config.outputPath;
+            const jsonlOutputPaths = (Array.isArray(outputPath) ? outputPath : [outputPath]).filter(
+              (output): output is string =>
+                typeof output === 'string' && getOutputFileFormat(output) === 'jsonl',
+            );
+            await restoreJsonlOutputsAfterPersistenceFailure(jsonlOutputPaths, ret);
+            throw new Error('Retry results failed to persist. Existing ERROR rows were preserved.');
+          }
           await deleteErrorResults(errorResultIds);
           await recalculatePromptMetrics(ret);
           logger.debug(
             `Cleaned up ${errorResultIds.length} old ERROR results after successful retry`,
           );
         } catch (cleanupError) {
+          if (ret.resultPersistenceFailed) {
+            throw cleanupError;
+          }
           // Cleanup failure is non-fatal - retry itself succeeded
           logger.warn('Post-retry cleanup had issues. Retry results are saved.', {
             error: cleanupError,
@@ -962,7 +978,8 @@ async function doEvalWithEnv(
         } finally {
           // Clear the stored error result IDs
           delete cliState._retryErrorResultIds;
-          // Clear retry mode flags
+          // Clear retry mode flags even when failed persistence rejects the retry.
+          cliState.resume = false;
           cliState.retryMode = false;
         }
       }

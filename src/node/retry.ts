@@ -91,7 +91,7 @@ async function resolveRetryConfigs(
   return configs;
 }
 
-async function restoreJsonlOutputsAfterPersistenceFailure(
+export async function restoreJsonlOutputsAfterPersistenceFailure(
   jsonlOutputPaths: string[],
   evalRecord: Eval,
 ): Promise<void> {
