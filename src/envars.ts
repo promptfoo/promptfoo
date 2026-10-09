@@ -1,7 +1,14 @@
 import { getEnvOverridesProvider } from './envOverrides';
 import { loadEnvFiles } from './util/envFile';
+import { parseEnvBool as parseBoolean } from './util/parseEnvBool';
 
 import type { EnvOverrides } from './types/env';
+
+// Preserve the original host restriction before loading .env, shared across CLI/library bundles.
+const HOST_TEST_MODE_KEY = Symbol.for('promptfoo.envars.isHostTesting');
+export const isHostTesting = ((process as unknown as Record<symbol, boolean>)[
+  HOST_TEST_MODE_KEY
+] ??= parseBoolean(process.env.IS_TESTING));
 
 loadEnvFiles();
 
@@ -545,15 +552,9 @@ export function getEnvBool(key: EnvVarKey, defaultValue?: boolean): boolean {
   return parseEnvBool(getEnvString(key), defaultValue);
 }
 
+// Preserve the existing helper entry point for internal consumers.
 export function parseEnvBool(input: string | undefined, defaultValue?: boolean): boolean {
-  const value = input || defaultValue;
-  if (typeof value === 'boolean') {
-    return value;
-  }
-  if (typeof value === 'string') {
-    return ['1', 'true', 'yes', 'yup', 'yeppers'].includes(value.toLowerCase());
-  }
-  return Boolean(defaultValue);
+  return parseBoolean(input, defaultValue);
 }
 
 /** Suite flags can restrict template access to process.env, but cannot lift operator restrictions. */

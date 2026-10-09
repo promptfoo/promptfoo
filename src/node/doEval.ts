@@ -279,8 +279,11 @@ export async function doEval(
   defaultConfigPath: string | undefined,
   evaluateOptions: InternalEvaluateOptions,
 ): Promise<Eval> {
-  const envFileOverrides = isCliEventSource(evaluateOptions) ? undefined : {};
+  const envFileOverrides: EnvOverrides = {};
   setupEnv(cmdObj.envPath, { processEnv: envFileOverrides });
+  if (isCliEventSource(evaluateOptions)) {
+    Object.assign(process.env, envFileOverrides);
+  }
   return cliState.withEnvFileOverrides(envFileOverrides, () =>
     doEvalWithEnv(cmdObj, defaultConfig, defaultConfigPath, evaluateOptions, envFileOverrides),
   );
@@ -341,13 +344,6 @@ async function doEvalWithEnv(
   const runEvaluationWithEnv = async (runEnv: EnvOverrides, initialization?: boolean) => {
     const startTime = Date.now();
     let testSources: Awaited<ReturnType<typeof resolveConfigs>>['testSources'];
-    telemetry.record('command_used', {
-      name: 'eval - started',
-      watch: Boolean(cmdObj.watch),
-      // Only set when redteam is enabled for sure, because we don't know if config is loaded yet
-      ...(Boolean(config?.redteam) && { isRedteam: true }),
-    });
-
     if (cmdObj.write) {
       await runDbMigrations();
     }
@@ -569,7 +565,16 @@ async function doEvalWithEnv(
     if ((!cmdObj.envPath || cmdObj.envPath.length === 0) && commandLineOptions?.envPath) {
       logger.debug(`Loading additional environment from config: ${commandLineOptions.envPath}`);
       setupEnv(commandLineOptions.envPath, { processEnv: envFileOverrides });
+      if (isCliInvocation) {
+        Object.assign(process.env, envFileOverrides);
+      }
     }
+
+    telemetry.record('command_used', {
+      name: 'eval - started',
+      watch: Boolean(cmdObj.watch),
+      ...(Boolean(config?.redteam) && { isRedteam: true }),
+    });
 
     warnIfRedteamConfigHasNoTests(config, testSuite);
 

@@ -329,10 +329,12 @@ describe('envars', () => {
       ['0', 'false', 'no', 'nope'].forEach((value) => {
         mockProcessEnv({ PROMPTFOO_CACHE_ENABLED: value });
         expect(getEnvBool('PROMPTFOO_CACHE_ENABLED')).toBe(false);
+        expect(getEnvBool('PROMPTFOO_CACHE_ENABLED', true)).toBe(false);
       });
     });
 
-    it('should return the default value for a non-existing environment variable', () => {
+    it.each([undefined, ''])('uses the boolean default when the value is %j', (value) => {
+      mockProcessEnv({ PROMPTFOO_CACHE_ENABLED: value });
       expect(getEnvBool('PROMPTFOO_CACHE_ENABLED', true)).toBe(true);
       expect(getEnvBool('PROMPTFOO_CACHE_ENABLED', false)).toBe(false);
     });
