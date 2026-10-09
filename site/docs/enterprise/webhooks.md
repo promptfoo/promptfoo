@@ -34,6 +34,8 @@ On-prem administrators can manage webhooks under **Organization → Webhooks** o
 
 Each webhook subscribes to selected events for one team. When creating a webhook through the API, set `teamId` to that team's UUID. If omitted, the webhook belongs to the organization's default team, including webhooks created through the UI. It does not receive events from other teams.
 
+For request and response schemas, see **Create webhook**, **List webhook event types**, and **Regenerate webhook secret** in the [API reference](/docs/api-reference/), or download the [OpenAPI specification](https://api.promptfoo.app/static/openapi.json).
+
 ### Creating a Webhook
 
 Using an administrator service-account API key, send the following request, replacing the example `teamId` with the intended team's UUID. With an authenticated administrator session, omit the `Authorization` header.
