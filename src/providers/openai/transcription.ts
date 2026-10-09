@@ -3,7 +3,7 @@ import path from 'path';
 
 import { fetchWithCache } from '../../cache';
 import logger from '../../logger';
-import { isAbortError } from '../../util/fetch/errors';
+import { getAbortError, isAbortError } from '../../util/fetch/errors';
 import { getRequestTimeoutMs } from '../shared';
 import { OpenAiGenericProvider } from './';
 import {
@@ -20,16 +20,6 @@ import type {
   ProviderResponse,
 } from '../../types/index';
 import type { OpenAiSharedOptions } from './types';
-
-function getAbortError(signal: AbortSignal): Error {
-  const reason = signal.reason;
-  if (reason instanceof Error && reason.name === 'AbortError') {
-    return reason;
-  }
-  const error = new Error(reason instanceof Error ? reason.message : 'Request was aborted');
-  error.name = 'AbortError';
-  return error;
-}
 
 export interface OpenAiTranscriptionOptions extends OpenAiSharedOptions {
   language?: string;

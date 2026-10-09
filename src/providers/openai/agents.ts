@@ -9,6 +9,7 @@ import {
   startTraceExportLoop,
 } from '@openai/agents';
 import { SandboxAgent } from '@openai/agents/sandbox';
+import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import { getConfiguredTracingExport } from '../tracing';
 import {
@@ -164,7 +165,7 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
       this.agentConfig.tracing === true ||
       Boolean(context?.traceparent && hasConfiguredExporter) ||
       context?.test?.metadata?.tracingEnabled === true ||
-      process.env.PROMPTFOO_TRACING_ENABLED === 'true';
+      (this.env?.PROMPTFOO_TRACING_ENABLED ?? getEnvString('PROMPTFOO_TRACING_ENABLED')) === 'true';
 
     if (!tracingEnabled) {
       logger.debug('[AgentsProvider] Tracing not enabled');
@@ -263,7 +264,9 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
         output: result.finalOutput as string,
         tokenUsage: this.extractTokenUsage(result),
         cached: false,
-        cost: this.calculateCost(result),
+        // The Agents SDK exposes aggregate usage, but a run can include handoffs to
+        // agents with different models. Without per-model usage, no exact total is available.
+        cost: undefined,
       };
 
       return response;
@@ -309,15 +312,6 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
       ...(usage.requests === undefined ? {} : { numRequests: usage.requests }),
       ...(Object.keys(completionDetails).length ? { completionDetails } : {}),
     };
-  }
-
-  /**
-   * Calculate cost from agent result
-   */
-  private calculateCost(_result: any): number | undefined {
-    // The Agents SDK exposes aggregate usage, but a run can include handoffs to
-    // agents with different models. Without per-model usage, no exact total is available.
-    return undefined;
   }
 
   private wrapToolsIfNeeded(agent: Agent<any, any>): Agent<any, any> {

@@ -6,7 +6,7 @@ import {
 import { REDTEAM_DEFAULTS } from '@promptfoo/redteam/constants';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { getProviderType } from '../components/Targets/helpers';
+import { getProviderType, withLocalProviderType } from '../components/Targets/helpers';
 import { getProviderEditorType } from '../components/Targets/providerCatalog';
 import {
   getCurrentTargetConfigInvalidMarker,
@@ -1711,8 +1711,8 @@ export const useRedTeamConfig = create<RedTeamConfigState>()(
         finishNonObjectTargetRecovery?.();
       },
       setFullConfig: (config) => {
-        const providerType = getProviderEditorType(config.target?.id);
-        const normalizedConfig =
+        const providerType = getProviderEditorType(config.target?.id, config.target?.config);
+        let normalizedConfig =
           config.target && config.target.config === undefined
             ? {
                 ...config,
@@ -1732,6 +1732,17 @@ export const useRedTeamConfig = create<RedTeamConfigState>()(
           set({ config: normalizedConfig, providerType });
           return;
         }
+        normalizedConfig = {
+          ...normalizedConfig,
+          target: {
+            ...normalizedConfig.target,
+            config: withLocalProviderType(
+              normalizedConfig.target.id,
+              normalizedConfig.target.config,
+              providerType,
+            ),
+          },
+        };
         const finishTargetConfigValidationClear = prepareTargetConfigValidationClear(
           normalizedConfig.target,
         );

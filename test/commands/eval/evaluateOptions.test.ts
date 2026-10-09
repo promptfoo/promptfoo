@@ -9,6 +9,7 @@ import logger from '../../../src/logger';
 import Eval from '../../../src/models/eval';
 import { doEval } from '../../../src/node/doEval';
 import * as retryModule from '../../../src/node/retry';
+import { isSafeMode } from '../../../src/util/safeMode';
 import { mockProcessEnv } from '../../util/utils';
 import type { Command } from 'commander';
 
@@ -173,6 +174,39 @@ describe('evaluateOptions behavior', () => {
       remove.mockRestore();
       metrics.mockRestore();
     }
+  });
+
+  it('honors safe mode from an explicit config and restores it after evaluation', async () => {
+    const configFile = writeTempConfig(tmpDir, 'safe-mode.yaml', {
+      providers: ['echo'],
+      prompts: ['Hello'],
+      tests: [{ vars: {} }],
+      commandLineOptions: { safeMode: true },
+    });
+    const observed: boolean[] = [];
+    evaluateMock.mockImplementationOnce(async () => {
+      observed.push(isSafeMode());
+      return {} as any;
+    });
+    await doEval({ table: false, write: false, config: [configFile] }, {}, undefined, {});
+    expect(observed).toEqual([true]);
+    expect(isSafeMode()).toBe(false);
+  });
+
+  it('does not leak safe mode from one API evaluation into the next', async () => {
+    const observed: boolean[] = [];
+    const config = { providers: ['echo'], prompts: ['Hello'], tests: [{ vars: {} }] };
+    evaluateMock.mockImplementationOnce(async () => {
+      observed.push(isSafeMode());
+      return {} as any;
+    });
+    await doEval({ table: false, write: false, safeMode: true }, config, undefined, {});
+    evaluateMock.mockImplementationOnce(async () => {
+      observed.push(isSafeMode());
+      return {} as any;
+    });
+    await doEval({ table: false, write: false }, config, undefined, {});
+    expect(observed).toEqual([true, false]);
   });
 
   describe('generation accounting provenance', () => {
