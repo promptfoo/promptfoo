@@ -46,12 +46,14 @@ export const DEFAULT_BEDROCK_MANTLE_RESPONSES_REGION = 'us-east-1';
 
 /**
  * Mantle Regions that serve each OpenAI frontier model: the regional Mantle catalogs
- * (`GET /v1/models`, verified 2026-09-24) plus the GovCloud Regions from the AWS model cards.
+ * (`GET /v1/models`, verified 2026-09-24) and the AWS model cards.
  * AWS changes availability independently of promptfoo, so this table only picks the default
  * Region and explains Mantle 404s; configured Regions are always used as given.
  */
 const BEDROCK_OPENAI_MANTLE_REGIONS = new Map<string, readonly string[]>([
   ['openai.gpt-6-astra', ['us-west-2']],
+  // https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-openai-gpt-6-1-sol.html
+  ['openai.gpt-6.1-sol', ['us-east-1']],
   ['openai.gpt-6-sol', ['us-east-1']],
   ['openai.gpt-6-luna', ['us-east-1']],
   ['openai.gpt-5.6-sol', ['us-east-1', 'us-east-2']],
@@ -264,10 +266,19 @@ export class BedrockOpenAiResponsesProvider extends OpenAiResponsesProvider {
       delete (result.body as Record<string, unknown>).service_tier;
       return result;
     }
-    if (serviceTier !== undefined && serviceTier !== 'default') {
+    const supportsUltrafast = model === 'openai.gpt-6.1-sol';
+    if (
+      serviceTier !== undefined &&
+      serviceTier !== 'default' &&
+      !(supportsUltrafast && serviceTier === 'ultrafast')
+    ) {
+      const supportedTiers = supportsUltrafast
+        ? 'the standard and ultrafast inference tiers'
+        : 'the standard inference tier';
+      const supportedValues = supportsUltrafast ? '"default" or "ultrafast"' : '"default"';
       throw new Error(
-        `Amazon Bedrock model "${model}" supports only the standard inference tier; ` +
-          `received "${serviceTier}". Remove service_tier/serviceTier or set service_tier to "default".`,
+        `Amazon Bedrock model "${model}" supports only ${supportedTiers}; ` +
+          `received "${serviceTier}". Remove service_tier/serviceTier or set service_tier to ${supportedValues}.`,
       );
     }
     return result;

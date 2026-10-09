@@ -825,11 +825,8 @@ export function calculateOpenAIUsageCostFromTokenUsage(
   }
 
   const billingModelName = modelName.replace(/^openai\./, '');
-  // These models have no published Bedrock rates.
-  if (
-    modelName.startsWith('openai.') &&
-    (billingModelName === 'gpt-6-astra' || billingModelName === 'gpt-6.1-sol')
-  ) {
+  // GPT-6 Astra has no published Bedrock rates.
+  if (modelName.startsWith('openai.') && billingModelName === 'gpt-6-astra') {
     return undefined;
   }
   const cacheWriteTokens = tokenUsage.completionDetails?.cacheCreationInputTokens;
@@ -1005,10 +1002,12 @@ function getUltrafastModelRates(
   modelName: string,
   totalInputTokens: number,
 ): OpenAIModelRates | undefined {
-  // Only Astra has published Ultrafast rates, at 6x each standard rate.
+  // Astra and GPT-6.1 Sol publish Ultrafast rates at 6x each standard rate.
   // https://developers.openai.com/api/docs/pricing?latest-pricing=ultrafast
   const text =
-    modelName === 'gpt-6-astra' ? getBaseTextRates(modelName, totalInputTokens) : undefined;
+    modelName === 'gpt-6-astra' || modelName === 'gpt-6.1-sol'
+      ? getBaseTextRates(modelName, totalInputTokens)
+      : undefined;
   return text ? { text: applyRateMultiplier(text, 6) } : undefined;
 }
 
@@ -1307,9 +1306,6 @@ export function calculateOpenAIUsageCost(
   const usageParts = getOpenAIUsageParts(rawUsage);
   const usage = extractOpenAIBillingUsage(rawUsage);
   const gpt6Variant = getGpt6Variant(modelName);
-  if (gpt6Variant === '6.1-sol' && options.provider === 'bedrock') {
-    return calculateCustomUsageCost(usage, config, options.cachedResponse);
-  }
   if (
     (gpt6Variant === 'sol' || gpt6Variant === '6.1-sol' || gpt6Variant === 'luna') &&
     usesAzureOpenAiBilling(config, options.apiUrl, options.provider)

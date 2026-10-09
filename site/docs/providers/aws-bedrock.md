@@ -1180,6 +1180,28 @@ $2.20 input / $11 output for Sol and $0.11 input / $0.55 output per million toke
 See [OpenAI's Bedrock pricing guidance](https://developers.openai.com/api/docs/guides/amazon-bedrock#pricing)
 for regional pricing and AWS billing terms.
 
+GPT-6.1 Sol uses `bedrock:openai.gpt-6.1-sol` on Mantle in `us-east-1`. Set
+`service_tier: ultrafast` for faster interactive responses, or `default` for Standard:
+
+```yaml
+providers:
+  - id: bedrock:openai.gpt-6.1-sol
+    config:
+      region: us-east-1
+      service_tier: ultrafast
+      reasoning:
+        effort: low
+      max_output_tokens: 2048
+      store: false
+```
+
+Ultrafast costs six times Standard. On Mantle, its short-context rates are $13.20 input,
+$0.66 cache read, $16.50 cache write, and $66 output per million tokens, including the
+regional premium. Priority and Flex are unsupported. See the
+[AWS model card](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-openai-gpt-6-1-sol.html)
+for availability and long-context rates, and the [`openai-ultrafast` example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-ultrafast)
+for a Standard comparison. Bedrock authentication follows the instructions below.
+
 #### Frontier models (GPT-5.x)
 
 - **`openai.gpt-5.6-sol`**: Flagship reasoning tier (`us-east-1`, `us-east-2`)
@@ -1194,7 +1216,7 @@ GPT-5.6 also supports [Runtime Converse and Mantle Chat Completions](https://doc
 Promptfoo routes the bare
 `bedrock:openai.gpt-5.x` IDs to its OpenAI Responses provider, preserves the Bedrock request
 model ID, and returns the clean final answer. When no Region is configured, promptfoo uses
-`us-west-2` for `openai.gpt-6-astra`, `us-east-1` for `openai.gpt-6-sol` and `openai.gpt-6-luna`,
+`us-west-2` for `openai.gpt-6-astra`, `us-east-1` for `openai.gpt-6-sol`, `openai.gpt-6.1-sol`, and `openai.gpt-6-luna`,
 and `us-east-2` for other frontier models. A configured Region is always used; if Mantle does not
 serve the model there, it returns HTTP 404 ("model does not exist") and promptfoo adds the
 Regions that list the model to the error.

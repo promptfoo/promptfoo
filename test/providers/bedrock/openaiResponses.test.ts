@@ -84,6 +84,7 @@ describe('bedrock openaiResponses helper', () => {
       }
       expect(isBedrockOpenAiResponsesModel('openai.gpt-5.5')).toBe(true);
       expect(isBedrockOpenAiResponsesModel('openai.gpt-5.4')).toBe(true);
+      expect(isBedrockOpenAiResponsesModel('openai.gpt-6.1-sol')).toBe(true);
     });
 
     it('excludes open-weight gpt-oss ids (served via InvokeModel)', () => {
@@ -325,21 +326,24 @@ describe('bedrock openaiResponses helper', () => {
       );
     });
 
-    it('defaults GPT-6 Astra to us-west-2 in the factory and direct constructor', async () => {
-      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-6-astra', {
+    it.each([
+      ['openai.gpt-6-astra', 'us-west-2'],
+      ['openai.gpt-6.1-sol', 'us-east-1'],
+    ])('defaults %s to %s in the factory and direct constructor', async (model, region) => {
+      const provider = createBedrockOpenAiResponsesProvider(model, {
         config: { apiKey: 'bedrock-key' },
       });
-      const direct = new BedrockOpenAiResponsesProvider('openai.gpt-6-astra', {
+      const direct = new BedrockOpenAiResponsesProvider(model, {
         config: { apiKey: 'bedrock-key' },
       });
 
-      expect(provider.getApiUrl()).toBe('https://bedrock-mantle.us-west-2.api.aws/openai/v1');
-      expect(direct.getApiUrl()).toBe('https://bedrock-mantle.us-west-2.api.aws/openai/v1');
+      expect(provider.getApiUrl()).toBe(`https://bedrock-mantle.${region}.api.aws/openai/v1`);
+      expect(direct.getApiUrl()).toBe(`https://bedrock-mantle.${region}.api.aws/openai/v1`);
 
       await provider.callApi('hello');
       expect(fetchWithCache).toHaveBeenCalledWith(
-        'https://bedrock-mantle.us-west-2.api.aws/openai/v1/responses',
-        expect.objectContaining({ body: expect.stringContaining('"model":"openai.gpt-6-astra"') }),
+        `https://bedrock-mantle.${region}.api.aws/openai/v1/responses`,
+        expect.objectContaining({ body: expect.stringContaining(`"model":"${model}"`) }),
         expect.any(Number),
         'json',
         true,
@@ -369,6 +373,7 @@ describe('bedrock openaiResponses helper', () => {
 
     it.each([
       ['openai.gpt-6-astra', 'us-east-1'],
+      ['openai.gpt-6.1-sol', 'us-west-2'],
       ['openai.gpt-6-sol', 'us-west-2'],
       ['openai.gpt-6-luna', 'us-east-2'],
       ['openai.gpt-5.6-sol', 'us-gov-west-1'],
@@ -421,6 +426,7 @@ describe('bedrock openaiResponses helper', () => {
 
       it.each([
         ['openai.gpt-6-astra', 'us-east-1', 'us-west-2'],
+        ['openai.gpt-6.1-sol', 'us-east-2', 'us-east-1'],
         ['openai.gpt-6-sol', 'us-east-2', 'us-east-1'],
         ['openai.gpt-5.6-sol', 'us-west-2', 'us-east-1, us-east-2'],
         ['openai.gpt-5.5', 'us-west-2', 'us-east-1, us-east-2'],
@@ -737,6 +743,7 @@ describe('bedrock openaiResponses helper', () => {
 
     it.each([
       ['provider config', { service_tier: 'flex' }, undefined, 'flex'],
+      ['provider config', { service_tier: 'ultrafast' }, undefined, 'ultrafast'],
       [
         'provider passthrough',
         { service_tier: 'default', passthrough: { service_tier: 'priority' } },
@@ -767,6 +774,168 @@ describe('bedrock openaiResponses helper', () => {
         );
       },
     );
+
+    describe('GPT-6.1 Sol Ultrafast', () => {
+      it.each([
+        ['provider config', { service_tier: 'ultrafast' }, undefined],
+        [
+          'provider passthrough',
+          { service_tier: 'default', passthrough: { service_tier: 'ultrafast' } },
+          undefined,
+        ],
+        ['prompt config', { service_tier: 'default' }, { service_tier: 'ultrafast' }],
+        [
+          'prompt passthrough',
+          { service_tier: 'default' },
+          { passthrough: { service_tier: 'ultrafast' } },
+        ],
+      ] as const)('forwards the tier from %s', async (_case, config, promptConfig) => {
+        const provider = createBedrockOpenAiResponsesProvider('openai.gpt-6.1-sol', {
+          config: { apiKey: 'bedrock-key', ...config },
+        });
+
+        const request = await provider.getOpenAiBody(
+          'hello',
+          promptConfig
+            ? { prompt: { raw: 'hello', label: 'fixture', config: promptConfig }, vars: {} }
+            : undefined,
+        );
+
+        expect(request.body.model).toBe('openai.gpt-6.1-sol');
+        expect(request.body.service_tier).toBe('ultrafast');
+        expect(request.config.service_tier).toBe('ultrafast');
+      });
+
+      it.each(['priority', 'fast', 'flex', 'auto'] as const)(
+        'rejects the unsupported %s tier',
+        async (serviceTier) => {
+          const provider = createBedrockOpenAiResponsesProvider('openai.gpt-6.1-sol', {
+            config: { apiKey: 'bedrock-key', service_tier: serviceTier },
+          });
+
+          await expect(provider.getOpenAiBody('hello')).rejects.toThrow(
+            `supports only the standard and ultrafast inference tiers; received "${serviceTier}"`,
+          );
+          expect(fetchWithCache).not.toHaveBeenCalled();
+        },
+      );
+
+      it.each([null, 'default'] as const)(
+        'allows a prompt to clear Ultrafast with %s',
+        async (serviceTier) => {
+          const provider = createBedrockOpenAiResponsesProvider('openai.gpt-6.1-sol', {
+            config: { apiKey: 'bedrock-key', passthrough: { service_tier: 'ultrafast' } },
+          });
+          const { body, config } = await provider.getOpenAiBody('hello', {
+            prompt: { raw: 'hello', label: 'fixture', config: { service_tier: serviceTier } },
+            vars: {},
+          });
+
+          expect(body.service_tier).toBe(serviceTier ?? undefined);
+          expect(config.service_tier).toBe(serviceTier);
+        },
+      );
+
+      it.each(['provider', 'prompt'] as const)(
+        'uses the %s model override to validate the tier',
+        async (scope) => {
+          const override = {
+            passthrough: { model: 'openai.gpt-6.1-sol', service_tier: 'ultrafast' },
+          };
+          const provider = createBedrockOpenAiResponsesProvider('openai.gpt-6-sol', {
+            config: { apiKey: 'bedrock-key', ...(scope === 'provider' ? override : {}) },
+          });
+          const { body } = await provider.getOpenAiBody(
+            'hello',
+            scope === 'prompt'
+              ? { prompt: { raw: 'hello', label: 'fixture', config: override }, vars: {} }
+              : undefined,
+          );
+
+          expect(body.model).toBe('openai.gpt-6.1-sol');
+          expect(body.service_tier).toBe('ultrafast');
+
+          await expect(
+            provider.getOpenAiBody('hello', {
+              prompt: {
+                raw: 'hello',
+                label: 'fixture',
+                config: {
+                  passthrough: { model: 'openai.gpt-6-sol', service_tier: 'ultrafast' },
+                },
+              },
+              vars: {},
+            }),
+          ).rejects.toThrow('supports only the standard inference tier');
+        },
+      );
+
+      it.each([
+        [undefined, 'ultrafast', 0.0021384],
+        [undefined, 'default', 0.0003564],
+        ['https://bedrock-proxy.example.test/openai/v1', undefined, 0.0021384],
+        ['https://bedrock-proxy.example.test/openai/v1', 'default', 0.0003564],
+      ] as const)(
+        'uses regional pricing for endpoint %s and returned tier %s',
+        async (apiBaseUrl, serviceTier, expectedCost) => {
+          vi.mocked(fetchWithCache).mockResolvedValueOnce({
+            data: {
+              model: 'openai.gpt-6.1-sol',
+              service_tier: serviceTier,
+              output: [
+                {
+                  type: 'message',
+                  role: 'assistant',
+                  content: [{ type: 'output_text', text: 'hello' }],
+                },
+              ],
+              usage: {
+                input_tokens: 100,
+                output_tokens: 20,
+                input_tokens_details: { cached_tokens: 40, cache_write_tokens: 0 },
+              },
+            },
+            cached: false,
+            status: 200,
+            statusText: 'OK',
+          });
+          const provider = createBedrockOpenAiResponsesProvider('openai.gpt-6.1-sol', {
+            config: { apiKey: 'bedrock-key', apiBaseUrl, service_tier: 'ultrafast' },
+          });
+
+          const result = await provider.callApi('hello');
+
+          expect(result.error).toBeUndefined();
+          expect(result.output).toBe('hello');
+          expect(result.cost).toBeCloseTo(expectedCost, 10);
+          const request = JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]!.body as string);
+          expect(request.service_tier).toBe('ultrafast');
+        },
+      );
+
+      it('applies Ultrafast regional long-context rates to cache writes and reads', async () => {
+        const provider = createBedrockOpenAiResponsesProvider('openai.gpt-6.1-sol', {
+          config: { apiKey: 'bedrock-key', service_tier: 'ultrafast' },
+        });
+        const result = (provider as any).applyBilling(
+          {},
+          {
+            usage: {
+              input_tokens: 300_000,
+              output_tokens: 1000,
+              input_tokens_details: { cached_tokens: 100_000, cache_write_tokens: 50_000 },
+            },
+          },
+          provider.config,
+          false,
+        );
+
+        expect(result.cost).toBeCloseTo(
+          (150_000 * 26.4 + 100_000 * 1.32 + 50_000 * 33 + 1000 * 99) / 1e6,
+          10,
+        );
+      });
+    });
 
     it.each([
       ['omitted', undefined],
@@ -998,7 +1167,7 @@ describe('bedrock openaiResponses helper', () => {
       expect(body.temperature).toBeUndefined();
     });
 
-    it.each(['openai.gpt-6-sol', 'openai.gpt-6-luna'])(
+    it.each(['openai.gpt-6-sol', 'openai.gpt-6-luna', 'openai.gpt-6.1-sol'])(
       'treats %s as a reasoning model like GPT-5',
       async (model) => {
         restoreEnv = mockProcessEnv({

@@ -1,0 +1,59 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Compare Sol Standard and Ultrafast
+
+prompts:
+  - |-
+    Choose the next action for a support agent using this policy:
+    - Duplicate charges: investigate the duplicate before issuing a refund.
+    - Account access problems: send the account recovery flow, never request a password.
+    - Suspected account compromise takes priority over billing: escalate to security.
+    Reply with exactly one action: investigate_duplicate, account_recovery, or escalate_security.
+    Customer message: {{message}}
+
+providers:
+  - id: openai:responses:gpt-6.1-sol
+    label: Sol Standard
+    config:
+      service_tier: default
+      reasoning:
+        effort: low
+      max_output_tokens: 2048
+      store: false
+  - id: openai:responses:gpt-6.1-sol
+    label: Sol Ultrafast
+    config:
+      service_tier: ultrafast
+      reasoning:
+        effort: low
+      max_output_tokens: 2048
+      store: false
+
+defaultTest:
+  assert:
+    # Illustrative budgets; replace with your application's requirements.
+    - type: latency
+      threshold: 15000 # milliseconds
+      metric: Latency budget
+    - type: cost
+      threshold: 0.15 # USD per response
+      metric: Cost budget
+
+tests:
+  - vars:
+      message: My card was charged twice for one monthly subscription. Please refund one charge.
+    assert:
+      - type: equals
+        value: investigate_duplicate
+        metric: Action accuracy
+  - vars:
+      message: I forgot my password and cannot sign in. Can I send you my old password to verify my account?
+    assert:
+      - type: equals
+        value: account_recovery
+        metric: Action accuracy
+  - vars:
+      message: I see duplicate charges and someone changed my account email without permission.
+    assert:
+      - type: equals
+        value: escalate_security
+        metric: Action accuracy

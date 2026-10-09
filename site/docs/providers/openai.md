@@ -177,7 +177,7 @@ providers:
       max_output_tokens: 8192
 ```
 
-GPT-6.1 Sol accepts `low`, `medium` (the API default), `high`, `xhigh`, and `max`; it does not accept `none` or `minimal`. Promptfoo removes unsupported sampling and log-probability parameters. The model supports US and EU data residency, but Fast mode is unavailable with EU residency. See the [GPT-6.1 Sol model guide](https://developers.openai.com/api/docs/models/gpt-6.1-sol).
+GPT-6.1 Sol accepts `low`, `medium` (the API default), `high`, `xhigh`, and `max`; it does not accept `none` or `minimal`. Promptfoo removes unsupported sampling and log-probability parameters. The model supports US and EU data residency, including Fast and [Ultrafast](#ultrafast-mode). See the [GPT-6.1 Sol model guide](https://developers.openai.com/api/docs/models/gpt-6.1-sol).
 
 ### Fine-tuned models {#fine-tuned-and-legacy-completion-models}
 
@@ -271,7 +271,7 @@ Set `service_tier: ultrafast` to opt in on a supported model:
 
 ```yaml
 providers:
-  - id: openai:gpt-6-astra
+  - id: openai:gpt-6.1-sol
     config:
       service_tier: ultrafast
       reasoning:
@@ -279,9 +279,11 @@ providers:
       max_output_tokens: 2048
 ```
 
-Ultrafast is available for GPT-6 Astra and in preview for GPT-5.6 Sol. It supports US data residency and global processing only. Access and rate limits depend on your OpenAI account; see the [Ultrafast guide](https://developers.openai.com/api/docs/guides/ultrafast-mode). GPT-6.1 Sol is not currently listed as supporting this tier.
+Ultrafast is available for GPT-6.1 Sol and GPT-6 Astra, and in preview for GPT-5.6 Sol. GPT-6.1 Sol supports US and EU data residency and global processing; GPT-6 Astra supports US residency and global processing only. Use `apiBaseUrl: https://us.api.openai.com/v1` or `https://eu.api.openai.com/v1` with an eligible regional project. Ultrafast has separate rate limits; see the [Ultrafast guide](https://developers.openai.com/api/docs/guides/ultrafast-mode).
 
-GPT-6 Astra Ultrafast costs six times its Standard token rates. Promptfoo uses the returned service tier to estimate cost when available. For models without published Ultrafast rates, estimates require explicit `inputCost` and `outputCost`. See [Ultrafast pricing](https://developers.openai.com/api/docs/pricing?latest-pricing=ultrafast).
+GPT-6.1 Sol and GPT-6 Astra Ultrafast cost six times their Standard token rates. Promptfoo uses the returned service tier to estimate cost when available. For models without published Ultrafast rates, estimates require explicit `inputCost` and `outputCost`. See [Ultrafast pricing](https://developers.openai.com/api/docs/pricing?latest-pricing=ultrafast).
+
+Use the [`openai-ultrafast` example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-ultrafast) to compare Standard and Ultrafast quality, latency, and cost on repeated inputs with `--no-cache`. Choose Ultrafast for interactive workflows when measured time savings justify the premium. Promptfoo's Responses provider uses HTTP; OpenAI recommends persistent WebSockets for frequent tool calls, so measure your application's full workflow separately. For Amazon Bedrock, see [OpenAI models on Bedrock](./aws-bedrock.md#openai-models).
 
 ### Connection settings
 

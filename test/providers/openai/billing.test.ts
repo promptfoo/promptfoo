@@ -202,6 +202,7 @@ describe('OpenAI billing helpers', () => {
           ['flex', 0.5],
           ['fast', 2],
           ['priority', 2],
+          ['ultrafast', 6],
         ] as const) {
           expect(calculateOpenAIUsageCost('gpt-6.1-sol', {}, usage, { serviceTier })).toBeCloseTo(
             standardCost * multiplier,
@@ -241,7 +242,7 @@ describe('OpenAI billing helpers', () => {
       expect(calculateOpenAIUsageCost('gpt-6.1-sol-unpublished', {}, usage)).toBeUndefined();
     });
 
-    it.each(['azure', 'azure-openai', 'bedrock'])(
+    it.each(['azure', 'azure-openai'])(
       'requires explicit rates for unpublished %s pricing',
       (provider) => {
         const usage = { input_tokens: 1000, output_tokens: 100 };
@@ -260,30 +261,41 @@ describe('OpenAI billing helpers', () => {
       },
     );
 
-    it('does not infer Bedrock pricing from normalized token usage', () => {
+    it('uses regional Bedrock pricing from normalized token usage', () => {
       expect(
         calculateOpenAIUsageCostFromTokenUsage('openai.gpt-6.1-sol', {
           prompt: 1000,
           completion: 100,
+          cached: 200,
+          completionDetails: { cacheCreationInputTokens: 300 },
         }),
-      ).toBeUndefined();
+      ).toBeCloseTo((500 * 2.2 + 200 * 0.11 + 300 * 2.75 + 100 * 11) / 1e6, 10);
     });
   });
 
   describe('Ultrafast', () => {
     it.each([
-      { inputTokens: 272_000, input: 60, cached: 6, write: 75, output: 300 },
-      { inputTokens: 272_001, input: 120, cached: 12, write: 150, output: 450 },
+      { model: 'gpt-6-astra', inputTokens: 272_000, input: 60, cached: 6, write: 75, output: 300 },
+      {
+        model: 'gpt-6-astra',
+        inputTokens: 272_001,
+        input: 120,
+        cached: 12,
+        write: 150,
+        output: 450,
+      },
+      { model: 'gpt-6.1-sol', inputTokens: 272_000, input: 12, cached: 0.6, write: 15, output: 60 },
+      { model: 'gpt-6.1-sol', inputTokens: 272_001, input: 24, cached: 1.2, write: 30, output: 90 },
     ])(
-      'uses published Astra rates at $inputTokens input tokens',
-      ({ inputTokens, input, cached, write, output }) => {
+      'uses published $model rates at $inputTokens input tokens',
+      ({ model, inputTokens, input, cached, write, output }) => {
         const usage = {
           input_tokens: inputTokens,
           output_tokens: 1000,
           input_tokens_details: { cached_tokens: 500, cache_write_tokens: 250 },
         };
         expect(
-          calculateOpenAIUsageCost('gpt-6-astra', {}, usage, { serviceTier: 'ultrafast' }),
+          calculateOpenAIUsageCost(model, {}, usage, { serviceTier: 'ultrafast' }),
         ).toBeCloseTo(
           ((inputTokens - 750) * input + 500 * cached + 250 * write + 1000 * output) / 1e6,
           10,
@@ -306,7 +318,36 @@ describe('OpenAI billing helpers', () => {
       ).toBe(0);
     });
 
-    it.each(['gpt-5.6-sol', 'gpt-6.1-sol', 'gpt-6-sol', 'gpt-4o', 'gpt-image-1'])(
+    it.each(['https://us.api.openai.com/v1', 'https://eu.api.openai.com/v1'])(
+      'prices Sol Ultrafast cache usage and explicit overrides at %s',
+      (apiUrl) => {
+        const usage = createCachedResponsesUsage();
+        const options = { apiUrl, serviceTier: 'ultrafast' };
+        expect(calculateOpenAIUsageCost('gpt-6.1-sol', {}, usage, options)).toBeCloseTo(
+          ((1250 * 12 + 500 * 0.6 + 250 * 15 + 1000 * 60) / 1e6) * 1.1,
+          10,
+        );
+        expect(
+          calculateOpenAIUsageCost('gpt-6.1-sol', { inputCost: 3 / 1e6 }, usage, options),
+        ).toBeCloseTo((2000 * 3 + 1000 * 66) / 1e6, 10);
+        expect(
+          calculateOpenAIUsageCost('gpt-6.1-sol', { cost: 3 / 1e6 }, usage, options),
+        ).toBeCloseTo(0.009, 10);
+        expect(
+          calculateOpenAIUsageCost('gpt-6.1-sol', {}, usage, { ...options, cachedResponse: true }),
+        ).toBe(0);
+      },
+    );
+
+    it('leaves Sol Ultrafast costs unknown when cache write usage is missing', () => {
+      expect(
+        calculateOpenAIUsageCost('gpt-6.1-sol', {}, createCachedInputUsage(), {
+          serviceTier: 'ultrafast',
+        }),
+      ).toBeUndefined();
+    });
+
+    it.each(['gpt-5.6-sol', 'gpt-6-sol', 'gpt-4o', 'gpt-image-1'])(
       'does not substitute standard prices for unpublished %s Ultrafast rates',
       (model) => {
         const usage = { input_tokens: 1000, output_tokens: 100 };
