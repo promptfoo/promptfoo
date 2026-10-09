@@ -374,12 +374,10 @@ describe('OpenAiImageProvider', () => {
       const provider = new OpenAiImageProvider('dall-e-3', createApiKeyOptions());
 
       const mockDeleteFn = vi.fn();
-      vi.mocked(fetchWithCache).mockResolvedValueOnce(
-        createMockFetchResponse({
-          // Invalid data structure that will cause parsing to fail
-          deleteFromCache: mockDeleteFn,
-        }),
-      );
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        ...createMockFetchResponse({}),
+        deleteFromCache: mockDeleteFn,
+      });
 
       await provider.callApi('test prompt');
       expect(mockDeleteFn).toHaveBeenCalledTimes(1);
