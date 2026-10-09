@@ -17,58 +17,58 @@
           "$ref": "#/definitions/__schema2"
         },
         "prompts": {
-          "$ref": "#/definitions/__schema173"
+          "$ref": "#/definitions/__schema183"
         },
         "tests": {
-          "$ref": "#/definitions/__schema174"
+          "$ref": "#/definitions/__schema184"
         },
         "scenarios": {
-          "$ref": "#/definitions/__schema191"
+          "$ref": "#/definitions/__schema201"
         },
         "defaultTest": {
-          "$ref": "#/definitions/__schema192"
+          "$ref": "#/definitions/__schema202"
         },
         "outputPath": {
-          "$ref": "#/definitions/__schema193"
+          "$ref": "#/definitions/__schema203"
         },
         "sharing": {
-          "$ref": "#/definitions/__schema194"
+          "$ref": "#/definitions/__schema204"
         },
         "nunjucksFilters": {
-          "$ref": "#/definitions/__schema195"
+          "$ref": "#/definitions/__schema205"
         },
         "env": {
-          "$ref": "#/definitions/__schema196"
+          "$ref": "#/definitions/__schema206"
         },
         "derivedMetrics": {
-          "$ref": "#/definitions/__schema197"
+          "$ref": "#/definitions/__schema207"
         },
         "extensions": {
-          "$ref": "#/definitions/__schema198"
+          "$ref": "#/definitions/__schema208"
         },
         "metadata": {
-          "$ref": "#/definitions/__schema199"
+          "$ref": "#/definitions/__schema209"
         },
         "redteam": {
-          "$ref": "#/definitions/__schema200"
+          "$ref": "#/definitions/__schema210"
         },
         "writeLatestResults": {
-          "$ref": "#/definitions/__schema230"
+          "$ref": "#/definitions/__schema240"
         },
         "tracing": {
-          "$ref": "#/definitions/__schema231"
+          "$ref": "#/definitions/__schema241"
         },
         "basePath": {
-          "$ref": "#/definitions/__schema236"
+          "$ref": "#/definitions/__schema246"
         },
         "evaluateOptions": {
-          "$ref": "#/definitions/__schema237"
+          "$ref": "#/definitions/__schema247"
         },
         "commandLineOptions": {
-          "$ref": "#/definitions/__schema239"
+          "$ref": "#/definitions/__schema249"
         },
         "targets": {
-          "$ref": "#/definitions/__schema240"
+          "$ref": "#/definitions/__schema250"
         }
       },
       "required": ["prompts"],
@@ -176,471 +176,501 @@
             "ANTHROPIC_CUSTOM_HEADERS": {
               "$ref": "#/definitions/__schema14"
             },
-            "ATLASCLOUD_API_KEY": {
+            "ANTHROPIC_TEMPERATURE": {
               "$ref": "#/definitions/__schema15"
             },
-            "AWS_ACCESS_KEY_ID": {
+            "ATLASCLOUD_API_KEY": {
               "$ref": "#/definitions/__schema16"
             },
-            "AWS_BEARER_TOKEN_BEDROCK": {
+            "AWS_ACCESS_KEY_ID": {
               "$ref": "#/definitions/__schema17"
             },
-            "AWS_BEDROCK_REGION": {
+            "AWS_BEARER_TOKEN_BEDROCK": {
               "$ref": "#/definitions/__schema18"
             },
-            "AWS_PROFILE": {
+            "AWS_BEDROCK_REGION": {
               "$ref": "#/definitions/__schema19"
             },
-            "AWS_SECRET_ACCESS_KEY": {
+            "AWS_PROFILE": {
               "$ref": "#/definitions/__schema20"
             },
-            "AWS_SESSION_TOKEN": {
+            "AWS_SECRET_ACCESS_KEY": {
               "$ref": "#/definitions/__schema21"
             },
-            "AZURE_API_BASE_URL": {
+            "AWS_SESSION_TOKEN": {
               "$ref": "#/definitions/__schema22"
             },
-            "AZURE_API_HOST": {
+            "AZURE_API_BASE_URL": {
               "$ref": "#/definitions/__schema23"
             },
-            "AZURE_API_KEY": {
+            "AZURE_AI_PROJECT_URL": {
               "$ref": "#/definitions/__schema24"
             },
-            "AZURE_AUTHORITY_HOST": {
+            "AZURE_API_HOST": {
               "$ref": "#/definitions/__schema25"
             },
-            "AZURE_CLIENT_ID": {
+            "AZURE_API_KEY": {
               "$ref": "#/definitions/__schema26"
             },
-            "AZURE_CLIENT_SECRET": {
+            "AZURE_AUTHORITY_HOST": {
               "$ref": "#/definitions/__schema27"
             },
-            "AZURE_DEPLOYMENT_NAME": {
+            "AZURE_CLIENT_ID": {
               "$ref": "#/definitions/__schema28"
             },
-            "AZURE_EMBEDDING_DEPLOYMENT_NAME": {
+            "AZURE_CLIENT_SECRET": {
               "$ref": "#/definitions/__schema29"
             },
-            "AZURE_OPENAI_API_BASE_URL": {
+            "AZURE_DEPLOYMENT_NAME": {
               "$ref": "#/definitions/__schema30"
             },
-            "AZURE_OPENAI_API_HOST": {
+            "AZURE_EMBEDDING_DEPLOYMENT_NAME": {
               "$ref": "#/definitions/__schema31"
             },
-            "AZURE_OPENAI_API_KEY": {
+            "AZURE_OPENAI_API_BASE_URL": {
               "$ref": "#/definitions/__schema32"
             },
-            "AZURE_OPENAI_BASE_URL": {
+            "AZURE_OPENAI_API_HOST": {
               "$ref": "#/definitions/__schema33"
             },
-            "AZURE_OPENAI_DEPLOYMENT_NAME": {
+            "AZURE_OPENAI_API_KEY": {
               "$ref": "#/definitions/__schema34"
             },
-            "AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME": {
+            "AZURE_OPENAI_BASE_URL": {
               "$ref": "#/definitions/__schema35"
             },
-            "AZURE_TENANT_ID": {
+            "AZURE_OPENAI_DEPLOYMENT_NAME": {
               "$ref": "#/definitions/__schema36"
             },
-            "AZURE_TOKEN_SCOPE": {
+            "AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME": {
               "$ref": "#/definitions/__schema37"
             },
-            "CDP_DOMAIN": {
+            "AZURE_TENANT_ID": {
               "$ref": "#/definitions/__schema38"
             },
-            "CDP_TOKEN": {
+            "AZURE_TOKEN_SCOPE": {
               "$ref": "#/definitions/__schema39"
             },
-            "CLAUDE_CODE_USE_BEDROCK": {
+            "CDP_DOMAIN": {
               "$ref": "#/definitions/__schema40"
             },
-            "CLAUDE_CODE_USE_VERTEX": {
+            "CDP_TOKEN": {
               "$ref": "#/definitions/__schema41"
             },
-            "CLAUDE_CONFIG_DIR": {
+            "CLAUDE_CODE_USE_BEDROCK": {
               "$ref": "#/definitions/__schema42"
             },
-            "CLOUDFLARE_ACCOUNT_ID": {
+            "CLAUDE_CODE_USE_VERTEX": {
               "$ref": "#/definitions/__schema43"
             },
-            "CLOUDFLARE_API_KEY": {
+            "CLAUDE_CONFIG_DIR": {
               "$ref": "#/definitions/__schema44"
             },
-            "CLOUDFLARE_GATEWAY_ID": {
+            "CLOUDFLARE_ACCOUNT_ID": {
               "$ref": "#/definitions/__schema45"
             },
-            "CF_AIG_TOKEN": {
+            "CLOUDFLARE_API_KEY": {
               "$ref": "#/definitions/__schema46"
             },
-            "COMETAPI_KEY": {
+            "CLOUDFLARE_GATEWAY_ID": {
               "$ref": "#/definitions/__schema47"
             },
-            "COHERE_API_BASE_URL": {
+            "CF_AIG_TOKEN": {
               "$ref": "#/definitions/__schema48"
             },
-            "COHERE_API_KEY": {
+            "COMETAPI_KEY": {
               "$ref": "#/definitions/__schema49"
             },
-            "COHERE_CLIENT_NAME": {
+            "COHERE_API_BASE_URL": {
               "$ref": "#/definitions/__schema50"
             },
-            "DATABRICKS_TOKEN": {
+            "COHERE_API_KEY": {
               "$ref": "#/definitions/__schema51"
             },
-            "DATABRICKS_WORKSPACE_URL": {
+            "COHERE_CLIENT_NAME": {
               "$ref": "#/definitions/__schema52"
             },
-            "DEEPSEEK_API_KEY": {
+            "DATABRICKS_TOKEN": {
               "$ref": "#/definitions/__schema53"
             },
-            "DOCKER_MODEL_RUNNER_BASE_URL": {
+            "DATABRICKS_WORKSPACE_URL": {
               "$ref": "#/definitions/__schema54"
             },
-            "DOCKER_MODEL_RUNNER_API_KEY": {
+            "DEEPSEEK_API_KEY": {
               "$ref": "#/definitions/__schema55"
             },
-            "ELEVENLABS_API_KEY": {
+            "DOCKER_MODEL_RUNNER_BASE_URL": {
               "$ref": "#/definitions/__schema56"
             },
-            "ENVOY_API_BASE_URL": {
+            "DOCKER_MODEL_RUNNER_API_KEY": {
               "$ref": "#/definitions/__schema57"
             },
-            "ENVOY_API_KEY": {
+            "ELEVENLABS_API_KEY": {
               "$ref": "#/definitions/__schema58"
             },
-            "F5_API_BASE_URL": {
+            "ENVOY_API_BASE_URL": {
               "$ref": "#/definitions/__schema59"
             },
-            "F5_API_KEY": {
+            "ENVOY_API_KEY": {
               "$ref": "#/definitions/__schema60"
             },
-            "FAL_KEY": {
+            "F5_API_BASE_URL": {
               "$ref": "#/definitions/__schema61"
             },
-            "FIREWORKS_API_BASE_URL": {
+            "F5_API_KEY": {
               "$ref": "#/definitions/__schema62"
             },
-            "FIREWORKS_API_KEY": {
+            "FAL_KEY": {
               "$ref": "#/definitions/__schema63"
             },
-            "GITHUB_TOKEN": {
+            "FIREWORKS_API_BASE_URL": {
               "$ref": "#/definitions/__schema64"
             },
-            "GOOGLE_API_HOST": {
+            "FIREWORKS_API_KEY": {
               "$ref": "#/definitions/__schema65"
             },
-            "GOOGLE_API_BASE_URL": {
+            "GITHUB_TOKEN": {
               "$ref": "#/definitions/__schema66"
             },
-            "GOOGLE_API_KEY": {
+            "GOOGLE_API_HOST": {
               "$ref": "#/definitions/__schema67"
             },
-            "GOOGLE_CLOUD_PROJECT": {
+            "GOOGLE_APPLICATION_CREDENTIALS": {
               "$ref": "#/definitions/__schema68"
             },
-            "GOOGLE_CLOUD_LOCATION": {
+            "GOOGLE_API_BASE_URL": {
               "$ref": "#/definitions/__schema69"
             },
-            "GOOGLE_PROJECT_ID": {
+            "GOOGLE_API_KEY": {
               "$ref": "#/definitions/__schema70"
             },
-            "GOOGLE_LOCATION": {
+            "GOOGLE_CLOUD_PROJECT": {
               "$ref": "#/definitions/__schema71"
             },
-            "GOOGLE_GENERATIVE_AI_API_KEY": {
+            "GOOGLE_CLOUD_LOCATION": {
               "$ref": "#/definitions/__schema72"
             },
-            "GEMINI_API_KEY": {
+            "GOOGLE_PROJECT_ID": {
               "$ref": "#/definitions/__schema73"
             },
-            "GROQ_API_KEY": {
+            "GOOGLE_LOCATION": {
               "$ref": "#/definitions/__schema74"
             },
-            "HELICONE_API_KEY": {
+            "GOOGLE_GENERATIVE_AI_API_KEY": {
               "$ref": "#/definitions/__schema75"
             },
-            "HF_API_TOKEN": {
+            "GOOGLE_GENAI_USE_VERTEXAI": {
               "$ref": "#/definitions/__schema76"
             },
-            "HF_TOKEN": {
+            "GEMINI_API_KEY": {
               "$ref": "#/definitions/__schema77"
             },
-            "HYPERBOLIC_API_KEY": {
+            "GROQ_API_KEY": {
               "$ref": "#/definitions/__schema78"
             },
-            "HUGGING_FACE_HUB_TOKEN": {
+            "HELICONE_API_KEY": {
               "$ref": "#/definitions/__schema79"
             },
-            "JFROG_API_KEY": {
+            "HF_API_TOKEN": {
               "$ref": "#/definitions/__schema80"
             },
-            "LANGFUSE_BASE_URL": {
+            "HF_TOKEN": {
               "$ref": "#/definitions/__schema81"
             },
-            "LANGFUSE_HOST": {
+            "HYPERBOLIC_API_KEY": {
               "$ref": "#/definitions/__schema82"
             },
-            "LANGFUSE_PUBLIC_KEY": {
+            "HUGGING_FACE_HUB_TOKEN": {
               "$ref": "#/definitions/__schema83"
             },
-            "LANGFUSE_SECRET_KEY": {
+            "JFROG_API_KEY": {
               "$ref": "#/definitions/__schema84"
             },
-            "LITELLM_API_BASE": {
+            "LANGFUSE_BASE_URL": {
               "$ref": "#/definitions/__schema85"
             },
-            "LITELLM_API_KEY": {
+            "LANGFUSE_HOST": {
               "$ref": "#/definitions/__schema86"
             },
-            "LLAMA_BASE_URL": {
+            "LANGFUSE_PUBLIC_KEY": {
               "$ref": "#/definitions/__schema87"
             },
-            "LOCALAI_BASE_URL": {
+            "LANGFUSE_SECRET_KEY": {
               "$ref": "#/definitions/__schema88"
             },
-            "MISTRAL_API_BASE_URL": {
+            "LITELLM_API_BASE": {
               "$ref": "#/definitions/__schema89"
             },
-            "MISTRAL_API_HOST": {
+            "LITELLM_API_KEY": {
               "$ref": "#/definitions/__schema90"
             },
-            "MISTRAL_API_KEY": {
+            "LLAMA_BASE_URL": {
               "$ref": "#/definitions/__schema91"
             },
-            "MINIMAX_API_KEY": {
+            "LOCALAI_BASE_URL": {
               "$ref": "#/definitions/__schema92"
             },
-            "MOONSHOT_API_KEY": {
+            "MISTRAL_API_BASE_URL": {
               "$ref": "#/definitions/__schema93"
             },
-            "MLFLOW_GATEWAY_API_KEY": {
+            "MISTRAL_API_HOST": {
               "$ref": "#/definitions/__schema94"
             },
-            "MLFLOW_GATEWAY_URL": {
+            "MISTRAL_API_KEY": {
               "$ref": "#/definitions/__schema95"
             },
-            "MODEL_API_KEY": {
+            "MINIMAX_API_KEY": {
               "$ref": "#/definitions/__schema96"
             },
-            "MODELSLAB_API_KEY": {
+            "MOONSHOT_API_KEY": {
               "$ref": "#/definitions/__schema97"
             },
-            "N8N_API_KEY": {
+            "MLFLOW_GATEWAY_API_KEY": {
               "$ref": "#/definitions/__schema98"
             },
-            "NSCALE_SERVICE_TOKEN": {
+            "MLFLOW_GATEWAY_URL": {
               "$ref": "#/definitions/__schema99"
             },
-            "NSCALE_API_KEY": {
+            "MODEL_API_KEY": {
               "$ref": "#/definitions/__schema100"
             },
-            "NOVITA_API_KEY": {
+            "MODELSLAB_API_KEY": {
               "$ref": "#/definitions/__schema101"
             },
-            "NVIDIA_API_BASE_URL": {
+            "N8N_API_KEY": {
               "$ref": "#/definitions/__schema102"
             },
-            "NVIDIA_API_KEY": {
+            "NSCALE_SERVICE_TOKEN": {
               "$ref": "#/definitions/__schema103"
             },
-            "OLLAMA_API_KEY": {
+            "NSCALE_API_KEY": {
               "$ref": "#/definitions/__schema104"
             },
-            "OLLAMA_BASE_URL": {
+            "NOVITA_API_KEY": {
               "$ref": "#/definitions/__schema105"
             },
-            "OPENAI_API_BASE_URL": {
+            "NVIDIA_API_BASE_URL": {
               "$ref": "#/definitions/__schema106"
             },
-            "OPENAI_API_HOST": {
+            "NVIDIA_API_KEY": {
               "$ref": "#/definitions/__schema107"
             },
-            "OPENAI_API_KEY": {
+            "OLLAMA_API_KEY": {
               "$ref": "#/definitions/__schema108"
             },
-            "OPENAI_BASE_URL": {
+            "OLLAMA_BASE_URL": {
               "$ref": "#/definitions/__schema109"
             },
-            "OPENAI_ORGANIZATION": {
+            "OPENAI_API_BASE_URL": {
               "$ref": "#/definitions/__schema110"
             },
-            "CLAWDBOT_GATEWAY_PASSWORD": {
+            "OPENAI_API_HOST": {
               "$ref": "#/definitions/__schema111"
             },
-            "CLAWDBOT_GATEWAY_TOKEN": {
+            "OPENAI_API_KEY": {
               "$ref": "#/definitions/__schema112"
             },
-            "CLAWDBOT_GATEWAY_URL": {
+            "OPENAI_BASE_URL": {
               "$ref": "#/definitions/__schema113"
             },
-            "CODEX_API_KEY": {
+            "OPENAI_ORGANIZATION": {
               "$ref": "#/definitions/__schema114"
             },
-            "OPENCLAW_CONFIG_PATH": {
+            "CLAWDBOT_GATEWAY_PASSWORD": {
               "$ref": "#/definitions/__schema115"
             },
-            "OPENCLAW_GATEWAY_PASSWORD": {
+            "CLAWDBOT_GATEWAY_TOKEN": {
               "$ref": "#/definitions/__schema116"
             },
-            "OPENCLAW_GATEWAY_PORT": {
+            "CLAWDBOT_GATEWAY_URL": {
               "$ref": "#/definitions/__schema117"
             },
-            "OPENCLAW_GATEWAY_TOKEN": {
+            "CODEX_API_KEY": {
               "$ref": "#/definitions/__schema118"
             },
-            "OPENCLAW_GATEWAY_URL": {
+            "OPENCLAW_CONFIG_PATH": {
               "$ref": "#/definitions/__schema119"
             },
-            "ORCAROUTER_API_KEY": {
+            "OPENCLAW_GATEWAY_PASSWORD": {
               "$ref": "#/definitions/__schema120"
             },
-            "PALM_API_HOST": {
+            "OPENCLAW_GATEWAY_PORT": {
               "$ref": "#/definitions/__schema121"
             },
-            "PALM_API_KEY": {
+            "OPENCLAW_GATEWAY_TOKEN": {
               "$ref": "#/definitions/__schema122"
             },
-            "PORTKEY_API_KEY": {
+            "OPENCLAW_GATEWAY_URL": {
               "$ref": "#/definitions/__schema123"
             },
-            "PROMPTFOO_CA_CERT_PATH": {
+            "ORCAROUTER_API_KEY": {
               "$ref": "#/definitions/__schema124"
             },
-            "PROMPTFOO_PFX_CERT_PATH": {
+            "PALM_API_HOST": {
               "$ref": "#/definitions/__schema125"
             },
-            "PROMPTFOO_PFX_PASSWORD": {
+            "PALM_API_KEY": {
               "$ref": "#/definitions/__schema126"
             },
-            "PROMPTFOO_JKS_CERT_PATH": {
+            "PORTKEY_API_BASE_URL": {
               "$ref": "#/definitions/__schema127"
             },
-            "PROMPTFOO_JKS_PASSWORD": {
+            "PORTKEY_API_KEY": {
               "$ref": "#/definitions/__schema128"
             },
-            "PROMPTFOO_JKS_ALIAS": {
+            "PROMPTFOO_CA_CERT_PATH": {
               "$ref": "#/definitions/__schema129"
             },
-            "PROMPTFOO_INSECURE_SSL": {
+            "PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS": {
               "$ref": "#/definitions/__schema130"
             },
-            "QUIVERAI_API_KEY": {
+            "PROMPTFOO_DISABLE_TEMPLATING": {
               "$ref": "#/definitions/__schema131"
             },
-            "QWAK_TOKEN": {
+            "PROMPTFOO_MAX_CONCURRENCY": {
               "$ref": "#/definitions/__schema132"
             },
-            "REPLICATE_API_KEY": {
+            "PROMPTFOO_PFX_CERT_PATH": {
               "$ref": "#/definitions/__schema133"
             },
-            "REPLICATE_API_TOKEN": {
+            "PROMPTFOO_TRACING_ENABLED": {
               "$ref": "#/definitions/__schema134"
             },
-            "SHAREPOINT_BASE_URL": {
+            "PROMPTFOO_PFX_PASSWORD": {
               "$ref": "#/definitions/__schema135"
             },
-            "SHAREPOINT_CERT_PATH": {
+            "PROMPTFOO_JKS_CERT_PATH": {
               "$ref": "#/definitions/__schema136"
             },
-            "SHAREPOINT_CLIENT_ID": {
+            "PROMPTFOO_JKS_PASSWORD": {
               "$ref": "#/definitions/__schema137"
             },
-            "SHAREPOINT_TENANT_ID": {
+            "PROMPTFOO_JKS_ALIAS": {
               "$ref": "#/definitions/__schema138"
             },
-            "SLACK_BOT_TOKEN": {
+            "PROMPTFOO_INSECURE_SSL": {
               "$ref": "#/definitions/__schema139"
             },
-            "TOGETHER_API_KEY": {
+            "QUIVERAI_API_KEY": {
               "$ref": "#/definitions/__schema140"
             },
-            "TYPESAFE_API_KEY": {
+            "QWAK_TOKEN": {
               "$ref": "#/definitions/__schema141"
             },
-            "VERCEL_AI_GATEWAY_API_KEY": {
+            "REPLICATE_API_KEY": {
               "$ref": "#/definitions/__schema142"
             },
-            "VERCEL_AI_GATEWAY_BASE_URL": {
+            "REPLICATE_API_TOKEN": {
               "$ref": "#/definitions/__schema143"
             },
-            "VERTEX_API_HOST": {
+            "SHAREPOINT_BASE_URL": {
               "$ref": "#/definitions/__schema144"
             },
-            "VERTEX_API_KEY": {
+            "SHAREPOINT_CERT_PATH": {
               "$ref": "#/definitions/__schema145"
             },
-            "VERTEX_API_VERSION": {
+            "SHAREPOINT_CLIENT_ID": {
               "$ref": "#/definitions/__schema146"
             },
-            "VERTEX_PROJECT_ID": {
+            "SHAREPOINT_TENANT_ID": {
               "$ref": "#/definitions/__schema147"
             },
-            "VERTEX_PUBLISHER": {
+            "SLACK_BOT_TOKEN": {
               "$ref": "#/definitions/__schema148"
             },
-            "VERTEX_REGION": {
+            "SNOWFLAKE_ACCOUNT_IDENTIFIER": {
               "$ref": "#/definitions/__schema149"
             },
-            "VOYAGE_API_BASE_URL": {
+            "TOGETHER_API_KEY": {
               "$ref": "#/definitions/__schema150"
             },
-            "VOYAGE_API_KEY": {
+            "TYPESAFE_API_KEY": {
               "$ref": "#/definitions/__schema151"
             },
-            "WATSONX_AI_APIKEY": {
+            "VERCEL_AI_GATEWAY_API_KEY": {
               "$ref": "#/definitions/__schema152"
             },
-            "WATSONX_AI_AUTH_TYPE": {
+            "VERCEL_AI_GATEWAY_BASE_URL": {
               "$ref": "#/definitions/__schema153"
             },
-            "WATSONX_AI_BEARER_TOKEN": {
+            "VERTEX_API_HOST": {
               "$ref": "#/definitions/__schema154"
             },
-            "WATSONX_AI_PROJECT_ID": {
+            "VERTEX_API_KEY": {
               "$ref": "#/definitions/__schema155"
             },
-            "XAI_API_BASE_URL": {
+            "VERTEX_API_VERSION": {
               "$ref": "#/definitions/__schema156"
             },
-            "XAI_API_KEY": {
+            "VERTEX_PROJECT_ID": {
               "$ref": "#/definitions/__schema157"
             },
-            "AZURE_CONTENT_SAFETY_ENDPOINT": {
+            "VERTEX_PUBLISHER": {
               "$ref": "#/definitions/__schema158"
             },
-            "AZURE_CONTENT_SAFETY_API_KEY": {
+            "VERTEX_REGION": {
               "$ref": "#/definitions/__schema159"
             },
-            "AZURE_CONTENT_SAFETY_API_VERSION": {
+            "VOYAGE_API_BASE_URL": {
               "$ref": "#/definitions/__schema160"
             },
-            "AWS_REGION": {
+            "VOYAGE_API_KEY": {
               "$ref": "#/definitions/__schema161"
             },
-            "AWS_DEFAULT_REGION": {
+            "WATSONX_AI_APIKEY": {
               "$ref": "#/definitions/__schema162"
             },
-            "AWS_SAGEMAKER_MAX_TOKENS": {
+            "WATSONX_AI_AUTH_TYPE": {
               "$ref": "#/definitions/__schema163"
             },
-            "AWS_SAGEMAKER_TEMPERATURE": {
+            "WATSONX_AI_BEARER_TOKEN": {
               "$ref": "#/definitions/__schema164"
             },
-            "AWS_SAGEMAKER_TOP_P": {
+            "WATSONX_AI_PROJECT_ID": {
               "$ref": "#/definitions/__schema165"
             },
-            "AWS_SAGEMAKER_MAX_RETRIES": {
+            "XAI_API_BASE_URL": {
               "$ref": "#/definitions/__schema166"
             },
-            "PROMPTFOO_EVAL_TIMEOUT_MS": {
+            "XAI_API_KEY": {
               "$ref": "#/definitions/__schema167"
+            },
+            "AZURE_CONTENT_SAFETY_ENDPOINT": {
+              "$ref": "#/definitions/__schema168"
+            },
+            "AZURE_CONTENT_SAFETY_API_KEY": {
+              "$ref": "#/definitions/__schema169"
+            },
+            "AZURE_CONTENT_SAFETY_API_VERSION": {
+              "$ref": "#/definitions/__schema170"
+            },
+            "AWS_REGION": {
+              "$ref": "#/definitions/__schema171"
+            },
+            "AWS_DEFAULT_REGION": {
+              "$ref": "#/definitions/__schema172"
+            },
+            "AWS_SAGEMAKER_MAX_TOKENS": {
+              "$ref": "#/definitions/__schema173"
+            },
+            "AWS_SAGEMAKER_TEMPERATURE": {
+              "$ref": "#/definitions/__schema174"
+            },
+            "AWS_SAGEMAKER_TOP_P": {
+              "$ref": "#/definitions/__schema175"
+            },
+            "AWS_SAGEMAKER_MAX_RETRIES": {
+              "$ref": "#/definitions/__schema176"
+            },
+            "PROMPTFOO_EVAL_TIMEOUT_MS": {
+              "$ref": "#/definitions/__schema177"
             }
           }
         },
         "inputs": {
           "allOf": [
             {
-              "$ref": "#/definitions/__schema168"
+              "$ref": "#/definitions/__schema178"
             }
           ]
         }
@@ -1133,6 +1163,36 @@
       "type": "string"
     },
     "__schema168": {
+      "type": "string"
+    },
+    "__schema169": {
+      "type": "string"
+    },
+    "__schema170": {
+      "type": "string"
+    },
+    "__schema171": {
+      "type": "string"
+    },
+    "__schema172": {
+      "type": "string"
+    },
+    "__schema173": {
+      "type": "string"
+    },
+    "__schema174": {
+      "type": "string"
+    },
+    "__schema175": {
+      "type": "string"
+    },
+    "__schema176": {
+      "type": "string"
+    },
+    "__schema177": {
+      "type": "string"
+    },
+    "__schema178": {
       "type": "object",
       "propertyNames": {
         "type": "string",
@@ -1148,13 +1208,13 @@
             "type": "object",
             "properties": {
               "config": {
-                "$ref": "#/definitions/__schema169"
+                "$ref": "#/definitions/__schema179"
               },
               "description": {
-                "$ref": "#/definitions/__schema171"
+                "$ref": "#/definitions/__schema181"
               },
               "type": {
-                "$ref": "#/definitions/__schema172"
+                "$ref": "#/definitions/__schema182"
               }
             },
             "required": ["description"]
@@ -1162,7 +1222,7 @@
         ]
       }
     },
-    "__schema169": {
+    "__schema179": {
       "type": "object",
       "properties": {
         "benign": {
@@ -1176,24 +1236,24 @@
           "minItems": 1,
           "type": "array",
           "items": {
-            "$ref": "#/definitions/__schema170"
+            "$ref": "#/definitions/__schema180"
           }
         }
       }
     },
-    "__schema170": {
+    "__schema180": {
       "type": "string",
       "minLength": 1
     },
-    "__schema171": {
+    "__schema181": {
       "type": "string",
       "minLength": 1
     },
-    "__schema172": {
+    "__schema182": {
       "type": "string",
       "enum": ["text", "pdf", "docx", "image"]
     },
-    "__schema173": {
+    "__schema183": {
       "anyOf": [
         {
           "type": "string"
@@ -1257,7 +1317,7 @@
         }
       ]
     },
-    "__schema174": {
+    "__schema184": {
       "anyOf": [
         {
           "type": "string"
@@ -1270,62 +1330,62 @@
                 "type": "string"
               },
               {
-                "$ref": "#/definitions/__schema175"
+                "$ref": "#/definitions/__schema185"
               },
               {
-                "$ref": "#/definitions/__schema190"
+                "$ref": "#/definitions/__schema200"
               }
             ]
           }
         },
         {
-          "$ref": "#/definitions/__schema190"
+          "$ref": "#/definitions/__schema200"
         }
       ]
     },
-    "__schema175": {
+    "__schema185": {
       "type": "object",
       "properties": {
         "description": {
-          "$ref": "#/definitions/__schema176"
-        },
-        "vars": {
-          "$ref": "#/definitions/__schema177"
-        },
-        "provider": {
-          "$ref": "#/definitions/__schema178"
-        },
-        "providers": {
-          "$ref": "#/definitions/__schema180"
-        },
-        "prompts": {
-          "$ref": "#/definitions/__schema181"
-        },
-        "providerOutput": {
-          "$ref": "#/definitions/__schema182"
-        },
-        "assert": {
-          "$ref": "#/definitions/__schema183"
-        },
-        "assertScoringFunction": {
           "$ref": "#/definitions/__schema186"
         },
-        "options": {
+        "vars": {
           "$ref": "#/definitions/__schema187"
         },
-        "threshold": {
+        "provider": {
           "$ref": "#/definitions/__schema188"
         },
+        "providers": {
+          "$ref": "#/definitions/__schema190"
+        },
+        "prompts": {
+          "$ref": "#/definitions/__schema191"
+        },
+        "providerOutput": {
+          "$ref": "#/definitions/__schema192"
+        },
+        "assert": {
+          "$ref": "#/definitions/__schema193"
+        },
+        "assertScoringFunction": {
+          "$ref": "#/definitions/__schema196"
+        },
+        "options": {
+          "$ref": "#/definitions/__schema197"
+        },
+        "threshold": {
+          "$ref": "#/definitions/__schema198"
+        },
         "metadata": {
-          "$ref": "#/definitions/__schema189"
+          "$ref": "#/definitions/__schema199"
         }
       }
     },
-    "__schema176": {
+    "__schema186": {
       "type": "string"
     },
-    "__schema177": {},
-    "__schema178": {
+    "__schema187": {},
+    "__schema188": {
       "anyOf": [
         {
           "type": "string"
@@ -1334,11 +1394,11 @@
           "$ref": "#/definitions/__schema5"
         },
         {
-          "$ref": "#/definitions/__schema179"
+          "$ref": "#/definitions/__schema189"
         }
       ]
     },
-    "__schema179": {
+    "__schema189": {
       "type": "object",
       "properties": {
         "id": {},
@@ -1356,26 +1416,26 @@
         "inputs": {
           "allOf": [
             {
-              "$ref": "#/definitions/__schema168"
+              "$ref": "#/definitions/__schema178"
             }
           ]
         }
       },
       "required": ["id", "callApi"]
     },
-    "__schema180": {
+    "__schema190": {
       "type": "array",
       "items": {
         "type": "string"
       }
     },
-    "__schema181": {
+    "__schema191": {
       "type": "array",
       "items": {
         "type": "string"
       }
     },
-    "__schema182": {
+    "__schema192": {
       "anyOf": [
         {
           "type": "string"
@@ -1389,7 +1449,7 @@
         }
       ]
     },
-    "__schema183": {
+    "__schema193": {
       "type": "array",
       "items": {
         "anyOf": [
@@ -1405,7 +1465,7 @@
                 "items": {
                   "allOf": [
                     {
-                      "$ref": "#/definitions/__schema184"
+                      "$ref": "#/definitions/__schema194"
                     }
                   ]
                 }
@@ -1430,23 +1490,23 @@
             "required": ["type", "assert"]
           },
           {
-            "$ref": "#/definitions/__schema184"
+            "$ref": "#/definitions/__schema194"
           }
         ]
       }
     },
-    "__schema184": {
+    "__schema194": {
       "type": "object",
       "properties": {
         "type": {
           "anyOf": [
             {
-              "$ref": "#/definitions/__schema185"
+              "$ref": "#/definitions/__schema195"
             },
             {
               "allOf": [
                 {
-                  "$ref": "#/definitions/__schema185"
+                  "$ref": "#/definitions/__schema195"
                 }
               ]
             },
@@ -1485,7 +1545,7 @@
       },
       "required": ["type"]
     },
-    "__schema185": {
+    "__schema195": {
       "type": "string",
       "enum": [
         "agent-rubric",
@@ -1556,7 +1616,7 @@
         "word-count"
       ]
     },
-    "__schema186": {
+    "__schema196": {
       "anyOf": [
         {
           "type": "string",
@@ -1565,7 +1625,7 @@
         {}
       ]
     },
-    "__schema187": {
+    "__schema197": {
       "type": "object",
       "properties": {
         "prefix": {
@@ -1676,10 +1736,10 @@
       },
       "additionalProperties": {}
     },
-    "__schema188": {
+    "__schema198": {
       "type": "number"
     },
-    "__schema189": {
+    "__schema199": {
       "type": "object",
       "properties": {
         "pluginConfig": {},
@@ -1687,7 +1747,7 @@
       },
       "additionalProperties": {}
     },
-    "__schema190": {
+    "__schema200": {
       "type": "object",
       "properties": {
         "path": {
@@ -1729,7 +1789,7 @@
       },
       "required": ["path"]
     },
-    "__schema191": {
+    "__schema201": {
       "type": "array",
       "items": {
         "anyOf": [
@@ -1750,77 +1810,77 @@
                     "description": {
                       "allOf": [
                         {
-                          "$ref": "#/definitions/__schema176"
+                          "$ref": "#/definitions/__schema186"
                         }
                       ]
                     },
                     "vars": {
                       "allOf": [
                         {
-                          "$ref": "#/definitions/__schema177"
+                          "$ref": "#/definitions/__schema187"
                         }
                       ]
                     },
                     "provider": {
                       "allOf": [
                         {
-                          "$ref": "#/definitions/__schema178"
+                          "$ref": "#/definitions/__schema188"
                         }
                       ]
                     },
                     "providers": {
                       "allOf": [
                         {
-                          "$ref": "#/definitions/__schema180"
+                          "$ref": "#/definitions/__schema190"
                         }
                       ]
                     },
                     "prompts": {
                       "allOf": [
                         {
-                          "$ref": "#/definitions/__schema181"
+                          "$ref": "#/definitions/__schema191"
                         }
                       ]
                     },
                     "providerOutput": {
                       "allOf": [
                         {
-                          "$ref": "#/definitions/__schema182"
+                          "$ref": "#/definitions/__schema192"
                         }
                       ]
                     },
                     "assert": {
                       "allOf": [
                         {
-                          "$ref": "#/definitions/__schema183"
+                          "$ref": "#/definitions/__schema193"
                         }
                       ]
                     },
                     "assertScoringFunction": {
                       "allOf": [
                         {
-                          "$ref": "#/definitions/__schema186"
+                          "$ref": "#/definitions/__schema196"
                         }
                       ]
                     },
                     "options": {
                       "allOf": [
                         {
-                          "$ref": "#/definitions/__schema187"
+                          "$ref": "#/definitions/__schema197"
                         }
                       ]
                     },
                     "threshold": {
                       "allOf": [
                         {
-                          "$ref": "#/definitions/__schema188"
+                          "$ref": "#/definitions/__schema198"
                         }
                       ]
                     },
                     "metadata": {
                       "allOf": [
                         {
-                          "$ref": "#/definitions/__schema189"
+                          "$ref": "#/definitions/__schema199"
                         }
                       ]
                     }
@@ -1830,7 +1890,7 @@
               "tests": {
                 "type": "array",
                 "items": {
-                  "$ref": "#/definitions/__schema175"
+                  "$ref": "#/definitions/__schema185"
                 }
               }
             },
@@ -1839,7 +1899,7 @@
         ]
       }
     },
-    "__schema192": {
+    "__schema202": {
       "anyOf": [
         {
           "type": "string"
@@ -1848,40 +1908,40 @@
           "type": "object",
           "properties": {
             "vars": {
-              "$ref": "#/definitions/__schema177"
-            },
-            "provider": {
-              "$ref": "#/definitions/__schema178"
-            },
-            "providers": {
-              "$ref": "#/definitions/__schema180"
-            },
-            "prompts": {
-              "$ref": "#/definitions/__schema181"
-            },
-            "providerOutput": {
-              "$ref": "#/definitions/__schema182"
-            },
-            "assert": {
-              "$ref": "#/definitions/__schema183"
-            },
-            "assertScoringFunction": {
-              "$ref": "#/definitions/__schema186"
-            },
-            "options": {
               "$ref": "#/definitions/__schema187"
             },
-            "threshold": {
+            "provider": {
               "$ref": "#/definitions/__schema188"
             },
+            "providers": {
+              "$ref": "#/definitions/__schema190"
+            },
+            "prompts": {
+              "$ref": "#/definitions/__schema191"
+            },
+            "providerOutput": {
+              "$ref": "#/definitions/__schema192"
+            },
+            "assert": {
+              "$ref": "#/definitions/__schema193"
+            },
+            "assertScoringFunction": {
+              "$ref": "#/definitions/__schema196"
+            },
+            "options": {
+              "$ref": "#/definitions/__schema197"
+            },
+            "threshold": {
+              "$ref": "#/definitions/__schema198"
+            },
             "metadata": {
-              "$ref": "#/definitions/__schema189"
+              "$ref": "#/definitions/__schema199"
             }
           }
         }
       ]
     },
-    "__schema193": {
+    "__schema203": {
       "anyOf": [
         {
           "type": "string"
@@ -1894,7 +1954,7 @@
         }
       ]
     },
-    "__schema194": {
+    "__schema204": {
       "anyOf": [
         {
           "type": "boolean"
@@ -1912,7 +1972,7 @@
         }
       ]
     },
-    "__schema195": {
+    "__schema205": {
       "type": "object",
       "propertyNames": {
         "type": "string"
@@ -1921,7 +1981,7 @@
         "type": "string"
       }
     },
-    "__schema196": {
+    "__schema206": {
       "anyOf": [
         {
           "type": "object",
@@ -1950,464 +2010,494 @@
             "ANTHROPIC_CUSTOM_HEADERS": {
               "$ref": "#/definitions/__schema14"
             },
-            "ATLASCLOUD_API_KEY": {
+            "ANTHROPIC_TEMPERATURE": {
               "$ref": "#/definitions/__schema15"
             },
-            "AWS_ACCESS_KEY_ID": {
+            "ATLASCLOUD_API_KEY": {
               "$ref": "#/definitions/__schema16"
             },
-            "AWS_BEARER_TOKEN_BEDROCK": {
+            "AWS_ACCESS_KEY_ID": {
               "$ref": "#/definitions/__schema17"
             },
-            "AWS_BEDROCK_REGION": {
+            "AWS_BEARER_TOKEN_BEDROCK": {
               "$ref": "#/definitions/__schema18"
             },
-            "AWS_PROFILE": {
+            "AWS_BEDROCK_REGION": {
               "$ref": "#/definitions/__schema19"
             },
-            "AWS_SECRET_ACCESS_KEY": {
+            "AWS_PROFILE": {
               "$ref": "#/definitions/__schema20"
             },
-            "AWS_SESSION_TOKEN": {
+            "AWS_SECRET_ACCESS_KEY": {
               "$ref": "#/definitions/__schema21"
             },
-            "AZURE_API_BASE_URL": {
+            "AWS_SESSION_TOKEN": {
               "$ref": "#/definitions/__schema22"
             },
-            "AZURE_API_HOST": {
+            "AZURE_API_BASE_URL": {
               "$ref": "#/definitions/__schema23"
             },
-            "AZURE_API_KEY": {
+            "AZURE_AI_PROJECT_URL": {
               "$ref": "#/definitions/__schema24"
             },
-            "AZURE_AUTHORITY_HOST": {
+            "AZURE_API_HOST": {
               "$ref": "#/definitions/__schema25"
             },
-            "AZURE_CLIENT_ID": {
+            "AZURE_API_KEY": {
               "$ref": "#/definitions/__schema26"
             },
-            "AZURE_CLIENT_SECRET": {
+            "AZURE_AUTHORITY_HOST": {
               "$ref": "#/definitions/__schema27"
             },
-            "AZURE_DEPLOYMENT_NAME": {
+            "AZURE_CLIENT_ID": {
               "$ref": "#/definitions/__schema28"
             },
-            "AZURE_EMBEDDING_DEPLOYMENT_NAME": {
+            "AZURE_CLIENT_SECRET": {
               "$ref": "#/definitions/__schema29"
             },
-            "AZURE_OPENAI_API_BASE_URL": {
+            "AZURE_DEPLOYMENT_NAME": {
               "$ref": "#/definitions/__schema30"
             },
-            "AZURE_OPENAI_API_HOST": {
+            "AZURE_EMBEDDING_DEPLOYMENT_NAME": {
               "$ref": "#/definitions/__schema31"
             },
-            "AZURE_OPENAI_API_KEY": {
+            "AZURE_OPENAI_API_BASE_URL": {
               "$ref": "#/definitions/__schema32"
             },
-            "AZURE_OPENAI_BASE_URL": {
+            "AZURE_OPENAI_API_HOST": {
               "$ref": "#/definitions/__schema33"
             },
-            "AZURE_OPENAI_DEPLOYMENT_NAME": {
+            "AZURE_OPENAI_API_KEY": {
               "$ref": "#/definitions/__schema34"
             },
-            "AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME": {
+            "AZURE_OPENAI_BASE_URL": {
               "$ref": "#/definitions/__schema35"
             },
-            "AZURE_TENANT_ID": {
+            "AZURE_OPENAI_DEPLOYMENT_NAME": {
               "$ref": "#/definitions/__schema36"
             },
-            "AZURE_TOKEN_SCOPE": {
+            "AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME": {
               "$ref": "#/definitions/__schema37"
             },
-            "CDP_DOMAIN": {
+            "AZURE_TENANT_ID": {
               "$ref": "#/definitions/__schema38"
             },
-            "CDP_TOKEN": {
+            "AZURE_TOKEN_SCOPE": {
               "$ref": "#/definitions/__schema39"
             },
-            "CLAUDE_CODE_USE_BEDROCK": {
+            "CDP_DOMAIN": {
               "$ref": "#/definitions/__schema40"
             },
-            "CLAUDE_CODE_USE_VERTEX": {
+            "CDP_TOKEN": {
               "$ref": "#/definitions/__schema41"
             },
-            "CLAUDE_CONFIG_DIR": {
+            "CLAUDE_CODE_USE_BEDROCK": {
               "$ref": "#/definitions/__schema42"
             },
-            "CLOUDFLARE_ACCOUNT_ID": {
+            "CLAUDE_CODE_USE_VERTEX": {
               "$ref": "#/definitions/__schema43"
             },
-            "CLOUDFLARE_API_KEY": {
+            "CLAUDE_CONFIG_DIR": {
               "$ref": "#/definitions/__schema44"
             },
-            "CLOUDFLARE_GATEWAY_ID": {
+            "CLOUDFLARE_ACCOUNT_ID": {
               "$ref": "#/definitions/__schema45"
             },
-            "CF_AIG_TOKEN": {
+            "CLOUDFLARE_API_KEY": {
               "$ref": "#/definitions/__schema46"
             },
-            "COMETAPI_KEY": {
+            "CLOUDFLARE_GATEWAY_ID": {
               "$ref": "#/definitions/__schema47"
             },
-            "COHERE_API_BASE_URL": {
+            "CF_AIG_TOKEN": {
               "$ref": "#/definitions/__schema48"
             },
-            "COHERE_API_KEY": {
+            "COMETAPI_KEY": {
               "$ref": "#/definitions/__schema49"
             },
-            "COHERE_CLIENT_NAME": {
+            "COHERE_API_BASE_URL": {
               "$ref": "#/definitions/__schema50"
             },
-            "DATABRICKS_TOKEN": {
+            "COHERE_API_KEY": {
               "$ref": "#/definitions/__schema51"
             },
-            "DATABRICKS_WORKSPACE_URL": {
+            "COHERE_CLIENT_NAME": {
               "$ref": "#/definitions/__schema52"
             },
-            "DEEPSEEK_API_KEY": {
+            "DATABRICKS_TOKEN": {
               "$ref": "#/definitions/__schema53"
             },
-            "DOCKER_MODEL_RUNNER_BASE_URL": {
+            "DATABRICKS_WORKSPACE_URL": {
               "$ref": "#/definitions/__schema54"
             },
-            "DOCKER_MODEL_RUNNER_API_KEY": {
+            "DEEPSEEK_API_KEY": {
               "$ref": "#/definitions/__schema55"
             },
-            "ELEVENLABS_API_KEY": {
+            "DOCKER_MODEL_RUNNER_BASE_URL": {
               "$ref": "#/definitions/__schema56"
             },
-            "ENVOY_API_BASE_URL": {
+            "DOCKER_MODEL_RUNNER_API_KEY": {
               "$ref": "#/definitions/__schema57"
             },
-            "ENVOY_API_KEY": {
+            "ELEVENLABS_API_KEY": {
               "$ref": "#/definitions/__schema58"
             },
-            "F5_API_BASE_URL": {
+            "ENVOY_API_BASE_URL": {
               "$ref": "#/definitions/__schema59"
             },
-            "F5_API_KEY": {
+            "ENVOY_API_KEY": {
               "$ref": "#/definitions/__schema60"
             },
-            "FAL_KEY": {
+            "F5_API_BASE_URL": {
               "$ref": "#/definitions/__schema61"
             },
-            "FIREWORKS_API_BASE_URL": {
+            "F5_API_KEY": {
               "$ref": "#/definitions/__schema62"
             },
-            "FIREWORKS_API_KEY": {
+            "FAL_KEY": {
               "$ref": "#/definitions/__schema63"
             },
-            "GITHUB_TOKEN": {
+            "FIREWORKS_API_BASE_URL": {
               "$ref": "#/definitions/__schema64"
             },
-            "GOOGLE_API_HOST": {
+            "FIREWORKS_API_KEY": {
               "$ref": "#/definitions/__schema65"
             },
-            "GOOGLE_API_BASE_URL": {
+            "GITHUB_TOKEN": {
               "$ref": "#/definitions/__schema66"
             },
-            "GOOGLE_API_KEY": {
+            "GOOGLE_API_HOST": {
               "$ref": "#/definitions/__schema67"
             },
-            "GOOGLE_CLOUD_PROJECT": {
+            "GOOGLE_APPLICATION_CREDENTIALS": {
               "$ref": "#/definitions/__schema68"
             },
-            "GOOGLE_CLOUD_LOCATION": {
+            "GOOGLE_API_BASE_URL": {
               "$ref": "#/definitions/__schema69"
             },
-            "GOOGLE_PROJECT_ID": {
+            "GOOGLE_API_KEY": {
               "$ref": "#/definitions/__schema70"
             },
-            "GOOGLE_LOCATION": {
+            "GOOGLE_CLOUD_PROJECT": {
               "$ref": "#/definitions/__schema71"
             },
-            "GOOGLE_GENERATIVE_AI_API_KEY": {
+            "GOOGLE_CLOUD_LOCATION": {
               "$ref": "#/definitions/__schema72"
             },
-            "GEMINI_API_KEY": {
+            "GOOGLE_PROJECT_ID": {
               "$ref": "#/definitions/__schema73"
             },
-            "GROQ_API_KEY": {
+            "GOOGLE_LOCATION": {
               "$ref": "#/definitions/__schema74"
             },
-            "HELICONE_API_KEY": {
+            "GOOGLE_GENERATIVE_AI_API_KEY": {
               "$ref": "#/definitions/__schema75"
             },
-            "HF_API_TOKEN": {
+            "GOOGLE_GENAI_USE_VERTEXAI": {
               "$ref": "#/definitions/__schema76"
             },
-            "HF_TOKEN": {
+            "GEMINI_API_KEY": {
               "$ref": "#/definitions/__schema77"
             },
-            "HYPERBOLIC_API_KEY": {
+            "GROQ_API_KEY": {
               "$ref": "#/definitions/__schema78"
             },
-            "HUGGING_FACE_HUB_TOKEN": {
+            "HELICONE_API_KEY": {
               "$ref": "#/definitions/__schema79"
             },
-            "JFROG_API_KEY": {
+            "HF_API_TOKEN": {
               "$ref": "#/definitions/__schema80"
             },
-            "LANGFUSE_BASE_URL": {
+            "HF_TOKEN": {
               "$ref": "#/definitions/__schema81"
             },
-            "LANGFUSE_HOST": {
+            "HYPERBOLIC_API_KEY": {
               "$ref": "#/definitions/__schema82"
             },
-            "LANGFUSE_PUBLIC_KEY": {
+            "HUGGING_FACE_HUB_TOKEN": {
               "$ref": "#/definitions/__schema83"
             },
-            "LANGFUSE_SECRET_KEY": {
+            "JFROG_API_KEY": {
               "$ref": "#/definitions/__schema84"
             },
-            "LITELLM_API_BASE": {
+            "LANGFUSE_BASE_URL": {
               "$ref": "#/definitions/__schema85"
             },
-            "LITELLM_API_KEY": {
+            "LANGFUSE_HOST": {
               "$ref": "#/definitions/__schema86"
             },
-            "LLAMA_BASE_URL": {
+            "LANGFUSE_PUBLIC_KEY": {
               "$ref": "#/definitions/__schema87"
             },
-            "LOCALAI_BASE_URL": {
+            "LANGFUSE_SECRET_KEY": {
               "$ref": "#/definitions/__schema88"
             },
-            "MISTRAL_API_BASE_URL": {
+            "LITELLM_API_BASE": {
               "$ref": "#/definitions/__schema89"
             },
-            "MISTRAL_API_HOST": {
+            "LITELLM_API_KEY": {
               "$ref": "#/definitions/__schema90"
             },
-            "MISTRAL_API_KEY": {
+            "LLAMA_BASE_URL": {
               "$ref": "#/definitions/__schema91"
             },
-            "MINIMAX_API_KEY": {
+            "LOCALAI_BASE_URL": {
               "$ref": "#/definitions/__schema92"
             },
-            "MOONSHOT_API_KEY": {
+            "MISTRAL_API_BASE_URL": {
               "$ref": "#/definitions/__schema93"
             },
-            "MLFLOW_GATEWAY_API_KEY": {
+            "MISTRAL_API_HOST": {
               "$ref": "#/definitions/__schema94"
             },
-            "MLFLOW_GATEWAY_URL": {
+            "MISTRAL_API_KEY": {
               "$ref": "#/definitions/__schema95"
             },
-            "MODEL_API_KEY": {
+            "MINIMAX_API_KEY": {
               "$ref": "#/definitions/__schema96"
             },
-            "MODELSLAB_API_KEY": {
+            "MOONSHOT_API_KEY": {
               "$ref": "#/definitions/__schema97"
             },
-            "N8N_API_KEY": {
+            "MLFLOW_GATEWAY_API_KEY": {
               "$ref": "#/definitions/__schema98"
             },
-            "NSCALE_SERVICE_TOKEN": {
+            "MLFLOW_GATEWAY_URL": {
               "$ref": "#/definitions/__schema99"
             },
-            "NSCALE_API_KEY": {
+            "MODEL_API_KEY": {
               "$ref": "#/definitions/__schema100"
             },
-            "NOVITA_API_KEY": {
+            "MODELSLAB_API_KEY": {
               "$ref": "#/definitions/__schema101"
             },
-            "NVIDIA_API_BASE_URL": {
+            "N8N_API_KEY": {
               "$ref": "#/definitions/__schema102"
             },
-            "NVIDIA_API_KEY": {
+            "NSCALE_SERVICE_TOKEN": {
               "$ref": "#/definitions/__schema103"
             },
-            "OLLAMA_API_KEY": {
+            "NSCALE_API_KEY": {
               "$ref": "#/definitions/__schema104"
             },
-            "OLLAMA_BASE_URL": {
+            "NOVITA_API_KEY": {
               "$ref": "#/definitions/__schema105"
             },
-            "OPENAI_API_BASE_URL": {
+            "NVIDIA_API_BASE_URL": {
               "$ref": "#/definitions/__schema106"
             },
-            "OPENAI_API_HOST": {
+            "NVIDIA_API_KEY": {
               "$ref": "#/definitions/__schema107"
             },
-            "OPENAI_API_KEY": {
+            "OLLAMA_API_KEY": {
               "$ref": "#/definitions/__schema108"
             },
-            "OPENAI_BASE_URL": {
+            "OLLAMA_BASE_URL": {
               "$ref": "#/definitions/__schema109"
             },
-            "OPENAI_ORGANIZATION": {
+            "OPENAI_API_BASE_URL": {
               "$ref": "#/definitions/__schema110"
             },
-            "CLAWDBOT_GATEWAY_PASSWORD": {
+            "OPENAI_API_HOST": {
               "$ref": "#/definitions/__schema111"
             },
-            "CLAWDBOT_GATEWAY_TOKEN": {
+            "OPENAI_API_KEY": {
               "$ref": "#/definitions/__schema112"
             },
-            "CLAWDBOT_GATEWAY_URL": {
+            "OPENAI_BASE_URL": {
               "$ref": "#/definitions/__schema113"
             },
-            "CODEX_API_KEY": {
+            "OPENAI_ORGANIZATION": {
               "$ref": "#/definitions/__schema114"
             },
-            "OPENCLAW_CONFIG_PATH": {
+            "CLAWDBOT_GATEWAY_PASSWORD": {
               "$ref": "#/definitions/__schema115"
             },
-            "OPENCLAW_GATEWAY_PASSWORD": {
+            "CLAWDBOT_GATEWAY_TOKEN": {
               "$ref": "#/definitions/__schema116"
             },
-            "OPENCLAW_GATEWAY_PORT": {
+            "CLAWDBOT_GATEWAY_URL": {
               "$ref": "#/definitions/__schema117"
             },
-            "OPENCLAW_GATEWAY_TOKEN": {
+            "CODEX_API_KEY": {
               "$ref": "#/definitions/__schema118"
             },
-            "OPENCLAW_GATEWAY_URL": {
+            "OPENCLAW_CONFIG_PATH": {
               "$ref": "#/definitions/__schema119"
             },
-            "ORCAROUTER_API_KEY": {
+            "OPENCLAW_GATEWAY_PASSWORD": {
               "$ref": "#/definitions/__schema120"
             },
-            "PALM_API_HOST": {
+            "OPENCLAW_GATEWAY_PORT": {
               "$ref": "#/definitions/__schema121"
             },
-            "PALM_API_KEY": {
+            "OPENCLAW_GATEWAY_TOKEN": {
               "$ref": "#/definitions/__schema122"
             },
-            "PORTKEY_API_KEY": {
+            "OPENCLAW_GATEWAY_URL": {
               "$ref": "#/definitions/__schema123"
             },
-            "PROMPTFOO_CA_CERT_PATH": {
+            "ORCAROUTER_API_KEY": {
               "$ref": "#/definitions/__schema124"
             },
-            "PROMPTFOO_PFX_CERT_PATH": {
+            "PALM_API_HOST": {
               "$ref": "#/definitions/__schema125"
             },
-            "PROMPTFOO_PFX_PASSWORD": {
+            "PALM_API_KEY": {
               "$ref": "#/definitions/__schema126"
             },
-            "PROMPTFOO_JKS_CERT_PATH": {
+            "PORTKEY_API_BASE_URL": {
               "$ref": "#/definitions/__schema127"
             },
-            "PROMPTFOO_JKS_PASSWORD": {
+            "PORTKEY_API_KEY": {
               "$ref": "#/definitions/__schema128"
             },
-            "PROMPTFOO_JKS_ALIAS": {
+            "PROMPTFOO_CA_CERT_PATH": {
               "$ref": "#/definitions/__schema129"
             },
-            "PROMPTFOO_INSECURE_SSL": {
+            "PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS": {
               "$ref": "#/definitions/__schema130"
             },
-            "QUIVERAI_API_KEY": {
+            "PROMPTFOO_DISABLE_TEMPLATING": {
               "$ref": "#/definitions/__schema131"
             },
-            "QWAK_TOKEN": {
+            "PROMPTFOO_MAX_CONCURRENCY": {
               "$ref": "#/definitions/__schema132"
             },
-            "REPLICATE_API_KEY": {
+            "PROMPTFOO_PFX_CERT_PATH": {
               "$ref": "#/definitions/__schema133"
             },
-            "REPLICATE_API_TOKEN": {
+            "PROMPTFOO_TRACING_ENABLED": {
               "$ref": "#/definitions/__schema134"
             },
-            "SHAREPOINT_BASE_URL": {
+            "PROMPTFOO_PFX_PASSWORD": {
               "$ref": "#/definitions/__schema135"
             },
-            "SHAREPOINT_CERT_PATH": {
+            "PROMPTFOO_JKS_CERT_PATH": {
               "$ref": "#/definitions/__schema136"
             },
-            "SHAREPOINT_CLIENT_ID": {
+            "PROMPTFOO_JKS_PASSWORD": {
               "$ref": "#/definitions/__schema137"
             },
-            "SHAREPOINT_TENANT_ID": {
+            "PROMPTFOO_JKS_ALIAS": {
               "$ref": "#/definitions/__schema138"
             },
-            "SLACK_BOT_TOKEN": {
+            "PROMPTFOO_INSECURE_SSL": {
               "$ref": "#/definitions/__schema139"
             },
-            "TOGETHER_API_KEY": {
+            "QUIVERAI_API_KEY": {
               "$ref": "#/definitions/__schema140"
             },
-            "TYPESAFE_API_KEY": {
+            "QWAK_TOKEN": {
               "$ref": "#/definitions/__schema141"
             },
-            "VERCEL_AI_GATEWAY_API_KEY": {
+            "REPLICATE_API_KEY": {
               "$ref": "#/definitions/__schema142"
             },
-            "VERCEL_AI_GATEWAY_BASE_URL": {
+            "REPLICATE_API_TOKEN": {
               "$ref": "#/definitions/__schema143"
             },
-            "VERTEX_API_HOST": {
+            "SHAREPOINT_BASE_URL": {
               "$ref": "#/definitions/__schema144"
             },
-            "VERTEX_API_KEY": {
+            "SHAREPOINT_CERT_PATH": {
               "$ref": "#/definitions/__schema145"
             },
-            "VERTEX_API_VERSION": {
+            "SHAREPOINT_CLIENT_ID": {
               "$ref": "#/definitions/__schema146"
             },
-            "VERTEX_PROJECT_ID": {
+            "SHAREPOINT_TENANT_ID": {
               "$ref": "#/definitions/__schema147"
             },
-            "VERTEX_PUBLISHER": {
+            "SLACK_BOT_TOKEN": {
               "$ref": "#/definitions/__schema148"
             },
-            "VERTEX_REGION": {
+            "SNOWFLAKE_ACCOUNT_IDENTIFIER": {
               "$ref": "#/definitions/__schema149"
             },
-            "VOYAGE_API_BASE_URL": {
+            "TOGETHER_API_KEY": {
               "$ref": "#/definitions/__schema150"
             },
-            "VOYAGE_API_KEY": {
+            "TYPESAFE_API_KEY": {
               "$ref": "#/definitions/__schema151"
             },
-            "WATSONX_AI_APIKEY": {
+            "VERCEL_AI_GATEWAY_API_KEY": {
               "$ref": "#/definitions/__schema152"
             },
-            "WATSONX_AI_AUTH_TYPE": {
+            "VERCEL_AI_GATEWAY_BASE_URL": {
               "$ref": "#/definitions/__schema153"
             },
-            "WATSONX_AI_BEARER_TOKEN": {
+            "VERTEX_API_HOST": {
               "$ref": "#/definitions/__schema154"
             },
-            "WATSONX_AI_PROJECT_ID": {
+            "VERTEX_API_KEY": {
               "$ref": "#/definitions/__schema155"
             },
-            "XAI_API_BASE_URL": {
+            "VERTEX_API_VERSION": {
               "$ref": "#/definitions/__schema156"
             },
-            "XAI_API_KEY": {
+            "VERTEX_PROJECT_ID": {
               "$ref": "#/definitions/__schema157"
             },
-            "AZURE_CONTENT_SAFETY_ENDPOINT": {
+            "VERTEX_PUBLISHER": {
               "$ref": "#/definitions/__schema158"
             },
-            "AZURE_CONTENT_SAFETY_API_KEY": {
+            "VERTEX_REGION": {
               "$ref": "#/definitions/__schema159"
             },
-            "AZURE_CONTENT_SAFETY_API_VERSION": {
+            "VOYAGE_API_BASE_URL": {
               "$ref": "#/definitions/__schema160"
             },
-            "AWS_REGION": {
+            "VOYAGE_API_KEY": {
               "$ref": "#/definitions/__schema161"
             },
-            "AWS_DEFAULT_REGION": {
+            "WATSONX_AI_APIKEY": {
               "$ref": "#/definitions/__schema162"
             },
-            "AWS_SAGEMAKER_MAX_TOKENS": {
+            "WATSONX_AI_AUTH_TYPE": {
               "$ref": "#/definitions/__schema163"
             },
-            "AWS_SAGEMAKER_TEMPERATURE": {
+            "WATSONX_AI_BEARER_TOKEN": {
               "$ref": "#/definitions/__schema164"
             },
-            "AWS_SAGEMAKER_TOP_P": {
+            "WATSONX_AI_PROJECT_ID": {
               "$ref": "#/definitions/__schema165"
             },
-            "AWS_SAGEMAKER_MAX_RETRIES": {
+            "XAI_API_BASE_URL": {
               "$ref": "#/definitions/__schema166"
             },
-            "PROMPTFOO_EVAL_TIMEOUT_MS": {
+            "XAI_API_KEY": {
               "$ref": "#/definitions/__schema167"
+            },
+            "AZURE_CONTENT_SAFETY_ENDPOINT": {
+              "$ref": "#/definitions/__schema168"
+            },
+            "AZURE_CONTENT_SAFETY_API_KEY": {
+              "$ref": "#/definitions/__schema169"
+            },
+            "AZURE_CONTENT_SAFETY_API_VERSION": {
+              "$ref": "#/definitions/__schema170"
+            },
+            "AWS_REGION": {
+              "$ref": "#/definitions/__schema171"
+            },
+            "AWS_DEFAULT_REGION": {
+              "$ref": "#/definitions/__schema172"
+            },
+            "AWS_SAGEMAKER_MAX_TOKENS": {
+              "$ref": "#/definitions/__schema173"
+            },
+            "AWS_SAGEMAKER_TEMPERATURE": {
+              "$ref": "#/definitions/__schema174"
+            },
+            "AWS_SAGEMAKER_TOP_P": {
+              "$ref": "#/definitions/__schema175"
+            },
+            "AWS_SAGEMAKER_MAX_RETRIES": {
+              "$ref": "#/definitions/__schema176"
+            },
+            "PROMPTFOO_EVAL_TIMEOUT_MS": {
+              "$ref": "#/definitions/__schema177"
             },
             "PROMPTFOO_CACHE_ENABLED": {
               "type": "string"
@@ -2437,7 +2527,7 @@
         }
       ]
     },
-    "__schema197": {
+    "__schema207": {
       "type": "array",
       "items": {
         "type": "object",
@@ -2457,7 +2547,7 @@
         "required": ["name", "value"]
       }
     },
-    "__schema198": {
+    "__schema208": {
       "anyOf": [
         {
           "type": "array",
@@ -2470,21 +2560,21 @@
         }
       ]
     },
-    "__schema199": {
+    "__schema209": {
       "type": "object",
       "propertyNames": {
         "type": "string"
       },
       "additionalProperties": {}
     },
-    "__schema200": {
+    "__schema210": {
       "type": "object",
       "properties": {
         "injectVar": {
           "description": "Variable to inject. Can be a string or array of strings. If string, it's transformed to an array. Inferred from the prompts by default.",
           "allOf": [
             {
-              "$ref": "#/definitions/__schema201"
+              "$ref": "#/definitions/__schema211"
             }
           ]
         },
@@ -2492,7 +2582,7 @@
           "description": "Purpose override string - describes the prompt templates",
           "allOf": [
             {
-              "$ref": "#/definitions/__schema202"
+              "$ref": "#/definitions/__schema212"
             }
           ]
         },
@@ -2500,7 +2590,7 @@
           "description": "Additional instructions for test generation applied to each plugin",
           "allOf": [
             {
-              "$ref": "#/definitions/__schema203"
+              "$ref": "#/definitions/__schema213"
             }
           ]
         },
@@ -2508,7 +2598,7 @@
           "description": "Provider used for generating adversarial inputs",
           "allOf": [
             {
-              "$ref": "#/definitions/__schema204"
+              "$ref": "#/definitions/__schema214"
             }
           ]
         },
@@ -2516,7 +2606,7 @@
           "description": "Number of tests to generate",
           "allOf": [
             {
-              "$ref": "#/definitions/__schema205"
+              "$ref": "#/definitions/__schema215"
             }
           ]
         },
@@ -2524,7 +2614,7 @@
           "description": "Language(s) of tests to generate for this plugin",
           "allOf": [
             {
-              "$ref": "#/definitions/__schema206"
+              "$ref": "#/definitions/__schema216"
             }
           ]
         },
@@ -2532,7 +2622,7 @@
           "description": "Compliance frameworks to include across reports and commands",
           "allOf": [
             {
-              "$ref": "#/definitions/__schema207"
+              "$ref": "#/definitions/__schema217"
             }
           ]
         },
@@ -2540,7 +2630,7 @@
           "description": "Names of people, brands, or organizations related to your LLM application",
           "allOf": [
             {
-              "$ref": "#/definitions/__schema209"
+              "$ref": "#/definitions/__schema219"
             }
           ]
         },
@@ -2548,7 +2638,7 @@
           "description": "Security contexts for testing multiple states - each context has its own purpose",
           "allOf": [
             {
-              "$ref": "#/definitions/__schema210"
+              "$ref": "#/definitions/__schema220"
             }
           ]
         },
@@ -2556,7 +2646,7 @@
           "default": ["default"],
           "type": "array",
           "items": {
-            "$ref": "#/definitions/__schema213"
+            "$ref": "#/definitions/__schema223"
           },
           "description": "Plugins to use for redteam generation"
         },
@@ -2564,7 +2654,7 @@
           "default": ["default"],
           "type": "array",
           "items": {
-            "$ref": "#/definitions/__schema221"
+            "$ref": "#/definitions/__schema231"
           },
           "description": "Strategies to use for redteam generation.\n\nDefaults to basic, jailbreak:meta, jailbreak:composite\nSupports audio, authoritative-markup-injection, base64, basic, best-of-n, camelcase, citation, crescendo, custom, default, emoji, gcg, goat, hex, homoglyph, image, indirect-web-pwn, jailbreak, jailbreak-templates, jailbreak:composite, jailbreak:goblin, jailbreak:hydra, jailbreak:likert, jailbreak:meta, jailbreak:tree, layer, leetspeak, math-prompt, mischievous-user, morse, multilingual, other-encodings, piglatin, prompt-injection, retry, rot13, video"
         },
@@ -2572,7 +2662,7 @@
           "description": "Maximum number of concurrent API calls",
           "allOf": [
             {
-              "$ref": "#/definitions/__schema224"
+              "$ref": "#/definitions/__schema234"
             }
           ]
         },
@@ -2580,7 +2670,7 @@
           "description": "Maximum number of characters allowed per generated user message",
           "allOf": [
             {
-              "$ref": "#/definitions/__schema225"
+              "$ref": "#/definitions/__schema235"
             }
           ]
         },
@@ -2588,7 +2678,7 @@
           "description": "Delay in milliseconds between plugin API calls",
           "allOf": [
             {
-              "$ref": "#/definitions/__schema226"
+              "$ref": "#/definitions/__schema236"
             }
           ]
         },
@@ -2596,7 +2686,7 @@
           "description": "Whether to exclude target output from the agentific attack generation process",
           "allOf": [
             {
-              "$ref": "#/definitions/__schema227"
+              "$ref": "#/definitions/__schema237"
             }
           ]
         },
@@ -2604,7 +2694,7 @@
           "description": "Tracing defaults applied to all strategies unless overridden",
           "allOf": [
             {
-              "$ref": "#/definitions/__schema228"
+              "$ref": "#/definitions/__schema238"
             }
           ]
         },
@@ -2612,40 +2702,40 @@
           "description": "Global grading examples that apply to all plugins",
           "allOf": [
             {
-              "$ref": "#/definitions/__schema229"
+              "$ref": "#/definitions/__schema239"
             }
           ]
         }
       }
     },
-    "__schema201": {
+    "__schema211": {
       "type": "string"
     },
-    "__schema202": {
+    "__schema212": {
       "type": "string"
     },
-    "__schema203": {
+    "__schema213": {
       "type": "string"
     },
-    "__schema204": {
+    "__schema214": {
       "anyOf": [
         {
           "type": "string"
         },
         {
-          "$ref": "#/definitions/__schema179"
+          "$ref": "#/definitions/__schema189"
         },
         {
           "$ref": "#/definitions/__schema5"
         }
       ]
     },
-    "__schema205": {
+    "__schema215": {
       "type": "integer",
       "exclusiveMinimum": 0,
       "maximum": 9007199254740991
     },
-    "__schema206": {
+    "__schema216": {
       "anyOf": [
         {
           "type": "string"
@@ -2658,14 +2748,14 @@
         }
       ]
     },
-    "__schema207": {
+    "__schema217": {
       "minItems": 1,
       "type": "array",
       "items": {
-        "$ref": "#/definitions/__schema208"
+        "$ref": "#/definitions/__schema218"
       }
     },
-    "__schema208": {
+    "__schema218": {
       "type": "string",
       "enum": [
         "mitre:atlas",
@@ -2679,13 +2769,13 @@
         "dod:ai:ethics"
       ]
     },
-    "__schema209": {
+    "__schema219": {
       "type": "array",
       "items": {
         "type": "string"
       }
     },
-    "__schema210": {
+    "__schema220": {
       "type": "array",
       "items": {
         "type": "object",
@@ -2698,7 +2788,7 @@
             "description": "Optional purpose/context for this context - used for generation and grading, or inherited from the root redteam purpose when omitted or blank",
             "allOf": [
               {
-                "$ref": "#/definitions/__schema211"
+                "$ref": "#/definitions/__schema221"
               }
             ]
           },
@@ -2706,7 +2796,7 @@
             "description": "Variables passed to provider (e.g., context_file, user_role)",
             "allOf": [
               {
-                "$ref": "#/definitions/__schema212"
+                "$ref": "#/definitions/__schema222"
               }
             ]
           }
@@ -2714,10 +2804,10 @@
         "required": ["id"]
       }
     },
-    "__schema211": {
+    "__schema221": {
       "type": "string"
     },
-    "__schema212": {
+    "__schema222": {
       "type": "object",
       "propertyNames": {
         "type": "string"
@@ -2726,15 +2816,15 @@
         "type": "string"
       }
     },
-    "__schema213": {
+    "__schema223": {
       "anyOf": [
         {
           "anyOf": [
             {
-              "$ref": "#/definitions/__schema214"
+              "$ref": "#/definitions/__schema224"
             },
             {
-              "$ref": "#/definitions/__schema215"
+              "$ref": "#/definitions/__schema225"
             }
           ],
           "description": "Name of the plugin or path to custom plugin"
@@ -2745,10 +2835,10 @@
             "id": {
               "anyOf": [
                 {
-                  "$ref": "#/definitions/__schema216"
+                  "$ref": "#/definitions/__schema226"
                 },
                 {
-                  "$ref": "#/definitions/__schema217"
+                  "$ref": "#/definitions/__schema227"
                 }
               ],
               "description": "Name of the plugin"
@@ -2757,7 +2847,7 @@
               "description": "Number of tests to generate for this plugin",
               "allOf": [
                 {
-                  "$ref": "#/definitions/__schema218"
+                  "$ref": "#/definitions/__schema228"
                 }
               ]
             },
@@ -2765,7 +2855,7 @@
               "description": "Plugin-specific configuration",
               "allOf": [
                 {
-                  "$ref": "#/definitions/__schema219"
+                  "$ref": "#/definitions/__schema229"
                 }
               ]
             },
@@ -2773,7 +2863,7 @@
               "description": "Severity level for this plugin",
               "allOf": [
                 {
-                  "$ref": "#/definitions/__schema220"
+                  "$ref": "#/definitions/__schema230"
                 }
               ]
             }
@@ -2782,7 +2872,7 @@
         }
       ]
     },
-    "__schema214": {
+    "__schema224": {
       "type": "string",
       "enum": [
         "aegis",
@@ -3078,10 +3168,10 @@
         "xstest"
       ]
     },
-    "__schema215": {
+    "__schema225": {
       "type": "string"
     },
-    "__schema216": {
+    "__schema226": {
       "type": "string",
       "enum": [
         "aegis",
@@ -3377,41 +3467,41 @@
         "xstest"
       ]
     },
-    "__schema217": {
+    "__schema227": {
       "type": "string"
     },
-    "__schema218": {
+    "__schema228": {
       "type": "integer",
       "exclusiveMinimum": 0,
       "maximum": 9007199254740991
     },
-    "__schema219": {
+    "__schema229": {
       "type": "object",
       "propertyNames": {
         "type": "string"
       },
       "additionalProperties": {}
     },
-    "__schema220": {
+    "__schema230": {
       "type": "string",
       "enum": ["critical", "high", "medium", "low", "informational"]
     },
-    "__schema221": {
+    "__schema231": {
       "anyOf": [
         {
-          "$ref": "#/definitions/__schema222"
+          "$ref": "#/definitions/__schema232"
         },
         {
           "type": "object",
           "properties": {
             "id": {
-              "$ref": "#/definitions/__schema222"
+              "$ref": "#/definitions/__schema232"
             },
             "config": {
               "description": "Strategy-specific configuration",
               "allOf": [
                 {
-                  "$ref": "#/definitions/__schema223"
+                  "$ref": "#/definitions/__schema233"
                 }
               ]
             }
@@ -3420,7 +3510,7 @@
         }
       ]
     },
-    "__schema222": {
+    "__schema232": {
       "anyOf": [
         {
           "type": "string",
@@ -3472,32 +3562,32 @@
         }
       ]
     },
-    "__schema223": {
+    "__schema233": {
       "type": "object",
       "propertyNames": {
         "type": "string"
       },
       "additionalProperties": {}
     },
-    "__schema224": {
+    "__schema234": {
       "type": "integer",
       "exclusiveMinimum": 0,
       "maximum": 9007199254740991
     },
-    "__schema225": {
+    "__schema235": {
       "type": "integer",
       "exclusiveMinimum": 0,
       "maximum": 9007199254740991
     },
-    "__schema226": {
+    "__schema236": {
       "type": "integer",
       "minimum": 0,
       "maximum": 9007199254740991
     },
-    "__schema227": {
+    "__schema237": {
       "type": "boolean"
     },
-    "__schema228": {
+    "__schema238": {
       "type": "object",
       "properties": {
         "enabled": {
@@ -3549,14 +3639,14 @@
           "additionalProperties": {
             "allOf": [
               {
-                "$ref": "#/definitions/__schema228"
+                "$ref": "#/definitions/__schema238"
               }
             ]
           }
         }
       }
     },
-    "__schema229": {
+    "__schema239": {
       "type": "array",
       "items": {
         "type": "object",
@@ -3577,10 +3667,10 @@
         "required": ["output", "pass", "score", "reason"]
       }
     },
-    "__schema230": {
+    "__schema240": {
       "type": "boolean"
     },
-    "__schema231": {
+    "__schema241": {
       "type": "object",
       "properties": {
         "enabled": {
@@ -3691,19 +3781,19 @@
                   "const": "tempo"
                 },
                 "endpoint": {
-                  "$ref": "#/definitions/__schema232"
+                  "$ref": "#/definitions/__schema242"
                 },
                 "auth": {
                   "type": "object",
                   "properties": {
                     "token": {
-                      "$ref": "#/definitions/__schema233"
+                      "$ref": "#/definitions/__schema243"
                     },
                     "username": {
-                      "$ref": "#/definitions/__schema234"
+                      "$ref": "#/definitions/__schema244"
                     },
                     "password": {
-                      "$ref": "#/definitions/__schema235"
+                      "$ref": "#/definitions/__schema245"
                     }
                   }
                 },
@@ -3732,7 +3822,7 @@
                   "const": "braintrust"
                 },
                 "endpoint": {
-                  "$ref": "#/definitions/__schema232"
+                  "$ref": "#/definitions/__schema242"
                 },
                 "projectId": {
                   "type": "string",
@@ -3774,7 +3864,7 @@
                   "const": "langfuse"
                 },
                 "endpoint": {
-                  "$ref": "#/definitions/__schema232"
+                  "$ref": "#/definitions/__schema242"
                 },
                 "auth": {
                   "type": "object",
@@ -3820,26 +3910,26 @@
         }
       }
     },
-    "__schema232": {
+    "__schema242": {
       "type": "string",
       "format": "uri"
     },
-    "__schema233": {
+    "__schema243": {
       "type": "string",
       "minLength": 1
     },
-    "__schema234": {
+    "__schema244": {
       "type": "string",
       "minLength": 1
     },
-    "__schema235": {
+    "__schema245": {
       "type": "string",
       "minLength": 1
     },
-    "__schema236": {
+    "__schema246": {
       "type": "string"
     },
-    "__schema237": {
+    "__schema247": {
       "type": "object",
       "properties": {
         "cache": {
@@ -3882,14 +3972,14 @@
           "type": "boolean"
         },
         "filterRange": {
-          "$ref": "#/definitions/__schema238"
+          "$ref": "#/definitions/__schema248"
         }
       }
     },
-    "__schema238": {
+    "__schema248": {
       "type": "string"
     },
-    "__schema239": {
+    "__schema249": {
       "type": "object",
       "properties": {
         "description": {
@@ -4021,7 +4111,7 @@
         "filterRange": {
           "allOf": [
             {
-              "$ref": "#/definitions/__schema238"
+              "$ref": "#/definitions/__schema248"
             }
           ]
         },
@@ -4094,7 +4184,7 @@
         }
       }
     },
-    "__schema240": {
+    "__schema250": {
       "allOf": [
         {
           "$ref": "#/definitions/__schema3"
