@@ -70,6 +70,7 @@ type EvalBarSource = {
   defaultTest?: unknown;
   tests?: unknown;
   scenarios?: unknown;
+  extensions?: unknown;
 };
 
 export type EvalBar = {
@@ -188,14 +189,18 @@ export function canonicalPrml(manifest: Record<string, unknown>): string {
 }
 
 function canonicalize(value: unknown, ancestors: Set<object>): unknown {
-  if (
-    value === null ||
-    typeof value === 'string' ||
-    typeof value === 'boolean' ||
-    typeof value === 'number'
-  ) {
+  if (value === null || typeof value === 'boolean' || typeof value === 'number') {
     if (typeof value === 'number' && !Number.isFinite(value)) {
       throw new Error('Evaluation locks cannot include non-finite numbers');
+    }
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    if (value.startsWith('file://') || value.startsWith('package:')) {
+      throw new Error(
+        `Evaluation locks cannot include unresolved external reference "${value}"; replace it with self-contained criteria before locking`,
+      );
     }
     return value;
   }
@@ -205,7 +210,9 @@ function canonicalize(value: unknown, ancestors: Set<object>): unknown {
   }
 
   if (typeof value === 'function') {
-    return { $function: Function.prototype.toString.call(value) };
+    throw new Error(
+      'Evaluation locks cannot safely bind function values because captured state is not represented; use self-contained data-backed criteria instead',
+    );
   }
 
   if (typeof value === 'bigint' || typeof value === 'symbol') {
@@ -255,6 +262,12 @@ export function createEvalBar(
   testSuite: EvalBarSource,
   execution: { repeat: number; filterRange?: string },
 ): EvalBar {
+  if (Array.isArray(testSuite.extensions) && testSuite.extensions.length > 0) {
+    throw new Error(
+      'Evaluation locks do not support extension hooks because hooks can mutate tests after verification',
+    );
+  }
+
   return {
     version: 1,
     defaultTest: testSuite.defaultTest ?? null,

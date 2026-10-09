@@ -71,22 +71,40 @@ describe('evalLock', () => {
     ).toBe(5);
   });
 
-  it('represents inline functions deterministically', () => {
-    const first = createSuite();
-    const second = createSuite();
-    first.tests![0].options = {
-      transform: function normalize(value: unknown) {
-        return String(value).trim();
-      },
-    };
-    second.tests![0].options = {
-      transform: function normalize(value: unknown) {
-        return String(value).trim();
-      },
+  it('rejects closure-dependent function criteria', () => {
+    const suite = createSuite();
+    const expected = 'Paris';
+    suite.tests![0].options = {
+      transform: (value: unknown) => (value === expected ? value : 'unexpected'),
     };
 
-    expect(hashEvalBar(createEvalBar(first, { repeat: 1 }))).toBe(
-      hashEvalBar(createEvalBar(second, { repeat: 1 })),
+    expect(() => hashEvalBar(createEvalBar(suite, { repeat: 1 }))).toThrow(
+      'cannot safely bind function values',
+    );
+  });
+
+  it.each(['file://check.js', 'package:custom-assertions:check'])(
+    'rejects unresolved executable criteria at registration: %s',
+    async (value) => {
+      const lockPath = path.join(tempDir, 'eval.lock.json');
+      const suite = createSuite();
+      suite.tests![0].assert = [{ type: 'javascript', value }];
+
+      await expect(
+        writeEvalLock(lockPath, createEvalBar(suite, { repeat: 1 }), 80),
+      ).rejects.toThrow('cannot include unresolved external reference');
+      await expect(fs.stat(lockPath)).rejects.toMatchObject({ code: 'ENOENT' });
+    },
+  );
+
+  it('rejects extension hooks that could mutate the bar after verification', () => {
+    const suite = {
+      ...createSuite(),
+      extensions: ['file://hooks.js:beforeEach'],
+    };
+
+    expect(() => createEvalBar(suite, { repeat: 1 })).toThrow(
+      'extension hooks because hooks can mutate tests after verification',
     );
   });
 

@@ -868,7 +868,6 @@ async function doEvalWithEnv(
     }
 
     if (evalLockPath || verifyLockPath) {
-      const bar = createEvalBar(testSuite, { repeat, filterRange });
       if (evalLockPath) {
         const threshold = getEnvFloat('PROMPTFOO_PASS_RATE_THRESHOLD');
         if (threshold === undefined) {
@@ -878,6 +877,7 @@ async function doEvalWithEnv(
           );
         }
         try {
+          const bar = createEvalBar(testSuite, { repeat, filterRange });
           activeEvalLock = await writeEvalLock(evalLockPath, bar, threshold);
           logger.info(
             chalk.green(
@@ -892,6 +892,7 @@ async function doEvalWithEnv(
         }
       } else if (verifyLockPath) {
         try {
+          const bar = createEvalBar(testSuite, { repeat, filterRange });
           activeEvalLock = await verifyEvalLock(verifyLockPath, bar);
           logger.info(
             chalk.green(
