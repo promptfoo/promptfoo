@@ -100,6 +100,7 @@ export type BedrockModelFamily =
   | 'deepseek'
   | 'openai'
   | 'qwen'
+  | 'xai'
   | 'zai'
   | 'minimax'
   | 'moonshot'
@@ -2601,7 +2602,7 @@ export const RETIRED_BEDROCK_MODELS = new Set([
   'meta.llama2-70b-chat-v1',
 ]);
 
-/** Reject withdrawn models before InvokeModel, Converse, or Knowledge Base requests. */
+/** Reject withdrawn models and IDs that require a cross-region inference profile. */
 export function assertBedrockModelIsAvailable(modelName: string): void {
   // A system inference profile or foundation model ARN ends in the ID it resolves to.
   // Application inference profile ARNs hide the model, so they cannot be checked here.
@@ -2610,6 +2611,14 @@ export function assertBedrockModelIsAvailable(modelName: string): void {
     : modelName;
   if (RETIRED_BEDROCK_MODELS.has(modelId.replace(INFERENCE_PROFILE_PREFIX, ''))) {
     throw new Error(`Unknown Amazon Bedrock model: ${modelName}`);
+  }
+  if (modelId === 'zai.glm-5.3' || modelId === 'moonshotai.kimi-k3') {
+    throw new Error(
+      `Amazon Bedrock model "${modelId}" requires a cross-region inference profile. ` +
+        `Use "bedrock:us.${modelId}" or "bedrock:global.${modelId}"` +
+        (modelId === 'moonshotai.kimi-k3' ? ` or "bedrock:in.${modelId}"` : '') +
+        ' in a supported region.',
+    );
   }
 }
 
@@ -2636,7 +2645,7 @@ export function getHandlerForModel(
     if (!inferenceModelType) {
       throw new Error(
         'Inference profile requires inferenceModelType to be specified in config. ' +
-          'Options: claude, nova, nova2, llama (defaults to v4), llama2, llama3, llama3.1, llama3.2, llama3.3, llama4, mistral, cohere, ai21, titan, deepseek, openai, qwen, zai, minimax, moonshot, nvidia, writer, gemma',
+          'Options: claude, nova, nova2, llama (defaults to v4), llama2, llama3, llama3.1, llama3.2, llama3.3, llama4, mistral, cohere, ai21, titan, deepseek, openai, qwen, xai, zai, minimax, moonshot, nvidia, writer, gemma',
       );
     }
 
@@ -2680,6 +2689,7 @@ export function getHandlerForModel(
         return BEDROCK_MODEL.QWEN;
       case 'nova2':
         return BEDROCK_MODEL.AMAZON_NOVA_2;
+      case 'xai':
       case 'zai':
       case 'minimax':
       case 'moonshot':
@@ -2696,14 +2706,6 @@ export function getHandlerForModel(
   const ret = AWS_BEDROCK_MODELS[modelName];
   if (ret) {
     return ret;
-  }
-  if (modelName === 'zai.glm-5.3' || modelName === 'moonshotai.kimi-k3') {
-    throw new Error(
-      `Amazon Bedrock model "${modelName}" requires a cross-region inference profile. ` +
-        `Use "bedrock:us.${modelName}" or "bedrock:global.${modelName}"` +
-        (modelName === 'moonshotai.kimi-k3' ? ` or "bedrock:in.${modelName}"` : '') +
-        ' in a supported region.',
-    );
   }
   if (modelName.startsWith('ai21.')) {
     return BEDROCK_MODEL.AI21;

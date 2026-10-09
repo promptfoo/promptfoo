@@ -12,6 +12,28 @@ import { awsProviderFactories } from '../../../src/providers/families/aws';
 const factory = awsProviderFactories.find((candidate) => candidate.test('bedrock:'))!;
 
 describe('Bedrock Runtime model compatibility', () => {
+  it.each(['zai.glm-5.3', 'moonshotai.kimi-k3'])(
+    'rejects the bare %s ID before constructing a Converse provider',
+    async (model) => {
+      await expect(factory.create(`bedrock:converse:${model}`, {}, {} as never)).rejects.toThrow(
+        `bedrock:us.${model}`,
+      );
+    },
+  );
+
+  it.each([
+    'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/grok-eval',
+    'arn:aws:bedrock:us-east-1:123456789012:inference-profile/us.xai.grok-4.7',
+  ])('uses the xAI request contract for %s', async (arn) => {
+    const config = { inferenceModelType: 'xai' as const, max_tokens: 128, region: 'us-east-1' };
+    const handler = getHandlerForModel(arn, config);
+    expect(handler).toBe(BEDROCK_MODEL.OPENAI_COMPAT);
+    expect(await handler.params(config, 'Hello', [], arn)).toMatchObject({
+      messages: [{ role: 'user', content: 'Hello' }],
+      max_tokens: 128,
+    });
+  });
+
   it.each(['us.xai.grok-4.7', 'global.xai.grok-4.7'])(
     'loads %s through Converse without selecting Mantle',
     async (model) => {
