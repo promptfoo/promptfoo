@@ -80,6 +80,31 @@ describe('ProviderRateLimitState', () => {
     },
   );
 
+  it.each([NaN, Infinity, -Infinity, -1])(
+    'ignores invalid custom retry delay %s while preserving the response reset',
+    async (retryAfterMs) => {
+      await state
+        .executeWithRetry('invalid-delay', async () => ({ error: 'HTTP 429' }), {
+          getHeaders: () => ({
+            'x-ratelimit-remaining-requests': '0',
+            'x-ratelimit-reset-requests': '5s',
+          }),
+          getRetryAfter: () => retryAfterMs,
+          isRateLimited: () => true,
+          maxRetriesOverride: 0,
+        })
+        .catch(() => undefined);
+      const call = vi.fn(async () => 'recovered');
+      const next = state.executeWithRetry('next', call, {}).catch(() => undefined);
+      await vi.advanceTimersByTimeAsync(4999);
+      expect(call).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1);
+      expect(call).toHaveBeenCalledOnce();
+      await expect(next).resolves.toBe('recovered');
+      expect(state.getMetrics()).toMatchObject({ activeRequests: 0, queueDepth: 0 });
+    },
+  );
+
   it('returns a call that completes after cancellation instead of discarding it', async () => {
     const controller = new AbortController();
     const result = state.executeWithRetry(

@@ -179,8 +179,12 @@ export class SlotQueue {
     quotaResets.push(...unknownQuotaResets);
     const genericReset =
       this.resetAtRequests === null && this.resetAtTokens === null ? this.resetAt : null;
+    const selectedDeadline =
+      selectedResetAt !== undefined && Number.isFinite(selectedResetAt)
+        ? selectedResetAt
+        : undefined;
     const deadline =
-      selectedResetAt ??
+      selectedDeadline ??
       (retryAfterMs !== undefined && Number.isFinite(retryAfterMs) && retryAfterMs >= 0
         ? now + retryAfterMs
         : (this.rateLimitedUntil ??

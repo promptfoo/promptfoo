@@ -399,6 +399,23 @@ describe('SlotQueue', () => {
       expect(queue.getActiveCount()).toBe(0);
     });
 
+    it.each([NaN, Infinity, -Infinity])(
+      'falls back from a non-finite selected deadline %s and releases the queue',
+      async (selectedResetAt) => {
+        queue.markRateLimited(undefined, selectedResetAt);
+        expect(queue.getResetAt()).toBe(Date.now() + 60000);
+        const acquired = vi.fn();
+        const pending = trackAcquire(queue.acquire('invalid-deadline')).then(acquired);
+        await vi.advanceTimersByTimeAsync(59999);
+        expect(acquired).not.toHaveBeenCalled();
+        await vi.advanceTimersByTimeAsync(1);
+        await pending;
+        expect(acquired).toHaveBeenCalledOnce();
+        queue.release();
+        expect(queue.getActiveCount()).toBe(0);
+      },
+    );
+
     it('should treat an explicit absolute zero as known immediate quota', async () => {
       queue.markRateLimited(undefined, 0);
 

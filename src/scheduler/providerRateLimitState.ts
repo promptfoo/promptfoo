@@ -227,6 +227,9 @@ export class ProviderRateLimitState extends EventEmitter {
             !isObserverError &&
             (options.isRateLimited?.(result, undefined) ?? false);
           retryAfterMs = options.getRetryAfter?.(result, undefined);
+          if (retryAfterMs !== undefined && (!Number.isFinite(retryAfterMs) || retryAfterMs < 0)) {
+            retryAfterMs = undefined;
+          }
 
           // Observer diagnostics may carry another service's headers. Keep the
           // actual wire quota already learned by onResponseHeaders instead.
@@ -284,6 +287,9 @@ export class ProviderRateLimitState extends EventEmitter {
             options.canRetry?.() !== false &&
             (options.isRateLimited?.(undefined, retryError) ?? this.isRateLimitError(retryError));
           retryAfterMs = options.getRetryAfter?.(undefined, retryError);
+          if (retryAfterMs !== undefined && (!Number.isFinite(retryAfterMs) || retryAfterMs < 0)) {
+            retryAfterMs = undefined;
+          }
           if (isRateLimited) {
             this.handleRateLimit(retryAfterMs);
           }
