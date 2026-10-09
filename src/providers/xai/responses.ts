@@ -233,27 +233,33 @@ export class XAIResponsesProvider implements ApiProvider {
       modelName: this.modelName,
       providerType: 'xai',
       functionCallbackHandler: this.functionCallbackHandler,
-      costCalculator: (modelName, usage, config, responseData) => {
-        const reportedCost = hasXAICostOverrides(config) ? undefined : getXAICostInUsd(usage);
-        return (
-          reportedCost ??
-          calculateXAICost(
-            getXAIRequestModel(modelName, config),
-            config || {},
-            usage?.input_tokens ?? usage?.prompt_tokens,
-            usage?.output_tokens ?? usage?.completion_tokens,
-            usage?.output_tokens_details?.reasoning_tokens ??
-              usage?.completion_tokens_details?.reasoning_tokens,
-            usage?.input_tokens_details?.cached_tokens ??
-              usage?.prompt_tokens_details?.cached_tokens,
-            {
-              apiUrl: this.getApiUrl(),
-              serviceTier: responseData?.service_tier === 'priority' ? 'priority' : undefined,
-            },
-          )
-        );
-      },
+      costCalculator: (_modelName, usage, config, responseData) =>
+        this.calculateCost(usage, config, responseData),
     });
+  }
+
+  private calculateCost(
+    usage: any,
+    config: XAIResponsesConfig = {},
+    responseData?: { service_tier?: string },
+  ): number | undefined {
+    const reportedCost = hasXAICostOverrides(config) ? undefined : getXAICostInUsd(usage);
+    return (
+      reportedCost ??
+      calculateXAICost(
+        getXAIRequestModel(this.modelName, config),
+        config,
+        usage?.input_tokens ?? usage?.prompt_tokens,
+        usage?.output_tokens ?? usage?.completion_tokens,
+        usage?.output_tokens_details?.reasoning_tokens ??
+          usage?.completion_tokens_details?.reasoning_tokens,
+        usage?.input_tokens_details?.cached_tokens ?? usage?.prompt_tokens_details?.cached_tokens,
+        {
+          apiUrl: this.getApiUrl(),
+          serviceTier: responseData?.service_tier === 'priority' ? 'priority' : undefined,
+        },
+      )
+    );
   }
 
   id(): string {
@@ -506,7 +512,7 @@ export class XAIResponsesProvider implements ApiProvider {
       }
 
       if (status < 200 || status >= 300) {
-        return this.handleUnsuccessfulResponse(data, status, statusText, cached);
+        return this.handleUnsuccessfulResponse(data, status, statusText, cached, config);
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
@@ -544,6 +550,7 @@ export class XAIResponsesProvider implements ApiProvider {
     status: number,
     statusText: string,
     cached: boolean,
+    config: XAIResponsesConfig,
   ): ProviderResponse {
     const errorMessage = `xAI API error: ${status} ${statusText}\n${
       typeof data === 'string' ? data : JSON.stringify(data)
@@ -552,6 +559,8 @@ export class XAIResponsesProvider implements ApiProvider {
       return {
         output: errorMessage,
         tokenUsage: this.getTokenUsage(data, cached),
+        cached,
+        cost: cached ? 0 : this.calculateCost(data.usage, config, data),
         isRefusal: true,
       };
     }
