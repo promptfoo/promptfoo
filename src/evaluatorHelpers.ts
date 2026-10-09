@@ -122,25 +122,33 @@ function firstUnprotectedPlaceholder(
   return null;
 }
 
-// Nunjucks balances nested {% raw %} blocks, so a non-greedy regex that stops
-// at the first {% endraw %} under-covers: everything up to the matching close
-// of the outermost open is literal text.
+// Mirror Nunjucks parseRaw: nested {% raw %} blocks are balanced, so a
+// non-greedy regex that stops at the first {% endraw %} under-covers. An
+// unterminated block still swallows everything through the last raw/endraw
+// token as literal text; content after that token parses normally.
 function collectRawSpans(value: string): Array<[number, number]> {
   const spans: Array<[number, number]> = [];
   let depth = 0;
   let spanStart = 0;
+  let lastTokenEnd = 0;
   for (const match of value.matchAll(RAW_TOKEN_REGEX)) {
+    const tokenEnd = match.index + match[0].length;
     if (match[1] === 'raw') {
       if (depth === 0) {
         spanStart = match.index;
       }
       depth++;
+      lastTokenEnd = tokenEnd;
     } else if (depth > 0) {
       depth--;
+      lastTokenEnd = tokenEnd;
       if (depth === 0) {
-        spans.push([spanStart, match.index + match[0].length]);
+        spans.push([spanStart, tokenEnd]);
       }
     }
+  }
+  if (depth > 0) {
+    spans.push([spanStart, lastTokenEnd]);
   }
   return spans;
 }
