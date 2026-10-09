@@ -230,11 +230,17 @@ export class ProviderRateLimitState extends EventEmitter {
 
           // Observer diagnostics may carry another service's headers. Keep the
           // actual wire quota already learned by onResponseHeaders instead.
-          if (!isObserverError && headers && (headers !== observedHeaders || isRateLimited)) {
-            this.updateFromHeaders(headers, isRateLimited);
-          }
+          const observedResetAt =
+            !isObserverError && headers && (headers !== observedHeaders || isRateLimited)
+              ? this.updateFromHeaders(headers, isRateLimited)
+              : undefined;
           if (isRateLimited) {
-            this.handleRateLimit(retryAfterMs);
+            this.handleRateLimit(
+              retryAfterMs,
+              observedResetAt === undefined
+                ? undefined
+                : Math.max(observedResetAt, Date.now() + (retryAfterMs ?? 0)),
+            );
           }
           // Completed calls retain their result and quota even if cancellation arrived
           // during completion. Cancellation still prevents another attempt.
@@ -346,8 +352,22 @@ export class ProviderRateLimitState extends EventEmitter {
     headers: Record<string, string>,
     isRateLimited: boolean,
     selectedResetAt?: number,
-  ): void {
+  ): number | undefined {
     const parsed = parseRateLimitHeaders(headers);
+    // Preserve this response's explicit clock before queue processing can expire it.
+    // Old cached deadlines still use the conservative fallback when no new clock arrives.
+    const specificResets = [
+      { at: parsed.resetAtRequests, remaining: parsed.remainingRequests },
+      { at: parsed.resetAtTokens, remaining: parsed.remainingTokens },
+    ].filter(
+      ({ at, remaining }) => at !== undefined && (remaining === undefined || remaining <= 0),
+    );
+    const observedResetAt =
+      parsed.resetAtRequests !== undefined || parsed.resetAtTokens !== undefined
+        ? specificResets.length > 0
+          ? Math.max(...specificResets.map(({ at }) => at!))
+          : undefined
+        : parsed.resetAt;
     if (selectedResetAt !== undefined) {
       const existingResetAt = this.slotQueue.getResetAt();
       // A selected backoff must not shorten quota learned by a concurrent call.
@@ -403,6 +423,7 @@ export class ProviderRateLimitState extends EventEmitter {
       // Proactive concurrency reduction
       this.applyConcurrencyChange(this.adaptiveConcurrency.recordApproachingLimit(minRatio));
     }
+    return isRateLimited ? observedResetAt : undefined;
   }
 
   /**

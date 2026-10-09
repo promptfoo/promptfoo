@@ -53,6 +53,33 @@ describe('ProviderRateLimitState', () => {
     });
   });
 
+  it.each(['requests', 'tokens', 'generic'] as const)(
+    'honors freshly received elapsed %s reset headers without adding a minute',
+    async (dimension) => {
+      const headers =
+        dimension === 'generic'
+          ? { 'x-ratelimit-reset': String(Math.floor(Date.now() / 1000) - 1) }
+          : {
+              [`x-ratelimit-reset-${dimension}`]: '0s',
+              [`x-ratelimit-remaining-${dimension}`]: '0',
+            };
+      const limited = state
+        .executeWithRetry('elapsed', async () => ({ error: 'HTTP 429' }), {
+          getHeaders: () => headers,
+          isRateLimited: () => true,
+          maxRetriesOverride: 0,
+        })
+        .catch(() => undefined);
+      await vi.advanceTimersByTimeAsync(0);
+      await limited;
+      const call = vi.fn(async () => 'ready');
+      const next = state.executeWithRetry('next', call, {}).catch((error) => error);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(call).toHaveBeenCalledOnce();
+      await expect(next).resolves.toBe('ready');
+    },
+  );
+
   it('returns a call that completes after cancellation instead of discarding it', async () => {
     const controller = new AbortController();
     const result = state.executeWithRetry(
