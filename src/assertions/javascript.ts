@@ -1,7 +1,8 @@
-import { Parser, type TokenType, tokTypes } from 'acorn';
+import { Parser, type TokenType, tokTypes, type YieldExpression } from 'acorn';
 import { type GradingResult } from '../types/index';
 import invariant from '../util/invariant';
 import { getProcessShim } from '../util/processShim';
+import { isSafeMode, SafeModeError } from '../util/safeMode';
 import { asGradingResult, normalizeScriptAssertionResult } from './scriptResultNormalization';
 
 import type { AssertionParams } from '../types/index';
@@ -15,10 +16,19 @@ const assertionParser = Parser.extend((BaseParser) => {
   const tokenizerPrototype = BaseParser.prototype as Parser & {
     updateContext(previousType: TokenType): void;
     next(ignoreEscapeSequenceInKeyword: boolean): void;
+    parseYield(forInit: boolean): YieldExpression;
   };
 
   return class extends BaseParser {
     declare type: TokenType;
+    declare exprAllowed: boolean;
+
+    parseYield(forInit: boolean): YieldExpression {
+      // Acorn's lexical context can miss async generators and generator methods.
+      // The grammar has identified yield here, so its operand can start a regex.
+      this.exprAllowed = true;
+      return tokenizerPrototype.parseYield.call(this, forInit);
+    }
 
     next(): void {
       // Escaped keywords are valid property names. Leave their syntax validation
@@ -256,6 +266,11 @@ export const handleJavascript = async ({
 
     let result: boolean | number | GradingResult;
     if (typeof valueFromScript === 'undefined') {
+      if (isSafeMode()) {
+        throw new SafeModeError(
+          'Inline JavaScript execution is disabled in safe mode. Please use a file reference instead (e.g. "file://path/to/assertion.js").',
+        );
+      }
       // Multiline assertions use the value as-is (user controls returns)
       // Single-line assertions get processed to handle variable declarations
       const functionBody = renderedValue.includes('\n')
@@ -278,6 +293,14 @@ export const handleJavascript = async ({
 
     return normalizeJavascriptAssertionResult(assertion, result, inverse, renderedValue);
   } catch (err) {
+    if (err instanceof SafeModeError) {
+      return {
+        pass: false,
+        score: 0,
+        reason: err.message,
+        assertion: normalizeResultAssertion(undefined, assertion),
+      };
+    }
     return {
       pass: false,
       score: 0,

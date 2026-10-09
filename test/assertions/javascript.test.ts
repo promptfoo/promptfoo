@@ -355,6 +355,8 @@ describe('buildFunctionBody', () => {
     'const x = 1; return true; { pass: true, score: 1 } garbage',
     'const f = async () => await /unterminated; true',
     'const f = () => await /[a-z]+/.test("a"); f()',
+    'const f = async function* () { yield /unterminated; }; f().next()',
+    'const f = async function () { yield /[a-z]+/.test("a"); }; f()',
   ])('rejects malformed code without returning an earlier object: %s', (code) => {
     expect(() => new Function(buildFunctionBody(code))).toThrow(SyntaxError);
   });
@@ -431,6 +433,57 @@ const javascriptFunctionFailAssertion: Assertion = {
 };
 
 describe('JavaScript async declaration grading', () => {
+  it.each(
+    [
+      {
+        name: 'async generator function',
+        value:
+          'const f = async function* () { yield /[;/*]/.test(output); }; f().next().then(result => result.value)',
+      },
+      {
+        name: 'async generator object method',
+        value:
+          'const f = { async *run() { yield /[;/*]/.test(output); } }; f.run().next().then(result => result.value)',
+      },
+      {
+        name: 'async generator class method',
+        value:
+          'const F = class { async *run() { yield /[;/*]/.test(output); } }; new F().run().next().then(result => result.value)',
+      },
+      {
+        name: 'generator function',
+        value: 'const f = function* () { yield /[;/*]/.test(output); }; f().next().value',
+      },
+      {
+        name: 'generator object method',
+        value: 'const f = { *run() { yield /[;/*]/.test(output); } }; f.run().next().value',
+      },
+      {
+        name: 'generator class method',
+        value:
+          'const F = class { *run() { yield /[;/*]/.test(output); } }; new F().run().next().value',
+      },
+    ].flatMap((testCase) =>
+      [
+        { output: ';', pass: true },
+        { output: 'a', pass: false },
+      ].map((result) => ({ ...testCase, ...result })),
+    ),
+  )('grades a regex directly yielded by $name with pass $pass', async ({ value, output, pass }) => {
+    const result = await runAssertion({
+      prompt: 'Test prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion: { type: 'javascript', value },
+      test: {} as AtomicTestCase,
+      providerResponse: { output },
+    });
+    expect(result).toMatchObject({
+      pass,
+      score: pass ? 1 : 0,
+      reason: pass ? 'Assertion passed' : `Custom function returned false\n${value}`,
+    });
+  });
+
   it.each(
     ['\r', '\u2028', '\u2029', ' '].flatMap((separator) =>
       [true, false].map((pass) => ({ separator, pass })),
@@ -1935,13 +1988,8 @@ describe('JavaScript file references', () => {
       // Mock isPackagePath to return false for file:// paths
       vi.mocked(isPackagePath).mockReturnValue(false);
 
-      // Mock importModule to handle both path and functionName
       const mockImportModule = vi.mocked(importModule);
-      mockImportModule.mockImplementation((path, functionName) => {
-        // Make sure both parameters are captured in the mock
-        mockImportModule.mock.calls.push([path, functionName]);
-        return Promise.resolve(mockFn);
-      });
+      mockImportModule.mockResolvedValue(mockFn);
 
       const fileAssertion: Assertion = {
         type: 'javascript',

@@ -11,6 +11,7 @@ import type { ProviderResponse } from '../types/providers';
  * Used by RateLimitRegistry.execute() and provider wrappers.
  */
 export interface RateLimitExecuteOptions<T> {
+  abortSignal?: AbortSignal;
   /** Extract rate limit headers from the result */
   getHeaders?: (result: T) => Record<string, string> | undefined;
   /** Detect if the result indicates a rate limit */
@@ -20,6 +21,10 @@ export interface RateLimitExecuteOptions<T> {
   /** Preserve a structured failure result when retries are exhausted. Defaults to throwing. */
   onRateLimitExhausted?: (result: T, error: Error) => T;
 }
+
+// Word-bounded: a bare "429" substring also matches token counts and request
+// IDs, e.g. "prompt is too long: 204291 tokens".
+const HTTP_429_RE = /\b429\b/;
 
 /**
  * Default rate limit detection for ProviderResponse.
@@ -67,10 +72,10 @@ export function isProviderResponseRateLimited(
     // Check HTTP status code (most reliable)
     result?.metadata?.http?.status === 429 ||
       // Check error field in response
-      result?.error?.includes?.('429') ||
+      HTTP_429_RE.test(result?.error ?? '') ||
       result?.error?.toLowerCase?.().includes?.('rate limit') ||
       // Check thrown error message
-      error?.message?.includes('429') ||
+      HTTP_429_RE.test(error?.message ?? '') ||
       error?.message?.toLowerCase().includes('rate limit') ||
       error?.message?.toLowerCase().includes('too many requests'),
   );
