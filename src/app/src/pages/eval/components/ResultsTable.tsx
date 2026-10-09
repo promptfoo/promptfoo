@@ -34,7 +34,7 @@ import {
   type ProviderOptions,
   type Vars,
 } from '@promptfoo/types';
-import { EVAL_TABLE_MAX_PAGE_SIZE } from '@promptfoo/types/api/eval';
+import { EVAL_TABLE_MAX_PAGE_SIZE } from '@promptfoo/types/evalConstants';
 import invariant from '@promptfoo/util/invariant';
 import {
   createColumnHelper,
