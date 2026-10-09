@@ -18,6 +18,11 @@ and web assets. Evaluations cover success, assertion failure, and provider error
 with caching disabled and isolated configuration paths. CommonJS also checks
 writable exports and Zod constructor identity.
 
+Both profiles check ordinary evaluations and actionable PDF/SQL installation errors
+without either parser installed, through ESM and CommonJS. The default profile also
+checks incompatible versions, then installs supported parsers and exercises a local
+PDF file variable plus SQL table allowlisting through the public evaluation API.
+
 Both profiles check that Slack stays opt-in and rejects an incompatible SDK without
 affecting ordinary providers, in ESM and CommonJS. The default profile also installs
 the supported Slack SDK and constructs providers without making Slack requests.

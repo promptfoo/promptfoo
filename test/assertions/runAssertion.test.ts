@@ -6,6 +6,7 @@ import { runAssertion } from '../../src/assertions/index';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { DefaultEmbeddingProvider } from '../../src/providers/openai/defaults';
 import { fetchWithRetries } from '../../src/util/fetch/index';
+import { getPackageVersion } from '../../src/util/packageVersion';
 import { createMockProvider } from '../factories/provider';
 import { TestGrader } from '../util/utils';
 
@@ -26,10 +27,17 @@ vi.mock('node:module', () => {
   const mockRequire: NodeJS.Require = {
     resolve: vi.fn() as unknown as NodeJS.RequireResolve,
   } as unknown as NodeJS.Require;
+  const createRequire = vi.fn().mockReturnValue(mockRequire);
   return {
-    createRequire: vi.fn().mockReturnValue(mockRequire),
+    createRequire,
+    default: { createRequire },
   };
 });
+
+// Package resolution and filesystem access are mocked here; SQL parsing still uses the real parser.
+vi.mock('../../src/util/packageVersion', () => ({
+  getPackageVersion: vi.fn(),
+}));
 
 vi.mock('../../src/util/fetch/index.ts', async () => {
   const actual = await vi.importActual<typeof import('../../src/util/fetch/index')>(
@@ -106,6 +114,10 @@ vi.mock('../../src/matchers/rag', async () => {
 const Grader = new TestGrader();
 
 describe('runAssertion', () => {
+  beforeEach(() => {
+    vi.mocked(getPackageVersion).mockReset().mockReturnValue('5.4.0');
+  });
+
   afterEach(() => {
     vi.clearAllMocks();
   });

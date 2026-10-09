@@ -253,6 +253,7 @@
     "tsdown": "0.23.0",
     "typescript": "^7.0.0",
     "vitest": "^5.0.2",
+    "webpack": "5.111.1",
     "yaml": "^2.9.0"
   },
   "optionalDependencies": {
@@ -276,8 +277,6 @@
     "hono": "^4.13.9",
     "jks-js": "^1.1.5",
     "natural": "^8.1.1",
-    "node-sql-parser": "^5.4.0",
-    "pdf-parse": "^2.4.5",
     "pem": "~1.14.8",
     "read-excel-file": "^9.3.9",
     "sharp": "^0.35.5"
@@ -392,6 +391,8 @@
     "@openai/codex-security": "^0.2.0",
     "@slack/web-api": "*",
     "ibm-cloud-sdk-core": "*",
+    "node-sql-parser": "*",
+    "pdf-parse": "*",
     "playwright": "*",
     "playwright-extra": "*",
     "puppeteer-extra-plugin-stealth": "*"
@@ -422,6 +423,12 @@
       "optional": true
     },
     "ibm-cloud-sdk-core": {
+      "optional": true
+    },
+    "node-sql-parser": {
+      "optional": true
+    },
+    "pdf-parse": {
       "optional": true
     },
     "playwright": {
