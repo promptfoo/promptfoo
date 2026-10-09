@@ -581,6 +581,9 @@ Use `pythonExecutable` when one provider needs a different interpreter than the 
 
 #### Environment Variables
 
+Python inherits environment variables from your shell and `--env-file`. Set `PATH`
+and `PYTHONPATH` there; provider `env` overrides do not change the child process environment.
+
 ```bash
 # Use specific Python version
 export PROMPTFOO_PYTHON=/usr/bin/python3.11
