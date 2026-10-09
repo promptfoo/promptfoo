@@ -1,7 +1,7 @@
 {
   "app -> contracts": 7,
   "app -> legacy-contracts": 105,
-  "app -> legacy-runtime": 20,
+  "app -> legacy-runtime": 22,
   "app -> node": 17,
   "app -> providers": 7,
   "app -> redteam": 104,
@@ -24,7 +24,7 @@
   "legacy-contracts -> validation": 3,
   "legacy-runtime -> contracts": 2,
   "legacy-runtime -> core": 12,
-  "legacy-runtime -> legacy-contracts": 72,
+  "legacy-runtime -> legacy-contracts": 73,
   "legacy-runtime -> node": 110,
   "legacy-runtime -> providers": 17,
   "legacy-runtime -> redteam": 8,
