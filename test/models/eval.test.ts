@@ -18,6 +18,7 @@ import { EvalEvaluationStore } from '../../src/node/evaluationStore';
 import { TraceStore } from '../../src/tracing/store';
 import { type EvaluateResult, type Prompt, ResultFailureReason } from '../../src/types/index';
 import { updateResult, writeResultsToDatabase } from '../../src/util/database';
+import { redactAzureBlobSasTokens } from '../../src/util/sanitizer';
 import {
   getCachedStandaloneEvals,
   getStandaloneEvalCacheKey,
@@ -219,6 +220,41 @@ describe('evaluator', () => {
       });
       expect(findResults).not.toHaveBeenCalled();
     });
+  });
+
+  it('preserves duplicate SAS signatures when saving an unchanged redacted config', async () => {
+    const config = {
+      tests: [
+        { vars: { label: 'first', file: 'az://account/container/a.yaml?sig=secret-a' } },
+        { vars: { label: 'second', file: 'az://account/container/a.yaml?sig=secret-b' } },
+      ],
+    };
+    const eval_ = await Eval.create(config, []);
+    await updateResult(eval_.id, redactAzureBlobSasTokens(config));
+    const loaded = await Eval.findById(eval_.id);
+    expect(loaded?.config).toEqual(config);
+  });
+
+  it('reloads summaries after appending to an evaluation with loaded results', async () => {
+    const eval_ = await EvalFactory.create({ numResults: 1 });
+    await eval_.loadResults();
+    const [existing] = await EvalResult.findManyByEvalId(eval_.id);
+    const appended = new EvalResult({
+      ...existing,
+      id: 'appended-result',
+      testIdx: 1,
+      response: existing.response ?? null,
+    });
+    await eval_.setResults([appended]);
+    expect((await eval_.toEvaluateSummary()).results).toHaveLength(2);
+  });
+
+  it('retains persisted rows when an empty upload chunk follows a loaded summary', async () => {
+    const eval_ = await EvalFactory.create({ numResults: 1 });
+    await eval_.loadResults();
+    await eval_.setResults([]);
+    expect((await eval_.toEvaluateSummary()).results).toHaveLength(1);
+    expect(await getCachedResultsCount(eval_.id)).toBe(1);
   });
 
   describe('fetchResultsBatched', () => {
@@ -1519,6 +1555,19 @@ describe('evaluator', () => {
   });
 
   describe('toResultsFile', () => {
+    it('redacts gateway URL credentials from result files while preserving the live config', async () => {
+      const gateway = 'https://gateway.example/v1?googleAccessToken=short-private-value';
+      const evaluation = new Eval({
+        providers: [{ id: 'openai:chat:test', config: { apiBaseUrl: gateway } }],
+        metadata: { documentationUrl: 'HTTPS://Docs.Example?version=2' },
+      });
+      const result = await evaluation.toResultsFile();
+      expect(JSON.stringify(result.config)).not.toContain('short-private-value');
+      expect(JSON.stringify(result.config)).toContain('%5BREDACTED%5D');
+      expect(result.config.metadata?.documentationUrl).toBe('HTTPS://Docs.Example?version=2');
+      expect(JSON.stringify(evaluation.config)).toContain(gateway);
+    });
+
     it('drops malformed trace-provider headers when exporting older evaluations', async () => {
       const evaluation = new Eval({
         tracing: {
@@ -1765,6 +1814,21 @@ describe('evaluator', () => {
       }
     });
 
+    it('ignores malformed filter entries while applying valid filters', async () => {
+      const validFilter = JSON.stringify({
+        logicOperator: 'and',
+        type: 'metric',
+        operator: 'equals',
+        value: 'accuracy',
+      });
+      const valid = await evalWithResults.getTablePage({ filters: [validFilter] });
+      const mixed = await evalWithResults.getTablePage({
+        filters: ['{bad json', 'null', '[]', validFilter],
+      });
+      expect(mixed.filteredCount).toBe(valid.filteredCount);
+      expect(mixed.body).toEqual(valid.body);
+    });
+
     it('should combine multiple filter types', async () => {
       const result = await evalWithResults.getTablePage({
         filterMode: 'passes',
@@ -1954,7 +2018,7 @@ describe('evaluator', () => {
           success, score, metadata
         ) VALUES
         ('promptfoo-ns-1', '${eval_.id}', 0, 0, '{}', '{}', '{}', 1, 1.0,
-          '{"userKey": "shown", "__promptfoo": {"traceLinkage": {"traceId": "abc"}}}')`,
+          '{"userKey": "shown", "__promptfoo": {"remote": true, "traceLinkage": {"traceId": "abc"}}}')`,
       );
 
       const keys = await EvalQueries.getMetadataKeysFromEval(eval_.id);

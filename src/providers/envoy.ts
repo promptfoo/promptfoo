@@ -1,3 +1,4 @@
+import { resolveProviderEnv } from './env';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 
 import type { EnvOverrides } from '../types/env';
@@ -41,10 +42,18 @@ export function createEnvoyProvider(
   }
 
   // Filter out basePath from config to avoid passing it to the API
-  const { basePath: _, ...configWithoutBasePath } = options.config?.config || {};
-
-  // Get the gateway URL from config or environment
-  const apiBaseUrl = configWithoutBasePath.apiBaseUrl || process.env.ENVOY_API_BASE_URL;
+  const {
+    basePath: _,
+    apiBaseUrl: configuredBaseUrl,
+    ...configWithoutBasePath
+  } = options.config?.config || {};
+  const env = {
+    ...options.env,
+    ...Object.fromEntries(
+      Object.entries(options.config?.env ?? {}).filter(([, value]) => value !== undefined),
+    ),
+  };
+  let apiBaseUrl = configuredBaseUrl ?? resolveProviderEnv(env, ['ENVOY_API_BASE_URL'])?.value;
 
   if (!apiBaseUrl) {
     throw new Error(
@@ -52,18 +61,31 @@ export function createEnvoyProvider(
     );
   }
 
-  // Ensure the URL ends with the correct path if not already specified
-  const normalizedBaseUrl = apiBaseUrl.endsWith('/v1')
-    ? apiBaseUrl
-    : `${apiBaseUrl.replace(/\/$/, '')}/v1`;
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(apiBaseUrl);
+    if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+      throw new Error('Unsupported gateway protocol');
+    }
+  } catch {
+    throw new Error(
+      'Envoy provider requires a valid gateway URL. Check ENVOY_API_BASE_URL or config.apiBaseUrl.',
+    );
+  }
+
+  if (configuredBaseUrl == null) {
+    const basePath = parsedUrl.pathname.replace(/\/+$/, '');
+    parsedUrl.pathname = basePath.endsWith('/v1') ? basePath : `${basePath}/v1`;
+    apiBaseUrl = parsedUrl.toString();
+  }
 
   const envoyConfig = {
-    ...options,
+    ...options.config,
+    id: options.id ?? options.config?.id,
+    env,
     config: {
       ...configWithoutBasePath,
-      // Keep the normalized URL last so a raw apiBaseUrl from the user's
-      // config cannot overwrite it (it may lack the /v1 suffix).
-      apiBaseUrl: normalizedBaseUrl,
+      apiBaseUrl,
     },
   };
 

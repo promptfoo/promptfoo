@@ -4,9 +4,10 @@ import fsPromises from 'fs/promises';
 import os from 'os';
 import path from 'path';
 
+import { parseTraceParent } from '@opentelemetry/core';
 import dedent from 'dedent';
 import cliState from '../cliState';
-import { getEnvString } from '../envars';
+import { getEnvString, getProcessEnv } from '../envars';
 import { importModule } from '../esm';
 import logger, { getLogLevel } from '../logger';
 import {
@@ -16,6 +17,7 @@ import {
   initializeAgenticCache,
   resolveAgenticWorkingDir,
 } from './agentic-utils';
+import { assertIsolatedWorkingDir, clearRepositoryEnv } from './agentWorkspace';
 
 import type { EnvOverrides } from '../types/env';
 import type {
@@ -166,7 +168,7 @@ export interface OpenCodeAgentConfig {
   description: string;
   /** Agent mode: 'primary' for main assistants, 'subagent' for specialized tasks, 'all' for both */
   mode?: 'primary' | 'subagent' | 'all';
-  /** Full OpenCode provider/model-id for this agent (e.g., 'anthropic/claude-sonnet-4-6') */
+  /** Full OpenCode provider/model-id for this agent (e.g., 'anthropic/claude-sonnet-5') */
   model?: string;
   /** Temperature for response randomness (0.0-1.0) */
   temperature?: number;
@@ -263,7 +265,7 @@ export interface OpenCodeSDKConfig {
   provider_id?: string;
 
   /**
-   * Model ID within provider_id (e.g., 'claude-sonnet-4-6', 'gpt-4o').
+   * Model ID within provider_id (e.g., 'claude-sonnet-5', 'gpt-5.6').
    * Set provider_id separately; custom_agent.model uses the full provider/model-id instead.
    */
   model?: string;
@@ -297,6 +299,9 @@ export interface OpenCodeSDKConfig {
    * If not specified, uses a temporary directory
    */
   working_dir?: string;
+
+  /** Run each eval call in a fresh copy of `working_dir`, created by promptfoo eval. */
+  copy_working_dir?: boolean | 'git' | 'copy';
 
   /**
    * Workspace identifier for OpenCode v2 workspace-aware APIs
@@ -359,6 +364,13 @@ export interface OpenCodeSDKConfig {
   persist_sessions?: boolean;
 
   /**
+   * Restart the owned server when the request traceparent changes. Serializes calls
+   * and disables caching. Incompatible with external or persistent/forked sessions.
+   * @default false
+   */
+  restart_server_per_call?: boolean;
+
+  /**
    * MCP server configuration
    */
   mcp?: Record<string, OpenCodeMCPServerConfig>;
@@ -415,6 +427,10 @@ interface OpenCodeClient {
     prompt: (
       parameters: Record<string, unknown>,
     ) => Promise<OpenCodeSdkResult<OpenCodePromptResponse>>;
+    messages: (
+      parameters: Record<string, unknown>,
+      options?: Record<string, unknown>,
+    ) => Promise<OpenCodeSdkResult<OpenCodeSessionMessage[]>>;
     delete: (parameters: Record<string, unknown>) => Promise<unknown>;
     abort?: (parameters: Record<string, unknown>) => Promise<unknown>;
   };
@@ -439,7 +455,10 @@ interface OpenCodeSDKModule {
     config?: Record<string, unknown>;
     env?: Record<string, string>;
   }) => Promise<{ client: OpenCodeClient; server: OpenCodeServer }>;
-  createOpencodeClient: (options: { baseUrl: string }) => OpenCodeClient;
+  createOpencodeClient: (options: {
+    baseUrl: string;
+    headers?: Record<string, string>;
+  }) => OpenCodeClient;
 }
 
 interface LoadedOpenCodeSDKModule extends OpenCodeSDKModule {
@@ -463,6 +482,7 @@ interface OpenCodeSessionHandle {
 
 interface OpenCodePreparedCall {
   config: OpenCodeSDKConfig;
+  inIsolatedWorkspace: boolean;
   isTempDir: boolean;
   workingDir?: string;
 }
@@ -481,6 +501,8 @@ type OpenCodeTokenCache =
     };
 
 interface OpenCodeAssistantMessage {
+  id?: string;
+  parentID?: string;
   tokens?: {
     total?: number;
     input?: number;
@@ -490,6 +512,11 @@ interface OpenCodeAssistantMessage {
   };
   cost?: number;
   structured?: unknown;
+}
+
+interface OpenCodeSessionMessage {
+  info?: { id?: string };
+  parts?: OpenCodePromptPart[];
 }
 
 interface OpenCodePromptPart {
@@ -576,6 +603,12 @@ function resolveEsmPackage(
   }
 
   return path.join(packageDir, esmEntry);
+}
+
+function hasRepositoryEnv(env: NodeJS.ProcessEnv): boolean {
+  const filtered = { ...env };
+  clearRepositoryEnv(filtered);
+  return Object.keys(env).some((key) => !(key in filtered));
 }
 
 function unwrapOpenCodeResult<T>(result: OpenCodeSdkResult<T> | undefined): T | undefined {
@@ -781,6 +814,48 @@ function normalizeStructuredText(value: string): string | undefined {
   return tryParseJson(fencedJsonMatch[1]);
 }
 
+function isValidTraceparent(traceparent: string | undefined): traceparent is string {
+  return Boolean(traceparent && parseTraceParent(traceparent));
+}
+
+const OPENCODE_TRACEPARENT_ENV = 'OPENCODE_TRACEPARENT';
+
+function setProcessEnvValue(key: string, value: string | undefined): void {
+  if (value === undefined) {
+    Reflect.deleteProperty(process.env, key);
+  } else {
+    Object.assign(process.env, { [key]: value });
+  }
+}
+
+/**
+ * The SDK reads process.env synchronously when it starts the server. Apply overrides
+ * until the startup function returns its promise, then restore the parent environment.
+ * The real-SDK contract test guards this timing assumption across SDK upgrades.
+ */
+export function spawnWithServerEnv<T>(
+  serverEnv: Record<string, string | undefined>,
+  spawn: () => Promise<T>,
+): Promise<T> {
+  const restore: [string, string | undefined][] = [];
+  try {
+    for (const [key, value] of Object.entries(serverEnv)) {
+      if (process.env[key] !== value) {
+        restore.push([key, process.env[key]]);
+        setProcessEnvValue(key, value);
+      }
+    }
+    return spawn();
+  } finally {
+    for (const [key, value] of restore) {
+      setProcessEnvValue(key, value);
+    }
+  }
+}
+
+/** Serialize server replacement with the calls using that server. */
+const SERVER_LIFECYCLE_QUEUE_KEY = 'opencode:sdk:server-lifecycle';
+
 /**
  * Helper to load the OpenCode SDK ESM module
  *
@@ -836,6 +911,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
 
   private providerId = 'opencode:sdk';
   private opencodeModule?: LoadedOpenCodeSDKModule;
+  private opencodeModuleLoad?: Promise<LoadedOpenCodeSDKModule>;
   private client?: OpenCodeClient;
   private clientInitialization?: Promise<void>;
   private server?: OpenCodeServer;
@@ -844,6 +920,9 @@ export class OpenCodeSDKProvider implements ApiProvider {
   private sessionQueues = new Map<string, Promise<void>>();
   private readonly credentialCacheScope = crypto.randomUUID();
   private streamingWarningEmitted = false;
+  private missingTraceparentWarningEmitted = false;
+  private activeTraceparent?: string;
+  private serverHasRepositoryEnv = false;
 
   constructor(
     options: {
@@ -870,23 +949,36 @@ export class OpenCodeSDKProvider implements ApiProvider {
       return config.apiKey;
     }
 
+    let env = this.env;
+    if (os.platform() === 'win32' && env) {
+      // Match the alias ordering used when building the spawned server environment.
+      // Preflight must recognize the winning credential before the server starts.
+      const configuredEnv = env;
+      env = {};
+      for (const key of Object.keys(configuredEnv).sort()) {
+        if (configuredEnv[key] !== undefined) {
+          env[key.toUpperCase()] = configuredEnv[key];
+        }
+      }
+    }
+
     // Check provider-specific env vars based on provider_id
     const providerId = config?.provider_id?.toLowerCase();
     if (providerId === 'anthropic') {
-      return this.env?.ANTHROPIC_API_KEY || getEnvString('ANTHROPIC_API_KEY');
+      return env?.ANTHROPIC_API_KEY || getEnvString('ANTHROPIC_API_KEY');
     }
     if (providerId === 'openai') {
-      return this.env?.OPENAI_API_KEY || getEnvString('OPENAI_API_KEY');
+      return env?.OPENAI_API_KEY || getEnvString('OPENAI_API_KEY');
     }
     if (providerId === 'google') {
-      return this.env?.GOOGLE_API_KEY || getEnvString('GOOGLE_API_KEY');
+      return env?.GOOGLE_API_KEY || getEnvString('GOOGLE_API_KEY');
     }
 
     // Fall back to common env vars
     return (
-      this.env?.ANTHROPIC_API_KEY ||
+      env?.ANTHROPIC_API_KEY ||
       getEnvString('ANTHROPIC_API_KEY') ||
-      this.env?.OPENAI_API_KEY ||
+      env?.OPENAI_API_KEY ||
       getEnvString('OPENAI_API_KEY')
     );
   }
@@ -913,6 +1005,14 @@ export class OpenCodeSDKProvider implements ApiProvider {
     this.sessionOrder = [];
     this.sessionQueues.clear();
 
+    await this.closeServer();
+  }
+
+  /** Close the owned server; callers handle session cleanup. */
+  private async closeServer(): Promise<void> {
+    await this.clientInitialization?.catch(() => undefined);
+    this.clientInitialization = undefined;
+
     // Close server if we started one
     if (this.server) {
       try {
@@ -923,6 +1023,8 @@ export class OpenCodeSDKProvider implements ApiProvider {
       this.server = undefined;
     }
     this.client = undefined;
+    this.activeTraceparent = undefined;
+    this.serverHasRepositoryEnv = false;
   }
 
   /**
@@ -1055,12 +1157,31 @@ export class OpenCodeSDKProvider implements ApiProvider {
     });
   }
 
-  private buildServerEnv(config: OpenCodeSDKConfig): Record<string, string> {
-    const serverEnv: Record<string, string> = {};
+  /** An undefined value removes a variable while the server starts. */
+  private buildServerEnv(
+    config: OpenCodeSDKConfig,
+    traceparent?: string,
+  ): Record<string, string | undefined> {
+    const serverEnv: Record<string, string | undefined> = {};
+    const processEnv = getProcessEnv();
+    const isWindows = os.platform() === 'win32';
+    const canonicalKeys = new Map<string, string>();
+    const envKey = (key: string): string => {
+      if (!isWindows) {
+        return key;
+      }
+      const normalized = key.toUpperCase();
+      const existing = canonicalKeys.get(normalized);
+      if (existing) {
+        return existing;
+      }
+      canonicalKeys.set(normalized, key);
+      return key;
+    };
 
-    for (const [key, value] of Object.entries(process.env)) {
+    for (const [key, value] of Object.entries(processEnv)) {
       if (value !== undefined) {
-        serverEnv[key] = value;
+        serverEnv[envKey(key)] = value;
       }
     }
 
@@ -1068,23 +1189,38 @@ export class OpenCodeSDKProvider implements ApiProvider {
       for (const key of Object.keys(this.env).sort()) {
         const value = this.env[key];
         if (value !== undefined) {
-          serverEnv[key] = value;
+          serverEnv[envKey(key)] = value;
         }
       }
     }
 
     if (config.log_level === 'debug' || isDebugMode()) {
-      serverEnv.DEBUG = serverEnv.DEBUG || 'opencode:*';
+      const debugKey = envKey('DEBUG');
+      serverEnv[debugKey] = serverEnv[debugKey] || 'opencode:*';
       logger.debug('[OpenCode SDK] Debug mode enabled, synced from promptfoo log level');
     }
 
+    const pathKey = envKey('PATH');
     const homeDir = os.homedir();
     const opencodeBinPath = path.join(homeDir, '.opencode', 'bin');
-    if (!serverEnv.PATH?.includes(opencodeBinPath)) {
-      serverEnv.PATH = `${opencodeBinPath}:${serverEnv.PATH ?? ''}`;
+    if (!serverEnv[pathKey]?.split(path.delimiter).includes(opencodeBinPath)) {
+      serverEnv[pathKey] = [opencodeBinPath, serverEnv[pathKey]]
+        .filter(Boolean)
+        .join(path.delimiter);
       logger.debug(`Added ${opencodeBinPath} to PATH for OpenCode CLI`);
     }
 
+    const traceparentKey = envKey(OPENCODE_TRACEPARENT_ENV);
+    // Restart mode owns the trace context; otherwise preserve an ambient value.
+    if (config.restart_server_per_call) {
+      serverEnv[traceparentKey] = isValidTraceparent(traceparent) ? traceparent : undefined;
+    } else if (isValidTraceparent(traceparent) && !serverEnv[traceparentKey]) {
+      serverEnv[traceparentKey] = traceparent;
+    }
+
+    if (assertIsolatedWorkingDir(config)) {
+      clearRepositoryEnv(serverEnv);
+    }
     return serverEnv;
   }
 
@@ -1227,11 +1363,29 @@ export class OpenCodeSDKProvider implements ApiProvider {
     this.sessionOrder.push(cacheKey);
   }
 
+  private assertServerWorkspace(config: OpenCodeSDKConfig, inIsolatedWorkspace: boolean): void {
+    // A reused server must not retain repository selectors from an earlier call.
+    if (
+      inIsolatedWorkspace &&
+      !config.baseUrl &&
+      (this.serverHasRepositoryEnv || hasRepositoryEnv(process.env))
+    ) {
+      throw new Error(
+        'copy_working_dir cannot isolate OpenCode while its server inherits Git repository ' +
+          'selectors such as GIT_DIR, GIT_WORK_TREE, or GIT_INDEX_FILE. The OpenCode SDK does ' +
+          'not support replacing that environment. Unset repository-selecting Git variables ' +
+          'before starting the provider.',
+      );
+    }
+  }
+
   private prepareCall(context?: CallApiContextParams): OpenCodePreparedCall {
     const config: OpenCodeSDKConfig = {
       ...this.config,
       ...context?.prompt?.config,
     };
+    const inIsolatedWorkspace = assertIsolatedWorkingDir(config);
+    this.assertServerWorkspace(config, inIsolatedWorkspace);
 
     if (config.apiKey !== this.config.apiKey) {
       throw new Error(
@@ -1244,9 +1398,17 @@ export class OpenCodeSDKProvider implements ApiProvider {
       );
     }
 
+    if (Boolean(config.restart_server_per_call) !== Boolean(this.config.restart_server_per_call)) {
+      throw new Error(
+        'OpenCode SDK restart_server_per_call is provider-level configuration and cannot be overridden per prompt',
+      );
+    }
+
     if (config.workspace && !config.baseUrl && !config.working_dir) {
       throw new Error('OpenCode SDK workspace support requires either baseUrl or working_dir');
     }
+
+    this.validateTraceRestartConfiguration(config);
 
     if (config.apiKey && !config.provider_id && !config.baseUrl) {
       logger.warn(
@@ -1277,6 +1439,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
 
       return {
         config,
+        inIsolatedWorkspace,
         isTempDir: false,
         workingDir,
       };
@@ -1284,25 +1447,76 @@ export class OpenCodeSDKProvider implements ApiProvider {
 
     return {
       config,
+      inIsolatedWorkspace,
       isTempDir: true,
       workingDir: fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-opencode-sdk-')),
     };
   }
 
-  private async ensureOpenCodeModule(): Promise<LoadedOpenCodeSDKModule> {
-    if (!this.opencodeModule) {
-      this.opencodeModule = await loadOpenCodeSDK();
+  private validateTraceRestartConfiguration(config: OpenCodeSDKConfig): void {
+    if (!config.restart_server_per_call) {
+      return;
     }
+
+    if (config.baseUrl) {
+      throw new Error(
+        'OpenCode SDK restart_server_per_call cannot be combined with baseUrl; the provider must own the server.',
+      );
+    }
+
+    if (config.port !== undefined && config.port !== 0) {
+      throw new Error(
+        'OpenCode SDK restart_server_per_call requires an automatically assigned port; omit port or set it to 0.',
+      );
+    }
+
+    const conflicting = [
+      config.persist_sessions ? 'persist_sessions' : undefined,
+      config.session_id ? 'session_id' : undefined,
+      config.parent_session_id ? 'parent_session_id' : undefined,
+    ].filter(Boolean);
+    if (conflicting.length > 0) {
+      throw new Error(
+        `OpenCode SDK restart_server_per_call cannot preserve session state with: ${conflicting.join(', ')}.`,
+      );
+    }
+  }
+
+  private async ensureOpenCodeModule(): Promise<LoadedOpenCodeSDKModule> {
+    if (this.opencodeModule) {
+      return this.opencodeModule;
+    }
+
+    // Share concurrent loads and allow a later retry if resolution fails.
+    if (!this.opencodeModuleLoad) {
+      this.opencodeModuleLoad = loadOpenCodeSDK().catch((err) => {
+        this.opencodeModuleLoad = undefined;
+        throw err;
+      });
+    }
+    this.opencodeModule = await this.opencodeModuleLoad;
     return this.opencodeModule;
   }
 
-  private async ensureClient(config: OpenCodeSDKConfig): Promise<void> {
+  private async ensureClient(config: OpenCodeSDKConfig, traceparent?: string): Promise<void> {
     const opencodeModule = await this.ensureOpenCodeModule();
 
     this.validateSessionPolicyConfiguration(config);
 
+    const desiredTraceparent = isValidTraceparent(traceparent) ? traceparent : undefined;
+    const restartsPerCall = Boolean(config.restart_server_per_call);
+
     if (this.client) {
-      return;
+      if (!restartsPerCall || this.activeTraceparent === desiredTraceparent) {
+        return;
+      }
+      logger.debug(
+        `[OpenCode SDK] Restarting server to re-parent spans (traceparent ${this.activeTraceparent ?? 'none'} -> ${desiredTraceparent ?? 'none'})`,
+      );
+      await this.closeServer();
+      // Sessions lived on the server we just stopped; their handles are now dangling.
+      this.sessions.clear();
+      this.sessionOrder = [];
     }
     if (this.clientInitialization !== undefined) {
       return this.clientInitialization;
@@ -1318,6 +1532,14 @@ export class OpenCodeSDKProvider implements ApiProvider {
         return;
       }
 
+      const serverEnv = this.buildServerEnv(config, desiredTraceparent);
+      const passThroughEnv: Record<string, string> = {};
+      for (const [key, value] of Object.entries(serverEnv)) {
+        if (value !== undefined) {
+          passThroughEnv[key] = value;
+        }
+      }
+
       const serverOptions: {
         hostname: string;
         port: number;
@@ -1328,7 +1550,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
         hostname: config.hostname ?? '127.0.0.1',
         port: config.port ?? 0,
         timeout: config.timeout ?? 30000,
-        env: this.buildServerEnv(config),
+        env: passThroughEnv,
       };
 
       const serverConfig = this.buildServerConfig(config);
@@ -1336,17 +1558,42 @@ export class OpenCodeSDKProvider implements ApiProvider {
         serverOptions.config = serverConfig;
       }
 
-      const opencode = await createOpencode(serverOptions);
-      this.client = opencode.client;
+      this.serverHasRepositoryEnv = hasRepositoryEnv(serverEnv);
+      const opencode = await spawnWithServerEnv(serverEnv, () => createOpencode(serverOptions));
       this.server = opencode.server;
+      const authEnv =
+        os.platform() === 'win32'
+          ? Object.fromEntries(
+              Object.entries(serverEnv).map(([key, value]) => [key.toUpperCase(), value]),
+            )
+          : serverEnv;
+      const password = authEnv.OPENCODE_SERVER_PASSWORD;
+      // createOpencode does not authenticate its client when the spawned server
+      // enables Basic auth. Use the same effective credentials as that server.
+      this.client = password
+        ? createOpencodeClient({
+            baseUrl: opencode.server.url,
+            headers: {
+              Authorization: `Basic ${Buffer.from(`${authEnv.OPENCODE_SERVER_USERNAME ?? 'opencode'}:${password}`).toString('base64')}`,
+            },
+          })
+        : opencode.client;
+      this.activeTraceparent = desiredTraceparent;
       logger.debug(`OpenCode server started at ${opencode.server.url}`);
     })();
     this.clientInitialization = initialization;
     try {
       await initialization;
+    } catch (error) {
+      // Initialization may fail after the server starts but before its client is ready.
+      await this.closeServer();
+      throw error;
     } finally {
       if (this.clientInitialization === initialization) {
         this.clientInitialization = undefined;
+      }
+      if (!this.server) {
+        this.serverHasRepositoryEnv = false;
       }
     }
   }
@@ -1553,6 +1800,90 @@ export class OpenCodeSDKProvider implements ApiProvider {
     };
   }
 
+  /**
+   * Whether the skill tool can run for this config, so the session-history
+   * round trip used for skill tracking can be skipped when it cannot.
+   *
+   * OpenCode permission rules are last-match-wins for each matching pattern.
+   * Since the prospective skill name is unknown here, any non-deny rule means
+   * a skill may run and its intermediate history must be inspected.
+   */
+  private isSkillToolEnabled(config: OpenCodeSDKConfig): boolean {
+    const rules = this.buildEffectivePermissionRules(config);
+    // A pattern-specific rule only overrides earlier rules for matching skill names.
+    // We do not know which skill the model may invoke until after the call, so skip the
+    // history fetch only when every rule that could cover `skill` is a denial. Treating
+    // the final patterned rule as global loses allowed calls for policies such as
+    // { '*': 'allow', 'blocked-skill': 'deny' }.
+    return rules.some(
+      (rule) => (rule.permission === 'skill' || rule.permission === '*') && rule.action !== 'deny',
+    );
+  }
+
+  /**
+   * Fetches the session message history and returns only the parts that belong
+   * to the current prompt, bounded by parentID (start) and assistantMessage.id
+   * (end) to prevent skill calls from other prompts bleeding in.
+   *
+   * Returns an empty array — which makes the caller fall back to the
+   * final-message parts — whenever the current prompt cannot be located in the
+   * history (a start/end anchor is absent from the response or fetched page).
+   * Over-attributing skill calls from earlier or concurrent prompts in a
+   * shared session would be worse than missing intermediate-turn calls.
+   */
+  private async fetchCurrentPromptParts(
+    client: OpenCodeClient,
+    session: OpenCodeSessionContext,
+    response: OpenCodeSdkResult<OpenCodePromptResponse>,
+    abortSignal?: AbortSignal,
+  ): Promise<OpenCodePromptPart[]> {
+    const assistantMessage = unwrapOpenCodeResult(response)?.info;
+    const parentId = assistantMessage?.parentID;
+    const assistantId = assistantMessage?.id;
+    if (!parentId || !assistantId) {
+      logger.debug(
+        '[OpenCode SDK] Assistant message is missing a history anchor; skipping session history fetch for skill tracking',
+      );
+      return [];
+    }
+    const messagesResult =
+      this.opencodeModule?.apiVersion === 'v2'
+        ? await client.session.messages(
+            { sessionID: session.sessionId, ...session.sessionQuery },
+            abortSignal ? { signal: abortSignal } : undefined,
+          )
+        : await client.session.messages({
+            path: getSessionPath(session.sessionId),
+            query: session.sessionQuery,
+            ...(abortSignal ? { signal: abortSignal } : {}),
+          });
+    const messages = unwrapOpenCodeResult(messagesResult) ?? [];
+    // Bound the slice with both a start anchor (parentID → user message that
+    // triggered this prompt) and an end anchor (assistantMessage.id → the
+    // response we just received). Without the end anchor, messages from a
+    // concurrent prompt on the same shared session could be included and
+    // cause skill-used to pass for the wrong evaluation row.
+    const startIndex = messages.findIndex((m) => m.info?.id === parentId);
+    if (startIndex === -1) {
+      logger.debug(
+        `[OpenCode SDK] Parent message ${parentId} not found in ${messages.length} fetched messages; falling back to final-message parts for skill tracking`,
+      );
+      return [];
+    }
+    const endIndex = messages.findIndex((m) => m.info?.id === assistantId);
+    if (endIndex < startIndex) {
+      logger.debug(
+        `[OpenCode SDK] Assistant message ${assistantId} not found after its parent in ${messages.length} fetched messages; falling back to final-message parts for skill tracking`,
+      );
+      return [];
+    }
+    const relevantMessages = messages.slice(startIndex, endIndex + 1);
+    logger.debug(
+      `[OpenCode SDK] Fetched ${messages.length} messages, using ${relevantMessages.length} (start=${startIndex} end=${endIndex}) for skill tracking`,
+    );
+    return relevantMessages.flatMap((m) => m.parts ?? []);
+  }
+
   private getSessionQueueKey(
     config: OpenCodeSDKConfig,
     workingDir: string | undefined,
@@ -1630,6 +1961,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
     config: OpenCodeSDKConfig,
     response: OpenCodeSdkResult<OpenCodePromptResponse>,
     sessionId: string,
+    allSessionParts: OpenCodePromptPart[],
   ): ProviderResponse {
     const responseData = unwrapOpenCodeResult(response);
     const assistantMessage = responseData?.info;
@@ -1651,7 +1983,10 @@ export class OpenCodeSDKProvider implements ApiProvider {
     }
 
     const tokens = assistantMessage?.tokens;
-    const skillCalls = this.deriveSkillCalls(parts);
+    // Prefer full session history when available so skill calls from intermediate
+    // turns are captured. OpenCode is multi-turn: the skill tool is typically
+    // invoked before the final response, so its tool part is absent from `parts`.
+    const skillCalls = this.deriveSkillCalls(allSessionParts.length > 0 ? allSessionParts : parts);
 
     return {
       output,
@@ -1732,9 +2067,8 @@ export class OpenCodeSDKProvider implements ApiProvider {
     context?: CallApiContextParams,
     callOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    const { config, isTempDir, workingDir } = this.prepareCall(context);
-    let ephemeralSession: OpenCodeSessionHandle | undefined;
-    let abortListener: (() => void) | undefined;
+    const { config, inIsolatedWorkspace, isTempDir, workingDir } = this.prepareCall(context);
+    const perCallTracing = Boolean(config.restart_server_per_call);
 
     try {
       this.buildEffectivePermissionRules(config);
@@ -1748,14 +2082,31 @@ export class OpenCodeSDKProvider implements ApiProvider {
         );
       }
 
+      if (
+        perCallTracing &&
+        !isValidTraceparent(context?.traceparent) &&
+        !this.missingTraceparentWarningEmitted
+      ) {
+        this.missingTraceparentWarningEmitted = true;
+        logger.warn(
+          '[OpenCode SDK] restart_server_per_call has no valid trace context. Enable tracing.enabled to correlate spans; calls remain serialized and uncached.',
+        );
+      }
+
       const mcpConfig = config.mcp && Object.keys(config.mcp).length > 0 ? config.mcp : undefined;
       const statefulSession = Boolean(config.session_id || config.persist_sessions);
       const hasPermissionRules = this.buildConfiguredPermissionRules(config).length > 0;
       const sensitiveMcpConfig = openCodeMcpContainsCacheSensitiveData(mcpConfig);
       const sensitiveBaseUrl = openCodeBaseUrlContainsCacheSensitiveData(config.baseUrl);
+      // Cached responses cannot emit spans for the current request.
       const cacheResult =
-        statefulSession || hasPermissionRules || sensitiveMcpConfig || sensitiveBaseUrl
-          ? { shouldCache: false, shouldReadCache: false, shouldWriteCache: false }
+        inIsolatedWorkspace ||
+        statefulSession ||
+        hasPermissionRules ||
+        sensitiveMcpConfig ||
+        sensitiveBaseUrl ||
+        perCallTracing
+          ? { shouldReadCache: false, shouldWriteCache: false }
           : await initializeAgenticCache(
               {
                 cacheKeyPrefix: 'opencode:sdk',
@@ -1779,76 +2130,123 @@ export class OpenCodeSDKProvider implements ApiProvider {
         return { error: 'OpenCode SDK call aborted before it started' };
       }
 
-      await this.ensureClient(config);
-      const sessionQueueKey = this.getSessionQueueKey(config, workingDir);
+      // Protect server replacement for the full session lifecycle.
+      const sessionQueueKey = perCallTracing
+        ? SERVER_LIFECYCLE_QUEUE_KEY
+        : this.getSessionQueueKey(config, workingDir);
       return await this.runSerializedSessionCall(
         sessionQueueKey,
         callOptions?.abortSignal,
         async () => {
-          const session = await this.getOrCreateSession(config, workingDir);
-          ephemeralSession = session.ephemeralSession;
-          if (callOptions?.abortSignal?.aborted) {
-            return { error: 'OpenCode SDK call aborted before it started' };
-          }
+          let ephemeralSession: OpenCodeSessionHandle | undefined;
+          let abortListener: (() => void) | undefined;
+          try {
+            await this.ensureClient(config, context?.traceparent);
+            this.assertServerWorkspace(config, inIsolatedWorkspace);
+            const session = await this.getOrCreateSession(config, workingDir);
+            ephemeralSession = session.ephemeralSession;
+            if (callOptions?.abortSignal?.aborted) {
+              return { error: 'OpenCode SDK call aborted before it started' };
+            }
 
-          const promptOptions = this.buildPromptParameters(
-            config,
-            prompt,
-            session.sessionId,
-            session.sessionQuery,
-          );
-          logger.debug(`OpenCode SDK prompt options:`, promptOptions);
-
-          const client = this.client;
-          if (!client) {
-            throw new Error('OpenCode SDK client is not initialized');
-          }
-
-          // If the caller's abortSignal fires mid-prompt, ask the server to stop
-          // rather than letting it run to completion while we discard the result.
-          // session.abort is only on v2; v1 has no abort primitive, so we still
-          // honor cancellation locally via the response check below.
-          const abortSignal = callOptions?.abortSignal;
-          if (abortSignal && client.session.abort && this.opencodeModule?.apiVersion === 'v2') {
-            const abortParams = this.buildAbortSessionParameters(
+            const promptOptions = this.buildPromptParameters(
+              config,
+              prompt,
               session.sessionId,
               session.sessionQuery,
             );
-            abortListener = () => {
-              client.session.abort?.(abortParams).catch((err) => {
-                logger.debug(`[OpenCode SDK] Failed to abort session ${session.sessionId}: ${err}`);
-              });
-            };
-            abortSignal.addEventListener('abort', abortListener, { once: true });
+            logger.debug(`OpenCode SDK prompt options:`, promptOptions);
+
+            const client = this.client;
+            if (!client) {
+              throw new Error('OpenCode SDK client is not initialized');
+            }
+
+            // If the caller's abortSignal fires mid-prompt, ask the server to stop
+            // rather than letting it run to completion while we discard the result.
+            // session.abort is only on v2; v1 has no abort primitive, so we still
+            // honor cancellation locally via the response check below.
+            const abortSignal = callOptions?.abortSignal;
+            if (abortSignal && client.session.abort && this.opencodeModule?.apiVersion === 'v2') {
+              const abortParams = this.buildAbortSessionParameters(
+                session.sessionId,
+                session.sessionQuery,
+              );
+              abortListener = () => {
+                client.session.abort?.(abortParams).catch((err) => {
+                  logger.debug(
+                    `[OpenCode SDK] Failed to abort session ${session.sessionId}: ${err}`,
+                  );
+                });
+              };
+              abortSignal.addEventListener('abort', abortListener, { once: true });
+            }
+
+            const response = await client.session.prompt(promptOptions);
+            logger.debug(`OpenCode SDK response received`);
+
+            // The prompt has returned, so an abort from here on must not ask the
+            // server to kill the session it already answered.
+            if (abortListener && abortSignal) {
+              abortSignal.removeEventListener('abort', abortListener);
+              abortListener = undefined;
+            }
+
+            if (abortSignal?.aborted) {
+              return { error: 'OpenCode SDK call aborted' };
+            }
+
+            // Fetch only the parts that belong to the current prompt from the session
+            // history so that deriveSkillCalls captures skill calls from intermediate
+            // turns. Gated on the effective tool policy, so the extra round trip is
+            // skipped whenever the skill tool is denied and no skill parts can exist.
+            let allSessionParts: OpenCodePromptPart[] = [];
+            if (this.isSkillToolEnabled(config)) {
+              try {
+                allSessionParts = await this.fetchCurrentPromptParts(
+                  client,
+                  session,
+                  response,
+                  abortSignal,
+                );
+              } catch (e) {
+                logger.debug(
+                  `[OpenCode SDK] Could not fetch session history for skill tracking: ${e}`,
+                );
+              }
+              if (abortSignal?.aborted) {
+                return { error: 'OpenCode SDK call aborted' };
+              }
+            }
+
+            const providerResponse = this.buildProviderResponse(
+              config,
+              response,
+              session.sessionId,
+              allSessionParts,
+            );
+            await cacheResponse(cacheResult, providerResponse, 'OpenCode SDK');
+            logger.debug(`OpenCode SDK response: ${providerResponse.output.slice(0, 100)}...`);
+            return providerResponse;
+          } finally {
+            if (abortListener && callOptions?.abortSignal) {
+              callOptions.abortSignal.removeEventListener('abort', abortListener);
+            }
+            if (ephemeralSession) {
+              try {
+                await this.deleteSession(ephemeralSession);
+              } catch (err) {
+                logger.debug(
+                  `Failed to delete non-persistent session ${ephemeralSession.id}: ${err}`,
+                );
+              }
+            }
           }
-
-          const response = await client.session.prompt(promptOptions);
-          logger.debug(`OpenCode SDK response received`);
-
-          if (abortSignal?.aborted) {
-            return { error: 'OpenCode SDK call aborted' };
-          }
-
-          const providerResponse = this.buildProviderResponse(config, response, session.sessionId);
-          await cacheResponse(cacheResult, providerResponse, 'OpenCode SDK');
-          logger.debug(`OpenCode SDK response: ${providerResponse.output.slice(0, 100)}...`);
-          return providerResponse;
         },
       );
     } catch (error) {
       return this.handleCallError(error, callOptions);
     } finally {
-      if (abortListener && callOptions?.abortSignal) {
-        callOptions.abortSignal.removeEventListener('abort', abortListener);
-      }
-      if (ephemeralSession) {
-        try {
-          await this.deleteSession(ephemeralSession);
-        } catch (err) {
-          logger.debug(`Failed to delete non-persistent session ${ephemeralSession.id}: ${err}`);
-        }
-      }
-
       // Clean up temp directory
       if (isTempDir && workingDir) {
         await fsPromises.rm(workingDir, { recursive: true, force: true });

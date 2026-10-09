@@ -256,6 +256,8 @@ describe('AI21ChatCompletionProvider', () => {
         body: expect.stringContaining('"max_tokens":0'),
       }),
       expect.any(Number),
+      'json',
+      undefined,
     );
   });
 
@@ -285,4 +287,9 @@ describe('AI21ChatCompletionProvider', () => {
     // is responsible for collapsing identical requests, not the provider.
     expect(vi.mocked(fetchWithCache)).toHaveBeenCalledTimes(2);
   });
+});
+
+it('keeps mutable prices independent across model aliases', () => {
+  const costs = AI21ChatCompletionProvider.AI21_CHAT_MODELS.map(({ cost }) => cost);
+  expect(new Set(costs).size).toBe(costs.length);
 });
