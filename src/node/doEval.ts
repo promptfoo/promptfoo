@@ -1220,7 +1220,7 @@ async function doEvalWithEnv(
           // Preserve the released path bases: --tests uses CWD, while --vars uses
           // the config directory. --tests takes precedence when both are supplied.
           varPaths.push(
-            ...resolveTestsWatchPaths(cliTests, cmdObj.tests ? process.cwd() : basePath),
+            ...resolveTestsWatchPaths(cliTests, cmdObj.tests ? process.cwd() : basePath, basePath),
           );
         } else {
           varPaths.push(...resolveTestsWatchPaths(config.tests, basePath));

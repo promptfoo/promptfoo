@@ -57,6 +57,7 @@ import {
   validateTestPromptReferences,
 } from '../validateTestPromptReferences';
 import { validateTestProviderReferences } from '../validateTestProviderReferences';
+import { mapVarFileReferences, pinVarFileReference } from '../varFileReferences';
 import { loadYaml } from '../yamlLoad';
 import { DEFAULT_CONFIG_EXTENSIONS } from './extensions';
 
@@ -545,18 +546,42 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
   return { ...config, tests: await readTestSources(testSources, config.env) };
 }
 
-type TestSource = { tests: TestSuiteConfig['tests']; basePath: string };
+type TestSource = {
+  tests: TestSuiteConfig['tests'];
+  basePath: string;
+  testsBasePath?: string;
+};
+
+/** Resolves a local path or `file://` reference from a directory; remote and templated references pass through. */
+function resolveReferenceFromDirectory(directory: string, reference: string): string {
+  if (reference.includes('{{') || isRemoteTestsReference(reference)) {
+    return reference;
+  }
+  const prefix = reference.startsWith('file://') ? 'file://' : '';
+  return prefix + path.resolve(directory, reference.slice(prefix.length));
+}
 
 async function readTestSources(
   sources: TestSource[],
   env: TestSuite['env'],
   loadProviders = true,
+  // Directory the evaluation resolves `file://` vars from; see readTestConfigs.
+  suiteBasePath?: string,
 ): Promise<TestCase[]> {
-  const read = loadProviders ? readTests : readTestConfigs;
   const tests: TestCase[] = [];
   for (const source of sources) {
     try {
-      tests.push(...(await read(source.tests, source.basePath, env)));
+      tests.push(
+        ...(loadProviders
+          ? await readTests(source.tests, source.basePath, env)
+          : await readTestConfigs(
+              source.tests,
+              source.basePath,
+              env,
+              suiteBasePath ?? source.basePath,
+              source.testsBasePath ?? source.basePath,
+            )),
+      );
     } catch (error) {
       throw new ConfigResolutionError(
         `Failed to load tests from ${source.basePath || process.cwd()}: ${error instanceof Error ? error.message : String(error)}`,
@@ -662,16 +687,14 @@ async function prepareCombinedConfig(
   let prompts: UnifiedConfig['prompts'] = configsAreStringOrArray ? [] : {};
   const promptBasePaths = new Map<string | Prompt, string>();
 
-  const resolveConfigPath = (basePath: string, reference: string): string => {
-    if (reference.includes('{{')) {
-      reference = cliState.withEnv(combinedEnv, () => renderEnvOnlyInObject(reference));
-    }
-    if (reference.includes('{{') || isRemoteTestsReference(reference)) {
-      return reference;
-    }
-    const prefix = reference.startsWith('file://') ? 'file://' : '';
-    return prefix + path.resolve(basePath, reference.slice(prefix.length));
-  };
+  // The env can come from any of the configs, so templates are rendered with the combined one.
+  const renderReference = (reference: string): string =>
+    reference.includes('{{')
+      ? cliState.withEnv(combinedEnv, () => renderEnvOnlyInObject(reference))
+      : reference;
+
+  const resolveConfigPath = (basePath: string, reference: string): string =>
+    resolveReferenceFromDirectory(basePath, renderReference(reference));
 
   const resolveNestedFileReferences = (basePath: string, value: unknown): unknown => {
     if (typeof value === 'string') {
@@ -711,6 +734,7 @@ async function prepareCombinedConfig(
     throw new Error(`Invalid prompt object: ${JSON.stringify(prompt)}`);
   };
 
+  const suiteBasePath = configSources[0] ? path.resolve(configSources[0].basePath) : undefined;
   const makeTestAbsolute = (basePath: string, test: unknown): unknown => {
     if (typeof test === 'string') {
       return resolveConfigPath(basePath, test);
@@ -726,16 +750,28 @@ async function prepareCombinedConfig(
       };
     }
     const source = test as TestCase;
+    // `file://` vars resolve from the suite directory at run time. Rows authored there keep
+    // their references relative; only rows from another config's directory are pinned. Env
+    // templates in a reference are rendered either way.
+    const prepareReference =
+      path.resolve(basePath) === suiteBasePath
+        ? renderReference
+        : (reference: string) => {
+            const rendered = renderReference(reference);
+            return rendered.startsWith('file://') && !rendered.includes('{{')
+              ? pinVarFileReference(rendered, basePath)
+              : resolveReferenceFromDirectory(basePath, rendered);
+          };
     // Keep grader IDs unchanged so references can reuse configured providers.
     return {
       ...source,
       ...(source.vars && {
         vars:
           typeof source.vars === 'string'
-            ? resolveConfigPath(basePath, source.vars)
+            ? prepareReference(source.vars)
             : Array.isArray(source.vars)
-              ? source.vars.map((value) => resolveConfigPath(basePath, value))
-              : resolveNestedFileReferences(basePath, source.vars),
+              ? source.vars.map((value) => prepareReference(value))
+              : mapVarFileReferences(source.vars, prepareReference),
       }),
       ...(typeof source.provider === 'string' &&
         source.provider.startsWith('file://') && {
@@ -818,17 +854,32 @@ async function prepareCombinedConfig(
             )
           : source;
       for (const scenario of [loaded].flat()) {
-        scenarios.push(
-          typeof scenario === 'object' && scenario?.tests
-            ? {
-                ...scenario,
-                ...(Array.isArray(scenario.config) && {
-                  config: scenario.config.map((test: unknown) => makeTestAbsolute(basePath, test)),
-                }),
-                tests: [scenario.tests].flat().map((test) => makeTestAbsolute(basePath, test)),
-              }
-            : scenario,
-        );
+        if (typeof scenario !== 'object' || !scenario?.tests) {
+          scenarios.push(scenario);
+          continue;
+        }
+        const scenarioTests = [scenario.tests]
+          .flat()
+          .map((test) => makeTestAbsolute(basePath, test));
+        scenarios.push({
+          ...scenario,
+          ...(Array.isArray(scenario.config) && {
+            config: scenario.config.map((test: unknown) => makeTestAbsolute(basePath, test)),
+          }),
+          // Scenario tests are read later, from the suite directory, which leaves the file
+          // vars in the rows of a test file relative to that directory. For a config in
+          // another directory they are read here instead, where their own directory is
+          // known, so that those rows are pinned like the ones written inline.
+          tests:
+            path.resolve(basePath) === suiteBasePath
+              ? scenarioTests
+              : await readTestSources(
+                  [{ tests: scenarioTests as TestSuiteConfig['tests'], basePath }],
+                  combinedEnv,
+                  false,
+                  suiteBasePath,
+                ),
+        });
       }
     }
   }
@@ -856,8 +907,13 @@ async function prepareCombinedConfig(
       if (!prev && !curr.defaultTest) {
         return undefined;
       }
-      // Otherwise merge objects
-      const currDefaultTest = typeof curr.defaultTest === 'object' ? curr.defaultTest : {};
+      // Otherwise merge objects. Each inline default is prepared in its own directory first,
+      // like any other row, so that file vars from another config's directory do not resolve
+      // from the suite's.
+      const currDefaultTest =
+        typeof curr.defaultTest === 'object'
+          ? (makeTestAbsolute(basePath, curr.defaultTest) as Partial<TestCase>)
+          : {};
       const prevObj = typeof prev === 'object' ? prev : {};
       return {
         ...prevObj,
@@ -1203,9 +1259,18 @@ async function resolveLoadedConfig(
   const testConfigs = await readTestSources(
     testSources?.length
       ? testSources
-      : [{ tests: config.tests || [], basePath: cmdObj.tests ? '' : basePath }],
+      : [
+          {
+            // --tests is located from the working directory, while references inside its
+            // rows resolve from the config directory like every other test.
+            tests: config.tests || [],
+            basePath,
+            testsBasePath: cmdObj.tests ? process.cwd() : basePath,
+          },
+        ],
     runtimeEnv,
     false,
+    basePath,
   );
   config.tests = testConfigs.map((test) =>
     clone(isApiProvider(test.provider) ? { ...test, provider: undefined } : test),
@@ -1241,6 +1306,7 @@ async function resolveLoadedConfig(
           [{ tests: scenario.tests, basePath }],
           runtimeEnv,
           false,
+          basePath,
         );
       }
       invariant(typeof scenario === 'object', 'scenario must be an object');

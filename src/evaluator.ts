@@ -1,3 +1,5 @@
+import * as fs from 'fs';
+import * as path from 'path';
 import readline from 'readline';
 import { isDeepStrictEqual } from 'util';
 
@@ -2148,13 +2150,13 @@ export function generateVarCombinations(
 
       // For glob patterns, we need to resolve the base directory and use relative patterns
       const basePath = cliState.basePath || '';
-      const filePaths =
-        globSync(filePath, {
-          cwd: basePath || process.cwd(),
-          windowsPathsNoEscape: true,
-        }) || [];
+      // A path that exists is a literal file, even when a directory name contains glob
+      // characters such as brackets.
+      const filePaths = fs.existsSync(path.resolve(basePath || process.cwd(), filePath))
+        ? [filePath]
+        : globSync(filePath, { cwd: basePath || process.cwd(), windowsPathsNoEscape: true }) || [];
 
-      values = filePaths.map((path: string) => `file://${path}`);
+      values = filePaths.map((matchedPath: string) => `file://${matchedPath}`);
       if (values.length === 0) {
         throw new Error(
           `No files found for variable ${key} at path ${filePath} in directory ${basePath || process.cwd()}`,

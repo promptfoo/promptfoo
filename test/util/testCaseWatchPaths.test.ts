@@ -3,7 +3,11 @@ import * as os from 'os';
 import * as path from 'path';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { resolveTestsWatchPaths } from '../../src/util/testCaseReader';
+import {
+  readTestConfigs,
+  readTestFiles,
+  resolveTestsWatchPaths,
+} from '../../src/util/testCaseReader';
 
 import type { TestSuiteConfig } from '../../src/types/index';
 
@@ -55,12 +59,55 @@ describe('resolveTestsWatchPaths', () => {
     ]);
   });
 
+  it('preserves directory patterns in relative test references', async () => {
+    for (const name of ['a', 'b', '[ab]']) {
+      const directory = path.join(base, 'sets', name);
+      fs.mkdirSync(directory, { recursive: true });
+      fs.writeFileSync(
+        path.join(directory, 'cases-1.yaml'),
+        `- vars:\n    doc: ${JSON.stringify(name)}\n`,
+      );
+    }
+    const reference = 'sets/[ab]/cases-*.yaml';
+
+    const loaded = await readTestConfigs(reference, base, {});
+    expect(loaded.map((row) => row.vars?.doc).sort()).toEqual(['a', 'b']);
+    expect(resolve(reference).sort()).toEqual([
+      path.join(base, 'sets', 'a', 'cases-1.yaml'),
+      path.join(base, 'sets', 'b', 'cases-1.yaml'),
+    ]);
+  });
+
   it('expands test globs beneath a directory containing brackets', () => {
     const root = path.join(base, 'suite[blue]');
     fs.mkdirSync(root);
     const testsPath = path.join(root, 'cases.yaml');
     fs.writeFileSync(testsPath, '- description: case');
     expect(resolveTestsWatchPaths('file://*.yaml', root)).toEqual([testsPath]);
+  });
+
+  it('expands a --tests glob from a bracketed directory when the config is elsewhere', () => {
+    // --tests uses its working directory for lookup, separately from the config directory
+    // used for dependencies inside rows.
+    const root = path.join(base, 'work [acme]');
+    fs.mkdirSync(path.join(root, 'set-1'), { recursive: true });
+    fs.mkdirSync(path.join(root, 'set-2'));
+    fs.writeFileSync(path.join(root, 'set-1', 'cases.yaml'), '- description: case');
+    fs.writeFileSync(path.join(root, 'set-2', 'cases.yaml'), '- description: case');
+    // What the pattern matches when the brackets are taken for a set of characters.
+    fs.mkdirSync(path.join(base, 'work a', 'set-1'), { recursive: true });
+    fs.writeFileSync(path.join(base, 'work a', 'set-1', 'cases.yaml'), '- description: other');
+
+    const watched = resolveTestsWatchPaths(
+      path.join(root, 'set-*', 'cases.yaml') as TestSuiteConfig['tests'],
+      root,
+      path.join(base, 'nested'),
+    );
+
+    expect([...watched].sort()).toEqual([
+      path.join(root, 'set-1', 'cases.yaml'),
+      path.join(root, 'set-2', 'cases.yaml'),
+    ]);
   });
 
   it("never watches a glob's parent directory", () => {
@@ -145,6 +192,15 @@ describe('resolveTestsWatchPaths', () => {
     ]);
   });
 
+  it('watches an existing literal var file instead of matching sibling filenames', () => {
+    const literalPath = path.join(base, 'doc[12].txt');
+    const matchedPath = path.join(base, 'doc1.txt');
+    fs.writeFileSync(literalPath, 'literal');
+    fs.writeFileSync(matchedPath, 'glob match');
+
+    expect(resolve([{ vars: { doc: 'file://doc[12].txt' } }])).toEqual([literalPath]);
+  });
+
   it('watches file references nested inside a tests file', () => {
     // cases.yaml holds a case whose vars point at another file; the loader reads it,
     // so editing it changes the evaluation and has to trigger a rerun.
@@ -153,6 +209,47 @@ describe('resolveTestsWatchPaths', () => {
     expect(watched).toContain(path.join(base, 'nested/cases.yaml'));
     expect(watched).toContain(path.join(base, 'vars.csv'));
   });
+
+  it('resolves inline file vars of a --tests file from the config directory', () => {
+    // --tests is located from the working directory, but the vars in its rows are read
+    // from the config directory, so that is the copy to watch.
+    const configDirectory = path.join(base, 'nested');
+    fs.writeFileSync(path.join(base, 'cli-tests.yaml'), '- vars:\n    doc: file://doc.txt\n');
+
+    expect(
+      resolveTestsWatchPaths('cli-tests.yaml' as TestSuiteConfig['tests'], base, configDirectory),
+    ).toEqual([path.join(base, 'cli-tests.yaml'), path.join(configDirectory, 'doc.txt')]);
+    expect(resolve('cli-tests.yaml' as TestSuiteConfig['tests'])).toEqual([
+      path.join(base, 'cli-tests.yaml'),
+      path.join(base, 'doc.txt'),
+    ]);
+  });
+
+  it.each(['json', 'jsonl'])(
+    'watches standalone --tests %s dependencies from the directory the loader uses',
+    async (extension) => {
+      const configDirectory = path.join(base, 'nested');
+      const source = `cli-dependencies.${extension}`;
+      const row = { vars: 'cli-vars.yaml', provider: 'file://cli-provider.js' };
+      fs.writeFileSync(path.join(base, source), JSON.stringify(extension === 'json' ? [row] : row));
+      fs.writeFileSync(path.join(base, 'cli-vars.yaml'), 'doc: wrong working-directory copy\n');
+      fs.writeFileSync(path.join(configDirectory, 'cli-vars.yaml'), 'doc: config-directory copy\n');
+
+      const [loaded] = await readTestConfigs(path.join(base, source), configDirectory, {});
+      expect(loaded.vars).toEqual({ doc: 'config-directory copy' });
+      expect(loaded.provider).toBe(`file://${path.join(configDirectory, 'cli-provider.js')}`);
+      const watched = resolveTestsWatchPaths(source, base, configDirectory);
+      expect(watched).toEqual(
+        expect.arrayContaining([
+          path.join(base, source),
+          path.join(configDirectory, 'cli-vars.yaml'),
+          path.join(configDirectory, 'cli-provider.js'),
+        ]),
+      );
+      expect(watched).not.toContain(path.join(base, 'cli-vars.yaml'));
+      expect(watched).not.toContain(path.join(base, 'cli-provider.js'));
+    },
+  );
 
   it('watches file references nested inside a .jsonl tests file', () => {
     fs.writeFileSync(
@@ -252,6 +349,16 @@ describe('resolveTestsWatchPaths', () => {
     fs.writeFileSync(path.join(base, 'varsdir/one.yaml'), '');
     const watched = resolve([{ vars: 'varsdir/*.yaml' }] as unknown as TestSuiteConfig['tests']);
     expect(watched).toContain(path.join(base, 'varsdir/one.yaml'));
+  });
+
+  it('matches the bare-vars loader glob precedence when a literal sibling exists', async () => {
+    fs.writeFileSync(path.join(base, 'vars[12].yaml'), 'doc: literal\n');
+    fs.writeFileSync(path.join(base, 'vars1.yaml'), 'doc: glob match\n');
+
+    expect(await readTestFiles('vars[12].yaml', base)).toEqual({ doc: 'glob match' });
+    expect(resolve([{ vars: 'vars[12].yaml' }] as unknown as TestSuiteConfig['tests'])).toEqual([
+      path.join(base, 'vars1.yaml'),
+    ]);
   });
 
   it('resolves every entry of a vars-file array', () => {

@@ -142,11 +142,10 @@ vi.mock('../../../src/util/file', async () => {
 });
 
 vi.mock('../../../src/util/testCaseReader', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../src/util/testCaseReader')>();
   const readRows = vi.fn(async (tests) => (Array.isArray(tests) ? tests : []));
   return {
-    isRemoteTestsReference: (
-      await importOriginal<typeof import('../../../src/util/testCaseReader')>()
-    ).isRemoteTestsReference,
+    isRemoteTestsReference: actual.isRemoteTestsReference,
     readTest: vi.fn(async (test) => test),
     readTestConfig: vi.fn(async (test) => test),
     readTests: readRows,
@@ -1664,6 +1663,9 @@ describe('resolveConfigs', () => {
       [`file://${path.resolve('/mock/cwd/tests.yaml')}`],
       path.resolve('.'),
       {},
+      // The suite directory, so rows read from it keep their authored var references.
+      path.resolve('.'),
+      path.resolve('.'),
     );
 
     expect(testSuite).toMatchObject({

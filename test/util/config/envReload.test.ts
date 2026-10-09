@@ -2119,8 +2119,10 @@ describe('suite environment loading', () => {
       expect((config.tests as TestCase[])[1].provider).toBe(
         `file://${path.join(base, 'nested/provider.py')}:call_api`,
       );
-      // Inline file:// vars stay config-relative, matching prompt rendering.
-      expect(testSuite.tests?.[1].vars?.doc).toBe(`file://${path.join(base, 'doc.txt')}`);
+      // Inline file:// vars keep their authored reference. Rendering resolves it from the
+      // config directory, not from the tests file's directory.
+      expect(testSuite.tests?.[1].vars?.doc).toBe('file://doc.txt');
+      expect((config.tests as TestCase[])[1].vars?.doc).toBe('file://doc.txt');
     },
   );
 

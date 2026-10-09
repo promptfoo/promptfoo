@@ -23,6 +23,7 @@ import { parseAzureBlobUri, readAzureBlobText, sanitizeAzureBlobUriForError } fr
 import { maybeLoadConfigFromExternalFile } from './file';
 import { isJavascriptFile } from './fileExtensions';
 import { renderEnvOnlyInObject } from './render';
+import { mapVarFileReferences, pinVarFileReference } from './varFileReferences';
 import { parseXlsxFile } from './xlsx';
 import { loadYaml } from './yamlLoad';
 
@@ -552,7 +553,9 @@ async function readTestWithEnv(
   }
 
   if (!loadProviders) {
-    testCase.vars = resolveVarsFileReferences(testCase.vars, basePath) as TestCase['vars'];
+    // Env templates in file vars are rendered here, for the default test as for any other
+    // row. The references stay relative; `readTestConfigs` pins the ones that need it.
+    testCase.vars = mapVarFileReferences(testCase.vars, renderEnvOnlyInObject);
     if (typeof testCase.provider === 'string' && testCase.provider.startsWith('file://')) {
       testCase.provider = resolveVarsFileReferences(testCase.provider, effectiveBasePath) as string;
     } else if (
@@ -639,6 +642,7 @@ async function loadTestsFromGlobWithEnv(
   basePath: string,
   env: EnvOverrides | undefined,
   loadProviders = true,
+  testsBasePath = basePath,
 ): Promise<TestCase[]> {
   loadTestsGlob = renderEnvOnlyInObject(loadTestsGlob);
   if (loadTestsGlob.startsWith('huggingface://datasets/')) {
@@ -651,19 +655,13 @@ async function loadTestsFromGlobWithEnv(
   if (loadTestsGlob.startsWith('file://')) {
     loadTestsGlob = loadTestsGlob.slice('file://'.length);
   }
-  const resolvedPath = path.resolve(basePath, loadTestsGlob);
+  const resolvedPath = path.resolve(testsBasePath, loadTestsGlob);
 
   const testFiles: string[] = fs.existsSync(resolvedPath)
     ? [resolvedPath]
-    : globSync(
-        path.resolve(
-          escapeGlob(path.resolve(basePath), { windowsPathsNoEscape: true }),
-          path.relative(path.resolve(basePath), resolvedPath),
-        ),
-        {
-          windowsPathsNoEscape: true,
-        },
-      );
+    : globSync(toTestsGlob(testsBasePath, loadTestsGlob), {
+        windowsPathsNoEscape: true,
+      });
 
   // Check for possible function names in the path (Windows-aware)
   const pathWithoutFunction = stripFunctionSuffix(resolvedPath);
@@ -687,7 +685,7 @@ async function loadTestsFromGlobWithEnv(
   const ret: TestCase[] = [];
   if (testFiles.length < 1) {
     const message = `No test files found for path: ${resolvedPath}`;
-    if (!hasGlobMagic(path.relative(path.resolve(basePath), resolvedPath))) {
+    if (!hasGlobMagic(path.relative(path.resolve(testsBasePath), resolvedPath))) {
       throw new Error(message);
     }
     logger.warn(message);
@@ -761,14 +759,59 @@ export async function readTests(
   );
 }
 
-/** Parse source files once and retain declarative rows for persistence and replay. */
+/**
+ * Parse source files once and retain declarative rows for persistence and replay.
+ *
+ * `file://` vars are resolved from `suiteBasePath` when the evaluation runs. Rows read from
+ * that same directory keep their references as authored, so results, exports and test
+ * identity do not depend on where the project is checked out. Rows read from another
+ * directory (an additional config file) would resolve from the wrong place, so their
+ * references are pinned to the directory they were authored in.
+ */
 export async function readTestConfigs(
   tests: TestSuiteConfig['tests'],
   basePath: string = cliState.basePath || '',
   env: EnvOverrides | undefined = cliState.env,
+  suiteBasePath: string = basePath,
+  // CLI --tests references are located from CWD, while their rows use the config directory.
+  testsBasePath: string = basePath,
 ): Promise<TestCase[]> {
   return cliState.withBasePath(basePath, () =>
-    cliState.withEnv(env, () => readTestsWithEnv(tests, basePath, env, false)),
+    cliState.withEnv(env, async () => {
+      const rows = await readTestsWithEnv(tests, basePath, env, false, testsBasePath);
+      const pinTo = path.resolve(basePath) === path.resolve(suiteBasePath) ? undefined : basePath;
+      return rows.map((row) => {
+        if (isRemoteTestCase(row)) {
+          return row;
+        }
+        const vars = mapVarFileReferences(row.vars, (value) => {
+          const reference = renderEnvOnlyInObject(value);
+          return pinTo === undefined ? reference : pinVarFileReference(reference, pinTo);
+        });
+        const providerId = typeof row.provider === 'string' ? row.provider : row.provider?.id;
+        // Provider construction happens later from the suite directory, so retain this
+        // row's origin unless an imported file already supplied a more specific one.
+        if (
+          pinTo !== undefined &&
+          typeof providerId === 'string' &&
+          !isApiProvider(row.provider) &&
+          !row.metadata?.__promptfoo?.providerBasePath
+        ) {
+          return {
+            ...row,
+            vars,
+            metadata: {
+              ...row.metadata,
+              __promptfoo: {
+                ...row.metadata?.__promptfoo,
+                providerBasePath: path.resolve(basePath),
+              },
+            },
+          };
+        }
+        return vars === row.vars ? row : { ...row, vars };
+      });
+    }),
   );
 }
 
@@ -777,10 +820,11 @@ async function readTestsWithEnv(
   basePath: string,
   env: EnvOverrides | undefined,
   loadProviders = true,
+  testsBasePath = basePath,
 ): Promise<TestCase[]> {
   const loadStandalone = async (source: string, config?: Record<string, any>) => {
     source = renderEnvOnlyInObject(source);
-    const tests = await readStandaloneTestsFile(source, basePath, config);
+    const tests = await readStandaloneTestsFile(source, testsBasePath, config);
     if (isRemoteTestsReference(source)) {
       // Resolve local provider and vars references only for local sources.
       return tests;
@@ -797,10 +841,10 @@ async function readTestsWithEnv(
     }
     // Points to a tests file with multiple test cases
     if (source.endsWith('yaml') || source.endsWith('yml')) {
-      return loadTestsFromGlobWithEnv(source, basePath, env, loadProviders);
+      return loadTestsFromGlobWithEnv(source, basePath, env, loadProviders, testsBasePath);
     }
     const withoutScheme = source.replace(/^file:\/\//, '');
-    if (!hasGlobMagic(withoutScheme) || fs.existsSync(path.resolve(basePath, withoutScheme))) {
+    if (!hasGlobMagic(withoutScheme) || fs.existsSync(path.resolve(testsBasePath, withoutScheme))) {
       // Preserve standalone parsing for literal files, including names with glob characters.
       return loadStandalone(source);
     }
@@ -849,7 +893,15 @@ async function readTestsWithEnv(
         ret.push(...(await loadStandalone(globOrTest)));
       } else {
         // Resolve globs for other file types
-        ret.push(...(await loadTestsFromGlobWithEnv(globOrTest, basePath, env, loadProviders)));
+        ret.push(
+          ...(await loadTestsFromGlobWithEnv(
+            globOrTest,
+            basePath,
+            env,
+            loadProviders,
+            testsBasePath,
+          )),
+        );
       }
     } else if (isRemoteTestCase(globOrTest as TestCase)) {
       ret.push(globOrTest as TestCase);
@@ -936,6 +988,19 @@ function hasGlobMagic(reference: string): boolean {
 }
 
 /**
+ * The glob pattern for a tests reference resolved from `basePath`.
+ *
+ * The lookup directory is literal; user-authored components retain their glob syntax.
+ * Keep it separate from the directory used to resolve dependencies inside loaded rows.
+ */
+function toTestsGlob(basePath: string, reference: string): string {
+  const escape = (directory: string) => escapeGlob(directory, { windowsPathsNoEscape: true });
+  const base = path.resolve(basePath);
+  const resolvedPath = path.resolve(base, reference);
+  return path.resolve(escape(base), path.relative(base, resolvedPath));
+}
+
+/**
  * Resolve a single `tests` string reference to the file paths the loader will read.
  *
  * Globs are expanded with the same `globSync` call `loadTestsFromGlob` uses, because
@@ -943,7 +1008,11 @@ function hasGlobMagic(reference: string): boolean {
  * watching a pattern's parent directory instead would rerun the evaluation on every
  * unrelated edit beneath it, including the run's own output file.
  */
-function resolveTestsFileReference(reference: string, basePath: string): string[] {
+function resolveTestsFileReference(
+  reference: string,
+  basePath: string,
+  literalFirst = true,
+): string[] {
   reference = renderEnvOnlyInObject(reference);
   const withoutScheme = reference.replace(/^file:\/\//, '');
   if (isRemoteTestsReference(withoutScheme)) {
@@ -951,14 +1020,8 @@ function resolveTestsFileReference(reference: string, basePath: string): string[
   }
 
   const resolved = path.resolve(basePath, withoutScheme);
-  if (hasGlobMagic(withoutScheme)) {
-    const matches = globSync(
-      path.resolve(
-        escapeGlob(path.resolve(basePath), { windowsPathsNoEscape: true }),
-        path.relative(path.resolve(basePath), resolved),
-      ),
-      { windowsPathsNoEscape: true },
-    );
+  if ((!literalFirst || !fs.existsSync(resolved)) && hasGlobMagic(withoutScheme)) {
+    const matches = globSync(toTestsGlob(basePath, withoutScheme), { windowsPathsNoEscape: true });
     if (matches.length > 0) {
       return matches.map((match) => stripSheetSelector(match));
     }
@@ -1069,6 +1132,9 @@ function collectConfigFileReferences(
 export function resolveTestsWatchPaths(
   tests: TestSuiteConfig['tests'],
   basePath: string = cliState.basePath || '',
+  // Directory the evaluation resolves row dependencies from. It differs from
+  // `basePath` for `--tests`, which is located from the working directory.
+  rowBasePath: string = basePath,
 ): string[] {
   if (tests == null) {
     return [];
@@ -1090,8 +1156,8 @@ export function resolveTestsWatchPaths(
         file,
         ...collectNestedFileReferences(
           file,
-          basePath,
-          useSourceDirectory ? path.dirname(file) : basePath,
+          rowBasePath,
+          useSourceDirectory ? path.dirname(file) : rowBasePath,
         ),
       ]);
     }
@@ -1111,7 +1177,8 @@ export function resolveTestsWatchPaths(
       if (typeof entry.vars === 'string' || Array.isArray(entry.vars)) {
         const references = Array.isArray(entry.vars) ? entry.vars : [entry.vars];
         return references.flatMap((value) =>
-          typeof value === 'string' ? resolveTestsFileReference(value, basePath) : [],
+          // Bare vars paths are always globbed by readTestFiles, even when a literal exists.
+          typeof value === 'string' ? resolveTestsFileReference(value, basePath, false) : [],
         );
       }
       // A mapping: only file:// values are file references, the rest are literal vars.
