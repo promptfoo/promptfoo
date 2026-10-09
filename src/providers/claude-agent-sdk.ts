@@ -1837,7 +1837,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       promptCredentialOverrideBypassesCache ||
       statefulSessionBypassesCache ||
       externalCredentialProviderBypassesCache
-        ? { shouldCache: false, shouldReadCache: false, shouldWriteCache: false }
+        ? { shouldReadCache: false, shouldWriteCache: false }
         : await initializeAgenticCache(
             {
               cacheKeyPrefix: 'anthropic:claude-agent-sdk',
