@@ -402,9 +402,11 @@ export class ElevenLabsAgentsProvider implements ApiProvider {
     this.operationController.abort();
     this.agentCreationController.abort();
     const cleanup = this.cleanupAgents().finally(() => {
-      // Retain failed IDs for a later cleanup call, without recursively registering
-      // new shutdown work during process termination.
-      providerRegistry.unregister(this.resource);
+      if (this.pendingAgentDeletions.size > 0) {
+        providerRegistry.retainForProcessShutdown(this.resource);
+      } else {
+        providerRegistry.unregister(this.resource);
+      }
       if (this.cleanupPromise === cleanup) {
         this.cleanupPromise = undefined;
       }

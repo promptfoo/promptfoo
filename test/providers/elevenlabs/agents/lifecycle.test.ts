@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ElevenLabsAgentsProvider } from '../../../../src/providers/elevenlabs/agents';
 import { ElevenLabsAPIError } from '../../../../src/providers/elevenlabs/errors';
-import { providerRegistry } from '../../../../src/providers/providerRegistry';
+import { ProviderRegistry, providerRegistry } from '../../../../src/providers/providerRegistry';
 
 const client = vi.hoisted(() => ({ post: vi.fn(), delete: vi.fn() }));
 vi.mock('../../../../src/providers/elevenlabs/client', () => ({
@@ -34,6 +34,46 @@ const createProvider = () =>
   });
 
 describe('ephemeral agent lifecycle', () => {
+  it.each([
+    { recovered: true, terminal: true },
+    { recovered: false, terminal: true },
+    { recovered: false, terminal: false },
+  ])(
+    'retries failed idle deletion once at shutdown ($recovered, terminal=$terminal)',
+    async ({ recovered, terminal }) => {
+      const registry = new ProviderRegistry(false);
+      vi.spyOn(providerRegistry, 'register').mockImplementation(registry.register.bind(registry));
+      vi.spyOn(providerRegistry, 'unregister').mockImplementation(
+        registry.unregister.bind(registry),
+      );
+      vi.spyOn(providerRegistry, 'useResource').mockImplementation(
+        registry.useResource.bind(registry),
+      );
+      vi.spyOn(providerRegistry, 'throwIfResourceUseAborted').mockImplementation(
+        registry.throwIfResourceUseAborted.bind(registry),
+      );
+      vi.spyOn(providerRegistry, 'retainForProcessShutdown').mockImplementation(
+        registry.retainForProcessShutdown.bind(registry),
+      );
+      client.delete.mockRejectedValue(new Error('unavailable'));
+      const provider = createProvider();
+      await registry.withEvaluation(() =>
+        registry.withProvider(provider, () => provider.callApi('hello')),
+      );
+      expect(client.delete).toHaveBeenCalledOnce();
+      if (recovered) {
+        client.delete.mockResolvedValue(undefined);
+      }
+      await (terminal ? registry.shutdownForProcess() : registry.shutdownAll());
+      expect(client.delete.mock.calls.map(([path]) => path)).toEqual([
+        '/convai/agents/owned-1',
+        '/convai/agents/owned-1',
+      ]);
+      await (terminal ? registry.shutdownForProcess() : registry.shutdownAll());
+      expect(client.delete).toHaveBeenCalledTimes(2);
+    },
+  );
+
   it('aborts pending creation during cleanup and can create a new agent later', async () => {
     let creationStarted!: () => void;
     const started = new Promise<void>((resolve) => {

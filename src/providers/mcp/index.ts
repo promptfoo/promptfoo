@@ -239,6 +239,6 @@ export class MCPProvider implements ApiProvider {
 
   // Get connected servers
   getConnectedServers() {
-    return this.mcpClient.connectedServers;
+    return this.mcpSession.client?.connectedServers ?? [];
   }
 }
