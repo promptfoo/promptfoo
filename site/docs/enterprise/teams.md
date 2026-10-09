@@ -77,6 +77,8 @@ These instructions apply to Promptfoo Enterprise On-Prem versions with team-leve
 
 Repeat for each team. A shared deployment-level `OPENAI_API_KEY` alone does not separate spend by team. Changing only the [target's credentials](./red-teams.md#creating-targets) also does not configure the models used for test generation and grading.
 
+For automation, see **Get team red team provider override** and **Update team red team provider override** in the [API reference](/docs/api-reference/) for the provider configuration schema and permissions.
+
 ### Check generation and grading overrides
 
 The team's Red Team Provider supplies generation and grading unless a separate global provider is configured for that role:
