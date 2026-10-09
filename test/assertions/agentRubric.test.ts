@@ -56,6 +56,26 @@ describe('handleAgentRubric', () => {
       {},
       params.assertion,
       undefined,
+      undefined,
+    );
+  });
+
+  it("passes the target's reported working directory to the matcher", async () => {
+    mockMatchesAgentRubric.mockResolvedValue({ pass: true, score: 1, reason: 'verified' });
+
+    await handleAgentRubric({
+      ...params,
+      providerResponse: { output: 'Implemented', metadata: { workingDir: '/tmp/workspace' } },
+    });
+
+    expect(mockMatchesAgentRubric).toHaveBeenCalledWith(
+      'Verify the claimed change',
+      'Implemented',
+      {},
+      {},
+      params.assertion,
+      undefined,
+      '/tmp/workspace',
     );
   });
 
@@ -94,6 +114,7 @@ describe('handleAgentRubric', () => {
       { rubricPrompt: serializedPrompt },
       {},
       structuredParams.assertion,
+      undefined,
       undefined,
     );
   });
