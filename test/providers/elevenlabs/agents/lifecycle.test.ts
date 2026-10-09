@@ -190,7 +190,7 @@ describe('ElevenLabs ephemeral agent ownership', () => {
     ]);
   });
 
-  it('keeps an active peer evaluation alive during global registry shutdown', async () => {
+  it('keeps an active peer evaluation alive during scoped teardown', async () => {
     const simulationStarted = createDeferred<void>();
     const releaseSimulation = createDeferred<void>();
     let nextAgent = 0;
@@ -251,28 +251,47 @@ describe('ElevenLabs ephemeral agent ownership', () => {
     ]);
   });
 
-  it('lets an active simulation finish before explicit cleanup deletes its agent', async () => {
-    const simulationStarted = createDeferred<void>();
-    const releaseSimulation = createDeferred<void>();
-    post.mockResolvedValueOnce({ agent_id: 'active-agent' });
-    post.mockImplementationOnce(async () => {
-      simulationStarted.resolve();
-      await releaseSimulation.promise;
-      return { status: 'completed', simulated_conversation: [] };
-    });
-    const provider = createProvider();
-    const call = provider.callApi('First');
-    await simulationStarted.promise;
-    const cleanup = provider.cleanup();
-    try {
-      await Promise.resolve();
-      expect(deleteAgent).not.toHaveBeenCalled();
-    } finally {
-      releaseSimulation.resolve();
-      await Promise.all([call, cleanup]);
-    }
-    expect(deleteAgent.mock.calls).toEqual([['/convai/agents/active-agent']]);
-  });
+  it.each(['explicit cleanup', 'registry shutdown'])(
+    'waits for an active simulation and deletion during %s',
+    async (mode) => {
+      const simulationStarted = createDeferred<void>();
+      const releaseSimulation = createDeferred<void>();
+      const deletionStarted = createDeferred<void>();
+      const finishDeletion = createDeferred<void>();
+      deleteAgent.mockImplementationOnce(() => {
+        deletionStarted.resolve();
+        return finishDeletion.promise;
+      });
+      post.mockResolvedValueOnce({ agent_id: 'active-agent' });
+      post.mockImplementationOnce(async () => {
+        simulationStarted.resolve();
+        await releaseSimulation.promise;
+        return { status: 'completed', simulated_conversation: [] };
+      });
+      const provider = createProvider();
+      const call = provider.callApi('First');
+      await simulationStarted.promise;
+      let finished = false;
+      const cleanup = (
+        mode === 'explicit cleanup' ? provider.cleanup() : providerRegistry.shutdownAll()
+      ).then(() => {
+        finished = true;
+      });
+      try {
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        expect(finished).toBe(false);
+        expect(deleteAgent).not.toHaveBeenCalled();
+        releaseSimulation.resolve();
+        await deletionStarted.promise;
+        expect(finished).toBe(false);
+      } finally {
+        releaseSimulation.resolve();
+        finishDeletion.resolve();
+        await Promise.all([call, cleanup]);
+      }
+      expect(deleteAgent.mock.calls).toEqual([['/convai/agents/active-agent']]);
+    },
+  );
 
   it('leaves caller-owned agents unregistered during public API evaluations', async () => {
     const provider = createProvider('caller-owned');

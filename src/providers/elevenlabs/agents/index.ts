@@ -34,7 +34,6 @@ export class ElevenLabsAgentsProvider implements ApiProvider {
   private cleanupPromise: Promise<void> | null = null;
   private activeCalls = 0;
   private onIdle: (() => void) | null = null;
-  private shutdownRequested = false;
   private initPromise: Promise<void> | null = null;
 
   constructor(
@@ -187,9 +186,6 @@ export class ElevenLabsAgentsProvider implements ApiProvider {
       if (this.activeCalls === 0) {
         this.onIdle?.();
         this.onIdle = null;
-        if (this.shutdownRequested) {
-          await this.cleanup();
-        }
       }
     }
   }
@@ -395,16 +391,11 @@ export class ElevenLabsAgentsProvider implements ApiProvider {
     return this.cleanupPromise;
   }
 
-  async shutdown(): Promise<void> {
-    // A different evaluation can request global teardown while this provider is active.
-    this.shutdownRequested = true;
-    if (this.activeCalls === 0) {
-      await this.cleanup();
-    }
+  shutdown(): Promise<void> {
+    return this.cleanup();
   }
 
   private async cleanupOwnedAgent(): Promise<void> {
-    this.shutdownRequested = false;
     providerRegistry.unregister(this);
     if (this.activeCalls > 0) {
       await new Promise<void>((resolve) => {
