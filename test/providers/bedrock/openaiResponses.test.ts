@@ -489,6 +489,53 @@ describe('bedrock openaiResponses helper', () => {
         },
       );
 
+      it.each([
+        ['configured region', { region: 'us-west-2' }, true],
+        [
+          'explicit Mantle endpoint',
+          { apiBaseUrl: 'https://bedrock-mantle.us-west-2.api.aws/openai/v1' },
+          true,
+        ],
+        ['listed region', { region: 'us-east-1' }, false],
+        ['custom proxy', { apiBaseUrl: 'https://proxy.example.test/openai/v1' }, false],
+      ] as const)('handles service-tier rejection for a %s', async (_case, config, hasHint) => {
+        const data = {
+          error: {
+            code: 'invalid_value',
+            message:
+              "Invalid value: 'ultrafast'. Supported values are: 'auto', 'default', 'flex', and 'priority'.",
+            param: 'service_tier',
+            type: 'invalid_request_error',
+          },
+        };
+        vi.mocked(fetchWithCache).mockResolvedValue({
+          data,
+          cached: false,
+          status: 400,
+          statusText: 'Bad Request',
+        });
+        const provider = createBedrockOpenAiResponsesProvider('openai.gpt-6.1-sol', {
+          config: { apiKey: 'bedrock-key', service_tier: 'ultrafast', ...config },
+        });
+
+        const result = await provider.callApi('hello');
+        const repeated = await provider.callApi('hello');
+
+        expect(result.metadata?.http?.status).toBe(400);
+        expect(result.error).toContain(`API error: 400 Bad Request\n${JSON.stringify(data)}`);
+        expect(repeated.error).toBe(result.error);
+        if (hasHint) {
+          expect(result.error).toContain('a listed Region: us-east-1.');
+          expect(result.error).toContain(
+            'apiBaseUrl' in config ? 'Point config.apiBaseUrl' : 'Set config.region',
+          );
+          expect(errorSpy).toHaveBeenCalledTimes(1);
+        } else {
+          expect(result.error).toBe(`API error: 400 Bad Request\n${JSON.stringify(data)}`);
+          expect(errorSpy).not.toHaveBeenCalled();
+        }
+      });
+
       it.each(['factory', 'direct'])(
         'keeps region remediation for a generated Mantle endpoint (%s)',
         async (mode) => {
@@ -560,7 +607,7 @@ describe('bedrock openaiResponses helper', () => {
           { region: 'us-east-1', apiBaseUrl: 'https://proxy.example.test/openai/v1' },
           404,
         ],
-        ['a non-404 error', 'openai.gpt-6-astra', { region: 'us-east-1' }, 400],
+        ['an unrelated validation error', 'openai.gpt-6-astra', { region: 'us-east-1' }, 400],
       ])('leaves the error unchanged for %s', async (_, model, config, status) => {
         mockMantleResponse(model, status);
         const provider = createBedrockOpenAiResponsesProvider(model, {
@@ -772,6 +819,35 @@ describe('bedrock openaiResponses helper', () => {
         await expect(provider.getOpenAiBody('hello', context as any)).rejects.toThrow(
           `supports only the standard inference tier; received "${tier}"`,
         );
+      },
+    );
+
+    it.each([
+      ['provider config', { serviceTier: 'ultrafast' }, undefined],
+      ['Converse-style provider config', { serviceTier: { type: 'priority' } }, undefined],
+      ['null provider config', { serviceTier: null }, undefined],
+      [
+        'conflicting provider config',
+        { service_tier: 'ultrafast', serviceTier: 'default' },
+        undefined,
+      ],
+      ['provider passthrough', { passthrough: { serviceTier: 'ultrafast' } }, undefined],
+      ['prompt config', {}, { serviceTier: 'ultrafast' }],
+      ['prompt passthrough', {}, { passthrough: { serviceTier: 'ultrafast' } }],
+    ] as const)(
+      'rejects camelCase serviceTier in %s before sending a request',
+      async (_case, config, promptConfig) => {
+        const provider = createBedrockOpenAiResponsesProvider('openai.gpt-6.1-sol', {
+          config: { apiKey: 'bedrock-key', ...config },
+        });
+
+        await expect(
+          provider.callApi('hello', {
+            prompt: { raw: 'hello', label: 'hello', config: promptConfig },
+            vars: {},
+          }),
+        ).rejects.toThrow('Replace serviceTier with service_tier');
+        expect(fetchWithCache).not.toHaveBeenCalled();
       },
     );
 
