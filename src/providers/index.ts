@@ -499,10 +499,6 @@ async function loadApiProvidersWithEnv(
             throw new Error(
               `Invalid provider at index ${idx}: expected a provider id string, ProviderOptions with an 'id' field, or a ProviderOptionsMap (e.g. { "openai:responses:gpt-5.4": { config: ... } }). Got: ${describeInvalidProvider(provider)}`,
             );
-          default: {
-            const _exhaustive: never = descriptor;
-            throw new Error(`Unhandled provider kind: ${(_exhaustive as any).kind}`);
-          }
         }
       }),
     );
