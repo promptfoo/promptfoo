@@ -14,12 +14,9 @@ import type {
   SessionCreateParams,
 } from '@anthropic-ai/sdk/resources/beta/sessions/sessions';
 
-import type { EnvOverrides } from '../../types/env';
-import type {
-  CallApiContextParams,
-  CallApiOptionsParams,
-  ProviderResponse,
-} from '../../types/index';
+import type { EnvOverrides } from '../../contracts/env';
+import type { ProviderResponse } from '../../contracts/providers';
+import type { CallApiContextParams, CallApiOptionsParams } from '../../types/providers';
 import type { AnthropicBaseOptions } from './types';
 
 // The public October 2026 workflow API is newer than the pinned SDK's types.
