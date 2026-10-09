@@ -1,9 +1,20 @@
 import { fetchWithCache } from '../cache';
+import { getEnvString } from '../envars';
 import logger from '../logger';
+import { isCallerAbortError } from '../util/fetch/requestSignal';
+import {
+  isResponseHeadersObserverError,
+  preserveResponseHeadersObserverError,
+} from '../util/fetch/responseHeadersObserver';
 import { normalizeFinishReason } from '../util/finishReason';
 import { OpenAiChatCompletionProvider } from './openai/chat';
-import { calculateOpenAICost, formatOpenAiError, getTokenUsage } from './openai/util';
-import { getRequestTimeoutMs } from './shared';
+import {
+  calculateOpenAICost,
+  formatOpenAiError,
+  getTokenUsage,
+  isOpenAiErrorOnlyResponse,
+} from './openai/util';
+import { getRequestTimeoutMs, throwIfAborted, waitForPromiseWithAbort } from './shared';
 import type OpenAI from 'openai';
 
 import type {
@@ -45,7 +56,9 @@ import type {
 export class SnowflakeCortexProvider extends OpenAiChatCompletionProvider {
   constructor(modelName: string, providerOptions: ProviderOptions) {
     const accountIdentifier =
-      providerOptions.config?.accountIdentifier || process.env.SNOWFLAKE_ACCOUNT_IDENTIFIER;
+      providerOptions.config?.accountIdentifier ||
+      (providerOptions.env?.SNOWFLAKE_ACCOUNT_IDENTIFIER ??
+        getEnvString('SNOWFLAKE_ACCOUNT_IDENTIFIER'));
 
     if (!accountIdentifier && !providerOptions.config?.apiBaseUrl) {
       throw new Error(
@@ -94,8 +107,13 @@ export class SnowflakeCortexProvider extends OpenAiChatCompletionProvider {
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
+    throwIfAborted(callApiOptions?.abortSignal);
     // Get the request body and config from parent class
-    const { body, config } = await this.getOpenAiBody(prompt, context, callApiOptions);
+    const { body, config } = await waitForPromiseWithAbort(
+      this.getOpenAiBody(prompt, context, callApiOptions),
+      callApiOptions?.abortSignal,
+    );
+    throwIfAborted(callApiOptions?.abortSignal);
 
     // Make the API call to Snowflake Cortex endpoint
     logger.debug('[Snowflake Cortex] Calling API', {
@@ -136,22 +154,41 @@ export class SnowflakeCortexProvider extends OpenAiChatCompletionProvider {
               ...config.headers,
             },
             body: JSON.stringify(body),
+            ...(callApiOptions?.abortSignal ? { signal: callApiOptions.abortSignal } : {}),
           },
           getRequestTimeoutMs(),
           'json',
           context?.bustCache ?? context?.debug,
+          undefined,
+          (response) => {
+            if (response.status >= 200 && response.status < 300 && response.headers) {
+              callApiOptions?.onResponseHeaders?.(response.headers);
+            }
+          },
+          callApiOptions?.onResponseHeaders
+            ? (backoff) => callApiOptions.onResponseHeaders?.(backoff.headers, backoff)
+            : undefined,
         ));
-
       if (status < 200 || status >= 300) {
         return {
           error: `API error: ${status} ${statusText}\n${typeof data === 'string' ? data : JSON.stringify(data)}`,
         };
       }
+      if (isOpenAiErrorOnlyResponse(data)) {
+        return { error: formatOpenAiError(data) };
+      }
+      throwIfAborted(callApiOptions?.abortSignal);
     } catch (err) {
+      if (
+        !isResponseHeadersObserverError(callApiOptions?.onResponseHeaders, err) &&
+        isCallerAbortError(err, callApiOptions?.abortSignal)
+      ) {
+        throwIfAborted(callApiOptions?.abortSignal);
+      }
       logger.error(`[Snowflake Cortex] API call error: ${String(err)}`);
-      return {
+      return preserveResponseHeadersObserverError(callApiOptions?.onResponseHeaders, err, {
         error: `API call error: ${String(err)}`,
-      };
+      });
     }
 
     if (data.error) {

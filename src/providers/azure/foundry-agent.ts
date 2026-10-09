@@ -1,6 +1,7 @@
 import { createHmac } from 'crypto';
 
 import { getCache, isCacheEnabled } from '../../cache';
+import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import { setGenAIResponseAttributes } from '../../tracing/genaiTracer';
 import { rateLimitTimingFromHeaders } from '../../util/fetch';
@@ -296,7 +297,9 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
   constructor(deploymentName: string, options: AzureAssistantProviderOptions = {}) {
     super(deploymentName, options);
     this.assistantConfig = options.config || {};
-    this.projectUrl = options.config?.projectUrl || process.env.AZURE_AI_PROJECT_URL || '';
+    this.projectUrl =
+      options.config?.projectUrl ||
+      (options.env?.AZURE_AI_PROJECT_URL ?? getEnvString('AZURE_AI_PROJECT_URL') ?? '');
 
     if (!this.projectUrl) {
       throw new Error(
