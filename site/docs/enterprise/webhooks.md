@@ -1,7 +1,7 @@
 ---
 sidebar_label: Webhook Integration
 title: Webhook Integration
-description: Receive Promptfoo Enterprise issue, remediation, and eval notifications. Configure team-scoped webhooks, rotate secrets, and verify request signatures safely.
+description: Receive Promptfoo Enterprise issue, remediation, and eval notifications. Configure organization webhooks, rotate secrets, and verify request signatures safely.
 ---
 
 # Webhook Integration
@@ -14,7 +14,7 @@ An "issue" in Promptfoo Enterprise refers to a **security vulnerability** or wea
 
 ## Event Types
 
-The following webhook event types are available:
+Supported webhook event types include:
 
 - `issue.created`: Triggered when a new security vulnerability is detected and created
 - `issue.updated`: Triggered when a vulnerability is updated (such as when multiple attributes change at once)
@@ -25,6 +25,9 @@ The following webhook event types are available:
 - `evaluation.created`: Triggered when an eval job is created
 - `evaluation.completed`: Triggered when an eval job completes, including partial completion
 - `evaluation.failed`: Triggered when an eval job fails
+- `team.created`, `team.updated`, `team.deleted`: Team lifecycle events
+- `target.created`, `target.updated`, `target.deleted`: Target lifecycle events
+- `scan_template.created`, `scan_template.updated`, `scan_template.deleted`: Scan-template lifecycle events
 
 > Note: When multiple properties of a vulnerability are updated simultaneously (for example, both status and severity), a single issue.updated event will be sent rather than separate issue.status_changed and issue.severity_changed events. This helps prevent webhook consumers from receiving multiple notifications for what is logically a single update operation.
 
@@ -32,13 +35,13 @@ The following webhook event types are available:
 
 On-prem administrators can manage webhooks under **Organization → Webhooks** or through the API. Management requires organization-admin access. Use your signed-in administrator session or an administrator [service-account API key](./service-accounts.md); team-scoped user API tokens are rejected.
 
-Each webhook subscribes to selected events for one team. When creating a webhook through the API, set `teamId` to that team's UUID. If omitted, the webhook belongs to the organization's default team, including webhooks created through the UI. It does not receive events from other teams.
+Each webhook subscribes to selected events across its organization. The API stores a `teamId` on the subscription (the organization's default team if omitted, including through the UI), but delivery does **not** filter events by that team. Choose a receiver authorized to handle the selected events from every team in the organization.
 
 For request and response schemas, see **Create webhook**, **List webhook event types**, and **Regenerate webhook secret** in the [API reference](/docs/api-reference/), or download the [OpenAPI specification](https://api.promptfoo.app/static/openapi.json).
 
 ### Creating a Webhook
 
-Using an administrator service-account API key, send the following request, replacing the example `teamId` with the intended team's UUID. With an authenticated administrator session, omit the `Authorization` header.
+Using an administrator service-account API key, send the following request, replacing the example `teamId` with a team UUID from your organization. This field does not restrict event delivery to that team. With an authenticated administrator session, omit the `Authorization` header.
 
 ```http
 POST /api/v1/webhooks
@@ -164,7 +167,7 @@ app.post(
 
 Promptfoo sends an HTTP `POST` and expects a `2xx` response within 10 seconds. Redirects are not followed. Deliveries are asynchronous, with no automatic retries for failures. The `X-Webhook-Id` header identifies the webhook subscription, not an individual event.
 
-To test the integration, trigger a subscribed event in the webhook's team, such as adding an issue comment. If it does not arrive, check that the webhook is enabled, its team and event subscription match, and the Promptfoo server can reach the endpoint. For HTTPS, check that the server trusts the endpoint's certificate. On managed Promptfoo Cloud, private and reserved network destinations are blocked; on-prem receivers can use internal addresses reachable from the deployment.
+To test the integration, trigger a subscribed event in the webhook's organization, such as adding an issue comment. If it does not arrive, check that the webhook is enabled, its organization and event subscription match, and the Promptfoo server can reach the endpoint. For HTTPS, check that the server trusts the endpoint's certificate. On managed Promptfoo Cloud, private and reserved network destinations are blocked; on-prem receivers can use internal addresses reachable from the deployment.
 
 If signature verification fails, check the raw body and current signing secret. On-prem administrators can inspect server logs for `Failed to send webhook` and the endpoint's response status or connection error.
 
