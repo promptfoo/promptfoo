@@ -653,25 +653,19 @@ describe('CloudflareGateway Provider', () => {
   });
 
   describe('Supported Providers', () => {
-    // Note: bedrock is NOT supported because it requires AWS request signing
-    // azure-openai and workers-ai have special URL handling but are supported
+    // Note: azure-openai has special URL handling but is supported
     const supportedProviders = [
       'openai',
       'anthropic',
       'groq',
       'perplexity-ai',
-      'google-ai-studio',
       'mistral',
-      'cohere',
       'azure-openai',
-      'workers-ai',
-      'huggingface',
-      'replicate',
       'grok',
     ];
 
     it.each(supportedProviders)('should support %s provider', (providerName) => {
-      // azure-openai and workers-ai need extra config
+      // azure-openai needs extra config
       const extraConfig =
         providerName === 'azure-openai'
           ? { resourceName: 'test-resource', deploymentName: 'test-deployment' }
@@ -687,12 +681,36 @@ describe('CloudflareGateway Provider', () => {
       expect(provider.id()).toBe(`cloudflare-gateway:${providerName}:test-model`);
     });
 
-    it('should not support bedrock provider', () => {
-      expect(() =>
-        createCloudflareGatewayProvider('cloudflare-gateway:bedrock:anthropic.claude-v2', {
-          config: minimumConfig,
-        }),
-      ).toThrow('Unsupported Cloudflare AI Gateway provider');
+    // bedrock requires AWS request signing; the rest expose native endpoints that
+    // reject OpenAI Chat Completions payloads.
+    const unsupportedProviders = [
+      'bedrock',
+      'workers-ai',
+      'google-ai-studio',
+      'cohere',
+      'huggingface',
+      'replicate',
+    ];
+
+    it.each([...unsupportedProviders, 'unknown', 'toString', 'constructor', '__proto__'])(
+      'rejects %s before credential resolution through either entry point',
+      (providerName) => {
+        const expected = new Error(
+          `Unsupported Cloudflare AI Gateway provider: "${providerName}". Supported providers: ${supportedProviders.join(', ')}`,
+        );
+        expect(() =>
+          createCloudflareGatewayProvider(`cloudflare-gateway:${providerName}:test-model`),
+        ).toThrow(expected);
+        expect(() => new CloudflareGatewayOpenAiProvider(providerName, 'test-model', {})).toThrow(
+          expected,
+        );
+      },
+    );
+
+    it('requires the Messages provider for direct Anthropic construction', () => {
+      expect(() => new CloudflareGatewayOpenAiProvider('anthropic', 'test-model', {})).toThrow(
+        'Use CloudflareGatewayAnthropicProvider for the Anthropic Messages route.',
+      );
     });
   });
 
@@ -855,50 +873,6 @@ describe('CloudflareGateway Provider', () => {
         expect.stringContaining('api-version=2024-06-01'),
         expect.any(Object),
       );
-    });
-  });
-
-  describe('Workers AI Provider', () => {
-    it('should construct correct URL with model in path', async () => {
-      const provider = new CloudflareGatewayOpenAiProvider(
-        'workers-ai',
-        '@cf/meta/llama-3.1-8b-instruct',
-        {
-          config: minimumConfig,
-        },
-      );
-
-      const responsePayload = {
-        choices: [{ message: { content: 'Test' } }],
-        usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-      };
-      const mockResponse = {
-        ...defaultMockResponse,
-        text: vi.fn().mockResolvedValue(JSON.stringify(responsePayload)),
-        ok: true,
-      };
-      mockFetch.mockResolvedValue(mockResponse);
-
-      await provider.callApi('Test prompt');
-
-      expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining(
-          'https://gateway.ai.cloudflare.com/v1/testAccountId/testGatewayId/workers-ai/@cf/meta/llama-3.1-8b-instruct',
-        ),
-        expect.any(Object),
-      );
-    });
-
-    it('should return correct id for workers-ai provider', () => {
-      const provider = new CloudflareGatewayOpenAiProvider(
-        'workers-ai',
-        '@cf/meta/llama-3.1-8b-instruct',
-        {
-          config: minimumConfig,
-        },
-      );
-
-      expect(provider.id()).toBe('cloudflare-gateway:workers-ai:@cf/meta/llama-3.1-8b-instruct');
     });
   });
 });
