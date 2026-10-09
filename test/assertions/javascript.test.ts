@@ -1965,13 +1965,8 @@ describe('JavaScript file references', () => {
       // Mock isPackagePath to return false for file:// paths
       vi.mocked(isPackagePath).mockReturnValue(false);
 
-      // Mock importModule to handle both path and functionName
       const mockImportModule = vi.mocked(importModule);
-      mockImportModule.mockImplementation((path, functionName) => {
-        // Make sure both parameters are captured in the mock
-        mockImportModule.mock.calls.push([path, functionName]);
-        return Promise.resolve(mockFn);
-      });
+      mockImportModule.mockResolvedValue(mockFn);
 
       const fileAssertion: Assertion = createStringAssertion(
         'javascript',
