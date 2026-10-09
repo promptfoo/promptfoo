@@ -47,11 +47,7 @@ export function setupRetryCommand(program: Command) {
 }
 
 // Preserve established command-module imports while the implementation lives in the node layer.
-export {
-  deleteErrorResults,
-  getErrorResultIds,
-  recalculatePromptMetrics,
-  retryCommand,
-} from '../node/retry';
+export { recalculatePromptMetrics } from '../node/promptMetrics';
+export { deleteErrorResults, getErrorResultIds, retryCommand } from '../node/retry';
 
 export type { RetryCommandOptions };

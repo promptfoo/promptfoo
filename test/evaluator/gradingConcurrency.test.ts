@@ -4,9 +4,11 @@ import { randomUUID } from 'crypto';
 
 import { expect, it, vi } from 'vitest';
 import { clearCache, getCache } from '../../src/cache';
+import cliState from '../../src/cliState';
 import { evaluate, runEval } from '../../src/evaluator';
 import { runExtensionHook } from '../../src/evaluatorHelpers';
 import Eval from '../../src/models/eval';
+import EvalResult from '../../src/models/evalResult';
 import telemetry from '../../src/telemetry';
 import {
   type ApiProvider,
@@ -632,7 +634,10 @@ describeEvaluator('evaluator grading concurrency', () => {
       const reason = new Error('custom embedding shutdown');
       const target: ApiProvider = {
         id: () => 'target-provider',
-        callApi: async () => ({ output: 'Target output', tokenUsage: createEmptyTokenUsage() }),
+        callApi: vi.fn(async () => ({
+          output: 'Target output',
+          tokenUsage: createEmptyTokenUsage(),
+        })),
       };
       const embedding: ApiProvider = {
         id: () => 'embedding-judge',
@@ -671,8 +676,15 @@ describeEvaluator('evaluator grading concurrency', () => {
         const result = (await evalRecord.toEvaluateSummary()).results.find(
           (row) => row.vars.topic === 'alpha',
         );
-        expect(result?.error).toBe('Aborted: custom embedding shutdown');
-        expect(result?.response?.output).toBe('Target output');
+        expect(result).toMatchObject({
+          error: `Evaluation aborted: ${String(reason)}`,
+          success: false,
+          score: 0,
+          failureReason: ResultFailureReason.ERROR,
+          response: { output: 'Target output' },
+          metadata: { incomplete: true, __promptfoo: { resumable: true } },
+        });
+        expect(await EvalResult.getCompletedIndexPairs(evalRecord.id)).toEqual(new Set());
         expect(vi.mocked(runExtensionHook).mock.calls.map((call) => call[1])).not.toContain(
           'afterAll',
         );
@@ -683,6 +695,23 @@ describeEvaluator('evaluator grading concurrency', () => {
             String(message).includes('Assertion grading failed'),
           ),
         ).toBe(false);
+
+        cliState.resume = true;
+        embedding.callEmbeddingApi = async () => ({
+          embedding: [1, 0],
+          tokenUsage: createEmptyTokenUsage(),
+        });
+        await evaluate(suite, evalRecord, { maxConcurrency: mode === 'grouped' ? 1 : 2 });
+        const resumed = (await evalRecord.toEvaluateSummary()).results;
+        expect(target.callApi).toHaveBeenCalledTimes(2);
+        expect(resumed).toHaveLength(1);
+        expect(resumed[0]).toMatchObject({
+          success: true,
+          score: 1,
+          response: { output: 'Target output' },
+        });
+        expect(resumed[0].metadata?.__promptfoo?.resumable).toBeUndefined();
+        expect(await EvalResult.getCompletedIndexPairs(evalRecord.id)).toEqual(new Set(['0:0']));
       } finally {
         errorSpy.mockRestore();
         recordEvent.mockRestore();

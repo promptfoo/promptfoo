@@ -75,6 +75,264 @@ async function markComparisonPending(record: Eval) {
 }
 
 describeEvaluator('select-best runtime grading configuration', () => {
+  it.each([0, 1, 2])(
+    'excludes an interrupted column at index %s without shifting comparison results',
+    async (interruptedIndex) => {
+      const { grader, suite, target } = makeSuite();
+      const prompts = ['Completed candidate A', 'Completed candidate B'];
+      prompts.splice(interruptedIndex, 0, 'Interrupted candidate');
+      suite.prompts = prompts.map(toPrompt);
+      suite.tests![0].assert!.push({ type: 'contains', value: 'candidate B' });
+      suite.tests![0].options = { rubricPrompt: '{{ outputs | dump }}' };
+      vi.mocked(grader.callApi).mockResolvedValue({ output: '1' });
+      vi.mocked(target.callApi).mockImplementation(async (prompt, _context, options) => {
+        if (prompt === 'Interrupted candidate') {
+          options?.onProgress?.({ output: 'UNFINISHED_CANDIDATE' });
+          return new Promise<never>(() => {});
+        }
+        return { output: prompt };
+      });
+      const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+      vi.useFakeTimers();
+      try {
+        const evaluation = evaluate(suite, record, { maxConcurrency: 3, timeoutMs: 1000 });
+        await vi.waitFor(() => expect(target.callApi).toHaveBeenCalledTimes(3));
+        await vi.advanceTimersByTimeAsync(1000);
+        await evaluation;
+
+        expect(grader.callApi).toHaveBeenCalledOnce();
+        expect(JSON.parse(vi.mocked(grader.callApi).mock.calls[0][0])).toEqual([
+          'Completed candidate A',
+          'Completed candidate B',
+        ]);
+        const results = await record.fetchResultsByTestIdx(0);
+        expect(results.find((row) => row.promptIdx === interruptedIndex)).toMatchObject({
+          failureReason: ResultFailureReason.ERROR,
+          success: false,
+          score: 0,
+          response: { output: 'UNFINISHED_CANDIDATE' },
+        });
+        expect(
+          results.find((row) => row.promptIdx === prompts.indexOf('Completed candidate B')),
+        ).toMatchObject({ success: true, score: 1 });
+        expect(
+          results.find((row) => row.promptIdx === prompts.indexOf('Completed candidate A')),
+        ).toMatchObject({ failureReason: ResultFailureReason.ASSERT, success: false });
+        expect(record.getStats()).toMatchObject({ successes: 1, failures: 1, errors: 1 });
+      } finally {
+        vi.useRealTimers();
+      }
+    },
+  );
+
+  it.each([true, false])(
+    'preserves the sole completed candidate with assertion pass=%s',
+    async (passesAssertion) => {
+      const { grader, suite, target } = makeSuite();
+      suite.tests![0].assert!.push({ type: 'contains', value: 'accepted' });
+      vi.mocked(target.callApi).mockImplementation(async (prompt) =>
+        prompt === 'first'
+          ? { output: 'Partial evidence', error: 'Target unavailable' }
+          : { output: passesAssertion ? 'accepted' : 'rejected' },
+      );
+      const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+
+      await evaluate(suite, record, { maxConcurrency: 1 });
+
+      const results = await record.fetchResultsByTestIdx(0);
+      expect(grader.callApi).not.toHaveBeenCalled();
+      expect(results.find((row) => row.promptIdx === 0)).toMatchObject({
+        failureReason: ResultFailureReason.ERROR,
+        success: false,
+        score: 0,
+      });
+      expect(results.find((row) => row.promptIdx === 1)).toMatchObject({
+        failureReason: passesAssertion ? ResultFailureReason.NONE : ResultFailureReason.ASSERT,
+        success: passesAssertion,
+        score: passesAssertion ? 1 : 0,
+      });
+    },
+  );
+
+  it.each([false, true])(
+    'compares a failed checkpoint replacement instead of stale evidence with cancelled=%s',
+    async (cancelled) => {
+      const { grader, suite, target } = makeSuite();
+      const controller = new AbortController();
+      suite.tests![0].options = { rubricPrompt: '{{ outputs | dump }}' };
+      suite.tests![0].assert!.push({ type: 'contains', value: 'Completed' });
+      vi.mocked(target.callApi).mockImplementation((_prompt, _context, options) => {
+        options?.onProgress?.({
+          output: 'Stale partial evidence',
+          tokenUsage: { total: 11, numRequests: 1 },
+        });
+        return new Promise<never>(() => {});
+      });
+      const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+      const firstRun = evaluate(suite, record, {
+        maxConcurrency: 1,
+        abortSignal: controller.signal,
+      });
+      await vi.waitFor(() => expect(target.callApi).toHaveBeenCalledOnce());
+      controller.abort();
+      await firstRun;
+      const [checkpoint] = await record.fetchResultsByTestIdx(0);
+      const append = record.addResult.bind(record);
+      const appendSpy = vi.spyOn(record, 'addResult').mockImplementation((row, options) => {
+        if (options?.replaceId === checkpoint.id) {
+          return Promise.reject(new Error('SQLITE_BUSY'));
+        }
+        return append(row, options);
+      });
+      try {
+        const resumeController = new AbortController();
+        if (cancelled) {
+          vi.mocked(grader.callApi).mockImplementation(async () => {
+            resumeController.abort(new Error('Comparison cancelled during replacement recovery'));
+            throw resumeController.signal.reason;
+          });
+        }
+        cliState.resume = true;
+        vi.mocked(target.callApi).mockImplementation(async (prompt) => ({
+          output: `Completed ${prompt}`,
+          tokenUsage: { total: 7, numRequests: 1 },
+        }));
+        await evaluate(suite, record, { maxConcurrency: 1, abortSignal: resumeController.signal });
+
+        expect(grader.callApi).toHaveBeenCalledOnce();
+        expect(JSON.parse(vi.mocked(grader.callApi).mock.calls[0][0])).toEqual([
+          'Completed first',
+          'Completed second',
+        ]);
+        const [recovered] = await record.getFailedResultsByTestIdx(0);
+        if (cancelled) {
+          expect(recovered).toMatchObject({
+            success: false,
+            score: 0,
+            failureReason: ResultFailureReason.ERROR,
+            error: expect.stringContaining('Comparison cancelled during replacement recovery'),
+            metadata: { __promptfoo: { comparisonError: { success: true, score: 1 } } },
+          });
+        } else {
+          expect(recovered).toMatchObject({ success: true, score: 1 });
+          expect(recovered.gradingResult?.componentResults).toEqual(
+            expect.arrayContaining([
+              expect.objectContaining({
+                assertion: expect.objectContaining({ type: 'select-best' }),
+              }),
+            ]),
+          );
+        }
+        expect(record.prompts[0].metrics).toMatchObject({
+          score: 0,
+          testPassCount: 0,
+          testFailCount: 0,
+          testErrorCount: 1,
+          totalLatencyMs: checkpoint.latencyMs,
+          tokenUsage: { total: 11, numRequests: 1 },
+        });
+        const savedRows = await record.fetchResultsByTestIdx(0);
+        expect(savedRows).toHaveLength(2);
+        expect(savedRows.find((row) => row.promptIdx === 0)?.id).toBe(checkpoint.id);
+        expect(savedRows.find((row) => row.promptIdx === 1)).toMatchObject({
+          success: false,
+          failureReason: cancelled ? ResultFailureReason.ERROR : ResultFailureReason.ASSERT,
+        });
+        if (cancelled) {
+          appendSpy.mockRestore();
+          vi.mocked(target.callApi).mockClear();
+          vi.mocked(grader.callApi).mockImplementation(async (prompt) => ({
+            output: String(JSON.parse(prompt).indexOf('Completed first')),
+          }));
+          const freshRecord = (await Eval.findById(record.id))!;
+          await evaluate(suite, freshRecord, { maxConcurrency: 1 });
+          const finalRows = await freshRecord.fetchResultsByTestIdx(0);
+          expect(finalRows).toHaveLength(2);
+          expect(target.callApi).toHaveBeenCalledOnce();
+          expect(grader.callApi).toHaveBeenCalledTimes(2);
+          expect(JSON.parse(vi.mocked(grader.callApi).mock.calls[1][0]).sort()).toEqual([
+            'Completed first',
+            'Completed second',
+          ]);
+          expect(finalRows.find((row) => row.promptIdx === 0)?.id).not.toBe(checkpoint.id);
+          for (const row of finalRows) {
+            expect(row.metadata?.__promptfoo?.comparisonError).toBeUndefined();
+            expect(freshRecord.prompts[row.promptIdx].metrics).toMatchObject({
+              testPassCount: row.promptIdx === 0 ? 1 : 0,
+              testFailCount: row.promptIdx === 0 ? 0 : 1,
+              testErrorCount: 0,
+              totalLatencyMs: row.latencyMs,
+              tokenUsage: { total: 7, numRequests: 1 },
+            });
+          }
+          await evaluate(suite, freshRecord, { maxConcurrency: 1 });
+          expect(target.callApi).toHaveBeenCalledOnce();
+          expect(grader.callApi).toHaveBeenCalledTimes(2);
+        }
+      } finally {
+        appendSpy.mockRestore();
+      }
+    },
+  );
+
+  it('recovers comparison errors without clearing assertion or target failures', async () => {
+    const { grader, suite, target } = makeSuite();
+    suite.prompts = ['Rejected candidate', 'Target error', 'Accepted candidate'].map(toPrompt);
+    suite.tests![0].assert!.push({ type: 'contains', value: 'Accepted' });
+    suite.tests![0].options = { rubricPrompt: '{{ outputs | dump }}' };
+    vi.mocked(target.callApi).mockImplementation(async (prompt) =>
+      prompt === 'Target error'
+        ? { output: 'Partial evidence', error: 'Target unavailable' }
+        : { output: prompt },
+    );
+    vi.mocked(grader.callApi)
+      .mockRejectedValueOnce(new Error('Temporary grader failure'))
+      .mockResolvedValue({ output: '1' });
+    const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+    await evaluate(suite, record, { maxConcurrency: 1 });
+    const targetError = (await record.fetchResultsByTestIdx(0)).find((row) => row.promptIdx === 1)!;
+    expect(record.getStats()).toMatchObject({ successes: 0, failures: 0, errors: 3 });
+
+    cliState.resume = true;
+    await evaluate(suite, record, { maxConcurrency: 1 });
+
+    expect(target.callApi).toHaveBeenCalledTimes(3);
+    expect(grader.callApi).toHaveBeenCalledTimes(2);
+    expect(JSON.parse(vi.mocked(grader.callApi).mock.calls[1][0])).toEqual([
+      'Rejected candidate',
+      'Accepted candidate',
+    ]);
+    const recovered = await record.fetchResultsByTestIdx(0);
+    expect(recovered.find((row) => row.promptIdx === 0)).toMatchObject({
+      failureReason: ResultFailureReason.ASSERT,
+      success: false,
+      score: 0,
+    });
+    expect(recovered.find((row) => row.promptIdx === 1)).toMatchObject({
+      failureReason: ResultFailureReason.ERROR,
+      error: targetError.error,
+      success: false,
+      score: 0,
+      response: targetError.response,
+    });
+    expect(recovered.find((row) => row.promptIdx === 2)?.success).toBe(true);
+    expect(record.getStats()).toMatchObject({ successes: 1, failures: 1, errors: 1 });
+  });
+
+  it('skips comparison when every candidate has an execution error', async () => {
+    const { grader, suite, target } = makeSuite();
+    vi.mocked(target.callApi).mockResolvedValue({
+      output: 'Incomplete response',
+      error: 'Target unavailable',
+    });
+    const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+
+    await evaluate(suite, record, { maxConcurrency: 1 });
+
+    expect(grader.callApi).not.toHaveBeenCalled();
+    expect(record.getStats()).toMatchObject({ successes: 0, failures: 0, errors: 2 });
+  });
+
   it.each([0, 10000])('grades the replacement test with timeoutMs=%s', async (timeoutMs) => {
     const { grader, suite } = makeSuite();
     vi.mocked(runExtensionHook).mockImplementation(async (_extensions, hookName, context) => {

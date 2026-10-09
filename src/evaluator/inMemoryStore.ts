@@ -73,6 +73,24 @@ export class InMemoryEvaluationStore
 
   async appendResult(result: EvaluateResult): Promise<void> {
     this.evaluation.results.push(result);
+    this.clearRecoveredResult(result);
+  }
+
+  async replaceResult(result: EvaluateResult, previous: EvaluateResult): Promise<void> {
+    const index = this.evaluation.results.indexOf(previous);
+    if (index < 0) {
+      throw new Error('Cannot replace a checkpoint that is no longer saved');
+    }
+    this.evaluation.results[index] = result;
+    this.clearRecoveredResult(result);
+  }
+
+  private clearRecoveredResult(result: EvaluateResult): void {
+    const key = getResultIndexKey(result);
+    this.failedResultsByIndex.delete(key);
+    this.finalResultsByIndex.delete(key);
+    this.syncFailedResults();
+    this.syncFinalResults();
   }
 
   async appendPrompts(prompts: CompletedPrompt[]): Promise<void> {
@@ -86,7 +104,10 @@ export class InMemoryEvaluationStore
   async readCompletedIndexPairs(options?: { excludeErrors?: boolean }): Promise<Set<string>> {
     const completedPairs = new Set<string>();
     for (const result of this.evaluation.results) {
-      if (options?.excludeErrors && result.failureReason === ERROR_FAILURE_REASON) {
+      if (
+        result.failureReason === ERROR_FAILURE_REASON &&
+        (options?.excludeErrors || result.metadata?.__promptfoo?.resumable === true)
+      ) {
         continue;
       }
       completedPairs.add(getResultIndexKey(result));
@@ -104,8 +125,11 @@ export class InMemoryEvaluationStore
     return this.evaluation.results;
   }
 
-  async readResultsByTestIdx(testIdx: number): Promise<EvaluateResult[]> {
-    return this.evaluation.results.filter((result) => result.testIdx === testIdx);
+  async readResultsByTestIdx(testIdx: number, promptIdx?: number): Promise<EvaluateResult[]> {
+    return this.evaluation.results.filter(
+      (result) =>
+        result.testIdx === testIdx && (promptIdx === undefined || result.promptIdx === promptIdx),
+    );
   }
 
   recordFinalResult(result: EvaluateResult): void {

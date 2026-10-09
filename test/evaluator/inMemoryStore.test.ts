@@ -55,6 +55,8 @@ describe('InMemoryEvaluationStore', () => {
     expect(await store.readResults()).toBe(evaluation.results);
     expect(await store.readResults()).toEqual([first, second, third]);
     expect(await store.readResultsByTestIdx(1)).toEqual([first, third]);
+    expect(await store.readResultsByTestIdx(1, 0)).toEqual([first]);
+    expect(await store.readResultsByTestIdx(1, 1)).toEqual([third]);
     expect(evaluation.prompts).toBe(prompts);
   });
 

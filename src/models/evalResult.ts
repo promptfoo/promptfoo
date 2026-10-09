@@ -1,6 +1,6 @@
 import { isDeepStrictEqual } from 'node:util';
 
-import { and, eq, gte, inArray, lt, ne } from 'drizzle-orm';
+import { and, eq, gte, inArray, lt, ne, sql } from 'drizzle-orm';
 import { extractBlobHashesFromValue } from '../blobs/blobRefs';
 import { extractAndStoreBinaryData, isBlobStorageEnabled } from '../blobs/extractor';
 import { getDb } from '../database/index';
@@ -86,9 +86,53 @@ function projectOutputMetadata<T>(
       ) {
         return [[key, value]];
       }
-      return key === 'audio' || key === 'blobUris'
-        ? []
-        : [[key, stripMediaReferences(sanitizeForDb(value))]];
+      if (key === 'audio' || key === 'blobUris') {
+        return [];
+      }
+      const projected = stripMediaReferences(sanitizeForDb(value));
+      if (key === 'redteamHistory' && Array.isArray(projected)) {
+        return [
+          [
+            key,
+            projected.map((turn) => {
+              if (!turn || typeof turn !== 'object' || Array.isArray(turn)) {
+                return turn;
+              }
+              // Use the target's media type hint; ordinary history text remains intact.
+              const {
+                images: _images,
+                outputImage: _outputImage,
+                outputAudio: _outputAudio,
+                ...history
+              } = turn;
+              return turn.isBase64 === true ? { ...history, output: '[output stripped]' } : history;
+            }),
+          ],
+        ];
+      }
+      if (key === 'messages' && Array.isArray(projected)) {
+        return [
+          [
+            key,
+            projected.map((message) =>
+              message?.role === 'assistant' && message.isBase64 === true
+                ? { ...message, content: '[output stripped]' }
+                : message,
+            ),
+          ],
+        ];
+      }
+      if (key === 'successfulAttacks' && Array.isArray(projected)) {
+        return [
+          [
+            key,
+            projected.map((attack) =>
+              attack?.isBase64 === true ? { ...attack, response: '[output stripped]' } : attack,
+            ),
+          ],
+        ];
+      }
+      return [[key, projected]];
     }),
   ) as T;
 }
@@ -909,11 +953,36 @@ export function sanitizeResultForJsonlArtifact<T extends object>(
   } as T;
 }
 
+function resumableCheckpointFilter() {
+  return sql`${evalResultsTable.failureReason} = ${ResultFailureReason.ERROR} AND
+    COALESCE(json_extract(
+      CASE WHEN json_valid(${evalResultsTable.metadata}) THEN ${evalResultsTable.metadata} ELSE '{}' END,
+      '$.__promptfoo.resumable'
+    ), 0) = 1`;
+}
+
+/** The persisted fields consumed when rebuilding prompt metrics. */
+export type EvalResultMetrics = Pick<
+  EvalResult,
+  | 'id'
+  | 'testIdx'
+  | 'promptIdx'
+  | 'testCase'
+  | 'success'
+  | 'failureReason'
+  | 'score'
+  | 'latencyMs'
+  | 'cost'
+  | 'response'
+  | 'gradingResult'
+  | 'namedScores'
+>;
+
 export default class EvalResult {
   static async createFromEvaluateResult(
     evalId: string,
     result: EvaluateResult,
-    opts?: { persist: boolean },
+    opts?: { persist: boolean; replaceId?: string },
   ) {
     const persist = opts?.persist == null ? true : opts.persist;
     const {
@@ -981,7 +1050,25 @@ export default class EvalResult {
       args.response = redacted.response;
       args.gradingResult = redacted.gradingResult;
       args.metadata = redacted.metadata;
-      const dbResult = await db.insert(evalResultsTable).values(args).returning();
+      const dbResult = opts?.replaceId
+        ? await db.transaction(async (tx) => {
+            const previous = await tx
+              .select({ id: evalResultsTable.id })
+              .from(evalResultsTable)
+              .where(
+                and(eq(evalResultsTable.evalId, evalId), eq(evalResultsTable.id, opts.replaceId!)),
+              )
+              .get();
+            if (!previous) {
+              throw new Error('Interrupted result was already replaced');
+            }
+            const inserted = await tx.insert(evalResultsTable).values(args).returning();
+            // Keep the checkpoint until its replacement is safely recorded. A new ID also
+            // keeps retry cleanup from deleting the replacement with the old ERROR IDs.
+            await tx.delete(evalResultsTable).where(eq(evalResultsTable.id, previous.id)).run();
+            return inserted;
+          })
+        : await db.insert(evalResultsTable).values(args).returning();
       clearCountCache(evalId);
       return new EvalResult({ ...dbResult[0], persisted: true });
     }
@@ -1046,7 +1133,7 @@ export default class EvalResult {
     return result.length > 0 ? new EvalResult({ ...result[0], persisted: true }) : null;
   }
 
-  static async findManyByEvalId(evalId: string, opts?: { testIdx?: number }) {
+  static async findManyByEvalId(evalId: string, opts?: { testIdx?: number; promptIdx?: number }) {
     const db = await getDb();
     const results = await db
       .select()
@@ -1055,6 +1142,7 @@ export default class EvalResult {
         and(
           eq(evalResultsTable.evalId, evalId),
           opts?.testIdx == null ? undefined : eq(evalResultsTable.testIdx, opts.testIdx),
+          opts?.promptIdx == null ? undefined : eq(evalResultsTable.promptIdx, opts.promptIdx),
         ),
       );
     return results.map((result) => new EvalResult({ ...result, persisted: true }));
@@ -1081,6 +1169,17 @@ export default class EvalResult {
     return results.map((result) => new EvalResult({ ...result, persisted: true }));
   }
 
+  static async hasSavedResults(evalId: string): Promise<boolean> {
+    const db = await getDb();
+    const row = await db
+      .select({ id: evalResultsTable.id })
+      .from(evalResultsTable)
+      .where(eq(evalResultsTable.evalId, evalId))
+      .limit(1)
+      .get();
+    return Boolean(row);
+  }
+
   /**
    * Returns a set of completed (testIdx,promptIdx) pairs for a given eval.
    * Key format: `${testIdx}:${promptIdx}`
@@ -1093,14 +1192,15 @@ export default class EvalResult {
     opts?: { excludeErrors?: boolean },
   ): Promise<Set<string>> {
     const db = await getDb();
-    const whereClause = opts?.excludeErrors
-      ? and(
-          eq(evalResultsTable.evalId, evalId),
-          // Exclude ERROR results so they can be retried
-          // This prevents resume mode from skipping ERROR results during retry
-          ne(evalResultsTable.failureReason, ResultFailureReason.ERROR),
-        )
-      : eq(evalResultsTable.evalId, evalId);
+    const whereClause = and(
+      eq(evalResultsTable.evalId, evalId),
+      // Cancellation checkpoints are unfinished cases, unlike ordinary provider errors
+      // and per-case timeouts. They remain eligible for ordinary resume.
+      sql`NOT (${resumableCheckpointFilter()})`,
+      opts?.excludeErrors
+        ? ne(evalResultsTable.failureReason, ResultFailureReason.ERROR)
+        : undefined,
+    );
 
     const rows = await db
       .select({ testIdx: evalResultsTable.testIdx, promptIdx: evalResultsTable.promptIdx })
@@ -1115,12 +1215,22 @@ export default class EvalResult {
 
   // This is a generator that yields batches of results from the database
   // These are batched by test Id, not just results to ensure we get all results for a given test
+  static findManyByEvalIdBatched(
+    evalId: string,
+    opts: { batchSize?: number; projection: 'metrics' },
+  ): AsyncGenerator<EvalResultMetrics[]>;
+  static findManyByEvalIdBatched(
+    evalId: string,
+    opts?: { batchSize?: number; projection?: undefined },
+  ): AsyncGenerator<EvalResult[]>;
+  static findManyByEvalIdBatched(
+    evalId: string,
+    opts: { batchSize?: number; projection?: 'metrics' },
+  ): AsyncGenerator<EvalResult[] | EvalResultMetrics[]>;
   static async *findManyByEvalIdBatched(
     evalId: string,
-    opts?: {
-      batchSize?: number;
-    },
-  ): AsyncGenerator<EvalResult[]> {
+    opts?: { batchSize?: number; projection?: 'metrics' },
+  ): AsyncGenerator<EvalResult[] | EvalResultMetrics[]> {
     const db = await getDb();
     const batchSize = opts?.batchSize || 100;
     let offset = 0;
@@ -1139,19 +1249,47 @@ export default class EvalResult {
       }
 
       offset = nextResult.testIdx;
-      const results = await db
-        .select()
-        .from(evalResultsTable)
-        .where(
-          and(
-            eq(evalResultsTable.evalId, evalId),
-            gte(evalResultsTable.testIdx, offset),
-            lt(evalResultsTable.testIdx, offset + batchSize),
-          ),
-        )
-        .all();
-
-      yield results.map((result) => new EvalResult({ ...result, persisted: true }));
+      const whereClause = and(
+        eq(evalResultsTable.evalId, evalId),
+        gte(evalResultsTable.testIdx, offset),
+        lt(evalResultsTable.testIdx, offset + batchSize),
+      );
+      if (opts?.projection === 'metrics') {
+        // Reconciliation does not consume prompt/provider artifacts. Do not make it
+        // depend on decoding those fields, while required metric JSON still fails normally.
+        const results = await db
+          .select({
+            id: evalResultsTable.id,
+            testIdx: evalResultsTable.testIdx,
+            promptIdx: evalResultsTable.promptIdx,
+            testCase: evalResultsTable.testCase,
+            success: evalResultsTable.success,
+            failureReason: evalResultsTable.failureReason,
+            score: evalResultsTable.score,
+            latencyMs: evalResultsTable.latencyMs,
+            cost: evalResultsTable.cost,
+            response: evalResultsTable.response,
+            gradingResult: evalResultsTable.gradingResult,
+            namedScores: evalResultsTable.namedScores,
+          })
+          .from(evalResultsTable)
+          .where(whereClause)
+          .all();
+        // Preserve the metric-field defaults applied by the full EvalResult constructor.
+        yield results.map((result) => ({
+          ...result,
+          latencyMs: result.latencyMs || 0,
+          cost: result.cost || 0,
+          response: result.response || undefined,
+          namedScores: result.namedScores || {},
+          failureReason: isResultFailureReason(result.failureReason)
+            ? result.failureReason
+            : ResultFailureReason.NONE,
+        }));
+      } else {
+        const results = await db.select().from(evalResultsTable).where(whereClause).all();
+        yield results.map((result) => new EvalResult({ ...result, persisted: true }));
+      }
       offset += batchSize;
     }
   }

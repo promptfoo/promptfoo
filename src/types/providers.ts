@@ -121,6 +121,12 @@ export interface CallApiOptionsParams {
    */
   abortSignal?: AbortSignal;
   /**
+   * Checkpoint cumulative completed work while a call is still running. This is
+   * evidence for an interrupted call, not a final response or grading result.
+   * Consumers must copy snapshots synchronously; providers may reuse objects.
+   */
+  onProgress?: (response: ProviderResponse) => void;
+  /**
    * @internal Notify the scheduler before cancellable post-processing or a
    * selected target-fetch backoff. Backoff observations retain their original
    * quota deadline even when a coalesced consumer joins later.

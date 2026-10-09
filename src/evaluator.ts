@@ -120,6 +120,7 @@ import {
   accumulateGradingRequest,
   accumulateGradingTokenUsage,
   accumulateResponseTokenUsage,
+  accumulateTokenUsage,
   cloneTokenUsageBreakdown,
   createEmptyAssertions,
   createEmptyTokenUsage,
@@ -916,6 +917,7 @@ function isCliPauseCancellation(
 
 async function callProviderForRunEval({
   abortSignal,
+  onProgress,
   pauseSignal,
   evalId,
   filters,
@@ -940,6 +942,7 @@ async function callProviderForRunEval({
   | 'test'
   | 'testSuite'
 > & {
+  onProgress?: (response: ProviderResponse, completedTargetCount: number) => void;
   filters: RunEvalOptions['nunjucksFilters'];
   pauseSignal?: AbortSignal;
   promptForRender: Prompt;
@@ -964,6 +967,7 @@ async function callProviderForRunEval({
     } else {
       response = await callActiveProvider({
         abortSignal,
+        onProgress,
         pauseSignal,
         evalId,
         filters,
@@ -1089,6 +1093,7 @@ async function collectExternalTraceAfterProviderCall({
 
 async function callActiveProvider({
   abortSignal,
+  onProgress,
   pauseSignal,
   evalId,
   filters,
@@ -1107,6 +1112,7 @@ async function callActiveProvider({
   RunEvalOptions,
   'abortSignal' | 'evalId' | 'provider' | 'rateLimitRegistry' | 'repeatIndex' | 'test' | 'testSuite'
 > & {
+  onProgress?: (response: ProviderResponse, completedTargetCount: number) => void;
   filters: RunEvalOptions['nunjucksFilters'];
   pauseSignal?: AbortSignal;
   onProviderInvoked: () => void;
@@ -1141,11 +1147,20 @@ async function callActiveProvider({
     // A previous response belongs only to backoff until the next attempt starts.
     completedResponse = undefined;
     const callApiOptions =
-      abortSignal || onResponseHeaders ? { abortSignal, onResponseHeaders } : undefined;
+      abortSignal || onResponseHeaders || onProgress
+        ? {
+            abortSignal,
+            onResponseHeaders,
+            onProgress: onProgress
+              ? (response: ProviderResponse) => onProgress(response, completedTargets.length)
+              : undefined,
+          }
+        : undefined;
     const invoke = () =>
       providerRegistry.withProvider(
         cleanupOwner,
         async () => {
+          abortSignal?.throwIfAborted();
           onProviderInvoked();
           const result = traceContext?.traceparent
             ? await withTracedProviderCall(
@@ -1451,6 +1466,7 @@ async function applyRunEvalResponseOutcome({
   deferredGradingAbortSignal,
   evalId,
   latencyMs,
+  onResponseProcessed,
   prompt,
   promptIdx,
   provider,
@@ -1470,6 +1486,7 @@ async function applyRunEvalResponseOutcome({
   deferredGradingAbortSignal?: AbortSignal;
   evalId?: string;
   latencyMs: number;
+  onResponseProcessed?: (response: ProviderResponse) => void;
   prompt: Prompt;
   promptIdx: number;
   provider: ApiProvider;
@@ -1507,6 +1524,7 @@ async function applyRunEvalResponseOutcome({
     deferredGradingAbortSignal,
     evalId,
     latencyMs,
+    onResponseProcessed,
     prompt,
     promptIdx,
     provider,
@@ -1529,6 +1547,7 @@ async function gradeRunEvalResponse({
   deferredGradingAbortSignal,
   evalId,
   latencyMs,
+  onResponseProcessed,
   prompt,
   promptIdx,
   provider,
@@ -1548,6 +1567,7 @@ async function gradeRunEvalResponse({
   deferredGradingAbortSignal?: AbortSignal;
   evalId?: string;
   latencyMs: number;
+  onResponseProcessed?: (response: ProviderResponse) => void;
   prompt: Prompt;
   promptIdx: number;
   provider: ApiProvider;
@@ -1572,6 +1592,7 @@ async function gradeRunEvalResponse({
     testIdx,
     vars,
   });
+  onResponseProcessed?.(processedResponse);
   const traceId = getTraceId(traceContext);
   if (
     traceId &&
@@ -1758,6 +1779,10 @@ export async function runEval(options: RunEvalOptions): Promise<EvaluateResult[]
   );
 }
 
+interface RunEvalInternalOptions extends RunEvalOptions {
+  onProviderProgress?: (result: EvaluateResult) => void;
+}
+
 async function runEvalInternal(
   {
     provider,
@@ -1779,7 +1804,8 @@ async function runEvalInternal(
     evalId,
     providerCallQueue,
     rateLimitRegistry,
-  }: RunEvalOptions,
+    onProviderProgress,
+  }: RunEvalInternalOptions,
   orchestrationOptions: Pick<InternalEvaluateOptions, 'abortSignal' | 'pauseSignal'> = {
     abortSignal,
   },
@@ -1811,7 +1837,23 @@ async function runEvalInternal(
 
   let setup = state.setup;
   let latencyMs = 0;
+  let partialResult: EvaluateResult | undefined;
+  let providerProgress: ProviderResponse | undefined;
+  let progressCompletedTargetCount: number | undefined;
+  let acceptingProviderProgress = true;
   let providerCallCompleted = false;
+  const throwIfHardAborted = (completedResponse?: ProviderResponse) => {
+    // Keep a selected provider failure rather than replacing its diagnostic with
+    // cancellation. The evaluator's outer race still rejects stale completed rows.
+    if (completedResponse?.error) {
+      return;
+    }
+    for (const signal of [abortSignal, orchestrationOptions.abortSignal]) {
+      if (!isCliPauseCancellation(signal?.reason, signal, orchestrationOptions.pauseSignal)) {
+        signal?.throwIfAborted();
+      }
+    }
+  };
   let traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>> | undefined;
   // The step's copy_working_dir workspace, removed once its assertions have run.
   let workspace: AgentWorkspace | undefined;
@@ -1852,12 +1894,129 @@ async function runEvalInternal(
           },
         );
     const executionTraceContext = traceContext;
+    const checkpoint = (response: ProviderResponse, completed = false) => {
+      if (
+        (!onProviderProgress && !abortSignal) ||
+        (abortSignal?.aborted &&
+          (!completed ||
+            !isCliPauseCancellation(
+              abortSignal.reason,
+              abortSignal,
+              orchestrationOptions.pauseSignal,
+            )))
+      ) {
+        return;
+      }
+      // Strategies reuse history/usage objects. Detach the checkpoint so a late
+      // completion or mutation cannot change the authoritative interrupted row.
+      const serialized = safeJsonStringify(response);
+      if (!serialized) {
+        return;
+      }
+      const reportedResponse: ProviderResponse = JSON.parse(serialized);
+      const progressResponse = completed ? providerProgress : undefined;
+      const completedHistory = progressResponse?.metadata?.redteamHistory;
+      const finalHistory = reportedResponse.metadata?.redteamHistory;
+      const snapshot = normalizeCachedTargetResponse(
+        progressResponse
+          ? {
+              ...progressResponse,
+              ...reportedResponse,
+              metadata: {
+                ...progressResponse.metadata,
+                ...reportedResponse.metadata,
+                // Normal strategy results can select a successful branch and omit
+                // completed error/backtrack probes from their display history.
+                ...(Array.isArray(completedHistory) &&
+                  (!Array.isArray(finalHistory) ||
+                    completedHistory.length >= finalHistory.length) && {
+                    redteamHistory: completedHistory,
+                  }),
+              },
+            }
+          : reportedResponse,
+      );
+      if (completed && reportedResponse.metadata?.interruptedStrategy && progressResponse) {
+        // The scheduler's completed targets own target usage; retain the strategy's
+        // separately accounted work without adding those target totals a second time.
+        const progressUsage = progressResponse.tokenUsage;
+        if (progressUsage) {
+          snapshot.tokenUsage ??= createEmptyTokenUsage();
+          for (const kind of ['attacker', 'assertions', 'generation'] as const) {
+            if (progressUsage[kind]) {
+              snapshot.tokenUsage[kind] = progressUsage[kind];
+            }
+            if (progressUsage.incurredTokenUsage?.[kind]) {
+              snapshot.tokenUsage.incurredTokenUsage ??= {};
+              snapshot.tokenUsage.incurredTokenUsage[kind] = progressUsage.incurredTokenUsage[kind];
+            }
+          }
+        }
+        // A repeated output can belong to another target attempt, and blob storage can
+        // change a matching output's representation. Match the accepted progress to
+        // the target-completion count captured before that progress was published.
+        if (
+          progressCompletedTargetCount !==
+            reportedResponse.metadata.completedTargetResponses?.length &&
+          snapshot.metadata
+        ) {
+          delete snapshot.metadata.storedGraderResult;
+        }
+      }
+      // Strategy responses carry internal grading separately from target usage.
+      // Account for that completed work if interruption occurs after callApi returns,
+      // without changing the response used by normal assertion accounting.
+      // If the final response omits usage, the retained progress usage is already accounted.
+      const storedGrade =
+        completed &&
+        !reportedResponse.metadata?.interruptedStrategy &&
+        (!progressResponse || reportedResponse.tokenUsage)
+          ? reportedResponse.metadata?.storedGraderResult
+          : undefined;
+      if (storedGrade?.tokensUsed) {
+        snapshot.tokenUsage ??= createEmptyTokenUsage();
+        accumulateGradingTokenUsage(snapshot.tokenUsage, storedGrade.tokensUsed, {
+          cached: storedGrade.metadata?.cachedResponse,
+        });
+      }
+      partialResult = createEvaluateResult({
+        fileMetadata: state.fileMetadata,
+        latencyMs: 0,
+        prompt,
+        promptIdx: promptIndex,
+        rendered,
+        response: snapshot,
+        setup,
+        test,
+        testIdx: testIndex,
+        traceContext: executionTraceContext,
+        evalId,
+        vars: omitEvalRuntimeVars(state.vars),
+      });
+      accumulateResponseTokenUsage(partialResult.tokenUsage!, snapshot);
+      onProviderProgress?.(partialResult);
+      return partialResult;
+    };
+    checkpoint({ tokenUsage: createEmptyTokenUsage() });
     const runExecution = () =>
       withTestCaseSpan(
         executionTraceContext?.rootSpan,
         async () => {
           const providerCall = await callProviderForRunEval({
             abortSignal,
+            onProgress:
+              onProviderProgress || abortSignal
+                ? (response, completedTargetCount) => {
+                    if (!acceptingProviderProgress) {
+                      return;
+                    }
+                    const progress = checkpoint(response);
+                    if (progress) {
+                      providerProgress = progress.response;
+                      progressCompletedTargetCount = completedTargetCount;
+                    }
+                  }
+                : undefined,
             pauseSignal: orchestrationOptions.pauseSignal,
             evalId,
             filters,
@@ -1878,7 +2037,14 @@ async function runEvalInternal(
             vars: state.vars,
           });
           providerCallCompleted = true;
-          const response = normalizeCachedTargetResponse(providerCall.response);
+          throwIfHardAborted(providerCall.response);
+          const completedCheckpoint = checkpoint(providerCall.response, true);
+          acceptingProviderProgress = false;
+          const response = normalizeCachedTargetResponse(
+            providerCall.response.metadata?.interruptedStrategy && completedCheckpoint?.response
+              ? completedCheckpoint.response
+              : providerCall.response,
+          );
           latencyMs = providerCall.latencyMs;
           if (stepWorkspace) {
             response.metadata = { ...response.metadata, ...(await stepWorkspace.metadata()) };
@@ -1900,6 +2066,7 @@ async function runEvalInternal(
           );
 
           await applyProviderDelayIfNeeded(provider, response, abortSignal);
+          throwIfHardAborted(response);
 
           // The __eval* runtime vars were exposed to prompt/provider rendering above.
           // Build a copy without them for the persisted result, assertions, and
@@ -1929,6 +2096,7 @@ async function runEvalInternal(
             abortSignal,
             deferredGradingAbortSignal: orchestrationOptions.abortSignal,
             deferGrading,
+            onResponseProcessed: (processedResponse) => checkpoint(processedResponse, true),
             evalId,
             latencyMs,
             prompt,
@@ -1946,6 +2114,13 @@ async function runEvalInternal(
             vars: persistedVars,
           });
 
+          // Started deferred assertions own the workspace even if cancellation stops this row.
+          const deferredGrading = deferredGradingPromises.get(ret);
+          if (workspace && deferredGrading) {
+            deferredGradingPromises.set(ret, deferredGrading.finally(workspace.remove));
+            workspace = undefined;
+          }
+          throwIfHardAborted(response);
           // Update token usage stats
           if (response.tokenUsage) {
             accumulateResponseTokenUsage(ret.tokenUsage, response);
@@ -1971,16 +2146,11 @@ async function runEvalInternal(
           runExecution,
         )
       : await runExecution();
-    // Deferred assertions still need the workspace, so they remove it when they finish.
-    const deferredGrading = deferredGradingPromises.get(rows[0]);
-    if (workspace && deferredGrading) {
-      deferredGradingPromises.set(rows[0], deferredGrading.finally(workspace.remove));
-      workspace = undefined;
-    }
     return rows;
   } catch (err) {
     if (
       !providerCallCompleted &&
+      !providerProgress &&
       isCliPauseCancellation(err, abortSignal, orchestrationOptions.pauseSignal)
     ) {
       // Leave incomplete CLI-paused work eligible for resume instead of persisting an ERROR.
@@ -2003,6 +2173,7 @@ async function runEvalInternal(
     return [
       {
         ...setup,
+        ...partialResult,
         // Exclude the __eval* runtime vars from the persisted error result.
         vars: omitEvalRuntimeVars(setup.vars),
         error: errorWithStack,
@@ -2015,11 +2186,16 @@ async function runEvalInternal(
         testIdx: testIndex,
         testCase: test,
         promptId: prompt.id || '',
-        metadata,
+        metadata: {
+          ...partialResult?.metadata,
+          ...metadata,
+          ...(partialResult && { incomplete: true }),
+        },
         ...getTraceLinkage(traceContext, evalId),
       },
     ];
   } finally {
+    acceptingProviderProgress = false;
     await workspace?.remove();
   }
 }
@@ -3870,16 +4046,23 @@ function createPromptEvalCounts(prompts: CompletedPrompt[]) {
   });
 }
 
-function reservePromptEvalCount(context: EvalProcessingContext, promptIdx: number) {
-  context.promptEvalCounts[promptIdx] = (context.promptEvalCounts[promptIdx] ?? 0) + 1;
+function reservePromptEvalCount(
+  context: EvalProcessingContext,
+  promptIdx: number,
+  replaced = false,
+) {
+  context.promptEvalCounts[promptIdx] =
+    (context.promptEvalCounts[promptIdx] ?? 0) + (replaced ? 0 : 1);
   return context.promptEvalCounts[promptIdx];
 }
 
-function createEvalStepTimeoutResult(
+function createEvalStepInterruptedResult(
   evalStep: RunEvalOptions,
   sanitizedTestCase: AtomicTestCase,
-  timeoutMs: number,
+  latencyMs: number,
   error: unknown,
+  didTimeout: boolean,
+  partialResult?: EvaluateResult,
 ): EvaluateResult {
   return {
     provider: {
@@ -3892,13 +4075,17 @@ function createEvalStepTimeoutResult(
       label: evalStep.prompt.label,
       config: evalStep.prompt.config,
     },
-    vars: evalStep.test.vars || {},
-    error: `Evaluation timed out after ${timeoutMs}ms: ${String(error)}`,
+    ...partialResult,
+    vars: omitEvalRuntimeVars(partialResult?.vars ?? evalStep.test.vars ?? {}),
+    metadata: { ...evalStep.test.metadata, ...partialResult?.metadata, incomplete: true },
+    error: didTimeout
+      ? `Evaluation timed out after ${latencyMs}ms: ${String(error)}`
+      : `Evaluation aborted: ${String(error)}`,
     success: false,
     failureReason: ResultFailureReason.ERROR,
     score: 0,
     namedScores: {},
-    latencyMs: timeoutMs,
+    latencyMs,
     promptIdx: evalStep.promptIdx,
     testIdx: evalStep.testIdx,
     testCase: sanitizedTestCase,
@@ -4070,6 +4257,9 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
   rateLimitRegistry: RateLimitRegistry | undefined;
   private readonly comparisonProviders = new Map<string, ComparisonProviders>();
   private readonly currentResultKeys = new Set<string>();
+  // Failed resume writes (including checkpoint lookup) must not change durable metrics.
+  // Completed responses remain available to recovery/comparison until a later resume saves them.
+  private readonly failedResumeWrites = new Set<string>();
   private readonly retryErrorResultIds = new Set(
     cliState.retryMode ? cliState._retryErrorResultIds : [],
   );
@@ -4227,9 +4417,26 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     }
   }
 
-  private async persistEvalRow(row: EvaluateResult): Promise<void> {
+  private async persistEvalRow(
+    row: EvaluateResult,
+    { resumable = false }: { resumable?: boolean } = {},
+  ): Promise<EvaluateResult | undefined> {
     this.currentResultKeys.add(getResultIndexKey(row));
     setComparisonError(row);
+    // This lifecycle marker belongs to the evaluator, never to a provider or hook.
+    const metadata = row.metadata?.[PROMPTFOO_METADATA_KEY];
+    if (resumable || metadata?.resumable !== undefined) {
+      const internal =
+        metadata && typeof metadata === 'object' && !Array.isArray(metadata) ? { ...metadata } : {};
+      delete internal.resumable;
+      if (resumable) {
+        internal.resumable = true;
+      }
+      row.metadata = { ...row.metadata, [PROMPTFOO_METADATA_KEY]: internal };
+      if (Object.keys(internal).length === 0) {
+        delete row.metadata[PROMPTFOO_METADATA_KEY];
+      }
+    }
     if (row.testCase.assert?.some((assertion) => assertion.type === 'select-best')) {
       // Capture grader references before a later hook can replace shared nested test fields.
       this.comparisonProviders.set(
@@ -4254,10 +4461,26 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         ),
       };
     }
+    let previous: TResult | undefined;
     try {
-      await this.store.appendResult(row);
+      previous = await this.findResumableCheckpoint(row);
+      if (previous) {
+        if (!this.store.replaceResult) {
+          throw new Error(
+            'Evaluation store must implement replaceResult to resume a saved checkpoint',
+          );
+        }
+        await this.store.replaceResult(row, previous);
+      } else {
+        await this.store.appendResult(row);
+      }
     } catch (error) {
+      if (cliState.resume && this.store.persisted) {
+        this.failedResumeWrites.add(getResultIndexKey(row));
+      }
       this.store.recordResultPersistenceFailure(row);
+      // Non-streamed timeout rows also need a copy when this is the first failed write.
+      this.trackFinalJsonlResult(row);
       const resultSummary = summarizeEvaluateResultForLogging(row);
       logger.error('[Evaluator] Error saving result', {
         error,
@@ -4265,6 +4488,22 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       });
     }
 
+    return previous ? this.store.toEvaluateResult(previous) : undefined;
+  }
+
+  private async findResumableCheckpoint(row: Pick<EvaluateResult, 'testIdx' | 'promptIdx'>) {
+    if (!cliState.resume || !this.store.persisted) {
+      return undefined;
+    }
+    return (await this.store.readResultsByTestIdx(row.testIdx, row.promptIdx)).find(
+      (candidate) =>
+        candidate.promptIdx === row.promptIdx &&
+        candidate.failureReason === ResultFailureReason.ERROR &&
+        candidate.metadata?.[PROMPTFOO_METADATA_KEY]?.resumable === true,
+    );
+  }
+
+  private async streamEvalRow(row: EvaluateResult) {
     for (const writer of this.fileWriters) {
       await writer.write(sanitizeResultForJsonlArtifact(row));
     }
@@ -4276,6 +4515,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     mathjsModule,
     metrics,
     promptEvalCount,
+    previousRow,
     row,
   }: {
     derivedMetrics: TestSuite['derivedMetrics'];
@@ -4283,8 +4523,27 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     mathjsModule: typeof import('mathjs') | null;
     metrics: PromptMetrics;
     promptEvalCount: number;
+    previousRow?: EvaluateResult;
     row: EvaluateResult;
   }): void {
+    if (this.failedResumeWrites.has(getResultIndexKey(row))) {
+      return;
+    }
+    if (previousRow) {
+      metrics.testErrorCount = Math.max(0, metrics.testErrorCount - 1);
+      metrics.totalLatencyMs -= previousRow.latencyMs || 0;
+      metrics.cost -= previousRow.cost || 0;
+      if (metrics.incurredCost !== undefined) {
+        metrics.incurredCost -= previousRow.incurredCost ?? previousRow.cost ?? 0;
+      }
+      // Token usage is a numeric tree; negate its breakdowns for the existing accumulator.
+      const removedUsage: TokenUsage = JSON.parse(
+        JSON.stringify(previousRow.tokenUsage || createEmptyTokenUsage(), (_key, value) =>
+          typeof value === 'number' ? -value : value,
+        ),
+      );
+      accumulateTokenUsage(metrics.tokenUsage, removedUsage);
+    }
     metrics.score += row.score;
     for (const [key, value] of Object.entries(row.namedScores)) {
       accumulateNamedMetric(metrics, {
@@ -4324,7 +4583,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
   }
 
   private async processEvalStep(
-    evalStep: RunEvalOptions,
+    evalStep: RunEvalInternalOptions,
     index: number,
     {
       deferGrading = false,
@@ -4357,7 +4616,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
   }
 
   private async runEvalStepAfterBeforeEach(
-    evalStep: RunEvalOptions,
+    evalStep: RunEvalInternalOptions,
     {
       deferGrading,
       deferredGradingAbortSignal,
@@ -4447,7 +4706,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         }
       }
 
-      await this.persistEvalRow(row);
+      const previousRow = await this.persistEvalRow(row);
 
       const metrics = context.prompts[row.promptIdx].metrics;
       invariant(metrics, 'Expected prompt.metrics to be set');
@@ -4456,9 +4715,17 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         evalStep,
         mathjsModule: context.mathjsModule,
         metrics,
-        promptEvalCount: reservePromptEvalCount(context, row.promptIdx),
+        promptEvalCount: reservePromptEvalCount(
+          context,
+          row.promptIdx,
+          Boolean(previousRow) || this.failedResumeWrites.has(getResultIndexKey(row)),
+        ),
+        previousRow,
         row,
       });
+
+      // Account for the committed result before a fallible artifact write.
+      await this.streamEvalRow(row);
 
       // The row that stops the eval is counted first, like any other error. Otherwise the
       // summary and the exit code would report only the rows that passed before it.
@@ -4522,7 +4789,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     const { deferGrading = false, providerCallQueue } = processOptions;
     const timeoutMs = context.options.timeoutMs || getEvalTimeoutMs();
 
-    if (timeoutMs <= 0) {
+    if (timeoutMs <= 0 && !evalStep.abortSignal) {
       return await this.processEvalStep(
         evalStep,
         index,
@@ -4532,16 +4799,38 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     }
 
     const abortController = new AbortController();
-    const evalStepWithSignal = {
+    let partialResult: EvaluateResult | undefined;
+    const evalStepWithSignal: RunEvalInternalOptions = {
       ...evalStep,
+      onProviderProgress: (result) => {
+        partialResult = result;
+      },
       abortSignal: evalStep.abortSignal
         ? AbortSignal.any([evalStep.abortSignal, abortController.signal])
         : abortController.signal,
     };
 
+    // CLI pause has its own bounded provider-call unwind. Keep observing hard
+    // cancellation independently: a pause-inclusive signal only aborts once.
+    const interruptionSignals = new Set(
+      [
+        evalStepWithSignal.abortSignal,
+        context.deferredGradingAbortSignal,
+        abortController.signal,
+      ].filter((signal): signal is AbortSignal => Boolean(signal)),
+    );
+    const startedAt = Date.now();
     let timeoutId: NodeJS.Timeout | undefined;
+    let interrupted = false;
+    let onAbort: (() => void) | undefined;
     let didTimeout = false;
     const clearEvalStepTimeout = () => {
+      if (onAbort) {
+        for (const signal of interruptionSignals) {
+          signal.removeEventListener('abort', onAbort);
+        }
+        onAbort = undefined;
+      }
       if (timeoutId) {
         clearTimeout(timeoutId);
         timeoutId = undefined;
@@ -4549,7 +4838,33 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     };
 
     try {
+      const interruption = new Promise<never>((_, reject) => {
+        onAbort = () => {
+          const signal = [...interruptionSignals].find(
+            (signal) =>
+              signal.aborted &&
+              !isCliPauseCancellation(signal.reason, signal, context.options.pauseSignal),
+          );
+          if (signal) {
+            interrupted = true;
+            reject(signal.reason ?? new Error('Evaluation aborted'));
+          }
+        };
+        for (const signal of interruptionSignals) {
+          signal.addEventListener('abort', onAbort, { once: true });
+        }
+        onAbort();
+        if (timeoutMs > 0) {
+          timeoutId = setTimeout(() => {
+            didTimeout = true;
+            abortController.abort(
+              new DOMException(`Evaluation timed out after ${timeoutMs}ms`, 'AbortError'),
+            );
+          }, timeoutMs);
+        }
+      });
       return await Promise.race([
+        interruption,
         this.processEvalStep(
           evalStepWithSignal,
           index,
@@ -4557,53 +4872,76 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
             deferGrading,
             onRowsReady: clearEvalStepTimeout,
             providerCallQueue,
-            shouldSkipStaleRows: () => didTimeout,
+            shouldSkipStaleRows: () => interrupted,
           },
           context,
         ),
-        new Promise<void>((_, reject) => {
-          timeoutId = setTimeout(() => {
-            didTimeout = true;
-            abortController.abort();
-            reject(new Error(`Evaluation timed out after ${timeoutMs}ms`));
-          }, timeoutMs);
-        }),
       ]);
     } catch (error) {
-      if (!didTimeout) {
+      if (!interrupted) {
         throw error;
       }
-      await this.addEvalStepTimeoutResult(evalStep, index, timeoutMs, error, context);
+      await this.addEvalStepInterruptedResult(
+        evalStepWithSignal,
+        index,
+        didTimeout ? timeoutMs : Date.now() - startedAt,
+        error,
+        context,
+        didTimeout,
+        partialResult,
+      );
     } finally {
       evalStep.test = evalStepWithSignal.test;
       clearEvalStepTimeout();
     }
   }
 
-  private async addEvalStepTimeoutResult(
+  private async addEvalStepInterruptedResult(
     evalStep: RunEvalOptions,
     index: number,
-    timeoutMs: number,
+    latencyMs: number,
     error: unknown,
     context: EvalProcessingContext,
+    didTimeout: boolean,
+    partialResult?: EvaluateResult,
   ) {
     const sanitizedTestCase = { ...evalStep.test };
     delete (sanitizedTestCase as Partial<AtomicTestCase>).provider;
 
-    const timeoutResult = createEvalStepTimeoutResult(
+    const timeoutResult = createEvalStepInterruptedResult(
       evalStep,
       sanitizedTestCase,
-      timeoutMs,
+      latencyMs,
       error,
+      didTimeout,
+      partialResult,
     );
     this.trackFinalJsonlResult(timeoutResult);
-    await this.store.appendResult(timeoutResult);
-    this.stats.errors++;
+    // Paused CLI runs return before final export; stream their authoritative cancellation row.
+    const previousRow = await this.persistEvalRow(timeoutResult, {
+      resumable: !didTimeout,
+    });
+    this.trackCompletedRow(evalStep, timeoutResult, context);
 
     const { metrics } = context.prompts[evalStep.promptIdx];
     if (metrics) {
-      metrics.testErrorCount += 1;
-      metrics.totalLatencyMs += timeoutMs;
+      this.updatePromptMetricsForRow({
+        derivedMetrics: context.testSuite.derivedMetrics,
+        evalStep,
+        mathjsModule: context.mathjsModule,
+        metrics,
+        promptEvalCount: reservePromptEvalCount(
+          context,
+          evalStep.promptIdx,
+          Boolean(previousRow) || this.failedResumeWrites.has(getResultIndexKey(timeoutResult)),
+        ),
+        previousRow,
+        row: timeoutResult,
+      });
+    }
+
+    if (!didTimeout) {
+      await this.streamEvalRow(timeoutResult);
     }
 
     context.numComplete++;
@@ -4612,7 +4950,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       context.runEvalOptionsLength,
       index,
       evalStep,
-      metrics || createTimeoutMetrics(timeoutMs),
+      metrics || createTimeoutMetrics(latencyMs),
     );
   }
 
@@ -4900,21 +5238,42 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     prompts: CompletedPrompt[];
   }) {
     let lastPromptsFlush = 0;
-    await async.forEachOfLimit(
-      concurrentRunEvalOptions,
-      processingContext.concurrency,
-      async (evalStep) => {
-        checkAbort();
-        const idx = evalStepIndexMap.get(evalStep)!;
-        await this.processEvalStepWithTimeout(evalStep, idx, {}, processingContext);
-        processedIndices.add(idx);
-        const now = Date.now();
-        if (now - lastPromptsFlush >= PROMPTS_FLUSH_INTERVAL_MS) {
-          lastPromptsFlush = now;
-          await this.store.appendPrompts(prompts);
-        }
-      },
-    );
+    const activeSteps = new Set<Promise<void>>();
+    try {
+      await async.forEachOfLimit(
+        concurrentRunEvalOptions,
+        processingContext.concurrency,
+        async (evalStep) => {
+          checkAbort();
+          const step = (async () => {
+            const idx = evalStepIndexMap.get(evalStep)!;
+            await this.processEvalStepWithTimeout(evalStep, idx, {}, processingContext);
+            processedIndices.add(idx);
+            const now = Date.now();
+            if (now - lastPromptsFlush >= PROMPTS_FLUSH_INTERVAL_MS) {
+              lastPromptsFlush = now;
+              await this.store.appendPrompts(prompts);
+            }
+          })();
+          activeSteps.add(step);
+          try {
+            await step;
+          } finally {
+            activeSteps.delete(step);
+          }
+        },
+      );
+    } finally {
+      if (
+        activeSteps.size > 0 &&
+        concurrentRunEvalOptions.some((evalStep) => evalStep.abortSignal?.aborted)
+      ) {
+        // The wrappers race uncooperative providers. Drain only their cancellation writes
+        // before cleanup closes writers, even if another worker's metrics flush failed.
+        await Promise.allSettled(activeSteps);
+      }
+    }
+    checkAbort();
   }
 
   private async saveInterruptedEval({
@@ -5055,7 +5414,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         if (result.failureReason === ResultFailureReason.ERROR) {
           continue;
         }
-        const metrics = prompts[result.promptIdx]?.metrics;
+        const metrics = this.getComparisonMetrics(result, prompts);
         const previous = {
           success: result.success,
           score: result.score,
@@ -5158,15 +5517,48 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       return;
     }
 
-    const firstResult = resultsToCompare[0];
-    const savedTest = firstResult.testCase;
+    const assertionResult = resultsToCompare.find((result) =>
+      result.testCase.assert?.some((assertion) => assertion.type === 'select-best'),
+    );
+    if (!assertionResult) {
+      return;
+    }
+    const savedTest = assertionResult.testCase;
     const assertion = savedTest.assert?.find((a): a is Assertion => a.type === 'select-best');
     if (!assertion) {
       return;
     }
+    // Partial outputs are evidence, not completed comparison candidates. Grader errors can
+    // be retried, and ordinary assertion failures remain eligible for comparison.
+    const comparableResults = resultsToCompare.filter(
+      (result) => result.failureReason !== ResultFailureReason.ERROR || getComparisonError(result),
+    );
+    if (comparableResults.length === 0) {
+      return;
+    }
+    if (comparableResults.length === 1 && resultsToCompare.length > 1) {
+      const result = comparableResults[0];
+      // No comparison is possible; retain the completed row's other assertion verdicts.
+      await this.applySelectBestGradingResult({
+        gradingResult: {
+          pass: true,
+          score: result.score,
+          reason: 'Comparison skipped: only one completed candidate',
+          assertion: {
+            type: assertion.type,
+            value: assertion.value,
+            metric: assertion.metric,
+            weight: assertion.weight,
+          },
+        },
+        metrics: this.getComparisonMetrics(result, prompts),
+        result,
+      });
+      return;
+    }
     let gradingResults: GradingResult[];
     try {
-      const providers = this.comparisonProviders.get(getResultIndexKey(firstResult));
+      const providers = this.comparisonProviders.get(getResultIndexKey(assertionResult));
       // Persisted rows retain each column's hook-adjusted criteria and vars. Only grader
       // references and redacted credentials need to come from the current configuration.
       const comparisonTestCase = {
@@ -5186,7 +5578,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       };
 
       const repeatCacheContext = repeatCacheContextByTestIdx.get(testIdx);
-      const outputs = resultsToCompare.map((r) => r.response?.output || '');
+      const outputs = comparableResults.map((r) => r.response?.output || '');
       gradingResults = await withCacheNamespace(
         repeatCacheContext
           ? getRepeatCacheNamespace(
@@ -5202,7 +5594,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
                 comparisonTestCase,
                 compareAssertion,
                 outputs,
-                this.getComparisonCallApiContext(resultsToCompare[0], repeatCacheContext),
+                this.getComparisonCallApiContext(assertionResult, repeatCacheContext),
               ),
           ),
       );
@@ -5225,10 +5617,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         'Check the grader configuration and credentials. Supply a grader configuration matching the saved result to resume, or rerun the evaluation. Run with --verbose to log the underlying error.';
       const reason = `${COMPARISON_ERROR_PREFIX}${graderId ? ` (${graderId})` : ''}: ${message}`;
       gradingResults = [];
-      for (const result of resultsToCompare) {
-        if (result.failureReason === ResultFailureReason.ERROR && !getComparisonError(result)) {
-          continue;
-        }
+      for (const result of comparableResults) {
         const previous = {
           success: result.success,
           score: result.score,
@@ -5242,7 +5631,11 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         result.failureReason = ResultFailureReason.ERROR;
         result.success = false;
         result.score = 0;
-        this.updateComparisonResultCounts(result, previous, prompts[result.promptIdx]?.metrics);
+        this.updateComparisonResultCounts(
+          result,
+          previous,
+          this.getComparisonMetrics(result, prompts),
+        );
         this.trackFinalJsonlResult(result);
         if (this.store.persisted && !this.store.hasResultPersistenceFailure(result)) {
           await this.store.saveResult(result);
@@ -5253,8 +5646,8 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     for (let index = 0; index < gradingResults.length; index++) {
       await this.applySelectBestGradingResult({
         gradingResult: gradingResults[index],
-        metrics: prompts[resultsToCompare[index].promptIdx]?.metrics,
-        result: resultsToCompare[index],
+        metrics: this.getComparisonMetrics(comparableResults[index], prompts),
+        result: comparableResults[index],
       });
     }
 
@@ -5339,9 +5732,12 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       return;
     }
 
-    const maxScoreAssertion = resultsToCompare[0].testCase.assert?.find(
-      (a) => a.type === 'max-score',
-    ) as Assertion;
+    const assertionResult = resultsToCompare.find((result) =>
+      result.testCase.assert?.some((assertion) => assertion.type === 'max-score'),
+    );
+    const maxScoreAssertion = assertionResult?.testCase.assert?.find(
+      (assertion): assertion is Assertion => assertion.type === 'max-score',
+    );
     if (!maxScoreAssertion) {
       return;
     }
@@ -5373,16 +5769,25 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
           ...maxScoreGradingResults[index],
           assertion: maxScoreAssertion,
         },
-        metrics: prompts[resultsToCompare[index].promptIdx]?.metrics,
+        metrics: this.getComparisonMetrics(resultsToCompare[index], prompts),
         result: resultsToCompare[index],
       });
     }
+  }
+
+  private getComparisonMetrics(result: TResult, prompts: CompletedPrompt[]) {
+    return this.failedResumeWrites.has(getResultIndexKey(result))
+      ? undefined
+      : prompts[result.promptIdx]?.metrics;
   }
 
   private async getResultsToCompare(testIdx: number): Promise<TResult[]> {
     let base = this.store.persisted
       ? await this.store.readResultsByTestIdx(testIdx)
       : this.store.results.filter((r) => r.testIdx === testIdx);
+    // Replacing a checkpoint changes insertion order in persisted stores. Comparison
+    // assertions and output assignments use the configured prompt-column order.
+    base = [...base].sort((a, b) => a.promptIdx - b.promptIdx);
     // Retry keeps old errors until new results are saved. Compare only their replacements.
     if (this.retryErrorResultIds.size > 0) {
       base = base.filter(
@@ -5397,17 +5802,17 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     if (!this.store.resultPersistenceFailed) {
       return base;
     }
-    // A row that failed to persist is absent from the database (and from `results`), so it
-    // would otherwise be excluded from the comparison — skewing the winner for its siblings
-    // and leaving the failed row with stale, pre-comparison grading. Merge it back in.
+    // Recovery rows are authoritative even when a failed checkpoint replacement leaves
+    // stale evidence in the database. Compare the completed replacement, not that checkpoint.
     const failed = await this.store.readFailedResultsByTestIdx(testIdx);
     if (failed.length === 0) {
       return base;
     }
-    const seen = new Set(base.map(getResultIndexKey));
-    return [...base, ...failed.filter((r) => !seen.has(getResultIndexKey(r)))].sort(
-      (a, b) => a.promptIdx - b.promptIdx,
-    );
+    const merged = new Map(base.map((result) => [getResultIndexKey(result), result]));
+    for (const result of failed) {
+      merged.set(getResultIndexKey(result), result);
+    }
+    return [...merged.values()].sort((a, b) => a.promptIdx - b.promptIdx);
   }
 
   private getComparisonCallApiContext(
@@ -5639,18 +6044,50 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     startTime: number;
   }) {
     for (let i = 0; i < runEvalOptions.length; i++) {
-      if (processedIndices.has(i)) {
+      const evalStep = runEvalOptions[i];
+      // Persistence/recovery already owns this outcome even if a later JSONL write failed.
+      if (processedIndices.has(i) || this.currentResultKeys.has(getResultIndexKey(evalStep))) {
         continue;
       }
-      const evalStep = runEvalOptions[i];
-      const timeoutResult = createMaxDurationTimeoutResult(evalStep, maxEvalTimeMs, startTime);
+      const checkpoint = await this.findResumableCheckpoint(evalStep);
+      // Queued work has no new target response. Retain its prior evidence and resumability;
+      // replacing the row also protects it from retry cleanup that names the old ERROR ID.
+      const timeoutResult = checkpoint
+        ? {
+            ...this.store.toEvaluateResult(checkpoint),
+            // Copy internal fields: export projections must not overwrite saved evidence.
+            provider: checkpoint.provider,
+            prompt: checkpoint.prompt,
+            response: checkpoint.response,
+            testCase: checkpoint.testCase,
+            vars:
+              'vars' in checkpoint
+                ? (checkpoint.vars as EvaluateResult['vars'])
+                : checkpoint.testCase.vars || {},
+            gradingResult: checkpoint.gradingResult,
+            metadata: checkpoint.metadata,
+          }
+        : createMaxDurationTimeoutResult(evalStep, maxEvalTimeMs, startTime);
       this.trackFinalJsonlResult(timeoutResult);
-      await this.store.appendResult(timeoutResult);
+      const previousRow = await this.persistEvalRow(timeoutResult, {
+        resumable: Boolean(checkpoint),
+      });
       this.stats.errors++;
       const { metrics } = prompts[evalStep.promptIdx];
       if (metrics) {
-        metrics.testErrorCount += 1;
-        metrics.totalLatencyMs += timeoutResult.latencyMs;
+        this.updatePromptMetricsForRow({
+          derivedMetrics: undefined,
+          evalStep,
+          mathjsModule: null,
+          metrics,
+          promptEvalCount:
+            metrics.testPassCount +
+            metrics.testFailCount +
+            metrics.testErrorCount +
+            (previousRow ? 0 : 1),
+          previousRow,
+          row: timeoutResult,
+        });
       }
     }
   }
@@ -5817,7 +6254,13 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       tests,
       recovery,
     );
-    await this.store.appendPrompts(prompts);
+    await cliState.withConfig(
+      {
+        ...cliState.config,
+        derivedMetrics: testSuite.derivedMetrics ?? cliState.config?.derivedMetrics,
+      },
+      () => this.store.appendPrompts(prompts),
+    );
     maybeEmitAzureOpenAiWarning(testSuite, tests);
 
     const varNames = await prepareTestVariables(tests, testSuite);
@@ -5848,6 +6291,26 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       }
     }
     const repeatCacheContextByTestIdx = buildRepeatCacheContextByTestIdx(runEvalOptions);
+    const mathjsModule = testSuite.derivedMetrics ? await import('mathjs') : null;
+    if (cliState.resume && this.store.persisted && mathjsModule) {
+      const expressions = testSuite.derivedMetrics!.filter(
+        (metric) => typeof metric.value === 'string',
+      );
+      if (expressions.length > 0) {
+        // Reuse the ordered expression evaluator after row-based recovery, including when
+        // no work remains. Function metrics keep their saved state and are not replayed.
+        const stepsByPrompt = new Map(runEvalOptions.map((step) => [step.promptIdx, step]));
+        for (const [promptIdx, step] of stepsByPrompt) {
+          const metrics = prompts[promptIdx].metrics;
+          if (metrics) {
+            const count = metrics.testPassCount + metrics.testFailCount + metrics.testErrorCount;
+            if (count > 0) {
+              updateDerivedMetrics(metrics, expressions, step, count, mathjsModule);
+            }
+          }
+        }
+      }
+    }
     await filterCompletedResumeSteps(runEvalOptions, this.store);
 
     const concurrencySettings = adjustConcurrencyForSerialFeatures({
@@ -5858,10 +6321,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     });
     concurrency = concurrencySettings.concurrency;
     const { usesConversationVar } = concurrencySettings;
-
-    // Awaiting after accumulating scores lets other rows change the total
-    // before derived metrics use this row's __count.
-    const mathjsModule = testSuite.derivedMetrics ? await import('mathjs') : null;
 
     const processingContext: EvalProcessingContext = {
       assertionTypes,

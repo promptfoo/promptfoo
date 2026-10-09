@@ -36,11 +36,8 @@ import {
   EvalRunError,
   showRedteamProviderLabelMissingWarning,
 } from '../../src/node/doEval';
-import {
-  deleteErrorResults,
-  getErrorResultIds,
-  recalculatePromptMetrics,
-} from '../../src/node/retry';
+import { recalculatePromptMetrics } from '../../src/node/promptMetrics';
+import { deleteErrorResults, getErrorResultIds } from '../../src/node/retry';
 import { ClaudeCodeSDKProvider } from '../../src/providers/claude-agent-sdk';
 import { loadApiProvider } from '../../src/providers/index';
 import { createShareableUrl, isSharingEnabled } from '../../src/share';
@@ -81,10 +78,12 @@ vi.mock('../../src/globalConfig/cloud', async (importOriginal) => {
   };
 });
 vi.mock('../../src/migrate');
+vi.mock('../../src/node/promptMetrics', () => ({
+  recalculatePromptMetrics: vi.fn(),
+}));
 vi.mock('../../src/node/retry', () => ({
   deleteErrorResults: vi.fn(),
   getErrorResultIds: vi.fn(),
-  recalculatePromptMetrics: vi.fn(),
 }));
 vi.mock('../../src/providers');
 vi.mock('../../src/redteam/shared', async (importOriginal) => {
@@ -171,6 +170,12 @@ vi.mock('../../src/database/index', async (importOriginal) => {
       transaction: vi.fn((fn) => fn(dbMock)),
     })),
   };
+});
+
+beforeEach(() => {
+  vi.mocked(evaluate)
+    .mockReset()
+    .mockImplementation(async (_testSuite, evalRecord) => evalRecord as Eval);
 });
 
 describe('eval command compatibility exports', () => {
@@ -314,7 +319,7 @@ describe('evalCommand', () => {
     );
   });
 
-  it('should finalize streamed JSONL output through recovery when CLI result persistence fails', async () => {
+  it('finalizes streamed JSONL recovery before reporting an API persistence failure', async () => {
     const cmdObj = { table: false, write: false, share: false };
     const config = { outputPath: ['results.jsonl', 'results.json'] } as UnifiedConfig;
 
@@ -337,7 +342,11 @@ describe('evalCommand', () => {
       return evalRecord as Eval;
     });
 
-    await doEval(cmdObj, config, defaultConfigPath, {});
+    await expect(doEval(cmdObj, config, defaultConfigPath, {})).rejects.toMatchObject({
+      name: 'EvalRunError',
+      exitCode: 1,
+      message: 'Evaluation failed because one or more results could not be saved.',
+    });
 
     expect(writeMultipleOutputs).toHaveBeenCalledWith(
       ['results.jsonl', 'results.json'],

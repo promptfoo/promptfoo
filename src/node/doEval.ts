@@ -53,6 +53,7 @@ import {
   warnOnDegradedJsonlRecovery,
   writeMultipleOutputs,
 } from '../util/index';
+import { getOutputFileFormat } from '../util/outputFormats';
 import { promptfooCommand } from '../util/promptfooCommand';
 import { checkProviderApiKeys } from '../util/provider';
 import { shouldShareResults } from '../util/sharing';
@@ -60,7 +61,12 @@ import { resolveTestsWatchPaths } from '../util/testCaseReader';
 import { TokenUsageTracker } from '../util/tokenUsage';
 import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import { isUuid } from '../util/uuid';
-import { deleteErrorResults, getErrorResultIds, recalculatePromptMetrics } from './retry';
+import { recalculatePromptMetrics } from './promptMetrics';
+import {
+  deleteErrorResults,
+  getErrorResultIds,
+  restoreJsonlOutputsAfterPersistenceFailure,
+} from './retry';
 import { notCloudEnabledShareInstructions } from './shareInstructions';
 import type { FSWatcher } from 'chokidar';
 import type { Command } from 'commander';
@@ -947,12 +953,24 @@ async function doEvalWithEnv(
       if (retryErrors && cliState._retryErrorResultIds && !paused) {
         const errorResultIds = cliState._retryErrorResultIds;
         try {
+          if (ret.resultPersistenceFailed) {
+            const outputPath = config.outputPath;
+            const jsonlOutputPaths = (Array.isArray(outputPath) ? outputPath : [outputPath]).filter(
+              (output): output is string =>
+                typeof output === 'string' && getOutputFileFormat(output) === 'jsonl',
+            );
+            await restoreJsonlOutputsAfterPersistenceFailure(jsonlOutputPaths, ret);
+            throw new Error('Retry results failed to persist. Existing ERROR rows were preserved.');
+          }
           await deleteErrorResults(errorResultIds);
           await recalculatePromptMetrics(ret);
           logger.debug(
             `Cleaned up ${errorResultIds.length} old ERROR results after successful retry`,
           );
         } catch (cleanupError) {
+          if (ret.resultPersistenceFailed) {
+            throw cleanupError;
+          }
           // Cleanup failure is non-fatal - retry itself succeeded
           logger.warn('Post-retry cleanup had issues. Retry results are saved.', {
             error: cleanupError,
@@ -960,7 +978,8 @@ async function doEvalWithEnv(
         } finally {
           // Clear the stored error result IDs
           delete cliState._retryErrorResultIds;
-          // Clear retry mode flags
+          // Clear retry mode flags even when failed persistence rejects the retry.
+          cliState.resume = false;
           cliState.retryMode = false;
         }
       }
@@ -971,8 +990,45 @@ async function doEvalWithEnv(
     // Clear resume flag after run completes
     cliState.resume = false;
 
+    const { outputPath } = config;
+
+    // JSONL rows are streamed (already redacted) during evaluation, then the file is
+    // rewritten from the completed eval so rows that were never streamed — timeout rows
+    // and deferred max-score/select-best grading — are reflected on disk.
+    const paths = (Array.isArray(outputPath) ? outputPath : [outputPath]).filter(
+      (p): p is string => typeof p === 'string' && p.length > 0,
+    );
+
+    if (ret.resultPersistenceFailed) {
+      if (ret.persisted) {
+        ret.clearResults();
+      }
+      warnOnDegradedJsonlRecovery(ret, paths);
+      try {
+        await writeMultipleOutputs(paths, ret, null);
+      } catch (error) {
+        logger.warn('Could not finalize outputs after evaluation results failed to persist.', {
+          error,
+        });
+      }
+      return failEvalRun(
+        'Evaluation failed because one or more results could not be saved.',
+        isCliInvocation,
+        { cliFallback: ret },
+      );
+    }
+
     // If paused, print minimal guidance and skip the rest of the reporting
     if (paused && cmdObj.write !== false) {
+      if (resumeEval) {
+        // A resumed run can replace a previously streamed cancellation checkpoint.
+        // Finalize JSONL after the writers close, including if the resumed run is paused again.
+        const jsonlPaths = paths.filter((output) => getOutputFileFormat(output) === 'jsonl');
+        if (jsonlPaths.length > 0) {
+          warnOnDegradedJsonlRecovery(ret, jsonlPaths);
+          await writeMultipleOutputs(jsonlPaths, ret, null);
+        }
+      }
       printBorder();
       logger.info(`${chalk.yellow('⏸')} Evaluation paused. ID: ${chalk.cyan(evalRecord.id)}`);
       logger.info(`» Resume with: ${chalk.green.bold('promptfoo eval --resume ' + evalRecord.id)}`);
@@ -1059,15 +1115,6 @@ async function doEvalWithEnv(
     if (totalTests >= 500) {
       logger.info('Skipping table output because there are more than 500 tests.');
     }
-
-    const { outputPath } = config;
-
-    // JSONL rows are streamed (already redacted) during evaluation, then the file is
-    // rewritten from the completed eval so rows that were never streamed — timeout rows
-    // and deferred max-score/select-best grading — are reflected on disk.
-    const paths = (Array.isArray(outputPath) ? outputPath : [outputPath]).filter(
-      (p): p is string => typeof p === 'string' && p.length > 0,
-    );
 
     const isRedteam = Boolean(config.redteam);
     const duration = Math.round((Date.now() - startTime) / 1000);

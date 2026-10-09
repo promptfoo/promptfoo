@@ -24,7 +24,7 @@ import {
   getStandaloneEvalCacheKey,
   setCachedStandaloneEvals,
 } from '../../src/util/standaloneEvalCache';
-import { createEvaluateResult } from '../factories/eval';
+import { createCompletedPrompt, createEvaluateResult } from '../factories/eval';
 import EvalFactory from '../factories/evalFactory';
 
 vi.mock('../../src/globalConfig/accounts', async () => {
@@ -205,11 +205,26 @@ describe('evaluator', () => {
       ]);
     });
 
+    it('preserves fresh prompt state when no result rows have been saved', async () => {
+      const prompts = [createCompletedPrompt('Fresh prompt')];
+      prompts[0].metrics!.namedScores.InitialValue = 77;
+      const evaluation = await Eval.create({}, prompts);
+      const fetchBatched = vi.spyOn(evaluation, 'fetchResultsBatched');
+      await new EvalEvaluationStore(evaluation).appendPrompts(prompts);
+      expect(fetchBatched).not.toHaveBeenCalled();
+      expect((await Eval.findById(evaluation.id))!.prompts).toEqual(prompts);
+    });
+
     it('keeps legacy result and summary reads on their existing path', async () => {
       const stored = await EvalFactory.createOldResult();
       const evaluation = (await Eval.findById(stored.id))!;
       const findResults = vi.spyOn(EvalResult, 'findManyByEvalId');
 
+      const before = structuredClone(evaluation.prompts);
+      const fetchBatched = vi.spyOn(evaluation, 'fetchResultsBatched');
+      await new EvalEvaluationStore(evaluation).appendPrompts(evaluation.prompts);
+      expect(fetchBatched).not.toHaveBeenCalled();
+      expect((await Eval.findById(stored.id))!.prompts).toEqual(before);
       expect(evaluation.useOldResults()).toBe(true);
       expect(await evaluation.getResults()).toBe(evaluation.oldResults!.results);
       expect(await evaluation.toEvaluateSummary()).toMatchObject({

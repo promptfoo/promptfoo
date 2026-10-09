@@ -1,10 +1,13 @@
 import EvalResult, { asEvaluateResult } from '../models/evalResult';
+import { recalculatePromptMetrics } from './promptMetrics';
 
 import type { EvaluationStore } from '../evaluator/runtime';
 import type Eval from '../models/eval';
 import type { CompletedPrompt, EvaluateResult } from '../types/index';
 
 export class EvalEvaluationStore implements EvaluationStore<Eval, EvalResult> {
+  private promptsPrepared = false;
+
   constructor(readonly evaluation: Eval) {}
 
   get id() {
@@ -35,8 +38,20 @@ export class EvalEvaluationStore implements EvaluationStore<Eval, EvalResult> {
     return this.evaluation.addResult(result);
   }
 
-  appendPrompts(prompts: CompletedPrompt[]): Promise<void> {
-    return this.evaluation.addPrompts(prompts);
+  replaceResult(result: EvaluateResult, previous: EvalResult): Promise<void> {
+    return this.evaluation.addResult(result, { replaceId: previous.id });
+  }
+
+  async appendPrompts(prompts: CompletedPrompt[]): Promise<void> {
+    if (!this.promptsPrepared && this.persisted && (await EvalResult.hasSavedResults(this.id))) {
+      // Result commits can outlive an aggregate flush, including the last checkpoint
+      // replacement. Reconcile an existing eval once from its durable rows.
+      this.evaluation.prompts = prompts;
+      await recalculatePromptMetrics(this.evaluation, { preserveDerivedMetrics: true });
+    } else {
+      await this.evaluation.addPrompts(prompts);
+    }
+    this.promptsPrepared = true;
   }
 
   hasResultPersistenceFailure(result: Pick<EvaluateResult, 'promptIdx' | 'testIdx'>): boolean {
@@ -55,8 +70,10 @@ export class EvalEvaluationStore implements EvaluationStore<Eval, EvalResult> {
     return this.evaluation.getResults();
   }
 
-  readResultsByTestIdx(testIdx: number): Promise<EvalResult[]> {
-    return this.evaluation.fetchResultsByTestIdx(testIdx);
+  readResultsByTestIdx(testIdx: number, promptIdx?: number): Promise<EvalResult[]> {
+    return promptIdx === undefined
+      ? this.evaluation.fetchResultsByTestIdx(testIdx)
+      : this.evaluation.fetchResultsByTestIdx(testIdx, promptIdx);
   }
 
   recordFinalResult(result: EvaluateResult): void {

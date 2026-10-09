@@ -1351,6 +1351,154 @@ describe('EvalResult', () => {
   });
 
   describe('toEvaluateResult', () => {
+    it.each(['audio', 'base64', 'base64-json', 'text'] as const)(
+      'projects known %s checkpoint media without redacting ordinary history text',
+      async (kind) => {
+        const bytes = 'c3ludGhldGljLW1lZGlh';
+        const isBase64 = kind === 'base64' || kind === 'base64-json';
+        const output = {
+          audio: 'Audio transcript',
+          base64: bytes,
+          'base64-json': JSON.stringify({ data: [{ b64_json: bytes }] }),
+          text: 'Ordinary answer',
+        }[kind];
+        const history = {
+          prompt: 'Probe',
+          output,
+          isBase64,
+          ...(kind === 'audio' && { outputAudio: { data: bytes, format: 'wav' } }),
+        };
+        const metadata = {
+          redteamHistory: [history],
+          messages: [
+            { role: 'user', content: 'Keep the prompt' },
+            { role: 'assistant', content: output, isBase64 },
+          ],
+          successfulAttacks: [
+            { turn: 1, message: 'Keep the attack prompt', response: output, isBase64 },
+          ],
+          opaque: 'A'.repeat(2400),
+        };
+        const input = createEvaluateResult({
+          ...mockEvaluateResult,
+          gradingResult: null,
+          response: {
+            output,
+            metadata,
+            ...(kind === 'audio' && { audio: { data: bytes, format: 'wav' } }),
+          },
+          metadata,
+        });
+        const saved = await EvalResult.createFromEvaluateResult(`checkpoint-media-${kind}`, input, {
+          persist: true,
+        });
+        const before = structuredClone(saved.response);
+        const restoreEnv = mockProcessEnv({ PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'true' });
+        try {
+          for (const projected of [
+            saved.toEvaluateResult(),
+            sanitizeResultForJsonlArtifact(input),
+          ]) {
+            expect(projected.response?.output).toBe('[output stripped]');
+            if (kind !== 'text') {
+              expect(JSON.stringify(projected)).not.toContain(bytes);
+            }
+            for (const values of [projected.metadata, projected.response?.metadata]) {
+              expect(values?.opaque).toBe(metadata.opaque);
+              expect(values?.messages[0].content).toBe('Keep the prompt');
+              expect(values?.successfulAttacks[0]).toMatchObject({
+                turn: 1,
+                message: 'Keep the attack prompt',
+                response: isBase64 ? '[output stripped]' : output,
+              });
+              expect(values?.messages[1].content).toBe(isBase64 ? '[output stripped]' : output);
+              expect(values?.redteamHistory[0].output).toBe(
+                isBase64 ? '[output stripped]' : output,
+              );
+              expect(values?.redteamHistory[0]).not.toHaveProperty('outputAudio');
+            }
+          }
+        } finally {
+          restoreEnv();
+        }
+        expect(saved.response).toEqual(before);
+        expect((await EvalResult.findById(saved.id))?.response).toEqual(before);
+      },
+    );
+
+    it.each([
+      {
+        name: 'bare base64',
+        image: { data: 'c3ludGhldGljLWltYWdl', mimeType: 'image/png' },
+        marker: 'c3ludGhldGljLWltYWdl',
+      },
+      {
+        name: 'data URL',
+        image: { data: 'data:image/png;base64,c3ludGhldGljLWltYWdl', mimeType: 'image/png' },
+        marker: 'c3ludGhldGljLWltYWdl',
+      },
+      {
+        name: 'blob reference',
+        image: {
+          mimeType: 'image/png',
+          blobRef: {
+            uri: `promptfoo://blob/${'1'.repeat(64)}`,
+            hash: '1'.repeat(64),
+            provider: 'filesystem',
+            mimeType: 'image/png',
+            sizeBytes: 15,
+          },
+        },
+        marker: `promptfoo://blob/${'1'.repeat(64)}`,
+      },
+    ])(
+      'strips $name checkpoint history images from JSON and JSONL without changing storage',
+      async ({ name, image, marker }) => {
+        const metadata = {
+          redteamHistory: [
+            {
+              prompt: 'Probe',
+              output: 'Image response',
+              images: [image],
+              outputImage: { ...image, format: 'png' },
+            },
+          ],
+          ordinary: 'metadata retained',
+        };
+        const input = createEvaluateResult({
+          ...mockEvaluateResult,
+          success: false,
+          failureReason: ResultFailureReason.ERROR,
+          score: 0,
+          response: { output: 'Image response', images: [image], metadata },
+          metadata: { ...metadata, __promptfoo: { resumable: true } },
+        });
+        const saved = await EvalResult.createFromEvaluateResult(`checkpoint-image-${name}`, input, {
+          persist: true,
+        });
+        expect(JSON.stringify(saved.toEvaluateResult())).toContain(marker);
+        const before = structuredClone(saved.response);
+        const restoreEnv = mockProcessEnv({ PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'true' });
+        try {
+          for (const projected of [
+            saved.toEvaluateResult(),
+            sanitizeResultForJsonlArtifact(input),
+          ]) {
+            expect(projected.response?.output).toBe('[output stripped]');
+            expect(projected.response?.images).toBeUndefined();
+            expect(JSON.stringify(projected)).not.toContain(marker);
+            expect(projected.metadata?.ordinary).toBe('metadata retained');
+            expect(projected.response?.metadata?.ordinary).toBe('metadata retained');
+          }
+        } finally {
+          restoreEnv();
+        }
+        expect(saved.response).toEqual(before);
+        expect((await EvalResult.findById(saved.id))?.response).toEqual(before);
+        expect(JSON.stringify(saved.toEvaluateResult())).toContain(marker);
+      },
+    );
+
     it.each(
       [
         { boundary: 'model', strip: true },

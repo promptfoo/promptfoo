@@ -5,6 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { expect, it, vi } from 'vitest';
 import { evaluate } from '../../src/evaluator';
 import Eval from '../../src/models/eval';
+import { nodeEvaluatorRuntime } from '../../src/node/evaluatorRuntime';
 import { MCPProvider } from '../../src/providers/mcp';
 import { ProviderRegistry, providerRegistry } from '../../src/providers/providerRegistry';
 import { toPrompt } from './helpers';
@@ -674,6 +675,226 @@ describeEvaluator('registered resources across overlapping evaluations', () => {
       await Promise.allSettled([preceding, ...(next ? [next] : [])]);
     }
   });
+
+  it.each(['timeout', 'cancel'] as const)(
+    'finalizes %s evidence before shared raw calls and cleanup settle',
+    async (mode) => {
+      const calls = [0, 1].map(() => ({
+        started: deferred(),
+        finish: deferred(),
+        settled: deferred(),
+      }));
+      const writeStarted = deferred();
+      const finishWrite = deferred();
+      const resource = { shutdown: vi.fn(async () => {}) };
+      const cleanup = vi.fn(async () => {});
+      let callIndex = 0;
+      const provider: ApiProvider = {
+        id: () => 'shared-checkpoint-provider',
+        cleanupAfterEvaluation: cleanup,
+        callApi: vi.fn(async (_prompt, _context, options) => {
+          const index = callIndex++;
+          providerRegistry.register(resource);
+          options?.onProgress?.({
+            output: `Checkpoint ${index}`,
+            tokenUsage: { total: 11, numRequests: 1 },
+          });
+          calls[index].started.resolve();
+          await calls[index].finish.promise;
+          options?.onProgress?.({
+            output: `Late evidence ${index}`,
+            tokenUsage: { total: 99, numRequests: 1 },
+          });
+          calls[index].settled.resolve();
+          return { output: `Completed ${index}`, tokenUsage: { total: 7, numRequests: 1 } };
+        }),
+      };
+      const suite: TestSuite = { providers: [provider], prompts: [toPrompt('Probe')], tests: [{}] };
+      const firstRecord = await Eval.create({}, suite.prompts, { id: randomUUID() });
+      const secondRecord = await Eval.create({}, suite.prompts, { id: randomUUID() });
+      const firstController = new AbortController();
+      const secondController = new AbortController();
+      const events: string[] = [];
+      const writer = {
+        write: vi.fn(async () => {
+          events.push('write-start');
+          writeStarted.resolve();
+          await finishWrite.promise;
+          events.push('write-end');
+        }),
+        close: vi.fn(async () => {
+          events.push('close');
+        }),
+      };
+      vi.useFakeTimers();
+      const first = providerRegistry.withEvaluation(async () => {
+        await providerRegistry.cleanupWhenIdle([provider]);
+        return evaluate(
+          suite,
+          firstRecord,
+          {
+            timeoutMs: mode === 'timeout' ? 25 : 0,
+            abortSignal: firstController.signal,
+          },
+          { ...nodeEvaluatorRuntime, createResultWriters: () => [writer] },
+        );
+      });
+      let second: Promise<Eval> | undefined;
+      try {
+        await calls[0].started.promise;
+        second = providerRegistry.withEvaluation(async () => {
+          await providerRegistry.cleanupWhenIdle([provider]);
+          return evaluate(suite, secondRecord, {
+            timeoutMs: 0,
+            abortSignal: secondController.signal,
+          });
+        });
+        await calls[1].started.promise;
+        if (mode === 'cancel') {
+          firstController.abort();
+        }
+        await vi.advanceTimersByTimeAsync(mode === 'timeout' ? 25 : 0);
+        if (mode === 'cancel') {
+          await writeStarted.promise;
+          expect(writer.close).not.toHaveBeenCalled();
+          expect(cleanup).not.toHaveBeenCalled();
+          expect(resource.shutdown).not.toHaveBeenCalled();
+          finishWrite.resolve();
+        }
+        await first;
+        expect(events).toEqual(
+          mode === 'cancel' ? ['write-start', 'write-end', 'close'] : ['close'],
+        );
+        if (mode === 'timeout') {
+          expect(writer.write).not.toHaveBeenCalled();
+        }
+        const [checkpoint] = await firstRecord.fetchResultsByTestIdx(0);
+        expect(checkpoint).toMatchObject({
+          success: false,
+          score: 0,
+          response: { output: 'Checkpoint 0' },
+          metadata: { incomplete: true },
+        });
+        expect(checkpoint.metadata?.__promptfoo?.resumable).toBe(
+          mode === 'cancel' ? true : undefined,
+        );
+        expect(firstRecord.prompts[0].metrics).toMatchObject({
+          testErrorCount: 1,
+          tokenUsage: { total: 11, numRequests: 1 },
+        });
+        expect(cleanup).not.toHaveBeenCalled();
+        expect(resource.shutdown).not.toHaveBeenCalled();
+
+        calls[0].finish.resolve();
+        await calls[0].settled.promise;
+        await vi.advanceTimersByTimeAsync(0);
+        expect(cleanup).not.toHaveBeenCalled();
+        expect(resource.shutdown).not.toHaveBeenCalled();
+        expect((await firstRecord.fetchResultsByTestIdx(0))[0].response).toEqual(
+          checkpoint.response,
+        );
+
+        calls[1].finish.resolve();
+        await second;
+        expect(cleanup).toHaveBeenCalledOnce();
+        expect(resource.shutdown).toHaveBeenCalledOnce();
+        expect((await firstRecord.fetchResultsByTestIdx(0))[0].response).toEqual(
+          checkpoint.response,
+        );
+        expect(secondRecord.prompts[0].metrics).toMatchObject({
+          testPassCount: 1,
+          tokenUsage: { total: 7, numRequests: 1 },
+        });
+      } finally {
+        firstController.abort();
+        secondController.abort();
+        finishWrite.resolve();
+        for (const call of calls) {
+          call.finish.resolve();
+        }
+        await Promise.allSettled([first, ...(second ? [second] : [])]);
+        await vi.advanceTimersByTimeAsync(0);
+        providerRegistry.unregister(resource);
+        vi.useRealTimers();
+      }
+    },
+  );
+
+  it.each(['timeout', 'cancel'] as const)(
+    'keeps a zero-request checkpoint when a provider override is %s while awaiting cleanup',
+    async (mode) => {
+      const cleanupStarted = deferred();
+      const finishCleanup = deferred();
+      const waiting = deferred();
+      const override: ApiProvider = {
+        id: () => 'checkpoint-waits-for-cleanup',
+        callApi: vi.fn(async () => ({ output: 'Must not run' })),
+        cleanupAfterEvaluation: vi.fn(async () => {
+          cleanupStarted.resolve();
+          await finishCleanup.promise;
+        }),
+      };
+      const original: ApiProvider = {
+        id: () => 'unused-original',
+        callApi: vi.fn(async () => ({ output: 'Unused' })),
+      };
+      const suite: TestSuite = {
+        providers: [original],
+        prompts: [toPrompt('Probe')],
+        tests: [{ provider: override }],
+      };
+      const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+      const controller = new AbortController();
+      const preceding = providerRegistry.withEvaluation(() =>
+        providerRegistry.cleanupWhenIdle([override]),
+      );
+      await cleanupStarted.promise;
+      const withProvider = providerRegistry.withProvider.bind(providerRegistry);
+      const tracked = vi
+        .spyOn(providerRegistry, 'withProvider')
+        .mockImplementation((provider, run, signal) => {
+          if (provider === override) {
+            waiting.resolve();
+          }
+          return withProvider(provider, run, signal);
+        });
+      vi.useFakeTimers();
+      const evaluation = evaluate(suite, record, {
+        timeoutMs: mode === 'timeout' ? 25 : 0,
+        abortSignal: controller.signal,
+      });
+      try {
+        await waiting.promise;
+        expect(override.callApi).not.toHaveBeenCalled();
+        if (mode === 'cancel') {
+          controller.abort();
+        }
+        await vi.advanceTimersByTimeAsync(mode === 'timeout' ? 25 : 0);
+        await evaluation;
+        const [checkpoint] = await record.fetchResultsByTestIdx(0);
+        expect(checkpoint).toMatchObject({
+          success: false,
+          score: 0,
+          metadata: { incomplete: true },
+        });
+        expect(record.prompts[0].metrics).toMatchObject({
+          testErrorCount: 1,
+          tokenUsage: { total: 0, numRequests: 0 },
+        });
+        finishCleanup.resolve();
+        await preceding;
+        await vi.advanceTimersByTimeAsync(0);
+        expect(override.callApi).not.toHaveBeenCalled();
+        expect(original.callApi).not.toHaveBeenCalled();
+      } finally {
+        controller.abort();
+        finishCleanup.resolve();
+        await Promise.allSettled([preceding, evaluation]);
+        tracked.mockRestore();
+        vi.useRealTimers();
+      }
+    },
+  );
 
   it('keeps cleanup with the target behind an evaluation wrapper until its cancelled call drains', async () => {
     const entered = deferred();

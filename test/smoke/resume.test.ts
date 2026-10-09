@@ -85,6 +85,14 @@ function spawnCli(
     stdio: ['pipe', 'pipe', 'pipe'],
   });
 
+  // Capture completion before a caller can wait for output or send signals. The process
+  // may close before waitForExit is called, and close also waits for stdout/stderr to drain.
+  const completion = new Promise<{ stdout: string; stderr: string; exitCode: number }>(
+    (resolve) => {
+      child.once('close', (code) => resolve({ stdout, stderr, exitCode: code ?? 1 }));
+    },
+  );
+
   const outputWaiters: Array<{
     pattern: string | RegExp;
     resolve: (output: string) => void;
@@ -117,7 +125,7 @@ function spawnCli(
   });
 
   const sendSignal = (signal: NodeJS.Signals) => {
-    if (child.pid && !child.killed) {
+    if (child.pid && child.exitCode === null && child.signalCode === null) {
       child.kill(signal);
     }
   };
@@ -168,12 +176,9 @@ function spawnCli(
         );
       }, timeoutMs);
 
-      child.on('exit', (code) => {
+      completion.then((result) => {
         clearTimeout(timer);
-        // Small delay to collect remaining output
-        setTimeout(() => {
-          resolve({ stdout, stderr, exitCode: code ?? 1 });
-        }, 100);
+        resolve(result);
       });
     });
   };
@@ -227,6 +232,17 @@ describe('Resume E2E Tests', () => {
   });
 
   describe('Regular eval resume', () => {
+    it('retains the process result for later exit waiters', async () => {
+      const cli = spawnCli(['--version']);
+      try {
+        const result = await cli.waitForExit();
+        expect(result.exitCode).toBe(0);
+        expect(await cli.waitForExit(1000)).toEqual(result);
+      } finally {
+        cli.kill();
+      }
+    });
+
     it('completes a full evaluation with echo provider', () => {
       const configPath = path.join(CONFIGS_DIR, 'resume-many-tests.yaml');
       const outputPath = path.join(OUTPUT_DIR, 'full-eval-output.json');

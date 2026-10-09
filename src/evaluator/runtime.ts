@@ -41,12 +41,14 @@ export interface EvaluationStore<
   readonly resultPersistenceFailed: boolean;
 
   appendResult(result: EvaluateResult): Promise<void>;
+  /** Atomically replace a saved checkpoint; legacy stores can omit this capability. */
+  replaceResult?(result: EvaluateResult, previous: TResult): Promise<void>;
   appendPrompts(prompts: CompletedPrompt[]): Promise<void>;
   hasResultPersistenceFailure(result: Pick<EvaluateResult, 'promptIdx' | 'testIdx'>): boolean;
   readCompletedIndexPairs(options?: { excludeErrors?: boolean }): Promise<Set<string>>;
   readFailedResultsByTestIdx(testIdx: number): Promise<TResult[]>;
   readResults(): Promise<Array<TResult | EvaluateResult>>;
-  readResultsByTestIdx(testIdx: number): Promise<TResult[]>;
+  readResultsByTestIdx(testIdx: number, promptIdx?: number): Promise<TResult[]>;
   recordFinalResult(result: EvaluateResult): void;
   recordResultPersistenceFailure(result: EvaluateResult): void;
   save(): Promise<void>;

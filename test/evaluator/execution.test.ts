@@ -48,6 +48,218 @@ function useEvaluationTimers() {
 }
 
 describeEvaluator('evaluator execution control', () => {
+  it.each([
+    { progress: false, schedulerDisabled: false },
+    { progress: true, schedulerDisabled: false },
+    { progress: false, schedulerDisabled: true },
+    { progress: true, schedulerDisabled: true },
+  ])(
+    'bounds CLI pause with progress=$progress and scheduler disabled=$schedulerDisabled',
+    async ({ progress, schedulerDisabled }) => {
+      useEvaluationTimers();
+      vi.stubEnv('PROMPTFOO_DISABLE_ADAPTIVE_SCHEDULER', String(schedulerDisabled));
+      const pause = new AbortController();
+      const started = createDeferred<void>();
+      const release = createDeferred<void>();
+      let resuming = false;
+      const provider: ApiProvider = {
+        id: () => 'cli-pause-noncooperative',
+        callApi: vi.fn(async (_prompt, _context, options) => {
+          if (resuming) {
+            return { output: 'Resumed once', tokenUsage: { total: 7, numRequests: 1 } };
+          }
+          if (progress) {
+            options?.onProgress?.({
+              output: 'Completed checkpoint',
+              tokenUsage: { total: 11, numRequests: 1, attacker: { total: 3, numRequests: 1 } },
+            });
+          }
+          started.resolve();
+          await release.promise;
+          options?.onProgress?.({
+            output: 'Late checkpoint',
+            tokenUsage: { total: 99, numRequests: 1 },
+          });
+          return { output: 'Late completion', tokenUsage: { total: 99, numRequests: 1 } };
+        }),
+      };
+      const suite: TestSuite = {
+        providers: [provider],
+        prompts: [toPrompt('Pause fixture')],
+        tests: [{}],
+      };
+      const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+      try {
+        const running = evaluate(suite, record, { maxConcurrency: 1, pauseSignal: pause.signal });
+        await started.promise;
+        pause.abort(new Error('CLI pause fixture'));
+        await running;
+        const rows = await record.fetchResultsByTestIdx(0);
+        expect(rows).toHaveLength(progress ? 1 : 0);
+        if (progress) {
+          expect(rows[0]).toMatchObject({
+            success: false,
+            score: 0,
+            failureReason: ResultFailureReason.ERROR,
+            response: {
+              output: 'Completed checkpoint',
+              tokenUsage: { total: 11, numRequests: 1, attacker: { total: 3 } },
+            },
+          });
+          expect(rows[0].metadata?.__promptfoo?.resumable).not.toBe(true);
+          expect(record.prompts[0].metrics).toMatchObject({
+            testErrorCount: 1,
+            tokenUsage: { total: 11, numRequests: 1 },
+          });
+        }
+        expect(await EvalResult.getCompletedIndexPairs(record.id)).toEqual(
+          new Set(progress ? ['0:0'] : []),
+        );
+        const beforeLate = JSON.stringify(rows.map((row) => row.toEvaluateResult()));
+        release.resolve();
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        expect(
+          JSON.stringify(
+            (await record.fetchResultsByTestIdx(0)).map((row) => row.toEvaluateResult()),
+          ),
+        ).toBe(beforeLate);
+        cliState.resume = true;
+        resuming = true;
+        await evaluate(suite, (await Eval.findById(record.id))!, { maxConcurrency: 1 });
+        expect(provider.callApi).toHaveBeenCalledTimes(progress ? 1 : 2);
+      } finally {
+        release.resolve();
+        vi.unstubAllEnvs();
+      }
+    },
+  );
+
+  it.each(['caller', 'deadline'] as const)(
+    'honors a later %s cancellation after CLI pause during deferred grading',
+    async (mode) => {
+      useEvaluationTimers();
+      const pause = new AbortController();
+      const hard = new AbortController();
+      const started = createDeferred<void>();
+      const release = createDeferred<void>();
+      const reason = new Error('Hard cancellation after CLI pause');
+      const grader: ApiProvider = {
+        id: () => 'held-after-cli-pause',
+        callApi: vi.fn(async () => {
+          started.resolve();
+          await release.promise;
+          return { output: JSON.stringify({ pass: true, score: 1, reason: 'Late grade' }) };
+        }),
+      };
+      const target: ApiProvider = {
+        id: () => 'completed-before-cli-pause',
+        callApi: vi.fn(async () => ({
+          output: 'Completed target',
+          tokenUsage: { total: 5, numRequests: 1 },
+        })),
+      };
+      const suite: TestSuite = {
+        providers: [target],
+        prompts: [toPrompt('Pause then cancel')],
+        tests: [{ assert: [{ type: 'llm-rubric', value: 'Grade fixture', provider: grader }] }],
+      };
+      const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+      let finished = false;
+      try {
+        const running = evaluate(suite, record, {
+          maxConcurrency: 1,
+          maxEvalTimeMs: mode === 'deadline' ? 100 : undefined,
+          abortSignal: hard.signal,
+          pauseSignal: pause.signal,
+        }).then((value) => {
+          finished = true;
+          return value;
+        });
+        await started.promise;
+        pause.abort(new Error('CLI pause before hard cancellation'));
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        expect(finished).toBe(false);
+        if (mode === 'caller') {
+          hard.abort(reason);
+        } else {
+          await vi.advanceTimersByTimeAsync(100);
+        }
+        await running;
+        const rows = await record.fetchResultsByTestIdx(0);
+        expect(rows).toHaveLength(1);
+        expect(rows[0]).toMatchObject({
+          success: false,
+          score: 0,
+          failureReason: ResultFailureReason.ERROR,
+          response: { output: 'Completed target' },
+        });
+        expect(rows[0].error).toContain(
+          mode === 'caller' ? reason.message : 'Aborted: This operation was aborted',
+        );
+        expect(rows[0].error).not.toContain('CLI pause before hard cancellation');
+        expect(record.prompts[0].metrics).toMatchObject({
+          testErrorCount: 1,
+          tokenUsage: { total: 5, numRequests: 1 },
+        });
+        const beforeLate = JSON.stringify(rows[0].toEvaluateResult());
+        release.resolve();
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        expect(JSON.stringify((await record.fetchResultsByTestIdx(0))[0].toEvaluateResult())).toBe(
+          beforeLate,
+        );
+      } finally {
+        release.resolve();
+      }
+    },
+  );
+
+  it('keeps a completed target when CLI pause shortens pacing and does not replay it', async () => {
+    useEvaluationTimers();
+    const pause = new AbortController();
+    const started = createDeferred<void>();
+    const provider: ApiProvider = {
+      id: () => 'paused-target-pacing',
+      delay: 1000,
+      callApi: vi.fn(async () => {
+        started.resolve();
+        return { output: 'Completed before pacing', tokenUsage: { total: 5, numRequests: 1 } };
+      }),
+    };
+    const suite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Pacing fixture')],
+      tests: [{ assert: [{ type: 'contains', value: 'Completed' }] }],
+    };
+    const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+    let finished = false;
+    const running = evaluate(suite, record, { maxConcurrency: 1, pauseSignal: pause.signal }).then(
+      (value) => {
+        finished = true;
+        return value;
+      },
+    );
+    await started.promise;
+    await vi.advanceTimersByTimeAsync(0);
+    expect(finished).toBe(false);
+    pause.abort(new Error('CLI pause during pacing'));
+    await running;
+    const rows = await record.fetchResultsByTestIdx(0);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      success: true,
+      score: 1,
+      response: { output: 'Completed before pacing' },
+    });
+    expect(record.prompts[0].metrics).toMatchObject({
+      testPassCount: 1,
+      testErrorCount: 0,
+      tokenUsage: { total: 5, numRequests: 1 },
+    });
+    cliState.resume = true;
+    await evaluate(suite, (await Eval.findById(record.id))!, { maxConcurrency: 1 });
+    expect(provider.callApi).toHaveBeenCalledOnce();
+  });
+
   it('evaluates with provider delay', async () => {
     const started = createDeferred<void>();
     const provider: ApiProvider = {
@@ -1048,13 +1260,14 @@ describeEvaluator('evaluator execution control', () => {
     }
   });
 
-  it('keeps a target response that completes after the eval is paused', async () => {
+  it('resumes a checkpoint instead of accepting a target response after pause', async () => {
     const controller = new AbortController();
+    const reason = new Error('Target stopped by caller');
     // Like the echo provider, this target ignores the signal and finishes its in-flight call.
     const provider: ApiProvider = {
       id: () => 'signal-ignoring-target',
       callApi: vi.fn(async () => {
-        controller.abort();
+        controller.abort(reason);
         return { output: 'completed output', tokenUsage: createEmptyTokenUsage() };
       }),
     };
@@ -1071,10 +1284,26 @@ describeEvaluator('evaluator execution control', () => {
     expect(provider.callApi).toHaveBeenCalledTimes(1);
     expect(results).toEqual([
       expect.objectContaining({
-        success: true,
-        response: expect.objectContaining({ output: 'completed output' }),
+        success: false,
+        score: 0,
+        failureReason: ResultFailureReason.ERROR,
+        error: `Evaluation aborted: ${String(reason)}`,
+        vars: { topic: 'alpha' },
+        metadata: expect.objectContaining({ incomplete: true, __promptfoo: { resumable: true } }),
       }),
     ]);
+    expect(results[0].response?.output).toBeUndefined();
+    expect(await EvalResult.getCompletedIndexPairs(evalRecord.id)).toEqual(new Set());
+
+    cliState.resume = true;
+    vi.mocked(provider.callApi).mockResolvedValue({ output: 'resumed output' });
+    await evaluate(testSuite, evalRecord, { maxConcurrency: 1 });
+    const resumed = await evalRecord.toEvaluateSummary();
+    expect(provider.callApi).toHaveBeenCalledTimes(3);
+    expect(resumed.results).toHaveLength(2);
+    expect(resumed.results.every((row) => row.success && row.score === 1)).toBe(true);
+    expect(resumed.results.every((row) => !row.metadata?.__promptfoo?.resumable)).toBe(true);
+    expect(await EvalResult.getCompletedIndexPairs(evalRecord.id)).toEqual(new Set(['0:0', '1:0']));
   });
 
   it('keeps a grade that completes after the eval is paused', async () => {
@@ -1772,13 +2001,14 @@ describeEvaluator('evaluator execution control', () => {
         abortSignal: controller.signal,
         pauseSignal: mode === 'ordinary caller cancellation' ? undefined : controller.signal,
       });
-      const rows = await evalRecord.getResults();
+      const rows = await evalRecord.fetchResultsByTestIdx(0);
       expect(provider.callApi).toHaveBeenCalledTimes(cancelBeforeCall ? 0 : 1);
       const incomplete = mode === 'incomplete CLI pause';
       expect(rows).toHaveLength(incomplete ? 0 : 1);
-      // Ordinary errors still count as completed unless retry-errors is explicitly selected.
+      const callerCheckpoint = mode === 'ordinary caller cancellation';
+      // CLI pause preserves completed work; a caller checkpoint remains resumable.
       expect(await EvalResult.getCompletedIndexPairs(evalRecord.id)).toEqual(
-        new Set(incomplete ? [] : ['0:0']),
+        new Set(incomplete || callerCheckpoint ? [] : ['0:0']),
       );
       if (incomplete) {
         return;
@@ -1797,12 +2027,50 @@ describeEvaluator('evaluator execution control', () => {
       } else {
         expect(row.success).toBe(false);
         expect(row.failureReason).toBe(ResultFailureReason.ERROR);
-        expect(row.response).toBeFalsy();
+        expect(row.score).toBe(0);
+        if (mode === 'independent SDK error during CLI pause') {
+          expect(row.response).toMatchObject({ tokenUsage: { total: 0, numRequests: 0 } });
+          expect(row.response?.output).toBeUndefined();
+          expect(row.metadata?.__promptfoo?.resumable).not.toBe(true);
+        } else {
+          expect(row.response).toBeFalsy();
+          expect(row.metadata?.__promptfoo?.resumable).toBe(true);
+        }
         expect(row.error).toContain(
           mode === 'independent SDK error during CLI pause'
             ? 'Independent SDK failure'
             : 'This operation was aborted',
         );
+        expect(evalRecord.prompts[0].metrics).toMatchObject({
+          testPassCount: 0,
+          testFailCount: 0,
+          testErrorCount: 1,
+          tokenUsage: { total: 0, numRequests: 0 },
+        });
+        const beforeResume = row.toEvaluateResult();
+        const resumed = (await Eval.findById(evalRecord.id))!;
+        cliState.resume = true;
+        await evaluate(testSuite, resumed, { maxConcurrency: 1 });
+        const resumedRows = await resumed.fetchResultsByTestIdx(0);
+        expect(resumedRows).toHaveLength(1);
+        expect(provider.callApi).toHaveBeenCalledOnce();
+        if (callerCheckpoint) {
+          expect(resumedRows[0]).toMatchObject({
+            success: true,
+            score: 1,
+            failureReason: ResultFailureReason.NONE,
+          });
+          expect(resumedRows[0].id).not.toBe(row.id);
+          expect(resumed.prompts[0].metrics).toMatchObject({ testPassCount: 1, testErrorCount: 0 });
+        } else {
+          expect(resumedRows[0].toEvaluateResult()).toEqual(beforeResume);
+          expect(resumed.prompts[0].metrics).toMatchObject({
+            testPassCount: 0,
+            testFailCount: 0,
+            testErrorCount: 1,
+            tokenUsage: { total: 0, numRequests: 0 },
+          });
+        }
       }
     } finally {
       vi.unstubAllEnvs();

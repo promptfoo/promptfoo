@@ -62,6 +62,7 @@ import {
   queryTestIndicesOptimized,
 } from './evalPerformance';
 import EvalResult, {
+  type EvalResultMetrics,
   getResultIndexKey,
   getStripFlags,
   PROMPTFOO_METADATA_KEY,
@@ -759,7 +760,7 @@ export default class Eval {
     return convertResultsToTable(await this.toResultsFile());
   }
 
-  async addResult(result: EvaluateResult) {
+  async addResult(result: EvaluateResult, options?: { replaceId?: string }) {
     const httpStatus = result.response?.metadata?.http?.status;
     if (
       this.observedTargetErrorStatus === undefined &&
@@ -770,13 +771,30 @@ export default class Eval {
     }
     const newResult = await EvalResult.createFromEvaluateResult(this.id, result, {
       persist: this.persisted,
+      ...(options?.replaceId && { replaceId: options.replaceId }),
     });
+    // A later resume can reuse this Eval instance after a persistence failure. This saved
+    // row supersedes all recovery copies, including checkpoints buffered after another failure.
+    const key = getResultIndexKey(result);
+    this.failedResults.delete(key);
+    this.failedEvalResults.delete(key);
+    this.finalJsonlResults.delete(key);
     if (!this.persisted) {
       // We're only going to keep results in memory if the eval isn't persisted in the database
       // This is to avoid memory issues when running large evaluations
-      this.results.push(newResult);
+      const index = options?.replaceId
+        ? this.results.findIndex((row) => row.id === options.replaceId)
+        : -1;
+      if (index >= 0) {
+        this.results[index] = newResult;
+      } else {
+        this.results.push(newResult);
+      }
     }
     if (this.persisted) {
+      if (options?.replaceId) {
+        this.clearResults();
+      }
       // Notify watchers that new results are available, passing the eval ID
       notifyEvaluationChanged(this.id);
     }
@@ -827,7 +845,15 @@ export default class Eval {
     return reconstructed;
   }
 
-  async *fetchResultsBatched(batchSize: number = 100) {
+  fetchResultsBatched(
+    batchSize: number,
+    options: { projection: 'metrics' },
+  ): AsyncGenerator<EvalResultMetrics[], void>;
+  fetchResultsBatched(batchSize?: number): AsyncGenerator<EvalResult[], void>;
+  async *fetchResultsBatched(
+    batchSize: number = 100,
+    options?: { projection: 'metrics' },
+  ): AsyncGenerator<EvalResult[] | EvalResultMetrics[], void> {
     if (!this.persisted) {
       for (let offset = 0; offset < this.results.length; offset += batchSize) {
         yield this.results.slice(offset, offset + batchSize);
@@ -835,8 +861,10 @@ export default class Eval {
       return;
     }
 
-    for await (const batch of EvalResult.findManyByEvalIdBatched(this.id, { batchSize })) {
-      yield batch;
+    if (options?.projection === 'metrics') {
+      yield* EvalResult.findManyByEvalIdBatched(this.id, { batchSize, projection: 'metrics' });
+    } else {
+      yield* EvalResult.findManyByEvalIdBatched(this.id, { batchSize });
     }
   }
 
@@ -915,8 +943,8 @@ export default class Eval {
     }
   }
 
-  async fetchResultsByTestIdx(testIdx: number) {
-    return await EvalResult.findManyByEvalId(this.id, { testIdx });
+  async fetchResultsByTestIdx(testIdx: number, promptIdx?: number) {
+    return await EvalResult.findManyByEvalId(this.id, { testIdx, promptIdx });
   }
 
   /**
