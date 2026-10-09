@@ -3145,3 +3145,16 @@ describe('Provider Registry', () => {
     );
   });
 });
+
+describe('Bedrock native API routing', () => {
+  it('loads an explicit native operation', async () => {
+    const provider = await loadApiProvider('bedrock:api:Rerank');
+    expect(provider.constructor.name).toBe('AwsBedrockNativeApiProvider');
+    expect(provider.id()).toBe('bedrock:api:Rerank');
+  });
+  it('rejects unknown operations and administration APIs', async () => {
+    await expect(loadApiProvider('bedrock:api:CreateGuardrail')).rejects.toThrow(
+      'Unsupported Bedrock native API',
+    );
+  });
+});

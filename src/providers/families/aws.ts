@@ -24,6 +24,13 @@ export const awsProviderFactories: ProviderFactory[] = [
       const modelType = splits[1];
       const modelName = splits.slice(2).join(':');
       const textRoute = getBedrockTextRoute(providerPath);
+      if (modelType === 'api') {
+        const { AwsBedrockNativeApiProvider } = await import('../bedrock/nativeApi');
+        return new AwsBedrockNativeApiProvider(modelName, {
+          ...providerOptions,
+          id: providerOptions.id ?? providerPath,
+        });
+      }
 
       // Mythos 5 requires Mantle's Messages endpoint. Both 5.1 models support
       // Runtime, including an explicit Messages route with US/global profiles.
