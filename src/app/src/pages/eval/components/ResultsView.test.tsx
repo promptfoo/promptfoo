@@ -3,7 +3,7 @@ import { callApi } from '@app/utils/api';
 import { renderWithProviders } from '@app/utils/testutils';
 import { act, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ResultsView from './ResultsView';
 import { useResultsViewSettingsStore, useTableStore } from './store';
@@ -254,8 +254,8 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-vi.mock('react-router-dom', async () => {
-  const actual = await vi.importActual('react-router-dom');
+vi.mock('react-router', async () => {
+  const actual = await vi.importActual('react-router');
   return {
     ...actual,
     useNavigate: () => mockNavigate,
@@ -1364,7 +1364,7 @@ describe('ResultsView Chart Rendering', () => {
     );
   });
 
-  it('should render ResultsCharts if all scores are uniform but not binary edge values', async () => {
+  it.each([0.8, 2, -2])('renders charts for uniform nonbinary scores of %s', async (score) => {
     vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(1100);
 
     vi.mocked(useTableStore).mockReturnValue({
@@ -1385,7 +1385,7 @@ describe('ResultsView Chart Rendering', () => {
           ],
           vars: ['input'],
         },
-        body: [{ outputs: [{ score: 0.8 }, { score: 0.8 }] }],
+        body: [{ outputs: [{ score }, { score }] }],
       },
       config: {
         description: 'Test Evaluation',
@@ -1415,9 +1415,9 @@ describe('ResultsView Chart Rendering', () => {
       />,
     );
 
-    // Uniform score of 0.8 is meaningful (graded assertion), should show charts
     const showChartsButton = screen.queryByText('Hide Charts');
     expect(showChartsButton).toBeInTheDocument();
+    expect(screen.getByTestId('results-charts')).toBeInTheDocument();
   });
 
   it('recomputes the default chart visibility when navigating between evals', async () => {
