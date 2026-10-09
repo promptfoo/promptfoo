@@ -615,6 +615,30 @@ describe('fetchWithProxy', () => {
     );
   });
 
+  it.each([
+    { name: 'mixed-case record with an empty value', headers: { aUtHoRiZaTiOn: '' }, expected: '' },
+    {
+      name: 'lowercase tuple',
+      headers: [['authorization', 'Bearer explicit']],
+      expected: 'Bearer explicit',
+    },
+  ])('preserves explicit custom-endpoint auth from $name', async ({ headers, expected }) => {
+    const url = 'https://us%40er:p%40ss@example.com/v1/chat/completions?variant=one#fragment';
+    const originalHeaders = JSON.stringify(headers);
+    const controller = new AbortController();
+
+    await fetchWithProxy(url, { headers: headers as HeadersInit, signal: controller.signal });
+
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    const [calledUrl, calledOptions] = vi.mocked(global.fetch).mock.calls[0];
+    expect(calledUrl).toBe('https://example.com/v1/chat/completions?variant=one#fragment');
+    const sentHeaders = new Headers(calledOptions?.headers as HeadersInit);
+    expect(sentHeaders.has('authorization')).toBe(true);
+    expect(sentHeaders.get('authorization')).toBe(expected);
+    expect(calledOptions?.signal).toBe(controller.signal);
+    expect(JSON.stringify(headers)).toBe(originalHeaders);
+  });
+
   it('should use custom CA certificate when PROMPTFOO_CA_CERT_PATH is set', async () => {
     const mockCertPath = path.normalize('/path/to/cert.pem');
     const mockCertContent = 'mock-cert-content';
@@ -1500,18 +1524,31 @@ describe('computeRateLimitWaitMs', () => {
     expect(computeRateLimitWaitMs(response)).toBe(expected);
   });
 
-  it('prefers OpenAI reset headers when present', () => {
-    const response = createMockResponse({
-      headers: new Headers({
-        'x-ratelimit-reset-requests': '3s',
-        'Retry-After': '60',
-      }),
-    });
-    const wait = computeRateLimitWaitMs(response);
-    // resolves close to 3000ms; allow a few ms of clock drift
-    expect(wait).toBeGreaterThanOrEqual(2_900);
-    expect(wait).toBeLessThanOrEqual(3_100);
-  });
+  it.each([
+    ['requests exhausted', 0, 100, '1s', '60s', '100', 1000],
+    ['tokens exhausted', 100, 0, '60s', '1s', '100', 1000],
+    ['both exhausted', 0, 0, '1s', '60s', '100', 60000],
+    ['unknown quotas', undefined, undefined, '1s', '60s', '100', 60000],
+    ['Retry-After floor', 0, 100, '3s', '60s', '60000', 60000],
+  ] as const)(
+    'uses the effective quota deadline for transport retries: %s',
+    (_name, requests, tokens, requestReset, tokenReset, retryAfter, expected) => {
+      const headers = new Headers({
+        'x-ratelimit-reset-requests': requestReset,
+        'x-ratelimit-reset-tokens': tokenReset,
+        'retry-after-ms': retryAfter,
+      });
+      if (requests !== undefined) {
+        headers.set('x-ratelimit-remaining-requests', String(requests));
+      }
+      if (tokens !== undefined) {
+        headers.set('x-ratelimit-remaining-tokens', String(tokens));
+      }
+      const wait = computeRateLimitWaitMs(createMockResponse({ headers }));
+      expect(wait).toBeGreaterThanOrEqual(expected - 20);
+      expect(wait).toBeLessThanOrEqual(expected);
+    },
+  );
 
   it('falls back to Retry-After when a reset header is non-finite', () => {
     const response = createMockResponse({

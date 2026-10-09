@@ -374,6 +374,50 @@ describe('SlotQueue', () => {
       expect(queue.getResetAt()).toBe(Date.now() + 60000);
     });
 
+    it.each([
+      ['elapsed', -1000],
+      ['immediate', 0],
+      ['future', 5000],
+    ] as const)('should retain the selected absolute %s deadline', async (_name, offset) => {
+      const selectedResetAt = Date.now() + offset;
+      vi.advanceTimersByTime(25);
+
+      queue.markRateLimited(undefined, selectedResetAt);
+
+      expect(queue.getResetAt()).toBe(selectedResetAt);
+      const acquired = vi.fn();
+      const pending = trackAcquire(queue.acquire('selected-deadline')).then(acquired);
+      await Promise.resolve();
+      if (offset > 0) {
+        expect(acquired).not.toHaveBeenCalled();
+        await vi.advanceTimersByTimeAsync(selectedResetAt - Date.now());
+      }
+      await pending;
+      expect(acquired).toHaveBeenCalledOnce();
+      expect(queue.getQueueDepth()).toBe(0);
+      queue.release();
+      expect(queue.getActiveCount()).toBe(0);
+    });
+
+    it('should treat an explicit absolute zero as known immediate quota', async () => {
+      queue.markRateLimited(undefined, 0);
+
+      expect(queue.getResetAt()).toBe(0);
+      await queue.acquire('elapsed-zero');
+      expect(queue.getQueueDepth()).toBe(0);
+      queue.release();
+      expect(queue.getActiveCount()).toBe(0);
+    });
+
+    it('should preserve a later known deadline when marking an earlier selected deadline', () => {
+      const existingResetAt = Date.now() + 120000;
+      queue.updateRateLimitState({ resetAt: existingResetAt });
+
+      queue.markRateLimited(undefined, Date.now() + 5000);
+
+      expect(queue.getResetAt()).toBe(existingResetAt);
+    });
+
     it('should use later reset time when new retryAfterMs is longer', () => {
       queue.updateRateLimitState({ resetAt: Date.now() + 30000 });
 
@@ -657,6 +701,35 @@ describe('SlotQueue', () => {
       vi.advanceTimersByTime(119999);
       expect(queue.getActiveCount()).toBe(0);
       vi.advanceTimersByTime(1);
+      expect(queue.getActiveCount()).toBe(1);
+    });
+
+    it.each(['requests', 'tokens'] as const)(
+      'invalidates cached positive %s quota when a 429 supplies only its reset',
+      (dimension) => {
+        queue.updateRateLimitState({ remainingRequests: 50, remainingTokens: 50 });
+        const now = Date.now();
+        queue.updateRateLimitState(
+          parseRateLimitHeaders({
+            [`x-ratelimit-reset-${dimension}`]: '2m',
+          }),
+          true,
+        );
+        queue.markRateLimited(30000);
+        trackAcquire(queue.acquire('cached-positive-reset-only'));
+        expect(queue.getResetAt()).toBe(now + 120000);
+        vi.advanceTimersByTime(119999);
+        expect(queue.getActiveCount()).toBe(0);
+        vi.advanceTimersByTime(1);
+        expect(queue.getActiveCount()).toBe(1);
+      },
+    );
+
+    it('retains cached positive quota for a successful reset-only response', () => {
+      queue.updateRateLimitState({ remainingRequests: 50, limitRequests: 100 });
+      queue.updateRateLimitState(parseRateLimitHeaders({ 'x-ratelimit-reset-requests': '2m' }));
+      expect(queue.getRemainingRatio().requests).toBe(0.5);
+      trackAcquire(queue.acquire('successful-reset-only'));
       expect(queue.getActiveCount()).toBe(1);
     });
 

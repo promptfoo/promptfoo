@@ -22,9 +22,16 @@ import {
   type SystemError,
 } from './errors';
 import { monkeyPatchFetch, preserveCloudAuthRedirects } from './monkeyPatchFetch';
+import { getEffectiveRequestSignal } from './requestSignal';
 import { getFetchRetryContextMaxRetries } from './retryContext';
 
 import type { FetchOptions } from './types';
+
+export type FetchRateLimitObservation = {
+  headers: Record<string, string>;
+  status: number;
+  resetAt: number;
+};
 
 // Credential failures are not transient HTTP failures and must not be retried by this layer.
 class RequestAuthenticationError extends Error {}
@@ -408,20 +415,31 @@ export function isRateLimited(response: Response): boolean {
 export function computeRateLimitWaitMs(response: Response): number {
   const parsedHeaders = parseRateLimitHeaders(Object.fromEntries(response.headers.entries()));
   const rateLimitReset = response.headers.get('X-RateLimit-Reset');
-  const openaiReset =
-    response.headers.get('x-ratelimit-reset-requests') ||
-    response.headers.get('x-ratelimit-reset-tokens');
+  const now = Date.now();
+  const specificResets = [
+    { resetAt: parsedHeaders.resetAtRequests, remaining: parsedHeaders.remainingRequests },
+    { resetAt: parsedHeaders.resetAtTokens, remaining: parsedHeaders.remainingTokens },
+  ].filter(
+    ({ resetAt, remaining }) =>
+      resetAt !== undefined && (remaining === undefined || remaining <= 0),
+  );
 
-  if (openaiReset) {
-    if (parsedHeaders.resetAt !== undefined) {
-      return Math.max(parsedHeaders.resetAt - Date.now(), 0);
-    }
+  if (parsedHeaders.resetAtRequests !== undefined || parsedHeaders.resetAtTokens !== undefined) {
+    // The transport retries inside a held scheduler slot. Honor every exhausted or
+    // unknown dimension here too, without waiting on explicitly available quota.
+    return specificResets.length > 0 || parsedHeaders.retryAfterMs !== undefined
+      ? Math.max(
+          0,
+          parsedHeaders.retryAfterMs ?? 0,
+          ...specificResets.map(({ resetAt }) => resetAt! - now),
+        )
+      : 60_000;
   }
 
   if (rateLimitReset) {
     const resetAt = Number.parseInt(rateLimitReset, 10) * 1000;
     if (Number.isFinite(resetAt) && resetAt >= 0) {
-      return Math.max(resetAt - Date.now() + 1000, 0);
+      return Math.max(resetAt - now + 1000, parsedHeaders.retryAfterMs ?? 0, 0);
     }
   }
 
@@ -474,8 +492,18 @@ async function sleepWithAbort(waitTime: number, signal?: AbortSignal | null): Pr
 export async function handleRateLimit(
   response: Response,
   signal?: AbortSignal | null,
+  onRateLimitBackoff?: (observation: FetchRateLimitObservation) => void,
 ): Promise<void> {
   const waitTime = computeRateLimitWaitMs(response);
+  if (!signal?.aborted) {
+    onRateLimitBackoff?.(
+      Object.freeze({
+        headers: Object.freeze(Object.fromEntries(response.headers.entries())),
+        status: response.status,
+        resetAt: Date.now() + waitTime,
+      }),
+    );
+  }
   const jitter = Math.floor(Math.random() * RATE_LIMIT_JITTER_MS);
   const totalWait = waitTime + jitter;
   logger.debug(
@@ -502,19 +530,23 @@ const RATE_LIMIT_BODY_PEEK_BYTES = 64 * 1024;
  * response may still be observed by upstream wrappers (logging middleware,
  * monkey-patched fetch); cloning preserves their ability to read the body.
  *
- * Failures (clone, read, parse) degrade to `{ body: undefined, code:
- * undefined }` and are logged at debug level. Losing the body code only
+ * Clone/read failures degrade to `{ body: undefined, code: undefined }`
+ * unless the caller cancelled the unfinished peek. Losing the body code only
  * widens classification from `quota` to `rate_limit`, which is the safer
  * (retryable) side of the misclassification.
  */
 async function peekRateLimitBody(
   response: Response,
   logEnabled: boolean,
+  signal?: AbortSignal | null,
 ): Promise<{ body: unknown; code: string | undefined; type: string | undefined }> {
   let cloned: Response;
   try {
     cloned = response.clone();
   } catch (err) {
+    if (signal?.aborted) {
+      throw getAbortError(signal);
+    }
     if (logEnabled) {
       logger.debug(`[fetch] peekRateLimitBody: clone failed, skipping body code lookup: ${err}`);
     }
@@ -525,6 +557,9 @@ async function peekRateLimitBody(
   try {
     text = await readBoundedText(cloned, RATE_LIMIT_BODY_PEEK_BYTES, { requireStream: true });
   } catch (err) {
+    if (signal?.aborted) {
+      throw getAbortError(signal);
+    }
     if (logEnabled) {
       logger.debug(`[fetch] peekRateLimitBody: body read failed: ${err}`);
     }
@@ -693,6 +728,7 @@ async function handleRateLimitedResponse(
   maxRetries: number,
   logEnabled: boolean,
   signal?: AbortSignal | null,
+  onRateLimitBackoff?: (observation: FetchRateLimitObservation) => void,
 ): Promise<void> {
   // Only the 429 path produces a structured error. A 200 OK with
   // `X-RateLimit-Remaining=0` is a soft hint that we're approaching a limit —
@@ -707,7 +743,7 @@ async function handleRateLimitedResponse(
   // sees the same classification callers do.
   let rateLimitError: HttpRateLimitError | undefined;
   if (isHardRateLimit) {
-    const { body, code, type } = await peekRateLimitBody(response, logEnabled);
+    const { body, code, type } = await peekRateLimitBody(response, logEnabled, signal);
     rateLimitError = buildHttpRateLimitError(response, body, code, type);
   }
 
@@ -744,7 +780,7 @@ async function handleRateLimitedResponse(
       `Rate limited on URL ${safeUrl}: HTTP ${response.status} ${response.statusText}, attempt ${attempt + 1}/${maxRetries + 1}, waiting before retry...`,
     );
   }
-  await handleRateLimit(response, signal);
+  await handleRateLimit(response, signal, onRateLimitBackoff);
 }
 
 function formatFetchErrorMessage(error: unknown, url: RequestInfo): string {
@@ -769,6 +805,7 @@ export async function fetchWithRetries(
   options: FetchOptions = {},
   timeout: number,
   maxRetries?: number,
+  onRateLimitBackoff?: (observation: FetchRateLimitObservation) => void,
 ): Promise<Response> {
   options = preserveCloudAuthRedirects(url, options);
   const contextMaxRetries = getFetchRetryContextMaxRetries();
@@ -776,7 +813,7 @@ export async function fetchWithRetries(
 
   let lastErrorMessage: string | undefined;
   const backoff = getEnvInt('PROMPTFOO_REQUEST_BACKOFF_MS', 5000);
-  const signal = options.signal ?? (url instanceof Request ? url.signal : undefined);
+  const signal = getEffectiveRequestSignal(url, options);
   const logEnabled =
     new Headers(getFetchWithProxyHeaders(url, options)).get('x-promptfoo-silent') !== 'true';
 
@@ -795,7 +832,15 @@ export async function fetchWithRetries(
       }
 
       if (response && isRateLimited(response)) {
-        await handleRateLimitedResponse(response, url, i, maxRetries, logEnabled, signal);
+        await handleRateLimitedResponse(
+          response,
+          url,
+          i,
+          maxRetries,
+          logEnabled,
+          signal,
+          onRateLimitBackoff,
+        );
         continue;
       }
 
@@ -805,17 +850,17 @@ export async function fetchWithRetries(
       if (error instanceof Error && error.name === 'AbortError') {
         throw error;
       }
-      if (signal?.aborted) {
-        throw getAbortError(signal);
-      }
-
-      // Do not retry policy rejections, credential failures, or already-final rate-limit errors.
+      // Preserve completed policy and rate-limit diagnostics even if cancellation
+      // arrives after the response. These failures never consume another retry.
       if (
         error instanceof CloudAuthRedirectError ||
         error instanceof HttpRateLimitError ||
         error instanceof RequestAuthenticationError
       ) {
         throw error;
+      }
+      if (signal?.aborted) {
+        throw getAbortError(signal);
       }
 
       const errorMessage = formatFetchErrorMessage(error, url);

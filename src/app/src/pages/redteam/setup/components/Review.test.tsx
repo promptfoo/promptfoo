@@ -207,7 +207,8 @@ vi.mock('@promptfoo/redteam/sharedFrontend', () => ({
   getUnifiedConfig: mockGetUnifiedConfig,
 }));
 
-vi.mock('../utils/yamlHelpers', () => ({
+vi.mock('../utils/yamlHelpers', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../utils/yamlHelpers')>()),
   generateOrderedYaml: vi.fn().mockReturnValue('description: Test config\nplugins: []'),
 }));
 
@@ -269,6 +270,11 @@ describe('Review Component', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockGetUnifiedConfig.mockReturnValue({
+      description: 'Test config',
+      plugins: [],
+      strategies: [],
+    });
     timers = useTestTimers();
 
     // Reset the mock to return a connected state by default
@@ -307,6 +313,58 @@ describe('Review Component', () => {
   afterEach(() => {
     restoreTestTimers({ runPending: true });
   });
+
+  it.each(['llamafile', 'vllm', 'text-generation-webui'])(
+    'normalizes %s local Review requests using the actual unified config conversion',
+    async (type) => {
+      const target = {
+        id: 'openai:chat',
+        label: 'Local target',
+        config: {
+          type,
+          model: 'tenant/model:Q4',
+          apiBaseUrl: 'https://local.example.test/v1',
+          apiKeyEnvar: 'LOCAL_MODEL_KEY',
+          useDefaultApiKey: '{{ env.LOCAL_SOURCE }}',
+          stop: ['<end>'],
+        },
+      };
+
+      restoreTestTimers();
+      const user = userEvent.setup();
+      const { getUnifiedConfig } = await vi.importActual<
+        typeof import('@promptfoo/redteam/sharedFrontend')
+      >('@promptfoo/redteam/sharedFrontend');
+      mockGetUnifiedConfig.mockImplementation(getUnifiedConfig);
+      const config = { ...defaultConfig, target, prompts: ['Hello'] };
+      const original = JSON.parse(JSON.stringify(config));
+      mockUseRedTeamConfig.mockReturnValue({
+        config,
+        updateConfig: mockUpdateConfig,
+        targetConfigError: null,
+        targetConfigDraft: null,
+      });
+      vi.mocked(useEmailVerification).mockReturnValue({
+        checkEmailStatus: vi.fn().mockResolvedValue({ canProceed: true }),
+      } as any);
+      renderWithProviders(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+      await user.click(screen.getByRole('button', { name: /run now/i }));
+      await waitFor(() => expect(callApi).toHaveBeenCalledWith('/redteam/run', expect.anything()));
+      const request = vi.mocked(callApi).mock.calls.find(([path]) => path === '/redteam/run')![1]!;
+      const submitted = JSON.parse(request.body as string).config;
+      expect(submitted.targets).toEqual([
+        { ...target, config: { ...target.config, apiKeyRequired: false, useDefaultApiKey: false } },
+      ]);
+      expect(submitted.prompts).toEqual(['Hello']);
+      expect(config).toEqual(original);
+    },
+  );
 
   describe('Component Integration', () => {
     it('renders all main sections including Advanced Configuration accordion', () => {
