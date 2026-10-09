@@ -74,8 +74,11 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
   const [evalId, setEvalId] = useState<string | null>(evalIdProp ?? null);
   const [evalData, setEvalData] = useState<ResultsFile | null>(null);
   const [selectedPromptIndex, setSelectedPromptIndex] = useState(0);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const [isToolsDialogOpen, setIsToolsDialogOpen] = useState(false);
   const { recordEvent } = useTelemetry();
+  const recordEventRef = useRef(recordEvent);
 
   const [isFiltersVisible, setIsFiltersVisible] = useState(false);
   const [reportSettingsOpen, setReportSettingsOpen] = useState(false);
@@ -91,62 +94,75 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
   const vulnerabilitiesDataGridRef = useRef<HTMLDivElement>(null);
 
   const searchParams = new URLSearchParams(window.location.search);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
-  useEffect(() => {
-    const fetchEvalById = async (id: string) => {
-      const resp = await callApi(`/results/${id}`, {
-        cache: 'no-store',
-      });
-      const body = (await resp.json()) as SharedResults;
-      setEvalData(body.data);
+  const requestedEvalId = evalIdProp || searchParams.get('evalId');
 
-      // Track funnel event for report viewed
-      recordEvent('funnel', {
-        type: 'redteam',
-        step: 'webui_report_viewed',
-        source: 'webui',
-        evalId: id,
+  useEffect(() => {
+    recordEventRef.current = recordEvent;
+  }, [recordEvent]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: loadAttempt restarts a failed request when the user retries.
+  useEffect(() => {
+    const controller = new AbortController();
+    setEvalData(null);
+    setLoadError(null);
+    setSelectedPromptIndex(0);
+
+    const loadReport = async () => {
+      let id = requestedEvalId;
+      if (!id) {
+        const response = await callApi('/results', {
+          cache: 'no-store',
+          signal: controller.signal,
+        });
+        if (!response.ok) {
+          throw new Error(`Failed to fetch recent evals (${response.status})`);
+        }
+        const body = (await response.json()) as { data: ResultLightweightWithLabel[] };
+        if (controller.signal.aborted) {
+          return;
+        }
+        id = body.data?.[0]?.evalId ?? null;
+        if (!id) {
+          setLoadError('No evaluations are available yet.');
+          return;
+        }
+      }
+      const response = await callApi(`/results/${encodeURIComponent(id)}`, {
+        cache: 'no-store',
+        signal: controller.signal,
       });
+      if (!response.ok) {
+        throw new Error(`Failed to fetch report (${response.status})`);
+      }
+      const body = (await response.json()) as SharedResults;
+      if (!body.data?.config || !Array.isArray(body.data.results?.results)) {
+        throw new Error('Report response is missing evaluation data');
+      }
+      if (controller.signal.aborted) {
+        return;
+      }
+      setEvalId(id);
+      setEvalData(body.data);
+      try {
+        recordEventRef.current('funnel', {
+          type: 'redteam',
+          step: 'webui_report_viewed',
+          source: 'webui',
+          evalId: id,
+        });
+      } catch (error) {
+        console.error('Failed to record report view:', error);
+      }
     };
 
-    // If evalId was provided as a prop, use it directly
-    if (evalIdProp) {
-      setEvalId(evalIdProp);
-      fetchEvalById(evalIdProp);
-      return;
-    }
-
-    if (searchParams) {
-      const evalId = searchParams.get('evalId');
-      if (evalId) {
-        setEvalId(evalId);
-        fetchEvalById(evalId);
-      } else {
-        // Need to fetch the latest evalId from the server
-        const fetchLatestEvalId = async () => {
-          try {
-            const resp = await callApi('/results', { cache: 'no-store' });
-            if (!resp.ok) {
-              console.error('Failed to fetch recent evals');
-              return;
-            }
-            const body = (await resp.json()) as { data: ResultLightweightWithLabel[] };
-            if (body.data && body.data.length > 0) {
-              const latestEvalId = body.data[0].evalId;
-              setEvalId(latestEvalId);
-              fetchEvalById(latestEvalId);
-            } else {
-              console.log('No recent evals found');
-            }
-          } catch (error) {
-            console.error('Error fetching latest eval:', error);
-          }
-        };
-
-        fetchLatestEvalId();
+    void loadReport().catch((error) => {
+      if (!controller.signal.aborted) {
+        console.error('Failed to load report:', error);
+        setLoadError('Unable to load this report. Try again.');
       }
-    }
-  }, [evalIdProp, recordEvent]);
+    });
+    return () => controller.abort();
+  }, [requestedEvalId, loadAttempt]);
 
   // Track scroll position for persistent header visibility
   useEffect(() => {
@@ -641,12 +657,26 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
         </DropdownMenuItem>
       </>,
     );
+    return () => onActionsReady(null);
   }, [embedded, onActionsReady, evalData, evalId, isFiltersVisible]);
 
   usePageMeta({
     title: `Report: ${evalData?.config.description || evalId || 'Red Team'}`,
     description: 'Red team evaluation report',
   });
+
+  if (loadError) {
+    return (
+      <div className="flex min-h-36 flex-col items-center justify-center gap-3 p-6">
+        <p role="alert" className="text-sm text-muted-foreground">
+          {loadError}
+        </p>
+        <Button variant="outline" onClick={() => setLoadAttempt((attempt) => attempt + 1)}>
+          Try again
+        </Button>
+      </div>
+    );
+  }
 
   if (!evalData || !evalId) {
     return (
