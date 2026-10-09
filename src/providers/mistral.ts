@@ -5,6 +5,7 @@ import { getEnvString } from '../envars';
 import logger from '../logger';
 import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
 import { maybeLoadToolsFromExternalFile } from '../util';
+import { resolveProviderEnv } from './env';
 import { calculateCost, getRequestTimeoutMs, parseChatPrompt } from './shared';
 
 import type { EnvVarKey } from '../envars';
@@ -19,6 +20,25 @@ import type {
 
 function modelsWithCost(ids: string[], cost: { input: number; output: number }) {
   return ids.map((id) => ({ id, cost: { ...cost } }));
+}
+
+function getMistralApiUrl(
+  config: { apiHost?: string; apiBaseUrl?: string },
+  env: EnvOverrides | undefined,
+  defaultUrl: string,
+): string {
+  if (config.apiHost) {
+    return `https://${config.apiHost}/v1`;
+  }
+  if (config.apiBaseUrl) {
+    return config.apiBaseUrl;
+  }
+  const endpoint = resolveProviderEnv(env, ['MISTRAL_API_HOST', 'MISTRAL_API_BASE_URL']);
+  return endpoint
+    ? endpoint.name === 'MISTRAL_API_HOST'
+      ? `https://${endpoint.value}/v1`
+      : endpoint.value
+    : defaultUrl;
 }
 
 const MISTRAL_CHAT_MODELS = [
@@ -508,17 +528,7 @@ export class MistralChatCompletionProvider implements ApiProvider {
   }
 
   getApiUrl(): string {
-    const apiHost =
-      this.config.apiHost || this.env?.MISTRAL_API_HOST || getEnvString('MISTRAL_API_HOST');
-    if (apiHost) {
-      return `https://${apiHost}/v1`;
-    }
-    return (
-      this.config.apiBaseUrl ||
-      this.env?.MISTRAL_API_BASE_URL ||
-      getEnvString('MISTRAL_API_BASE_URL') ||
-      this.getApiUrlDefault()
-    );
+    return getMistralApiUrl(this.config, this.env, this.getApiUrlDefault());
   }
 
   requiresApiKey(): boolean {
@@ -526,16 +536,13 @@ export class MistralChatCompletionProvider implements ApiProvider {
   }
 
   getApiKey(): string | undefined {
-    logger.debug(`Mistral apiKeyEnvar: ${this.config.apiKeyEnvar}`);
-    const apiKeyCandidate =
-      this.config?.apiKey ||
-      (this.config?.apiKeyEnvar
-        ? getEnvString(this.config.apiKeyEnvar as EnvVarKey) ||
-          this.env?.[this.config.apiKeyEnvar as keyof EnvOverrides]
-        : undefined) ||
-      this.env?.MISTRAL_API_KEY ||
-      getEnvString('MISTRAL_API_KEY');
-    return apiKeyCandidate;
+    const namedKey = this.config.apiKeyEnvar
+      ? (this.env?.[this.config.apiKeyEnvar] ?? getEnvString(this.config.apiKeyEnvar as EnvVarKey))
+      : undefined;
+    return (
+      this.config.apiKey ||
+      (namedKey ?? this.env?.MISTRAL_API_KEY ?? getEnvString('MISTRAL_API_KEY'))
+    );
   }
 
   private getCacheIdentityHash(apiUrl: string): string {
@@ -751,17 +758,7 @@ export class MistralEmbeddingProvider implements ApiProvider {
   }
 
   getApiUrl(): string {
-    const apiHost =
-      this.config.apiHost || this.env?.MISTRAL_API_HOST || getEnvString('MISTRAL_API_HOST');
-    if (apiHost) {
-      return `https://${apiHost}/v1`;
-    }
-    return (
-      this.config.apiBaseUrl ||
-      this.env?.MISTRAL_API_BASE_URL ||
-      getEnvString('MISTRAL_API_BASE_URL') ||
-      this.getApiUrlDefault()
-    );
+    return getMistralApiUrl(this.config, this.env, this.getApiUrlDefault());
   }
 
   requiresApiKey(): boolean {
@@ -769,16 +766,13 @@ export class MistralEmbeddingProvider implements ApiProvider {
   }
 
   getApiKey(): string | undefined {
-    logger.debug(`Mistral apiKeyEnvar: ${this.config.apiKeyEnvar}`);
-    const apiKeyCandidate =
-      this.config?.apiKey ||
-      (this.config?.apiKeyEnvar
-        ? getEnvString(this.config.apiKeyEnvar as EnvVarKey) ||
-          this.env?.[this.config.apiKeyEnvar as keyof EnvOverrides]
-        : undefined) ||
-      this.env?.MISTRAL_API_KEY ||
-      getEnvString('MISTRAL_API_KEY');
-    return apiKeyCandidate;
+    const namedKey = this.config.apiKeyEnvar
+      ? (this.env?.[this.config.apiKeyEnvar] ?? getEnvString(this.config.apiKeyEnvar as EnvVarKey))
+      : undefined;
+    return (
+      this.config.apiKey ||
+      (namedKey ?? this.env?.MISTRAL_API_KEY ?? getEnvString('MISTRAL_API_KEY'))
+    );
   }
 
   private getCacheIdentityHash(apiUrl: string): string {

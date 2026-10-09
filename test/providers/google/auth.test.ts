@@ -5,6 +5,7 @@ import { mockProcessEnv } from '../../util/utils';
 // Mock dependencies
 vi.mock('../../../src/envars', () => ({
   getEnvString: vi.fn(),
+  getEnvOverrides: vi.fn(),
 }));
 
 vi.mock('../../../src/logger', () => ({
@@ -351,6 +352,22 @@ describe('GoogleAuthManager', () => {
   });
 
   describe('validateAndWarn', () => {
+    it.each([undefined, ''])('preserves the provider ADC diagnostic mask %j', (adc) => {
+      vi.mocked(getEnvString).mockImplementation((key) =>
+        key === 'GOOGLE_APPLICATION_CREDENTIALS' ? 'ambient.json' : '',
+      );
+      GoogleAuthManager.validateAndWarn(
+        { vertexai: true },
+        { GOOGLE_APPLICATION_CREDENTIALS: adc },
+      );
+      const warning = expect.stringContaining('no projectId, credentials, or ADC detected');
+      if (adc === '') {
+        expect(logger.debug).toHaveBeenCalledWith(warning);
+      } else {
+        expect(logger.debug).not.toHaveBeenCalledWith(warning);
+      }
+    });
+
     it('should warn when GOOGLE_GENAI_USE_VERTEXAI conflicts with config', () => {
       vi.mocked(getEnvString).mockImplementation((key: string, defaultValue?: string) => {
         if (key === 'GOOGLE_GENAI_USE_VERTEXAI') {
