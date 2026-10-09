@@ -30,6 +30,21 @@ export function getFinalTest(test: TestCase, assertion: Assertion) {
     }),
   });
 
+  // rfdc omits symbol keys, including loaded-media metadata used by graders.
+  // Clone their values too so assertions retain independent variable ownership.
+  if (test.vars && ret.vars) {
+    for (const key of Object.getOwnPropertySymbols(test.vars)) {
+      if (Object.prototype.propertyIsEnumerable.call(test.vars, key)) {
+        Object.defineProperty(ret.vars, key, {
+          value: clone(Reflect.get(test.vars, key)),
+          enumerable: true,
+          configurable: true,
+          writable: true,
+        });
+      }
+    }
+  }
+
   // Assertion provider overrides test provider
   ret.options = ret.options || {};
   // NOTE: Clone does not copy functions so we set the provider again

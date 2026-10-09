@@ -3,6 +3,7 @@ import { join } from 'path';
 
 import { themes } from 'prism-react-renderer';
 import webpack from 'webpack';
+import browserInventoryPlugin from './src/plugins/browser-inventory';
 import type * as Preset from '@docusaurus/preset-classic';
 import type { Config, Plugin } from '@docusaurus/types';
 
@@ -467,6 +468,7 @@ const config: Config = {
   } satisfies Preset.ThemeConfig,
 
   plugins: [
+    browserInventoryPlugin,
     webpackProgressCompatibilityPlugin,
     buildTimestampPlugin,
     require.resolve('docusaurus-plugin-image-zoom'),
@@ -476,6 +478,10 @@ const config: Config = {
       '@docusaurus/plugin-client-redirects',
       {
         redirects: [
+          {
+            from: '/docs/write-for-promptfoo',
+            to: '/docs/contributing/',
+          },
           {
             from: '/docs/category/troubleshooting',
             to: '/docs/usage/troubleshooting/',
@@ -570,6 +576,10 @@ const config: Config = {
             to: '/docs/guides/gpt-mmlu-comparison/',
           },
           // Deleted guides redirected to guides index
+          {
+            from: '/docs/guides/lintlang-prompt-assertion',
+            to: '/docs/guides/',
+          },
           {
             from: '/docs/guides/cohere-command-r-benchmark',
             to: '/docs/guides/',
