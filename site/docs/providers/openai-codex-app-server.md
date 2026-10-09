@@ -115,6 +115,8 @@ The provider returns Codex's final assistant text as `output`. It also records t
 
 For downstream coding-agent checks, `raw` also includes SDK-compatible `items` and `usage` fields alongside the protocol-shaped thread and turn payloads. That keeps trajectory-style assertions aligned between `openai:codex-app-server` and `openai:codex-sdk` without losing the richer app-server metadata.
 
+For command output, the completed app-server item is authoritative: its value stays in `aggregatedOutput` (metadata), `aggregated_output` (raw items), and the `codex.output` completion span. Later deltas do not replace or extend it. When the app server omits an aggregate, the provider uses the observed stream as a fallback. Completion spans capture that fallback when the item completes; metadata and raw items include deltas received before the turn finishes.
+
 ## Safety Defaults
 
 The app-server protocol can expose shell, filesystem, config, plugin, MCP, and app connector surfaces. Promptfoo defaults to deterministic eval behavior:
