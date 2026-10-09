@@ -1,4 +1,5 @@
 import { BedrockRuntime } from '@aws-sdk/client-bedrock-runtime';
+import { NodeHttpHandler } from '@smithy/node-http-handler';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AwsBedrockNativeApiProvider } from '../../../src/providers/bedrock/nativeApi';
 
@@ -330,4 +331,46 @@ it('explains when an older AWS SDK lacks the selected operation', async () => {
   expect((await provider.callApi('{}')).error).toContain(
     'Installed AWS SDK does not expose InvokeGuardrailChecks',
   );
+});
+
+it.each(['inlineSessionState', 'collaborators'])(
+  'validates inline-agent filters in %s before dispatch',
+  async (path) => {
+    const { provider, invoke } = fixture('InvokeInlineAgent', {});
+    const kb = {
+      retrievalConfiguration: { vectorSearchConfiguration: { filter: { tenant: 'invalid' } } },
+    };
+    const request =
+      path === 'inlineSessionState'
+        ? { inlineSessionState: { knowledgeBaseConfigurations: [kb] } }
+        : { collaborators: [{ knowledgeBases: [kb] }] };
+    expect((await provider.callApi(JSON.stringify(request))).error).toContain(
+      'Invalid Bedrock retrieval filter',
+    );
+    expect(invoke).not.toHaveBeenCalled();
+  },
+);
+
+it('uses SigV4 for Agent Runtime even when a Bedrock API key is configured', async () => {
+  const handle = vi.spyOn(NodeHttpHandler.prototype, 'handle').mockResolvedValue({
+    response: {
+      statusCode: 200,
+      headers: { 'content-type': 'application/json' },
+      body: Buffer.from('{"results":[]}'),
+    },
+  });
+  const provider = new AwsBedrockNativeApiProvider('Rerank', {
+    config: {
+      region: 'us-east-1',
+      apiKey: 'synthetic-bearer',
+      accessKeyId: 'synthetic',
+      secretAccessKey: 'synthetic',
+    },
+  });
+  const result = await provider.callApi('{"queries":[],"sources":[]}');
+  expect(result.error).toBeUndefined();
+  const headers = handle.mock.calls[0][0].headers;
+  expect(headers.authorization).toMatch(/^AWS4-HMAC-SHA256 /);
+  expect(Object.values(headers).join(' ')).not.toContain('synthetic-bearer');
+  await provider.cleanup();
 });

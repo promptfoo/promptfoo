@@ -1,4 +1,3 @@
-import { getEnvInt } from '../../envars';
 import { throwIfAborted } from '../shared';
 import { AwsBedrockGenericProvider } from './base';
 import { isValidBedrockRetrievalFilter } from './retrievalFilter';
@@ -106,15 +105,20 @@ export class AwsBedrockNativeApiProvider extends AwsBedrockGenericProvider {
     return `bedrock:api:${this.operation}`;
   }
 
+  protected getApiKey(): string | undefined {
+    // Agent Runtime accepts SigV4 credentials, not Bedrock Runtime bearer tokens.
+    return OPERATIONS[this.operation].service === 'runtime' ? super.getApiKey() : undefined;
+  }
+
   async getAgentRuntimeClient() {
     if (!this.agentRuntime) {
       const { BedrockAgentRuntime } = await import('@aws-sdk/client-bedrock-agent-runtime');
       const credentials = await this.getCredentials();
       this.agentRuntime = new BedrockAgentRuntime({
         region: this.getRegion(),
-        maxAttempts: getEnvInt('AWS_BEDROCK_MAX_RETRIES', 10),
+        maxAttempts: this.getMaxAttempts(),
         retryMode: 'adaptive',
-        requestHandler: await createBedrockRequestHandler({ apiKey: this.getApiKey() }),
+        requestHandler: await createBedrockRequestHandler(),
         ...(credentials ? { credentials } : {}),
         ...(this.config.endpoint ? { endpoint: this.config.endpoint } : {}),
       });
@@ -154,6 +158,12 @@ export class AwsBedrockNativeApiProvider extends AwsBedrockGenericProvider {
         input.retrieveAndGenerateConfiguration?.knowledgeBaseConfiguration?.retrievalConfiguration,
         ...(input.sessionState?.knowledgeBaseConfigurations ?? []).map(
           (kb: any) => kb.retrievalConfiguration,
+        ),
+        ...(input.inlineSessionState?.knowledgeBaseConfigurations ?? []).map(
+          (kb: any) => kb.retrievalConfiguration,
+        ),
+        ...(input.collaborators ?? []).flatMap((collaborator: any) =>
+          (collaborator.knowledgeBases ?? []).map((kb: any) => kb.retrievalConfiguration),
         ),
       ];
       const filters = [
