@@ -1,5 +1,5 @@
-import { getEnvString } from '../envars';
 import { resolveProviderCreatorInput } from './creator';
+import { resolveProviderEnv } from './env';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiCompletionProvider } from './openai/completion';
 import { OpenAiEmbeddingProvider } from './openai/embedding';
@@ -135,6 +135,8 @@ class LiteLLMCompletionProvider extends LiteLLMProviderWrapper {
  * LiteLLM Embedding Provider
  */
 class LiteLLMEmbeddingProvider extends LiteLLMProviderWrapper implements ApiEmbeddingProvider {
+  readonly supportsEmbeddingCancellation = true;
+
   private embeddingProvider: OpenAiEmbeddingProvider;
 
   constructor(modelName: string, options: ProviderOptions) {
@@ -146,8 +148,12 @@ class LiteLLMEmbeddingProvider extends LiteLLMProviderWrapper implements ApiEmbe
     }
   }
 
-  async callEmbeddingApi(text: string): Promise<ProviderEmbeddingResponse> {
-    return this.withAuthHint(await this.embeddingProvider.callEmbeddingApi(text));
+  async callEmbeddingApi(
+    text: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderEmbeddingResponse> {
+    return this.withAuthHint(await this.embeddingProvider.callEmbeddingApi(text, context, options));
   }
 }
 
@@ -193,8 +199,7 @@ export function createLiteLLMProvider(
   // Resolve apiBaseUrl: config > provider env > context env > process env > default
   const resolvedApiBaseUrl =
     config.apiBaseUrl ||
-    providerOptions.env?.LITELLM_API_BASE ||
-    getEnvString('LITELLM_API_BASE') ||
+    resolveProviderEnv(providerOptions.env, ['LITELLM_API_BASE'])?.value ||
     'http://0.0.0.0:4000';
 
   // Build the config object with proper defaults

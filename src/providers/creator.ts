@@ -16,7 +16,15 @@ export function resolveProviderCreatorInput(input: ProviderCreatorOptions): Prov
     input.providerOptions ?? {
       ...legacy,
       id: input.id ?? legacy?.id,
-      env: input.env || legacy?.env ? { ...input.env, ...legacy?.env } : undefined,
+      env:
+        input.env || legacy?.env
+          ? {
+              ...input.env,
+              ...Object.fromEntries(
+                Object.entries(legacy?.env ?? {}).filter(([, value]) => value !== undefined),
+              ),
+            }
+          : undefined,
     }
   );
 }

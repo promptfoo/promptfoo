@@ -8,7 +8,7 @@ import { type Attributes, type Span, SpanKind, SpanStatusCode, trace } from '@op
 import dedent from 'dedent';
 import { z } from 'zod';
 import cliState from '../../cliState';
-import { getEnvString, getProcessEnv } from '../../envars';
+import { getProcessEnv } from '../../envars';
 import logger from '../../logger';
 import {
   addActiveSpanRoleAttribute,
@@ -25,6 +25,7 @@ import { normalizeFieldName, REDACTED, sanitizeObject } from '../../util/sanitiz
 import { VERSION } from '../../version';
 import { resolveAgenticWorkingDir } from '../agentic-utils';
 import { clearRepositoryEnv, isAgentWorkspace } from '../agentWorkspace';
+import { resolveProviderApiKey } from '../credentials';
 import { providerRegistry } from '../providerRegistry';
 import { calculateOpenAIUsageCostFromTokenUsage } from './billing';
 import {
@@ -828,6 +829,50 @@ function createAbortError(message: string): Error {
   return error;
 }
 
+/** Find npm's entrypoint only when Windows cannot launch a native Codex binary. */
+function getCodexNpmEntrypoint(env: Record<string, string>): string | undefined {
+  // Match Node's first, case-insensitive PATH key after sorting environment keys.
+  const pathKey = Object.keys(env)
+    .sort()
+    .find((key) => key.toUpperCase() === 'PATH');
+  const searchPath = pathKey
+    ? env[pathKey]
+    : (Object.entries(process.env).find(([key]) => key.toUpperCase() === 'PATH')?.[1] ?? '');
+  // libuv skips quoted delimiters, then consumes the rest of the PATH component.
+  const directories = (
+    searchPath.match(
+      new RegExp(`(?:"[^"]*(?:"|$)|'[^']*(?:'|$)|[^${path.delimiter}]+)[^${path.delimiter}]*`, 'g'),
+    ) ?? []
+  ).map((directory) => directory.replace(/^["']|["']$/g, ''));
+  // libuv checks the parent process environment when deciding whether to search cwd.
+  const searchCwd = !Object.keys(process.env).some(
+    (key) => key.toUpperCase() === 'NODEFAULTCURRENTDIRECTORYINEXEPATH',
+  );
+  const nativeDirectories = searchCwd ? [process.cwd(), ...directories] : directories;
+  if (
+    nativeDirectories.some((directory) =>
+      ['codex.com', 'codex.exe'].some((file) =>
+        fs.existsSync(path.resolve(process.cwd(), directory, file)),
+      ),
+    )
+  ) {
+    return undefined;
+  }
+  // Only discover npm installations on absolute PATH entries, never in the workspace.
+  const binDirectory = directories.find(
+    (directory) => path.isAbsolute(directory) && fs.existsSync(path.join(directory, 'codex.cmd')),
+  );
+  if (!binDirectory) {
+    return undefined;
+  }
+  const nodeModulesDirectory =
+    path.basename(binDirectory).toLowerCase() === '.bin'
+      ? path.dirname(binDirectory)
+      : path.join(binDirectory, 'node_modules');
+  const entrypoint = path.join(nodeModulesDirectory, '@openai', 'codex', 'bin', 'codex.js');
+  return fs.existsSync(entrypoint) ? entrypoint : undefined;
+}
+
 class CodexAppServerConnection {
   readonly instanceId: string;
 
@@ -1029,7 +1074,7 @@ class CodexAppServerConnection {
     return this.closePromise;
   }
 
-  private handleLine(line: string): void {
+  private handleLine(line: string, retryBufferedMessage = true): void {
     const trimmed = line.trim();
     if (!trimmed && this.bufferedJsonRpcLines.length === 0) {
       return;
@@ -1037,7 +1082,7 @@ class CodexAppServerConnection {
 
     const candidateLines =
       this.bufferedJsonRpcLines.length > 0 ? [...this.bufferedJsonRpcLines, line] : [trimmed];
-    const candidate = candidateLines.join('\\n');
+    let candidate = candidateLines.join('\n');
     if (candidate.length > MAX_BUFFERED_JSON_RPC_CHARS) {
       this.bufferedJsonRpcLines = [];
       this.handleProcessFailure(
@@ -1050,15 +1095,40 @@ class CodexAppServerConnection {
     }
     let message: JsonRpcMessage;
     try {
-      message = JSON.parse(candidate) as JsonRpcMessage;
+      try {
+        message = JSON.parse(candidate) as JsonRpcMessage;
+      } catch (error) {
+        if (
+          candidateLines.length <= 1 ||
+          !(error instanceof Error) ||
+          !/Bad control character/i.test(error.message)
+        ) {
+          throw error;
+        }
+        // Preserve compatibility with app-server output containing raw newlines inside strings.
+        candidate = this.escapeStringNewlines(candidate);
+        message = JSON.parse(candidate) as JsonRpcMessage;
+      }
     } catch (error) {
-      if (this.shouldBufferJsonRpcLine(error, trimmed)) {
+      if (this.shouldBufferJsonRpcLine(error, candidate)) {
         this.bufferedJsonRpcLines = candidateLines;
         return;
       }
 
       logger.warn('[CodexAppServer] Failed to parse JSON-RPC line', { error, line: candidate });
       this.bufferedJsonRpcLines = [];
+      if (retryBufferedMessage && candidateLines.length > 1) {
+        // A later object may begin a new record after an unfinished malformed message.
+        let restartIndex = candidateLines.length - 1;
+        for (let index = candidateLines.length - 1; index > 0; index--) {
+          if (candidateLines[index].trimStart().startsWith('{')) {
+            restartIndex = index;
+            break;
+          }
+        }
+        this.bufferedJsonRpcLines = candidateLines.slice(restartIndex, -1);
+        this.handleLine(line, false);
+      }
       return;
     }
 
@@ -1066,16 +1136,42 @@ class CodexAppServerConnection {
     this.handleMessage(message);
   }
 
-  private shouldBufferJsonRpcLine(error: unknown, trimmedLine: string): boolean {
-    if (this.bufferedJsonRpcLines.length > 0) {
-      return true;
+  private escapeStringNewlines(candidate: string): string {
+    const parts: string[] = [];
+    let inString = false;
+    let escaped = false;
+    let start = 0;
+
+    for (let index = 0; index < candidate.length; index++) {
+      const character = candidate[index];
+      if (inString && character === '\n' && !escaped) {
+        parts.push(candidate.slice(start, index), '\\n');
+        start = index + 1;
+      }
+      if (escaped) {
+        escaped = false;
+      } else if (inString && character === '\\') {
+        escaped = true;
+      } else if (character === '"') {
+        inString = !inString;
+      }
     }
-    if (!trimmedLine.startsWith('{')) {
+
+    parts.push(candidate.slice(start));
+    return parts.join('');
+  }
+
+  private shouldBufferJsonRpcLine(error: unknown, candidate: string): boolean {
+    if (!candidate.trimStart().startsWith('{')) {
       return false;
     }
 
     const message = error instanceof Error ? error.message : String(error);
-    return /Unterminated string|Unexpected end of JSON input|Bad control character/i.test(message);
+    return (
+      /Unterminated string|Unexpected end of JSON input/i.test(message) ||
+      (message.startsWith('Expected ') &&
+        message.includes(` in JSON at position ${candidate.length} (line`))
+    );
   }
 
   private handleMessage(message: JsonRpcMessage): void {
@@ -1223,6 +1319,9 @@ class CodexAppServerConnection {
 }
 
 export class OpenAICodexAppServerProvider implements ApiProvider {
+  private readonly registerForCleanup: boolean;
+  private cleanupGeneration = 0;
+
   config: CodexAppServerConfig;
   env?: EnvOverrides;
   apiKey?: string;
@@ -1250,13 +1349,17 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       id?: string;
       config?: CodexAppServerConfig;
       env?: EnvOverrides;
+      registerForCleanup?: boolean;
     } = {},
   ) {
+    this.registerForCleanup = options.registerForCleanup ?? true;
     this.config = parseCodexAppServerConfig(options.config);
     this.env = options.env;
     this.apiKey = this.getApiKey();
     this.providerId = options.id ?? this.providerId;
-    providerRegistry.register(this);
+    if (this.registerForCleanup) {
+      providerRegistry.register(this);
+    }
   }
 
   id(): string {
@@ -1264,13 +1367,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
   }
 
   getApiKey(config: CodexAppServerConfig = this.config): string | undefined {
-    return (
-      config.apiKey ||
-      this.env?.OPENAI_API_KEY ||
-      this.env?.CODEX_API_KEY ||
-      getEnvString('OPENAI_API_KEY') ||
-      getEnvString('CODEX_API_KEY')
-    );
+    return resolveProviderApiKey(config, this.env, ['OPENAI_API_KEY', 'CODEX_API_KEY']);
   }
 
   requiresApiKey(): boolean {
@@ -1282,6 +1379,8 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
   }
 
   async cleanup(): Promise<void> {
+    providerRegistry.unregister(this);
+    this.cleanupGeneration++;
     this.resolveActiveTurns(new Error('codex app-server provider cleanup interrupted active turn'));
     this.threads.clear();
     this.threadPromises.clear();
@@ -1310,11 +1409,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
   }
 
   async shutdown(): Promise<void> {
-    try {
-      await this.cleanup();
-    } finally {
-      providerRegistry.unregister(this);
-    }
+    await this.cleanup();
   }
 
   async callApi(
@@ -1322,6 +1417,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     context?: CallApiContextParams,
     callOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
+    const cleanupGeneration = this.cleanupGeneration;
     const mergedConfig = mergeCodexAppServerConfig(
       this.config,
       context?.prompt?.config as CodexAppServerConfig | undefined,
@@ -1336,7 +1432,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
 
     return withGenAISpan(
       this.buildSpanContext(prompt, context, requestedModel),
-      () => this.callApiInternal(prompt, context, callOptions, config),
+      () => this.callApiInternal(prompt, context, callOptions, config, cleanupGeneration),
       (response) => this.extractSpanResult(response, requestedModel),
     );
   }
@@ -1400,6 +1496,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     context: CallApiContextParams | undefined,
     callOptions: CallApiOptionsParams | undefined,
     rawConfig: CodexAppServerConfig,
+    cleanupGeneration: number,
   ): Promise<ProviderResponse> {
     let config: CodexAppServerConfig;
     try {
@@ -1531,6 +1628,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
                 await this.cleanupThreadAfterTurn(connection, threadHandle, resolvedConfig);
               }
             },
+            cleanupGeneration,
           );
         } finally {
           this.unprotectThread(threadHandle.threadId);
@@ -1543,13 +1641,12 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
         }
       };
 
-      return explicitThreadQueueKey
-        ? await this.runSerializedThreadTurn(
-            explicitThreadQueueKey,
-            callOptions?.abortSignal,
-            runThreadTurn,
-          )
-        : await runThreadTurn();
+      return await this.runSerializedThreadTurn(
+        explicitThreadQueueKey,
+        callOptions?.abortSignal,
+        runThreadTurn,
+        cleanupGeneration,
+      );
     } catch (error: unknown) {
       const isAbort =
         (error instanceof Error && error.name === 'AbortError') ||
@@ -1750,10 +1847,15 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     config: CodexAppServerConfig,
   ): Promise<CodexAppServerConnection> {
     const connectionInstanceId = `${connectionKey}:${crypto.randomUUID()}`;
+    const entrypoint =
+      process.platform === 'win32' && config.codex_path_override === undefined
+        ? getCodexNpmEntrypoint(env)
+        : undefined;
+    const args = this.buildAppServerArgs(config, env);
     const connection = new CodexAppServerConnection({
       connectionInstanceId,
-      command: config.codex_path_override ?? 'codex',
-      args: this.buildAppServerArgs(config, env),
+      command: config.codex_path_override ?? (entrypoint ? process.execPath : 'codex'),
+      args: entrypoint ? [entrypoint, ...args] : args,
       env,
       requestTimeoutMs: this.getRequestTimeoutMs(config),
       startupTimeoutMs: config.startup_timeout_ms ?? DEFAULT_STARTUP_TIMEOUT_MS,
@@ -1761,6 +1863,10 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       onServerRequest: (message) => this.handleServerRequest(message, config),
       onClose: (error) => this.handleConnectionClose(connectionKey, connectionInstanceId, error),
     });
+
+    if (this.registerForCleanup) {
+      providerRegistry.register(this);
+    }
 
     this.initializingConnections.add(connection);
     try {
@@ -2366,7 +2472,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
         : {}),
       ...(config.personality ? { personality: config.personality } : {}),
       ...(config.base_url
-        ? { config: { ...(config.cli_config ?? {}), base_url: config.base_url } }
+        ? { config: { ...(config.cli_config ?? {}), openai_base_url: config.base_url } }
         : {}),
       ephemeral: config.ephemeral ?? true,
       experimentalRawEvents: config.experimental_raw_events ?? false,
@@ -2393,6 +2499,9 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
         ? { developerInstructions: config.developer_instructions }
         : {}),
       ...(config.personality ? { personality: config.personality } : {}),
+      ...(config.base_url
+        ? { config: { ...(config.cli_config ?? {}), openai_base_url: config.base_url } }
+        : {}),
       persistExtendedHistory: config.persist_extended_history ?? false,
     };
   }
@@ -3138,7 +3247,11 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     queueKey: string | undefined,
     abortSignal: AbortSignal | undefined,
     executeTurn: () => Promise<T>,
+    cleanupGeneration: number,
   ): Promise<T> {
+    if (cleanupGeneration !== this.cleanupGeneration) {
+      throw new Error('codex app-server provider cleanup interrupted queued turn');
+    }
     if (!queueKey) {
       return executeTurn();
     }
@@ -3158,6 +3271,9 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
 
     try {
       await this.waitForPreviousThreadRun(previousRun, abortSignal);
+      if (cleanupGeneration !== this.cleanupGeneration) {
+        throw new Error('codex app-server provider cleanup interrupted queued turn');
+      }
       return await executeTurn();
     } finally {
       releaseCurrentRun();
@@ -3460,7 +3576,10 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       input,
       output,
       cached: usage.cachedInputTokens ?? usage.cached_input_tokens ?? 0,
-      cacheWrite: usage.cacheWriteInputTokens ?? usage.cache_write_input_tokens,
+      cacheWrite:
+        typeof (usage.cacheWriteInputTokens ?? usage.cache_write_input_tokens) === 'number'
+          ? (usage.cacheWriteInputTokens ?? usage.cache_write_input_tokens)
+          : undefined,
       reasoning: usage.reasoningOutputTokens ?? usage.reasoning_output_tokens ?? 0,
     };
   }

@@ -1,4 +1,5 @@
-import type { ApiProvider } from '../../types/providers';
+import type { LoadApiProviderContext } from '../../types/index';
+import type { ApiProvider, ProviderOptions } from '../../types/providers';
 import type { ProviderCreatorOptions } from '../creator';
 import type { ProviderFactory } from '../registryTypes';
 
@@ -14,10 +15,23 @@ const creators: readonly (readonly [string, () => Promise<Creator>])[] = [
   ['togetherai', async () => (await import('../togetherai')).createTogetherAiProvider],
 ];
 
-export const compatibleProviderFactories: ProviderFactory[] = creators.map(([prefix, load]) => ({
-  test: (path) => path.startsWith(`${prefix}:`),
-  create: async (path, providerOptions) => {
-    const create = await load();
-    return create(path, { providerOptions });
-  },
-}));
+export function getCompatibleProviderFactories(
+  mergeEnv: (
+    path: string,
+    providerOptions: ProviderOptions,
+    context: LoadApiProviderContext,
+  ) => ProviderOptions['env'],
+): ProviderFactory[] {
+  return creators.map(([prefix, load]) => ({
+    test: (path) => path.startsWith(`${prefix}:`),
+    create: async (path, providerOptions, context) => {
+      const create = await load();
+      return create(path, {
+        providerOptions: {
+          ...providerOptions,
+          env: mergeEnv(path, providerOptions, context),
+        },
+      });
+    },
+  }));
+}

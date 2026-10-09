@@ -65,6 +65,19 @@ describe.each(cases)('%s normalized lazy factory', (prefix, key) => {
     await provider.cleanup?.();
   });
 
+  it('inherits context credentials when called directly', async () => {
+    const path = `${prefix}:org/model:tag`;
+    const factory = (await getProviderFactories(path)).find((entry) => entry.test(path))!;
+    const provider = await factory.create(
+      path,
+      { id: 'direct', config: { apiBaseUrl: 'http://127.0.0.1:1/v1' } },
+      { env: { [key]: 'context-fixture' } as EnvOverrides },
+    );
+    expect(provider.id()).toBe('direct');
+    expect((provider as unknown as { getApiKey(): string }).getApiKey()).toBe('context-fixture');
+    await provider.cleanup?.();
+  });
+
   it('dispatches the selected family before the generic JavaScript-file fallback', async () => {
     const path = `${prefix}:org/model.js`;
     const factories = await getProviderFactories(path);
@@ -136,4 +149,38 @@ it('keeps canonical Novita environment independent of legacy fields', () => {
     config: { env: { NOVITA_API_KEY: 'nested-key' } },
   });
   expect((provider as unknown as { getApiKey(): string }).getApiKey()).toBe('canonical-key');
+});
+
+it('merges direct Envoy context endpoints with provider-scoped credentials', async () => {
+  const path = 'envoy:model';
+  const factory = (await getProviderFactories(path)).find((entry) => entry.test(path))!;
+  const provider = await factory.create(
+    path,
+    { env: { OPENAI_API_KEY: 'provider-key' } },
+    { env: { ENVOY_API_BASE_URL: 'http://127.0.0.1:1/gateway', OPENAI_API_KEY: 'context-key' } },
+  );
+  expect(provider.config.apiBaseUrl).toBe('http://127.0.0.1:1/gateway/v1');
+  expect((provider as unknown as { getApiKey(): string }).getApiKey()).toBe('provider-key');
+  await provider.cleanup?.();
+});
+
+it('keeps higher-priority Nscale aliases when merging direct factory contexts', async () => {
+  const path = 'nscale:model';
+  const factory = (await getProviderFactories(path)).find((entry) => entry.test(path))!;
+  const provider = await factory.create(
+    path,
+    { env: { NSCALE_API_KEY: 'provider-key' } },
+    { env: { NSCALE_SERVICE_TOKEN: 'context-token' } },
+  );
+  expect((provider as unknown as { getApiKey(): string }).getApiKey()).toBe('provider-key');
+  await provider.cleanup?.();
+});
+
+it('ignores undefined legacy env entries while preserving explicit empty masks', () => {
+  expect(
+    resolveProviderCreatorInput({
+      env: { OPENAI_API_KEY: 'suite', LITELLM_API_KEY: 'suite-proxy' },
+      config: { env: { OPENAI_API_KEY: undefined, LITELLM_API_KEY: '' } },
+    }).env,
+  ).toEqual({ OPENAI_API_KEY: 'suite', LITELLM_API_KEY: '' });
 });
