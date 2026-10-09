@@ -236,7 +236,7 @@ describe('web page tracking request contract', () => {
           metadata: {
             webPageUuid: validTracking ? pageUuid : { invalid: pageUuid },
             webPageUrl: pageUrl,
-            redteamConversationHistoryVersion: 2,
+            redteamConversationHistoryVersion: 3,
             redteamFinalPrompt: 'Report the reference',
             messages: [
               ...prior,

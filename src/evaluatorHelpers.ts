@@ -133,6 +133,36 @@ export function getRenderedInputVariables(
       return value;
     }
   };
+  const projectBodyInput = (variables: Record<string, string>): string | undefined => {
+    const renderedValues: string[] = [];
+    const visit = (template: unknown) => {
+      if (typeof template === 'string') {
+        const name = Object.keys(variables).find((name) =>
+          isDirectTemplateReference(template, name, undefined, true),
+        );
+        if (name) {
+          // Use HTTP's renderer before its JSON boundary, including builtin trim.
+          renderedValues.push(renderVarsInObject(template, variables));
+        }
+      } else if (template && typeof template === 'object') {
+        for (const [key, child] of Object.entries(template)) {
+          if (key !== '__proto__') {
+            visit(child);
+          }
+        }
+      }
+    };
+    visit(body);
+    const projected = renderedValues.map((rendered) =>
+      projectJsonValue(rendered, typeof body !== 'string'),
+    );
+    // A second body field can deliver the same input literally even when another
+    // field parses it. Prefer that unchanged, actually delivered representation.
+    return (
+      projected.find((value, index) => value === renderedValues[index]) ??
+      projected.find((value) => value !== undefined)
+    );
+  };
   const vars = Object.fromEntries(
     Object.entries(inputVars).flatMap(([name, value]) => {
       const throughPrompt =
@@ -157,16 +187,18 @@ export function getRenderedInputVariables(
         if (!wholePrompt || (!request.parsesPrompt && !request.jsonBody)) {
           return [[name, value]];
         }
-        const projected = projectJsonValue(
-          value,
-          !request.parsesPrompt && typeof body !== 'string',
-        );
+        const renderedValue = prompt && renderedPrompt !== undefined ? renderedPrompt : value;
+        const projected = request.parsesPrompt
+          ? projectJsonValue(renderedValue, false)
+          : projectBodyInput({
+              prompt: renderedValue,
+              ...(reserved.includes(injectVar) ? {} : { [injectVar]: renderedValue }),
+              ...(throughBody ? { [name]: value } : {}),
+            });
         return projected === undefined ? [] : [[name, projected]];
       }
       if (throughBody) {
-        const projected = request.jsonBody
-          ? projectJsonValue(value, typeof body !== 'string')
-          : value;
+        const projected = request.jsonBody ? projectBodyInput({ [name]: value }) : value;
         return projected === undefined ? [] : [[name, projected]];
       }
       return [];

@@ -62,13 +62,13 @@ Hydra manages attacker-side history and backtracking. Your target provider manag
 
 Grading history records attack contributions and observed replies. Stateful input attribution supports direct or trimmed interpolation in static prompt templates. Forwarding is established for built-in OpenAI chat, Responses, and completion requests without replacement `passthrough` inputs, or static HTTP POST/PUT/PATCH/DELETE body values consisting of a complete direct or trimmed interpolation, such as `{{prompt}}` or `{{user_context | trim}}`. Responses inputs must also remain unchanged by the provider's content-part normalization; ordinary role/content text messages are supported. Custom providers can report the exact sent prompt using `ProviderResponse.prompt`.
 
-Generated inputs remain literal during prompt rendering. JSON-looking text stays unchanged unless the target request path parses that complete value; then grading retains only the parsed value. JSON strings inside a parsed object remain literal, and input contents never redefine message roles.
+Generated inputs remain literal during prompt rendering. JSON-looking text stays unchanged unless the target request path parses that complete rendered value; then grading retains only the parsed value, including when trimming makes JSON parseable. JSON strings inside a parsed object remain literal, and input contents never redefine message roles.
 
 YAML-looking text is retained when the target sends it literally. YAML chat parsing remains unattributed because it can discard comments. Static HTTP method spellings normalized by Fetch, such as `post` or `PuT`, are supported; `PATCH` remains case-sensitive.
 
 Verified earlier turns remain available when a later input is blank or cannot be attributed, including inputs from failed target requests. Disabling target-prompt templating does not disable this grading history.
 
-Saved runs without verified history continue to grade only the current turn. Histories recorded before transport verification are also excluded, and their stored verdicts are recomputed during regrading. Rerun these tests to record verified history for later regrading.
+Saved runs without verified history continue to grade only the current turn. Older history formats without complete rendering or transport verification are also excluded, and their stored verdicts are recomputed during regrading. Rerun these tests to record verified history for later regrading.
 
 Built-in providers require a response from a direct request to establish input delivery. Followed redirects are excluded, even when a redirect may preserve the request body, because the final response does not describe every redirect hop. Cached responses without this transport evidence also leave the input unattributed; run with `--no-cache` to record fresh evidence.
 

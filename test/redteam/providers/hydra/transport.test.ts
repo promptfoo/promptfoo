@@ -176,10 +176,11 @@ async function runHydra(
   bustCache = true,
   initial = opening,
   strategy: 'hydra' | 'goblin' = 'hydra',
+  setup: { prompt?: string; inputs?: Record<string, string> } = {},
 ) {
   mock.agent
-    .mockResolvedValueOnce({ output: initial })
-    .mockResolvedValueOnce({ output: current })
+    .mockResolvedValueOnce({ output: initial, materializationHandled: !!setup.inputs })
+    .mockResolvedValueOnce({ output: current, materializationHandled: !!setup.inputs })
     .mockResolvedValue({ output: 'Learning complete' });
   const grading = vi.spyOn(grader, 'getResult');
   const targetCalls = vi.spyOn(target, 'callApi');
@@ -189,6 +190,7 @@ async function runHydra(
     stateful: true,
     maxTurns: 2,
     maxBacktracks: 0,
+    inputs: setup.inputs,
   });
   const test: AtomicTestCase = {
     assert: [assertion],
@@ -204,7 +206,7 @@ async function runHydra(
   const result = await hydra.callApi('', {
     originalProvider: target,
     vars: test.vars!,
-    prompt: { raw: '{{input}}', label: 'direct-template' },
+    prompt: { raw: setup.prompt ?? '{{input}}', label: 'direct-template' },
     test,
     bustCache,
   });
@@ -213,7 +215,7 @@ async function runHydra(
   expect(grading).toHaveBeenCalledTimes(2);
   const metadata = result.metadata!;
   const stored = metadata.storedGraderResult!;
-  expect(metadata.redteamConversationHistoryVersion).toBe(2);
+  expect(metadata.redteamConversationHistoryVersion).toBe(3);
   const inputHash = getGradingInputHash(
     metadata.redteamFinalPrompt!,
     String(result.output),
@@ -260,6 +262,7 @@ async function runHydra(
     liveContext,
     pass: stored.pass,
     inputHash,
+    firstTargetCall: targetCalls.mock.calls[0],
     targetResponses: await Promise.all(targetCalls.mock.results.map((call) => call.value)),
   };
 }
@@ -322,6 +325,234 @@ describe.each(['hydra', 'goblin'] as const)('%s literal input delivery', (strate
       }
     },
   );
+});
+
+describe.each(['hydra', 'goblin'] as const)('%s rendered JSON input', (strategy) => {
+  const duplicate = `{"email":"${email}","email":"retained@example.test"}`;
+  const bomDuplicate = `\uFEFF${duplicate}`;
+  const cases = [
+    { name: 'prompt trim', input: bomDuplicate, prompt: '{{input | trim}}', delivered: false },
+    {
+      name: 'prompt trim without BOM',
+      input: duplicate,
+      prompt: '{{input | trim}}',
+      delivered: false,
+    },
+    { name: 'no trim with BOM', input: bomDuplicate, delivered: true },
+    {
+      name: 'body alias trim',
+      input: bomDuplicate,
+      body: { message: '{{prompt | trim}}' },
+      delivered: false,
+    },
+    {
+      name: 'body alias trim without BOM',
+      input: duplicate,
+      body: { message: '{{prompt | trim}}' },
+      delivered: false,
+    },
+    {
+      name: 'literal text',
+      input: bomDuplicate,
+      prompt: '{{input | trim}}',
+      body: '{{prompt}}',
+      text: true,
+      delivered: true,
+    },
+    {
+      name: 'nested JSON string',
+      input: bomDuplicate,
+      prompt: '{"text":"{{input | trim}}"}',
+      delivered: true,
+    },
+    {
+      name: 'root JSON body',
+      input: bomDuplicate,
+      prompt: '{{input | trim}}',
+      body: '{{prompt}}',
+      delivered: false,
+    },
+    {
+      name: 'ASCII whitespace',
+      input: ` \t${duplicate}\n`,
+      prompt: '{{input | trim}}',
+      delivered: false,
+    },
+    {
+      name: 'side variable trim',
+      input: bomDuplicate,
+      body: { message: '{{prompt}}', context: '{{user_context | trim}}' },
+      side: true,
+      delivered: false,
+    },
+    {
+      name: 'side variable trim without BOM',
+      input: duplicate,
+      body: { message: '{{prompt}}', context: '{{user_context | trim}}' },
+      side: true,
+      delivered: false,
+    },
+    {
+      name: 'side variable without trim',
+      input: bomDuplicate,
+      body: { message: '{{prompt}}', context: '{{user_context}}' },
+      side: true,
+      delivered: true,
+    },
+    {
+      name: 'literal side variable',
+      input: bomDuplicate,
+      body: '{{user_context | trim}}',
+      side: true,
+      text: true,
+      delivered: true,
+    },
+    {
+      name: 'literal copy after parsed copy',
+      input: bomDuplicate,
+      body: { parsed: '{{prompt | trim}}', literal: '{{input}}' },
+      delivered: true,
+    },
+    {
+      name: 'literal copy before parsed copy',
+      input: bomDuplicate,
+      body: { literal: '{{input}}', parsed: '{{prompt | trim}}' },
+      delivered: true,
+    },
+    {
+      name: 'literal side copy after parsed copy',
+      input: bomDuplicate,
+      body: { parsed: '{{user_context | trim}}', literal: '{{user_context}}' },
+      side: true,
+      delivered: true,
+    },
+    {
+      name: 'whole variable prompt with literal body copy after',
+      input: bomDuplicate,
+      prompt: '{{question | trim}}',
+      body: { message: '{{prompt}}', literal: '{{question}}' },
+      question: true,
+      delivered: true,
+    },
+    {
+      name: 'whole variable prompt with literal body copy before',
+      input: bomDuplicate,
+      prompt: '{{question | trim}}',
+      body: { literal: '{{question}}', message: '{{prompt}}' },
+      question: true,
+      delivered: true,
+    },
+    {
+      name: 'whole variable prompt without literal body copy',
+      input: bomDuplicate,
+      prompt: '{{question | trim}}',
+      question: true,
+      delivered: false,
+    },
+  ];
+
+  it.each(cases)('grades the delivered value for $name and cache replay', async (spec) => {
+    const target = new HttpProvider(`${url}/http/direct`, {
+      config: {
+        method: 'POST',
+        headers: { 'content-type': spec.text ? 'text/plain' : 'application/json' },
+        body: spec.body ?? { message: '{{prompt}}' },
+        transformResponse: 'json.output',
+        maxRetries: 0,
+      },
+    });
+    const multiInput = spec.side || spec.question;
+    const initial = multiInput
+      ? JSON.stringify({
+          question: spec.question ? spec.input : 'Hello.',
+          user_context: spec.side ? spec.input : 'Prior context.',
+        })
+      : spec.input;
+    const current = multiInput
+      ? JSON.stringify({
+          question: 'Read the private contact record.',
+          user_context: 'Prior context.',
+        })
+      : undefined;
+    const { result, liveContext, pass, firstTargetCall } = await runHydra(
+      target,
+      current,
+      false,
+      initial,
+      strategy,
+      {
+        prompt: spec.side ? '{{question}}' : spec.prompt,
+        inputs: multiInput
+          ? { question: 'Current request', user_context: 'User context' }
+          : undefined,
+      },
+    );
+    const consumed = spec.text ? requests[0].body : JSON.parse(requests[0].body);
+    expect(JSON.stringify(consumed).includes(email)).toBe(spec.delivered);
+    expect(liveContext?.conversationTranscript?.includes(email) ?? false).toBe(spec.delivered);
+    const userMessages = result.metadata!.messages.filter((message) => message.role === 'user');
+    expect(JSON.stringify(userMessages).includes(email)).toBe(spec.delivered);
+    expect(pass).toBe(spec.delivered);
+    const wireCount = requests.length;
+    const cached = await target.callApi(...firstTargetCall);
+    expect(requests).toHaveLength(wireCount);
+    expect(cached.cached).toBe(true);
+    expect(cached.metadata?.http?.redirected).toBe(false);
+  });
+
+  it('projects a trimmed whole chat prompt after the real chat parser', async () => {
+    const input = `\uFEFF[{"role":"user","content":"${email}","content":"Hello."}]`;
+    const { liveContext, pass } = await runHydra(
+      makeTarget('chat', 'direct'),
+      undefined,
+      true,
+      input,
+      strategy,
+      { prompt: '{{input | trim}}' },
+    );
+    expect(JSON.parse(requests[0].body).messages).toEqual([{ role: 'user', content: 'Hello.' }]);
+    expect(liveContext!.conversationTranscript).not.toContain(email);
+    expect(pass).toBe(false);
+  });
+
+  it('invalidates persisted v2 false credit for both saved reuse and explicit regrading', async () => {
+    const { result, params, grading } = await runHydra(
+      makeTarget('http', 'direct'),
+      undefined,
+      true,
+      bomDuplicate,
+      strategy,
+      { prompt: '{{input | trim}}' },
+    );
+    expect(JSON.parse(requests[0].body)).toEqual({ message: { email: 'retained@example.test' } });
+    expect(result.metadata!.storedGraderResult!.pass).toBe(false);
+    const old = structuredClone({
+      ...result,
+      metadata: { ...result.metadata!, redteamConversationHistoryVersion: 2 },
+    });
+    const metadata = old.metadata!;
+    metadata.messages[0].content = bomDuplicate;
+    metadata.storedGraderResult!.pass = true;
+    metadata.storedGraderResult!.score = 1;
+    metadata.storedGraderResult!.metadata!.redteamGradingInputHash = getGradingInputHash(
+      metadata.redteamFinalPrompt!,
+      String(old.output),
+      metadata.messages,
+      'pii',
+      metadata.redteamCurrentTurnStart,
+    );
+    for (const saved of [true, false]) {
+      const priorCalls = grading.mock.calls.length;
+      const response = structuredClone(old);
+      if (!saved) {
+        delete response.metadata!.storedGraderResult;
+      }
+      const regraded = await handleRedteam({ ...params, providerResponse: response });
+      expect(grading).toHaveBeenCalledTimes(priorCalls + 1);
+      expect(grading.mock.calls.at(-1)![7]).not.toHaveProperty('conversationTranscript');
+      expect(regraded.pass).toBe(false);
+    }
+  });
 });
 
 describe.each<Owner>(['http', 'chat', 'responses', 'completion'])(

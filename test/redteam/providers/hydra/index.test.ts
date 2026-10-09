@@ -1444,7 +1444,7 @@ describe('HydraProvider', () => {
           { role: 'assistant', content: finalOutput },
         ]);
         expect(result.metadata.redteamCurrentTurnStart).toBe(mode === 'YAML input' ? undefined : 2);
-        expect(result.metadata.redteamConversationHistoryVersion).toBe(2);
+        expect(result.metadata.redteamConversationHistoryVersion).toBe(3);
         expect(result.metadata.storedGraderResult?.metadata?.redteamGradingInputHash).toBe(
           getGradingInputHash(
             result.metadata.redteamFinalPrompt!,
@@ -2052,7 +2052,7 @@ describe('HydraProvider', () => {
       context.originalProvider = mockTargetProvider;
       const provider = new HydraProvider({ injectVar: 'input', maxTurns: 2, stateful: true });
       const result = await provider.callApi('', context);
-      expect(result.metadata.redteamConversationHistoryVersion).toBe(2);
+      expect(result.metadata.redteamConversationHistoryVersion).toBe(3);
       expect(JSON.parse(mockGrader.getResult.mock.calls[1][7].conversationTranscript)).toEqual([
         { role: 'assistant', content: acknowledgment },
       ]);
@@ -2179,7 +2179,7 @@ describe('HydraProvider', () => {
       expect(mockGrader.getResult).not.toHaveBeenCalled();
       expect(result.error).toContain('did not execute any target probes');
       expect(result.metadata.messages).toEqual([]);
-      expect(result.metadata.redteamConversationHistoryVersion).toBe(2);
+      expect(result.metadata.redteamConversationHistoryVersion).toBe(3);
     });
 
     it('excludes abandoned turns after backtracking', async () => {
