@@ -9,7 +9,6 @@ vi.mock('../../src/providers', () => ({
   loadApiProvider: vi.fn(),
 }));
 
-vi.mock('../../src/cliState');
 vi.mock('../../src/logger');
 
 describe('getGradingProvider', () => {
@@ -169,6 +168,30 @@ describe('getGradingProvider', () => {
           providerId: 'openai:gpt-4.1',
         },
       );
+    });
+
+    it('warns once per implicit grader within a configuration', async () => {
+      cliState.config = { defaultTest: { provider: 'echo' } };
+      vi.mocked(loadApiProvider).mockResolvedValue(mockProvider);
+
+      await getGradingProvider('text', undefined, null);
+      await getGradingProvider('text', undefined, null);
+
+      expect(logger.warn).toHaveBeenCalledTimes(1);
+    });
+
+    it('warns again in a separate evaluation scope using the same configuration', async () => {
+      cliState.config = { defaultTest: { provider: 'echo' } };
+      vi.mocked(loadApiProvider).mockResolvedValue(mockProvider);
+
+      for (let run = 0; run < 2; run++) {
+        await cliState.withEnv(undefined, async () => {
+          await getGradingProvider('text', undefined, null);
+          await getGradingProvider('text', undefined, null);
+        });
+      }
+
+      expect(logger.warn).toHaveBeenCalledTimes(2);
     });
 
     it('should not warn when an explicit provider selects the grader', async () => {
