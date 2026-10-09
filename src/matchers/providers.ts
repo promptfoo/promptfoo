@@ -7,6 +7,7 @@ import { getCloudTargetIdFromProviders } from '../redteam/remoteGenerationContex
 import {
   getProviderCallExecutionContext,
   getProviderCallTracingContext,
+  runProviderCallWithAbort,
 } from '../scheduler/providerCallExecutionContext';
 import { createProviderRateLimitOptions, isRateLimitWrapped } from '../scheduler/providerWrapper';
 import invariant from '../util/invariant';
@@ -15,6 +16,7 @@ import type {
   ApiProvider,
   CallApiContextParams,
   CallApiOptionsParams,
+  CancellableEmbeddingProvider,
   GradingConfig,
   ProviderOptions,
   ProviderResponse,
@@ -46,13 +48,29 @@ export function getGradingProviderCallOptions(): CallApiOptionsParams | undefine
   return abortSignal ? { abortSignal } : undefined;
 }
 
+export async function callEmbeddingProvider(provider: ApiProvider, input: string) {
+  const options = getGradingProviderCallOptions();
+  const result =
+    options && provider.supportsEmbeddingCancellation
+      ? await (provider as CancellableEmbeddingProvider).callEmbeddingApi(input, undefined, options)
+      : await provider.callEmbeddingApi!(input);
+  // A provider that cannot observe cancellation may report it as an error response.
+  if (result.error) {
+    options?.abortSignal?.throwIfAborted();
+  }
+  return result;
+}
+
 /**
  * Apply tracing, rate limits, and grouped scheduling to every grading-provider modality.
  */
 export function callGradingProvider<T extends ProviderResponse>(
   provider: ApiProvider,
   label: string,
-  invoke: (context: CallApiContextParams | undefined) => Promise<T>,
+  invoke: (
+    context: CallApiContextParams | undefined,
+    onResponseHeaders?: CallApiOptionsParams['onResponseHeaders'],
+  ) => Promise<T>,
   options: {
     callContext?: CallApiContextParams;
     operationName?: 'embeddings';
@@ -61,36 +79,49 @@ export function callGradingProvider<T extends ProviderResponse>(
   const { callContext, operationName } = options;
   const executionContext = getProviderCallExecutionContext();
   const tracingContext = getProviderCallTracingContext();
-  const callProvider = (): Promise<T> =>
+  const callProvider = (
+    onResponseHeaders?: CallApiOptionsParams['onResponseHeaders'],
+  ): Promise<T> =>
     providerRegistry.withProvider(
       provider,
-      () =>
-        tracingContext
+      async () => {
+        const invokeProvider = (context: CallApiContextParams | undefined) =>
+          onResponseHeaders ? invoke(context, onResponseHeaders) : invoke(context);
+        return tracingContext
           ? (tracingContext.withProviderSpan(
               { provider, callContext, operationName, role: 'grader', promptLabel: label },
-              invoke,
+              invokeProvider,
             ) as Promise<T>)
-          : invoke(callContext),
+          : invokeProvider(callContext);
+      },
       executionContext?.abortSignal,
     );
 
-  const executeCall = () => {
+  const executeCall = async () => {
+    // Never start a grader after cancellation; queued graders check once they reach the front.
+    executionContext?.abortSignal?.throwIfAborted();
     if (executionContext?.rateLimitRegistry && !isRateLimitWrapped(provider)) {
       return executionContext.rateLimitRegistry.execute(
         provider,
         callProvider,
-        createProviderRateLimitOptions(),
+        createProviderRateLimitOptions(executionContext.abortSignal),
       );
     }
 
     return callProvider();
   };
 
-  if (executionContext?.providerCallQueue) {
-    return executionContext.providerCallQueue.enqueue(provider.id(), executeCall);
-  }
-
-  return executeCall();
+  return runProviderCallWithAbort(
+    () =>
+      executionContext?.providerCallQueue
+        ? executionContext.providerCallQueue.enqueue(
+            provider.id(),
+            executeCall,
+            executionContext.abortSignal,
+          )
+        : executeCall(),
+    executionContext?.abortSignal,
+  );
 }
 
 /** Preserve evaluator context while adding this grading call's prompt metadata and cancellation. */
@@ -112,14 +143,18 @@ export function callProviderWithContext(
     },
     vars,
   };
-  const callApiOptions = getGradingProviderCallOptions();
+  const contextOptions = getGradingProviderCallOptions();
   return callGradingProvider(
     provider,
     label,
-    (tracedContext) =>
-      callApiOptions
+    (tracedContext, onResponseHeaders) => {
+      const callApiOptions = onResponseHeaders
+        ? { ...contextOptions, onResponseHeaders }
+        : contextOptions;
+      return callApiOptions
         ? provider.callApi(prompt, tracedContext, callApiOptions)
-        : provider.callApi(prompt, tracedContext),
+        : provider.callApi(prompt, tracedContext);
+    },
     { callContext: callApiContext },
   );
 }
