@@ -1,20 +1,10 @@
 import { LRUCache } from 'lru-cache';
 import { DEFAULT_QUERY_LIMIT } from '../constants';
 
-import type { CompletedPrompt } from '../types/index';
+import type { StandaloneEval } from '../types/standaloneEval';
 
-export type StandaloneEval = CompletedPrompt & {
-  evalId: string;
-  description: string | null;
-  datasetId: string | null;
-  promptId: string | null;
-  isRedteam: boolean;
-  createdAt: number;
-
-  pluginFailCount: Record<string, number>;
-  pluginPassCount: Record<string, number>;
-  uuid: string;
-};
+// Compatibility export for existing cache consumers.
+export type { StandaloneEval } from '../types/standaloneEval';
 
 export type StandaloneEvalCacheKeyOptions = {
   limit?: number;
