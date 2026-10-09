@@ -9,7 +9,7 @@ prompts:
     {{question}}
 
 providers:
-  # Application Inference Profiles - Multi-region, automatic failover
+  # Application Inference Profiles - Usage attribution and optional cross-region routing
   # These require the inferenceModelType configuration parameter
 
   # Claude inference profile - optimized for high availability

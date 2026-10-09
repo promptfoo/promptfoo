@@ -1,15 +1,15 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: 'Simple Inference Profile Example - High Availability Setup'
+description: 'Simple Inference Profile Example - Usage Tracking'
 
 # This example demonstrates a typical production setup using inference profiles
-# for high availability and automatic failover across regions
+# for usage tracking; cross-region routing depends on the profile source
 
 prompts:
   - 'Answer this customer support question professionally: {{question}}'
 
 providers:
-  # Production inference profile with automatic failover
-  # This profile might route to us-east-1 primarily, with failover to us-west-2
+  # Production profile for one model
+  # Copy a system cross-region profile to enable routing among its regions
   - id: bedrock:arn:aws:bedrock:us-east-1:YOUR_ACCOUNT_ID:application-inference-profile/prod-claude-ha
     label: 'Production Claude (HA)'
     config:

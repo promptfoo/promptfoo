@@ -2,13 +2,13 @@
 description: 'Bedrock Nova Tool Use Eval'
 
 prompts:
-  - 'What is the color of {{topic}}? ONLY answer using the "color_json" tool.'
+  - 'Report the usual color of {{topic}} by calling color_json with both the name and color. This tool records your answer; it does not look up colors.'
 
 providers:
   - id: bedrock:amazon.nova-micro-v1:0
     config:
       region: 'us-east-1'
-      inferenceConfig:
+      interfaceConfig:
         temperature: 0.7
         max_new_tokens: 256
       toolConfig:
@@ -17,7 +17,7 @@ providers:
         tools:
           - toolSpec:
               name: color_json
-              description: 'Outputs the color of a thing'
+              description: 'Records a known color. Supply both the thing name and its color.'
               inputSchema:
                 json:
                   type: object
@@ -34,7 +34,7 @@ providers:
   - id: bedrock:amazon.nova-lite-v1:0
     config:
       region: 'us-east-1'
-      inferenceConfig:
+      interfaceConfig:
         temperature: 0.7
         max_new_tokens: 256
       toolConfig:
@@ -43,7 +43,7 @@ providers:
         tools:
           - toolSpec:
               name: color_json
-              description: 'Outputs the color of a thing'
+              description: 'Records a known color. Supply both the thing name and its color.'
               inputSchema:
                 json:
                   type: object
@@ -60,7 +60,7 @@ providers:
   - id: bedrock:amazon.nova-pro-v1:0
     config:
       region: 'us-east-1'
-      inferenceConfig:
+      interfaceConfig:
         temperature: 0.7
         max_new_tokens: 256
       toolConfig:
@@ -69,7 +69,7 @@ providers:
         tools:
           - toolSpec:
               name: color_json
-              description: 'Outputs the color of a thing'
+              description: 'Records a known color. Supply both the thing name and its color.'
               inputSchema:
                 json:
                   type: object
@@ -85,26 +85,26 @@ providers:
                     - color
 
 defaultTest:
-  options:
-    transform: 'JSON.parse(output).input.color'
+  assert:
+    - type: javascript
+      value: |
+        try {
+          const tool = JSON.parse(output);
+          return tool.name === 'color_json' &&
+            tool.input?.color?.toLowerCase() === context.vars.expectedColor;
+        } catch {
+          return false;
+        }
 tests:
   - vars:
       topic: sky
-    assert:
-      - type: equals
-        value: blue
+      expectedColor: blue
   - vars:
       topic: ocean
-    assert:
-      - type: equals
-        value: blue
+      expectedColor: blue
   - vars:
       topic: banana
-    assert:
-      - type: equals
-        value: yellow
+      expectedColor: yellow
   - vars:
       topic: grass
-    assert:
-      - type: equals
-        value: green
+      expectedColor: green

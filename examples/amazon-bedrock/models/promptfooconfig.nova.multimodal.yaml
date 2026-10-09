@@ -8,10 +8,13 @@ providers:
   - id: bedrock:amazon.nova-pro-v1:0
     config:
       region: 'us-east-1'
-      inferenceConfig:
+      interfaceConfig:
         temperature: 0.7
         max_new_tokens: 256
 
 tests:
   - vars:
       image: file://cat.jpg
+    assert:
+      - type: icontains
+        value: cat
