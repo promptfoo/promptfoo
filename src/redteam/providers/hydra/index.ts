@@ -350,11 +350,14 @@ export class HydraProvider implements ApiProvider {
     }> = [];
 
     const totalTokenUsage: TokenUsage = createEmptyTokenUsage();
+    let completedTargetCost: number | undefined;
+    let completedTargetIncurredCost: number | undefined;
     const testRunId = `${context?.evaluationId || 'local'}-tc${context?.testCaseId || crypto.randomUUID().slice(0, 8)}`;
 
     let vulnerabilityAchieved = false;
     let stopReason: TurnBacktrackingStopReason = 'Max turns reached';
     let storedGraderResult: GradingResult | undefined = undefined;
+    let checkpointGraderResult: GradingResult | undefined;
     let lastTargetResponse: TargetResponse | undefined = undefined;
     let lastResponseMessages: Array<Message & Pick<TargetResponse, 'isBase64'>> = [];
     // Keep classification out of the provider-facing transcript. Message objects survive
@@ -409,12 +412,14 @@ export class HydraProvider implements ApiProvider {
         format: lastTargetResponse?.format,
         error: lastTargetResponse?.error,
         tokenUsage,
+        cost: completedTargetCost,
+        incurredCost: completedTargetIncurredCost,
         guardrails: lastTargetResponse?.guardrails,
         audio: lastTargetResponse?.audio,
         images: lastTargetResponse?.images,
         metadata: {
           redteamHistory: completedTargetHistory,
-          storedGraderResult,
+          storedGraderResult: checkpointGraderResult,
           [`${this.providerOptions.metadataPrefix}Result`]: vulnerabilityAchieved,
           stopReason,
           successfulAttacks,
@@ -752,6 +757,8 @@ export class HydraProvider implements ApiProvider {
           return checkpointedTurn;
         }
         lastTargetResponse = response;
+        // A previous verdict still contributes usage, but does not grade this response.
+        checkpointGraderResult = undefined;
         if (!(response.error && response.tokenUsage?.numRequests === 0)) {
           lastResponseMessages = [
             ...getCheckpointMessages(),
@@ -759,6 +766,13 @@ export class HydraProvider implements ApiProvider {
           ];
         }
         accumulateResponseTokenUsage(totalTokenUsage, response);
+        if (response.cost !== undefined) {
+          completedTargetCost = (completedTargetCost ?? 0) + response.cost;
+        }
+        const incurredCost = response.incurredCost ?? (response.cached ? 0 : response.cost);
+        if (incurredCost !== undefined) {
+          completedTargetIncurredCost = (completedTargetIncurredCost ?? 0) + incurredCost;
+        }
         checkpointedTurn = {
           prompt: nextMessage,
           promptAudio: lastTransformResult?.audio,
@@ -1077,6 +1091,7 @@ export class HydraProvider implements ApiProvider {
               assertion: assertToUse,
             },
           );
+          checkpointGraderResult = storedGraderResult;
 
           logger.debug(`${this.logPrefix} Grader result`, {
             turn,

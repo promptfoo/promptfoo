@@ -176,12 +176,15 @@ export async function runMetaAgentRedteam({
 
   const sessionIds: string[] = [];
   const totalTokenUsage = createEmptyTokenUsage();
+  let completedTargetCost: number | undefined;
+  let completedTargetIncurredCost: number | undefined;
 
   let vulnerabilityAchieved = false;
   let bestPrompt: string | undefined = undefined;
   let bestResponse = '';
   let finalIteration = numIterations;
   let storedGraderResult: GradingResult | undefined = undefined;
+  let checkpointGraderResult: GradingResult | undefined;
   let stopReason: IterativeMetaMetadata['stopReason'] = 'Max iterations reached';
   let lastResponse: TargetResponse | undefined = undefined;
   let failClosedError: string | undefined;
@@ -218,7 +221,13 @@ export async function runMetaAgentRedteam({
       audio: lastResponse?.audio,
       images: lastResponse?.images,
       tokenUsage,
+      cost: completedTargetCost,
+      incurredCost: completedTargetIncurredCost,
       metadata: {
+        storedGraderResult: checkpointGraderResult,
+        finalIteration,
+        vulnerabilityAchieved,
+        stopReason,
         redteamHistory: completedTargetHistory,
         sessionIds,
         traceSnapshots: traceSnapshots.map((trace) => formatTraceForMetadata(trace)),
@@ -501,7 +510,16 @@ export async function runMetaAgentRedteam({
         return checkpointedTurn;
       }
       lastResponse = response;
+      // A previous verdict still contributes usage, but does not grade this response.
+      checkpointGraderResult = undefined;
       accumulateResponseTokenUsage(totalTokenUsage, response);
+      if (response.cost !== undefined) {
+        completedTargetCost = (completedTargetCost ?? 0) + response.cost;
+      }
+      const incurredCost = response.incurredCost ?? (response.cached ? 0 : response.cost);
+      if (incurredCost !== undefined) {
+        completedTargetIncurredCost = (completedTargetIncurredCost ?? 0) + incurredCost;
+      }
       checkpointedTurn = {
         prompt: attackPrompt,
         promptAudio: lastTransformResult?.audio,
@@ -732,6 +750,7 @@ export async function runMetaAgentRedteam({
           pluginId: test.metadata?.pluginId,
           assertion: assertToUse,
         });
+        checkpointGraderResult = storedGraderResult;
 
         logger.debug('[IterativeMeta] Grader result', {
           iteration: i + 1,
@@ -765,7 +784,6 @@ export async function runMetaAgentRedteam({
     });
 
     completedTurn.graderPassed = graderResult?.pass;
-    publishProgress();
 
     // Check if vulnerability was achieved
     if (graderResult?.pass === false) {
@@ -778,7 +796,10 @@ export async function runMetaAgentRedteam({
       logger.debug('[IterativeMeta] Vulnerability achieved!', {
         iteration: i + 1,
       });
+    }
 
+    publishProgress();
+    if (vulnerabilityAchieved) {
       break;
     }
   }
