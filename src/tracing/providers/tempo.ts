@@ -36,13 +36,21 @@ interface TempoSpan {
   endTimeUnixNano?: string;
   attributes?: Array<{ key: string; value: TempoAttributeValue }>;
   status?: { code?: number | string; message?: string };
+  droppedAttributesCount?: unknown;
+  droppedEventsCount?: unknown;
+  droppedLinksCount?: unknown;
+  events?: Array<{ droppedAttributesCount?: unknown }>;
+  links?: Array<{ droppedAttributesCount?: unknown }>;
 }
 
 interface TempoTraceResponse {
   batches?: Array<{
-    resource?: { attributes?: Array<{ key: string; value: TempoAttributeValue }> };
+    resource?: {
+      attributes?: Array<{ key: string; value: TempoAttributeValue }>;
+      droppedAttributesCount?: unknown;
+    };
     scopeSpans?: Array<{
-      scope?: { name?: string; version?: string };
+      scope?: { name?: string; version?: string; droppedAttributesCount?: unknown };
       spans?: TempoSpan[];
     }>;
   }>;
@@ -94,6 +102,21 @@ function attributesToRecord(
   return Object.fromEntries(
     (attributes ?? []).map(({ key, value }) => [key, extractAttributeValue(value)]),
   );
+}
+
+function assertNoDroppedTelemetry(...counts: unknown[]): void {
+  const incomplete = counts.some((count) => {
+    if (count == null || count === 0) {
+      return false;
+    }
+    return (
+      typeof count !== 'string' ||
+      !/^[ \t\r\n]*-?0(?:\.0+)?(?:[eE][+-]?\d+)?[ \t\r\n]*$/.test(count)
+    );
+  });
+  if (incomplete) {
+    throw new TraceProviderError('Tempo returned incomplete trace data: dropped telemetry');
+  }
 }
 
 function decodeSpanId(id: string | undefined): string | undefined {
@@ -177,7 +200,23 @@ function transformSpan(
   traceId: string,
   resourceAttributes: Record<string, unknown>,
   scopeName: string | undefined,
-): SpanData | null {
+): SpanData {
+  assertNoDroppedTelemetry(
+    span?.droppedAttributesCount,
+    span?.droppedEventsCount,
+    span?.droppedLinksCount,
+  );
+  for (const records of [span?.events, span?.links]) {
+    if (records == null) {
+      continue;
+    }
+    if (!Array.isArray(records)) {
+      throw new TraceProviderError('Tempo span events and links must be arrays');
+    }
+    for (const record of records) {
+      assertNoDroppedTelemetry(record?.droppedAttributesCount);
+    }
+  }
   if (decodeTraceId(span.traceId) !== traceId.toLowerCase()) {
     throw new Error('Span trace ID must match the requested trace');
   }
@@ -280,35 +319,42 @@ export class TempoProvider implements TraceProvider {
     let malformedSpans = 0;
 
     for (const batch of data.batches ?? []) {
-      if (!batch || !Array.isArray(batch.scopeSpans)) {
+      assertNoDroppedTelemetry(batch?.resource?.droppedAttributesCount);
+      if (!Array.isArray(batch?.scopeSpans)) {
         malformedSpans++;
         continue;
       }
       const resourceAttributes = attributesToRecord(batch.resource?.attributes);
       for (const scopeSpan of batch.scopeSpans) {
-        if (!scopeSpan || !Array.isArray(scopeSpan.spans)) {
+        assertNoDroppedTelemetry(scopeSpan?.scope?.droppedAttributesCount);
+        if (!Array.isArray(scopeSpan?.spans)) {
           malformedSpans++;
           continue;
         }
         for (const span of scopeSpan.spans) {
-          if (spans.length >= MAX_SPANS) {
-            return spans;
-          }
-
+          let normalizedSpan: SpanData;
           try {
-            const normalizedSpan = transformSpan(
+            normalizedSpan = transformSpan(
               span,
               traceId,
               resourceAttributes,
               scopeSpan.scope?.name,
             );
-            if (normalizedSpan && !seenSpanIds.has(normalizedSpan.spanId)) {
-              seenSpanIds.add(normalizedSpan.spanId);
-              spans.push(normalizedSpan);
+          } catch (error) {
+            if (error instanceof TraceProviderError) {
+              throw error;
             }
-          } catch {
             malformedSpans++;
+            continue;
           }
+          if (seenSpanIds.has(normalizedSpan.spanId)) {
+            continue;
+          }
+          if (spans.length >= MAX_SPANS) {
+            throw new TraceProviderError('Tempo trace exceeds the maximum span count');
+          }
+          seenSpanIds.add(normalizedSpan.spanId);
+          spans.push(normalizedSpan);
         }
       }
     }
