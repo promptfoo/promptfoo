@@ -176,7 +176,7 @@ export class GeminiImageProvider implements ApiProvider {
         ])?.value
       : undefined;
 
-    const vertexApiKey = this.config.vertexai === true ? this.getVertexApiKey() : undefined;
+    const vertexApiKey = isVertexMode ? this.getVertexApiKey() : undefined;
     const hasOAuthConfig = Boolean(
       this.config.credentials ||
         this.config.keyFilename ||
@@ -213,7 +213,7 @@ export class GeminiImageProvider implements ApiProvider {
         (effectiveRegion && effectiveRegion !== 'global'),
     );
     const usesVertexExpress =
-      this.config.vertexai === true &&
+      isVertexMode &&
       Boolean(vertexApiKey) &&
       this.config.expressMode !== false &&
       !hasOAuthConfig &&

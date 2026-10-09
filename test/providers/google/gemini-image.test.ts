@@ -361,6 +361,43 @@ describe('GeminiImageProvider', () => {
     );
   });
 
+  it.each([
+    { scope: 'provider', expressMode: undefined },
+    { scope: 'provider', expressMode: true },
+    { scope: 'process', expressMode: undefined },
+    { scope: 'process', expressMode: true },
+  ])(
+    'routes environment-selected Vertex Express for $scope with expressMode=$expressMode',
+    async ({ scope, expressMode }) => {
+      const restore =
+        scope === 'process' ? mockProcessEnv({ GOOGLE_GENAI_USE_VERTEXAI: 'true' }) : () => {};
+      try {
+        const provider = new GeminiImageProvider('gemini-3.1-flash-image', {
+          config: { apiKey: 'explicit-vertex-key', expressMode },
+          env: scope === 'provider' ? { GOOGLE_GENAI_USE_VERTEXAI: 'true' } : undefined,
+        });
+        mockSuccessfulImageResponse();
+
+        const result = await provider.callApi('Draw a circle');
+
+        expect(result.error).toBeUndefined();
+        expect(mockGetGoogleClient).not.toHaveBeenCalled();
+        expect(mockResolveProjectId).not.toHaveBeenCalled();
+        expect(mockFetchWithCache).toHaveBeenCalledWith(
+          'https://aiplatform.googleapis.com/v1/publishers/google/models/gemini-3.1-flash-image:generateContent',
+          expect.objectContaining({
+            headers: expect.objectContaining({ 'x-goog-api-key': 'explicit-vertex-key' }),
+          }),
+          expect.any(Number),
+          'json',
+          true,
+        );
+      } finally {
+        restore();
+      }
+    },
+  );
+
   it('should honor a custom base URL for Vertex Express image requests', async () => {
     const provider = new GeminiImageProvider('gemini-3-pro-image-preview', {
       config: {
