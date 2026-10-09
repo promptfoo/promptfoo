@@ -492,7 +492,7 @@ describe('util', () => {
               properties: {
                 param1: { type: 'STRING' },
               },
-              propertyOrdering: ['param1', 'param2'],
+              propertyOrdering: ['param1'],
             },
           },
           {
@@ -649,7 +649,7 @@ describe('util', () => {
       );
     });
 
-    it('should throw error when propertyOrdering references invalid property', () => {
+    it('accepts propertyOrdering as an annotation while validating argument types', () => {
       const output = [
         {
           functionCall: {
@@ -658,9 +658,9 @@ describe('util', () => {
           },
         },
       ];
-      expect(() => validateFunctionCall(output, mockFunctions)).toThrow(
-        /Tool schema doesn't compile with ajv:.*If this is a valid tool schema you may need to reformulate your assertion without is-valid-function-call/,
-      );
+      expect(() => validateFunctionCall(output, mockFunctions)).not.toThrow();
+      output[0].functionCall.args = '{"param1": 123}';
+      expect(() => validateFunctionCall(output, mockFunctions)).toThrow(/does not match schema/);
     });
   });
 

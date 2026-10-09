@@ -74,6 +74,16 @@ describeEvaluator('evaluator runtime ports', () => {
     const runtime = createInMemoryRuntime(store);
     const controller = new AbortController();
     let phase = 'initial';
+    let initialCalls = 0;
+    let initialStarted!: () => void;
+    const initialReady = new Promise<void>((resolve) => {
+      initialStarted = resolve;
+    });
+    let resumedStarted!: () => void;
+    const resumedReady = new Promise<void>((resolve) => {
+      resumedStarted = resolve;
+    });
+    const releaseCalls: Array<() => void> = [];
     const target: ApiProvider = {
       id: () => 'queued-runtime-vars',
       callApi: vi.fn(async (_prompt, context, options) => {
@@ -82,7 +92,15 @@ describeEvaluator('evaluator runtime ports', () => {
           output: `Evidence ${phase} ${context!.vars.index}`,
           tokenUsage: { total: 11, numRequests: 1 },
         });
-        return new Promise<never>(() => {});
+        if (phase === 'initial' && ++initialCalls === 2) {
+          initialStarted();
+        }
+        if (phase === 'timed') {
+          resumedStarted();
+        }
+        return new Promise<{ output: string }>((resolve) => {
+          releaseCalls.push(() => resolve({ output: 'Late completion' }));
+        });
       }),
     };
     const suite: TestSuite = {
@@ -98,7 +116,8 @@ describeEvaluator('evaluator runtime ports', () => {
         { maxConcurrency: 2, timeoutMs: 1000, abortSignal: controller.signal },
         runtime,
       );
-      await vi.waitFor(() => expect(target.callApi).toHaveBeenCalledTimes(2));
+      await initialReady;
+      expect(target.callApi).toHaveBeenCalledTimes(2);
       controller.abort();
       await initial;
       const before = structuredClone(state.results.find((row) => row.testIdx === 1)!);
@@ -112,12 +131,18 @@ describeEvaluator('evaluator runtime ports', () => {
         { maxConcurrency: 1, timeoutMs: 1000, maxEvalTimeMs: 25 },
         runtime,
       );
-      await vi.waitFor(() => expect(target.callApi).toHaveBeenCalledTimes(3));
+      await resumedReady;
+      expect(target.callApi).toHaveBeenCalledTimes(3);
       await vi.advanceTimersByTimeAsync(25);
       await resumed;
       const after = state.results.find((row) => row.testIdx === 1)!;
       expect(after.vars).toEqual(before.vars);
     } finally {
+      controller.abort();
+      for (const release of releaseCalls) {
+        release();
+      }
+      await vi.advanceTimersByTimeAsync(0);
       vi.useRealTimers();
     }
   });

@@ -91,6 +91,82 @@ export function testCasesPrompt(
     .join(', ')}}[]}`;
 }
 
+function parsePersonaItem(item: unknown): string | null {
+  if (typeof item === 'string') {
+    const trimmed = item.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  }
+  if (typeof item === 'object' && item !== null) {
+    const record = item as Record<string, unknown>;
+    const val = record.persona ?? record.name ?? record.description;
+    if (typeof val === 'string') {
+      const trimmed = val.trim();
+      return trimmed.length > 0 ? trimmed : null;
+    }
+  }
+  return null;
+}
+
+function extractFromList(items: unknown[]): string[] {
+  return items.map(parsePersonaItem).filter((p): p is string => p !== null);
+}
+
+function extractFromRecord(obj: Record<string, unknown>): string[] {
+  const candidates = [
+    obj.personas,
+    obj.user_personas,
+    obj.persona_list,
+    obj.personas_list,
+    obj.results,
+  ];
+  for (const candidate of candidates) {
+    if (Array.isArray(candidate)) {
+      const extracted = extractFromList(candidate);
+      if (extracted.length > 0) {
+        return extracted;
+      }
+    }
+  }
+  return [];
+}
+
+export function extractPersonas(output: string): string[] {
+  // Markdown fences are common in otherwise valid JSON responses, including raw arrays.
+  const json = output.trim().replace(/^```(?:json)?\s*\n([\s\S]*?)\n```$/i, '$1');
+
+  // 1. Try direct JSON parsing
+  try {
+    const parsed = JSON.parse(json);
+    if (Array.isArray(parsed)) {
+      const fromArray = extractFromList(parsed);
+      if (fromArray.length > 0) {
+        return fromArray;
+      }
+    } else if (typeof parsed === 'object' && parsed !== null) {
+      const fromObj = extractFromRecord(parsed as Record<string, unknown>);
+      if (fromObj.length > 0) {
+        return fromObj;
+      }
+    }
+  } catch {
+    // Fall back to scanning extracted JSON objects from text/markdown
+  }
+
+  // 2. Scan extracted JSON objects
+  const respObjects = extractJsonObjects(output);
+  for (const respObj of respObjects) {
+    if (typeof respObj === 'object' && respObj !== null) {
+      const fromObj = extractFromRecord(respObj as Record<string, unknown>);
+      if (fromObj.length > 0) {
+        return fromObj;
+      }
+    }
+  }
+
+  // 3. Fallback: if respObjects itself is a list of persona objects
+  return extractFromList(respObjects);
+}
+
 export async function synthesize({
   prompts,
   instructions,
@@ -138,15 +214,10 @@ export async function synthesize({
   logger.debug(`Received personas response:\n${resp.output}`);
   invariant(typeof resp.output !== 'undefined', 'resp.output must be defined');
   const output = typeof resp.output === 'string' ? resp.output : JSON.stringify(resp.output);
-  const respObjects = extractJsonObjects(output);
+  const personas = extractPersonas(output);
   invariant(
-    respObjects.length >= 1,
-    `Expected at least one JSON object in the response for personas, got ${respObjects.length}`,
-  );
-  const personas = (respObjects[0] as { personas?: unknown }).personas;
-  invariant(
-    Array.isArray(personas),
-    'Expected the personas response to contain a "personas" array.',
+    Array.isArray(personas) && personas.length > 0,
+    'Expected at least one user persona in the response. Check the provider response format.',
   );
   logger.debug(
     `Generated ${personas.length} persona${personas.length === 1 ? '' : 's'}:\n${personas.map((p) => `  - ${p}`).join('\n')}`,
@@ -194,18 +265,30 @@ export async function synthesize({
     const personaResponse = await providerModel.callApi(personaPrompt);
     logger.debug(`Received persona response:\n${personaResponse.output}`);
 
-    const personaResponseObjects = extractJsonObjects(personaResponse.output as string);
-
     invariant(
-      personaResponseObjects.length >= 1,
-      `Expected at least one JSON object in the response for persona ${persona}, got ${personaResponseObjects.length}`,
+      personaResponse.output !== undefined && personaResponse.output !== null,
+      'Expected the test case response to contain a "vars" array of objects.',
     );
-    const parsed = personaResponseObjects[0] as { vars: VarMapping[] };
-    logger.debug(`Received ${parsed.vars?.length} test cases`);
+    const personaOutput =
+      typeof personaResponse.output === 'string'
+        ? personaResponse.output
+        : JSON.stringify(personaResponse.output);
+    const personaResponseObjects = extractJsonObjects(personaOutput);
+
+    const wrapper = personaResponseObjects.find((obj): obj is { vars: VarMapping[] } => {
+      const vars = (obj as { vars?: unknown }).vars;
+      return (
+        Array.isArray(vars) &&
+        vars.every((value) => value !== null && typeof value === 'object' && !Array.isArray(value))
+      );
+    });
+    invariant(wrapper, 'Expected the test case response to contain a "vars" array of objects.');
+    const vars = wrapper.vars;
+    logger.debug(`Received ${vars.length} test cases`);
     if (progressBar) {
-      progressBar.increment(parsed.vars?.length);
+      progressBar.increment(vars.length);
     }
-    return parsed.vars || [];
+    return vars;
   };
 
   let testCaseVars = await retryWithDeduplication(generateTestCasesForPersona, totalTestCases);
