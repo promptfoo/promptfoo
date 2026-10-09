@@ -3,10 +3,15 @@ import { access } from 'fs/promises';
 import * as path from 'path';
 
 import { type Options as CsvOptions, parse as csvParse } from 'csv-parse/sync';
-import { globSync, hasMagic } from 'glob';
+import { escape as escapeGlob, globSync, hasMagic } from 'glob';
 import nunjucks from 'nunjucks';
 import cliState from '../cliState';
-import { getEnvBool } from '../envars';
+import {
+  getEnvBool,
+  getEnvOverrides,
+  getProcessEnv,
+  isTemplateProcessEnvDisabled,
+} from '../envars';
 import { importModule } from '../esm';
 import logger from '../logger';
 import { runPython } from '../python/pythonUtils';
@@ -17,6 +22,49 @@ import { renderVarsInObject } from './render';
 import { loadYaml } from './yamlLoad';
 
 import type { NunjucksFilterMap, OutputFile, VarValue } from '../types';
+
+const loadedFileMimeTypes = Symbol('loadedFileMimeTypes');
+type VarsWithFileMimeTypes = Record<string, unknown> & {
+  [loadedFileMimeTypes]?: ReadonlyMap<string, string>;
+};
+
+/** Preserve loaded-file provenance through object copies, outside serialized vars. */
+export function setLoadedFileMimeTypes(
+  vars: Record<string, unknown>,
+  mimeTypes?: ReadonlyMap<string, string>,
+): Map<string, string> {
+  const current = (vars as VarsWithFileMimeTypes)[loadedFileMimeTypes];
+  const next = new Map(mimeTypes);
+  if (!mimeTypes) {
+    // Rerenders keep only unchanged loaded values. Each render owns a fresh map so
+    // pruning or loading another file cannot mutate a sibling copy of vars.
+    for (const value of Object.values(vars)) {
+      if (typeof value === 'string') {
+        const mimeType = current?.get(value);
+        if (mimeType) {
+          next.set(value, mimeType);
+        }
+      }
+    }
+  }
+  if (next.size > 0) {
+    Object.defineProperty(vars, loadedFileMimeTypes, {
+      value: next,
+      enumerable: true,
+      configurable: true,
+    });
+  } else {
+    delete (vars as VarsWithFileMimeTypes)[loadedFileMimeTypes];
+  }
+  return next;
+}
+
+export function getLoadedFileMimeType(
+  vars: Record<string, unknown>,
+  value: string,
+): string | undefined {
+  return (vars as VarsWithFileMimeTypes)[loadedFileMimeTypes]?.get(value);
+}
 
 type CsvParseOptionsWithColumns<T> = Omit<CsvOptions<T>, 'columns'> & {
   columns: Exclude<CsvOptions['columns'], undefined | false>;
@@ -51,8 +99,10 @@ export function getNunjucksEngineForFilePath(): nunjucks.Environment {
 
   // Add environment variables as template globals
   env.addGlobal('env', {
-    ...process.env,
-    ...cliState.config?.env,
+    ...(isTemplateProcessEnvDisabled() ? {} : getProcessEnv()),
+    ...Object.fromEntries(
+      Object.entries(getEnvOverrides() ?? {}).filter(([, value]) => value !== undefined),
+    ),
   });
 
   return env;
@@ -91,7 +141,9 @@ export function maybeLoadFromExternalFile(
   }
 
   // Render the file path using Nunjucks
-  const renderedFilePath = getNunjucksEngineForFilePath().renderString(filePath, {});
+  const renderedFilePath = getEnvBool('PROMPTFOO_DISABLE_TEMPLATING')
+    ? filePath
+    : getNunjucksEngineForFilePath().renderString(filePath, {});
 
   // Parse the file URL to extract file path and function name using existing utility
   // This handles colon splitting correctly, including Windows drive letters (C:\path)
@@ -130,9 +182,14 @@ export function maybeLoadFromExternalFile(
   const resolvedPath = path.resolve(cliState.basePath || '', pathToUse);
 
   // Check if the path contains glob patterns
-  if (hasMagic(pathToUse)) {
+  if (!fs.existsSync(resolvedPath) && hasMagic(pathToUse, { windowsPathsNoEscape: true })) {
     // Use globSync to expand the pattern
-    const matchedFiles = globSync(resolvedPath, {
+    const basePath = path.resolve(cliState.basePath || '');
+    const pattern = path.resolve(
+      escapeGlob(basePath, { windowsPathsNoEscape: true }),
+      path.relative(basePath, resolvedPath),
+    );
+    const matchedFiles = globSync(pattern, {
       windowsPathsNoEscape: true,
     });
 

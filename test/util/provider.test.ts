@@ -356,6 +356,21 @@ describe('getProviderDescription', () => {
     expect(description).not.toContain('SUPERSECRET123');
   });
 
+  it.each(['abc12345678901234567890', 'private-token/nested-route'])(
+    'redacts URLs embedded in provider-prefixed IDs: %s',
+    (secretPath) => {
+      const description = getProviderDescription(
+        createMockProvider({
+          id: `n8n:https://user:password@example.com/webhook/${secretPath}?key=secret`,
+        }),
+      );
+      expect(description).toContain('n8n:https://');
+      for (const secret of ['user', 'password', ...secretPath.split('/'), 'secret']) {
+        expect(description).not.toContain(secret);
+      }
+    },
+  );
+
   it('redacts credentials in URL path segments', () => {
     const provider = createMockProvider({
       id: 'https://api.example.com/auth/abc12345678901234567890',

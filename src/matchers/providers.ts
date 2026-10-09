@@ -1,6 +1,7 @@
 import cliState from '../cliState';
 import logger from '../logger';
 import { loadApiProvider } from '../providers/index';
+import { providerRegistry } from '../providers/providerRegistry';
 import { shouldGenerateRemote } from '../redteam/remoteGeneration';
 import { getCloudTargetIdFromProviders } from '../redteam/remoteGenerationContextFromProviders';
 import {
@@ -61,12 +62,17 @@ export function callGradingProvider<T extends ProviderResponse>(
   const executionContext = getProviderCallExecutionContext();
   const tracingContext = getProviderCallTracingContext();
   const callProvider = (): Promise<T> =>
-    tracingContext
-      ? (tracingContext.withProviderSpan(
-          { provider, callContext, operationName, role: 'grader', promptLabel: label },
-          invoke,
-        ) as Promise<T>)
-      : invoke(callContext);
+    providerRegistry.withProvider(
+      provider,
+      () =>
+        tracingContext
+          ? (tracingContext.withProviderSpan(
+              { provider, callContext, operationName, role: 'grader', promptLabel: label },
+              invoke,
+            ) as Promise<T>)
+          : invoke(callContext),
+      executionContext?.abortSignal,
+    );
 
   const executeCall = () => {
     if (executionContext?.rateLimitRegistry && !isRateLimitWrapped(provider)) {
@@ -94,12 +100,15 @@ export function callProviderWithContext(
   label: string,
   vars: Record<string, VarValue>,
   context?: CallApiContextParams,
+  promptConfig?: Record<string, unknown>,
 ): Promise<ProviderResponse> {
   const callApiContext = {
     ...context,
+    isGrading: true,
     prompt: {
       raw: prompt,
       label,
+      ...(promptConfig && { config: promptConfig }),
     },
     vars,
   };
@@ -173,8 +182,22 @@ export async function getGradingProvider(
   } else if (provider != null && typeof provider === 'object') {
     const typeValue = (provider as ProviderTypeMap)[type];
     if (typeValue) {
-      // Defined as embedding, classification, or text record
-      finalProvider = await getGradingProvider(type, typeValue, defaultProvider);
+      // Apply evaluation overrides only when the selected typed grader is loaded.
+      // Capturing them in the test config would retain credentials across later runs.
+      if (typeof typeValue === 'string') {
+        finalProvider = await loadApiProvider(typeValue, {
+          basePath: cliState.basePath,
+          env: cliState.env,
+        });
+      } else if (typeof typeValue.id === 'string') {
+        finalProvider = await loadApiProvider(typeValue.id, {
+          options: typeValue as ProviderOptions,
+          basePath: cliState.basePath,
+          env: cliState.env,
+        });
+      } else {
+        finalProvider = await getGradingProvider(type, typeValue, defaultProvider);
+      }
     } else if ((provider as ProviderOptions).id) {
       // Defined as ProviderOptions
       finalProvider = await loadFromProviderOptions(provider as ProviderOptions);

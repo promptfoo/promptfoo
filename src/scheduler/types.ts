@@ -17,7 +17,13 @@ export interface RateLimitExecuteOptions<T> {
   isRateLimited?: (result: T | undefined, error?: Error) => boolean;
   /** Extract retry-after delay from result or error */
   getRetryAfter?: (result: T | undefined, error?: Error) => number | undefined;
+  /** Preserve a structured failure result when retries are exhausted. Defaults to throwing. */
+  onRateLimitExhausted?: (result: T, error: Error) => T;
 }
+
+// Word-bounded: a bare "429" substring also matches token counts and request
+// IDs, e.g. "prompt is too long: 204291 tokens".
+const HTTP_429_RE = /\b429\b/;
 
 /**
  * Default rate limit detection for ProviderResponse.
@@ -34,8 +40,11 @@ export function isProviderResponseRateLimited(
   result: ProviderResponse | undefined,
   error: Error | undefined,
 ): boolean {
-  // Structured signal — never retry a hard quota.
-  if (result?.metadata?.rateLimitKind === 'quota') {
+  // Respect explicit rate-limit policy decisions as well as hard quotas.
+  if (
+    result?.metadata?.rateLimitRetryable === false ||
+    result?.metadata?.rateLimitKind === 'quota'
+  ) {
     return false;
   }
   if (result?.metadata?.rateLimitKind === 'rate_limit') {
@@ -62,10 +71,10 @@ export function isProviderResponseRateLimited(
     // Check HTTP status code (most reliable)
     result?.metadata?.http?.status === 429 ||
       // Check error field in response
-      result?.error?.includes?.('429') ||
+      HTTP_429_RE.test(result?.error ?? '') ||
       result?.error?.toLowerCase?.().includes?.('rate limit') ||
       // Check thrown error message
-      error?.message?.includes('429') ||
+      HTTP_429_RE.test(error?.message ?? '') ||
       error?.message?.toLowerCase().includes('rate limit') ||
       error?.message?.toLowerCase().includes('too many requests'),
   );
