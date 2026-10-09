@@ -2051,7 +2051,8 @@ retrieval settings.
 are forwarded to AWS. The response exposes `metadata.sessionId`, `metadata.citations`,
 and `metadata.guardrailAction`; an `INTERVENED` action sets `guardrails.flagged`.
 Reuse the returned session ID explicitly to continue a conversation. Calls with an
-explicit session ID bypass the cache so each turn reaches AWS.
+explicit session ID bypass the cache so each turn reaches AWS. Cached results omit
+the session ID; use `--no-cache` when starting a conversation that you intend to continue.
 
 Set `streaming: true` for
 [RetrieveAndGenerateStream](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_agent-runtime_RetrieveAndGenerateStream.html).

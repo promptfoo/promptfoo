@@ -213,7 +213,9 @@ strings. If the agent returns control without text, the eval output contains the
 return-control events as JSON; Promptfoo does not execute those requested actions.
 To resume, supply the same `sessionId` and the returned `invocationId` and
 `returnControlInvocationResults` in `sessionState`. Explicit session/memory calls,
-session-ending requests, and return-control results bypass the response cache.
+session-ending requests, and return-control results bypass the response cache. Cached
+outputs omit resumable session/memory IDs; use `--no-cache` to start a conversation
+you intend to continue. Responses that request return control are not cached.
 
 All agent stream exception events become provider errors. With tracing enabled,
 a returned guardrail trace with action `INTERVENED` also sets
