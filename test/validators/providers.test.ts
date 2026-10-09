@@ -87,6 +87,24 @@ describe('ProviderOptionsSchema', () => {
 });
 
 describe('ProviderSchema union', () => {
+  it('preserves the explicit embedding cancellation capability without requiring it', () => {
+    const provider = {
+      id: () => 'custom-embedding',
+      callApi: vi.fn(async () => ({ output: 'text' })),
+      callEmbeddingApi: vi.fn(async () => ({ embedding: [1, 0] })),
+    };
+    expect(ApiProviderSchema.parse(provider)).not.toHaveProperty('supportsEmbeddingCancellation');
+    expect(
+      ProviderSchema.parse({ ...provider, supportsEmbeddingCancellation: true }),
+    ).toMatchObject({
+      supportsEmbeddingCancellation: true,
+      callEmbeddingApi: provider.callEmbeddingApi,
+    });
+    expect(
+      ApiProviderSchema.safeParse({ ...provider, supportsEmbeddingCancellation: 'true' }).success,
+    ).toBe(false);
+  });
+
   it('should match ApiProviderSchema before ProviderOptionsSchema when callApi is present', () => {
     const input = createMockProvider({
       id: 'custom-provider',
