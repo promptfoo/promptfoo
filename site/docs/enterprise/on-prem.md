@@ -87,6 +87,12 @@ helm template promptfoo ./promptfoo-enterprise-helm --namespace promptfoo \
 
 Keep secret values out of committed values files and `--set` arguments. Mounted server dotenv values still enter the application's process environment. Both services read configuration at startup, so restart the affected Deployment after rotating a mounted Secret; changing the Secret alone does not reload the application.
 
+## API reference
+
+Use the [interactive API reference](/docs/api-reference/) or the [public OpenAPI specification](https://api.promptfoo.app/static/openapi.json) for endpoint schemas. Your on-prem API also serves its bundled specification at `/static/openapi.json`, for example `https://promptfoo.example.com/static/openapi.json`. Prefer that copy when your installed release differs from the public reference.
+
+Global provider configuration is documented under **Server Settings**; see **Get an on-prem server setting** and **Update an on-prem server setting** for the supported keys and value schemas.
+
 ## Upgrades and recovery
 
 - Record the application and authentication image digests and retain the deployment files and configuration for that release. Confirm the supported image pair and migration instructions before upgrading.
