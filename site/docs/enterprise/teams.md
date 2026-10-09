@@ -26,6 +26,30 @@ You can also create service accounts at the team level, which will allow you to 
 Only system admins can create service accounts.
 :::
 
+## Team Secrets (On-Prem)
+
+Team secrets store encrypted provider credentials that can be reused within a team. Open the team's settings, select **Secrets**, and click **Create Secret**. Enter a name, value, and optional description. Names must be unique within the team.
+
+In a provider's API Key field, use the key button to choose a team secret. This saves a reference such as `%__PF_SECRET.OPENAI_API_KEY__%` instead of copying the credential into the provider configuration. Team Red Team Provider overrides can also use these references.
+
+Secret permissions are separate from provider permissions: read access allows listing secrets and selecting references; update access is required to reveal or copy values. Creating and deleting secrets require their respective permissions. Being able to configure a target does not by itself grant access to reveal its secret values.
+
+To rotate a value without changing its references, use the [API](/docs/api-reference/): find the secret ID with `GET /api/v1/teams/{teamId}/secrets`, then send `PATCH /api/v1/teams/{teamId}/secrets/{secretId}` with the replacement value:
+
+```json
+{ "value": "<replacement-provider-api-key>" }
+```
+
+Start a new scan to verify the replacement before revoking the old key with your model provider. The current Secrets table supports creation, reveal/copy, and deletion; use the API for updating a value.
+
+Before deleting a secret, check its **References** column and the team's Red Team Provider configuration. Remove or replace references first. Promptfoo blocks deletion while saved targets still reference the secret; the References column does not include the team Red Team Provider override.
+
+## Team Probe Limits (On-Prem)
+
+When the organization has a licensed probe limit, an organization admin can set **Probe limit** in the team's settings and click **Save Changes**. Leave it blank for no additional team cap; the organization limit still applies. The sum of configured team caps cannot exceed the organization's licensed limit.
+
+Probe caps control scan volume, not model-provider token spend. Use your model provider's billing controls for spending budgets and alerts.
+
 ## CLI Team Context
 
 When using the Promptfoo CLI with multiple teams, you can control which team context your operations use:
