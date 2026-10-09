@@ -34,13 +34,9 @@ You may wish to authenticate into the CLI when using Promptfoo Enterprise. Follo
 
 1. Install the Promptfoo CLI. Read [getting started](/docs/getting-started/) for help installing the CLI.
 
-2. In the Promptfoo Enterprise app, select the "CLI Login Information" underneath your profile.
+2. In the Promptfoo Enterprise app, open your profile menu and select **CLI Login**.
 
-![CLI Login Information](/img/enterprise-docs/CLI-login-setting.png)
-
-3. Copy the first command and run in your CLI. Your CLI will then be authenticated to Promptfoo Enterprise, allowing you to share eval results run locally.
-
-![CLI Login Command](/img/enterprise-docs/CLI-login-key.png)
+3. Select **Generate CLI Token**, then copy and run the `promptfoo auth login` command in your terminal.
 
 4. Once authenticated, you can run `promptfoo eval --share` or `promptfoo share` to share eval results to your Promptfoo Enterprise organization.
 
