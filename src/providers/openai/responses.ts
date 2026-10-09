@@ -964,6 +964,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     status: number,
     statusText: string,
     headers?: Record<string, string>,
+    redirected?: boolean,
   ): ProviderResponse | undefined {
     const policy = getOpenAiPolicyRefusal(data, this.usesGatewayErrorFormat());
     if (!policy) {
@@ -991,7 +992,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
           ...(response.id ? { responseId: response.id } : {}),
           ...(response.model ? { model: response.model } : {}),
           ...(policy.code ? { providerPolicy: { code: policy.code } } : {}),
-          http: { status, statusText, headers: headers ?? {} },
+          http: { status, statusText, headers: headers ?? {}, redirected },
         },
       },
       billingData,
@@ -1390,6 +1391,8 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     let data: OpenAIResponsesResponse;
     let status: number;
     let statusText: string;
+    // Keep the creation POST's transport evidence when background GETs replace its data.
+    let redirected: boolean | undefined;
     let cached = false;
     let deleteFromCache: (() => Promise<void>) | undefined;
     let updateCache:
@@ -1486,6 +1489,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
           status: number;
           statusText: string;
           headers: Record<string, string>;
+          redirected: boolean;
         }> => {
           try {
             const response = await fetchWithRetries(
@@ -1533,6 +1537,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
               status: response.status,
               statusText: response.statusText,
               headers: Object.fromEntries(response.headers.entries()),
+              redirected: response.redirected,
             };
           } catch (err) {
             if (backgroundResponseId) {
@@ -1553,6 +1558,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
           status,
           statusText,
           headers: responseHeaders,
+          redirected,
         } = await Promise.race([streamCompletion, pendingCreationCancellation]));
       } else if (body.stream) {
         const controller = new AbortController();
@@ -1572,6 +1578,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
           status = response.status;
           statusText = response.statusText;
           responseHeaders = response.headers;
+          redirected = response.redirected;
           if (status >= 200 && status < 300) {
             data = await readResponsesStream(
               new Response(response.data),
@@ -1607,6 +1614,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
           deleteFromCache,
           updateCache,
           headers: responseHeaders,
+          redirected,
         } = body.background
           ? await createBackgroundResponseWithCancellation(
               url,
@@ -1638,6 +1646,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         status,
         statusText,
         responseHeaders,
+        redirected,
       );
       if (policyResponse) {
         return policyResponse;
@@ -1663,6 +1672,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
                 status,
                 statusText,
                 headers: responseHeaders ?? {},
+                redirected,
               },
             },
           };
@@ -1675,6 +1685,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
               status,
               statusText,
               headers: responseHeaders ?? {},
+              redirected,
             },
           },
         };
@@ -1721,6 +1732,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
           status,
           statusText,
           responseHeaders,
+          redirected,
         );
         if (polledPolicy) {
           await deleteFromCache?.();
@@ -1778,6 +1790,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
             status: 0,
             statusText: 'Error',
             headers: responseHeaders ?? {},
+            redirected,
           },
         },
       };
@@ -1792,6 +1805,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
             status,
             statusText,
             headers: responseHeaders ?? {},
+            redirected,
           },
         },
       };
@@ -1812,6 +1826,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
           status,
           statusText,
           headers: responseHeaders ?? {},
+          redirected,
         },
       },
     };

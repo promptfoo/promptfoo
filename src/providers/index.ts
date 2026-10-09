@@ -33,6 +33,7 @@ import type {
   ProviderConfig,
   ProviderFunction,
   ProviderOptions,
+  ProviderResponse,
   ProvidersConfig,
 } from '../types/providers';
 
@@ -41,7 +42,7 @@ export function getProviderRequestTemplates(
   provider: ApiProvider,
   renderedPrompt: string,
   context?: CallApiContextParams,
-  hasSentPromptEvidence = false,
+  response?: ProviderResponse,
 ): {
   forwardsPrompt: boolean;
   body?: unknown;
@@ -53,6 +54,19 @@ export function getProviderRequestTemplates(
   // and subclasses can replace the request, so they need response.prompt evidence.
   const prototype = Object.getPrototypeOf(provider);
   const config = provider.config ?? {};
+  if (
+    [
+      HttpProvider.prototype,
+      OpenAiChatCompletionProvider.prototype,
+      OpenAiResponsesProvider.prototype,
+      OpenAiCompletionProvider.prototype,
+    ].includes(prototype) &&
+    response?.metadata?.http?.redirected !== false
+  ) {
+    // Native fetch does not expose the redirect hops or final method. A followed
+    // redirect (or legacy cache entry without this field) cannot prove body delivery.
+    return { forwardsPrompt: false };
+  }
   if (prototype === HttpProvider.prototype) {
     if (
       !['POST', 'PUT', 'PATCH', 'DELETE'].includes(config.method) ||
@@ -116,7 +130,7 @@ export function getProviderRequestTemplates(
     ...(parsesPrompt ? { parsesPrompt: true } : {}),
     forwardsPrompt:
       override === undefined
-        ? hasSentPromptEvidence
+        ? response?.prompt === renderedPrompt
         : !Object.prototype.hasOwnProperty.call(effectiveConfig.passthrough ?? {}, override),
   };
 }

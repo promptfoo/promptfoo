@@ -751,10 +751,12 @@ export class HydraProvider implements ApiProvider {
         : this.stateful
           ? [...statefulGradingHistory, ...currentGradingMessages]
           : currentGradingMessages;
-      // An unknown current input must not make the last verified user turn look
-      // like the current one when the result is graded again later.
+      // Unknown or normalized blank input must not hide the prior verified turns
+      // or make the last one look current when the result is graded again later.
       lastCurrentTurnStart =
-        this.stateful && !replaysHistory && currentGradingMessages.length === 0
+        this.stateful &&
+        !replaysHistory &&
+        !getTargetConversation(currentGradingMessages).lastUserPrompt
           ? statefulGradingHistory.length
           : undefined;
       const { conversationTranscript } = getTargetConversation(

@@ -556,7 +556,7 @@ export async function getTargetRequestTemplates(
   const { getProviderRequestTemplates } = await loadProviderModule();
   // Exact string equality is evidence for opaque adapters only; it must not
   // override a known built-in request replacement or normalization.
-  return getProviderRequestTemplates(provider, prompt, context, response.prompt === prompt);
+  return getProviderRequestTemplates(provider, prompt, context, response);
 }
 
 /**

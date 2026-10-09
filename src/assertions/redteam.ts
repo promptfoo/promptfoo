@@ -189,6 +189,10 @@ export const handleRedteam = async (
     usesHydraHistory &&
     providerResponse.metadata?.redteamConversationHistoryVersion ===
       ATTRIBUTED_CONVERSATION_VERSION;
+  const hasOutdatedHistory =
+    usesHydraHistory &&
+    providerResponse.metadata?.redteamConversationHistoryVersion !== undefined &&
+    !hasAttributedHistory;
   // Skip grading if stored result exists from strategy execution for this specific assertion
   const savedConversation = getTargetConversation(
     providerResponse.metadata?.messages,
@@ -236,6 +240,7 @@ export const handleRedteam = async (
       : undefined;
   if (
     hasStrategyGrade &&
+    !hasOutdatedHistory &&
     typeof storedResult.metadata?.redteamGradingAssertionHash === 'string' &&
     storedResult.metadata.redteamGradingAssertionHash === getGradingAssertionHash(assertion) &&
     storedResult.metadata?.redteamGradingInputHash ===

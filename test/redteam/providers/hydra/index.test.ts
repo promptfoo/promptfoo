@@ -1441,7 +1441,7 @@ describe('HydraProvider', () => {
           { role: 'assistant', content: finalOutput },
         ]);
         expect(result.metadata.redteamCurrentTurnStart).toBe(2);
-        expect(result.metadata.redteamConversationHistoryVersion).toBe(1);
+        expect(result.metadata.redteamConversationHistoryVersion).toBe(2);
         expect(result.metadata.storedGraderResult?.metadata?.redteamGradingInputHash).toBe(
           getGradingInputHash(
             result.metadata.redteamFinalPrompt!,
@@ -1571,7 +1571,10 @@ describe('HydraProvider', () => {
         const sentBodies: unknown[] = [];
         vi.spyOn(target, 'callApi').mockImplementation(async (prompt, targetContext) => {
           sentBodies.push(determineRequestBody(true, prompt, body, targetContext!.vars));
-          return mockTargetProvider.callApi(prompt, targetContext);
+          return {
+            ...(await mockTargetProvider.callApi(prompt, targetContext)),
+            metadata: { http: { status: 200, statusText: 'OK', redirected: false } },
+          };
         });
         context.originalProvider = target;
         const provider = new HydraProvider({
@@ -1746,7 +1749,10 @@ describe('HydraProvider', () => {
       const sentBodies: unknown[] = [];
       vi.spyOn(target, 'callApi').mockImplementation(async (prompt, targetContext) => {
         sentBodies.push(determineRequestBody(false, prompt, body, targetContext!.vars));
-        return mockTargetProvider.callApi(prompt, targetContext);
+        return {
+          ...(await mockTargetProvider.callApi(prompt, targetContext)),
+          metadata: { http: { status: 200, statusText: 'OK', redirected: false } },
+        };
       });
       context.originalProvider = target;
       const provider = new HydraProvider({
@@ -1814,6 +1820,7 @@ describe('HydraProvider', () => {
             // Even explicit pre-normalization evidence cannot override the known conversion.
             prompt,
             ...(await mockTargetProvider.callApi(prompt, callContext)),
+            metadata: { http: { status: 200, statusText: 'OK', redirected: false } },
           };
         });
         context.originalProvider = target;
@@ -1926,7 +1933,10 @@ describe('HydraProvider', () => {
         const sentBodies: unknown[] = [];
         vi.spyOn(target, 'callApi').mockImplementation(async (prompt, targetContext) => {
           sentBodies.push(determineRequestBody(json, prompt, body, targetContext!.vars));
-          return mockTargetProvider.callApi(prompt, targetContext);
+          return {
+            ...(await mockTargetProvider.callApi(prompt, targetContext)),
+            metadata: { http: { status: 200, statusText: 'OK', redirected: false } },
+          };
         });
         context.originalProvider = target;
         const provider = new HydraProvider({ injectVar: 'input', maxTurns: 2, stateful: true });
@@ -1991,7 +2001,10 @@ describe('HydraProvider', () => {
       const sentBodies: unknown[] = [];
       vi.spyOn(target, 'callApi').mockImplementation(async (prompt, targetContext) => {
         sentBodies.push(determineRequestBody(true, prompt, body, targetContext!.vars));
-        return mockTargetProvider.callApi(prompt, targetContext);
+        return {
+          ...(await mockTargetProvider.callApi(prompt, targetContext)),
+          metadata: { http: { status: 200, statusText: 'OK', redirected: false } },
+        };
       });
       context.originalProvider = target;
       const provider = new HydraProvider({
@@ -2027,7 +2040,7 @@ describe('HydraProvider', () => {
       context.originalProvider = mockTargetProvider;
       const provider = new HydraProvider({ injectVar: 'input', maxTurns: 2, stateful: true });
       const result = await provider.callApi('', context);
-      expect(result.metadata.redteamConversationHistoryVersion).toBe(1);
+      expect(result.metadata.redteamConversationHistoryVersion).toBe(2);
       expect(JSON.parse(mockGrader.getResult.mock.calls[1][7].conversationTranscript)).toEqual([
         { role: 'assistant', content: acknowledgment },
       ]);
@@ -2154,7 +2167,7 @@ describe('HydraProvider', () => {
       expect(mockGrader.getResult).not.toHaveBeenCalled();
       expect(result.error).toContain('did not execute any target probes');
       expect(result.metadata.messages).toEqual([]);
-      expect(result.metadata.redteamConversationHistoryVersion).toBe(1);
+      expect(result.metadata.redteamConversationHistoryVersion).toBe(2);
     });
 
     it('excludes abandoned turns after backtracking', async () => {

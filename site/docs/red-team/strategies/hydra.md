@@ -64,9 +64,11 @@ Grading history records attack contributions and observed replies. Stateful inpu
 
 Generated inputs remain literal during prompt rendering. JSON-looking text stays unchanged unless the target request path parses that complete value; then grading retains only the parsed value. JSON strings inside a parsed object remain literal, and input contents never redefine message roles.
 
-Verified earlier turns remain available when a later input cannot be attributed, including inputs from failed target requests. Disabling target-prompt templating does not disable this grading history.
+Verified earlier turns remain available when a later input is blank or cannot be attributed, including inputs from failed target requests. Disabling target-prompt templating does not disable this grading history.
 
-Saved runs without verified history continue to grade only the current turn. Rerun them to record verified history for later regrading.
+Saved runs without verified history continue to grade only the current turn. Histories recorded before transport verification are also excluded, and their stored verdicts are recomputed during regrading. Rerun these tests to record verified history for later regrading.
+
+Built-in providers require a response from a direct request to establish input delivery. Followed redirects are excluded, even when a redirect may preserve the request body, because the final response does not describe every redirect hop. Cached responses without this transport evidence also leave the input unattributed; run with `--no-cache` to record fresh evidence.
 
 Inputs with uncertain forwarding remain unattributed: arbitrary prompt functions, conditional or raw-wrapped templates, YAML chat payloads, JSON templates with unsupported expressions or malformed leaves, text templates that construct JSON structures, stringified or embedded JSON body templates, dynamic HTTP Content-Type headers, HTTP request transforms, raw or multipart HTTP requests, and provider wrappers without sent-prompt evidence. Unused variables, discarded fields, operator variables, and materialized media are excluded. This conservative history is not a normalized copy of the full provider conversation.
 

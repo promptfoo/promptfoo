@@ -451,57 +451,63 @@ describe('OpenAiResponsesProvider request building', () => {
     );
   });
 
-  it('should poll a queued background response until it is ready to grade', async () => {
-    const updateCache = vi.fn().mockResolvedValue(undefined);
-    vi.mocked(cache.fetchWithCache)
-      .mockResolvedValueOnce({
-        data: { id: 'resp_background', status: 'queued', output: [], usage: null },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-        updateCache,
-      })
-      .mockResolvedValueOnce({
-        data: {
-          id: 'resp_background',
-          status: 'completed',
-          output: [
-            {
-              type: 'message',
-              role: 'assistant',
-              content: [{ type: 'output_text', text: 'Background result' }],
-            },
-          ],
-          usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
+  it.each([false, true, undefined])(
+    'should retain creation redirect evidence %s while polling a queued background response',
+    async (redirected) => {
+      const updateCache = vi.fn().mockResolvedValue(undefined);
+      vi.mocked(cache.fetchWithCache)
+        .mockResolvedValueOnce({
+          data: { id: 'resp_background', status: 'queued', output: [], usage: null },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+          updateCache,
+          redirected,
+        })
+        .mockResolvedValueOnce({
+          data: {
+            id: 'resp_background',
+            status: 'completed',
+            output: [
+              {
+                type: 'message',
+                role: 'assistant',
+                content: [{ type: 'output_text', text: 'Background result' }],
+              },
+            ],
+            usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+          redirected: !redirected,
+        });
+      const provider = new OpenAiResponsesProvider('gpt-5.5', {
+        config: { apiKey: 'test-key', background: true },
       });
-    const provider = new OpenAiResponsesProvider('gpt-5.5', {
-      config: { apiKey: 'test-key', background: true },
-    });
 
-    const result = await provider.callApi('A long task');
+      const result = await provider.callApi('A long task');
 
-    expect(result.error).toBeUndefined();
-    expect(result.output).toBe('Background result');
-    expect(updateCache).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'resp_background', status: 'completed' }),
-      200,
-      'OK',
-      undefined,
-    );
-    expect(cache.fetchWithCache).toHaveBeenNthCalledWith(
-      2,
-      'https://api.openai.com/v1/responses/resp_background',
-      expect.objectContaining({ method: 'GET' }),
-      expect.any(Number),
-      'json',
-      true,
-      undefined,
-    );
-  });
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('Background result');
+      expect(result.metadata?.http?.redirected).toBe(redirected);
+      expect(updateCache).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'resp_background', status: 'completed' }),
+        200,
+        'OK',
+        undefined,
+      );
+      expect(cache.fetchWithCache).toHaveBeenNthCalledWith(
+        2,
+        'https://api.openai.com/v1/responses/resp_background',
+        expect.objectContaining({ method: 'GET' }),
+        expect.any(Number),
+        'json',
+        true,
+        undefined,
+      );
+    },
+  );
 
   it('should honor the eval timeout for a background response on a standard model', async () => {
     setOpenAiEnv({ PROMPTFOO_EVAL_TIMEOUT_MS: '600000' });
@@ -2954,43 +2960,77 @@ describe('OpenAiResponsesProvider request building', () => {
     );
   });
 
-  it('should consume a completed streamed background response', async () => {
-    vi.mocked(fetchWithRetries).mockResolvedValueOnce(
-      new Response(
-        `data: ${JSON.stringify({
-          type: 'response.completed',
-          response: {
-            id: 'resp_stream_background',
-            status: 'completed',
-            output: [
-              {
-                type: 'message',
-                role: 'assistant',
-                content: [{ type: 'output_text', text: 'Streamed background result' }],
-              },
-            ],
-            usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
-          },
-        })}\n\ndata: [DONE]\n\n`,
-        { status: 200, headers: { 'Content-Type': 'text/event-stream' } },
-      ),
-    );
-    const provider = new OpenAiResponsesProvider('gpt-4.1', {
-      config: { apiKey: 'test-key', background: true, stream: true, maxRetries: 0 },
-    });
+  it.each([
+    [true, false],
+    [true, true],
+    [false, false],
+    [false, true],
+  ])(
+    'retains streamed creation evidence (background=%s, redirected=%s)',
+    async (background, redirected) => {
+      const stream = `data: ${JSON.stringify({
+        type: 'response.completed',
+        response: {
+          id: 'resp_stream_background',
+          status: 'completed',
+          output: [
+            {
+              type: 'message',
+              role: 'assistant',
+              content: [{ type: 'output_text', text: 'Streamed background result' }],
+            },
+          ],
+          usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+        },
+      })}\n\ndata: [DONE]\n\n`;
+      const upstream = new Response(stream, {
+        status: 200,
+        headers: { 'Content-Type': 'text/event-stream' },
+      });
+      Object.defineProperty(upstream, 'redirected', { value: redirected });
+      vi.mocked(fetchWithRetries).mockResolvedValueOnce(upstream);
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: stream,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        redirected,
+      });
+      const provider = new OpenAiResponsesProvider('gpt-4.1', {
+        config: { apiKey: 'test-key', background, stream: true, maxRetries: 0 },
+      });
 
-    const result = await provider.callApi('Stream the background task');
+      const result = await provider.callApi('Stream the background task');
 
-    expect(result.error).toBeUndefined();
-    expect(result.output).toBe('Streamed background result');
-    expect(result.cached).toBe(false);
-    expect(fetchWithRetries).toHaveBeenCalledWith(
-      expect.stringContaining('/responses'),
-      expect.objectContaining({ method: 'POST', body: expect.stringContaining('"stream":true') }),
-      expect.any(Number),
-      0,
-    );
-  });
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('Streamed background result');
+      expect(result.cached).toBe(false);
+      expect(result.metadata?.http?.redirected).toBe(redirected);
+      if (background) {
+        expect(fetchWithRetries).toHaveBeenCalledWith(
+          expect.stringContaining('/responses'),
+          expect.objectContaining({
+            method: 'POST',
+            body: expect.stringContaining('"stream":true'),
+          }),
+          expect.any(Number),
+          0,
+        );
+      } else {
+        expect(cache.fetchWithCache).toHaveBeenCalledWith(
+          expect.stringContaining('/responses'),
+          expect.objectContaining({
+            method: 'POST',
+            body: expect.stringContaining('"stream":true'),
+          }),
+          expect.any(Number),
+          'text',
+          true,
+          0,
+        );
+      }
+    },
+  );
 
   it('should cancel a streamed background request when the eval is aborted', async () => {
     const controller = new AbortController();

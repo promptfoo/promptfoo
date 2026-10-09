@@ -2511,6 +2511,44 @@ prompts:
 });
 
 describe('getProviderRequestTemplates', () => {
+  const directResponse = {
+    metadata: { http: { status: 200, statusText: 'OK', redirected: false } },
+  };
+  // Configuration controls assume a measured direct response; transport cases below
+  // explicitly exercise redirected and legacy responses.
+  const requestTemplates = (
+    provider: ApiProvider,
+    prompt: string,
+    context?: Parameters<typeof getProviderRequestTemplates>[2],
+    response: Parameters<typeof getProviderRequestTemplates>[3] = directResponse,
+  ) => getProviderRequestTemplates(provider, prompt, context, response);
+
+  it.each([false, true, undefined])(
+    'requires known direct transport evidence: %s',
+    (redirected) => {
+      const providers = [
+        new HttpProvider('https://example.test', {
+          config: {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: { message: '{{prompt}}' },
+          },
+        }),
+        new OpenAiChatCompletionProvider('test-model'),
+        new OpenAiResponsesProvider('test-model'),
+        new OpenAiCompletionProvider('test-model'),
+      ];
+      for (const provider of providers) {
+        const result = getProviderRequestTemplates(provider, 'sent input', undefined, {
+          prompt: 'sent input',
+          metadata: { http: { status: 200, statusText: 'OK', redirected } },
+        });
+        expect(result.forwardsPrompt || result.body !== undefined).toBe(redirected === false);
+        expect(getProviderRequestTemplates(provider, 'sent input').forwardsPrompt).toBe(false);
+      }
+    },
+  );
+
   it.each([
     ['Plain input', true],
     [JSON.stringify([{ role: 'user', content: 'Plain input' }]), true],
@@ -2539,25 +2577,27 @@ describe('getProviderRequestTemplates', () => {
       const provider = new OpenAiResponsesProvider('test-model');
       const { body } = await provider.getOpenAiBody(prompt);
       expect(JSON.stringify(body.input)).not.toContain('hidden@example.com');
-      expect(getProviderRequestTemplates(provider, prompt).forwardsPrompt).toBe(expected);
+      expect(requestTemplates(provider, prompt).forwardsPrompt).toBe(expected);
       // Reporting the pre-normalization prompt cannot overrule the known path.
-      expect(getProviderRequestTemplates(provider, prompt, undefined, true).forwardsPrompt).toBe(
-        expected,
-      );
+      expect(
+        requestTemplates(provider, prompt, undefined, { ...directResponse, prompt }).forwardsPrompt,
+      ).toBe(expected);
     },
   );
 
   it('uses sent-prompt evidence only for opaque implementations', () => {
     const provider = createMockProvider({ id: 'custom' });
-    expect(getProviderRequestTemplates(provider, 'Input', undefined, true).forwardsPrompt).toBe(
-      true,
-    );
+    expect(
+      requestTemplates(provider, 'Input', undefined, { ...directResponse, prompt: 'Input' })
+        .forwardsPrompt,
+    ).toBe(true);
     const replaced = new OpenAiChatCompletionProvider('test-model', {
       config: { passthrough: { messages: [] } },
     });
-    expect(getProviderRequestTemplates(replaced, 'Input', undefined, true).forwardsPrompt).toBe(
-      false,
-    );
+    expect(
+      requestTemplates(replaced, 'Input', undefined, { ...directResponse, prompt: 'Input' })
+        .forwardsPrompt,
+    ).toBe(false);
   });
 
   it.each([
@@ -2568,12 +2608,12 @@ describe('getProviderRequestTemplates', () => {
     'respects %s passthrough overrides and per-prompt config',
     (_name, Provider, field) => {
       const provider = new Provider('test-model', { config: {} });
-      expect(getProviderRequestTemplates(provider, 'User input').forwardsPrompt).toBe(true);
+      expect(requestTemplates(provider, 'User input').forwardsPrompt).toBe(true);
       for (const value of [undefined, null, []]) {
         provider.config.passthrough = { [field]: value };
-        expect(getProviderRequestTemplates(provider, 'User input').forwardsPrompt).toBe(false);
+        expect(requestTemplates(provider, 'User input').forwardsPrompt).toBe(false);
         expect(
-          getProviderRequestTemplates(provider, 'User input', {
+          requestTemplates(provider, 'User input', {
             vars: {},
             prompt: { raw: '{{input}}', label: 'test', config: { passthrough: {} } },
           }).forwardsPrompt,
@@ -2581,7 +2621,7 @@ describe('getProviderRequestTemplates', () => {
       }
       provider.config.passthrough = {};
       expect(
-        getProviderRequestTemplates(provider, 'User input', {
+        requestTemplates(provider, 'User input', {
           vars: {},
           prompt: { raw: '{{input}}', label: 'test', config: { passthrough: { [field]: [] } } },
         }).forwardsPrompt,
@@ -2605,13 +2645,13 @@ describe('getProviderRequestTemplates', () => {
     const provider = new HttpProvider('https://example.com/chat', {
       config: { body: { input: '{{prompt}}' }, ...config },
     });
-    expect(getProviderRequestTemplates(provider, 'User input')).toEqual({ forwardsPrompt: false });
+    expect(requestTemplates(provider, 'User input')).toEqual({ forwardsPrompt: false });
   });
 
   it('recognizes only the built-in implementation, not URL or model-shaped IDs', () => {
     for (const id of ['https://example.com/chat', 'openai:chat:test']) {
       const provider = createMockProvider({ id, config: { method: 'POST', body: '{{prompt}}' } });
-      expect(getProviderRequestTemplates(provider, 'User input')).toEqual({
+      expect(requestTemplates(provider, 'User input')).toEqual({
         forwardsPrompt: false,
       });
     }
@@ -2622,7 +2662,7 @@ describe('getProviderRequestTemplates', () => {
     const provider = new HttpProvider('https://example.com/chat', {
       config: { method: 'POST', body },
     });
-    const result = getProviderRequestTemplates(provider, 'User input');
+    const result = requestTemplates(provider, 'User input');
     expect(result.body).toEqual(body);
     expect(result.jsonBody).toBe(true);
     expect(result.reservedVariables).toEqual(
@@ -2667,7 +2707,10 @@ describe('getProviderRequestTemplates', () => {
         { 'content-type': 'application/x-www-form-urlencoded' },
         { format: 'application/json', header: 'Content-Type' },
       );
-      const request = getProviderRequestTemplates(provider, 'User input', undefined, true);
+      const request = requestTemplates(provider, 'User input', undefined, {
+        ...directResponse,
+        prompt: 'User input',
+      });
       expect(request.jsonBody).toBe(expected);
       if (expected === undefined) {
         expect(request).toEqual({ forwardsPrompt: false });
@@ -2685,18 +2728,15 @@ describe('getProviderRequestTemplates', () => {
     expect((await provider.getOpenAiBody(messages)).body.input).toEqual([
       { role: 'user', content: 'text', account: 9007199254740992 },
     ]);
+    expect(requestTemplates(provider, '{"account":9007199254740993}').parsesPrompt).toBeUndefined();
+    expect(requestTemplates(provider, '[{"role":"user","content":"text"}]').parsesPrompt).toBe(
+      true,
+    );
     expect(
-      getProviderRequestTemplates(provider, '{"account":9007199254740993}').parsesPrompt,
+      requestTemplates(new OpenAiCompletionProvider('test-model'), '[1]').parsesPrompt,
     ).toBeUndefined();
     expect(
-      getProviderRequestTemplates(provider, '[{"role":"user","content":"text"}]').parsesPrompt,
-    ).toBe(true);
-    expect(
-      getProviderRequestTemplates(new OpenAiCompletionProvider('test-model'), '[1]').parsesPrompt,
-    ).toBeUndefined();
-    expect(
-      getProviderRequestTemplates(new OpenAiChatCompletionProvider('test-model'), '[1]')
-        .parsesPrompt,
+      requestTemplates(new OpenAiChatCompletionProvider('test-model'), '[1]').parsesPrompt,
     ).toBe(true);
   });
 });
