@@ -21,14 +21,14 @@ You can reference this provider using either:
 
 ## Installation
 
-The Claude Agent SDK provider requires the `@anthropic-ai/claude-agent-sdk` package to be installed separately:
+The Claude Agent SDK and its native CLI are not included in the default Promptfoo install. Install them alongside Promptfoo in the project containing your eval config:
 
 ```bash
-npm install @anthropic-ai/claude-agent-sdk
+npm install promptfoo @anthropic-ai/claude-agent-sdk@^0.3.273
 ```
 
 :::note
-This is an optional dependency and only needs to be installed if you want to use the Claude Agent SDK provider. Note that Anthropic has released the claude-agent-sdk library with a [proprietary license](https://github.com/anthropics/claude-agent-sdk-typescript/blob/9f51899c3e04f15951949ceac81849265d545579/LICENSE.md).
+The provider checks for version `0.3.273` or later within `0.3.x` when called. It resolves the SDK from your config directory or its parents, including when Promptfoo is installed globally. Anthropic distributes the SDK under a [proprietary license](https://github.com/anthropics/claude-agent-sdk-typescript/blob/9f51899c3e04f15951949ceac81849265d545579/LICENSE.md).
 :::
 
 ## Setup
@@ -85,6 +85,7 @@ export CLAUDE_CODE_USE_VERTEX=true
 By default, Claude Agent SDK runs in a temporary directory with no tools enabled, using the `default` permission mode. This makes it behave similarly to the standard [Anthropic provider](/docs/providers/anthropic/). It has no access to the file system (read or write) and can't run system commands.
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - anthropic:claude-agent-sdk
 
@@ -433,7 +434,7 @@ providers:
 ```
 
 :::note
-Only the `local` type is currently supported. Relative paths in `path` resolve against the config file's directory.
+Only the `local` type is supported. Relative paths in `path` resolve against the config file's directory.
 :::
 
 ### Plugin Structure
@@ -532,6 +533,7 @@ Claude automatically invokes the relevant skill when a task matches the skill's 
 Promptfoo normalizes Claude `Skill` tool invocations into `response.metadata.skillCalls`, so skill evals can use the same `skill-used` assertion style as Codex. The underlying `Skill` tool calls are still available in [`response.metadata.toolCalls`](#tool-call-tracking) when you need the raw tool payload.
 
 ```yaml
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: anthropic:claude-agent-sdk
     config:
@@ -588,6 +590,7 @@ This ensures tests don't depend on user-specific skills that may not be present 
 ### Example: Complete Skills Testing Configuration
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: anthropic:claude-agent-sdk
     config:
@@ -741,7 +744,7 @@ providers:
         - context-1m-2025-08-07
 ```
 
-Currently available betas:
+Available betas:
 
 | Beta                    | Description                                        |
 | ----------------------- | -------------------------------------------------- |

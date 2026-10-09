@@ -283,21 +283,22 @@ describe('MlflowGatewayChatCompletionProvider', () => {
     const provider = new MlflowGatewayChatCompletionProvider('my-chat-endpoint', {
       config: { gatewayUrl: 'http://localhost:5000' },
     });
-    const result = await provider.callApi('Hello gateway');
+    const abortSignal = new AbortController().signal;
+    const result = await provider.callApi('Hello gateway', undefined, { abortSignal });
 
-    expect(fetchWithCache).toHaveBeenCalledWith(
-      'http://localhost:5000/gateway/mlflow/v1/chat/completions',
-      expect.objectContaining({
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-      }),
-      expect.any(Number),
-      'json',
-      undefined,
-      undefined,
-    );
-    const request = vi.mocked(fetchWithCache).mock.calls[0][1] as RequestInit;
-    expect(JSON.parse(request.body as string)).toMatchObject({ model: 'my-chat-endpoint' });
+    expect(fetchWithCache).toHaveBeenCalledTimes(1);
+    const [url, request, timeout, format, , , onResponsePrepared] =
+      vi.mocked(fetchWithCache).mock.calls[0];
+    expect(url).toBe('http://localhost:5000/gateway/mlflow/v1/chat/completions');
+    expect(request).toMatchObject({ method: 'POST', signal: abortSignal });
+    expect(request?.headers).toEqual({ 'Content-Type': 'application/json' });
+    expect(timeout).toEqual(expect.any(Number));
+    expect(format).toBe('json');
+    expect(onResponsePrepared).toEqual(expect.any(Function));
+    expect(JSON.parse(request?.body as string)).toMatchObject({
+      model: 'my-chat-endpoint',
+      messages: [{ role: 'user', content: 'Hello gateway' }],
+    });
     expect(result.output).toBe('gateway output');
     expect(result.tokenUsage).toEqual({ total: 7, prompt: 4, completion: 3, numRequests: 1 });
   });

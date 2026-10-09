@@ -1,5 +1,4 @@
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 import {
   buildArchitectureReport,
@@ -15,7 +14,7 @@ import {
   scanArchitectureSources,
 } from './architectureUtils';
 
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const repoRoot = path.resolve(import.meta.dirname, '..');
 const config = readLayerConfig(repoRoot);
 const jsonMode = process.argv.includes('--json');
 const reportMode = process.argv.includes('--report') || jsonMode;
