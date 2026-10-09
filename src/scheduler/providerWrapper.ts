@@ -5,6 +5,7 @@
  * code paths that bypass the main evaluator.
  */
 
+import { composeResponseHeadersObservers } from '../util/fetch/responseHeadersObserver';
 import { parseRetryAfter } from './headerParser';
 import {
   getProviderResponseHeaders,
@@ -44,10 +45,12 @@ export function isRateLimitWrapped(provider: ApiProvider): boolean {
  * Shared between providerWrapper and evaluator for consistency.
  */
 export function createProviderRateLimitOptions(
+  abortSignal?: AbortSignal,
   provider?: ApiProvider,
   context?: CallApiContextParams,
 ): RateLimitExecuteOptions<ProviderResponse> {
   return {
+    ...(abortSignal && { abortSignal }),
     skipRateLimit: provider?.isHistoricalReplay?.(context) ?? false,
     // Provider errors are values carrying output, usage and HTTP metadata.
     // Keep that evidence when the scheduler has no retries left.
@@ -140,8 +143,21 @@ export function wrapProviderWithRateLimiting(
     ): Promise<ProviderResponse> => {
       return registry.execute(
         provider,
-        () => originalCallApi(prompt, context, options),
-        createProviderRateLimitOptions(provider, context),
+        (onResponseHeaders) =>
+          originalCallApi(
+            prompt,
+            context,
+            onResponseHeaders
+              ? {
+                  ...options,
+                  onResponseHeaders: composeResponseHeadersObservers(
+                    onResponseHeaders,
+                    options?.onResponseHeaders,
+                  ),
+                }
+              : options,
+          ),
+        createProviderRateLimitOptions(options?.abortSignal, provider, context),
       );
     },
   };

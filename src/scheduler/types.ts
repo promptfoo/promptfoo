@@ -1,3 +1,4 @@
+import { isResponseHeadersObserverErrorResponse } from '../util/fetch/responseHeadersObserver';
 /**
  * Shared types for the scheduler module.
  */
@@ -13,6 +14,8 @@ import type { ProviderResponse } from '../types/providers';
 export interface RateLimitExecuteOptions<T> {
   /** Execute outside the shared rate-limit queue and state. Fetch retry context is still preserved. */
   skipRateLimit?: boolean;
+  /** Cancel queue and retry waits for this caller. */
+  abortSignal?: AbortSignal;
   /** Extract rate limit headers from the result */
   getHeaders?: (result: T) => Record<string, string> | undefined;
   /** Detect if the result indicates a rate limit */
@@ -44,6 +47,11 @@ export function isProviderResponseRateLimited(
   result: ProviderResponse | undefined,
   error: Error | undefined,
 ): boolean {
+  if (isResponseHeadersObserverErrorResponse(result)) {
+    return false;
+  }
+  // Tool diagnostics may mention their own quota without describing the model request.
+  const responseError = result?.metadata?.errorOrigin === 'tool' ? undefined : result?.error;
   // Local responses and explicit policy decisions must not trigger retries.
   if (
     result?.retryable === false ||
@@ -65,7 +73,7 @@ export function isProviderResponseRateLimited(
   // exceeded: ..."`), so this is a substring match rather than a
   // startsWith. The substring is specific enough that false positives are
   // implausible in normal API error envelopes.
-  if (result?.error?.includes('Quota exceeded:')) {
+  if (responseError?.includes('Quota exceeded:')) {
     return false;
   }
   if (error?.message?.includes('Quota exceeded:')) {
@@ -76,8 +84,8 @@ export function isProviderResponseRateLimited(
     // Check HTTP status code (most reliable)
     result?.metadata?.http?.status === 429 ||
       // Check error field in response
-      HTTP_429_RE.test(result?.error ?? '') ||
-      result?.error?.toLowerCase?.().includes?.('rate limit') ||
+      HTTP_429_RE.test(responseError ?? '') ||
+      responseError?.toLowerCase?.().includes?.('rate limit') ||
       // Check thrown error message
       HTTP_429_RE.test(error?.message ?? '') ||
       error?.message?.toLowerCase().includes('rate limit') ||

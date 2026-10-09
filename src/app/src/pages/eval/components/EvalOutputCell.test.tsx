@@ -2,11 +2,8 @@ import { mockClipboard } from '@app/tests/browserMocks';
 import { createCodexSecurityResult } from '@app/tests/fixtures/codexSecurity';
 import { restoreTestTimers, type TestTimers, useTestTimers } from '@app/tests/timers';
 import { renderWithProviders as baseRender } from '@app/utils/testutils';
-import {
-  type AssertionType,
-  type EvaluateTableOutput,
-  ResultFailureReason,
-} from '@promptfoo/types';
+import { type AssertionType, type EvaluateTableOutput } from '@promptfoo/types';
+import { ResultFailureReason } from '@promptfoo/types/results';
 import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';

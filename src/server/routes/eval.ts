@@ -8,7 +8,12 @@ import EvalResult from '../../models/evalResult';
 import { evaluateWithSource } from '../../node';
 import { resolveProviderConfigs } from '../../providers/index';
 import { EvalSchemas } from '../../types/api/eval';
-import { isCloudProvider } from '../../util/cloud';
+import {
+  getCloudDatabaseId,
+  getProviderFromCloud,
+  isCloudProvider,
+  withCloudProviderResolver,
+} from '../../util/cloud';
 import { deleteEval, deleteEvals, updateResult, writeResultsToDatabase } from '../../util/database';
 import {
   ComparisonEvalNotFoundError,
@@ -634,22 +639,51 @@ evalRouter.post('/replay', async (req: Request, res: Response): Promise<void> =>
       return;
     }
 
-    // A prompt-only replay cannot preserve security operation inputs or saved-report
-    // overrides. Inspect config references without instantiating any provider, and
-    // retain expanded file configs so evaluation cannot reread a different target.
+    // Resolve declarative files and cloud targets once, before any provider operation.
+    const cloudProviders = new Map<string, Awaited<ReturnType<typeof getProviderFromCloud>>>();
+    const cloudKey = (id: string, options?: object) => JSON.stringify([id, options ?? {}]);
+    const inspectedProvider = (provider: unknown) => {
+      const ref = normalizeProviderRef(provider);
+      if ('loadProviderPath' in ref && isCloudProvider(ref.loadProviderPath)) {
+        return cloudProviders.get(
+          cloudKey(
+            getCloudDatabaseId(ref.loadProviderPath),
+            'loadOptions' in ref ? ref.loadOptions : {},
+          ),
+        );
+      }
+      return provider;
+    };
     let replayProviders;
     try {
       const resolved = resolveProviderConfigs(providers, { basePath: eval_.config.basePath });
-      const candidates = Array.isArray(resolved) ? resolved : [resolved];
+      // Replay replaces saved prompt-routing filters, while retaining local options.
+      const candidates = (Array.isArray(resolved) ? resolved : [resolved]).map((provider) => {
+        const ref = normalizeProviderRef(provider);
+        if (ref.kind === 'options' || ref.kind === 'map') {
+          const options = { ...ref.loadOptions, prompts: ['Replay'] };
+          return ref.kind === 'map' ? { [ref.loadProviderPath]: options } : options;
+        }
+        return ref.kind === 'named' ? { id: ref.loadProviderPath, prompts: ['Replay'] } : provider;
+      });
+      for (const candidate of candidates) {
+        const ref = normalizeProviderRef(candidate);
+        if ('loadProviderPath' in ref && isCloudProvider(ref.loadProviderPath)) {
+          const id = getCloudDatabaseId(ref.loadProviderPath);
+          const options = 'loadOptions' in ref ? ref.loadOptions : {};
+          cloudProviders.set(cloudKey(id, options), await getProviderFromCloud(id, options));
+        }
+      }
       if (promptIndex === undefined) {
-        // Older callers are unambiguous only for a single configured provider.
-        replayProviders = candidates.length === 1 ? candidates : [];
+        // Older callers replayed all configured providers and returned the first result.
+        replayProviders = candidates;
       } else {
         const column = eval_.getPrompts()[promptIndex];
         replayProviders = column
           ? candidates.filter((candidate) => {
-              const reference = normalizeProviderRef(candidate);
-              return (reference.label || reference.id) === column.provider;
+              const ref = normalizeProviderRef(candidate);
+              const resolvedRef = normalizeProviderRef(inspectedProvider(candidate));
+              return (ref.label || resolvedRef.label || resolvedRef.id) === column.provider;
             })
           : [];
       }
@@ -662,43 +696,56 @@ evalRouter.post('/replay', async (req: Request, res: Response): Promise<void> =>
       );
       return;
     }
-    if (!Array.isArray(replayProviders) || replayProviders.length !== 1) {
+    if (
+      !Array.isArray(replayProviders) ||
+      replayProviders.length === 0 ||
+      (promptIndex !== undefined && replayProviders.length !== 1)
+    ) {
       res
         .status(400)
         .json({ error: 'Cannot resolve the replay provider. Rerun using the eval configuration.' });
       return;
     }
-    for (const replayProvider of replayProviders) {
-      const replayError = getReplayProviderError(replayProvider);
+    for (const provider of replayProviders) {
+      const replayError = getReplayProviderError(inspectedProvider(provider));
       if (replayError) {
         res.status(400).json({ error: replayError });
         return;
       }
     }
 
-    // Run the prompt through the provider
-    const result = await evaluateWithSource(
-      {
-        prompts: [
-          {
-            raw: prompt,
-            label: 'Replay', // Add required label field
-          },
-        ],
-        providers: replayProviders,
-        tests: [
-          {
-            vars: (variables || {}) as Vars,
-          },
-        ],
-      },
-      {
-        maxConcurrency: 1,
-        showProgressBar: false,
-        eventSource: 'web',
-        cache: false, // Always disable cache for replays to get fresh results
-      },
-    );
+    const evaluateReplay = () =>
+      evaluateWithSource(
+        {
+          prompts: [
+            {
+              raw: prompt,
+              label: 'Replay', // Add required label field
+            },
+          ],
+          providers: replayProviders,
+          basePath: eval_.config.basePath,
+          tests: [
+            {
+              vars: (variables || {}) as Vars,
+            },
+          ],
+        },
+        {
+          maxConcurrency: 1,
+          showProgressBar: false,
+          eventSource: 'web',
+          cache: false, // Always disable cache for replays to get fresh results
+        },
+      );
+    // Keep native cloud/local merge semantics without rereading a different target.
+    const result = await (cloudProviders.size > 0
+      ? withCloudProviderResolver((id, options) => {
+          const provider = cloudProviders.get(cloudKey(id, options));
+          invariant(provider, 'Replay requested a provider outside the inspected selection');
+          return provider;
+        }, evaluateReplay)
+      : evaluateReplay());
 
     const summary = await result.toEvaluateSummary();
 

@@ -18,7 +18,7 @@ Initialize the [example](https://github.com/promptfoo/promptfoo/tree/main/exampl
 ```bash
 npx promptfoo@latest init --example openai-codex-security
 cd openai-codex-security
-npm install promptfoo @openai/codex-security@^0.1.31
+npm install promptfoo @openai/codex-security@^0.2.0
 git clone --branch v19.0.0 --single-branch https://github.com/juice-shop/juice-shop.git juice-shop-v19
 git -C juice-shop-v19 checkout --detach 36870cbbdfe7864698e1adf644c7bf772f67ebb7
 export CODEX_SECURITY_REPOSITORY="$PWD/juice-shop-v19"

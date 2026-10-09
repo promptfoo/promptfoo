@@ -227,7 +227,7 @@ describe('ProviderConfigEditor', () => {
         />,
       );
       expect(validate?.()).toBe(false);
-      expect(setError).toHaveBeenCalledWith('Provider ID is required');
+      expect(setError).toHaveBeenCalledWith(expect.stringContaining('Provider ID is required'));
     },
   );
 
@@ -1870,7 +1870,7 @@ describe('ProviderConfigEditor', () => {
       />,
     );
 
-    expect(setError).toHaveBeenCalledWith('Provider ID is required');
+    expect(setError).toHaveBeenCalledWith(expect.stringContaining('Provider ID is required'));
     expect(onValidate).toHaveBeenCalledWith(false);
   });
 

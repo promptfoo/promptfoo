@@ -14,12 +14,8 @@ import {
 import { getActualPrompt } from '@app/utils/providerResponse';
 import { getTokenUsageTotal } from '@app/utils/tokenUsage';
 import { CodexSecurityResultSchema } from '@promptfoo/contracts/codexSecurity';
-import {
-  type EvaluateTableOutput,
-  type GradingResult,
-  type ImageOutput,
-  ResultFailureReason,
-} from '@promptfoo/types';
+import { type EvaluateTableOutput, type GradingResult, type ImageOutput } from '@promptfoo/types';
+import { ResultFailureReason } from '@promptfoo/types/results';
 import { diffJson, diffSentences, diffWords } from 'diff';
 import {
   Check,

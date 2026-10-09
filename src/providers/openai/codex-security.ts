@@ -774,7 +774,7 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
       callOptions,
     );
     const result = await client.run(repository, options);
-    return this.buildScanResponse(result, module, operation, observers);
+    return this.buildScanResponse(result, module, repository, operation, mode, config, observers);
   }
 
   private getScanTarget(
@@ -900,11 +900,16 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
   private buildScanResponse(
     result: ScanResult,
     module: CodexSecurityModule,
+    repository: string,
     operation: 'security-scan' | 'deep-security-scan' | 'security-diff-scan',
+    mode: 'standard' | 'deep',
+    config: OpenAICodexSecurityConfig,
     observers: ScanObservers,
   ): ProviderResponse {
     const cost = result.cost ?? observers.cost;
     const tokenUsage = getTokenUsage(result, observers.cost);
+    const findings = Array.isArray(result.findings?.findings) ? result.findings.findings : [];
+    const model = result.turnResult?.model ?? cost?.model ?? config.model;
     const raw = result.toJSON();
     const summary = normalizeCodexSecurityResult(raw, {
       source: { kind: 'sdk' },
@@ -934,6 +939,24 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
       ...(cost ? { cost: cost.estimatedUsd } : {}),
       ...(tokenUsage ? { tokenUsage } : {}),
       metadata: {
+        // Preserve existing native assertions while exposing the versioned summary.
+        operation,
+        mode,
+        repository,
+        ...(model ? { model } : {}),
+        ...(config.model_reasoning_effort || config.reasoning_effort
+          ? { reasoningEffort: config.model_reasoning_effort ?? config.reasoning_effort }
+          : {}),
+        findingsCount: findings.length,
+        coverage: result.coverage,
+        scanDir: result.scanDir,
+        reportPath: result.reportPath,
+        findingsPath: result.findingsPath,
+        coveragePath: result.coveragePath,
+        ...(result.sarifPath ? { sarifPath: result.sarifPath } : {}),
+        pluginVersion: result.pluginVersion,
+        sdkVersion: module.VERSION,
+        ...(observers.warnings.length > 0 ? { warnings: observers.warnings } : {}),
         codexSecurity: summary,
         codexSecurityReplay: createCodexSecurityReplayHeader(
           raw as Record<string, unknown>,
@@ -994,6 +1017,11 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
       cached: false,
       ...(result.threadId ? { sessionId: result.threadId } : {}),
       metadata: {
+        operation: 'validation',
+        repository,
+        disposition: result.disposition,
+        outputDir: result.outputDir,
+        ...(config.model ? { model: config.model } : {}),
         skillCalls: [{ name: 'validation' }],
       },
     };
