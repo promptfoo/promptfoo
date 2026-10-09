@@ -544,7 +544,12 @@ async function prepareCheckpointMetadata<T>(
         ) {
           return entry;
         }
-        return { ...entry, response: await prepare(entry.response) };
+        // The extractor also follows owned metadata inside each target response.
+        // Prepare descendants first so every target remains a bounded media root.
+        const metadata = await prepareCheckpointMetadata(entry.response.metadata, prepare);
+        const response =
+          metadata === entry.response.metadata ? entry.response : { ...entry.response, metadata };
+        return { ...entry, response: await prepare(response) };
       }),
     ),
   } as T;
