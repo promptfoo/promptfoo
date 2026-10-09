@@ -1392,10 +1392,10 @@ Mantle model. On Converse, promptfoo estimates Standard, Priority (1.75×), and 
 including cache reads, using the [AWS model card](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-xai-grok-4-7.html).
 InvokeModel uses and estimates Standard only; its provider does not forward `serviceTier`. Cache-write and Reserved-capacity costs remain unavailable.
 
-**Grok 4.6** (`xai.grok-4.6`) supports Runtime **Converse** through the
+**Grok 4.6** (`xai.grok-4.6`) supports Runtime **InvokeModel and Converse** through the
 `us.xai.grok-4.6` and `global.xai.grok-4.6` inference profiles. The current
 [AWS model card](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-xai-grok-4-6.html)
-does not list InvokeModel support. Use the explicit Converse selector with **ordinary AWS
+lists both native APIs. Use `bedrock:us.xai.grok-4.6` for InvokeModel or the explicit Converse selector with **ordinary AWS
 credentials** (no Bedrock API key required):
 
 ```yaml
