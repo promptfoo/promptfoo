@@ -114,7 +114,7 @@ def call_api(mode, marker):
       } else {
         operation = pool.execute('call_api', [mode, marker]).catch((error) => error);
       }
-      // Use a generous real-process deadline; the descendant intentionally outlives it.
+      // Bound cleanup even when the descendant retains the worker's output pipes.
       const outcome = await Promise.race([
         operation,
         sleep(3000, 'still waiting for descendant pipes', { signal: deadline.signal }),
@@ -124,7 +124,12 @@ def call_api(mode, marker):
       );
       const pids = JSON.parse(await fs.readFile(marker, 'utf-8'));
       expect(() => process.kill(pids.worker, 0)).toThrow();
-      expect(() => process.kill(pids.descendant, 0)).not.toThrow();
+      if (process.platform === 'win32' && mode === 'timeout') {
+        // Forced Windows shutdown terminates the entire process tree.
+        expect(() => process.kill(pids.descendant, 0)).toThrow();
+      } else {
+        expect(() => process.kill(pids.descendant, 0)).not.toThrow();
+      }
       if (mode === 'timeout') {
         const replacement = await pool.execute('call_api', ['recover', marker]);
         expect(replacement).toBeTypeOf('number');
