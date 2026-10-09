@@ -76,6 +76,24 @@ describe('redteam workload preview normalization', () => {
     },
   );
 
+  it.each(['urgent', 'HIGH', '', null, 42, {}])(
+    'uses default severity and expands aliases for invalid imported severity %j',
+    (severity) => {
+      const plugin = Object.freeze({ id: 'toxicity', numTests: 2, severity: severity as Severity });
+      const result = normalizeRedteamConfigForPreview({
+        plugins: [plugin],
+        strategies: ['basic'],
+        numTests: 7,
+      });
+      expect(result.plugins).toHaveLength(6);
+      for (const entry of result.plugins) {
+        expect(entry).toMatchObject({ numTests: 2 });
+        expect(entry).not.toHaveProperty('severity', severity);
+      }
+      expect(plugin.severity).toBe(severity);
+    },
+  );
+
   it('keeps a non-mutating best-effort preview for incomplete editor fields', () => {
     const plugin = Object.freeze({ id: '', numTests: -1, severity: Severity.High });
     const result = normalizeRedteamConfigForPreview({

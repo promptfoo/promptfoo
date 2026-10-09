@@ -5,6 +5,7 @@ import {
   type Plugin,
   riskCategorySeverityMap,
   type Severity,
+  SeveritySchema,
 } from '../redteam/constants';
 import { RedteamConfigSchema } from '../validators/redteam';
 
@@ -40,6 +41,11 @@ function getValidPluginNumTests(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : undefined;
 }
 
+function getValidPluginSeverity(value: unknown) {
+  const parsed = SeveritySchema.safeParse(value);
+  return parsed.success ? parsed.data : undefined;
+}
+
 /** Normalize the workload preview with the same aliases and duplicate precedence as generation. */
 export function normalizeRedteamConfigForPreview(
   config: Pick<SavedRedteamConfig, 'plugins' | 'strategies' | 'numTests' | 'language'>,
@@ -49,9 +55,18 @@ export function normalizeRedteamConfigForPreview(
     if (typeof entry === 'string') {
       return entry;
     }
-    const { numTests, ...options } = { numTests: undefined, ...entry };
+    const { numTests, severity, ...options } = {
+      numTests: undefined,
+      severity: undefined,
+      ...entry,
+    };
     const validNumTests = getValidPluginNumTests(numTests);
-    return { ...options, ...(validNumTests !== undefined && { numTests: validNumTests }) };
+    const validSeverity = getValidPluginSeverity(severity);
+    return {
+      ...options,
+      ...(validNumTests !== undefined && { numTests: validNumTests }),
+      ...(validSeverity !== undefined && { severity: validSeverity }),
+    };
   });
   const normalized = RedteamConfigSchema.safeParse({
     plugins,
@@ -113,11 +128,14 @@ export function getUnifiedConfig(
         const {
           config: pluginConfig,
           numTests,
+          severity,
           ...pluginOptions
-        } = { numTests: undefined, ...plugin };
+        } = { numTests: undefined, severity: undefined, ...plugin };
         const validNumTests = getValidPluginNumTests(numTests);
+        const validSeverity = getValidPluginSeverity(severity);
         return {
           ...pluginOptions,
+          ...(validSeverity !== undefined && { severity: validSeverity }),
           ...(validNumTests !== undefined && { numTests: validNumTests }),
           ...(pluginConfig && Object.keys(pluginConfig).length > 0 && { config: pluginConfig }),
         };

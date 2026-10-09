@@ -157,6 +157,17 @@ describe('getUnifiedConfig', () => {
     },
   );
 
+  it.each(['urgent', 'HIGH', '', null, 42, {}])(
+    'omits an invalid imported severity %j before generation',
+    (severity) => {
+      const plugin = Object.freeze({ id: 'toxicity', numTests: 2, severity: severity as Severity });
+      const result = getUnifiedConfig({ ...baseConfig, numTests: 7, plugins: [plugin] });
+      expect(result.redteam.plugins).toEqual([{ id: 'toxicity', numTests: 2 }]);
+      expect(RedteamConfigSchema.parse(result.redteam).plugins).toHaveLength(6);
+      expect(plugin.severity).toBe(severity);
+    },
+  );
+
   it('should handle defaultTest transformation', () => {
     const configWithDefaultTest: SavedRedteamConfig = {
       ...baseConfig,
