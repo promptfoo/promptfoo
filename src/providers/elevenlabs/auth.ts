@@ -1,6 +1,6 @@
 import { getEnvString } from '../../envars';
 
-import type { EnvOverrides } from '../../types/env';
+import type { EnvOverrides } from '../../contracts/env';
 import type { ElevenLabsBaseConfig } from './types';
 
 /** Resolve provider credentials in order, reading the private environment only when needed. */

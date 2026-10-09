@@ -19,6 +19,7 @@ import {
 } from '@promptfoo/redteam/constants';
 import { useRedTeamTargetConfigValidation } from '../hooks/useRedTeamTargetConfigValidation';
 import { type Config } from '../types';
+import { normalizeLocalProviders } from './Targets/helpers';
 import { TestCaseDialog } from './TestCaseDialog';
 import type { ConversationMessage } from '@promptfoo/redteam/types';
 
@@ -146,7 +147,7 @@ async function callTestGenerationApi(
       plugin: pluginWithLanguage,
       strategy,
       config: { applicationDefinition: { purpose } },
-      provider,
+      provider: normalizeLocalProviders(provider, { forRuntime: true }),
       history,
       turn,
       maxTurns,
@@ -170,7 +171,7 @@ async function callTestExecutionApi(
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      providerOptions: target,
+      providerOptions: normalizeLocalProviders(target, { forRuntime: true }),
       prompt,
     }),
     signal: AbortSignal.any([AbortSignal.timeout(TEST_EXECUTION_TIMEOUT), abortController.signal]),
