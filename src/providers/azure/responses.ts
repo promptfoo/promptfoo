@@ -10,6 +10,7 @@ import invariant from '../../util/invariant';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { applyGpt6RequestRules, getGpt6ResponsesReasoning, isGpt6Model } from '../openai/gpt6';
 import { ResponsesProcessor } from '../responses/index';
+import { parseResponsesInput } from '../responses/input';
 import { getRequestTimeoutMs, LONG_RUNNING_MODEL_TIMEOUT_MS } from '../shared';
 import { AzureGenericProvider } from './generic';
 import { calculateAzureCost } from './util';
@@ -47,7 +48,7 @@ export class AzureResponsesProvider extends AzureGenericProvider {
       // the Responses-shaped usage object (input_tokens/output_tokens) so cost is non-zero.
       costCalculator: (modelName: string, usage: any, config?: any) =>
         calculateAzureCost(
-          typeof config?.model === 'string' ? config.model : modelName,
+          config?.modelName ?? modelName,
           {
             ...config,
             passthrough: {
@@ -74,6 +75,11 @@ export class AzureResponsesProvider extends AzureGenericProvider {
     if (this.config.mcp?.enabled) {
       this.initializationPromise = this.initializeMCP();
     }
+  }
+
+  private getModelName(config: AzureChatResponsesOptions): string {
+    const model = (config.passthrough as { model?: unknown } | undefined)?.model;
+    return typeof model === 'string' ? model : (config.modelName ?? this.deploymentName);
   }
 
   private async initializeMCP(): Promise<void> {
@@ -131,24 +137,9 @@ export class AzureResponsesProvider extends AzureGenericProvider {
       ...context?.prompt?.config,
     };
 
-    let input;
-    try {
-      const parsedJson = JSON.parse(prompt);
-      if (Array.isArray(parsedJson)) {
-        input = parsedJson;
-      } else {
-        input = prompt;
-      }
-    } catch {
-      input = prompt;
-    }
+    const input = parseResponsesInput(prompt);
 
-    const passthroughModel = (config.passthrough as { model?: unknown } | undefined)?.model;
-    const capabilityModelName = (
-      typeof passthroughModel === 'string'
-        ? passthroughModel
-        : (config.modelName ?? this.deploymentName)
-    ).toLowerCase();
+    const capabilityModelName = this.getModelName(config).toLowerCase();
     const isReasoningModel = this.isReasoningModel(capabilityModelName);
     const isFixedReasoningModel = /^gpt-chat-latest(?:-|$)/.test(capabilityModelName);
     const isGPT6Model = isGpt6Model(capabilityModelName);
@@ -391,7 +382,11 @@ export class AzureResponsesProvider extends AzureGenericProvider {
     logger.debug('\tAzure Responses API response', { data });
 
     // Use the shared response processor for all response processing
-    const result = await this.processor.processResponseOutput(data, body, cached);
+    const result = await this.processor.processResponseOutput(
+      data,
+      { ...body, modelName: this.getModelName({ ...this.config, ...context?.prompt?.config }) },
+      cached,
+    );
     const responseUsage = (data as any)?.usage;
     const cachedInputTokens =
       responseUsage?.prompt_tokens_details?.cached_tokens ??
