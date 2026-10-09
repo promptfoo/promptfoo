@@ -14,7 +14,7 @@ import cliState from '../../cliState';
 import { getEnvBool, isCI, isTemplateProcessEnvDisabled } from '../../envars';
 import { importModule } from '../../esm';
 import logger from '../../logger';
-import { readPrompts, readProviderPromptMap } from '../../prompts/index';
+import { readPrompts } from '../../prompts/index';
 import { loadApiProviders, resolveProviderConfigs } from '../../providers/index';
 import telemetry from '../../telemetry';
 import {
@@ -569,7 +569,7 @@ async function readTestSources(
 /** Combines declarative config and keeps each test source's directory for loading and watch. */
 async function prepareCombinedConfig(
   configPaths: string[],
-): Promise<{ config: UnifiedConfig; testSources: TestSource[] }> {
+): Promise<{ config: UnifiedConfig; testSources: TestSource[]; promptBasePaths: string[] }> {
   const configSources: { config: UnifiedConfig; basePath: string }[] = [];
   for (const configPath of configPaths) {
     const resolvedPath = path.resolve(process.cwd(), configPath);
@@ -660,6 +660,7 @@ async function prepareCombinedConfig(
   );
 
   let prompts: UnifiedConfig['prompts'] = configsAreStringOrArray ? [] : {};
+  const promptBasePaths = new Map<string | Prompt, string>();
 
   const resolveConfigPath = (basePath: string, reference: string): string => {
     if (reference.includes('{{')) {
@@ -697,7 +698,11 @@ async function prepareCombinedConfig(
     if (prompt.id) {
       return {
         ...prompt,
-        id: prompt.id.startsWith('file://') ? resolveConfigPath(basePath, prompt.id) : prompt.id,
+        // Resolve the file to read independently from its authored identity. Glob IDs
+        // are also used by provider/test prompt filters and must survive relocation.
+        ...(prompt.id.startsWith('file://') && {
+          raw: prompt.raw ?? resolveConfigPath(basePath, prompt.id),
+        }),
       };
     }
     if (PromptSchema.safeParse(prompt).success) {
@@ -745,7 +750,10 @@ async function prepareCombinedConfig(
   };
 
   const seenPrompts = new Set<string | Prompt>();
-  const addSeenPrompt = (prompt: string | Prompt) => {
+  const addSeenPrompt = (prompt: string | Prompt, basePath: string) => {
+    if (!promptBasePaths.has(prompt)) {
+      promptBasePaths.set(prompt, basePath);
+    }
     if (typeof prompt === 'string') {
       seenPrompts.add(prompt);
     } else if (typeof prompt === 'object' && prompt.id) {
@@ -760,7 +768,7 @@ async function prepareCombinedConfig(
     if (typeof config.prompts === 'string') {
       invariant(Array.isArray(prompts), 'Cannot mix string and map-type prompts');
       const absolutePrompt = makeAbsolute(basePath, config.prompts);
-      addSeenPrompt(absolutePrompt);
+      addSeenPrompt(absolutePrompt, basePath);
     } else if (Array.isArray(config.prompts)) {
       invariant(Array.isArray(prompts), 'Cannot mix configs with map and array-type prompts');
       config.prompts.forEach((prompt) => {
@@ -770,7 +778,7 @@ async function prepareCombinedConfig(
               (typeof prompt.raw === 'string' || typeof prompt.label === 'string')),
           `Invalid prompt: ${JSON.stringify(prompt)}. Prompts must be either a string or an object with a 'raw' or 'label' string property.`,
         );
-        addSeenPrompt(makeAbsolute(basePath, prompt as string | Prompt));
+        addSeenPrompt(makeAbsolute(basePath, prompt as string | Prompt), basePath);
       });
     } else {
       // Object format such as { 'prompts/prompt1.txt': 'foo', 'prompts/prompt2.txt': 'bar' }
@@ -781,10 +789,13 @@ async function prepareCombinedConfig(
       prompts = {
         ...prompts,
         ...Object.fromEntries(
-          Object.entries(config.prompts).map(([prompt, label]) => [
-            prompt.startsWith('file://') ? resolveConfigPath(basePath, prompt) : prompt,
-            label,
-          ]),
+          Object.entries(config.prompts).map(([prompt, label]) => {
+            const absolutePrompt = prompt.startsWith('file://')
+              ? resolveConfigPath(basePath, prompt)
+              : prompt;
+            promptBasePaths.set(absolutePrompt, basePath);
+            return [absolutePrompt, label];
+          }),
         ),
       };
     }
@@ -893,6 +904,9 @@ async function prepareCombinedConfig(
 
   return {
     config: combinedConfig,
+    promptBasePaths: (Array.isArray(prompts) ? prompts : Object.keys(prompts)).map(
+      (prompt) => promptBasePaths.get(prompt as string | Prompt) ?? configSources[0].basePath,
+    ),
     testSources: configSources.map(({ config, basePath }) => ({
       tests: config.tests,
       basePath,
@@ -918,12 +932,14 @@ export async function resolveConfigs(
 }> {
   let fileConfig: Partial<UnifiedConfig> = {};
   let testSources: TestSource[] | undefined;
+  let promptBasePaths: string[] | undefined;
   let defaultConfig = _defaultConfig;
   const configPaths = cmdObj.config;
   let promptReferenceSources: PromptReferenceSource[] = [];
   if (configPaths) {
     const prepared = await prepareCombinedConfig(configPaths);
     fileConfig = prepared.config;
+    promptBasePaths = prepared.promptBasePaths;
     testSources = cmdObj.tests || cmdObj.vars || cmdObj.assertions ? [] : prepared.testSources;
     promptReferenceSources = await readPromptReferenceSources(configPaths);
     // The user has provided a config file, so we do not want to use the default config.
@@ -939,6 +955,7 @@ export async function resolveConfigs(
           promptReferenceSources,
           type,
           testSources,
+          promptBasePaths,
         ),
       ),
     ),
@@ -975,6 +992,7 @@ async function resolveLoadedConfig(
   promptReferenceSources: PromptReferenceSource[],
   type?: 'DatasetGeneration' | 'AssertionGeneration',
   testSources?: TestSource[],
+  promptBasePaths?: string[],
 ) {
   const configPaths = cmdObj.config;
   // Standalone assertion mode
@@ -1127,7 +1145,7 @@ async function resolveLoadedConfig(
 
   // Resolve provider configs: loads file:// references while preserving non-file providers.
   // This enables:
-  // 1. Building the provider-prompt map with `prompts` filters from external files (#1307)
+  // 1. Loading per-instance `prompts` filters from external files (#1307)
   // 2. Filtering by resolved provider ids/labels (not just file paths)
   // 3. Avoiding double file I/O (files are read once here, not again in loadApiProviders)
   const resolvedProviderConfigs = resolveProviderConfigs(config.providers, { basePath });
@@ -1161,7 +1179,12 @@ async function resolveLoadedConfig(
   // label them relative to the working directory so labels do not embed the checkout path.
   let parsedPrompts = cmdObj.prompts
     ? await readPrompts(config.prompts)
-    : await readPrompts(config.prompts, basePath, path.relative(process.cwd(), basePath));
+    : await readPrompts(
+        config.prompts,
+        basePath,
+        path.relative(process.cwd(), basePath),
+        cmdObj.assertions ? undefined : promptBasePaths,
+      );
 
   // Filter prompts if --filter-prompts option is provided
   if (cmdObj.filterPrompts) {
@@ -1251,14 +1274,6 @@ async function resolveLoadedConfig(
     }
   }
 
-  // Build provider-prompt map using filtered resolved configs (not raw config with file:// strings)
-  // This ensures that `prompts` filters from external provider files are respected (#1307)
-  // and that the map is consistent with the filtered providers
-  const parsedProviderPromptMap = readProviderPromptMap(
-    { providers: filteredProviderConfigs },
-    parsedPrompts,
-  );
-
   if (parsedPrompts.length === 0) {
     const message =
       'No prompts found. Add a `prompts:` entry to your config or pass --prompts path/to/prompt.txt.';
@@ -1282,7 +1297,6 @@ async function resolveLoadedConfig(
     tags: config.tags,
     prompts: parsedPrompts,
     providers: parsedProviders,
-    providerPromptMap: parsedProviderPromptMap,
     tests: parsedTests,
     scenarios: parsedScenarios as Scenario[],
     defaultTest,

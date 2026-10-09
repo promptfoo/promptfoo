@@ -194,3 +194,8 @@ describe('AI21ChatCompletionProvider', () => {
     expect(vi.mocked(fetchWithCache)).toHaveBeenCalledTimes(2);
   });
 });
+
+it('keeps mutable prices independent across model aliases', () => {
+  const costs = AI21ChatCompletionProvider.AI21_CHAT_MODELS.map(({ cost }) => cost);
+  expect(new Set(costs).size).toBe(costs.length);
+});

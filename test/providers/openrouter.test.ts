@@ -75,6 +75,7 @@ describe('OpenRouter', () => {
         }),
         expect.any(Number),
         undefined,
+        expect.any(Function),
       );
     });
 

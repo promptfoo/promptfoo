@@ -132,6 +132,9 @@ describe('Snowflake Cortex Provider', () => {
         expect.any(Number),
         'json',
         undefined,
+        undefined,
+        expect.any(Function),
+        undefined,
       );
 
       expect(result).toEqual({

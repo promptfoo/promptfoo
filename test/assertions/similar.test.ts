@@ -482,6 +482,7 @@ describe('handleSimilar', () => {
       false,
       expect.any(Object),
       'dot_product',
+      undefined,
     );
   });
 
@@ -529,6 +530,7 @@ describe('handleSimilar', () => {
       false,
       expect.any(Object),
       'euclidean',
+      undefined,
     );
   });
 
@@ -576,6 +578,7 @@ describe('handleSimilar', () => {
       false,
       expect.any(Object),
       'cosine',
+      undefined,
     );
   });
 });
