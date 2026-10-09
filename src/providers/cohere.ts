@@ -2,6 +2,7 @@ import { fetchWithCache } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
 import { extractGenAIResponse, type GenAISpanContext, withGenAISpan } from '../tracing/genaiTracer';
+import { normalizeFinishReason } from '../util/finishReason';
 import { getRequestTimeoutMs } from './shared';
 
 import type { EnvOverrides } from '../types/env';
@@ -618,7 +619,7 @@ export class CohereChatCompletionProvider implements ApiProvider {
     return withGenAISpan(
       spanContext,
       () => this.callApiInternal(prompt, config),
-      extractGenAIResponse,
+      (response) => extractGenAIResponse(response, true),
     );
   }
 
@@ -855,12 +856,6 @@ export class CohereChatCompletionProvider implements ApiProvider {
         return { error: errorMessage };
       }
 
-      let output = getV2Output(data);
-      if (output === undefined) {
-        return { error: 'Cohere v2 Chat API response did not contain text content.' };
-      }
-      output = appendV2Documents(output, data, Boolean(params.showDocuments));
-
       const usage = data?.usage?.tokens ?? data?.usage?.billed_units ?? {};
       const promptTokens = usage.input_tokens || 0;
       const completionTokens = usage.output_tokens || 0;
@@ -874,12 +869,35 @@ export class CohereChatCompletionProvider implements ApiProvider {
         completion: completionTokens,
         numRequests: 1,
       };
+      const normalizedReason = normalizeFinishReason(data?.finish_reason);
+      const finishReason =
+        normalizedReason === 'complete'
+          ? 'stop'
+          : normalizedReason === 'tool_call'
+            ? 'tool_calls'
+            : normalizedReason;
+      let output = getV2Output(data);
+      if (finishReason === 'error' || finishReason === 'timeout') {
+        // Cohere can report failed generation in an HTTP 200 response with partial content.
+        return {
+          error: `Cohere v2 Chat API generation failed with finish_reason ${data.finish_reason}.`,
+          cached,
+          tokenUsage,
+          finishReason,
+          raw: output,
+        };
+      }
+      if (output === undefined) {
+        return { error: 'Cohere v2 Chat API response did not contain text content.' };
+      }
+      output = appendV2Documents(output, data, Boolean(params.showDocuments));
       const metadata = getV2ResponseMetadata(data);
 
       return {
         cached,
         output,
         tokenUsage,
+        ...(finishReason ? { finishReason } : {}),
         ...(metadata ? { metadata } : {}),
       };
     } catch (error) {
