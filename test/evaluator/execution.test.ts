@@ -7,12 +7,14 @@ import * as path from 'path';
 
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
+import { R_ENDPOINT } from '../../src/constants';
 import { __resetPromptConversationCacheForTests, evaluate } from '../../src/evaluator';
 import { runExtensionHook } from '../../src/evaluatorHelpers';
 import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
 import EvalResult from '../../src/models/evalResult';
 import { EchoProvider } from '../../src/providers/echo';
+import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { providerRegistry } from '../../src/providers/providerRegistry';
 import { callTargetProvider } from '../../src/redteam/providers/shared';
 import { ProviderGroupedCallQueue } from '../../src/scheduler/providerCallQueue';
@@ -1813,13 +1815,27 @@ describeEvaluator('evaluator execution control', () => {
   });
   it('retains completed nested target work when a CLI pause interrupts the strategy', async () => {
     const controller = new AbortController();
+    const audio = Buffer.alloc(2048, 81).toString('base64');
+    const targetResponse: ProviderResponse = {
+      output: 'completed target',
+      audio: { data: audio, format: 'wav' },
+      metadata: {
+        http: {
+          status: 200,
+          statusText: 'OK',
+          headers: {
+            'Set-Cookie': 'synthetic-checkpoint-cookie',
+            'Content-Type': 'application/json',
+          },
+        },
+      },
+      cost: 0.25,
+      tokenUsage: { total: 5, prompt: 2, completion: 3, numRequests: 1 },
+    };
+    const originalResponse = structuredClone(targetResponse);
     const target: ApiProvider = {
       id: () => 'billable-target',
-      callApi: vi.fn(async () => ({
-        output: 'completed target',
-        cost: 0.25,
-        tokenUsage: { total: 5, prompt: 2, completion: 3, numRequests: 1 },
-      })),
+      callApi: vi.fn(async () => targetResponse),
     };
     const strategy: ApiProvider = {
       id: () => 'interrupted-strategy',
@@ -1846,11 +1862,116 @@ describeEvaluator('evaluator execution control', () => {
       response: { output: 'completed target', tokenUsage: { total: 10, numRequests: 2 } },
     });
     expect(rows[0].error).toContain('strategy completed');
-    expect(rows[0].response?.metadata?.completedTargetResponses).toHaveLength(2);
+    for (const metadata of [rows[0].response!.metadata!, rows[0].metadata!]) {
+      expect(metadata.completedTargetResponses).toHaveLength(2);
+      for (const [index, entry] of metadata.completedTargetResponses.entries()) {
+        expect(entry.prompt).toBe(index === 0 ? 'first target prompt' : 'second target prompt');
+        expect(entry.response.audio.data).toBeUndefined();
+        expect(entry.response.audio.blobRef.uri).toMatch(/^promptfoo:\/\/blob\//);
+        expect(entry.response.metadata.http.headers['Set-Cookie']).toBe('[REDACTED]');
+        expect(entry.response.metadata.http.headers['Content-Type']).toBe('application/json');
+        expect(entry.response.cost).toBe(0.25);
+      }
+    }
+    expect(targetResponse).toEqual(originalResponse);
     cliState.resume = true;
     await evaluate(suite, record, { maxConcurrency: 1 });
     expect(target.callApi).toHaveBeenCalledTimes(2);
     expect(strategy.callApi).toHaveBeenCalledOnce();
+  });
+
+  it('redacts native OpenAI response headers in both persisted interrupted checkpoint copies', async () => {
+    const targetFetch = vi.fn(async () => {
+      return new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: { role: 'assistant', content: 'synthetic target output' },
+              finish_reason: 'stop',
+            },
+          ],
+          usage: { prompt_tokens: 2, completion_tokens: 3, total_tokens: 5 },
+        }),
+        {
+          headers: {
+            'content-type': 'application/json',
+            'set-cookie': 'synthetic-session=local-only',
+            'openai-organization': 'synthetic-only-org',
+          },
+        },
+      );
+    });
+    const unexpectedUrls: string[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string | URL | Request) => {
+        if (String(url) === 'https://synthetic.fixture.test/v1/chat/completions') {
+          return targetFetch();
+        }
+        // The evaluator also reports eval_ran through this independent transport.
+        if (String(url) === R_ENDPOINT) {
+          return new Response(null, { status: 204 });
+        }
+        unexpectedUrls.push(String(url));
+        throw new Error('Unexpected request in isolated checkpoint test');
+      }),
+    );
+    const target = new OpenAiChatCompletionProvider('gpt-4o', {
+      config: {
+        apiBaseUrl: 'https://synthetic.fixture.test/v1',
+        apiKey: 'synthetic-key',
+        maxRetries: 0,
+        cost: 0.05,
+      },
+    });
+    try {
+      const controller = new AbortController();
+      const strategy: ApiProvider = {
+        id: () => 'interrupted-native-openai',
+        callApi: async () => {
+          await callTargetProvider(target, 'synthetic private prompt', {
+            prompt: toPrompt('synthetic private prompt'),
+            vars: {},
+            bustCache: true,
+          });
+          controller.abort();
+          throw controller.signal.reason;
+        },
+      };
+      const suite = {
+        providers: [strategy],
+        prompts: [toPrompt('synthetic strategy')],
+        tests: [{}],
+      };
+      const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+      await evaluate(suite, record, { maxConcurrency: 1, pauseSignal: controller.signal });
+      const rows = await record.getResults();
+      expect(rows).toHaveLength(1);
+      expect(targetFetch).toHaveBeenCalledOnce();
+      expect(rows[0]).toMatchObject({
+        cost: 0.25,
+        response: {
+          cost: 0.25,
+          tokenUsage: { total: 5, prompt: 2, completion: 3, numRequests: 1 },
+        },
+      });
+      for (const metadata of [rows[0].response!.metadata!, rows[0].metadata!]) {
+        expect(metadata.http.headers['set-cookie']).toBe('[REDACTED]');
+        expect(metadata.http.headers['openai-organization']).toBe('[REDACTED]');
+        const response = metadata.completedTargetResponses[0].response;
+        expect(response.output).toBe('synthetic target output');
+        expect(response.metadata.http.headers['set-cookie']).toBe('[REDACTED]');
+        expect(response.metadata.http.headers['openai-organization']).toBe('[REDACTED]');
+        expect(response.metadata.http.headers['content-type']).toBe('application/json');
+      }
+      cliState.resume = true;
+      await evaluate(suite, record, { maxConcurrency: 1 });
+      expect(targetFetch).toHaveBeenCalledOnce();
+      expect(unexpectedUrls).toEqual([]);
+    } finally {
+      await target.cleanup();
+      vi.unstubAllGlobals();
+    }
   });
 
   it('leaves a retried call resumable when CLI pause interrupts its next attempt', async () => {

@@ -2,7 +2,7 @@ import { isDeepStrictEqual } from 'node:util';
 
 import { and, eq, gte, inArray, lt, ne } from 'drizzle-orm';
 import { extractBlobHashesFromValue } from '../blobs/blobRefs';
-import { extractAndStoreBinaryData, isBlobStorageEnabled } from '../blobs/extractor';
+import { extractAndStoreResultMedia, isBlobStorageEnabled } from '../blobs/extractor';
 import { getDb } from '../database/index';
 import { evalResultsTable } from '../database/tables';
 import { type EnvVarKey, getEnvBool, parseEnvBool } from '../envars';
@@ -71,41 +71,61 @@ function stripMediaReferences(value: unknown): unknown {
 
 function projectOutputMetadata<T>(
   metadata: T,
-  stripOutput: boolean,
+  options: ResponseProjectionOptions,
   responseMetadata: ProviderResponse['metadata'],
   testMetadata?: AtomicTestCase['metadata'],
 ): T {
-  if (!stripOutput || !metadata || !responseMetadata || typeof metadata !== 'object') {
-    return metadata;
+  let projected = metadata;
+  if (options.stripOutput && metadata && responseMetadata && typeof metadata === 'object') {
+    projected = Object.fromEntries(
+      Object.entries(metadata).flatMap(([key, value]) => {
+        if (
+          !Object.prototype.hasOwnProperty.call(responseMetadata, key) ||
+          (testMetadata && isDeepStrictEqual(value, testMetadata[key])) ||
+          // Checkpoints contain target inputs as well as outputs; project their
+          // response fields below instead of stripping input media references.
+          (key === 'completedTargetResponses' && asRecord(metadata)?.interruptedStrategy === true)
+        ) {
+          return [[key, value]];
+        }
+        return key === 'audio' || key === 'blobUris'
+          ? []
+          : [[key, stripMediaReferences(sanitizeForDb(value))]];
+      }),
+    ) as T;
   }
-  return Object.fromEntries(
-    Object.entries(metadata).flatMap(([key, value]) => {
-      if (
-        !Object.prototype.hasOwnProperty.call(responseMetadata, key) ||
-        (testMetadata && isDeepStrictEqual(value, testMetadata[key]))
-      ) {
-        return [[key, value]];
-      }
-      return key === 'audio' || key === 'blobUris'
-        ? []
-        : [[key, stripMediaReferences(sanitizeForDb(value))]];
-    }),
-  ) as T;
+  return mapCompletedTargetResponses(sanitizeCompletedTargetResponses(projected), (entry) => ({
+    ...entry,
+    ...('prompt' in entry && options.stripPromptText ? { prompt: '[prompt stripped]' } : {}),
+    // Old stored rows and non-persisted JSON/JSONL exports also cross this boundary.
+    response: projectProviderResponse(entry.response, options)!,
+  }));
+}
+
+interface ResponseProjectionOptions {
+  stripMetadata: boolean;
+  stripOutput: boolean;
+  stripPromptText: boolean;
 }
 
 function projectProviderResponse(
   response: ProviderResponse | undefined,
-  options: { stripMetadata: boolean; stripOutput: boolean },
+  options: ResponseProjectionOptions,
 ): ProviderResponse | undefined {
   if (!response) {
     return response;
   }
 
-  if (!options.stripMetadata && !options.stripOutput) {
+  if (
+    !options.stripMetadata &&
+    !options.stripOutput &&
+    !options.stripPromptText &&
+    response.metadata?.interruptedStrategy !== true
+  ) {
     return response;
   }
 
-  const projectedResponse: ProviderResponse = options.stripMetadata
+  const projectedResponse: ProviderResponse & { turns?: unknown } = options.stripMetadata
     ? (({ metadata: _metadata, ...rest }) => rest)(response)
     : { ...response };
 
@@ -116,13 +136,25 @@ function projectProviderResponse(
     delete projectedResponse.audio;
     delete projectedResponse.video;
     delete projectedResponse.images;
-    if (projectedResponse.metadata) {
-      projectedResponse.metadata = projectOutputMetadata(
-        projectedResponse.metadata,
-        true,
-        projectedResponse.metadata,
-      );
-    }
+  }
+  if (options.stripPromptText && 'prompt' in projectedResponse) {
+    projectedResponse.prompt = '[prompt stripped]';
+  }
+  if (projectedResponse.metadata) {
+    projectedResponse.metadata = projectOutputMetadata(
+      projectedResponse.metadata,
+      options,
+      projectedResponse.metadata,
+    );
+  }
+
+  // Legacy multi-turn target responses carry the same prompt/output/media fields
+  // per turn. Project those fields without touching unrelated turn attributes.
+  if (Array.isArray(projectedResponse.turns)) {
+    projectedResponse.turns = projectedResponse.turns.map((turn) => {
+      const record = asRecord(turn);
+      return record ? projectProviderResponse(record, options) : turn;
+    });
   }
 
   return projectedResponse;
@@ -637,22 +669,69 @@ function sanitizeResponseForDb<T extends ProviderResponse | null | undefined>(re
     return response;
   }
 
-  const redactedMetadata = redactHttpHeadersOnMetadata((response as ProviderResponse).metadata, {
-    redactLegacyHeaders: true,
-  });
-  if (redactedMetadata === (response as ProviderResponse).metadata) {
+  const redactedMetadata = sanitizeCompletedTargetResponses(
+    redactHttpHeadersOnMetadata((response as ProviderResponse).metadata, {
+      redactLegacyHeaders: true,
+    }),
+  );
+  const redactedPrompt = sanitizeForDbWithSecrets(response.prompt);
+  const redacted = {
+    ...response,
+    metadata: redactedMetadata,
+    ...('prompt' in response ? { prompt: redactedPrompt } : {}),
+  };
+  const turns = asRecord(response)?.turns;
+  if (Array.isArray(turns)) {
+    const redactedTurns = turns.map((turn) => {
+      const record = asRecord(turn);
+      return record ? sanitizeResponseForDb(record) : turn;
+    });
+    if (redactedTurns.some((turn, index) => turn !== turns[index])) {
+      return { ...redacted, turns: redactedTurns } as T;
+    }
+  }
+  if (redactedMetadata === response.metadata && redactedPrompt === response.prompt) {
     return response;
   }
-  return { ...response, metadata: redactedMetadata } as T;
+  return redacted as T;
 }
 
 // `responseMetadata` is the (pre-redaction) provider response metadata, used as the provenance
 // source so a legacy top-level `metadata.headers` is redacted only where it echoes the
 // transport — leaving user-authored test metadata headers intact.
 function sanitizeMetadataForDb<T>(metadata: T, responseMetadata?: unknown): T {
-  return redactHttpHeadersOnMetadata(metadata, {
-    legacyHeadersSource: sanitizeForDb(responseMetadata),
-  });
+  return sanitizeCompletedTargetResponses(
+    redactHttpHeadersOnMetadata(metadata, {
+      legacyHeadersSource: sanitizeForDb(responseMetadata),
+    }),
+  );
+}
+
+/** Traverse only the evaluator-owned interrupted-strategy checkpoint schema. */
+function mapCompletedTargetResponses<T>(
+  metadata: T,
+  project: (entry: Record<string, unknown> & { response: ProviderResponse }) => unknown,
+): T {
+  const record = asRecord(metadata);
+  if (record?.interruptedStrategy !== true || !Array.isArray(record.completedTargetResponses)) {
+    return metadata;
+  }
+  return {
+    ...record,
+    completedTargetResponses: record.completedTargetResponses.map((entry) => {
+      const target = asRecord(entry);
+      const response = asRecord(target?.response);
+      return target && response ? project({ ...target, response }) : entry;
+    }),
+  } as T;
+}
+
+function sanitizeCompletedTargetResponses<T>(metadata: T): T {
+  return mapCompletedTargetResponses(metadata, (entry) => ({
+    ...entry,
+    ...('prompt' in entry ? { prompt: sanitizeForDbWithSecrets(entry.prompt) } : {}),
+    response: sanitizeResponseForDb(entry.response),
+  }));
 }
 
 function sanitizeGradingResultAssertions<T>(gradingResult: T): T {
@@ -856,6 +935,7 @@ export function sanitizeResultForJsonlArtifact<T extends object>(
   const response = projectProviderResponse(redacted.response ?? undefined, {
     stripMetadata: shouldStripMetadata,
     stripOutput: shouldStripResponseOutput,
+    stripPromptText: shouldStripPromptText,
   });
 
   return {
@@ -902,7 +982,11 @@ export function sanitizeResultForJsonlArtifact<T extends object>(
       ? {}
       : projectOutputMetadata(
           redacted.metadata,
-          shouldStripResponseOutput,
+          {
+            stripMetadata: shouldStripMetadata,
+            stripOutput: shouldStripResponseOutput,
+            stripPromptText: shouldStripPromptText,
+          },
           redacted.response?.metadata,
           (artifactResult.testCase as AtomicTestCase | undefined)?.metadata,
         ),
@@ -937,11 +1021,11 @@ export default class EvalResult {
     // EvalResult round-trips without a Drizzle schema migration.
     const persistedMetadata = persistTraceMetadata(metadata, traceId, evaluationId);
 
-    const processedResponse = await extractAndStoreBinaryData(result.response, {
-      evalId,
-      testIdx: result.testIdx,
-      promptIdx: result.promptIdx,
-    });
+    const processed = await extractAndStoreResultMedia(
+      // Remove circular SDK payloads before traversing either checkpoint copy.
+      { response: sanitizeForDb(result.response), metadata: sanitizeForDb(persistedMetadata) },
+      { evalId, testIdx: result.testIdx, promptIdx: result.promptIdx },
+    );
 
     // Sanitize all JSON fields to remove circular references and non-serializable values.
     // `testCase` and `prompt` can contain a resolved runtime provider under
@@ -961,13 +1045,13 @@ export default class EvalResult {
       error: error?.toString(),
       success,
       score: score == null ? 0 : score,
-      response: sanitizeForDb(processedResponse || null),
+      response: sanitizeForDb(processed.response || null),
       gradingResult: sanitizeForDb(gradingResult || null),
       namedScores: sanitizeForDb(namedScores),
       provider: sanitizeProvider(provider),
       latencyMs,
       cost,
-      metadata: sanitizeForDb(persistedMetadata),
+      metadata: sanitizeForDb(processed.metadata),
       failureReason,
     };
     if (persist) {
@@ -993,16 +1077,16 @@ export default class EvalResult {
     const returnResults: EvalResult[] = [];
     const processedResults: EvaluateResult[] = [];
     for (const result of results) {
-      const processedResponse = isBlobStorageEnabled()
-        ? await extractAndStoreBinaryData(result.response, {
-            evalId,
-            testIdx: result.testIdx,
-            promptIdx: result.promptIdx,
-          })
-        : result.response;
+      const processed = isBlobStorageEnabled()
+        ? await extractAndStoreResultMedia(
+            { response: sanitizeForDb(result.response), metadata: sanitizeForDb(result.metadata) },
+            { evalId, testIdx: result.testIdx, promptIdx: result.promptIdx },
+          )
+        : { response: result.response, metadata: result.metadata };
       processedResults.push({
         ...serializeResultProviderRefs(result),
-        response: processedResponse ?? undefined,
+        response: processed.response ?? undefined,
+        metadata: processed.metadata,
       });
     }
 
@@ -1244,11 +1328,23 @@ export default class EvalResult {
       pluginId: _pluginId,
       ...rest
     } = serializeResultProviderRefs(this);
+    const processed = await extractAndStoreResultMedia(
+      {
+        response: sanitizeForDb(rest.response),
+        metadata: sanitizeForDb(
+          persistTraceMetadata(this.metadata, this.traceId, this.evaluationId),
+        ),
+      },
+      { evalId: this.evalId, testIdx: this.testIdx, promptIdx: this.promptIdx },
+    );
     const persistedValues = {
       ...rest,
       error: this.error ?? null,
-      gradingResult: sanitizeGradingResultForDb(rest.gradingResult),
-      metadata: persistTraceMetadata(this.metadata, this.traceId, this.evaluationId),
+      ...redactSensitiveResultFieldsForDb({
+        response: sanitizeForDb(processed.response),
+        gradingResult: sanitizeForDb(rest.gradingResult),
+        metadata: sanitizeForDb(processed.metadata),
+      }),
     };
     //check if this exists in the db
     if (this.persisted) {
@@ -1277,6 +1373,7 @@ export default class EvalResult {
     const response = projectProviderResponse(this.response, {
       stripMetadata: shouldStripMetadata,
       stripOutput: shouldStripResponseOutput,
+      stripPromptText: shouldStripPromptText,
     });
 
     const prompt = projectPrompt(this.prompt, shouldStripPromptText);
@@ -1330,7 +1427,11 @@ export default class EvalResult {
         ? {}
         : projectOutputMetadata(
             this.metadata,
-            shouldStripResponseOutput,
+            {
+              stripMetadata: shouldStripMetadata,
+              stripOutput: shouldStripResponseOutput,
+              stripPromptText: shouldStripPromptText,
+            },
             this.response?.metadata,
             this.testCase.metadata,
           ),

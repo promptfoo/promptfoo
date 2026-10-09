@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   extractAndStoreBinaryData,
+  extractAndStoreResultMedia,
   isBlobStorageEnabled,
   normalizeAudioMimeType,
 } from '../../src/blobs/extractor';
@@ -233,6 +234,85 @@ describe('Local blob extraction', () => {
     // Should store locally
     expect(mockStoreBlob).toHaveBeenCalledTimes(1);
     expect(mockUploadBlobRemote).not.toHaveBeenCalled();
+  });
+
+  it('shares one blob across the response and both checkpoint copies with eval provenance', async () => {
+    const hash = 'a'.repeat(64);
+    mockStoreBlob.mockResolvedValue({ ref: { hash, uri: `promptfoo://blob/${hash}` } });
+    const audio = { data: Buffer.alloc(2048, 81).toString('base64'), format: 'wav' };
+    const metadata = {
+      interruptedStrategy: true,
+      completedTargetResponses: [
+        { prompt: 'first prompt', response: { output: 'first response', audio } },
+        { prompt: 'second prompt', response: { output: 'second response', audio } },
+      ],
+    };
+    const fields = { response: { audio, metadata }, metadata };
+    const original = structuredClone(fields);
+    const context = { evalId: 'checkpoint-eval', testIdx: 3, promptIdx: 4 };
+    const processed = await extractAndStoreResultMedia(fields, context);
+    expect(mockStoreBlob).toHaveBeenCalledOnce();
+    expect(mockStoreBlob).toHaveBeenCalledWith(expect.any(Buffer), 'audio/wav', {
+      ...context,
+      location: 'response.audio.data',
+      kind: 'audio',
+    });
+    for (const copy of [processed.response!.metadata!, processed.metadata]) {
+      for (const entry of copy.completedTargetResponses) {
+        expect(entry.response.audio.data).toBeUndefined();
+        expect(entry.response.audio.blobRef).toEqual(processed.response!.audio!.blobRef);
+      }
+    }
+    const { recordBlobReference } = await import('../../src/blobs/index');
+    expect(recordBlobReference).toHaveBeenCalledWith(hash, {
+      ...context,
+      location: 'response.audio.blobRef',
+    });
+    expect(recordBlobReference).toHaveBeenCalledWith(hash, {
+      ...context,
+      location: 'metadata.completedTargetResponses[0].response.audio.blobRef',
+    });
+    expect(mockUploadBlobRemote).not.toHaveBeenCalled();
+    expect(fields).toEqual(original);
+  });
+
+  it('keeps checkpoint audio inline when media externalization is disabled', async () => {
+    vi.stubEnv('PROMPTFOO_INLINE_MEDIA', 'true');
+    try {
+      const metadata = {
+        interruptedStrategy: true,
+        completedTargetResponses: [
+          {
+            prompt: 'prompt',
+            response: {
+              audio: { data: Buffer.alloc(2048, 81).toString('base64'), format: 'wav' },
+            },
+          },
+        ],
+      };
+      const fields = { response: { metadata }, metadata };
+      expect(await extractAndStoreResultMedia(fields, {})).toEqual(fields);
+      expect(mockStoreBlob).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('leaves unmarked and malformed checkpoint metadata unchanged', async () => {
+    const entry = {
+      prompt: 'prompt',
+      response: {
+        audio: { data: Buffer.alloc(2048, 81).toString('base64'), format: 'wav' },
+      },
+    };
+    for (const metadata of [
+      { completedTargetResponses: [entry] },
+      { interruptedStrategy: true, completedTargetResponses: [null, 1, {}, { response: 'text' }] },
+    ]) {
+      const fields = { response: { metadata }, metadata };
+      expect(await extractAndStoreResultMedia(fields, {})).toEqual(fields);
+    }
+    expect(mockStoreBlob).not.toHaveBeenCalled();
   });
 
   it('should externalize image data URIs to blobRefs', async () => {
