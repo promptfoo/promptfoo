@@ -9,6 +9,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { evaluate, runEval } from '../../src/evaluator';
 import Eval from '../../src/models/eval';
 import { isAgentWorkspace } from '../../src/providers/agentWorkspace';
+import { ResultFailureReason } from '../../src/types/index';
 import { mockProcessEnv } from '../util/utils';
 import { toPrompt } from './helpers';
 import { describeEvaluator } from './lifecycle';
@@ -92,6 +93,118 @@ describeEvaluator('evaluator copy_working_dir workspaces', () => {
       expect(summary.results.map((result) => result.prompt.config)).not.toContainEqual(
         expect.objectContaining({ working_dir: expect.anything() }),
       );
+    },
+  );
+
+  it.each([
+    { mode: 'deferred', cancel: true, held: true, maxConcurrency: 1 },
+    { mode: 'immediate assertion', cancel: true, held: false, maxConcurrency: 1 },
+    { mode: 'non-cancelled', cancel: false, held: true, maxConcurrency: 1 },
+    { mode: 'inline', cancel: true, held: true, maxConcurrency: 2 },
+  ])(
+    'keeps the copied workspace through $mode assertion completion',
+    async ({ cancel, held, maxConcurrency }) => {
+      const controller = new AbortController();
+      let signalStarted!: () => void;
+      const started = new Promise<void>((resolve) => {
+        signalStarted = resolve;
+      });
+      let release!: () => void;
+      const pendingAssertion = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      let signalFinished!: () => void;
+      const finished = new Promise<void>((resolve) => {
+        signalFinished = resolve;
+      });
+      let assertionRead: string | undefined;
+      const testSuite: TestSuite = {
+        providers: [createTarget({ working_dir: fixture, copy_working_dir: 'copy' })],
+        prompts: [toPrompt('Change the fixture')],
+        tests: [
+          {
+            assert: [
+              {
+                type: 'javascript',
+                value: async () => {
+                  signalStarted();
+                  if (cancel) {
+                    controller.abort(new Error('Stop during assertion startup'));
+                  }
+                  try {
+                    if (held) {
+                      await pendingAssertion;
+                    }
+                    assertionRead = fs.readFileSync(path.join(workspaces[0], 'run.txt'), 'utf8');
+                    fs.writeFileSync(
+                      path.join(workspaces[0], 'assertion.txt'),
+                      'assertion finished',
+                    );
+                    return assertionRead === 'repeat 0\n';
+                  } finally {
+                    signalFinished();
+                  }
+                },
+              },
+              { type: 'llm-rubric', value: 'The workspace was changed', provider: createGrader() },
+            ],
+          },
+        ],
+      };
+      const evalRecord = new Eval({});
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      let settled = false;
+      const evaluation = evaluate(testSuite, evalRecord, {
+        maxConcurrency,
+        timeoutMs: 0,
+        maxEvalTimeMs: 0,
+        abortSignal: controller.signal,
+      }).then((result) => {
+        settled = true;
+        return result;
+      });
+      try {
+        await started;
+        await vi.advanceTimersByTimeAsync(0);
+        if (held) {
+          expect(isAgentWorkspace(workspaces[0])).toBe(true);
+          expect(fs.existsSync(path.join(workspaces[0], 'run.txt'))).toBe(true);
+        }
+        let cancelledResult;
+        if (cancel) {
+          await evaluation;
+          expect(settled).toBe(true);
+          cancelledResult = structuredClone((await evalRecord.toEvaluateSummary()).results[0]);
+          expect(cancelledResult).toMatchObject({
+            success: false,
+            score: 0,
+            failureReason: ResultFailureReason.ERROR,
+            response: { output: 'workspace-0' },
+            metadata: { incomplete: true, __promptfoo: { resumable: true } },
+          });
+        } else {
+          expect(settled).toBe(false);
+        }
+        release();
+        await finished;
+        await evaluation;
+        expect(assertionRead).toBe('repeat 0\n');
+        await vi.waitFor(() => expect(fs.existsSync(workspaces[0])).toBe(false));
+        expect(isAgentWorkspace(workspaces[0])).toBe(false);
+        const summary = await evalRecord.toEvaluateSummary();
+        if (cancel) {
+          expect(summary.results[0]).toEqual(cancelledResult);
+          expect(summary.stats).toMatchObject({ successes: 0, failures: 0, errors: 1 });
+        } else {
+          expect(summary.stats.successes).toBe(1);
+        }
+        expect(fs.readdirSync(fixture)).toEqual(['README.md']);
+      } finally {
+        release();
+        await finished;
+        await evaluation;
+        vi.useRealTimers();
+      }
     },
   );
 

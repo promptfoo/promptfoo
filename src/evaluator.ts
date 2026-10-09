@@ -1921,6 +1921,12 @@ async function runEvalInternal({
             vars: persistedVars,
           });
 
+          // Started deferred assertions own the workspace even if cancellation stops this row.
+          const deferredGrading = deferredGradingPromises.get(ret);
+          if (workspace && deferredGrading) {
+            deferredGradingPromises.set(ret, deferredGrading.finally(workspace.remove));
+            workspace = undefined;
+          }
           abortSignal?.throwIfAborted();
           // Update token usage stats
           if (response.tokenUsage) {
@@ -1947,12 +1953,6 @@ async function runEvalInternal({
           runExecution,
         )
       : await runExecution();
-    // Deferred assertions still need the workspace, so they remove it when they finish.
-    const deferredGrading = deferredGradingPromises.get(rows[0]);
-    if (workspace && deferredGrading) {
-      deferredGradingPromises.set(rows[0], deferredGrading.finally(workspace.remove));
-      workspace = undefined;
-    }
     return rows;
   } catch (err) {
     const { errorWithStack, metadata, logContext } = buildProviderErrorContext({
