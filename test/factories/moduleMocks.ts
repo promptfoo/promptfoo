@@ -28,6 +28,19 @@ export const createDisabledCloudConfigFactory = (): MockModuleFactory => async (
   };
 };
 
+export const createEmptyGlobFactory = (): MockModuleFactory => async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    globSync: vi.fn().mockReturnValue([]),
+
+    hasMagic: (path: string) => {
+      // Match the real hasMagic behavior: only detect patterns in forward-slash paths
+      // This mimics glob's actual behavior where backslash paths return false
+      return /[*?[\]{}]/.test(path) && !path.includes('\\');
+    },
+  };
+};
+
 export const createFsPromiseOverlayFactory =
   (fsPromiseMocks: Record<string, unknown>): MockModuleFactory =>
   async (importOriginal) => {
