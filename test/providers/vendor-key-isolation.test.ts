@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
 import { loadApiProvider } from '../../src/providers/index';
 import { mockProcessEnv } from '../util/utils';
+import { createMockFetchResponse } from './mockProviderResponses';
 
 import type { OpenAiGenericProvider } from '../../src/providers/openai';
 import type { ApiProvider } from '../../src/types/providers';
@@ -22,15 +23,12 @@ beforeEach(() => {
     MISSING_VENDOR_KEY: undefined,
   });
   vi.mocked(fetchWithCache).mockReset();
-  vi.mocked(fetchWithCache).mockResolvedValue({
-    data: {
+  vi.mocked(fetchWithCache).mockResolvedValue(
+    createMockFetchResponse({
       choices: [{ message: { content: 'Hello' }, text: 'Hello', finish_reason: 'stop' }],
       data: [{ embedding: [0.1, 0.2], url: 'https://example.invalid/image.png' }],
-    },
-    cached: false,
-    status: 200,
-    statusText: 'OK',
-  });
+    }),
+  );
 });
 afterEach(() => {
   restoreEnv();
