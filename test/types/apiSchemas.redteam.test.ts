@@ -131,6 +131,10 @@ describe('API schema red-team coverage', () => {
       expect(
         MediaSchemas.Info.Params.safeParse({ type: 'document', filename: 'abcdef123456.pdf' })
           .success,
+      ).toBe(true);
+      expect(
+        MediaSchemas.Info.Params.safeParse({ type: 'unknown', filename: 'abcdef123456.pdf' })
+          .success,
       ).toBe(false);
       expect(
         MediaSchemas.Info.Params.safeParse({ type: 'audio', filename: '../../passwd' }).success,

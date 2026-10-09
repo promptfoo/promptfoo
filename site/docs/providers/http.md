@@ -85,6 +85,8 @@ you are using [raw HTTP request mode](#sending-a-raw-http-request).
 This example sends the prompt as a `documentQuery` text field and sends a simple
 generated PDF as the `files` upload field:
 
+For PDF redteam strategy output, decode its PDF data URI and upload the bytes with a [custom provider](/docs/guides/pdf-red-team#connect-your-own-application). The multipart `generated` source below renders its own fixture; it does not consume the strategy's PDF data URI.
+
 ```yaml
 providers:
   - id: http

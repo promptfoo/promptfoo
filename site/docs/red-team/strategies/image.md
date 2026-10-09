@@ -62,7 +62,7 @@ redteam:
 ```
 
 :::note
-You should only disable all other strategies when using the image strategy. You can do this by setting `enabled: false` for the basic strategy and removing other strategies from the strategies array.
+For an image-only target, disable `basic` so it does not receive unencoded text. To transform attacks before rendering them, use a [layer](/docs/red-team/strategies/layer/) with `image` last. For PDF upload targets, use the [PDF strategy](/docs/red-team/strategies/pdf/).
 :::
 
 Your prompt.json file should look like this:

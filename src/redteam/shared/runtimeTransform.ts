@@ -10,6 +10,7 @@
 
 import logger from '../../logger';
 import { accumulateTokenUsage } from '../../util/tokenUsageUtils';
+import { hasPdfStrategy } from '../constants/strategies';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 
 import type { MediaData } from '../../storage/types';
@@ -100,6 +101,9 @@ export async function applyRuntimeTransforms(
 
   if (!layerConfigs?.length) {
     return { prompt, originalPrompt };
+  }
+  if (hasPdfStrategy(layerConfigs)) {
+    return { prompt, originalPrompt, error: 'PDF transforms support single-turn generation only' };
   }
 
   logger.debug(`[RuntimeTransform] Applying ${layerConfigs.length} transforms to prompt`, {

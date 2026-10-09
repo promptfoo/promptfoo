@@ -39,6 +39,8 @@ redteam:
     - jailbreak:hydra # Multi-turn adaptive conversations
 ```
 
+For document-upload applications, use the [PDF strategy](/docs/red-team/strategies/pdf/) to deliver attacks as real attachments. The [PDF guide](/docs/guides/pdf-red-team/) includes a runnable invoice-review app.
+
 ## All Strategies
 
 <StrategyTable showRemoteStatus />

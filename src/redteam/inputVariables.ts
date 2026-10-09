@@ -33,6 +33,7 @@ export type InputMaterializationContext = {
 };
 
 export type MaterializedInputMetadata = {
+  bodyText?: string;
   injectedInstruction?: string;
   injectionPlacement?: DocxInjectionPlacement;
   inputPurpose?: string;
@@ -691,6 +692,19 @@ export function buildPromptInputDescriptions(inputs?: Inputs): Record<string, st
   );
 }
 
+function materializeDocxRenderPlan(plan: DocxRenderPlan, inputPurpose?: string) {
+  return {
+    metadata: {
+      bodyText: plan.bodyText,
+      injectedInstruction: plan.injectedInstruction,
+      injectionPlacement: plan.injectionPlacement,
+      inputPurpose,
+      wrapperSummary: plan.wrapperSummary,
+    },
+    value: toDataUri(DOCX_MIME_TYPE, buildDocxDataFromRenderPlan(plan)),
+  };
+}
+
 export async function materializeInputValueWithMetadata(
   value: string,
   definition: InputDefinition,
@@ -707,6 +721,15 @@ export async function materializeInputValueWithMetadata(
     !shouldApplyDocxWrapperPass(definition) ||
     !context.provider
   ) {
+    if (
+      normalizedInput.type === 'docx' &&
+      injectionPlacement !== DEFAULT_DOCX_INJECTION_PLACEMENT
+    ) {
+      return materializeDocxRenderPlan(
+        createFallbackDocxRenderPlan(value, definition, injectionPlacement),
+        normalizedInput.config?.inputPurpose,
+      );
+    }
     const shouldIncludeMetadata =
       normalizedInput.type !== 'text' &&
       Boolean(normalizedInput.config?.injectionPlacements?.length);
@@ -734,16 +757,6 @@ export async function materializeInputValueWithMetadata(
       inputPurpose: normalizedInput.config?.inputPurpose,
       injectionPlacement,
     });
-    const renderPlan = createFallbackDocxRenderPlan(value, definition, injectionPlacement);
-    return {
-      metadata: {
-        injectedInstruction: renderPlan.injectedInstruction,
-        injectionPlacement: renderPlan.injectionPlacement,
-        inputPurpose: normalizedInput.config?.inputPurpose,
-        wrapperSummary: renderPlan.wrapperSummary,
-      },
-      value: toDataUri(DOCX_MIME_TYPE, buildDocxDataFromRenderPlan(renderPlan)),
-    };
   }
   const renderPlan = parseDocxRenderPlan(
     typeof output === 'string' ? output : '',
@@ -752,15 +765,7 @@ export async function materializeInputValueWithMetadata(
     injectionPlacement,
   );
 
-  return {
-    metadata: {
-      injectedInstruction: renderPlan.injectedInstruction,
-      injectionPlacement: renderPlan.injectionPlacement,
-      inputPurpose: normalizedInput.config?.inputPurpose,
-      wrapperSummary: renderPlan.wrapperSummary,
-    },
-    value: toDataUri(DOCX_MIME_TYPE, buildDocxDataFromRenderPlan(renderPlan)),
-  };
+  return materializeDocxRenderPlan(renderPlan, normalizedInput.config?.inputPurpose);
 }
 
 export function materializeInputValue(

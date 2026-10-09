@@ -38,6 +38,8 @@ function computeHash(data: Buffer): string {
  */
 export class LocalFileSystemProvider implements MediaStorageProvider {
   readonly providerId = 'local';
+  // Short hash prefixes can collide, so existing media URLs must revalidate.
+  readonly hasImmutableKeys = false;
   private basePath: string;
   private readonly realBasePath: string;
   private readonly hashIndex: ReadonlyMap<string, string>;
@@ -95,7 +97,7 @@ export class LocalFileSystemProvider implements MediaStorageProvider {
   /**
    * Resolve a legacy key without following symlinks below the configured root.
    */
-  private async getFilePath(key: string): Promise<string> {
+  private async getFilePath(key: string, metadataSidecar = false): Promise<string> {
     // Prevent directory traversal and ensure all paths are under the base path
     const targetPath = path.resolve(this.basePath, key);
     // Ensure basePath has trailing separator for strict prefix check
@@ -106,6 +108,20 @@ export class LocalFileSystemProvider implements MediaStorageProvider {
       );
     }
     const relativePath = path.relative(path.resolve(this.basePath), targetPath);
+    const components = relativePath.split(path.sep);
+    // Legacy providers accepted arbitrary relative keys. Preserve those media
+    // while withholding the storage index, blob internals, and metadata sidecars.
+    if (
+      relativePath.toLowerCase() === HASH_INDEX_FILE ||
+      components[0].toLowerCase() === 'blob-data' ||
+      components.some(
+        (component, index) =>
+          component.toLowerCase().endsWith('.meta.json') &&
+          !(metadataSidecar && index === components.length - 1),
+      )
+    ) {
+      throw new Error('[LocalStorage] Invalid local media key');
+    }
     const filePath = path.join(this.realBasePath, relativePath);
     let currentPath = this.realBasePath;
     for (const component of ['', ...relativePath.split(path.sep)]) {
@@ -219,7 +235,7 @@ export class LocalFileSystemProvider implements MediaStorageProvider {
       return;
     }
     const filePath = await this.getFilePath(key);
-    const metadataPath = await this.getFilePath(`${key}.meta.json`);
+    const metadataPath = await this.getFilePath(`${key}.meta.json`, true);
 
     // Delete files (ignore ENOENT errors)
     try {

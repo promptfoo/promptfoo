@@ -154,7 +154,7 @@ export class CodingAgentGrader extends RedteamGraderBase {
     const verifierFinding = await verifyCodingAgentResult(
       this.pluginId,
       llmOutput,
-      test,
+      gradingContext?.verifierTest ? { ...test, ...gradingContext.verifierTest } : test,
       renderedValue,
       gradingContext,
     );

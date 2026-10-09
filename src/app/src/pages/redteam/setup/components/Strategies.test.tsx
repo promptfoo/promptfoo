@@ -127,7 +127,7 @@ describe('Strategies', () => {
   describe('MULTI_MODAL_STRATEGIES export', () => {
     it('exports MULTI_MODAL_STRATEGIES constant with expected values', () => {
       expect(MULTI_MODAL_STRATEGIES).toBeDefined();
-      expect(MULTI_MODAL_STRATEGIES).toEqual(['audio', 'image', 'video']);
+      expect(MULTI_MODAL_STRATEGIES).toEqual(['audio', 'image', 'video', 'pdf']);
     });
   });
 

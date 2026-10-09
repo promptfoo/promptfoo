@@ -1,4 +1,5 @@
 import logger from '../../logger';
+import { hasPdfStrategy } from '../constants/strategies';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { getAttackProviderFullId, isAttackProvider } from '../shared/attackProviders';
 import { withPersistableGenerationProvider } from './types';
@@ -57,6 +58,10 @@ export async function addLayerTestCases(
   if (steps.length === 0) {
     logger.warn('layer strategy: no steps provided; returning empty');
     return [];
+  }
+
+  if (hasPdfStrategy(steps)) {
+    throw new Error('PDF is a standalone strategy and cannot be used inside a layer');
   }
 
   let current: TestCaseWithPlugin[] = testCases;

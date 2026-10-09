@@ -218,6 +218,33 @@ describe('server OpenAPI generation', () => {
     expect(TestCaseGenerationSchema.safeParse(request).success).toBe(false);
   });
 
+  it.each([undefined, 'text', 'image', 'docx', 'pdf'])(
+    'matches PDF template validation for provider input type %s',
+    (type) => {
+      const document = createServerOpenApiDocument();
+      const requestSchema = (document.paths?.['/api/redteam/generate-test']?.post as any)
+        ?.requestBody?.content?.['application/json']?.schema;
+      const request = {
+        plugin: { id: 'aegis', config: {} },
+        strategy: { id: 'basic', config: {} },
+        config: { applicationDefinition: { purpose: 'test assistant' } },
+        provider: {
+          id: 'echo',
+          inputs: {
+            document: {
+              type,
+              description: 'Invoice',
+              config: { template: { source: 'file', path: './invoice.pdf' } },
+            },
+          },
+        },
+      };
+      const validate = new Ajv2020({ allErrors: true, strict: false }).compile(requestSchema);
+      expect(validate(request)).toBe(type === 'pdf');
+      expect(TestCaseGenerationSchema.safeParse(request).success).toBe(type === 'pdf');
+    },
+  );
+
   it('preserves required OpenAPI 3.1 response descriptions and media schemas', () => {
     const document = createServerOpenApiDocument();
 

@@ -1,0 +1,5 @@
+.env
+node_modules/
+redteam*.yaml
+results*.json
+artifacts/

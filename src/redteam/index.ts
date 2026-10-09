@@ -128,7 +128,7 @@ async function rematerializeStrategyInputVars(
   const materializedPromptSnapshot = getMaterializedMultiInputPromptSnapshot(testCase.metadata);
   const currentInjectVar = testCase.vars?.[injectVar];
 
-  if (!inputs || Object.keys(inputs).length === 0 || !currentInjectVar) {
+  if (testCase.metadata?.pdf || !inputs || Object.keys(inputs).length === 0 || !currentInjectVar) {
     return {
       inputMaterialization,
       vars: testCase.vars,
@@ -494,8 +494,13 @@ function filterOversizedTestCases<T extends TestCase>(
       (testCase.metadata?.pluginConfig as { maxCharsPerMessage?: number } | undefined)
         ?.maxCharsPerMessage;
     const violation = getGeneratedPromptOverLimit(
-      String(testCase.vars?.[injectVar] ?? ''),
+      String(
+        testCase.metadata?.pdf
+          ? testCase.metadata.originalText
+          : (testCase.vars?.[injectVar] ?? ''),
+      ),
       testCaseMaxCharsPerMessage,
+      testCase.metadata?.pdf ? 'text' : 'chat',
     );
     if (!violation) {
       return true;
@@ -728,7 +733,7 @@ async function applyStrategies(
             ...(t?.metadata?.strategyConfig || {}),
           };
 
-          return {
+          const result: TestCaseWithPlugin = {
             ...t,
             vars,
             metadata: {
@@ -750,6 +755,11 @@ async function applyStrategies(
               ...getMaterializedMultiInputPromptMetadata(vars),
             },
           };
+          // PDFs bypass rematerialization; their snapshot only duplicates attachment bytes.
+          if (result.metadata?.pdf) {
+            delete result.metadata[MATERIALIZED_MULTI_INPUT_PROMPT_METADATA_KEY];
+          }
+          return result;
         }),
       )),
     );

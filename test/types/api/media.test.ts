@@ -18,6 +18,7 @@ describe('legacy media parameter schema composition', () => {
       requestId: 'request',
     });
     expect(schema.safeParse({ type: 'audio', filename: '../private' }).success).toBe(false);
-    expect(schema.safeParse({ type: 'document', filename: params.filename }).success).toBe(false);
+    expect(schema.safeParse({ type: 'document', filename: params.filename }).success).toBe(true);
+    expect(schema.safeParse({ type: 'unknown', filename: params.filename }).success).toBe(false);
   });
 });

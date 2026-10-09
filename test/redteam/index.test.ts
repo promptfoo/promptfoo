@@ -27,7 +27,7 @@ import { extractVariablesFromTemplates } from '../../src/util/templates';
 import { loadYaml } from '../../src/util/yamlLoad';
 import { mockProcessEnv, stripAnsi } from '../util/utils';
 
-import type { ApiProvider } from '../../src/types/index';
+import type { ApiProvider, TestCase } from '../../src/types/index';
 import type { Inputs } from '../../src/types/shared';
 
 vi.mock('cli-progress');
@@ -964,6 +964,68 @@ describe('synthesize', () => {
       );
     });
 
+    it.each([
+      'attack',
+      JSON.stringify([{ role: 'system', content: 'x'.repeat(101) }]),
+      JSON.stringify([
+        { role: 'user', content: 'x'.repeat(60) },
+        { role: 'user', content: 'x'.repeat(60) },
+      ]),
+    ])('applies raw PDF payload limits: %s', async (payload) => {
+      const inputs = { document: { type: 'pdf', description: 'Invoice' } } satisfies Inputs;
+      const originalPrompt = JSON.stringify({ document: 'attack' });
+      vi.spyOn(Plugins, 'find').mockReturnValue({
+        key: 'policy',
+        action: vi.fn().mockResolvedValue([
+          {
+            vars: { [MULTI_INPUT_VAR]: originalPrompt, document: 'old PDF' },
+            metadata: { pluginId: 'policy', pluginConfig: { inputs } },
+          },
+        ]),
+      });
+      const dataUri = `data:application/pdf;base64,${'A'.repeat(3000)}`;
+      const materializedPrompt = JSON.stringify({ document: dataUri });
+      const mockStrategyAction = vi.fn().mockImplementation((cases: TestCase[]) =>
+        cases.map((test) => ({
+          ...test,
+          vars: { ...test.vars, [MULTI_INPUT_VAR]: materializedPrompt, document: dataUri },
+          metadata: {
+            ...test.metadata,
+            originalText: payload,
+            pdf: { input: 'document', text: 'Invoice\nattack' },
+          },
+        })),
+      );
+      vi.spyOn(Strategies, 'find').mockReturnValue({
+        id: 'pdf',
+        action: mockStrategyAction,
+      });
+      const result = await synthesize({
+        inputs,
+        numTests: 1,
+        plugins: [{ id: 'policy', numTests: 1, config: { policy: 'Be accurate' } }],
+        prompts: ['{{document}}'],
+        provider: mockProvider,
+        purpose: 'Review invoices',
+        maxCharsPerMessage: 100,
+        strategies: [{ id: 'pdf', config: { maxCharsPerMessage: 100 } }],
+        targetIds: ['test-provider'],
+      });
+      const pdfTest = result.testCases.find((test) => test.metadata?.strategyId === 'pdf');
+      if (payload.length > 100) {
+        expect(pdfTest).toBeUndefined();
+        return;
+      }
+      expect(pdfTest?.vars?.document).toBe(dataUri);
+      expect(pdfTest?.vars?.[MULTI_INPUT_VAR]).toBe(materializedPrompt);
+      expect(pdfTest?.metadata).not.toHaveProperty('__promptfooMaterializedMultiInputPrompt');
+      expect(JSON.stringify(pdfTest).split(dataUri)).toHaveLength(3);
+      expect(
+        mockStrategyAction.mock.results[0].value[0].metadata
+          .__promptfooMaterializedMultiInputPrompt,
+      ).toBe(originalPrompt);
+    });
+
     it('should re-materialize DOCX inputs after strategies mutate multi-input prompts', async () => {
       const inputs = {
         document: {
@@ -1070,6 +1132,9 @@ describe('synthesize', () => {
         ),
       );
       expect(strategyTestCase?.vars?.question).toBe(strategyQuestion);
+      expect(strategyTestCase?.metadata?.__promptfooMaterializedMultiInputPrompt).toBe(
+        strategyMultiInputPrompt,
+      );
       expect(strategyTestCase?.metadata?.inputMaterialization).toMatchObject({
         document: {
           injectedInstruction,

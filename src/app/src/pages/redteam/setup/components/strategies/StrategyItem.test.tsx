@@ -9,6 +9,12 @@ import { StrategyItem } from './StrategyItem';
 import type { StrategyCardData } from './types';
 
 // Mock dependencies
+vi.mock('@app/hooks/useApiHealth', () => ({
+  useApiHealth: () => ({ data: { status: 'connected' } }),
+}));
+vi.mock('../../hooks/useRedTeamTargetConfigValidation', () => ({
+  useRedTeamTargetConfigValidation: () => ({ targetConfigError: undefined }),
+}));
 vi.mock('../../hooks/useRedTeamConfig', () => ({
   useRedTeamConfig: vi.fn(() => ({
     config: {
@@ -82,6 +88,31 @@ describe('StrategyItem', () => {
   });
 
   describe('Basic rendering', () => {
+    it('enables text previews when connectivity and target configuration are valid', () => {
+      renderStrategyItem({
+        isDisabled: false,
+        isRemoteGenerationDisabled: false,
+        strategy: baseStrategy,
+        isSelected: false,
+        onToggle: mockOnToggle,
+        onConfigClick: mockOnConfigClick,
+      });
+      expect(screen.getByRole('button', { name: /test case/i })).not.toBeDisabled();
+    });
+
+    it('allows PDF selection but disables the text-only example preview', () => {
+      renderStrategyItem({
+        isDisabled: false,
+        isRemoteGenerationDisabled: false,
+        strategy: { ...baseStrategy, id: 'pdf', name: 'PDF' },
+        isSelected: false,
+        onToggle: mockOnToggle,
+        onConfigClick: mockOnConfigClick,
+      });
+      expect(screen.getByRole('button', { name: /test case/i })).toBeDisabled();
+      expect(screen.getByRole('button', { name: 'PDF' })).not.toBeDisabled();
+    });
+
     it('renders strategy name and description', () => {
       renderStrategyItem({
         isDisabled: false,

@@ -14,6 +14,17 @@ export interface Strategy {
 
 export const strategies: Strategy[] = [
   {
+    category: 'Static (Single-Turn)',
+    strategy: 'pdf',
+    displayName: 'PDF Attachments',
+    description: 'Instructions embedded in uploaded documents',
+    longDescription:
+      'Appends attacks to reusable PDF templates and produces text or scanned attachments for document-reading applications.',
+    cost: 'Variable',
+    asrIncrease: 'Not measured',
+    link: '/docs/red-team/strategies/pdf/',
+  },
+  {
     category: 'Custom',
     strategy: 'custom',
     displayName: 'Custom Strategies',
