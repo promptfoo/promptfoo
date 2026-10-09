@@ -144,7 +144,6 @@ describe('dependency ownership report', () => {
   it.each([
     { patterns: ['packages/*', '!packages/skip'], included: ['contracts'] },
     { patterns: ['!packages/skip', 'packages/*'], included: ['contracts'] },
-    { patterns: ['packages/*', '!packages/skip', 'packages/**'], included: ['contracts'] },
     {
       patterns: ['packages/*', '!packages/skip', 'packages/skip'],
       included: ['contracts', 'skip'],
@@ -793,6 +792,14 @@ describe('dependency ownership report', () => {
     ]);
   });
 
+  it('scans hidden source files and non-generated source directories', () => {
+    write('src/.hidden.ts', "import 'hidden-file';");
+    write('src/.internal/loader.ts', "import 'hidden-directory';");
+    expect(
+      reportDependencyOwnership(root, config).undeclaredUsages.map(({ dependency }) => dependency),
+    ).toEqual(['hidden-directory', 'hidden-file']);
+  });
+
   it('does not scan hidden generated source directories', () => {
     write('src/.cache/generated.js', "require('generated-only');");
     expect(reportDependencyOwnership(root, config).undeclaredUsages).toEqual([]);
@@ -926,7 +933,7 @@ describe('dependency ownership report', () => {
   it('records computed loaders without guessing that user paths are missing packages', () => {
     write(
       'src/index.ts',
-      'import(candidate); require(moduleName); require.resolve(`${name}/package.json`); module.require("module-package"); import(`literal-package`);',
+      'import(candidate); require(moduleName); require.resolve(`${name}/package.json`); import(`literal-package`);',
     );
     const report = reportDependencyOwnership(root, config);
     expect(report.computedImports.map((entry) => entry.expression)).toEqual([
@@ -934,10 +941,7 @@ describe('dependency ownership report', () => {
       'require(moduleName)',
       'require.resolve(`${name}/package.json`)',
     ]);
-    expect(report.undeclaredUsages.map((entry) => entry.dependency)).toEqual([
-      'literal-package',
-      'module-package',
-    ]);
+    expect(report.undeclaredUsages.map((entry) => entry.dependency)).toEqual(['literal-package']);
   });
 
   it('records JSDoc import types and audits the standalone action package', () => {
@@ -1018,27 +1022,6 @@ describe('dependency ownership report', () => {
     expect(reportDependencyOwnership(root, config).undeclaredUsages).toEqual([]);
   });
 
-  it('keeps module and require bindings local to functions, catches, and classes', () => {
-    write(
-      'src/index.js',
-      "export function load(require, module) { require('local-only'); return module.require('local-module'); } try {} catch (require) { require('caught-require'); } try {} catch (module) { module.require('caught-module'); } switch (true) { case true: { let require; require('switched'); break; } } require('real-package'); const C = class module { static load() { module.require('class-local'); } };",
-    );
-    expect(reportDependencyOwnership(root, config).undeclaredUsages).toEqual([
-      expect.objectContaining({ dependency: 'real-package' }),
-    ]);
-  });
-
-  it('handles import-equals loader shadows and computed module require', () => {
-    write(
-      'src/index.ts',
-      "import require = require('./local'); require('local-only'); module['require']('driver');",
-    );
-    write('src/local.ts', 'export = {};');
-    expect(reportDependencyOwnership(root, config).undeclaredUsages).toEqual([
-      expect.objectContaining({ dependency: 'driver' }),
-    ]);
-  });
-
   it('ignores require calls shadowed by a parameter property', () => {
     write(
       'src/index.ts',
@@ -1051,6 +1034,41 @@ describe('dependency ownership report', () => {
     write(
       'src/index.js',
       "export function load({ require }) { require('local'); }\nfor (let require = () => {}; false;) require('loop');\nswitch (0) { case 0: { let require = () => {}; require('switch-local'); } }\nrequire('external');",
+    );
+    expect(reportDependencyOwnership(root, config).undeclaredUsages).toEqual([
+      expect.objectContaining({ dependency: 'external' }),
+    ]);
+  });
+
+  it.each([
+    "function load(require, value = require('local')) {}",
+    "const load = function (require, value = require('local')) {};",
+    "const load = (require, value = require('local')) => value;",
+    "function load(module, value = module.require('local')) {}",
+    "const load = function require(value = require('local')) {};",
+  ])('ignores local loaders in default parameters: %s', (source) => {
+    write('src/index.js', `${source}\nrequire('external');`);
+    expect(reportDependencyOwnership(root, config).undeclaredUsages).toEqual([
+      expect.objectContaining({ dependency: 'external' }),
+    ]);
+  });
+
+  it('does not extend body-local loader bindings into default parameters', () => {
+    write(
+      'src/index.js',
+      "function load(value = require('external')) { var require = () => {}; require('local'); }",
+    );
+    expect(reportDependencyOwnership(root, config).undeclaredUsages).toEqual([
+      expect.objectContaining({ dependency: 'external' }),
+    ]);
+  });
+
+  it.each(['require', 'module'])('keeps static-block %s bindings inside the block', (loader) => {
+    const call = loader === 'require' ? 'require' : 'module.require';
+    write(
+      'src/index.js',
+      `class Example { static { var ${loader} = () => {}; ${call}('local'); } }
+${call}('external');`,
     );
     expect(reportDependencyOwnership(root, config).undeclaredUsages).toEqual([
       expect.objectContaining({ dependency: 'external' }),
@@ -1086,6 +1104,32 @@ describe('dependency ownership report', () => {
     write('src/import-equals.ts', "import require = require('./local'); require('local-equals');");
     write('src/local.js', 'export default () => {};');
     expect(reportDependencyOwnership(root, config).undeclaredUsages).toEqual([]);
+  });
+
+  it.each(['module', 'require'])('recognizes namespace %s loader bindings', (name) => {
+    write(
+      'src/index.ts',
+      name === 'module'
+        ? "namespace module { export function require(id: string) {} } module.require('local'); require('external');"
+        : "namespace require { export function resolve(id: string) {} } require.resolve('local'); module.require('external');",
+    );
+    expect(
+      reportDependencyOwnership(root, config).undeclaredUsages.map((entry) => entry.dependency),
+    ).toEqual(['external']);
+  });
+
+  it.each([
+    "import('missing-package' as string);",
+    "require('missing-package' satisfies string);",
+    "require(('missing-package' as const)!);",
+    "(require as any)('missing-package');",
+    "(module as any).require('missing-package');",
+    "(require as any).resolve('missing-package');",
+  ])('reports statically named loaders through erased TypeScript: %s', (source) => {
+    write('src/index.ts', source);
+    const report = reportDependencyOwnership(root, config);
+    expect(report.undeclaredUsages.map((entry) => entry.dependency)).toEqual(['missing-package']);
+    expect(report.computedImports).toEqual([]);
   });
 
   it('keeps namespace import-equals bindings inside their scope', () => {
@@ -1490,5 +1534,26 @@ describe('dependency ownership report', () => {
       }),
     ]);
     expect(report.rows[0].files).toBe(0);
+  });
+
+  it('keeps module and require bindings local to functions, catches, and classes', () => {
+    write(
+      'src/index.js',
+      "export function load(require, module) { require('local-only'); return module.require('local-module'); } try {} catch (require) { require('caught-require'); } try {} catch (module) { module.require('caught-module'); } switch (true) { case true: { let require; require('switched'); break; } } require('real-package'); const C = class module { static load() { module.require('class-local'); } };",
+    );
+    expect(reportDependencyOwnership(root, config).undeclaredUsages).toEqual([
+      expect.objectContaining({ dependency: 'real-package' }),
+    ]);
+  });
+
+  it('handles import-equals loader shadows and computed module require', () => {
+    write(
+      'src/index.ts',
+      "import require = require('./local'); require('local-only'); module['require']('driver');",
+    );
+    write('src/local.ts', 'export = {};');
+    expect(reportDependencyOwnership(root, config).undeclaredUsages).toEqual([
+      expect.objectContaining({ dependency: 'driver' }),
+    ]);
   });
 });

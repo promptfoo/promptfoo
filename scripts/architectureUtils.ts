@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import { isBuiltin } from 'node:module';
 import path from 'node:path';
 
-import { globSync } from 'glob';
+import { escape as escapeGlob, globSync } from 'glob';
 import { type Node, parseSync, Visitor } from 'oxc-parser';
 
 export interface LayerDefinition {
@@ -50,9 +50,10 @@ export interface LayerConfig {
 const DEFAULT_SOURCE_ROOTS = ['src', 'packages'];
 
 const TYPESCRIPT_EXTENSIONS = ['.ts', '.tsx', '.mts', '.cts'];
-const SOURCE_EXTENSIONS = [...TYPESCRIPT_EXTENSIONS, '.js', '.jsx', '.mjs', '.cjs'];
+const JAVASCRIPT_EXTENSIONS = ['.js', '.jsx', '.mjs', '.cjs'];
+const SOURCE_EXTENSIONS = [...TYPESCRIPT_EXTENSIONS, ...JAVASCRIPT_EXTENSIONS];
 const DECLARATION_EXTENSIONS = ['.d.ts', '.d.mts', '.d.cts'];
-const DIRECTORY_INDEXES = SOURCE_EXTENSIONS.map((extension) => `index${extension}`);
+
 const SOURCE_EXTENSIONS_BY_RUNTIME_EXTENSION: Record<string, string[]> = {
   '.js': ['.ts', '.tsx', '.d.ts'],
   '.jsx': ['.tsx', '.ts', '.d.ts'],
@@ -62,6 +63,19 @@ const SOURCE_EXTENSIONS_BY_RUNTIME_EXTENSION: Record<string, string[]> = {
 
 export function normalizePath(filePath: string): string {
   return filePath.split(path.sep).join('/');
+}
+
+function normalizeSourceRoot(repoRoot: string, root: unknown): string {
+  if (typeof root !== 'string' || !root.trim() || path.isAbsolute(root)) {
+    throw new Error(
+      `Architecture root "${String(root)}" must be a nonempty repository-relative path.`,
+    );
+  }
+  const relative = normalizePath(path.relative(repoRoot, path.resolve(repoRoot, root)));
+  if (!relative || relative === '..' || relative.startsWith('../')) {
+    throw new Error(`Architecture root "${root}" must be inside the repository.`);
+  }
+  return relative;
 }
 
 function validateLayerDefinition(
@@ -102,6 +116,7 @@ function validateLayerDefinition(
     );
   }
 
+  layer.roots = layer.roots.map((root) => normalizeSourceRoot(repoRoot, root));
   return layer.roots.map((root) => {
     if (typeof root !== 'string' || !fs.existsSync(path.join(repoRoot, root))) {
       throw new Error(`Architecture layer "${layer.name}" root "${String(root)}" does not exist.`);
@@ -211,11 +226,14 @@ export function readLayerConfig(repoRoot: string): LayerConfig {
   if (!config || typeof config !== 'object' || !Array.isArray(config.layers)) {
     throw new Error(`${configPath} must define a layers array.`);
   }
+  const publicFacadePath =
+    typeof config.publicFacade === 'string' ? path.join(repoRoot, config.publicFacade) : '';
   if (
-    typeof config.publicFacade !== 'string' ||
-    !fs.existsSync(path.join(repoRoot, config.publicFacade))
+    !publicFacadePath ||
+    !fs.existsSync(publicFacadePath) ||
+    !fs.statSync(publicFacadePath).isFile()
   ) {
-    throw new Error(`${configPath} must define an existing publicFacade path.`);
+    throw new Error(`${configPath} must define an existing publicFacade file path.`);
   }
 
   const layerNames = new Set<string>();
@@ -227,6 +245,23 @@ export function readLayerConfig(repoRoot: string): LayerConfig {
     }
     layerNames.add(layer.name);
     configuredRoots.push(...validateLayerDefinition(repoRoot, configPath, layer));
+  }
+
+  if (config.leafLayers !== undefined) {
+    if (!Array.isArray(config.leafLayers)) {
+      throw new Error(`${configPath} leafLayers must be an array of unique layer names.`);
+    }
+    const leafLayers = new Set<string>();
+    for (const layerName of config.leafLayers) {
+      if (
+        typeof layerName !== 'string' ||
+        leafLayers.has(layerName) ||
+        !layerNames.has(layerName)
+      ) {
+        throw new Error(`${configPath} leafLayers must be unique, known layer names.`);
+      }
+      leafLayers.add(layerName);
+    }
   }
 
   validateDependencies(config, layerNames);
@@ -243,19 +278,35 @@ export function getSourceFiles(
   ignoredRoots: string[] = [],
   additionalRoots: string[] = [],
 ): string[] {
-  const roots = [...new Set([...DEFAULT_SOURCE_ROOTS, ...additionalRoots].map(normalizePath))];
-  return globSync(
-    roots.map((root) =>
-      TYPESCRIPT_EXTENSIONS.includes(path.extname(root)) ? root : `${root}/**/*.{ts,tsx,mts,cts}`,
+  const roots = [
+    ...new Set(
+      [...DEFAULT_SOURCE_ROOTS, ...additionalRoots].map((root) =>
+        normalizeSourceRoot(repoRoot, root),
+      ),
     ),
+  ];
+  return globSync(
+    roots.flatMap((root) => {
+      const literalRoot = escapeGlob(root);
+      return fs.statSync(path.join(repoRoot, root), { throwIfNoEntry: false })?.isFile()
+        ? TYPESCRIPT_EXTENSIONS.includes(path.extname(root))
+          ? [literalRoot]
+          : []
+        : TYPESCRIPT_EXTENSIONS.map((extension) => `${literalRoot}/**/*${extension}`);
+    }),
     {
       cwd: repoRoot,
+      nobrace: true,
+      dot: true,
       ignore: [
-        '**/*.d.{ts,mts,cts}',
+        ...['ts', 'mts', 'cts'].map((extension) => `**/*.d.${extension}`),
         '**/node_modules/**',
         'packages/**/dist/**',
         ...(includeApp ? [] : ['src/app/**']),
-        ...ignoredRoots.flatMap((root) => [normalizePath(root), `${normalizePath(root)}/**`]),
+        ...ignoredRoots.flatMap((root) => {
+          const literalRoot = escapeGlob(normalizeSourceRoot(repoRoot, root));
+          return [literalRoot, `${literalRoot}/**`];
+        }),
       ],
       nodir: true,
     },
@@ -299,62 +350,126 @@ function getStaticModuleSpecifier(node: Node): string | undefined {
   return undefined;
 }
 
-export function extractModuleSpecifiers(sourceText: string, filePath: string): string[] {
+export type ModuleReferenceKind = 'type' | 'value' | 'deferred' | 'resolution';
+
+export interface ModuleReference {
+  /** Undefined for computed loaders whose target cannot be determined statically. */
+  specifier?: string;
+  kind: ModuleReferenceKind;
+  syntax:
+    | 'import'
+    | 'export'
+    | 'dynamic-import'
+    | 'import-equals'
+    | 'import-type'
+    | 'require'
+    | 'require-resolve';
+  /** One-based source line for diagnostics. */
+  line: number;
+}
+
+/** Classifies syntax, not emitted JavaScript: ordinary imports may still be erased by tsc. */
+export function extractModuleReferences(sourceText: string, filePath: string): ModuleReference[] {
   const result = parseSync(filePath, sourceText);
   if (result.errors.length > 0) {
     throw new Error(`Could not parse ${filePath}: ${result.errors[0].message}`);
   }
-
-  const specifiers: string[] = [];
-
+  // Oxc's JavaScript AST offsets use UTF-16 code units, like string/RegExp indices.
+  const lineStarts = [0];
+  for (const match of sourceText.matchAll(/\r\n|[\n\r\u2028\u2029]/gu)) {
+    lineStarts.push(match.index + match[0].length);
+  }
+  const lineAtOffset = (offset: number): number => {
+    let low = 0;
+    let high = lineStarts.length;
+    while (low < high) {
+      const middle = Math.floor((low + high) / 2);
+      if (lineStarts[middle] <= offset) {
+        low = middle + 1;
+      } else {
+        high = middle;
+      }
+    }
+    return low;
+  };
+  const references: ModuleReference[] = [];
+  const add = (
+    node: Node,
+    specifier: string | undefined,
+    kind: ModuleReferenceKind,
+    syntax: ModuleReference['syntax'],
+  ) => {
+    references.push({
+      specifier,
+      kind,
+      syntax,
+      line: lineAtOffset(node.start),
+    });
+  };
   new Visitor({
     ImportDeclaration(node) {
-      specifiers.push(node.source.value);
+      const typeOnly =
+        node.importKind === 'type' ||
+        (node.specifiers.length > 0 &&
+          node.specifiers.every(
+            (specifier) => specifier.type === 'ImportSpecifier' && specifier.importKind === 'type',
+          ));
+      add(node, node.source.value, typeOnly ? 'type' : 'value', 'import');
     },
     ExportAllDeclaration(node) {
-      specifiers.push(node.source.value);
+      add(node, node.source.value, node.exportKind === 'type' ? 'type' : 'value', 'export');
     },
     ExportNamedDeclaration(node) {
       if (node.source) {
-        specifiers.push(node.source.value);
+        const typeOnly =
+          node.exportKind === 'type' ||
+          (node.specifiers.length > 0 &&
+            node.specifiers.every((specifier) => specifier.exportKind === 'type'));
+        add(node, node.source.value, typeOnly ? 'type' : 'value', 'export');
       }
     },
     ImportExpression(node) {
-      const specifier = getStaticModuleSpecifier(node.source);
-      if (specifier !== undefined) {
-        specifiers.push(specifier);
-      }
+      add(node, getStaticModuleSpecifier(node.source), 'deferred', 'dynamic-import');
     },
     TSImportEqualsDeclaration(node) {
       if (node.moduleReference.type === 'TSExternalModuleReference') {
-        specifiers.push(node.moduleReference.expression.value);
+        add(
+          node,
+          node.moduleReference.expression.value,
+          node.importKind === 'type' ? 'type' : 'value',
+          'import-equals',
+        );
       }
     },
     TSImportType(node) {
-      specifiers.push(node.source.value);
+      add(node, node.source.value, 'type', 'import-type');
     },
     CallExpression(node) {
       if (node.arguments.length !== 1) {
         return;
       }
-
-      const specifier = getStaticModuleSpecifier(node.arguments[0]);
-      if (
-        specifier !== undefined &&
-        ((node.callee.type === 'Identifier' && node.callee.name === 'require') ||
-          (node.callee.type === 'MemberExpression' &&
-            !node.callee.computed &&
-            node.callee.object.type === 'Identifier' &&
-            node.callee.object.name === 'require' &&
-            node.callee.property.type === 'Identifier' &&
-            node.callee.property.name === 'resolve'))
+      if (node.callee.type === 'Identifier' && node.callee.name === 'require') {
+        add(node, getStaticModuleSpecifier(node.arguments[0]), 'value', 'require');
+      } else if (
+        node.callee.type === 'MemberExpression' &&
+        !node.callee.computed &&
+        node.callee.object.type === 'Identifier' &&
+        node.callee.object.name === 'require' &&
+        node.callee.property.type === 'Identifier' &&
+        node.callee.property.name === 'resolve'
       ) {
-        specifiers.push(specifier);
+        add(node, getStaticModuleSpecifier(node.arguments[0]), 'resolution', 'require-resolve');
       }
     },
   }).visit(result.program);
+  return references;
+}
 
-  return specifiers;
+/** Compatibility view used by the conservative ratchet and dependency ownership report. */
+export function extractModuleSpecifiers(sourceText: string, filePath: string): string[] {
+  return extractModuleReferences(sourceText, filePath).flatMap((reference) =>
+    reference.specifier === undefined ? [] : [reference.specifier],
+  );
 }
 
 export function resolveInternalModule(
@@ -391,10 +506,12 @@ export function resolveInternalModule(
   const candidates = [
     ...runtimeSourceCandidates,
     unresolvedPath,
-    ...SOURCE_EXTENSIONS.map((extension) => `${unresolvedPath}${extension}`),
+    ...TYPESCRIPT_EXTENSIONS.map((extension) => `${unresolvedPath}${extension}`),
     ...DECLARATION_EXTENSIONS.map((extension) => `${unresolvedPath}${extension}`),
-    ...DIRECTORY_INDEXES.map((indexFile) => path.join(unresolvedPath, indexFile)),
-    ...DECLARATION_EXTENSIONS.map((extension) => path.join(unresolvedPath, `index${extension}`)),
+    ...JAVASCRIPT_EXTENSIONS.map((extension) => `${unresolvedPath}${extension}`),
+    ...[...TYPESCRIPT_EXTENSIONS, ...DECLARATION_EXTENSIONS, ...JAVASCRIPT_EXTENSIONS].map(
+      (extension) => path.join(unresolvedPath, `index${extension}`),
+    ),
   ];
 
   for (const candidate of candidates) {
@@ -452,7 +569,7 @@ export interface BoundaryViolation {
   importedLayer: string;
 }
 
-export interface ArchitectureModuleReference {
+export interface ArchitectureModuleReference extends ModuleReference {
   importer: string;
   importerLayer: string;
   specifier: string;
@@ -462,7 +579,9 @@ export interface ArchitectureModuleReference {
 
 export interface ArchitectureSourceScan {
   sourceFiles: string[];
+  includesFacade: boolean;
   references: ArchitectureModuleReference[];
+  computedReferences: Array<ModuleReference & { importer: string; importerLayer: string }>;
 }
 
 /**
@@ -472,20 +591,27 @@ export interface ArchitectureSourceScan {
 export function scanArchitectureSources(
   repoRoot: string,
   config: LayerConfig,
+  options: { includeFacade?: boolean } = {},
 ): ArchitectureSourceScan {
   const publicFacade = normalizePath(config.publicFacade);
   const sourceRoots = getArchitectureRoots(config);
   const sourceFiles = getSourceFiles(repoRoot, true, config.ignoredRoots, sourceRoots);
   const references: ArchitectureModuleReference[] = [];
+  const computedReferences: ArchitectureSourceScan['computedReferences'] = [];
 
   for (const importer of sourceFiles) {
-    if (normalizePath(importer) === publicFacade) {
+    if (!options.includeFacade && normalizePath(importer) === publicFacade) {
       continue;
     }
 
     const importerLayer = getLayerForFile(importer, config);
     const sourceText = fs.readFileSync(path.join(repoRoot, importer), 'utf8');
-    for (const specifier of extractModuleSpecifiers(sourceText, importer)) {
+    for (const reference of extractModuleReferences(sourceText, importer)) {
+      const { specifier } = reference;
+      if (specifier === undefined) {
+        computedReferences.push({ ...reference, importer, importerLayer });
+        continue;
+      }
       const resolvedImport = resolveInternalModule(
         repoRoot,
         importer,
@@ -494,6 +620,7 @@ export function scanArchitectureSources(
         sourceRoots,
       );
       references.push({
+        ...reference,
         importer,
         importerLayer,
         specifier,
@@ -504,7 +631,12 @@ export function scanArchitectureSources(
     }
   }
 
-  return { sourceFiles, references };
+  return {
+    sourceFiles,
+    references,
+    computedReferences,
+    includesFacade: options.includeFacade ?? false,
+  };
 }
 
 export function findUnclassifiedFiles(
@@ -529,6 +661,14 @@ export function findViolations(
   const publicFacade = normalizePath(config.publicFacade);
   const leafLayers = new Set(config.leafLayers ?? []);
   const layersByName = new Map(config.layers.map((layer) => [layer.name, layer]));
+  const allowedExternalByLayer = new Map(
+    config.layers
+      .filter((layer) => leafLayers.has(layer.name))
+      .map((layer) => [
+        layer.name,
+        new Set((layer.allowedExternal ?? []).map((entry) => entry.replace(/^node:/, ''))),
+      ]),
+  );
   const violations: BoundaryViolation[] = [];
 
   for (const {
@@ -543,21 +683,15 @@ export function findViolations(
     }
 
     const importerIsLeaf = leafLayers.has(importerLayer);
-    const allowedExternal = importerIsLeaf
-      ? new Set(
-          (layersByName.get(importerLayer)?.allowedExternal ?? []).map((entry) =>
-            entry.replace(/^node:/, ''),
-          ),
-        )
-      : null;
+    const allowedExternal = allowedExternalByLayer.get(importerLayer);
 
     if (!resolvedImport || !importedLayer) {
       // Not an internal module (internal relative / src-rooted / aliased imports resolve above).
       // A leaf layer may import only its allowlisted external packages and Node builtins; flag
       // any other bare specifier.
-      if (importerIsLeaf) {
+      if (allowedExternal) {
         const externalName = getExternalModuleName(specifier);
-        if (externalName && !allowedExternal!.has(externalName)) {
+        if (externalName && !allowedExternal.has(externalName)) {
           violations.push({
             kind: 'leaf-external',
             importer,
@@ -582,17 +716,15 @@ export function findViolations(
       });
     }
 
-    if (leafLayers.has(importerLayer)) {
-      if (importedLayer !== importerLayer) {
-        violations.push({
-          kind: 'leaf',
-          importer,
-          importerLayer,
-          specifier,
-          imported: resolvedImport,
-          importedLayer,
-        });
-      }
+    if (importerIsLeaf && importedLayer !== importerLayer) {
+      violations.push({
+        kind: 'leaf',
+        importer,
+        importerLayer,
+        specifier,
+        imported: resolvedImport,
+        importedLayer,
+      });
     }
 
     const importerConfig = layersByName.get(importerLayer);
@@ -603,7 +735,7 @@ export function findViolations(
     if (
       importedLayer !== importerLayer &&
       resolvedImport !== publicFacade &&
-      !leafLayers.has(importerLayer) &&
+      !importerIsLeaf &&
       importerConfig &&
       !allowedLayerDependency
     ) {
@@ -663,7 +795,12 @@ export function computeCrossLayerEdges(
   const tallies = new Map<string, { count: number; files: Set<string> }>();
 
   for (const { importer, importerLayer, resolvedImport, importedLayer } of sourceScan.references) {
-    if (!resolvedImport || !importedLayer || importedLayer === importerLayer) {
+    if (
+      normalizePath(importer) === normalizePath(config.publicFacade) ||
+      !resolvedImport ||
+      !importedLayer ||
+      importedLayer === importerLayer
+    ) {
       continue;
     }
 
@@ -692,7 +829,16 @@ export function computeStronglyConnectedComponents(
   config: LayerConfig,
   edges: CrossLayerEdge[],
 ): string[][] {
-  const nodes = config.layers.map((layer) => layer.name);
+  return stronglyConnectedComponents(
+    config.layers.map((layer) => layer.name),
+    edges,
+  );
+}
+
+function stronglyConnectedComponents(
+  nodes: string[],
+  edges: Array<{ from: string; to: string }>,
+): string[][] {
   const adjacency = new Map<string, string[]>(nodes.map((node) => [node, []]));
   for (const edge of edges) {
     if (adjacency.has(edge.from) && adjacency.has(edge.to)) {
@@ -741,14 +887,16 @@ export function computeStronglyConnectedComponents(
     }
   }
 
-  return components.sort((left, right) => right.length - left.length);
+  return components.sort(
+    (left, right) => right.length - left.length || left[0].localeCompare(right[0]),
+  );
 }
 
 /**
  * Given a target topological order (`tierOrder`, most-depended-upon first),
  * returns the cross-layer edges that violate it — a lower-tier layer importing
- * a higher-tier layer. These are the cycle-causing "back edges" to eliminate on
- * the way to a DAG. Edges touching a layer absent from `tierOrder` are ignored.
+ * a higher-tier layer. These are order violations, not a minimum cut or an estimate of the work
+ * required to reach a DAG. Edges touching a layer absent from `tierOrder` are ignored.
  */
 export function findBackEdges(edges: CrossLayerEdge[], tierOrder: string[]): CrossLayerEdge[] {
   const rank = new Map(tierOrder.map((layer, index) => [layer, index]));
@@ -914,4 +1062,142 @@ export function readEdgeBaseline(repoRoot: string, config: LayerConfig): EdgeBas
   }
 
   return baseline as EdgeBaseline;
+}
+
+/** Source graph diagnostics only; this does not model bundler substitutions or tree shaking. */
+export function buildArchitectureReport(
+  repoRoot: string,
+  config: LayerConfig,
+  sourceScan: ArchitectureSourceScan,
+  entrypoints: string[] = [config.publicFacade],
+) {
+  if (!sourceScan.includesFacade) {
+    throw new Error('Architecture reports require a scan with includeFacade: true.');
+  }
+  const normalizedEntrypoints = [
+    ...new Set(
+      entrypoints.map((entrypoint) =>
+        normalizePath(
+          path.relative(repoRoot, path.resolve(repoRoot, entrypoint.replace(/\\/g, '/'))),
+        ),
+      ),
+    ),
+  ];
+  const scannedFiles = new Set(sourceScan.sourceFiles);
+  const unscannedInternal = sourceScan.references.filter(
+    (reference) => reference.resolvedImport && !scannedFiles.has(reference.resolvedImport),
+  );
+  const views = Object.fromEntries(
+    (['combined', 'type', 'value', 'deferred', 'resolution'] as const).map((kind) => {
+      const references = sourceScan.references.filter(
+        (reference) => kind === 'combined' || reference.kind === kind,
+      );
+      const edges = computeCrossLayerEdges(repoRoot, config, { ...sourceScan, references });
+      const fileEdges = references.flatMap((reference) =>
+        reference.resolvedImport
+          ? [{ from: reference.importer, to: reference.resolvedImport }]
+          : [],
+      );
+      const selfImports = new Set(
+        fileEdges.filter((edge) => edge.from === edge.to).map((edge) => edge.from),
+      );
+      const fileCycles = stronglyConnectedComponents(sourceScan.sourceFiles, fileEdges).filter(
+        (component) => component.length > 1 || selfImports.has(component[0]),
+      );
+      return [
+        kind,
+        {
+          references: references.length,
+          crossLayerReferences: edges.reduce((sum, edge) => sum + edge.count, 0),
+          edges,
+          layerCycles: computeStronglyConnectedComponents(config, edges).filter(
+            (component) => component.length > 1,
+          ),
+          fileCycles,
+        },
+      ];
+    }),
+  );
+  const sourceRoots = ['src', 'packages', ...config.layers.flatMap((layer) => layer.roots)];
+  const unresolvedInternal = sourceScan.references.filter(
+    (reference) =>
+      !reference.resolvedImport &&
+      (reference.specifier.startsWith('.') ||
+        reference.specifier.startsWith('/') ||
+        reference.specifier.startsWith('#') ||
+        sourceRoots.some((root) => isWithinRoot(reference.specifier, root)) ||
+        Object.keys(config.aliases ?? {}).some(
+          (alias) => reference.specifier === alias || reference.specifier.startsWith(`${alias}/`),
+        )),
+  );
+  const unresolvedSet = new Set(unresolvedInternal);
+  const byImporter = new Map<string, ArchitectureModuleReference[]>();
+  for (const reference of sourceScan.references) {
+    const outgoing = byImporter.get(reference.importer) ?? [];
+    outgoing.push(reference);
+    byImporter.set(reference.importer, outgoing);
+  }
+  const reach = (entrypoint: string, mode: 'combined' | 'value' | 'value-and-deferred') => {
+    const files = new Set([entrypoint]);
+    const externalSpecifiers = new Set<string>();
+    const unresolvedReferences: ArchitectureModuleReference[] = [];
+    const includesKind = (reference: ModuleReference) =>
+      mode === 'combined' ||
+      reference.kind === 'value' ||
+      (mode === 'value-and-deferred' && reference.kind === 'deferred');
+    for (const file of files) {
+      for (const reference of byImporter.get(file) ?? []) {
+        if (!includesKind(reference)) {
+          continue;
+        }
+        if (reference.resolvedImport) {
+          files.add(reference.resolvedImport);
+        } else if (unresolvedSet.has(reference)) {
+          unresolvedReferences.push(reference);
+        } else {
+          externalSpecifiers.add(reference.specifier);
+        }
+      }
+    }
+    return {
+      files: [...files].sort(),
+      externalSpecifiers: [...externalSpecifiers].sort(),
+      unresolvedReferences,
+      unscannedInternal: unscannedInternal.filter(
+        (reference) => files.has(reference.importer) && includesKind(reference),
+      ),
+      computedReferences: sourceScan.computedReferences.filter(
+        (reference) => files.has(reference.importer) && includesKind(reference),
+      ),
+    };
+  };
+  for (const entrypoint of normalizedEntrypoints) {
+    if (!scannedFiles.has(entrypoint)) {
+      throw new Error(
+        `Architecture report entrypoint "${entrypoint}" is not in the checked source tree.`,
+      );
+    }
+  }
+  return {
+    schemaVersion: 1,
+    scope: {
+      sourceFiles: sourceScan.sourceFiles.length,
+      facadeIncluded: true,
+      ratchetExcludesFacade: true,
+    },
+    views,
+    unresolvedInternal,
+    unscannedInternal,
+    computedReferences: sourceScan.computedReferences,
+    entrypoints: Object.fromEntries(
+      normalizedEntrypoints.map((entrypoint) => [
+        entrypoint,
+        {
+          combined: reach(entrypoint, 'combined'),
+          value: reach(entrypoint, 'value'),
+          valueAndDeferred: reach(entrypoint, 'value-and-deferred'),
+        },
+      ]),
+    ),
+  };
 }

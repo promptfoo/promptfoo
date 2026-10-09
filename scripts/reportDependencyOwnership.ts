@@ -1,7 +1,6 @@
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 import { globSync } from 'glob';
 import { minimatch } from 'minimatch';
@@ -75,6 +74,7 @@ const ignored = [
   '**/dist/**',
   '**/build/**',
   '**/.docusaurus/**',
+  '**/.cache/**',
   '**/coverage/**',
   '**/__mocks__/**',
 ];
@@ -147,6 +147,10 @@ function getShadowRanges(
     BlockStatement(node) {
       lexicalScopes.push([node.start, node.end]);
     },
+    StaticBlock(node) {
+      lexicalScopes.push([node.start, node.end]);
+      functionScopes.push([node.start, node.end]);
+    },
     TSModuleBlock(node) {
       lexicalScopes.push([node.start, node.end]);
       functionScopes.push([node.start, node.end]);
@@ -207,9 +211,9 @@ function getShadowRanges(
     }
     return false;
   };
-  const addParams = (node: { body: { start: number; end: number } | null; params: unknown[] }) => {
-    if (node.body && node.params.some(bindsName)) {
-      ranges.push([node.body.start, node.body.end]);
+  const addParams = (node: { start: number; end: number; params: unknown[] }) => {
+    if (node.params.some(bindsName)) {
+      ranges.push([node.start, node.end]);
     }
   };
   new Visitor({
@@ -222,8 +226,8 @@ function getShadowRanges(
       }
     },
     FunctionExpression(node) {
-      if (node.id?.name === name && node.body) {
-        ranges.push([node.body.start, node.body.end]);
+      if (node.id?.name === name) {
+        ranges.push([node.start, node.end]);
       }
       addParams(node);
     },
@@ -242,6 +246,11 @@ function getShadowRanges(
     },
     TSImportEqualsDeclaration(node) {
       if (node.id.name === name) {
+        ranges.push(scopeFor(node.start, lexicalScopes));
+      }
+    },
+    TSModuleDeclaration(node) {
+      if (node.id.type === 'Identifier' && node.id.name === name) {
         ranges.push(scopeFor(node.start, lexicalScopes));
       }
     },
@@ -367,7 +376,23 @@ function scopeFor(file: string, manifest: string, configuredRoots: string[]): Sc
     : 'build';
 }
 
-function staticSpecifier(node: Node): string | undefined {
+/** TypeScript assertions do not change the expression evaluated by a module loader. */
+function unwrapTypeScriptExpression(node: Node): Node {
+  while (
+    node.type === 'TSAsExpression' ||
+    node.type === 'TSSatisfiesExpression' ||
+    node.type === 'TSTypeAssertion' ||
+    node.type === 'TSNonNullExpression' ||
+    node.type === 'TSInstantiationExpression' ||
+    node.type === 'ParenthesizedExpression'
+  ) {
+    node = node.expression;
+  }
+  return node;
+}
+
+function staticSpecifier(expression: Node): string | undefined {
+  const node = unwrapTypeScriptExpression(expression);
   if (node.type === 'Literal' && typeof node.value === 'string') {
     return node.value;
   }
@@ -403,7 +428,7 @@ function discoverFiles(
     ]) {
       for (const file of globSync(pattern, {
         cwd: repoRoot,
-        dot: pattern === `${root}*.${extensions}`,
+        dot: true,
         nodir: true,
         ignore: sourceIgnores(root),
       }).map(normalizePath)) {
@@ -412,6 +437,7 @@ function discoverFiles(
     }
     for (const file of globSync(`${root}dist/**/*.d.{ts,mts,cts}`, {
       cwd: repoRoot,
+      dot: true,
       nodir: true,
       ignore: ['**/node_modules/**', ...configuredIgnores],
     }).map(normalizePath)) {
@@ -426,6 +452,7 @@ function discoverFiles(
   for (const root of configuredRoots) {
     for (const file of globSync([root, `${root}/**/*.${extensions}`], {
       cwd: repoRoot,
+      dot: true,
       nodir: true,
       ignore: sourceIgnores(
         manifestFor(`${root}/`, manifests) === 'package.json'
@@ -824,37 +851,41 @@ export function reportDependencyOwnership(
         load(node, node.source, 'dynamic');
       },
       CallExpression(node) {
+        const callee = unwrapTypeScriptExpression(node.callee);
+        const object =
+          callee.type === 'MemberExpression'
+            ? unwrapTypeScriptExpression(callee.object)
+            : undefined;
         if (!node.arguments[0]) {
           return;
         }
         if (
           !isRequireShadowed(node.start) &&
-          node.callee.type === 'Identifier' &&
-          node.callee.name === 'require'
+          callee.type === 'Identifier' &&
+          callee.name === 'require'
         ) {
           load(node, node.arguments[0], 'value');
         } else if (
           !isModuleShadowed(node.start) &&
-          node.callee.type === 'MemberExpression' &&
-          node.callee.object.type === 'Identifier' &&
-          node.callee.object.name === 'module' &&
-          ((node.callee.computed && staticSpecifier(node.callee.property) === 'require') ||
-            (!node.callee.computed &&
-              node.callee.property.type === 'Identifier' &&
-              node.callee.property.name === 'require'))
+          callee.type === 'MemberExpression' &&
+          object?.type === 'Identifier' &&
+          object.name === 'module' &&
+          ((callee.computed && staticSpecifier(callee.property) === 'require') ||
+            (!callee.computed &&
+              callee.property.type === 'Identifier' &&
+              callee.property.name === 'require'))
         ) {
           load(node, node.arguments[0], 'value');
         } else if (
-          node.callee.type === 'MemberExpression' &&
-          ((node.callee.computed && staticSpecifier(node.callee.property) === 'resolve') ||
-            (!node.callee.computed &&
-              node.callee.property.type === 'Identifier' &&
-              node.callee.property.name === 'resolve')) &&
+          callee.type === 'MemberExpression' &&
+          ((callee.computed && staticSpecifier(callee.property) === 'resolve') ||
+            (!callee.computed &&
+              callee.property.type === 'Identifier' &&
+              callee.property.name === 'resolve')) &&
           ((!isRequireShadowed(node.start) &&
-            node.callee.object.type === 'Identifier' &&
-            node.callee.object.name === 'require') ||
-            (node.callee.object.type === 'MetaProperty' &&
-              node.callee.object.meta.name === 'import'))
+            object?.type === 'Identifier' &&
+            object.name === 'require') ||
+            (object?.type === 'MetaProperty' && object.meta.name === 'import'))
         ) {
           load(node, node.arguments[0], 'resolve');
         }
@@ -1001,8 +1032,8 @@ export function reportDependencyOwnership(
   };
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+if (process.argv[1] && path.resolve(process.argv[1]) === import.meta.filename) {
+  const repoRoot = path.resolve(import.meta.dirname, '..');
   const report = reportDependencyOwnership(repoRoot);
   if (process.argv.includes('--json')) {
     console.log(JSON.stringify(report, null, 2));

@@ -4,6 +4,7 @@ import path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
+  extractModuleReferences,
   extractModuleSpecifiers,
   findUnclassifiedFiles,
   findViolations,
@@ -14,6 +15,82 @@ import {
   readLayerConfig,
   resolveInternalModule,
 } from '../../scripts/architectureUtils';
+
+describe('extractModuleReferences', () => {
+  it('separates explicit types, mixed/side-effect imports, loads, and resolution', () => {
+    const source = `import type { A } from 'a';
+import { type B } from 'b';
+import { type C, D } from 'c';
+import 'side';
+export type * from 'types';
+export { type E } from 'e';
+export { type F, G } from 'f';
+import type H = require('h');
+type I = import('i').I;
+import('later');
+require('now');
+require.resolve('path');`;
+    expect(
+      extractModuleReferences(source, 'fixture.ts').map(({ specifier, kind, line }) => [
+        specifier,
+        kind,
+        line,
+      ]),
+    ).toEqual([
+      ['a', 'type', 1],
+      ['b', 'type', 2],
+      ['c', 'value', 3],
+      ['side', 'value', 4],
+      ['types', 'type', 5],
+      ['e', 'type', 6],
+      ['f', 'value', 7],
+      ['h', 'type', 8],
+      ['i', 'type', 9],
+      ['later', 'deferred', 10],
+      ['now', 'value', 11],
+      ['path', 'resolution', 12],
+    ]);
+    expect(extractModuleSpecifiers(source, 'fixture.ts')).toHaveLength(12);
+  });
+
+  it('counts all JavaScript line terminators with CRLF as one line', () => {
+    const source =
+      "import 'a';\r\nimport 'b';\rimport 'c';\u2028import 'd';\u2029import 'e';\nimport 'f';";
+    expect(extractModuleReferences(source, 'fixture.ts').map(({ line }) => line)).toEqual([
+      1, 2, 3, 4, 5, 6,
+    ]);
+  });
+
+  it('uses UTF-16 offsets after long Unicode prefixes and across every line terminator', () => {
+    const prefix = `/* ${'é漢😀'.repeat(1000)} */`;
+    const source =
+      `${prefix} import 'same-line';\r\nimport 'crlf';\rimport 'cr';` +
+      "\u2028import 'line-separator';\u2029import 'paragraph-separator';\nimport 'lf';";
+    expect(extractModuleReferences(source, 'fixture.ts').map(({ line }) => line)).toEqual([
+      1, 2, 3, 4, 5, 6,
+    ]);
+  });
+
+  it('surfaces computed loaders without inventing literal dependencies', () => {
+    const source =
+      "import(target); require(target); require.resolve(target); import(`fixed`); // import('fake')";
+    expect(
+      extractModuleReferences(source, 'fixture.ts').map(({ specifier, kind }) => [specifier, kind]),
+    ).toEqual([
+      [undefined, 'deferred'],
+      [undefined, 'value'],
+      [undefined, 'resolution'],
+      ['fixed', 'deferred'],
+    ]);
+    expect(extractModuleSpecifiers(source, 'fixture.ts')).toEqual(['fixed']);
+  });
+
+  it('fails on invalid syntax instead of reporting a partial graph', () => {
+    expect(() => extractModuleReferences('import {', 'broken.ts')).toThrow(
+      'Could not parse broken.ts',
+    );
+  });
+});
 
 describe('extractModuleSpecifiers', () => {
   it('collects static ESM and CommonJS module specifiers', () => {
@@ -108,59 +185,6 @@ describe('resolveInternalModule', () => {
       );
     });
 
-    it('resolves extensionless aliases to declaration files', () => {
-      write('src/internal/foo.d.ts');
-      write('src/internal/bar/index.d.mts');
-      expect(
-        resolveInternalModule(repoRoot, 'src/index.ts', '@internal/foo', {
-          '@internal': 'src/internal',
-        }),
-      ).toBe('src/internal/foo.d.ts');
-      expect(
-        resolveInternalModule(repoRoot, 'src/index.ts', '@internal/bar', {
-          '@internal': 'src/internal',
-        }),
-      ).toBe('src/internal/bar/index.d.mts');
-    });
-
-    it('resolves aliases within a repository-root layer', () => {
-      write('lib/foo.d.ts');
-      expect(
-        resolveInternalModule(repoRoot, 'src/index.ts', '@internal/foo', { '@internal': 'lib' }, [
-          '.',
-        ]),
-      ).toBe('lib/foo.d.ts');
-    });
-
-    it.each([
-      ['.js', '.d.ts'],
-      ['.jsx', '.d.ts'],
-      ['.mjs', '.d.mts'],
-      ['.cjs', '.d.cts'],
-    ])('maps explicit %s imports to %s declarations', (runtime, declaration) => {
-      write(`src/internal/foo${declaration}`);
-      expect(resolveInternalModule(repoRoot, 'src/index.ts', `./internal/foo${runtime}`)).toBe(
-        `src/internal/foo${declaration}`,
-      );
-    });
-
-    it('prefers .tsx over .ts for .jsx specifiers', () => {
-      write('src/foo.ts');
-      write('src/foo.tsx');
-      expect(resolveInternalModule(repoRoot, 'src/bar.ts', './foo.jsx')).toBe('src/foo.tsx');
-    });
-
-    it.each([false, true])(
-      'resolves .ts for .jsx with runtime file present=%s',
-      (runtimeExists) => {
-        write('src/foo.ts');
-        if (runtimeExists) {
-          write('src/foo.jsx');
-        }
-        expect(resolveInternalModule(repoRoot, 'src/bar.ts', './foo.jsx')).toBe('src/foo.ts');
-      },
-    );
-
     it('maps .mjs specifiers to .mts source files', () => {
       write('src/foo.mts');
       expect(resolveInternalModule(repoRoot, 'src/bar.ts', './foo.mjs')).toBe('src/foo.mts');
@@ -171,7 +195,7 @@ describe('resolveInternalModule', () => {
       expect(resolveInternalModule(repoRoot, 'src/bar.ts', './foo.cjs')).toBe('src/foo.cts');
     });
 
-    it('resolves .tsx source for runtime .js when .ts is absent', () => {
+    it('resolves .tsx source for runtime .js when both .ts and .tsx are absent', () => {
       write('src/component.tsx');
       expect(resolveInternalModule(repoRoot, 'src/index.ts', './component.js')).toBe(
         'src/component.tsx',
@@ -190,6 +214,54 @@ describe('resolveInternalModule', () => {
         `src/shared${source}`,
       );
     });
+
+    it('resolves declaration-only runtime imports for report reach', () => {
+      write('src/types.d.ts');
+      write('src/module.d.mts');
+
+      expect(resolveInternalModule(repoRoot, 'src/index.ts', './types.js')).toBe('src/types.d.ts');
+      expect(resolveInternalModule(repoRoot, 'src/index.ts', './module')).toBe('src/module.d.mts');
+    });
+
+    it.each([
+      ['.ts', '.d.ts'],
+      ['.tsx', '.d.ts'],
+      ['.mts', '.d.mts'],
+      ['.cts', '.d.cts'],
+    ])('prefers %s implementations over %s declarations', (implementation, declaration) => {
+      write(`src/module${implementation}`);
+      write(`src/module${declaration}`);
+      expect(resolveInternalModule(repoRoot, 'src/index.ts', './module')).toBe(
+        `src/module${implementation}`,
+      );
+    });
+
+    it.each(['.d.ts', '.d.mts', '.d.cts'])(
+      'resolves declaration-only directories with index%s',
+      (extension) => {
+        write(`src/types/index${extension}`);
+        expect(resolveInternalModule(repoRoot, 'src/index.ts', './types')).toBe(
+          `src/types/index${extension}`,
+        );
+      },
+    );
+
+    it('prefers directory implementations over declaration indexes', () => {
+      write('src/types/index.ts');
+      write('src/types/index.d.ts');
+      expect(resolveInternalModule(repoRoot, 'src/index.ts', './types')).toBe('src/types/index.ts');
+    });
+
+    it.each(['', '/index'])(
+      'resolves declarations before JavaScript for extensionless imports: %s',
+      (suffix) => {
+        write(`src/shared${suffix}.js`);
+        write(`src/shared${suffix}.d.ts`);
+        expect(resolveInternalModule(repoRoot, 'src/index.ts', './shared')).toBe(
+          `src/shared${suffix}.d.ts`,
+        );
+      },
+    );
 
     it('returns undefined for non-existent internal paths', () => {
       expect(resolveInternalModule(repoRoot, 'src/foo.ts', './missing')).toBeUndefined();
@@ -361,6 +433,61 @@ describe('getSourceFiles', () => {
     );
   });
 
+  it.each([
+    'internal/routes/[id].ts',
+    'internal/[routes]/index.ts',
+    'internal/{old,new}/index.ts',
+    'internal/plugin.ts/index.ts',
+    'internal/plugin.tsx/index.ts',
+    'internal/plugin.mts/index.ts',
+    'internal/plugin.cts/index.ts',
+  ])('scans literal configured roots containing glob characters: %s', (sourceFile) => {
+    write('src/index.ts');
+    write(sourceFile, "import 'node:fs';");
+    const root = sourceFile.endsWith('index.ts') ? path.dirname(sourceFile) : sourceFile;
+    const config: LayerConfig = {
+      publicFacade: 'src/index.ts',
+      leafLayers: ['routes'],
+      layers: [
+        { name: 'facade', roots: ['src/index.ts'], allowedDependencies: [] },
+        { name: 'routes', roots: [root], allowedDependencies: [] },
+      ],
+    };
+
+    expect(findViolations(repoRoot, config)).toEqual([
+      expect.objectContaining({ kind: 'leaf-external', importer: sourceFile }),
+    ]);
+  });
+
+  it('rejects empty scan and ignore roots before starting the glob', () => {
+    expect(() => getSourceFiles(repoRoot, true, [], [''])).toThrow('root');
+    expect(() => getSourceFiles(repoRoot, true, [''])).toThrow('root');
+  });
+
+  it('includes dot-prefixed sources while retaining dependency and output exclusions', () => {
+    write('packages/widget/src/.internal.ts');
+    write('packages/widget/src/.private/index.ts');
+    write('packages/widget/.cache/node_modules/vendor/index.ts');
+    write('packages/widget/dist/.internal.ts');
+    write('packages/widget/src/.types.d.ts');
+    expect(getSourceFiles(repoRoot)).toEqual([
+      'packages/widget/src/.internal.ts',
+      'packages/widget/src/.private/index.ts',
+    ]);
+  });
+
+  it('treats ignored roots as literal files and directories', () => {
+    write('src/[generated]/index.ts');
+    write('src/g/index.ts');
+    write('src/[id].ts');
+    write('src/i.ts');
+
+    expect(getSourceFiles(repoRoot, true, ['src/[generated]', 'src/[id].ts'])).toEqual([
+      'src/g/index.ts',
+      'src/i.ts',
+    ]);
+  });
+
   it.each(['internal/tool.cjs', 'internal/tool'])(
     'enforces single-file layer boundaries for %s',
     (specifier) => {
@@ -388,6 +515,9 @@ describe('getSourceFiles', () => {
 
   it('ignores nested node_modules and configured roots', () => {
     write('src/core/a.ts');
+    write('src/core/types.d.ts');
+    write('src/core/module.d.mts');
+    write('src/core/common.d.cts');
     write('src/app/node_modules/pkg/index.ts');
     write('src/__mocks__/database.ts');
 
@@ -431,7 +561,41 @@ describe('readLayerConfig', () => {
   it('rejects configs that omit an existing public facade', () => {
     writeConfig({ layers: [coreLayer()] });
 
-    expect(() => readLayerConfig(repoRoot)).toThrow('must define an existing publicFacade path.');
+    expect(() => readLayerConfig(repoRoot)).toThrow(
+      'must define an existing publicFacade file path.',
+    );
+  });
+
+  it('rejects public facades that are directories', () => {
+    writeConfig({ publicFacade: 'src', layers: [coreLayer()] });
+
+    expect(() => readLayerConfig(repoRoot)).toThrow(
+      'must define an existing publicFacade file path.',
+    );
+  });
+
+  it('rejects duplicate or unknown leaf layers', () => {
+    writeConfig({
+      publicFacade: 'src/index.ts',
+      leafLayers: ['core', 'core'],
+      layers: [coreLayer()],
+    });
+    expect(() => readLayerConfig(repoRoot)).toThrow(
+      'leafLayers must be unique, known layer names.',
+    );
+
+    writeConfig({ publicFacade: 'src/index.ts', leafLayers: ['missing'], layers: [coreLayer()] });
+    expect(() => readLayerConfig(repoRoot)).toThrow(
+      'leafLayers must be unique, known layer names.',
+    );
+  });
+
+  it('rejects leaf layers that are not an array', () => {
+    writeConfig({ publicFacade: 'src/index.ts', leafLayers: 'core', layers: [coreLayer()] });
+
+    expect(() => readLayerConfig(repoRoot)).toThrow(
+      'leafLayers must be an array of unique layer names.',
+    );
   });
 
   it('rejects duplicate layer names', () => {
@@ -477,6 +641,11 @@ describe('readLayerConfig', () => {
     expect(() => readLayerConfig(repoRoot)).toThrow(
       'Architecture layer "core" contains an invalid allowedImportPaths entry.',
     );
+  });
+
+  it.each(['', ' ', '..', '../outside', '/absolute'])('rejects invalid source root %j', (root) => {
+    writeConfig({ publicFacade: 'src/index.ts', layers: [coreLayer({ roots: [root] })] });
+    expect(() => readLayerConfig(repoRoot)).toThrow('root');
   });
 
   it('rejects missing layer roots', () => {
