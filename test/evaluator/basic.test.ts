@@ -11,16 +11,15 @@ import { processConfigFileReferences } from '../../src/util/fileReference';
 import { mockApiProvider, mockReasoningApiProvider, toPrompt } from './helpers';
 import { describeEvaluator } from './lifecycle';
 
+const createVariableTest = () => ({
+  vars: { var1: 'value1', var2: 'value2' },
+});
 describeEvaluator('evaluator basic flows', () => {
   it('evaluate with vars', async () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
       prompts: [toPrompt('Test prompt {{ var1 }} {{ var2 }}')],
-      tests: [
-        {
-          vars: { var1: 'value1', var2: 'value2' },
-        },
-      ],
+      tests: [createVariableTest()],
     };
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
     await evaluate(testSuite, evalRecord, {});
@@ -231,11 +230,7 @@ describeEvaluator('evaluator basic flows', () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
       prompts: [{ raw: 'Test prompt {{ var1 }} {{ var2 }}', label: 'test display name' }],
-      tests: [
-        {
-          vars: { var1: 'value1', var2: 'value2' },
-        },
-      ],
+      tests: [createVariableTest()],
     };
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
     await evaluate(testSuite, evalRecord, {});
@@ -331,11 +326,7 @@ describeEvaluator('evaluator basic flows', () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider, mockApiProvider],
       prompts: [toPrompt('Test prompt {{ var1 }} {{ var2 }}')],
-      tests: [
-        {
-          vars: { var1: 'value1', var2: 'value2' },
-        },
-      ],
+      tests: [createVariableTest()],
     };
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
     await evaluate(testSuite, evalRecord, {});

@@ -50,3 +50,46 @@ export const createLocalGenerationFactory = (): MockModuleFactory => async (impo
     getRemoteGenerationUrl: vi.fn().mockReturnValue('http://test-url'),
   };
 };
+
+export const createChildLoggerFactory = (): MockModuleFactory => () => ({
+  default: {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+    child: vi.fn().mockReturnValue({}),
+  },
+});
+
+export const createGeneratorFsPromisesFactory =
+  (fsMocks: { readFileSync: Mock; writeFileSync: Mock }): MockModuleFactory =>
+  () => ({
+    default: {
+      readFile: fsMocks.readFileSync,
+      writeFile: fsMocks.writeFileSync,
+    },
+    readFile: fsMocks.readFileSync,
+    writeFile: fsMocks.writeFileSync,
+  });
+
+export const createFsModuleFactory =
+  (fsMocks: Record<string, unknown>): MockModuleFactory =>
+  async (importOriginal) => {
+    const actual = await importOriginal<typeof import('fs')>();
+    return {
+      ...actual,
+      default: {
+        ...actual,
+        ...fsMocks,
+      },
+      ...fsMocks,
+    };
+  };
+
+export const createUuidModuleFactory = (): MockModuleFactory => () => ({
+  isUuid: vi.fn((str: string) => {
+    // Check if the string looks like a UUID
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    return uuidRegex.test(str);
+  }),
+});

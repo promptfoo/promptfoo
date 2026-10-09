@@ -18,6 +18,7 @@ import { createDecompressionInterceptor, stripDecompressionHeaders } from './dec
 import {
   extractRateLimitErrorCode,
   extractRateLimitErrorType,
+  getAbortError,
   HttpRateLimitError,
   type SystemError,
 } from './errors';
@@ -434,21 +435,6 @@ export function computeRateLimitWaitMs(response: Response): number {
  */
 const RATE_LIMIT_JITTER_MS = 1000;
 
-/**
- * Handle rate limiting by waiting the appropriate amount of time, plus a
- * uniform random jitter to avoid synchronized retry storms when many
- * concurrent requests hit the same rate limit.
- */
-function getAbortError(signal: AbortSignal): Error {
-  const reason = signal.reason;
-  if (reason instanceof Error && reason.name === 'AbortError') {
-    return reason;
-  }
-  const error = new Error(reason instanceof Error ? reason.message : 'Request was aborted');
-  error.name = 'AbortError';
-  return error;
-}
-
 async function sleepWithAbort(waitTime: number, signal?: AbortSignal | null): Promise<void> {
   if (!signal) {
     await sleep(waitTime);
@@ -471,6 +457,11 @@ async function sleepWithAbort(waitTime: number, signal?: AbortSignal | null): Pr
   });
 }
 
+/**
+ * Handle rate limiting by waiting the appropriate amount of time, plus a
+ * uniform random jitter to avoid synchronized retry storms when many
+ * concurrent requests hit the same rate limit.
+ */
 export async function handleRateLimit(
   response: Response,
   signal?: AbortSignal | null,

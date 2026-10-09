@@ -69,7 +69,7 @@ export class PythonWorkerPool {
     }
 
     // Try to get available worker
-    const worker = this.getAvailableWorker();
+    const worker = this.workers.find((worker) => worker.isReady() && !worker.isBusy()) ?? null;
 
     if (worker) {
       // Worker available, execute immediately and trigger queue processing when done
@@ -83,27 +83,15 @@ export class PythonWorkerPool {
     }
   }
 
-  private getAvailableWorker(): PythonWorker | null {
-    for (const worker of this.workers) {
-      if (worker.isReady() && !worker.isBusy()) {
-        return worker;
-      }
-    }
-    return null;
-  }
-
   private processQueue(): void {
     // Drain the entire queue - process all waiting requests with available workers
     while (this.queue.length > 0) {
-      const worker = this.getAvailableWorker();
+      const worker = this.workers.find((worker) => worker.isReady() && !worker.isBusy()) ?? null;
       if (!worker) {
         return; // No workers available right now
       }
 
-      const request = this.queue.shift();
-      if (!request) {
-        return;
-      }
+      const request = this.queue.shift()!;
 
       logger.debug(`Processing queued request (${this.queue.length} remaining)`);
 

@@ -2346,9 +2346,7 @@ describe('evalCommand', () => {
     });
 
     vi.mocked(evaluate).mockResolvedValue(evalRecord);
-    vi.mocked(isSharingEnabled).mockImplementation(function () {
-      return true;
-    });
+    vi.mocked(isSharingEnabled).mockReturnValue(true);
     vi.mocked(createShareableUrl).mockResolvedValue('http://share.url');
 
     await doEval(cmdObj, config, defaultConfigPath, {});
@@ -2371,9 +2369,7 @@ describe('evalCommand', () => {
     });
 
     vi.mocked(evaluate).mockResolvedValue(evalRecord);
-    vi.mocked(isSharingEnabled).mockImplementation(function () {
-      return true;
-    });
+    vi.mocked(isSharingEnabled).mockReturnValue(true);
 
     await doEval(cmdObj, config, defaultConfigPath, {});
 
@@ -2395,9 +2391,7 @@ describe('evalCommand', () => {
     });
 
     vi.mocked(evaluate).mockResolvedValue(evalRecord);
-    vi.mocked(isSharingEnabled).mockImplementation(function () {
-      return true;
-    });
+    vi.mocked(isSharingEnabled).mockReturnValue(true);
     vi.mocked(createShareableUrl).mockResolvedValue('http://share.url');
 
     await doEval(cmdObj, config, defaultConfigPath, {});
@@ -2420,9 +2414,7 @@ describe('evalCommand', () => {
     });
 
     vi.mocked(evaluate).mockResolvedValue(evalRecord);
-    vi.mocked(isSharingEnabled).mockImplementation(function () {
-      return true;
-    });
+    vi.mocked(isSharingEnabled).mockReturnValue(true);
     vi.mocked(createShareableUrl).mockResolvedValue('http://share.url');
 
     await doEval(cmdObj, config, defaultConfigPath, {});
@@ -2436,9 +2428,7 @@ describe('evalCommand', () => {
     const evalRecord = new Eval(config);
 
     // Mock cloud config as enabled
-    vi.mocked(cloudConfig.isEnabled).mockImplementation(function () {
-      return true;
-    });
+    vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
 
     vi.mocked(resolveConfigs).mockResolvedValue({
       config,
@@ -2450,9 +2440,7 @@ describe('evalCommand', () => {
     });
 
     vi.mocked(evaluate).mockResolvedValue(evalRecord);
-    vi.mocked(isSharingEnabled).mockImplementation(function () {
-      return true;
-    });
+    vi.mocked(isSharingEnabled).mockReturnValue(true);
     vi.mocked(createShareableUrl).mockResolvedValue('http://share.url');
 
     await doEval(cmdObj, config, defaultConfigPath, {});
@@ -2466,9 +2454,7 @@ describe('evalCommand', () => {
     const evalRecord = new Eval(config);
 
     // Mock cloud config as enabled
-    vi.mocked(cloudConfig.isEnabled).mockImplementationOnce(function () {
-      return true;
-    });
+    vi.mocked(cloudConfig.isEnabled).mockReturnValueOnce(true);
 
     vi.mocked(resolveConfigs).mockResolvedValue({
       config,
@@ -2480,9 +2466,7 @@ describe('evalCommand', () => {
     });
 
     vi.mocked(evaluate).mockResolvedValue(evalRecord);
-    vi.mocked(isSharingEnabled).mockImplementationOnce(function () {
-      return true;
-    });
+    vi.mocked(isSharingEnabled).mockReturnValueOnce(true);
 
     await doEval(cmdObj, config, defaultConfigPath, {});
 
@@ -2639,9 +2623,7 @@ describe('checkCloudPermissions', () => {
 
   it('should fail when checkCloudPermissions throws an error', async () => {
     // Mock cloudConfig to be enabled
-    vi.mocked(cloudConfig.isEnabled).mockImplementation(function () {
-      return true;
-    });
+    vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
 
     // Mock checkCloudPermissions to throw an error
     const permissionError = new ConfigPermissionError('Permission denied: insufficient access');
@@ -2677,9 +2659,7 @@ describe('checkCloudPermissions', () => {
 
   it('should call checkCloudPermissions and proceed when it succeeds', async () => {
     // Mock cloudConfig to be enabled
-    vi.mocked(cloudConfig.isEnabled).mockImplementation(function () {
-      return true;
-    });
+    vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
 
     // Mock checkCloudPermissions to succeed (resolve without throwing)
     vi.mocked(checkCloudPermissions).mockResolvedValueOnce(undefined);
@@ -2718,9 +2698,7 @@ describe('checkCloudPermissions', () => {
 
   it('should call checkCloudPermissions but skip permission check when cloudConfig is disabled', async () => {
     // Mock cloudConfig to be disabled
-    vi.mocked(cloudConfig.isEnabled).mockImplementation(function () {
-      return false;
-    });
+    vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
 
     // Mock checkCloudPermissions to succeed (it should return early due to disabled cloud)
     vi.mocked(checkCloudPermissions).mockResolvedValueOnce(undefined);
@@ -3037,6 +3015,25 @@ describe('doEval with external defaultTest', () => {
 });
 
 describe('Sharing Precedence - Comprehensive Test Coverage', () => {
+  const createExplicitSharingCheck = () => async () => {
+    const cmdObj = { table: false, write: false };
+    const config = { sharing: false } as UnifiedConfig;
+    const evalRecord = new Eval(config);
+
+    vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
+    vi.mocked(resolveConfigs).mockResolvedValue({
+      config,
+      testSuite: { prompts: [], providers: [] },
+      basePath: path.resolve('/'),
+      commandLineOptions: { share: true },
+    });
+    vi.mocked(evaluate).mockResolvedValue(evalRecord);
+
+    await doEval(cmdObj, config, defaultConfigPath, {});
+
+    expect(createShareableUrl).toHaveBeenCalledWith(expect.any(Eval), { silent: true });
+  };
+
   const defaultConfigPath = '/path/to/config.yaml';
   const defaultConfig = {
     prompts: [],
@@ -3097,9 +3094,7 @@ describe('Sharing Precedence - Comprehensive Test Coverage', () => {
       const config = { sharing: true } as UnifiedConfig;
       const evalRecord = new Eval(config);
 
-      vi.mocked(cloudConfig.isEnabled).mockImplementation(function () {
-        return true;
-      });
+      vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
       vi.mocked(resolveConfigs).mockResolvedValue({
         config,
         testSuite: { prompts: [], providers: [] },
@@ -3118,9 +3113,7 @@ describe('Sharing Precedence - Comprehensive Test Coverage', () => {
       const config = { sharing: true } as UnifiedConfig;
       const evalRecord = new Eval(config);
 
-      vi.mocked(cloudConfig.isEnabled).mockImplementation(function () {
-        return true;
-      });
+      vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
       vi.mocked(resolveConfigs).mockResolvedValue({
         config,
         testSuite: { prompts: [], providers: [] },
@@ -3141,9 +3134,7 @@ describe('Sharing Precedence - Comprehensive Test Coverage', () => {
       const config = { sharing: false } as UnifiedConfig;
       const evalRecord = new Eval(config);
 
-      vi.mocked(cloudConfig.isEnabled).mockImplementation(function () {
-        return false;
-      });
+      vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
       vi.mocked(resolveConfigs).mockResolvedValue({
         config,
         testSuite: { prompts: [], providers: [] },
@@ -3161,9 +3152,7 @@ describe('Sharing Precedence - Comprehensive Test Coverage', () => {
       const config = {} as UnifiedConfig;
       const evalRecord = new Eval(config);
 
-      vi.mocked(cloudConfig.isEnabled).mockImplementation(function () {
-        return false;
-      });
+      vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
       vi.mocked(resolveConfigs).mockResolvedValue({
         config,
         testSuite: { prompts: [], providers: [] },
@@ -3179,35 +3168,17 @@ describe('Sharing Precedence - Comprehensive Test Coverage', () => {
   });
 
   describe('Priority 3: commandLineOptions.share from config file', () => {
-    it('should share when commandLineOptions.share = true, overriding config.sharing = false', async () => {
-      const cmdObj = { table: false, write: false };
-      const config = { sharing: false } as UnifiedConfig;
-      const evalRecord = new Eval(config);
-
-      vi.mocked(cloudConfig.isEnabled).mockImplementation(function () {
-        return false;
-      });
-      vi.mocked(resolveConfigs).mockResolvedValue({
-        config,
-        testSuite: { prompts: [], providers: [] },
-        basePath: path.resolve('/'),
-        commandLineOptions: { share: true },
-      });
-      vi.mocked(evaluate).mockResolvedValue(evalRecord);
-
-      await doEval(cmdObj, config, defaultConfigPath, {});
-
-      expect(createShareableUrl).toHaveBeenCalledWith(expect.any(Eval), { silent: true });
-    });
+    it(
+      'should share when commandLineOptions.share = true, overriding config.sharing = false',
+      createExplicitSharingCheck(),
+    );
 
     it('should not share when commandLineOptions.share = false, overriding cloud enabled', async () => {
       const cmdObj = { table: false, write: false };
       const config = {} as UnifiedConfig;
       const evalRecord = new Eval(config);
 
-      vi.mocked(cloudConfig.isEnabled).mockImplementation(function () {
-        return true;
-      });
+      vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
       vi.mocked(resolveConfigs).mockResolvedValue({
         config,
         testSuite: { prompts: [], providers: [] },
@@ -3228,9 +3199,7 @@ describe('Sharing Precedence - Comprehensive Test Coverage', () => {
       const config = { sharing: true } as UnifiedConfig;
       const evalRecord = new Eval(config);
 
-      vi.mocked(cloudConfig.isEnabled).mockImplementation(function () {
-        return false;
-      });
+      vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
       vi.mocked(resolveConfigs).mockResolvedValue({
         config,
         testSuite: { prompts: [], providers: [] },
@@ -3248,9 +3217,7 @@ describe('Sharing Precedence - Comprehensive Test Coverage', () => {
       const config = { sharing: false } as UnifiedConfig;
       const evalRecord = new Eval(config);
 
-      vi.mocked(cloudConfig.isEnabled).mockImplementation(function () {
-        return true;
-      });
+      vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
       vi.mocked(resolveConfigs).mockResolvedValue({
         config,
         testSuite: { prompts: [], providers: [] },
@@ -3268,9 +3235,7 @@ describe('Sharing Precedence - Comprehensive Test Coverage', () => {
       const config = { sharing: { apiBaseUrl: 'https://custom.api.url' } } as UnifiedConfig;
       const evalRecord = new Eval(config);
 
-      vi.mocked(cloudConfig.isEnabled).mockImplementation(function () {
-        return false;
-      });
+      vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
       vi.mocked(resolveConfigs).mockResolvedValue({
         config,
         testSuite: { prompts: [], providers: [] },
@@ -3290,9 +3255,7 @@ describe('Sharing Precedence - Comprehensive Test Coverage', () => {
       const config = {} as UnifiedConfig;
       const evalRecord = new Eval(config);
 
-      vi.mocked(cloudConfig.isEnabled).mockImplementation(function () {
-        return true;
-      });
+      vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
       vi.mocked(resolveConfigs).mockResolvedValue({
         config,
         testSuite: { prompts: [], providers: [] },
@@ -3310,9 +3273,7 @@ describe('Sharing Precedence - Comprehensive Test Coverage', () => {
       const config = {} as UnifiedConfig;
       const evalRecord = new Eval(config);
 
-      vi.mocked(cloudConfig.isEnabled).mockImplementation(function () {
-        return false;
-      });
+      vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
       vi.mocked(resolveConfigs).mockResolvedValue({
         config,
         testSuite: { prompts: [], providers: [] },
@@ -3332,9 +3293,7 @@ describe('Sharing Precedence - Comprehensive Test Coverage', () => {
       const config = { sharing: undefined } as UnifiedConfig;
       const evalRecord = new Eval(config);
 
-      vi.mocked(cloudConfig.isEnabled).mockImplementation(function () {
-        return true;
-      });
+      vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
       vi.mocked(resolveConfigs).mockResolvedValue({
         config,
         testSuite: { prompts: [], providers: [] },
@@ -3347,35 +3306,17 @@ describe('Sharing Precedence - Comprehensive Test Coverage', () => {
       expect(createShareableUrl).toHaveBeenCalledWith(expect.any(Eval), { silent: true });
     });
 
-    it('should respect commandLineOptions.share = true even when config.sharing = false and cloud disabled', async () => {
-      const cmdObj = { table: false, write: false };
-      const config = { sharing: false } as UnifiedConfig;
-      const evalRecord = new Eval(config);
-
-      vi.mocked(cloudConfig.isEnabled).mockImplementation(function () {
-        return false;
-      });
-      vi.mocked(resolveConfigs).mockResolvedValue({
-        config,
-        testSuite: { prompts: [], providers: [] },
-        basePath: path.resolve('/'),
-        commandLineOptions: { share: true },
-      });
-      vi.mocked(evaluate).mockResolvedValue(evalRecord);
-
-      await doEval(cmdObj, config, defaultConfigPath, {});
-
-      expect(createShareableUrl).toHaveBeenCalledWith(expect.any(Eval), { silent: true });
-    });
+    it(
+      'should respect commandLineOptions.share = true even when config.sharing = false and cloud disabled',
+      createExplicitSharingCheck(),
+    );
 
     it('should not call createShareableUrl when isSharingEnabled returns false', async () => {
       const cmdObj = { share: true, table: false, write: false };
       const config = {} as UnifiedConfig;
       const evalRecord = new Eval(config);
 
-      vi.mocked(isSharingEnabled).mockImplementation(function () {
-        return false;
-      });
+      vi.mocked(isSharingEnabled).mockReturnValue(false);
       vi.mocked(resolveConfigs).mockResolvedValue({
         config,
         testSuite: { prompts: [], providers: [] },
