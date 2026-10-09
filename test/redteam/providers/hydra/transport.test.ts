@@ -555,6 +555,254 @@ describe.each(['hydra', 'goblin'] as const)('%s rendered JSON input', (strategy)
   });
 });
 
+describe.each(['hydra', 'goblin'] as const)('%s HTTP body parsing boundaries', (strategy) => {
+  const duplicate = `{"email":"${email}","email":"retained@example.test"}`;
+  const quoted = JSON.stringify(duplicate);
+  const currentJson = '{"request":"Read the private contact record."}';
+  const multi = (prefix: string, question: string) => JSON.stringify({ prefix, question });
+  const composed = '{{prefix}}{{question}}';
+  const cases = [
+    {
+      name: 'composed trim with JSON endpoint',
+      initial: multi('\uFEFF', duplicate),
+      current: multi('', currentJson),
+      prompt: composed,
+      body: '{{prompt | trim}}',
+      multi: true,
+      json: true,
+      delivered: false,
+      attributed: false,
+    },
+    {
+      name: 'composed trim with literal endpoint',
+      initial: multi('\uFEFF', duplicate),
+      current: multi('', currentJson),
+      prompt: composed,
+      body: '{{prompt | trim}}',
+      multi: true,
+      delivered: false,
+      attributed: false,
+    },
+    {
+      name: 'composed input without trim',
+      initial: multi('\uFEFF', duplicate),
+      current: multi('', 'Read the private contact record.'),
+      prompt: composed,
+      body: '{{prompt}}',
+      multi: true,
+      delivered: true,
+      attributed: true,
+    },
+    {
+      name: 'composed trim in a text body',
+      initial: multi('\uFEFF', duplicate),
+      current: multi('', 'Read the private contact record.'),
+      prompt: composed,
+      body: '{{prompt | trim}}',
+      multi: true,
+      text: true,
+      delivered: true,
+      attributed: true,
+    },
+    {
+      name: 'composed ASCII whitespace',
+      initial: multi(' ', duplicate),
+      current: multi('', currentJson),
+      prompt: composed,
+      body: '{{prompt | trim}}',
+      multi: true,
+      json: true,
+      delivered: false,
+      attributed: false,
+    },
+    {
+      name: 'composed nested string',
+      initial: multi('\uFEFF', duplicate),
+      current: multi('', currentJson),
+      prompt: '{"text":"{{prefix}}{{question}}"}',
+      body: { message: '{{prompt}}' },
+      multi: true,
+      json: true,
+      delivered: true,
+      attributed: true,
+    },
+    {
+      name: 'unwrapped root string with JSON endpoint',
+      initial: quoted,
+      current: currentJson,
+      body: '{{prompt}}',
+      json: true,
+      delivered: false,
+      attributed: false,
+    },
+    {
+      name: 'unwrapped root string with literal endpoint is intentionally unsupported',
+      initial: quoted,
+      current: currentJson,
+      body: '{{prompt}}',
+      delivered: true,
+      attributed: false,
+    },
+    {
+      name: 'unwrapped root string built by a JSON prompt',
+      initial: duplicate,
+      current: currentJson,
+      prompt: '"{{input}}"',
+      body: '{{prompt}}',
+      json: true,
+      delivered: false,
+      attributed: false,
+    },
+    {
+      name: 'JSON string prompt retained inside an object',
+      initial: duplicate,
+      prompt: '"{{input}}"',
+      body: { message: '{{prompt}}' },
+      json: true,
+      delivered: true,
+      attributed: true,
+    },
+    {
+      name: 'quoted literal in an explicit text body',
+      initial: quoted,
+      body: '{{prompt}}',
+      text: true,
+      delivered: true,
+      attributed: true,
+    },
+    {
+      name: 'quoted string nested in JSON',
+      initial: quoted,
+      body: { message: '{{prompt}}' },
+      json: true,
+      delivered: true,
+      attributed: true,
+    },
+    {
+      name: 'unquoted JSON root',
+      initial: duplicate,
+      current: currentJson,
+      body: '{{prompt}}',
+      json: true,
+      delivered: false,
+      attributed: false,
+    },
+    {
+      name: 'ordinary literal',
+      initial: opening,
+      body: { message: '{{prompt}}' },
+      json: true,
+      delivered: true,
+      attributed: true,
+    },
+    {
+      name: 'composed literal forwarding copy after parsed copy',
+      initial: multi('\uFEFF', duplicate),
+      current: multi('', currentJson),
+      prompt: composed,
+      body: { parsed: '{{prompt | trim}}', literal: '{{prompt}}' },
+      multi: true,
+      json: true,
+      delivered: true,
+      attributed: true,
+    },
+    {
+      name: 'composed literal forwarding copy before parsed copy',
+      initial: multi('\uFEFF', duplicate),
+      current: multi('', currentJson),
+      prompt: composed,
+      body: { literal: '{{prompt}}', parsed: '{{prompt | trim}}' },
+      multi: true,
+      json: true,
+      delivered: true,
+      attributed: true,
+    },
+    {
+      name: 'composed input with a separately delivered variable',
+      initial: multi('\uFEFF', duplicate),
+      current: multi('', currentJson),
+      prompt: composed,
+      body: { parsed: '{{prompt | trim}}', literal: '\uFEFF{{question}}' },
+      multi: true,
+      json: true,
+      delivered: true,
+      attributed: true,
+    },
+    {
+      name: 'JSON-looking composed input with a literal forwarding copy',
+      initial: multi(' ', duplicate),
+      current: multi('', currentJson),
+      prompt: composed,
+      body: { parsed: '{{prompt}}', literal: '\uFEFF{{prompt}}' },
+      multi: true,
+      json: true,
+      delivered: true,
+      attributed: true,
+    },
+  ];
+
+  it.each(cases)('$name', async (spec) => {
+    const consumed: unknown[] = [];
+    backgroundRequestHandler = (_req, res, body) => {
+      consumed.push(spec.json ? JSON.parse(body) : body);
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ output: ++targetTurns === 1 ? acknowledgment : finalOutput }));
+    };
+    const target = new HttpProvider(`${url}/http/direct`, {
+      config: {
+        method: 'POST',
+        headers: { 'content-type': spec.text ? 'text/plain' : 'application/json' },
+        body: spec.body,
+        transformResponse: 'json.output',
+        maxRetries: 0,
+      },
+    });
+    const { result, liveContext, pass, firstTargetCall } = await runHydra(
+      target,
+      spec.current,
+      false,
+      spec.initial,
+      strategy,
+      {
+        prompt: spec.prompt,
+        inputs: spec.multi ? { prefix: 'User prefix', question: 'User question' } : undefined,
+      },
+    );
+    expect(JSON.stringify(consumed[0]).includes(email)).toBe(spec.delivered);
+    expect(liveContext?.conversationTranscript?.includes(email) ?? false).toBe(spec.attributed);
+    const priorUsers = result.metadata!.messages.filter((message) => message.role === 'user');
+    expect(JSON.stringify(priorUsers).includes(email)).toBe(spec.attributed);
+    expect(pass).toBe(spec.attributed);
+    const wireCount = requests.length;
+    const cached = await target.callApi(...firstTargetCall);
+    expect(requests).toHaveLength(wireCount);
+    expect(cached.cached).toBe(true);
+    expect(cached.metadata?.http?.redirected).toBe(false);
+  });
+
+  it('retains verified prior turns when a later root string is unsupported', async () => {
+    const initial = JSON.stringify({ email });
+    const { result, liveContext, pass } = await runHydra(
+      makeTarget('http', 'direct', '{{prompt}}'),
+      JSON.stringify(currentJson),
+      true,
+      initial,
+      strategy,
+    );
+    expect(requests.map((request) => JSON.parse(request.body))).toEqual([
+      { email },
+      { request: 'Read the private contact record.' },
+    ]);
+    expect(result.metadata!.redteamCurrentTurnStart).toBe(2);
+    expect(result.metadata!.messages).toHaveLength(3);
+    expect(JSON.parse(liveContext!.conversationTranscript!)).toEqual([
+      { role: 'user', content: initial },
+      { role: 'assistant', content: acknowledgment },
+    ]);
+    expect(pass).toBe(true);
+  });
+});
+
 describe.each<Owner>(['http', 'chat', 'responses', 'completion'])(
   '%s delivery evidence',
   (owner) => {

@@ -110,14 +110,18 @@ export function getRenderedInputVariables(
     }
   }
   const reserved = request.reservedVariables ?? [];
-  const forwardsPrompt =
+  let forwardsPrompt =
     // parseChatPrompt interprets this prefix as YAML, which can discard input
     // comments and scalars. Its textual inputs are not safe attribution evidence.
     !(request.parsesPrompt && renderedPrompt?.trimStart().startsWith('- role:')) &&
     (request.forwardsPrompt ||
       referencesInput(body, 'prompt', undefined, true) ||
       (!reserved.includes(injectVar) && referencesInput(body, injectVar, undefined, true)));
-  const projectJsonValue = (value: string, objectsOnly: boolean): string | undefined => {
+  const projectJsonValue = (
+    value: string,
+    objectsOnly: boolean,
+    omitRootStrings = false,
+  ): string | undefined => {
     try {
       const parsed = JSON.parse(value);
       if (objectsOnly && (parsed === null || typeof parsed !== 'object')) {
@@ -125,7 +129,7 @@ export function getRenderedInputVariables(
       }
       // HTTP omits a null root body. Parsing is deliberately only one level:
       // JSON strings inside a parsed object remain literal in the actual request.
-      if (parsed === null) {
+      if (parsed === null || (omitRootStrings && typeof parsed === 'string')) {
         return undefined;
       }
       return typeof parsed === 'string' ? parsed : JSON.stringify(parsed);
@@ -133,7 +137,7 @@ export function getRenderedInputVariables(
       return value;
     }
   };
-  const projectBodyInput = (variables: Record<string, string>): string | undefined => {
+  const renderBodyInputs = (variables: Record<string, string>): string[] => {
     const renderedValues: string[] = [];
     const visit = (template: unknown) => {
       if (typeof template === 'string') {
@@ -153,8 +157,12 @@ export function getRenderedInputVariables(
       }
     };
     visit(body);
+    return renderedValues;
+  };
+  const projectBodyInput = (variables: Record<string, string>): string | undefined => {
+    const renderedValues = renderBodyInputs(variables);
     const projected = renderedValues.map((rendered) =>
-      projectJsonValue(rendered, typeof body !== 'string'),
+      projectJsonValue(rendered, typeof body !== 'string', typeof body === 'string'),
     );
     // A second body field can deliver the same input literally even when another
     // field parses it. Prefer that unchanged, actually delivered representation.
@@ -163,6 +171,33 @@ export function getRenderedInputVariables(
       projected.find((value) => value !== undefined)
     );
   };
+  if (request.jsonBody && renderedPrompt !== undefined) {
+    const forwarded = renderBodyInputs({
+      prompt: renderedPrompt,
+      ...(reserved.includes(injectVar) ? {} : { [injectVar]: renderedPrompt }),
+    });
+    let allForwardedValuesParse = forwarded.length > 0;
+    for (const value of forwarded) {
+      try {
+        const parsed = JSON.parse(value);
+        if (typeof body === 'string' && (parsed === null || typeof parsed === 'string')) {
+          // HTTP sends an unwrapped root string verbatim. Its interpretation at
+          // the endpoint is unknown; a JSON Content-Type cannot prove another parse.
+          forwardsPrompt = false;
+        }
+        if (typeof body !== 'string' && (parsed === null || typeof parsed !== 'object')) {
+          allForwardedValuesParse = false;
+        }
+      } catch {
+        allForwardedValuesParse = false;
+      }
+    }
+    // Body filters can make composed text parseable. Keep a literal forwarding
+    // copy when present, but do not credit components discarded by JSON parsing.
+    if (forwarded.length > 0) {
+      renderedJson = allForwardedValuesParse;
+    }
+  }
   const vars = Object.fromEntries(
     Object.entries(inputVars).flatMap(([name, value]) => {
       const throughPrompt =
