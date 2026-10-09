@@ -13,6 +13,20 @@ export const createProxyAgentFactory = (): MockModuleFactory => async (importOri
   };
 };
 
+export const createFsModuleFactory =
+  (fsMocks: Record<string, unknown>): MockModuleFactory =>
+  async (importOriginal) => {
+    const actual = await importOriginal<typeof import('fs')>();
+    return {
+      ...actual,
+      default: {
+        ...actual,
+        ...fsMocks,
+      },
+      ...fsMocks,
+    };
+  };
+
 export const createDisabledCloudConfigFactory = (): MockModuleFactory => async (importOriginal) => {
   return {
     ...(await importOriginal()),
