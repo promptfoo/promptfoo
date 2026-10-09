@@ -6,17 +6,34 @@ import {
   TrueFoundryProvider,
 } from '../../src/providers/truefoundry';
 import * as fetchModule from '../../src/util/fetch/index';
+import { createChatCompletion, createEnabledSetting } from '../factories/literalFixtures';
 import { mockProcessEnv } from '../util/utils';
+import { createInvalidRequestResponse } from './mockProviderResponses';
+
+const { createFileUtilitiesFactory } = await vi.hoisted(() => import('../factories/moduleMocks'));
+
+const createEmbeddingResponse = () => ({
+  data: [
+    {
+      embedding: [0.1, 0.2, 0.3],
+      index: 0,
+    },
+  ],
+  usage: {
+    prompt_tokens: 5,
+    total_tokens: 5,
+  },
+});
+
+const createLoggingOptions = () => ({
+  config: {
+    loggingConfig: createEnabledSetting(),
+  },
+});
 
 const TRUEFOUNDRY_API_BASE = 'https://llm-gateway.truefoundry.com';
 
-vi.mock('../../src/util', async (importOriginal) => {
-  return {
-    ...(await importOriginal()),
-    maybeLoadFromExternalFile: vi.fn((x) => x),
-    renderVarsInObject: vi.fn((x) => x),
-  };
-});
+vi.mock('../../src/util', createFileUtilitiesFactory());
 
 vi.mock('../../src/util/fetch/index.ts');
 
@@ -140,13 +157,7 @@ describe('TrueFoundry', () => {
     });
 
     it('should handle TrueFoundry-specific logging configuration', () => {
-      const provider = new TrueFoundryProvider('openai/gpt-4', {
-        config: {
-          loggingConfig: {
-            enabled: true,
-          },
-        },
-      });
+      const provider = new TrueFoundryProvider('openai/gpt-4', createLoggingOptions());
 
       expect(provider.toJSON().config).toMatchObject({
         loggingConfig: {
@@ -179,10 +190,7 @@ describe('TrueFoundry', () => {
       });
 
       it('should call TrueFoundry API and return output with correct structure', async () => {
-        const mockResponse = {
-          choices: [{ message: { content: 'Test output' } }],
-          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-        };
+        const mockResponse = createChatCompletion();
 
         const response = new Response(JSON.stringify(mockResponse), {
           status: 200,
@@ -371,10 +379,7 @@ describe('TrueFoundry', () => {
           },
         });
 
-        const mockResponse = {
-          choices: [{ message: { content: 'Test output' } }],
-          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-        };
+        const mockResponse = createChatCompletion();
 
         const response = new Response(JSON.stringify(mockResponse), {
           status: 200,
@@ -399,18 +404,9 @@ describe('TrueFoundry', () => {
       });
 
       it('should add X-TFY-LOGGING-CONFIG header when loggingConfig is provided', async () => {
-        const providerWithLogging = new TrueFoundryProvider('openai/gpt-4', {
-          config: {
-            loggingConfig: {
-              enabled: true,
-            },
-          },
-        });
+        const providerWithLogging = new TrueFoundryProvider('openai/gpt-4', createLoggingOptions());
 
-        const mockResponse = {
-          choices: [{ message: { content: 'Test output' } }],
-          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-        };
+        const mockResponse = createChatCompletion();
 
         const response = new Response(JSON.stringify(mockResponse), {
           status: 200,
@@ -441,10 +437,7 @@ describe('TrueFoundry', () => {
           },
         });
 
-        const mockResponse = {
-          choices: [{ message: { content: 'Test output' } }],
-          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-        };
+        const mockResponse = createChatCompletion();
 
         const response = new Response(JSON.stringify(mockResponse), {
           status: 200,
@@ -505,18 +498,7 @@ describe('TrueFoundry', () => {
       });
 
       it('should handle API errors', async () => {
-        const errorResponse = {
-          error: {
-            message: 'API Error',
-            type: 'invalid_request_error',
-          },
-        };
-
-        const response = new Response(JSON.stringify(errorResponse), {
-          status: 400,
-          statusText: 'Bad Request',
-          headers: new Headers({ 'Content-Type': 'application/json' }),
-        });
+        const response = createInvalidRequestResponse();
         mockedFetchWithRetries.mockResolvedValueOnce(response);
 
         const result = await provider.callApi('Test prompt');
@@ -793,18 +775,7 @@ describe('TrueFoundry', () => {
     });
 
     it('should call embedding API successfully', async () => {
-      const mockResponse = {
-        data: [
-          {
-            embedding: [0.1, 0.2, 0.3],
-            index: 0,
-          },
-        ],
-        usage: {
-          prompt_tokens: 5,
-          total_tokens: 5,
-        },
-      };
+      const mockResponse = createEmbeddingResponse();
 
       const response = new Response(JSON.stringify(mockResponse), {
         status: 200,
@@ -901,18 +872,7 @@ describe('TrueFoundry', () => {
         },
       );
 
-      const mockResponse = {
-        data: [
-          {
-            embedding: [0.1, 0.2, 0.3],
-            index: 0,
-          },
-        ],
-        usage: {
-          prompt_tokens: 5,
-          total_tokens: 5,
-        },
-      };
+      const mockResponse = createEmbeddingResponse();
 
       const response = new Response(JSON.stringify(mockResponse), {
         status: 200,

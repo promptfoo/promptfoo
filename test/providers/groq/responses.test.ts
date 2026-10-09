@@ -2,7 +2,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearCache } from '../../../src/cache';
 import { GroqResponsesProvider } from '../../../src/providers/groq/index';
 import * as fetchModule from '../../../src/util/fetch/index';
+import { createResponseMessage } from '../../factories/literalFixtures';
 import { mockProcessEnv } from '../../util/utils';
+
+const createCompletedResponse = () => ({
+  id: 'resp_123',
+  model: 'openai/gpt-oss-120b',
+  output: [createResponseMessage('Hello, world!')],
+  usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+});
 
 const GROQ_API_BASE = 'https://api.groq.com/openai/v1';
 
@@ -195,25 +203,11 @@ describe('GroqResponsesProvider', () => {
         },
       });
 
-      const mockResponse = new Response(
-        JSON.stringify({
-          id: 'resp_123',
-          model: 'openai/gpt-oss-120b',
-          output: [
-            {
-              type: 'message',
-              role: 'assistant',
-              content: [{ type: 'output_text', text: 'Hello, world!' }],
-            },
-          ],
-          usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
-        }),
-        {
-          status: 200,
-          statusText: 'OK',
-          headers: new Headers({ 'Content-Type': 'application/json' }),
-        },
-      );
+      const mockResponse = new Response(JSON.stringify(createCompletedResponse()), {
+        status: 200,
+        statusText: 'OK',
+        headers: new Headers({ 'Content-Type': 'application/json' }),
+      });
       mockedFetchWithRetries.mockResolvedValueOnce(mockResponse);
 
       await provider.callApi('Test prompt');
@@ -265,34 +259,11 @@ describe('GroqResponsesProvider', () => {
     it('should process successful response', async () => {
       const provider = new GroqResponsesProvider('openai/gpt-oss-120b', {});
 
-      const mockResponse = new Response(
-        JSON.stringify({
-          id: 'resp_123',
-          model: 'openai/gpt-oss-120b',
-          output: [
-            {
-              type: 'message',
-              role: 'assistant',
-              content: [
-                {
-                  type: 'output_text',
-                  text: 'Hello, world!',
-                },
-              ],
-            },
-          ],
-          usage: {
-            input_tokens: 10,
-            output_tokens: 5,
-            total_tokens: 15,
-          },
-        }),
-        {
-          status: 200,
-          statusText: 'OK',
-          headers: new Headers({ 'Content-Type': 'application/json' }),
-        },
-      );
+      const mockResponse = new Response(JSON.stringify(createCompletedResponse()), {
+        status: 200,
+        statusText: 'OK',
+        headers: new Headers({ 'Content-Type': 'application/json' }),
+      });
       mockedFetchWithRetries.mockResolvedValueOnce(mockResponse);
 
       const result = await provider.callApi('Test prompt');
