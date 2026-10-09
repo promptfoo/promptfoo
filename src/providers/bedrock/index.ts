@@ -536,7 +536,7 @@ interface BedrockOpenAICompatGenerationOptions extends BedrockQwenGenerationOpti
    * Reasoning depth for reasoning-capable models in this group (e.g. MiniMax M2, NVIDIA
    * Nemotron). Forwarded as-is so Bedrock validates it; omitted unless explicitly set.
    */
-  reasoning_effort?: 'low' | 'medium' | 'high';
+  reasoning_effort?: 'low' | 'medium' | 'high' | 'max';
 }
 
 // =============================================================================
@@ -2488,6 +2488,9 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   // share BEDROCK_MODEL.OPENAI_COMPAT. Verified available via `aws bedrock list-foundation-models`.
 
   // Z.AI GLM
+  // GLM 5.3 and Kimi K3 require Runtime cross-region inference profiles.
+  'us.zai.glm-5.3': BEDROCK_MODEL.OPENAI_COMPAT,
+  'global.zai.glm-5.3': BEDROCK_MODEL.OPENAI_COMPAT,
   'zai.glm-5': BEDROCK_MODEL.OPENAI_COMPAT,
   'zai.glm-4.7': BEDROCK_MODEL.OPENAI_COMPAT,
   'zai.glm-4.7-flash': BEDROCK_MODEL.OPENAI_COMPAT,
@@ -2498,6 +2501,9 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'minimax.minimax-m2.5': BEDROCK_MODEL.OPENAI_COMPAT,
 
   // Moonshot AI (Kimi) — note the two provider prefixes Bedrock uses (`moonshot.`/`moonshotai.`)
+  'us.moonshotai.kimi-k3': BEDROCK_MODEL.OPENAI_COMPAT,
+  'global.moonshotai.kimi-k3': BEDROCK_MODEL.OPENAI_COMPAT,
+  'in.moonshotai.kimi-k3': BEDROCK_MODEL.OPENAI_COMPAT,
   'moonshotai.kimi-k2.5': BEDROCK_MODEL.OPENAI_COMPAT,
   'moonshot.kimi-k2-thinking': BEDROCK_MODEL.OPENAI_COMPAT,
 
@@ -2688,6 +2694,18 @@ export function getHandlerForModel(
   const ret = AWS_BEDROCK_MODELS[modelName];
   if (ret) {
     return ret;
+  }
+  if (modelName === 'zai.glm-5.3' || modelName === 'moonshotai.kimi-k3') {
+    throw new Error(
+      `Amazon Bedrock model "${modelName}" requires a cross-region inference profile. ` +
+        `Use "bedrock:us.${modelName}" or "bedrock:global.${modelName}" in a supported region.`,
+    );
+  }
+  if (/^(?:us|global)\.xai\.grok-4\.7$/.test(modelName)) {
+    throw new Error(
+      `Amazon Bedrock model "${modelName}" supports Converse, not InvokeModel. ` +
+        `Use "bedrock:converse:${modelName}".`,
+    );
   }
   if (modelName.startsWith('ai21.')) {
     return BEDROCK_MODEL.AI21;

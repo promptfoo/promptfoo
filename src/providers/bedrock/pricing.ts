@@ -396,6 +396,11 @@ export function getBedrockPricing(
   normalizedModelId: string,
   region?: string,
 ): BedrockPricing | undefined {
+  // GLM 5.3 has profile-specific rates in calculateBedrockCost. Never inherit
+  // GLM 5's substring match for a bare or otherwise unsupported model ID.
+  if (normalizedModelId.includes('zai.glm-5.3')) {
+    return undefined;
+  }
   if (normalizedModelId.includes('openai.gpt-oss-') && region) {
     const pricing = GPT_OSS_REGION_PRICING[region.toLowerCase()];
     if (!pricing) {
@@ -476,6 +481,35 @@ export function calculateBedrockCost(
   }
 
   const normalizedModelId = modelId.toLowerCase();
+  // AWS model cards publish separate geo/global cache rates for these Runtime
+  // profiles. Converse inputTokens excludes the separately reported cache tokens.
+  const grok47 = /(?:^|inference-profile\/)(us|global)\.xai\.grok-4\.7$/.exec(normalizedModelId);
+  const kimi3 = /(?:^|inference-profile\/)(us|in|global)\.moonshotai\.kimi-k3$/.exec(
+    normalizedModelId,
+  );
+  const glm53 = /(?:^|inference-profile\/)(us|global)\.zai\.glm-5\.3$/.exec(normalizedModelId);
+  if (grok47 || kimi3 || glm53) {
+    if (grok47 && cacheWriteTokens > 0) {
+      return undefined;
+    }
+    const globalProfile = (grok47 ?? kimi3 ?? glm53)?.[1] === 'global';
+    const rates = grok47
+      ? { input: 2, output: 6, read: 0.5, write: 0 }
+      : kimi3
+        ? { input: 3, output: 15, read: 0.3, write: 3.75 }
+        : { input: 1.68, output: 5.28, read: 0.312, write: 2.1 };
+    const multiplier =
+      (globalProfile ? 1 : 1.1) *
+      (serviceTier?.type === 'priority' ? 1.75 : serviceTier?.type === 'flex' ? 0.5 : 1);
+    return (
+      ((promptTokens * rates.input +
+        completionTokens * rates.output +
+        cacheReadTokens * rates.read +
+        cacheWriteTokens * rates.write) /
+        1_000_000) *
+      multiplier
+    );
+  }
   if (isBedrockGrok46Profile(normalizedModelId)) {
     // AWS publishes Standard rates for these profiles, with a separate cached-input rate.
     // No other service tier or cache-write price is established by the model card.
@@ -554,6 +588,14 @@ export function calculateBedrockInvokeModelCost(
   cacheWrite1hTokens = 0,
 ): number | undefined {
   const normalizedModelId = modelId.toLowerCase();
+  // These new models expose OpenAI cache counters on InvokeModel. Until those
+  // counters are normalized here, do not reuse the Converse cost calculation.
+  if (
+    normalizedModelId.includes('zai.glm-5.3') ||
+    normalizedModelId.includes('moonshotai.kimi-k3')
+  ) {
+    return undefined;
+  }
   if (
     !isBedrockGrok46Profile(normalizedModelId) &&
     !isClaudeFableOrMythos5Model(normalizedModelId) &&
