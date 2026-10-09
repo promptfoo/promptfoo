@@ -2,7 +2,13 @@ import logger from '../logger';
 import { providerRegistry } from './providerRegistry';
 import { loadTransformers } from './transformersAvailability';
 
-import type { ApiProvider, ProviderEmbeddingResponse, ProviderResponse } from '../types/index';
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  CallApiOptionsParams,
+  ProviderEmbeddingResponse,
+  ProviderResponse,
+} from '../types/index';
 
 /**
  * Common options for all Transformers.js providers
@@ -238,7 +244,10 @@ async function getOrCreatePipeline(
   model: string,
   options: TransformersBaseOptions,
   owned: Set<PipelineEntry>,
+  signal?: AbortSignal,
 ): Promise<Pipeline> {
+  await providerRegistry.useResource(pipelineCleanup, signal);
+  providerRegistry.throwIfResourceUseAborted(signal);
   providerRegistry.register(pipelineCleanup);
   const cacheKey = getPipelineCacheKey(task, model, options);
 
@@ -371,14 +380,19 @@ export class TransformersEmbeddingProvider implements ApiProvider {
     };
   }
 
-  async callEmbeddingApi(text: string): Promise<ProviderEmbeddingResponse> {
+  async callEmbeddingApi(
+    text: string,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderEmbeddingResponse> {
     try {
       const extractor = await getOrCreatePipeline(
         'feature-extraction',
         this.modelName,
         this.config,
         this.pipelines,
+        options?.abortSignal,
       );
+      providerRegistry.throwIfResourceUseAborted(options?.abortSignal);
 
       // Apply prefix if configured (critical for BGE, E5, Instructor models)
       const inputText = this.config.prefix ? `${this.config.prefix}${text}` : text;
@@ -415,6 +429,7 @@ export class TransformersEmbeddingProvider implements ApiProvider {
         latencyMs,
       };
     } catch (err) {
+      providerRegistry.throwIfResourceUseAborted(options?.abortSignal);
       const error = err as Error;
 
       // Check for model not found
@@ -477,14 +492,21 @@ export class TransformersTextGenerationProvider implements ApiProvider {
     return releasePipelines(pipelines);
   }
 
-  async callApi(prompt: string): Promise<ProviderResponse> {
+  async callApi(
+    prompt: string,
+    _context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
     try {
       const generator = await getOrCreatePipeline(
         'text-generation',
         this.modelName,
         this.config,
         this.pipelines,
+        options?.abortSignal,
       );
+
+      providerRegistry.throwIfResourceUseAborted(options?.abortSignal);
 
       // Build generation options (convert camelCase to snake_case for library)
       const generationOptions: Record<string, unknown> = {
@@ -557,6 +579,7 @@ export class TransformersTextGenerationProvider implements ApiProvider {
         latencyMs,
       };
     } catch (err) {
+      providerRegistry.throwIfResourceUseAborted(options?.abortSignal);
       const error = err as Error;
 
       if (error.message?.includes('Could not locate file')) {
