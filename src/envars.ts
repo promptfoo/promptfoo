@@ -1,3 +1,4 @@
+import './updates/initialProcessEnvironment';
 import { getEnvOverridesProvider } from './envOverrides';
 import { loadEnvFiles } from './util/envFile';
 

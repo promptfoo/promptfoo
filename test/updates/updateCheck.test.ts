@@ -1,0 +1,173 @@
+import { existsSync } from 'node:fs';
+
+import { afterEach, beforeEach, describe, expect, it, type MockedFunction, vi } from 'vitest';
+
+vi.mock('node:fs', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('node:fs')>()),
+  existsSync: vi.fn(),
+}));
+
+vi.mock('../../src/util/fetch/index', () => ({
+  fetchWithTimeout: vi.fn(),
+}));
+
+vi.mock('semver', () => ({
+  default: {
+    gt: vi.fn(),
+  },
+}));
+
+vi.mock('../../src/version', () => ({
+  VERSION: '1.0.0',
+}));
+
+import semver from 'semver';
+import { checkForUpdates, getUpdateInstructions } from '../../src/updates/updateCheck';
+import { fetchWithTimeout } from '../../src/util/fetch/index';
+import { mockProcessEnv } from '../util/utils';
+
+const mockFetchWithTimeout = fetchWithTimeout as MockedFunction<typeof fetchWithTimeout>;
+const mockSemverGt = semver.gt as MockedFunction<typeof semver.gt>;
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+  vi.restoreAllMocks();
+});
+
+describe('checkForUpdates', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockFetchWithTimeout.mockReset();
+    mockSemverGt.mockReset();
+    vi.unstubAllEnvs();
+  });
+
+  it('should check for updates when the evaluated application uses development mode', async () => {
+    vi.stubEnv('NODE_ENV', 'development');
+    mockFetchWithTimeout.mockResolvedValue({
+      ok: true,
+      json: async () => ({ latestVersion: '1.0.0' }),
+    } as any);
+    mockSemverGt.mockReturnValue(false);
+
+    const result = await checkForUpdates();
+
+    expect(result).toBeNull();
+    expect(mockFetchWithTimeout).toHaveBeenCalled();
+  });
+
+  it('should return null without a request when update checks are disabled', async () => {
+    vi.stubEnv('PROMPTFOO_DISABLE_UPDATE', 'true');
+
+    await expect(checkForUpdates({ throwOnError: true })).resolves.toBeNull();
+
+    expect(mockFetchWithTimeout).not.toHaveBeenCalled();
+  });
+
+  it('should return update info when update is available', async () => {
+    mockFetchWithTimeout.mockResolvedValue({
+      ok: true,
+      json: async () => ({ latestVersion: '1.1.0' }),
+    } as any);
+
+    mockSemverGt.mockReturnValue(true);
+
+    const result = await checkForUpdates();
+
+    expect(result).toEqual({
+      message: 'Promptfoo update available! 1.0.0 → 1.1.0',
+      update: {
+        current: '1.0.0',
+        latest: '1.1.0',
+        name: 'promptfoo',
+      },
+    });
+
+    expect(mockFetchWithTimeout).toHaveBeenCalledWith(
+      'https://api.promptfoo.dev/api/latestVersion',
+      expect.objectContaining({ headers: { 'x-promptfoo-silent': 'true' } }),
+      10000,
+    );
+  });
+
+  it('should return null when no update is available', async () => {
+    mockFetchWithTimeout.mockResolvedValue({
+      ok: true,
+      json: async () => ({ latestVersion: '1.0.0' }),
+    } as any);
+
+    mockSemverGt.mockReturnValue(false);
+
+    const result = await checkForUpdates();
+    expect(result).toBeNull();
+  });
+
+  it('should return null on network error', async () => {
+    mockFetchWithTimeout.mockRejectedValue(new Error('Network error'));
+
+    const result = await checkForUpdates();
+    expect(result).toBeNull();
+  });
+
+  it('should throw on network error when requested', async () => {
+    mockFetchWithTimeout.mockRejectedValue(new Error('Network error'));
+
+    await expect(checkForUpdates({ throwOnError: true })).rejects.toThrow('Network error');
+  });
+});
+
+describe('getUpdateInstructions', () => {
+  let restoreEnvironment: () => void;
+
+  beforeEach(() => {
+    restoreEnvironment = mockProcessEnv({}, { clear: true });
+    vi.mocked(existsSync).mockReset().mockReturnValue(false);
+  });
+
+  afterEach(() => {
+    restoreEnvironment();
+  });
+
+  it('distinguishes supported global installs from temporary and other installations', () => {
+    const instructions = getUpdateInstructions();
+
+    expect(instructions).toContain('global npm installations on macOS or Linux');
+    expect(instructions).toContain('promptfoo update');
+    expect(instructions).toContain('npx promptfoo@latest');
+    expect(instructions).toContain('package manager that installed Promptfoo');
+  });
+
+  it('directs official image users to pull the image and rebuild derived images', () => {
+    vi.stubEnv('PROMPTFOO_OFFICIAL_DOCKER_IMAGE', 'true');
+
+    const instructions = getUpdateInstructions();
+
+    expect(instructions).toContain('docker pull ghcr.io/promptfoo/promptfoo:latest');
+    expect(instructions).toContain('rebuild, and redeploy');
+    expect(instructions).not.toContain('promptfoo update');
+  });
+
+  it.each(['docker-env', 'marker-file'])(
+    'uses rebuild guidance for a container detected by %s',
+    (detection) => {
+      if (detection === 'docker-env') {
+        vi.stubEnv('DOCKER', 'true');
+      } else {
+        vi.mocked(existsSync).mockImplementation((file) => file === '/.dockerenv');
+      }
+      expect(getUpdateInstructions()).toContain('rebuild and redeploy');
+      expect(getUpdateInstructions()).not.toContain('promptfoo update');
+    },
+  );
+
+  it('directs custom container users to update and rebuild their own image', () => {
+    vi.stubEnv('PROMPTFOO_RUNNING_IN_DOCKER', 'true');
+
+    const instructions = getUpdateInstructions();
+
+    expect(instructions).toContain('source, dependency, or parent image');
+    expect(instructions).toContain('rebuild and redeploy');
+    expect(instructions).not.toContain('docker pull');
+    expect(instructions).not.toContain('promptfoo update');
+  });
+});

@@ -102,32 +102,33 @@ export function setupEnvFilesFromArgv(argv: string[] = process.argv.slice(2)): v
   telemetry.initialize();
 }
 
-export function shouldSkipDefaultConfigLoading(argv: string[] = process.argv.slice(2)): boolean {
+function getRequestedCommand(argv: string[]): string | undefined {
   for (let index = 0; index < argv.length; index++) {
     const arg = argv[index];
-
     if (arg === '--') {
-      return false;
+      return argv[index + 1];
     }
-
     if (arg === '--env-file' || arg === '--env-path') {
-      index += 1;
-      continue;
-    }
-
-    if (
-      arg === '-v' ||
-      arg === '--verbose' ||
-      arg.startsWith('--env-file=') ||
-      arg.startsWith('--env-path=')
+      index++;
+    } else if (
+      !/^-[v]+$/.test(arg) &&
+      arg !== '--verbose' &&
+      !arg.startsWith('--env-file=') &&
+      !arg.startsWith('--env-path=')
     ) {
-      continue;
+      return arg;
     }
-
-    return arg === 'code-scans';
   }
+  return undefined;
+}
 
-  return false;
+export function shouldSkipDefaultConfigLoading(argv: string[] = process.argv.slice(2)): boolean {
+  const command = getRequestedCommand(argv);
+  return command === 'code-scans' || command === 'update';
+}
+
+export function isUpdateCommandRequested(argv: string[] = process.argv.slice(2)): boolean {
+  return getRequestedCommand(argv) === 'update';
 }
 
 export function isMainModule(importMetaUrl: string, processArgv1: string | undefined): boolean {

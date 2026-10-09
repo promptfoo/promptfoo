@@ -62,6 +62,7 @@ vi.mock('../src/codeScan', () => ({
 }));
 
 let addCommonOptionsRecursively: typeof import('../src/mainUtils').addCommonOptionsRecursively;
+let isUpdateCommandRequested: typeof import('../src/mainUtils').isUpdateCommandRequested;
 let isMainModule: typeof import('../src/mainUtils').isMainModule;
 let shouldSkipDefaultConfigLoading: typeof import('../src/mainUtils').shouldSkipDefaultConfigLoading;
 let setupEnvFilesFromArgv: typeof import('../src/mainUtils').setupEnvFilesFromArgv;
@@ -72,6 +73,7 @@ async function loadMainModule() {
   ({
     addCommonOptionsRecursively,
     isMainModule,
+    isUpdateCommandRequested,
     shouldSkipDefaultConfigLoading,
     setupEnvFilesFromArgv,
     shutdownGracefully,
@@ -148,9 +150,11 @@ describe('shouldSkipDefaultConfigLoading', () => {
     );
   });
 
-  it('keeps default config discovery for other commands and post-separator arguments', () => {
+  it('keeps default config discovery for other commands', () => {
     expect(shouldSkipDefaultConfigLoading(['eval', '--help'])).toBe(false);
-    expect(shouldSkipDefaultConfigLoading(['--', 'code-scans', 'run'])).toBe(false);
+    expect(shouldSkipDefaultConfigLoading(['--', 'code-scans', 'run'])).toBe(true);
+    expect(shouldSkipDefaultConfigLoading(['--', 'update', '--check'])).toBe(true);
+    expect(isUpdateCommandRequested(['--', 'update', '--check'])).toBe(true);
   });
 });
 
@@ -735,5 +739,22 @@ describe('shutdownGracefully', () => {
 
     // Should complete without throwing
     await expect(shutdownPromise).resolves.toBeUndefined();
+  });
+});
+
+describe('update command startup', () => {
+  beforeEach(loadMainModule);
+  it.each([
+    ['update'],
+    ['--env-file', 'fixture.env', 'update'],
+    ['--verbose', 'update'],
+    ['-vv', 'update', '--force'],
+    ['-vvv', '--', 'update'],
+  ])('skips project configuration for %j', (...args) => {
+    expect(isUpdateCommandRequested(args)).toBe(true);
+    expect(shouldSkipDefaultConfigLoading(args)).toBe(true);
+  });
+  it('does not mistake an option value for the update command', () => {
+    expect(isUpdateCommandRequested(['--env-file', 'update', 'eval'])).toBe(false);
   });
 });

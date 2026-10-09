@@ -46,6 +46,7 @@ The `promptfoo` command line utility includes these command groups:
 - `show [id]` - Show details of a specific resource (eval, prompt, or dataset).
 - `delete <id>` - Delete an eval by ID; accepts `latest` or `all`.
 - `retry <evalId>` - Retry ERROR results from a previous eval in place.
+- `update` - Update promptfoo to the latest version.
 - `validate` - Validate a promptfoo configuration file.
   - `validate config`
   - `validate target`
@@ -252,6 +253,23 @@ Create a URL that can be shared online. If no ID is provided, promptfoo shares t
 | Option        | Description                         |
 | ------------- | ----------------------------------- |
 | `--show-auth` | Include auth info in the shared URL |
+
+## `promptfoo update`
+
+Update a verified global npm installation on macOS or Linux. Other installation methods receive manual instructions. The command waits for npm to finish without accepting interactive input.
+
+| Option    | Description                                  |
+| --------- | -------------------------------------------- |
+| `--check` | Check for a newer release without installing |
+| `--force` | Update even when update checks are disabled  |
+
+```sh
+promptfoo update --check
+promptfoo update
+promptfoo update --force
+```
+
+`--check` takes precedence over `--force`: it never installs and respects `PROMPTFOO_DISABLE_UPDATE`. Without `--check`, npm selects and installs `promptfoo@latest` using your registry configuration; no separate version lookup is required.
 
 ## `promptfoo cache`
 
