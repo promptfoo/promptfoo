@@ -1,11 +1,12 @@
 ---
 sidebar_label: Webhook Integration
-description: Integrate real-time issue notifications with external systems using Promptfoo's webhook API. Configure event types, manage endpoints, and verify signatures securely.
+title: Webhook Integration
+description: Receive Promptfoo Enterprise issue, remediation, and eval notifications. Configure team-scoped webhooks, rotate secrets, and verify request signatures safely.
 ---
 
 # Webhook Integration
 
-[Promptfoo Enterprise](/docs/enterprise/) provides webhooks to notify external systems when security vulnerabilities (issues) are created or updated.
+[Promptfoo Enterprise](/docs/enterprise/) provides webhooks for security vulnerabilities (issues), remediation, and eval job events.
 
 ## What is an Issue?
 
@@ -20,35 +21,42 @@ The following webhook event types are available:
 - `issue.status_changed`: Triggered when a vulnerability's status changes (e.g., from open to fixed)
 - `issue.severity_changed`: Triggered when a vulnerability's severity level changes
 - `issue.comment_added`: Triggered when a comment is added to a vulnerability
+- `remediation.created`: Triggered when a new remediation is created for an issue
+- `evaluation.created`: Triggered when an eval job is created
+- `evaluation.completed`: Triggered when an eval job completes, including partial completion
+- `evaluation.failed`: Triggered when an eval job fails
 
 > Note: When multiple properties of a vulnerability are updated simultaneously (for example, both status and severity), a single issue.updated event will be sent rather than separate issue.status_changed and issue.severity_changed events. This helps prevent webhook consumers from receiving multiple notifications for what is logically a single update operation.
 
 ## Managing Webhooks
 
-Webhooks can be managed via the API. Each webhook is associated with an organization and can be configured to listen for specific event types.
+On-prem administrators can manage webhooks under **Organization → Webhooks** or through the API. Management requires organization-admin access; team-scoped API tokens are rejected, so use your signed-in administrator session.
+
+Each webhook subscribes to selected events for one team. When creating a webhook through the API, set `teamId` to that team's UUID. If omitted, the webhook belongs to the organization's default team, including webhooks created through the UI. It does not receive events from other teams.
 
 ### Creating a Webhook
 
-```
-POST /api/webhooks
+With an authenticated administrator session, send:
+
+```http
+POST /api/v1/webhooks
 Content-Type: application/json
-Authorization: Bearer YOUR_API_TOKEN
 
 {
-  "url": "<https://your-webhook-endpoint.com/callback>",
+  "url": "https://your-webhook-endpoint.com/callback",
   "name": "My SIEM Integration",
   "events": ["issue.created", "issue.status_changed"],
-  "teamId": "optional-team-id",
   "enabled": true
 }
-
 ```
 
 Upon creation, a secret is generated for the webhook. This secret is used to sign webhook payloads and should be stored securely.
 
+Use `GET /api/v1/webhooks/event-types` to list the events supported by your installed version. To rotate a secret, use **Regenerate** in the webhook's edit dialog or `POST /api/v1/webhooks/{webhookId}/regenerate-secret`. Update the receiver with the returned secret; new deliveries use the replacement immediately.
+
 ### Webhook Payload Structure
 
-Webhook payloads are sent as JSON and have the following structure:
+Webhook payloads are sent as JSON with `event`, `timestamp`, and `data` fields. Issue events have the following structure:
 
 ```json
 {
@@ -100,40 +108,59 @@ This structure allows you to:
 2. Understand what specific attributes changed
 3. Track who made the change (if applicable)
 
+For `remediation.created`, `data` contains `issueId` and `remediation`. Eval events include `jobId`: creation includes `config`, completion includes `evalId`, `partial`, and `progress`, and failure includes `error` and `progress` when available.
+
 ## Verifying Webhook Signatures
 
-To verify that a webhook is coming from Promptfoo Enterprise, the payload is signed using HMAC SHA-256. The signature is included in the `X-Promptfoo-Signature` header.
+To verify that a webhook is coming from Promptfoo Enterprise, the payload is signed using HMAC SHA-256. The hex-encoded signature is included in the `X-Promptfoo-Signature` header. Verify the raw request body before parsing JSON; reserializing parsed JSON can change the signed bytes.
 
 Here's an example of how to verify signatures in Node.js:
 
-```jsx
-const crypto = require('crypto');
+```js
+import crypto from 'node:crypto';
+import express from 'express';
 
-function verifyWebhookSignature(payload, signature, secret) {
-  const expectedSignature = crypto
-    .createHmac('sha256', secret)
-    .update(JSON.stringify(payload))
-    .digest('hex');
+const app = express();
+const webhookSecret = process.env.PROMPTFOO_WEBHOOK_SECRET;
 
-  return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSignature));
+if (!webhookSecret) {
+  throw new Error('Set PROMPTFOO_WEBHOOK_SECRET to the webhook signing secret');
 }
 
-// In your webhook handler:
-app.post('/webhook-endpoint', (req, res) => {
-  const payload = req.body;
-  const signature = req.headers['x-promptfoo-signature'];
-  const webhookSecret = 'your-webhook-secret';
+function verifyWebhookSignature(rawBody, signature, secret) {
+  if (
+    !Buffer.isBuffer(rawBody) ||
+    typeof signature !== 'string' ||
+    !/^[a-f0-9]{64}$/i.test(signature)
+  ) {
+    return false;
+  }
 
-  if (!verifyWebhookSignature(payload, signature, webhookSecret)) {
+  const expectedSignature = crypto.createHmac('sha256', secret).update(rawBody).digest();
+  return crypto.timingSafeEqual(Buffer.from(signature, 'hex'), expectedSignature);
+}
+
+// Register this route before any app.use(express.json()) middleware.
+app.post('/webhook-endpoint', express.raw({ type: 'application/json' }), (req, res) => {
+  if (!verifyWebhookSignature(req.body, req.get('X-Promptfoo-Signature'), webhookSecret)) {
     return res.status(401).send('Invalid signature');
   }
 
+  const payload = JSON.parse(req.body.toString('utf8'));
   // Process the webhook
   console.log(`Received ${payload.event} event`);
 
   res.status(200).send('Webhook received');
 });
 ```
+
+## Delivery and troubleshooting
+
+Promptfoo sends an HTTP `POST` and expects a `2xx` response within 10 seconds. Redirects are not followed. Deliveries are asynchronous, with no automatic retries for failures. The `X-Webhook-Id` header identifies the webhook subscription, not an individual event.
+
+To test the integration, trigger a subscribed event in the webhook's team, such as adding an issue comment. If it does not arrive, check that the webhook is enabled, its team and event subscription match, and the Promptfoo server can reach the endpoint. For HTTPS, check that the server trusts the endpoint's certificate. On managed Promptfoo Cloud, private and reserved network destinations are blocked; on-prem receivers can use internal addresses reachable from the deployment.
+
+If signature verification fails, check the raw body and current signing secret. On-prem administrators can inspect server logs for `Failed to send webhook` and the endpoint's response status or connection error.
 
 ## Example Integration Scenarios
 
