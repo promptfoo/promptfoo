@@ -48,7 +48,7 @@ function createAttack(strategy: Strategy, continueAfterSuccess: boolean, events:
     generatedQuestion: 'Return an amount as JSON',
   });
   const score = { value: false, metadata: 0, rationale: 'Synthetic objective check' };
-  vi.spyOn(attack, 'getEvalScore').mockResolvedValue(strategy === 'custom' ? [score] : score);
+  vi.spyOn(attack, 'getEvalScore').mockResolvedValue(score);
   vi.spyOn(attack, 'getRefusalScore').mockImplementation(async () => {
     events.push('refusal');
     return [false, 'Synthetic legacy check'];

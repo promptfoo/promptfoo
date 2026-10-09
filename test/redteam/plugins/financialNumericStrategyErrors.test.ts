@@ -37,15 +37,17 @@ describe('fatal numeric grading errors', () => {
       const generation = provider as unknown as {
         getAttackPrompt: () => Promise<{ generatedQuestion: string }>;
         getRefusalScore: () => Promise<[boolean, string]>;
-        getEvalScore: () => Promise<Array<{ value: boolean; metadata: number; rationale: string }>>;
+        getEvalScore: () => Promise<{ value: boolean; metadata: number; rationale: string }>;
       };
       vi.spyOn(generation, 'getAttackPrompt').mockResolvedValue({
         generatedQuestion: 'Return an amount as JSON',
       });
       vi.spyOn(generation, 'getRefusalScore').mockResolvedValue([false, 'Not a refusal']);
-      vi.spyOn(generation, 'getEvalScore').mockResolvedValue([
-        { value: false, metadata: 0, rationale: 'Continue probing' },
-      ]);
+      vi.spyOn(generation, 'getEvalScore').mockResolvedValue({
+        value: false,
+        metadata: 0,
+        rationale: 'Continue probing',
+      });
     }
     vi.stubGlobal(
       'fetch',

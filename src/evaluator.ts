@@ -18,7 +18,7 @@ import {
   runCompareAssertion,
 } from './assertions/index';
 import { extractAndStoreBinaryData } from './blobs/extractor';
-import { getCache, withCacheNamespace } from './cache';
+import { getCache, isCacheEnabled, withCacheEnabled, withCacheNamespace } from './cache';
 import cliState from './cliState';
 import { DEFAULT_MAX_CONCURRENCY, FILE_METADATA_KEY } from './constants';
 import { getEnvBool, getEnvInt, getEvalTimeoutMs, getMaxEvalTimeMs, isCI } from './envars';
@@ -42,12 +42,7 @@ import { maybeWrapMcpProviderForRedteam } from './redteam/mcpTargetProvider';
 import { redteamProviderManager } from './redteam/providers/shared';
 import { throwIfTargetPromptExceedsMaxChars } from './redteam/shared/promptLength';
 import { getSessionId } from './redteam/util';
-import {
-  createProviderRateLimitOptions,
-  createRateLimitRegistry,
-  type RateLimitRegistry,
-  sleepWithAbort,
-} from './scheduler';
+import { createProviderRateLimitOptions, RateLimitRegistry, sleepWithAbort } from './scheduler';
 import {
   withProviderCallExecutionContext,
   withProviderCallTracingContext,
@@ -1321,6 +1316,12 @@ function buildCallApiContext({
     testIdx: testIndex,
   };
 
+  if (!isCacheEnabled()) {
+    // Preserve the context hint for custom providers and older package copies.
+    // The shared async cache policy also disables writes in built-in providers.
+    callApiContext.bustCache = true;
+  }
+
   if (evalId) {
     callApiContext.evaluationId = evalId;
   }
@@ -1868,9 +1869,10 @@ export function getTraceLinkage(
  * @returns The result of the test case.
  */
 export async function runEval(options: RunEvalOptions): Promise<EvaluateResult[]> {
-  return withCacheNamespace(
-    getRepeatCacheNamespace(options.repeatIndex, options.evaluateOptions),
-    () => runEvalInternal(options),
+  return withCacheEnabled(options.evaluateOptions?.cache === false ? false : isCacheEnabled(), () =>
+    withCacheNamespace(getRepeatCacheNamespace(options.repeatIndex, options.evaluateOptions), () =>
+      runEvalInternal(options),
+    ),
   );
 }
 
@@ -4213,7 +4215,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     });
 
     // Create rate limit registry for adaptive concurrency control
-    this.rateLimitRegistry = createRateLimitRegistry({
+    this.rateLimitRegistry = new RateLimitRegistry({
       maxConcurrency: options.maxConcurrency || DEFAULT_MAX_CONCURRENCY,
     });
 
@@ -6415,7 +6417,11 @@ export function evaluate<
             options,
             resolvedRuntime,
           );
-          return ev.evaluate();
+          // Capture this entry point's policy for providers and graders loaded
+          // through another package copy, including extension-hook imports.
+          return withCacheEnabled(options.cache === false ? false : isCacheEnabled(), () =>
+            ev.evaluate(),
+          );
         },
         testSuite.providers.map((provider) => ({ id: provider.id(), config: provider.config })),
       ),

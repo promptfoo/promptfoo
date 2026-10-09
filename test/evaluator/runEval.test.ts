@@ -1,5 +1,6 @@
 import './setup';
 
+import { getEventListeners } from 'node:events';
 import fs from 'fs/promises';
 
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -1385,7 +1386,8 @@ describe('runEval', () => {
             (m) => m.activeRequests === 0 && m.queueDepth === 0,
           ),
         ).toBe(true);
-        expect(vi.getTimerCount()).toBe(0);
+        // Check this evaluation's cleanup without counting unrelated worker timers.
+        expect(getEventListeners(controller.signal, 'abort')).toHaveLength(0);
       } finally {
         registry.dispose();
         await vi.advanceTimersByTimeAsync(60000);

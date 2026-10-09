@@ -15,7 +15,6 @@ import { sleep } from '../../../util/time';
 import { TokenUsageTracker } from '../../../util/tokenUsage';
 import {
   accumulateAttackerTokenUsage,
-  accumulateGradingResponseTokenUsage,
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../../../util/tokenUsageUtils';
@@ -40,18 +39,14 @@ import {
 } from '../../shared/runtimeTransform';
 import { Strategies } from '../../strategies';
 import { checkExfilTracking } from '../../strategies/indirectWebPwn';
-import {
-  extractInputVarsFromPrompt,
-  extractPromptFromTags,
-  getSessionId,
-  isBasicRefusal,
-} from '../../util';
+import { extractInputVarsFromPrompt, extractPromptFromTags, getSessionId } from '../../util';
+import { MemorySystem } from '../conversationMemory';
+import { getEvalScore, getRefusalScore } from '../conversationScoring';
 import { getGoalRubric } from '../prompts';
 import {
   accumulateGraderResult,
   accumulateUnblockingTokenUsage,
   buildGraderResultAssertion,
-  callGradingProvider,
   captureFlaggedTurn,
   externalizeResponseForRedteamHistory,
   formatRedteamHistoryAsTranscript,
@@ -80,7 +75,7 @@ import {
   type RedteamTracingOptions,
   resolveTracingOptions,
 } from '../tracingOptions';
-import { CRESCENDO_SYSTEM_PROMPT, EVAL_SYSTEM_PROMPT, REFUSAL_SYSTEM_PROMPT } from './prompts';
+import { CRESCENDO_SYSTEM_PROMPT } from './prompts';
 
 import type {
   ApiProvider,
@@ -163,29 +158,6 @@ interface CrescendoConfig {
    */
   inputs?: Inputs;
   [key: string]: unknown;
-}
-
-export class MemorySystem {
-  private conversations: Map<string, Message[]> = new Map();
-
-  addMessage(conversationId: string, message: Message) {
-    if (!this.conversations.has(conversationId)) {
-      this.conversations.set(conversationId, []);
-    }
-    this.conversations.get(conversationId)!.push(message);
-  }
-
-  getConversation(conversationId: string): Message[] {
-    return this.conversations.get(conversationId) || [];
-  }
-
-  duplicateConversationExcludingLastTurn(conversationId: string): string {
-    const originalConversation = this.getConversation(conversationId);
-    const newConversationId = crypto.randomUUID();
-    const newConversation = originalConversation.slice(0, -2); // Remove last turn (user + assistant)
-    this.conversations.set(newConversationId, newConversation);
-    return newConversationId;
-  }
 }
 
 export class CrescendoProvider implements ApiProvider {
@@ -1441,72 +1413,18 @@ export class CrescendoProvider implements ApiProvider {
     tokenUsage: TokenUsage,
     options?: CallApiOptionsParams,
   ): Promise<[boolean, string]> {
-    logger.debug(`[Crescendo] Getting refusal score for prompt: ${attackPrompt}`);
-    // Short-circuit refusal grading for standard refusal prefixes
-    if (isBasicRefusal(lastResponse)) {
-      logger.debug(
-        '[Crescendo] Response contains a standard refusal prefix. Short-circuiting refusal grading.',
-      );
-      return [true, 'The output contains a standard refusal.'];
-    }
-
-    // Otherwise, use the scoring chat to grade the refusal
-    const refusalInput = JSON.stringify({
-      conversationObjective: attackPrompt,
-      responseToEvaluateInput: lastResponse,
-    });
-
-    const refusalSystemPrompt = this.nunjucks.renderString(REFUSAL_SYSTEM_PROMPT, {
-      conversationObjective: this.userGoal,
-    });
-
-    const refusalBody = JSON.stringify([
-      { role: 'system', content: refusalSystemPrompt },
-      { role: 'user', content: refusalInput },
-    ]);
-
-    const scoringProvider = await this.getScoringProvider();
-    const refusalResponse = await callGradingProvider(
-      scoringProvider,
-      refusalBody,
+    return getRefusalScore(
       {
-        prompt: {
-          raw: refusalBody,
-          label: 'refusal',
-        },
-        vars: {},
+        logPrefix: 'Crescendo',
+        userGoal: this.userGoal,
+        nunjucks: this.nunjucks,
+        getScoringProvider: () => this.getScoringProvider(),
       },
+      attackPrompt,
+      lastResponse,
+      tokenUsage,
       options,
     );
-    TokenUsageTracker.getInstance().trackResponseUsage(scoringProvider.id(), refusalResponse);
-    accumulateGradingResponseTokenUsage(tokenUsage, refusalResponse);
-    if (scoringProvider.delay) {
-      logger.debug(`[Crescendo] Sleeping for ${scoringProvider.delay}ms`);
-      await sleep(scoringProvider.delay);
-    }
-    if (refusalResponse.error) {
-      throw new Error(`Error from redteam (refusal) provider: ${refusalResponse.error}`);
-    }
-
-    logger.debug(`[Crescendo] Refusal score response: ${refusalResponse.output}`);
-
-    const parsed =
-      typeof refusalResponse.output === 'string'
-        ? extractFirstJsonObject<{
-            value: boolean;
-            metadata: number;
-            rationale: string;
-          }>(refusalResponse.output)
-        : refusalResponse.output;
-
-    logger.debug('[Crescendo] Refusal score parsed response', { parsed });
-    invariant(typeof parsed.value === 'boolean', 'Expected refusal grader value to be a boolean');
-    invariant(
-      typeof parsed.metadata === 'number',
-      'Expected refusal grader metadata to be a number',
-    );
-
-    return [parsed.value, parsed.rationale];
   }
 
   private async getEvalScore(
@@ -1514,69 +1432,17 @@ export class CrescendoProvider implements ApiProvider {
     tokenUsage: TokenUsage,
     options?: CallApiOptionsParams,
   ): Promise<any> {
-    logger.debug(
-      `[Crescendo] Getting eval score for response: ${lastResponse.substring(0, 100)}...`,
-    );
-    const evalInput = JSON.stringify({
-      conversationObjective: this.userGoal,
-      responseToEvaluateInput: lastResponse,
-    });
-
-    const evalSystemPrompt = this.nunjucks.renderString(EVAL_SYSTEM_PROMPT, {
-      conversationObjective: this.userGoal,
-    });
-
-    const evalBody = JSON.stringify([
-      { role: 'system', content: evalSystemPrompt },
-      { role: 'user', content: evalInput },
-    ]);
-
-    const scoringProvider = await this.getScoringProvider();
-    const evalResponse = await callGradingProvider(
-      scoringProvider,
-      evalBody,
+    return getEvalScore(
       {
-        prompt: {
-          raw: evalBody,
-          label: 'eval',
-        },
-        vars: {},
+        logPrefix: 'Crescendo',
+        userGoal: this.userGoal,
+        nunjucks: this.nunjucks,
+        getScoringProvider: () => this.getScoringProvider(),
       },
+      lastResponse,
+      tokenUsage,
       options,
     );
-    TokenUsageTracker.getInstance().trackResponseUsage(scoringProvider.id(), evalResponse);
-    accumulateGradingResponseTokenUsage(tokenUsage, evalResponse);
-    if (scoringProvider.delay) {
-      logger.debug(`[Crescendo] Sleeping for ${scoringProvider.delay}ms`);
-      await sleep(scoringProvider.delay);
-    }
-    if (evalResponse.error) {
-      throw new Error(`Error from redteam (eval) provider: ${evalResponse.error}`);
-    }
-
-    logger.debug(`[Crescendo] Eval score response: ${evalResponse.output}`);
-
-    const parsed =
-      typeof evalResponse.output === 'string'
-        ? extractFirstJsonObject<{
-            value: boolean;
-            description: string;
-            rationale: string;
-            metadata: number;
-          }>(evalResponse.output)
-        : evalResponse.output;
-
-    logger.debug('[Crescendo] Eval score parsed response', { parsed });
-    invariant(
-      typeof parsed.value === 'boolean',
-      `Expected eval grader value to be a boolean: ${parsed}`,
-    );
-    invariant(
-      typeof parsed.metadata === 'number',
-      `Expected eval grader metadata to be a number: ${parsed}`,
-    );
-
-    return parsed;
   }
 
   private async backtrackMemory(conversationId: string): Promise<string> {

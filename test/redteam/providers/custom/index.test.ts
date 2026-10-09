@@ -3,7 +3,7 @@ import { runEval } from '../../../../src/evaluator';
 import logger from '../../../../src/logger';
 import { PromptfooChatCompletionProvider } from '../../../../src/providers/promptfoo';
 import { getGradingInputHash } from '../../../../src/redteam/grading/storedResult';
-import { CustomProvider, MemorySystem } from '../../../../src/redteam/providers/custom/index';
+import { CustomProvider } from '../../../../src/redteam/providers/custom/index';
 import { redteamProviderManager, tryUnblocking } from '../../../../src/redteam/providers/shared';
 import { shouldGenerateRemote } from '../../../../src/redteam/remoteGeneration';
 import { isProviderResponseRateLimited } from '../../../../src/scheduler/types';
@@ -16,7 +16,6 @@ import {
   createSelectedToolErrorTarget,
 } from '../../../util/selectedToolErrorTarget';
 
-import type { Message } from '../../../../src/redteam/providers/shared';
 import type { ProviderResponse } from '../../../../src/types/providers';
 
 // Hoisted mocks for getGraderById
@@ -81,49 +80,6 @@ vi.mock('../../../../src/redteam/shared/runtimeTransform', async (importOriginal
     ...(await importOriginal()),
     applyRuntimeTransforms: mockApplyRuntimeTransforms,
   };
-});
-
-describe('MemorySystem', () => {
-  let memorySystem: MemorySystem;
-
-  beforeEach(() => {
-    memorySystem = new MemorySystem();
-  });
-
-  it('should add and retrieve messages for a conversation', () => {
-    const conversationId = 'test-convo';
-    const message: Message = { role: 'user', content: 'test message' };
-
-    memorySystem.addMessage(conversationId, message);
-    const conversation = memorySystem.getConversation(conversationId);
-
-    expect(conversation).toHaveLength(1);
-    expect(conversation[0]).toEqual(message);
-  });
-
-  it('should return empty array for non-existent conversation', () => {
-    const conversation = memorySystem.getConversation('non-existent');
-    expect(conversation).toEqual([]);
-  });
-
-  it('should duplicate conversation excluding last turn', () => {
-    const conversationId = 'test-convo';
-    const messages: Message[] = [
-      { role: 'system', content: 'system message' },
-      { role: 'user', content: 'user message 1' },
-      { role: 'assistant', content: 'assistant message 1' },
-      { role: 'user', content: 'user message 2' },
-      { role: 'assistant', content: 'assistant message 2' },
-    ];
-
-    messages.forEach((msg) => memorySystem.addMessage(conversationId, msg));
-
-    const newConversationId = memorySystem.duplicateConversationExcludingLastTurn(conversationId);
-    const newConversation = memorySystem.getConversation(newConversationId);
-
-    expect(newConversation).toHaveLength(3);
-    expect(newConversation).toEqual(messages.slice(0, 3));
-  });
 });
 
 describe('CustomProvider', () => {

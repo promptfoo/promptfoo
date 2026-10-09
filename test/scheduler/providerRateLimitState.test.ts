@@ -764,6 +764,41 @@ describe('ProviderRateLimitState', () => {
     });
   });
 
+  it.each(['success', 'error'] as const)(
+    'keeps latency metrics bounded to the latest 100 %s calls',
+    async (outcome) => {
+      const error = new Error('provider failed');
+      for (let index = 0; index < 110; index++) {
+        const request = state.executeWithRetry(
+          `latency-${index}`,
+          async () => {
+            vi.advanceTimersByTime(index < 10 ? 1000 : 1);
+            if (outcome === 'error') {
+              throw error;
+            }
+            return 'success';
+          },
+          { maxRetriesOverride: 0 },
+        );
+        if (outcome === 'error') {
+          await expect(request).rejects.toBe(error);
+        } else {
+          await expect(request).resolves.toBe('success');
+        }
+      }
+
+      expect(state.getMetrics()).toMatchObject({
+        activeRequests: 0,
+        totalRequests: 110,
+        completedRequests: outcome === 'success' ? 110 : 0,
+        failedRequests: outcome === 'error' ? 110 : 0,
+        avgLatencyMs: 1,
+        p50LatencyMs: 1,
+        p99LatencyMs: 1,
+      });
+    },
+  );
+
   describe('dispose', () => {
     it('should clean up resources', () => {
       state.dispose();
