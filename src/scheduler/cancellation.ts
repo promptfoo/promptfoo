@@ -1,8 +1,6 @@
-import { getCallerAbortError } from '../util/fetch/requestSignal';
-
 export function throwIfAborted(signal?: AbortSignal): void {
   if (signal?.aborted) {
-    throw getCallerAbortError(signal, 'The operation was aborted.');
+    throw signal.reason;
   }
 }
 
@@ -15,7 +13,7 @@ export function sleepWithAbort(ms: number, signal?: AbortSignal): Promise<void> 
     };
     const onAbort = () => {
       cleanup();
-      reject(getCallerAbortError(signal!, 'The operation was aborted.'));
+      reject(signal?.reason);
     };
     const timer = setTimeout(() => {
       cleanup();

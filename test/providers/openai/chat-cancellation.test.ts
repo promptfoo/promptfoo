@@ -103,6 +103,44 @@ describe('OpenAI-compatible chat cancellation', () => {
     await target.cleanup();
   });
 
+  it('restores MCP tools on reuse after abandoned startup and ignores late old cleanup', async () => {
+    const firstStartup = createDeferred<void>();
+    const initialize = vi
+      .spyOn(MCPClient.prototype, 'initialize')
+      .mockReturnValueOnce(firstStartup.promise)
+      .mockResolvedValue();
+    vi.spyOn(MCPClient.prototype, 'getAllTools').mockReturnValue([
+      { name: 'lookup', description: 'fixture', inputSchema: { type: 'object' } },
+    ]);
+    const cleanup = vi.spyOn(MCPClient.prototype, 'cleanup').mockResolvedValue();
+    fetch.mockImplementation(async () => response());
+    const target = new OpenAiChatCompletionProvider('fixture', {
+      config: { apiKey: 'fixture-key', mcp: { enabled: true } },
+    });
+    const controller = new AbortController();
+    const first = target.callApi('first', undefined, { abortSignal: controller.signal });
+    const rejected = expect(first).rejects.toMatchObject({ name: 'AbortError' });
+    controller.abort();
+    await rejected;
+    await target.cleanup();
+    const second = target.callApi('second');
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect.soft(initialize).toHaveBeenCalledTimes(2);
+    firstStartup.resolve();
+    await second;
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    await target.callApi('third');
+    for (const [, options] of fetch.mock.calls) {
+      expect(JSON.parse(String(options?.body)).tools).toEqual([
+        expect.objectContaining({ function: expect.objectContaining({ name: 'lookup' }) }),
+      ]);
+    }
+    expect(initialize).toHaveBeenCalledTimes(2);
+    expect(cleanup).toHaveBeenCalledOnce();
+    await target.cleanup();
+    expect(cleanup).toHaveBeenCalledTimes(2);
+  });
+
   it('releases its scheduler slot while shared MCP connection remains pending for another caller', async () => {
     const connection = createDeferred<void>();
     const connecting = createDeferred<void>();

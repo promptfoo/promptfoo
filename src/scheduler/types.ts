@@ -24,6 +24,10 @@ export interface RateLimitExecuteOptions<T> {
   onRateLimitExhausted?: (result: T, error: Error) => T;
 }
 
+// Word-bounded: a bare "429" substring also matches token counts and request
+// IDs, e.g. "prompt is too long: 204291 tokens".
+const HTTP_429_RE = /\b429\b/;
+
 /**
  * Default rate limit detection for ProviderResponse.
  *
@@ -75,10 +79,10 @@ export function isProviderResponseRateLimited(
     // Check HTTP status code (most reliable)
     result?.metadata?.http?.status === 429 ||
       // Check error field in response
-      responseError?.includes?.('429') ||
+      HTTP_429_RE.test(responseError ?? '') ||
       responseError?.toLowerCase?.().includes?.('rate limit') ||
       // Check thrown error message
-      error?.message?.includes('429') ||
+      HTTP_429_RE.test(error?.message ?? '') ||
       error?.message?.toLowerCase().includes('rate limit') ||
       error?.message?.toLowerCase().includes('too many requests'),
   );

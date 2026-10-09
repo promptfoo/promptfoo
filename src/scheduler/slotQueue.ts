@@ -1,12 +1,9 @@
-import { getCallerAbortError } from '../util/fetch/requestSignal';
-import { throwIfAborted } from './cancellation';
-
 import type { ParsedRateLimitHeaders } from './headerParser';
 
 interface QueuedRequest {
   id: string;
   resolve: () => void;
-  reject: (error: Error) => void;
+  reject: (error: unknown) => void;
   queuedAt: number;
 }
 
@@ -56,10 +53,10 @@ export class SlotQueue {
 
   /**
    * Acquire a slot. All requests go through the queue to prevent race conditions.
-   * Returns when a slot is available and quota is not exhausted.
+   * Returns when a slot is available and quota is not exhausted. An aborted signal stops
+   * the request from waiting, but a slot that is free immediately is still granted.
    */
   async acquire(requestId: string, abortSignal?: AbortSignal): Promise<void> {
-    throwIfAborted(abortSignal);
     return new Promise((resolve, reject) => {
       const queuedAt = Date.now();
       let timeoutId: NodeJS.Timeout | null = null;
@@ -69,7 +66,7 @@ export class SlotQueue {
         }
         abortSignal?.removeEventListener('abort', onAbort);
       };
-      const removeAndReject = (error: Error) => {
+      const removeAndReject = (error: unknown) => {
         const index = this.waiting.indexOf(request);
         if (index !== -1) {
           this.waiting.splice(index, 1);
@@ -77,8 +74,7 @@ export class SlotQueue {
           this.processQueue();
         }
       };
-      const onAbort = () =>
-        removeAndReject(getCallerAbortError(abortSignal!, 'The operation was aborted.'));
+      const onAbort = () => removeAndReject(abortSignal?.reason);
       const request: QueuedRequest = {
         id: requestId,
         queuedAt,
@@ -108,6 +104,9 @@ export class SlotQueue {
 
       // Immediately try to process queue (synchronous, no race)
       this.processQueue();
+      if (abortSignal?.aborted) {
+        onAbort();
+      }
     });
   }
 

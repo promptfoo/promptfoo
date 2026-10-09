@@ -3,7 +3,8 @@ import fs from 'fs/promises';
 import path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { runPython, state } from '../../src/python/pythonUtils';
+import cliState from '../../src/cliState';
+import { runPython } from '../../src/python/pythonUtils';
 import {
   createSecureTempDirectory,
   removeSecureTempDirectory,
@@ -49,8 +50,6 @@ describe('runPython preparation cancellation', () => {
   beforeEach(async () => {
     vi.resetAllMocks();
     vi.useFakeTimers();
-    state.cachedPythonPath = null;
-    state.validationPromise = null;
     createdDirectories.length = 0;
 
     fixtureDirectory = await realTempFiles.createSecureTempDirectory('python-cancellation-test-');
@@ -103,8 +102,6 @@ describe('runPython preparation cancellation', () => {
         realTempFiles.removeSecureTempDirectory(directory),
       ),
     );
-    state.cachedPythonPath = null;
-    state.validationPromise = null;
     vi.useRealTimers();
     vi.resetAllMocks();
   });
@@ -123,42 +120,44 @@ describe('runPython preparation cancellation', () => {
     expect(pythonShell).not.toHaveBeenCalled();
   });
 
-  it('cancels after held validation without cancelling another caller sharing that validation', async () => {
-    const validationStarted = createDeferred<void>();
-    const validationRelease = createDeferred<{ stdout: string; stderr: string }>();
-    execFileAsync.mockImplementationOnce(() => {
-      validationStarted.resolve();
-      return validationRelease.promise;
-    });
-    const controller = new AbortController();
-    const reason = new Error('cancelled during executable validation');
-    const options = { pythonExecutable: 'configured-python', abortSignal: controller.signal };
-    const cancelled = runPython(scriptPath, 'cancelled_call', [], options).catch((error) => error);
-    let surviving: Promise<unknown> | undefined;
-
-    try {
-      await validationStarted.promise;
-      surviving = runPython(scriptPath, 'surviving_call', [], {
-        pythonExecutable: 'configured-python',
+  it('cancels after held validation without cancelling another caller sharing that validation', () =>
+    cliState.withEnv({}, async () => {
+      const validationStarted = createDeferred<void>();
+      const validationRelease = createDeferred<{ stdout: string; stderr: string }>();
+      execFileAsync.mockImplementationOnce(() => {
+        validationStarted.resolve();
+        return validationRelease.promise;
       });
-      expect(execFileAsync).toHaveBeenCalledTimes(1);
-      expect(createSecureTempDirectory).not.toHaveBeenCalled();
-      expect(pythonShell).not.toHaveBeenCalled();
+      const controller = new AbortController();
+      const reason = new Error('cancelled during executable validation');
+      const options = { pythonExecutable: 'configured-python', abortSignal: controller.signal };
+      const cancelled = runPython(scriptPath, 'cancelled_call', [], options).catch(
+        (error) => error,
+      );
+      let surviving: Promise<unknown> | undefined;
 
-      controller.abort(reason);
-      validationRelease.resolve({ stdout: 'Python 3.12.0\n', stderr: '' });
+      try {
+        await validationStarted.promise;
+        surviving = runPython(scriptPath, 'surviving_call', [], {
+          pythonExecutable: 'configured-python',
+        });
+        expect(execFileAsync).toHaveBeenCalledTimes(1);
+        expect(createSecureTempDirectory).not.toHaveBeenCalled();
+        expect(pythonShell).not.toHaveBeenCalled();
 
-      expect(await cancelled).toBe(reason);
-      await expect(surviving).resolves.toEqual({ output: 'prepared' });
-      expect(createSecureTempDirectory).toHaveBeenCalledTimes(1);
-      expect(pythonShell).toHaveBeenCalledTimes(1);
-      expect(pythonShell.mock.calls[0][1].args[1]).toBe('surviving_call');
-      expect(state.cachedPythonPath).toBe('configured-python');
-    } finally {
-      validationRelease.resolve({ stdout: 'Python 3.12.0\n', stderr: '' });
-      await Promise.allSettled([cancelled, ...(surviving ? [surviving] : [])]);
-    }
-  });
+        controller.abort(reason);
+        validationRelease.resolve({ stdout: 'Python 3.12.0\n', stderr: '' });
+
+        expect(await cancelled).toBe(reason);
+        await expect(surviving).resolves.toEqual({ output: 'prepared' });
+        expect(createSecureTempDirectory).toHaveBeenCalledTimes(1);
+        expect(pythonShell).toHaveBeenCalledTimes(1);
+        expect(pythonShell.mock.calls[0][1].args[1]).toBe('surviving_call');
+      } finally {
+        validationRelease.resolve({ stdout: 'Python 3.12.0\n', stderr: '' });
+        await Promise.allSettled([cancelled, ...(surviving ? [surviving] : [])]);
+      }
+    }));
 
   it('does not start Python after cancellation during the final preparation write', async () => {
     const outputWritten = createDeferred<string>();

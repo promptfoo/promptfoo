@@ -245,7 +245,9 @@ describe('persisted CLI pause drains completed deferred grading', () => {
 
         const installed = process
           .listeners('SIGINT')
-          .filter((listener) => !beforeSigint.includes(listener));
+          .filter(
+            (listener) => !beforeSigint.includes(listener) && listener.name === 'sigintHandler',
+          );
         expect(installed).toHaveLength(1);
         // Invoke the real installed doEval handler, leaving Vitest's own SIGINT
         // listener alone. process.on/removeListener remain unmocked.
@@ -269,7 +271,9 @@ describe('persisted CLI pause drains completed deferred grading', () => {
         expect(paused.persisted).toBe(true);
         expect(callOptions.abortSignal).toBe(caller.signal);
         expect(firstQueue?.hasJobs()).toBe(false);
-        expect(process.listeners('SIGINT')).toEqual(beforeSigint);
+        expect(
+          process.listeners('SIGINT').filter((listener) => listener.name === 'sigintHandler'),
+        ).toEqual(beforeSigint.filter((listener) => listener.name === 'sigintHandler'));
         expect(targetCalls).toEqual(['alpha', 'beta']);
 
         // Reload from the DB instead of reading evaluator-owned transient rows.
@@ -363,7 +367,9 @@ describe('persisted CLI pause drains completed deferred grading', () => {
         }
         expectOnlyDisabledTelemetry();
         expect(watchdogFired).toBe(false);
-        expect(process.listeners('SIGINT')).toEqual(beforeSigint);
+        expect(
+          process.listeners('SIGINT').filter((listener) => listener.name === 'sigintHandler'),
+        ).toEqual(beforeSigint.filter((listener) => listener.name === 'sigintHandler'));
       } finally {
         caller.abort(new Error('deferred pause fixture cleanup'));
         for (const release of releases) {
@@ -599,7 +605,9 @@ describe('persisted CLI pause drains completed deferred grading', () => {
       if (!otelWasInitialized) {
         await shutdownOtel();
       }
-      expect(process.listeners('SIGINT')).toEqual(beforeSigint);
+      expect(
+        process.listeners('SIGINT').filter((listener) => listener.name === 'sigintHandler'),
+      ).toEqual(beforeSigint.filter((listener) => listener.name === 'sigintHandler'));
     } finally {
       caller.abort(new Error('trace pause fixture cleanup'));
       release.resolve(null);

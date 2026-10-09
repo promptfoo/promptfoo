@@ -190,17 +190,13 @@ describe('scheduler observer ownership through provider delegation', () => {
         abortSignal: controller.signal,
         onResponseHeaders: explicit,
       }),
-    ).rejects.toMatchObject({
-      name: 'AbortError',
-      message: 'caller stopped',
-      cause: 'caller stopped',
-    });
+    ).rejects.toBe('caller stopped');
     expect(rawCall).not.toHaveBeenCalled();
     expect(explicit).not.toHaveBeenCalled();
     expect(state.getMetrics().child).toMatchObject({
       activeRequests: 0,
       queueDepth: 0,
-      failedRequests: 1,
+      failedRequests: 0,
     });
   });
 

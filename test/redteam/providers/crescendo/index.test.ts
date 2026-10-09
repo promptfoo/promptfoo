@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { runAssertions } from '../../../../src/assertions/index';
 import * as evaluatorHelpers from '../../../../src/evaluatorHelpers';
+import logger from '../../../../src/logger';
 import { CrescendoProvider, MemorySystem } from '../../../../src/redteam/providers/crescendo/index';
 import { redteamProviderManager, tryUnblocking } from '../../../../src/redteam/providers/shared';
 import { shouldGenerateRemote } from '../../../../src/redteam/remoteGeneration';
@@ -531,12 +532,7 @@ describe('CrescendoProvider', () => {
             };
       const targetResponses =
         path === 'unblocking'
-          ? [
-              final === 'tool error'
-                ? { output: 'Please provide the example reference number.' }
-                : markedError,
-              selectedResponse,
-            ]
+          ? [{ output: 'Please provide the example reference number.' }, selectedResponse]
           : final === 'tool error'
             ? [selectedResponse]
             : [markedError, selectedResponse];
@@ -592,19 +588,26 @@ describe('CrescendoProvider', () => {
 
       expect(events).toEqual(
         path === 'unblocking'
-          ? ['attacker', 'target 1', 'unblocking', 'target 2', 'refusal', 'eval', 'return']
+          ? [
+              'attacker',
+              'target 1',
+              'unblocking',
+              'target 2',
+              ...(selectedResponse.error ? [] : ['refusal', 'eval']),
+              'return',
+            ]
           : [
-              ...targetResponses.flatMap((_response, index) => [
+              ...targetResponses.flatMap((response, index) => [
                 'attacker',
                 `target ${index + 1}`,
-                'unblocking',
-                'refusal',
-                'eval',
+                ...(response.error ? [] : ['unblocking', 'refusal', 'eval']),
               ]),
               'return',
             ],
       );
-      const gradedResponses = path === 'unblocking' ? [selectedResponse] : targetResponses;
+      const gradedResponses = (path === 'unblocking' ? [selectedResponse] : targetResponses).filter(
+        (response) => !response.error,
+      );
       expect(
         mockScoringProvider.callApi.mock.calls.map(([body, context]) => ({
           label: context?.prompt.label,
@@ -628,16 +631,16 @@ describe('CrescendoProvider', () => {
         expect(result.metadata).not.toHaveProperty(key);
       }
       expect(result.metadata?.crescendoRoundsCompleted).toBe(rounds);
-      expect(result.metadata?.crescendoConfidence).toBe(25);
+      expect(result.metadata?.crescendoConfidence).toBe(gradedResponses.length > 0 ? 25 : null);
       expect(result.metadata?.stopReason).toBe('Max rounds reached');
-      expect(result.metadata?.redteamHistory).toHaveLength(rounds);
+      expect(result.metadata?.redteamHistory).toHaveLength(gradedResponses.length);
       expect(result.tokenUsage).toMatchObject({
         total: targetResponses.length * 5,
         prompt: targetResponses.length * 3,
         completion: targetResponses.length * 2,
         numRequests: targetResponses.length,
         attacker: { total: rounds * 2, numRequests: rounds },
-        assertions: { total: rounds * 6, numRequests: rounds * 2 },
+        assertions: { total: gradedResponses.length * 6, numRequests: gradedResponses.length * 2 },
       });
     });
   });
@@ -666,12 +669,7 @@ describe('CrescendoProvider', () => {
               };
         const targetResponses =
           path === 'unblocking'
-            ? [
-                final === 'observer error'
-                  ? { output: 'Please provide the example reference number.' }
-                  : observerResponse,
-                selectedResponse,
-              ]
+            ? [{ output: 'Please provide the example reference number.' }, selectedResponse]
             : final === 'observer error'
               ? [selectedResponse]
               : [observerResponse, selectedResponse];
@@ -729,19 +727,26 @@ describe('CrescendoProvider', () => {
 
         expect(events).toEqual(
           path === 'unblocking'
-            ? ['attacker', 'target 1', 'unblocking', 'target 2', 'refusal', 'eval', 'return']
+            ? [
+                'attacker',
+                'target 1',
+                'unblocking',
+                'target 2',
+                ...(selectedResponse.error ? [] : ['refusal', 'eval']),
+                'return',
+              ]
             : [
-                ...targetResponses.flatMap((_response, index) => [
+                ...targetResponses.flatMap((response, index) => [
                   'attacker',
                   `target ${index + 1}`,
-                  'unblocking',
-                  'refusal',
-                  'eval',
+                  ...(response.error ? [] : ['unblocking', 'refusal', 'eval']),
                 ]),
                 'return',
               ],
         );
-        const gradedResponses = path === 'unblocking' ? [selectedResponse] : targetResponses;
+        const gradedResponses = (
+          path === 'unblocking' ? [selectedResponse] : targetResponses
+        ).filter((response) => !response.error);
         expect(
           mockScoringProvider.callApi.mock.calls.map(([body, context]) => ({
             label: context?.prompt.label,
@@ -760,16 +765,19 @@ describe('CrescendoProvider', () => {
         expect(isProviderResponseRateLimited(result, undefined)).toBe(final === 'provider error');
         expect(result.metadata).not.toHaveProperty('errorOrigin');
         expect(result.metadata?.crescendoRoundsCompleted).toBe(rounds);
-        expect(result.metadata?.crescendoConfidence).toBe(25);
+        expect(result.metadata?.crescendoConfidence).toBe(gradedResponses.length > 0 ? 25 : null);
         expect(result.metadata?.stopReason).toBe('Max rounds reached');
-        expect(result.metadata?.redteamHistory).toHaveLength(rounds);
+        expect(result.metadata?.redteamHistory).toHaveLength(gradedResponses.length);
         expect(result.tokenUsage).toMatchObject({
           total: targetResponses.length * 5,
           prompt: targetResponses.length * 3,
           completion: targetResponses.length * 2,
           numRequests: targetResponses.length,
           attacker: { total: rounds * 2, numRequests: rounds },
-          assertions: { total: rounds * 6, numRequests: rounds * 2 },
+          assertions: {
+            total: gradedResponses.length * 6,
+            numRequests: gradedResponses.length * 2,
+          },
         });
       });
     },
@@ -1704,6 +1712,74 @@ describe('CrescendoProvider', () => {
     expect(result.output).toBe('This is 504');
     expect(result.error).toBe('HTTP 504');
   });
+
+  it.each([false, true])(
+    'keeps a missing target response out of graders with unblocking=%s',
+    async (unblocking) => {
+      const provider = new CrescendoProvider({
+        injectVar: 'objective',
+        maxTurns: 1,
+        redteamProvider: mockRedTeamProvider,
+      });
+      mockRedTeamProvider.callApi.mockResolvedValue({
+        output: JSON.stringify({
+          generatedQuestion: 'attack',
+          rationaleBehindJailbreak: 'rationale',
+          lastResponseSummary: 'summary',
+        }),
+      });
+      if (unblocking) {
+        mockTargetProvider.callApi.mockResolvedValueOnce({
+          output: 'Please confirm the request',
+          tokenUsage: { total: 8, prompt: 6, completion: 2, numRequests: 1 },
+        });
+        vi.mocked(tryUnblocking).mockResolvedValueOnce({
+          success: true,
+          unblockingPrompt: 'Confirmed',
+        });
+      }
+      mockTargetProvider.callApi.mockResolvedValue({
+        output: null,
+        tokenUsage: { total: 5, prompt: 5, completion: 0, numRequests: 1 },
+        metadata: {
+          http: {
+            status: 200,
+            statusText: 'OK',
+            headers: { authorization: 'Bearer CRESCENDO_SECRET_CANARY' },
+          },
+        },
+      });
+      const test: AtomicTestCase = {
+        metadata: { pluginId: 'ssrf' },
+        assert: [{ type: 'promptfoo:redteam:ssrf' }],
+      };
+
+      const result = await provider.callApi('Test prompt', {
+        originalProvider: mockTargetProvider,
+        vars: { objective: 'Test objective' },
+        prompt: { raw: 'Test prompt', label: 'test' },
+        test,
+      });
+
+      expect(result.error).toContain('Target returned malformed response');
+      expect(result.tokenUsage).toMatchObject({
+        total: unblocking ? 13 : 5,
+        numRequests: unblocking ? 2 : 1,
+      });
+      expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(unblocking ? 2 : 1);
+      expect(tryUnblocking).toHaveBeenCalledTimes(unblocking ? 1 : 0);
+      expect(mockScoringProvider.callApi).not.toHaveBeenCalled();
+      expect(mockGetGraderById).not.toHaveBeenCalled();
+      expect(logger.debug).toHaveBeenCalledWith('[Crescendo] Target response', {
+        response: expect.objectContaining({ metadata: expect.any(Object) }),
+      });
+      expect(
+        vi
+          .mocked(logger.debug)
+          .mock.calls.some(([message]) => String(message).includes('CRESCENDO_SECRET_CANARY')),
+      ).toBe(false);
+    },
+  );
 
   it('should handle purpose from test metadata', async () => {
     const provider = new CrescendoProvider({

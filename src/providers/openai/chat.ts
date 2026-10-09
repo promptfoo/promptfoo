@@ -56,6 +56,7 @@ import {
   assertOpenAiApiModel,
   formatOpenAiError,
   getOpenAiChatChoiceError,
+  getOpenAiEffectiveServiceTier,
   getOpenAiGatewayErrorType,
   getOpenAiGatewayProviderCode,
   getOpenAiPartialOutput,
@@ -63,6 +64,8 @@ import {
   getTokenUsage,
   isCustomOpenAiEndpoint,
   isOpenAiErrorOnlyResponse,
+  normalizeOpenAiBillingModelName,
+  normalizeOpenAiServiceTierForWire,
   OPENAI_CHAT_MODELS,
   validateFunctionCall,
 } from './util';
@@ -139,10 +142,14 @@ function getChatSearchCitations(
 }
 
 function getChatSearchSurcharge(modelName: string): number {
-  if (/(?:^|\/)gpt-5-search-api(?:-|$)/.test(modelName)) {
+  const billingModelName = normalizeOpenAiBillingModelName(modelName);
+  if (billingModelName.includes('/')) {
+    return 0;
+  }
+  if (/^gpt-5-search-api(?:-|$)/.test(billingModelName)) {
     return 0.01;
   }
-  if (/(?:^|\/)gpt-4o(?:-mini)?-search-preview(?:-|$)/.test(modelName)) {
+  if (/^gpt-4o(?:-mini)?-search-preview(?:-|$)/.test(billingModelName)) {
     return 0.025;
   }
   return 0;
@@ -344,17 +351,24 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     this.config = options.config ? { ...options.config } : {};
 
     if (this.config.mcp?.enabled) {
-      this.initializationPending = true;
-      this.initializationPromise = this.initializeMCP().finally(() => {
-        this.initializationPending = false;
-      });
-      // A canceled call may return before awaiting this shared initialization.
-      void this.initializationPromise.catch(() => undefined);
+      this.startMCPInitialization();
     }
   }
 
   validateFunctionToolCall(output: string | object, vars?: CallApiContextParams['vars']): void {
     validateFunctionCall(output, this.config.functions, vars);
+  }
+
+  private startMCPInitialization(): void {
+    this.initializationPending = true;
+    this.lastInitializationWaitCancelled = false;
+    const initialization = this.initializeMCP().finally(() => {
+      if (this.initializationPromise === initialization) {
+        this.initializationPending = false;
+      }
+    });
+    this.initializationPromise = initialization;
+    void initialization.catch(() => undefined);
   }
 
   private async initializeMCP(): Promise<void> {
@@ -365,14 +379,18 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
   async cleanup(): Promise<void> {
     if (this.mcpClient) {
       const mcpClient = this.mcpClient;
+      const initialization = this.initializationPromise;
       const cleanup = (async () => {
         try {
-          await this.initializationPromise;
+          await initialization;
         } finally {
           try {
             await mcpClient.cleanup();
           } finally {
-            this.mcpClient = null;
+            if (this.mcpClient === mcpClient) {
+              this.mcpClient = null;
+              this.initializationPromise = null;
+            }
           }
         }
       })();
@@ -384,6 +402,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         // Teardown must not rejoin startup abandoned by its last caller. The
         // shared work still owns eventual resource cleanup, including late failure.
         this.mcpClient = null;
+        this.initializationPromise = null;
         void cleanup.catch((error) => {
           logger.debug('MCP cleanup after cancelled initialization failed', { error });
         });
@@ -391,6 +410,14 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       }
       await cleanup;
     }
+  }
+
+  protected isReasoningCapabilityModel(modelName: string): boolean {
+    return super.isReasoningModel(modelName);
+  }
+
+  protected supportsTemperatureForCapabilityModel(modelName: string): boolean {
+    return !this.isReasoningCapabilityModel(modelName);
   }
 
   /**
@@ -428,19 +455,25 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     callApiOptions?: CallApiOptionsParams,
   ) {
     // Merge configs from the provider and the prompt
+    const promptConfig = context?.prompt?.config;
     const config = {
       ...this.config,
-      ...context?.prompt?.config,
+      ...promptConfig,
     };
+    const effectiveServiceTier = getOpenAiEffectiveServiceTier(this.config, promptConfig);
 
     const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
 
     const passthroughModel =
       typeof config.passthrough?.model === 'string' ? config.passthrough.model : undefined;
-    const capabilityModelName = (passthroughModel ?? this.getCapabilityModelName()).replace(
-      /(^|\/)ft:/,
-      '$1',
-    );
+    const capabilityModelName = this.normalizeCapabilityModelName(
+      passthroughModel ?? this.getCapabilityModelName(),
+    ).replace(/(^|\/)ft:/, '$1');
+    // Repeating the configured model must preserve subclass capabilities, such as
+    // Mantle Grok's completion cap and temperature support.
+    const usesConfiguredCapabilities =
+      capabilityModelName ===
+      this.normalizeCapabilityModelName(this.getCapabilityModelName()).replace(/(^|\/)ft:/, '$1');
     const isGPT5Model = this.isGPT5Model(capabilityModelName);
     const isOSeriesModel =
       capabilityModelName.startsWith('o1') ||
@@ -451,10 +484,9 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       capabilityModelName.includes('/o4');
     const isGPT6Model = isGpt6Model(capabilityModelName);
     const isOpenRouterGpt6 = isGPT6Model && this.usesOpenRouter();
-    const isReasoningModel =
-      passthroughModel === undefined
-        ? this.isReasoningModel()
-        : super.isReasoningModel(capabilityModelName);
+    const isReasoningModel = usesConfiguredCapabilities
+      ? this.isReasoningModel()
+      : this.isReasoningCapabilityModel(capabilityModelName);
     const maxCompletionTokens = isReasoningModel
       ? (config.max_completion_tokens ?? getEnvInt('OPENAI_MAX_COMPLETION_TOKENS'))
       : undefined;
@@ -471,10 +503,11 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         ? undefined
         : getEnvFloat('OPENAI_TEMPERATURE')
       : getEnvFloat('OPENAI_TEMPERATURE', 0);
-    // GPT-6 sampling depends on the final reasoning effort; its request rules remove it if needed.
     const supportsTemperature =
       isGPT6Model ||
-      (passthroughModel === undefined ? this.supportsTemperature() : !isReasoningModel);
+      (usesConfiguredCapabilities
+        ? this.supportsTemperature()
+        : this.supportsTemperatureForCapabilityModel(capabilityModelName));
     const temperature = supportsTemperature
       ? (config.temperature ?? temperatureDefault)
       : undefined;
@@ -539,6 +572,9 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         : {}),
       ...(callApiOptions?.includeLogProbs ? { logprobs: callApiOptions.includeLogProbs } : {}),
       ...(config.stop ? { stop: config.stop } : {}),
+      ...(config.safety_identifier === undefined
+        ? {}
+        : { safety_identifier: config.safety_identifier }),
       ...(config.prompt_cache_key === undefined
         ? {}
         : { prompt_cache_key: config.prompt_cache_key }),
@@ -549,6 +585,11 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         ? {}
         : { prompt_cache_retention: config.prompt_cache_retention }),
       ...(config.passthrough || {}),
+      ...(effectiveServiceTier === undefined
+        ? {}
+        : {
+            service_tier: normalizeOpenAiServiceTierForWire(effectiveServiceTier, this.getApiUrl()),
+          }),
       ...(capabilityModelName.includes('audio')
         ? {
             modalities: config.modalities || ['text', 'audio'],
@@ -573,9 +614,6 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     }
 
     // Add other basic parameters
-    if (config.service_tier) {
-      body.service_tier = config.service_tier;
-    }
     if (config.user) {
       body.user = config.user;
     }
@@ -593,6 +631,13 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       delete body.max_tokens;
     }
 
+    // Whether a native GPT-6 request reasons decides which environment limit applies to it.
+    const gpt6Effort =
+      isGPT6Model && !isOpenRouterGpt6
+        ? getGpt6ChatReasoningEffort(this.config, context?.prompt?.config, (value) =>
+            renderVarsInObject(value, context?.vars),
+          )
+        : undefined;
     if (isGPT6Model) {
       const outputCap = resolveGpt6ChatOutputCap(
         this.config,
@@ -600,7 +645,12 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         isOpenRouterGpt6,
         {
           maxCompletionTokens: getEnvInt('OPENAI_MAX_COMPLETION_TOKENS'),
-          maxTokens: getEnvInt('OPENAI_MAX_TOKENS'),
+          // OPENAI_MAX_TOKENS limits the visible output of non-reasoning requests. As a GPT-6
+          // cap it would also limit reasoning, as it never has for o-series or GPT-5 Chat
+          // requests, so it applies only when reasoning is turned off. OpenRouter requests,
+          // which have always honored it, keep falling back to it.
+          maxTokens:
+            isOpenRouterGpt6 || gpt6Effort === 'none' ? getEnvInt('OPENAI_MAX_TOKENS') : undefined,
         },
       );
       if (outputCap === undefined) {
@@ -617,13 +667,10 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           'GPT-6 Chat Completions requests use reasoning_effort. Configure reasoning_effort, or use the Responses API for config.reasoning.',
         );
       }
-      const effort = getGpt6ChatReasoningEffort(this.config, context?.prompt?.config, (value) =>
-        renderVarsInObject(value, context?.vars),
-      );
-      if (effort === undefined) {
+      if (gpt6Effort === undefined) {
         delete body.reasoning_effort;
       } else {
-        body.reasoning_effort = effort;
+        body.reasoning_effort = gpt6Effort;
       }
     }
     // OpenRouter can translate Chat tools to the upstream Responses API.
@@ -631,7 +678,18 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       isOpenRouter: isOpenRouterGpt6,
     });
 
-    return { body, config: { ...config, service_tier: body.service_tier } };
+    return { body, config: { ...config, service_tier: effectiveServiceTier } };
+  }
+
+  protected override getBillingModelName(config: OpenAiCompletionOptions): string {
+    const passthroughModel = (config.passthrough as { model?: unknown } | undefined)?.model;
+    return typeof passthroughModel === 'string'
+      ? passthroughModel
+      : super.getBillingModelName(config);
+  }
+
+  protected getBillingRegion(): string | undefined {
+    return undefined;
   }
 
   /**
@@ -648,14 +706,13 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     if (this.usesOpenRouter()) {
       return calculateOpenRouterResponseCost(data, config);
     }
-    const passthroughModel = (config.passthrough as { model?: unknown } | undefined)?.model;
-    const modelName =
-      typeof passthroughModel === 'string' ? passthroughModel : this.getBillingModelName(config);
-    const billingModelName = modelName.split('/').pop() ?? modelName;
+    const modelName = this.getBillingModelName(config);
+    const billingModelName = normalizeOpenAiBillingModelName(modelName);
     const tokenCost = calculateOpenAIUsageCost(billingModelName, config, data.usage, {
       apiUrl: this.getApiUrl(),
       cachedResponse: cached,
       provider: this.getGenAISystem(),
+      region: this.getBillingRegion(),
       serviceTier: data.service_tier ?? config.service_tier,
     });
     const searchCost = cached ? 0 : getChatSearchSurcharge(modelName);
@@ -693,6 +750,10 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
+    if (this.config.mcp?.enabled && !this.mcpClient) {
+      throwIfAborted(callApiOptions?.abortSignal);
+      this.startMCPInitialization();
+    }
     if (this.initializationPromise == null) {
       throwIfAborted(callApiOptions?.abortSignal);
     } else {

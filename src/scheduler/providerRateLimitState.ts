@@ -144,6 +144,7 @@ export class ProviderRateLimitState extends EventEmitter {
        */
       maxRetriesOverride?: number;
       abortSignal?: AbortSignal;
+      canRetry?: () => boolean;
     },
   ): Promise<T> {
     this.totalRequests++;
@@ -221,7 +222,10 @@ export class ProviderRateLimitState extends EventEmitter {
             result.isRefusal === true;
           const headers = options.getHeaders?.(result);
           const isObserverError = isResponseHeadersObserverErrorResponse(result);
-          isRateLimited = !isObserverError && (options.isRateLimited?.(result, undefined) ?? false);
+          isRateLimited =
+            options.canRetry?.() !== false &&
+            !isObserverError &&
+            (options.isRateLimited?.(result, undefined) ?? false);
           retryAfterMs = options.getRetryAfter?.(result, undefined);
 
           // Observer diagnostics may carry another service's headers. Keep the
@@ -232,11 +236,8 @@ export class ProviderRateLimitState extends EventEmitter {
           if (isRateLimited) {
             this.handleRateLimit(retryAfterMs);
           }
-          // A completed response still consumes quota when its caller cancels.
-          // Learn it before discarding the result and releasing the slot.
-          if (!hasErrorResponse && !hasRefusalResponse) {
-            throwIfAborted(options.abortSignal);
-          }
+          // Completed calls retain their result and quota even if cancellation arrived
+          // during completion. Cancellation still prevents another attempt.
           this.latencies.push(Date.now() - startTime);
           releaseSlot();
 
@@ -274,7 +275,8 @@ export class ProviderRateLimitState extends EventEmitter {
 
           retryError = error as Error;
           isRateLimited =
-            options.isRateLimited?.(undefined, retryError) ?? this.isRateLimitError(retryError);
+            options.canRetry?.() !== false &&
+            (options.isRateLimited?.(undefined, retryError) ?? this.isRateLimitError(retryError));
           retryAfterMs = options.getRetryAfter?.(undefined, retryError);
           if (isRateLimited) {
             this.handleRateLimit(retryAfterMs);
@@ -286,7 +288,10 @@ export class ProviderRateLimitState extends EventEmitter {
           releaseSlot();
         }
 
-        if (!shouldRetry(attempt, retryError, isRateLimited, retryPolicy)) {
+        if (
+          options.canRetry?.() === false ||
+          !shouldRetry(attempt, retryError, isRateLimited, retryPolicy)
+        ) {
           throw (
             retryError ??
             new RateLimitExhaustedError(
@@ -297,14 +302,12 @@ export class ProviderRateLimitState extends EventEmitter {
         }
 
         attempt++;
-        this.retriedRequests++;
-        const delay = getRetryDelay(attempt, retryPolicy, retryAfterMs);
-        this.emit('request:retrying', {
-          rateLimitKey: this.rateLimitKey,
+        const delay = this.recordRetry(
           attempt,
-          delayMs: delay,
-          reason: isRateLimited ? 'ratelimit' : 'error',
-        });
+          retryPolicy,
+          retryAfterMs,
+          isRateLimited ? 'ratelimit' : 'error',
+        );
 
         // Both result and exception retries wait after their slot is released.
         await sleepWithAbort(delay, options.abortSignal);
@@ -313,6 +316,23 @@ export class ProviderRateLimitState extends EventEmitter {
       this.failedRequests++;
       throw error;
     }
+  }
+
+  private recordRetry(
+    attempt: number,
+    retryPolicy: RetryPolicy,
+    retryAfterMs: number | undefined,
+    reason: 'ratelimit' | 'error',
+  ): number {
+    this.retriedRequests++;
+    const delayMs = getRetryDelay(attempt, retryPolicy, retryAfterMs);
+    this.emit('request:retrying', {
+      rateLimitKey: this.rateLimitKey,
+      attempt,
+      delayMs,
+      reason,
+    });
+    return delayMs;
   }
 
   /**

@@ -64,7 +64,7 @@ describe('RateLimitRegistry cancellation during scheduling', () => {
 
       await expect(
         registry.execute(provider, invoke, createProviderRateLimitOptions(controller.signal)),
-      ).rejects.toMatchObject({ name: 'AbortError', cause: 'caller stopped' });
+      ).rejects.toBe('caller stopped');
       expect(invoke).not.toHaveBeenCalled();
       expect(getEventListeners(controller.signal, 'abort')).toHaveLength(0);
       expect(vi.getTimerCount()).toBe(0);
@@ -125,7 +125,7 @@ describe('RateLimitRegistry cancellation during scheduling', () => {
 
     controller.abort(new Error('network timeout from caller'));
     await vi.advanceTimersByTimeAsync(0);
-    expect(caught).toMatchObject({ name: 'AbortError' });
+    expect(caught).toBe(controller.signal.reason);
     await rejection;
     expect(Object.values(registry.getMetrics())[0]).toMatchObject({
       activeRequests: 1,
@@ -200,7 +200,8 @@ describe('RateLimitRegistry cancellation during scheduling', () => {
       });
       await vi.advanceTimersByTimeAsync(0);
       expect(Object.values(registry.getMetrics())[0].retriedRequests).toBe(1);
-      expect(getEventListeners(controller.signal, 'abort')).toHaveLength(1);
+      // The registry race and cancellable backoff each hold one listener.
+      expect(getEventListeners(controller.signal, 'abort')).toHaveLength(2);
       const state = [...registry['states'].values()][0];
       expect(state['latencies']).toHaveLength(1);
 

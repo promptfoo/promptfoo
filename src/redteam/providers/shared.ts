@@ -538,8 +538,11 @@ export function callTargetProvider(
           ),
         }
       : options;
-    const call = (callContext?: CallApiContextParams) =>
-      targetProvider.callApi(targetPrompt, callContext, targetOptions);
+    const call = async (callContext?: CallApiContextParams) => {
+      const response = await targetProvider.callApi(targetPrompt, callContext, targetOptions);
+      executionContext?.onTargetResponse?.(targetPrompt, response);
+      return response;
+    };
     return tracingContext
       ? tracingContext.withProviderSpan({ provider: targetProvider, callContext: context }, call)
       : call(context);
@@ -646,10 +649,12 @@ export async function getTargetResponse(
     }
   }
   const tokenUsage = { numRequests: 1, ...targetRespRaw.tokenUsage };
-  const hasOutput = targetRespRaw && Object.prototype.hasOwnProperty.call(targetRespRaw, 'output');
-  const hasError = targetRespRaw && Object.prototype.hasOwnProperty.call(targetRespRaw, 'error');
+  const hasOutput =
+    targetRespRaw &&
+    Object.prototype.hasOwnProperty.call(targetRespRaw, 'output') &&
+    targetRespRaw.output != null;
 
-  if (hasError) {
+  if (targetRespRaw?.error) {
     const output = hasOutput
       ? ((typeof targetRespRaw.output === 'string'
           ? targetRespRaw.output
@@ -679,18 +684,6 @@ export async function getTargetResponse(
     };
   }
 
-  if (targetRespRaw?.error) {
-    return preserveSelectedError(
-      {
-        ...(targetRespRaw as ProviderResponse),
-        output: '',
-        error: targetRespRaw.error,
-        tokenUsage,
-      },
-      targetRespRaw,
-    );
-  }
-
   if (targetRespRaw?.conversationEnded) {
     return {
       ...(targetRespRaw as ProviderResponse),
@@ -699,15 +692,13 @@ export async function getTargetResponse(
     };
   }
 
-  throw new Error(
-    `
-    Target returned malformed response: expected either \`output\` or \`error\` property to be set.
-
-    Instead got: ${safeJsonStringify(targetRespRaw)}
-
-    Note: Empty strings are valid output values.
-    `,
-  );
+  return {
+    ...(targetRespRaw as ProviderResponse),
+    output: '',
+    error:
+      'Target returned malformed response: expected either `output` or `error` property to be set. Empty strings are valid output values; null and undefined are not.',
+    tokenUsage,
+  };
 }
 
 interface TraceableRedteamGrader<TResult, TArgs extends unknown[]> {

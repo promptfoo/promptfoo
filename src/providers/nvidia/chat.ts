@@ -1,4 +1,5 @@
 import { getEnvString } from '../../envars';
+import { resolveProviderEnv } from '../env';
 import { OpenAiChatCompletionProvider } from '../openai/chat';
 
 import type { EnvVarKey } from '../../envars';
@@ -48,9 +49,7 @@ export function calculateNvidiaCost(
 export class NvidiaProvider extends OpenAiChatCompletionProvider {
   constructor(modelName: string, providerOptions: ProviderOptions) {
     const explicitBaseUrl = providerOptions.config?.apiBaseUrl;
-    const envBaseUrl =
-      (providerOptions.env as Record<string, string | undefined> | undefined)
-        ?.NVIDIA_API_BASE_URL || getEnvString('NVIDIA_API_BASE_URL');
+    const envBaseUrl = resolveProviderEnv(providerOptions.env, ['NVIDIA_API_BASE_URL'])?.value;
 
     super(modelName, {
       ...providerOptions,

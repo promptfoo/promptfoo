@@ -103,6 +103,8 @@ export async function selectMaxScore(
   outputs: string[],
   resultsWithGradingResults: Array<{
     gradingResult?: Pick<GradingResult, 'componentResults'> | null;
+    /** Exclude a target failure from winner selection while preserving its output position. */
+    unavailable?: boolean;
   }>,
   assertion: Assertion,
 ): Promise<Omit<GradingResult, 'assertion'>[]> {
@@ -127,6 +129,9 @@ export async function selectMaxScore(
 
   // Calculate aggregate score for each output
   const scores = resultsWithGradingResults.map((result, index) => {
+    if (result.unavailable) {
+      return { index, score: 0, componentCount: 0, totalWeight: 0, unavailable: true };
+    }
     // Get component results from gradingResult if available
     const componentResults = result.gradingResult?.componentResults || [];
 
@@ -178,7 +183,7 @@ export async function selectMaxScore(
   let winnerIndex = 0;
 
   for (let i = 0; i < scores.length; i++) {
-    if (scores[i].score > maxScore) {
+    if (!scores[i].unavailable && scores[i].score > maxScore) {
       maxScore = scores[i].score;
       winnerIndex = i;
     }
@@ -188,7 +193,10 @@ export async function selectMaxScore(
   const meetsThreshold = options.threshold === undefined || maxScore >= options.threshold;
 
   // Return results for each output
-  return scores.map(({ index, score, componentCount, totalWeight }) => {
+  return scores.map(({ index, score, componentCount, totalWeight, unavailable }) => {
+    if (unavailable) {
+      return { pass: false, score: 0, reason: 'Target response unavailable for comparison' };
+    }
     const isWinner = index === winnerIndex && meetsThreshold;
 
     return {

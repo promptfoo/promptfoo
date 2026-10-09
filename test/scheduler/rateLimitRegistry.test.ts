@@ -263,7 +263,8 @@ describe('RateLimitRegistry', () => {
         expect.any(Function),
         {
           abortSignal: undefined,
-          getHeaders: undefined,
+          getHeaders: expect.any(Function),
+          canRetry: expect.any(Function),
           isRateLimited: undefined,
           getRetryAfter: undefined,
           maxRetriesOverride: undefined,
@@ -295,7 +296,8 @@ describe('RateLimitRegistry', () => {
         expect.any(Function),
         {
           abortSignal: undefined,
-          getHeaders,
+          getHeaders: expect.any(Function),
+          canRetry: expect.any(Function),
           isRateLimited,
           getRetryAfter,
           maxRetriesOverride: undefined,

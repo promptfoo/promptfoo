@@ -3,7 +3,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { runPython, state } from '../../src/python/pythonUtils';
+import { runPython } from '../../src/python/pythonUtils';
 import type { PythonShell } from 'python-shell';
 
 const observed = vi.hoisted(() => ({
@@ -62,10 +62,6 @@ describe('runPython real invocation cancellation', () => {
     );
     const caller = new AbortController();
     const reason = new Error('cancel only this loader');
-    const previousState = {
-      cachedPythonPath: state.cachedPythonPath,
-      validationPromise: state.validationPromise,
-    };
     let rejectEntry!: (error: Error) => void;
     let resolveEntry!: () => void;
     const entered = new Promise<void>((resolve, reject) => {
@@ -134,7 +130,6 @@ describe('runPython real invocation cancellation', () => {
       }
       await Promise.allSettled(calls);
       await Promise.all(observed.children.map((child) => child.closed));
-      Object.assign(state, previousState);
       fs.rmSync(directory, { recursive: true, force: true });
     }
   });

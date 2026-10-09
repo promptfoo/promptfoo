@@ -149,19 +149,15 @@ describe('scheduler rate-limit ordering and failure diagnostics', () => {
         },
       });
       await vi.advanceTimersByTimeAsync(0);
-      if (cancelled) {
-        expect(await first).toMatchObject({ name: 'AbortError', message: reason.message });
-      } else {
-        expect(await first).toMatchObject({ output: 'completed first response' });
-      }
+      expect(await first).toMatchObject({ output: 'completed first response' });
       expect(learned).toHaveBeenCalledOnce();
       expect(releaseSlot).toHaveBeenCalledOnce();
       expect(callApi).toHaveBeenCalledOnce();
       expect(Object.values(registry.getMetrics())[0]).toMatchObject({
         activeRequests: 0,
         queueDepth: 1,
-        completedRequests: cancelled ? 0 : 1,
-        failedRequests: cancelled ? 1 : 0,
+        completedRequests: 1,
+        failedRequests: 0,
         retriedRequests: 0,
       });
 
@@ -176,8 +172,8 @@ describe('scheduler rate-limit ordering and failure diagnostics', () => {
         totalRequests: 2,
         activeRequests: 0,
         queueDepth: 0,
-        completedRequests: cancelled ? 1 : 2,
-        failedRequests: cancelled ? 1 : 0,
+        completedRequests: 2,
+        failedRequests: 0,
         retriedRequests: 0,
       });
       expect(vi.getTimerCount()).toBe(0);
@@ -333,7 +329,7 @@ describe('scheduler rate-limit ordering and failure diagnostics', () => {
     });
   });
 
-  it('still allows caller cancellation to supersede a successful response', async () => {
+  it('retains an already-settled successful response when cancellation races completion', async () => {
     const registry = createRegistry();
     const controller = new AbortController();
     const response = createDeferred<ProviderResponse>();
@@ -348,10 +344,11 @@ describe('scheduler rate-limit ordering and failure diagnostics', () => {
     controller.abort();
     response.resolve({ output: 'late success' });
     await vi.advanceTimersByTimeAsync(0);
-    expect(await pending).toMatchObject({ name: 'AbortError' });
+    expect(await pending).toEqual({ output: 'late success' });
     expect(Object.values(registry.getMetrics())[0]).toMatchObject({
       activeRequests: 0,
-      failedRequests: 1,
+      completedRequests: 1,
+      failedRequests: 0,
       retriedRequests: 0,
     });
   });

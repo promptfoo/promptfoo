@@ -107,6 +107,52 @@ describe('actual iterative manager child quota ownership', () => {
     return { state, done, controller };
   }
 
+  it.each(['response', 'exception'] as const)(
+    'does not replay a strategy after its target exhausts %s retries',
+    async (kind) => {
+      const failure = {
+        error: '429 rate limit',
+        metadata: {
+          http: {
+            status: 429,
+            statusText: 'Too Many Requests',
+            headers: { 'retry-after-ms': '0' },
+          },
+        },
+      };
+      const target: ApiProvider = {
+        id: () => 'exhausted-target',
+        config: { maxRetries: 1 },
+        callApi: vi.fn(async () => {
+          if (kind === 'exception') {
+            throw new Error('429 rate limit; retry after 0');
+          }
+          return failure;
+        }),
+      };
+      const strategy: ApiProvider = {
+        id: () => 'parent-strategy',
+        config: { maxRetries: 2 },
+        callApi: vi.fn(async () => callTargetProvider(target, 'fixture')),
+      };
+      const result = withProviderCallExecutionContext({ rateLimitRegistry: registry }, () =>
+        wrapProviderWithRateLimiting(strategy, registry).callApi('fixture'),
+      ).catch((error) => error);
+      await vi.advanceTimersByTimeAsync(10000);
+      await result;
+      expect(target.callApi).toHaveBeenCalledTimes(2);
+      expect(strategy.callApi).toHaveBeenCalledOnce();
+      expect(registry.getMetrics()[getRateLimitKey(strategy)]).toMatchObject({
+        retriedRequests: 0,
+        rateLimitHits: 0,
+      });
+      expect(registry.getMetrics()[getRateLimitKey(target)]).toMatchObject({
+        retriedRequests: 1,
+        rateLimitHits: 2,
+      });
+    },
+  );
+
   it.each(['attacker', 'judge'] as const)(
     'keeps a completed %s quota on its child pool while another iterative strategy starts',
     async (origin) => {

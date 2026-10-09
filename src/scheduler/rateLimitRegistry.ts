@@ -4,9 +4,9 @@ import { getEnvBool, getEnvInt } from '../envars';
 import logger from '../logger';
 import { withFetchRetryContext } from '../util/fetch/retryContext';
 import { sanitizeProviderIdForLog } from '../util/provider';
-import { throwIfAborted } from './cancellation';
 import {
   getProviderCallExecutionContext,
+  runProviderCallWithAbort,
   withProviderCallExecutionContext,
 } from './providerCallExecutionContext';
 import {
@@ -63,11 +63,20 @@ export class RateLimitRegistry extends EventEmitter {
     // `fetchWithRetries` picks up the provider's `maxRetries` as its default
     // and `fetchWithProxy` disables transient retries when `maxRetries: 0`.
     if (!this.enabled) {
-      throwIfAborted(options?.abortSignal);
-      return withFetchRetryContext(providerMaxRetries, callFn);
+      return withFetchRetryContext(providerMaxRetries, () =>
+        runProviderCallWithAbort(callFn, options?.abortSignal),
+      );
     }
 
     const rateLimitKey = getRateLimitKey(provider);
+    const parentContext = getProviderCallExecutionContext();
+    if (
+      parentContext?.rateLimitProvider &&
+      getRateLimitKey(parentContext.rateLimitProvider) !== rateLimitKey
+    ) {
+      parentContext.onNestedScheduledCall?.();
+    }
+    let nestedCallStarted = false;
     const state = this.getOrCreateState(rateLimitKey);
 
     // Generate unique request ID for metrics/logging
@@ -88,22 +97,34 @@ export class RateLimitRegistry extends EventEmitter {
           // its slot. Direct registry users do not acquire evaluator orchestration.
           return executionContext
             ? withProviderCallExecutionContext(
-                { ...executionContext, rateLimitRegistry: this, rateLimitProvider: provider },
+                {
+                  ...executionContext,
+                  rateLimitRegistry: this,
+                  rateLimitProvider: provider,
+                  onNestedScheduledCall: () => {
+                    nestedCallStarted = true;
+                  },
+                },
                 () => callFn(onResponseHeaders),
               )
             : callFn(onResponseHeaders);
         },
         {
           abortSignal: options?.abortSignal,
-          getHeaders: options?.getHeaders,
+          // A nested provider already learned its quota and exhausted its own
+          // retry budget. Replaying the parent repeats all earlier child work.
+          getHeaders: (result) => (nestedCallStarted ? undefined : options?.getHeaders?.(result)),
           isRateLimited: options?.isRateLimited,
+          canRetry: () => !nestedCallStarted,
           getRetryAfter: options?.getRetryAfter,
           maxRetriesOverride: provider.handlesOwnRetries ? 0 : providerMaxRetries,
         },
       );
 
     try {
-      const result = await withFetchRetryContext(providerMaxRetries, run);
+      const result = await withFetchRetryContext(providerMaxRetries, () =>
+        runProviderCallWithAbort(run, options?.abortSignal),
+      );
 
       this.emit('request:completed', {
         rateLimitKey,

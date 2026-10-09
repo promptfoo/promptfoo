@@ -48,7 +48,7 @@ export function createProviderRateLimitOptions(
   abortSignal?: AbortSignal,
 ): RateLimitExecuteOptions<ProviderResponse> {
   return {
-    abortSignal,
+    ...(abortSignal && { abortSignal }),
     // Provider errors are values carrying output, usage and HTTP metadata.
     // Keep that evidence when the scheduler has no retries left.
     onRateLimitExhausted: (result, error) =>

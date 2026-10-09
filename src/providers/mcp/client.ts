@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import path from 'path';
 
 import cliState from '../../cliState';
@@ -5,9 +6,8 @@ import { type McpConfigParsed, McpConfigSchema } from '../../contracts/providerC
 import { getEnvBool, getEnvInt, getProcessEnv } from '../../envars';
 import logger from '../../logger';
 import { isCallerAbortError } from '../../util/fetch/requestSignal';
-import { TOKEN_REFRESH_BUFFER_MS, type TokenRefreshLock } from '../../util/oauth';
 import { isMissingPackageImportError } from '../../util/packageImportErrors';
-import { throwIfAborted, waitForPromiseWithAbort } from '../shared';
+import { waitForPromiseWithAbort } from '../shared';
 import { withGenAIToolSpan } from '../tracing';
 import {
   applyQueryParams,
@@ -21,6 +21,7 @@ import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import type { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import type { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import type { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import type { FetchLike } from '@modelcontextprotocol/sdk/shared/transport.js';
 
 import type {
   MCPConfig,
@@ -31,18 +32,50 @@ import type {
   MCPToolResult,
 } from './types';
 
-interface MCPTokenRefreshLock extends TokenRefreshLock {
-  waiters: Set<Promise<void>>;
-  lastWaitCancelled: boolean;
-}
+const oauthRequestSignal = new AsyncLocalStorage<AbortSignal>();
 
 /**
- * Stored OAuth configuration for a server, used for token refresh.
+ * Refresh tokens per request without reconnecting and aborting other tool calls.
+ * Retry a rejected token once on HTTP 401; return other failures without a retry.
  */
-interface OAuthServerConfig {
-  serverKey: string;
-  serverConfig: MCPServerConfig;
-  auth: MCPOAuthClientCredentialsAuth | MCPOAuthPasswordAuth;
+function createOAuthFetch(
+  auth: MCPOAuthClientCredentialsAuth | MCPOAuthPasswordAuth,
+  serverUrl: string,
+): FetchLike {
+  return async (url, init) => {
+    // SDK transports pass their lifetime signal, not the individual tool request's signal.
+    // Only bind tools/call: the SDK must still be able to send notifications/cancelled.
+    let requestSignal: AbortSignal | undefined;
+    if (typeof init?.body === 'string') {
+      try {
+        if (JSON.parse(init.body).method === 'tools/call') {
+          requestSignal = oauthRequestSignal.getStore();
+        }
+      } catch {
+        // Non-JSON transport requests use only their transport signal.
+      }
+    }
+    const signal =
+      requestSignal && init?.signal
+        ? AbortSignal.any([requestSignal, init.signal])
+        : (requestSignal ?? init?.signal);
+    const send = async (rejectedToken?: string) => {
+      signal?.throwIfAborted();
+      const { accessToken } = await getOAuthTokenWithExpiry(auth, serverUrl, rejectedToken);
+      signal?.throwIfAborted();
+      const headers = new Headers(init?.headers);
+      headers.set('Authorization', `Bearer ${accessToken}`);
+      // biome-ignore lint/style/noRestrictedGlobals: SDK default; fetchWithProxy retries tool calls on 5xx
+      return { accessToken, response: await fetch(url, { ...init, headers, signal }) };
+    };
+    const first = await send();
+    if (first.response.status !== 401) {
+      return first.response;
+    }
+    logger.debug('[MCP] Server rejected the OAuth token; retrying with a new token');
+    await first.response.body?.cancel();
+    return (await send(first.accessToken)).response;
+  };
 }
 
 /**
@@ -116,14 +149,8 @@ export class MCPClient {
     string,
     StdioClientTransport | SSEClientTransport | StreamableHTTPClientTransport
   > = new Map();
-  // Store OAuth configs for servers that need token refresh (when tokenUrl is configured)
-  private oauthConfigs: Map<string, OAuthServerConfig> = new Map();
-  // Track token expiration time per server
-  private tokenExpiresAt: Map<string, number> = new Map();
-  // Lock mechanism to prevent concurrent token refresh per server
-  private tokenRefreshLocks: Map<string, MCPTokenRefreshLock> = new Map();
+
   private cleanupPromise: Promise<void> | null = null;
-  private deferredCleanupPromise: Promise<void> | null = null;
 
   get hasInitialized(): boolean {
     return this.clients.size > 0;
@@ -171,10 +198,7 @@ export class MCPClient {
     }
   }
 
-  private async connectToServer(
-    server: MCPServerConfig,
-    serverKey = server.name || server.url || server.path || 'default',
-  ): Promise<void> {
+  private async connectToServer(server: MCPServerConfig, serverKey: string): Promise<void> {
     const { Client } = await loadMcpClientSdk();
     const client = new Client({
       name: 'promptfoo-MCP',
@@ -227,51 +251,33 @@ export class MCPClient {
         // Render environment variables in auth config
         const renderedServer = renderAuthVars(server);
 
-        // Determine authentication strategy
+        // OAuth tokens are attached per request (see createOAuthFetch) using the configured
+        // tokenUrl or discovery, which avoids the SDK's authorization_endpoint requirement.
+        // Fetching one now makes bad credentials fail the connection. Other auth types
+        // (bearer, basic, api_key) use static headers.
+        let oauthFetch: FetchLike | undefined;
         let authHeaders: Record<string, string> = {};
-
         if (renderedServer.auth?.type === 'oauth') {
           const oauthAuth = renderedServer.auth as
             | MCPOAuthClientCredentialsAuth
             | MCPOAuthPasswordAuth;
-
-          // Fetch token using configured tokenUrl or OAuth discovery
-          // This avoids SDK's OAuth discovery which requires authorization_endpoint
           logger.debug('[MCP] Fetching OAuth token');
-          const { accessToken, expiresAt } = await getOAuthTokenWithExpiry(oauthAuth, server.url);
-          authHeaders = { Authorization: `Bearer ${accessToken}` };
-
-          // Store config and expiration for proactive token refresh
-          this.oauthConfigs.set(serverKey, {
-            serverKey,
-            serverConfig: server,
-            auth: oauthAuth,
-          });
-          this.tokenExpiresAt.set(serverKey, expiresAt);
+          await getOAuthTokenWithExpiry(oauthAuth, server.url);
+          oauthFetch = createOAuthFetch(oauthAuth, server.url);
         } else {
-          // For non-OAuth auth types (bearer, basic, api_key), use static headers
           authHeaders = getAuthHeaders(renderedServer);
         }
 
-        // Combine auth headers with custom headers
-        const headers = {
-          ...(server.headers || {}),
-          ...authHeaders,
-        };
+        const headers = { ...server.headers, ...authHeaders };
 
         // Apply query params for api_key with query placement
         const queryParams = getAuthQueryParams(renderedServer);
         const serverUrl = applyQueryParams(server.url, queryParams);
 
-        // Build transport options with headers
-        const transportOptions: {
-          requestInit?: { headers: Record<string, string> };
-        } = {};
-
-        if (Object.keys(headers).length > 0) {
-          transportOptions.requestInit = { headers };
-        }
-
+        const transportOptions = {
+          ...(Object.keys(headers).length > 0 && { requestInit: { headers } }),
+          ...(oauthFetch && { fetch: oauthFetch }),
+        };
         const hasOptions = Object.keys(transportOptions).length > 0;
 
         try {
@@ -390,270 +396,97 @@ export class MCPClient {
     return Array.from(this.tools.values()).flat();
   }
 
-  /**
-   * Proactively refresh OAuth token for a server if it's close to expiration.
-   * Uses a locking mechanism to prevent concurrent refresh attempts.
-   */
-  private async refreshOAuthTokenIfNeeded(
-    serverKey: string,
-    abortSignal?: AbortSignal,
-  ): Promise<void> {
-    const oauthConfig = this.oauthConfigs.get(serverKey);
-    if (!oauthConfig) {
-      return;
-    }
-
-    await this.refreshOAuthToken(serverKey, oauthConfig, false, abortSignal);
-  }
-
-  private hasValidToken(serverKey: string): boolean {
-    const expiresAt = this.tokenExpiresAt.get(serverKey);
-    return (
-      expiresAt != null &&
-      this.clients.has(serverKey) &&
-      Date.now() + TOKEN_REFRESH_BUFFER_MS < expiresAt
-    );
-  }
-
-  private waitForTokenRefresh(lock: MCPTokenRefreshLock, abortSignal?: AbortSignal): Promise<void> {
-    let cancelled = false;
-    const waiter = waitForPromiseWithAbort(lock.promise, abortSignal)
-      .catch((error: unknown) => {
-        cancelled = isCallerAbortError(error, abortSignal, { requireReasonMatch: true });
-        throw error;
-      })
-      .finally(() => {
-        lock.waiters.delete(waiter);
-        if (lock.waiters.size === 0) {
-          lock.lastWaitCancelled = cancelled;
-        }
-      });
-    lock.waiters.add(waiter);
-    return waiter;
-  }
-
-  private async refreshOAuthToken(
-    serverKey: string,
-    oauthConfig: OAuthServerConfig,
-    forceRefresh: boolean,
-    abortSignal?: AbortSignal,
-  ): Promise<void> {
-    // Wait for each active refresh lock. Its owner clears it in finally; once no lock
-    // remains, this caller either uses the refreshed token or starts its own refresh.
-    // Another caller may install a new lock while we wait, so check again each time.
-    while (true) {
-      throwIfAborted(abortSignal);
-      const existingRefreshLock = this.tokenRefreshLocks.get(serverKey);
-      if (!existingRefreshLock) {
-        break;
-      }
-
-      logger.debug(`[MCP] Token refresh already in progress for ${serverKey}, waiting...`);
-      try {
-        await this.waitForTokenRefresh(existingRefreshLock, abortSignal);
-        throwIfAborted(abortSignal);
-        // Verify token is still valid after waiting
-        if (this.hasValidToken(serverKey)) {
-          return;
-        }
-        // The token is still stale; check for a replacement lock before refreshing.
-        logger.debug(`[MCP] Token still needs refresh for ${serverKey}, refreshing again...`);
-      } catch (error) {
-        if (abortSignal?.aborted) {
-          throw error;
-        }
-        // The lock owner cleans up even on failure; check for a replacement lock.
-        logger.debug(`[MCP] Previous token refresh failed for ${serverKey}, retrying...`);
-      }
-    }
-
-    if (!forceRefresh && this.hasValidToken(serverKey)) {
-      logger.debug(`[MCP] Token for ${serverKey} still valid, no refresh needed`);
-      return;
-    }
-
-    // Start a new token refresh and store the promise for deduplication
-    throwIfAborted(abortSignal);
-    logger.debug(`[MCP] Refreshing OAuth token for server ${serverKey}`);
-    const refreshLock: MCPTokenRefreshLock = {
-      waiters: new Set(),
-      lastWaitCancelled: false,
-      promise: this.performTokenRefresh(serverKey, oauthConfig).finally(() => {
-        // Shared work owns the lock lifetime, even if its initiating caller stops waiting.
-        if (this.tokenRefreshLocks.get(serverKey) === refreshLock) {
-          this.tokenRefreshLocks.delete(serverKey);
-        }
-      }),
-    };
-    this.tokenRefreshLocks.set(serverKey, refreshLock);
-
-    await this.waitForTokenRefresh(refreshLock, abortSignal);
-    throwIfAborted(abortSignal);
-  }
-
-  /**
-   * Perform the actual token refresh and reconnection.
-   */
-  private async performTokenRefresh(
-    serverKey: string,
-    oauthConfig: OAuthServerConfig,
-  ): Promise<void> {
-    // Close existing connection
-    const existingTransport = this.transports.get(serverKey);
-    const existingClient = this.clients.get(serverKey);
-    if (existingTransport) {
-      await existingTransport.close().catch(() => {});
-    }
-    if (existingClient) {
-      await existingClient.close().catch(() => {});
-    }
-
-    // Remove old entries (keep tools and oauthConfig)
-    this.clients.delete(serverKey);
-    this.transports.delete(serverKey);
-
-    // Reconnect with fresh token
-    await this.connectToServer(oauthConfig.serverConfig, serverKey);
-    logger.debug(`[MCP] Successfully refreshed OAuth token for server ${serverKey}`);
-  }
-
   async callTool(
     name: string,
     args: Record<string, unknown>,
-    abortSignal?: AbortSignal,
+    signal?: AbortSignal,
   ): Promise<MCPToolResult> {
-    throwIfAborted(abortSignal);
+    signal?.throwIfAborted();
     return await withGenAIToolSpan(
       { name, arguments: sanitizeMcpToolData(args), resultFormat: 'mcp' },
-      () => this.callToolInternal(name, args, abortSignal),
+      () => this.callToolInternal(name, args, signal),
     );
   }
 
   private async callToolInternal(
     name: string,
     args: Record<string, unknown>,
-    abortSignal?: AbortSignal,
+    signal?: AbortSignal,
   ): Promise<MCPToolResult> {
-    throwIfAborted(abortSignal);
-    const requestOptions = getEffectiveRequestOptions(this.config);
+    const timeoutOptions = getEffectiveRequestOptions(this.config);
+    const requestOptions = signal ? { ...timeoutOptions, signal } : timeoutOptions;
     const disconnectedServers: string[] = [];
 
     // Find which server has this tool
     for (const [serverKey, serverTools] of this.tools.entries()) {
-      if (serverTools.some((tool) => tool.name === name)) {
-        // Proactively refresh token if close to expiration (with locking)
+      signal?.throwIfAborted();
+      if (!serverTools.some((tool) => tool.name === name)) {
+        continue;
+      }
+      const client = this.clients.get(serverKey);
+      if (!client) {
+        disconnectedServers.push(serverKey);
+        continue;
+      }
+      try {
+        const finished = new AbortController();
+        const requestSignal = signal ? AbortSignal.any([signal, finished.signal]) : finished.signal;
+        let result;
         try {
-          await this.refreshOAuthTokenIfNeeded(serverKey, abortSignal);
-          throwIfAborted(abortSignal);
-        } catch (error) {
-          if (abortSignal?.aborted) {
-            throw error;
-          }
-          const errorMessage = error instanceof Error ? error.message : String(error);
-          logger.debug(
-            `[MCP] Failed to refresh OAuth token for ${serverKey}, trying the next matching server: ${errorMessage}`,
-          );
-        }
-
-        // Get the current client (may have changed after token refresh)
-        const client = this.clients.get(serverKey);
-        if (!client) {
-          logger.debug(
-            `[MCP] Server ${serverKey} is not connected, trying the next matching server`,
-          );
-          disconnectedServers.push(serverKey);
-          continue;
-        }
-        let currentClient = client;
-        let retried = false;
-
-        // A successful call returns. Authentication failure allows one refresh and
-        // one retry; all other failures return an error after the catch block.
-        while (true) {
-          try {
-            throwIfAborted(abortSignal);
-            const result = await waitForPromiseWithAbort(
-              currentClient.callTool(
+          result = await waitForPromiseWithAbort(
+            oauthRequestSignal.run(requestSignal, () =>
+              client.callTool(
                 { name, arguments: args },
                 undefined, // use default result schema
                 requestOptions,
               ),
-              abortSignal,
-            );
-            if (!result.isError) {
-              throwIfAborted(abortSignal);
-            }
+            ),
+            signal,
+          );
+        } finally {
+          // A timeout can reject the SDK request while a shared token refresh is still pending.
+          // Stop that request's eventual send without cancelling other callers' refreshes.
+          finished.abort();
+        }
+        if (!result.isError) {
+          signal?.throwIfAborted();
+        }
 
-            // Handle different content types appropriately
-            let content = '';
-            if (result?.content) {
-              if (typeof result.content === 'string') {
-                // Try to parse JSON first, fall back to raw string
-                try {
-                  const parsed = JSON.parse(result.content);
-                  content = typeof parsed === 'string' ? parsed : JSON.stringify(parsed);
-                } catch {
-                  content = result.content;
-                }
-              } else if (Buffer.isBuffer(result.content)) {
-                content = result.content.toString();
-              } else {
-                content = JSON.stringify(result.content);
-              }
+        // Handle different content types appropriately
+        let content = '';
+        if (result?.content) {
+          if (typeof result.content === 'string') {
+            // Try to parse JSON first, fall back to raw string
+            try {
+              const parsed = JSON.parse(result.content);
+              content = typeof parsed === 'string' ? parsed : JSON.stringify(parsed);
+            } catch {
+              content = result.content;
             }
-
-            return {
-              content,
-              ...(result.isError ? { isError: true } : {}),
-              raw: result,
-            };
-          } catch (error) {
-            // Preserve a completed failure while preventing any post-cancellation retry.
-            if (abortSignal?.aborted) {
-              throw error;
-            }
-            const errorMessage = error instanceof Error ? error.message : String(error);
-
-            // Check if this is an auth error and we have OAuth config for this server
-            // This is a fallback in case the proactive refresh didn't catch an expired token
-            const isAuthError =
-              errorMessage.includes('401') ||
-              errorMessage.includes('Unauthorized') ||
-              errorMessage.includes('authorization_endpoint') ||
-              errorMessage.includes('token');
-
-            const oauthConfig = this.oauthConfigs.get(serverKey);
-            if (!retried && isAuthError && oauthConfig) {
-              logger.debug(`[MCP] Auth error for ${serverKey}, attempting reactive token refresh`);
-              retried = true;
-              try {
-                await this.refreshOAuthToken(serverKey, oauthConfig, true, abortSignal);
-                throwIfAborted(abortSignal);
-                // Get the new client after reconnection
-                const newClient = this.clients.get(serverKey);
-                if (newClient) {
-                  currentClient = newClient;
-                  continue; // Retry with new token
-                }
-              } catch (refreshError) {
-                if (abortSignal?.aborted) {
-                  throw refreshError;
-                }
-                const refreshErrorMsg =
-                  refreshError instanceof Error ? refreshError.message : String(refreshError);
-                logger.error(`[MCP] Token refresh failed for ${serverKey}: ${refreshErrorMsg}`);
-              }
-            }
-
-            if (this.isDebugEnabled) {
-              logger.error(`Error calling tool ${name}: ${errorMessage}`);
-            }
-            return {
-              content: '',
-              error: errorMessage,
-            };
+          } else if (Buffer.isBuffer(result.content)) {
+            content = result.content.toString();
+          } else {
+            content = JSON.stringify(result.content);
           }
         }
+
+        return {
+          content,
+          ...(result.isError ? { isError: true } : {}),
+          raw: result,
+        };
+      } catch (error) {
+        if (isCallerAbortError(error, signal, { requireReasonMatch: true })) {
+          throw signal!.reason;
+        }
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        if (this.isDebugEnabled) {
+          logger.error(`Error calling tool ${name}: ${errorMessage}`);
+        }
+        return {
+          content: '',
+          error: errorMessage,
+        };
       }
     }
 
@@ -668,8 +501,7 @@ export class MCPClient {
   }
 
   async cleanup(): Promise<void> {
-    // Repeated callers share the same foreground cleanup, including resource closes.
-    this.cleanupPromise ??= Promise.resolve().then(() => this.cleanupInternal());
+    this.cleanupPromise ??= this.cleanupInternal();
     const cleanup = this.cleanupPromise;
     try {
       await cleanup;
@@ -681,72 +513,15 @@ export class MCPClient {
   }
 
   private async cleanupInternal(): Promise<void> {
-    while (this.tokenRefreshLocks.size > 0) {
-      const locks = [...this.tokenRefreshLocks.values()];
-      const activeWaits = locks.flatMap((lock) => {
-        if (lock.waiters.size > 0) {
-          return [...lock.waiters];
-        }
-        return lock.lastWaitCancelled ? [] : [lock.promise];
-      });
-
-      if (activeWaits.length === 0) {
-        // Only pending refreshes own late connections. Release this client's
-        // unrelated connections now, without waiting for abandoned OAuth work.
-        for (const [serverKey, client] of [...this.clients]) {
-          if (this.tokenRefreshLocks.has(serverKey)) {
-            continue;
-          }
-          const transport = this.transports.get(serverKey);
-          this.clients.delete(serverKey);
-          this.transports.delete(serverKey);
-          this.tools.delete(serverKey);
-          this.oauthConfigs.delete(serverKey);
-          this.tokenExpiresAt.delete(serverKey);
-          await this.closeConnection(client, transport);
-        }
-
-        // Closing a connection yields: a refresh may settle or acquire a live
-        // waiter meanwhile. Reconsider ownership before deferring its cleanup.
-        const remainingLocks = [...this.tokenRefreshLocks.values()];
-        if (
-          remainingLocks.length === 0 ||
-          remainingLocks.some((lock) => lock.waiters.size > 0 || !lock.lastWaitCancelled)
-        ) {
-          continue;
-        }
-        // Every pending refresh has been abandoned. Do not make teardown rejoin
-        // raw token/connect work, but observe one eventual full cleanup.
-        if (!this.deferredCleanupPromise) {
-          this.deferredCleanupPromise = Promise.allSettled(
-            remainingLocks.map((lock) => lock.promise),
-          ).then(async () => {
-            this.deferredCleanupPromise = null;
-            await this.cleanup();
-          });
-          void this.deferredCleanupPromise.catch((error: unknown) => {
-            logger.debug('MCP cleanup after cancelled token refresh failed', { error });
-          });
-        }
-        return;
-      }
-
-      // A live caller may cancel or finish while another refresh stays abandoned.
-      // Wake on caller settlement and reconsider all locks, rather than joining
-      // every raw refresh that happened to exist when cleanup first started.
-      await Promise.race(activeWaits).catch(() => undefined);
-    }
-    for (const [serverKey, client] of this.clients.entries()) {
-      const transport = this.transports.get(serverKey);
-      this.clients.delete(serverKey);
-      this.transports.delete(serverKey);
-      await this.closeConnection(client, transport);
-    }
+    const connections = [...this.clients].map(([serverKey, client]) => ({
+      client,
+      transport: this.transports.get(serverKey),
+    }));
     this.clients.clear();
     this.transports.clear();
     this.tools.clear();
-    this.oauthConfigs.clear();
-    this.tokenExpiresAt.clear();
-    this.tokenRefreshLocks.clear();
+    for (const { client, transport } of connections) {
+      await this.closeConnection(client, transport);
+    }
   }
 }

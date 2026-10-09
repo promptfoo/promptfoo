@@ -298,11 +298,7 @@ describe('RateLimitRegistry integration - cancellation', () => {
       const pending = registry.execute(createProvider(), callFn, {
         abortSignal: controller.signal,
       });
-      const rejected = expect(pending).rejects.toMatchObject({
-        name: 'AbortError',
-        message: reason.message,
-        cause: reason,
-      });
+      const rejected = expect(pending).rejects.toBe(reason);
       await vi.advanceTimersByTimeAsync(0);
       controller.abort(reason);
       await rejected;
@@ -326,11 +322,7 @@ describe('RateLimitRegistry integration - cancellation', () => {
 
     try {
       controller.abort(reason);
-      await expect(queued).rejects.toMatchObject({
-        name: 'AbortError',
-        message: reason.message,
-        cause: reason,
-      });
+      await expect(queued).rejects.toBe(reason);
       expect(queuedCall).not.toHaveBeenCalled();
     } finally {
       first.resolve();

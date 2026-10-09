@@ -388,7 +388,7 @@ describe('Chat post-response callback cancellation', () => {
           error:
             settlement === 'returned error'
               ? `MCP Tool Error (first): ${JSON.stringify(content)}`
-              : expect.stringContaining('Error: selected SDK failure'),
+              : 'MCP Tool Error (first): selected SDK failure',
           metadata: { http: { status: 200 } },
         });
         if (settlement === 'returned error') {
@@ -507,7 +507,7 @@ describe('Chat post-response callback cancellation', () => {
         );
         expect(callTool).toHaveBeenCalledOnce();
         expect(getEventListeners(controller.signal, 'abort')).toHaveLength(0);
-        expect(callTool.mock.calls[0][2]?.signal).toBeUndefined();
+        expect(callTool.mock.calls[0][2]?.signal).toBe(controller.signal);
       } finally {
         if (settlement === 'returned error') {
           result.resolve({
