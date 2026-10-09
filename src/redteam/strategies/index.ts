@@ -4,6 +4,7 @@ import logger from '../../logger';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { safeJoin } from '../../util/pathUtils';
 import { isCustomStrategy } from '../constants/strategies';
+import { addArabicPresentationForms } from './arabicPresentationForms';
 import { addAuthoritativeMarkupInjectionTestCases } from './authoritativeMarkupInjection';
 import { addBase64Encoding } from './base64';
 import { addBestOfNTestCases } from './bestOfN';
@@ -77,6 +78,11 @@ export const Strategies: Strategy[] = [
   },
   createEncodingStrategy('base64', 'Base64', () => addBase64Encoding),
   createEncodingStrategy('homoglyph', 'Homoglyph', () => addHomoglyphs),
+  createEncodingStrategy(
+    'arabic-presentation-forms',
+    'Arabic presentation forms',
+    () => addArabicPresentationForms,
+  ),
   {
     id: 'basic',
     action: async (_testCases: TestCase[], _injectVar: string, _config?: Record<string, any>) => {

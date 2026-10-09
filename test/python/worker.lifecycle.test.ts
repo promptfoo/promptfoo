@@ -53,12 +53,31 @@ def call_api(mode, marker):
   const pool = new PythonWorkerPool(script, 'call_api', 1, undefined, 1000);
   try {
     await pool.initialize();
+    // Exercise the real worker deadline without charging Windows filesystem and
+    // process scheduling delays against the successful replacement request.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     for (let attempt = 0; attempt < 4; attempt++) {
+      await fs.rm(marker, { force: true });
       const timedOut = pool.execute('call_api', ['hang', marker]);
       const rejected = expect(timedOut).rejects.toThrow('Python worker timed out after 1000ms');
       const recovered = pool.execute('call_api', ['recover', marker]).catch((error) => error);
+      // Wait for the actual Python call to enter its hanging branch before
+      // advancing its deadline. setImmediate and filesystem I/O remain real.
+      let originalPid = 0;
+      while (!originalPid) {
+        try {
+          originalPid = Number(await fs.readFile(marker, 'utf-8'));
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+            throw error;
+          }
+        }
+        if (!originalPid) {
+          await new Promise<void>((resolve) => setImmediate(resolve));
+        }
+      }
+      await vi.advanceTimersByTimeAsync(1000);
       await rejected;
-      const originalPid = Number(await fs.readFile(marker, 'utf-8'));
       expect(originalPid).toBeGreaterThan(0);
       expect(() => process.kill(originalPid, 0)).toThrow();
       const replacementPid = await recovered;
@@ -71,6 +90,7 @@ def call_api(mode, marker):
       await expect(fs.stat(created)).rejects.toMatchObject({ code: 'ENOENT' });
     }
   } finally {
+    vi.useRealTimers();
     await pool.shutdown();
     capture.mockRestore();
     await fs.rm(directory, { recursive: true, force: true });
@@ -114,7 +134,7 @@ def call_api(mode, marker):
       } else {
         operation = pool.execute('call_api', [mode, marker]).catch((error) => error);
       }
-      // Use a generous real-process deadline; the descendant intentionally outlives it.
+      // Bound cleanup even when the descendant retains the worker's output pipes.
       const outcome = await Promise.race([
         operation,
         sleep(3000, 'still waiting for descendant pipes', { signal: deadline.signal }),
@@ -124,7 +144,12 @@ def call_api(mode, marker):
       );
       const pids = JSON.parse(await fs.readFile(marker, 'utf-8'));
       expect(() => process.kill(pids.worker, 0)).toThrow();
-      expect(() => process.kill(pids.descendant, 0)).not.toThrow();
+      if (process.platform === 'win32' && mode === 'timeout') {
+        // Forced Windows shutdown terminates the entire process tree.
+        expect(() => process.kill(pids.descendant, 0)).toThrow();
+      } else {
+        expect(() => process.kill(pids.descendant, 0)).not.toThrow();
+      }
       if (mode === 'timeout') {
         const replacement = await pool.execute('call_api', ['recover', marker]);
         expect(replacement).toBeTypeOf('number');

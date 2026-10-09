@@ -65,22 +65,14 @@ export const DEEPSEEK_CHAT_MODELS = [
     },
   },
   // Retired models retain their historical rates.
-  {
-    id: 'deepseek-chat',
+  ...['deepseek-chat', 'deepseek-reasoner'].map((id) => ({
+    id,
     cost: {
       input: 0.14 / 1e6,
       output: 0.28 / 1e6,
       cache_read: 0.0028 / 1e6,
     },
-  },
-  {
-    id: 'deepseek-reasoner',
-    cost: {
-      input: 0.14 / 1e6,
-      output: 0.28 / 1e6,
-      cache_read: 0.0028 / 1e6,
-    },
-  },
+  })),
 ];
 
 /**

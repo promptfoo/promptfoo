@@ -41,3 +41,10 @@ export function createWarningLoggerModule(): { default: Omit<LoggerModule['defau
     },
   };
 }
+
+export function createEsLoggerModule(errorFirst = false): LoggerModule & { __esModule: boolean } {
+  return {
+    __esModule: true,
+    ...(errorFirst ? createErrorFirstLoggerModule() : createLoggerModule()),
+  };
+}
