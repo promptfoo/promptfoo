@@ -4,6 +4,10 @@ import { SECRET_FIELD_NAMES } from '../validation/secretFieldNames';
 // Use schema-emitting primitives for the complete template grammar, including
 // authority syntax. A runtime-only URL refinement would leave editor validation
 // accepting invalid ports and IP addresses. International hosts use punycode.
+const maxFeedbackUrlLength = 8192;
+// JSON Schema validators can continue after maxLength fails. Bound every emitted
+// regex as well, so oversized inputs never reach the URL or credential grammar.
+const lengthGuard = `(?=[\\s\\S]{1,${maxFeedbackUrlLength}}$(?![\\s\\S]))`;
 const ipv4 = z.regexes.ipv4.source.slice(1, -1);
 const ipv6 = z.regexes.ipv6.source.slice(1, -1);
 const dnsLabel = '[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?';
@@ -13,7 +17,7 @@ const dnsHost = `(?!(?:${dnsLabel}\\.)*(?:[0-9]+|0[xX][0-9a-fA-F]+)\\.?(?=[:/?#]
 const host = `(?:${ipv4}|\\[(?:${ipv6})\\]|${dnsHost})`;
 const port = '(?:[0-5]?[0-9]{1,4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5])';
 const templatePattern = new RegExp(
-  `^https://${host}(?::${port})?(?:[/?#](?:[^\\s{}\\\\]|\\{\\{(?:evalId|resultId|testCaseId|rating)\\}\\})*)?$(?![\\s\\S])`,
+  `^${lengthGuard}https://${host}(?::${port})?(?:[/?#](?:[^\\s{}\\\\]|\\{\\{(?:evalId|resultId|testCaseId|rating)\\}\\})*)?$(?![\\s\\S])`,
 );
 // Keep feedback links aligned with the sanitizer's credential vocabulary, with
 // the additional generic and signed-URL names already forbidden by this feature.
@@ -29,16 +33,21 @@ const credentialNames = [
 const credentialKeys = credentialNames
   .map((name) => [...name].map((letter) => `[${letter}${letter.toUpperCase()}]`).join('[._+-]*'))
   .join('|');
+// Require an equals sign in the same parameter before scanning its segments.
+// Each prefix is scanned once, and separators never compete with an adjacent
+// separator repetition. This also covers array/nested suffixes such as token[].
 const noCredentialsPattern = new RegExp(
-  `^(?![\\s\\S]*[?&#;](?:[^?&#;=]*[.\\[])?[._+-]*(?:${credentialKeys})[._+-]*(?:[.\\]][^?&#;=]*)?=)[\\s\\S]*$`,
+  `^${lengthGuard}(?![\\s\\S]*[?&#;](?=[^?&#;=]*=)(?:[^?&#;=]*[.\\[_+-])?(?:${credentialKeys})(?:[.\\[\\]_+-][^?&#;=]*)?=)[\\s\\S]*$`,
 );
 // Encoded parameter names can disguise a credential key from schema validators.
-const noEncodedKeysPattern = /^(?![\s\S]*[?&#;][^?&#;=%]*%[^?&#;=]*=)[\s\S]*$/;
+const noEncodedKeysPattern = new RegExp(
+  `^${lengthGuard}(?![\\s\\S]*[?&#;][^?&#;=%]*%[^?&#;=]*=)[\\s\\S]*$`,
+);
 
 export const RatingFeedbackUrlSchema = z
   .string()
   .min(1)
-  .max(8192)
+  .max(maxFeedbackUrlLength, { abort: true })
   .regex(
     templatePattern,
     'Feedback URLs require HTTPS, no URL credentials, and supported placeholders outside the host',

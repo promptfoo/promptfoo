@@ -127,6 +127,53 @@ describe('config-schema.json', () => {
         { pass: 'https://reviews.example.com/?settings.api_key=secret' },
         false,
       ],
+      ['array credential key', { pass: 'https://reviews.example.com/?api_key[]=secret' }, false],
+      [
+        'named credential child',
+        { pass: 'https://reviews.example.com/?token[primary]=secret' },
+        false,
+      ],
+      [
+        'nested credential child',
+        { pass: 'https://reviews.example.com/?settings[api_key][primary]=secret' },
+        false,
+      ],
+      [
+        'bracket fragment credential',
+        { pass: 'https://reviews.example.com/#session_token[]=secret' },
+        false,
+      ],
+      [
+        'padded bracket credential',
+        { pass: 'https://reviews.example.com/?__API__KEY__[0]=secret' },
+        false,
+      ],
+      [
+        'ordinary bracket key',
+        { pass: 'https://reviews.example.com/?review[category]=quality' },
+        true,
+      ],
+      [
+        'credential word in value',
+        { pass: 'https://reviews.example.com/?category=token[primary]' },
+        true,
+      ],
+      ['credential-like path', { pass: 'https://reviews.example.com/token[primary]=public' }, true],
+      [
+        'long ordinary key within limit',
+        { pass: 'https://reviews.example.com/?' + '.'.repeat(7600) + '=public' },
+        true,
+      ],
+      [
+        'oversized separator key',
+        { pass: 'https://reviews.example.com/?' + '.'.repeat(65536) + '=public' },
+        false,
+      ],
+      [
+        'oversized nested key without equals',
+        { pass: 'https://reviews.example.com/?' + 'token.'.repeat(11000) },
+        false,
+      ],
       ['trailing newline', { pass: 'https://reviews.example.com/\n' }, false],
       ['non-numeric port', { pass: 'https://reviews.example.com:bad/' }, false],
       ['out-of-range port', { pass: 'https://reviews.example.com:65536/' }, false],
