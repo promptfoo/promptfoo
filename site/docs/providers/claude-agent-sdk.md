@@ -54,6 +54,24 @@ providers:
 
 This is useful when you're using a local Claude Code binary with an active session, such as Claude Code monthly plans. Promptfoo will skip its preflight API key validation, but the SDK still needs to be able to authenticate on its own.
 
+## Dynamic workflows
+
+To run [dynamic workflows](https://platform.claude.com/cookbook/claude-agent-sdk-08-dynamic-workflows), enable the `Workflow` tool and explicitly ask for a workflow in your prompt:
+
+```yaml
+providers:
+  - id: anthropic:claude-agent-sdk
+    config:
+      custom_allowed_tools: [Workflow]
+      max_budget_usd: 1
+prompts:
+  - Use a dynamic workflow to verify each calculation independently, wait for the results, and report the final verdict.
+```
+
+The provider grades the main agent's final answer and records the `Workflow` call in `metadata.toolCalls`. The [dynamic workflows example](https://github.com/promptfoo/promptfoo/tree/main/examples/claude-agent-sdk/dynamic-workflows) checks that the tool was used as well as checking the answer. Workflows can spawn multiple agents, increasing token usage.
+
+For Anthropic-hosted sessions created with `client.beta.agents.create`, use [Claude Managed Agents](./claude-managed-agents.md).
+
 ## Other Model Providers
 
 Apart from using the Anthropic API, you can also use AWS Bedrock and Google Vertex AI.
