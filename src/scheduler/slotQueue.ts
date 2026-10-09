@@ -37,6 +37,7 @@ export class SlotQueue {
   private resetAt: number | null = null;
   private resetAtRequests: number | null = null;
   private resetAtTokens: number | null = null;
+  private rateLimitedUntil: number | null = null;
   private remainingRequests: number | null = null;
   private remainingTokens: number | null = null;
   private requestLimit: number | null = null;
@@ -149,33 +150,22 @@ export class SlotQueue {
     this.scheduleResetProcessing();
   }
 
-  /**
-   * Mark that a rate limit was hit.
-   * Only updates resetAt if we don't already have a later reset time.
-   */
+  /** Apply request-wide backoff without inventing exhaustion of an available quota. */
   markRateLimited(retryAfterMs?: number): void {
-    this.remainingRequests = 0;
-    this.remainingTokens = 0;
-
-    // Only update resetAt if:
-    // 1. We have a retryAfterMs >= 0, OR
-    // 2. We don't have an existing resetAt
-    if (retryAfterMs !== undefined && retryAfterMs >= 0) {
-      // retryAfterMs = 0 means "retry immediately", so resetAt = now
-      const newResetAt = Date.now() + retryAfterMs;
-      // Use the later of existing or new reset time
-      this.resetAt = this.resetAt ? Math.max(this.resetAt, newResetAt) : newResetAt;
-      // Retry-After applies to the rate-limited request as a whole. Keep it
-      // as a minimum boundary for both quota clocks without shortening a
-      // provider's longer quota-specific reset window.
-      this.resetAtRequests = Math.max(this.resetAtRequests ?? this.resetAt, this.resetAt);
-      this.resetAtTokens = Math.max(this.resetAtTokens ?? this.resetAt, this.resetAt);
-    } else if (!this.resetAt) {
-      // No retryAfter provided and no existing reset - use conservative default
-      this.resetAt = Date.now() + 60000;
-    }
-    // If we have an existing resetAt and no retryAfterMs, keep existing
-
+    const now = Date.now();
+    this.clearExpiredQuotaState(now);
+    const quotaResets = this.getQuotaResetTimes();
+    // A generic reset has no dimension and remains a conservative backoff boundary.
+    // Dimension-specific resets only block when their own quota is exhausted.
+    const genericReset =
+      this.resetAtRequests === null && this.resetAtTokens === null ? this.resetAt : null;
+    const deadline =
+      retryAfterMs !== undefined && Number.isFinite(retryAfterMs) && retryAfterMs >= 0
+        ? now + retryAfterMs
+        : (this.rateLimitedUntil ??
+          (quotaResets.length > 0 ? Math.max(...quotaResets) : genericReset) ??
+          now + 60000);
+    this.rateLimitedUntil = Math.max(this.rateLimitedUntil ?? 0, genericReset ?? 0, deadline);
     this.scheduleResetProcessing();
   }
 
@@ -201,7 +191,9 @@ export class SlotQueue {
   }
 
   getResetAt(): number | null {
-    return this.resetAt;
+    return this.resetAt === null && this.rateLimitedUntil === null
+      ? null
+      : Math.max(this.resetAt ?? 0, this.rateLimitedUntil ?? 0);
   }
 
   /**
@@ -213,51 +205,27 @@ export class SlotQueue {
    * outdated rate limit info.
    */
   private isQuotaExhausted(): boolean {
-    const now = Date.now();
+    this.clearExpiredQuotaState(Date.now());
+    return this.rateLimitedUntil !== null || this.getQuotaResetTimes().length > 0;
+  }
 
+  private clearExpiredQuotaState(now: number): void {
     const requestResetAt = this.resetAtRequests ?? this.resetAt;
-    if (
-      this.remainingRequests !== null &&
-      this.remainingRequests <= 0 &&
-      requestResetAt &&
-      now >= requestResetAt
-    ) {
+    if (requestResetAt !== null && now >= requestResetAt) {
       this.remainingRequests = null;
       this.resetAtRequests = null;
     }
-
     const tokenResetAt = this.resetAtTokens ?? this.resetAt;
-    if (
-      this.remainingTokens !== null &&
-      this.remainingTokens <= 0 &&
-      tokenResetAt &&
-      now >= tokenResetAt
-    ) {
+    if (tokenResetAt !== null && now >= tokenResetAt) {
       this.remainingTokens = null;
       this.resetAtTokens = null;
     }
-
-    if (this.resetAt && now >= this.resetAt) {
+    if (this.resetAt !== null && now >= this.resetAt) {
       this.resetAt = null;
     }
-
-    // Request quota exhausted
-    if (this.remainingRequests !== null && this.remainingRequests <= 0) {
-      const resetAt = this.resetAtRequests ?? this.resetAt;
-      if (resetAt && now < resetAt) {
-        return true;
-      }
+    if (this.rateLimitedUntil !== null && now >= this.rateLimitedUntil) {
+      this.rateLimitedUntil = null;
     }
-
-    // Token quota exhausted
-    if (this.remainingTokens !== null && this.remainingTokens <= 0) {
-      const resetAt = this.resetAtTokens ?? this.resetAt;
-      if (resetAt && now < resetAt) {
-        return true;
-      }
-    }
-
-    return false;
   }
 
   /**
@@ -278,7 +246,7 @@ export class SlotQueue {
     }
   }
 
-  private getNextQuotaResetAt(): number | null {
+  private getQuotaResetTimes(): number[] {
     const resetTimes: number[] = [];
     if (this.remainingRequests !== null && this.remainingRequests <= 0) {
       const resetAt = this.resetAtRequests ?? this.resetAt;
@@ -291,6 +259,14 @@ export class SlotQueue {
       if (resetAt) {
         resetTimes.push(resetAt);
       }
+    }
+    return resetTimes;
+  }
+
+  private getNextQuotaResetAt(): number | null {
+    const resetTimes = this.getQuotaResetTimes();
+    if (this.rateLimitedUntil !== null) {
+      resetTimes.push(this.rateLimitedUntil);
     }
     return resetTimes.length > 0 ? Math.min(...resetTimes) : null;
   }

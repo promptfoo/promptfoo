@@ -598,6 +598,64 @@ describe('SlotQueue', () => {
     });
   });
 
+  describe('quota clocks and independent 429 backoff', () => {
+    beforeEach(() => {
+      queue = new SlotQueue({ maxConcurrency: 5, minConcurrency: 1 });
+    });
+
+    it('uses the conservative backoff after positive quota clocks have expired', () => {
+      queue.updateRateLimitState({
+        remainingRequests: 10,
+        remainingTokens: 100,
+        resetAt: Date.now() + 1000,
+        resetAtRequests: Date.now() + 1000,
+        resetAtTokens: Date.now() + 2000,
+      });
+      vi.advanceTimersByTime(3000);
+      queue.markRateLimited();
+      trackAcquire(queue.acquire('bare-429'));
+      vi.advanceTimersByTime(59999);
+      expect(queue.getActiveCount()).toBe(0);
+      vi.advanceTimersByTime(1);
+      expect(queue.getActiveCount()).toBe(1);
+    });
+
+    it.each(['requests', 'tokens'] as const)(
+      'does not exhaust the available quota when %s are limited',
+      (dimension) => {
+        queue.updateRateLimitState({
+          remainingRequests: dimension === 'requests' ? 0 : 100,
+          remainingTokens: dimension === 'tokens' ? 0 : 100,
+          resetAt: Date.now() + (dimension === 'requests' ? 1000 : 60000),
+          resetAtRequests: Date.now() + (dimension === 'requests' ? 1000 : 60000),
+          resetAtTokens: Date.now() + (dimension === 'tokens' ? 1000 : 60000),
+        });
+        queue.markRateLimited(1000);
+        trackAcquire(queue.acquire('one-quota-429'));
+        vi.advanceTimersByTime(999);
+        expect(queue.getActiveCount()).toBe(0);
+        vi.advanceTimersByTime(1);
+        expect(queue.getActiveCount()).toBe(1);
+      },
+    );
+
+    it('keeps Retry-After active when an in-flight successful response updates quota headers', () => {
+      queue.markRateLimited(30000);
+      queue.updateRateLimitState({
+        remainingRequests: 100,
+        remainingTokens: 100,
+        resetAt: Date.now() + 1000,
+        resetAtRequests: Date.now() + 1000,
+        resetAtTokens: Date.now() + 1000,
+      });
+      trackAcquire(queue.acquire('late-response'));
+      vi.advanceTimersByTime(29999);
+      expect(queue.getActiveCount()).toBe(0);
+      vi.advanceTimersByTime(1);
+      expect(queue.getActiveCount()).toBe(1);
+    });
+  });
+
   describe('isQuotaExhausted - clears stale state after reset time', () => {
     beforeEach(() => {
       queue = new SlotQueue({
