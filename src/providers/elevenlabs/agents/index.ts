@@ -4,10 +4,10 @@
  * Test and evaluate voice AI agents with LLM backends
  */
 
-import { getEnvString } from '../../../envars';
 import logger from '../../../logger';
 import { providerRegistry } from '../../providerRegistry';
 import { waitForPromiseWithAbort } from '../../shared';
+import { getElevenLabsApiKey } from '../auth';
 import { ElevenLabsClient } from '../client';
 import { CostTracker } from '../cost-tracker';
 import { ElevenLabsAPIError } from '../errors';
@@ -80,8 +80,8 @@ export class ElevenLabsAgentsProvider implements ApiProvider {
       this.id = () => id;
     }
 
-    // Initialize advanced features asynchronously
-    this.initPromise = this.initializeAdvancedFeatures();
+    // Preserve the initial asynchronous readiness boundary.
+    this.initPromise = Promise.resolve();
   }
 
   id(): string {
@@ -90,31 +90,6 @@ export class ElevenLabsAgentsProvider implements ApiProvider {
 
   toString(): string {
     return `[ElevenLabs Agents Provider] ${this.config.agentId || 'Ephemeral Agent'}`;
-  }
-
-  /**
-   * Initialize advanced features
-   */
-  private async initializeAdvancedFeatures(): Promise<void> {
-    try {
-      // Validate configurations
-      this.validateConfigurations();
-
-      // No initialization needed yet - will be done per-agent during callApi
-    } catch (error) {
-      logger.error('[ElevenLabs Agents] Advanced features initialization failed', {
-        error: error instanceof Error ? error.message : String(error),
-      });
-      // Don't throw - fall back to basic agent functionality
-    }
-  }
-
-  /**
-   * Validate all advanced feature configurations
-   */
-  private validateConfigurations(): void {
-    // No advanced feature validations needed currently
-    // Future advanced features will be validated here
   }
 
   async callApi(
@@ -137,6 +112,7 @@ export class ElevenLabsAgentsProvider implements ApiProvider {
     const signal = options?.abortSignal
       ? AbortSignal.any([this.operationController.signal, options.abortSignal])
       : this.operationController.signal;
+
     // Wait for initialization
     if (this.initPromise != null) {
       await this.initPromise;
@@ -413,13 +389,7 @@ export class ElevenLabsAgentsProvider implements ApiProvider {
    * Get API key from config or environment
    */
   private getApiKey(): string | undefined {
-    return (
-      this.config.apiKey ||
-      (this.config.apiKeyEnvar && this.env?.[this.config.apiKeyEnvar as keyof EnvOverrides]) ||
-      (this.config.apiKeyEnvar && getEnvString(this.config.apiKeyEnvar as any)) ||
-      this.env?.ELEVENLABS_API_KEY ||
-      getEnvString('ELEVENLABS_API_KEY')
-    );
+    return getElevenLabsApiKey(this, () => this.env);
   }
 
   /**
