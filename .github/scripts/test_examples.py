@@ -328,6 +328,64 @@ class GitSelectionTests(unittest.TestCase):
 
 
 class RunnerTests(unittest.TestCase):
+    def test_docker_mirror_retains_the_example_tag_and_runs_both_suites(self):
+        for minor in (10, 14):
+            with (
+                self.subTest(python=minor),
+                patch(
+                    "examples.sys.version_info",
+                    types.SimpleNamespace(major=3, minor=minor),
+                ),
+                patch("examples.Path.is_file", return_value=True),
+                patch("examples.venv.EnvBuilder.create"),
+                patch("examples.subprocess.run") as run,
+            ):
+                run_example("docker-sandbox")
+            commands = [call.args[0] for call in run.call_args_list]
+            self.assertEqual(len(commands), 6)
+            self.assertEqual(commands[2][:2], ("docker", "pull"))
+            source = commands[2][2]
+            self.assertRegex(
+                source,
+                r"^public\.ecr\.aws/docker/library/python@sha256:[a-f0-9]{64}$",
+            )
+            self.assertEqual(
+                commands[3], ("docker", "tag", source, "python:3.9-alpine")
+            )
+            for command, relative in zip(commands[4:], (".", "tests")):
+                self.assertEqual(command[1:3], (str(SCRIPT), "test"))
+                self.assertEqual(
+                    Path(command[3]),
+                    ROOT / EXAMPLES["docker-sandbox"].directory / relative,
+                )
+                self.assertEqual(command[4], "test_*.py")
+            self.assertTrue(all(call.kwargs["check"] for call in run.call_args_list))
+
+    def test_docker_pull_or_tag_failure_stops_before_example_tests(self):
+        for operation in ("pull", "tag"):
+
+            def fail_docker(command, operation=operation, **_kwargs):
+                if command[:2] == ("docker", operation):
+                    raise subprocess.CalledProcessError(1, command)
+
+            with (
+                self.subTest(operation=operation),
+                patch(
+                    "examples.sys.version_info",
+                    types.SimpleNamespace(major=3, minor=10),
+                ),
+                patch("examples.Path.is_file", return_value=True),
+                patch("examples.venv.EnvBuilder.create"),
+                patch("examples.subprocess.run", side_effect=fail_docker) as run,
+                self.assertRaises(subprocess.CalledProcessError),
+            ):
+                run_example("docker-sandbox")
+            commands = [call.args[0] for call in run.call_args_list]
+            self.assertEqual(commands[-1][:2], ("docker", operation))
+            self.assertFalse(
+                any(command[1:3] == (str(SCRIPT), "test") for command in commands)
+            )
+
     def test_adk_optional_adapter_is_isolated_and_runs_its_own_suite(self):
         with (
             patch(
