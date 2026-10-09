@@ -183,6 +183,8 @@ The eligibility skill reports `candidate`, `no_candidate_found`, or
 `inconclusive` per application. It inspects source without running the app or
 making target calls. Missing credentials or a local system prompt do not rule
 out a candidate; ambiguous off-repo AI behavior remains an explicit unknown.
+These are workflow instructions, not a sandbox: configure read-only and network
+restrictions in your agent client when you need enforced isolation.
 
 For red-team work, ask for the task directly:
 
