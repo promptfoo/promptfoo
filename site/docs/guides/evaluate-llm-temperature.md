@@ -137,6 +137,8 @@ promptfoo eval --repeat 3
 
 The above command runs the LLM three times for each test case, helping you get a more complete sample of how it performs at a given temperature.
 
-The completion summary flags repeated groups that contain both passing and failing results. JSON output includes the same data under `repeatStability`, with pass/fail/error counts and a 95% confidence interval for each group. Confidence intervals are omitted for groups containing cached results.
+The completion summary flags repeated groups that contain both passing and failing results. JSON exports include the full summary under `results.repeatStability`, grouped by test case, expanded variables, provider, and prompt. Pass rates exclude errors; groups with no scored results have no pass rate.
+
+For groups with scored results and no cached target or grader responses, the summary includes a Wilson 95% confidence interval. Interpreting it as a model pass-rate estimate assumes independent runs with the same success probability. Shared conversation history or changing external state can violate that assumption, even with `--no-cache`.
 
 By default, each repeat index has its own cache entry, so re-running the same eval can replay repeat 0, repeat 1, and repeat 2 independently. If you want fresh generations on every run while sampling temperature, add `--no-cache`.
