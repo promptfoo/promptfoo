@@ -619,7 +619,7 @@ export class CohereChatCompletionProvider implements ApiProvider {
     return withGenAISpan(
       spanContext,
       () => this.callApiInternal(prompt, config),
-      extractGenAIResponse,
+      (response) => extractGenAIResponse(response, true),
     );
   }
 
