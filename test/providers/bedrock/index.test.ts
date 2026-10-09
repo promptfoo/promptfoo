@@ -3489,6 +3489,37 @@ describe('BEDROCK_MODEL token counting functionality', () => {
   });
 });
 
+it.each([
+  'AMAZON_NOVA',
+  'AMAZON_NOVA_2',
+  'COHERE_COMMAND',
+  'COHERE_COMMAND_R',
+  'CLAUDE_COMPLETION',
+  'CLAUDE_MESSAGES',
+  'DEEPSEEK',
+  'OPENAI',
+  'MISTRAL_CHAT',
+  'LLAMA2',
+] as const)('keeps missing usage fresh and explicit for %s', (model) => {
+  const handler = BEDROCK_MODEL[model].tokenUsage!;
+  const result = handler({}, 'prompt');
+  expect(Reflect.ownKeys(result)).toEqual(['prompt', 'completion', 'total', 'numRequests']);
+  expect(result).toEqual({
+    prompt: undefined,
+    completion: undefined,
+    total: undefined,
+    numRequests: 1,
+  });
+  expect(handler({}, 'prompt')).not.toBe(result);
+});
+
+it('keeps independently replaceable Bedrock token callbacks', () => {
+  expect(BEDROCK_MODEL.AMAZON_NOVA.tokenUsage).not.toBe(BEDROCK_MODEL.AMAZON_NOVA_2.tokenUsage);
+  expect(BEDROCK_MODEL.COHERE_COMMAND.tokenUsage).not.toBe(
+    BEDROCK_MODEL.COHERE_COMMAND_R.tokenUsage,
+  );
+});
+
 describe('AWS_BEDROCK_MODELS mapping', () => {
   it.each(['fable', 'mythos'])('maps %s 5.1 base, US, and global Runtime IDs', (family) => {
     for (const prefix of ['', 'us.', 'global.']) {

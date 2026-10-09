@@ -1,8 +1,9 @@
-import { getEnvString } from '../envars';
+import { resolveProviderCreatorInput } from './creator';
+import { resolveProviderEnv } from './env';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 
-import type { EnvOverrides } from '../types/env';
-import type { ApiProvider, ProviderOptions } from '../types/index';
+import type { ApiProvider } from '../types/index';
+import type { ProviderCreatorOptions } from './creator';
 
 /**
  * Creates an Envoy AI Gateway provider using OpenAI-compatible endpoints
@@ -28,12 +29,9 @@ import type { ApiProvider, ProviderOptions } from '../types/index';
  */
 export function createEnvoyProvider(
   providerPath: string,
-  options: {
-    config?: ProviderOptions;
-    id?: string;
-    env?: EnvOverrides;
-  } = {},
+  options: ProviderCreatorOptions = {},
 ): ApiProvider {
+  const providerOptions = resolveProviderCreatorInput(options);
   const splits = providerPath.split(':');
   const modelName = splits.slice(1).join(':');
 
@@ -42,13 +40,13 @@ export function createEnvoyProvider(
   }
 
   // Filter out basePath from config to avoid passing it to the API
-  const { basePath: _, ...configWithoutBasePath } = options.config?.config || {};
-
-  const apiBaseUrl =
-    configWithoutBasePath.apiBaseUrl ||
-    options.config?.env?.ENVOY_API_BASE_URL ||
-    options.env?.ENVOY_API_BASE_URL ||
-    getEnvString('ENVOY_API_BASE_URL');
+  const {
+    basePath: _,
+    apiBaseUrl: configuredBaseUrl,
+    ...configWithoutBasePath
+  } = providerOptions.config || {};
+  const env = providerOptions.env;
+  let apiBaseUrl = configuredBaseUrl ?? resolveProviderEnv(env, ['ENVOY_API_BASE_URL'])?.value;
 
   if (!apiBaseUrl) {
     throw new Error(
@@ -56,16 +54,30 @@ export function createEnvoyProvider(
     );
   }
 
-  const baseUrl = apiBaseUrl.replace(/\/+$/, '');
-  const normalizedBaseUrl = baseUrl.endsWith('/v1') ? baseUrl : `${baseUrl}/v1`;
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(apiBaseUrl);
+    if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+      throw new Error('Unsupported gateway protocol');
+    }
+  } catch {
+    throw new Error(
+      'Envoy provider requires a valid gateway URL. Check ENVOY_API_BASE_URL or config.apiBaseUrl.',
+    );
+  }
+
+  if (configuredBaseUrl == null) {
+    const basePath = parsedUrl.pathname.replace(/\/+$/, '');
+    parsedUrl.pathname = basePath.endsWith('/v1') ? basePath : `${basePath}/v1`;
+    apiBaseUrl = parsedUrl.toString();
+  }
 
   const envoyConfig = {
-    ...options.config,
-    id: options.id ?? options.config?.id,
-    env: options.config?.env ?? options.env,
+    ...providerOptions,
+    env,
     config: {
       ...configWithoutBasePath,
-      apiBaseUrl: normalizedBaseUrl,
+      apiBaseUrl,
     },
   };
 

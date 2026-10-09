@@ -1209,3 +1209,8 @@ describe('Mistral', () => {
     });
   });
 });
+
+it('keeps mutable prices independent across model aliases', () => {
+  const costs = MistralChatCompletionProvider.MISTRAL_CHAT_MODELS.map(({ cost }) => cost);
+  expect(new Set(costs).size).toBe(costs.length);
+});
