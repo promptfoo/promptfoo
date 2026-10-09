@@ -1,14 +1,11 @@
 import { getEnvString } from '../../envars';
+import { resolveProviderEnv } from '../env';
 
 import type { EnvOverrides } from '../../types/env';
 
-// Region resolution intentionally mirrors AwsBedrockGenericProvider.getRegion()
-// (src/providers/bedrock/base.ts): same config.region → AWS_BEDROCK_REGION head
-// plus AWS_REGION/AWS_DEFAULT_REGION fallbacks. The mantle providers wrap other
-// provider classes rather than extending AwsBedrockGenericProvider, so they
-// can't reuse getRegion() directly — keep this chain in sync if the canonical
-// one changes. The default differs per route (frontier GA region vs Anthropic
-// Messages region), so callers pass it in.
+// Mantle supports AWS_REGION/AWS_DEFAULT_REGION in addition to Bedrock's region
+// override. Provider values precede ambient aliases. The default differs per route
+// (frontier GA region vs Anthropic Messages region), so callers pass it in.
 export function resolveBedrockMantleRegion(
   config: Record<string, any>,
   env: EnvOverrides | undefined,
@@ -16,12 +13,7 @@ export function resolveBedrockMantleRegion(
 ): string {
   return (
     config.region ||
-    env?.AWS_BEDROCK_REGION ||
-    getEnvString('AWS_BEDROCK_REGION') ||
-    env?.AWS_REGION ||
-    env?.AWS_DEFAULT_REGION ||
-    process.env.AWS_REGION ||
-    process.env.AWS_DEFAULT_REGION ||
+    resolveProviderEnv(env, ['AWS_BEDROCK_REGION', 'AWS_REGION', 'AWS_DEFAULT_REGION'])?.value ||
     defaultRegion
   );
 }
