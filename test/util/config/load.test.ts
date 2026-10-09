@@ -68,7 +68,8 @@ vi.mock('path', async () => {
   };
 });
 
-vi.mock('glob', () => ({
+vi.mock('glob', async (importOriginal) => ({
+  escape: (await importOriginal<typeof import('glob')>()).escape,
   globSync: vi.fn(),
   hasMagic: vi.fn((pattern: string | string[]) => {
     const p = Array.isArray(pattern) ? pattern.join('') : pattern;
@@ -140,25 +141,25 @@ vi.mock('../../../src/util/file', async () => {
   };
 });
 
-vi.mock('../../../src/util/testCaseReader', () => ({
-  readTest: vi.fn().mockImplementation(async (test) => test),
-  readTests: vi.fn().mockImplementation(async (tests) => {
-    if (!tests) {
-      return [];
-    }
-    if (Array.isArray(tests)) {
-      return tests;
-    }
-    return [];
-  }),
-}));
+vi.mock('../../../src/util/testCaseReader', async (importOriginal) => {
+  const readRows = vi.fn(async (tests) => (Array.isArray(tests) ? tests : []));
+  return {
+    isRemoteTestsReference: (
+      await importOriginal<typeof import('../../../src/util/testCaseReader')>()
+    ).isRemoteTestsReference,
+    readTest: vi.fn(async (test) => test),
+    readTestConfig: vi.fn(async (test) => test),
+    readTests: readRows,
+    readTestConfigs: readRows,
+  };
+});
 
 vi.mock('../../../src/providers', async () => {
   const actual =
     await vi.importActual<typeof import('../../../src/providers')>('../../../src/providers');
   return {
     ...actual,
-    loadApiProviders: vi.fn().mockImplementation(async (providers) => {
+    loadApiProviders: vi.fn(async (providers) => {
       return providers.map((p: any) => ({
         id: () => (typeof p === 'string' ? p : p.id),
         label: typeof p === 'string' ? p : p.label || p.id,
@@ -217,6 +218,7 @@ vi.mock('../../../src/assertions', () => ({
 // Global setup for all tests - set default mock implementation for $RefParser
 beforeEach(() => {
   mockDereference.mockImplementation((config: object) => Promise.resolve(config));
+  vi.mocked(readTests).mockReset();
 });
 
 describe('combineConfigs', () => {
@@ -311,6 +313,7 @@ describe('combineConfigs', () => {
     );
 
     expect(config1Result).toEqual({
+      basePath: '.',
       description: 'test1',
       tags: { tag1: 'value1' },
       providers: ['provider1'],
@@ -347,6 +350,7 @@ describe('combineConfigs', () => {
     );
 
     expect(config2Result).toEqual({
+      basePath: '.',
       description: 'test2',
       tags: {},
       providers: ['provider2'],
@@ -388,6 +392,7 @@ describe('combineConfigs', () => {
 
     expect(fs.readFileSync).toHaveBeenCalledTimes(4);
     expect(result).toEqual({
+      basePath: '.',
       description: 'test1, test2',
       tags: { tag1: 'value1' },
       providers: ['provider1', 'provider2'],
@@ -1075,7 +1080,7 @@ describe('combineConfigs', () => {
     expect(result.sharing).toBeUndefined();
   });
 
-  it('should load defaultTest from external file when string starts with file://', async () => {
+  it('resolves a relative defaultTest file reference without loading it', async () => {
     const externalDefaultTest = {
       assert: [{ type: 'equals', value: 'test' }],
       vars: { foo: 'bar' },
@@ -1097,8 +1102,8 @@ describe('combineConfigs', () => {
 
     const result = await combineConfigs(['config.json']);
 
-    // combineConfigs should preserve the string reference, not load it
-    expect(result.defaultTest).toBe('file://path/to/defaultTest.yaml');
+    expect(result.defaultTest).toBe(`file://${path.resolve('path/to/defaultTest.yaml')}`);
+    expect(maybeLoadFromExternalFile).not.toHaveBeenCalled();
   });
 
   it('should preserve string defaultTest when combining configs with file:// reference', async () => {
@@ -1123,7 +1128,7 @@ describe('combineConfigs', () => {
     const result = await combineConfigs(['config1.json', 'config2.json']);
 
     // Should preserve the file:// reference from the second config
-    expect(result.defaultTest).toBe('file://external/defaultTest.yaml');
+    expect(result.defaultTest).toBe(`file://${path.resolve('external/defaultTest.yaml')}`);
   });
 
   it('should merge inline defaultTest objects when combining configs', async () => {
@@ -1560,7 +1565,7 @@ describe('resolveConfigs', () => {
 
     await resolveConfigs(cmdObj, defaultConfig);
 
-    expect(cliState.basePath).toBe(path.dirname('config.json'));
+    expect(cliState.basePath).toBe(path.resolve(path.dirname('config.json')));
   });
 
   it('should include YAML location when an inline test references a missing prompt', async () => {
@@ -1629,9 +1634,9 @@ describe('resolveConfigs', () => {
       }),
     );
 
-    vi.mocked(maybeLoadFromExternalFile)
-      .mockResolvedValueOnce(scenarios)
-      .mockResolvedValueOnce(externalTests);
+    vi.mocked(maybeLoadFromExternalFile).mockImplementation(async (value) =>
+      typeof value === 'string' ? scenarios : value,
+    );
 
     vi.mocked(readTests).mockResolvedValue(externalTests);
 
@@ -1655,8 +1660,12 @@ describe('resolveConfigs', () => {
 
     const { testSuite } = await resolveConfigs(cmdObj, defaultConfig);
 
-    expect(maybeLoadFromExternalFile).toHaveBeenCalledWith(['file://scenarios.yaml']);
-    expect(maybeLoadFromExternalFile).toHaveBeenCalledWith('file://tests.yaml');
+    expect(maybeLoadFromExternalFile).toHaveBeenCalledWith('file://scenarios.yaml');
+    expect(readTests).toHaveBeenCalledWith(
+      [`file://${path.resolve('/mock/cwd/tests.yaml')}`],
+      path.resolve('.'),
+      {},
+    );
 
     expect(testSuite).toMatchObject({
       prompts: [
@@ -1998,42 +2007,78 @@ describe('resolveConfigs', () => {
   });
 
   describe('--filter-providers with test-level provider references', () => {
+    beforeEach(() => {
+      vi.mocked(maybeLoadFromExternalFile)
+        .mockReset()
+        .mockImplementation(async (value) => value);
+    });
     afterEach(() => {
-      vi.mocked(loadApiProviders).mockClear();
+      vi.mocked(loadApiProviders).mockReset();
     });
 
-    it('does not reject a test that references a provider removed by --filter-providers', async () => {
-      // The reference is to a provider that IS defined in the config but was filtered
-      // out of this run. That is a valid config, not a typo, so validation must pass.
-      const config = {
-        prompts: ['Tell me about {{topic}}'],
-        providers: ['openai:gpt-4o-mini', 'anthropic:messages:claude-sonnet-4-5'],
-        tests: [{ vars: { topic: 'AI' }, providers: ['anthropic:messages:claude-sonnet-4-5'] }],
-      };
-      vi.mocked(fs.existsSync).mockReturnValue(true);
-      vi.mocked(fs.readFileSync).mockImplementation((filePath: fs.PathOrFileDescriptor) => {
-        if (typeof filePath === 'string' && filePath.endsWith('config.yaml')) {
-          return yaml.dump(config);
-        }
-        return Buffer.from('');
-      });
-      vi.mocked(globSync).mockReturnValue(['config.yaml']);
-      vi.mocked(isCI).mockReturnValue(true);
-      vi.mocked(readPrompts).mockResolvedValue([
-        { raw: 'Tell me about {{topic}}', label: 'Tell me about {{topic}}', config: {} },
-      ]);
-      // First call = the filtered set (openai only); second = every defined provider.
-      vi.mocked(loadApiProviders)
-        .mockResolvedValueOnce([createMockProvider({ id: 'openai:gpt-4o-mini' })])
-        .mockResolvedValueOnce([
-          createMockProvider({ id: 'openai:gpt-4o-mini' }),
-          createMockProvider({ id: 'anthropic:messages:claude-sonnet-4-5' }),
+    it.each([
+      {
+        selection: { filterProviders: 'openai' },
+        excluded: 'anthropic:messages:claude-sonnet-4-5',
+        reference: 'anthropic:*',
+      },
+      {
+        selection: { filterTargets: 'openai' },
+        excluded: { id: 'anthropic:messages:claude-sonnet-4-5', label: 'excluded-label' },
+        reference: 'excluded-label',
+      },
+      {
+        selection: { providers: ['openai:gpt-4o-mini'] },
+        excluded: { 'anthropic:messages:claude-sonnet-4-5': { label: 'excluded-map' } },
+        reference: 'excluded-map',
+      },
+    ])(
+      'validates excluded provider references without loading them: $selection',
+      async ({ selection, excluded, reference }) => {
+        // The reference is to a provider that IS defined in the config but was filtered
+        // out of this run. That is a valid config, not a typo, so validation must pass.
+        const config = {
+          prompts: ['Tell me about {{topic}}'],
+          providers: ['openai:gpt-4o-mini', excluded],
+          tests: [{ vars: { topic: 'AI' }, providers: [reference] }],
+          defaultTest: { providers: [reference] },
+          scenarios: [
+            { config: [{ providers: [reference] }], tests: [{ providers: [reference] }] },
+          ],
+        };
+        vi.mocked(fs.existsSync).mockReturnValue(true);
+        vi.mocked(fs.readFileSync).mockImplementation((filePath: fs.PathOrFileDescriptor) => {
+          if (typeof filePath === 'string' && filePath.endsWith('config.yaml')) {
+            return yaml.dump(config);
+          }
+          return Buffer.from('');
+        });
+        vi.mocked(globSync).mockReturnValue(['config.yaml']);
+        vi.mocked(isCI).mockReturnValue(true);
+        vi.mocked(readPrompts).mockResolvedValue([
+          { raw: 'Tell me about {{topic}}', label: 'Tell me about {{topic}}', config: {} },
         ]);
+        // Excluded providers may require unavailable SDKs or credentials.
+        vi.mocked(loadApiProviders)
+          .mockResolvedValueOnce([createMockProvider({ id: 'openai:gpt-4o-mini' })])
+          .mockRejectedValueOnce(new Error('Excluded provider must not be instantiated'));
 
-      await expect(
-        resolveConfigs({ config: ['config.yaml'], filterProviders: 'openai' }, {}),
-      ).resolves.toBeDefined();
-    });
+        await expect(
+          resolveConfigs({ config: ['config.yaml'], ...selection }, {}),
+        ).resolves.toBeDefined();
+        expect(loadApiProviders).toHaveBeenCalledTimes(1);
+        expect(loadApiProviders).toHaveBeenCalledWith(['openai:gpt-4o-mini'], expect.anything());
+
+        // Unknown names must still fail, even when provider selection is active.
+        config.tests[0].providers = ['undeclared-provider'];
+        vi.mocked(loadApiProviders)
+          .mockReset()
+          .mockResolvedValue([createMockProvider({ id: 'openai:gpt-4o-mini' })]);
+        await expect(resolveConfigs({ config: ['config.yaml'], ...selection }, {})).rejects.toThrow(
+          'references provider "undeclared-provider" which does not exist',
+        );
+      },
+    );
   });
 
   describe('--providers flag config preservation', () => {
@@ -2630,7 +2675,9 @@ describe('resolveConfigs with external defaultTest', () => {
 
     const result = await resolveConfigs({ config: ['config.json'] }, {});
 
-    expect(maybeLoadFromExternalFile).toHaveBeenCalledWith('file://shared/defaultTest.yaml');
+    expect(maybeLoadFromExternalFile).toHaveBeenCalledWith(
+      `file://${path.resolve('shared/defaultTest.yaml')}`,
+    );
     expect(result.testSuite.defaultTest).toEqual(
       expect.objectContaining({
         assert: externalDefaultTest.assert,

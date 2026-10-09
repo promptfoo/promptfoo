@@ -3,6 +3,7 @@ import logger from '../../logger';
 import { loadTransformModule } from '../transformUtils';
 import { MCPClient } from './client';
 import { createTransformResponse, type MCPTransformResponseContext } from './transforms';
+import { sanitizeMcpToolData } from './util';
 
 import type {
   ApiProvider,
@@ -34,7 +35,7 @@ export class MCPProvider implements ApiProvider {
 
   constructor(options: MCPProviderOptions = {}) {
     this.config = McpConfigSchema.parse(options.config ?? {});
-    this.defaultArgs = options.defaultArgs || {};
+    this.defaultArgs = options.defaultArgs ?? this.config.defaultArgs ?? {};
 
     this.mcpClient = new MCPClient(this.config);
     this.initializationPromise = this.initialize();
@@ -125,7 +126,10 @@ export class MCPProvider implements ApiProvider {
         ...toolArgs,
       };
 
-      logger.debug(`MCP Provider calling tool ${toolName} with args: ${JSON.stringify(finalArgs)}`);
+      logger.debug('MCP Provider calling tool', {
+        toolName,
+        argumentNames: Object.keys(finalArgs),
+      });
 
       // Call the MCP tool
       const result = await this.mcpClient.callTool(toolName, finalArgs);
@@ -144,7 +148,7 @@ export class MCPProvider implements ApiProvider {
       });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error(`MCP Provider error: ${errorMessage}`);
+      logger.error('MCP Provider error', { error: errorMessage });
       return {
         error: `MCP Provider error: ${errorMessage}`,
       };
@@ -166,7 +170,8 @@ export class MCPProvider implements ApiProvider {
     try {
       await this.initializationPromise;
 
-      const result = await this.mcpClient.callTool(toolName, args);
+      const toolArgs = { ...this.defaultArgs, ...args };
+      const result = await this.mcpClient.callTool(toolName, toolArgs);
 
       if (result.error) {
         return {
@@ -176,7 +181,7 @@ export class MCPProvider implements ApiProvider {
 
       return this.transformToolResult(result, {
         toolName,
-        toolArgs: args,
+        toolArgs,
       });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -209,10 +214,10 @@ export class MCPProvider implements ApiProvider {
       metadata: {
         ...transformedResponse.metadata,
         toolName: context.toolName,
-        toolArgs: context.toolArgs,
+        toolArgs: sanitizeMcpToolData(context.toolArgs),
         ...(context.originalPayload === undefined
           ? {}
-          : { originalPayload: context.originalPayload }),
+          : { originalPayload: sanitizeMcpToolData(context.originalPayload) }),
       },
     };
   }

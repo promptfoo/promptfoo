@@ -13,7 +13,11 @@ export class ProviderReferenceValidationError extends Error {
 /**
  * Validates a single provider reference against available providers.
  */
-function validateProviderRef(ref: string, providers: ApiProvider[], context: string): void {
+function validateProviderRef(
+  ref: string,
+  providers: Pick<ApiProvider, 'id' | 'label'>[],
+  context: string,
+): void {
   if (!providers.some((p) => doesProviderRefMatch(ref, p))) {
     const available = providers.map(getProviderDescription).join(', ');
     throw new ProviderReferenceValidationError(
@@ -27,7 +31,7 @@ function validateProviderRef(ref: string, providers: ApiProvider[], context: str
  */
 function validateTestProviders(
   test: TestCase | Partial<TestCase>,
-  providers: ApiProvider[],
+  providers: Pick<ApiProvider, 'id' | 'label'>[],
   context: string,
 ): void {
   if (!test.providers) {
@@ -55,7 +59,7 @@ function validateTestProviders(
  */
 export function validateTestProviderReferences(
   tests: TestCase[],
-  providers: ApiProvider[],
+  providers: Pick<ApiProvider, 'id' | 'label'>[],
   defaultTest?: Partial<TestCase>,
   scenarios?: Scenario[],
 ): void {
