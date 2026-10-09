@@ -24,8 +24,16 @@ import {
   type TraceData,
 } from '../types/index';
 import { isApiProvider, isProviderOptions } from '../types/providers';
+import { GRADING_PROVIDER_TYPE_KEYS, isProviderTypeMap } from '../util/gradingProvider';
 import { safeJsonStringify } from '../util/json';
-import { isSecretField, REDACTED, sanitizeObject } from '../util/sanitizer';
+import {
+  isSecretField,
+  mapTestProviderRefs,
+  REDACTED,
+  sanitizeObject,
+  stripProviderPromptSelectors,
+  stripTestProviderPromptSelectors,
+} from '../util/sanitizer';
 import { getCurrentTimestamp } from '../util/time';
 import {
   accumulateGradingTokenUsage,
@@ -126,6 +134,12 @@ export function projectPrompt<T extends Prompt>(prompt: T, stripPromptText: bool
         ...prompt,
         raw: '[prompt stripped]',
         template: undefined,
+        ...(prompt.config?.provider && {
+          config: {
+            ...prompt.config,
+            provider: stripProviderPromptSelectors(prompt.config.provider),
+          },
+        }),
       }
     : prompt;
 }
@@ -195,9 +209,19 @@ export function projectTracesForOutput(
 
 function projectTestCase(
   testCase: AtomicTestCase,
-  options: { stripMetadata: boolean; stripVars: boolean; stripOutput: boolean },
+  options: {
+    stripMetadata: boolean;
+    stripVars: boolean;
+    stripOutput: boolean;
+    stripPromptText: boolean;
+  },
 ): AtomicTestCase {
-  if (!options.stripMetadata && !options.stripVars && !options.stripOutput) {
+  if (
+    !options.stripMetadata &&
+    !options.stripVars &&
+    !options.stripOutput &&
+    !options.stripPromptText
+  ) {
     return testCase;
   }
 
@@ -215,7 +239,44 @@ function projectTestCase(
     projectedTestCase.metadata = { __promptfoo: { remote: true } };
   }
 
-  return projectedTestCase;
+  return options.stripPromptText
+    ? stripTestProviderPromptSelectors(projectedTestCase)
+    : projectedTestCase;
+}
+
+/** Map only grading assertion providers and component results. */
+function mapGradingResultProviderRefs<T>(
+  gradingResult: T,
+  mapProvider: (provider: unknown) => unknown,
+): T {
+  const visited = new WeakMap<object, Record<string, unknown>>();
+  const project = (value: unknown): unknown => {
+    const result = asRecord(value);
+    if (!result) {
+      return value;
+    }
+    const previous = visited.get(result);
+    if (previous) {
+      return previous;
+    }
+    const projected = { ...result };
+    visited.set(result, projected);
+    if (result.assertion) {
+      projected.assertion = mapTestProviderRefs(result.assertion, mapProvider);
+    }
+    if (Array.isArray(result.componentResults)) {
+      projected.componentResults = result.componentResults.map(project);
+    }
+    return projected;
+  };
+  return project(gradingResult) as T;
+}
+
+/** Project assertion providers only, preserving grading details and unrelated metadata. */
+function projectGradingResult<T>(gradingResult: T, stripPromptText: boolean): T {
+  return stripPromptText
+    ? mapGradingResultProviderRefs(gradingResult, stripProviderPromptSelectors)
+    : gradingResult;
 }
 
 // Removes circular references from the provider object and ensures consistent format
@@ -257,6 +318,70 @@ export function sanitizeProvider(
     }
   } catch {}
   return JSON.parse(safeJsonStringify(provider) as string);
+}
+
+/** Snapshot live provider references for replay without retaining runtime client state. */
+export function toSerializableProviderRef(provider: unknown): unknown {
+  if (isApiProvider(provider)) {
+    return {
+      ...sanitizeProvider(provider),
+      ...sanitizeObject(
+        {
+          transform: typeof provider.transform === 'string' ? provider.transform : undefined,
+          delay: provider.delay,
+          inputs: provider.inputs,
+        },
+        { context: 'provider options', sanitizeUrls: true, maxDepth: Number.POSITIVE_INFINITY },
+      ),
+      ...(provider.prompts && { prompts: [...provider.prompts] }),
+    };
+  }
+  if (Array.isArray(provider)) {
+    return provider.map(toSerializableProviderRef);
+  }
+  if (isProviderTypeMap(provider)) {
+    let serialized: Record<string, unknown> | undefined;
+    for (const type of GRADING_PROVIDER_TYPE_KEYS) {
+      if (isApiProvider(provider[type])) {
+        serialized ??= { ...provider };
+        serialized[type] = toSerializableProviderRef(provider[type]);
+      }
+    }
+    return serialized ?? provider;
+  }
+  return provider;
+}
+
+/** Snapshot live grading references before generic result serialization invokes provider toJSON. */
+function serializeResultProviderRefs<T extends object>(result: T): T {
+  const record = result as Record<string, unknown>;
+  const serializeProvider = (provider: unknown) => {
+    if (!isApiProvider(provider) && !isProviderTypeMap(provider)) {
+      return provider;
+    }
+    return sanitizeObject(toSerializableProviderRef(provider), {
+      context: 'grading provider',
+      sanitizeUrls: true,
+      maxDepth: Number.POSITIVE_INFINITY,
+      throwOnError: true,
+    });
+  };
+  const projected: Record<string, unknown> = { ...record };
+  if (record.testCase) {
+    projected.testCase = mapTestProviderRefs(record.testCase, serializeProvider);
+  }
+  const prompt = asRecord(record.prompt);
+  const config = asRecord(prompt?.config);
+  if (config?.provider !== undefined) {
+    projected.prompt = {
+      ...prompt,
+      config: { ...config, provider: serializeProvider(config.provider) },
+    };
+  }
+  if (record.gradingResult) {
+    projected.gradingResult = mapGradingResultProviderRefs(record.gradingResult, serializeProvider);
+  }
+  return projected as T;
 }
 
 /**
@@ -722,7 +847,7 @@ export function sanitizeResultForJsonlArtifact<T extends object>(
     shouldStripMetadata,
   } = stripFlags;
 
-  const artifactResult = result as T & Record<string, unknown>;
+  const artifactResult = serializeResultProviderRefs(result) as T & Record<string, unknown>;
   const redacted = redactSensitiveResultFieldsForDb({
     response: sanitizeForDb(artifactResult.response as ProviderResponse | null | undefined),
     gradingResult: sanitizeForDb(artifactResult.gradingResult),
@@ -743,6 +868,7 @@ export function sanitizeResultForJsonlArtifact<T extends object>(
               stripMetadata: shouldStripMetadata,
               stripVars: shouldStripTestVars,
               stripOutput: shouldStripResponseOutput,
+              stripPromptText: shouldStripPromptText,
             },
           ),
         }
@@ -768,7 +894,9 @@ export function sanitizeResultForJsonlArtifact<T extends object>(
         }
       : {}),
     response,
-    gradingResult: shouldStripGradingResult ? null : redacted.gradingResult,
+    gradingResult: shouldStripGradingResult
+      ? null
+      : projectGradingResult(redacted.gradingResult, shouldStripPromptText),
     namedScores: sanitizeForDb(artifactResult.namedScores),
     metadata: shouldStripMetadata
       ? {}
@@ -803,19 +931,11 @@ export default class EvalResult {
       testCase,
       traceId,
       evaluationId,
-    } = result;
+    } = serializeResultProviderRefs(result);
 
     // Persist trace linkage inside a private metadata namespace so it survives
     // EvalResult round-trips without a Drizzle schema migration.
     const persistedMetadata = persistTraceMetadata(metadata, traceId, evaluationId);
-
-    // Normalize provider for storage and extract blobs from responses.
-    const preSanitizeTestCase = {
-      ...testCase,
-      ...(testCase.provider && {
-        provider: sanitizeProvider(testCase.provider),
-      }),
-    };
 
     const processedResponse = await extractAndStoreBinaryData(result.response, {
       evalId,
@@ -833,7 +953,7 @@ export default class EvalResult {
     const args = {
       id: crypto.randomUUID(),
       evalId,
-      testCase: sanitizeForDbWithSecrets(preSanitizeTestCase),
+      testCase: sanitizeForDbWithSecrets(testCase),
       promptIdx: result.promptIdx,
       testIdx: result.testIdx,
       prompt: sanitizeForDbWithSecrets(prompt),
@@ -880,7 +1000,10 @@ export default class EvalResult {
             promptIdx: result.promptIdx,
           })
         : result.response;
-      processedResults.push({ ...result, response: processedResponse ?? undefined });
+      processedResults.push({
+        ...serializeResultProviderRefs(result),
+        response: processedResponse ?? undefined,
+      });
     }
 
     await db.transaction(async (tx) => {
@@ -1115,11 +1238,16 @@ export default class EvalResult {
     // testCase metadata in the constructor, and trace linkage travels inside the metadata
     // JSON via persistTraceMetadata. Drizzle would drop them silently, but excluding them
     // explicitly keeps the write payload aligned with the schema.
-    const { traceId: _traceId, evaluationId: _evaluationId, pluginId: _pluginId, ...rest } = this;
+    const {
+      traceId: _traceId,
+      evaluationId: _evaluationId,
+      pluginId: _pluginId,
+      ...rest
+    } = serializeResultProviderRefs(this);
     const persistedValues = {
       ...rest,
       error: this.error ?? null,
-      gradingResult: sanitizeGradingResultForDb(this.gradingResult),
+      gradingResult: sanitizeGradingResultForDb(rest.gradingResult),
       metadata: persistTraceMetadata(this.metadata, this.traceId, this.evaluationId),
     };
     //check if this exists in the db
@@ -1157,6 +1285,7 @@ export default class EvalResult {
       stripMetadata: shouldStripMetadata,
       stripVars: shouldStripTestVars,
       stripOutput: shouldStripResponseOutput,
+      stripPromptText: shouldStripPromptText,
     });
     // Mirror the live accounting in the evaluator: a response counts as one provider
     // request even when it reports no token usage, and a grading result counts as one
@@ -1178,7 +1307,9 @@ export default class EvalResult {
       }),
       description: this.description || undefined,
       error: this.error || undefined,
-      gradingResult: shouldStripGradingResult ? null : this.gradingResult,
+      gradingResult: shouldStripGradingResult
+        ? null
+        : projectGradingResult(this.gradingResult, shouldStripPromptText),
       id: this.id,
       latencyMs: this.latencyMs,
       namedScores: this.namedScores,

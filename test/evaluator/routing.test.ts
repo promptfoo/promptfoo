@@ -22,6 +22,42 @@ function duplicateProvider(id: string, output: string, label?: string): ApiProvi
 }
 
 describeEvaluator('evaluator prompt and provider routing', () => {
+  it.each<{
+    name: string;
+    map: NonNullable<TestSuite['providerPromptMap']>;
+    expected: string[];
+  }>([
+    {
+      name: 'unrelated map falls back to instance',
+      map: { other: ['second'] },
+      expected: ['first'],
+    },
+    { name: 'ID fallback', map: { 'stable-id': ['second'] }, expected: ['second'] },
+    {
+      name: 'label precedence',
+      map: { named: ['first'], 'stable-id': ['second'] },
+      expected: ['first'],
+    },
+    { name: 'empty label override', map: { named: [], 'stable-id': ['second'] }, expected: [] },
+    { name: 'empty ID override', map: { 'stable-id': [] }, expected: [] },
+  ])('honors explicit overrides for labeled providers: $name', async ({ map, expected }) => {
+    const provider = createMockProvider({ id: 'stable-id', label: 'named', prompts: ['first'] });
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('first'), toPrompt('second')],
+      providerPromptMap: map,
+      tests: [{ vars: {} }],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await evaluate(testSuite, evalRecord, {});
+
+    const summary = await evalRecord.toEvaluateSummary();
+    expect(summary.results.map((result) => result.prompt.label)).toEqual(expected);
+    expect(provider.callApi).toHaveBeenCalledTimes(expected.length);
+    expect(provider.prompts).toEqual(['first']);
+  });
+
   it('evaluate with providerPromptMap', async () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
@@ -294,25 +330,25 @@ describeEvaluator('evaluator prompt and provider routing', () => {
         1,
         'now=first',
         expect.anything(),
-        undefined,
+        expect.any(Object),
       );
       expect(secondProvider.callApi).toHaveBeenNthCalledWith(
         1,
         'now=first',
         expect.anything(),
-        undefined,
+        expect.any(Object),
       );
       expect(firstProvider.callApi).toHaveBeenNthCalledWith(
         2,
         'prior=First provider output now=second',
         expect.anything(),
-        undefined,
+        expect.any(Object),
       );
       expect(secondProvider.callApi).toHaveBeenNthCalledWith(
         2,
         'prior=Second provider output now=second',
         expect.anything(),
-        undefined,
+        expect.any(Object),
       );
     },
   );
@@ -464,44 +500,45 @@ describeEvaluator('evaluator prompt and provider routing', () => {
     ]);
   });
 
-  it('does not share resumed metrics between duplicate providers', async () => {
-    const firstProvider = duplicateProvider('duplicate-provider', 'First provider output');
-    const secondProvider = duplicateProvider('duplicate-provider', 'Second provider output');
-    const prompt = toPrompt('Test prompt');
+  it.each([false, true])(
+    'preserves distinct metrics for duplicate columns (restore: %s)',
+    async (restorePromptColumns) => {
+      const firstProvider = duplicateProvider('duplicate-provider', 'First provider output');
+      const secondProvider = duplicateProvider('duplicate-provider', 'Second provider output');
+      const prompt = toPrompt('Test prompt');
 
-    const testSuite: TestSuite = {
-      providers: [firstProvider, secondProvider],
-      prompts: [prompt],
-      tests: [{ vars: { input: 'value' } }],
-    };
+      const testSuite: TestSuite = {
+        providers: [firstProvider, secondProvider],
+        prompts: [prompt],
+        tests: [{ vars: { input: 'value' } }],
+      };
 
-    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
-    // Both duplicate providers resolve to this single stored prompt on resume.
-    evalRecord.prompts = [
-      {
+      const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+      // Saved columns retain both providers, even though their identities are equal.
+      evalRecord.prompts = [firstProvider, secondProvider].map((_, index) => ({
         ...prompt,
         id: generateIdFromPrompt(prompt),
         provider: 'duplicate-provider',
         metrics: createPromptMetrics({
-          testPassCount: 5,
-          tokenUsage: createTokenUsage({ numRequests: 3 }),
+          testPassCount: 5 + index * 6,
+          tokenUsage: createTokenUsage({ numRequests: 3 + index * 4 }),
         }),
-      },
-    ];
-    evalRecord.persisted = true;
+      }));
+      evalRecord.persisted = true;
 
-    cliState.resume = true;
-    await evaluate(testSuite, evalRecord, {});
+      cliState.resume = true;
+      await evaluate(testSuite, evalRecord, { restorePromptColumns });
 
-    const table = await evalRecord.getTable();
+      const table = await evalRecord.getTable();
 
-    // Each column resumes from the stored totals and adds only its own result, rather
-    // than both accumulating into one shared metrics object.
-    expect(table.head.prompts.map((prompt) => prompt.metrics?.testPassCount)).toEqual([6, 6]);
-    expect(table.head.prompts.map((prompt) => prompt.metrics?.tokenUsage?.numRequests)).toEqual([
-      4, 4,
-    ]);
-  });
+      // Each column resumes from the stored totals and adds only its own result, rather
+      // than both accumulating into one shared metrics object.
+      expect(table.head.prompts.map((prompt) => prompt.metrics?.testPassCount)).toEqual([6, 12]);
+      expect(table.head.prompts.map((prompt) => prompt.metrics?.tokenUsage?.numRequests)).toEqual([
+        4, 8,
+      ]);
+    },
+  );
 
   it('evaluate with test-level providers filter', async () => {
     const mockProvider1: ApiProvider = {
