@@ -316,6 +316,159 @@ describe('interrupted checkpoint JSON and media shapes', () => {
         expect(input).toEqual(original);
       }
     });
+
+    describe.each([
+      { name: 'hash-only entry', fields: { hash: outputHash }, media: true },
+      { name: 'URI-only entry', fields: { uri: outputRef.uri }, media: true },
+      { name: 'full media entry', fields: outputRef, media: true },
+      { name: 'wrapped reference entry', fields: { blobRef: outputRef }, media: false },
+      { name: 'ordinary entry', fields: { label: 'ordinary entry' }, media: false },
+    ])('$name child output context', ({ fields, media }) => {
+      it.each(
+        [
+          { name: 'metadata bytes', children: { metadata: { data: bytes.toString('base64') } } },
+          {
+            name: 'turn bytes',
+            children: {
+              turns: [
+                {
+                  data: bytes.toString('base64'),
+                  prompt: promptMedia,
+                  input: inputMedia,
+                  cost: 0.125,
+                  tokenUsage: { total: 2 },
+                },
+              ],
+            },
+          },
+          {
+            name: 'nested checkpoint bytes',
+            children: {
+              metadata: {
+                interruptedStrategy: true,
+                completedTargetResponses: [
+                  {
+                    prompt: promptMedia,
+                    response: {
+                      metadata: { data: bytes.toString('base64') },
+                      prompt: promptMedia,
+                      input: inputMedia,
+                      cost: 0.125,
+                      tokenUsage: { total: 2 },
+                    },
+                  },
+                ],
+              },
+            },
+          },
+        ].flatMap((scenario) =>
+          ['mirrored', 'response-only', 'row-only'].flatMap((location) =>
+            [
+              [false, false],
+              [false, true],
+              [true, false],
+              [true, true],
+            ].map(([stripPrompt, stripOutput]) => ({
+              ...scenario,
+              location,
+              stripPrompt,
+              stripOutput,
+            })),
+          ),
+        ),
+      )(
+        'projects $name at $location with prompt=$stripPrompt output=$stripOutput',
+        async ({ name, children, location, stripPrompt, stripOutput }) => {
+          const ordinaryMetadata = { data: bytes.toString('base64'), note: 'ordinary neighbor' };
+          const metadata = {
+            interruptedStrategy: true,
+            completedTargetResponses: [
+              {
+                ...fields,
+                prompt: promptMedia,
+                response: {
+                  ...children,
+                  prompt: promptMedia,
+                  input: inputMedia,
+                  materializedVars: { image: inputMedia },
+                  inputMaterialization: { image: inputMedia },
+                  cost: 0.25,
+                  tokenUsage: { total: 5 },
+                },
+              },
+              { response: { metadata: ordinaryMetadata, error: 'ordinary diagnostic' } },
+            ],
+          };
+          const input = {
+            ...legacyResult(
+              { output: 'text', metadata: location === 'row-only' ? {} : metadata },
+              location === 'response-only' ? {} : metadata,
+            ),
+            cost: 0.5,
+          };
+          const original = structuredClone(input);
+          const row = await EvalResult.createFromEvaluateResult(randomUUID(), input, {
+            persist: false,
+          });
+          const rowBefore = structuredClone({ response: row.response, metadata: row.metadata });
+          const flags = {
+            ...getStripFlags(),
+            shouldStripPromptText: stripPrompt,
+            shouldStripResponseOutput: stripOutput,
+          };
+          const projected =
+            boundary === 'model'
+              ? row.toEvaluateResult(flags)
+              : sanitizeResultForJsonlArtifact(input, flags);
+          expect(projected.cost).toBe(0.5);
+          const expectedPrompt = stripPrompt ? '[prompt stripped]' : promptMedia;
+          const copies = [projected.response?.metadata, projected.metadata].filter(
+            (copy) => copy?.interruptedStrategy,
+          );
+          expect(copies).toHaveLength(location === 'mirrored' ? 2 : 1);
+          copies.forEach((copy) => {
+            const entry = copy!.completedTargetResponses[0];
+            const target = entry.response;
+            expect(JSON.stringify(target).includes(bytes.toString('base64'))).toBe(
+              !(media && stripOutput),
+            );
+            expect(collectBlobHashes(entry).has(outputHash)).toBe(
+              !stripOutput && JSON.stringify(fields).includes(outputHash),
+            );
+            expect(entry.prompt).toBe(expectedPrompt);
+            expect(target).toMatchObject({
+              prompt: expectedPrompt,
+              input: inputMedia,
+              materializedVars: { image: inputMedia },
+              inputMaterialization: { image: inputMedia },
+              cost: 0.25,
+              tokenUsage: { total: 5 },
+            });
+            expect(copy!.completedTargetResponses[1].response).toMatchObject({
+              metadata: ordinaryMetadata,
+              error: 'ordinary diagnostic',
+            });
+            const child =
+              name === 'turn bytes'
+                ? target.turns[0]
+                : target.metadata?.completedTargetResponses?.[0]?.response;
+            if (child) {
+              expect(child).toMatchObject({
+                prompt: expectedPrompt,
+                input: inputMedia,
+                cost: 0.125,
+                tokenUsage: { total: 2 },
+              });
+            }
+            if (name === 'nested checkpoint bytes') {
+              expect(target.metadata.completedTargetResponses[0].prompt).toBe(expectedPrompt);
+            }
+          });
+          expect(input).toEqual(original);
+          expect({ response: row.response, metadata: row.metadata }).toEqual(rowBefore);
+        },
+      );
+    });
   });
 
   it.each([

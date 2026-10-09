@@ -119,6 +119,7 @@ function projectOutputMetadata<T>(
     sanitizeCompletedTargetResponses(projected),
     (entry) => {
       const { prompt, response, ...extra } = entry;
+      const entryIsMedia = options.stripOutput && extractBlobHashesFromValue(entry).length > 0;
       // Only prompt/response are declared checkpoint fields. Additional imported
       // fields retain the generic media scrub, including a media-shaped remainder.
       const projectedExtra = options.stripOutput
@@ -132,7 +133,11 @@ function projectOutputMetadata<T>(
           ? { prompt: options.stripPromptText ? '[prompt stripped]' : prompt }
           : {}),
         // Old stored rows and non-persisted JSON/JSONL exports also cross this boundary.
-        response: projectProviderResponse(response, { ...childOptions, checkpointOutput: true })!,
+        response: projectProviderResponse(response, {
+          ...childOptions,
+          checkpointOutput: true,
+          inheritedMediaOutput: childOptions.inheritedMediaOutput || entryIsMedia,
+        })!,
       };
     },
     options.stripOutput
