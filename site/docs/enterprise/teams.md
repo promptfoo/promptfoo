@@ -34,7 +34,7 @@ In a provider's API Key field, use the key button to choose a team secret. This 
 
 Secret permissions are separate from provider permissions: read access allows listing secrets and selecting references; update access is required to reveal or copy values. Creating and deleting secrets require their respective permissions. Being able to configure a target does not by itself grant access to reveal its secret values.
 
-To rotate a value without changing its references, use the [API](/docs/api-reference/): find the secret ID with `GET /api/v1/teams/{teamId}/secrets`, then send `PATCH /api/v1/teams/{teamId}/secrets/{secretId}` with the replacement value:
+To rotate a value without changing its references, find the secret ID with `GET /api/v1/teams/{teamId}/secrets`, then send `PATCH /api/v1/teams/{teamId}/secrets/{secretId}` with the replacement value. See **List team secrets** and **Update team secret** in the [API reference](/docs/api-reference/) for request and response schemas.
 
 ```json
 { "value": "<replacement-provider-api-key>" }
