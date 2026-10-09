@@ -217,19 +217,22 @@ function FilterRow({
 
   const handleLogicOperatorChange = useCallback(
     (logicOperator: ResultsFilter['logicOperator']) => {
-      if (filter.sortIndex === 1) {
+      if (index === 1) {
         updateAllFilterLogicOperators(logicOperator);
       }
     },
-    [filter.sortIndex, updateAllFilterLogicOperators],
+    [index, updateAllFilterLogicOperators],
   );
 
   // Get logic operator from second filter
-  const filterWithSortIndex1 = Object.values(filters.values).find((f) => f.sortIndex === 1);
+  const ordinaryFilters = Object.values(filters.values)
+    .filter((f) => f.type !== 'error')
+    .sort((a, b) => a.sortIndex - b.sortIndex);
+  const secondFilter = ordinaryFilters[1];
   const displayLogicOperator =
-    filter.sortIndex === 1
+    index === 1
       ? (filter.logicOperator ?? 'and')
-      : (filterWithSortIndex1?.logicOperator ?? filter.logicOperator ?? 'and');
+      : (secondFilter?.logicOperator ?? filter.logicOperator ?? 'and');
 
   // Build type options
   const typeOptions = useMemo(() => {
@@ -363,7 +366,7 @@ function FilterRow({
         <Select
           value={displayLogicOperator}
           onValueChange={(v) => handleLogicOperatorChange(v as ResultsFilter['logicOperator'])}
-          disabled={filter.sortIndex > 1}
+          disabled={index > 1}
         >
           <SelectTrigger className="h-8 w-[70px] shrink-0">
             <SelectValue />
@@ -583,6 +586,7 @@ export default function FiltersForm() {
   }, [filters.values]);
 
   const activeFilterCount = filters.appliedCount;
+  const ordinaryFilters = filterList.filter((filter) => filter.type !== 'error');
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -625,12 +629,12 @@ export default function FiltersForm() {
             <p className="text-sm text-muted-foreground">No filters applied</p>
           ) : (
             <div className="space-y-2">
-              {filterList.map((filter, index) => (
+              {filterList.map((filter) => (
                 <FilterRow
                   key={filter.id}
                   filter={filter}
-                  index={index}
-                  totalFilters={filterList.length}
+                  index={ordinaryFilters.indexOf(filter)}
+                  totalFilters={ordinaryFilters.length}
                   onRemove={() => handleRemoveFilter(filter.id)}
                 />
               ))}

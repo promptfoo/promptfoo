@@ -83,6 +83,10 @@ const failureReasonSql = sql`COALESCE(
   'Failure reason unavailable'
 )`;
 
+// libSQL's SHA3 function keeps group IDs bounded and stable when individual results
+// are re-rated. Include the eval ID so a group cannot be reused across evaluations.
+const failureGroupIdSql = sql`lower(hex(sha3(eval_id || char(0) || ${failureReasonSql}, 256)))`;
+
 /**
  * Database query result type interfaces
  * These types ensure type safety for raw SQL queries that don't use Drizzle's query builder
@@ -932,7 +936,7 @@ export default class Eval {
   async getFailureSummary() {
     const db = await getDb();
     const rows = await db.all<{ id: string; error: string; count: number }>(sql`
-      SELECT MIN(id) AS id, SUBSTR(${failureReasonSql}, 1, 500) AS error, COUNT(*) AS count
+      SELECT ${failureGroupIdSql} AS id, SUBSTR(${failureReasonSql}, 1, 500) AS error, COUNT(*) AS count
       FROM eval_results
       WHERE eval_id = ${this.id} AND success = 0
       GROUP BY ${failureReasonSql}
@@ -1132,14 +1136,10 @@ export default class Eval {
             )`;
           }
         } else if (type === 'error') {
-          // A representative result ID keeps large failure messages out of query URLs.
-          // Scope both sides to this eval and to current failures (manual passes retain error).
+          // Match the stable full-reason digest, excluding manually overridden passes.
           condition =
-            operator === 'equals' && typeof value === 'string' && value.length <= 200
-              ? sql`success = 0 AND ${failureReasonSql} = (
-                SELECT ${failureReasonSql} FROM eval_results
-                WHERE eval_id = ${this.id} AND id = ${value} AND success = 0
-              )`
+            operator === 'equals' && typeof value === 'string' && /^[a-f0-9]{64}$/.test(value)
+              ? sql`success = 0 AND ${failureGroupIdSql} = ${value}`
               : sql`0 = 1`;
         } else if (type === 'plugin' && typeof value === 'string') {
           const isCategory = Object.keys(PLUGIN_CATEGORIES).includes(value);

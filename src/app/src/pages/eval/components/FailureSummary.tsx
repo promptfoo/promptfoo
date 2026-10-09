@@ -8,14 +8,13 @@ import type { GetFailureSummaryResponse } from '@promptfoo/types/api/eval';
 
 interface FailureSummaryProps {
   evalId: string;
-  onSelect: () => void;
 }
 
 function useFailureSummary(evalId: string) {
-  const table = useTableStore((state) => state.table);
+  const resultsRevision = useTableStore((state) => state.resultsRevision);
   const [summary, setSummary] = useState<GetFailureSummaryResponse | null>(null);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: table changes signal streamed results and manual ratings.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: revision invalidates after persisted ratings or websocket updates, not table navigation.
   useEffect(() => {
     const controller = new AbortController();
     setSummary(null);
@@ -36,14 +35,14 @@ function useFailureSummary(evalId: string) {
     }
     void load();
     return () => controller.abort();
-  }, [evalId, table]);
+  }, [evalId, resultsRevision]);
 
   return summary;
 }
 
-export function FailureSummary({ evalId, onSelect }: FailureSummaryProps) {
+export function FailureSummary({ evalId }: FailureSummaryProps) {
   const summary = useFailureSummary(evalId);
-  const { addFilter, filters, removeFilter } = useTableStore();
+  const { filters, setFailureGroup } = useTableStore();
   if (!summary?.failures.length) {
     return null;
   }
@@ -51,12 +50,8 @@ export function FailureSummary({ evalId, onSelect }: FailureSummaryProps) {
 
   const selectGroup = ({ id, error }: GetFailureSummaryResponse['failures'][number]) => {
     const wasSelected = selectedGroups.some((filter) => filter.value === id);
-    // One group at a time avoids contradictory AND predicates and preserves other filters.
-    selectedGroups.forEach((filter) => removeFilter(filter.id));
-    if (!wasSelected) {
-      onSelect();
-      addFilter({ type: 'error', operator: 'equals', value: id, label: error });
-    }
+    // Publish one update so URL synchronization changes mode and group atomically.
+    setFailureGroup(evalId, wasSelected ? null : { id, error });
   };
 
   return (

@@ -131,6 +131,7 @@ export default function Eval({ fetchId }: EvalOptions) {
         const data = await fetchEvalData(id, {
           skipSettingEvalId: true,
           skipLoadingState: isBackgroundUpdate,
+          refreshFailureSummary: isBackgroundUpdate,
           filterMode,
           filters: Object.values(filters.values).filter((filter) =>
             filter.type === 'metadata'
@@ -338,6 +339,17 @@ export default function Eval({ fetchId }: EvalOptions) {
           if (_searchParams.get('filter') !== serializedFilters) {
             replaceSearchParams((params) => {
               params.set('filter', serializedFilters);
+              const selectedGroup = Object.values(_filters.values).find(
+                (filter) => filter.type === 'error',
+              );
+              const previousGroup = Object.values(previousFilters.values).find(
+                (filter) => filter.type === 'error',
+              );
+              // Update both URL controls in one navigation; separate setters race
+              // because their callbacks can still hold the previous location.search.
+              if (selectedGroup && selectedGroup.value !== previousGroup?.value) {
+                params.delete('mode');
+              }
             });
           }
         }

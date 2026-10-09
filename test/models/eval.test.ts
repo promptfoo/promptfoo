@@ -1918,10 +1918,28 @@ describe('evaluator', () => {
   });
 
   describe('getFailureSummary', () => {
+    it('keeps a selected group stable when its first result is re-rated or removed', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 3, resultTypes: ['error'] });
+      const db = await getDb();
+      await db.run(sql`UPDATE eval_results SET error = 'same failure' WHERE eval_id = ${eval_.id}`);
+      const initial = (await eval_.getFailureSummary()).failures[0];
+      expect(initial.id).toMatch(/^[a-f0-9]{64}$/);
+      const filters = [JSON.stringify({ type: 'error', operator: 'equals', value: initial.id })];
+      await db.run(sql`UPDATE eval_results SET success = 1 WHERE eval_id = ${eval_.id} AND id = (
+        SELECT MIN(id) FROM eval_results WHERE eval_id = ${eval_.id}
+      )`);
+      expect((await eval_.getFailureSummary()).failures).toEqual([{ ...initial, count: 2 }]);
+      expect((await eval_.getTablePage({ filters })).filteredCount).toBe(2);
+      await db.run(sql`DELETE FROM eval_results WHERE eval_id = ${eval_.id} AND success = 1`);
+      expect((await eval_.getTablePage({ filters })).filteredCount).toBe(2);
+      expect((await eval_.getFailureSummary()).failures[0].id).toBe(initial.id);
+    });
+
     it('includes manual failures, excludes overridden passes, and scopes group IDs to the eval', async () => {
       const eval_ = await EvalFactory.create({ numResults: 3, resultTypes: ['error'] });
       const other = await EvalFactory.create({ numResults: 1, resultTypes: ['error'] });
       const db = await getDb();
+      await db.run(sql`UPDATE eval_results SET error = 'same failure' WHERE eval_id = ${other.id}`);
       await db
         .update(evalResultsTable)
         .set({ error: 'same failure' })

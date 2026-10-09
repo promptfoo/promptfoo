@@ -918,11 +918,7 @@ export default function ResultsView({
                         </button>
                       </Badge>
                     )}
-                    <FailureSummary
-                      key={currentEvalId}
-                      evalId={currentEvalId}
-                      onSelect={() => setFilterMode('all')}
-                    />
+                    <FailureSummary key={currentEvalId} evalId={currentEvalId} />
                     {filters.appliedCount > 0 && (
                       <AppliedFilterBadges
                         filters={appliedFilters}
