@@ -99,7 +99,7 @@ tests:
       testCaseId: geography-001
 ```
 
-Supported placeholders are `{{evalId}}`, `{{resultId}}`, `{{testCaseId}}`, and `{{rating}}`; values are URL-encoded before the link opens. Placeholders can appear in the path, query, or fragment, but the host must be fixed. Feedback links require HTTPS and are limited to 8,192 characters. Clearing a rating does not open a link. Links are disabled in comparison mode, where identifiers can refer to different evaluations.
+Supported placeholders are `{{evalId}}`, `{{resultId}}`, `{{testCaseId}}`, and `{{rating}}`; values are URL-encoded before the link opens. Placeholders can appear in the path, query, or fragment, but the host must be fixed. Feedback links require HTTPS and are limited to 8,192 characters. Use a fixed DNS hostname (punycode for international names), dotted-decimal IPv4 address, or bracketed IPv6 address, with an optional port from 0 to 65535. Clearing a rating does not open a link. Links are disabled in comparison mode, where identifiers can refer to different evaluations.
 
 Feedback URLs are saved with the evaluation and included when it is exported or shared. Never include secrets in these URLs. Validation rejects URL credentials, common credential parameter names (such as `api_key`, `token`, and `password`), and percent-encoded parameter names; it cannot identify every possible secret. Authenticate with the destination site separately. Opening a link navigates the reviewer's browser to that site.
 

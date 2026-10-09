@@ -1,24 +1,27 @@
 import { z } from 'zod';
+import { SECRET_FIELD_NAMES } from '../validation/secretFieldNames';
 
-// Keep the constraints in regex primitives so YAML/editor JSON Schema validation
-// enforces them too. Placeholders belong in the path/query/fragment, never the host.
-const templatePattern =
-  /^https:\/\/[^/?#@\s{}\\]+(?:[/?#](?:[^\s{}\\]|\{\{(?:evalId|resultId|testCaseId|rating)\}\})*)?$/;
+// Use schema-emitting primitives for the complete template grammar, including
+// authority syntax. A runtime-only URL refinement would leave editor validation
+// accepting invalid ports and IP addresses. International hosts use punycode.
+const ipv4 = z.regexes.ipv4.source.slice(1, -1);
+const ipv6 = z.regexes.ipv6.source.slice(1, -1);
+const dnsLabel = '[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?';
+// WHATWG treats a final numeric or hexadecimal label as IPv4. Only canonical
+// dotted-decimal IPv4 is accepted, via the separate IPv4 alternative below.
+const dnsHost = `(?!(?:${dnsLabel}\\.)*(?:[0-9]+|0[xX][0-9a-fA-F]+)\\.?(?=[:/?#]|$))${dnsLabel}(?:\\.${dnsLabel})*\\.?`;
+const host = `(?:${ipv4}|\\[(?:${ipv6})\\]|${dnsHost})`;
+const port = '(?:[0-5]?[0-9]{1,4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5])';
+const templatePattern = new RegExp(
+  `^https://${host}(?::${port})?(?:[/?#](?:[^\\s{}\\\\]|\\{\\{(?:evalId|resultId|testCaseId|rating)\\}\\})*)?$(?![\\s\\S])`,
+);
+// Keep feedback links aligned with the sanitizer's credential vocabulary, with
+// the additional generic and signed-URL names already forbidden by this feature.
 const credentialNames = [
+  ...SECRET_FIELD_NAMES,
   'key',
-  'apikey',
-  'accesstoken',
-  'refreshtoken',
-  'token',
-  'secret',
-  'clientsecret',
-  'password',
-  'passwd',
-  'authorization',
-  'auth',
   'credential',
-  'signature',
-  'sig',
+  'subscriptionkey',
   'xamzcredential',
   'xamzsignature',
   'xamzsecuritytoken',
@@ -26,7 +29,9 @@ const credentialNames = [
 const credentialKeys = credentialNames
   .map((name) => [...name].map((letter) => `[${letter}${letter.toUpperCase()}]`).join('[._+-]*'))
   .join('|');
-const noCredentialsPattern = new RegExp(`^(?![\\s\\S]*[?&#;](?:${credentialKeys})=)[\\s\\S]*$`);
+const noCredentialsPattern = new RegExp(
+  `^(?![\\s\\S]*[?&#;](?:[^?&#;=]*[.\\[])?[._+-]*(?:${credentialKeys})[._+-]*(?:[.\\]][^?&#;=]*)?=)[\\s\\S]*$`,
+);
 // Encoded parameter names can disguise a credential key from schema validators.
 const noEncodedKeysPattern = /^(?![\s\S]*[?&#;][^?&#;=%]*%[^?&#;=]*=)[\s\S]*$/;
 
@@ -39,20 +44,7 @@ export const RatingFeedbackUrlSchema = z
     'Feedback URLs require HTTPS, no URL credentials, and supported placeholders outside the host',
   )
   .regex(noCredentialsPattern, 'Feedback URLs must not contain credential parameters')
-  .regex(noEncodedKeysPattern, 'Feedback URL parameter names must not be percent-encoded')
-  .refine((template) => {
-    if (template.length > 8192) {
-      return false;
-    }
-    try {
-      const url = new URL(
-        template.replace(/\{\{(?:evalId|resultId|testCaseId|rating)\}\}/g, 'placeholder'),
-      );
-      return url.protocol === 'https:' && !url.username && !url.password;
-    } catch {
-      return false;
-    }
-  }, 'Feedback URL is not a valid HTTPS URL');
+  .regex(noEncodedKeysPattern, 'Feedback URL parameter names must not be percent-encoded');
 
 // A union preserves the at-least-one-link requirement in generated JSON Schema.
 export const RatingFeedbackSchema = z.union([
