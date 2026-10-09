@@ -3,9 +3,9 @@ import { getDefaultProviders } from '../providers/defaults';
 import { doRemoteGrading } from '../remoteGrading';
 import { accumulateTokenUsage } from '../util/tokenUsageUtils';
 import {
+  callEmbeddingProvider,
   callGradingProvider,
   getAndCheckProvider,
-  getGradingProviderCallOptions,
   getRemoteGradingContext,
   shouldUseRemoteGrading,
 } from './providers';
@@ -138,18 +138,20 @@ async function calculateProviderSimilarity(
     throw new Error('Provider must implement callSimilarityApi or callEmbeddingApi');
   }
 
-  const callApiOptions = getGradingProviderCallOptions();
-  const embed = (text: string) =>
+  const [expectedEmbedding, outputEmbedding] = await Promise.all([
     callGradingProvider(
       finalProvider,
       'similarity.embedding',
-      (context) =>
-        context || callApiOptions
-          ? callEmbeddingApi.call(finalProvider, text, context, callApiOptions)
-          : callEmbeddingApi.call(finalProvider, text),
+      (context) => callEmbeddingProvider(finalProvider, expected, context),
       { operationName: 'embeddings' },
-    );
-  const [expectedEmbedding, outputEmbedding] = await Promise.all([embed(expected), embed(output)]);
+    ),
+    callGradingProvider(
+      finalProvider,
+      'similarity.embedding',
+      (context) => callEmbeddingProvider(finalProvider, output, context),
+      { operationName: 'embeddings' },
+    ),
+  ]);
 
   const mergedUsage = normalizeMatcherTokenUsage(undefined);
   accumulateTokenUsage(mergedUsage, expectedEmbedding.tokenUsage);

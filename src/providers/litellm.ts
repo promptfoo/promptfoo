@@ -1,4 +1,4 @@
-import { getEnvString } from '../envars';
+import { resolveProviderEnv } from './env';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiCompletionProvider } from './openai/completion';
 import { OpenAiEmbeddingProvider } from './openai/embedding';
@@ -137,6 +137,8 @@ class LiteLLMCompletionProvider extends LiteLLMProviderWrapper {
  * LiteLLM Embedding Provider
  */
 class LiteLLMEmbeddingProvider extends LiteLLMProviderWrapper implements ApiEmbeddingProvider {
+  readonly supportsEmbeddingCancellation = true;
+
   private embeddingProvider: OpenAiEmbeddingProvider;
 
   constructor(modelName: string, options: ProviderOptions) {
@@ -149,9 +151,11 @@ class LiteLLMEmbeddingProvider extends LiteLLMProviderWrapper implements ApiEmbe
   }
 
   async callEmbeddingApi(
-    ...args: Parameters<OpenAiEmbeddingProvider['callEmbeddingApi']>
+    text: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
   ): Promise<ProviderEmbeddingResponse> {
-    return this.withAuthHint(await this.embeddingProvider.callEmbeddingApi(...args));
+    return this.withAuthHint(await this.embeddingProvider.callEmbeddingApi(text, context, options));
   }
 }
 
@@ -193,15 +197,16 @@ export function createLiteLLMProvider(
   // Resolve apiBaseUrl: config > provider env > context env > process env > default
   const resolvedApiBaseUrl =
     config.apiBaseUrl ||
-    options.config?.env?.LITELLM_API_BASE ||
-    options.env?.LITELLM_API_BASE ||
-    getEnvString('LITELLM_API_BASE') ||
+    resolveProviderEnv(
+      { LITELLM_API_BASE: options.config?.env?.LITELLM_API_BASE ?? options.env?.LITELLM_API_BASE },
+      ['LITELLM_API_BASE'],
+    )?.value ||
     'http://0.0.0.0:4000';
 
   // Build the config object with proper defaults
   // omitDefaults: true ensures temperature/max_tokens are not sent unless explicitly
   // configured, allowing the LiteLLM proxy to apply its own model-specific defaults.
-  const litellmConfigDefaults: LiteLLMCompletionOptions = {
+  const mergedConfig: LiteLLMCompletionOptions = {
     apiKeyEnvar: 'LITELLM_API_KEY',
     apiKeyRequired: false,
     apiBaseUrl: resolvedApiBaseUrl,
@@ -209,10 +214,6 @@ export function createLiteLLMProvider(
   };
 
   // Merge configs, with explicit config values taking precedence
-  const mergedConfig: LiteLLMCompletionOptions = {
-    ...litellmConfigDefaults,
-  };
-
   // Only override properties that are actually defined and not null in config
   Object.keys(config).forEach((key) => {
     if (config[key] !== undefined && config[key] !== null) {
@@ -239,9 +240,6 @@ export function createLiteLLMProvider(
     case 'embedding':
     case 'embeddings':
       return new LiteLLMEmbeddingProvider(modelName, litellmConfig);
-
-    case 'chat':
-      return new LiteLLMProvider(modelName, litellmConfig);
 
     default:
       // Default to chat for backward compatibility (e.g., 'litellm:gpt-4')

@@ -13,10 +13,10 @@ import { getDefaultProviders } from '../providers/defaults';
 import invariant from '../util/invariant';
 import { accumulateTokenUsage } from '../util/tokenUsageUtils';
 import {
+  callEmbeddingProvider,
   callGradingProvider,
   callProviderWithContext,
   getAndCheckProvider,
-  getGradingProviderCallOptions,
 } from './providers';
 import { loadRubricPrompt, renderLlmRubricPrompt } from './rubric';
 import {
@@ -85,19 +85,12 @@ export async function matchesAnswerRelevance(
     `Provider ${embeddingProvider.id()} must implement callEmbeddingApi for similarity check`,
   );
 
-  const callEmbeddingApi = embeddingProvider.callEmbeddingApi.bind(embeddingProvider);
-  const callApiOptions = getGradingProviderCallOptions();
-  const embed = (text: string) =>
-    callGradingProvider(
-      embeddingProvider,
-      'answer-relevance.embedding',
-      (context) =>
-        context || callApiOptions
-          ? callEmbeddingApi(text, context, callApiOptions)
-          : callEmbeddingApi(text),
-      { callContext: providerCallContext, operationName: 'embeddings' },
-    );
-  const inputEmbeddingResp = await embed(input);
+  const inputEmbeddingResp = await callGradingProvider(
+    embeddingProvider,
+    'answer-relevance.embedding',
+    (context) => callEmbeddingProvider(embeddingProvider, input, context),
+    { callContext: providerCallContext, operationName: 'embeddings' },
+  );
   accumulateTokenUsage(tokensUsed, inputEmbeddingResp.tokenUsage);
   if (inputEmbeddingResp.error || !inputEmbeddingResp.embedding) {
     return graderFail(inputEmbeddingResp.error || 'No embedding', tokensUsed);
@@ -108,7 +101,12 @@ export async function matchesAnswerRelevance(
   const questionsWithScores: { question: string; similarity: number }[] = [];
 
   for (const question of candidateQuestions) {
-    const resp = await embed(question);
+    const resp = await callGradingProvider(
+      embeddingProvider,
+      'answer-relevance.embedding',
+      (context) => callEmbeddingProvider(embeddingProvider, question, context),
+      { callContext: providerCallContext, operationName: 'embeddings' },
+    );
     accumulateTokenUsage(tokensUsed, resp.tokenUsage);
     if (resp.error || !resp.embedding) {
       return graderFail(resp.error || 'No embedding', tokensUsed);

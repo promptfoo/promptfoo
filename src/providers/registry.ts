@@ -1,3 +1,4 @@
+import os from 'os';
 import path from 'path';
 
 import dedent from 'dedent';
@@ -5,14 +6,13 @@ import { getEnvString } from '../envars';
 import { importModule } from '../esm';
 import logger from '../logger';
 import { isJavascriptFile } from '../util/fileExtensions';
-import { isMissingPackageImportError } from '../util/packageImportErrors';
 import { A2AProvider } from './a2a';
 import { createAbliterationProvider } from './abliteration';
 import { AI21ChatCompletionProvider } from './ai21';
 import { AlibabaChatCompletionProvider, AlibabaEmbeddingProvider } from './alibaba';
 import { AnthropicCompletionProvider } from './anthropic/completion';
 import { AnthropicMessagesProvider } from './anthropic/messages';
-import { ANTHROPIC_MODELS, looksLikeClaudeModelId } from './anthropic/util';
+import { ANTHROPIC_SHORTHAND_MODEL_IDS, looksLikeClaudeModelId } from './anthropic/util';
 import { createAtlasCloudProvider } from './atlascloud';
 import { AzureAssistantProvider } from './azure/assistant';
 import { AzureChatCompletionProvider } from './azure/chat';
@@ -24,6 +24,7 @@ import { AzureModerationProvider } from './azure/moderation';
 import { AzureRealtimeProvider } from './azure/realtime';
 import { AzureResponsesProvider } from './azure/responses';
 import { AzureVideoProvider } from './azure/video';
+import { getBedrockTextRoute } from './bedrock/routing';
 import { BrowserProvider } from './browser';
 import { createCerebrasProvider } from './cerebras';
 import { ClouderaAiChatCompletionProvider } from './cloudera';
@@ -73,6 +74,8 @@ import { createN8nProvider } from './n8n';
 import { createNovitaProvider } from './novita';
 import { createNscaleProvider } from './nscale';
 import { OllamaChatProvider, OllamaCompletionProvider, OllamaEmbeddingProvider } from './ollama';
+import { resolveOpenAiApiUrl } from './openai';
+import { loadOpenAiAgentsModule } from './openai/agents-availability';
 import { OpenAiAssistantProvider } from './openai/assistant';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiCompletionProvider } from './openai/completion';
@@ -82,7 +85,13 @@ import { OpenAiModerationProvider } from './openai/moderation';
 import { OpenAiRealtimeProvider } from './openai/realtime';
 import { OpenAiResponsesProvider } from './openai/responses';
 import { OpenAiTtsProvider } from './openai/tts';
-import { assertOpenAiApiModel, NON_CONVERSATIONAL_REALTIME_MODELS } from './openai/util';
+import {
+  assertOpenAiApiModel,
+  assertOpenAiModelEndpointCompatibility,
+  getRetiredOpenAiModelRoute,
+  isOpenAiFirstPartyApiUrl,
+  OPENAI_DAYBREAK_ALIASES,
+} from './openai/util';
 import { OpenAiVideoProvider } from './openai/video';
 import { createOpenRouterProvider } from './openrouter';
 import { createOrcaRouterProvider } from './orcarouter';
@@ -102,6 +111,7 @@ import { ScriptCompletionProvider } from './scriptCompletion';
 import { SequenceProvider } from './sequence';
 import { modelNameFromProviderPath } from './shared';
 import { SimulatedUser } from './simulatedUser';
+import { loadSlackProviderModule } from './slack-availability';
 import { createSnowflakeProvider } from './snowflake';
 import { createTogetherAiProvider } from './togetherai';
 import { TransformersEmbeddingProvider, TransformersTextGenerationProvider } from './transformers';
@@ -118,29 +128,175 @@ import { createXAIVideoProvider } from './xai/video';
 import { createXAIVoiceProvider } from './xai/voice';
 
 import type { LoadApiProviderContext } from '../types/index';
-import type { ProviderOptions } from '../types/providers';
+import type { ApiProvider, ProviderOptions } from '../types/providers';
 import type { ProviderFactory, ProviderFamily } from './registryTypes';
+
+const CODEX_CLI_PROVIDER_PATH = /^openai:(?:codex|codex-sdk|codex-app-server|codex-desktop)(?::|$)/;
+
+/** Aliases read together by these providers must keep their original scope priority. */
+function getProviderEnvAliasGroups(
+  providerPath: string,
+  config?: ProviderOptions['config'],
+): readonly (readonly string[])[] {
+  if (
+    config?.vertexai === true &&
+    /^(?:google|palm):(?:(?:interactions:)?gemini-omni-flash-preview$|(?:image:)?[^:]*-image)/.test(
+      providerPath,
+    )
+  ) {
+    return [
+      ['VERTEX_API_KEY', 'GOOGLE_API_KEY'],
+      ['VERTEX_PROJECT_ID', 'GOOGLE_PROJECT_ID', 'GOOGLE_CLOUD_PROJECT'],
+      providerPath.includes('-image')
+        ? ['VERTEX_REGION', 'GOOGLE_CLOUD_LOCATION', 'GOOGLE_LOCATION']
+        : ['VERTEX_REGION', 'GOOGLE_CLOUD_LOCATION'],
+    ];
+  }
+  if (CODEX_CLI_PROVIDER_PATH.test(providerPath)) {
+    return [['OPENAI_API_KEY', 'CODEX_API_KEY']];
+  }
+  if (/^(?:openclaw|clawdbot)(?::|$)/.test(providerPath)) {
+    return [
+      [
+        'OPENCLAW_GATEWAY_TOKEN',
+        'CLAWDBOT_GATEWAY_TOKEN',
+        'OPENCLAW_GATEWAY_PASSWORD',
+        'CLAWDBOT_GATEWAY_PASSWORD',
+      ],
+    ];
+  }
+  if (providerPath.startsWith('huggingface:') || providerPath.startsWith('hf:')) {
+    return [['HF_TOKEN', 'HF_API_TOKEN']];
+  }
+  if (providerPath.startsWith('replicate:')) {
+    return [['REPLICATE_API_KEY', 'REPLICATE_API_TOKEN']];
+  }
+  if (providerPath.startsWith('nscale:')) {
+    return [['NSCALE_SERVICE_TOKEN', 'NSCALE_API_KEY']];
+  }
+  if (providerPath.startsWith('sagemaker:')) {
+    return [['AWS_REGION', 'AWS_DEFAULT_REGION']];
+  }
+  if (providerPath.startsWith('bedrock:')) {
+    const mode = getBedrockTextRoute(providerPath)?.apiMode;
+    return mode === 'chat' || mode === 'messages' || mode === 'responses'
+      ? [['AWS_BEDROCK_REGION', 'AWS_REGION', 'AWS_DEFAULT_REGION']]
+      : [];
+  }
+  if (/^(?:google|palm):live:/.test(providerPath)) {
+    return [['GOOGLE_API_KEY', 'GEMINI_API_KEY']];
+  }
+  if (/^(?:google|palm):(?:image:|[^:]*-image)/.test(providerPath)) {
+    return [
+      ['GOOGLE_API_KEY', 'GOOGLE_GENERATIVE_AI_API_KEY', 'GEMINI_API_KEY'],
+      ['VERTEX_PROJECT_ID', 'GOOGLE_PROJECT_ID', 'GOOGLE_CLOUD_PROJECT'],
+      ['VERTEX_REGION', 'GOOGLE_CLOUD_LOCATION', 'GOOGLE_LOCATION'],
+    ];
+  }
+  if (/^(?:google|palm):video:/.test(providerPath)) {
+    return [
+      ['GOOGLE_API_KEY', 'GEMINI_API_KEY', 'PALM_API_KEY'],
+      ['VERTEX_PROJECT_ID', 'GOOGLE_PROJECT_ID', 'GOOGLE_CLOUD_PROJECT'],
+      ['VERTEX_REGION', 'GOOGLE_CLOUD_LOCATION', 'GOOGLE_LOCATION'],
+    ];
+  }
+  if (providerPath.startsWith('vertex:')) {
+    return [
+      ['VERTEX_API_KEY', 'GOOGLE_API_KEY'],
+      ['VERTEX_PROJECT_ID', 'GOOGLE_PROJECT_ID', 'GOOGLE_CLOUD_PROJECT'],
+      providerPath.startsWith('vertex:video:')
+        ? ['VERTEX_REGION', 'GOOGLE_CLOUD_LOCATION', 'GOOGLE_LOCATION']
+        : ['VERTEX_REGION', 'GOOGLE_CLOUD_LOCATION'],
+    ];
+  }
+  if (
+    /^(?:google|palm):(?:interactions:)?(?:gemini-omni-flash-preview|gemini-omni-1\.1-flash|gemini-robotics-er-2-preview)$/.test(
+      providerPath,
+    )
+  ) {
+    return [['GOOGLE_API_KEY', 'GEMINI_API_KEY', 'PALM_API_KEY', 'GOOGLE_GENERATIVE_AI_API_KEY']];
+  }
+  if (/^(?:google|palm):/.test(providerPath)) {
+    return [['GOOGLE_API_KEY', 'GEMINI_API_KEY', 'PALM_API_KEY']];
+  }
+  if (/^(?:azure|azureopenai):/.test(providerPath)) {
+    return [
+      providerPath.split(':')[1] === 'moderation'
+        ? ['AZURE_CONTENT_SAFETY_API_KEY', 'AZURE_API_KEY', 'AZURE_OPENAI_API_KEY']
+        : ['AZURE_API_KEY', 'AZURE_OPENAI_API_KEY'],
+      [
+        'AZURE_API_HOST',
+        'AZURE_OPENAI_API_HOST',
+        'AZURE_API_BASE_URL',
+        'AZURE_OPENAI_API_BASE_URL',
+        'AZURE_OPENAI_BASE_URL',
+      ],
+    ];
+  }
+  return [];
+}
+
+function getProviderEndpointAliases(providerPath: string): readonly string[] {
+  if (providerPath.startsWith('openai:') && !CODEX_CLI_PROVIDER_PATH.test(providerPath)) {
+    return ['OPENAI_API_HOST', 'OPENAI_API_BASE_URL', 'OPENAI_BASE_URL'];
+  }
+  if (providerPath.startsWith('mistral:')) {
+    return ['MISTRAL_API_HOST', 'MISTRAL_API_BASE_URL'];
+  }
+  if (/^(?:google|palm):/.test(providerPath)) {
+    return ['GOOGLE_API_HOST', 'PALM_API_HOST', 'GOOGLE_API_BASE_URL'];
+  }
+  if (/^(?:openclaw|clawdbot)(?::|$)/.test(providerPath)) {
+    return ['OPENCLAW_GATEWAY_URL', 'CLAWDBOT_GATEWAY_URL'];
+  }
+  return [];
+}
 
 /** Merge low-to-high priority scopes without letting a lower-priority key alias win. */
 export function mergeProviderEnv(
-  providerPath: string,
+  provider: string | { id: string; config?: ProviderOptions['config']; preserveAliases?: boolean },
   ...layers: (NonNullable<ProviderOptions['env']> | undefined)[]
 ): NonNullable<ProviderOptions['env']> | undefined {
-  const isCodexSDK = /^openai:(?:codex-sdk|codex)(?::|$)/.test(providerPath);
+  const providerPath = typeof provider === 'string' ? provider : provider.id;
+  const config = typeof provider === 'string' ? undefined : provider.config;
+  const aliasGroups =
+    typeof provider !== 'string' && provider.preserveAliases
+      ? []
+      : [
+          ...getProviderEnvAliasGroups(providerPath, config),
+          getProviderEndpointAliases(providerPath),
+        ];
+  const isWindowsOpenCode = os.platform() === 'win32' && /^opencode(?::|$)/.test(providerPath);
   let merged: NonNullable<ProviderOptions['env']> | undefined;
   for (const layer of layers) {
     if (!layer) {
       continue;
     }
     merged ??= {};
-    if (isCodexSDK && (layer.OPENAI_API_KEY || layer.CODEX_API_KEY)) {
-      delete merged.OPENAI_API_KEY;
-      delete merged.CODEX_API_KEY;
+    for (const aliases of aliasGroups) {
+      // Empty entries retain their existing per-variable meaning; a non-empty
+      // alias selects this scope without retaining a conflicting lower alias.
+      if (aliases.some((key) => layer[key])) {
+        for (const key of aliases) {
+          delete merged[key];
+        }
+      }
     }
-    Object.assign(
-      merged,
-      Object.fromEntries(Object.entries(layer).filter(([, value]) => value !== undefined)),
-    );
+    for (const [key, value] of Object.entries(layer)) {
+      if (value === undefined) {
+        continue;
+      }
+      if (isWindowsOpenCode) {
+        for (const existingKey of Object.keys(merged)) {
+          if (existingKey !== key && existingKey.toUpperCase() === key.toUpperCase()) {
+            // Keep earlier spellings available to case-sensitive provider templates.
+            // The server environment later collapses aliases with this same value.
+            merged[existingKey] = value;
+          }
+        }
+      }
+      merged[key] = value;
+    }
   }
   return merged;
 }
@@ -164,6 +320,80 @@ function shouldDefaultToOpenAiResponses(modelName: string): boolean {
   const major = Number(version[1]);
   const minor = Number(version[2] ?? 0);
   return major > 5 || (major === 5 && minor >= 6);
+}
+
+function configuredProviderFactory(
+  prefix: string,
+  getCreateProvider: () => (
+    providerPath: string,
+    options: { config: ProviderOptions; env: LoadApiProviderContext['env'] },
+  ) => ApiProvider,
+): ProviderFactory {
+  return {
+    test: (providerPath: string) => providerPath.startsWith(prefix),
+    create: async (providerPath, providerOptions, context) =>
+      getCreateProvider()(providerPath, { config: providerOptions, env: context.env }),
+  };
+}
+
+const OPENAI_CONFIG_MODEL_OVERRIDE_ROUTES = new Set(['image', 'video']);
+const OPENAI_PASSTHROUGH_MODEL_ROUTES = new Set([
+  'chat',
+  'completion',
+  'embedding',
+  'embeddings',
+  'responses',
+  'speech',
+  'tts',
+]);
+const OPENAI_FIXED_MODEL_ROUTES = new Set(['moderation', 'realtime', 'transcription']);
+
+function getEffectiveOpenAiApiModel(
+  modelType: string,
+  modelName: string,
+  configuredModel: string | undefined,
+  passthroughModel: unknown,
+): string {
+  if (OPENAI_CONFIG_MODEL_OVERRIDE_ROUTES.has(modelType)) {
+    return configuredModel || modelName || modelType;
+  }
+
+  const retiredRoute = getRetiredOpenAiModelRoute(modelType);
+  const explicitRouteUsesConfiguredModel =
+    OPENAI_PASSTHROUGH_MODEL_ROUTES.has(modelType) || OPENAI_FIXED_MODEL_ROUTES.has(modelType);
+  const providerOverridesModelFromConfig =
+    modelType === 'speech' ||
+    modelType === 'tts' ||
+    OpenAiTtsProvider.OPENAI_TTS_MODEL_NAMES.includes(modelType) ||
+    retiredRoute === 'tts';
+  const selectedModel = providerOverridesModelFromConfig
+    ? configuredModel || modelName || modelType
+    : modelName || (explicitRouteUsesConfiguredModel ? configuredModel : undefined) || modelType;
+
+  if (OPENAI_FIXED_MODEL_ROUTES.has(modelType) || modelType === 'gpt-transcribe') {
+    return selectedModel;
+  }
+
+  const bareModelUsesPassthrough =
+    !modelName &&
+    (shouldDefaultToOpenAiResponses(modelType) ||
+      OpenAiChatCompletionProvider.OPENAI_CHAT_MODEL_NAMES.includes(modelType) ||
+      OpenAiCompletionProvider.OPENAI_COMPLETION_MODEL_NAMES.includes(modelType) ||
+      OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES.includes(modelType) ||
+      OpenAiTtsProvider.OPENAI_TTS_MODEL_NAMES.includes(modelType) ||
+      retiredRoute === 'chat' ||
+      retiredRoute === 'responses' ||
+      retiredRoute === 'tts' ||
+      (!retiredRoute &&
+        !OpenAiCompletionProvider.OPENAI_COMPLETION_MODEL_NAMES.includes(modelType) &&
+        !OpenAiTtsProvider.OPENAI_TTS_MODEL_NAMES.includes(modelType) &&
+        !OpenAiRealtimeProvider.OPENAI_REALTIME_MODEL_NAMES.includes(modelType)));
+
+  const routeUsesPassthrough =
+    OPENAI_PASSTHROUGH_MODEL_ROUTES.has(modelType) || bareModelUsesPassthrough;
+  return routeUsesPassthrough && typeof passthroughModel === 'string'
+    ? passthroughModel
+    : selectedModel;
 }
 
 export const providerMap: ProviderFactory[] = [
@@ -321,8 +551,7 @@ export const providerMap: ProviderFactory[] = [
       // released after this build works without waiting for a catalog entry. The
       // provider still logs `Using unknown Anthropic model`, and Anthropic returns
       // not_found_error if the id is not real.
-      const modelIds = ANTHROPIC_MODELS.map((model) => model.id);
-      if (modelIds.includes(modelType) || looksLikeClaudeModelId(modelType)) {
+      if (ANTHROPIC_SHORTHAND_MODEL_IDS.has(modelType) || looksLikeClaudeModelId(modelType)) {
         return new AnthropicMessagesProvider(
           modelNameFromProviderPath(providerPath, 1),
           providerOptions,
@@ -337,19 +566,7 @@ export const providerMap: ProviderFactory[] = [
       );
     },
   },
-  {
-    test: (providerPath: string) => providerPath.startsWith('atlascloud:'),
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
-    ) => {
-      return createAtlasCloudProvider(providerPath, {
-        config: providerOptions,
-        env: context.env,
-      });
-    },
-  },
+  configuredProviderFactory('atlascloud:', () => createAtlasCloudProvider),
   {
     test: (providerPath: string) =>
       providerPath.startsWith('azure:') || providerPath.startsWith('azureopenai:'),
@@ -361,6 +578,12 @@ export const providerMap: ProviderFactory[] = [
       const splits = providerPath.split(':');
       const modelType = splits[1];
       const deploymentName = modelNameFromProviderPath(providerPath, 2);
+
+      if (modelType === 'decisions') {
+        throw new Error(
+          'The Decisions API is available through openai:decisions:<model name>, not the Azure provider.',
+        );
+      }
 
       // Azure model types that have no sensible default deployment must name one in
       // the provider path (`azure:<type>:<name>`). Without this, the registry would
@@ -436,7 +659,12 @@ export const providerMap: ProviderFactory[] = [
       }
       if (modelType === 'realtime') {
         requirePathSegment('realtime', 'a deployment name', 'deployment');
-        if (NON_CONVERSATIONAL_REALTIME_MODELS.has(deploymentName)) {
+        // Azure path segments are user-chosen deployment names, not model IDs. Keep only the
+        // two legacy fail-fast cases here instead of applying OpenAI's model-ID routing set.
+        if (
+          deploymentName === 'gpt-realtime-whisper' ||
+          deploymentName === 'gpt-realtime-translate'
+        ) {
           throw new Error(
             deploymentName === 'gpt-realtime-whisper'
               ? 'azure:realtime:gpt-realtime-whisper is transcription-only. Use it as input_audio_transcription.model in a conversational Azure Realtime deployment.'
@@ -461,32 +689,8 @@ export const providerMap: ProviderFactory[] = [
       );
     },
   },
-  {
-    test: (providerPath: string) => providerPath.startsWith('cerebras:'),
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
-    ) => {
-      return createCerebrasProvider(providerPath, {
-        config: providerOptions,
-        env: context.env,
-      });
-    },
-  },
-  {
-    test: (providerPath: string) => providerPath.startsWith('novita:'),
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
-    ) => {
-      return createNovitaProvider(providerPath, {
-        config: providerOptions,
-        env: context.env,
-      });
-    },
-  },
+  configuredProviderFactory('cerebras:', () => createCerebrasProvider),
+  configuredProviderFactory('novita:', () => createNovitaProvider),
   {
     test: (providerPath: string) => providerPath.startsWith('cloudera:'),
     create: async (
@@ -531,17 +735,13 @@ export const providerMap: ProviderFactory[] = [
   },
   {
     test: (providerPath: string) => providerPath.startsWith('cohere:'),
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      _context: LoadApiProviderContext,
-    ) => {
+    create: async (providerPath: string, providerOptions: ProviderOptions) => {
       const splits = providerPath.split(':');
       const modelType = splits[1];
       const modelName = splits.slice(2).join(':');
 
       if (modelType === 'embedding' || modelType === 'embeddings') {
-        return new CohereEmbeddingProvider(modelName, providerOptions);
+        return new CohereEmbeddingProvider(modelName, providerOptions.config, providerOptions.env);
       }
       if (modelType === 'chat' || modelType === undefined) {
         return new CohereChatCompletionProvider(modelName || modelType, providerOptions);
@@ -583,19 +783,7 @@ export const providerMap: ProviderFactory[] = [
       });
     },
   },
-  {
-    test: (providerPath: string) => providerPath.startsWith('deepseek:'),
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
-    ) => {
-      return createDeepSeekProvider(providerPath, {
-        config: providerOptions,
-        env: context.env,
-      });
-    },
-  },
+  configuredProviderFactory('deepseek:', () => createDeepSeekProvider),
   {
     test: (providerPath: string) => providerPath === 'echo',
     create: async (
@@ -656,19 +844,7 @@ export const providerMap: ProviderFactory[] = [
       }
     },
   },
-  {
-    test: (providerPath: string) => providerPath.startsWith('envoy:'),
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
-    ) => {
-      return createEnvoyProvider(providerPath, {
-        config: providerOptions,
-        env: context.env,
-      });
-    },
-  },
+  configuredProviderFactory('envoy:', () => createEnvoyProvider),
   {
     test: (providerPath: string) => providerPath.startsWith('f5:'),
     create: async (
@@ -869,19 +1045,7 @@ export const providerMap: ProviderFactory[] = [
       });
     },
   },
-  {
-    test: (providerPath: string) => providerPath.startsWith('minimax:'),
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
-    ) => {
-      return createMiniMaxProvider(providerPath, {
-        config: providerOptions,
-        env: context.env,
-      });
-    },
-  },
+  configuredProviderFactory('minimax:', () => createMiniMaxProvider),
   {
     test: (providerPath: string) => providerPath.startsWith('mistral:'),
     create: async (
@@ -1002,7 +1166,41 @@ export const providerMap: ProviderFactory[] = [
       const splits = providerPath.split(':');
       const modelType = splits[1];
       const modelName = splits.slice(2).join(':');
+      if (modelType === 'chatkit') {
+        throw new Error(
+          'The openai:chatkit provider has been removed. Export your Agent Builder workflow and evaluate it with the OpenAI Agents SDK, a custom provider, or an HTTP endpoint. Migration guide: https://www.promptfoo.dev/docs/providers/openai-chatkit/',
+        );
+      }
       const configuredModel = getConfiguredOpenAiModel(providerOptions);
+      const assistantModel =
+        modelType === 'assistant' && typeof providerOptions.config?.modelName === 'string'
+          ? providerOptions.config.modelName.trim() || undefined
+          : undefined;
+      const passthrough = providerOptions.config?.passthrough as { model?: unknown } | undefined;
+      const effectiveApiModel = getEffectiveOpenAiApiModel(
+        modelType,
+        modelName,
+        configuredModel,
+        passthrough?.model,
+      );
+      const allowTranscription = modelType === 'gpt-transcribe' || modelType === 'transcription';
+
+      const codexBaseUrl =
+        providerOptions.config?.base_url ?? providerOptions.config?.cli_config?.openai_base_url;
+      const codexModelProvider =
+        providerOptions.config?.model_provider ??
+        providerOptions.config?.cli_config?.model_provider;
+      // Codex can load either backend selector from its own configuration files.
+      // Apply OpenAI model restrictions only when both native selectors are explicit.
+      if (
+        ['codex-app-server', 'codex-desktop', 'codex-sdk', 'codex'].includes(modelType) &&
+        codexModelProvider === 'openai' &&
+        typeof codexBaseUrl === 'string' &&
+        codexBaseUrl.length > 0 &&
+        isOpenAiFirstPartyApiUrl(codexBaseUrl)
+      ) {
+        assertOpenAiModelEndpointCompatibility(modelName || configuredModel);
+      }
 
       if (modelType === 'agents-api') {
         const { OpenAiAgentsApiProvider } = await import('./openai/agents-api');
@@ -1014,8 +1212,8 @@ export const providerMap: ProviderFactory[] = [
 
       // Codex app-server providers (openai:codex-app-server or openai:codex-desktop)
       if (modelType === 'codex-app-server' || modelType === 'codex-desktop') {
-        const { OpenAICodexAppServerProvider } = await import('./openai/codex-app-server');
         const codexModel = modelName || configuredModel;
+        const { OpenAICodexAppServerProvider } = await import('./openai/codex-app-server');
         const codexProviderId = providerOptions.id ?? providerPath;
         return new OpenAICodexAppServerProvider({
           ...providerOptions,
@@ -1026,17 +1224,14 @@ export const providerMap: ProviderFactory[] = [
                 model: codexModel,
               }
             : providerOptions.config,
-          env: {
-            ...context.env,
-            ...providerOptions.env,
-          },
+          env: mergeProviderEnv(providerPath, context.env, providerOptions.env),
         });
       }
 
       // Codex SDK providers (openai:codex-sdk or openai:codex)
       if (modelType === 'codex-sdk' || modelType === 'codex') {
-        const { OpenAICodexSDKProvider } = await import('./openai/codex-sdk');
         const codexModel = modelName || configuredModel;
+        const { OpenAICodexSDKProvider } = await import('./openai/codex-sdk');
         const codexProviderId = providerOptions.id ?? providerPath;
         return new OpenAICodexSDKProvider({
           ...providerOptions,
@@ -1051,7 +1246,6 @@ export const providerMap: ProviderFactory[] = [
         });
       }
       const requestedApiModel = modelName || configuredModel || modelType;
-      const passthrough = providerOptions.config?.passthrough as { model?: unknown } | undefined;
       if (
         [modelType, requestedApiModel, passthrough?.model].some(
           (model) =>
@@ -1060,27 +1254,22 @@ export const providerMap: ProviderFactory[] = [
         )
       ) {
         throw new Error(
-          'gpt-live-transcribe requires a dedicated Realtime transcription session, which this provider does not support.',
+          'gpt-live-transcribe requires Realtime transcription sessions, which are not yet supported by promptfoo.',
         );
       }
       const isLiveProvider =
         modelType === 'live' || /^gpt-live-1(?:-\d{4}-\d{2}-\d{2})?$/.test(modelType);
-      if (!isLiveProvider && !['agents', 'chatkit', 'assistant'].includes(modelType)) {
-        const apiHost =
-          providerOptions.config?.apiHost ||
-          providerOptions.env?.OPENAI_API_HOST ||
-          getEnvString('OPENAI_API_HOST');
-        const apiUrl = apiHost
-          ? `https://${apiHost}/v1`
-          : providerOptions.config?.apiBaseUrl ||
-            providerOptions.env?.OPENAI_API_BASE_URL ||
-            providerOptions.env?.OPENAI_BASE_URL ||
-            getEnvString('OPENAI_API_BASE_URL') ||
-            getEnvString('OPENAI_BASE_URL') ||
-            'https://api.openai.com/v1';
-        for (const candidate of [requestedApiModel, configuredModel, passthrough?.model]) {
-          assertOpenAiApiModel(candidate, apiUrl);
-        }
+      const providerEnv =
+        modelType === 'decisions'
+          ? mergeProviderEnv(providerPath, context.env, providerOptions.env)
+          : providerOptions.env;
+      if (
+        !isLiveProvider &&
+        modelType !== 'agents' &&
+        (modelType !== 'assistant' || assistantModel)
+      ) {
+        const apiUrl = resolveOpenAiApiUrl(providerOptions.config ?? {}, providerEnv);
+        assertOpenAiApiModel(assistantModel || effectiveApiModel, apiUrl, { allowTranscription });
       }
       if (modelType === 'chat') {
         return new OpenAiChatCompletionProvider(
@@ -1108,7 +1297,7 @@ export const providerMap: ProviderFactory[] = [
       }
       if (modelType === 'realtime') {
         return new OpenAiRealtimeProvider(
-          modelName || configuredModel || 'gpt-realtime-1.5',
+          modelName || configuredModel || 'gpt-realtime-2.1',
           providerOptions,
         );
       }
@@ -1117,6 +1306,13 @@ export const providerMap: ProviderFactory[] = [
           modelName || configuredModel || 'gpt-6-sol',
           providerOptions,
         );
+      }
+      if (modelType === 'decisions') {
+        const { OpenAiDecisionsProvider } = await import('./openai/decisions');
+        return new OpenAiDecisionsProvider(modelName || configuredModel || '', {
+          ...providerOptions,
+          env: providerEnv,
+        });
       }
       if (modelType === 'transcription') {
         const { OpenAiTranscriptionProvider } = await import('./openai/transcription');
@@ -1139,7 +1335,13 @@ export const providerMap: ProviderFactory[] = [
           providerOptions,
         );
       }
-      if (shouldDefaultToOpenAiResponses(modelType)) {
+      if (
+        shouldDefaultToOpenAiResponses(modelType) ||
+        (OPENAI_DAYBREAK_ALIASES.has(modelType) &&
+          isOpenAiFirstPartyApiUrl(
+            resolveOpenAiApiUrl(providerOptions.config ?? {}, providerOptions.env),
+          ))
+      ) {
         return new OpenAiResponsesProvider(modelType, providerOptions);
       }
       if (OpenAiChatCompletionProvider.OPENAI_CHAT_MODEL_NAMES.includes(modelType)) {
@@ -1151,28 +1353,35 @@ export const providerMap: ProviderFactory[] = [
       if (OpenAiTtsProvider.OPENAI_TTS_MODEL_NAMES.includes(modelType)) {
         return new OpenAiTtsProvider(modelType, providerOptions);
       }
+      if (modelType === 'gpt-transcribe') {
+        const { OpenAiTranscriptionProvider } = await import('./openai/transcription');
+        return new OpenAiTranscriptionProvider(modelType, providerOptions);
+      }
       if (OpenAiRealtimeProvider.OPENAI_REALTIME_MODEL_NAMES.includes(modelType)) {
         return new OpenAiRealtimeProvider(modelType, providerOptions);
       }
       if (OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES.includes(modelType)) {
         return new OpenAiResponsesProvider(modelType, providerOptions);
       }
-      if (modelType === 'agents') {
-        try {
-          const { OpenAiAgentsProvider } = await import('./openai/agents');
-          return new OpenAiAgentsProvider(modelName || 'default-agent', providerOptions);
-        } catch (error) {
-          if (isMissingPackageImportError(error, '@openai/agents')) {
-            throw new Error(
-              'The @openai/agents package is required for OpenAI Agents providers. Install it with: npm install @openai/agents',
-            );
-          }
-          throw error;
-        }
+      // assertOpenAiApiModel above rejects retired IDs for api.openai.com. Preserve the
+      // historical endpoint family for custom OpenAI-compatible gateways that still serve them.
+      switch (getRetiredOpenAiModelRoute(modelType)) {
+        case 'chat':
+          return new OpenAiChatCompletionProvider(modelType, providerOptions);
+        case 'tts':
+          return new OpenAiTtsProvider(modelType, providerOptions);
+        case 'realtime':
+          return new OpenAiRealtimeProvider(modelType, providerOptions);
+        case 'responses':
+          return new OpenAiResponsesProvider(modelType, providerOptions);
+        case 'moderation':
+          return new OpenAiModerationProvider(modelType, providerOptions);
       }
-      if (modelType === 'chatkit') {
-        const { OpenAiChatKitProvider } = await import('./openai/chatkit');
-        return new OpenAiChatKitProvider(modelName || '', providerOptions);
+      if (modelType === 'agents') {
+        const { OpenAiAgentsProvider } = await loadOpenAiAgentsModule(
+          () => import('./openai/agents'),
+        );
+        return new OpenAiAgentsProvider(modelName || 'default-agent', providerOptions);
       }
       if (modelType === 'assistant') {
         return new OpenAiAssistantProvider(modelName, providerOptions);
@@ -1185,37 +1394,13 @@ export const providerMap: ProviderFactory[] = [
       }
       // Assume user did not provide model type, and it's a chat model
       logger.warn(
-        `Unknown OpenAI model type: ${modelType}. Treating it as a chat model. Use one of the following providers: openai:chat:<model name>, openai:completion:<model name>, openai:embeddings:<model name>, openai:image:<model name>, openai:video:<model name>, openai:tts:<model name>, openai:transcription:<model name>, openai:realtime:<model name>, openai:live:<model name>, openai:agents:<agent name>, openai:chatkit:<workflow_id>, openai:codex-sdk`,
+        `Unknown OpenAI model type: ${modelType}. Treating it as a chat model. Use one of the following providers: openai:chat:<model name>, openai:completion:<model name>, openai:embeddings:<model name>, openai:image:<model name>, openai:video:<model name>, openai:tts:<model name>, openai:transcription:<model name>, openai:realtime:<model name>, openai:live:<model name>, openai:agents:<agent name>, openai:codex-sdk`,
       );
       return new OpenAiChatCompletionProvider(modelType, providerOptions);
     },
   },
-  {
-    test: (providerPath: string) => providerPath.startsWith('openrouter:'),
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
-    ) => {
-      return createOpenRouterProvider(providerPath, {
-        config: providerOptions,
-        env: context.env,
-      });
-    },
-  },
-  {
-    test: (providerPath: string) => providerPath.startsWith('orcarouter:'),
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
-    ) => {
-      return createOrcaRouterProvider(providerPath, {
-        config: providerOptions,
-        env: context.env,
-      });
-    },
-  },
+  configuredProviderFactory('openrouter:', () => createOpenRouterProvider),
+  configuredProviderFactory('orcarouter:', () => createOrcaRouterProvider),
   {
     test: (providerPath: string) => providerPath.startsWith('package:'),
     create: async (
@@ -1226,19 +1411,7 @@ export const providerMap: ProviderFactory[] = [
       return parsePackageProvider(providerPath, context.basePath || process.cwd(), providerOptions);
     },
   },
-  {
-    test: (providerPath: string) => providerPath.startsWith('perplexity:'),
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
-    ) => {
-      return createPerplexityProvider(providerPath, {
-        config: providerOptions,
-        env: context.env,
-      });
-    },
-  },
+  configuredProviderFactory('perplexity:', () => createPerplexityProvider),
   {
     test: (providerPath: string) => providerPath.startsWith('portkey:'),
     create: async (
@@ -1312,45 +1485,29 @@ export const providerMap: ProviderFactory[] = [
       );
     },
   },
+  configuredProviderFactory('togetherai:', () => createTogetherAiProvider),
+  configuredProviderFactory('truefoundry:', () => createTrueFoundryProvider),
   {
-    test: (providerPath: string) => providerPath.startsWith('togetherai:'),
+    test: (providerPath: string) => providerPath.startsWith('typesafe:'),
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
       context: LoadApiProviderContext,
     ) => {
-      return createTogetherAiProvider(providerPath, {
-        config: providerOptions,
-        env: context.env,
+      const { TypeSafeProvider } = await import('./typesafe');
+      const modelName = modelNameFromProviderPath(providerPath, 1);
+      if (!modelName) {
+        throw new Error(
+          `Invalid typesafe provider path: ${providerPath}. Model name is required. Use: typesafe:jev-latest`,
+        );
+      }
+      return new TypeSafeProvider(modelName, {
+        ...providerOptions,
+        env: providerOptions.env ?? context.env,
       });
     },
   },
-  {
-    test: (providerPath: string) => providerPath.startsWith('truefoundry:'),
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
-    ) => {
-      return createTrueFoundryProvider(providerPath, {
-        config: providerOptions,
-        env: context.env,
-      });
-    },
-  },
-  {
-    test: (providerPath: string) => providerPath.startsWith('llamaapi:'),
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
-    ) => {
-      return createLlamaApiProvider(providerPath, {
-        config: providerOptions,
-        env: context.env,
-      });
-    },
-  },
+  configuredProviderFactory('llamaapi:', () => createLlamaApiProvider),
   {
     test: (providerPath: string) => providerPath.startsWith('aimlapi:'),
     create: async (
@@ -1401,14 +1558,11 @@ export const providerMap: ProviderFactory[] = [
   },
   {
     test: (providerPath: string) => providerPath.startsWith('voyage:'),
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      _context: LoadApiProviderContext,
-    ) => {
+    create: async (providerPath: string, providerOptions: ProviderOptions) => {
       return new VoyageEmbeddingProvider(
         modelNameFromProviderPath(providerPath, 1),
-        providerOptions,
+        providerOptions.config,
+        providerOptions.env,
       );
     },
   },
@@ -1753,56 +1907,47 @@ export const providerMap: ProviderFactory[] = [
       providerOptions: ProviderOptions,
       _context: LoadApiProviderContext,
     ) => {
-      try {
-        const { SlackProvider } = await import('./slack');
+      const { SlackProvider } = await loadSlackProviderModule(() => import('./slack'));
 
-        // Handle plain 'slack' format
-        if (providerPath === 'slack') {
-          return new SlackProvider(providerOptions);
-        }
+      // Handle plain 'slack' format
+      if (providerPath === 'slack') {
+        return new SlackProvider(providerOptions);
+      }
 
-        // Handle slack:* formats
-        const splits = providerPath.split(':');
+      // Handle slack:* formats
+      const splits = providerPath.split(':');
 
-        if (splits.length < 2) {
-          throw new Error(
-            'Invalid Slack provider path. Use slack:<channel_id> or slack:channel:<channel_id>',
-          );
-        }
+      if (splits.length < 2) {
+        throw new Error(
+          'Invalid Slack provider path. Use slack:<channel_id> or slack:channel:<channel_id>',
+        );
+      }
 
-        // Handle slack:C0123ABCDEF format
-        if (splits.length === 2) {
-          return new SlackProvider({
-            ...providerOptions,
-            config: {
-              ...providerOptions.config,
-              channel: splits[1],
-            },
-          });
-        }
+      // Handle slack:C0123ABCDEF format
+      if (splits.length === 2) {
+        return new SlackProvider({
+          ...providerOptions,
+          config: {
+            ...providerOptions.config,
+            channel: splits[1],
+          },
+        });
+      }
 
-        // Handle slack:channel:C0123ABCDEF or slack:user:U0123ABCDEF format
-        const targetType = splits[1];
-        const targetId = splits.slice(2).join(':');
+      // Handle slack:channel:C0123ABCDEF or slack:user:U0123ABCDEF format
+      const targetType = splits[1];
+      const targetId = splits.slice(2).join(':');
 
-        if (targetType === 'channel' || targetType === 'user') {
-          return new SlackProvider({
-            ...providerOptions,
-            config: {
-              ...providerOptions.config,
-              channel: targetId,
-            },
-          });
-        } else {
-          throw new Error(`Invalid Slack target type: ${targetType}. Use 'channel' or 'user'`);
-        }
-      } catch (error: any) {
-        if (error.code === 'MODULE_NOT_FOUND' && error.message.includes('@slack/web-api')) {
-          throw new Error(
-            'The Slack provider requires the @slack/web-api package. Please install it with: npm install @slack/web-api@^8',
-          );
-        }
-        throw error;
+      if (targetType === 'channel' || targetType === 'user') {
+        return new SlackProvider({
+          ...providerOptions,
+          config: {
+            ...providerOptions.config,
+            channel: targetId,
+          },
+        });
+      } else {
+        throw new Error(`Invalid Slack target type: ${targetType}. Use 'channel' or 'user'`);
       }
     },
   },

@@ -98,6 +98,9 @@ describe('Transformers SDK compatibility', () => {
     await expect(loadTransformers()).rejects.toThrow(
       'npm install promptfoo @huggingface/transformers@^4.0.0',
     );
+    await expect(loadTransformers()).rejects.toThrow(
+      'npm install -g promptfoo @huggingface/transformers@^4.0.0',
+    );
     expect(sdkImported).not.toHaveBeenCalled();
   });
 });

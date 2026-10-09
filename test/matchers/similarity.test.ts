@@ -51,6 +51,7 @@ describe('matchesSimilarity', () => {
       ? {
           prompt: { raw: 'fixture', label: 'embedding' },
           vars: {},
+          bustCache: true,
           traceparent: '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01',
         }
       : undefined;
