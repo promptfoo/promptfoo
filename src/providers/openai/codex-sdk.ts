@@ -4,8 +4,9 @@ import path from 'path';
 
 import { type Attributes, type Span, SpanKind, SpanStatusCode, trace } from '@opentelemetry/api';
 import dedent from 'dedent';
+import semverSatisfies from 'semver/functions/satisfies.js';
 import { z } from 'zod';
-import { getEnvString, getProcessEnv } from '../../envars';
+import { getProcessEnv } from '../../envars';
 import {
   addActiveSpanRoleAttribute,
   closeTurnSpan,
@@ -25,9 +26,12 @@ import {
   isDefinitiveBillingCode,
   isHardQuotaCode,
 } from '../../util/fetch/errors';
+import { getPackageVersion } from '../../util/packageVersion';
 import { normalizeFieldName, REDACTED, sanitizeObject } from '../../util/sanitizer';
 import { resolveAgenticWorkingDir } from '../agentic-utils';
+import { AgenticRunQueue, createAbortError } from '../agenticRunQueue';
 import { assertIsolatedWorkingDir, clearRepositoryEnv } from '../agentWorkspace';
+import { resolveProviderApiKey } from '../credentials';
 import { providerRegistry } from '../providerRegistry';
 import { calculateOpenAIUsageCostFromTokenUsage } from './billing';
 import {
@@ -48,6 +52,11 @@ import {
   shouldInjectApiKey,
   usesCustomModelProvider,
 } from './codexApiKeyGating';
+import {
+  COMMON_OPTIONAL_PROCESS_ENV_KEYS,
+  findGitRepositoryRoot,
+  getMinimalProcessEnv,
+} from './codexProcess';
 import {
   buildCodexSkillMetadata,
   extractCodexSkillPathCandidates,
@@ -102,7 +111,7 @@ function isValidTraceparent(traceparent: string | undefined): traceparent is str
  * OpenAI Codex SDK Provider
  *
  * This provider requires the @openai/codex-sdk package to be installed separately:
- *   npm install @openai/codex-sdk
+ *   npm install promptfoo @openai/codex-sdk@^0.156.1
  *
  * Key features:
  * - Supports API key auth or existing Codex/ChatGPT login state
@@ -200,39 +209,6 @@ interface CodexStreamingState {
   /** 1-based index of the currently open turn, stamped on item spans for correlation. */
   activeTurnIndex: number;
 }
-
-const MINIMAL_CLI_ENV_KEYS = [
-  'PATH',
-  'Path',
-  'HOME',
-  'USER',
-  'USERNAME',
-  'USERPROFILE',
-  'TMPDIR',
-  'TMP',
-  'TEMP',
-  'SHELL',
-  'COMSPEC',
-  'SystemRoot',
-  'PATHEXT',
-  'LANG',
-  'LC_ALL',
-  'TERM',
-] as const;
-
-const COMMON_OPTIONAL_PROCESS_ENV_KEYS = [
-  'CODEX_HOME',
-  'HTTP_PROXY',
-  'HTTPS_PROXY',
-  'ALL_PROXY',
-  'NO_PROXY',
-  'SSL_CERT_FILE',
-  'SSL_CERT_DIR',
-  'REQUESTS_CA_BUNDLE',
-  'NODE_EXTRA_CA_CERTS',
-  'SSH_AUTH_SOCK',
-  'GIT_SSH_COMMAND',
-] as const;
 
 export interface OpenAICodexSDKConfig {
   /**
@@ -479,18 +455,6 @@ function parseCodexConfig(
   }
 }
 
-function getMinimalProcessEnv(): Record<string, string> {
-  const env: Record<string, string> = {};
-  const processEnv = getProcessEnv();
-  for (const key of MINIMAL_CLI_ENV_KEYS) {
-    const value = processEnv[key];
-    if (typeof value === 'string' && value.length > 0) {
-      env[key] = value;
-    }
-  }
-  return env;
-}
-
 // The transient throttle code plus the shared hard-quota set, so a billing code
 // added to HARD_QUOTA_ERROR_CODES (e.g. credit_balance_exhausted) is recognized
 // on the SDK path too instead of falling back to the 60s retry cycle.
@@ -626,11 +590,9 @@ function buildCodexRateLimitResponse(
   };
 }
 
-/**
- * Helper to load the OpenAI Codex SDK ESM module
- * Uses resolvePackageEntryPoint to handle ESM-only packages with restrictive exports
- */
-async function loadCodexSDK(): Promise<any> {
+export const CODEX_SDK_VERSION_RANGE = '^0.156.1';
+
+export function resolveCodexSdkPackage(): string | null {
   const basePaths = [
     cliState.basePath ? path.resolve(cliState.basePath) : undefined,
     process.cwd(),
@@ -638,24 +600,34 @@ async function loadCodexSDK(): Promise<any> {
     path.resolve(getDirectory(), '../..'),
   ].filter((candidate): candidate is string => Boolean(candidate));
 
-  let codexPath: string | null = null;
   for (const basePath of new Set(basePaths)) {
-    codexPath = resolvePackageEntryPoint('@openai/codex-sdk', basePath);
-    if (codexPath) {
-      break;
+    const entryPoint = resolvePackageEntryPoint('@openai/codex-sdk', basePath);
+    if (entryPoint) {
+      return entryPoint;
     }
   }
+  return null;
+}
 
+async function loadCodexSDK(): Promise<any> {
+  const codexPath = resolveCodexSdkPackage();
   if (!codexPath) {
     throw new Error(
       dedent`The @openai/codex-sdk package is required but not installed.
 
       To use the OpenAI Codex SDK provider, install it with:
-        npm install @openai/codex-sdk
+        npm install promptfoo @openai/codex-sdk@${CODEX_SDK_VERSION_RANGE}
 
       Requires Node.js >=22.22.0.
 
       For more information, see: https://www.promptfoo.dev/docs/providers/openai-codex-sdk/`,
+    );
+  }
+
+  const version = getPackageVersion('@openai/codex-sdk', codexPath);
+  if (!version || !semverSatisfies(version, CODEX_SDK_VERSION_RANGE)) {
+    throw new Error(
+      `The OpenAI Codex SDK provider requires @openai/codex-sdk@${CODEX_SDK_VERSION_RANGE} (found ${version ?? 'unknown'}). Install it with: npm install promptfoo @openai/codex-sdk@${CODEX_SDK_VERSION_RANGE}`,
     );
   }
 
@@ -674,7 +646,7 @@ async function loadCodexSDK(): Promise<any> {
       - Corrupted installation
 
       Try reinstalling:
-        npm install @openai/codex-sdk
+        npm install promptfoo @openai/codex-sdk@${CODEX_SDK_VERSION_RANGE}
 
       For more information, see: https://www.promptfoo.dev/docs/providers/openai-codex-sdk/`,
     );
@@ -719,7 +691,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
   private codexModule?: any;
   private codexInstances: Map<string, any> = new Map();
   private threads: Map<string, any> = new Map();
-  private threadRunQueues: Map<string, Promise<void>> = new Map();
+  private threadRunQueues = new AgenticRunQueue('Codex thread turn wait aborted');
   private deepTracingWarningShown = false; // Show warning once per instance
   private ignoredProviderEnvWarningShown = false;
   private omittedProcessEnvWarningShown = false;
@@ -752,13 +724,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
   }
 
   getApiKey(config: OpenAICodexSDKConfig = this.config): string | undefined {
-    return (
-      config?.apiKey ||
-      this.env?.OPENAI_API_KEY ||
-      this.env?.CODEX_API_KEY ||
-      getEnvString('OPENAI_API_KEY') ||
-      getEnvString('CODEX_API_KEY')
-    );
+    return resolveProviderApiKey(config, this.env, ['OPENAI_API_KEY', 'CODEX_API_KEY']);
   }
 
   requiresApiKey(): boolean {
@@ -1019,19 +985,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
   }
 
   private findGitRepositoryRoot(workingDir: string): string | undefined {
-    let currentDir = path.resolve(workingDir);
-
-    while (true) {
-      if (fs.existsSync(path.join(currentDir, '.git'))) {
-        return currentDir;
-      }
-
-      const parentDir = path.dirname(currentDir);
-      if (parentDir === currentDir) {
-        return undefined;
-      }
-      currentDir = parentDir;
-    }
+    return findGitRepositoryRoot(workingDir);
   }
 
   /**
@@ -1158,7 +1112,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       for await (const event of events) {
         const eventTime = Date.now();
         if (callOptions?.abortSignal?.aborted) {
-          throw this.createAbortError('OpenAI Codex SDK call aborted');
+          throw createAbortError('OpenAI Codex SDK call aborted');
         }
 
         this.handleStreamingEvent(event, state, tracer, eventTime, skillRootPrefixes);
@@ -2009,72 +1963,6 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       .digest('hex');
   }
 
-  private async runSerializedThreadTurn<T>(
-    queueKey: string | undefined,
-    abortSignal: AbortSignal | undefined,
-    executeTurn: () => Promise<T>,
-  ): Promise<T> {
-    if (!queueKey) {
-      return executeTurn();
-    }
-
-    const previousRun = this.threadRunQueues.get(queueKey) ?? Promise.resolve();
-    let releaseCurrentRun: () => void = () => {};
-    const currentRun = new Promise<void>((resolve) => {
-      releaseCurrentRun = resolve;
-    });
-    const queuedRun = previousRun.catch(() => undefined).then(() => currentRun);
-    this.threadRunQueues.set(queueKey, queuedRun);
-    void queuedRun.finally(() => {
-      if (this.threadRunQueues.get(queueKey) === queuedRun) {
-        this.threadRunQueues.delete(queueKey);
-      }
-    });
-
-    try {
-      await this.waitForPreviousThreadRun(previousRun, abortSignal);
-      return await executeTurn();
-    } finally {
-      releaseCurrentRun();
-    }
-  }
-
-  private async waitForPreviousThreadRun(
-    previousRun: Promise<void>,
-    abortSignal: AbortSignal | undefined,
-  ): Promise<void> {
-    const previousRunDone = previousRun.catch(() => undefined);
-
-    if (!abortSignal) {
-      await previousRunDone;
-      return;
-    }
-
-    if (abortSignal.aborted) {
-      throw this.createAbortError('Codex thread turn wait aborted');
-    }
-
-    let onAbort: (() => void) | undefined;
-    const abortPromise = new Promise<void>((_, reject) => {
-      onAbort = () => reject(this.createAbortError('Codex thread turn wait aborted'));
-      abortSignal.addEventListener('abort', onAbort, { once: true });
-    });
-
-    try {
-      await Promise.race([previousRunDone, abortPromise]);
-    } finally {
-      if (onAbort) {
-        abortSignal.removeEventListener('abort', onAbort);
-      }
-    }
-  }
-
-  private createAbortError(message: string): Error {
-    const error = new Error(message);
-    error.name = 'AbortError';
-    return error;
-  }
-
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
@@ -2429,7 +2317,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     const queueKey = this.getThreadRunQueueKey(resolvedConfig, cacheKey);
     const runOptions = this.buildCodexRunOptions(resolvedConfig, callOptions);
 
-    return this.runSerializedThreadTurn(queueKey, callOptions?.abortSignal, async () => {
+    return this.threadRunQueues.run(queueKey, callOptions?.abortSignal, async () => {
       if (cleanupGeneration !== this.cleanupGeneration) {
         throw new Error('Codex SDK call was interrupted by cleanup');
       }

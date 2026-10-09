@@ -9,6 +9,7 @@ import {
 import invariant from '../../util/invariant';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { applyGpt6RequestRules, getGpt6ResponsesReasoning, isGpt6Model } from '../openai/gpt6';
+import { flattenResponseTool } from '../openai/util';
 import { ResponsesProcessor } from '../responses/index';
 import { getRequestTimeoutMs, LONG_RUNNING_MODEL_TIMEOUT_MS } from '../shared';
 import { AzureGenericProvider } from './generic';
@@ -70,14 +71,6 @@ export class AzureResponsesProvider extends AzureGenericProvider {
             usage?.output_tokens_details?.image_tokens,
         ),
     });
-
-    if (this.config.mcp?.enabled) {
-      this.initializationPromise = this.initializeMCP();
-    }
-  }
-
-  private async initializeMCP(): Promise<void> {
-    // TODO: Initialize MCP if needed
   }
 
   /**
@@ -228,15 +221,7 @@ export class AzureResponsesProvider extends AzureGenericProvider {
     const loadedTools = config.tools
       ? await maybeLoadToolsFromExternalFile(config.tools, context?.vars)
       : undefined;
-    const tools = Array.isArray(loadedTools)
-      ? loadedTools.map((tool) => {
-          if (tool?.type !== 'function' || !tool.function) {
-            return tool;
-          }
-          const { function: functionDefinition, ...rest } = tool;
-          return { ...rest, ...functionDefinition };
-        })
-      : loadedTools;
+    const tools = Array.isArray(loadedTools) ? loadedTools.map(flattenResponseTool) : loadedTools;
     const toolChoice =
       typeof config.tool_choice === 'object' &&
       config.tool_choice?.type === 'function' &&
@@ -299,9 +284,6 @@ export class AzureResponsesProvider extends AzureGenericProvider {
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    if (this.initializationPromise != null) {
-      await this.initializationPromise;
-    }
     await this.ensureInitialized();
     invariant(this.authHeaders, 'auth headers are not initialized');
 
