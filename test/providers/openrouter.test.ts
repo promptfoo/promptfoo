@@ -233,7 +233,7 @@ describe('OpenRouter', () => {
     });
 
     it.each([
-      ['a null body', null, 'Malformed response data: expected choices[0].message'],
+      ['a null body', null, 'Malformed response data: null'],
       ['missing choices', {}, 'Malformed response data: expected choices[0].message'],
       ['null choices', { choices: null }, 'Malformed response data: expected choices[0].message'],
       [
