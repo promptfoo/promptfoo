@@ -1,6 +1,13 @@
 import { createHmac } from 'crypto';
 
-import { fetchWithCache, getCache, getScopedCacheKey, isCacheEnabled } from '../../cache';
+import {
+  fetchWithCache,
+  getCache,
+  getCacheClearGeneration,
+  getScopedCacheKey,
+  isCacheEnabled,
+  setCacheIfCurrent,
+} from '../../cache';
 import logger from '../../logger';
 import { getRequestTimeoutMs } from '../shared';
 import { OpenAiGenericProvider } from '.';
@@ -247,6 +254,7 @@ export class OpenAiModerationProvider
     }
 
     const useCache = isCacheEnabled();
+    const clearGeneration = getCacheClearGeneration();
     const supportsImages = supportsImageInput(this.modelName);
     const input = formatModerationInput(assistantResponse, supportsImages);
     const cacheKey = getModerationCacheKey(this.modelName, this.config, input, {
@@ -281,7 +289,7 @@ export class OpenAiModerationProvider
 
     try {
       const { data, status, statusText } = await fetchOpenAIModerationWithDedupe(
-        getScopedCacheKey(cacheKey),
+        `${clearGeneration}:${getScopedCacheKey(cacheKey)}`,
         async () =>
           fetchWithCache<OpenAIModerationResponse>(
             appendOpenAiApiPath(this.getApiUrl(), 'moderations'),
@@ -309,8 +317,7 @@ export class OpenAiModerationProvider
       const response = parseOpenAIModerationResponse(data);
 
       if (useCache) {
-        const cache = await getCache();
-        await cache.set(cacheKey, JSON.stringify(response));
+        await setCacheIfCurrent(cacheKey, JSON.stringify(response), clearGeneration);
       }
 
       return response;

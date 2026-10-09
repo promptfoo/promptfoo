@@ -931,6 +931,85 @@ describe('invocation-scoped cache settings', () => {
     expect(results.every((result) => !result.coalesced)).toBe(true);
   });
 
+  it.each(['provider', 'update callback'])(
+    'does not let a stale %s replace a result after clearing',
+    async (kind) => {
+      await cliState.withEnv(disk(path.join(tempDir, 'stale-provider-write')), () =>
+        cache.withCacheNamespace('fixture', async () => {
+          const generation = cache.getCacheClearGeneration();
+          vi.mocked(fetchWithRetries).mockResolvedValueOnce(Response.json('initial'));
+          const fetched = await cache.fetchWithCache('https://cache-fixture.invalid/update');
+          await cache.getCache().clear();
+          const write = (value: string, token = generation) =>
+            kind === 'provider'
+              ? cache.setCacheIfCurrent('provider', value, token)
+              : fetched.updateCache!(value, 200, 'OK');
+          if (kind === 'provider') {
+            await write('fresh', cache.getCacheClearGeneration());
+          }
+          await write('stale');
+          if (kind === 'provider') {
+            expect(await cache.getCache().get('provider')).toBe('fresh');
+          } else {
+            vi.mocked(fetchWithRetries).mockResolvedValueOnce(Response.json('fresh'));
+            expect(
+              await cache.fetchWithCache('https://cache-fixture.invalid/update'),
+            ).toMatchObject({
+              data: 'fresh',
+              cached: false,
+            });
+          }
+        }),
+      );
+    },
+  );
+
+  it.each(['provider', 'update callback'])(
+    'drains an already-started %s write before clearing',
+    async (kind) => {
+      await cliState.withEnv(disk(path.join(tempDir, 'provider-write')), () =>
+        cache.withCacheNamespace('fixture', async () => {
+          vi.mocked(fetchWithRetries).mockResolvedValueOnce(Response.json('initial'));
+          const fetched = await cache.fetchWithCache('https://cache-fixture.invalid/update');
+          const store = cache.getCache().stores[0];
+          const set = store.set.bind(store);
+          const entered = createDeferred<void>();
+          const release = createDeferred<void>();
+          vi.spyOn(store, 'set').mockImplementationOnce(async (...args) => {
+            entered.resolve();
+            await release.promise;
+            return set(...args);
+          });
+          const write =
+            kind === 'provider'
+              ? cache.setCacheIfCurrent('provider', 'old', cache.getCacheClearGeneration())
+              : fetched.updateCache!('old', 200, 'OK');
+          await entered.promise;
+          let cleared = false;
+          const clearing = cache
+            .getCache()
+            .clear()
+            .then(() => {
+              cleared = true;
+            });
+          try {
+            await new Promise(setImmediate);
+            expect(cleared).toBe(false);
+          } finally {
+            release.resolve();
+            await Promise.all([write, clearing]);
+          }
+          expect(await cache.getCache().get('provider')).toBeUndefined();
+          vi.mocked(fetchWithRetries).mockResolvedValueOnce(Response.json('fresh'));
+          expect(await cache.fetchWithCache('https://cache-fixture.invalid/update')).toMatchObject({
+            data: 'fresh',
+            cached: false,
+          });
+        }),
+      );
+    },
+  );
+
   it('clears only the selected backend and its claims', async () => {
     const paths = [path.join(tempDir, 'a'), path.join(tempDir, 'b')];
     for (const cachePath of paths) {

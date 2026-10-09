@@ -357,6 +357,40 @@ export function getCacheClearGeneration() {
   return getCacheGeneration(getCacheBackend()).clearGeneration;
 }
 
+/** Save a provider response only while its original cache scope is still current. */
+export function setCacheIfCurrent(cacheKey: string, value: unknown, clearGeneration: number) {
+  const backend = getCacheBackend();
+  return writeCacheIfCurrent(
+    backend,
+    getCacheInstance(backend),
+    getCacheGeneration(backend),
+    clearGeneration,
+    getScopedCacheKey(cacheKey),
+    value,
+  );
+}
+
+async function writeCacheIfCurrent(
+  backend: CacheBackend,
+  cache: Cache,
+  generationState: { clearGeneration: number },
+  clearGeneration: number,
+  cacheKey: string,
+  value: unknown,
+) {
+  await Promise.allSettled(
+    [...backend.clears]
+      .filter(([, prefix]) => !prefix || cacheKey.startsWith(prefix))
+      .map(([clearing]) => clearing),
+  );
+  if (generationState.clearGeneration !== clearGeneration) {
+    return;
+  }
+  const write = cache.set(cacheKey, value).finally(() => backend.writes.delete(write));
+  backend.writes.set(write, cacheKey);
+  await write;
+}
+
 function getUnscopedCacheKey(cacheKey: string, namespace: string) {
   const namespacePrefix = `${namespace}:`;
   return cacheKey.startsWith(namespacePrefix) ? cacheKey.slice(namespacePrefix.length) : cacheKey;
@@ -869,6 +903,7 @@ function deserializeFetchResponse<T>(
   cached: boolean,
   cache: Cache,
   cacheKey: string,
+  writeCache: (value: SerializedFetchResponse) => Promise<void>,
   sanitizeResponse?: CacheOptions['sanitizeResponse'],
 ) {
   const parsedResponse = JSON.parse(response);
@@ -895,8 +930,7 @@ function deserializeFetchResponse<T>(
       statusText: string,
       headers?: Record<string, string>,
     ) => {
-      await cache.set(
-        cacheKey,
+      await writeCache(
         serializeFetchResponse(
           data,
           status,
@@ -1166,6 +1200,8 @@ export async function fetchWithCache<T = unknown>(
   const inflightFetchResponses = backend.inflight;
   const generationState = getCacheGeneration(backend);
   const clearGeneration = generationState.clearGeneration;
+  const writeCache = (value: SerializedFetchResponse) =>
+    writeCacheIfCurrent(backend, cache, generationState, clearGeneration, cacheKey, value);
   await Promise.allSettled(
     [...backend.clears]
       .filter(([, prefix]) => !prefix || cacheKey.startsWith(prefix))
@@ -1179,6 +1215,7 @@ export async function fetchWithCache<T = unknown>(
       true,
       cache,
       cacheKey,
+      writeCache,
       sanitizeResponse,
     );
     if (logEnabled) {
@@ -1213,12 +1250,8 @@ export async function fetchWithCache<T = unknown>(
         logEnabled,
         sanitizeResponse,
       );
-      if (preparedResponse.cacheable && generationState.clearGeneration === clearGeneration) {
-        const write = cache
-          .set(cacheKey, preparedResponse.response)
-          .finally(() => backend.writes.delete(write));
-        backend.writes.set(write, cacheKey);
-        await write;
+      if (preparedResponse.cacheable) {
+        await writeCache(preparedResponse.response);
       }
       return preparedResponse.response;
     })().finally(() => {
@@ -1228,7 +1261,14 @@ export async function fetchWithCache<T = unknown>(
   }
 
   const response = await inflightResponse;
-  const result = deserializeFetchResponse<T>(response, false, cache, cacheKey, sanitizeResponse);
+  const result = deserializeFetchResponse<T>(
+    response,
+    false,
+    cache,
+    cacheKey,
+    writeCache,
+    sanitizeResponse,
+  );
   return coalesced ? { ...result, coalesced: true } : result;
 }
 

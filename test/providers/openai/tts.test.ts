@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { getCache, getScopedCacheKey, isCacheEnabled } from '../../../src/cache';
+import { getCache, getScopedCacheKey, isCacheEnabled, setCacheIfCurrent } from '../../../src/cache';
 import { OpenAiTtsProvider } from '../../../src/providers/openai/tts';
 import { HttpRateLimitError } from '../../../src/util/fetch/errors';
 import { fetchWithRetries } from '../../../src/util/fetch/index';
@@ -25,6 +25,9 @@ function audioResponse(bytes = new Uint8Array([1, 2, 3, 4])) {
 describe('OpenAiTtsProvider', () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    vi.mocked(setCacheIfCurrent).mockImplementation(async (key, value) => {
+      await getCache().set(key, value);
+    });
     mockedIsCacheEnabled.mockReturnValue(false);
     mockedGetScopedCacheKey.mockImplementation((cacheKey) => cacheKey);
   });

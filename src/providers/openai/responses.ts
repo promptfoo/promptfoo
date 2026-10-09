@@ -2,6 +2,7 @@ import {
   claimCacheKeyOnce,
   type FetchWithCacheResult,
   fetchWithCache,
+  getCacheClearGeneration,
   getScopedCacheKey,
   isCacheEnabled,
 } from '../../cache';
@@ -449,7 +450,7 @@ async function createBackgroundResponseWithCancellation(
   const effectiveCacheOptions = cacheIdentity.cacheable
     ? { bust: bustCache, cacheKey: cacheIdentity.key }
     : true;
-  const cacheKey = getScopedCacheKey(cacheIdentity.key);
+  const cacheKey = `${getCacheClearGeneration()}:${getScopedCacheKey(cacheIdentity.key)}`;
   let inFlight = canCoalesce ? inFlightBackgroundCreations.get(cacheKey) : undefined;
   if (!inFlight) {
     const promise = fetchWithCache<OpenAIResponsesResponse>(
@@ -638,7 +639,7 @@ async function coalesceBackgroundResponse(
       deadline,
     );
   }
-  const cacheKey = getScopedCacheKey(cacheIdentity.key);
+  const cacheKey = `${getCacheClearGeneration()}:${getScopedCacheKey(cacheIdentity.key)}`;
   let inFlight = inFlightBackgroundResponses.get(cacheKey);
   if (!inFlight) {
     const controller = new AbortController();

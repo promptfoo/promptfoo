@@ -1,4 +1,10 @@
-import { getCache, getScopedCacheKey, isCacheEnabled } from '../../cache';
+import {
+  getCache,
+  getCacheClearGeneration,
+  getScopedCacheKey,
+  isCacheEnabled,
+  setCacheIfCurrent,
+} from '../../cache';
 import logger from '../../logger';
 import { sha256 } from '../../util/createHash';
 import {
@@ -140,9 +146,13 @@ async function getCachedResponse(
   }
 }
 
-async function cacheResponse(cacheKey: string, response: ProviderResponse): Promise<void> {
+async function cacheResponse(
+  cacheKey: string,
+  response: ProviderResponse,
+  clearGeneration: number,
+): Promise<void> {
   try {
-    await getCache().set(cacheKey, JSON.stringify(response));
+    await setCacheIfCurrent(cacheKey, JSON.stringify(response), clearGeneration);
   } catch (error) {
     logger.debug('[OpenAI TTS] Failed to cache response', { error });
   }
@@ -303,6 +313,7 @@ export class OpenAiTtsProvider extends OpenAiGenericProvider {
     )}`;
 
     const useCache = cacheEnabled && !this.shouldBustCache(context);
+    const clearGeneration = getCacheClearGeneration();
     if (useCache) {
       const cachedResponse = await getCachedResponse(cacheKey, startedAt);
       if (cachedResponse) {
@@ -353,7 +364,7 @@ export class OpenAiTtsProvider extends OpenAiGenericProvider {
         };
 
         if (useCache) {
-          await cacheResponse(cacheKey, result);
+          await cacheResponse(cacheKey, result, clearGeneration);
         }
 
         return result;
@@ -383,7 +394,10 @@ export class OpenAiTtsProvider extends OpenAiGenericProvider {
 
     return useCache
       ? coalesceRequest(
-          getInFlightCacheKey(getScopedCacheKey(cacheKey), callApiOptions?.abortSignal),
+          getInFlightCacheKey(
+            `${clearGeneration}:${getScopedCacheKey(cacheKey)}`,
+            callApiOptions?.abortSignal,
+          ),
           requestSpeech,
         )
       : requestSpeech();

@@ -12,6 +12,10 @@ vi.mock('../../../../src/providers/elevenlabs/client', () => ({
   }),
 }));
 
+vi.mock('../../../../src/telemetry', () => ({
+  default: { record: vi.fn(), send: vi.fn() },
+}));
+
 async function runEvaluation(provider: ElevenLabsAgentsProvider) {
   const result = await evaluate(
     {
