@@ -23,18 +23,18 @@ export function toolCallVerdict(
   };
 }
 
-/** Verdict for a validator error. A tool schema error fails under `not-` too. */
+/** Only a known invalid-call verdict can satisfy a negated assertion. */
 export function toolCallErrorVerdict(
   assertion: Assertion,
   inverse: boolean,
   err: unknown,
   label: string,
 ): GradingResult {
-  // Thrown by the provider validators when a tool schema does not compile.
-  if (err instanceof Error && err.name === 'InvalidToolSchemaError') {
-    return { pass: false, score: 0, reason: err.message, assertion };
+  const reason = err instanceof Error ? err.message : String(err);
+  if (!(err instanceof Error) || err.name !== 'InvalidToolCallError') {
+    return { pass: false, score: 0, reason, assertion };
   }
-  return toolCallVerdict(assertion, inverse, false, (err as Error).message, label);
+  return toolCallVerdict(assertion, inverse, false, reason, label);
 }
 
 export const handleIsValidFunctionCall = ({

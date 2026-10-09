@@ -18,7 +18,7 @@ import {
   parseChatPrompt,
   transformToolChoice,
 } from '../shared';
-import { InvalidToolSchemaError } from '../toolSchemaError';
+import { InvalidToolCallError, InvalidToolSchemaError } from '../toolSchemaError';
 import { loadCredentials } from './auth';
 import {
   GEMINI_FLASH_MODELS,
@@ -2130,8 +2130,15 @@ export function validateFunctionCall(
     } else {
       throw new Error('Unrecognized function call format');
     }
+    if (
+      !Array.isArray(functionCalls) ||
+      functionCalls.length === 0 ||
+      functionCalls.some((call) => !call || typeof call.name !== 'string')
+    ) {
+      throw new Error('Expected at least one function call');
+    }
   } catch {
-    throw new Error(
+    throw new InvalidToolCallError(
       `Google did not return a valid-looking function call: ${JSON.stringify(output)}`,
     );
   }
@@ -2145,19 +2152,45 @@ export function validateFunctionCall(
   if (interpolatedFunctions !== undefined && !Array.isArray(interpolatedFunctions)) {
     throw new InvalidToolSchemaError('Expected the loaded functions to be an array');
   }
+  if (
+    interpolatedFunctions?.some(
+      (tool) =>
+        !tool ||
+        typeof tool !== 'object' ||
+        (tool.functionDeclarations !== undefined &&
+          (!Array.isArray(tool.functionDeclarations) ||
+            tool.functionDeclarations.some(
+              (declaration) =>
+                !declaration || typeof declaration.name !== 'string' || !declaration.name.trim(),
+            ))),
+    )
+  ) {
+    throw new InvalidToolSchemaError('Expected valid function declarations in each tool');
+  }
+  const declarations = interpolatedFunctions?.flatMap((tool) => tool.functionDeclarations ?? []);
+  if (!declarations?.length) {
+    throw new InvalidToolSchemaError(
+      `Called "${functionCalls[0].name}", but there is no function with that name`,
+    );
+  }
   const ajv = getAjv();
 
   for (const functionCall of functionCalls) {
     // Parse function call and validate it against schema
     const functionName = functionCall.name;
-    const functionArgs = parseStringObject(functionCall.args);
-    const functionSchema = interpolatedFunctions
-      ?.flatMap((tool) => tool.functionDeclarations ?? [])
-      .find((declaration) => declaration.name === functionName);
-    if (!functionSchema) {
-      throw new Error(`Called "${functionName}", but there is no function with that name`);
+    let functionArgs;
+    try {
+      functionArgs = parseStringObject(functionCall.args);
+    } catch (err) {
+      throw new InvalidToolCallError((err as Error).message);
     }
-    if (Object.keys(functionArgs).length !== 0 && functionSchema?.parameters) {
+    const functionSchema = declarations.find((declaration) => declaration.name === functionName);
+    if (!functionSchema) {
+      throw new InvalidToolCallError(
+        `Called "${functionName}", but there is no function with that name`,
+      );
+    }
+    if (functionSchema.parameters) {
       const parameterSchema = normalizeSchemaTypes(functionSchema.parameters);
       let validate;
       try {
@@ -2168,12 +2201,12 @@ export function validateFunctionCall(
         );
       }
       if (!validate(functionArgs)) {
-        throw new Error(
+        throw new InvalidToolCallError(
           `Call to "${functionName}":\n${JSON.stringify(functionCall)}\ndoes not match schema:\n${JSON.stringify(validate.errors)}`,
         );
       }
     } else if (!(JSON.stringify(functionArgs) === '{}' && !functionSchema?.parameters)) {
-      throw new Error(
+      throw new InvalidToolCallError(
         `Call to "${functionName}":\n${JSON.stringify(functionCall)}\ndoes not match schema:\n${JSON.stringify(functionSchema)}`,
       );
     }

@@ -16,7 +16,7 @@ export const handleIsValidOpenAiToolsCall = async ({
     toolCallVerdict(assertion, inverse, valid, reason, 'OpenAI tools call');
 
   // Handle MCP tool outputs from Responses API
-  const outputStr = typeof output === 'string' ? output : JSON.stringify(output);
+  const outputStr = typeof output === 'string' ? output : (JSON.stringify(output) ?? '');
 
   // Check for MCP tool results in the output
   if (outputStr.includes('MCP Tool Result') || outputStr.includes('MCP Tool Error')) {
@@ -35,7 +35,7 @@ export const handleIsValidOpenAiToolsCall = async ({
   }
 
   // Handle traditional OpenAI function/tool calls
-  if (typeof output === 'object' && 'tool_calls' in output) {
+  if (output && typeof output === 'object' && 'tool_calls' in output) {
     output = output.tool_calls as string | object;
   }
   const toolsOutput = output as {
@@ -57,12 +57,16 @@ export const handleIsValidOpenAiToolsCall = async ({
     );
   }
 
-  let tools = (provider as OpenAiChatCompletionProvider).config.tools;
-  if (tools) {
-    const loadedTools = await maybeLoadToolsFromExternalFile(tools, test.vars);
-    if (loadedTools !== undefined) {
-      tools = loadedTools;
+  let tools = (provider as OpenAiChatCompletionProvider).config?.tools;
+  try {
+    if (tools) {
+      const loadedTools = await maybeLoadToolsFromExternalFile(tools, test.vars);
+      if (loadedTools !== undefined) {
+        tools = loadedTools;
+      }
     }
+  } catch (err) {
+    return toolCallErrorVerdict(assertion, inverse, err, 'OpenAI tools call');
   }
 
   // Tools must be defined when validating tool calls. Missing tools is a
@@ -72,6 +76,17 @@ export const handleIsValidOpenAiToolsCall = async ({
       pass: false,
       score: 0,
       reason: 'No tools configured in provider, but output contains tool calls',
+      assertion,
+    };
+  }
+  if (
+    !Array.isArray(tools) ||
+    tools.some((tool) => !tool || typeof tool !== 'object' || typeof tool.type !== 'string')
+  ) {
+    return {
+      pass: false,
+      score: 0,
+      reason: 'Expected tools to be an array of tool definitions',
       assertion,
     };
   }

@@ -3,7 +3,7 @@ import { maybeLoadFromExternalFileWithVars } from '../../util/index';
 import { getAjv, safeJsonStringify } from '../../util/json';
 import { isNonCredentialHeader, looksLikeSecret, sanitizeUrl } from '../../util/sanitizer';
 import { calculateCost } from '../shared';
-import { InvalidToolSchemaError } from '../toolSchemaError';
+import { InvalidToolCallError, InvalidToolSchemaError } from '../toolSchemaError';
 
 import type { TokenUsage, VarValue } from '../../types/index';
 import type { ProviderConfig } from '../shared';
@@ -1246,16 +1246,17 @@ export function validateFunctionCall(
   functions?: OpenAiFunction[],
   vars?: Record<string, VarValue>,
 ) {
-  if (typeof output === 'object' && 'function_call' in output) {
+  if (output && typeof output === 'object' && 'function_call' in output) {
     output = (output as { function_call: any }).function_call;
   }
   const functionCall = output as { arguments: string; name: string };
   if (
+    !functionCall ||
     typeof functionCall !== 'object' ||
     typeof functionCall.name !== 'string' ||
     typeof functionCall.arguments !== 'string'
   ) {
-    throw new Error(
+    throw new InvalidToolCallError(
       `OpenAI did not return a valid-looking function call: ${JSON.stringify(functionCall)}`,
     );
   }
@@ -1270,11 +1271,37 @@ export function validateFunctionCall(
   if (interpolatedFunctions !== undefined && !Array.isArray(interpolatedFunctions)) {
     throw new InvalidToolSchemaError('Expected the loaded functions to be an array');
   }
-  const functionArgs = JSON.parse(functionCall.arguments);
+  if (!interpolatedFunctions?.length) {
+    throw new InvalidToolSchemaError(
+      `Called "${functionCall.name}", but there is no function with that name`,
+    );
+  }
+  if (
+    interpolatedFunctions.some(
+      (definition) =>
+        !definition ||
+        typeof definition !== 'object' ||
+        typeof definition.name !== 'string' ||
+        !definition.name.trim() ||
+        definition.parameters == null,
+    )
+  ) {
+    throw new InvalidToolSchemaError(
+      'Expected each function to have a name and a parameters schema',
+    );
+  }
+  let functionArgs;
+  try {
+    functionArgs = JSON.parse(functionCall.arguments);
+  } catch (err) {
+    throw new InvalidToolCallError((err as Error).message);
+  }
   const functionName = functionCall.name;
   const functionSchema = interpolatedFunctions?.find((f) => f.name === functionName)?.parameters;
   if (!functionSchema) {
-    throw new Error(`Called "${functionName}", but there is no function with that name`);
+    throw new InvalidToolCallError(
+      `Called "${functionName}", but there is no function with that name`,
+    );
   }
   let validate;
   try {
@@ -1283,7 +1310,7 @@ export function validateFunctionCall(
     throw new InvalidToolSchemaError((err as Error).message);
   }
   if (!validate(functionArgs)) {
-    throw new Error(
+    throw new InvalidToolCallError(
       `Call to "${functionName}" does not match schema: ${JSON.stringify(validate.errors)}`,
     );
   }

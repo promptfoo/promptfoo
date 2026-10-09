@@ -141,9 +141,7 @@ describe('Google assertions', () => {
 
       expect(() => {
         validateFunctionCall(functionOutput, mockProvider.config.tools, {});
-      }).toThrow(
-        'Call to "getCurrentTemperature":\n{"name":"getCurrentTemperature","args":"{}"}\ndoes not match schema:\n{"name":"getCurrentTemperature","parameters":{"type":"OBJECT","properties":{"location":{"type":"STRING"},"unit":{"type":"STRING","enum":["Celsius","Fahrenheit"]}},"required":["location","unit"]}}',
-      );
+      }).toThrow(/does not match schema:[\s\S]*must have required property 'location'/);
     });
 
     it('should load functions from external file', () => {
