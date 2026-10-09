@@ -1,6 +1,8 @@
 ---
+title: New Relic tracing integration
 sidebar_label: New Relic
-description: Export Promptfoo eval traces to New Relic over OTLP. Set the endpoint and license key header, then explore test case and provider call spans in distributed tracing.
+sidebar_position: 100
+description: Export Promptfoo eval traces to New Relic over OTLP. Configure an ingest key and endpoint, then inspect test-case and provider spans in distributed tracing.
 ---
 
 # New Relic integration
@@ -9,7 +11,7 @@ description: Export Promptfoo eval traces to New Relic over OTLP. Set the endpoi
 
 ## What gets exported
 
-When tracing is enabled, Promptfoo creates a root span named `promptfoo.test_case` for every test case, plus child spans for LLM provider calls made in-process. Spans carry GenAI semantic convention attributes such as `gen_ai.provider.name`, `gen_ai.operation.name`, `gen_ai.request.model`, and token usage, alongside Promptfoo attributes like `promptfoo.eval.id`, `promptfoo.provider.id`, and `promptfoo.prompt.label`.
+When tracing is enabled, Promptfoo creates a root span named `promptfoo.test_case` for every test case, plus child spans for instrumented LLM provider calls made in-process. Spans carry GenAI semantic convention attributes such as `gen_ai.provider.name`, `gen_ai.operation.name`, `gen_ai.request.model`, and token usage, alongside Promptfoo attributes like `promptfoo.eval.id`, `promptfoo.provider.id`, and `promptfoo.prompt.label`.
 
 Traces are also written to Promptfoo's local trace store by default, so the built-in trace viewer keeps working while you export to New Relic.
 
