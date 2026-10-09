@@ -255,6 +255,57 @@ and logs a warning, including the default `temperature` the InvokeModel path wou
 | `guardrailIdentifier`          | Guardrail ID for content filtering                                 |
 | `guardrailVersion`             | Guardrail version (default: DRAFT)                                 |
 
+### Native request fields and streaming
+
+Both Converse operations accept `system`, `inferenceConfig`, `toolConfig`,
+`guardrailConfig`, `outputConfig`, `promptVariables`, `requestMetadata`, and
+`additionalModelResponseFieldPaths` in provider `config`. Their shapes follow the
+[AWS Converse API reference](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_Converse.html).
+A native `inferenceConfig` replaces the convenience sampling settings and their
+defaults. Use either `toolConfig.tools` or `tools`; explicit `tools` takes precedence.
+Native tools can include strict `toolSpec` schemas, tool cache points, and system
+tools where the model supports them.
+
+Set `streaming: true` to use
+[ConverseStream](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_ConverseStream.html).
+Promptfoo collects the stream into one eval response. Both modes preserve content
+blocks in `response.metadata.content`, along with returned usage, cache counts,
+latency, guardrail traces, service tier, performance settings, and requested
+additional response fields. Streaming also executes configured MCP tools and local
+`functionToolCallbacks`. Missing, interrupted, or failed streams produce an error
+before any tool callback runs.
+
+```yaml
+providers:
+  - id: bedrock:converse:us.amazon.nova-2-lite-v1:0
+    config:
+      region: us-east-1
+      streaming: true
+      maxTokens: 128
+      requestMetadata:
+        suite: smoke-test
+```
+
+For streaming guardrails, set `guardrailConfig.streamProcessingMode` to `sync` or
+`async`. A returned `guardrail_intervened` stop reason sets
+`response.guardrails.flagged` in both modes.
+
+JSON message prompts can use native Bedrock content blocks: text, image, document,
+video, audio, cache points, reasoning, tool requests/results, citations, search
+results, tool additions/removals, and guarded content. System messages accept native
+text, guard, and cache-point blocks. Binary `source.bytes` and redacted reasoning
+are base64 strings in JSON/YAML and are decoded before SDK serialization. S3 sources
+and document text/content sources retain their native shape; arbitrary tool input
+and JSON tool results are left intact. AWS model, region, and API support still
+determine which blocks and features a request can combine.
+
+To invoke a versioned Prompt management ARN, use
+`bedrock:converse:arn:aws:bedrock:REGION:ACCOUNT:prompt/PROMPT_ID:VERSION` and supply
+`promptVariables` as `{ variableName: { text: value } }`. An empty prompt sends no
+additional messages. Define system instructions, inference settings, tools, and
+model-specific fields in Prompt management: AWS prohibits overriding those fields
+at invocation time, and Promptfoo rejects those overrides instead of sending them.
+
 ### Performance Configuration
 
 Configure latency and service tier. [Latency optimization](https://docs.aws.amazon.com/bedrock/latest/userguide/latency-optimized-inference.html)
@@ -1804,7 +1855,7 @@ Bedrock reports an intervention differently by API:
 - Converse responses use `stopReason: guardrail_intervened`.
 - The standalone ApplyGuardrail API uses `action: GUARDRAIL_INTERVENED`.
 
-Promptfoo normalizes supported InvokeModel and non-streaming Converse interventions into top-level `guardrails.flagged`. Use [`not-guardrails`](/docs/configuration/expected-outputs/guardrails#inverse-assertion-not-guardrails) when a case must produce an intervention and `guardrails` for benign traffic:
+Promptfoo normalizes supported InvokeModel and Converse interventions into top-level `guardrails.flagged`. Use [`not-guardrails`](/docs/configuration/expected-outputs/guardrails#inverse-assertion-not-guardrails) when a case must produce an intervention and `guardrails` for benign traffic:
 
 ```yaml
 tests:
