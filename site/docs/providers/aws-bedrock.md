@@ -1385,8 +1385,8 @@ Mantle selectors documented here.
 Grok reaches Bedrock two different ways, depending on the model.
 
 **Grok 4.7** requires a Runtime inference profile: use
-`bedrock:converse:us.xai.grok-4.7` or `bedrock:converse:global.xai.grok-4.7`, with
-`config.region` set to a supported source region. The bare `xai.grok-4.7` ID is not a
+`bedrock:us.xai.grok-4.7` or `bedrock:global.xai.grok-4.7` for InvokeModel, or add
+`converse:` after `bedrock:` for Converse. Set `config.region` to a supported source region. The bare `xai.grok-4.7` ID is not a
 Mantle model. Promptfoo estimates Standard, Priority (1.75×), and Flex (0.5×) costs,
 including cache reads, using the [AWS model card](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-xai-grok-4-7.html).
 Cache-write and Reserved-capacity costs remain unavailable.
@@ -1592,8 +1592,9 @@ require cross-region inference profiles. Use `bedrock:us.zai.glm-5.3` or
 `bedrock:us.moonshotai.kimi-k3`; both also accept `global.` profiles, and Kimi K3 accepts
 `in.moonshotai.kimi-k3` from supported India regions. GLM 5.3 accepts `reasoning_effort: max`.
 For Converse, add `converse:` after `bedrock:`. Kimi K3 and GLM 5.3 Converse cost estimates
-include cache reads/writes and Standard, Priority, and Flex tiers; their InvokeModel cost
-remains unavailable. Rates follow the model card and [AWS pricing](https://aws.amazon.com/bedrock/pricing/). AWS documents Kimi K3 Converse limitations for document inputs
+include cache reads/writes. Kimi K3 Converse/Invoke support Standard only; its Priority/Flex
+tiers require the Responses or Chat Completions APIs. GLM 5.3 Converse estimates include
+Standard, Priority, and Flex. InvokeModel cost remains unavailable for both models. Rates follow the model card and [AWS pricing](https://aws.amazon.com/bedrock/pricing/). AWS documents Kimi K3 Converse limitations for document inputs
 and multi-turn history containing reasoning blocks; remove earlier reasoning blocks
 before sending a subsequent Converse turn.
 
