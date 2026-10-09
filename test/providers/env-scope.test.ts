@@ -826,7 +826,9 @@ describe('provider environment scopes', () => {
         env: { AZURE_AI_PROJECT_URL: 'https://project.example.invalid' },
       }),
     );
-    expect(Reflect.get(foundry, 'projectUrl')).toBe('https://project.example.invalid');
+    expect(Reflect.get(foundry, 'getProjectUrl').call(foundry)).toBe(
+      'https://project.example.invalid',
+    );
   });
 
   it('Snowflake rejects a masked account while allowing an explicit endpoint', () => {
@@ -1064,7 +1066,9 @@ describe('provider environment scopes', () => {
         'https://scoped-account.snowflakecomputing.com',
       );
       const foundry = new AzureFoundryAgentProvider('agent', { config: { apiKey: 'fake-key' } });
-      expect(Reflect.get(foundry, 'projectUrl')).toBe(scopedEnv.AZURE_AI_PROJECT_URL);
+      expect(Reflect.get(foundry, 'getProjectUrl').call(foundry)).toBe(
+        scopedEnv.AZURE_AI_PROJECT_URL,
+      );
       expect(resolveBedrockMantleRegion({}, undefined, 'us-east-1')).toBe('us-west-2');
     });
   });
