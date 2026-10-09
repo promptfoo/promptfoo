@@ -37,7 +37,7 @@ Configure your IdP integration to populate these fields on the FusionAuth **user
 | `defaultOrganizationId`    | The UUID of the intended Promptfoo organization             |
 | `promptfooRoleAssignments` | An array of assignment strings, or a comma-separated string |
 
-Set `defaultOrganizationId` explicitly when a user belongs to multiple organizations. Without it, team synchronization can resolve the organization only when the user has exactly one active organization membership. Any configured allowed-email-domain restriction must also match the user's email.
+Set `defaultOrganizationId` explicitly to select the intended organization, especially when a user belongs to multiple organizations. Any configured allowed-email-domain restriction must also match the user's email. Verify the organization selected after login before testing team assignments.
 
 For **team assignment only**, use:
 
@@ -67,9 +67,13 @@ Replace the example slugs and organization UUID with your existing values. Teams
 
 ## Understand synchronization
 
-In either IdP-managed mode on-prem, a successful synchronization removes memberships in teams omitted from the assignment list. An empty array (`[]`), an empty string, or a list containing only unrelated IdP groups or the ignored `promptfoo:org-admin` marker removes all team memberships in that organization. Send the intended Promptfoo team assignments, not an unfiltered list of IdP groups.
+In either IdP-managed mode on-prem, synchronization removes memberships in teams omitted from the parsed assignment list. An empty array (`[]`), or a list containing only unrelated IdP groups or the ignored `promptfoo:org-admin` marker, removes all team memberships in that organization. A missing field or empty string skips synchronization and retains existing memberships. Send the intended Promptfoo team assignments, not an unfiltered list of IdP groups.
 
-Missing data, an unsupported data type, or an invalid Promptfoo mapping skips team synchronization. Invalid mappings can also reject login on releases using a required login webhook. Validate the resulting assignments before enabling synchronization.
+:::warning Validate assignments before enabling synchronization
+
+Invalid mappings do not reliably reject login or leave memberships unchanged. Entries with unknown teams or invalid formats are omitted from the parsed list, so existing team memberships can be removed. Missing roles or a missing team-only default role can prevent additions after removals have already occurred. Test the complete assignment list with a non-administrator account before applying it to users.
+
+:::
 
 Team-role synchronization does not grant organization administrator access. The legacy `promptfoo:org-admin` assignment is ignored; manage organization administrators separately in Promptfoo. Service accounts are excluded from IdP team synchronization.
 
@@ -83,8 +87,8 @@ Test with a non-administrator account that represents your intended permissions:
 2. In team-only mode, verify a newly assigned team receives the selected default role. In team-and-role mode, verify the mapped role's permissions.
 3. Remove one test assignment, perform a fresh IdP login, and confirm that team membership is removed. Keep the administrator recovery login available.
 
-If login succeeds but teams or roles are wrong, inspect the resulting FusionAuth user data, organization UUID, existing slugs, and role-management mode. Missing teams/roles, conflicting roles for one team, or an absent team-only default role prevent synchronization.
+If login succeeds but teams or roles are wrong, inspect the resulting FusionAuth user data, organization UUID, existing slugs, and role-management mode. Check server logs for skipped assignments, and use only one role per team. A successful login does not prove that every assignment was applied.
 
-For releases using the managed FusionAuth login webhook, follow the packaged `login-onboarding.md`: FusionAuth must reach Promptfoo's `/api/v1/auth/fusionauth/login-webhook`, and replicas must share the required configuration. `/health` readiness alone does not validate an end-to-end IdP login. Use the packaged upgrade and recovery procedure before changing webhook settings on an existing installation.
+Follow the FusionAuth configuration and upgrade instructions packaged with your deployment. `/health` readiness alone does not validate an end-to-end IdP login; complete the login and permission checks above after changes.
 
 For automation, see **Organizations** in the [API reference](/docs/api-reference/). `PATCH /api/v1/organizations/{id}` accepts `roleManagementMode` (`promptfoo`, `team_only`, or `idp`) and `defaultTeamOnlyRoleId`; use a role from the same organization. Prefer your installation's `/static/openapi.json` when its release differs from the public reference.
