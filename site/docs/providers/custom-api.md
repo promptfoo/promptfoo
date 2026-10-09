@@ -101,6 +101,8 @@ module.exports = class OpenAIProvider {
 }
 ```
 
+Return an `error` for failed requests. Omitting `output` or returning `output: null` or `output: undefined` also produces an error, including in red team scans. The literal strings `"null"` and `"undefined"` are response content and are graded normally.
+
 ### Looking up text-token prices
 
 Custom providers can import `getModelPricing` from `promptfoo` to look up the installed version's OpenAI or Anthropic catalog rates. Pass the provider name (`openai` or `anthropic`) and an exact model ID; unknown providers, unknown models, and models without catalog prices return `undefined`.
@@ -309,10 +311,15 @@ providers:
 
 ### Embeddings API
 
-```javascript title="embeddingProvider.js"
-async callEmbeddingApi(text) {
+To stop embedding grading when an eval is cancelled, set `supportsEmbeddingCancellation` to `true` and pass the third argument's `abortSignal` to your request. Without this flag, promptfoo calls `callEmbeddingApi` with only the input.
+
+```javascript
+supportsEmbeddingCancellation = true;
+
+async callEmbeddingApi(text, _context, { abortSignal } = {}) {
   const response = await fetch('https://api.openai.com/v1/embeddings', {
     method: 'POST',
+    signal: abortSignal,
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,

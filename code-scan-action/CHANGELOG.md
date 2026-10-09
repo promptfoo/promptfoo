@@ -2,6 +2,12 @@
 
 All notable changes to this package will be documented in this file.
 
+## [0.2.2](https://github.com/promptfoo/promptfoo/compare/code-scan-action-0.2.1...code-scan-action-0.2.2) (2026-10-08)
+
+### Bug Fixes
+
+- **code-scan:** mint OIDC after CLI installation ([#11467](https://github.com/promptfoo/promptfoo/issues/11467)) ([9a404c8](https://github.com/promptfoo/promptfoo/commit/9a404c8ea96e6e8f854964b9224667e704cd405d))
+
 ## [0.2.1](https://github.com/promptfoo/promptfoo/compare/code-scan-action-0.2.0...code-scan-action-0.2.1) (2026-10-06)
 
 ### Bug Fixes
