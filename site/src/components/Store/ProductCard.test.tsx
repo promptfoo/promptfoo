@@ -33,7 +33,7 @@ const mockProduct: FourthwallProduct = {
 };
 
 describe('ProductCard', () => {
-  it('links bundles without variants to their hosted page at the bundle price', async () => {
+  it('opens bundles without variants at the bundle price', async () => {
     const bundle: FourthwallBundle = {
       type: 'BUNDLE',
       id: 'bundle-1',
@@ -44,20 +44,15 @@ describe('ProductCard', () => {
       access: { type: 'PUBLIC' },
       images: mockProduct.images,
       price: { value: 25, currency: 'USD' },
+      offers: [mockProduct],
+      pricingStrategy: { type: 'FIXED_PRICE' },
     };
     const handleClick = vi.fn();
     render(<ProductCard product={bundle} onClick={handleClick} />);
 
-    const link = screen.getByRole('link', { name: 'View Panda Sticker Pack' });
-    expect(link).toHaveAttribute(
-      'href',
-      'https://promptfoo-shop.fourthwall.com/products/panda-sticker-pack',
-    );
     expect(screen.getByText('$25.00')).toBeInTheDocument();
-    // Keep jsdom on the page while checking that bundles never open the variant modal.
-    link.addEventListener('click', (event) => event.preventDefault());
-    await userEvent.setup().click(link);
-    expect(handleClick).not.toHaveBeenCalled();
+    await userEvent.setup().click(screen.getByRole('button', { name: 'View Panda Sticker Pack' }));
+    expect(handleClick).toHaveBeenCalledWith(bundle);
   });
 
   it('renders product image', () => {
