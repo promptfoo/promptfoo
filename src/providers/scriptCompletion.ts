@@ -1,6 +1,7 @@
 import { execFile } from 'child_process';
 import crypto from 'crypto';
 import fs from 'fs';
+import { promisify } from 'util';
 
 import { getCache, isCacheEnabled } from '../cache';
 import { getProcessEnv } from '../envars';
@@ -14,6 +15,8 @@ import type {
   ProviderOptions,
   ProviderResponse,
 } from '../types/index';
+
+const execFileAsync = promisify(execFile);
 
 const ANSI_ESCAPE = /\x1b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g;
 
@@ -90,52 +93,45 @@ export class ScriptCompletionProvider implements ApiProvider {
       );
     }
 
-    return new Promise<ProviderResponse>((resolve, reject) => {
-      const command = scriptParts.shift();
-      invariant(command, 'No command found in script path');
-      // Remove properties not useful in shell scripts and non-serializable objects
-      // These can contain circular references (e.g., Timeout objects) that break JSON serialization
-      delete context?.getCache;
-      delete context?.logger;
-      delete context?.filters; // NunjucksFilterMap contains functions
-      delete context?.originalProvider; // ApiProvider object with methods
-      const scriptArgs = scriptParts.concat([
-        prompt,
-        safeJsonStringify(this.options || {}) as string,
-        safeJsonStringify(context || {}) as string,
-      ]);
-      const options = {
-        ...(this.options?.config.basePath && { cwd: this.options.config.basePath }),
-        env: getProcessEnv(),
-      };
+    const command = scriptParts.shift();
+    invariant(command, 'No command found in script path');
+    // Keep caller context intact while omitting nonserializable script arguments.
+    const scriptContext = { ...context };
+    delete scriptContext.getCache;
+    delete scriptContext.logger;
+    delete scriptContext.filters;
+    delete scriptContext.originalProvider;
+    const scriptArgs = scriptParts.concat([
+      prompt,
+      safeJsonStringify(this.options || {}) as string,
+      safeJsonStringify(scriptContext) as string,
+    ]);
+    const options = {
+      ...(this.options?.config.basePath && { cwd: this.options.config.basePath }),
+      env: getProcessEnv(),
+    };
 
-      const child = execFile(command, scriptArgs, options, async (error, stdout, stderr) => {
-        if (error) {
-          logger.debug(`Error running script ${this.scriptPath}: ${error.message}`);
-          reject(error);
-          return;
-        }
-        const standardOutput = stripText(Buffer.from(stdout).toString('utf8').trim());
-        const errorOutput = stripText(Buffer.from(stderr).toString('utf8').trim());
-        if (errorOutput) {
-          logger.debug(`Error output from script ${this.scriptPath}: ${errorOutput}`);
-          if (!standardOutput) {
-            reject(new Error(errorOutput));
-            return;
-          }
-        }
-        logger.debug(`Output from script ${this.scriptPath}: ${standardOutput}`);
-        const result = { output: standardOutput };
-        if (fileHashes.length > 0 && isCacheEnabled()) {
-          const cache = await getCache();
-          await cache.set(cacheKey, JSON.stringify(result));
-        }
-        resolve(result);
-      });
-      // Close stdin immediately so child processes that read stdin don't hang.
-      // execFile pipes stdin by default but never writes to it, causing tools
-      // like opencode to block forever waiting for input.
-      child.stdin?.end();
+    const execution = execFileAsync(command, scriptArgs, options);
+    // execFile leaves stdin open; close it so programs waiting for EOF can finish.
+    execution.child?.stdin?.end();
+    const { stdout, stderr } = await execution.catch((error: Error) => {
+      logger.debug(`Error running script ${this.scriptPath}: ${error.message}`);
+      throw error;
     });
+    const standardOutput = stripText(Buffer.from(stdout).toString('utf8').trim());
+    const errorOutput = stripText(Buffer.from(stderr).toString('utf8').trim());
+    if (errorOutput) {
+      logger.debug(`Error output from script ${this.scriptPath}: ${errorOutput}`);
+      if (!standardOutput) {
+        throw new Error(errorOutput);
+      }
+    }
+    logger.debug(`Output from script ${this.scriptPath}: ${standardOutput}`);
+    const result = { output: standardOutput };
+    if (fileHashes.length > 0 && isCacheEnabled()) {
+      const cache = await getCache();
+      await cache.set(cacheKey, JSON.stringify(result));
+    }
+    return result;
   }
 }
