@@ -148,6 +148,8 @@ To run tests in watch mode:
 npm run test:watch
 ```
 
+For the web UI's real browser tests, install Chromium once with `npx playwright install chromium`, then run `npm run test:app:browser` from the repository root. Browser binaries are not downloaded by `npm install`.
+
 You can also run specific tests with:
 
 ```bash
