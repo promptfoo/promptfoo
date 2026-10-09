@@ -296,31 +296,34 @@ describe('Python file references', { timeout: 15000 }, () => {
     });
   });
 
-  it('should reject a partially numeric Python result', async () => {
-    vi.mocked(runPythonCode).mockResolvedValueOnce('0.8oops');
+  it.each(['0.8oops', 'Infinity', '-Infinity', '', '   '])(
+    'rejects a malformed or non-finite Python score: %j',
+    async (value) => {
+      vi.mocked(runPythonCode).mockResolvedValueOnce(value);
 
-    const assertion: Assertion = {
-      type: 'python',
-      value: "'0.8oops'",
-      threshold: 0.5,
-    };
+      const assertion: Assertion = {
+        type: 'python',
+        value: JSON.stringify(value),
+        threshold: 0.5,
+      };
 
-    const result = await runAssertion({
-      prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
-      assertion,
-      test: {} as AtomicTestCase,
-      providerResponse: { output: 'Expected output' },
-    });
+      const result = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output: 'Expected output' },
+      });
 
-    expect(result).toMatchObject({
-      pass: false,
-      score: 0,
-      reason: expect.stringContaining(
-        'Python assertion must return a boolean, number, or {pass, score, reason} object',
-      ),
-    });
-  });
+      expect(result).toMatchObject({
+        pass: false,
+        score: 0,
+        reason: expect.stringContaining(
+          'Python assertion must return a boolean, number, or {pass, score, reason} object',
+        ),
+      });
+    },
+  );
 
   it.each([
     ['boolean', false, 0, 'Python code returned false', false, undefined],
