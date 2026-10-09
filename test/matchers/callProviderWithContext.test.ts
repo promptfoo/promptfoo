@@ -59,6 +59,7 @@ describe('callProviderWithContext', () => {
     );
 
     expect(provider.callApi).toHaveBeenCalledWith('grade this', {
+      isGrading: true,
       prompt: { raw: 'grade this', label: 'rubric' },
       vars,
     });
@@ -82,6 +83,7 @@ describe('callProviderWithContext', () => {
       }),
     );
     expect(provider.callApi).toHaveBeenCalledWith('grade this', {
+      isGrading: true,
       prompt: { raw: 'grade this', label: 'rubric' },
       vars,
     });
@@ -100,6 +102,7 @@ describe('callProviderWithContext', () => {
     expect(provider.callApi).toHaveBeenCalledWith(
       'grade this',
       {
+        isGrading: true,
         prompt: { raw: 'grade this', label: 'rubric' },
         vars,
       },
@@ -112,6 +115,16 @@ describe('callProviderWithContext', () => {
     const registry = createRegistry();
     const abortController = new AbortController();
     const traceparent = '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01';
+    const originalContext = {
+      isGrading: false,
+      prompt: { raw: 'original input', label: 'target' },
+      vars: { original: 'value' },
+      evaluationId: 'evaluation-123',
+      testIdx: 2,
+      bustCache: true,
+      traceparent: '00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-aaaaaaaaaaaaaaaa-01',
+      tracestate: 'vendor=state',
+    };
     const withProviderSpan: ProviderCallTracingContext['withProviderSpan'] = async (
       { callContext },
       invoke,
@@ -127,10 +140,11 @@ describe('callProviderWithContext', () => {
             withGraderSpan: async (_options, invoke) => invoke(),
             withProviderSpan: providerSpan,
           },
-          () => callProviderWithContext(provider, 'grade this', 'rubric', vars),
+          () => callProviderWithContext(provider, 'grade this', 'rubric', vars, originalContext),
         ),
     );
 
+    expect(originalContext.isGrading).toBe(false);
     expect(registry.executeSpy).toHaveBeenCalledTimes(1);
     expect(providerSpan).toHaveBeenCalledWith(
       expect.objectContaining({ provider, role: 'grader', promptLabel: 'rubric' }),
@@ -139,9 +153,14 @@ describe('callProviderWithContext', () => {
     expect(provider.callApi).toHaveBeenCalledWith(
       'grade this',
       {
+        isGrading: true,
         prompt: { raw: 'grade this', label: 'rubric' },
         vars,
+        evaluationId: 'evaluation-123',
+        testIdx: 2,
+        bustCache: true,
         traceparent,
+        tracestate: 'vendor=state',
       },
       { abortSignal: abortController.signal },
     );
@@ -159,6 +178,7 @@ describe('callProviderWithContext', () => {
     expect(registry.executeSpy).toHaveBeenCalledTimes(1);
     expect(provider.callApi).toHaveBeenCalledTimes(2);
     expect(provider.callApi).toHaveBeenLastCalledWith('direct', {
+      isGrading: true,
       prompt: { raw: 'direct', label: 'rubric' },
       vars,
     });
@@ -182,6 +202,7 @@ describe('callProviderWithContext', () => {
     expect(provider.callApi).toHaveBeenCalledWith(
       'grade this',
       {
+        isGrading: true,
         prompt: { raw: 'grade this', label: 'rubric' },
         vars,
       },
@@ -210,11 +231,27 @@ describe('callProviderWithContext', () => {
       await expect(promise).resolves.toBe(response);
       expect(vi.mocked(provider.callApi).mock.calls[0]).toEqual([
         'grade this',
-        { prompt: { raw: 'grade this', label: 'rubric' }, vars },
+        { isGrading: true, prompt: { raw: 'grade this', label: 'rubric' }, vars },
         ...(abortSignal ? [{ abortSignal }] : []),
       ]);
     },
   );
+
+  it('does not start a queued grading call after cancellation', async () => {
+    const provider = createProvider();
+    const controller = new AbortController();
+    const providerCallQueue = new ProviderGroupedCallQueue();
+    const promise = withProviderCallExecutionContext(
+      { abortSignal: controller.signal, providerCallQueue },
+      () => callProviderWithContext(provider, 'grade this', 'rubric', vars),
+    );
+    const reason = new Error('eval paused');
+    controller.abort(reason);
+
+    await providerCallQueue.run(providerCallQueue.takeNextGroup()[0]);
+    await expect(promise).rejects.toBe(reason);
+    expect(provider.callApi).not.toHaveBeenCalled();
+  });
 });
 
 describe('callGradingProvider', () => {
