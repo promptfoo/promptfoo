@@ -37,6 +37,43 @@ describe('AnthropicCompletionProvider', () => {
   });
 
   describe('callApi', () => {
+    it.each([
+      { configured: 0.2, scoped: '0.4', global: '0.6', expected: 0.2 },
+      { configured: 0, scoped: '0.4', global: '0.6', expected: 0 },
+      { configured: undefined, scoped: '0.4', global: '0.6', expected: 0.4 },
+      { configured: undefined, scoped: '0', global: '0.6', expected: 0 },
+      { configured: undefined, scoped: undefined, global: '0.6', expected: 0.6 },
+      { configured: undefined, scoped: '', global: '0.6', expected: 0.6 },
+      { configured: undefined, scoped: 'invalid', global: '0.6', expected: 0.6 },
+      { configured: undefined, scoped: 'invalid', global: undefined, expected: 0 },
+    ])(
+      'resolves temperature from config=$configured, scoped=$scoped, global=$global',
+      async ({ configured, scoped, global, expected }) => {
+        mockProcessEnv({ ANTHROPIC_TEMPERATURE: global });
+        const provider = new AnthropicCompletionProvider('claude-2.1', {
+          config: { temperature: configured },
+          env: { ANTHROPIC_TEMPERATURE: scoped },
+        });
+        const create = vi.spyOn(provider.anthropic.completions, 'create').mockResolvedValue({
+          id: 'test-id',
+          model: 'claude-2.1',
+          stop_reason: 'stop_sequence',
+          type: 'completion',
+          completion: 'Test output',
+        });
+
+        const result = await provider.callApi('Test prompt');
+
+        expect(create).toHaveBeenCalledExactlyOnceWith(
+          expect.objectContaining({ temperature: expected }),
+        );
+        expect(result).toMatchObject({
+          output: 'Test output',
+          tokenUsage: { numRequests: 1 },
+        });
+      },
+    );
+
     it('should return output for default behavior', async () => {
       const provider = new AnthropicCompletionProvider('claude-1');
       vi.spyOn(provider.anthropic.completions, 'create').mockResolvedValue({

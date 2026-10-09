@@ -123,7 +123,7 @@ describe.each(routes)('$path credential isolation', ({ path, family, mode, vendo
 describe.each(routes.filter(({ family }) => family === 'nscale'))(
   '$path native credential serialization',
   ({ path }) => {
-    it('prefers a process service token over a scoped legacy key', async () => {
+    it('prefers a scoped legacy key over a process service token', async () => {
       const restore = mockProcessEnv({ NSCALE_SERVICE_TOKEN: 'process-service-token' });
       try {
         const provider = await loadApiProvider(path, {
@@ -135,7 +135,7 @@ describe.each(routes.filter(({ family }) => family === 'nscale'))(
         const result = await invoke(provider);
         expect(result.error).toBeUndefined();
         expect(vi.mocked(fetchWithCache).mock.calls[0]?.[1]?.headers).toMatchObject({
-          Authorization: 'Bearer process-service-token',
+          Authorization: 'Bearer scoped-legacy-key',
         });
       } finally {
         restore();

@@ -6,7 +6,6 @@ import * as index from '../src/index';
 import { evaluate } from '../src/index';
 import logger from '../src/logger';
 import Eval from '../src/models/eval';
-import { readProviderPromptMap } from '../src/prompts/index';
 import * as providers from '../src/providers/index';
 import { doRedteamRun } from '../src/redteam/shared';
 import * as fileUtils from '../src/util/file';
@@ -64,13 +63,6 @@ vi.mock('../src/globalConfig/accounts', async () => {
   };
 });
 vi.mock('../src/migrate');
-vi.mock('../src/prompts', async () => {
-  const originalModule = await vi.importActual<typeof import('../src/prompts')>('../src/prompts');
-  return {
-    ...originalModule,
-    readProviderPromptMap: vi.fn().mockReturnValue({}),
-  };
-});
 vi.mock('../src/redteam/shared', async () => {
   const originalModule =
     await vi.importActual<typeof import('../src/redteam/shared')>('../src/redteam/shared');
@@ -268,13 +260,6 @@ describe('evaluate function', () => {
     };
 
     await index.evaluate(testSuite);
-    expect(readProviderPromptMap).toHaveBeenCalledWith(testSuite, [
-      {
-        raw: mockPromptFunction.toString(),
-        label: 'testPrompt',
-        function: mockPromptFunction,
-      },
-    ]);
     expect(doEvaluate).toHaveBeenCalledWith(
       expect.objectContaining({
         prompts: [
@@ -284,7 +269,6 @@ describe('evaluate function', () => {
             function: mockPromptFunction,
           },
         ],
-        providerPromptMap: {},
       }),
       expect.anything(),
       expect.objectContaining({
