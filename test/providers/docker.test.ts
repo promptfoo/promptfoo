@@ -11,13 +11,6 @@ import {
   hasLocalModel,
   parseProviderPath,
 } from '../../src/providers/docker';
-import { createMockFetchResponse } from './mockProviderResponses';
-import { createAttributeRecordingSpan } from './openai/tracing';
-
-const createCompletionResponse = () => ({
-  choices: [{ message: { content: 'test output' } }],
-  usage: { total_tokens: 10 },
-});
 
 vi.mock('../../src/cache');
 vi.mock('../../src/logger');
@@ -39,8 +32,8 @@ describe('docker model runner provider', () => {
 
   describe('hasLocalModel', () => {
     it('returns true if the model exists', async () => {
-      vi.mocked(fetchWithCache).mockResolvedValue(
-        createMockFetchResponse({
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: {
           data: [
             {
               id: 'ai/model-a:tag-a',
@@ -49,8 +42,11 @@ describe('docker model runner provider', () => {
               id: 'ai/model-b:tag-b',
             },
           ],
-        }),
-      );
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
 
       await expect(
         hasLocalModel('ai/model-a:tag-a', 'http://localhost:12434/engines/v1'),
@@ -58,15 +54,18 @@ describe('docker model runner provider', () => {
     });
 
     it('returns false if the model does not exists', async () => {
-      vi.mocked(fetchWithCache).mockResolvedValue(
-        createMockFetchResponse({
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: {
           data: [
             {
               id: 'ai/model-x:tag-x',
             },
           ],
-        }),
-      );
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
 
       await expect(
         hasLocalModel('ai/model-a:tag-a', 'http://localhost:12434/engines/v1'),
@@ -161,18 +160,39 @@ describe('docker model runner provider', () => {
       async ({ providerType, choices }) => {
         const attributes: Record<string, unknown> = {};
         const getTracer = vi.spyOn(trace, 'getTracer').mockReturnValue({
-          startActiveSpan: createAttributeRecordingSpan(attributes),
+          startActiveSpan: (
+            _name: string,
+            options: { attributes: Record<string, unknown> },
+            _context: unknown,
+            callback: any,
+          ) => {
+            Object.assign(attributes, options.attributes);
+            return callback({
+              setAttribute: vi.fn(),
+              setStatus: vi.fn(),
+              recordException: vi.fn(),
+              end: vi.fn(),
+            });
+          },
         } as any);
 
         try {
           vi.mocked(fetchWithCache)
-            .mockResolvedValueOnce(createMockFetchResponse({ data: [{ id: 'ai/existing-model' }] }))
-            .mockResolvedValueOnce(
-              createMockFetchResponse({
+            .mockResolvedValueOnce({
+              data: { data: [{ id: 'ai/existing-model' }] },
+              cached: false,
+              status: 200,
+              statusText: 'OK',
+            })
+            .mockResolvedValueOnce({
+              data: {
                 choices,
                 usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-              }),
-            );
+              },
+              cached: false,
+              status: 200,
+              statusText: 'OK',
+            });
 
           const provider = createDockerProvider(`docker:${providerType}:ai/existing-model`, {
             id: 'customer:custom-label',
@@ -200,7 +220,15 @@ describe('docker model runner provider', () => {
             status: 200,
             statusText: 'OK',
           })
-          .mockResolvedValueOnce(createMockFetchResponse(createCompletionResponse()));
+          .mockResolvedValueOnce({
+            data: {
+              choices: [{ message: { content: 'test output' } }],
+              usage: { total_tokens: 10 },
+            },
+            cached: false,
+            status: 200,
+            statusText: 'OK',
+          });
 
         const provider = createDockerProvider('docker:chat:ai/missing-model');
 
@@ -228,7 +256,15 @@ describe('docker model runner provider', () => {
             status: 200,
             statusText: 'OK',
           })
-          .mockResolvedValueOnce(createMockFetchResponse(createCompletionResponse()));
+          .mockResolvedValueOnce({
+            data: {
+              choices: [{ message: { content: 'test output' } }],
+              usage: { total_tokens: 10 },
+            },
+            cached: false,
+            status: 200,
+            statusText: 'OK',
+          });
 
         const provider = createDockerProvider('docker:chat:ai/existing-model');
 
@@ -247,12 +283,15 @@ describe('docker model runner provider', () => {
             status: 200,
             statusText: 'OK',
           })
-          .mockResolvedValueOnce(
-            createMockFetchResponse({
+          .mockResolvedValueOnce({
+            data: {
               choices: [{ text: 'test output' }],
               usage: { total_tokens: 10 },
-            }),
-          );
+            },
+            cached: false,
+            status: 200,
+            statusText: 'OK',
+          });
 
         const provider = createDockerProvider('docker:completion:ai/missing-model');
 
@@ -274,12 +313,15 @@ describe('docker model runner provider', () => {
             status: 200,
             statusText: 'OK',
           })
-          .mockResolvedValueOnce(
-            createMockFetchResponse({
+          .mockResolvedValueOnce({
+            data: {
               data: [{ embedding: [0.1, 0.2, 0.3] }],
               usage: { total_tokens: 10 },
-            }),
-          );
+            },
+            cached: false,
+            status: 200,
+            statusText: 'OK',
+          });
 
         const provider = createDockerProvider('docker:embedding:ai/missing-embedding-model');
 

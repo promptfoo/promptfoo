@@ -12,7 +12,6 @@ import {
 import { analyzeTemplateReference } from '../../util/templates';
 import { sleepWithAbort } from '../../util/time';
 import { buildChatSpanContext, extractProviderResponseAttributes, withGenAISpan } from '../tracing';
-import { decodeUrlComponent } from '../urlEncoding';
 import { calculateOpenAIUsageCost } from './billing';
 import { OpenAiGenericProvider } from './index';
 import { appendOpenAiApiPath, assertOpenAiApiModel } from './util';
@@ -162,6 +161,14 @@ function addCredential(credentials: Set<string>, value: unknown): void {
       credentials.add(candidate);
       credentials.add(encodeURIComponent(candidate));
     }
+  }
+}
+
+function decodeUrlComponent(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
   }
 }
 

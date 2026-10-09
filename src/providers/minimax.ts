@@ -1,10 +1,10 @@
+import { getEnvString } from '../envars';
 import logger from '../logger';
-import { resolveConfiguredApiKey } from './credentials';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { getOpenAICompletionTokenDetails } from './openai/util';
-import { serializeProvider } from './serialization';
 import { clampCachedTokens } from './shared';
 
+import type { EnvVarKey } from '../envars';
 import type { EnvOverrides } from '../types/env';
 import type {
   ApiProvider,
@@ -46,6 +46,14 @@ type MiniMaxProviderOptions = Omit<ProviderOptions, 'config'> & {
     env?: EnvOverrides;
   };
 };
+
+function getProviderEnvString(env: EnvOverrides | undefined, key: EnvVarKey): string | undefined {
+  if (env && Object.prototype.hasOwnProperty.call(env, key)) {
+    const value = env[key as keyof EnvOverrides];
+    return value === undefined ? undefined : String(value);
+  }
+  return undefined;
+}
 
 export const MINIMAX_CHAT_MODELS: MiniMaxModel[] = [
   {
@@ -151,7 +159,14 @@ class MiniMaxProvider extends OpenAiChatCompletionProvider {
   }
 
   override getApiKey(): string | undefined {
-    return resolveConfiguredApiKey(this);
+    if (this.config.apiKey !== undefined) {
+      return this.config.apiKey;
+    }
+
+    const apiKeyEnvar = this.config.apiKeyEnvar as EnvVarKey | undefined;
+    return apiKeyEnvar
+      ? (getProviderEnvString(this.env, apiKeyEnvar) ?? getEnvString(apiKeyEnvar))
+      : undefined;
   }
 
   override getOrganization(): undefined {
@@ -178,7 +193,14 @@ class MiniMaxProvider extends OpenAiChatCompletionProvider {
   }
 
   toJSON() {
-    return serializeProvider(this, 'minimax');
+    return {
+      provider: 'minimax',
+      model: this.modelName,
+      config: {
+        ...this.config,
+        ...(this.config.apiKey && { apiKey: undefined }),
+      },
+    };
   }
 
   override async getOpenAiBody(

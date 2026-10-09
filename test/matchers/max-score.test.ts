@@ -6,21 +6,6 @@ import { createPrompt } from '../factories/testSuite';
 
 import type { Assertion, EvaluateResult } from '../../src/types/index';
 
-const createZeroThresholdAssertion = () => ({
-  type: 'max-score' as const,
-  value: {
-    threshold: 0,
-  },
-});
-
-const createMixedAssertions = () => ({
-  assert: [
-    { type: 'contains' as const, value: 'test' },
-    { type: 'select-best' as const },
-    { type: 'max-score' as const },
-  ],
-});
-
 describe('selectMaxScore', () => {
   const createMockResult = (score: number, testIdx: number): EvaluateResult =>
     createEvaluateResult({
@@ -163,11 +148,23 @@ describe('selectMaxScore', () => {
     const results = [
       {
         ...createMockResult(1.0, 0),
-        testCase: createMixedAssertions(),
+        testCase: {
+          assert: [
+            { type: 'contains', value: 'test' },
+            { type: 'select-best' },
+            { type: 'max-score' },
+          ],
+        },
       },
       {
         ...createMockResult(0.5, 1),
-        testCase: createMixedAssertions(),
+        testCase: {
+          assert: [
+            { type: 'contains', value: 'test' },
+            { type: 'select-best' },
+            { type: 'max-score' },
+          ],
+        },
       },
     ];
 
@@ -292,7 +289,12 @@ describe('selectMaxScore', () => {
       expect(resultsWithoutThreshold[1].pass).toBe(false);
 
       // Test with threshold=0
-      const assertionWithZeroThreshold: Assertion = createZeroThresholdAssertion();
+      const assertionWithZeroThreshold: Assertion = {
+        type: 'max-score',
+        value: {
+          threshold: 0,
+        },
+      };
 
       const resultsWithZeroThreshold = await selectMaxScore(
         outputs,
@@ -352,7 +354,12 @@ describe('selectMaxScore', () => {
         },
       ];
 
-      const assertionWithZeroThreshold: Assertion = createZeroThresholdAssertion();
+      const assertionWithZeroThreshold: Assertion = {
+        type: 'max-score',
+        value: {
+          threshold: 0,
+        },
+      };
 
       const gradingResults = await selectMaxScore(outputs, results, assertionWithZeroThreshold);
 
@@ -412,7 +419,12 @@ describe('selectMaxScore', () => {
         },
       ];
 
-      const assertionWithZeroThreshold: Assertion = createZeroThresholdAssertion();
+      const assertionWithZeroThreshold: Assertion = {
+        type: 'max-score',
+        value: {
+          threshold: 0,
+        },
+      };
 
       const gradingResults = await selectMaxScore(outputs, results, assertionWithZeroThreshold);
 

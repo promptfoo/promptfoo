@@ -1,4 +1,4 @@
-import { getEnvString, getProviderEnvString } from '../envars';
+import { getEnvString } from '../envars';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiCompletionProvider } from './openai/completion';
 import { OpenAiEmbeddingProvider } from './openai/embedding';
@@ -17,6 +17,14 @@ type NovitaProviderOptions = {
   id?: string;
   env?: EnvOverrides;
 };
+
+function getProviderEnvString(env: EnvOverrides | undefined, key: EnvVarKey): string | undefined {
+  if (env && Object.prototype.hasOwnProperty.call(env, key)) {
+    const value = env[key as keyof EnvOverrides];
+    return value === undefined ? undefined : String(value);
+  }
+  return undefined;
+}
 
 function getNovitaApiKey(
   config: OpenAiCompletionOptions,

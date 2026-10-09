@@ -5,9 +5,7 @@ import {
   formatHyperbolicImageOutput,
   HyperbolicImageProvider,
 } from '../../../src/providers/hyperbolic/image';
-import { createApiKeyOptions } from '../../factories/literalFixtures';
 import { mockProcessEnv } from '../../util/utils';
-import { createMockFetchResponse } from '../mockProviderResponses';
 
 vi.mock('../../../src/cache');
 
@@ -32,7 +30,9 @@ describe('HyperbolicImageProvider', () => {
 
   describe('getApiKey', () => {
     it('should return config apiKey if set', () => {
-      const provider = new HyperbolicImageProvider('test', createApiKeyOptions());
+      const provider = new HyperbolicImageProvider('test', {
+        config: { apiKey: 'test-key' },
+      });
       expect(provider.getApiKey()).toBe('test-key');
     });
 
@@ -82,17 +82,24 @@ describe('HyperbolicImageProvider', () => {
     });
 
     it('should handle successful API call', async () => {
-      const mockResponse = createMockFetchResponse({
-        images: [
-          {
-            image: 'test-image-data',
-          },
-        ],
-      });
+      const mockResponse = {
+        data: {
+          images: [
+            {
+              image: 'test-image-data',
+            },
+          ],
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
 
       vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
-      const provider = new HyperbolicImageProvider('test', createApiKeyOptions());
+      const provider = new HyperbolicImageProvider('test', {
+        config: { apiKey: 'test-key' },
+      });
 
       const result = await provider.callApi('test prompt');
 
@@ -104,20 +111,32 @@ describe('HyperbolicImageProvider', () => {
     });
 
     it('should handle API errors', async () => {
-      vi.mocked(fetchWithCache).mockResolvedValue(
-        createMockFetchResponse({ error: 'API error' }, { status: 400, statusText: 'Bad Request' }),
-      );
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: { error: 'API error' },
+        cached: false,
+        status: 400,
+        statusText: 'Bad Request',
+      });
 
-      const provider = new HyperbolicImageProvider('test', createApiKeyOptions());
+      const provider = new HyperbolicImageProvider('test', {
+        config: { apiKey: 'test-key' },
+      });
 
       const result = await provider.callApi('test prompt');
       expect(result.error).toBe('API error: 400 Bad Request\n{"error":"API error"}');
     });
 
     it('should handle empty images array', async () => {
-      vi.mocked(fetchWithCache).mockResolvedValue(createMockFetchResponse({ images: [] }));
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: { images: [] },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
 
-      const provider = new HyperbolicImageProvider('test', createApiKeyOptions());
+      const provider = new HyperbolicImageProvider('test', {
+        config: { apiKey: 'test-key' },
+      });
 
       const result = await provider.callApi('test prompt');
       expect(result.error).toBe('No images returned from API');
@@ -126,7 +145,9 @@ describe('HyperbolicImageProvider', () => {
     it('should handle network errors', async () => {
       vi.mocked(fetchWithCache).mockRejectedValue(new Error('Network error'));
 
-      const provider = new HyperbolicImageProvider('test', createApiKeyOptions());
+      const provider = new HyperbolicImageProvider('test', {
+        config: { apiKey: 'test-key' },
+      });
 
       const result = await provider.callApi('test prompt');
       expect(result.error).toBe('API call error: Error: Network error');

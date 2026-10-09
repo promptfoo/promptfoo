@@ -3,7 +3,6 @@ import { getCache, getScopedCacheKey, isCacheEnabled } from '../../../src/cache'
 import { OpenAiTtsProvider } from '../../../src/providers/openai/tts';
 import { HttpRateLimitError } from '../../../src/util/fetch/errors';
 import { fetchWithRetries } from '../../../src/util/fetch/index';
-import { createApiKeyOptions } from '../../factories/literalFixtures';
 import { mockProcessEnv } from '../../util/utils';
 
 vi.mock('../../../src/cache.ts');
@@ -32,15 +31,15 @@ describe('OpenAiTtsProvider', () => {
 
   it.each([
     'gpt-4o-mini-tts',
-    'gpt-4o-mini-tts-2025-12-15',
     'gpt-4o-mini-tts-2025-03-20',
+    'gpt-4o-mini-tts-2025-12-15',
     'tts-1',
     'tts-1-1106',
     'tts-1-hd',
     'tts-1-hd-1106',
   ])('sends model %s to /v1/audio/speech and returns playable audio', async (model) => {
     mockedFetch.mockResolvedValue(audioResponse());
-    const provider = new OpenAiTtsProvider(model, createApiKeyOptions());
+    const provider = new OpenAiTtsProvider(model, { config: { apiKey: 'test-key' } });
 
     const result = await provider.callApi('Hello from promptfoo');
 
@@ -150,7 +149,9 @@ describe('OpenAiTtsProvider', () => {
   it('does not create speech for an already-aborted eval', async () => {
     const controller = new AbortController();
     controller.abort();
-    const provider = new OpenAiTtsProvider('gpt-4o-mini-tts', createApiKeyOptions());
+    const provider = new OpenAiTtsProvider('gpt-4o-mini-tts', {
+      config: { apiKey: 'test-key' },
+    });
 
     await expect(
       provider.callApi('Cancelled speech', undefined, { abortSignal: controller.signal }),
@@ -161,7 +162,7 @@ describe('OpenAiTtsProvider', () => {
   it('normalizes a pre-aborted custom speech reason to AbortError', async () => {
     const controller = new AbortController();
     controller.abort(new Error('caller cancelled before dispatch'));
-    const provider = new OpenAiTtsProvider('gpt-4o-mini-tts', createApiKeyOptions());
+    const provider = new OpenAiTtsProvider('gpt-4o-mini-tts', { config: { apiKey: 'test-key' } });
 
     await expect(
       provider.callApi('Cancelled speech', undefined, { abortSignal: controller.signal }),
@@ -172,7 +173,9 @@ describe('OpenAiTtsProvider', () => {
   it('forwards the eval abort signal to speech requests', async () => {
     const controller = new AbortController();
     mockedFetch.mockResolvedValue(audioResponse());
-    const provider = new OpenAiTtsProvider('gpt-4o-mini-tts', createApiKeyOptions());
+    const provider = new OpenAiTtsProvider('gpt-4o-mini-tts', {
+      config: { apiKey: 'test-key' },
+    });
 
     await provider.callApi('Cancellable speech', undefined, { abortSignal: controller.signal });
 
@@ -194,7 +197,7 @@ describe('OpenAiTtsProvider', () => {
         headers: { 'retry-after': '120' },
       }),
     );
-    const provider = new OpenAiTtsProvider('tts-1', createApiKeyOptions());
+    const provider = new OpenAiTtsProvider('tts-1', { config: { apiKey: 'test-key' } });
 
     const result = await provider.callApi('Retry later');
 
@@ -318,7 +321,7 @@ describe('OpenAiTtsProvider', () => {
   ])('reports the documented per-character cost for %s', async (model, dollarsPerMillion) => {
     mockedFetch.mockResolvedValue(audioResponse());
     const prompt = 'a'.repeat(1000);
-    const provider = new OpenAiTtsProvider(model, createApiKeyOptions());
+    const provider = new OpenAiTtsProvider(model, { config: { apiKey: 'test-key' } });
 
     const result = await provider.callApi(prompt);
 
@@ -327,7 +330,7 @@ describe('OpenAiTtsProvider', () => {
 
   it('does not invent a GPT-4o mini TTS cost when the binary speech response has no usage', async () => {
     mockedFetch.mockResolvedValue(audioResponse());
-    const provider = new OpenAiTtsProvider('gpt-4o-mini-tts', createApiKeyOptions());
+    const provider = new OpenAiTtsProvider('gpt-4o-mini-tts', { config: { apiKey: 'test-key' } });
 
     const result = await provider.callApi('Hello');
 
@@ -337,7 +340,7 @@ describe('OpenAiTtsProvider', () => {
   it('counts Unicode code points for the speech character limit and legacy billing', async () => {
     mockedFetch.mockResolvedValue(audioResponse());
     const prompt = '😀'.repeat(2049);
-    const provider = new OpenAiTtsProvider('tts-1', createApiKeyOptions());
+    const provider = new OpenAiTtsProvider('tts-1', { config: { apiKey: 'test-key' } });
 
     const result = await provider.callApi(prompt);
 
@@ -356,7 +359,7 @@ describe('OpenAiTtsProvider', () => {
     mockedIsCacheEnabled.mockReturnValue(true);
     mockedGetCache.mockReturnValue(cache as any);
     mockedFetch.mockResolvedValue(audioResponse());
-    const provider = new OpenAiTtsProvider('tts-1', createApiKeyOptions());
+    const provider = new OpenAiTtsProvider('tts-1', { config: { apiKey: 'test-key' } });
 
     const first = await provider.callApi('Cache this speech');
     const second = await provider.callApi('Cache this speech');
@@ -452,7 +455,7 @@ describe('OpenAiTtsProvider', () => {
     mockedIsCacheEnabled.mockReturnValue(true);
     mockedGetCache.mockReturnValue(cache as any);
     mockedFetch.mockResolvedValue(audioResponse());
-    const provider = new OpenAiTtsProvider('tts-1', createApiKeyOptions());
+    const provider = new OpenAiTtsProvider('tts-1', { config: { apiKey: 'test-key' } });
 
     await provider.callApi('Read this link: https://files.example/report?access_token=tenant-a');
     await provider.callApi('Read this link: https://files.example/report?access_token=tenant-a');
@@ -474,7 +477,7 @@ describe('OpenAiTtsProvider', () => {
       await new Promise<void>((resolve) => setImmediate(resolve));
       return audioResponse();
     });
-    const provider = new OpenAiTtsProvider('tts-1', createApiKeyOptions());
+    const provider = new OpenAiTtsProvider('tts-1', { config: { apiKey: 'test-key' } });
 
     const results = await Promise.all([
       provider.callApi('same input'),
@@ -508,7 +511,7 @@ describe('OpenAiTtsProvider', () => {
           }
         }),
     );
-    const provider = new OpenAiTtsProvider('tts-1', createApiKeyOptions());
+    const provider = new OpenAiTtsProvider('tts-1', { config: { apiKey: 'test-key' } });
     const first = new AbortController();
     const second = new AbortController();
 
@@ -546,7 +549,7 @@ describe('OpenAiTtsProvider', () => {
         }) as Response,
     );
     const controller = new AbortController();
-    const pending = new OpenAiTtsProvider('tts-1', createApiKeyOptions()).callApi(
+    const pending = new OpenAiTtsProvider('tts-1', { config: { apiKey: 'test-key' } }).callApi(
       'Cancel while reading audio',
       undefined,
       { abortSignal: controller.signal },
@@ -571,7 +574,7 @@ describe('OpenAiTtsProvider', () => {
       await new Promise<void>((resolve) => setImmediate(resolve));
       return audioResponse();
     });
-    const provider = new OpenAiTtsProvider('tts-1', createApiKeyOptions());
+    const provider = new OpenAiTtsProvider('tts-1', { config: { apiKey: 'test-key' } });
 
     const results = await Promise.all([
       provider.callApi('same input'),
@@ -660,7 +663,7 @@ describe('OpenAiTtsProvider', () => {
   });
 
   it('rejects a per-prompt Codex-only speech model override before dispatch', async () => {
-    const provider = new OpenAiTtsProvider('gpt-4o-mini-tts', createApiKeyOptions());
+    const provider = new OpenAiTtsProvider('gpt-4o-mini-tts', { config: { apiKey: 'test-key' } });
 
     await expect(
       provider.callApi('hello', {
@@ -841,7 +844,7 @@ describe('OpenAiTtsProvider', () => {
     mockedIsCacheEnabled.mockReturnValue(true);
     mockedGetCache.mockReturnValue(cache as any);
     mockedFetch.mockResolvedValue(audioResponse());
-    const provider = new OpenAiTtsProvider('tts-1', createApiKeyOptions());
+    const provider = new OpenAiTtsProvider('tts-1', { config: { apiKey: 'test-key' } });
 
     const prompt = 'Read this API key aloud: sk-proj-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
     await provider.callApi(prompt);
@@ -1018,7 +1021,7 @@ describe('OpenAiTtsProvider', () => {
       statusText: 'Bad Request',
       text: async () => JSON.stringify({ error: { message: 'Unsupported voice' } }),
     } as Response);
-    const provider = new OpenAiTtsProvider('gpt-4o-mini-tts', createApiKeyOptions());
+    const provider = new OpenAiTtsProvider('gpt-4o-mini-tts', { config: { apiKey: 'test-key' } });
 
     await expect(provider.callApi('Hello')).resolves.toMatchObject({
       error: 'API error 400: Unsupported voice',

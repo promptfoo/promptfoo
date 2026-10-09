@@ -294,6 +294,9 @@
         "COMETAPI_KEY": {
           "type": "string"
         },
+        "COHERE_API_BASE_URL": {
+          "type": "string"
+        },
         "COHERE_API_KEY": {
           "type": "string"
         },
@@ -2998,6 +3001,9 @@
           "type": "boolean"
         },
         "watch": {
+          "type": "boolean"
+        },
+        "safeMode": {
           "type": "boolean"
         },
         "filterErrorsOnly": {

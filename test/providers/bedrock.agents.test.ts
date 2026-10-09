@@ -2,14 +2,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AwsBedrockAgentsProvider } from '../../src/providers/bedrock/agents';
 import { mockProcessEnv } from '../util/utils';
 
-const createAgentConfig = () => ({
-  config: {
-    agentId: 'test-agent-123',
-    agentAliasId: 'test-alias',
-    region: 'us-east-1',
-  },
-});
-
 // Hoisted mocks for AWS SDK
 const mockSend = vi.hoisted(() => vi.fn());
 const MockBedrockAgentRuntimeClient = vi.hoisted(() =>
@@ -138,7 +130,13 @@ describe('AwsBedrockAgentsProvider', () => {
 
   describe('getAgentRuntimeClient', () => {
     it('should create runtime client without custom handler by default', async () => {
-      const provider = new AwsBedrockAgentsProvider('test-agent-123', createAgentConfig());
+      const provider = new AwsBedrockAgentsProvider('test-agent-123', {
+        config: {
+          agentId: 'test-agent-123',
+          agentAliasId: 'test-alias',
+          region: 'us-east-1',
+        },
+      });
 
       await provider.getAgentRuntimeClient();
 
@@ -155,7 +153,13 @@ describe('AwsBedrockAgentsProvider', () => {
     it('should create runtime client with proxy agent when proxy is configured', async () => {
       mockProcessEnv({ HTTPS_PROXY: 'http://proxy.example:8080' });
 
-      const provider = new AwsBedrockAgentsProvider('test-agent-123', createAgentConfig());
+      const provider = new AwsBedrockAgentsProvider('test-agent-123', {
+        config: {
+          agentId: 'test-agent-123',
+          agentAliasId: 'test-alias',
+          region: 'us-east-1',
+        },
+      });
 
       await provider.getAgentRuntimeClient();
 
@@ -175,15 +179,6 @@ describe('AwsBedrockAgentsProvider', () => {
   });
 
   describe('callApi', () => {
-    const createBedrockChunkStream = () =>
-      async function* () {
-        yield {
-          chunk: {
-            bytes: new TextEncoder().encode('Response'),
-          },
-        };
-      };
-
     let provider: AwsBedrockAgentsProvider;
 
     beforeEach(() => {
@@ -389,7 +384,13 @@ describe('AwsBedrockAgentsProvider', () => {
       provider.config.sessionId = 'fixed-session-id';
 
       const mockResponse = {
-        completion: createBedrockChunkStream()(),
+        completion: (async function* () {
+          yield {
+            chunk: {
+              bytes: new TextEncoder().encode('Response'),
+            },
+          };
+        })(),
         sessionId: 'response-session-id',
         $metadata: {},
       };
@@ -407,7 +408,13 @@ describe('AwsBedrockAgentsProvider', () => {
       mockSend.mockClear();
 
       const mockResponse = {
-        completion: createBedrockChunkStream()(),
+        completion: (async function* () {
+          yield {
+            chunk: {
+              bytes: new TextEncoder().encode('Response'),
+            },
+          };
+        })(),
         sessionId: 'generated-session',
         $metadata: {},
       };

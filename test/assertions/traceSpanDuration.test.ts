@@ -5,19 +5,6 @@ import { createMockProvider, createProviderResponse } from '../factories/provide
 import type { AssertionParams, AtomicTestCase } from '../../src/types/index';
 import type { TraceData } from '../../src/types/tracing';
 
-const createSpanDurationAssertion = () => ({
-  type: 'trace-span-duration' as const,
-  value: { max: 1000 },
-});
-
-const createSingleSpanTrace = () => ({
-  traceId: 'single-span',
-  evaluationId: 'test-evaluation-id',
-  testCaseId: 'test-test-case-id',
-  metadata: { test: 'value' },
-  spans: [{ spanId: '1', name: 'single.op', startTime: 0, endTime: 750 }],
-});
-
 const mockProvider = createMockProvider({
   id: 'mock',
   response: createProviderResponse({ output: 'mock' }),
@@ -116,7 +103,10 @@ describe('handleTraceSpanDuration', () => {
   it('should fail when some spans exceed duration limit', () => {
     const params: AssertionParams = {
       ...defaultParams,
-      assertion: createSpanDurationAssertion(),
+      assertion: {
+        type: 'trace-span-duration',
+        value: { max: 1000 },
+      },
       renderedValue: { max: 1000 },
       assertionValueContext: {
         ...defaultParams.assertionValueContext,
@@ -214,7 +204,10 @@ describe('handleTraceSpanDuration', () => {
   it('should handle spans without endTime', () => {
     const params: AssertionParams = {
       ...defaultParams,
-      assertion: createSpanDurationAssertion(),
+      assertion: {
+        type: 'trace-span-duration',
+        value: { max: 1000 },
+      },
       renderedValue: { max: 1000 },
       assertionValueContext: {
         ...defaultParams.assertionValueContext,
@@ -243,7 +236,10 @@ describe('handleTraceSpanDuration', () => {
   it('should handle empty trace spans', () => {
     const params: AssertionParams = {
       ...defaultParams,
-      assertion: createSpanDurationAssertion(),
+      assertion: {
+        type: 'trace-span-duration',
+        value: { max: 1000 },
+      },
       renderedValue: { max: 1000 },
       assertionValueContext: {
         ...defaultParams.assertionValueContext,
@@ -269,7 +265,10 @@ describe('handleTraceSpanDuration', () => {
   it('should fail when no trace data is available', () => {
     const params: AssertionParams = {
       ...defaultParams,
-      assertion: createSpanDurationAssertion(),
+      assertion: {
+        type: 'trace-span-duration',
+        value: { max: 1000 },
+      },
       renderedValue: { max: 1000 },
     };
 
@@ -376,7 +375,13 @@ describe('handleTraceSpanDuration', () => {
       renderedValue: { max: 1000, percentile: 100 },
       assertionValueContext: {
         ...defaultParams.assertionValueContext,
-        trace: createSingleSpanTrace(),
+        trace: {
+          traceId: 'single-span',
+          evaluationId: 'test-evaluation-id',
+          testCaseId: 'test-test-case-id',
+          metadata: { test: 'value' },
+          spans: [{ spanId: '1', name: 'single.op', startTime: 0, endTime: 750 }],
+        },
       },
     };
 
@@ -456,7 +461,13 @@ describe('handleTraceSpanDuration', () => {
       renderedValue: { max: 1000, percentile: 95 },
       assertionValueContext: {
         ...defaultParams.assertionValueContext,
-        trace: createSingleSpanTrace(),
+        trace: {
+          traceId: 'single-span',
+          evaluationId: 'test-evaluation-id',
+          testCaseId: 'test-test-case-id',
+          metadata: { test: 'value' },
+          spans: [{ spanId: '1', name: 'single.op', startTime: 0, endTime: 750 }],
+        },
       },
     };
 

@@ -3,25 +3,6 @@ import { BrowserProvider, createTransformResponse } from '../../src/providers/br
 import type { Page } from 'playwright';
 import type { Mock, Mocked } from 'vitest';
 
-const createDebugBrowserOptions = () => ({
-  config: {
-    connectOptions: {
-      debuggingPort: 9222,
-    },
-    steps: [],
-  },
-});
-
-const createNavigateStep = () => ({
-  action: 'navigate',
-  args: { url: 'https://example.com' },
-});
-
-const createPromptTypingStep = () => ({
-  action: 'type',
-  args: { selector: '#input', text: '{{prompt}}' },
-});
-
 let mockPage: Mocked<Page>;
 
 const mockBrowser = {
@@ -85,7 +66,12 @@ describe('BrowserProvider', () => {
   it('should execute navigate action', async () => {
     const provider = new BrowserProvider('test', {
       config: {
-        steps: [createNavigateStep()],
+        steps: [
+          {
+            action: 'navigate',
+            args: { url: 'https://example.com' },
+          },
+        ],
       },
     });
 
@@ -263,7 +249,12 @@ describe('BrowserProvider', () => {
     const transform = vi.fn().mockReturnValue({ foo: 'bar' });
     const provider = new BrowserProvider('test', {
       config: {
-        steps: [createNavigateStep()],
+        steps: [
+          {
+            action: 'navigate',
+            args: { url: 'https://example.com' },
+          },
+        ],
         transformResponse: transform,
       },
     });
@@ -277,7 +268,12 @@ describe('BrowserProvider', () => {
   it('should use transformResponse string', async () => {
     const provider = new BrowserProvider('test', {
       config: {
-        steps: [createNavigateStep()],
+        steps: [
+          {
+            action: 'navigate',
+            args: { url: 'https://example.com' },
+          },
+        ],
         transformResponse: '({foo: extracted, html: finalHtml})',
       },
     });
@@ -307,7 +303,12 @@ describe('BrowserProvider', () => {
   it('should handle cookies as array', async () => {
     const provider = new BrowserProvider('test', {
       config: {
-        steps: [createNavigateStep()],
+        steps: [
+          {
+            action: 'navigate',
+            args: { url: 'https://example.com' },
+          },
+        ],
         cookies: [{ name: 'foo', value: 'bar' }],
       },
     });
@@ -324,7 +325,12 @@ describe('BrowserProvider', () => {
     const { BrowserProvider: MockedBrowserProvider } = await import('../../src/providers/browser');
     const provider = new MockedBrowserProvider('test', {
       config: {
-        steps: [createNavigateStep()],
+        steps: [
+          {
+            action: 'navigate',
+            args: { url: 'https://example.com' },
+          },
+        ],
         cookies: 'mock-file.txt',
       },
     });
@@ -372,7 +378,12 @@ describe('BrowserProvider', () => {
   it('should default to output: finalHtml if no transformResponse', async () => {
     const provider = new BrowserProvider('test', {
       config: {
-        steps: [createNavigateStep()],
+        steps: [
+          {
+            action: 'navigate',
+            args: { url: 'https://example.com' },
+          },
+        ],
       },
     });
 
@@ -390,7 +401,12 @@ describe('BrowserProvider', () => {
 
     const provider = new BrowserProvider('test', {
       config: {
-        steps: [createNavigateStep()],
+        steps: [
+          {
+            action: 'navigate',
+            args: { url: 'https://example.com' },
+          },
+        ],
         transformResponse: transformFn,
       },
     });
@@ -411,7 +427,12 @@ describe('BrowserProvider', () => {
 
     const provider = new BrowserProvider('test', {
       config: {
-        steps: [createNavigateStep()],
+        steps: [
+          {
+            action: 'navigate',
+            args: { url: 'https://example.com' },
+          },
+        ],
         transformResponse: transformFn,
       },
     });
@@ -429,7 +450,12 @@ describe('BrowserProvider', () => {
 
     const provider = new BrowserProvider('test', {
       config: {
-        steps: [createNavigateStep()],
+        steps: [
+          {
+            action: 'navigate',
+            args: { url: 'https://example.com' },
+          },
+        ],
         transformResponse: transformFn,
       },
     });
@@ -492,7 +518,16 @@ describe('BrowserProvider - Multi-turn Session Persistence', () => {
     const provider = new BrowserProvider('test', {
       config: {
         persistSession: true,
-        steps: [createNavigateStep(), createPromptTypingStep()],
+        steps: [
+          {
+            action: 'navigate',
+            args: { url: 'https://example.com' },
+          },
+          {
+            action: 'type',
+            args: { selector: '#input', text: '{{prompt}}' },
+          },
+        ],
       },
     });
 
@@ -525,7 +560,10 @@ describe('BrowserProvider - Multi-turn Session Persistence', () => {
             runOnce: true,
             args: { ms: 1000 },
           },
-          createPromptTypingStep(),
+          {
+            action: 'type',
+            args: { selector: '#input', text: '{{prompt}}' },
+          },
         ],
       },
     });
@@ -592,7 +630,12 @@ describe('BrowserProvider - Multi-turn Session Persistence', () => {
     const provider = new BrowserProvider('test', {
       config: {
         persistSession: true,
-        steps: [createNavigateStep()],
+        steps: [
+          {
+            action: 'navigate',
+            args: { url: 'https://example.com' },
+          },
+        ],
       },
     });
 
@@ -635,7 +678,12 @@ describe('BrowserProvider - Connect to Existing Session', () => {
         connectOptions: {
           debuggingPort: 9222,
         },
-        steps: [createNavigateStep()],
+        steps: [
+          {
+            action: 'navigate',
+            args: { url: 'https://example.com' },
+          },
+        ],
       },
     });
 
@@ -700,7 +748,14 @@ describe('BrowserProvider - Connect to Existing Session', () => {
       mockExistingBrowser as any,
     );
 
-    const provider = new BrowserProvider('test', createDebugBrowserOptions());
+    const provider = new BrowserProvider('test', {
+      config: {
+        connectOptions: {
+          debuggingPort: 9222,
+        },
+        steps: [],
+      },
+    });
 
     await provider.callApi('test');
 
@@ -735,7 +790,14 @@ describe('BrowserProvider - Connect to Existing Session', () => {
       return Promise.resolve(mockConnectedBrowser);
     });
 
-    const provider = new BrowserProvider('test', createDebugBrowserOptions());
+    const provider = new BrowserProvider('test', {
+      config: {
+        connectOptions: {
+          debuggingPort: 9222,
+        },
+        steps: [],
+      },
+    });
 
     await provider.callApi('test');
 
@@ -746,7 +808,14 @@ describe('BrowserProvider - Connect to Existing Session', () => {
   it('should handle connection failures gracefully', async () => {
     mockFetch.mockRejectedValue(new Error('Connection refused'));
 
-    const provider = new BrowserProvider('test', createDebugBrowserOptions());
+    const provider = new BrowserProvider('test', {
+      config: {
+        connectOptions: {
+          debuggingPort: 9222,
+        },
+        steps: [],
+      },
+    });
 
     const result = await provider.callApi('test');
 
@@ -764,7 +833,14 @@ describe('BrowserProvider - Connect to Existing Session', () => {
       } as Response);
     });
 
-    const provider = new BrowserProvider('test', createDebugBrowserOptions());
+    const provider = new BrowserProvider('test', {
+      config: {
+        connectOptions: {
+          debuggingPort: 9222,
+        },
+        steps: [],
+      },
+    });
 
     const result = await provider.callApi('test');
 
@@ -782,7 +858,14 @@ describe('BrowserProvider - Connect to Existing Session', () => {
       } as Response);
     });
 
-    const provider = new BrowserProvider('test', createDebugBrowserOptions());
+    const provider = new BrowserProvider('test', {
+      config: {
+        connectOptions: {
+          debuggingPort: 9222,
+        },
+        steps: [],
+      },
+    });
 
     const result = await provider.callApi('test');
 
@@ -794,7 +877,14 @@ describe('BrowserProvider - Connect to Existing Session', () => {
     const timeoutError = new Error('Request timed out after 5000ms');
     mockFetch.mockRejectedValue(timeoutError);
 
-    const provider = new BrowserProvider('test', createDebugBrowserOptions());
+    const provider = new BrowserProvider('test', {
+      config: {
+        connectOptions: {
+          debuggingPort: 9222,
+        },
+        steps: [],
+      },
+    });
 
     const result = await provider.callApi('test');
 
@@ -808,7 +898,14 @@ describe('BrowserProvider - Connect to Existing Session', () => {
     (connError as any).code = 'ECONNREFUSED';
     mockFetch.mockRejectedValue(connError);
 
-    const provider = new BrowserProvider('test', createDebugBrowserOptions());
+    const provider = new BrowserProvider('test', {
+      config: {
+        connectOptions: {
+          debuggingPort: 9222,
+        },
+        steps: [],
+      },
+    });
 
     const result = await provider.callApi('test');
 

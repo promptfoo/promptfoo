@@ -11,7 +11,9 @@ import {
   VALID_CATEGORIES,
 } from '../../../src/redteam/plugins/unsafebench';
 import { fetchWithProxy } from '../../../src/util/fetch';
-import { mockProcessEnv } from '../../util/utils';
+import { mockProcessEnv, sampleEachShufflePath } from '../../util/utils';
+
+import type { UnsafeBenchCategory } from '../../../src/redteam/plugins/unsafebench';
 
 const createUnsafeImageTest = () => ({
   vars: { prompt: 'describe this image' },
@@ -48,6 +50,35 @@ afterAll(() => {
 });
 
 describe('processImageToJpeg', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it('rasterizes a self-contained SVG with an entity and resizes it before JPEG encoding', async () => {
+    const sharp = (await import('sharp')).default;
+    const svg = Buffer.from(`<?xml version="1.0"?>
+      <!DOCTYPE svg [<!ENTITY color "#ff0000">]>
+      <svg xmlns="http://www.w3.org/2000/svg" width="32" height="16">
+        <rect width="32" height="16" fill="&color;"/>
+      </svg>`);
+
+    const result = await processImageToJpeg(svg, 8);
+
+    expect(result).toMatch(/^data:image\/jpeg;base64,/);
+    const image = sharp(Buffer.from(result!.split(',')[1], 'base64'));
+    await expect(image.metadata()).resolves.toMatchObject({ format: 'jpeg', width: 8, height: 4 });
+    const { data, info } = await image.raw().toBuffer({ resolveWithObject: true });
+    expect(info.channels).toBe(3);
+    expect(data[0]).toBeGreaterThan(240);
+    expect(data[1]).toBeLessThan(15);
+    expect(data[2]).toBeLessThan(15);
+  });
+
+  it('rejects malformed SVG input without emitting image data', async () => {
+    await expect(
+      processImageToJpeg(Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><rect')),
+    ).resolves.toBeNull();
+    expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Error processing image'));
+  });
+
   it('preserves a JPEG that is already within the size limit', async () => {
     const jpegBase64 =
       '/9j/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAABAAIDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAf/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAABgj/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwCdABykX//Z';
@@ -124,6 +155,24 @@ describe('UnsafeBenchPlugin', () => {
     expect(violenceTests).toHaveLength(3);
     expect(hateTests).toHaveLength(3);
   });
+
+  it.each<{ categories?: UnsafeBenchCategory[] }>([{}, { categories: ['Violence'] }])(
+    'samples every ordered pair of images equally with config %o',
+    async (config) => {
+      mockFetchHuggingFaceDataset.mockResolvedValue(
+        ['a', 'b', 'c'].map((image) => ({
+          vars: { image, category: 'Violence', safety_label: 'unsafe' },
+        })),
+      );
+      const plugin = new Plugin({ type: 'test' }, 'testing purposes', 'image', config);
+
+      const samples = await sampleEachShufflePath(async () =>
+        (await plugin.generateTests(2)).map((test) => test.vars?.image).join(''),
+      );
+
+      expect(samples).toEqual(['ab', 'ac', 'ba', 'bc', 'ca', 'cb']);
+    },
+  );
 
   it('should warn about invalid categories', () => {
     const loggerWarnSpy = vi.spyOn(logger, 'warn');

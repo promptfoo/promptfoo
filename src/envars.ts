@@ -69,6 +69,11 @@ type EnvVars = {
   PROMPTFOO_OFFICIAL_DOCKER_IMAGE?: boolean;
   PROMPTFOO_RUNNING_IN_DOCKER?: boolean;
   PROMPTFOO_SELF_HOSTED?: boolean;
+  /**
+   * Disables dynamic inline JavaScript execution in transforms and assertions.
+   * Requires pointing to dedicated script files instead (file://...).
+   */
+  PROMPTFOO_SAFE_MODE?: boolean;
   PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES?: boolean;
   PROMPTFOO_STRICT_FILES?: boolean;
   PROMPTFOO_STRIP_GRADING_RESULT?: boolean;
@@ -485,18 +490,6 @@ type EnvVars = {
 // Allow string access to any key for environment variables not explicitly listed
 export type EnvVarKey = keyof EnvVars;
 
-/** Read only own provider overrides, without falling back to process.env. */
-export function getProviderEnvString(
-  env: EnvOverrides | undefined,
-  key: EnvVarKey,
-): string | undefined {
-  if (env && Object.prototype.hasOwnProperty.call(env, key)) {
-    const value = env[key as keyof EnvOverrides];
-    return value === undefined ? undefined : String(value);
-  }
-  return undefined;
-}
-
 /** Reads one config layer without mixing in process.env; a missing or failed provider is unset. */
 export function getEnvOverrides(layer: 'suite' | 'file' = 'suite'): EnvOverrides | undefined {
   try {
@@ -663,12 +656,4 @@ export function isCI() {
  */
 export function isNonInteractive() {
   return isCI() || !process.stdin.isTTY || !process.stdout.isTTY;
-}
-
-export function parseEnvFloat(value: string | undefined): number | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
-  const parsed = Number.parseFloat(value);
-  return Number.isNaN(parsed) ? undefined : parsed;
 }

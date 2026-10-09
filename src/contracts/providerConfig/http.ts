@@ -175,5 +175,6 @@ export const HttpProviderConfigInputSchema: z.ZodType<
 export const HttpProviderConfigInputJsonSchema = z.toJSONSchema(HttpProviderConfigInputSchema, {
   target: 'draft-07',
   io: 'input',
+  unrepresentable: 'throw',
   reused: 'ref',
 });

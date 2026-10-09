@@ -4,6 +4,7 @@ interface QueuedRequest {
   id: string;
   resolve: () => void;
   reject: (error: Error) => void;
+  queuedAt: number;
 }
 
 export interface SlotQueueOptions {
@@ -56,8 +57,10 @@ export class SlotQueue {
    */
   async acquire(requestId: string): Promise<void> {
     return new Promise((resolve, reject) => {
+      const queuedAt = Date.now();
+
       // Set up timeout for queued request
-      let timeoutId: NodeJS.Timeout | undefined;
+      let timeoutId: NodeJS.Timeout | null = null;
       if (this.queueTimeoutMs > 0) {
         timeoutId = setTimeout(() => {
           // Remove from queue
@@ -72,14 +75,18 @@ export class SlotQueue {
       }
 
       const wrappedResolve = () => {
-        clearTimeout(timeoutId);
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+        }
         this.activeCount++;
         this.onSlotAcquired?.(this.waiting.length);
         resolve();
       };
 
       const wrappedReject = (error: Error) => {
-        clearTimeout(timeoutId);
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+        }
         reject(error);
       };
 
@@ -88,6 +95,7 @@ export class SlotQueue {
         id: requestId,
         resolve: wrappedResolve,
         reject: wrappedReject,
+        queuedAt,
       });
 
       // Immediately try to process queue (synchronous, no race)
@@ -199,22 +207,30 @@ export class SlotQueue {
       return false;
     }
 
-    const quotaExhausted = (remaining: number | null) =>
-      remaining !== null && remaining <= 0 && this.resetAt && now < this.resetAt;
+    // Request quota exhausted
+    if (this.remainingRequests !== null && this.remainingRequests <= 0) {
+      if (this.resetAt && now < this.resetAt) {
+        return true;
+      }
+    }
 
-    return !!(
-      // Request quota exhausted
-      quotaExhausted(this.remainingRequests) ||
-      // Token quota exhausted
-      quotaExhausted(this.remainingTokens)
-    );
+    // Token quota exhausted
+    if (this.remainingTokens !== null && this.remainingTokens <= 0) {
+      if (this.resetAt && now < this.resetAt) {
+        return true;
+      }
+    }
+
+    return false;
   }
 
   /**
    * Schedule queue processing when rate limit window resets.
    */
   private scheduleResetProcessing(): void {
-    clearTimeout(this.resetTimer ?? undefined);
+    if (this.resetTimer) {
+      clearTimeout(this.resetTimer);
+    }
 
     if (this.resetAt && this.waiting.length > 0) {
       const delay = Math.max(0, this.resetAt - Date.now());
@@ -274,8 +290,10 @@ export class SlotQueue {
    * Callers should handle these rejections (e.g., via .catch() on acquire promises).
    */
   dispose(): void {
-    clearTimeout(this.resetTimer ?? undefined);
-    this.resetTimer = null;
+    if (this.resetTimer) {
+      clearTimeout(this.resetTimer);
+      this.resetTimer = null;
+    }
     // Reject any waiting requests
     const waiting = this.waiting;
     this.waiting = [];

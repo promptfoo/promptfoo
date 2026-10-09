@@ -6,10 +6,6 @@ import {
   toKebabCase,
 } from '../../src/providers/portkey';
 
-const createOpenaiProviderConfig = () => ({
-  config: { portkeyProvider: 'openai' },
-});
-
 describe('toKebabCase', () => {
   it('should convert simple camelCase to kebab-case', () => {
     expect(toKebabCase('camelCase')).toBe('camel-case');
@@ -180,7 +176,9 @@ describe('PortkeyChatCompletionProvider', () => {
 
     it('should send PORTKEY_API_KEY from the environment in the x-portkey-api-key header', () => {
       vi.stubEnv('PORTKEY_API_KEY', 'pk-env-key');
-      const provider = new PortkeyChatCompletionProvider('gpt-4o', createOpenaiProviderConfig());
+      const provider = new PortkeyChatCompletionProvider('gpt-4o', {
+        config: { portkeyProvider: 'openai' },
+      });
       expect(provider.config.headers).toMatchObject({ 'x-portkey-api-key': 'pk-env-key' });
     });
 
@@ -195,7 +193,9 @@ describe('PortkeyChatCompletionProvider', () => {
 
     it('should not copy an environment credential into the persisted config', () => {
       vi.stubEnv('PORTKEY_API_KEY', 'pk-env-key');
-      const provider = new PortkeyChatCompletionProvider('gpt-4o', createOpenaiProviderConfig());
+      const provider = new PortkeyChatCompletionProvider('gpt-4o', {
+        config: { portkeyProvider: 'openai' },
+      });
       // eval results persist provider config, so the credential must only reach the header.
       expect(provider.config.portkeyApiKey).toBeUndefined();
       expect(provider.config.headers).toMatchObject({ 'x-portkey-api-key': 'pk-env-key' });
@@ -232,14 +232,18 @@ describe('PortkeyChatCompletionProvider', () => {
     it('should forward OPENAI_API_KEY as the bearer when Portkey passes through to a provider', () => {
       vi.stubEnv('OPENAI_API_KEY', 'sk-openai');
       vi.stubEnv('PORTKEY_API_KEY', 'pk-env-key');
-      const provider = new PortkeyChatCompletionProvider('gpt-4o', createOpenaiProviderConfig());
+      const provider = new PortkeyChatCompletionProvider('gpt-4o', {
+        config: { portkeyProvider: 'openai' },
+      });
       expect(provider.getApiKey()).toBe('sk-openai');
     });
 
     it('should never send the portkey key as the bearer token', () => {
       vi.stubEnv('OPENAI_API_KEY', undefined);
       vi.stubEnv('PORTKEY_API_KEY', 'pk-env-key');
-      const provider = new PortkeyChatCompletionProvider('gpt-4o', createOpenaiProviderConfig());
+      const provider = new PortkeyChatCompletionProvider('gpt-4o', {
+        config: { portkeyProvider: 'openai' },
+      });
       expect(provider.getApiKey()).toBeUndefined();
     });
 
@@ -314,7 +318,9 @@ describe('PortkeyChatCompletionProvider', () => {
   it('should name the portkey credential when no key is configured', () => {
     vi.stubEnv('OPENAI_API_KEY', undefined);
     vi.stubEnv('PORTKEY_API_KEY', undefined);
-    const provider = new PortkeyChatCompletionProvider('gpt-4o', createOpenaiProviderConfig());
+    const provider = new PortkeyChatCompletionProvider('gpt-4o', {
+      config: { portkeyProvider: 'openai' },
+    });
     expect(provider.requiresApiKey()).toBe(true);
     expect(provider.getApiKey()).toBeUndefined();
   });

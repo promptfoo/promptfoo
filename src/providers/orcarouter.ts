@@ -1,7 +1,6 @@
 import { type EnvVarKey, getEnvString } from '../envars';
 import { renderVarsInObject } from '../util';
 import { OpenAiChatCompletionProvider } from './openai/chat';
-import { serializeProvider } from './serialization';
 
 import type { EnvOverrides } from '../types/env';
 import type {
@@ -69,7 +68,14 @@ export class OrcaRouterProvider extends OpenAiChatCompletionProvider {
   }
 
   toJSON() {
-    return serializeProvider(this, 'orcarouter');
+    return {
+      provider: 'orcarouter',
+      model: this.modelName,
+      config: {
+        ...this.config,
+        ...(this.config.apiKey && { apiKey: undefined }),
+      },
+    };
   }
 
   /**

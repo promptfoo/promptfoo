@@ -4,34 +4,23 @@ import { mockProcessEnv } from '../../../util/utils';
 
 import type { CallApiContextParams } from '../../../../src/types/providers';
 
-const { createReadFileFactory } = await vi.hoisted(() => import('../../../factories/moduleMocks'));
-
-const createAlignmentResponse = () => ({
-  words: [
-    { text: 'Hello', start: 0.0, end: 0.5 },
-    { text: 'world', start: 0.6, end: 1.0 },
-  ],
-  duration_seconds: 1.0,
-});
-
 // Mock dependencies
 vi.mock('../../../../src/providers/elevenlabs/client');
 
 // Create hoisted mock for fs.promises.readFile
 const mockReadFile = vi.hoisted(() => vi.fn());
-vi.mock('fs', createReadFileFactory(mockReadFile));
+vi.mock('fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('fs')>();
+  return {
+    ...actual,
+    promises: {
+      ...actual.promises,
+      readFile: mockReadFile,
+    },
+  };
+});
 
 describe('ElevenLabsAlignmentProvider', () => {
-  const createAlignmentTimeoutCheck = () => () => {
-    const provider = new ElevenLabsAlignmentProvider('elevenlabs:alignment', {
-      config: {
-        timeout: 180000,
-      },
-    });
-
-    expect(provider.config.timeout).toBe(180000);
-  };
-
   beforeEach(() => {
     vi.clearAllMocks();
     mockReadFile.mockReset();
@@ -58,7 +47,15 @@ describe('ElevenLabsAlignmentProvider', () => {
       );
     });
 
-    it('should use custom configuration', createAlignmentTimeoutCheck());
+    it('should use custom configuration', () => {
+      const provider = new ElevenLabsAlignmentProvider('elevenlabs:alignment', {
+        config: {
+          timeout: 180000,
+        },
+      });
+
+      expect(provider.config.timeout).toBe(180000);
+    });
 
     it('should use custom label if provided', () => {
       const provider = new ElevenLabsAlignmentProvider('elevenlabs:alignment', {
@@ -137,7 +134,13 @@ describe('ElevenLabsAlignmentProvider', () => {
       const provider = new ElevenLabsAlignmentProvider('elevenlabs:alignment');
 
       const mockAudioBuffer = Buffer.from('audio-data');
-      const mockAlignmentResponse = createAlignmentResponse();
+      const mockAlignmentResponse = {
+        words: [
+          { text: 'Hello', start: 0.0, end: 0.5 },
+          { text: 'world', start: 0.6, end: 1.0 },
+        ],
+        duration_seconds: 1.0,
+      };
 
       mockReadFile.mockResolvedValue(mockAudioBuffer);
       (provider as any).client.upload = vi.fn().mockResolvedValue(mockAlignmentResponse);
@@ -161,7 +164,13 @@ describe('ElevenLabsAlignmentProvider', () => {
       const provider = new ElevenLabsAlignmentProvider('elevenlabs:alignment');
 
       const mockAudioBuffer = Buffer.from('audio-data');
-      const mockAlignmentResponse = createAlignmentResponse();
+      const mockAlignmentResponse = {
+        words: [
+          { text: 'Hello', start: 0.0, end: 0.5 },
+          { text: 'world', start: 0.6, end: 1.0 },
+        ],
+        duration_seconds: 1.0,
+      };
 
       mockReadFile.mockResolvedValue(mockAudioBuffer);
       (provider as any).client.upload = vi.fn().mockResolvedValue(mockAlignmentResponse);
@@ -367,6 +376,12 @@ describe('ElevenLabsAlignmentProvider', () => {
       expect(provider.config.timeout).toBe(120000);
     });
 
-    it('should use custom timeout if specified', createAlignmentTimeoutCheck());
+    it('should use custom timeout if specified', () => {
+      const provider = new ElevenLabsAlignmentProvider('elevenlabs:alignment', {
+        config: { timeout: 180000 },
+      });
+
+      expect(provider.config.timeout).toBe(180000);
+    });
   });
 });

@@ -1,5 +1,3 @@
-const { createLoggerModule } = await vi.hoisted(async () => import('../../factories/logger'));
-
 /**
  * Integration test for GitHub issue #6902:
  * "Gemini provider fails with MCP tools due to unsupported additionalProperties in JSON Schema"
@@ -8,19 +6,8 @@ const { createLoggerModule } = await vi.hoisted(async () => import('../../factor
  * to ensure schemas are properly sanitized before being sent to the Gemini API.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createMockFetchResponse } from '../mockProviderResponses';
 
 // Mock MCP client to return tools with problematic schemas (additionalProperties, $schema, etc.)
-const createMcpProviderConfig = () => ({
-  config: {
-    apiKey: 'test-api-key',
-    mcp: {
-      enabled: true,
-      server: { command: 'test', args: [], name: 'test' },
-    },
-  },
-});
-
 const mcpMocks = vi.hoisted(() => {
   const createMockTools = () => [
     {
@@ -118,7 +105,14 @@ vi.mock('../../../src/cache', async (importOriginal) => {
   };
 });
 
-vi.mock('../../../src/logger', () => createLoggerModule());
+vi.mock('../../../src/logger', () => ({
+  default: {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  },
+}));
 
 vi.mock('../../../src/providers/mcp/client', () => ({
   MCPClient: mcpMocks.MockMCPClient,
@@ -153,22 +147,27 @@ describe('Google Providers MCP Integration (GitHub #6902)', () => {
       // Capture the request body for validation
       capturedRequestBody = JSON.parse(options.body);
 
-      return createMockFetchResponse({
-        candidates: [
-          {
-            content: {
-              parts: [{ text: 'Test response' }],
-              role: 'model',
+      return {
+        data: {
+          candidates: [
+            {
+              content: {
+                parts: [{ text: 'Test response' }],
+                role: 'model',
+              },
+              finishReason: 'STOP',
             },
-            finishReason: 'STOP',
+          ],
+          usageMetadata: {
+            promptTokenCount: 10,
+            candidatesTokenCount: 5,
+            totalTokenCount: 15,
           },
-        ],
-        usageMetadata: {
-          promptTokenCount: 10,
-          candidatesTokenCount: 5,
-          totalTokenCount: 15,
         },
-      });
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
     });
   });
 
@@ -335,7 +334,15 @@ describe('Google Providers MCP Integration (GitHub #6902)', () => {
 
   describe('Schema validation for Gemini compatibility', () => {
     it('should only include Gemini-supported schema properties', async () => {
-      const provider = new AIStudioChatProvider('gemini-2.0-flash', createMcpProviderConfig());
+      const provider = new AIStudioChatProvider('gemini-2.0-flash', {
+        config: {
+          apiKey: 'test-api-key',
+          mcp: {
+            enabled: true,
+            server: { command: 'test', args: [], name: 'test' },
+          },
+        },
+      });
 
       await (provider as any).initializationPromise;
       await provider.callApi('Test');
@@ -388,7 +395,15 @@ describe('Google Providers MCP Integration (GitHub #6902)', () => {
     });
 
     it('should have all types in uppercase format', async () => {
-      const provider = new AIStudioChatProvider('gemini-2.0-flash', createMcpProviderConfig());
+      const provider = new AIStudioChatProvider('gemini-2.0-flash', {
+        config: {
+          apiKey: 'test-api-key',
+          mcp: {
+            enabled: true,
+            server: { command: 'test', args: [], name: 'test' },
+          },
+        },
+      });
 
       await (provider as any).initializationPromise;
       await provider.callApi('Test');

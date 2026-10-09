@@ -9,7 +9,6 @@ import {
 import invariant from '../../util/invariant';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { applyGpt6RequestRules, getGpt6ResponsesReasoning, isGpt6Model } from '../openai/gpt6';
-import { flattenResponseTool } from '../openai/util';
 import { ResponsesProcessor } from '../responses/index';
 import { getRequestTimeoutMs, LONG_RUNNING_MODEL_TIMEOUT_MS } from '../shared';
 import { AzureGenericProvider } from './generic';
@@ -84,7 +83,7 @@ export class AzureResponsesProvider extends AzureGenericProvider {
   /**
    * Check if the current deployment is a reasoning model.
    * Reasoning models use max_completion_tokens instead of max_tokens,
-   * don't support temperature, and accept reasoning_effort parameter.
+   * don't support temperature, and may support configurable reasoning effort.
    */
   isReasoningModel(modelName = this.config.modelName ?? this.deploymentName): boolean {
     // Check explicit config flags first (match chat.ts behavior)
@@ -104,6 +103,8 @@ export class AzureResponsesProvider extends AzureGenericProvider {
       // GPT-5 series (reasoning by default)
       lowerName.startsWith('gpt-5') ||
       lowerName.includes('-gpt-5') ||
+      lowerName === 'gpt-chat-latest' ||
+      lowerName.startsWith('gpt-chat-latest-') ||
       isGpt6Model(lowerName) ||
       // DeepSeek reasoning models
       lowerName.includes('deepseek-r1') ||
@@ -149,6 +150,7 @@ export class AzureResponsesProvider extends AzureGenericProvider {
         : (config.modelName ?? this.deploymentName)
     ).toLowerCase();
     const isReasoningModel = this.isReasoningModel(capabilityModelName);
+    const isFixedReasoningModel = /^gpt-chat-latest(?:-|$)/.test(capabilityModelName);
     const isGPT6Model = isGpt6Model(capabilityModelName);
     const maxOutputTokensDefault = config.omitDefaults
       ? getEnvString('OPENAI_MAX_TOKENS') === undefined
@@ -177,7 +179,7 @@ export class AzureResponsesProvider extends AzureGenericProvider {
         )
       : undefined;
     const reasoningEffort =
-      isReasoningModel && !isGPT6Model
+      isReasoningModel && !isGPT6Model && !isFixedReasoningModel
         ? (renderVarsInObject(config.reasoning_effort, context?.vars) as ReasoningEffort)
         : undefined;
 
@@ -226,7 +228,15 @@ export class AzureResponsesProvider extends AzureGenericProvider {
     const loadedTools = config.tools
       ? await maybeLoadToolsFromExternalFile(config.tools, context?.vars)
       : undefined;
-    const tools = Array.isArray(loadedTools) ? loadedTools.map(flattenResponseTool) : loadedTools;
+    const tools = Array.isArray(loadedTools)
+      ? loadedTools.map((tool) => {
+          if (tool?.type !== 'function' || !tool.function) {
+            return tool;
+          }
+          const { function: functionDefinition, ...rest } = tool;
+          return { ...rest, ...functionDefinition };
+        })
+      : loadedTools;
     const toolChoice =
       typeof config.tool_choice === 'object' &&
       config.tool_choice?.type === 'function' &&
@@ -260,6 +270,14 @@ export class AzureResponsesProvider extends AzureGenericProvider {
       ...('store' in config ? { store: Boolean(config.store) } : {}),
       ...(config.passthrough || {}),
     };
+
+    if (isFixedReasoningModel && body.reasoning && typeof body.reasoning === 'object') {
+      body.reasoning = { ...body.reasoning };
+      delete body.reasoning.effort;
+      if (Object.keys(body.reasoning).length === 0) {
+        delete body.reasoning;
+      }
+    }
 
     if (isGPT6Model) {
       if (gpt6Reasoning) {

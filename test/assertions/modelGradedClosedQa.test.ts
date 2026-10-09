@@ -4,10 +4,6 @@ import { matchesClosedQa } from '../../src/matchers/llmGrading';
 
 import type { AssertionParams } from '../../src/types/index';
 
-const createEmptyTest = () => ({
-  options: {},
-  vars: {},
-});
 vi.mock('../../src/matchers/llmGrading');
 
 describe('handleModelGradedClosedQa', () => {
@@ -37,7 +33,10 @@ describe('handleModelGradedClosedQa', () => {
       prompt: 'test prompt',
       providerResponse: {},
       renderedValue: {},
-      test: createEmptyTest(),
+      test: {
+        options: {},
+        vars: {},
+      },
     };
 
     await expect(handleModelGradedClosedQa(params)).rejects.toThrow(
@@ -63,7 +62,10 @@ describe('handleModelGradedClosedQa', () => {
       prompt: undefined,
       providerResponse: {},
       renderedValue: 'test value',
-      test: createEmptyTest(),
+      test: {
+        options: {},
+        vars: {},
+      },
     };
 
     await expect(handleModelGradedClosedQa(params)).rejects.toThrow(

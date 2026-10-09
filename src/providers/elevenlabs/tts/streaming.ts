@@ -81,6 +81,7 @@ export async function handleStreamingTTS(
   return new Promise((resolve, reject) => {
     let completionTimeout: NodeJS.Timeout | undefined;
     let settled = false;
+    const audioChunks: Buffer[] = [];
     let totalChunks = 0;
 
     const settle = (error?: Error) => {
@@ -111,6 +112,7 @@ export async function handleStreamingTTS(
       switch (message.type) {
         case 'audio': {
           const audioBuffer = Buffer.from(message.data, 'base64');
+          audioChunks.push(audioBuffer);
           totalChunks++;
 
           const chunk: StreamingChunk = {

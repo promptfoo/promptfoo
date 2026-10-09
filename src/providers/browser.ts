@@ -76,8 +76,17 @@ export function createTransformResponse(
 }
 
 export class BrowserProvider implements ApiProvider {
+  /**
+   * Global page cache for session persistence across all instances.
+   * Used as fallback when instance-level page is not set.
+   */
+  private static pageCache: Map<string, Page> = new Map();
+
   static clearSessionCache(): void {
-    // Sessions are stored on provider instances; there is no global cache to clear.
+    BrowserProvider.pageCache.forEach((page) => {
+      page.close().catch(() => {});
+    });
+    BrowserProvider.pageCache.clear();
   }
 
   config: BrowserProviderConfig;

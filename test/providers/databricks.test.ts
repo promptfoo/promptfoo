@@ -6,9 +6,6 @@ import { mockProcessEnv } from '../util/utils';
 
 import type { DatabricksMosaicAiProviderOptions } from '../../src/providers/databricks';
 
-const createEmptyProviderOptions = () => ({
-  config: {},
-});
 vi.mock('../../src/logger');
 
 describe('Databricks Foundation Model APIs Provider', () => {
@@ -64,7 +61,9 @@ describe('Databricks Foundation Model APIs Provider', () => {
     it('should create provider with workspace URL from environment variable', () => {
       mockProcessEnv({ DATABRICKS_WORKSPACE_URL: workspaceUrl });
 
-      const options: DatabricksMosaicAiProviderOptions = createEmptyProviderOptions();
+      const options: DatabricksMosaicAiProviderOptions = {
+        config: {},
+      };
       const provider = new DatabricksMosaicAiChatCompletionProvider('my-endpoint', options);
 
       expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
@@ -84,7 +83,9 @@ describe('Databricks Foundation Model APIs Provider', () => {
     });
 
     it('should throw error when no workspace URL is provided', () => {
-      const options: DatabricksMosaicAiProviderOptions = createEmptyProviderOptions();
+      const options: DatabricksMosaicAiProviderOptions = {
+        config: {},
+      };
       expect(() => new DatabricksMosaicAiChatCompletionProvider('my-endpoint', options)).toThrow(
         'Databricks workspace URL is required. Set it in the config or DATABRICKS_WORKSPACE_URL environment variable.',
       );

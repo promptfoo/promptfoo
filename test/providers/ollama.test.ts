@@ -7,60 +7,8 @@ import {
   OllamaCompletionProvider,
   OllamaEmbeddingProvider,
 } from '../../src/providers/ollama';
-import { createAttributeRecordingSpan } from './openai/tracing';
 
 import type { CallApiContextParams } from '../../src/types/index';
-
-const createWeatherToolsOptions = () => ({
-  config: {
-    tools: [
-      {
-        type: 'function',
-        function: {
-          name: 'get_weather',
-          description: 'Get current weather for a location',
-          parameters: {
-            type: 'object',
-            properties: {
-              location: {
-                type: 'string',
-                description: 'City and state, e.g. San Francisco, CA',
-              },
-              unit: {
-                type: 'string',
-                enum: ['celsius', 'fahrenheit'],
-              },
-            },
-            required: ['location'],
-          },
-        },
-      },
-    ],
-  },
-});
-
-const createStreamResponse = (
-  data: string = '{"message":{"role":"assistant","content":"hi"},"done":true}\n',
-) => ({
-  data,
-  cached: false,
-  status: 200,
-  statusText: 'OK',
-  headers: {},
-});
-
-const createEmbeddingResponse = () => ({
-  data: { embeddings: [[0.1]] },
-  cached: false,
-  status: 200,
-  statusText: 'OK',
-  headers: {},
-});
-
-const createCustomProviderOptions = () => ({
-  id: 'custom-id',
-  config: { temperature: 0.7 },
-});
 
 vi.mock('../../src/cache');
 
@@ -70,13 +18,16 @@ describe('OllamaCompletionProvider', () => {
   });
 
   it('should construct with model name and options', () => {
-    const provider = new OllamaCompletionProvider('llama3.3', createCustomProviderOptions());
+    const provider = new OllamaCompletionProvider('llama3.3', {
+      id: 'custom-id',
+      config: { temperature: 0.7 },
+    });
     expect(provider.modelName).toBe('llama3.3');
     expect(provider.config.temperature).toBe(0.7);
     expect(provider.id()).toBe('custom-id');
   });
 
-  const verifyOllamaResponse = async () => {
+  it('should call API and return response', async () => {
     const mockResponse = {
       data: '{"response":"test response","done":true}\n',
       cached: false,
@@ -93,9 +44,7 @@ describe('OllamaCompletionProvider', () => {
     expect(result).toEqual({
       output: 'test response',
     });
-  };
-
-  it('should call API and return response', verifyOllamaResponse);
+  });
 
   it('should handle multiple response chunks', async () => {
     const mockResponse = {
@@ -237,7 +186,13 @@ describe('OllamaCompletionProvider', () => {
   });
 
   it('should handle invalid JSON response', async () => {
-    const mockResponse = createStreamResponse('invalid json');
+    const mockResponse = {
+      data: 'invalid json',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    };
 
     vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
@@ -267,11 +222,13 @@ describe('OllamaCompletionProvider', () => {
   });
 
   it('should prepend thinking to response content when both are present', async () => {
-    vi.mocked(fetchWithCache).mockResolvedValue(
-      createStreamResponse(
-        '{"response":"Hi!","thinking":"Short.","done":true,"done_reason":"stop"}\n',
-      ),
-    );
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: '{"response":"Hi!","thinking":"Short.","done":true,"done_reason":"stop"}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
 
     const provider = new OllamaCompletionProvider('qwen3:0.6b');
     const result = await provider.callApi('test prompt');
@@ -281,11 +238,13 @@ describe('OllamaCompletionProvider', () => {
   });
 
   it('should omit thinking when showThinking is false, without sending it to Ollama', async () => {
-    vi.mocked(fetchWithCache).mockResolvedValue(
-      createStreamResponse(
-        '{"response":"Hi!","thinking":"Short.","done":true,"done_reason":"stop"}\n',
-      ),
-    );
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: '{"response":"Hi!","thinking":"Short.","done":true,"done_reason":"stop"}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
 
     const provider = new OllamaCompletionProvider('qwen3:0.6b', {
       config: { showThinking: false },
@@ -492,7 +451,24 @@ describe('OllamaCompletionProvider', () => {
     });
   });
 
-  it('should handle missing token usage gracefully', verifyOllamaResponse);
+  it('should handle missing token usage gracefully', async () => {
+    const mockResponse = {
+      data: '{"response":"test response","done":true}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    };
+
+    vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+
+    const provider = new OllamaCompletionProvider('llama3.3');
+    const result = await provider.callApi('test prompt');
+
+    expect(result).toEqual({
+      output: 'test response',
+    });
+  });
 
   it('should handle partial token usage (only prompt_eval_count)', async () => {
     const mockResponse = {
@@ -551,16 +527,23 @@ describe('OllamaChatProvider', () => {
   });
 
   it('should construct with model name and options', () => {
-    const provider = new OllamaChatProvider('llama3.3', createCustomProviderOptions());
+    const provider = new OllamaChatProvider('llama3.3', {
+      id: 'custom-id',
+      config: { temperature: 0.7 },
+    });
     expect(provider.modelName).toBe('llama3.3');
     expect(provider.config.temperature).toBe(0.7);
     expect(provider.id()).toBe('custom-id');
   });
 
-  const verifyOllamaChatResponse = async () => {
-    const mockResponse = createStreamResponse(
-      '{"message":{"role":"assistant","content":"test response","images":null},"done":true}\n',
-    );
+  it('should call chat API and return response', async () => {
+    const mockResponse = {
+      data: '{"message":{"role":"assistant","content":"test response","images":null},"done":true}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    };
 
     vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
@@ -570,9 +553,7 @@ describe('OllamaChatProvider', () => {
     expect(result).toEqual({
       output: 'test response',
     });
-  };
-
-  it('should call chat API and return response', verifyOllamaChatResponse);
+  });
 
   it('should handle multiple chat response chunks', async () => {
     const mockResponse = {
@@ -684,7 +665,13 @@ describe('OllamaChatProvider', () => {
   });
 
   it('should handle invalid JSON response', async () => {
-    const mockResponse = createStreamResponse('invalid json');
+    const mockResponse = {
+      data: 'invalid json',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    };
 
     vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
@@ -706,7 +693,13 @@ describe('OllamaChatProvider', () => {
 
   it('should handle think configuration when it is not provided', async () => {
     const provider = new OllamaChatProvider('llama3.3');
-    const mockResponse = createStreamResponse('');
+    const mockResponse = {
+      data: '',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    };
 
     vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
@@ -723,7 +716,13 @@ describe('OllamaChatProvider', () => {
         think: false,
       },
     });
-    const mockResponse = createStreamResponse('');
+    const mockResponse = {
+      data: '',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    };
 
     vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
@@ -740,7 +739,13 @@ describe('OllamaChatProvider', () => {
         think: true,
       },
     });
-    const mockResponse = createStreamResponse('');
+    const mockResponse = {
+      data: '',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    };
 
     vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
@@ -770,7 +775,13 @@ describe('OllamaChatProvider', () => {
   });
 
   it('should merge passthrough.options instead of clobbering computed options', async () => {
-    vi.mocked(fetchWithCache).mockResolvedValue(createStreamResponse());
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: '{"message":{"role":"assistant","content":"hi"},"done":true}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
 
     const provider = new OllamaChatProvider('llama3.3', {
       config: { temperature: 0.5, num_predict: 64, passthrough: { options: { min_p: 0.1 } } },
@@ -784,7 +795,13 @@ describe('OllamaChatProvider', () => {
   });
 
   it('should forward min_p, keep_alive, and legacy options, but drop invalid keys', async () => {
-    vi.mocked(fetchWithCache).mockResolvedValue(createStreamResponse());
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: '{"message":{"role":"assistant","content":"hi"},"done":true}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
 
     const provider = new OllamaChatProvider('llama3.3', {
       config: {
@@ -819,7 +836,13 @@ describe('OllamaChatProvider', () => {
   it.each([['low'], ['medium'], ['high'], ['max'], [true], [false]])(
     'should forward think level %s as a top-level parameter',
     async (level) => {
-      vi.mocked(fetchWithCache).mockResolvedValue(createStreamResponse());
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: '{"message":{"role":"assistant","content":"hi"},"done":true}\n',
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      });
 
       const provider = new OllamaChatProvider('qwen3', { config: { think: level as any } });
       await provider.callApi('test prompt');
@@ -875,7 +898,13 @@ describe('OllamaChatProvider', () => {
 
   it('should warn when a completion-only key is set on a chat provider', async () => {
     const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
-    vi.mocked(fetchWithCache).mockResolvedValue(createStreamResponse());
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: '{"message":{"role":"assistant","content":"hi"},"done":true}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
 
     const provider = new OllamaChatProvider('qwen3', {
       config: { suffix: 'X', system: 'terse', raw: true } as any,
@@ -930,7 +959,13 @@ describe('OllamaChatProvider', () => {
 
   it('should not warn for keys the chat endpoint does accept', async () => {
     const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
-    vi.mocked(fetchWithCache).mockResolvedValue(createStreamResponse());
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: '{"message":{"role":"assistant","content":"hi"},"done":true}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
 
     const provider = new OllamaChatProvider('qwen3', {
       config: { think: false, keep_alive: '5m', format: 'json' },
@@ -944,7 +979,13 @@ describe('OllamaChatProvider', () => {
 
   it('should not report promptfoo-internal keys as dropped config', async () => {
     const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => logger);
-    vi.mocked(fetchWithCache).mockResolvedValue(createStreamResponse());
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: '{"message":{"role":"assistant","content":"hi"},"done":true}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
 
     // loadApiProvider injects basePath into every provider config, so without an
     // exclusion the diagnostic fires on every request with a key the user never set.
@@ -961,7 +1002,13 @@ describe('OllamaChatProvider', () => {
   });
 
   it('should not leak think or passthrough into the nested options object', async () => {
-    vi.mocked(fetchWithCache).mockResolvedValue(createStreamResponse());
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: '{"message":{"role":"assistant","content":"hi"},"done":true}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
 
     const provider = new OllamaChatProvider('llama3.3', {
       config: { temperature: 0.5, think: true, passthrough: { format: 'json' } },
@@ -1031,9 +1078,13 @@ describe('OllamaChatProvider', () => {
         tools: [{ name: 'test-tool' }],
       },
     });
-    const mockResponse = createStreamResponse(
-      '{"message":{"role":"assistant","content":"test response","images":null},"done":true}\n',
-    );
+    const mockResponse = {
+      data: '{"message":{"role":"assistant","content":"test response","images":null},"done":true}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    };
 
     vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
@@ -1055,9 +1106,13 @@ describe('OllamaChatProvider', () => {
 
   it('should handle context bustCache parameter', async () => {
     const provider = new OllamaChatProvider('llama3.3');
-    const mockResponse = createStreamResponse(
-      '{"message":{"role":"assistant","content":"test response","images":null},"done":true}\n',
-    );
+    const mockResponse = {
+      data: '{"message":{"role":"assistant","content":"test response","images":null},"done":true}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    };
 
     vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
@@ -1099,7 +1154,24 @@ describe('OllamaChatProvider', () => {
     });
   });
 
-  it('should handle missing token usage gracefully in chat', verifyOllamaChatResponse);
+  it('should handle missing token usage gracefully in chat', async () => {
+    const mockResponse = {
+      data: '{"message":{"role":"assistant","content":"test response","images":null},"done":true}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    };
+
+    vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+
+    const provider = new OllamaChatProvider('llama3.3');
+    const result = await provider.callApi('test prompt');
+
+    expect(result).toEqual({
+      output: 'test response',
+    });
+  });
 
   it('should handle partial token usage in chat (only prompt_eval_count)', async () => {
     const mockResponse = {
@@ -1162,7 +1234,33 @@ describe('OllamaChatProvider', () => {
 
     vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
-    const provider = new OllamaChatProvider('llama3.3', createWeatherToolsOptions());
+    const provider = new OllamaChatProvider('llama3.3', {
+      config: {
+        tools: [
+          {
+            type: 'function',
+            function: {
+              name: 'get_weather',
+              description: 'Get current weather for a location',
+              parameters: {
+                type: 'object',
+                properties: {
+                  location: {
+                    type: 'string',
+                    description: 'City and state, e.g. San Francisco, CA',
+                  },
+                  unit: {
+                    type: 'string',
+                    enum: ['celsius', 'fahrenheit'],
+                  },
+                },
+                required: ['location'],
+              },
+            },
+          },
+        ],
+      },
+    });
 
     const result = await provider.callApi('What is the weather in Amsterdam?');
 
@@ -1187,7 +1285,33 @@ describe('OllamaChatProvider', () => {
 
     vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
-    const provider = new OllamaChatProvider('llama3.3', createWeatherToolsOptions());
+    const provider = new OllamaChatProvider('llama3.3', {
+      config: {
+        tools: [
+          {
+            type: 'function',
+            function: {
+              name: 'get_weather',
+              description: 'Get current weather for a location',
+              parameters: {
+                type: 'object',
+                properties: {
+                  location: {
+                    type: 'string',
+                    description: 'City and state, e.g. San Francisco, CA',
+                  },
+                  unit: {
+                    type: 'string',
+                    enum: ['celsius', 'fahrenheit'],
+                  },
+                },
+                required: ['location'],
+              },
+            },
+          },
+        ],
+      },
+    });
 
     const result = await provider.callApi('What is the weather in Amsterdam?');
 
@@ -1416,7 +1540,33 @@ describe('OllamaChatProvider', () => {
 
     vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
-    const provider = new OllamaChatProvider('llama3.3', createWeatherToolsOptions());
+    const provider = new OllamaChatProvider('llama3.3', {
+      config: {
+        tools: [
+          {
+            type: 'function',
+            function: {
+              name: 'get_weather',
+              description: 'Get current weather for a location',
+              parameters: {
+                type: 'object',
+                properties: {
+                  location: {
+                    type: 'string',
+                    description: 'City and state, e.g. San Francisco, CA',
+                  },
+                  unit: {
+                    type: 'string',
+                    enum: ['celsius', 'fahrenheit'],
+                  },
+                },
+                required: ['location'],
+              },
+            },
+          },
+        ],
+      },
+    });
 
     const result = await provider.callApi('Compare weather in Amsterdam and Paris');
 
@@ -1456,7 +1606,20 @@ describe('Ollama provider tracing', () => {
   ])('prefers the canonical test index for $operation spans', async ({ Provider, data }) => {
     const attributes: Record<string, unknown> = {};
     const getTracer = vi.spyOn(trace, 'getTracer').mockReturnValue({
-      startActiveSpan: createAttributeRecordingSpan(attributes),
+      startActiveSpan: (
+        _name: string,
+        options: { attributes: Record<string, unknown> },
+        _context: unknown,
+        callback: any,
+      ) => {
+        Object.assign(attributes, options.attributes);
+        return callback({
+          setAttribute: vi.fn(),
+          setStatus: vi.fn(),
+          recordException: vi.fn(),
+          end: vi.fn(),
+        });
+      },
     } as any);
 
     try {
@@ -1549,7 +1712,13 @@ describe('OllamaEmbeddingProvider', () => {
 
   it('should warn for a key the embed endpoint does not accept', async () => {
     const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
-    vi.mocked(fetchWithCache).mockResolvedValue(createEmbeddingResponse());
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: { embeddings: [[0.1]] },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
 
     const provider = new OllamaEmbeddingProvider('all-minilm', {
       config: { format: 'json', suffix: 'X' } as any,
@@ -1608,7 +1777,13 @@ describe('OllamaEmbeddingProvider', () => {
   });
 
   it('should default truncate to false so over-long input fails loudly', async () => {
-    vi.mocked(fetchWithCache).mockResolvedValue(createEmbeddingResponse());
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: { embeddings: [[0.1]] },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
 
     const provider = new OllamaEmbeddingProvider('all-minilm');
     await provider.callEmbeddingApi('test text');
@@ -1619,7 +1794,13 @@ describe('OllamaEmbeddingProvider', () => {
   });
 
   it('should thread config through to the embeddings request', async () => {
-    vi.mocked(fetchWithCache).mockResolvedValue(createEmbeddingResponse());
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: { embeddings: [[0.1]] },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
 
     const provider = new OllamaEmbeddingProvider('all-minilm', {
       config: {
@@ -1724,7 +1905,13 @@ describe('OllamaEmbeddingProvider', () => {
   });
 
   it('should handle invalid JSON response', async () => {
-    const mockResponse = createStreamResponse('invalid json');
+    const mockResponse = {
+      data: 'invalid json',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    };
 
     vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 

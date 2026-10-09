@@ -1,4 +1,3 @@
-import { createMockFetchResponse } from '../../mockProviderResponses';
 // Load-bearing: registers shared vi.mock / beforeEach hooks before any
 // module-under-test import below. See ./setup.ts for details.
 import './setup';
@@ -7,35 +6,30 @@ import { describe, expect, it, vi } from 'vitest';
 import * as cache from '../../../../src/cache';
 import { OpenAiResponsesProvider } from '../../../../src/providers/openai/responses';
 
-const createFunctionCallResponse = () => ({
-  id: 'resp_abc123',
-  status: 'completed',
-  model: 'gpt-4o',
-  output: [
-    {
-      type: 'function_call',
-      name: 'addNumbers',
-      id: 'call_123',
-      arguments: '{"a": 5, "b": 6}',
-    },
-  ],
-  usage: { input_tokens: 20, output_tokens: 15, total_tokens: 35 },
-});
-
-const createCompletedFunctionCall = () => ({
-  type: 'function_call',
-  status: 'completed',
-  name: 'addNumbers',
-  arguments: '{}',
-  call_id: 'call_123',
-});
-
 describe('OpenAiResponsesProvider function callbacks', () => {
   describe('Function Tool Callbacks', () => {
     it('should execute function callbacks and return the result', async () => {
-      const mockApiResponse = createFunctionCallResponse();
+      const mockApiResponse = {
+        id: 'resp_abc123',
+        status: 'completed',
+        model: 'gpt-4o',
+        output: [
+          {
+            type: 'function_call',
+            name: 'addNumbers',
+            id: 'call_123',
+            arguments: '{"a": 5, "b": 6}',
+          },
+        ],
+        usage: { input_tokens: 20, output_tokens: 15, total_tokens: 35 },
+      };
 
-      vi.mocked(cache.fetchWithCache).mockResolvedValue(createMockFetchResponse(mockApiResponse));
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
+        data: mockApiResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
 
       const provider = new OpenAiResponsesProvider('gpt-4o', {
         config: {
@@ -67,12 +61,23 @@ describe('OpenAiResponsesProvider function callbacks', () => {
             id: 'call_123',
             arguments: '{"a": 5, "b": 6}',
           },
-          createCompletedFunctionCall(),
+          {
+            type: 'function_call',
+            status: 'completed',
+            name: 'addNumbers',
+            arguments: '{}',
+            call_id: 'call_123',
+          },
         ],
         usage: { input_tokens: 20, output_tokens: 15, total_tokens: 35 },
       };
 
-      vi.mocked(cache.fetchWithCache).mockResolvedValue(createMockFetchResponse(mockApiResponse));
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
+        data: mockApiResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
 
       const provider = new OpenAiResponsesProvider('gpt-4o', {
         config: {
@@ -111,7 +116,12 @@ describe('OpenAiResponsesProvider function callbacks', () => {
         usage: { input_tokens: 20, output_tokens: 15, total_tokens: 35 },
       };
 
-      vi.mocked(cache.fetchWithCache).mockResolvedValue(createMockFetchResponse(mockApiResponse));
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
+        data: mockApiResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
 
       const provider = new OpenAiResponsesProvider('gpt-4o', {
         config: {
@@ -155,7 +165,12 @@ describe('OpenAiResponsesProvider function callbacks', () => {
         usage: { input_tokens: 20, output_tokens: 15, total_tokens: 35 },
       };
 
-      vi.mocked(cache.fetchWithCache).mockResolvedValue(createMockFetchResponse(mockApiResponse));
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
+        data: mockApiResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
 
       const provider = new OpenAiResponsesProvider('gpt-4o', {
         config: {
@@ -180,11 +195,24 @@ describe('OpenAiResponsesProvider function callbacks', () => {
         id: 'resp_abc123',
         status: 'completed',
         model: 'gpt-4o',
-        output: [createCompletedFunctionCall()],
+        output: [
+          {
+            type: 'function_call',
+            status: 'completed',
+            name: 'addNumbers',
+            arguments: '{}',
+            call_id: 'call_123',
+          },
+        ],
         usage: { input_tokens: 20, output_tokens: 15, total_tokens: 35 },
       };
 
-      vi.mocked(cache.fetchWithCache).mockResolvedValue(createMockFetchResponse(mockApiResponse));
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
+        data: mockApiResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
 
       const provider = new OpenAiResponsesProvider('gpt-4o', {
         config: {
@@ -224,7 +252,12 @@ describe('OpenAiResponsesProvider function callbacks', () => {
         usage: { input_tokens: 20, output_tokens: 15, total_tokens: 35 },
       };
 
-      vi.mocked(cache.fetchWithCache).mockResolvedValue(createMockFetchResponse(mockApiResponse));
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
+        data: mockApiResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
 
       const provider = new OpenAiResponsesProvider('gpt-4o', {
         config: {
@@ -262,7 +295,12 @@ describe('OpenAiResponsesProvider function callbacks', () => {
         usage: { input_tokens: 20, output_tokens: 15, total_tokens: 35 },
       };
 
-      vi.mocked(cache.fetchWithCache).mockResolvedValue(createMockFetchResponse(mockApiResponse));
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
+        data: mockApiResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
 
       const provider = new OpenAiResponsesProvider('gpt-4o', {
         config: {
@@ -289,7 +327,13 @@ describe('OpenAiResponsesProvider function callbacks', () => {
         status: 'completed',
         model: 'gpt-4o',
         output: [
-          createCompletedFunctionCall(),
+          {
+            type: 'function_call',
+            status: 'completed',
+            name: 'addNumbers',
+            arguments: '{}',
+            call_id: 'call_123',
+          },
           {
             type: 'function_call',
             status: 'completed',
@@ -301,7 +345,12 @@ describe('OpenAiResponsesProvider function callbacks', () => {
         usage: { input_tokens: 20, output_tokens: 15, total_tokens: 35 },
       };
 
-      vi.mocked(cache.fetchWithCache).mockResolvedValue(createMockFetchResponse(mockApiResponse));
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
+        data: mockApiResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
 
       const provider = new OpenAiResponsesProvider('gpt-4o', {
         config: {
@@ -347,7 +396,12 @@ describe('OpenAiResponsesProvider function callbacks', () => {
         usage: { input_tokens: 20, output_tokens: 15, total_tokens: 35 },
       };
 
-      vi.mocked(cache.fetchWithCache).mockResolvedValue(createMockFetchResponse(mockApiResponse));
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
+        data: mockApiResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
 
       const provider = new OpenAiResponsesProvider('gpt-4o', {
         config: {
@@ -368,9 +422,27 @@ describe('OpenAiResponsesProvider function callbacks', () => {
     });
 
     it('should handle tool callback integration test with expected result format', async () => {
-      const mockApiResponse = createFunctionCallResponse();
+      const mockApiResponse = {
+        id: 'resp_abc123',
+        status: 'completed',
+        model: 'gpt-4o',
+        output: [
+          {
+            type: 'function_call',
+            name: 'addNumbers',
+            id: 'call_123',
+            arguments: '{"a": 5, "b": 6}',
+          },
+        ],
+        usage: { input_tokens: 20, output_tokens: 15, total_tokens: 35 },
+      };
 
-      vi.mocked(cache.fetchWithCache).mockResolvedValue(createMockFetchResponse(mockApiResponse));
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
+        data: mockApiResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
 
       const provider = new OpenAiResponsesProvider('gpt-4o', {
         config: {

@@ -1,6 +1,5 @@
 import { getEnvString } from '../../envars';
 import { OpenAiChatCompletionProvider } from '../openai/chat';
-import { serializeProvider } from '../serialization';
 
 import type { EnvVarKey } from '../../envars';
 import type { EnvOverrides } from '../../types/env';
@@ -122,7 +121,14 @@ export class NvidiaProvider extends OpenAiChatCompletionProvider {
   }
 
   toJSON() {
-    return serializeProvider(this, 'nvidia');
+    return {
+      provider: 'nvidia',
+      model: this.modelName,
+      config: {
+        ...this.config,
+        ...(this.config.apiKey && { apiKey: undefined }),
+      },
+    };
   }
 }
 

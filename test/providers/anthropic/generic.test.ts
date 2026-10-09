@@ -5,14 +5,6 @@ import { AnthropicGenericProvider } from '../../../src/providers/anthropic/gener
 import { AnthropicMessagesProvider } from '../../../src/providers/anthropic/messages';
 import { mockProcessEnv } from '../../util/utils';
 
-const { createProxyAgentFactory } = await vi.hoisted(() => import('../../factories/moduleMocks'));
-
-const createMessagesRequest = () => ({
-  method: 'post',
-  path: '/v1/messages',
-  body: { model: 'claude-3-5-sonnet-20241022', max_tokens: 1, messages: [] },
-});
-
 const claudeCodeAuthMocks = vi.hoisted(() => ({
   loadClaudeCodeCredential: vi.fn(),
   isCredentialExpired: vi.fn(),
@@ -27,7 +19,15 @@ vi.mock('../../../src/providers/anthropic/claudeCodeAuth', async (importOriginal
   };
 });
 
-vi.mock('proxy-agent', createProxyAgentFactory());
+vi.mock('proxy-agent', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+
+    ProxyAgent: vi.fn().mockImplementation(function () {
+      return {};
+    }),
+  };
+});
 
 describe('AnthropicGenericProvider', () => {
   describe('constructor', () => {
@@ -70,7 +70,11 @@ describe('AnthropicGenericProvider', () => {
           config: { apiKey: 'test-key', apiBaseUrl: 'https://third-party.example' },
           env: { ANTHROPIC_CUSTOM_HEADERS: '' },
         });
-        const { req } = await (provider.anthropic as any).buildRequest(createMessagesRequest());
+        const { req } = await (provider.anthropic as any).buildRequest({
+          method: 'post',
+          path: '/v1/messages',
+          body: { model: 'claude-3-5-sonnet-20241022', max_tokens: 1, messages: [] },
+        });
         const headers = new Headers(req.headers);
 
         expect(headers.has('x-proxy-secret')).toBe(false);
@@ -91,7 +95,11 @@ describe('AnthropicGenericProvider', () => {
           config: { apiKey: 'test-key', apiBaseUrl: 'https://third-party.example' },
           env: { ANTHROPIC_CUSTOM_HEADERS: 'X-Target-Header: configured-value' },
         });
-        const { req } = await (provider.anthropic as any).buildRequest(createMessagesRequest());
+        const { req } = await (provider.anthropic as any).buildRequest({
+          method: 'post',
+          path: '/v1/messages',
+          body: { model: 'claude-3-5-sonnet-20241022', max_tokens: 1, messages: [] },
+        });
         const headers = new Headers(req.headers);
 
         expect(headers.has('x-proxy-secret')).toBe(false);
@@ -112,7 +120,11 @@ describe('AnthropicGenericProvider', () => {
           config: { apiKey: 'test-key', apiBaseUrl: 'https://third-party.example' },
           env: { ANTHROPIC_CUSTOM_HEADERS: '' },
         });
-        const { req } = await (provider.anthropic as any).buildRequest(createMessagesRequest());
+        const { req } = await (provider.anthropic as any).buildRequest({
+          method: 'post',
+          path: '/v1/messages',
+          body: { model: 'claude-3-5-sonnet-20241022', max_tokens: 1, messages: [] },
+        });
 
         expect(req.headers.get('x-api-key')).toBe('test-key');
         expect(req.headers.get('x-proxy-secret')).toBeNull();

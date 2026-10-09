@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { processTemplateFile as processMarkdownFile } from '../../../src/prompts/processors/text';
+import { processMarkdownFile } from '../../../src/prompts/processors/markdown';
 
 vi.mock('fs');
 

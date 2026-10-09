@@ -14,9 +14,21 @@ import dedent from 'dedent';
 import { getCache, isCacheEnabled } from '../cache';
 import logger from '../logger';
 import { safeResolve } from '../util/pathUtils';
-import { providerRegistry } from './providerRegistry';
 
 import type { ApiProvider, ProviderResponse } from '../types/index';
+
+const AGENTIC_PROVIDER_IDS = [
+  'anthropic:claude-agent-sdk',
+  'anthropic:claude-code',
+  'openai:codex',
+  'openai:codex-app-server',
+  'openai:codex-desktop',
+  'openai:codex-security',
+  'openai:codex-sdk',
+  'openinterpreter',
+  'opencode',
+  'opencode:sdk',
+] as const;
 
 /**
  * Whether a provider runs a coding-agent runtime rather than a plain model API.
@@ -35,18 +47,9 @@ export function isAgenticProvider(provider: ApiProvider | null | undefined): boo
     return false;
   }
 
-  return [
-    'anthropic:claude-agent-sdk',
-    'anthropic:claude-code',
-    'openai:codex',
-    'openai:codex-app-server',
-    'openai:codex-desktop',
-    'openai:codex-security',
-    'openai:codex-sdk',
-    'openinterpreter',
-    'opencode',
-    'opencode:sdk',
-  ].some((agenticId) => providerId === agenticId || providerId.startsWith(`${agenticId}:`));
+  return AGENTIC_PROVIDER_IDS.some(
+    (agenticId) => providerId === agenticId || providerId.startsWith(`${agenticId}:`),
+  );
 }
 
 /**
@@ -83,7 +86,8 @@ export function resolveAgenticWorkingDir(
     return undefined;
   }
 
-  return safeResolve(configBasePath ? path.resolve(configBasePath) : process.cwd(), workingDir);
+  const basePath = configBasePath ? path.resolve(configBasePath) : process.cwd();
+  return safeResolve(basePath, workingDir);
 }
 
 /**
@@ -98,7 +102,8 @@ export function resolveAgenticWorkingDir(
  * @throws Error if fingerprinting times out or directory is inaccessible
  */
 export async function getWorkingDirFingerprint(workingDir: string): Promise<string> {
-  const dirMtime = (await fs.stat(workingDir)).mtimeMs;
+  const dirStat = await fs.stat(workingDir);
+  const dirMtime = dirStat.mtimeMs;
 
   const startTime = Date.now();
 
@@ -108,7 +113,9 @@ export async function getWorkingDirFingerprint(workingDir: string): Promise<stri
       throw new Error('Working directory fingerprint timed out');
     }
 
-    for (const entry of await fs.readdir(dir, { withFileTypes: true })) {
+    const entries = await fs.readdir(dir, { withFileTypes: true });
+
+    for (const entry of entries) {
       const fullPath = path.join(dir, entry.name);
       if (entry.isDirectory()) {
         await getAllFiles(fullPath, files);
@@ -128,10 +135,12 @@ export async function getWorkingDirFingerprint(workingDir: string): Promise<stri
       throw new Error('Working directory fingerprint timed out');
     }
 
+    const batch = allFiles.slice(i, i + STAT_BATCH_SIZE);
     const batchMtimes = await Promise.all(
-      allFiles.slice(i, i + STAT_BATCH_SIZE).map(async (file: string) => {
+      batch.map(async (file: string) => {
         const stat = await fs.stat(file);
-        return `${path.relative(workingDir, file)}:${stat.mtimeMs}`;
+        const relativePath = path.relative(workingDir, file);
+        return `${relativePath}:${stat.mtimeMs}`;
       }),
     );
     fileMtimes.push(...batchMtimes);
@@ -139,7 +148,9 @@ export async function getWorkingDirFingerprint(workingDir: string): Promise<stri
   fileMtimes.sort(); // Sort for consistent ordering
 
   const fingerprintData = `dir:${dirMtime};files:${fileMtimes.join(',')}`;
-  return crypto.createHash('sha256').update(fingerprintData).digest('hex');
+  const fingerprint = crypto.createHash('sha256').update(fingerprintData).digest('hex');
+
+  return fingerprint;
 }
 
 /**
@@ -162,6 +173,8 @@ export interface AgenticCacheOptions {
  * Result of cache check operation
  */
 export interface CacheCheckResult {
+  /** Whether caching should be used */
+  shouldCache: boolean;
   /** Whether we should read from cache (false when bustCache is true) */
   shouldReadCache: boolean;
   /** Whether we should write to cache */
@@ -170,12 +183,9 @@ export interface CacheCheckResult {
   cache?: Awaited<ReturnType<typeof getCache>>;
   /** The generated cache key (if caching is enabled) */
   cacheKey?: string;
+  /** The working directory fingerprint (if working_dir was provided) */
+  workingDirFingerprint?: string | null;
 }
-
-const createDisabledCacheResult = (): CacheCheckResult => ({
-  shouldReadCache: false,
-  shouldWriteCache: false,
-});
 
 /**
  * Generate a cache key from arbitrary data using SHA-256 hash
@@ -207,14 +217,24 @@ export async function initializeAgenticCache(
   options: AgenticCacheOptions,
   cacheKeyData: Record<string, unknown>,
 ): Promise<CacheCheckResult> {
-  if (!isCacheEnabled()) {
-    return createDisabledCacheResult();
+  const shouldCache = isCacheEnabled();
+
+  if (!shouldCache) {
+    return {
+      shouldCache: false,
+      shouldReadCache: false,
+      shouldWriteCache: false,
+    };
   }
 
   // MCP tools typically interact with external state, so disable caching by default.
   // Users can opt in with cacheMcp: true for deterministic MCP tools.
   if (options.mcp && !options.cacheMcp) {
-    return createDisabledCacheResult();
+    return {
+      shouldCache: false,
+      shouldReadCache: false,
+      shouldWriteCache: false,
+    };
   }
 
   let workingDirFingerprint: string | null = null;
@@ -228,7 +248,11 @@ export async function initializeAgenticCache(
 
         Caching is disabled.`,
       );
-      return createDisabledCacheResult();
+      return {
+        shouldCache: false,
+        shouldReadCache: false,
+        shouldWriteCache: false,
+      };
     }
   }
 
@@ -240,10 +264,12 @@ export async function initializeAgenticCache(
   });
 
   return {
+    shouldCache: true,
     shouldReadCache: !options.bustCache,
     shouldWriteCache: true,
     cache,
     cacheKey,
+    workingDirFingerprint,
   };
 }
 
@@ -299,16 +325,5 @@ export async function cacheResponse(
     logger.error(
       `Error caching response${debugContext ? ` for ${debugContext}` : ''}: ${String(error)}`,
     );
-  }
-}
-
-export async function cleanupAndUnregister(provider: {
-  cleanup(): Promise<void>;
-  shutdown(): Promise<void>;
-}): Promise<void> {
-  try {
-    await provider.cleanup();
-  } finally {
-    providerRegistry.unregister(provider);
   }
 }

@@ -43,7 +43,15 @@ interface MeteorAssertion {
   gamma?: number;
 }
 
-function generateEnums(candidate: string[], reference: string[]): [WordPair[], WordPair[]] {
+function preprocessWord(word: string): string {
+  return word.toLowerCase();
+}
+
+function generateEnums(
+  candidate: string[],
+  reference: string[],
+  preprocess: (word: string) => string = preprocessWord,
+): [WordPair[], WordPair[]] {
   if (typeof candidate === 'string') {
     throw new TypeError(`"candidate" expects pre-tokenized candidate (string[]): ${candidate}`);
   }
@@ -53,10 +61,10 @@ function generateEnums(candidate: string[], reference: string[]): [WordPair[], W
   }
 
   const enumCandidateList: WordPair[] = candidate.map(
-    (word, idx): WordPair => [idx, word.toLowerCase()],
+    (word, idx): WordPair => [idx, preprocess(word)],
   );
   const enumReferenceList: WordPair[] = reference.map(
-    (word, idx): WordPair => [idx, word.toLowerCase()],
+    (word, idx): WordPair => [idx, preprocess(word)],
   );
   return [enumCandidateList, enumReferenceList];
 }
@@ -86,36 +94,44 @@ function matchExactEnums(
 async function matchStemEnums(
   enumCandidateList: WordPair[],
   enumReferenceList: WordPair[],
+  stemmer?: Stemmer,
 ): Promise<[MatchPair[], WordPair[], WordPair[]]> {
   await ensureNaturalPackage();
   invariant(PorterStemmer, 'PorterStemmer should be loaded');
 
-  const actualStemmer = PorterStemmer;
+  const actualStemmer = stemmer || PorterStemmer;
+  const candidateCopy = [...enumCandidateList];
+  const referenceCopy = [...enumReferenceList];
 
   // Create stemmed versions of words
-  const candidateStems = enumCandidateList.map(
+  const candidateStems = candidateCopy.map(
     ([idx, word]) => [idx, actualStemmer.stem(word)] as [number, string],
   );
-  const referenceStems = enumReferenceList.map(
+  const referenceStems = referenceCopy.map(
     ([idx, word]) => [idx, actualStemmer.stem(word)] as [number, string],
   );
 
-  return matchExactEnums(candidateStems, referenceStems);
+  return matchExactEnums(
+    candidateStems.map(([idx, stem]) => [idx, stem] as WordPair),
+    referenceStems.map(([idx, stem]) => [idx, stem] as WordPair),
+  );
 }
 
 async function matchSynonymEnums(
   enumCandidateList: WordPair[],
   enumReferenceList: WordPair[],
-): Promise<MatchPair[]> {
+  wordnet?: unknown,
+): Promise<[MatchPair[], WordPair[], WordPair[]]> {
   await ensureNaturalPackage();
   invariant(WordNet, 'WordNet should be loaded');
 
-  const actualWordNet = new WordNet();
+  const actualWordNet = wordnet || new WordNet();
   const wordMatch: MatchPair[] = [];
+  const candidateCopy = [...enumCandidateList];
   const referenceCopy = [...enumReferenceList];
 
-  for (let i = enumCandidateList.length - 1; i >= 0; i--) {
-    const candidateWord = enumCandidateList[i][1];
+  for (let i = candidateCopy.length - 1; i >= 0; i--) {
+    const candidateWord = candidateCopy[i][1];
 
     // Get all synsets and their synonyms
     const candidateSynsets = await new Promise<DataRecord[]>((resolve) => {
@@ -134,14 +150,15 @@ async function matchSynonymEnums(
     for (let j = referenceCopy.length - 1; j >= 0; j--) {
       const referenceWord = referenceCopy[j][1];
       if (candidateSynonymSet.has(referenceWord)) {
-        wordMatch.push([enumCandidateList[i][0], referenceCopy[j][0]]);
+        wordMatch.push([candidateCopy[i][0], referenceCopy[j][0]]);
+        candidateCopy.splice(i, 1);
         referenceCopy.splice(j, 1);
         break;
       }
     }
   }
 
-  return wordMatch;
+  return [wordMatch, candidateCopy, referenceCopy];
 }
 
 function countChunks(matches: MatchPair[]): number {
@@ -179,7 +196,7 @@ async function calculateSingleMeteorScore(
     await matchStemEnums(remainingCandidate, remainingReference);
 
   // Stage 3: Synonym matches
-  const synonymMatches = await matchSynonymEnums(
+  const [synonymMatches, ,] = await matchSynonymEnums(
     remainingCandidateAfterStem,
     remainingReferenceAfterStem,
   );
@@ -190,6 +207,12 @@ async function calculateSingleMeteorScore(
   );
   const matchesCount = allMatches.length;
 
+  if (matchesCount === 0) {
+    return 0;
+  }
+
+  let fragFrac = 0;
+  let fmean = 0;
   if (translationLength === 0 || referenceLength === 0 || matchesCount === 0) {
     return 0.0;
   }
@@ -202,9 +225,9 @@ async function calculateSingleMeteorScore(
     return 0.0;
   }
 
-  const fmean = (precision * recall) / denominator;
+  fmean = (precision * recall) / denominator;
   const chunkCount = countChunks(allMatches);
-  const fragFrac = chunkCount / matchesCount;
+  fragFrac = chunkCount / matchesCount;
   const penalty = gamma * Math.pow(fragFrac, beta);
 
   return (1 - penalty) * fmean;

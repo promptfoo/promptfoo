@@ -1,14 +1,20 @@
 import { describe, expect, it } from 'vitest';
 import { handlePerplexity, handlePerplexityScore } from '../../src/assertions/perplexity';
-import { createNumericAssertionParams } from '../factories/assertionParams';
 
-const createInvertedPerplexityParams = () => ({
-  assertion: { type: 'perplexity-score' as const, threshold: 0.5 },
-  logProbs: [-2],
-  inverse: true,
-});
+import type { AssertionParams } from '../../src/types';
 
-const params = createNumericAssertionParams('perplexity', 5);
+const params = (overrides: Partial<AssertionParams>): AssertionParams =>
+  ({
+    assertion: { type: 'perplexity', threshold: 5 },
+    baseType: 'perplexity',
+    assertionValueContext: {} as any,
+    inverse: false,
+    output: '',
+    outputString: '',
+    providerResponse: { output: '' },
+    test: {},
+    ...overrides,
+  }) as AssertionParams;
 
 // logProbs [0, 0] => perplexity = exp(0) = 1 (within threshold 5)
 // logProbs [-2]   => perplexity = exp(2) ≈ 7.39 (exceeds threshold 5)
@@ -64,7 +70,13 @@ describe('handlePerplexityScore inverse (not-perplexity-score)', () => {
     );
     expect(base.score).toBeCloseTo(0.1192, 4);
 
-    const inverted = handlePerplexityScore(params(createInvertedPerplexityParams()));
+    const inverted = handlePerplexityScore(
+      params({
+        assertion: { type: 'perplexity-score', threshold: 0.5 },
+        logProbs: [-2],
+        inverse: true,
+      }),
+    );
     // Inverting the graded score keeps perplexity-score aggregate-friendly ("higher is better")
     // under negation: high perplexity (low norm) yields a high score for not-perplexity-score.
     // This matters because assertionsResult overrides pass/fail with the aggregate score when a
@@ -74,7 +86,13 @@ describe('handlePerplexityScore inverse (not-perplexity-score)', () => {
 
   it('passes and contributes a high score when perplexity exceeds the normalized threshold', () => {
     // norm ≈ 0.1192 < threshold 0.5 => base fails, so not- passes; inverted score ≈ 0.8808
-    const inverted = handlePerplexityScore(params(createInvertedPerplexityParams()));
+    const inverted = handlePerplexityScore(
+      params({
+        assertion: { type: 'perplexity-score', threshold: 0.5 },
+        logProbs: [-2],
+        inverse: true,
+      }),
+    );
     expect(inverted.pass).toBe(true);
     expect(inverted.score).toBeCloseTo(0.8808, 4);
   });

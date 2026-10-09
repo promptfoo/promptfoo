@@ -1,5 +1,3 @@
-import { createApiKeyOptions, createLocationProperties } from '../../../factories/literalFixtures';
-import { createMockFetchResponse } from '../../mockProviderResponses';
 // Load-bearing: registers shared vi.mock / beforeEach hooks before any
 // module-under-test import below. See ./setup.ts for details.
 import './setup';
@@ -9,31 +7,6 @@ import * as cache from '../../../../src/cache';
 import { OpenAiResponsesProvider } from '../../../../src/providers/openai/responses';
 
 import type { OpenAiWebSearchTool } from '../../../../src/providers/openai/types';
-
-const createWeatherToolMessage = () => ({
-  type: 'message',
-  role: 'assistant',
-  content: [
-    {
-      type: 'tool_call',
-      name: 'get_weather',
-      id: 'call_123',
-      input: { location: 'San Francisco' },
-    },
-  ],
-});
-
-const createResponsesTokenUsage = () => ({
-  input_tokens: 1_000,
-  output_tokens: 100,
-  total_tokens: 1_100,
-});
-
-const createCompletedWebSearchCall = () => ({
-  type: 'web_search_call',
-  action: { type: 'search', query: 'pricing' },
-  status: 'completed',
-});
 
 describe('OpenAiResponsesProvider tool handling', () => {
   it.each([
@@ -67,8 +40,8 @@ describe('OpenAiResponsesProvider tool handling', () => {
   ] satisfies OpenAiWebSearchTool[])(
     'forwards $type options with $search_context_size context',
     async (tool) => {
-      vi.mocked(cache.fetchWithCache).mockResolvedValue(
-        createMockFetchResponse({
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
+        data: {
           id: 'resp_search',
           status: 'completed',
           output: [
@@ -78,8 +51,11 @@ describe('OpenAiResponsesProvider tool handling', () => {
               content: [{ type: 'output_text', text: 'Found documentation.' }],
             },
           ],
-        }),
-      );
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
       const provider = new OpenAiResponsesProvider('gpt-5.6-sol', {
         config: { apiKey: 'test-key', tools: [tool] },
       });
@@ -99,11 +75,29 @@ describe('OpenAiResponsesProvider tool handling', () => {
       id: 'resp_abc123',
       status: 'completed',
       model: 'gpt-4o',
-      output: [createWeatherToolMessage()],
+      output: [
+        {
+          type: 'message',
+          role: 'assistant',
+          content: [
+            {
+              type: 'tool_call',
+              name: 'get_weather',
+              id: 'call_123',
+              input: { location: 'San Francisco' },
+            },
+          ],
+        },
+      ],
       usage: { input_tokens: 20, output_tokens: 15, total_tokens: 35 },
     };
 
-    vi.mocked(cache.fetchWithCache).mockResolvedValue(createMockFetchResponse(mockApiResponse));
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
+      data: mockApiResponse,
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
 
     const tools = [
       {
@@ -113,7 +107,9 @@ describe('OpenAiResponsesProvider tool handling', () => {
           description: 'Get the current weather in a given location',
           parameters: {
             type: 'object' as const,
-            properties: createLocationProperties(),
+            properties: {
+              location: { type: 'string' },
+            },
             required: ['location'],
           },
         },
@@ -150,12 +146,30 @@ describe('OpenAiResponsesProvider tool handling', () => {
       id: 'resp_abc123',
       status: 'completed',
       model: 'gpt-4o',
-      output: [createWeatherToolMessage()],
+      output: [
+        {
+          type: 'message',
+          role: 'assistant',
+          content: [
+            {
+              type: 'tool_call',
+              name: 'get_weather',
+              id: 'call_123',
+              input: { location: 'San Francisco' },
+            },
+          ],
+        },
+      ],
       parallel_tool_calls: true,
       usage: { input_tokens: 20, output_tokens: 15, total_tokens: 35 },
     };
 
-    vi.mocked(cache.fetchWithCache).mockResolvedValue(createMockFetchResponse(mockApiResponse));
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
+      data: mockApiResponse,
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
 
     const provider = new OpenAiResponsesProvider('gpt-4o', {
       config: {
@@ -168,7 +182,9 @@ describe('OpenAiResponsesProvider tool handling', () => {
               description: 'Get weather',
               parameters: {
                 type: 'object' as const,
-                properties: createLocationProperties(),
+                properties: {
+                  location: { type: 'string' },
+                },
               },
             },
           },
@@ -209,10 +225,19 @@ describe('OpenAiResponsesProvider tool handling', () => {
     };
 
     // Setup mock for fetchWithCache
-    vi.mocked(cache.fetchWithCache).mockResolvedValue(createMockFetchResponse(mockApiResponse));
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
+      data: mockApiResponse,
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
 
     // Initialize the provider
-    const provider = new OpenAiResponsesProvider('gpt-4o', createApiKeyOptions());
+    const provider = new OpenAiResponsesProvider('gpt-4o', {
+      config: {
+        apiKey: 'test-key',
+      },
+    });
 
     // Call the API
     const result = await provider.callApi('Test prompt');
@@ -252,10 +277,19 @@ describe('OpenAiResponsesProvider tool handling', () => {
     };
 
     // Setup mock for fetchWithCache
-    vi.mocked(cache.fetchWithCache).mockResolvedValue(createMockFetchResponse(mockApiResponse));
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
+      data: mockApiResponse,
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
 
     // Initialize the provider
-    const provider = new OpenAiResponsesProvider('gpt-4o', createApiKeyOptions());
+    const provider = new OpenAiResponsesProvider('gpt-4o', {
+      config: {
+        apiKey: 'test-key',
+      },
+    });
 
     // Call the API
     const result = await provider.callApi('Test prompt');
@@ -289,10 +323,19 @@ describe('OpenAiResponsesProvider tool handling', () => {
     };
 
     // Setup mock for fetchWithCache
-    vi.mocked(cache.fetchWithCache).mockResolvedValue(createMockFetchResponse(mockApiResponse));
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
+      data: mockApiResponse,
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
 
     // Initialize the provider
-    const provider = new OpenAiResponsesProvider('gpt-4o', createApiKeyOptions());
+    const provider = new OpenAiResponsesProvider('gpt-4o', {
+      config: {
+        apiKey: 'test-key',
+      },
+    });
 
     // Call the API
     const result = await provider.callApi('Test prompt');
@@ -307,21 +350,32 @@ describe('OpenAiResponsesProvider tool handling', () => {
   });
 
   it('should include observable web and file search fees in responses cost', async () => {
-    vi.mocked(cache.fetchWithCache).mockResolvedValue(
-      createMockFetchResponse({
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
+      data: {
         id: 'resp_cost123',
         status: 'completed',
         model: 'gpt-5-mini',
         output: [
-          createCompletedWebSearchCall(),
+          {
+            type: 'web_search_call',
+            action: { type: 'search', query: 'pricing' },
+            status: 'completed',
+          },
           {
             type: 'file_search_call',
             status: 'completed',
           },
         ],
-        usage: createResponsesTokenUsage(),
-      }),
-    );
+        usage: {
+          input_tokens: 1_000,
+          output_tokens: 100,
+          total_tokens: 1_100,
+        },
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
 
     const provider = new OpenAiResponsesProvider('gpt-5-mini', {
       config: {
@@ -336,19 +390,28 @@ describe('OpenAiResponsesProvider tool handling', () => {
   });
 
   it('should price observable web search fees from effective passthrough tools', async () => {
-    vi.mocked(cache.fetchWithCache).mockResolvedValue(
-      createMockFetchResponse({
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
+      data: {
         id: 'resp_cost456',
         status: 'completed',
         model: 'gpt-4o',
-        output: [createCompletedWebSearchCall()],
+        output: [
+          {
+            type: 'web_search_call',
+            action: { type: 'search', query: 'pricing' },
+            status: 'completed',
+          },
+        ],
         usage: {
           input_tokens: 0,
           output_tokens: 0,
           total_tokens: 0,
         },
-      }),
-    );
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
 
     const provider = new OpenAiResponsesProvider('gpt-4o', {
       config: {
@@ -364,8 +427,8 @@ describe('OpenAiResponsesProvider tool handling', () => {
   });
 
   it('should price from the tier returned by OpenAI rather than the requested tier', async () => {
-    vi.mocked(cache.fetchWithCache).mockResolvedValue(
-      createMockFetchResponse({
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
+      data: {
         id: 'resp_priority123',
         status: 'completed',
         model: 'gpt-5-mini',
@@ -377,9 +440,16 @@ describe('OpenAiResponsesProvider tool handling', () => {
             content: [{ type: 'output_text', text: 'Done' }],
           },
         ],
-        usage: createResponsesTokenUsage(),
-      }),
-    );
+        usage: {
+          input_tokens: 1_000,
+          output_tokens: 100,
+          total_tokens: 1_100,
+        },
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
 
     const provider = new OpenAiResponsesProvider('gpt-5-mini', {
       config: {
@@ -405,9 +475,18 @@ describe('OpenAiResponsesProvider tool handling', () => {
           status: 'completed',
         },
       ],
-      usage: createResponsesTokenUsage(),
+      usage: {
+        input_tokens: 1_000,
+        output_tokens: 100,
+        total_tokens: 1_100,
+      },
     };
-    vi.mocked(cache.fetchWithCache).mockResolvedValue(createMockFetchResponse(mockApiResponse));
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
+      data: mockApiResponse,
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
 
     const provider = new OpenAiResponsesProvider('gpt-5-mini', {
       config: {

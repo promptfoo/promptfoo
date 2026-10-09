@@ -6,16 +6,8 @@ import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import * as pythonUtils from '../../src/python/pythonUtils';
 import { runPython } from '../../src/python/pythonUtils';
 import { runPythonCode } from '../../src/python/wrapper';
-import { createScriptAssertionParams } from '../factories/literalFixtures';
 
 import type { Assertion, AtomicTestCase, GradingResult } from '../../src/types/index';
-
-const { createPathFactory } = await vi.hoisted(() => import('../factories/moduleMocks'));
-
-const createPythonAssertion = (value: string) => ({
-  type: 'python' as const,
-  value,
-});
 
 vi.mock('../../src/python/wrapper', async () => {
   const actual = await vi.importActual<typeof import('../../src/python/wrapper')>(
@@ -37,7 +29,18 @@ vi.mock('../../src/python/pythonUtils', async () => {
   };
 });
 
-vi.mock('path', createPathFactory());
+vi.mock('path', async () => {
+  const actualPath = await vi.importActual<typeof import('path')>('path');
+  const mocked = {
+    ...actualPath,
+    resolve: vi.fn(),
+    extname: vi.fn(),
+  };
+  return {
+    ...mocked,
+    default: mocked,
+  };
+});
 
 // These tests can be slow on Windows due to heavy module imports
 describe('Python file references', { timeout: 15000 }, () => {
@@ -62,7 +65,10 @@ describe('Python file references', { timeout: 15000 }, () => {
   });
 
   it('should handle Python file reference with function name', async () => {
-    const assertion: Assertion = createPythonAssertion('file:///path/to/assert.py:custom_function');
+    const assertion: Assertion = {
+      type: 'python',
+      value: 'file:///path/to/assert.py:custom_function',
+    };
 
     const mockOutput = true;
     vi.mocked(path.resolve).mockReturnValue('/path/to/assert.py');
@@ -132,7 +138,10 @@ describe('Python file references', { timeout: 15000 }, () => {
   });
 
   it('should pass provider metadata shortcut to a python assert', async () => {
-    const assertion: Assertion = createPythonAssertion('file:///path/to/assert.py');
+    const assertion: Assertion = {
+      type: 'python',
+      value: 'file:///path/to/assert.py',
+    };
 
     const metadata = { http: { status: 200, statusText: 'OK' }, customField: 5 };
     vi.mocked(path.resolve).mockReturnValue('/path/to/assert.py');
@@ -165,7 +174,10 @@ describe('Python file references', { timeout: 15000 }, () => {
   });
 
   it('should use default function name for Python when none specified', async () => {
-    const assertion: Assertion = createPythonAssertion('file:///path/to/assert.py');
+    const assertion: Assertion = {
+      type: 'python',
+      value: 'file:///path/to/assert.py',
+    };
 
     const mockOutput = true;
     vi.mocked(path.resolve).mockReturnValue('/path/to/assert.py');
@@ -195,7 +207,10 @@ describe('Python file references', { timeout: 15000 }, () => {
   });
 
   it('should handle Python assertion errors', async () => {
-    const assertion: Assertion = createPythonAssertion('file:///path/to/assert.py:custom_function');
+    const assertion: Assertion = {
+      type: 'python',
+      value: 'file:///path/to/assert.py:custom_function',
+    };
 
     vi.mocked(path.resolve).mockReturnValue('/path/to/assert.py');
     vi.mocked(path.extname).mockReturnValue('.py');
@@ -221,7 +236,10 @@ describe('Python file references', { timeout: 15000 }, () => {
   });
 
   it('should handle Python returning a score', async () => {
-    const assertion: Assertion = createPythonAssertion('file:///path/to/assert.py');
+    const assertion: Assertion = {
+      type: 'python',
+      value: 'file:///path/to/assert.py',
+    };
 
     vi.mocked(path.resolve).mockReturnValue('/path/to/assert.py');
     vi.mocked(path.extname).mockReturnValue('.py');
@@ -469,7 +487,10 @@ describe('Python file references', { timeout: 15000 }, () => {
       vi.mocked(path.resolve).mockReturnValue('/path/to/assert.py');
       vi.mocked(path.extname).mockReturnValue('.py');
 
-      const fileAssertion: Assertion = createPythonAssertion('file:///path/to/assert.py');
+      const fileAssertion: Assertion = {
+        type: 'python',
+        value: 'file:///path/to/assert.py',
+      };
 
       const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
       const providerResponse = { output };
@@ -567,7 +588,10 @@ describe('Python file references', { timeout: 15000 }, () => {
     vi.mocked(runPython).mockRejectedValue(
       new Error('The Python script `call_api` function must return a dict with an `output`'),
     );
-    const fileAssertion: Assertion = createPythonAssertion('file:///path/to/assert.py');
+    const fileAssertion: Assertion = {
+      type: 'python',
+      value: 'file:///path/to/assert.py',
+    };
     const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
     const providerResponse = { output };
     const result: GradingResult = await runAssertion({
@@ -625,7 +649,10 @@ describe('Python file references', { timeout: 15000 }, () => {
     vi.mocked(path.extname).mockReturnValue('.py');
     vi.mocked(runPython).mockResolvedValueOnce(pythonResult as any);
 
-    const fileAssertion: Assertion = createPythonAssertion('file:///path/to/assert.py');
+    const fileAssertion: Assertion = {
+      type: 'python',
+      value: 'file:///path/to/assert.py',
+    };
     const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
     const providerResponse = { output: 'Expected output' };
 
@@ -693,7 +720,12 @@ describe('Python file references', { timeout: 15000 }, () => {
       };
       vi.mocked(runPythonCode).mockResolvedValueOnce(scriptResult);
 
-      const result = await runAssertion(createScriptAssertionParams('python'));
+      const result = await runAssertion({
+        prompt: 'Test',
+        assertion: { type: 'python', value: 'unused' },
+        test: {},
+        providerResponse: { output: 'Test output' },
+      });
 
       expect(result).toMatchObject({ pass: true, score: 1, reason: 'ok' });
       expect(result).toHaveProperty(mappedField, null);
@@ -729,7 +761,12 @@ describe('Python file references', { timeout: 15000 }, () => {
       };
       vi.mocked(runPythonCode).mockResolvedValueOnce(scriptResult);
 
-      const result = await runAssertion(createScriptAssertionParams('python'));
+      const result = await runAssertion({
+        prompt: 'Test',
+        assertion: { type: 'python', value: 'unused' },
+        test: {},
+        providerResponse: { output: 'Test output' },
+      });
 
       if (Number.isFinite(weight)) {
         expect(result.namedScoreWeights).toEqual({ quality: 3 });
@@ -743,12 +780,39 @@ describe('Python file references', { timeout: 15000 }, () => {
     },
   );
 
+  it('accepts the result shapes earlier releases recorded from Python graders', async () => {
+    vi.mocked(runPythonCode).mockResolvedValueOnce({
+      pass_: true,
+      score: 1,
+      reason: 'ok',
+      named_scores: { exact_match: true, has_citation: false, skipped: null, relevance: '0.5' },
+      component_results: [{ pass_: true, score: 0.75 }, { pass_: false }],
+    });
+
+    const result = await runAssertion({
+      assertion: { type: 'python', value: 'unused' },
+      test: {},
+      providerResponse: { output: 'Test output' },
+    });
+
+    expect(result).toMatchObject({
+      pass: true,
+      score: 1,
+      reason: 'ok',
+      namedScores: { exact_match: 1, has_citation: 0, skipped: 0, relevance: 0.5 },
+      componentResults: [
+        { pass: true, score: 0.75, reason: '' },
+        { pass: false, score: 0, reason: '' },
+      ],
+    });
+  });
+
   it('omits rejected object payloads from validation errors', async () => {
     vi.mocked(runPythonCode).mockResolvedValueOnce({
       pass_: true,
       score: 1,
       reason: 'Custom grade',
-      named_scores: { quality: null },
+      named_scores: { quality: 'high' },
       metadata: { http: { requestHeaders: { authorization: 'diagnostic-placeholder' } } },
     });
 

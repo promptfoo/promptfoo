@@ -10,7 +10,6 @@ import {
   HttpMultipartConfigSchema as PortableHttpMultipartConfigSchema,
 } from '../contracts/providerConfig/httpMultipart';
 import { getNunjucksEngine } from '../util/templates';
-import { decodeUrlComponent } from './urlEncoding';
 
 export const HttpMultipartConfigSchema = PortableHttpMultipartConfigSchema;
 export type HttpMultipartConfig = z.infer<typeof HttpMultipartConfigSchema>;
@@ -130,6 +129,15 @@ function createGeneratedFile(
   };
 }
 
+/** Percent-decode a URL path, leaving it alone if it is not valid encoding. */
+function decodeUrlPath(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
 export function normalizeFilePath(filePath: string): string {
   if (!filePath.startsWith('file://')) {
     // Plain paths pass through untouched, which is also how a Windows UNC share is
@@ -149,7 +157,7 @@ export function normalizeFilePath(filePath: string): string {
   // and the behaviour stays deterministic in tests on every OS.
   const winDriveMatch = url.match(/^file:\/\/\/?([a-zA-Z]:[\\/].*)$/);
   if (winDriveMatch) {
-    return path.normalize(decodeUrlComponent(winDriveMatch[1]));
+    return path.normalize(decodeUrlPath(winDriveMatch[1]));
   }
 
   // A rooted URL (file:///...) is a real file URL, so percent-encoding is meaningful.
@@ -159,7 +167,7 @@ export function normalizeFilePath(filePath: string): string {
     } catch {
       // fileURLToPath rejects a driveless path on Windows (ERR_INVALID_FILE_URL_PATH), so
       // decode here too -- otherwise a %20 survives into the filename on Windows only.
-      return decodeUrlComponent(url.slice('file://'.length));
+      return decodeUrlPath(url.slice('file://'.length));
     }
   }
 

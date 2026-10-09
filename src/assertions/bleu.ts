@@ -10,7 +10,7 @@
  */
 
 import invariant from '../util/invariant';
-import { countNGrams, getNGrams } from './ngrams';
+import { getNGrams } from './ngrams';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
@@ -37,6 +37,19 @@ function calculateBrevityPenalty(candidateLength: number, referenceLength: numbe
  */
 function tokenize(text: string): string[] {
   return text.toLowerCase().trim().split(/\s+/);
+}
+
+/**
+ * Counts how many times each n-gram occurs.
+ *
+ * @internal
+ */
+function countNGrams(ngrams: string[]): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const gram of ngrams) {
+    counts.set(gram, (counts.get(gram) ?? 0) + 1);
+  }
+  return counts;
 }
 
 /**
