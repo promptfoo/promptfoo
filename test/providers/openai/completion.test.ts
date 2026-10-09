@@ -464,20 +464,23 @@ describe('OpenAI Provider', () => {
       expect(result.error).toContain('Network error');
     });
 
-    it('returns a clean error on an empty choices array instead of an opaque TypeError', async () => {
-      mockFetchWithCache.mockResolvedValue({
-        data: { choices: [] },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+    it.each([null, {}, { choices: [] }])(
+      'returns a clean error on a missing completion choice: %j',
+      async (data) => {
+        mockFetchWithCache.mockResolvedValue({
+          data,
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        });
 
-      const provider = new OpenAiCompletionProvider('text-davinci-003');
-      const result = await provider.callApi('Test prompt');
+        const provider = new OpenAiCompletionProvider('text-davinci-003');
+        const result = await provider.callApi('Test prompt');
 
-      expect(result.error).toContain('Malformed response data');
-      expect(result.error).not.toContain('TypeError');
-    });
+        expect(result.error).toContain('Malformed response data');
+        expect(result.error).not.toContain('TypeError');
+      },
+    );
 
     it('should handle missing API key', async () => {
       // Save the original env var and clear it for this test
