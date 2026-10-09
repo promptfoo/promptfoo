@@ -611,3 +611,77 @@ describe('ConverseStream response parity', () => {
     expect(result.output).toBeUndefined();
   });
 });
+
+describe('native Converse configuration and cached binary parity', () => {
+  it('retains provider-native tools when a prompt overrides only tool choice', async () => {
+    const tools = [{ toolSpec: { name: 'lookup', inputSchema: { json: { type: 'object' } } } }];
+    const { provider, send } = fixture({ toolConfig: { tools } });
+    await provider.callApi('hello', {
+      vars: {},
+      prompt: { raw: 'hello', label: 'hello', config: { toolConfig: { toolChoice: { any: {} } } } },
+    });
+    expect(send.mock.calls[0][0].input.toolConfig).toEqual({ tools, toolChoice: { any: {} } });
+  });
+
+  it.each(['direct', 'additional'])(
+    'normalizes native inferenceConfig for %s Nova reasoning',
+    async (source) => {
+      const reasoningConfig = { type: 'enabled', maxReasoningEffort: 'high' } as const;
+      const { provider, send } = fixture({
+        inferenceConfig: { maxTokens: 100, temperature: 0.5, topP: 0.9, stopSequences: ['END'] },
+        ...(source === 'direct'
+          ? { reasoningConfig }
+          : { additionalModelRequestFields: { reasoningConfig } }),
+      });
+      await provider.callApi('hello');
+      expect(send.mock.calls[0][0].input.inferenceConfig).toEqual({ stopSequences: ['END'] });
+    },
+  );
+
+  it('normalizes deprecated Claude sampling in native inferenceConfig', async () => {
+    const { provider, send } = fixture(
+      { inferenceConfig: { maxTokens: 100, temperature: 0.5, topP: 0.9 } },
+      'us.anthropic.claude-opus-4-7',
+    );
+    await provider.callApi('hello');
+    expect(send.mock.calls[0][0].input.inferenceConfig).toEqual({ maxTokens: 100 });
+  });
+
+  it.each(['typed', 'legacy'])(
+    'restores %s cached native binary content without changing tool JSON',
+    async (kind) => {
+      cache.enabled = true;
+      const { provider, send } = fixture();
+      const content = [
+        { text: 'READY' },
+        { image: { format: 'png', source: { bytes: new Uint8Array([1, 2, 3]) } } },
+        { reasoningContent: { redactedContent: Buffer.from([4, 5]) } },
+        {
+          toolResult: {
+            toolUseId: 'tool',
+            content: [{ json: { bytes: { 0: 1, 1: 2 }, type: 'Buffer', data: [7] } }],
+          },
+        },
+      ];
+      send.mockResolvedValue({ ...reply, output: { message: { role: 'assistant', content } } });
+      const first = await provider.callApi('hello');
+      cache.get.mockResolvedValue(
+        kind === 'legacy'
+          ? JSON.stringify({ ...reply, output: { message: { role: 'assistant', content } } })
+          : cache.set.mock.calls[0][1],
+      );
+      const second = await provider.callApi('hello');
+      expect(second.error).toBeUndefined();
+      expect(second.cached).toBe(true);
+      expect(second.output).toEqual(first.output);
+      const cachedContent = second.metadata?.content as any[];
+      expect(cachedContent[1].image.source.bytes).toBeInstanceOf(Uint8Array);
+      expect(Array.from(cachedContent[1].image.source.bytes)).toEqual([1, 2, 3]);
+      expect(Array.from(cachedContent[2].reasoningContent.redactedContent)).toEqual([4, 5]);
+      expect(cachedContent[2].reasoningContent.redactedContent).toBeInstanceOf(Uint8Array);
+      expect(cachedContent[3].toolResult.content[0].json).toEqual(
+        content[3].toolResult?.content[0].json,
+      );
+    },
+  );
+});

@@ -359,7 +359,7 @@ function convertToolChoiceToConverseFormat(toolChoice: unknown): ToolChoice | un
   // Handle native Bedrock format
   if (
     toolChoice === 'any' ||
-    (toolChoice && typeof toolChoice === 'object' && 'any' in toolChoice)
+    (typeof toolChoice === 'object' && toolChoice !== null && 'any' in toolChoice)
   ) {
     return { any: {} };
   }
@@ -391,6 +391,9 @@ const nativeContentKeys = [
 ];
 
 function decodeNativeBytes(bytes: unknown): Uint8Array {
+  if (bytes instanceof Uint8Array) {
+    return Buffer.from(bytes);
+  }
   if (typeof bytes === 'string') {
     return Buffer.from(bytes.replace(/^data:[^;]+;base64,/, ''), 'base64');
   }
@@ -403,6 +406,19 @@ function decodeNativeBytes(bytes: unknown): Uint8Array {
     Array.isArray(bytes.data)
   ) {
     return Buffer.from(bytes.data);
+  }
+  // Older cache entries serialized plain Uint8Array values as numeric-key objects.
+  if (bytes && typeof bytes === 'object' && !(bytes instanceof Uint8Array)) {
+    const entries = Object.entries(bytes);
+    if (
+      entries.length &&
+      entries.every(
+        ([key, value], index) =>
+          key === String(index) && Number.isInteger(value) && value >= 0 && value <= 255,
+      )
+    ) {
+      return Buffer.from(entries.map(([, value]) => value));
+    }
   }
   return bytes as Uint8Array;
 }
@@ -909,23 +925,34 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
    */
   private buildInferenceConfig(): InferenceConfiguration | undefined {
     // Check reasoning mode constraints for Nova 2 models
-    const reasoningEnabled = this.config.reasoningConfig?.type === 'enabled';
-    const isHighEffort = this.config.reasoningConfig?.maxReasoningEffort === 'high';
+    const native = this.config.inferenceConfig;
+    const reasoning =
+      this.config.reasoningConfig ??
+      (this.config.additionalModelRequestFields
+        ?.reasoningConfig as BedrockConverseOptions['reasoningConfig']);
+    const reasoningEnabled = reasoning?.type === 'enabled';
+    const isHighEffort = reasoning?.maxReasoningEffort === 'high';
 
     // Get potential values
-    const maxTokensValue =
-      this.config.maxTokens ??
-      this.config.max_tokens ??
-      getEnvInt('AWS_BEDROCK_MAX_TOKENS') ??
-      undefined;
+    const maxTokensValue = native
+      ? native.maxTokens
+      : (this.config.maxTokens ??
+        this.config.max_tokens ??
+        getEnvInt('AWS_BEDROCK_MAX_TOKENS') ??
+        undefined);
 
-    const temperatureValue =
-      this.config.temperature ?? getEnvFloat('AWS_BEDROCK_TEMPERATURE') ?? undefined;
+    const temperatureValue = native
+      ? native.temperature
+      : (this.config.temperature ?? getEnvFloat('AWS_BEDROCK_TEMPERATURE') ?? undefined);
 
-    const topPValue = this.config.topP ?? this.config.top_p ?? getEnvFloat('AWS_BEDROCK_TOP_P');
+    const topPValue = native
+      ? native.topP
+      : (this.config.topP ?? this.config.top_p ?? getEnvFloat('AWS_BEDROCK_TOP_P'));
 
-    let stopSequences = this.config.stopSequences || this.config.stop;
-    if (!stopSequences) {
+    let stopSequences = native
+      ? native.stopSequences
+      : this.config.stopSequences || this.config.stop;
+    if (!native && !stopSequences) {
       const envStop = getEnvString('AWS_BEDROCK_STOP');
       if (envStop) {
         try {
@@ -1004,12 +1031,11 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       : [];
 
     // Merge prompt.config.tools with this.config.tools (prompt.config takes precedence)
-    const nativeToolConfig = promptConfig?.toolConfig ?? this.config.toolConfig;
     const configTools =
       promptConfig?.tools ??
       promptConfig?.toolConfig?.tools ??
       this.config.tools ??
-      nativeToolConfig?.tools;
+      this.config.toolConfig?.tools;
     if (mcpTools.length === 0 && (!configTools || configTools.length === 0)) {
       return undefined;
     }
@@ -1042,7 +1068,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     const converseTools = convertToolsToConverseFormat([...mcpTools, ...dedupedConfigTools]);
     const requestedToolChoice = configToolChoice
       ? convertToolChoiceToConverseFormat(configToolChoice)
-      : nativeToolConfig?.toolChoice;
+      : undefined;
     const modelRejectsForcedToolChoice = isForcedToolChoiceUnsupportedClaudeModel(this.modelName);
     const dropForcedToolChoice =
       (modelRejectsForcedToolChoice || isAlwaysOnAdaptiveThinkingClaudeModel(this.modelName)) &&
@@ -1186,7 +1212,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     if (/^arn:[^:]+:bedrock:[^:]+:[^:]+:prompt\//.test(this.modelName)) {
       return undefined;
     }
-    return this.config.inferenceConfig ?? this.buildInferenceConfig();
+    return this.buildInferenceConfig();
   }
 
   private async buildRequest(
@@ -1410,7 +1436,12 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     // Cache the response
     if (useCache) {
       try {
-        await cache.set(cacheKey, JSON.stringify(response));
+        await cache.set(
+          cacheKey,
+          JSON.stringify(response, (_key, value) =>
+            value instanceof Uint8Array ? { type: 'Buffer', data: Array.from(value) } : value,
+          ),
+        );
       } catch (err) {
         logger.error(`Failed to cache response: ${String(err)}`);
       }
@@ -1529,7 +1560,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
   ): Promise<ProviderResponse> {
     // Extract output text
     const outputMessage = response.output?.message;
-    const content = outputMessage?.content || [];
+    const content = (outputMessage?.content || []).map(normalizeNativeContentBlock);
     const showThinking = this.config.showThinking !== false;
 
     // Extract token usage
