@@ -48,6 +48,13 @@ export const createAzureApiOptions = () => ({
   },
 });
 
+export const createHttpResponse = (data = 'response', status = 200, statusText = 'OK') => ({
+  data,
+  status,
+  statusText,
+  cached: false,
+});
+
 export const createOtlpOptions = () => ({
   host: '127.0.0.1',
   port: 4318,
@@ -58,6 +65,12 @@ export const createChatUsage = (prompt_tokens = 10, completion_tokens = 20, tota
   prompt_tokens,
   completion_tokens,
   total_tokens,
+});
+
+export const createGetOptions = () => ({
+  config: {
+    method: 'GET',
+  },
 });
 
 export const createPassingGrade = (score = 0.8, reason = 'test reason') => ({
@@ -80,6 +93,10 @@ export const createTemperatureOptions = () => ({
 
 export const createLocationProperties = () => ({
   location: { type: 'string' },
+});
+
+export const createTestOutput = (output = 'Test output') => ({
+  output,
 });
 
 const createStringAssertion = <TType extends string>(type: TType, value: string) => ({
@@ -164,9 +181,20 @@ export const createImageUsageCounts = (candidatesTokenCount: number, totalTokenC
   totalTokenCount,
 });
 
+export const createDebugContextFixture = (raw: string, label: string) => ({
+  debug: true,
+  prompt: { raw, label },
+  vars: {},
+});
+
 export const createContentTypeResponse = (Content_Type = 'application/json') => ({
   status: 200,
   headers: { 'Content-Type': Content_Type },
+});
+
+export const createOAuthToken = (access_token: string) => ({
+  access_token,
+  expires_in: 3600,
 });
 
 export const createTextParts = (text: string, role: string) => ({
