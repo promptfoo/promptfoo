@@ -17,7 +17,7 @@ import {
 } from '../remoteGeneration';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
-import { callTargetProvider, snapshotTargetMetadata } from './shared';
+import { callTargetProvider, getForwardedTargetMetadata, snapshotTargetMetadata } from './shared';
 
 import type {
   ApiProvider,
@@ -143,12 +143,7 @@ export default class AuthoritativeMarkupInjectionProvider implements ApiProvider
     const targetMetadata = {
       ...(metadataSnapshot === undefined
         ? targetResponse.metadata
-        : {
-            http: metadataSnapshot?.http,
-            headers: metadataSnapshot?.headers,
-            rateLimitKind: metadataSnapshot?.rateLimitKind,
-            rateLimitRetryable: metadataSnapshot?.rateLimitRetryable,
-          }),
+        : getForwardedTargetMetadata(metadataSnapshot)),
       redteamTargetMetadata: metadataSnapshot,
       redteamOutputIsText: typeof targetResponse.output === 'string',
     };

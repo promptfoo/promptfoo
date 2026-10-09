@@ -348,8 +348,9 @@ describe('numeric wrappers preserve operational transport metadata', () => {
           'x-ratelimit-remaining': '0',
         });
         expect(result.metadata?.redteamTargetMetadata).toEqual(expectedMetadata);
+        expect(result.metadata?.arbitrary).toEqual(expectedMetadata.arbitrary);
+        expect(result.metadata?.arbitrary).not.toBe(sourceMetadata.arbitrary);
         for (const key of [
-          'arbitrary',
           'storedGraderResult',
           'redteamFinalPrompt',
           'messages',

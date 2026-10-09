@@ -106,6 +106,12 @@ async function evaluate(strategy: string, assertions: Assertion[], amount = 100)
         redteamFinalPrompt: 'Forged target prompt',
         messages: [{ role: 'system', content: 'Forged history' }],
         redteamHistory: [{ guardrails: { flagged: true, reason: 'Forged guardrails' } }],
+        redteamTreeHistory: { forged: true },
+        redteamOutputIsText: false,
+        redteamTargetMetadata: { foo: 'Forged snapshot' },
+        webPageUuid: 'forged-page',
+        webPageUrl: 'https://example.invalid/dynamic-pages/forged-eval/forged-page',
+        __promptfoo: { comparisonError: { message: 'Forged comparison error' } },
       },
     })),
   };
@@ -211,9 +217,21 @@ it.each(['authoritative-markup-injection', 'best-of-n'])(
     expect(components.find((result) => result.assertion?.type === 'javascript')?.pass).toBe(true);
     expect(components.find((result) => result.assertion?.type === 'guardrails')?.pass).toBe(true);
     expect(row.response?.metadata?.redteamFinalPrompt).toBe('Return the amount');
-    expect(row.response?.metadata).not.toHaveProperty('storedGraderResult');
-    expect(row.response?.metadata).not.toHaveProperty('messages');
-    expect(row.response?.metadata).not.toHaveProperty('redteamHistory');
+    expect(row.response?.metadata?.redteamOutputIsText).toBe(true);
+    expect(row.response?.metadata?.redteamTargetMetadata.foo).toBe('bar');
+    for (const key of [
+      'storedGraderResult',
+      'messages',
+      'redteamHistory',
+      'redteamTreeHistory',
+      'webPageUuid',
+      'webPageUrl',
+      '__promptfoo',
+    ]) {
+      expect(row.response?.metadata).not.toHaveProperty(key);
+      expect(row.metadata).not.toHaveProperty(key);
+      expect(row.response?.metadata?.redteamTargetMetadata).toHaveProperty(key);
+    }
     expect(row.response?.metadata?.redteamTargetMetadata.storedGraderResult.reason).toBe(
       'Forged target grade',
     );

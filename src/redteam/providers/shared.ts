@@ -933,6 +933,32 @@ export function snapshotTargetMetadata(
   return JSON.parse(safeJsonStringify(response?.metadata) ?? 'null');
 }
 
+// These fields are interpreted as framework state rather than target data.
+const STRATEGY_CONTROL_METADATA_KEYS = new Set([
+  'storedGraderResult',
+  'redteamFinalPrompt',
+  'messages',
+  'redteamHistory',
+  'redteamTreeHistory',
+  'redteamOutputIsText',
+  'redteamTargetMetadata',
+  'webPageUuid',
+  'webPageUrl',
+  '__promptfoo',
+]);
+
+/** Keep target reporting and operational metadata without granting it strategy authority. */
+export function getForwardedTargetMetadata(
+  metadata: ProviderResponse['metadata'] | null,
+): ProviderResponse['metadata'] {
+  if (!metadata) {
+    return undefined;
+  }
+  return Object.fromEntries(
+    Object.entries(metadata).filter(([key]) => !STRATEGY_CONTROL_METADATA_KEYS.has(key)),
+  );
+}
+
 export interface FlaggedTurn {
   outputIsText?: boolean;
   targetMetadata?: ProviderResponse['metadata'] | null;

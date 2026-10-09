@@ -17,7 +17,7 @@ import {
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
 import { getSessionId } from '../util';
-import { callTargetProvider, snapshotTargetMetadata } from './shared';
+import { callTargetProvider, getForwardedTargetMetadata, snapshotTargetMetadata } from './shared';
 
 import type {
   ApiProvider,
@@ -182,12 +182,7 @@ export default class BestOfNProvider implements ApiProvider {
               metadata: {
                 ...(targetMetadata === undefined
                   ? targetResponse.metadata
-                  : {
-                      http: targetMetadata?.http,
-                      headers: targetMetadata?.headers,
-                      rateLimitKind: targetMetadata?.rateLimitKind,
-                      rateLimitRetryable: targetMetadata?.rateLimitRetryable,
-                    }),
+                  : getForwardedTargetMetadata(targetMetadata)),
                 redteamTargetMetadata: targetMetadata,
               },
             };
