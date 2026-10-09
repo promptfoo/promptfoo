@@ -1,11 +1,13 @@
 import type { TraceContextData } from '../../tracing/traceContext';
 import type {
+  ApiProvider,
   AssertionValue,
   AtomicTestCase,
   GradingResult,
+  ImageOutput,
+  ProviderResponse,
   ResultSuggestion,
 } from '../../types/index';
-import type { ApiProvider, ImageOutput, ProviderResponse } from '../../types/providers';
 import type { TraceData } from '../../types/tracing';
 import type { RedteamHistoryEntry } from '../types';
 
