@@ -92,7 +92,16 @@ const storeOwners = new WeakMap<object, CacheBackend>();
 let nextCacheClearGeneration = 0;
 
 const cacheNamespaceStorage = new AsyncLocalStorage<{ namespace: string }>();
-const cacheEnabledStorage = new AsyncLocalStorage<{ enabled: boolean }>();
+// The CLI and the public ESM/CJS entry points can load separate copies of this
+// module. Share only the async policy, not cache instances or module defaults,
+// so providers loaded by extension hooks observe the evaluation's cache policy.
+const CACHE_ENABLED_CONTEXT = Symbol.for('promptfoo.cache.enabledContext.v1');
+const cacheContextGlobal = globalThis as typeof globalThis & {
+  [CACHE_ENABLED_CONTEXT]?: AsyncLocalStorage<{ enabled: boolean }>;
+};
+const cacheEnabledStorage = (cacheContextGlobal[CACHE_ENABLED_CONTEXT] ??= new AsyncLocalStorage<{
+  enabled: boolean;
+}>());
 
 // Explicit API overrides remain process-wide; environment defaults are invocation-scoped.
 let enabled: boolean | undefined;
