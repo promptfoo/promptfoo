@@ -605,6 +605,79 @@ tests:
       topic: Behind-the-scenes at our latest photoshoot
 ```
 
+## Native API requests
+
+Use `bedrock:api:<Operation>` when you need the complete AWS request and response,
+including a new model field or an operation outside the text and embedding adapters.
+The prompt must be a JSON object matching the operation's AWS SDK input. Model IDs,
+profiles, ARNs, transport controls, and nested model parameters are supplied there.
+The adapter uses the existing Bedrock credential, Region, proxy, and endpoint settings.
+
+| Operation                                                           | Native response                                                      |
+| ------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| `InvokeModel`                                                       | Parsed JSON in `body`, or a binary blob for non-JSON content         |
+| `InvokeModelWithResponseStream`                                     | `body` event array; model JSON in each `chunk.bytes`                 |
+| `Converse`, `ConverseStream`                                        | Full response; streaming events in `stream`                          |
+| `CountTokens`, `ApplyGuardrail`, `InvokeGuardrailChecks`            | Token-count or guardrail response                                    |
+| `StartAsyncInvoke`, `GetAsyncInvoke`, `ListAsyncInvokes`            | Job submission, status or listing response                           |
+| `Retrieve`, `RetrieveAndGenerate`, `RetrieveAndGenerateStream`      | Retrieval/RAG response; streaming events in `stream`                 |
+| `InvokeAgent`, `InvokeInlineAgent`                                  | `completion` event array, including traces, files and return control |
+| `AgenticRetrieveStream`, `GenerateQuery`                            | Agentic retrieval events in `stream`, or generated queries           |
+| `OptimizePrompt`                                                    | `optimizedPrompt` event array                                        |
+| `Rerank`                                                            | Ranked source indices, relevance scores, and pagination token        |
+| `InvokeFlow`                                                        | `responseStream` events and execution ID                             |
+| `StartFlowExecution`, `GetFlowExecution`, `ListFlowExecutionEvents` | Async Flow execution/status/events                                   |
+
+For example, count a Converse request's input tokens without generating output:
+
+```yaml
+prompts:
+  - |
+    {
+      "modelId": "anthropic.claude-haiku-4-5-20251001-v1:0",
+      "input": {"converse": {"messages": [
+        {"role": "user", "content": [{"text": "Hello"}]}
+      ]}}
+    }
+providers:
+  - id: bedrock:api:CountTokens
+    config:
+      region: us-east-1
+tests:
+  - assert:
+      - type: javascript
+        value: JSON.parse(output).inputTokens > 0
+```
+
+Token counting has its own [model and endpoint restrictions](https://docs.aws.amazon.com/bedrock/latest/userguide/count-tokens.html). A model that supports inference does not necessarily support Runtime `CountTokens`; cross-Region-only Claude models may require the Mantle Anthropic counting endpoint instead.
+
+For `InvokeModel` and its streaming variant, `body` may be a JSON object or a JSON
+string. All model-specific fields are preserved. `contentType` and `accept` default to
+`application/json`; transport options such as `serviceTier`, `performanceConfigLatency`,
+`requestMetadata`, `trace`, and guardrail identifiers belong alongside `body`.
+`requestMetadata` is a JSON **string** for these operations, as required by the SDK.
+
+SDK binary fields use an explicit `{"$base64":"aGVsbG8="}` wrapper. Returned binary
+values use the same wrapper. Base64 strings inside a model's JSON body remain strings.
+Output is serialized native JSON; use JavaScript assertions or a response transform
+to select text, vectors, ranking scores, images, or other fields. AWS request metadata
+is available in `metadata.aws`. Token usage records the request count; automatic model
+cost and normalized token counts are not available on this raw route.
+
+Calls are never cached. Event streams are collected before returning, and service
+exception events produce provider errors. Inspect native completion events when an
+operation has model-specific finish states. Async jobs are submitted once and are not
+polled automatically; use `GetAsyncInvoke` to check status and an existing S3 output
+bucket. Pagination, agent return-control actions, and Flow continuation requests remain
+explicit. No AWS resources are provisioned by this adapter. Use the Nova Sonic adapter
+for bidirectional audio; JSON prompts cannot represent an interactive duplex session.
+
+See the [AWS Runtime API reference](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_Operations_Amazon_Bedrock_Runtime.html),
+[Agent Runtime API reference](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_Operations_Agents_for_Amazon_Bedrock_Runtime.html),
+and [native request example](https://github.com/promptfoo/promptfoo/tree/main/examples/amazon-bedrock/native-api).
+Use the dedicated adapters above when you want normalized text, embeddings, tool
+callbacks, model token accounting, or generated media handling.
+
 ## Model-specific Configuration
 
 Different models may support different configuration options. Here are some model-specific parameters:
