@@ -172,121 +172,133 @@ export const XAI_CHAT_MODELS: XAIModel[] = [
     },
   },
   // Grok 4.5 Models (500K context)
-  {
-    id: 'grok-4.5',
-    cost: {
-      input: 2.0 / 1e6,
-      output: 6.0 / 1e6,
-      // Verified live 2026-08-31 against usage.cost_in_usd_ticks on a cache hit:
-      // grok-4.5 reads cached prompt tokens at $0.30/1M, not $0.50/1M. The
-      // $0.50 rate belongs to grok-4.6.
-      cache_read: 0.3 / 1e6,
-      longContext: {
-        threshold: 200_000,
-        input: 4.0 / 1e6,
-        output: 12.0 / 1e6,
-        cache_read: 0.6 / 1e6,
-      },
+  ...modelsWithCost([{ id: 'grok-4.5', aliases: ['grok-4.5-latest', 'grok-build-latest'] }], {
+    input: 2.0 / 1e6,
+    output: 6.0 / 1e6,
+    // Verified live 2026-08-31 against usage.cost_in_usd_ticks on a cache hit:
+    // grok-4.5 reads cached prompt tokens at $0.30/1M, not $0.50/1M. The
+    // $0.50 rate belongs to grok-4.6.
+    cache_read: 0.3 / 1e6,
+    longContext: {
+      threshold: 200_000,
+      input: 4.0 / 1e6,
+      output: 12.0 / 1e6,
+      cache_read: 0.6 / 1e6,
     },
-    aliases: ['grok-4.5-latest', 'grok-build-latest'],
-  },
+  }),
   // Grok 4.20 Models
-  {
-    id: 'grok-4.20-0309-reasoning',
-    cost: {
+  ...modelsWithCost(
+    [
+      {
+        id: 'grok-4.20-0309-reasoning',
+        aliases: [
+          'grok-4.20',
+          'grok-4.20-reasoning',
+          'grok-4.20-reasoning-latest',
+          'grok-4.20-0309',
+          'grok-4.20-beta',
+          'grok-4.20-beta-0309',
+          'grok-4.20-beta-0309-reasoning',
+          'grok-4.20-beta-latest',
+          'grok-4.20-beta-latest-reasoning',
+          'grok-4.20-beta-reasoning',
+          'grok-4.20-experimental-beta-0304',
+          'grok-4.20-experimental-beta-0304-reasoning',
+          'grok-4.20-experimental-beta-latest',
+          'grok-4.20-experimental-beta-reasoning-latest',
+          'grok-4.20-reasoning-gv2',
+        ],
+      },
+    ],
+    {
       input: 1.25 / 1e6,
       output: 2.5 / 1e6,
       cache_read: 0.2 / 1e6,
       longContext: GROK_43_AND_420_LONG_CONTEXT_COST,
     },
-    aliases: [
-      'grok-4.20',
-      'grok-4.20-reasoning',
-      'grok-4.20-reasoning-latest',
-      'grok-4.20-0309',
-      'grok-4.20-beta',
-      'grok-4.20-beta-0309',
-      'grok-4.20-beta-0309-reasoning',
-      'grok-4.20-beta-latest',
-      'grok-4.20-beta-latest-reasoning',
-      'grok-4.20-beta-reasoning',
-      'grok-4.20-experimental-beta-0304',
-      'grok-4.20-experimental-beta-0304-reasoning',
-      'grok-4.20-experimental-beta-latest',
-      'grok-4.20-experimental-beta-reasoning-latest',
-      'grok-4.20-reasoning-gv2',
+  ),
+  ...modelsWithCost(
+    [
+      {
+        id: 'grok-4.20-0309-non-reasoning',
+        aliases: [
+          'grok-4.20-non-reasoning',
+          'grok-4.20-non-reasoning-latest',
+          'grok-4.20-beta-non-reasoning',
+          'grok-4.20-beta-latest-non-reasoning',
+          'grok-4.20-beta-0309-non-reasoning',
+          'grok-4.20-experimental-beta-0304-non-reasoning',
+          'grok-4.20-experimental-beta-non-reasoning-latest',
+          'grok-4.20-non-reasoning-gv2',
+        ],
+      },
     ],
-  },
-  {
-    id: 'grok-4.20-0309-non-reasoning',
-    cost: {
+    {
       input: 1.25 / 1e6,
       output: 2.5 / 1e6,
       cache_read: 0.2 / 1e6,
       longContext: GROK_43_AND_420_LONG_CONTEXT_COST,
     },
-    aliases: [
-      'grok-4.20-non-reasoning',
-      'grok-4.20-non-reasoning-latest',
-      'grok-4.20-beta-non-reasoning',
-      'grok-4.20-beta-latest-non-reasoning',
-      'grok-4.20-beta-0309-non-reasoning',
-      'grok-4.20-experimental-beta-0304-non-reasoning',
-      'grok-4.20-experimental-beta-non-reasoning-latest',
-      'grok-4.20-non-reasoning-gv2',
+  ),
+  ...modelsWithCost(
+    [
+      {
+        id: 'grok-4.20-multi-agent-0309',
+        aliases: [
+          'grok-4.20-multi-agent',
+          'grok-4.20-multi-agent-latest',
+          'grok-4.20-multi-agent-beta-latest',
+          'grok-4.20-multi-agent-beta-0309',
+          'grok-4.20-multi-agent-experimental-beta-0304',
+          'grok-4.20-multi-agent-experimental-beta-latest',
+        ],
+      },
     ],
-  },
-  {
-    id: 'grok-4.20-multi-agent-0309',
-    cost: {
+    {
       input: 1.25 / 1e6,
       output: 2.5 / 1e6,
       cache_read: 0.2 / 1e6,
       longContext: GROK_43_AND_420_LONG_CONTEXT_COST,
     },
-    aliases: [
-      'grok-4.20-multi-agent',
-      'grok-4.20-multi-agent-latest',
-      'grok-4.20-multi-agent-beta-latest',
-      'grok-4.20-multi-agent-beta-0309',
-      'grok-4.20-multi-agent-experimental-beta-0304',
-      'grok-4.20-multi-agent-experimental-beta-latest',
-    ],
-  },
+  ),
   // Grok 4.3 Models
-  {
-    id: 'grok-4.3',
-    cost: {
-      input: 1.25 / 1e6,
-      output: 2.5 / 1e6,
-      cache_read: 0.2 / 1e6,
-      longContext: GROK_43_AND_420_LONG_CONTEXT_COST,
-    },
-    aliases: ['grok-4.3-latest', 'grok-latest'],
-  },
+  ...modelsWithCost([{ id: 'grok-4.3', aliases: ['grok-4.3-latest', 'grok-latest'] }], {
+    input: 1.25 / 1e6,
+    output: 2.5 / 1e6,
+    cache_read: 0.2 / 1e6,
+    longContext: GROK_43_AND_420_LONG_CONTEXT_COST,
+  }),
   // Grok 4.1 Fast Models (2M context window)
-  {
-    id: 'grok-4-1-fast-reasoning',
-    cost: {
+  ...modelsWithCost(
+    [
+      {
+        id: 'grok-4-1-fast-reasoning',
+        aliases: ['grok-4-1-fast', 'grok-4-1-fast-latest', 'grok-4-1-fast-reasoning-latest'],
+      },
+    ],
+    {
       input: 0.2 / 1e6,
       output: 0.5 / 1e6,
       cache_read: 0.05 / 1e6,
     },
-    aliases: ['grok-4-1-fast', 'grok-4-1-fast-latest', 'grok-4-1-fast-reasoning-latest'],
-  },
-  {
-    id: 'grok-4-1-fast-non-reasoning',
-    cost: {
+  ),
+  ...modelsWithCost(
+    [{ id: 'grok-4-1-fast-non-reasoning', aliases: ['grok-4-1-fast-non-reasoning-latest'] }],
+    {
       input: 0.2 / 1e6,
       output: 0.5 / 1e6,
       cache_read: 0.05 / 1e6,
     },
-    aliases: ['grok-4-1-fast-non-reasoning-latest'],
-  },
+  ),
   // Grok Build Models
-  {
-    id: 'grok-build-0.1',
-    cost: {
+  ...modelsWithCost(
+    [
+      {
+        id: 'grok-build-0.1',
+        aliases: ['grok-code-fast-1', 'grok-code-fast', 'grok-code-fast-1-0825'],
+      },
+    ],
+    {
       input: 1.0 / 1e6,
       output: 2.0 / 1e6,
       cache_read: 0.2 / 1e6,
@@ -297,91 +309,71 @@ export const XAI_CHAT_MODELS: XAIModel[] = [
         cache_read: 0.4 / 1e6,
       },
     },
-    aliases: ['grok-code-fast-1', 'grok-code-fast', 'grok-code-fast-1-0825'],
-  },
+  ),
   // Grok-4 Fast Models (2M context window)
-  {
-    id: 'grok-4-fast-reasoning',
-    cost: {
+  ...modelsWithCost(
+    [
+      {
+        id: 'grok-4-fast-reasoning',
+        aliases: ['grok-4-fast', 'grok-4-fast-latest', 'grok-4-fast-reasoning-latest'],
+      },
+    ],
+    {
       input: 0.2 / 1e6,
       output: 0.5 / 1e6,
       cache_read: 0.05 / 1e6,
     },
-    aliases: ['grok-4-fast', 'grok-4-fast-latest', 'grok-4-fast-reasoning-latest'],
-  },
-  {
-    id: 'grok-4-fast-non-reasoning',
-    cost: {
+  ),
+  ...modelsWithCost(
+    [{ id: 'grok-4-fast-non-reasoning', aliases: ['grok-4-fast-non-reasoning-latest'] }],
+    {
       input: 0.2 / 1e6,
       output: 0.5 / 1e6,
       cache_read: 0.05 / 1e6,
     },
-    aliases: ['grok-4-fast-non-reasoning-latest'],
-  },
+  ),
   // Grok-4 Models
-  {
-    id: 'grok-4-0709',
-    cost: {
-      input: 3.0 / 1e6,
-      output: 15.0 / 1e6,
-      cache_read: 0.75 / 1e6,
-    },
-    aliases: ['grok-4', 'grok-4-latest'],
-  },
+  ...modelsWithCost([{ id: 'grok-4-0709', aliases: ['grok-4', 'grok-4-latest'] }], {
+    input: 3.0 / 1e6,
+    output: 15.0 / 1e6,
+    cache_read: 0.75 / 1e6,
+  }),
   // Grok-3 Models
-  {
-    id: 'grok-3-beta',
-    cost: {
-      input: 3.0 / 1e6,
-      output: 15.0 / 1e6,
-      cache_read: 0.75 / 1e6,
-    },
-    aliases: ['grok-3', 'grok-3-latest'],
-  },
-  {
-    id: 'grok-3-fast-beta',
-    cost: {
-      input: 3.0 / 1e6,
-      output: 15.0 / 1e6,
-      cache_read: 0.75 / 1e6,
-    },
-    aliases: ['grok-3-fast', 'grok-3-fast-latest'],
-  },
-  {
-    id: 'grok-3-mini-beta',
-    cost: {
+  ...modelsWithCost([{ id: 'grok-3-beta', aliases: ['grok-3', 'grok-3-latest'] }], {
+    input: 3.0 / 1e6,
+    output: 15.0 / 1e6,
+    cache_read: 0.75 / 1e6,
+  }),
+  ...modelsWithCost([{ id: 'grok-3-fast-beta', aliases: ['grok-3-fast', 'grok-3-fast-latest'] }], {
+    input: 3.0 / 1e6,
+    output: 15.0 / 1e6,
+    cache_read: 0.75 / 1e6,
+  }),
+  ...modelsWithCost([{ id: 'grok-3-mini-beta', aliases: ['grok-3-mini', 'grok-3-mini-latest'] }], {
+    input: 0.3 / 1e6,
+    output: 0.5 / 1e6,
+    cache_read: 0.075 / 1e6,
+  }),
+  ...modelsWithCost(
+    [{ id: 'grok-3-mini-fast-beta', aliases: ['grok-3-mini-fast', 'grok-3-mini-fast-latest'] }],
+    {
       input: 0.3 / 1e6,
       output: 0.5 / 1e6,
       cache_read: 0.075 / 1e6,
     },
-    aliases: ['grok-3-mini', 'grok-3-mini-latest'],
-  },
-  {
-    id: 'grok-3-mini-fast-beta',
-    cost: {
-      input: 0.3 / 1e6,
-      output: 0.5 / 1e6,
-      cache_read: 0.075 / 1e6,
-    },
-    aliases: ['grok-3-mini-fast', 'grok-3-mini-fast-latest'],
-  },
+  ),
   // Grok-2 Models
-  {
-    id: 'grok-2-1212',
-    cost: {
+  ...modelsWithCost([{ id: 'grok-2-1212', aliases: ['grok-2', 'grok-2-latest'] }], {
+    input: 2.0 / 1e6,
+    output: 10.0 / 1e6,
+  }),
+  ...modelsWithCost(
+    [{ id: 'grok-2-vision-1212', aliases: ['grok-2-vision', 'grok-2-vision-latest'] }],
+    {
       input: 2.0 / 1e6,
       output: 10.0 / 1e6,
     },
-    aliases: ['grok-2', 'grok-2-latest'],
-  },
-  {
-    id: 'grok-2-vision-1212',
-    cost: {
-      input: 2.0 / 1e6,
-      output: 10.0 / 1e6,
-    },
-    aliases: ['grok-2-vision', 'grok-2-vision-latest'],
-  },
+  ),
   // Legacy models
   {
     id: 'grok-beta',
@@ -1072,4 +1064,12 @@ export function createXAIProvider(
   const modelName = splits.slice(1).join(':');
   invariant(modelName, 'Model name is required');
   return new XAIProvider(modelName, options);
+}
+
+function modelsWithCost(models: { id: string; aliases: string[] }[], cost: XAIModelCost) {
+  return models.map(({ id, aliases }) => ({
+    id,
+    cost: { ...cost, ...(cost.longContext && { longContext: { ...cost.longContext } }) },
+    aliases,
+  }));
 }

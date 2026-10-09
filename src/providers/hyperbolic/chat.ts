@@ -13,40 +13,35 @@ type HyperbolicProviderOptions = Omit<ProviderOptions, 'config'> & {
   };
 };
 
+function modelsWithCost(
+  models: { id: string; aliases: string[] }[],
+  cost: { input: number; output: number },
+) {
+  return models.map(({ id, aliases }) => ({ id, cost: { ...cost }, aliases }));
+}
+
 export const HYPERBOLIC_CHAT_MODELS = [
   // DeepSeek Models
-  {
-    id: 'deepseek-ai/DeepSeek-R1',
-    cost: {
+  ...modelsWithCost(
+    [
+      { id: 'deepseek-ai/DeepSeek-R1', aliases: ['DeepSeek-R1'] },
+      { id: 'deepseek-ai/DeepSeek-R1-Zero', aliases: ['DeepSeek-R1-Zero'] },
+    ],
+    {
       input: 0.5 / 1e6,
       output: 2.18 / 1e6,
     },
-    aliases: ['DeepSeek-R1'],
-  },
-  {
-    id: 'deepseek-ai/DeepSeek-R1-Zero',
-    cost: {
-      input: 0.5 / 1e6,
-      output: 2.18 / 1e6,
-    },
-    aliases: ['DeepSeek-R1-Zero'],
-  },
-  {
-    id: 'deepseek-ai/DeepSeek-V3',
-    cost: {
+  ),
+  ...modelsWithCost(
+    [
+      { id: 'deepseek-ai/DeepSeek-V3', aliases: ['DeepSeek-V3'] },
+      { id: 'deepseek-ai/DeepSeek-V3-0324', aliases: ['DeepSeek-V3-0324'] },
+    ],
+    {
       input: 0.27 / 1e6,
       output: 1.1 / 1e6,
     },
-    aliases: ['DeepSeek-V3'],
-  },
-  {
-    id: 'deepseek-ai/DeepSeek-V3-0324',
-    cost: {
-      input: 0.27 / 1e6,
-      output: 1.1 / 1e6,
-    },
-    aliases: ['DeepSeek-V3-0324'],
-  },
+  ),
   {
     id: 'deepseek/DeepSeek-V2.5',
     cost: {
@@ -64,22 +59,16 @@ export const HYPERBOLIC_CHAT_MODELS = [
     },
     aliases: ['Qwen3-235B-A22B'],
   },
-  {
-    id: 'qwen/QwQ-32B',
-    cost: {
+  ...modelsWithCost(
+    [
+      { id: 'qwen/QwQ-32B', aliases: ['QwQ-32B'] },
+      { id: 'qwen/QwQ-32B-Preview', aliases: ['QwQ-32B-Preview', 'Qwen/QwQ-32B-Preview'] },
+    ],
+    {
       input: 0.15 / 1e6,
       output: 0.6 / 1e6,
     },
-    aliases: ['QwQ-32B'],
-  },
-  {
-    id: 'qwen/QwQ-32B-Preview',
-    cost: {
-      input: 0.15 / 1e6,
-      output: 0.6 / 1e6,
-    },
-    aliases: ['QwQ-32B-Preview', 'Qwen/QwQ-32B-Preview'],
-  },
+  ),
   {
     id: 'qwen/Qwen2.5-72B-Instruct',
     cost: {
@@ -113,22 +102,16 @@ export const HYPERBOLIC_CHAT_MODELS = [
     },
     aliases: ['Llama-3.2-3B'],
   },
-  {
-    id: 'meta-llama/Llama-3.1-405B',
-    cost: {
+  ...modelsWithCost(
+    [
+      { id: 'meta-llama/Llama-3.1-405B', aliases: ['Llama-3.1-405B'] },
+      { id: 'meta-llama/Llama-3.1-405B-BASE', aliases: ['Llama-3.1-405B-BASE'] },
+    ],
+    {
       input: 3.0 / 1e6,
       output: 3.0 / 1e6,
     },
-    aliases: ['Llama-3.1-405B'],
-  },
-  {
-    id: 'meta-llama/Llama-3.1-405B-BASE',
-    cost: {
-      input: 3.0 / 1e6,
-      output: 3.0 / 1e6,
-    },
-    aliases: ['Llama-3.1-405B-BASE'],
-  },
+  ),
   {
     id: 'meta-llama/Llama-3.1-70B',
     cost: {
@@ -145,23 +128,17 @@ export const HYPERBOLIC_CHAT_MODELS = [
     },
     aliases: ['Llama-3.1-8B'],
   },
-  {
-    id: 'meta-llama/Llama-3-70B',
-    cost: {
+  ...modelsWithCost(
+    [
+      { id: 'meta-llama/Llama-3-70B', aliases: ['Llama-3-70B'] },
+      // Hermes Models
+      { id: 'hermes/Hermes-3-70B', aliases: ['Hermes-3-70B'] },
+    ],
+    {
       input: 0.35 / 1e6,
       output: 0.4 / 1e6,
     },
-    aliases: ['Llama-3-70B'],
-  },
-  // Hermes Models
-  {
-    id: 'hermes/Hermes-3-70B',
-    cost: {
-      input: 0.35 / 1e6,
-      output: 0.4 / 1e6,
-    },
-    aliases: ['Hermes-3-70B'],
-  },
+  ),
   // Vision-Language Models
   {
     id: 'qwen/Qwen2.5-VL-7B-Instruct',

@@ -597,3 +597,8 @@ describe('DeepSeek native requests', () => {
     ).toBe(0);
   });
 });
+
+it('keeps mutable prices independent across model aliases', () => {
+  const costs = DEEPSEEK_CHAT_MODELS.map(({ cost }) => cost);
+  expect(new Set(costs).size).toBe(costs.length);
+});
