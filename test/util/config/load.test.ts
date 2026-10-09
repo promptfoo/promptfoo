@@ -1667,6 +1667,7 @@ describe('resolveConfigs', () => {
       {},
       // The suite directory, so rows read from it keep their authored var references.
       path.resolve('.'),
+      path.resolve('.'),
     );
 
     expect(testSuite).toMatchObject({

@@ -9,7 +9,7 @@ import { resolveConfigs } from '../../../src/util/config/load';
 import { readTestConfigs } from '../../../src/util/testCaseReader';
 import { mockProcessEnv } from '../utils';
 
-import type { CommandLineOptions, Scenario, TestCase } from '../../../src/types/index';
+import type { ApiProvider, CommandLineOptions, Scenario, TestCase } from '../../../src/types/index';
 
 describe('file:// var references in loaded configs', () => {
   const originalCwd = process.cwd();
@@ -156,6 +156,51 @@ describe('file:// var references in loaded configs', () => {
     expect(fromFirst).toBe('file://docs/a.txt');
     expect(fromSecond).toBe(`file://${path.join(second, 'docs', 'a.txt')}`);
   });
+
+  it.each(['', 'nested'])(
+    'preserves the provider origin of another config scenario file in %s',
+    async (testDirectory) => {
+      const first = writeProject('first', { tests: [] });
+      const second = writeProject('second', {
+        tests: [],
+        scenarios: [
+          {
+            config: [{}],
+            tests: `file://${testDirectory ? `${testDirectory}/` : ''}scenario-tests.yaml`,
+          },
+        ],
+      });
+      const sourceDirectory = path.join(second, testDirectory);
+      fs.mkdirSync(sourceDirectory, { recursive: true });
+      fs.writeFileSync(
+        path.join(sourceDirectory, 'scenario-tests.yaml'),
+        '- provider: ./provider.cjs\n  vars:\n    doc: file://docs/a.txt\n',
+      );
+      for (const [providerDirectory, output] of [
+        [first, 'first shadow'],
+        [sourceDirectory, 'second origin'],
+      ]) {
+        fs.writeFileSync(
+          path.join(providerDirectory, 'provider.cjs'),
+          `module.exports = class { id() { return ${JSON.stringify(output)}; } async callApi() { return { output: ${JSON.stringify(output)} }; } };`,
+        );
+      }
+
+      const { testSuite } = await resolve({
+        config: [
+          path.join(first, 'promptfooconfig.json'),
+          path.join(second, 'promptfooconfig.json'),
+        ],
+      });
+
+      const [scenario] = testSuite.scenarios as Scenario[];
+      const [row] = scenario.tests as TestCase[];
+      expect(row.metadata?.__promptfoo?.providerBasePath).toBe(sourceDirectory);
+      await expect((row.provider as ApiProvider).callApi('hello')).resolves.toMatchObject({
+        output: 'second origin',
+      });
+    },
+  );
 
   it('pins only the file vars of rows from another config, leaving nested values as data', async () => {
     const first = writeProject('first', { tests: [] });
@@ -343,6 +388,50 @@ describe('file:// var references in loaded configs', () => {
 
       const docs = (testSuite.tests as TestCase[]).map((test) => test.vars?.doc);
       expect(docs.sort()).toEqual(['first', 'second']);
+    },
+  );
+
+  it.each(['yaml', 'json', 'csv'])(
+    'rejects a missing literal --tests %s file under a bracketed working directory',
+    async (extension) => {
+      const project = writeProject('project', {});
+      const work = path.join(directory, 'work [acme]');
+      fs.mkdirSync(work);
+      process.chdir(work);
+
+      await expect(
+        resolve({
+          config: [path.join(project, 'promptfooconfig.json')],
+          tests: `missing.${extension}`,
+        }),
+      ).rejects.toThrow(/No test files found|ENOENT/);
+    },
+  );
+
+  it.each(['project', '.'])(
+    'preserves authored --tests directory globs with config in %s',
+    async (configDirectory) => {
+      const project = writeProject(configDirectory, {});
+      const work = path.join(directory, 'work [acme]');
+      for (const name of ['a', 'b', '[ab]']) {
+        const source = path.join(work, 'sets', name);
+        fs.mkdirSync(source, { recursive: true });
+        fs.writeFileSync(
+          path.join(source, 'cases-1.yaml'),
+          `- vars:\n    doc: ${JSON.stringify(name)}\n`,
+        );
+      }
+      process.chdir(work);
+
+      const { testSuite } = await resolve({
+        config: [path.join(project, 'promptfooconfig.json')],
+        tests: 'sets/[ab]/cases-*.yaml',
+      });
+
+      expect((testSuite.tests as TestCase[]).map((row) => row.vars?.doc).sort()).toEqual([
+        'a',
+        'b',
+      ]);
     },
   );
 

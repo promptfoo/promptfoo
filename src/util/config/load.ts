@@ -546,15 +546,11 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
   return { ...config, tests: await readTestSources(testSources, config.env) };
 }
 
-type TestSource = { tests: TestSuiteConfig['tests']; basePath: string };
-
-/** Locates the `--tests` reference from the working directory, once its env templates are rendered. */
-function resolveCliTestsReference(reference: string, env: TestSuite['env']): string {
-  const rendered = reference.includes('{{')
-    ? cliState.withEnv(env, () => renderEnvOnlyInObject(reference))
-    : reference;
-  return resolveReferenceFromDirectory(process.cwd(), rendered);
-}
+type TestSource = {
+  tests: TestSuiteConfig['tests'];
+  basePath: string;
+  testsBasePath?: string;
+};
 
 /** Resolves a local path or `file://` reference from a directory; remote and templated references pass through. */
 function resolveReferenceFromDirectory(directory: string, reference: string): string {
@@ -583,6 +579,7 @@ async function readTestSources(
               source.basePath,
               env,
               suiteBasePath ?? source.basePath,
+              source.testsBasePath ?? source.basePath,
             )),
       );
     } catch (error) {
@@ -1261,11 +1258,9 @@ async function resolveLoadedConfig(
           {
             // --tests is located from the working directory, while references inside its
             // rows resolve from the config directory like every other test.
-            tests:
-              typeof cmdObj.tests === 'string'
-                ? resolveCliTestsReference(cmdObj.tests, runtimeEnv)
-                : config.tests || [],
+            tests: config.tests || [],
             basePath,
+            testsBasePath: cmdObj.tests ? process.cwd() : basePath,
           },
         ],
     runtimeEnv,

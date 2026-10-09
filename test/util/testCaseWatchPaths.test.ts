@@ -82,9 +82,9 @@ describe('resolveTestsWatchPaths', () => {
     expect(resolveTestsWatchPaths('file://*.yaml', root)).toEqual([testsPath]);
   });
 
-  it('expands a glob that leads out of the base directory into one containing brackets', () => {
-    // An absolute reference, as --tests is once it has been located from the working
-    // directory. Directories that exist as written are not part of the pattern.
+  it('expands a --tests glob from a bracketed directory when the config is elsewhere', () => {
+    // --tests uses its working directory for lookup, separately from the config directory
+    // used for dependencies inside rows.
     const root = path.join(base, 'work [acme]');
     fs.mkdirSync(path.join(root, 'set-1'), { recursive: true });
     fs.mkdirSync(path.join(root, 'set-2'));
@@ -96,6 +96,7 @@ describe('resolveTestsWatchPaths', () => {
 
     const watched = resolveTestsWatchPaths(
       path.join(root, 'set-*', 'cases.yaml') as TestSuiteConfig['tests'],
+      root,
       path.join(base, 'nested'),
     );
 

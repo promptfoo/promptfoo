@@ -641,6 +641,7 @@ async function loadTestsFromGlobWithEnv(
   basePath: string,
   env: EnvOverrides | undefined,
   loadProviders = true,
+  testsBasePath = basePath,
 ): Promise<TestCase[]> {
   loadTestsGlob = renderEnvOnlyInObject(loadTestsGlob);
   if (loadTestsGlob.startsWith('huggingface://datasets/')) {
@@ -653,11 +654,11 @@ async function loadTestsFromGlobWithEnv(
   if (loadTestsGlob.startsWith('file://')) {
     loadTestsGlob = loadTestsGlob.slice('file://'.length);
   }
-  const resolvedPath = path.resolve(basePath, loadTestsGlob);
+  const resolvedPath = path.resolve(testsBasePath, loadTestsGlob);
 
   const testFiles: string[] = fs.existsSync(resolvedPath)
     ? [resolvedPath]
-    : globSync(toTestsGlob(basePath, loadTestsGlob), {
+    : globSync(toTestsGlob(testsBasePath, loadTestsGlob), {
         windowsPathsNoEscape: true,
       });
 
@@ -683,7 +684,7 @@ async function loadTestsFromGlobWithEnv(
   const ret: TestCase[] = [];
   if (testFiles.length < 1) {
     const message = `No test files found for path: ${resolvedPath}`;
-    if (!hasGlobMagic(path.relative(path.resolve(basePath), resolvedPath))) {
+    if (!hasGlobMagic(path.relative(path.resolve(testsBasePath), resolvedPath))) {
       throw new Error(message);
     }
     logger.warn(message);
@@ -803,10 +804,12 @@ export async function readTestConfigs(
   basePath: string = cliState.basePath || '',
   env: EnvOverrides | undefined = cliState.env,
   suiteBasePath: string = basePath,
+  // CLI --tests references are located from CWD, while their rows use the config directory.
+  testsBasePath: string = basePath,
 ): Promise<TestCase[]> {
   return cliState.withBasePath(basePath, () =>
     cliState.withEnv(env, async () => {
-      const rows = await readTestsWithEnv(tests, basePath, env, false);
+      const rows = await readTestsWithEnv(tests, basePath, env, false, testsBasePath);
       const pinTo = path.resolve(basePath) === path.resolve(suiteBasePath) ? undefined : basePath;
       return rows.map((row) => {
         if (isRemoteTestCase(row)) {
@@ -818,6 +821,27 @@ export async function readTestConfigs(
             ? reference
             : `file://${path.resolve(pinTo, reference.slice(7))}`;
         });
+        const providerId = typeof row.provider === 'string' ? row.provider : row.provider?.id;
+        // Provider construction happens later from the suite directory, so retain this
+        // row's origin unless an imported file already supplied a more specific one.
+        if (
+          pinTo !== undefined &&
+          typeof providerId === 'string' &&
+          !isApiProvider(row.provider) &&
+          !row.metadata?.__promptfoo?.providerBasePath
+        ) {
+          return {
+            ...row,
+            vars,
+            metadata: {
+              ...row.metadata,
+              __promptfoo: {
+                ...row.metadata?.__promptfoo,
+                providerBasePath: path.resolve(basePath),
+              },
+            },
+          };
+        }
         return vars === row.vars ? row : { ...row, vars };
       });
     }),
@@ -829,10 +853,11 @@ async function readTestsWithEnv(
   basePath: string,
   env: EnvOverrides | undefined,
   loadProviders = true,
+  testsBasePath = basePath,
 ): Promise<TestCase[]> {
   const loadStandalone = async (source: string, config?: Record<string, any>) => {
     source = renderEnvOnlyInObject(source);
-    const tests = await readStandaloneTestsFile(source, basePath, config);
+    const tests = await readStandaloneTestsFile(source, testsBasePath, config);
     if (isRemoteTestsReference(source)) {
       // Resolve local provider and vars references only for local sources.
       return tests;
@@ -849,10 +874,10 @@ async function readTestsWithEnv(
     }
     // Points to a tests file with multiple test cases
     if (source.endsWith('yaml') || source.endsWith('yml')) {
-      return loadTestsFromGlobWithEnv(source, basePath, env, loadProviders);
+      return loadTestsFromGlobWithEnv(source, basePath, env, loadProviders, testsBasePath);
     }
     const withoutScheme = source.replace(/^file:\/\//, '');
-    if (!hasGlobMagic(withoutScheme) || fs.existsSync(path.resolve(basePath, withoutScheme))) {
+    if (!hasGlobMagic(withoutScheme) || fs.existsSync(path.resolve(testsBasePath, withoutScheme))) {
       // Preserve standalone parsing for literal files, including names with glob characters.
       return loadStandalone(source);
     }
@@ -901,7 +926,15 @@ async function readTestsWithEnv(
         ret.push(...(await loadStandalone(globOrTest)));
       } else {
         // Resolve globs for other file types
-        ret.push(...(await loadTestsFromGlobWithEnv(globOrTest, basePath, env, loadProviders)));
+        ret.push(
+          ...(await loadTestsFromGlobWithEnv(
+            globOrTest,
+            basePath,
+            env,
+            loadProviders,
+            testsBasePath,
+          )),
+        );
       }
     } else if (isRemoteTestCase(globOrTest as TestCase)) {
       ret.push(globOrTest as TestCase);
@@ -990,34 +1023,14 @@ function hasGlobMagic(reference: string): boolean {
 /**
  * The glob pattern for a tests reference resolved from `basePath`.
  *
- * Relative references retain their patterns below the literal base directory. Absolute
- * references (including pinned CLI references) and references outside that base use their
- * existing leading directories literally: `/work [acme]/cases-*.yaml` looks for
- * `cases-*.yaml` in `/work [acme]`, even when that directory is beneath the config directory.
+ * The lookup directory is literal; user-authored components retain their glob syntax.
+ * Keep it separate from the directory used to resolve dependencies inside loaded rows.
  */
 function toTestsGlob(basePath: string, reference: string): string {
   const escape = (directory: string) => escapeGlob(directory, { windowsPathsNoEscape: true });
   const base = path.resolve(basePath);
   const resolvedPath = path.resolve(base, reference);
-  const relative = path.relative(base, resolvedPath);
-  if (!path.isAbsolute(reference) && !relative.startsWith('..') && !path.isAbsolute(relative)) {
-    return path.resolve(escape(base), relative);
-  }
-
-  const { root } = path.parse(resolvedPath);
-  const segments = resolvedPath.slice(root.length).split(path.sep);
-  let directory = root;
-  let used = 0;
-  // The last segment names the files, so it is always part of the pattern.
-  while (used < segments.length - 1) {
-    const next = path.join(directory, segments[used]);
-    if (!fs.statSync(next, { throwIfNoEntry: false })?.isDirectory()) {
-      break;
-    }
-    directory = next;
-    used++;
-  }
-  return path.resolve(escape(directory), ...segments.slice(used));
+  return path.resolve(escape(base), path.relative(base, resolvedPath));
 }
 
 /**
