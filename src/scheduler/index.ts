@@ -33,7 +33,7 @@ export {
 // Rate limit key generation
 export { getRateLimitKey } from './rateLimitKey';
 // Core exports
-export { createRateLimitRegistry, RateLimitRegistry } from './rateLimitRegistry';
+export { RateLimitRegistry } from './rateLimitRegistry';
 // Retry policy
 export {
   DEFAULT_RETRY_POLICY,

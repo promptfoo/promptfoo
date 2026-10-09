@@ -297,6 +297,9 @@
         "CF_AIG_TOKEN": {
           "type": "string"
         },
+        "CEREBRAS_API_KEY": {
+          "type": "string"
+        },
         "COMETAPI_KEY": {
           "type": "string"
         },
@@ -313,6 +316,9 @@
           "type": "string"
         },
         "DATABRICKS_WORKSPACE_URL": {
+          "type": "string"
+        },
+        "DASHSCOPE_API_KEY": {
           "type": "string"
         },
         "DEEPSEEK_API_KEY": {
@@ -426,7 +432,13 @@
         "LLAMA_BASE_URL": {
           "type": "string"
         },
+        "LLAMA_API_KEY": {
+          "type": "string"
+        },
         "LOCALAI_BASE_URL": {
+          "type": "string"
+        },
+        "LOCALAI_TEMPERATURE": {
           "type": "string"
         },
         "MISTRAL_API_BASE_URL": {
@@ -531,6 +543,9 @@
         "PALM_API_KEY": {
           "type": "string"
         },
+        "PERPLEXITY_API_KEY": {
+          "type": "string"
+        },
         "PORTKEY_API_BASE_URL": {
           "type": "string"
         },
@@ -607,6 +622,9 @@
           "type": "string"
         },
         "TOGETHER_API_KEY": {
+          "type": "string"
+        },
+        "TRUEFOUNDRY_API_KEY": {
           "type": "string"
         },
         "TYPESAFE_API_KEY": {
@@ -1635,7 +1653,7 @@
           "items": {
             "$ref": "#/definitions/__schema61"
           },
-          "description": "Strategies to use for redteam generation.\n\nDefaults to basic, jailbreak:meta, jailbreak:composite\nSupports audio, authoritative-markup-injection, base64, basic, best-of-n, camelcase, citation, crescendo, custom, default, emoji, gcg, goat, hex, homoglyph, image, indirect-web-pwn, jailbreak, jailbreak-templates, jailbreak:composite, jailbreak:goblin, jailbreak:hydra, jailbreak:likert, jailbreak:meta, jailbreak:tree, layer, leetspeak, math-prompt, mischievous-user, morse, multilingual, other-encodings, piglatin, prompt-injection, retry, rot13, video"
+          "description": "Strategies to use for redteam generation.\n\nDefaults to basic, jailbreak:meta, jailbreak:composite\nSupports arabic-presentation-forms, audio, authoritative-markup-injection, base64, basic, best-of-n, camelcase, citation, crescendo, custom, default, emoji, gcg, goat, hex, homoglyph, image, indirect-web-pwn, jailbreak, jailbreak-templates, jailbreak:composite, jailbreak:goblin, jailbreak:hydra, jailbreak:likert, jailbreak:meta, jailbreak:tree, layer, leetspeak, math-prompt, mischievous-user, morse, multilingual, other-encodings, piglatin, prompt-injection, retry, rot13, video"
         },
         "maxConcurrency": {
           "description": "Maximum number of concurrent API calls",
@@ -2494,6 +2512,7 @@
         {
           "type": "string",
           "enum": [
+            "arabic-presentation-forms",
             "audio",
             "authoritative-markup-injection",
             "base64",

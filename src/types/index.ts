@@ -10,14 +10,16 @@ import {
 import { TRACE_CREDENTIAL_PATH_SEGMENT } from '../contracts/traceProviderEndpoint';
 import { PromptConfigSchema, PromptSchema } from '../contracts/validators/prompts';
 import { NunjucksFilterMapSchema, StringOrFunctionSchema } from '../contracts/validators/shared';
-import { isJavascriptFile, JAVASCRIPT_EXTENSIONS } from '../util/fileExtensions';
-import { parseFilterRange } from '../util/filterRange';
+import { isJavascriptFile, JAVASCRIPT_EXTENSIONS } from '../validation/fileExtensions';
+import { parseFilterRange } from '../validation/filterRange';
 import { ApiProviderSchema, ProviderOptionsSchema, ProvidersSchema } from '../validators/providers';
 import {
   CONFIG_PROVIDER_INPUT_ERROR,
   hasValidConfigProviders,
   normalizeConfigProviderAlias,
 } from './configAliases';
+
+import type { ResultFailureReason } from './results';
 
 export { ProvidersSchema };
 
@@ -380,21 +382,8 @@ export type ServerPromptWithMetadata = Omit<PromptWithMetadata, 'recentEvalDate'
   recentEvalDate: string;
 };
 
-export const ResultFailureReason = {
-  // The test passed, or we don't know exactly why the test case failed.
-  NONE: 0,
-  // The test case failed because an assertion rejected it.
-  ASSERT: 1,
-  // Test case failed due to some other error.
-  ERROR: 2,
-} as const;
-export type ResultFailureReason = (typeof ResultFailureReason)[keyof typeof ResultFailureReason];
-
-const validResultFailureReasons = new Set<number>(Object.values(ResultFailureReason));
-
-export function isResultFailureReason(value: number): value is ResultFailureReason {
-  return validResultFailureReasons.has(value);
-}
+// Compatibility exports for existing public and source consumers.
+export { isResultFailureReason, ResultFailureReason } from './results';
 
 export interface EvaluateResult {
   id?: string; // on the new version 2, this is stored per-result
