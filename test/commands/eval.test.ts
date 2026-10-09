@@ -172,6 +172,12 @@ vi.mock('../../src/database/index', async (importOriginal) => {
   };
 });
 
+beforeEach(() => {
+  vi.mocked(evaluate)
+    .mockReset()
+    .mockImplementation(async (_testSuite, evalRecord) => evalRecord as Eval);
+});
+
 describe('eval command compatibility exports', () => {
   it('preserves the established command-module runtime exports', () => {
     expect(commandDoEval).toBe(doEval);
@@ -313,7 +319,7 @@ describe('evalCommand', () => {
     );
   });
 
-  it('should finalize streamed JSONL output through recovery when CLI result persistence fails', async () => {
+  it('finalizes streamed JSONL recovery before reporting an API persistence failure', async () => {
     const cmdObj = { table: false, write: false, share: false };
     const config = { outputPath: ['results.jsonl', 'results.json'] } as UnifiedConfig;
 
@@ -336,7 +342,11 @@ describe('evalCommand', () => {
       return evalRecord as Eval;
     });
 
-    await doEval(cmdObj, config, defaultConfigPath, {});
+    await expect(doEval(cmdObj, config, defaultConfigPath, {})).rejects.toMatchObject({
+      name: 'EvalRunError',
+      exitCode: 1,
+      message: 'Evaluation failed because one or more results could not be saved.',
+    });
 
     expect(writeMultipleOutputs).toHaveBeenCalledWith(
       ['results.jsonl', 'results.json'],

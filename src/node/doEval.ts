@@ -999,6 +999,25 @@ async function doEvalWithEnv(
       (p): p is string => typeof p === 'string' && p.length > 0,
     );
 
+    if (ret.resultPersistenceFailed) {
+      if (ret.persisted) {
+        ret.clearResults();
+      }
+      warnOnDegradedJsonlRecovery(ret, paths);
+      try {
+        await writeMultipleOutputs(paths, ret, null);
+      } catch (error) {
+        logger.warn('Could not finalize outputs after evaluation results failed to persist.', {
+          error,
+        });
+      }
+      return failEvalRun(
+        'Evaluation failed because one or more results could not be saved.',
+        isCliInvocation,
+        { cliFallback: ret },
+      );
+    }
+
     // If paused, print minimal guidance and skip the rest of the reporting
     if (paused && cmdObj.write !== false) {
       if (resumeEval) {
