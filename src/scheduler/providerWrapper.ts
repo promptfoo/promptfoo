@@ -5,6 +5,7 @@
  * code paths that bypass the main evaluator.
  */
 
+import { composeResponseHeadersObservers } from '../util/fetch/responseHeadersObserver';
 import { parseRetryAfter } from './headerParser';
 import {
   getProviderResponseHeaders,
@@ -43,21 +44,29 @@ export function isRateLimitWrapped(provider: ApiProvider): boolean {
  * Create rate limit detection options for ProviderResponse.
  * Shared between providerWrapper and evaluator for consistency.
  */
-export function createProviderRateLimitOptions(): RateLimitExecuteOptions<ProviderResponse> {
+export function createProviderRateLimitOptions(
+  abortSignal?: AbortSignal,
+): RateLimitExecuteOptions<ProviderResponse> {
   return {
+    ...(abortSignal && { abortSignal }),
     // Provider errors are values carrying output, usage and HTTP metadata.
     // Keep that evidence when the scheduler has no retries left.
     onRateLimitExhausted: (result, error) =>
       result.error ? result : { ...result, error: error.message },
-    // A hard quota is not retried, so its headers must not feed the shared
+    // Non-retryable rate limits must not feed the shared
     // rate-limit state either: a billing 429 that also carries
     // `x-ratelimit-remaining-*: 0` and a reset timestamp would otherwise
     // park every queued and subsequent call until that reset instead of
     // letting them fail fast.
     getHeaders: (result: ProviderResponse | undefined) =>
-      result?.metadata?.rateLimitKind === 'quota' ? undefined : getProviderResponseHeaders(result),
+      result?.metadata?.rateLimitRetryable === false || result?.metadata?.rateLimitKind === 'quota'
+        ? undefined
+        : getProviderResponseHeaders(result),
     isRateLimited: isProviderResponseRateLimited,
     getRetryAfter: (result: ProviderResponse | undefined, error: Error | undefined) => {
+      if (result?.metadata?.rateLimitRetryable === false) {
+        return undefined;
+      }
       const rawHeaders = getProviderResponseHeaders(result);
       if (rawHeaders) {
         // Normalize header keys to lowercase for consistent access
@@ -123,8 +132,21 @@ export function wrapProviderWithRateLimiting(
     ): Promise<ProviderResponse> => {
       return registry.execute(
         provider,
-        () => originalCallApi(prompt, context, options),
-        createProviderRateLimitOptions(),
+        (onResponseHeaders) =>
+          originalCallApi(
+            prompt,
+            context,
+            onResponseHeaders
+              ? {
+                  ...options,
+                  onResponseHeaders: composeResponseHeadersObservers(
+                    onResponseHeaders,
+                    options?.onResponseHeaders,
+                  ),
+                }
+              : options,
+          ),
+        createProviderRateLimitOptions(options?.abortSignal),
       );
     },
   };

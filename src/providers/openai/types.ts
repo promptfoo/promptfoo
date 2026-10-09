@@ -15,6 +15,8 @@ export interface CallbackContext {
   assistantId: string;
   /** The provider type (e.g., 'openai', 'azure') */
   provider: string;
+  /** Caller cancellation signal, when supported by the provider (including Azure Foundry). */
+  abortSignal?: AbortSignal;
 }
 
 /**
@@ -171,9 +173,12 @@ export type OpenAiCompletionOptions = OpenAiSharedOptions & {
   prompt_cache_key?: string;
   prompt_cache_options?: OpenAiPromptCacheOptions;
   prompt_cache_retention?: OpenAiPromptCacheRetention;
+  safety_identifier?: string;
   reasoning_effort?: GPT5ReasoningEffort;
   reasoning?: Reasoning | GPT5Reasoning;
-  service_tier?: ('auto' | 'default' | 'fast' | 'flex' | 'priority' | 'premium') | null;
+  service_tier?:
+    | ('auto' | 'default' | 'fast' | 'flex' | 'priority' | 'premium' | 'ultrafast')
+    | null;
   modalities?: string[];
   audio?: {
     bitrate?: string;
