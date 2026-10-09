@@ -51,7 +51,7 @@ promptfoo auth login --host https://promptfoo.example.com --api-key "$PROMPTFOO_
 promptfoo auth whoami
 ```
 
-Set `PROMPTFOO_API_KEY` through your secret manager before running this command. For CI without a saved login, set `PROMPTFOO_API_KEY` and `PROMPTFOO_CLOUD_API_URL`; a saved API key and host take precedence over these environment variables. See [Enterprise sharing](/docs/usage/sharing#enterprise-sharing) for gateways that use a separate authentication header.
+Set `PROMPTFOO_API_KEY` through your secret manager before running this command. For CI without a saved login, set `PROMPTFOO_API_KEY`, `PROMPTFOO_CLOUD_API_URL` to the API base URL, and `PROMPTFOO_REMOTE_APP_BASE_URL` to the browser-facing app URL so report links open in your deployment. A saved API key and host take precedence over their environment variables. See [Enterprise sharing](/docs/usage/sharing#enterprise-sharing) for gateways that use a separate authentication header.
 
 :::tip
 CLI runs can upload results automatically after Enterprise login. Use `promptfoo share` to upload existing local evals, or see [disabling sharing](/docs/usage/sharing#disabling-sharing) to keep a CLI run local. Scans run on the server store their results in your deployment.
@@ -90,4 +90,4 @@ To switch organizations, run `promptfoo auth login --api-key <apiKey>` with a ke
 promptfoo auth teams current
 ```
 
-Cloud-backed operations, including sharing results and retrieving scan configurations, use this team context until you switch to a different team.
+The selected team is used when sharing results that are not associated with a saved cloud scan configuration. Saved scan configurations are retrieved by ID, and their results retain the configuration's team.
