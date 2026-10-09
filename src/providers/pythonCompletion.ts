@@ -63,6 +63,7 @@ export class PythonProvider implements ApiProvider {
   private functionName: string | null;
   private isInitialized: boolean = false;
   private initializationPromise: Promise<void> | null = null;
+  private cleanupGeneration = 0;
   public label: string | undefined;
   private pool: PythonWorkerPool | null = null;
 
@@ -101,6 +102,7 @@ export class PythonProvider implements ApiProvider {
       return this.initializationPromise;
     }
 
+    const cleanupGeneration = this.cleanupGeneration;
     // Start initialization and store the promise
     this.initializationPromise = (async () => {
       try {
@@ -127,16 +129,17 @@ export class PythonProvider implements ApiProvider {
         );
 
         await this.pool.initialize();
+        if (cleanupGeneration !== this.cleanupGeneration) {
+          throw new Error('Python provider initialization interrupted by cleanup');
+        }
 
         // Register for cleanup
         providerRegistry.register(this);
 
         this.isInitialized = true;
         logger.debug(`Initialized Python provider ${this.id()} with ${workerCount} workers`);
-      } catch (error) {
-        // Reset the initialization promise so future calls can retry
+      } finally {
         this.initializationPromise = null;
-        throw error;
       }
     })();
 
@@ -306,12 +309,23 @@ export class PythonProvider implements ApiProvider {
     return this.executePythonScript(prompt, undefined, 'call_classification_api');
   }
 
+  async cleanup(): Promise<void> {
+    await this.shutdown();
+  }
+
   async shutdown(): Promise<void> {
-    if (this.pool) {
-      await this.pool.shutdown();
-      this.pool = null;
+    this.cleanupGeneration++;
+    if (this.initializationPromise) {
+      try {
+        await this.initializationPromise;
+      } catch {
+        // Failed initialization can still leave workers that need disposal.
+      }
     }
-    providerRegistry.unregister(this);
+    const pool = this.pool;
+    this.pool = null;
     this.isInitialized = false;
+    providerRegistry.unregister(this);
+    await pool?.shutdown();
   }
 }
