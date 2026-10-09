@@ -40,10 +40,63 @@ describe('response-cache metadata', () => {
     expect(withResponseCacheMetadata(response, true)).toEqual({
       ...response,
       cached: true,
-      tokenUsage: { ...response.tokenUsage, cached: 12, numRequests: 0, incurredTokenUsage: {} },
+      tokenUsage: {
+        ...response.tokenUsage,
+        cached: 12,
+        completionDetails: { cacheReadInputTokens: 4 },
+        numRequests: 0,
+        incurredTokenUsage: {},
+      },
     });
     expect(response.tokenUsage.cached).toBe(4);
     expect(response.tokenUsage.numRequests).toBe(1);
+  });
+
+  it.each([0, 4])(
+    'preserves vendor cache counts separately across repeated replay (%s)',
+    (vendorCached) => {
+      const source = Object.freeze({
+        output: 'cached',
+        tokenUsage: Object.freeze({
+          total: 12,
+          cached: vendorCached,
+          completionDetails: Object.freeze({ reasoning: 2 }),
+        }),
+      });
+      const replay = withResponseCacheMetadata(source, true);
+      expect(replay.tokenUsage).toMatchObject({
+        total: 12,
+        cached: 12,
+        completionDetails: { reasoning: 2, cacheReadInputTokens: vendorCached },
+      });
+      expect(withResponseCacheMetadata(replay, true)).toEqual(replay);
+      expect(source.tokenUsage.cached).toBe(vendorCached);
+    },
+  );
+
+  it('keeps explicit vendor counts and does not infer them from response-cache counts', () => {
+    expect(
+      withResponseCacheMetadata(
+        { output: '', cached: true, tokenUsage: { total: 12, cached: 12 } },
+        true,
+      ).tokenUsage?.completionDetails,
+    ).toBeUndefined();
+    expect(
+      withResponseCacheMetadata(
+        {
+          output: '',
+          tokenUsage: { total: 12, cached: 12, completionDetails: { cacheReadInputTokens: 4 } },
+        },
+        true,
+      ).tokenUsage?.completionDetails?.cacheReadInputTokens,
+    ).toBe(4);
+    expect(
+      withResponseCacheMetadata({ output: '', tokenUsage: { cached: 4 } }, true).tokenUsage,
+    ).toEqual({
+      completionDetails: { cacheReadInputTokens: 4 },
+      numRequests: 0,
+      incurredTokenUsage: {},
+    });
   });
 
   it('keeps vendor prompt caching separate from a response-cache hit', () => {

@@ -24,18 +24,26 @@ export function withResponseCacheMetadata<T extends ProviderResponse | ProviderE
   response: T,
   cached: boolean,
 ): Omit<T, 'cached' | 'tokenUsage'> & Pick<ProviderResponse, 'tokenUsage'> & { cached: boolean } {
+  if (!cached || !response.tokenUsage) {
+    return { ...response, cached };
+  }
+  const base: Omit<T, 'cached' | 'tokenUsage'> = response;
+  const { cached: reportedCached, ...usage } = response.tokenUsage;
+  const providerCached =
+    usage.completionDetails?.cacheReadInputTokens ??
+    (response.cached === true ? undefined : reportedCached);
   return {
-    ...response,
+    ...base,
     cached,
-    ...(cached &&
-      response.tokenUsage && {
-        tokenUsage: {
-          ...response.tokenUsage,
-          ...(response.tokenUsage.total !== undefined && { cached: response.tokenUsage.total }),
-          numRequests: 0,
-          incurredTokenUsage: {},
-        },
+    tokenUsage: {
+      ...usage,
+      ...(providerCached !== undefined && {
+        completionDetails: { ...usage.completionDetails, cacheReadInputTokens: providerCached },
       }),
+      ...(usage.total !== undefined && { cached: usage.total }),
+      numRequests: 0,
+      incurredTokenUsage: {},
+    },
   };
 }
 
