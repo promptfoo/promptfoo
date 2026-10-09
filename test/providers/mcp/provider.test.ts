@@ -40,6 +40,22 @@ describe('MCPProvider', () => {
     mcpClientMock.cleanup.mockReset().mockResolvedValue(undefined);
   });
 
+  it('reads connected servers before a tool call and clears the accessor after cleanup', async () => {
+    const initializing = deferred();
+    mcpClientMock.initialize.mockReturnValueOnce(initializing.promise);
+    const provider = new MCPProvider({ config: { enabled: true } });
+    try {
+      expect(provider.getConnectedServers()).toEqual(['test-server']);
+      initializing.resolve();
+      await initializing.promise;
+      expect(provider.getConnectedServers()).toEqual(['test-server']);
+    } finally {
+      initializing.resolve();
+      await provider.cleanup();
+    }
+    expect(provider.getConnectedServers()).toEqual([]);
+  });
+
   it('should preserve existing output behavior without a response transform', async () => {
     const rawResult = {
       content: [{ type: 'text', text: 'raw response' }],
