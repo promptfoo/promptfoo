@@ -379,11 +379,11 @@ export class TrueFoundryEmbeddingProvider extends OpenAiEmbeddingProvider {
     }
 
     // Keep generated headers local to this request.
-    const providerForRequest = new OpenAiEmbeddingProvider(this.modelName, {
+    const providerForRequest = new TrueFoundryEmbeddingProvider(this.modelName, {
       config: { ...this.config, headers },
       env: this.env,
     });
-    return providerForRequest.callEmbeddingApi(text);
+    return super.callEmbeddingApi.call(providerForRequest, text);
   }
 
   id(): string {

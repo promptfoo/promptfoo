@@ -679,6 +679,25 @@ describe('XAIResponsesProvider', () => {
     });
   });
 
+  it('applies confirmed priority pricing to invalid prompt refusals', async () => {
+    mockFetchWithCache.mockResolvedValueOnce({
+      data: {
+        error: { code: 'invalid_prompt' },
+        service_tier: 'priority',
+        usage: { input_tokens: 100_000, output_tokens: 100_000, total_tokens: 200_000 },
+      },
+      cached: false,
+      status: 400,
+      statusText: 'Bad Request',
+    });
+    const provider = new XAIResponsesProvider('grok-4.5', {
+      config: { apiKey: 'test-key', service_tier: 'priority' },
+    });
+    const result = await provider.callApi('blocked prompt');
+    expect(result.isRefusal).toBe(true);
+    expect(result.cost).toBeCloseTo(1.6, 10);
+  });
+
   it('keeps invalid prompt refusals free when served from the cache', async () => {
     mockFetchWithCache.mockResolvedValueOnce({
       data: {
