@@ -806,6 +806,7 @@ describeEvaluator('evaluator execution control', () => {
   it('should not block timeout rows when a provider call does not settle after abort', async () => {
     vi.useFakeTimers();
 
+    const providerStarted = createDeferred<void>();
     const mockAddResult = vi.fn().mockResolvedValue(undefined);
 
     const hangingProvider: ApiProvider = {
@@ -813,6 +814,7 @@ describeEvaluator('evaluator execution control', () => {
       callApi: vi.fn().mockImplementation(
         () =>
           new Promise(() => {
+            providerStarted.resolve();
             // Intentionally never resolves; timeout handling must still emit a row.
           }),
       ),
@@ -852,6 +854,7 @@ describeEvaluator('evaluator execution control', () => {
 
     try {
       const evalPromise = evaluate(testSuite, mockEval as unknown as Eval, { timeoutMs: 50 });
+      await providerStarted.promise;
       await vi.advanceTimersByTimeAsync(50);
       await evalPromise;
 
@@ -1103,6 +1106,7 @@ describeEvaluator('evaluator execution control', () => {
   it('should abort when exceeding maxEvalTimeMs', async () => {
     vi.useFakeTimers();
 
+    const providerStarted = createDeferred<void>();
     const mockAddResult = vi.fn().mockResolvedValue(undefined);
     let longTimer: NodeJS.Timeout | null = null;
 
@@ -1110,6 +1114,7 @@ describeEvaluator('evaluator execution control', () => {
       id: vi.fn().mockReturnValue('slow-provider'),
       callApi: vi.fn().mockImplementation((_, __, opts) => {
         return new Promise((resolve, reject) => {
+          providerStarted.resolve();
           longTimer = setTimeout(() => {
             resolve({
               output: 'Slow response',
@@ -1161,6 +1166,7 @@ describeEvaluator('evaluator execution control', () => {
 
     try {
       const evalPromise = evaluate(testSuite, mockEval as unknown as Eval, { maxEvalTimeMs: 100 });
+      await providerStarted.promise;
       await vi.advanceTimersByTimeAsync(100);
       await evalPromise;
 

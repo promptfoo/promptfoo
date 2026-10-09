@@ -1,3 +1,4 @@
+import { watch } from 'node:fs';
 import { access, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -59,6 +60,15 @@ def get_tools():
     const reason = Object.assign(new Error('cancel held Python preparation'), {
       name: 'AbortError',
     });
+    const watcher = watch(directory);
+    const started = new Promise<void>((resolve, reject) => {
+      watcher.on('change', (_event, filename) => {
+        if (filename?.toString() === 'started') {
+          resolve();
+        }
+      });
+      watcher.on('error', reject);
+    });
     let outcome: unknown;
     const pending = provider.callApi('fixture', undefined, { abortSignal: controller.signal }).then(
       (value) => {
@@ -69,7 +79,14 @@ def get_tools():
       },
     );
     try {
-      await vi.waitFor(() => access(path.join(directory, 'started')));
+      await Promise.race([
+        started,
+        pending.then(() => {
+          throw new Error('Python preparation settled before its readiness signal', {
+            cause: outcome,
+          });
+        }),
+      ]);
       controller.abort(reason);
       await vi.waitFor(() => expect(outcome).toBe(reason));
       await expect(access(path.join(directory, 'finished'))).rejects.toMatchObject({
@@ -77,6 +94,7 @@ def get_tools():
       });
       expect(globalThis.fetch).not.toHaveBeenCalled();
     } finally {
+      watcher.close();
       controller.abort(reason);
       await pending;
       expect(runPython).toHaveBeenCalledOnce();
