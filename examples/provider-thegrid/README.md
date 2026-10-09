@@ -29,8 +29,8 @@ promptfoo view
 
 ## Note on token budgets
 
-Instruments reason before answering, and reasoning tokens count toward the output budget without appearing in the response. `max_tokens` is set generously here for that reason; lowering it too far truncates the visible answer.
+When the selected model uses reasoning, its output budget may cover both reasoning tokens and the visible answer. Increase `max_tokens` if answers are truncated.
 
 Use `max_tokens` rather than `max_completion_tokens`: promptfoo only forwards the latter for models it classifies as reasoning models, and Grid instrument names are not on that list.
 
-`THEGRID_API_KEY` must be set. Both providers pass it through a `default("THEGRID_API_KEY_NOT_SET", true)` sentinel, so an unset or empty key fails closed with a 401 from The Grid AI rather than falling through to `OPENAI_API_KEY`. That fallback is what `getApiKey()` would otherwise do, and it would send your OpenAI credential to `api.thegrid.ai`. If you see a 401 here, set `THEGRID_API_KEY`; do not remove the sentinel.
+Both providers select `THEGRID_API_KEY` with `apiKeyEnvar`. If that variable is unset or blank, promptfoo reports a missing-key error before sending a request; it does not fall back to `OPENAI_API_KEY`.

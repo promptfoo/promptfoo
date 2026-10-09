@@ -5,16 +5,11 @@ prompts:
   - 'Answer concisely: {{question}}'
 
 providers:
-  # The sentinel is load-bearing. `getApiKey()` resolves
-  # `config.apiKey || ... || OPENAI_API_KEY`, so an unset *or empty*
-  # THEGRID_API_KEY would fall through and send your OpenAI credential to
-  # api.thegrid.ai. `default(..., true)` substitutes on any falsy value, so a
-  # blank key fails closed with a 401 from The Grid AI instead.
   - id: openai:chat:text-standard
     label: The Grid AI text-standard
     config:
       apiBaseUrl: https://api.thegrid.ai/v1
-      apiKey: '{{ env.THEGRID_API_KEY | default("THEGRID_API_KEY_NOT_SET", true) }}'
+      apiKeyEnvar: THEGRID_API_KEY
       temperature: 0
       # Use max_tokens: promptfoo only forwards max_completion_tokens for models
       # it classifies as reasoning models, which Grid instrument names are not.
@@ -24,7 +19,7 @@ providers:
     label: The Grid AI text-prime
     config:
       apiBaseUrl: https://api.thegrid.ai/v1
-      apiKey: '{{ env.THEGRID_API_KEY | default("THEGRID_API_KEY_NOT_SET", true) }}'
+      apiKeyEnvar: THEGRID_API_KEY
       temperature: 0
       max_tokens: 1024
 
@@ -42,7 +37,7 @@ tests:
         Tuesday receives a return of 45 units, and Wednesday ships 2 pallets of
         96. How many units remain? Reply with the number only.
     assert:
-      - type: contains
+      - type: equals
         value: '813'
 
   # Instruction following under a constraint that is easy to state and easy to
@@ -68,7 +63,15 @@ tests:
         "Order A-4471 settled for $128.40 on 2026-03-02."
     assert:
       - type: is-json
-      - type: javascript
-        value: |
-          const parsed = JSON.parse(output);
-          return parsed.id === 'A-4471' && Number(parsed.total_usd) === 128.4;
+        value:
+          type: object
+          required: [id, total_usd, status]
+          additionalProperties: false
+          properties:
+            id:
+              const: A-4471
+            total_usd:
+              type: number
+              const: 128.4
+            status:
+              const: settled

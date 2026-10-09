@@ -2,7 +2,7 @@
 title: The Grid AI
 sidebar_label: The Grid AI
 sidebar_position: 42
-description: "Evaluate The Grid AI's capability-tier instruments with promptfoo through the OpenAI-compatible provider, including token budgets, credentials, and cost caveats."
+description: "Evaluate The Grid AI's capability-tier instruments with promptfoo through the OpenAI-compatible provider, including budgets, credentials, and cost caveats."
 ---
 
 # The Grid AI
@@ -22,31 +22,29 @@ providers:
     label: The Grid AI text-standard
     config:
       apiBaseUrl: https://api.thegrid.ai/v1
-      apiKey: '{{ env.THEGRID_API_KEY | default("THEGRID_API_KEY_NOT_SET", true) }}'
+      apiKeyEnvar: THEGRID_API_KEY
       max_tokens: 1024
 
 tests:
   - vars:
-      question: 'What is the capital of France?'
+      question: 'A warehouse has 1,248 units, ships 288, receives 45, then ships 192. How many remain? Reply with the number only.'
     assert:
-      - type: contains
-        value: Paris
+      - type: equals
+        value: '813'
 ```
 
-:::warning Keep the `default(..., true)` sentinel on `apiKey`
+:::warning Use a Grid-specific credential
 
-`OpenAiGenericProvider.getApiKey()` resolves `config.apiKey || apiKeyEnvar || OPENAI_API_KEY`. A plain `'{{env.THEGRID_API_KEY}}'` renders to an empty string when the variable is unset or blank, which is falsy, so the provider falls through and sends your OpenAI credential to `api.thegrid.ai`.
-
-The second argument to `default` makes it substitute on any falsy value, not just an undefined one. A missing or blank key then reaches The Grid AI as `THEGRID_API_KEY_NOT_SET` and comes back as a 401 naming the variable, rather than silently authenticating as you against OpenAI.
+`apiKeyEnvar: THEGRID_API_KEY` selects only that environment variable. If it is missing or blank, promptfoo reports a missing-key error before sending a request, even when `OPENAI_API_KEY` is set.
 
 :::
 
 ## Setting the endpoint by environment variable
 
-`OPENAI_BASE_URL` works only when neither `OPENAI_API_HOST` nor `OPENAI_API_BASE_URL` is set; `getApiUrl` reads those two first. Setting `apiBaseUrl` on the provider is unambiguous and is the recommended form.
+`OPENAI_BASE_URL` works only when neither `OPENAI_API_HOST` nor `OPENAI_API_BASE_URL` is set; those environment variables take precedence. Setting `apiBaseUrl` on the provider is unambiguous and is the recommended form.
 
 ```bash
-export THEGRID_API_KEY=<your-the-grid-key>
+export THEGRID_API_KEY='your-the-grid-key'
 ```
 
 `apiBaseUrl` should be the `/v1` root; promptfoo appends `/chat/completions`.
@@ -63,9 +61,9 @@ export THEGRID_API_KEY=<your-the-grid-key>
 
 Lab-pinned instruments such as `claude-opus-latest` and `gemini-pro-latest` restrict routing to one lab, but they are still moving targets: the underlying version changes when that lab ships a new model.
 
-:::caution Not suitable for reproducible benchmarks
+:::warning Model versions can change
 
-No Grid instrument is an immutable model id, and promptfoo cannot record which model served a request. `OpenAiChatCompletionProvider` discards the top-level `model` field from the response, so exported results carry the instrument name only.
+Capability tiers and lab-pinned `*-latest` instruments can change models over time. Promptfoo records the configured instrument name, but its generic chat provider does not preserve the response's top-level `model` field as result metadata.
 
 If a published number has to be reproducible, evaluate against a provider that exposes an immutable, versioned model id. Use The Grid AI for application evals, regression suites and judges, where routing to a current model is the point.
 
@@ -75,7 +73,7 @@ If a published number has to be reproducible, evaluate against a provider that e
 
 Use `max_tokens`. Promptfoo only forwards `max_completion_tokens` for models it classifies as reasoning models, and Grid instrument names are not on that list, so a `max_completion_tokens` value would be dropped.
 
-Instruments do reason before answering, and those reasoning tokens are billed and count against the output budget while never appearing in the response. A budget sized for the visible answer can therefore truncate it. Leave headroom.
+When the selected model uses reasoning, leave room in the output budget for those tokens as well as the visible answer. A budget sized only for the final answer may truncate it.
 
 When using The Grid AI as a judge, set `showThinking: false` so model-graded assertions parse only the final content:
 
@@ -86,7 +84,7 @@ defaultTest:
       id: openai:chat:text-prime
       config:
         apiBaseUrl: https://api.thegrid.ai/v1
-        apiKey: '{{ env.THEGRID_API_KEY | default("THEGRID_API_KEY_NOT_SET", true) }}'
+        apiKeyEnvar: THEGRID_API_KEY
         temperature: 0
         max_tokens: 4096
         showThinking: false
@@ -94,19 +92,26 @@ defaultTest:
 
 ## Cost reporting
 
-Promptfoo cannot report cost for Grid instruments. `calculateOpenAIUsageCost` looks up built-in rates by model name and returns `undefined` when there are none, before `inputCost` and `outputCost` overrides are consulted, so those options have no effect for these ids.
+Promptfoo has no built-in prices for Grid instruments. You can supply `inputCost` and `outputCost` in USD per token to estimate cost for an unknown model name:
 
-The Grid AI is market-priced, so a per-token rate moves and `/v1/models` can serve `"pricing": null` when the rate cache is cold. A static table would be wrong either way. Use The Grid AI's own `GET /v1/usage` and `GET /v1/usage/summary` endpoints for actual spend.
+```yaml
+config:
+  # Illustrative rates only: $1 per million input tokens and $2 per million output tokens.
+  inputCost: 0.000001
+  outputCost: 0.000002
+```
+
+Supply both rates. Grid prices vary with the market, so these estimates are only as current as the rates you configure. Use The Grid AI's [`GET /v1/usage` and `GET /v1/usage/summary`](https://thegrid.ai/openapi.json) endpoints for actual spend.
 
 ## Troubleshooting
 
-| Symptom                                    | Fix                                                                                                                      |
-| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------ |
-| Promptfoo calls OpenAI instead of The Grid AI | Set `apiBaseUrl` on the provider. `OPENAI_API_HOST` and `OPENAI_API_BASE_URL` both take priority over `OPENAI_BASE_URL`. |
-| `401` mentioning `THEGRID_API_KEY_NOT_SET` | `THEGRID_API_KEY` is unset or blank. The sentinel did its job; export a real key.                                        |
-| Empty or truncated output                  | Reasoning tokens consumed the budget. Raise `max_tokens`.                                                                |
-| Judge returns `Could not extract JSON`     | Set `showThinking: false` on the judge provider.                                                                         |
-| Cost shows as unknown                      | Expected; see Cost reporting above.                                                                                      |
+| Symptom                                        | Fix                                                                                                                      |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| Promptfoo calls OpenAI instead of The Grid AI  | Set `apiBaseUrl` on the provider. `OPENAI_API_HOST` and `OPENAI_API_BASE_URL` both take priority over `OPENAI_BASE_URL`. |
+| Missing-key error mentioning `THEGRID_API_KEY` | Export a nonempty `THEGRID_API_KEY` for your Grid account.                                                               |
+| Empty or truncated output                      | Raise `max_tokens` if the output budget was exhausted.                                                                   |
+| Judge returns `Could not extract JSON`         | Set `showThinking: false` on the judge provider.                                                                         |
+| Cost shows as unknown                          | Configure both per-token rates for an estimate; use Grid usage receipts for actual spend.                                |
 
 ## See also
 
