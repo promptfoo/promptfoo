@@ -1,8 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-// Use vi.hoisted() + vi.mock() instead of vi.resetModules() + vi.doMock() + dynamic import.
-// The old pattern re-imported the entire assertions module (~90 imports) for each test,
-// which caused timeouts on Windows due to slow module resolution.
+// Reuse the assertion module to avoid slow module resolution on Windows.
 const mockHandleMeteorAssertion = vi.hoisted(() => vi.fn());
 
 vi.mock('../../src/assertions/meteor', () => ({
@@ -55,25 +53,24 @@ describe('METEOR assertion', () => {
   });
 
   it.each([
-    "Cannot find module 'natural'",
-    'The "natural" package is required for METEOR assertions. Install it with: npm install natural@^8.1.0',
-  ])('should handle a rejected missing-package error: %s', async (message) => {
+    'The "natural" package is required for METEOR assertions. Install it alongside Promptfoo: npm install promptfoo natural@^8.1.1.',
+    'METEOR requires natural@^8.1.1; found 7.1.0. Install it alongside Promptfoo: npm install promptfoo natural@^8.1.1.',
+  ])('returns an actionable dependency failure: %s', async (message) => {
     mockHandleMeteorAssertion.mockRejectedValue(new Error(message));
 
     const result = await runAssertion(params);
 
-    expect(result.pass).toBe(false);
-    expect(result.score).toBe(0);
-    expect(result.reason).toBe(
-      'METEOR assertion requires the natural package. Please install it using: npm install natural@^8.1.0',
-    );
+    expect(result).toMatchObject({ pass: false, score: 0, reason: message });
     expect(result.assertion).toBe(params.assertion);
   });
 
-  it('should rethrow other errors that are not related to missing module', async () => {
-    const error = new Error('Some other error');
-    mockHandleMeteorAssertion.mockRejectedValue(error);
+  it.each(['Some other error', "Cannot find module 'natural-binding'"])(
+    'preserves unexpected handler errors: %s',
+    async (message) => {
+      const error = Object.assign(new Error(message), { code: 'MODULE_NOT_FOUND' });
+      mockHandleMeteorAssertion.mockRejectedValue(error);
 
-    await expect(runAssertion(params)).rejects.toBe(error);
-  });
+      await expect(runAssertion(params)).rejects.toBe(error);
+    },
+  );
 });

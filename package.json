@@ -240,6 +240,7 @@
     "husky": "^9.1.7",
     "ibm-cloud-sdk-core": "5.6.2",
     "knip": "~6.27.0",
+    "natural": "^8.1.1",
     "node-sql-parser": "^5.4.0",
     "oxc-parser": "^0.152.0",
     "pdf-parse": "^2.4.5",
@@ -253,6 +254,7 @@
     "tsdown": "0.23.0",
     "typescript": "^7.0.0",
     "vitest": "^5.0.2",
+    "webpack": "5.111.1",
     "yaml": "^2.9.0"
   },
   "optionalDependencies": {
@@ -275,7 +277,6 @@
     "google-auth-library": "^11.1.0",
     "hono": "^4.13.9",
     "jks-js": "^1.1.5",
-    "natural": "^8.1.1",
     "node-sql-parser": "^5.4.0",
     "pdf-parse": "^2.4.5",
     "pem": "~1.14.8",
@@ -392,6 +393,7 @@
     "@openai/codex-security": "^0.2.0",
     "@slack/web-api": "*",
     "ibm-cloud-sdk-core": "*",
+    "natural": "*",
     "playwright": "*",
     "playwright-extra": "*",
     "puppeteer-extra-plugin-stealth": "*"
@@ -422,6 +424,9 @@
       "optional": true
     },
     "ibm-cloud-sdk-core": {
+      "optional": true
+    },
+    "natural": {
       "optional": true
     },
     "playwright": {

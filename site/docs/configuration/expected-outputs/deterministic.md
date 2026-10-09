@@ -1510,31 +1510,24 @@ assert:
 
 ### METEOR
 
-METEOR (Metric for Evaluation of Translation with Explicit ORdering) is the most sophisticated text similarity metric, going beyond simple word matching to understand meaning.
+METEOR (Metric for Evaluation of Translation with Explicit ORdering) scores word overlap using exact matches, stems, and WordNet synonyms. It combines precision and recall with a penalty for fragmented matches.
 
-**What makes METEOR special:**
-
-- **Understands synonyms**: Recognizes that "good" and "nice" mean similar things
-- **Handles word forms**: Knows that "running" and "ran" are the same verb
-- **Considers word order**: Unlike other metrics, it penalizes scrambled sentences
-- **Balanced scoring**: Combines precision, recall, AND word order into a single score
-
-**When to use METEOR:**
-
-- **High-quality translation**: When semantic accuracy matters more than exact wording
-- **Natural language understanding**: Evaluating if the model truly "gets" the meaning
-- **Flexible matching**: When there are many valid ways to express the same idea
+Use it for translation or other text comparisons where inflected words and synonyms should receive credit. It does not establish factual accuracy or full semantic equivalence.
 
 For additional context, read about the metric on [Wikipedia](https://en.wikipedia.org/wiki/METEOR).
 
 :::info Installation Required
-METEOR requires the optional `natural` package. Install it before using METEOR assertions:
+METEOR requires `natural`, which is not included in the default installation. Install it with Promptfoo in your project:
 
 ```bash
-npm install natural@^8.1.0
+npm install promptfoo natural@^8.1.1
 ```
 
-If the package is not installed, METEOR assertions return a failed result (`pass: false`, `score: 0`) with installation instructions in the reason.
+For a global installation, use `npm install -g promptfoo natural@^8.1.1`.
+
+For a one-off eval, run `npx --package=promptfoo --package=natural@^8.1.1 promptfoo eval -c /absolute/path/to/promptfooconfig.yaml` from an empty directory outside an npm project. If either package is installed locally, use the project installation command above.
+
+If `natural` is missing or outside the supported `^8.1.1` range, METEOR assertions return `pass: false` and `score: 0`, with installation instructions in the reason. Other assertions work normally.
 :::
 
 #### How METEOR Works
@@ -1544,7 +1537,7 @@ METEOR evaluates text by:
 1. Matching unigrams (words) between the generated text and reference(s) using:
    - Exact matches (surface forms)
    - Word stems (e.g., "running" → "run")
-   - Semantic meanings
+   - WordNet synonyms
 2. Computing a final score (0.0 to 1.0) based on:
    - Unigram precision (accuracy of matched words)
    - Unigram recall (coverage of reference words)
@@ -1558,7 +1551,7 @@ assert:
     value: hello world # Reference text to compare against
 ```
 
-By default, METEOR uses a threshold of 0.5. Scores range from 0.0 (no match) to 1.0 (perfect match).
+By default, METEOR uses a threshold of 0.5. Scores range from 0 to 1. Identical short texts can score below 1 because the fragmentation penalty still applies.
 
 #### Custom Threshold
 

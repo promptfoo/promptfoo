@@ -270,21 +270,14 @@ const ASSERTION_HANDLERS: Record<
   meteor: async (params: AssertionParams) => {
     try {
       const { handleMeteorAssertion } = await import('./meteor.js');
-      // Await so missing-dependency rejections reach the catch below.
       return await handleMeteorAssertion(params);
     } catch (error) {
       if (
         error instanceof Error &&
-        (error.message.includes('Cannot find module') ||
-          error.message.includes('natural" package is required'))
+        (error.message.startsWith('METEOR requires natural@') ||
+          error.message.startsWith('The "natural" package is required for METEOR assertions.'))
       ) {
-        return {
-          pass: false,
-          score: 0,
-          reason:
-            'METEOR assertion requires the natural package. Please install it using: npm install natural@^8.1.0',
-          assertion: params.assertion,
-        };
+        return { pass: false, score: 0, reason: error.message, assertion: params.assertion };
       }
       throw error;
     }
