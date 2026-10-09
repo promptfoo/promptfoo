@@ -288,7 +288,7 @@ jobs:
       - name: Test Isolated Contracts
         # The script uses only Node builtins; no root dependency install or build secrets needed.
         # Pin npm 11 because bundled npm 10 crashes while resolving these standalone inputs.
-        run: npx --ignore-scripts --registry=https://registry.npmjs.org/ -y npm@11.18.0 run test:contracts-isolation
+        run: npx --ignore-scripts --registry=https://registry.npmjs.org/ -y npm@11.18.0 run test:contracts-workspace
 
   # Publish the Node 24 archive before Linux acceptance so platform checks can
   # validate the same immutable upload without waiting for any other build lane.

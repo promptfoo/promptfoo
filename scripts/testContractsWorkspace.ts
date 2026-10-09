@@ -1,4 +1,4 @@
-/** Build portable contracts without access to root-hoisted dependencies. */
+/** Build the private contracts workspace without access to root-hoisted dependencies. */
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -7,12 +7,18 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const npmPath = process.env.npm_execpath;
-assert(npmPath, 'Run through npm run test:contracts-isolation');
-const temporaryRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-contracts-isolation-'));
-const buildDir = path.join(temporaryRoot, 'package');
+const temporaryRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-contracts-workspace-'));
+const workspace = path.join(temporaryRoot, 'workspace');
 const consumer = path.join(temporaryRoot, 'consumer');
+const npmPath = process.env.npm_execpath;
+assert(npmPath, 'Run through npm run test:contracts-workspace');
 const env = { ...process.env, npm_config_cache: path.join(temporaryRoot, 'npm-cache') };
+// Honor the invoking npm's registry locally; CI sets it explicitly on the npx command.
+const registry =
+  process.env.npm_config_registry ??
+  process.env.NPM_CONFIG_REGISTRY ??
+  npm(['config', 'get', 'registry'], root).trim();
+const installFlags = ['--ignore-scripts', `--registry=${registry}`, '--no-audit', '--no-fund'];
 // Inert sentinels make the real npm installs fail if install hooks are ever enabled.
 const installHookSentinels = Object.fromEntries(
   ['preinstall', 'install', 'postinstall'].map((hook) => [
@@ -40,72 +46,33 @@ function writeJson(file: string, value: unknown): void {
 }
 
 try {
-  // Honor the invoking npm's registry locally; CI sets it explicitly on the npx command.
-  const registry =
-    process.env.npm_config_registry ??
-    process.env.NPM_CONFIG_REGISTRY ??
-    npm(['config', 'get', 'registry'], root).trim();
-  const installFlags = ['--ignore-scripts', `--registry=${registry}`, '--no-audit', '--no-fund'];
-  fs.mkdirSync(buildDir);
+  fs.mkdirSync(workspace);
   fs.mkdirSync(consumer);
-  fs.cpSync(path.join(root, 'src/contracts'), path.join(buildDir, 'src'), { recursive: true });
+  // Copy only declared build inputs. In particular, never copy node_modules or built outputs.
+  for (const input of ['package.json', 'tsconfig.json', 'tsdown.config.ts', 'src']) {
+    fs.cpSync(path.join(root, 'packages/contracts', input), path.join(workspace, input), {
+      recursive: true,
+    });
+  }
+  const manifest = JSON.parse(fs.readFileSync(path.join(workspace, 'package.json'), 'utf8'));
   const rootManifest = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
-  const manifest = {
-    name: 'promptfoo-contracts-fixture',
-    version: '0.0.0',
-    private: true,
-    type: 'module',
-    exports: {
-      '.': {
-        import: { types: './dist/index.d.ts', default: './dist/index.js' },
-        require: { types: './dist/index.d.cts', default: './dist/index.cjs' },
-      },
-    },
-    files: ['dist'],
-    scripts: { typecheck: 'tsc --noEmit', build: 'tsdown', ...installHookSentinels },
-    dependencies: { zod: rootManifest.dependencies.zod },
-    devDependencies: {
-      tsdown: rootManifest.devDependencies.tsdown,
-      typescript: rootManifest.devDependencies.typescript,
-    },
-  };
-  writeJson(path.join(buildDir, 'package.json'), manifest);
-  writeJson(path.join(buildDir, 'tsconfig.json'), {
-    compilerOptions: {
-      target: 'ES2022',
-      module: 'NodeNext',
-      moduleResolution: 'NodeNext',
-      strict: true,
-      skipLibCheck: false,
-      // The source must typecheck in a browser environment without Node globals.
-      lib: ['ES2022', 'DOM'],
-      types: [],
-      rootDir: 'src',
-      outDir: 'dist',
-    },
-    include: ['src/**/*.ts'],
+  assert.equal(manifest.private, true);
+  assert.deepEqual(Object.keys(manifest.dependencies), ['zod']);
+  writeJson(path.join(workspace, 'package.json'), {
+    ...manifest,
+    scripts: { ...manifest.scripts, ...installHookSentinels },
   });
-  fs.writeFileSync(
-    path.join(buildDir, 'tsdown.config.ts'),
-    `
-import { defineConfig } from 'tsdown';
-export default defineConfig({
-  entry: ['src/index.ts'], format: ['esm', 'cjs'], target: 'es2022', platform: 'neutral',
-  fixedExtension: false, dts: true, deps: { neverBundle: /^[a-z@][^:]*/ },
-});
-`,
-  );
   console.log('Installing isolated contracts build dependencies');
-  npm(['install', ...installFlags], buildDir);
-  console.log(npm(['run', 'typecheck'], buildDir));
-  console.log(npm(['run', 'build'], buildDir));
-  const [packed] = JSON.parse(npm(['pack', '--ignore-scripts', '--json'], buildDir));
+  npm(['install', ...installFlags], workspace);
+  console.log(npm(['run', 'typecheck'], workspace));
+  console.log(npm(['run', 'build'], workspace));
+  const [packed] = JSON.parse(npm(['pack', '--ignore-scripts', '--json'], workspace));
   for (const output of ['index.js', 'index.cjs', 'index.d.ts', 'index.d.cts']) {
     assert(packed.files.some((file: { path: string }) => file.path === `dist/${output}`));
   }
 
   writeJson(path.join(consumer, 'package.json'), {
-    name: 'contracts-isolation-consumer',
+    name: 'contracts-workspace-consumer',
     private: true,
     type: 'module',
     scripts: installHookSentinels,
@@ -114,7 +81,7 @@ export default defineConfig({
     [
       'install',
       ...installFlags,
-      path.join(buildDir, packed.filename),
+      path.join(workspace, packed.filename),
       `typescript@${manifest.devDependencies.typescript}`,
       `@types/node@${rootManifest.devDependencies['@types/node']}`,
     ],
@@ -142,6 +109,8 @@ assert.equal('TRACE_CREDENTIAL_PATH_SEGMENT' in contracts, false);
     `const assert = require('node:assert/strict');\nconst contracts = require('${manifest.name}');\n${runtimeChecks}`,
   );
   const typeChecks = `
+// @ts-expect-error This consumer must not inherit TypeScript's default DOM library.
+type UnexpectedBrowserGlobal = Document;
 const prompt: contracts.Prompt = { raw: 'hello', label: 'greeting' };
 const blob: contracts.BlobRef = { hash: 'abc', mimeType: 'image/png', provider: 'filesystem', sizeBytes: 3, uri: 'promptfoo://blob/abc' };
 const response: contracts.ProviderResponse = { images: [{ blobRef: blob }], output: prompt.raw };
@@ -175,7 +144,6 @@ void [response, invalid, invalidBlob];
         strict: true,
         skipLibCheck: false,
         noEmit: true,
-        // Node supplies cross-platform URL types used by Zod, without supplying DOM globals.
         types: ['node'],
       },
       files: [file],
@@ -186,5 +154,5 @@ void [response, invalid, invalidBlob];
   run(['runtime.cjs'], consumer);
   console.log('Verified isolated contracts build, installed ESM/CJS behavior and declarations');
 } finally {
-  await fs.promises.rm(temporaryRoot, { recursive: true, force: true });
+  fs.rmSync(temporaryRoot, { recursive: true, force: true });
 }

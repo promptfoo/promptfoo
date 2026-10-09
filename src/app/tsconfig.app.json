@@ -1,7 +1,7 @@
 {
   "compilerOptions": {
     "outDir": "../../dist/src/app",
-    "rootDir": "..",
+    "rootDir": "../..",
     "paths": {
       "@app/*": ["./src/*"],
       "@promptfoo/*": ["../*"]
