@@ -1,0 +1,3 @@
+service: document-processor
+image: registry.example.invalid/private/document-processor:latest
+port: 8080

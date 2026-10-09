@@ -22,10 +22,11 @@ const fixtureRoot = path.join(repoRoot, 'test', 'fixtures', 'agent-skills');
 const expectedSkillDirs = [
   'promptfoo-evals',
   'promptfoo-provider-setup',
+  'promptfoo-redteam-eligibility',
   'promptfoo-redteam-run',
   'promptfoo-redteam-setup',
 ];
-const expectedPluginVersion = '0.1.5';
+const expectedPluginVersion = '0.1.6';
 const expectedFixtureDirs = [
   'evals-json-rubric',
   'evals-local-js',
@@ -38,6 +39,7 @@ const expectedFixtureDirs = [
   'provider-setup-local-python',
   'provider-setup-openapi',
   'provider-setup-redteam-target',
+  'redteam-eligibility',
   'redteam-run-local-error',
   'redteam-run-local-mixed',
   'redteam-run-local-pass',
@@ -1695,7 +1697,7 @@ function openApiUnsafeResponseFieldSpec() {
   };
 }
 
-describe('promptfoo plugin package (Codex + Claude Code)', () => {
+describe('promptfoo plugin package (Codex, Claude Code, and Copilot)', () => {
   it('declares a Codex plugin manifest with a skills directory', () => {
     const manifestPath = path.join(pluginRoot, '.codex-plugin', 'plugin.json');
     const manifest = JSON.parse(readText(manifestPath));
@@ -1703,7 +1705,7 @@ describe('promptfoo plugin package (Codex + Claude Code)', () => {
     expect(manifest.name).toBe('promptfoo');
     expect(manifest.skills).toBe('./skills/');
     expect(manifest.interface.displayName).toBe('Promptfoo');
-    expect(manifest.interface.defaultPrompt).toHaveLength(3);
+    expect(manifest.interface.defaultPrompt).toHaveLength(4);
     expect(manifest.interface.defaultPrompt.every((prompt: string) => prompt.length <= 128)).toBe(
       true,
     );
@@ -1830,7 +1832,7 @@ describe('promptfoo plugin package (Codex + Claude Code)', () => {
     ).toBe(true);
   });
 
-  it('keeps the published surface to four focused skills without a meta selector', () => {
+  it('keeps the published surface to five focused skills without a meta selector', () => {
     const skillDirs = fs
       .readdirSync(path.join(pluginRoot, 'skills'), { withFileTypes: true })
       .filter((entry) => entry.isDirectory())
@@ -1862,6 +1864,8 @@ describe('promptfoo plugin package (Codex + Claude Code)', () => {
       'skills/promptfoo-provider-setup/scripts/response-contract.mjs',
       'skills/promptfoo-provider-setup/scripts/vendor/LICENSE',
       'skills/promptfoo-provider-setup/scripts/vendor/js-yaml.mjs',
+      'skills/promptfoo-redteam-eligibility/SKILL.md',
+      'skills/promptfoo-redteam-eligibility/agents/openai.yaml',
       'skills/promptfoo-redteam-run/SKILL.md',
       'skills/promptfoo-redteam-run/agents/openai.yaml',
       'skills/promptfoo-redteam-run/references/redteam-run-patterns.md',
@@ -1873,22 +1877,29 @@ describe('promptfoo plugin package (Codex + Claude Code)', () => {
   });
 
   it.each([
-    ['provider', 'openapi-operation-to-config.mjs', '{{prompt}}'],
-    ['redteam', 'openapi-operation-to-redteam-config.mjs', '{{message}}'],
+    ['provider', 'openapi-operation-to-config.mjs', '{{prompt}}', 'plugin'],
+    ['redteam', 'openapi-operation-to-redteam-config.mjs', '{{message}}', 'plugin'],
+    ['provider', 'openapi-operation-to-config.mjs', '{{prompt}}', 'copilot-project'],
+    ['redteam', 'openapi-operation-to-redteam-config.mjs', '{{message}}', 'copilot-project'],
   ])(
-    'runs the %s OpenAPI helper from an installed bundle without node_modules',
-    (kind, file, message) => {
+    'runs the %s helper (%s, %s) from a %s install without node_modules',
+    (kind, file, message, layout) => {
       const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-installed-plugin-'));
       try {
         const installedPlugin = path.join(tempDir, 'promptfoo');
-        fs.cpSync(pluginRoot, installedPlugin, { recursive: true });
-        const script = path.join(
-          installedPlugin,
-          'skills',
-          `promptfoo-${kind}-setup`,
-          'scripts',
-          file,
-        );
+        const installedSkills =
+          layout === 'copilot-project'
+            ? path.join(tempDir, '.github', 'skills')
+            : path.join(installedPlugin, 'skills');
+        if (layout === 'copilot-project') {
+          fs.cpSync(path.join(pluginRoot, 'skills'), installedSkills, { recursive: true });
+        } else {
+          fs.cpSync(pluginRoot, installedPlugin, { recursive: true });
+        }
+        for (const skill of expectedSkillDirs) {
+          expect(readSkillFrontmatter(path.join(installedSkills, skill)).name).toBe(skill);
+        }
+        const script = path.join(installedSkills, `promptfoo-${kind}-setup`, 'scripts', file);
         const output = path.join(tempDir, 'config.yaml');
         expect(
           execFileSync(
@@ -1929,7 +1940,7 @@ describe('promptfoo plugin package (Codex + Claude Code)', () => {
     },
   );
 
-  it('keeps the fixture matrix intentional and mapped to the four skills', () => {
+  it('keeps the fixture matrix intentional and mapped to the five skills', () => {
     const fixtureDirs = fs
       .readdirSync(fixtureRoot, { withFileTypes: true })
       .filter((entry) => entry.isDirectory())
@@ -1965,9 +1976,9 @@ describe('promptfoo plugin package (Codex + Claude Code)', () => {
       const skill = readText(path.join(skillRoot, 'SKILL.md'));
       const openaiYaml = readText(path.join(skillRoot, 'agents', 'openai.yaml'));
       const referencesDir = path.join(skillRoot, 'references');
-      const referenceFiles = fs
-        .readdirSync(referencesDir)
-        .filter((fileName) => fileName.endsWith('.md'));
+      const referenceFiles = fs.existsSync(referencesDir)
+        ? fs.readdirSync(referencesDir).filter((fileName) => fileName.endsWith('.md'))
+        : [];
 
       expect(skill).toMatch(new RegExp(`^---\\nname: ${skillDir}\\n`));
       const frontmatter = readSkillFrontmatter(skillRoot);
@@ -1976,7 +1987,6 @@ describe('promptfoo plugin package (Codex + Claude Code)', () => {
       expect(frontmatter.description.length).toBeLessThan(520);
       expect(openaiYaml).toContain(`$${skillDir}`);
       expect(openaiYaml).toContain('allow_implicit_invocation: true');
-      expect(referenceFiles.length).toBeGreaterThanOrEqual(1);
       for (const referenceFile of referenceFiles) {
         expect(skill).toContain(`references/${referenceFile}`);
       }
@@ -2029,11 +2039,14 @@ describe('promptfoo plugin package (Codex + Claude Code)', () => {
     },
   );
 
-  it('documents the shared plugin bundle on both marketplaces', () => {
+  it('documents the shared plugin bundle for Codex, Claude Code, and Copilot', () => {
     const docs = readText(path.join(repoRoot, 'site', 'docs', 'integrations', 'agent-skill.md'));
 
     expect(docs).toContain('Via Claude Code marketplace');
     expect(docs).toContain('Via Codex plugin bundle');
+    expect(docs).toContain('GitHub Copilot');
+    expect(docs).toContain('copilot plugin install promptfoo@promptfoo');
+    expect(docs).toContain('.github/skills');
     expect(docs).toContain('/plugin install promptfoo@promptfoo');
     expect(docs).toContain('intentionally no meta selector skill');
     expect(docs).toContain("routes from each skill's");
@@ -2096,7 +2109,7 @@ describe('promptfoo plugin package (Codex + Claude Code)', () => {
     expect(claudeBundle).toBe(pluginRoot);
     expect(path.resolve(repoRoot, codexEntry.source.path)).toBe(pluginRoot);
 
-    // Claude Code auto-discovers the same four skills as Codex from the shared bundle's skills/.
+    // Claude Code and Copilot discover the same skills as Codex from the shared bundle's skills/.
     const claudeSkillDirs = fs
       .readdirSync(path.join(claudeBundle, 'skills'), { withFileTypes: true })
       .filter((dirent) => dirent.isDirectory())
@@ -2186,9 +2199,10 @@ describe('promptfoo plugin package (Codex + Claude Code)', () => {
       const skillLineCount = readText(path.join(skillRoot, 'SKILL.md'))
         .trimEnd()
         .split('\n').length;
-      const referenceFiles = fs
-        .readdirSync(path.join(skillRoot, 'references'))
-        .filter((fileName) => fileName.endsWith('.md'));
+      const referencesDir = path.join(skillRoot, 'references');
+      const referenceFiles = fs.existsSync(referencesDir)
+        ? fs.readdirSync(referencesDir).filter((fileName) => fileName.endsWith('.md'))
+        : [];
 
       expect(skillLineCount).toBeLessThan(200);
       for (const referenceFile of referenceFiles) {
