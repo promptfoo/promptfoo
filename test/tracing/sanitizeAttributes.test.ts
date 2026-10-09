@@ -151,6 +151,26 @@ describe('sanitizeTraceAttributes', () => {
     });
   });
 
+  it('redacts credential-like token keys inside the usage namespaces', () => {
+    expect(
+      sanitizeTraceAttributes({
+        'gen_ai.usage.access_tokens': 654321,
+        'llm.usage.session_tokens': 123456,
+        'llm.token_count.refresh_token': 42,
+        'promptfoo.usage.bearer_tokens': 7,
+        'gen_ai.usage.input_tokens': 150,
+        'llm.token_count.prompt': 150,
+      }),
+    ).toEqual({
+      'gen_ai.usage.access_tokens': '<redacted>',
+      'llm.usage.session_tokens': '<redacted>',
+      'llm.token_count.refresh_token': '<redacted>',
+      'promptfoo.usage.bearer_tokens': '<redacted>',
+      'gen_ai.usage.input_tokens': 150,
+      'llm.token_count.prompt': 150,
+    });
+  });
+
   it('redacts well-known usage keys that do not hold a number', () => {
     expect(
       sanitizeTraceAttributes({

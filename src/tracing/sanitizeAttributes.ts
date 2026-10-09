@@ -70,6 +70,21 @@ const SAFE_TOKEN_COUNTER_NAMESPACE_PATTERNS = [
   /^llm\.token_count\.[a-z0-9_.]+$/,
 ];
 
+/**
+ * Words that mark a token as credential material even inside a usage namespace, for
+ * example `gen_ai.usage.access_tokens` or `llm.token_count.refresh_token`.
+ */
+const CREDENTIAL_TOKEN_QUALIFIERS = [
+  'access',
+  'session',
+  'refresh',
+  'auth',
+  'bearer',
+  'id_token',
+  'csrf',
+  'otp',
+];
+
 const TOKEN_MARKER = 'token';
 
 function isTokenCountAttribute(lowerKey: string, value: unknown): boolean {
@@ -78,9 +93,12 @@ function isTokenCountAttribute(lowerKey: string, value: unknown): boolean {
   if (typeof value !== 'number' || !Number.isFinite(value)) {
     return false;
   }
+  if (SAFE_TOKEN_ATTRIBUTE_KEYS.has(lowerKey)) {
+    return true;
+  }
   return (
-    SAFE_TOKEN_ATTRIBUTE_KEYS.has(lowerKey) ||
-    SAFE_TOKEN_COUNTER_NAMESPACE_PATTERNS.some((pattern) => pattern.test(lowerKey))
+    SAFE_TOKEN_COUNTER_NAMESPACE_PATTERNS.some((pattern) => pattern.test(lowerKey)) &&
+    !CREDENTIAL_TOKEN_QUALIFIERS.some((qualifier) => lowerKey.includes(qualifier))
   );
 }
 
