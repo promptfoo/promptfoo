@@ -310,12 +310,17 @@ export function getResolvedRelativePath(filePath: string, isCloudConfig?: boolea
  *
  * @param config - The configuration object to process
  * @param context - Optional context to control file loading behavior
+ * @param basePath - Optional file resolution scope; inherits the caller scope when omitted
  * @returns The configuration with external file references resolved
  */
 export function maybeLoadConfigFromExternalFile(
   config: any,
   context?: 'assertion' | 'general' | 'vars',
+  basePath?: string,
 ): any {
+  if (basePath !== undefined) {
+    return cliState.withBasePath(basePath, () => maybeLoadConfigFromExternalFile(config, context));
+  }
   if (Array.isArray(config)) {
     return config.map((item) => maybeLoadConfigFromExternalFile(item, context));
   }

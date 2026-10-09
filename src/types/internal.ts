@@ -11,6 +11,8 @@ export type InternalEvaluateOptions = EvaluateOptions & {
   eventSource?: EventSource;
   /** CLI-owned graceful pause; ordinary caller cancellation retains its error rows. */
   pauseSignal?: AbortSignal;
+  /** CLI recovery reuses saved columns; this is neither configurable nor persisted. */
+  restorePromptColumns?: boolean;
   generationEventId?: string;
   generationTokenUsage?: TokenUsage;
 };

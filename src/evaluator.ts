@@ -6,6 +6,7 @@ import chalk from 'chalk';
 import cliProgress from 'cli-progress';
 import { globSync } from 'glob';
 import { LRUCache } from 'lru-cache';
+import Clone from 'rfdc';
 import {
   getAssertionBaseType,
   hasTraceAwareAssertions,
@@ -97,7 +98,7 @@ import invariant from './util/invariant';
 import { safeJsonStringify, summarizeEvaluateResultForLogging } from './util/json';
 import { accumulateNamedMetric, backfillNamedScoreWeights } from './util/namedMetrics';
 import { filterFiniteScores } from './util/numeric';
-import { isPromptAllowed } from './util/promptMatching';
+import { getProviderPromptOverride, isPromptAllowed } from './util/promptMatching';
 import {
   getProviderIdentifier,
   isAnthropicProvider,
@@ -2375,9 +2376,9 @@ function mergeMaxScoreGradingResult(result: EvaluationStoreResult, gradingResult
   }
 }
 
-function ensureDefaultTestForExtensions(testSuite: TestSuite) {
+async function runBeforeAllExtensions(testSuite: TestSuite): Promise<TestSuite> {
   if (!testSuite.extensions?.length) {
-    return;
+    return testSuite;
   }
   if (!testSuite.defaultTest) {
     testSuite.defaultTest = {};
@@ -2385,6 +2386,46 @@ function ensureDefaultTestForExtensions(testSuite: TestSuite) {
   if (typeof testSuite.defaultTest !== 'string' && !testSuite.defaultTest.assert) {
     testSuite.defaultTest.assert = [];
   }
+
+  let seededMap: TestSuite['providerPromptMap'];
+  let seededEntries: [string, string[], string[]][] = [];
+  if (!testSuite.providerPromptMap) {
+    const map: NonNullable<TestSuite['providerPromptMap']> = Object.create(null);
+    for (const provider of testSuite.providers) {
+      const selectors = [...(provider.prompts ?? testSuite.prompts.map((prompt) => prompt.label))];
+      map[provider.id()] = selectors;
+      if (provider.label) {
+        map[provider.label] = selectors;
+      }
+    }
+    seededMap = map;
+    seededEntries = Object.entries(map).map(([key, selectors]) => [key, selectors, [...selectors]]);
+    testSuite = { ...testSuite, providerPromptMap: map };
+  }
+
+  const { suite } = await runExtensionHook(testSuite.extensions, 'beforeAll', { suite: testSuite });
+  if (seededMap) {
+    // Hooks may mutate legacy map arrays. Only changed entries override instance filters;
+    // untouched seeds must not merge duplicate providers or exclude newly added prompts.
+    const overrides: NonNullable<TestSuite['providerPromptMap']> = Object.assign(
+      Object.create(null),
+      suite.providerPromptMap,
+    );
+    for (const [key, reference, selectors] of seededEntries) {
+      if (!Object.hasOwn(overrides, key)) {
+        overrides[key] = ['*'];
+      } else if (
+        // Same-map entry replacements are explicit, even with equal values. An
+        // unchanged serialized roundtrip cannot retain map or array identity.
+        (suite.providerPromptMap !== seededMap || overrides[key] === reference) &&
+        isDeepStrictEqual(overrides[key], selectors)
+      ) {
+        delete overrides[key];
+      }
+    }
+    suite.providerPromptMap = overrides;
+  }
+  return suite;
 }
 
 async function maybeAddGeneratedPrompts(
@@ -2469,17 +2510,6 @@ function createDefaultPromptMetrics(): PromptMetrics {
   };
 }
 
-function buildExistingPromptsMap(store: EvaluationStore) {
-  const existingPromptsMap = new Map<string, CompletedPrompt>();
-  if (cliState.resume && store.persisted && store.prompts.length > 0) {
-    logger.debug('Resuming evaluation: preserving metrics from previous run');
-    for (const existingPrompt of store.prompts) {
-      existingPromptsMap.set(`${existingPrompt.provider}:${existingPrompt.id}`, existingPrompt);
-    }
-  }
-  return existingPromptsMap;
-}
-
 /**
  * The results-table columns owned by one provider, in table order. `promptIdx` is the
  * column's position in the table, which is how results are addressed everywhere else.
@@ -2499,46 +2529,317 @@ type ProviderColumns = {
  * `generateIdFromPrompt` hashes. Resolving by identity collapses duplicates into a
  * single column and silently drops the other columns' results.
  */
-function buildCompletedPrompts(
-  testSuite: TestSuite,
-  store: EvaluationStore,
-): { prompts: CompletedPrompt[]; columnsByProvider: ProviderColumns[] } {
+function buildLivePromptColumns(testSuite: TestSuite): {
+  prompts: CompletedPrompt[];
+  columnsByProvider: ProviderColumns[];
+} {
   const prompts: CompletedPrompt[] = [];
   const columnsByProvider: ProviderColumns[] = [];
-  const existingPromptsMap = buildExistingPromptsMap(store);
 
   for (const provider of testSuite.providers) {
     const providerKey = getProviderIdentifier(provider);
+    const allowedPrompts =
+      getProviderPromptOverride(provider, testSuite.providerPromptMap) ?? provider.prompts;
     const columns: ProviderColumns['columns'] = [];
 
     for (const prompt of testSuite.prompts) {
-      if (!isAllowedPrompt(prompt, testSuite.providerPromptMap?.[providerKey])) {
+      if (!isAllowedPrompt(prompt, allowedPrompts)) {
         continue;
       }
 
       const promptId = generateIdFromPrompt(prompt);
-      const existingPrompt = existingPromptsMap.get(`${providerKey}:${promptId}`);
-      if (existingPrompt?.metrics) {
-        backfillNamedScoreWeights(existingPrompt.metrics);
-      }
-
       columns.push({ promptIdx: prompts.length, prompt });
       prompts.push({
         ...prompt,
         id: promptId,
         provider: providerKey,
         label: prompt.label,
-        // `existingPromptsMap` is still keyed by identity, so duplicate providers resolve
-        // to the same stored prompt. Clone its metrics so the columns do not accumulate
-        // into one shared object. (Resume has deeper duplicate-provider problems; see
-        // `doEval`, which rebuilds `testSuite.prompts` from the previous run's columns.)
-        metrics: existingPrompt?.metrics
-          ? structuredClone(existingPrompt.metrics)
-          : createDefaultPromptMetrics(),
+        metrics: createDefaultPromptMetrics(),
       });
     }
 
     columnsByProvider.push({ provider, columns });
+  }
+
+  return { prompts, columnsByProvider };
+}
+
+function matchesSavedPromptLayout(
+  prompts: CompletedPrompt[],
+  savedPrompts: CompletedPrompt[],
+  allowTemplateDifference: boolean,
+): boolean {
+  return (
+    prompts.length === savedPrompts.length &&
+    prompts.every((prompt, index) => {
+      const saved = savedPrompts[index];
+      return (
+        prompt.provider === saved.provider &&
+        prompt.label === saved.label &&
+        prompt.raw === saved.raw &&
+        (prompt.template === saved.template || allowTemplateDifference) &&
+        isDeepStrictEqual(prompt.config, saved.config)
+      );
+    })
+  );
+}
+
+function canRestoreSavedText(prompts: Prompt[], savedPrompts: CompletedPrompt[]): boolean {
+  if (!prompts.some((prompt) => prompt.function)) {
+    return true;
+  }
+  // An excluded callable must not prevent replaying proven text snapshots. Unknown
+  // snapshots or anything overlapping a callable require the exact live layout.
+  const textRaw = new Set<string>();
+  const callableRaw = new Set<string>();
+  const callableLabels = new Set<string>();
+  for (const prompt of prompts) {
+    if (prompt.function) {
+      callableRaw.add(prompt.raw);
+      callableLabels.add(prompt.label);
+    } else {
+      textRaw.add(prompt.raw);
+    }
+  }
+  return savedPrompts.every(
+    (saved) =>
+      !callableRaw.has(saved.raw) && !callableLabels.has(saved.label) && textRaw.has(saved.raw),
+  );
+}
+
+function promptIdentityCandidates(prompts: Prompt[]): Map<string, Set<string | undefined>> {
+  const identities = new Map<string, Set<string | undefined>>();
+  for (const prompt of prompts) {
+    const key = JSON.stringify([generateIdFromPrompt(prompt), prompt.raw, prompt.label]);
+    const ids = identities.get(key) ?? new Set<string | undefined>();
+    ids.add(prompt.id);
+    identities.set(key, ids);
+  }
+  return identities;
+}
+
+type PreparedPromptRecovery = {
+  mode: 'live' | 'snapshot';
+  hookPrompts: Prompt[];
+  definitions: Prompt[];
+  identities: Map<string, Set<string | undefined>>;
+  canRestoreText: boolean;
+  // Only needed when an exact live slot has different saved definitions per provider.
+  exactProviders?: ApiProvider[];
+  providerOrdinals?: number[];
+};
+
+const clonePromptConfig = Clone({ circles: true });
+
+function copyPromptDefinition(prompt: Prompt): Prompt {
+  return {
+    id: prompt.id,
+    raw: prompt.raw,
+    label: prompt.label,
+    display: prompt.display,
+    template: prompt.template,
+    config: clonePromptConfig(prompt.config),
+    ...(prompt.function && { function: prompt.function }),
+  };
+}
+
+/** Prepares hook-visible definitions without committing columns or checking hook-owned filters. */
+function preparePromptRecovery(
+  testSuite: TestSuite,
+  store: EvaluationStore,
+): PreparedPromptRecovery {
+  const canRestoreText = canRestoreSavedText(testSuite.prompts, store.prompts);
+  const identities = promptIdentityCandidates(testSuite.prompts);
+  const live = buildLivePromptColumns(testSuite);
+  const exact = matchesSavedPromptLayout(live.prompts, store.prompts, canRestoreText);
+  let mode: PreparedPromptRecovery['mode'] = canRestoreText ? 'snapshot' : 'live';
+  let hookPrompts = testSuite.prompts;
+
+  if (exact) {
+    const templates = new Map<Prompt, string | undefined>();
+    let consistent = true;
+    for (const { columns } of live.columnsByProvider) {
+      for (const { prompt, promptIdx } of columns) {
+        const template = store.prompts[promptIdx].template;
+        if (templates.has(prompt) && templates.get(prompt) !== template) {
+          consistent = false;
+        }
+        templates.set(prompt, template);
+      }
+    }
+    if (consistent) {
+      mode = 'live';
+      hookPrompts = testSuite.prompts.map((prompt) =>
+        templates.has(prompt) ? { ...prompt, template: templates.get(prompt) } : prompt,
+      );
+    }
+  }
+  if (mode === 'snapshot') {
+    hookPrompts = store.prompts.map((saved) => {
+      const ids = identities.get(JSON.stringify([saved.id, saved.raw, saved.label]));
+      return { ...saved, id: ids?.size === 1 ? ids.values().next().value : undefined };
+    });
+  }
+  hookPrompts = hookPrompts.map(copyPromptDefinition);
+  return {
+    mode,
+    hookPrompts,
+    definitions: hookPrompts.map(copyPromptDefinition),
+    identities,
+    canRestoreText,
+    ...(mode === 'snapshot' &&
+      exact && {
+        exactProviders: [...testSuite.providers],
+        providerOrdinals: live.columnsByProvider.flatMap(({ columns }, providerIndex) =>
+          columns.map(() => providerIndex),
+        ),
+      }),
+  };
+}
+
+function buildCompletedPrompts(
+  testSuite: TestSuite,
+  store: EvaluationStore,
+  restorePromptColumns: boolean,
+  tests: AtomicTestCase[],
+  recovery?: PreparedPromptRecovery,
+): { prompts: CompletedPrompt[]; columnsByProvider: ProviderColumns[] } {
+  const providerIndices = new Map(
+    testSuite.providers.map((provider, index) => [getProviderIdentifier(provider), index]),
+  );
+  if (recovery) {
+    invariant(
+      testSuite.prompts.length === recovery.definitions.length &&
+        testSuite.prompts.every((prompt, index) =>
+          isDeepStrictEqual(copyPromptDefinition(prompt), recovery.definitions[index]),
+        ),
+      'Cannot resume evaluation because beforeAll changed saved prompt definitions. Start a new evaluation instead.',
+    );
+  }
+  const canRestoreText =
+    recovery?.canRestoreText ??
+    (!restorePromptColumns || canRestoreSavedText(testSuite.prompts, store.prompts));
+  const { prompts, columnsByProvider } =
+    recovery?.mode === 'snapshot'
+      ? { prompts: [], columnsByProvider: [] }
+      : buildLivePromptColumns(testSuite);
+  const matchesSavedLayout = matchesSavedPromptLayout(
+    prompts,
+    store.prompts,
+    restorePromptColumns && canRestoreText,
+  );
+
+  const restoredPrompts = restorePromptColumns
+    ? store.prompts.map((saved) => {
+        const metrics = saved.metrics
+          ? structuredClone(saved.metrics)
+          : createDefaultPromptMetrics();
+        backfillNamedScoreWeights(metrics);
+        return { ...saved, metrics };
+      })
+    : [];
+  if (restorePromptColumns && matchesSavedLayout) {
+    // Preserve positional authored IDs and each saved column's own metrics, even when
+    // provider or prompt identifiers are duplicated.
+    for (const { columns } of columnsByProvider) {
+      for (const column of columns) {
+        column.prompt = { ...column.prompt, template: store.prompts[column.promptIdx].template };
+      }
+    }
+    return { prompts: restoredPrompts, columnsByProvider };
+  }
+
+  if (
+    restorePromptColumns &&
+    canRestoreText &&
+    (providerIndices.size === testSuite.providers.length || recovery?.exactProviders)
+  ) {
+    // Otherwise, recover only identities with an unambiguous saved snapshot match.
+    const identities = recovery?.identities ?? promptIdentityCandidates(testSuite.prompts);
+    const allIds = new Set([...identities.values()].flatMap((ids) => [...ids]));
+    const defaultTest = getDefaultTest(testSuite);
+    const filters = tests.map((test) => ({
+      prompts: test.prompts ?? defaultTest?.prompts,
+      providers: test.providers ?? defaultTest?.providers,
+    }));
+    // Use the ID in both matching fields to isolate identity-based matches. Resolve
+    // this once per bucket, not once per saved column.
+    const identityFilters = (ids: Set<string | undefined>) =>
+      filters.filter((filter) =>
+        [...ids].some((id) => id && isAllowedPrompt({ raw: '', label: id, id }, filter.prompts)),
+      );
+    const ambiguousFilters = new Map(
+      [...identities].map(([key, ids]) => [key, ids.size > 1 ? identityFilters(ids) : []]),
+    );
+    const unknownFilters = identityFilters(allIds);
+    const restoredColumns: ProviderColumns[] = testSuite.providers.map((provider) => ({
+      provider,
+      columns: [],
+    }));
+    if (recovery?.exactProviders) {
+      invariant(
+        recovery.exactProviders.length === testSuite.providers.length &&
+          recovery.exactProviders.every(
+            (provider, index) => provider === testSuite.providers[index],
+          ),
+        'Cannot resume evaluation because saved providers are missing or reordered. Start a new evaluation instead.',
+      );
+    }
+    let previousProviderIndex = -1;
+    restoredPrompts.forEach((prompt, promptIdx) => {
+      const providerIndex =
+        recovery?.providerOrdinals?.[promptIdx] ?? providerIndices.get(prompt.provider) ?? -1;
+      invariant(
+        providerIndex >= 0 &&
+          providerIndex >= previousProviderIndex &&
+          getProviderIdentifier(testSuite.providers[providerIndex]) === prompt.provider,
+        'Cannot resume evaluation because saved providers are missing or reordered. Start a new evaluation instead.',
+      );
+      previousProviderIndex = providerIndex;
+      const key = JSON.stringify([prompt.id, prompt.raw, prompt.label]);
+      const ids = identities.get(key);
+      const runtimePrompt =
+        recovery?.mode === 'snapshot'
+          ? testSuite.prompts[promptIdx]
+          : { ...prompt, id: ids?.size === 1 ? ids.values().next().value : undefined };
+      invariant(
+        isAllowedPrompt(
+          runtimePrompt,
+          getProviderPromptOverride(
+            testSuite.providers[providerIndex],
+            testSuite.providerPromptMap,
+          ) ?? testSuite.providers[providerIndex].prompts,
+        ),
+        'Cannot resume evaluation because provider prompt selectors exclude saved columns. Start a new evaluation instead.',
+      );
+      invariant(
+        (ambiguousFilters.get(key) ?? unknownFilters).every(
+          (filter) =>
+            !isProviderAllowed(testSuite.providers[providerIndex], filter.providers) ||
+            isAllowedPrompt(runtimePrompt, filter.prompts),
+        ),
+        'Cannot resume evaluation because saved prompt IDs cannot be matched to test filters. Start a new evaluation instead.',
+      );
+      restoredColumns[providerIndex].columns.push({ promptIdx, prompt: runtimePrompt });
+    });
+    return { prompts: restoredPrompts, columnsByProvider: restoredColumns };
+  }
+
+  if (cliState.resume && store.persisted && store.prompts.length > 0) {
+    // Resume completion uses column indices. Compare definitions, not generated IDs.
+    invariant(
+      matchesSavedLayout,
+      'Cannot resume evaluation because the saved provider/prompt columns differ. Start a new evaluation instead.',
+    );
+    // Explicit retry configs retain their current definitions, but metrics belong to
+    // saved column positions, not potentially duplicated provider/prompt identities.
+    prompts.forEach((prompt, index) => {
+      const metrics = store.prompts[index].metrics;
+      if (metrics) {
+        prompt.metrics = structuredClone(metrics);
+        backfillNamedScoreWeights(prompt.metrics);
+      }
+    });
   }
 
   return { prompts, columnsByProvider };
@@ -5484,22 +5785,37 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     const rowsWithSelectBestAssertion = new Set<number>();
     const rowsWithMaxScoreAssertion = new Set<number>();
 
-    ensureDefaultTestForExtensions(testSuite);
-    const beforeAllOut = await runExtensionHook(testSuite.extensions, 'beforeAll', {
-      suite: testSuite,
-    });
-    testSuite = beforeAllOut.suite;
-
-    if (!(await maybeAddGeneratedPrompts(testSuite, options, providerAbortSignal))) {
+    const restorePromptColumns = Boolean(
+      options.restorePromptColumns &&
+        cliState.resume &&
+        this.store.persisted &&
+        this.store.prompts.length > 0,
+    );
+    const recovery =
+      restorePromptColumns && testSuite.extensions?.length
+        ? preparePromptRecovery(testSuite, this.store)
+        : undefined;
+    if (recovery) {
+      testSuite = { ...testSuite, prompts: recovery.hookPrompts };
+    }
+    testSuite = await runBeforeAllExtensions(testSuite);
+    if (
+      !restorePromptColumns &&
+      !(await maybeAddGeneratedPrompts(testSuite, options, providerAbortSignal))
+    ) {
       return this.store.evaluation;
     }
 
-    const { prompts, columnsByProvider } = buildCompletedPrompts(testSuite, this.store);
-
-    await this.store.appendPrompts(prompts);
-
     let tests = buildTestsFromSuite(testSuite);
     tests = filterByRange(tests, options.filterRange, warnEmptyFilterRange);
+    const { prompts, columnsByProvider } = buildCompletedPrompts(
+      testSuite,
+      this.store,
+      restorePromptColumns,
+      tests,
+      recovery,
+    );
+    await this.store.appendPrompts(prompts);
     maybeEmitAzureOpenAiWarning(testSuite, tests);
 
     const varNames = await prepareTestVariables(tests, testSuite);
