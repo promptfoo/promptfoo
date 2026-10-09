@@ -32,10 +32,11 @@ import type {
 } from '../types/providers';
 
 type ProviderFunctionWithMetadata = ProviderFunction &
-  Pick<ApiProvider, 'label' | 'transform' | 'delay' | 'inputs' | 'config'>;
+  Pick<ApiProvider, 'label' | 'prompts' | 'transform' | 'delay' | 'inputs' | 'config'>;
 
 const FORWARDED_PROVIDER_METADATA_KEYS = [
   'label',
+  'prompts',
   'transform',
   'delay',
   'inputs',
@@ -260,7 +261,11 @@ async function createApiProvider(
         {
           basePath,
           env: mergedFileEnv,
-          options: { ...fileContent, env: mergedFileEnv },
+          options: {
+            ...fileContent,
+            prompts: options.prompts ?? fileContent.prompts,
+            env: mergedFileEnv,
+          },
         },
         fileTemplateEnv,
       ),
@@ -276,6 +281,7 @@ async function createApiProvider(
       ret.delay = options.delay;
       ret.inputs = options.inputs;
       ret.label ||= renderTemplate(options.label || '');
+      ret.prompts = options.prompts;
       return ret;
     }
   }
@@ -341,9 +347,8 @@ export async function resolveProvider(
  * so they can be properly handled by loadApiProviders.
  *
  * This is used to:
- * 1. Build the provider-prompt map (respecting `prompts` filters from external files)
- * 2. Enable --filter-providers to match resolved provider ids/labels from files
- * 3. Pass to loadApiProviders without re-reading files
+ * 1. Enable --filter-providers to match resolved provider ids/labels from files
+ * 2. Pass resolved options to loadApiProviders without re-reading files
  */
 export function resolveProviderConfigs(
   providerPaths: TestSuiteConfig['providers'],

@@ -234,7 +234,11 @@ function normalizeJavascriptAssertionResult(
       'Custom function must return a GradingResult object with a finite score.',
     );
   }
-  return normalizedResult;
+  // A GradingResult reason is explanatory prose, including an intentional empty string.
+  // Preserve it for both inverse outcomes; primitive results keep their generated reasons.
+  return typeof result === 'object'
+    ? { ...normalizedResult, reason: result.reason }
+    : normalizedResult;
 }
 
 export const handleJavascript = async ({

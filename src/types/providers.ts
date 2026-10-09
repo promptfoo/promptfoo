@@ -151,6 +151,8 @@ export interface ApiProvider extends MinimalApiProvider {
   getAudioInputFormat?: () => 'openai' | 'google' | undefined;
   inputs?: Inputs;
   label?: ProviderLabel;
+  /** Effective prompt selectors after provider configuration has been resolved. */
+  prompts?: string[];
   transform?: string | TransformFunction;
   toJSON?: () => any;
   /**
