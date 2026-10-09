@@ -478,16 +478,16 @@ evalRouter.get('/:id/failure-summary', async (req: Request, res: Response): Prom
     return;
   }
 
-  const eval_ = await Eval.findById(paramsResult.data.id);
-  if (!eval_) {
-    res.status(404).json({ error: 'Eval not found' });
-    return;
+  try {
+    const eval_ = await Eval.findById(paramsResult.data.id);
+    if (!eval_) {
+      res.status(404).json({ error: 'Eval not found' });
+      return;
+    }
+    res.json(EvalSchemas.FailureSummary.Response.parse(await eval_.getFailureSummary()));
+  } catch (error) {
+    sendError(res, 500, 'Failed to load failure summary', error);
   }
-
-  const response = EvalSchemas.FailureSummary.Response.parse({
-    failures: await eval_.getFailureSummary(),
-  });
-  res.json(response);
 });
 
 evalRouter.get('/:id/metadata-keys', async (req: Request, res: Response): Promise<void> => {

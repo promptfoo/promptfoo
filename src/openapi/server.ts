@@ -553,7 +553,7 @@ export function createServerOpenApiRegistry() {
     path: '/api/eval/{id}/failure-summary',
     operationId: 'getEvalFailureSummary',
     tags: ['Eval'],
-    summary: 'Group failed evaluation results by error',
+    summary: 'Group failed evaluation results by failure reason',
     request: {
       params: params('GetFailureSummaryParams', EvalSchemas.FailureSummary.Params),
     },
@@ -561,6 +561,7 @@ export function createServerOpenApiRegistry() {
       200: jsonResponse('GetFailureSummaryResponse', EvalSchemas.FailureSummary.Response),
       400: validationError(),
       404: notFound('Evaluation not found'),
+      500: serverError(),
     },
   });
 

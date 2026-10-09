@@ -123,7 +123,7 @@ function getAppliedFilterLabel(
   }
 
   if (filter.type === 'error') {
-    return `Error: ${truncatedValue}`;
+    return `Rows with failure: ${(filter.label ?? 'Selected group').slice(0, MAX_FILTER_VALUE_LENGTH)}`;
   }
 
   if (filter.type === 'plugin') {
@@ -918,7 +918,11 @@ export default function ResultsView({
                         </button>
                       </Badge>
                     )}
-                    <FailureSummary evalId={currentEvalId} />
+                    <FailureSummary
+                      key={currentEvalId}
+                      evalId={currentEvalId}
+                      onSelect={() => setFilterMode('all')}
+                    />
                     {filters.appliedCount > 0 && (
                       <AppliedFilterBadges
                         filters={appliedFilters}

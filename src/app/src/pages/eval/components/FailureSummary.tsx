@@ -1,105 +1,110 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { Badge } from '@app/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { callApi } from '@app/utils/api';
-import { AlertCircle } from 'lucide-react';
 import { useTableStore } from './store';
+import type { GetFailureSummaryResponse } from '@promptfoo/types/api/eval';
 
 interface FailureSummaryProps {
   evalId: string;
+  onSelect: () => void;
 }
 
-type FailureSummaryResponse = {
-  failures: Array<{ error: string; count: number }>;
-};
+function useFailureSummary(evalId: string) {
+  const table = useTableStore((state) => state.table);
+  const [summary, setSummary] = useState<GetFailureSummaryResponse | null>(null);
 
-export function FailureSummary({ evalId }: FailureSummaryProps) {
-  const { addFilter, filters, removeFilter } = useTableStore();
-  const [failures, setFailures] = useState<FailureSummaryResponse['failures']>([]);
-
+  // biome-ignore lint/correctness/useExhaustiveDependencies: table changes signal streamed results and manual ratings.
   useEffect(() => {
     const controller = new AbortController();
-
-    async function loadFailureSummary() {
+    setSummary(null);
+    async function load() {
       try {
         const response = await callApi(`/eval/${encodeURIComponent(evalId)}/failure-summary`, {
           signal: controller.signal,
         });
-        if (!response.ok) {
-          setFailures([]);
-          return;
+        const data = response.ok ? await response.json() : null;
+        if (!controller.signal.aborted) {
+          setSummary(Array.isArray(data?.failures) ? data : null);
         }
-        const data = (await response.json()) as Partial<FailureSummaryResponse> | null;
-        setFailures(Array.isArray(data?.failures) ? data.failures : []);
-      } catch (error) {
-        if (!(error instanceof DOMException && error.name === 'AbortError')) {
-          setFailures([]);
+      } catch {
+        if (!controller.signal.aborted) {
+          setSummary(null);
         }
       }
     }
-
-    void loadFailureSummary();
+    void load();
     return () => controller.abort();
-  }, [evalId]);
+  }, [evalId, table]);
 
-  const activeFilterIds = useMemo(
-    () =>
-      new Map(
-        Object.entries(filters.values)
-          .filter(([, filter]) => filter.type === 'error' && filter.operator === 'equals')
-          .map(([id, filter]) => [filter.value, id]),
-      ),
-    [filters.values],
-  );
+  return summary;
+}
 
-  if (failures.length === 0) {
+export function FailureSummary({ evalId, onSelect }: FailureSummaryProps) {
+  const summary = useFailureSummary(evalId);
+  const { addFilter, filters, removeFilter } = useTableStore();
+  if (!summary?.failures.length) {
     return null;
   }
+  const selectedGroups = Object.values(filters.values).filter((filter) => filter.type === 'error');
 
-  const toggleFailureFilter = (error: string) => {
-    const activeFilterId = activeFilterIds.get(error);
-    if (activeFilterId) {
-      removeFilter(activeFilterId);
-      return;
+  const selectGroup = ({ id, error }: GetFailureSummaryResponse['failures'][number]) => {
+    const wasSelected = selectedGroups.some((filter) => filter.value === id);
+    // One group at a time avoids contradictory AND predicates and preserves other filters.
+    selectedGroups.forEach((filter) => removeFilter(filter.id));
+    if (!wasSelected) {
+      onSelect();
+      addFilter({ type: 'error', operator: 'equals', value: id, label: error });
     }
-    addFilter({
-      type: 'error',
-      operator: 'equals',
-      value: error,
-    });
   };
 
   return (
-    <div className="flex flex-wrap items-center gap-1.5">
-      <span className="text-xs font-medium text-muted-foreground">Failure groups:</span>
-      {failures.map(({ error, count }) => {
-        const isActive = activeFilterIds.has(error);
-        return (
-          <Tooltip key={error}>
-            <TooltipTrigger asChild>
-              <button type="button" onClick={() => toggleFailureFilter(error)}>
-                <Badge
-                  variant="secondary"
-                  className={
-                    isActive
-                      ? 'cursor-pointer bg-red-100 text-red-800 dark:bg-red-950/40 dark:text-red-300'
-                      : 'cursor-pointer hover:bg-muted'
-                  }
+    <section aria-label="Failure groups" className="space-y-1">
+      <p className="text-xs text-muted-foreground">
+        Select a failure group to show rows containing it. Other comparison outputs remain visible.
+      </p>
+      <div className="flex flex-wrap items-center gap-1.5">
+        {summary.failures.map((failure) => {
+          const isActive = selectedGroups.some((filter) => filter.value === failure.id);
+          return (
+            <Tooltip key={failure.id}>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  aria-pressed={isActive}
+                  aria-label={`${failure.count} ${failure.count === 1 ? 'failure' : 'failures'}: ${failure.error}`}
+                  onClick={() => selectGroup(failure)}
                 >
-                  <AlertCircle className="mr-1 size-3 text-red-500" />
-                  {count} {count === 1 ? 'failure' : 'failures'}
-                </Badge>
-              </button>
-            </TooltipTrigger>
-            <TooltipContent className="max-w-md break-words">
-              {error}
-              <br />
-              {isActive ? 'Click to remove filter' : 'Click to filter'}
-            </TooltipContent>
-          </Tooltip>
-        );
-      })}
-    </div>
+                  <Badge
+                    variant="secondary"
+                    className={
+                      isActive
+                        ? 'max-w-xs cursor-pointer bg-red-100 text-red-800 dark:bg-red-950/40 dark:text-red-300'
+                        : 'max-w-xs cursor-pointer hover:bg-muted'
+                    }
+                  >
+                    <span className="truncate">
+                      {failure.count} · {failure.error}
+                    </span>
+                  </Badge>
+                </button>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-md break-words">
+                <p className="text-sm">{failure.error}</p>
+                <p className="text-xs">
+                  {isActive ? 'Remove group filter' : 'Show rows with this failure'}
+                </p>
+              </TooltipContent>
+            </Tooltip>
+          );
+        })}
+      </div>
+      {summary.hasMore && (
+        <p className="text-xs text-muted-foreground">
+          Showing the 100 most frequent failure groups.
+        </p>
+      )}
+    </section>
   );
 }

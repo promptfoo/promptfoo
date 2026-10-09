@@ -143,10 +143,12 @@ export const GetFailureSummaryParamsSchema = EvalIdParamSchema;
 export const GetFailureSummaryResponseSchema = z.object({
   failures: z.array(
     z.object({
-      error: z.string().min(1),
+      id: z.string().min(1).max(200),
+      error: z.string().min(1).max(1000),
       count: z.number().int().positive(),
     }),
   ),
+  hasMore: z.boolean(),
 });
 
 export type GetFailureSummaryParams = z.infer<typeof GetFailureSummaryParamsSchema>;

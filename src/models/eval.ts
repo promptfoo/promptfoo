@@ -73,6 +73,16 @@ import EvalResult, {
 
 import type { EvalResultsFilterMode, TraceData } from '../types/index';
 
+// Use one expression for summary groups and their filters, including manual failures.
+// Invalid legacy JSON must not prevent the evaluation table from loading.
+const failureReasonSql = sql`COALESCE(
+  NULLIF(TRIM(error), ''),
+  CASE WHEN json_valid(grading_result) THEN
+    CASE WHEN json_type(grading_result, '$.reason') = 'text'
+      THEN NULLIF(TRIM(json_extract(grading_result, '$.reason')), '') END END,
+  'Failure reason unavailable'
+)`;
+
 /**
  * Database query result type interfaces
  * These types ensure type safety for raw SQL queries that don't use Drizzle's query builder
@@ -919,21 +929,23 @@ export default class Eval {
     return await EvalResult.findManyByEvalId(this.id, { testIdx });
   }
 
-  async getFailureSummary(): Promise<Array<{ error: string; count: number }>> {
+  async getFailureSummary() {
     const db = await getDb();
-    const rows = await db.all<{ error: string; count: number }>(sql`
-      SELECT error, COUNT(*) AS count
+    const rows = await db.all<{ id: string; error: string; count: number }>(sql`
+      SELECT MIN(id) AS id, SUBSTR(${failureReasonSql}, 1, 500) AS error, COUNT(*) AS count
       FROM eval_results
-      WHERE eval_id = ${this.id}
-        AND success = 0
-        AND error IS NOT NULL
-        AND TRIM(error) != ''
-      GROUP BY error
-      ORDER BY count DESC, error ASC
-      LIMIT 100
+      WHERE eval_id = ${this.id} AND success = 0
+      GROUP BY ${failureReasonSql}
+      ORDER BY count DESC, ${failureReasonSql} ASC
+      LIMIT 101
     `);
 
-    return rows.map(({ error, count }) => ({ error, count: Number(count) }));
+    return {
+      failures: rows
+        .slice(0, 100)
+        .map(({ id, error, count }) => ({ id, error, count: Number(count) })),
+      hasMore: rows.length > 100,
+    };
   }
 
   /**
@@ -1119,8 +1131,16 @@ export default class Eval {
                 AND LENGTH(TRIM(COALESCE(json_each.value, ''))) > 0
             )`;
           }
-        } else if (type === 'error' && operator === 'equals') {
-          condition = sql`error = ${value}`;
+        } else if (type === 'error') {
+          // A representative result ID keeps large failure messages out of query URLs.
+          // Scope both sides to this eval and to current failures (manual passes retain error).
+          condition =
+            operator === 'equals' && typeof value === 'string' && value.length <= 200
+              ? sql`success = 0 AND ${failureReasonSql} = (
+                SELECT ${failureReasonSql} FROM eval_results
+                WHERE eval_id = ${this.id} AND id = ${value} AND success = 0
+              )`
+              : sql`0 = 1`;
         } else if (type === 'plugin' && typeof value === 'string') {
           const isCategory = Object.keys(PLUGIN_CATEGORIES).includes(value);
 
@@ -1175,7 +1195,9 @@ export default class Eval {
           condition = sql`(named_scores LIKE '%PolicyViolation:%' AND named_scores LIKE ${`%${value}%`})`;
         }
 
-        if (condition) {
+        if (condition && type === 'error') {
+          conditions.push(sql`(${condition})`);
+        } else if (condition) {
           filterConditions.push({
             condition,
             logicOperator: logicOperator || 'AND',

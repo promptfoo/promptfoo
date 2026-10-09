@@ -22,7 +22,7 @@ import { type ResultsFilter, useTableStore } from '../store';
 const TYPE_LABELS: Record<ResultsFilter['type'], string> = {
   metric: 'Metric',
   metadata: 'Metadata',
-  error: 'Error',
+  error: 'Failure group',
   plugin: 'Plugin',
   strategy: 'Strategy',
   severity: 'Severity',
@@ -339,6 +339,20 @@ function FilterRow({
         return 'Enter value...';
     }
   }, [filter.type, metadataKey]);
+
+  // Failure groups are selected in the summary, not edited as arbitrary text predicates.
+  if (filter.type === 'error') {
+    return (
+      <div className="flex items-center gap-2">
+        <span className="min-w-0 flex-1 truncate text-sm" title={filter.label}>
+          Rows with failure: {filter.label ?? 'Selected group'}
+        </span>
+        <Button variant="ghost" size="sm" onClick={onRemove} aria-label="Remove failure group">
+          <X className="size-4" />
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-wrap items-center gap-1.5">

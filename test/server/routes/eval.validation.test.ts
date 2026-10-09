@@ -68,6 +68,25 @@ describe('Eval Routes - Zod Validation', () => {
     vi.resetAllMocks();
   });
 
+  describe('GET /api/eval/:id/failure-summary', () => {
+    it('returns bounded groups and explicit truncation', async () => {
+      const summary = {
+        failures: [{ id: 'result-id', error: 'Failure', count: 2 }],
+        hasMore: true,
+      };
+      mockFindById.mockResolvedValue({ getFailureSummary: vi.fn().mockResolvedValue(summary) });
+      const response = await api.get('/api/eval/test-id/failure-summary');
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual(summary);
+    });
+    it('returns a generic JSON error on database failure', async () => {
+      mockFindById.mockRejectedValue(new Error('private database details'));
+      const response = await api.get('/api/eval/test-id/failure-summary');
+      expect(response.status).toBe(500);
+      expect(response.body).toEqual({ error: 'Failed to load failure summary' });
+    });
+  });
+
   describe('PATCH /api/eval/:id/author', () => {
     it('should return 400 when body is empty', async () => {
       const response = await api.patch('/api/eval/test-id/author').send({});

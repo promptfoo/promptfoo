@@ -1,6 +1,6 @@
 {
   "app -> contracts": 7,
-  "app -> legacy-contracts": 105,
+  "app -> legacy-contracts": 106,
   "app -> legacy-runtime": 20,
   "app -> node": 17,
   "app -> providers": 7,

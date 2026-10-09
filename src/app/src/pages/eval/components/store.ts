@@ -249,6 +249,8 @@ export type ResultsFilter = {
   id: string;
   type: ResultsFilterType;
   value: string;
+  /** Display-only failure description; never sent in table query URLs. */
+  label?: string;
   operator: ResultsFilterOperator;
   logicOperator: 'and' | 'or';
   /**
@@ -317,6 +319,7 @@ interface TableState {
     type: ResultsFilterType;
     operator: ResultsFilter['operator'];
     value: string;
+    label?: string;
     logicOperator?: ResultsFilter['logicOperator'];
     field?: string;
   }) => void;
