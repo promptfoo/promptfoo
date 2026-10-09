@@ -4,10 +4,7 @@ import * as path from 'path';
 
 import { z } from 'zod';
 import { toSerializableProviderRef } from '../models/evalResult';
-import { isApiProvider } from '../types/providers';
 import { sha256 } from '../util/createHash';
-
-import type { TestSuite } from '../types';
 
 const SHA256_HEX = /^[a-f0-9]{64}$/;
 const UUID_V7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -69,16 +66,36 @@ const EvalLockFileSchema = z
 export type PrmlManifest = z.infer<typeof PrmlManifestSchema>;
 export type EvalLockFile = z.infer<typeof EvalLockFileSchema>;
 
+type EvalBarSource = {
+  defaultTest?: unknown;
+  tests?: unknown;
+  scenarios?: unknown;
+};
+
 export type EvalBar = {
   version: 1;
-  defaultTest: TestSuite['defaultTest'] | null;
-  tests: TestSuite['tests'];
-  scenarios: TestSuite['scenarios'] | null;
+  defaultTest: unknown;
+  tests: unknown;
+  scenarios: unknown;
   execution: {
     repeat: number;
     filterRange: string | null;
   };
 };
+
+function isRuntimeApiProvider(value: unknown): value is {
+  id: () => string;
+  callApi: (...args: unknown[]) => unknown;
+} {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'id' in value &&
+    typeof value.id === 'function' &&
+    'callApi' in value &&
+    typeof value.callApi === 'function'
+  );
+}
 
 function uuidV7(): string {
   const bytes = randomBytes(16);
@@ -195,7 +212,7 @@ function canonicalize(value: unknown, ancestors: Set<object>): unknown {
     throw new Error(`Evaluation locks cannot include ${typeof value} values`);
   }
 
-  if (isApiProvider(value)) {
+  if (isRuntimeApiProvider(value)) {
     return canonicalize(toSerializableProviderRef(value), ancestors);
   }
 
@@ -235,7 +252,7 @@ export function canonicalJson(value: unknown): string {
 }
 
 export function createEvalBar(
-  testSuite: TestSuite,
+  testSuite: EvalBarSource,
   execution: { repeat: number; filterRange?: string },
 ): EvalBar {
   return {
