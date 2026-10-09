@@ -3,10 +3,9 @@ import { createHmac } from 'crypto';
 import {
   fetchWithCache,
   getCache,
-  getCacheClearGeneration,
+  getCacheWriteContext,
   getScopedCacheKey,
   isCacheEnabled,
-  setCacheIfCurrent,
 } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
@@ -694,7 +693,8 @@ export class MistralChatCompletionProvider implements ApiProvider {
       : undefined;
     const params = buildMistralChatParams(this.modelName, messages, config, loadedTools);
 
-    const clearGeneration = getCacheClearGeneration();
+    const cacheContext = getCacheWriteContext();
+    const clearGeneration = cacheContext.generation;
     const cacheKey = `mistral:chat:${this.modelName}:${this.getCacheIdentityHash(
       apiUrl,
     )}:${getMistralAuthCacheNamespace(apiKey)}:${hashMistralCacheValue(params)}`;
@@ -793,7 +793,7 @@ export class MistralChatCompletionProvider implements ApiProvider {
 
     if (isCacheEnabled()) {
       try {
-        await setCacheIfCurrent(cacheKey, result, clearGeneration);
+        await cacheContext.set(cacheKey, result);
       } catch (err) {
         logger.error(`Failed to cache response: ${String(err)}`);
       }
@@ -893,7 +893,8 @@ export class MistralEmbeddingProvider implements ApiProvider {
 
     const apiUrl = this.getApiUrl();
     const url = `${apiUrl}/embeddings`;
-    const clearGeneration = getCacheClearGeneration();
+    const cacheContext = getCacheWriteContext();
+    const clearGeneration = cacheContext.generation;
     const cacheKey = `mistral:embedding:${this.modelName}:${this.getCacheIdentityHash(
       apiUrl,
     )}:${getMistralAuthCacheNamespace(apiKey)}:${hashMistralCacheValue(body)}`;
@@ -968,7 +969,7 @@ export class MistralEmbeddingProvider implements ApiProvider {
       };
       if (!cached && cache) {
         try {
-          await setCacheIfCurrent(cacheKey, data, clearGeneration);
+          await cacheContext.set(cacheKey, data);
         } catch (err) {
           logger.error(`Failed to cache Mistral embedding response: ${String(err)}`);
         }

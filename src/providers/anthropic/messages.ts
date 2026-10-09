@@ -1,8 +1,8 @@
 import { APIError } from '@anthropic-ai/sdk';
 import {
   getCache,
-  getCacheClearGeneration,
   getCacheTtlMs,
+  getCacheWriteContext,
   getScopedCacheKey,
   isCacheEnabled,
 } from '../../cache';
@@ -1148,7 +1148,8 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         )}`
       : undefined;
     const ephemeralCacheKey = cacheKey ? getScopedCacheKey(cacheKey) : undefined;
-    const cacheClearGeneration = getCacheClearGeneration();
+    const cacheContext = getCacheWriteContext();
+    const cacheClearGeneration = cacheContext.generation;
 
     if (cache && cacheKey && ephemeralCacheKey) {
       // Try to get the cached response
@@ -1225,10 +1226,9 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       if (cache && cacheKey && ephemeralCacheKey && message.stop_reason !== 'pause_turn') {
         try {
           await this.setCachedResponse(
-            cache,
             cacheKey,
             ephemeralCacheKey,
-            cacheClearGeneration,
+            cacheContext,
             getCacheTtlMs(),
             JSON.stringify(message),
           );

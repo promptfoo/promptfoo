@@ -218,4 +218,64 @@ describe.each(cases)('$name cache scope', (fixture) => {
     expect(await scope('a', 'shared', call)).toBe('2');
     expect(requests).toHaveLength(2);
   });
+
+  if ('poll' in fixture && !fixture.poll) {
+    it('does not let a pre-clear failure evict the replacement background response', async () => {
+      const provider = new OpenAiResponsesProvider('gpt-4.1', {
+        config: {
+          apiKey: 'fixture-key',
+          background: true,
+          headers: { 'OpenAI-Project': 'fixture-project' },
+        },
+      });
+      const call = () => scope('a', 'shared', () => provider.callApi('same prompt'));
+      const first = call();
+      await requestStarted.promise;
+      await scope('a', 'shared', async () => {
+        await getCache().clear();
+      });
+      const replacement = call();
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      released = true;
+      requests[1].resolve(fixture.response(2));
+      expect((await replacement).output).toBe('2');
+      requests[0].resolve(
+        Response.json({ id: 'resp_old', status: 'failed', error: { message: 'fixture failure' } }),
+      );
+      expect((await first).error).toContain('fixture failure');
+      expect(await call()).toMatchObject({ output: '2', cached: true });
+      expect(requests).toHaveLength(2);
+    });
+  }
+});
+
+it('does not open disk storage when speech policy bypasses response caching', async () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-cache-bypass-'));
+  fs.writeFileSync(path.join(directory, 'file'), 'fixture');
+  vi.mocked(fetchWithRetries).mockReset().mockResolvedValue(new Response('audio'));
+  try {
+    await cliState.withEnv(
+      {
+        PROMPTFOO_CACHE_TYPE: 'disk',
+        PROMPTFOO_CACHE_PATH: path.join(directory, 'file', 'cache'),
+      },
+      async () => {
+        const provider = new OpenAiTtsProvider('tts-1', {
+          config: {
+            apiKey: 'fixture-key',
+            apiBaseUrl: 'https://fixture.invalid/v1',
+            maxRetries: 0,
+          },
+        });
+        expect(await provider.callApi('fixture')).toMatchObject({
+          cached: false,
+          audio: { data: Buffer.from('audio').toString('base64') },
+        });
+      },
+    );
+    expect(fetchWithRetries).toHaveBeenCalledTimes(1);
+  } finally {
+    vi.resetAllMocks();
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
 });

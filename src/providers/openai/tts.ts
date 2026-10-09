@@ -1,10 +1,4 @@
-import {
-  getCache,
-  getCacheClearGeneration,
-  getScopedCacheKey,
-  isCacheEnabled,
-  setCacheIfCurrent,
-} from '../../cache';
+import { getCache, getCacheWriteContext, getScopedCacheKey, isCacheEnabled } from '../../cache';
 import logger from '../../logger';
 import { sha256 } from '../../util/createHash';
 import {
@@ -149,10 +143,10 @@ async function getCachedResponse(
 async function cacheResponse(
   cacheKey: string,
   response: ProviderResponse,
-  clearGeneration: number,
+  cacheContext: ReturnType<typeof getCacheWriteContext>,
 ): Promise<void> {
   try {
-    await setCacheIfCurrent(cacheKey, JSON.stringify(response), clearGeneration);
+    await cacheContext.set(cacheKey, JSON.stringify(response));
   } catch (error) {
     logger.debug('[OpenAI TTS] Failed to cache response', { error });
   }
@@ -313,7 +307,8 @@ export class OpenAiTtsProvider extends OpenAiGenericProvider {
     )}`;
 
     const useCache = cacheEnabled && !this.shouldBustCache(context);
-    const clearGeneration = getCacheClearGeneration();
+    const cacheContext = getCacheWriteContext();
+    const clearGeneration = cacheContext.generation;
     if (useCache) {
       const cachedResponse = await getCachedResponse(cacheKey, startedAt);
       if (cachedResponse) {
@@ -364,7 +359,7 @@ export class OpenAiTtsProvider extends OpenAiGenericProvider {
         };
 
         if (useCache) {
-          await cacheResponse(cacheKey, result, clearGeneration);
+          await cacheResponse(cacheKey, result, cacheContext);
         }
 
         return result;

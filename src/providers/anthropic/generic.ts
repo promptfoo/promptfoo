@@ -14,6 +14,7 @@ import {
 import type { ClientOptions } from '@anthropic-ai/sdk';
 import type { Cache } from 'cache-manager';
 
+import type { getCacheWriteContext } from '../../cache';
 import type { EnvOverrides } from '../../types/env';
 import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types/index';
 import type { ClaudeCodeOAuthCredential } from './claudeCodeAuth';
@@ -413,19 +414,21 @@ export class AnthropicGenericProvider implements ApiProvider {
   }
 
   protected async setCachedResponse(
-    cache: Cache,
     cacheKey: string,
     ephemeralCacheKey: string,
-    clearGeneration: number,
+    cacheContext: ReturnType<typeof getCacheWriteContext>,
     ttlMs: number,
     response: string,
   ): Promise<void> {
     if (this.label) {
-      await cache.set(cacheKey, response);
+      await cacheContext.set(cacheKey, response);
+      return;
+    }
+    if (!cacheContext.isCurrent()) {
       return;
     }
 
-    const key = `${clearGeneration}:${ephemeralCacheKey}`;
+    const key = `${cacheContext.generation}:${ephemeralCacheKey}`;
 
     if (
       !this.ephemeralResponseCache.has(key) &&

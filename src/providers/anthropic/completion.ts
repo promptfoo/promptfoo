@@ -1,8 +1,8 @@
 import Anthropic from '@anthropic-ai/sdk';
 import {
   getCache,
-  getCacheClearGeneration,
   getCacheTtlMs,
+  getCacheWriteContext,
   getScopedCacheKey,
   isCacheEnabled,
 } from '../../cache';
@@ -94,7 +94,8 @@ export class AnthropicCompletionProvider extends AnthropicGenericProvider {
     const cache = await getCache();
     const cacheKey = `anthropic:completion:${this.modelName}:${this.getCacheIdentityHash()}:${this.getCacheNamespace()}:${hashAnthropicCacheValue(params)}`;
     const ephemeralCacheKey = getScopedCacheKey(cacheKey);
-    const cacheClearGeneration = getCacheClearGeneration();
+    const cacheContext = getCacheWriteContext();
+    const cacheClearGeneration = cacheContext.generation;
     const shouldUseResponseCache = isCacheEnabled() && !this.hasCustomHeaders();
 
     if (shouldUseResponseCache) {
@@ -127,10 +128,9 @@ export class AnthropicCompletionProvider extends AnthropicGenericProvider {
     if (shouldUseResponseCache) {
       try {
         await this.setCachedResponse(
-          cache,
           cacheKey,
           ephemeralCacheKey,
-          cacheClearGeneration,
+          cacheContext,
           getCacheTtlMs(),
           JSON.stringify(response.completion),
         );

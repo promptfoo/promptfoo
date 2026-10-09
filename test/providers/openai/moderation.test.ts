@@ -2,9 +2,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   fetchWithCache,
   getCache,
+  getCacheWriteContext,
   getScopedCacheKey,
   isCacheEnabled,
-  setCacheIfCurrent,
 } from '../../../src/cache';
 import {
   formatModerationInput,
@@ -24,9 +24,13 @@ describe('OpenAiModerationProvider', () => {
   // Standard setup for all tests
   beforeEach(() => {
     vi.resetAllMocks();
-    vi.mocked(setCacheIfCurrent).mockImplementation(async (key, value) => {
-      await getCache().set(key, value);
-    });
+    vi.mocked(getCacheWriteContext).mockImplementation(() => ({
+      generation: 0,
+      isCurrent: () => true,
+      set: async (key, value) => {
+        await getCache().set(key, value);
+      },
+    }));
     vi.mocked(isCacheEnabled).mockImplementation(function () {
       return false;
     });

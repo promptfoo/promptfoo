@@ -3,10 +3,9 @@ import { createHmac } from 'crypto';
 import {
   fetchWithCache,
   getCache,
-  getCacheClearGeneration,
+  getCacheWriteContext,
   getScopedCacheKey,
   isCacheEnabled,
-  setCacheIfCurrent,
 } from '../../cache';
 import logger from '../../logger';
 import { getRequestTimeoutMs } from '../shared';
@@ -254,7 +253,8 @@ export class OpenAiModerationProvider
     }
 
     const useCache = isCacheEnabled();
-    const clearGeneration = getCacheClearGeneration();
+    const cacheContext = getCacheWriteContext();
+    const clearGeneration = cacheContext.generation;
     const supportsImages = supportsImageInput(this.modelName);
     const input = formatModerationInput(assistantResponse, supportsImages);
     const cacheKey = getModerationCacheKey(this.modelName, this.config, input, {
@@ -317,7 +317,7 @@ export class OpenAiModerationProvider
       const response = parseOpenAIModerationResponse(data);
 
       if (useCache) {
-        await setCacheIfCurrent(cacheKey, JSON.stringify(response), clearGeneration);
+        await cacheContext.set(cacheKey, JSON.stringify(response));
       }
 
       return response;

@@ -136,3 +136,84 @@ it('releases unused backends, TTL instances, and namespace wrappers', () => {
     fs.rmSync(directory, { recursive: true, force: true });
   }
 });
+
+it.each([
+  { providerKind: 'tts', axis: 'namespace' },
+  { providerKind: 'tts', axis: 'backend' },
+  { providerKind: 'anthropic', axis: 'namespace' },
+])(
+  'retains active $providerKind requests across $axis eviction and GC',
+  ({ providerKind, axis }) => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-provider-retention-'));
+    try {
+      const script = `
+      import { setImmediate } from 'node:timers/promises';
+      const providerKind = ${JSON.stringify(providerKind)};
+      const axis = ${JSON.stringify(axis)};
+      const directory = ${JSON.stringify(directory)};
+      const gate = Promise.withResolvers();
+      const entered = Promise.withResolvers();
+      let calls = 0;
+      globalThis.fetch = async request => {
+        const url = String(request?.url ?? request);
+        if (!['https://api.openai.com/v1/audio/speech', 'https://api.anthropic.com/v1/messages'].includes(url)) {
+          throw new Error('Unexpected network request: ' + url);
+        }
+        const requestIndex = ++calls;
+        entered.resolve();
+        await gate.promise;
+        return providerKind === 'tts'
+          ? new Response('audio-' + requestIndex)
+          : Response.json({
+              id: 'msg_fixture', type: 'message', role: 'assistant', model: 'claude-sonnet-4-6',
+              content: [{ type: 'text', text: 'fixture answer' }], stop_reason: 'end_turn',
+              usage: { input_tokens: 1, output_tokens: 1 },
+            });
+      };
+      const cache = await import(${JSON.stringify(pathToFileURL(path.resolve(__dirname, '../src/cache.ts')).href)});
+      const { default: cliState } = await import(${JSON.stringify(pathToFileURL(path.resolve(__dirname, '../src/cliState.ts')).href)});
+      const Provider = providerKind === 'tts'
+        ? (await import(${JSON.stringify(pathToFileURL(path.resolve(__dirname, '../src/providers/openai/tts.ts')).href)})).OpenAiTtsProvider
+        : (await import(${JSON.stringify(pathToFileURL(path.resolve(__dirname, '../src/providers/anthropic/messages.ts')).href)})).AnthropicMessagesProvider;
+      const provider = new Provider(providerKind === 'tts' ? 'tts-1' : 'claude-sonnet-4-6', {
+        config: { apiKey: 'fixture-api-key', maxRetries: 0 },
+      });
+      const env = { PROMPTFOO_CACHE_TYPE: 'disk', PROMPTFOO_CACHE_PATH: directory + '/active' };
+      const call = () => cliState.withEnv(env, () => cache.withCacheNamespace('active', () => provider.callApi('fixture')));
+      const pending = call();
+      await entered.promise;
+      for (let index = 0; index < 80; index++) {
+        await cliState.withEnv(
+          axis === 'namespace' ? env : { ...env, PROMPTFOO_CACHE_PATH: directory + '/other-' + index },
+          () => cache.withCacheNamespace('other-' + index, async () => cache.getCacheClearGeneration()),
+        );
+      }
+      for (let turn = 0; turn < 3; turn++) {
+        await setImmediate();
+        global.gc();
+      }
+      // TTS also shares concurrent requests; Anthropic's existing policy caches completed responses.
+      const concurrent = providerKind === 'tts' ? call() : undefined;
+      await setImmediate();
+      gate.resolve();
+      const first = await pending;
+      if (concurrent) { await concurrent; }
+      const repeated = await call();
+      console.log(JSON.stringify({ calls, firstError: first.error, repeatedError: repeated.error, cached: repeated.cached }));
+    `;
+      const child = spawnSync(
+        process.execPath,
+        ['--expose-gc', '--import', 'tsx', '--input-type=module', '--eval', script],
+        {
+          cwd: path.resolve(__dirname, '..'),
+          env: { ...process.env, LOG_LEVEL: 'error', PROMPTFOO_DISABLE_TELEMETRY: 'true' },
+          encoding: 'utf8',
+        },
+      );
+      expect(child.status, child.stderr).toBe(0);
+      expect(JSON.parse(child.stdout.trim())).toEqual({ calls: 1, cached: true });
+    } finally {
+      fs.rmSync(directory, { recursive: true, force: true });
+    }
+  },
+);

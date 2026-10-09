@@ -936,16 +936,16 @@ describe('invocation-scoped cache settings', () => {
     async (kind) => {
       await cliState.withEnv(disk(path.join(tempDir, 'stale-provider-write')), () =>
         cache.withCacheNamespace('fixture', async () => {
-          const generation = cache.getCacheClearGeneration();
+          const context = cache.getCacheWriteContext();
           vi.mocked(fetchWithRetries).mockResolvedValueOnce(Response.json('initial'));
           const fetched = await cache.fetchWithCache('https://cache-fixture.invalid/update');
           await cache.getCache().clear();
-          const write = (value: string, token = generation) =>
+          const write = (value: string, selected = context) =>
             kind === 'provider'
-              ? cache.setCacheIfCurrent('provider', value, token)
+              ? selected.set('provider', value)
               : fetched.updateCache!(value, 200, 'OK');
           if (kind === 'provider') {
-            await write('fresh', cache.getCacheClearGeneration());
+            await write('fresh', cache.getCacheWriteContext());
           }
           await write('stale');
           if (kind === 'provider') {
@@ -982,7 +982,7 @@ describe('invocation-scoped cache settings', () => {
           });
           const write =
             kind === 'provider'
-              ? cache.setCacheIfCurrent('provider', 'old', cache.getCacheClearGeneration())
+              ? cache.getCacheWriteContext().set('provider', 'old')
               : fetched.updateCache!('old', 200, 'OK');
           await entered.promise;
           let cleared = false;
@@ -1009,6 +1009,78 @@ describe('invocation-scoped cache settings', () => {
       );
     },
   );
+
+  it.each(['', 'fixture'])(
+    'keeps a write context bound to its original backend and namespace (%s)',
+    async (namespace) => {
+      const selected = disk(path.join(tempDir, 'context-original'));
+      const elsewhere = disk(path.join(tempDir, 'context-other'));
+      const original = <T>(fn: () => Promise<T>) =>
+        cliState.withEnv(selected, () => cache.withCacheNamespace(namespace, fn));
+      const context = await original(async () => cache.getCacheWriteContext());
+      await cliState.withEnv(elsewhere, () =>
+        cache.withCacheNamespace('other', () => context.set('key', 'original')),
+      );
+      expect(await original(() => cache.getCache().get('key'))).toBe('original');
+      expect(await cliState.withEnv(elsewhere, () => cache.getCache().get('key'))).toBeUndefined();
+      await original(() => cache.getCache().clear());
+      await cliState.withEnv(elsewhere, () => context.set('key', 'stale'));
+      expect(await original(() => cache.getCache().get('key'))).toBeUndefined();
+    },
+  );
+
+  it('keeps the original TTL when a write context is used from another environment', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-01-01T00:00:00Z'));
+    const selected = disk(path.join(tempDir, 'context-ttl'));
+    const context = cliState.withEnv({ ...selected, PROMPTFOO_CACHE_TTL: '10' }, () =>
+      cache.getCacheWriteContext(),
+    );
+    await cliState.withEnv({ ...selected, PROMPTFOO_CACHE_TTL: '1' }, () =>
+      context.set('key', 'value'),
+    );
+    vi.setSystemTime(new Date('2026-01-01T00:00:02Z'));
+    expect(await cliState.withEnv(selected, () => cache.getCache().get('key'))).toBe('value');
+    vi.setSystemTime(new Date('2026-01-01T00:00:11Z'));
+    expect(await cliState.withEnv(selected, () => cache.getCache().get('key'))).toBeUndefined();
+  });
+
+  it('drains an already-started response eviction before clearing', async () => {
+    await cliState.withEnv(disk(path.join(tempDir, 'pending-eviction')), async () => {
+      vi.mocked(fetchWithRetries).mockResolvedValueOnce(Response.json('initial'));
+      const response = await cache.fetchWithCache('https://cache-fixture.invalid/eviction');
+      const store = cache.getCache().stores[0];
+      const remove = store.delete.bind(store);
+      const entered = createDeferred<void>();
+      const release = createDeferred<void>();
+      vi.spyOn(store, 'delete').mockImplementationOnce(async (...args) => {
+        entered.resolve();
+        await release.promise;
+        return remove(...args);
+      });
+      const eviction = response.deleteFromCache!();
+      await entered.promise;
+      let cleared = false;
+      const clearing = cache
+        .getCache()
+        .clear()
+        .then(() => {
+          cleared = true;
+        });
+      try {
+        await new Promise(setImmediate);
+        expect(cleared).toBe(false);
+      } finally {
+        release.resolve();
+        await Promise.all([eviction, clearing]);
+      }
+      vi.mocked(fetchWithRetries).mockResolvedValueOnce(Response.json('fresh'));
+      expect(await cache.fetchWithCache('https://cache-fixture.invalid/eviction')).toMatchObject({
+        data: 'fresh',
+        cached: false,
+      });
+    });
+  });
 
   it('clears only the selected backend and its claims', async () => {
     const paths = [path.join(tempDir, 'a'), path.join(tempDir, 'b')];
