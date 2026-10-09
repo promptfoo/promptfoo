@@ -156,9 +156,9 @@ Commit skills to `.claude/skills/`, `.agents/skills/`, or `.github/skills/` for 
 agent picks them up automatically, with no per-person install needed.
 :::
 
-Each skill consists of a `SKILL.md` with workflow instructions plus a
-`references/` directory of assertion types, provider patterns, and config
-examples (provider and redteam setup also include a `scripts/` directory).
+Each skill has a `SKILL.md` with workflow instructions. Skills that need longer
+examples include a `references/` directory; provider and redteam setup also
+include helper scripts in `scripts/`.
 
 ## Usage
 

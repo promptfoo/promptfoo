@@ -54,7 +54,9 @@ assessment; otherwise include them in the report.
 ## Report
 
 Give a short verdict and rationale per application, with file/line evidence for
-the input, AI call, and output/action. State inspected paths and revision when
+the input, AI call, and output/action. Cite the external input read and the
+invocation that performs inference, following wrappers when needed; request
+fields alone do not establish that connection. State inspected paths and revision when
 available, exclusions, and unresolved assumptions. Separate readiness gaps from
 the suitability verdict. Suggest relevant attack categories only when supported
 by the evidence; use the user's requested output format, including JSON.
