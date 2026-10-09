@@ -8,6 +8,7 @@ import shlex
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 import venv
 from dataclasses import dataclass
@@ -259,6 +260,38 @@ def check_gate(selection: str, selected: str, tests: str) -> None:
         )
 
 
+def pull_docker_image(image: str, env: dict[str, str]) -> None:
+    """Retry registry throttling without retrying example execution."""
+    command = ("docker", "pull", image)
+    delays = (10, 30, 60)
+    for attempt in range(len(delays) + 1):
+        print(f"+ {shlex.join(command)}", flush=True)
+        try:
+            result = subprocess.run(
+                command,
+                cwd=ROOT,
+                env=env,
+                check=True,
+                text=True,
+                stderr=subprocess.PIPE,
+            )
+        except subprocess.CalledProcessError as error:
+            if error.stderr:
+                print(error.stderr, file=sys.stderr, end="", flush=True)
+            if (
+                attempt == len(delays)
+                or "toomanyrequests" not in (error.stderr or "").lower()
+            ):
+                raise
+            delay = delays[attempt]
+            print(f"Registry throttled Docker pull; retrying in {delay}s", flush=True)
+            time.sleep(delay)
+        else:
+            if result.stderr:
+                print(result.stderr, file=sys.stderr, end="", flush=True)
+            return
+
+
 def run_example(name: str) -> None:
     validate_registry()
     example = EXAMPLES[name]
@@ -304,7 +337,7 @@ def run_example(name: str) -> None:
             run(str(python), "-m", "pip", "check")
         for image in example.docker_images:
             source = DOCKER_IMAGE_MIRRORS.get(image, image)
-            run("docker", "pull", source)
+            pull_docker_image(source, env)
             if source != image:
                 run("docker", "tag", source, image)
         for relative, pattern in example.suites:
