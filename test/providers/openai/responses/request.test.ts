@@ -2182,85 +2182,119 @@ describe('OpenAiResponsesProvider request building', () => {
     }
   });
 
-  it('should preserve the polling deadline of a late background subscriber', async () => {
-    setOpenAiEnv({ PROMPTFOO_EVAL_TIMEOUT_MS: '140' });
-    let now = Date.now();
-    const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => now);
-    let notifyFirstPoll: (() => void) | undefined;
-    let releaseFirstPoll: (() => void) | undefined;
-    const firstPollStarted = new Promise<void>((resolve) => {
-      notifyFirstPoll = resolve;
-    });
-    const firstPollGate = new Promise<void>((resolve) => {
-      releaseFirstPoll = resolve;
-    });
-    let polls = 0;
-    vi.mocked(cache.fetchWithCache).mockImplementation(async (_url, options) => {
-      if (options?.method === 'POST') {
-        return {
-          data: { id: 'resp_late_deadline', status: 'queued', output: [], usage: null },
-          cached: false,
-          status: 200,
-          statusText: 'OK',
-        };
-      }
-      polls++;
-      if (polls === 1) {
-        notifyFirstPoll?.();
-        await firstPollGate;
-        now += 90;
-        return {
-          data: { id: 'resp_late_deadline', status: 'in_progress', output: [], usage: null },
-          cached: false,
-          status: 200,
-          statusText: 'OK',
-        };
-      }
-      return {
-        data: {
-          id: 'resp_late_deadline',
-          status: 'completed',
-          output: [
-            {
-              type: 'message',
-              role: 'assistant',
-              content: [{ type: 'output_text', text: 'Completed for late subscriber' }],
+  it.each([false, true])(
+    'preserves a late subscriber deadline and replacement evidence (recreated=%s)',
+    async (recreated) => {
+      setOpenAiEnv({ PROMPTFOO_EVAL_TIMEOUT_MS: '140' });
+      let now = Date.now();
+      const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => now);
+      let notifyFirstPoll: (() => void) | undefined;
+      let releaseFirstPoll: (() => void) | undefined;
+      const firstPollStarted = new Promise<void>((resolve) => {
+        notifyFirstPoll = resolve;
+      });
+      const firstPollGate = new Promise<void>((resolve) => {
+        releaseFirstPoll = resolve;
+      });
+      let polls = 0;
+      let expired = false;
+      const oldUpdateCache = vi.fn().mockResolvedValue(undefined);
+      const replacementUpdateCache = vi.fn().mockResolvedValue(undefined);
+      const replacementId = 'resp_replaced_late_deadline';
+      vi.mocked(cache.fetchWithCache).mockImplementation(async (_url, options) => {
+        if (options?.method === 'POST') {
+          return {
+            data: {
+              id: expired ? replacementId : 'resp_late_deadline',
+              status: 'queued',
+              output: [],
+              usage: null,
             },
-          ],
-          usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+            cached: recreated && !expired,
+            status: 200,
+            statusText: 'OK',
+            redirected: expired,
+            updateCache: expired ? replacementUpdateCache : oldUpdateCache,
+            deleteFromCache: vi.fn().mockResolvedValue(undefined),
+          };
+        }
+        polls++;
+        if (polls === 1) {
+          notifyFirstPoll?.();
+          await firstPollGate;
+          if (recreated) {
+            expired = true;
+            return {
+              data: { error: { message: 'Expired job' } },
+              cached: false,
+              status: 404,
+              statusText: 'Not Found',
+            };
+          }
+        }
+        if (polls === (recreated ? 2 : 1)) {
+          now += 90;
+          return {
+            data: {
+              id: expired ? replacementId : 'resp_late_deadline',
+              status: 'in_progress',
+              output: [],
+              usage: null,
+            },
+            cached: false,
+            status: 200,
+            statusText: 'OK',
+          };
+        }
+        return {
+          data: {
+            id: expired ? replacementId : 'resp_late_deadline',
+            status: 'completed',
+            output: [
+              {
+                type: 'message',
+                role: 'assistant',
+                content: [{ type: 'output_text', text: 'Completed for late subscriber' }],
+              },
+            ],
+            usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        };
+      });
+      const provider = new OpenAiResponsesProvider('gpt-4.1', {
+        config: {
+          apiKey: 'test-key',
+          background: true,
+          headers: { 'OpenAI-Project': 'project-a' },
         },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      };
-    });
-    const provider = new OpenAiResponsesProvider('gpt-4.1', {
-      config: {
-        apiKey: 'test-key',
-        background: true,
-        headers: { 'OpenAI-Project': 'project-a' },
-      },
-    });
+      });
 
-    try {
-      const first = provider.callApi('Shared deadline task');
-      await firstPollStarted;
-      now += 55;
-      const second = provider.callApi('Shared deadline task');
-      await new Promise<void>((resolve) => setImmediate(resolve));
-      releaseFirstPoll?.();
-      const [firstResult, secondResult] = await Promise.all([first, second]);
+      try {
+        const first = provider.callApi('Shared deadline task');
+        await firstPollStarted;
+        now += 55;
+        const second = provider.callApi('Shared deadline task');
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        releaseFirstPoll?.();
+        const [firstResult, secondResult] = await Promise.all([first, second]);
 
-      expect(firstResult.error).toContain(
-        'Background response resp_late_deadline timed out after 140ms.',
-      );
-      expect(secondResult.error).toBeUndefined();
-      expect(secondResult.output).toBe('Completed for late subscriber');
-      expect(polls).toBe(2);
-    } finally {
-      nowSpy.mockRestore();
-    }
-  });
+        expect(firstResult.error).toContain(
+          `Background response ${recreated ? replacementId : 'resp_late_deadline'} timed out after 140ms.`,
+        );
+        expect(secondResult.error).toBeUndefined();
+        expect(secondResult.output).toBe('Completed for late subscriber');
+        expect(secondResult.metadata?.http?.redirected).toBe(recreated);
+        expect(recreated ? replacementUpdateCache : oldUpdateCache).toHaveBeenCalledOnce();
+        expect(recreated ? oldUpdateCache : replacementUpdateCache).not.toHaveBeenCalled();
+        expect(polls).toBe(recreated ? 3 : 2);
+      } finally {
+        nowSpy.mockRestore();
+      }
+    },
+  );
 
   it('should cancel and evict an upstream background response when polling times out', async () => {
     setOpenAiEnv({ PROMPTFOO_EVAL_TIMEOUT_MS: '10' });
@@ -2357,6 +2391,7 @@ describe('OpenAiResponsesProvider request building', () => {
 
   it('should transparently replace a cached queued background response when its upstream ID has expired', async () => {
     const deleteFromCache = vi.fn().mockResolvedValue(undefined);
+    const oldUpdateCache = vi.fn().mockResolvedValue(undefined);
     const updateCache = vi.fn().mockResolvedValue(undefined);
     vi.mocked(cache.fetchWithCache)
       .mockResolvedValueOnce({
@@ -2365,7 +2400,7 @@ describe('OpenAiResponsesProvider request building', () => {
         status: 200,
         statusText: 'OK',
         deleteFromCache,
-        updateCache,
+        updateCache: oldUpdateCache,
       })
       .mockResolvedValueOnce({
         data: { error: { message: 'Response not found' } },
@@ -2375,6 +2410,7 @@ describe('OpenAiResponsesProvider request building', () => {
       })
       .mockResolvedValueOnce({
         data: { id: 'resp_retried', status: 'queued', output: [], usage: null },
+        updateCache,
         cached: false,
         status: 200,
         statusText: 'OK',
@@ -2406,6 +2442,7 @@ describe('OpenAiResponsesProvider request building', () => {
     expect(result.output).toBe('Recovered background result');
     expect(result.cached).toBe(false);
     expect(deleteFromCache).toHaveBeenCalledOnce();
+    expect(oldUpdateCache).not.toHaveBeenCalled();
     expect(updateCache).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'resp_retried', status: 'completed' }),
       200,
@@ -2425,6 +2462,7 @@ describe('OpenAiResponsesProvider request building', () => {
 
   it('should transparently replace a cached queued background response when its upstream ID is gone', async () => {
     const deleteFromCache = vi.fn().mockResolvedValue(undefined);
+    const oldUpdateCache = vi.fn().mockResolvedValue(undefined);
     const updateCache = vi.fn().mockResolvedValue(undefined);
     vi.mocked(cache.fetchWithCache)
       .mockResolvedValueOnce({
@@ -2433,7 +2471,7 @@ describe('OpenAiResponsesProvider request building', () => {
         status: 200,
         statusText: 'OK',
         deleteFromCache,
-        updateCache,
+        updateCache: oldUpdateCache,
       })
       .mockResolvedValueOnce({
         data: { error: { message: 'Response is gone' } },
@@ -2443,6 +2481,7 @@ describe('OpenAiResponsesProvider request building', () => {
       })
       .mockResolvedValueOnce({
         data: { id: 'resp_retried_after_gone', status: 'queued', output: [], usage: null },
+        updateCache,
         cached: false,
         status: 200,
         statusText: 'OK',
@@ -2474,6 +2513,7 @@ describe('OpenAiResponsesProvider request building', () => {
     expect(result.output).toBe('Recovered background result');
     expect(result.cached).toBe(false);
     expect(deleteFromCache).toHaveBeenCalledOnce();
+    expect(oldUpdateCache).not.toHaveBeenCalled();
     expect(updateCache).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'resp_retried_after_gone', status: 'completed' }),
       200,

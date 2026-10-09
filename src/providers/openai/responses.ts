@@ -138,7 +138,8 @@ interface BackgroundResponseResult {
   statusText: string;
   headers?: Record<string, string>;
   error?: string;
-  retried?: boolean;
+  /** Replacement creation response, including its native transport evidence and cache writer. */
+  retried?: FetchWithCacheResult<OpenAIResponsesResponse>;
   cancelled?: boolean;
   shared?: boolean;
   timedOut?: boolean;
@@ -584,7 +585,7 @@ async function resolveBackgroundResponse(
       statusText: retried.statusText,
       headers: retried.headers,
       error: `API error: ${retried.status} ${retried.statusText}\n${JSON.stringify(retried.data)}`,
-      retried: true,
+      retried,
     };
   }
 
@@ -600,7 +601,7 @@ async function resolveBackgroundResponse(
         deadline,
         cancelOnStop,
       )),
-      retried: true,
+      retried,
     };
   }
 
@@ -609,7 +610,7 @@ async function resolveBackgroundResponse(
     status: retried.status,
     statusText: retried.statusText,
     headers: retried.headers,
-    retried: true,
+    retried,
   };
 }
 
@@ -703,7 +704,7 @@ async function coalesceBackgroundResponse(
         inFlightBackgroundResponses.delete(cacheKey);
       }
       release();
-      return await coalesceBackgroundResponse(
+      const resumed = await coalesceBackgroundResponse(
         result.data,
         url,
         request,
@@ -714,6 +715,9 @@ async function coalesceBackgroundResponse(
         cancelOnStop,
         deadline,
       );
+      // A later subscriber may continue polling a replacement created by the
+      // first subscriber. Keep that POST's evidence unless another POST replaces it.
+      return result.retried && !resumed.retried ? { ...resumed, retried: result.retried } : resumed;
     }
     if (result.error) {
       return result;
@@ -1708,6 +1712,10 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
           cancelOnStop,
           backgroundDeadline,
         );
+        if (polled.retried) {
+          redirected = polled.retried.redirected;
+          updateCache = polled.retried.updateCache;
+        }
         if (polled.shared) {
           cached = true;
         } else if (

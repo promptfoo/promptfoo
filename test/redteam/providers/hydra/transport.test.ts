@@ -1,4 +1,4 @@
-import { createServer, type Server } from 'node:http';
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -45,6 +45,9 @@ let url: string;
 let targetTurns = 0;
 let responseFields: Record<string, unknown>;
 let grader: PiiGrader;
+let backgroundRequestHandler:
+  | ((req: IncomingMessage, res: ServerResponse, body: string) => void)
+  | undefined;
 
 // A local target exercises native fetch redirects without contacting a model API.
 beforeAll(async () => {
@@ -54,6 +57,10 @@ beforeAll(async () => {
       body += chunk;
     }
     requests.push({ method: req.method, url: req.url, body });
+    if (backgroundRequestHandler) {
+      backgroundRequestHandler(req, res, body);
+      return;
+    }
     const [first, mode] = (req.url ?? '').split('/').filter(Boolean);
     const owner = first === 'final' ? mode : first;
     if (mode?.startsWith('redirect-') && (mode !== 'redirect-later' || targetTurns > 0)) {
@@ -103,6 +110,7 @@ beforeEach(async () => {
   requests.length = 0;
   targetTurns = 0;
   responseFields = {};
+  backgroundRequestHandler = undefined;
   enableCache();
   await clearCache(); // The test environment uses an isolated in-memory cache.
   mock.agent.mockReset();
@@ -161,7 +169,11 @@ function makeTarget(
       : new OpenAiCompletionProvider('gpt-3.5-turbo-instruct', { config });
 }
 
-async function runHydra(target: ApiProvider, current = 'Read the private contact record.') {
+async function runHydra(
+  target: ApiProvider,
+  current = 'Read the private contact record.',
+  bustCache = true,
+) {
   mock.agent
     .mockResolvedValueOnce({ output: opening })
     .mockResolvedValueOnce({ output: current })
@@ -190,7 +202,7 @@ async function runHydra(target: ApiProvider, current = 'Read the private contact
     vars: test.vars!,
     prompt: { raw: '{{input}}', label: 'direct-template' },
     test,
-    bustCache: true,
+    bustCache,
   });
   expect(result.error).toBeUndefined();
   expect(targetTurns).toBe(2);
@@ -378,5 +390,104 @@ it.each([undefined, 'transformed failure'])(
     });
     expect(result.error).toBe(error);
     expect(result.output).toBe(acknowledgment);
+  },
+);
+
+it.each([
+  { redirected: true, expiredStatus: 404, queued: false },
+  { redirected: false, expiredStatus: 404, queued: false },
+  { redirected: true, expiredStatus: 410, queued: true },
+  { redirected: false, expiredStatus: 410, queued: true },
+])(
+  'uses replacement POST evidence after $expiredStatus (redirected=$redirected, queued=$queued)',
+  async ({ redirected, expiredStatus, queued }) => {
+    let seeding = true;
+    let openingPosts = 0;
+    const complete = (id: string, output: string) => ({
+      id,
+      status: 'completed',
+      output: [
+        { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: output }] },
+      ],
+      usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 },
+    });
+    backgroundRequestHandler = (req, res, body) => {
+      const path = req.url ?? '';
+      const respond = (data: unknown, status = 200) => {
+        res.writeHead(status, { 'content-type': 'application/json' });
+        res.end(JSON.stringify(data));
+      };
+      const creation = () => {
+        if (!seeding) {
+          targetTurns++;
+        }
+        respond(
+          seeding || queued
+            ? { id: seeding ? 'expired' : 'replacement', status: 'queued', output: [], usage: null }
+            : complete('replacement', acknowledgment),
+        );
+      };
+      if (path.endsWith('/responses/expired')) {
+        respond(
+          { error: { message: seeding ? 'Temporary poll failure' : 'Expired job' } },
+          seeding ? 500 : expiredStatus,
+        );
+      } else if (path.endsWith('/responses/replacement')) {
+        respond(complete('replacement', acknowledgment));
+      } else if (path === '/final/background') {
+        creation();
+      } else if (path.endsWith('/responses') && req.method === 'POST') {
+        if (JSON.parse(body).input === opening) {
+          openingPosts++;
+          if (seeding ? !redirected : redirected) {
+            res.writeHead(302, { location: '/final/background' });
+            res.end();
+          } else {
+            creation();
+          }
+        } else {
+          targetTurns++;
+          respond(complete('final', finalOutput));
+        }
+      } else {
+        respond({ error: { message: `Unexpected local request ${req.method} ${path}` } }, 400);
+      }
+    };
+    const target = new OpenAiResponsesProvider('gpt-4o-mini', {
+      config: {
+        apiBaseUrl: `${url}/background`,
+        apiKey: 'synthetic-key',
+        headers: { Authorization: '' },
+        background: true,
+        maxRetries: 0,
+      },
+    });
+    expect((await target.callApi(opening)).error).toContain('500');
+    expect(openingPosts).toBe(1);
+    seeding = false;
+    const start = requests.length;
+    const { targetResponses, liveContext, pass } = await runHydra(target, undefined, false);
+    expect(openingPosts).toBe(2);
+    expect(targetResponses[0].metadata?.http?.redirected).toBe(redirected);
+    expect(liveContext?.conversationTranscript?.includes(email) ?? false).toBe(!redirected);
+    expect(pass).toBe(!redirected);
+    const recovery = requests.slice(start);
+    expect(recovery.some((request) => request.url?.endsWith('/responses/expired'))).toBe(true);
+    if (redirected) {
+      expect(recovery.find((request) => request.url === '/final/background')).toMatchObject({
+        method: 'GET',
+        body: '',
+      });
+    } else {
+      expect(
+        recovery.some((request) => request.method === 'POST' && request.body.includes(opening)),
+      ).toBe(true);
+    }
+    const count = requests.length;
+    const cacheHit = await target.callApi(opening);
+    expect(cacheHit.cached).toBe(true);
+    expect(cacheHit.output).toBe(acknowledgment);
+    expect(cacheHit.metadata?.http?.redirected).toBe(redirected);
+    expect(requests).toHaveLength(count);
   },
 );
