@@ -179,6 +179,62 @@ describe('callback execution records', () => {
     expect(loadFile).toHaveBeenCalledTimes(2);
   });
 
+  it('keeps identical file references separate when their owning directories differ', async () => {
+    const cache = {};
+    const first = createDeferred<Function>();
+    const loadFile = vi
+      .fn()
+      .mockReturnValueOnce(first.promise)
+      .mockResolvedValue(() => 'second directory');
+    const call = (cacheScope: string) =>
+      executeCallback({
+        ...identity,
+        reference: 'file://callback.js:lookup',
+        cacheScope,
+        cache,
+        loadFile,
+      });
+    const pending = call('/first');
+    expect((await call('/second')).output).toBe('second directory');
+    first.resolve(() => 'first directory');
+    expect((await pending).output).toBe('first directory');
+    expect((await call('/second')).output).toBe('second directory');
+    expect(loadFile).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not publish a late cancelled import over a newer callback reference', async () => {
+    const cache = {};
+    const first = createDeferred<Function>();
+    const loaded = createDeferred<void>();
+    const controller = new AbortController();
+    const oldCallback = vi.fn(() => 'old');
+    const loadFile = vi
+      .fn()
+      .mockImplementationOnce(() => {
+        loaded.resolve();
+        return first.promise;
+      })
+      .mockResolvedValue(() => 'new');
+    const pending = executeCallback({
+      ...identity,
+      reference: 'file://old.js',
+      cache,
+      loadFile,
+      abortSignal: controller.signal,
+    });
+    await loaded.promise;
+    controller.abort();
+    expect(await pending).toMatchObject({ isError: true });
+    const current = () =>
+      executeCallback({ ...identity, reference: 'file://new.js', cache, loadFile });
+    expect((await current()).output).toBe('new');
+    first.resolve(oldCallback);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect((await current()).output).toBe('new');
+    expect(oldCallback).not.toHaveBeenCalled();
+    expect(loadFile).toHaveBeenCalledTimes(2);
+  });
+
   it.each([undefined, null, ''])(
     'treats missing callback reference %s as absent',
     async (reference) => {

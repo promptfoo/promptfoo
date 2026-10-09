@@ -1,3 +1,4 @@
+import { throwIfAborted, waitForPromiseWithAbort } from './shared';
 import { withGenAIToolSpan } from './tracing';
 
 import type { CallbackExecutionRecord } from './functionCallbackTypes';
@@ -7,6 +8,7 @@ type CallbackState = {
   nextId: number;
   resolvedId: number;
   reference?: unknown;
+  scope?: unknown;
 };
 
 // Each cache retains the newest successfully loaded reference for a tool name.
@@ -19,6 +21,8 @@ export async function executeCallback({
   callId,
   reference,
   cache,
+  cacheScope,
+  abortSignal,
   loadFile,
   loadInline,
   context,
@@ -30,6 +34,9 @@ export async function executeCallback({
   callId?: string;
   reference: unknown;
   cache: Record<string, Function>;
+  /** Effective file-owning directory or another adapter-specific cache discriminator. */
+  cacheScope?: unknown;
+  abortSignal?: AbortSignal;
   loadFile: (reference: string) => Promise<Function>;
   loadInline?: (expression: string) => Function;
   context?: unknown;
@@ -38,7 +45,9 @@ export async function executeCallback({
 }): Promise<CallbackExecutionRecord> {
   const identity = { name, arguments: args, ...(callId !== undefined && { callId }) };
   try {
+    throwIfAborted(abortSignal);
     const output = await withGenAIToolSpan({ name, arguments: args, callId }, async () => {
+      throwIfAborted(abortSignal);
       let states = callbackStates.get(cache);
       if (!states) {
         states = new Map();
@@ -50,41 +59,70 @@ export async function executeCallback({
         states.set(name, state);
       }
       const invocationId = ++state.nextId;
-      let callback = Object.prototype.hasOwnProperty.call(cache, name) ? cache[name] : undefined;
-      if (!callback || state.resolvedId === 0 || state.reference !== reference) {
-        if (typeof reference === 'function') {
-          callback = reference;
-        } else if (typeof reference === 'string' && reference) {
-          callback = reference.startsWith('file://')
-            ? await loadFile(reference)
-            : loadInline
-              ? loadInline(reference)
-              : new Function('return ' + reference)();
-        } else {
-          throw new Error(
-            reference == null || reference === ''
-              ? `No callback found for function '${name}'`
-              : `Invalid callback configuration for ${name}`,
-          );
+      const currentState = state;
+      const resolveCallback = async (): Promise<Function> => {
+        let callback = Object.prototype.hasOwnProperty.call(cache, name) ? cache[name] : undefined;
+        if (
+          !callback ||
+          currentState.resolvedId === 0 ||
+          currentState.reference !== reference ||
+          currentState.scope !== cacheScope
+        ) {
+          callback = await loadConfiguredCallback(name, reference, loadFile, loadInline);
         }
-        if (typeof callback !== 'function') {
-          throw new Error(`Callback '${name}' did not resolve to a function`);
+        if (invocationId > currentState.resolvedId) {
+          storeCallback(cache, name, callback);
+          currentState.reference = reference;
+          currentState.scope = cacheScope;
+          currentState.resolvedId = invocationId;
         }
-      }
-      if (invocationId > state.resolvedId) {
-        storeCallback(cache, name, callback);
-        state.reference = reference;
-        state.resolvedId = invocationId;
-      }
-      const result = await (passContext
-        ? (callback as Callback)(args, context)
-        : (callback as Callback)(args));
+        return callback;
+      };
+      // File imports still publish their cache entry if this caller stops waiting.
+      const callback = await waitForPromiseWithAbort(resolveCallback(), abortSignal);
+      throwIfAborted(abortSignal);
+      const result = await waitForPromiseWithAbort(
+        Promise.resolve(
+          passContext ? (callback as Callback)(args, context) : (callback as Callback)(args),
+        ),
+        abortSignal,
+      );
+      throwIfAborted(abortSignal);
       return transformOutput(result);
     });
+    throwIfAborted(abortSignal);
     return { ...identity, output, isError: false };
   } catch (error) {
     return { ...identity, isError: true, error };
   }
+}
+
+async function loadConfiguredCallback(
+  name: string,
+  reference: unknown,
+  loadFile: (reference: string) => Promise<Function>,
+  loadInline?: (expression: string) => Function,
+): Promise<Function> {
+  let callback: unknown;
+  if (typeof reference === 'function') {
+    callback = reference;
+  } else if (typeof reference === 'string' && reference) {
+    callback = reference.startsWith('file://')
+      ? await loadFile(reference)
+      : loadInline
+        ? loadInline(reference)
+        : new Function('return ' + reference)();
+  } else {
+    throw new Error(
+      reference == null || reference === ''
+        ? `No callback found for function '${name}'`
+        : `Invalid callback configuration for ${name}`,
+    );
+  }
+  if (typeof callback !== 'function') {
+    throw new Error(`Callback '${name}' did not resolve to a function`);
+  }
+  return callback;
 }
 
 function storeCallback(cache: Record<string, Function>, name: string, callback: Function): void {

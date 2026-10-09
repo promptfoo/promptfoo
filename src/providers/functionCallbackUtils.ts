@@ -1,4 +1,5 @@
 import logger from '../logger';
+import { isCallerAbortError } from '../util/fetch/requestSignal';
 import {
   CallbackPathTraversalError,
   loadCallbackFromFileUrl,
@@ -6,6 +7,7 @@ import {
 } from '../util/functions/loadFunction';
 import { executeCallback } from './functionCallbackExecutor';
 import { getMcpErrorMessage, isMcpErrorResult, normalizeMcpToolContent } from './mcp/util';
+import { throwIfAborted } from './shared';
 
 import type {
   FunctionCall,
@@ -45,6 +47,7 @@ export async function executeProviderFunctionCallback({
   callbacks,
   cache,
   logPrefix,
+  abortSignal,
 }: {
   functionName: string;
   args: string;
@@ -54,6 +57,8 @@ export async function executeProviderFunctionCallback({
   cache: Record<string, Function>;
   /** This provider's log prefix, e.g. `[Bedrock Converse]`. */
   logPrefix?: string;
+  /** Stops this caller's wait without stopping callback code that has already started. */
+  abortSignal?: AbortSignal;
 }): Promise<string> {
   const prefix = logPrefix ? `${logPrefix} ` : '';
   try {
@@ -67,6 +72,7 @@ export async function executeProviderFunctionCallback({
           ? callbacks[functionName]
           : undefined,
       cache,
+      abortSignal,
       loadFile: (reference) => loadProviderCallbackFromFileUrl(reference, logPrefix),
       transformOutput: (result) => {
         if (result === undefined || result === null) {
@@ -88,6 +94,9 @@ export async function executeProviderFunctionCallback({
     }
     return execution.output as string;
   } catch (error: any) {
+    if (isCallerAbortError(error, abortSignal, { requireReasonMatch: true })) {
+      throwIfAborted(abortSignal);
+    }
     logger.error(
       `${prefix}Error executing function '${functionName}': ${error.message || String(error)}`,
     );
