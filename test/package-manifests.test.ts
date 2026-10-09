@@ -136,13 +136,15 @@ function validateDockerInstallCommands(dockerfile: string): void {
   for (const [command, ...args] of commands) {
     // Keep Docker npm commands auditable: global options must follow the subcommand.
     // Reject unsupported shapes instead of silently skipping a hidden install.
-    expect(['ci', 'rebuild', 'run']).toContain(command);
+    expect(['ci', 'rebuild', 'run', 'pkg']).toContain(command);
     if (command === 'ci') {
       expect(args).toContain('--ignore-scripts');
       expect(args.some((arg) => arg.startsWith('--ignore-scripts='))).toBe(false);
     } else if (command === 'rebuild') {
       // Package names and globs can rebuild untrusted nested dependencies.
       expect(args).toEqual(['./node_modules/esbuild']);
+    } else if (command === 'pkg') {
+      expect(args).toEqual(['delete', 'devDependencies']);
     }
   }
 }
@@ -154,7 +156,7 @@ const TYPESCRIPT_SOURCE_EXTENSIONS = new Set(['.ts', '.tsx', '.mts', '.cts']);
 // reintroducing one. Add the affected range when shipping a fix; this is not an audit.
 const KNOWN_BAD_RELEASES = new Map([
   ['@cacheable/utils', '2.5.1'], // Shai-Hulud compromise (#10301)
-  ['@hono/node-server', '<1.19.15 || >=2.0.0 <2.0.10'], // GHSA-frvp-7c67-39w9, GHSA-9mqv-5hh9-4cgg
+  ['@hono/node-server', '<2.1.3'], // GHSA-frvp-7c67-39w9, GHSA-9mqv-5hh9-4cgg, GHSA-rmxm-3fg6-px4f
   ['@modelcontextprotocol/sdk', '<1.32.0'], // GHSA-6prh-2h8m-c8cw
   ['@simple-git/argv-parser', '<2.0.1'], // GHSA-v5rq-49vh-5v5c; upstream fixes VISUAL in 2.0.1
   ['cache-manager', '7.2.10'], // Shai-Hulud compromise (#10301)
@@ -166,6 +168,7 @@ const KNOWN_BAD_RELEASES = new Map([
   ['fast-uri', '<2.4.7 || >=3.0.0 <3.1.8 || >=4.0.0 <4.1.5'], // GHSA-hrr3-gc8f-f4qj, GHSA-qw65-cvwx-89v3, GHSA-58mr-gqgx-xq4g
   ['image-size', '>=0.6.3 <=2.0.2'], // GHSA-5p2g-fcmc-qvqq, GHSA-w3rx-r6r6-pgpr
   ['hono', '<4.13.7'], // GHSA-hxh3-vqpv-xpqv
+  ['ibm-cloud-sdk-core', '5.6.3'], // Escaped quotes expose JSON secret suffixes in debug logs (#11472)
   ['js-yaml', '<3.15.2 || >=4.0.0 <4.3.2 || >=5.0.0 <5.2.3'], // #10356, GHSA-2883-xcg3-v3hh
   ['keyv', '6.0.0'], // Shai-Hulud compromise (#10301)
   ['serialize-javascript', '7.1.1'], // GHSA-gfhx-hw2g-v5hg
@@ -415,8 +418,15 @@ describe('package manifests', () => {
       'code-scan-action/package.json',
     ].flatMap((manifestPath) => {
       const manifest = readPackageJson<PackageManifest>(manifestPath);
-      return findKnownBadRanges(manifest, KNOWN_BAD_RELEASES).map(
-        (violation) => `${manifestPath}: ${violation}`,
+      const profiles = [{ name: manifestPath, manifest }];
+      if (manifestPath === 'package.json') {
+        // Docker deletes devDependencies before installing and rebuilding production packages.
+        const productionManifest = { ...manifest };
+        delete productionManifest.devDependencies;
+        profiles.push({ name: 'Docker production manifest', manifest: productionManifest });
+      }
+      return profiles.flatMap(({ name, manifest: profile }) =>
+        findKnownBadRanges(profile, KNOWN_BAD_RELEASES).map((violation) => `${name}: ${violation}`),
       );
     });
 
@@ -683,6 +693,8 @@ describe('package manifests', () => {
   });
 
   it.each([
+    'RUN npm pkg delete dependencies',
+    'RUN npm pkg delete optionalDependencies',
     'RUN npm ci',
     String.raw`RUN n\pm ci`,
     `RUN n'p'm ci`,
@@ -741,7 +753,6 @@ describe('package manifests', () => {
         'package-lock.json',
       );
     for (const dependency of [
-      '@anthropic-ai/claude-agent-sdk',
       '@modelcontextprotocol/sdk',
       '@opencode-ai/sdk',
       'hono',
