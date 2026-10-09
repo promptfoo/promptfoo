@@ -108,7 +108,6 @@ describe('VoyageEmbeddingProvider', () => {
     },
     { name: 'suite environment', suiteKey: 'suite-custom', expectedKey: 'suite-custom' },
     { name: 'ambient custom variable', expectedKey: 'ambient-custom' },
-    { name: 'empty scoped custom variable', providerKey: '', expectedKey: 'ambient-custom' },
     {
       name: 'explicit key',
       providerKey: 'provider-custom',
@@ -157,6 +156,23 @@ describe('VoyageEmbeddingProvider', () => {
       );
     },
   );
+
+  it('does not send a request when the named credential is explicitly masked', async () => {
+    mockedGetEnvString.mockImplementation((name) =>
+      name === 'CUSTOM_VOYAGE_KEY' ? 'ambient-custom' : '',
+    );
+    const provider = await loadApiProvider('voyage:voyage-4-large', {
+      options: {
+        config: { apiKeyEnvar: 'CUSTOM_VOYAGE_KEY' },
+        env: { CUSTOM_VOYAGE_KEY: '', VOYAGE_API_KEY: 'provider-default' },
+      },
+      env: { CUSTOM_VOYAGE_KEY: 'suite-custom' },
+    });
+    await expect(provider.callEmbeddingApi!('masked key fixture')).rejects.toThrow(
+      'Voyage API key must be set for similarity comparison',
+    );
+    expect(mockedFetchWithCache).not.toHaveBeenCalled();
+  });
 
   it('returns cached responses with the cached flag preserved', async () => {
     mockedFetchWithCache.mockResolvedValue({

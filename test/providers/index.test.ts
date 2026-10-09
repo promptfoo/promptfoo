@@ -1629,7 +1629,7 @@ describe('loadApiProvider', () => {
       },
     })) as OpenAICodexAppServerProvider;
 
-    expect(mergedProvider.env?.CODEX_API_KEY).toBe('context-codex-key');
+    expect(mergedProvider.env).not.toHaveProperty('CODEX_API_KEY');
     expect(mergedProvider.env?.OPENAI_API_KEY).toBe('options-openai-key');
     expect(mergedProvider.getApiKey()).toBe('options-openai-key');
   });
@@ -2282,6 +2282,29 @@ describe('resolveProvider', () => {
 describe('resolveProviderConfigs', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it.each([true, false])('uses the effective nested file base path (explicit: %s)', (explicit) => {
+    const inherited = path.resolve(path.sep, 'inherited');
+    const configured = path.resolve(path.sep, 'configured');
+    const providerFile = path.resolve(path.sep, 'outer', 'provider.json');
+    const provider = { id: 'echo', config: { settings: 'file://./settings.json' } };
+    mockFsReadFileSync.mockImplementation((filename) =>
+      JSON.stringify(filename === providerFile ? provider : { greeting: 'Hello' }),
+    );
+
+    cliState.withBasePath(inherited, () => {
+      const result = resolveProviderConfigs(
+        `file://${providerFile}`,
+        explicit ? { basePath: configured } : undefined,
+      );
+      expect(result).toEqual([{ id: 'echo', config: { settings: { greeting: 'Hello' } } }]);
+      expect(mockFsReadFileSync).toHaveBeenCalledWith(
+        path.join(explicit ? configured : inherited, 'settings.json'),
+        'utf8',
+      );
+      expect(cliState.basePath).toBe(inherited);
+    });
   });
 
   it('should preserve string providers as-is', () => {

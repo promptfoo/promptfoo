@@ -14,8 +14,11 @@ cd provider-watsonx
 Install the optional WatsonX SDKs alongside promptfoo in this example directory:
 
 ```sh
-npm install promptfoo @ibm-cloud/watsonx-ai@^1.7.16 ibm-cloud-sdk-core@^5.6.2
+npm install promptfoo @ibm-cloud/watsonx-ai@^1.7.16 ibm-cloud-sdk-core@5.6.2
+npm install --save-exact ibm-cloud-sdk-core@5.6.2
 ```
+
+For Yarn, also add the root `resolutions` entry from the [WatsonX installation guide](https://www.promptfoo.dev/docs/providers/watsonx/#installation).
 
 Set up authentication and project ID:
 

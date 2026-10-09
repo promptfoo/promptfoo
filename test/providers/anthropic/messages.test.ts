@@ -9,6 +9,7 @@ import {
   getCache,
   withCacheNamespace,
 } from '../../../src/cache';
+import cliState from '../../../src/cliState';
 import logger from '../../../src/logger';
 import { hashAnthropicCacheValue } from '../../../src/providers/anthropic/generic';
 import { AnthropicMessagesProvider } from '../../../src/providers/anthropic/messages';
@@ -1781,6 +1782,7 @@ describe('AnthropicMessagesProvider', () => {
         role: 'assistant',
         model,
         container: null,
+        diagnostics: null,
         stop_details: null,
         stop_reason: round < 2 ? 'tool_use' : 'end_turn',
         stop_sequence: null,
@@ -2957,6 +2959,7 @@ describe('AnthropicMessagesProvider', () => {
       type: 'message',
       role: 'assistant',
       container: null,
+      diagnostics: null,
       stop_details: null,
       stop_sequence: null,
       content: [
@@ -3846,6 +3849,7 @@ describe('AnthropicMessagesProvider', () => {
         stop_sequence: null,
         type: 'message',
         container: null,
+        diagnostics: null,
         usage: {
           input_tokens: 10,
           output_tokens: 5,
@@ -4194,6 +4198,23 @@ describe('AnthropicMessagesProvider', () => {
       );
     });
 
+    it.each(['', 'invalid'])(
+      'does not revive ambient sampling after a provider temperature mask of %j',
+      async (temperature) => {
+        await cliState.withEnv({ ANTHROPIC_TEMPERATURE: '0.9' }, async () => {
+          const provider = createProvider('claude-sonnet-4-6', {
+            config: {},
+            env: { ANTHROPIC_TEMPERATURE: temperature },
+          });
+          const create = vi
+            .spyOn(provider.anthropic.messages, 'create')
+            .mockResolvedValue(mockResponse);
+          await provider.callApi('Masked sampling');
+          expect(create.mock.calls[0][0]).toHaveProperty('temperature', 0);
+        });
+      },
+    );
+
     it('should prefer config temperature over provider-scoped env', async () => {
       const provider = createProvider('claude-sonnet-4-6', {
         config: { temperature: 0.1 },
@@ -4467,6 +4488,47 @@ describe('AnthropicMessagesProvider', () => {
       );
       expect(warnings).toHaveLength(1);
     });
+
+    it.each(['suite', 'file'] as const)(
+      'warns for deprecated sampling supplied by the %s layer',
+      async (layer) => {
+        const provider = createProvider('claude-sonnet-5', { config: {} });
+        const createSpy = vi
+          .spyOn(provider.anthropic.messages, 'create')
+          .mockResolvedValue(mockResp);
+        const warnSpy = vi.spyOn(logger, 'warn');
+        const run =
+          layer === 'suite'
+            ? cliState.withEnv.bind(cliState)
+            : cliState.withEnvFileOverrides.bind(cliState);
+        await run({ ANTHROPIC_TEMPERATURE: '0.3' }, () => provider.callApi('Scoped sampling test'));
+        expect(createSpy.mock.calls[0][0]).not.toHaveProperty('temperature');
+        expect(warnSpy).toHaveBeenCalledWith(
+          expect.stringContaining('temperature is deprecated on Claude Sonnet 5'),
+        );
+      },
+    );
+
+    it.each(['', 'invalid'])(
+      'does not warn for masked deprecated sampling: %j',
+      async (temperature) => {
+        await cliState.withEnv({ ANTHROPIC_TEMPERATURE: '0.9' }, async () => {
+          const provider = createProvider('claude-sonnet-5', {
+            config: {},
+            env: { ANTHROPIC_TEMPERATURE: temperature },
+          });
+          const create = vi
+            .spyOn(provider.anthropic.messages, 'create')
+            .mockResolvedValue(mockResp);
+          const warn = vi.spyOn(logger, 'warn');
+          await provider.callApi('Masked sampling');
+          expect(create.mock.calls[0][0]).not.toHaveProperty('temperature');
+          expect(warn).not.toHaveBeenCalledWith(
+            expect.stringContaining('temperature is deprecated'),
+          );
+        });
+      },
+    );
 
     it('warns on Opus 4.7 when temperature set via env override', async () => {
       const provider = createProvider('claude-opus-4-7', {
