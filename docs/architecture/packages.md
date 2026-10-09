@@ -115,6 +115,13 @@ not refresh the baseline merely to make a newly introduced dependency pass.
 
 ## Browser Import Ratchet
 
+Browser consumers import result failure reasons from `src/types/results.ts` and
+the evaluation page limit from `src/types/evalConstants.ts`. Their legacy barrel
+exports remain compatible. History uses the `src/types/standaloneEval.ts` DTO,
+and trace views use the existing `TraceSpan` type from `src/types/tracing.ts`,
+without importing database or cache implementations. These type-only changes
+narrow the source graph; they do not by themselves measure bundle-size savings.
+
 The `app` layer has an additional internal-path allowlist. It pins the existing
 browser-to-runtime imports while DTOs and presentation helpers move into a
 browser-safe package surface. A new app import from root runtime code fails the
@@ -124,6 +131,18 @@ When moving an existing browser import to a narrower surface, remove its old
 path from the allowlist. Avoid adding paths unless the dependency is
 intentionally browser-safe. Allowlist entries are exact files, not directory
 roots.
+
+## Shared presentation helpers
+
+`src/presentation` contains table conversion, report metrics, and configuration
+formatting used by the UI and Node. Browser code imports these modules directly.
+The former paths in `src/util` and `src/redteam` preserve the same exports for
+existing Node and cloud consumers.
+
+These modules remain in the `legacy-runtime` layer because they depend on the
+transitional configuration and result types. Table conversion still updates
+result variables and uses the logger; Vite provides the browser logger and hash
+implementations.
 
 ## Dependency Ownership Report
 

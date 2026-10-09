@@ -54,11 +54,12 @@ import RedteamGoatProvider from '../../src/redteam/providers/goat';
 import RedteamIterativeProvider from '../../src/redteam/providers/iterative';
 import RedteamImageIterativeProvider from '../../src/redteam/providers/iterativeImage';
 import RedteamIterativeTreeProvider from '../../src/redteam/providers/iterativeTree';
+import { ProviderSchemas } from '../../src/types/api/providers';
 import { checkProviderApiKeys } from '../../src/util/provider';
 import { createMockProvider } from '../factories/provider';
 import { mockProcessEnv } from '../util/utils';
 
-import type { ProviderFunction, ProviderOptionsMap } from '../../src/types/index';
+import type { ApiProvider, ProviderFunction, ProviderOptionsMap } from '../../src/types/index';
 
 vi.mock('proxy-agent', async (importOriginal) => {
   return {
@@ -858,6 +859,22 @@ describe('loadApiProvider', () => {
     expect(provider.id()).toBe('vertex:video:veo-3.1-generate-001');
   });
 
+  it.each(['google:video:veo-3.1-generate-preview', 'vertex:video:veo-3.1-generate-001'])(
+    'preserves an explicit basePath when loading %s',
+    async (providerPath) => {
+      const provider = (await loadApiProvider(providerPath, {
+        basePath: '/config-directory',
+        options: {
+          config: {
+            basePath: '/explicit-media-directory',
+          },
+        },
+      })) as GoogleVideoProvider;
+
+      expect(provider.config.basePath).toBe('/explicit-media-directory');
+    },
+  );
+
   it('loadApiProvider with replicate:modelname', async () => {
     const provider = await loadApiProvider('replicate:meta/llama3');
     expect(provider).toBeInstanceOf(ReplicateProvider);
@@ -909,6 +926,26 @@ describe('loadApiProvider', () => {
       env: { MODELSLAB_API_KEY: 'context-key' } as any,
     });
     expect((provider as any).apiKey).toBe('provider-key');
+  });
+
+  it('loadApiProvider with typesafe:modelName', async () => {
+    const latest = await loadApiProvider('typesafe:jev-latest');
+    expect(latest.id()).toBe('typesafe:jev-latest');
+    const pinned = await loadApiProvider('typesafe:jev-1.13.0');
+    expect(pinned.id()).toBe('typesafe:jev-1.13.0');
+    expect(pinned).toHaveProperty('callClassificationApi');
+  });
+
+  it('loadApiProvider with typesafe: throws for empty model name', async () => {
+    await expect(loadApiProvider('typesafe:')).rejects.toThrow(/Model name is required/);
+  });
+
+  it('loadApiProvider with typesafe prefers provider-level env over context env', async () => {
+    const provider = (await loadApiProvider('typesafe:jev-latest', {
+      options: { env: { TYPESAFE_API_KEY: 'provider-key' } },
+      env: { TYPESAFE_API_KEY: 'context-key' } as any,
+    })) as ApiProvider & { getApiKey: () => string | undefined };
+    expect(provider.getApiKey()).toBe('provider-key');
   });
 
   it('loadApiProvider with moonshot prefers provider-level env over context env', async () => {
@@ -1382,6 +1419,28 @@ describe('loadApiProvider', () => {
     expect(provider.config.apiKey).toBe('secret');
   });
 
+  it('preserves and renders the Cohere Model Vault URL through provider-test schemas', async () => {
+    const providerOptions = {
+      id: 'cohere:chat:command-a-03-2025',
+      env: {
+        COHERE_API_BASE_URL: 'https://vault.example.com',
+      },
+      config: {
+        apiBaseUrl: '{{ env.COHERE_API_BASE_URL }}',
+      },
+    };
+    const parsedOptions = [
+      ProviderSchemas.Test.Request.parse({ providerOptions }).providerOptions,
+      ProviderSchemas.TestSession.Request.parse({ provider: providerOptions }).provider,
+    ];
+
+    for (const options of parsedOptions) {
+      expect.soft(options.env?.COHERE_API_BASE_URL).toBe('https://vault.example.com');
+      const provider = await loadApiProvider(options.id, { options });
+      expect.soft(provider.config.apiBaseUrl).toBe('https://vault.example.com');
+    }
+  });
+
   it('resolves env templates inside per-server MCP env maps', async () => {
     const provider = await loadApiProvider('echo', {
       options: {
@@ -1570,7 +1629,7 @@ describe('loadApiProvider', () => {
       },
     })) as OpenAICodexAppServerProvider;
 
-    expect(mergedProvider.env?.CODEX_API_KEY).toBe('context-codex-key');
+    expect(mergedProvider.env).not.toHaveProperty('CODEX_API_KEY');
     expect(mergedProvider.env?.OPENAI_API_KEY).toBe('options-openai-key');
     expect(mergedProvider.getApiKey()).toBe('options-openai-key');
   });
@@ -2223,6 +2282,29 @@ describe('resolveProvider', () => {
 describe('resolveProviderConfigs', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it.each([true, false])('uses the effective nested file base path (explicit: %s)', (explicit) => {
+    const inherited = path.resolve(path.sep, 'inherited');
+    const configured = path.resolve(path.sep, 'configured');
+    const providerFile = path.resolve(path.sep, 'outer', 'provider.json');
+    const provider = { id: 'echo', config: { settings: 'file://./settings.json' } };
+    mockFsReadFileSync.mockImplementation((filename) =>
+      JSON.stringify(filename === providerFile ? provider : { greeting: 'Hello' }),
+    );
+
+    cliState.withBasePath(inherited, () => {
+      const result = resolveProviderConfigs(
+        `file://${providerFile}`,
+        explicit ? { basePath: configured } : undefined,
+      );
+      expect(result).toEqual([{ id: 'echo', config: { settings: { greeting: 'Hello' } } }]);
+      expect(mockFsReadFileSync).toHaveBeenCalledWith(
+        path.join(explicit ? configured : inherited, 'settings.json'),
+        'utf8',
+      );
+      expect(cliState.basePath).toBe(inherited);
+    });
   });
 
   it('should preserve string providers as-is', () => {
