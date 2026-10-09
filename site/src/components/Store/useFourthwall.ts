@@ -327,7 +327,15 @@ export function useCart() {
     setCart(null);
   }, []);
 
-  const itemCount = cart?.items.reduce((sum, item) => sum + item.quantity, 0) ?? 0;
+  const countedBundles = new Set<string>();
+  const itemCount =
+    cart?.items.reduce((sum, item) => {
+      if (item.groupedBy) {
+        if (countedBundles.has(item.groupedBy.groupedId)) return sum;
+        countedBundles.add(item.groupedBy.groupedId);
+      }
+      return sum + item.quantity;
+    }, 0) ?? 0;
 
   return {
     cart,

@@ -195,6 +195,21 @@ describe('bundle cart edits', () => {
     return hook;
   }
 
+  it.each([1, 2])(
+    'counts a quantity-%s bundle once alongside an independent item',
+    async (quantity) => {
+      const cart = {
+        ...mixedCart,
+        items: mixedCart.items.map((item) => ({
+          ...item,
+          quantity: item.groupedBy ? quantity : 1,
+        })),
+      };
+      const { result } = await loadCart(cart);
+      expect(result.current.itemCount).toBe(1 + quantity);
+    },
+  );
+
   it('changes the entire bundle and preserves independent items and other bundle configurations', async () => {
     const otherBundleItems = mixedCart.items.slice(1).map((item) => ({
       ...item,
@@ -204,7 +219,15 @@ describe('bundle cart edits', () => {
     }));
     const cart = { ...mixedCart, items: [...mixedCart.items, ...otherBundleItems] };
     const { result } = await loadCart(cart);
-    const updated = { ...cart, id: 'replacement-cart' };
+    expect(result.current.itemCount).toBe(5);
+    const updated = {
+      ...cart,
+      id: 'replacement-cart',
+      items: cart.items.map((item) => ({
+        ...item,
+        quantity: item.groupedBy?.groupedId === 'group-1' ? 2 : item.quantity,
+      })),
+    };
     vi.mocked(fetch).mockImplementation(async () => response(updated));
     await act(async () => {
       await result.current.updateQuantity(cart.items[1], 2);
@@ -225,6 +248,7 @@ describe('bundle cart edits', () => {
       })),
     ]);
     expect(result.current.cart).toEqual(updated);
+    expect(result.current.itemCount).toBe(6);
     expect(localStorage.getItem('promptfoo_cart_id')).toBe('replacement-cart');
   });
 
@@ -238,6 +262,7 @@ describe('bundle cart edits', () => {
       items: [{ variantId: 'shirt-small', quantity: 1 }],
     });
     expect(result.current.cart?.items).toEqual(regularCart.items);
+    expect(result.current.itemCount).toBe(1);
   });
 
   it('keeps the original cart if a later replacement batch fails', async () => {
@@ -262,6 +287,7 @@ describe('bundle cart edits', () => {
       await result.current.removeFromCart(cart.items[0]);
     });
     expect(result.current.cart).toBeNull();
+    expect(result.current.itemCount).toBe(0);
     expect(localStorage.getItem('promptfoo_cart_id')).toBeNull();
     expect(fetch).toHaveBeenCalledTimes(1);
   });
