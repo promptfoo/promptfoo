@@ -1,6 +1,5 @@
 import { normalizeRedteamConfigForPreview } from '@promptfoo/presentation/redteamConfig';
 import { REDTEAM_DEFAULTS } from '@promptfoo/redteam/constants';
-import { countSelectedCustomIntents } from '../../utils/plugins';
 import type { Strategy } from '@promptfoo/redteam/constants';
 import type { RedteamStrategy } from '@promptfoo/redteam/types';
 
@@ -112,10 +111,11 @@ export function getEstimatedProbes(config: Config) {
     const key = `${plugin.id}:${JSON.stringify(plugin.config)}:${severity || ''}`;
     const pluginNumTests =
       typeof entry === 'object' && 'numTests' in entry ? entry.numTests : undefined;
-    const count =
-      plugin.id === 'intent'
-        ? countSelectedCustomIntents({ plugins: [plugin] })
-        : pluginNumTests || numTests;
+    // Imported lists are preserved during export, including blank entries. Match
+    // runtime's top-level count; the browser cannot resolve external file lists.
+    const intent = plugin.config?.intent;
+    const intentCount = Array.isArray(intent) ? intent.length : intent ? 1 : 0;
+    const count = plugin.id === 'intent' ? intentCount : pluginNumTests || numTests;
     const pluginLanguage = plugin.config?.language ?? language;
     const numLanguages = Array.isArray(pluginLanguage) ? pluginLanguage.length : 1;
     pluginCounts.set(key, count * numLanguages);
@@ -126,13 +126,21 @@ export function getEstimatedProbes(config: Config) {
   const strategyMultiplier = strategies.reduce((total, strategy) => {
     const strategyId: Strategy =
       typeof strategy === 'string' ? (strategy as Strategy) : (strategy.id as Strategy);
-    return total + STRATEGY_PROBE_MULTIPLIER[strategyId];
+    return strategyId === 'retry' ? total : total + STRATEGY_PROBE_MULTIPLIER[strategyId];
   }, 0);
 
   const basicStrategy = strategies.find((strategy) => getStrategyId(strategy) === 'basic');
   const includeBasicTests =
     typeof basicStrategy === 'object' ? (basicStrategy.config?.enabled ?? true) : true;
-  return baseProbes * ((includeBasicTests ? 1 : 0) + strategyMultiplier);
+  const basicProbes = includeBasicTests ? baseProbes : 0;
+  // Runtime applies retry to the enabled base cases before adding other strategies.
+  const retryStrategy = strategies.find((strategy) => getStrategyId(strategy) === 'retry');
+  const retryProbes = retryStrategy
+    ? typeof retryStrategy === 'object' && typeof retryStrategy.config?.numTests === 'number'
+      ? retryStrategy.config.numTests
+      : basicProbes
+    : 0;
+  return basicProbes + retryProbes + baseProbes * strategyMultiplier;
 }
 
 export function getEstimatedDuration(config: Config): string {

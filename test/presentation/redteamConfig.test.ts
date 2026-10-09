@@ -115,4 +115,15 @@ describe('redteam workload preview normalization', () => {
     expect(result.plugins).toEqual([]);
     expect(result.strategies).toEqual([]);
   });
+
+  it('deduplicates empty and missing configs using the last override', () => {
+    const plugin = Object.freeze({ id: 'bola', config: {}, numTests: 2 });
+    const result = normalizeRedteamConfigForPreview({
+      plugins: [plugin, { id: 'bola', numTests: 7 }],
+      strategies: [],
+    });
+    expect(result.plugins).toHaveLength(1);
+    expect(result.plugins[0]).toMatchObject({ id: 'bola', numTests: 7 });
+    expect(plugin.config).toEqual({});
+  });
 });

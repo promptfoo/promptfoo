@@ -78,6 +78,10 @@ describe('getEstimatedProbes', () => {
     { intent: ['single', ['step one', 'step two']], expected: 2 },
     { intent: 'file://external-intents.yaml', expected: 1 },
     { intent: [], expected: 0 },
+    { intent: ['', 'real intent'], expected: 2 },
+    { intent: ['  ', [' ', '\t'], ['real step', '']], expected: 3 },
+    { intent: '', expected: 0 },
+    { intent: '  ', expected: 1 },
   ])('counts intent entries before overrides: $intent', ({ intent, expected }) => {
     const config = {
       ...baseConfig,
@@ -101,6 +105,16 @@ describe('getEstimatedProbes', () => {
       language: ['en', 'es'],
     } as Config;
     expect(getEstimatedProbes(config)).toBe(132); // (2 + 3 + 1) * (1 + 10) * 2
+  });
+
+  it('preserves imported blank intents in the multiplied workload estimate', () => {
+    const config = {
+      ...baseConfig,
+      plugins: [{ id: 'intent', config: { intent: ['', 'real intent'] } }],
+      strategies: ['basic', 'jailbreak'],
+      language: ['en', 'es'],
+    } as Config;
+    expect(getEstimatedProbes(config)).toBe(44);
   });
 
   it('applies strategy and language factors to each plugin override', () => {
@@ -131,6 +145,45 @@ describe('getEstimatedProbes', () => {
     } as Config;
     expect(getEstimatedProbes(config)).toBe(2);
     expect(getEstimatedProbes({ ...config, strategies: [config.strategies[0]] })).toBe(0);
+  });
+
+  it.each([
+    { strategies: [{ id: 'basic', config: { enabled: false } }, 'retry'], expected: 0 },
+    {
+      strategies: [{ id: 'basic', config: { enabled: false } }, 'retry', 'base64'],
+      expected: 2,
+    },
+    {
+      strategies: [
+        { id: 'basic', config: { enabled: false } },
+        { id: 'retry', config: { numTests: 7 } },
+        'base64',
+      ],
+      expected: 9,
+    },
+    { strategies: ['basic', { id: 'retry', config: { numTests: 7 } }], expected: 9 },
+    { strategies: ['basic', 'retry'], expected: 4 },
+  ])('applies retry to the enabled base workload: $strategies', ({ strategies, expected }) => {
+    expect(
+      getEstimatedProbes({
+        ...baseConfig,
+        plugins: [{ id: 'bola', numTests: 2 }],
+        strategies,
+      } as Config),
+    ).toBe(expected);
+  });
+
+  it('deduplicates empty and omitted plugin configs just as export does', () => {
+    expect(
+      getEstimatedProbes({
+        ...baseConfig,
+        plugins: [
+          { id: 'bola', numTests: 2, config: {} },
+          { id: 'bola', numTests: 7 },
+        ],
+        strategies: [],
+      } as Config),
+    ).toBe(7);
   });
 
   it('counts duplicate plugin configurations once using the last override', () => {

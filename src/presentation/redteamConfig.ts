@@ -55,7 +55,12 @@ export function normalizeRedteamConfigForPreview(
     if (typeof entry === 'string') {
       return entry;
     }
-    const { numTests, severity, ...options } = {
+    const {
+      numTests,
+      severity,
+      config: pluginConfig,
+      ...options
+    } = {
       numTests: undefined,
       severity: undefined,
       ...entry,
@@ -64,6 +69,7 @@ export function normalizeRedteamConfigForPreview(
     const validSeverity = getValidPluginSeverity(severity);
     return {
       ...options,
+      ...(pluginConfig && Object.keys(pluginConfig).length > 0 && { config: pluginConfig }),
       ...(validNumTests !== undefined && { numTests: validNumTests }),
       ...(validSeverity !== undefined && { severity: validSeverity }),
     };
