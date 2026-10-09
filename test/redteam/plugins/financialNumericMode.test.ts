@@ -139,7 +139,7 @@ describe('explicit numeric preparation mode', () => {
       legacyGrade();
       await fs.writeFile(
         path.join(directory, 'reference.cjs'),
-        `module.exports = () => { globalThis.__numericReferenceCalls++; return ${JSON.stringify(reference)}; };`,
+        'module.exports = () => { globalThis.__numericReferenceCalls++; return { type: "numeric", expected: { amount: 100 } }; };',
       );
       const assertion: Assertion = { type, value: 'file://reference.cjs', config: { numeric } };
       const { row, target } = await evaluate([assertion], ['{"amount":100}', '{"amount":100}']);
@@ -213,6 +213,50 @@ describe('explicit numeric preparation mode', () => {
     },
   );
 
+  it.each([undefined, 'unmatched-plugin', 'financial:calculation-error'])(
+    'selects a matching numeric child in a later set only with pluginId=%s',
+    async (pluginId) => {
+      const child: Assertion = { type, value: reference, metric: 'groupedNumeric' };
+      const { row, target } = await evaluate(
+        [
+          { type: 'assert-set', assert: [{ type: 'contains', value: 'amount' }] },
+          { type: 'assert-set', assert: [child] },
+        ],
+        ['{"amount":101}', '{"amount":100}'],
+        undefined,
+        undefined,
+        { pluginId },
+      );
+      const matchesPlugin = pluginId === 'financial:calculation-error';
+      expect(target.callApi).toHaveBeenCalledTimes(matchesPlugin ? 1 : 2);
+      expect(row.success).toBe(!matchesPlugin);
+      expect(row.response?.output).toBe(matchesPlugin ? '{"amount":101}' : '{"amount":100}');
+      expect(row.response?.metadata?.storedGraderResult?.assertion?.metric).toBe(
+        matchesPlugin ? 'groupedNumeric' : undefined,
+      );
+      expect(
+        row.response?.metadata?.redteamHistory.map(
+          (turn: { graderPassed?: boolean }) => turn.graderPassed,
+        ),
+      ).toEqual(matchesPlugin ? [false] : [undefined, undefined]);
+    },
+  );
+
+  it('keeps a top-level plugin match ahead of a matching numeric child', async () => {
+    legacyGrade();
+    const { row, target } = await evaluate(
+      [
+        { type: 'assert-set', assert: [{ type: 'contains', value: 'amount' }] },
+        { type: 'assert-set', assert: [{ type, value: reference, metric: 'groupedNumeric' }] },
+        { type, value: 'Legacy rubric', metric: 'topMatch' },
+      ],
+      ['{"amount":101}', '{"amount":100}'],
+    );
+    expect(target.callApi).toHaveBeenCalledTimes(2);
+    expect(row.success).toBe(true);
+    expect(row.response?.metadata?.storedGraderResult?.assertion?.metric).toBe('topMatch');
+  });
+
   it.each(['provider', 'test'])(
     'preserves the original Prompt object for %s transforms',
     async (stage) => {
@@ -257,13 +301,19 @@ describe('explicit numeric preparation mode', () => {
       transform: 'JSON.parse(output).answer',
     };
     const { row, target } = await evaluate(
-      [{ type: 'assert-set', assert: [child], threshold: 0, config: { amount: 999 } }],
+      [
+        { type: 'assert-set', assert: [{ type: 'contains', value: 'answer' }] },
+        { type: 'assert-set', assert: [child], threshold: 0, config: { amount: 999 } },
+      ],
       wrapped,
     );
     expect(target.callApi).toHaveBeenCalledTimes(2);
     expect(row.response?.metadata?.storedGraderResult?.pass).toBe(false);
     expect(row.success).toBe(true);
-    expect(row.gradingResult?.componentResults?.[0].componentResults?.[0].pass).toBe(false);
+    const numericGrade = row.gradingResult?.componentResults
+      ?.flatMap((result) => result.componentResults ?? [result])
+      .find((result) => result.assertion?.type === type);
+    expect(numericGrade?.pass).toBe(false);
   });
 
   it.each(['provider', 'test', 'assertion'])(

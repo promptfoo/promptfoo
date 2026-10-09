@@ -98,7 +98,7 @@ describe('numeric checks before refusal shortcuts', () => {
           path.join(directory, `reference.${kind}`),
           kind === 'json'
             ? JSON.stringify(reference)
-            : `module.exports = () => { globalThis.__numericReferenceCalls++; return ${JSON.stringify(reference)}; };`,
+            : 'module.exports = () => { globalThis.__numericReferenceCalls++; return { type: "numeric", expected: { amount: 100 } }; };',
         );
         assertion.value = `file://reference.${kind}`;
         assertion.config = { numeric: true };

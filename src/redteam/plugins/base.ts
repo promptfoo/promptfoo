@@ -34,7 +34,7 @@ import type {
   ResultSuggestion,
   TestCase,
 } from '../../types/index';
-import type { RedteamGradingContext } from '../grading/types';
+import type { RedteamGrader, RedteamGradingContext } from '../grading/types';
 
 /**
  * Abstract base class for creating plugins that generate test cases.
@@ -380,7 +380,7 @@ export abstract class RedteamPluginBase {
  *
  * But if you'd like, you can override the `getResult` method to use a different grading method.
  */
-export abstract class RedteamGraderBase {
+export abstract class RedteamGraderBase implements RedteamGrader {
   abstract id: string;
   abstract rubric: string;
 

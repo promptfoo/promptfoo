@@ -56,7 +56,7 @@ import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL, TEMPERATURE } from './constants';
 import type { TraceContextData } from '../../tracing/traceContext';
 import type { ProviderOptions } from '../../types/providers';
 import type { TransformContext, TransformFunction } from '../../types/transform';
-import type { RedteamGraderBase } from '../plugins/base';
+import type { RedteamGrader, RedteamGradingContext } from '../grading/types';
 import type { RedteamHistoryEntry } from '../types';
 
 export const BLOCKING_QUESTION_ANALYSIS_FEATURE_FLAG_TIMESTAMP = '2025-06-16T14:49:11-07:00';
@@ -661,15 +661,24 @@ type PreparedNumericGrading =
       numeric: true;
       output: string;
       value: Assertion['value'];
-      gradingContext: NonNullable<Parameters<RedteamGraderBase['getResult']>[7]>;
+      gradingContext: RedteamGradingContext;
     };
 
 /** Keep existing top-level selection, with support for grouped explicit numeric checks. */
 export function getRedteamAssertion(test: AtomicTestCase | undefined): AssertionOrSet | undefined {
+  const pluginId = test?.metadata?.pluginId;
   const matching = test?.assert?.find(
-    (assertion) => assertion.type && assertion.type.includes(test.metadata?.pluginId),
+    (assertion) => assertion.type && assertion.type.includes(pluginId),
   );
-  const selected = matching ?? test?.assert?.find((assertion) => assertion.type);
+  const matchingNumericChild =
+    !matching && typeof pluginId === 'string'
+      ? getAssertionLeaves(test?.assert).find(
+          (assertion) =>
+            isNumericFinancialAssertion(assertion) && assertion.type?.includes(pluginId),
+        )
+      : undefined;
+  const selected =
+    matching ?? matchingNumericChild ?? test?.assert?.find((assertion) => assertion.type);
   return selected?.type === 'assert-set'
     ? (getAssertionLeaves([selected]).find(isNumericFinancialAssertion) ?? selected)
     : selected;
@@ -682,7 +691,7 @@ export async function prepareNumericGrading(
   output: string,
   test: AtomicTestCase,
   _value: Assertion['value'],
-  gradingContext?: Parameters<RedteamGraderBase['getResult']>[7],
+  gradingContext?: RedteamGradingContext,
 ): Promise<PreparedNumericGrading> {
   const assertion = input.assertion;
   if (!isSingleAssertion(assertion)) {
@@ -775,10 +784,10 @@ export async function prepareNumericGrading(
 
 /** Trace every strategy grader and prepare opt-in numeric inputs at the shared boundary. */
 export function runRedteamGrader(
-  grader: Pick<RedteamGraderBase, 'id' | 'getResult'>,
+  grader: RedteamGrader,
   input: RedteamGraderInput,
-  ...args: Parameters<RedteamGraderBase['getResult']>
-): ReturnType<RedteamGraderBase['getResult']> {
+  ...args: Parameters<RedteamGrader['getResult']>
+): ReturnType<RedteamGrader['getResult']> {
   const [
     prompt,
     output,
@@ -789,7 +798,7 @@ export function runRedteamGrader(
     skipRefusalCheck,
     gradingContext,
   ] = args;
-  const invoke = async (): ReturnType<RedteamGraderBase['getResult']> => {
+  const invoke = async (): ReturnType<RedteamGrader['getResult']> => {
     if (grader.id !== 'promptfoo:redteam:financial:calculation-error') {
       return grader.getResult(...args);
     }

@@ -144,7 +144,7 @@ describe('numeric grading before unblocking and empty-response shortcuts', () =>
       if (external) {
         await fs.writeFile(
           path.join(directory, 'reference.cjs'),
-          `module.exports = () => { globalThis.__numericUnblockingReferenceCalls++; return ${JSON.stringify(reference)}; };`,
+          'module.exports = () => { globalThis.__numericUnblockingReferenceCalls++; return { type: "numeric", expected: { amount: 100 } }; };',
         );
         assertion.value = 'file://reference.cjs';
         assertion.config = { numeric: true };
