@@ -2,6 +2,9 @@
 
 Examples for writing custom promptfoo providers in different JavaScript/TypeScript module formats.
 
+The API examples use `config.apiKey`, then `options.env.OPENAI_API_KEY` (provider or suite settings), then `process.env.OPENAI_API_KEY`.
+An explicit empty key masks lower-priority values. The host environment is read for each request, including CLI env files loaded after provider construction.
+
 ## Examples
 
 - [basic](./basic/) - Custom provider using CommonJS (.cjs)
