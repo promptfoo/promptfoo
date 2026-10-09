@@ -43,3 +43,20 @@ export function installTracerSpy(): RecordedSpan[] {
   } as any);
   return spans;
 }
+
+export const createAttributeRecordingSpan =
+  (attributes: Record<string, unknown>) =>
+  (
+    _name: string,
+    options: { attributes: Record<string, unknown> },
+    _context: unknown,
+    callback: any,
+  ) => {
+    Object.assign(attributes, options.attributes);
+    return callback({
+      setAttribute: vi.fn(),
+      setStatus: vi.fn(),
+      recordException: vi.fn(),
+      end: vi.fn(),
+    });
+  };

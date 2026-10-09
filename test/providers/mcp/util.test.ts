@@ -18,6 +18,16 @@ import type {
   MCPServerConfig,
 } from '../../../src/providers/mcp/types';
 
+const createClientCredentialsServer = () => ({
+  auth: {
+    type: 'oauth' as const,
+    grantType: 'client_credentials' as const,
+    clientId: 'id',
+    clientSecret: 'secret',
+    tokenUrl: 'https://auth.example.com/token',
+  },
+});
+
 // Mock fetchWithProxy for discovery tests
 const mockFetch = vi.fn();
 
@@ -199,30 +209,14 @@ describe('getAuthHeaders', () => {
   });
 
   it('should return oauth bearer token when provided', () => {
-    const server: MCPServerConfig = {
-      auth: {
-        type: 'oauth',
-        grantType: 'client_credentials',
-        clientId: 'id',
-        clientSecret: 'secret',
-        tokenUrl: 'https://auth.example.com/token',
-      },
-    };
+    const server: MCPServerConfig = createClientCredentialsServer();
     expect(getAuthHeaders(server, 'oauth-token-123')).toEqual({
       Authorization: 'Bearer oauth-token-123',
     });
   });
 
   it('should return empty object for oauth without token', () => {
-    const server: MCPServerConfig = {
-      auth: {
-        type: 'oauth',
-        grantType: 'client_credentials',
-        clientId: 'id',
-        clientSecret: 'secret',
-        tokenUrl: 'https://auth.example.com/token',
-      },
-    };
+    const server: MCPServerConfig = createClientCredentialsServer();
     expect(getAuthHeaders(server)).toEqual({});
   });
 
