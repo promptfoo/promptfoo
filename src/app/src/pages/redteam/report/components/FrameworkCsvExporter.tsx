@@ -1,6 +1,7 @@
 import { Button } from '@app/components/ui/button';
 import { DownloadIcon } from '@app/components/ui/icons';
 import { formatASRForDisplay } from '@promptfoo/app/src/utils/redteam';
+import { calculateAttackSuccessRate } from '@promptfoo/presentation/redteamMetrics';
 import {
   ALIASED_PLUGIN_MAPPINGS,
   DOD_AI_ETHICS_PRINCIPLE_NAMES,
@@ -11,7 +12,6 @@ import {
   riskCategorySeverityMap,
   Severity,
 } from '@promptfoo/redteam/constants';
-import { calculateAttackSuccessRate } from '@promptfoo/redteam/metrics';
 import {
   type CategoryStats,
   categorizePlugins,

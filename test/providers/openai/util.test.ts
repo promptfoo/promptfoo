@@ -8,12 +8,14 @@ import {
   getOpenAiEffectiveServiceTier,
   getTokenUsage,
   normalizeOpenAiServiceTierForWire,
+  OPENAI_BILLING_MODELS,
   OPENAI_CHAT_MODELS,
   OPENAI_CODEX_ONLY_MODELS,
   OPENAI_COMPLETION_MODELS,
   OPENAI_DEEP_RESEARCH_MODELS,
   OPENAI_REALTIME_MODELS,
   OPENAI_RESPONSES_ONLY_MODELS,
+  OPENAI_TRANSCRIPTION_MODELS,
   OPENAI_TTS_MODELS,
   RETIRED_OPENAI_MODEL_IDS,
   validateFunctionCall,
@@ -315,6 +317,20 @@ describe('getTokenUsage', () => {
 });
 
 describe('calculateOpenAICost', () => {
+  it('rejects incomplete audio usage even when one token count is zero', () => {
+    expect(calculateOpenAICost('gpt-4o-audio-preview', {}, 1000, 500, 0)).toBeUndefined();
+    expect(
+      calculateOpenAICost('gpt-4o-audio-preview', {}, 1000, 500, undefined, 0),
+    ).toBeUndefined();
+  });
+
+  it('uses long-context text rates when audio usage is present', () => {
+    const tokens = 300_000;
+    const model = 'gpt-6-astra';
+    const textCost = calculateOpenAICost(model, {}, tokens, 500);
+    expect(calculateOpenAICost(model, {}, tokens, 500, 1, 0)).toBe(textCost);
+  });
+
   it.each(['gpt-4o-mini-tts', 'gpt-4o-mini-tts-2025-12-15'])(
     'should recognize and price TTS model %s without treating it as a chat model',
     (model) => {
@@ -1318,4 +1334,16 @@ describe('OpenAI model catalogs', () => {
   ])('retains model %s before its announced shutdown', (model) => {
     expect(activeModels).toContain(model);
   });
+});
+
+it('keeps transcription prices independent across model aliases', () => {
+  const costs = OPENAI_TRANSCRIPTION_MODELS.map(({ cost }) => cost);
+  expect(new Set(costs).size).toBe(costs.length);
+});
+
+it('keeps mutable prices independent across model aliases', () => {
+  const costs = OPENAI_BILLING_MODELS.flatMap(({ cost }) => (cost ? [cost] : []));
+  expect(new Set(costs).size).toBe(costs.length);
+  const longContextCosts = costs.flatMap(({ longContext }) => (longContext ? [longContext] : []));
+  expect(new Set(longContextCosts).size).toBe(longContextCosts.length);
 });
