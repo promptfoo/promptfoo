@@ -4085,7 +4085,7 @@ describe('AwsBedrockCompletionProvider', () => {
   it.each([
     ['global.anthropic.claude-fable-5-1', 1000, 0.0363],
     ['global.anthropic.claude-opus-5-5', 1000, 0.01454],
-    ['global.anthropic.claude-sonnet-5-5', 1000, 0.00729],
+    ['global.anthropic.claude-sonnet-5-5', 1000, 0.00727],
     ['global.anthropic.claude-mythos-5-1', 0, 0.0263],
     ['global.anthropic.claude-fable-5', 0, 0.02645],
   ] as const)(

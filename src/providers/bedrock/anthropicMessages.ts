@@ -186,11 +186,15 @@ export function createBedrockAnthropicMessagesProvider(
     );
   }
 
-  // AWS's Fable 5.1 model card lists Mantle only in GovCloud West. Commercial
+  // These model cards list Mantle only in GovCloud West. Commercial
   // regions use the Runtime Messages endpoint with a US or global inference profile.
   if (
     !config.apiBaseUrl &&
-    modelName === 'anthropic.claude-fable-5-1' &&
+    [
+      'anthropic.claude-fable-5-1',
+      'anthropic.claude-haiku-5-5',
+      'anthropic.claude-sonnet-5-5',
+    ].includes(modelName) &&
     region !== 'us-gov-west-1'
   ) {
     throw new Error(

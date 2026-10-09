@@ -25,6 +25,10 @@ const RUNTIME_MESSAGES_MODELS = new Set([
   'global.anthropic.claude-fable-5-1',
   'us.anthropic.claude-mythos-5-1',
   'global.anthropic.claude-mythos-5-1',
+  ...['haiku', 'opus'].flatMap((family) =>
+    ['us', 'eu', 'au', 'jp', 'global'].map((geo) => `${geo}.anthropic.claude-${family}-5-5`),
+  ),
+  ...['us', 'eu', 'au', 'global'].map((geo) => `${geo}.anthropic.claude-sonnet-5-5`),
 ]);
 
 export function isBedrockRuntimeMessagesModel(modelName: string): boolean {
@@ -41,6 +45,9 @@ export function isBedrockAnthropicMessagesModel(modelName: string): boolean {
       'anthropic.claude-opus-4-7',
       'anthropic.claude-opus-4-8',
       'anthropic.claude-opus-5',
+      'anthropic.claude-haiku-5-5',
+      'anthropic.claude-sonnet-5-5',
+      'anthropic.claude-opus-5-5',
       'anthropic.claude-sonnet-5',
     ].includes(modelName) || isBedrockRuntimeMessagesModel(modelName)
   );

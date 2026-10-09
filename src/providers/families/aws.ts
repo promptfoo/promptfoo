@@ -99,7 +99,10 @@ export const awsProviderFactories: ProviderFactory[] = [
             `Use "bedrock:anthropic.claude-mythos-5"; Mythos does not support geo or global inference IDs.`,
         );
       }
-      if (anthropicModel && /^(?:(?:us|global)\.)?anthropic\.claude-/.test(anthropicModel)) {
+      if (
+        anthropicModel &&
+        /^(?:(?:us|eu|au|jp|global)\.)?anthropic\.claude-/.test(anthropicModel)
+      ) {
         const { createBedrockAnthropicMessagesProvider } = await import(
           '../bedrock/anthropicMessages'
         );

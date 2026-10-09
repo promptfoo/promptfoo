@@ -23,6 +23,9 @@ export const ANTHROPIC_MODELS = [
       output: 50 / 1e6, // $50 / MTok
     },
   ),
+  // Haiku 5.5 uses these rates through 100K input tokens; larger prompts are
+  // priced in calculateAnthropicCost, including cached input in the threshold.
+  ...modelsWithCost(['claude-haiku-5-5'], { input: 0.1 / 1e6, output: 0.5 / 1e6 }),
   // Claude Opus 5.5 — 1M context billed at a flat rate. Fast mode ($8/$40, Claude API only)
   // is a separate research-preview rate that is intentionally not encoded here.
   ...modelsWithCost(['claude-opus-5-5'], {
@@ -180,6 +183,7 @@ export const ANTHROPIC_SHORTHAND_MODEL_IDS = new Set([
 const CLAUDE_FABLE_MYTHOS_5_PATTERN = /(^|[^a-z0-9])claude-(?:fable|mythos)-5(?![a-z0-9])/i;
 const CLAUDE_MYTHOS_PREVIEW_RE = /(^|[^a-z0-9])claude-mythos-preview(?![a-z0-9])/i;
 const CLAUDE_FABLE_MYTHOS_51_PATTERN = /(^|[^a-z0-9])claude-(?:fable|mythos)-5-1(?![a-z0-9])/i;
+const CLAUDE_HAIKU_55_PATTERN = /(^|[^a-z0-9])claude-haiku-5-5(?![a-z0-9])/i;
 const CLAUDE_OPUS_55_PATTERN = /(^|[^a-z0-9])claude-opus-5-5(?![a-z0-9])/i;
 // `claude-opus-5-5` must not read as Opus 5: a single-digit `-N` suffix is a point release, not
 // a dated snapshot, so it is excluded while `claude-opus-5-20260801`-style suffixes still match.
@@ -245,6 +249,14 @@ interface ClaudeModelFamily {
  */
 const CLAUDE_MODEL_FAMILIES: readonly ClaudeModelFamily[] = [
   {
+    match: CLAUDE_HAIKU_55_PATTERN,
+    warningName: 'Claude Haiku 5.5',
+    samplingParamsDeprecated: true,
+    thinkingOnByDefault: true,
+    disabledThinkingEffortCapped: true,
+    regionalPremium: true,
+  },
+  {
     match: CLAUDE_MYTHOS_PREVIEW_RE,
     warningName: 'Claude Mythos Preview',
     samplingParamsDeprecated: true,
@@ -292,6 +304,7 @@ const CLAUDE_MODEL_FAMILIES: readonly ClaudeModelFamily[] = [
   {
     match: CLAUDE_SONNET_55_PATTERN,
     warningName: 'Claude Sonnet 5.5',
+    cacheReadMultiplier: 0.05,
     samplingParamsDeprecated: true,
     thinkingOnByDefault: true,
     disabledThinkingEffortCapped: true,
@@ -336,6 +349,11 @@ type ClaudeCapability = {
 
 function hasClaudeCapability(modelId: string, capability: ClaudeCapability): boolean {
   return CLAUDE_MODEL_FAMILIES.some((family) => family[capability] && family.match.test(modelId));
+}
+
+/** Matches Claude Haiku 5.5 model IDs across hosting providers. */
+export function isClaudeHaiku55Model(modelId: string): boolean {
+  return CLAUDE_HAIKU_55_PATTERN.test(modelId);
 }
 
 /** Matches Claude Opus 5.5 model IDs. */
@@ -633,7 +651,7 @@ export function normalizeClaudeThinkingConfig<
 export const CLAUDE_REGIONAL_ENDPOINT_PREMIUM = 1.1;
 const CLAUDE_US_INFERENCE_GEO_MULTIPLIER = 1.1;
 const CLAUDE_46_OR_LATER_MODEL_PATTERN =
-  /^claude-(?:(?:opus|sonnet)-4-(?:6|7|8)(?:-|$)|(?:fable|mythos|opus|sonnet)-5(?:-|$))/;
+  /^claude-(?:(?:opus|sonnet)-4-(?:6|7|8)(?:-|$)|(?:fable|mythos|opus|sonnet|haiku)-5(?:-|$))/;
 
 /**
  * Mark a cost config for the Claude regional endpoint premium (see isClaudeRegionalPremiumModel),
@@ -862,10 +880,14 @@ export function calculateAnthropicCost(
     (hasExplicitPricing
       ? ANTHROPIC_COMPATIBILITY_ALIAS_MODELS.find((model) => model.id === pricingModelName)
       : undefined);
+  const totalInputTokens =
+    (promptTokens ?? 0) + (cacheReadTokens ?? 0) + (cacheCreationTokens ?? 0);
   const modelInfo =
-    pricingModelName !== modelName && pricingModelName === 'claude-sonnet-5'
-      ? { id: pricingModelName, cost: { input: 3 / 1e6, output: 15 / 1e6 } }
-      : registeredModel;
+    registeredModel && isClaudeHaiku55Model(pricingModelName) && totalInputTokens > 100_000
+      ? { ...registeredModel, cost: { input: 0.5 / 1e6, output: 2.5 / 1e6 } }
+      : pricingModelName !== modelName && pricingModelName === 'claude-sonnet-5'
+        ? { id: pricingModelName, cost: { input: 3 / 1e6, output: 15 / 1e6 } }
+        : registeredModel;
   // A model name that normalizeAnthropicModelName rewrote carries a Bedrock
   // prefix. Bare and geo-prefixed Bedrock IDs bill at the regional premium;
   // only the `global.` endpoint bills at base rate.
@@ -899,8 +921,8 @@ export function calculateAnthropicCost(
   const cacheCreation = cacheCreationTokens ?? 0;
   const cacheCreation1h = cacheCreation1hTokens ?? 0;
 
-  // This shared helper does not infer size-based tiers. Provider-specific callers can supply
-  // explicit input/output rates, while cache pricing is applied whenever cache tokens are present.
+  // Haiku 5.5 tiers are selected above. Explicit input/output rates still take precedence,
+  // and cache pricing is applied whenever cache tokens are present.
   // The `typeof` guards narrow `number | undefined` to `number`; `Number.isFinite` alone already
   // rejects `undefined` at runtime but does not narrow the type.
   if (
