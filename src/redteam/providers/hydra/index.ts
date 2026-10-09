@@ -564,7 +564,10 @@ export class HydraProvider implements ApiProvider {
           ...(currentRenderInputVars || {}),
         };
 
-        injectedInputVars = currentRenderInputVars ?? { [this.injectVar]: escapedMessage };
+        injectedInputVars = {
+          [this.injectVar]: escapedMessage,
+          ...(currentRenderInputVars ?? {}),
+        };
         renderVariables = updatedVars;
         targetPrompt = await renderPrompt(
           prompt,
