@@ -38,7 +38,7 @@
   "providers -> core": 1,
   "providers -> legacy-contracts": 284,
   "providers -> legacy-runtime": 296,
-  "providers -> node": 343,
+  "providers -> node": 340,
   "providers -> redteam": 4,
   "redteam -> core": 2,
   "redteam -> legacy-contracts": 151,

@@ -1,12 +1,8 @@
 import OpenAI from 'openai';
 import logger from '../../logger';
-import {
-  CallbackPathTraversalError,
-  loadCallbackFromFileUrl,
-  wrapError,
-} from '../../util/functions/loadFunction';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { sleep } from '../../util/time';
+import { loadProviderCallbackFromFileUrl } from '../functionCallbackUtils';
 import { getRequestTimeoutMs, parseChatPrompt, toTitleCase } from '../shared';
 import {
   buildChatSpanContext,
@@ -108,15 +104,8 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
    * @param fileRef The file reference in the format 'file://path/to/file:functionName'
    * @returns The loaded function
    */
-  private async loadExternalFunction(fileRef: string): Promise<Function> {
-    try {
-      return await loadCallbackFromFileUrl(fileRef);
-    } catch (error) {
-      if (error instanceof CallbackPathTraversalError) {
-        throw error;
-      }
-      throw wrapError(`Error loading function from ${fileRef}: ${(error as Error).message}`, error);
-    }
+  private loadExternalFunction(fileRef: string): Promise<Function> {
+    return loadProviderCallbackFromFileUrl(fileRef);
   }
 
   /**
