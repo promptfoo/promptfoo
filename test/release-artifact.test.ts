@@ -246,25 +246,25 @@ describe('exact artifact release', () => {
     expect(workflow.jobs.build.steps.some((step) => step.run?.includes('package-artifact'))).toBe(
       false,
     );
-    const mirror = workflow.jobs['publish-code-scan-action'];
+    const mirror = workflow.jobs['build-code-scan-action-release'];
     expect(mirror.if).toContain("needs.build.result == 'success'");
     expect(mirror.if).not.toContain('needs.build-npm');
     expect(mirror.if).not.toContain('needs.publish-npm.result');
   });
 
   it.each([
-    { npm: 'success', mirror: 'success', cancelled: false, runs: true },
-    { npm: 'skipped', mirror: 'success', cancelled: false, runs: true },
-    { npm: 'failure', mirror: 'success', cancelled: false, runs: true },
-    { npm: 'success', mirror: 'failure', cancelled: false, runs: false },
-    { npm: 'skipped', mirror: 'skipped', cancelled: false, runs: false },
-    { npm: 'skipped', mirror: 'cancelled', cancelled: false, runs: false },
-    { npm: 'success', mirror: 'success', cancelled: true, runs: false },
-  ])('schedules action provenance for publication results %j', (scenario) => {
+    { npm: 'success', build: 'success', cancelled: false, runs: true },
+    { npm: 'skipped', build: 'success', cancelled: false, runs: true },
+    { npm: 'failure', build: 'success', cancelled: false, runs: true },
+    { npm: 'success', build: 'failure', cancelled: false, runs: false },
+    { npm: 'skipped', build: 'skipped', cancelled: false, runs: false },
+    { npm: 'skipped', build: 'cancelled', cancelled: false, runs: false },
+    { npm: 'success', build: 'success', cancelled: true, runs: false },
+  ])('schedules action provenance for build results %j', (scenario) => {
     const attestation = workflow.jobs['attest-code-scan-action'];
     const expression = (attestation.if ?? 'success()')
       .replace(/^\s*\$\{\{\s*|\s*\}\}\s*$/g, '')
-      .replaceAll('needs.publish-code-scan-action.result', 'mirrorResult');
+      .replaceAll('needs.build-code-scan-action-release.result', 'buildResult');
     // GitHub implicitly requires success across the dependency chain unless
     // the guard uses a status function. Evaluate this guard's JS-compatible
     // expression against the skipped npm ancestor of an action-only release.
@@ -275,8 +275,8 @@ describe('exact artifact release', () => {
         always: () => true,
         cancelled: () => scenario.cancelled,
         success: () =>
-          !scenario.cancelled && scenario.npm === 'success' && scenario.mirror === 'success',
-        mirrorResult: scenario.mirror,
+          !scenario.cancelled && scenario.npm === 'success' && scenario.build === 'success',
+        buildResult: scenario.build,
       },
     );
     expect(scheduled).toBe(scenario.runs);
