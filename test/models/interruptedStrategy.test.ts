@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import cliState from '../../src/cliState';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import EvalResult, {
@@ -302,6 +303,81 @@ describe('interrupted strategy checkpoints', () => {
       }
     },
   );
+
+  describe.each(['insert', 'update'] as const)('saved media policy on save %s', (mode) => {
+    it.each([
+      ['true', false, true],
+      ['false', true, false],
+      [undefined, true, true],
+      [undefined, false, false],
+    ] as const)(
+      'honors saved inline=%s over ambient inline=%s',
+      async (savedInline, ambientInline, expectedInline) => {
+        const input = checkpointFixture();
+        const record = await Eval.create(
+          { env: savedInline === undefined ? {} : { PROMPTFOO_INLINE_MEDIA: savedInline } },
+          [input.prompt],
+          { id: randomUUID() },
+        );
+        const row = await cliState.withEnv({ PROMPTFOO_INLINE_MEDIA: 'true' }, () =>
+          EvalResult.createFromEvaluateResult(record.id, input, { persist: mode === 'update' }),
+        );
+        const originalResponse = structuredClone(row.response);
+        vi.stubEnv('PROMPTFOO_INLINE_MEDIA', String(ambientInline));
+        row.gradingResult = { pass: false, score: 0.5, reason: 'Synthetic manual rating' };
+        row.score = 0.5;
+        await row.save();
+        const saved = await EvalResult.findById(row.id);
+        const exported = saved!.toEvaluateResult();
+        const responses = [
+          exported.response!,
+          exported.response!.metadata!.completedTargetResponses[0].response,
+          exported.metadata!.completedTargetResponses[0].response,
+        ];
+        for (const response of responses) {
+          expect(response.audio?.data).toBe(expectedInline ? audio : undefined);
+          expect(Boolean(response.audio?.blobRef)).toBe(!expectedInline);
+        }
+        expect(saved!.gradingResult?.reason).toBe('Synthetic manual rating');
+        expect(saved!.cost).toBe(0.5);
+        expect(
+          saved!.metadata.completedTargetResponses[0].response.metadata.http.headers['Set-Cookie'],
+        ).toBe('[REDACTED]');
+        expect(row.response).toEqual(originalResponse);
+      },
+    );
+  });
+
+  it('keeps opposite ordinary-audio save policies isolated during concurrent rating updates', async () => {
+    vi.stubEnv('PROMPTFOO_INLINE_MEDIA', 'true');
+    const rows = await Promise.all(
+      ['true', 'false'].map(async (inline) => {
+        const input = createEvaluateResult({
+          response: { output: 'ordinary audio', audio: { data: audio, format: 'wav' } },
+          metadata: {},
+        });
+        const record = await Eval.create(
+          { env: { PROMPTFOO_INLINE_MEDIA: inline } },
+          [input.prompt],
+          { id: randomUUID() },
+        );
+        return EvalResult.createFromEvaluateResult(record.id, input);
+      }),
+    );
+    for (const row of rows) {
+      row.gradingResult = { pass: false, score: 0, reason: 'Concurrent manual rating' };
+    }
+    await Promise.all(rows.map((row) => row.save()));
+    const [inline, external] = await Promise.all(rows.map((row) => EvalResult.findById(row.id)));
+    expect(inline!.response!.audio!.data).toBe(audio);
+    expect(inline!.response!.audio!.blobRef).toBeUndefined();
+    expect(external!.response!.audio!.data).toBeUndefined();
+    expect(external!.response!.audio!.blobRef?.uri).toMatch(/^promptfoo:\/\/blob\//);
+    expect(process.env.PROMPTFOO_INLINE_MEDIA).toBe('true');
+    for (const row of rows) {
+      expect(row.response!.audio!.data).toBe(audio);
+    }
+  });
 
   it.each(['json', 'jsonl'])(
     'strips persisted checkpoint payloads in real %s exports',

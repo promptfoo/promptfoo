@@ -116,6 +116,7 @@ async function maybeStore(
   context: BlobContext,
   location: string,
   kind: BlobKind,
+  storageEnabled: boolean,
   minSizeBytes = BLOB_MIN_SIZE,
 ): Promise<BlobRef | null> {
   const parsed = parseBinary(base64OrDataUrl, defaultMimeType);
@@ -123,7 +124,7 @@ async function maybeStore(
     return null;
   }
 
-  if (!isBlobStorageEnabled()) {
+  if (!storageEnabled) {
     return null;
   }
 
@@ -154,7 +155,10 @@ type StoreOnce = (
   minSizeBytes?: number,
 ) => Promise<BlobRef | null>;
 
-function createStoreOnce(blobContext: BlobContext): StoreOnce {
+function createStoreOnce(
+  blobContext: BlobContext,
+  storageEnabled = isBlobStorageEnabled(),
+): StoreOnce {
   const cache = new Map<string, Promise<BlobRef | null>>();
   return async (base64OrDataUrl, defaultMimeType, location, kind, minSizeBytes) => {
     // Canonicalize the cache key on the parsed bytes (not the raw input string)
@@ -177,6 +181,7 @@ function createStoreOnce(blobContext: BlobContext): StoreOnce {
       blobContext,
       location,
       kind,
+      storageEnabled,
       minSizeBytes,
     );
     cache.set(cacheKey, pendingStore);
@@ -655,8 +660,9 @@ export async function extractAndStoreBinaryData(
 export async function extractAndStoreResultMedia<T>(
   fields: { response: ProviderResponse | null | undefined; metadata: T },
   context: BlobContext,
+  storageEnabled = isBlobStorageEnabled(),
 ): Promise<{ response: ProviderResponse | null | undefined; metadata: T }> {
-  const storeOnce = createStoreOnce(context);
+  const storeOnce = createStoreOnce(context, storageEnabled);
   const response = await extractResponseBinaryData(fields.response, context, storeOnce, 'response');
   const metadata = await externalizeCompletedTargetResponses(
     fields.metadata,

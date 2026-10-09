@@ -4,7 +4,7 @@ import { and, eq, gte, inArray, lt, ne } from 'drizzle-orm';
 import { extractBlobHashesFromValue } from '../blobs/blobRefs';
 import { extractAndStoreResultMedia, isBlobStorageEnabled } from '../blobs/extractor';
 import { getDb } from '../database/index';
-import { evalResultsTable } from '../database/tables';
+import { evalResultsTable, evalsTable } from '../database/tables';
 import { type EnvVarKey, getEnvBool, parseEnvBool } from '../envars';
 import logger from '../logger';
 import { hashPrompt } from '../prompts/utils';
@@ -1318,6 +1318,22 @@ export default class EvalResult {
 
   async save() {
     const db = await getDb();
+    // Ratings and other later updates run outside the evaluation's scoped env.
+    // Preserve its saved media policy without changing process-wide settings.
+    const parentEval = await db
+      .select({ config: evalsTable.config })
+      .from(evalsTable)
+      .where(eq(evalsTable.id, this.evalId))
+      .get();
+    const savedEnv = parentEval?.config?.env;
+    const inlineMedia =
+      savedEnv && 'PROMPTFOO_INLINE_MEDIA' in savedEnv
+        ? savedEnv.PROMPTFOO_INLINE_MEDIA
+        : undefined;
+    const storageEnabled =
+      inlineMedia === undefined
+        ? isBlobStorageEnabled()
+        : !parseEnvBool(String(inlineMedia), false);
     // Trace linkage and `pluginId` aren't schema columns — `pluginId` is re-derived from
     // testCase metadata in the constructor, and trace linkage travels inside the metadata
     // JSON via persistTraceMetadata. Drizzle would drop them silently, but excluding them
@@ -1336,6 +1352,7 @@ export default class EvalResult {
         ),
       },
       { evalId: this.evalId, testIdx: this.testIdx, promptIdx: this.promptIdx },
+      storageEnabled,
     );
     const persistedValues = {
       ...rest,
