@@ -173,6 +173,37 @@ describe('aws bedrock provider factory routing', () => {
     expect(provider).toBeInstanceOf(AwsBedrockCompletionProvider);
   });
 
+  it.each(['anthropic.claude-opus-4-7', 'anthropic.claude-opus-4-8', 'anthropic.claude-opus-5'])(
+    'keeps %s on IAM-native routes with Messages as an explicit opt-in',
+    async (model) => {
+      const bare = await bedrockFactory.create(
+        `bedrock:${model}`,
+        { config: { region: 'us-east-1' } },
+        ctx,
+      );
+      const converse = await bedrockFactory.create(
+        `bedrock:converse:${model}`,
+        { config: { region: 'us-east-1' } },
+        ctx,
+      );
+      const completion = await bedrockFactory.create(
+        `bedrock:completion:${model}`,
+        { config: { region: 'us-east-1' } },
+        ctx,
+      );
+      const messages = await bedrockFactory.create(
+        `bedrock:messages:${model}`,
+        { config: { region: 'us-east-1', apiKey: 'bedrock-key' } },
+        ctx,
+      );
+
+      expect(bare).toBeInstanceOf(AwsBedrockCompletionProvider);
+      expect(converse).toBeInstanceOf(AwsBedrockConverseProvider);
+      expect(completion).toBeInstanceOf(AwsBedrockCompletionProvider);
+      expect(messages).toBeInstanceOf(BedrockAnthropicMessagesProvider);
+    },
+  );
+
   it('routes bare Mythos to the Bedrock Anthropic Messages endpoint', async () => {
     const provider = await bedrockFactory.create(
       'bedrock:anthropic.claude-mythos-5',
@@ -252,6 +283,19 @@ describe('aws bedrock provider factory routing', () => {
     expect(provider).toBeInstanceOf(BedrockAnthropicMessagesProvider);
   });
 
+  it.each([
+    'anthropic.claude-mythos-preview',
+    'anthropic.claude-opus-4-7',
+    'anthropic.claude-opus-4-8',
+  ])('supports the explicit messages form for Bedrock %s', async (model) => {
+    const provider = await bedrockFactory.create(
+      `bedrock:messages:${model}`,
+      { config: { apiKey: 'bedrock-key', region: 'us-east-1' } },
+      ctx,
+    );
+    expect(provider).toBeInstanceOf(BedrockAnthropicMessagesProvider);
+  });
+
   it.each(['converse', 'completion'])(
     'rejects the legacy %s API for Bedrock Mythos with a clear error',
     async (modelType) => {
@@ -289,7 +333,7 @@ describe('aws bedrock provider factory routing', () => {
   it('rejects unknown Anthropic Messages models instead of falling through to InvokeModel', async () => {
     await expect(
       bedrockFactory.create(
-        'bedrock:messages:anthropic.claude-opus-4-8',
+        'bedrock:messages:anthropic.claude-sonnet-4-6',
         { config: { apiKey: 'bedrock-key' } },
         ctx,
       ),
@@ -330,13 +374,41 @@ describe('aws bedrock provider factory routing', () => {
   it.each([
     'bedrock:converse:anthropic.claude-3-5-haiku-20241022-v1:0',
     'bedrock:converse:us.anthropic.claude-3-5-haiku-20241022-v1:0',
-  ])('rejects a retired model on the explicit Converse route (%s)', async (providerPath) => {
-    // The converse: route builds AwsBedrockConverseProvider directly and never reaches
-    // getHandlerForModel, so without an explicit check a withdrawn model would only fail at
-    // the remote API.
+    'bedrock:kb:eu.anthropic.claude-3-5-haiku-20241022-v1:0',
+    'bedrock:knowledge-base:eu.anthropic.claude-3-5-haiku-20241022-v1:0',
+  ])(
+    'rejects a retired model on the explicit Converse and knowledge base routes (%s)',
+    async (providerPath) => {
+      await expect(
+        bedrockFactory.create(providerPath, { config: { region: 'us-east-1' } }, ctx),
+      ).rejects.toThrow(/Unknown Amazon Bedrock model/);
+    },
+  );
+
+  it.each(['kb', 'knowledge-base'])(
+    'validates the modelArn override on the %s route',
+    async (route) => {
+      const modelArn =
+        'arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-3-opus-20240229-v1:0';
+      await expect(
+        bedrockFactory.create(
+          `bedrock:${route}:default`,
+          { config: { knowledgeBaseId: 'kb-123', modelArn } },
+          ctx,
+        ),
+      ).rejects.toThrow(`Unknown Amazon Bedrock model: ${modelArn}`);
+    },
+  );
+
+  it('allows an active modelArn to override a retired knowledge-base route model', async () => {
+    const modelArn = 'arn:aws:bedrock:us-east-1::foundation-model/amazon.nova-lite-v1:0';
     await expect(
-      bedrockFactory.create(providerPath, { config: { region: 'us-east-1' } }, ctx),
-    ).rejects.toThrow(/Unknown Amazon Bedrock model/);
+      bedrockFactory.create(
+        'bedrock:kb:eu.anthropic.claude-3-5-haiku-20241022-v1:0',
+        { config: { knowledgeBaseId: 'kb-123', modelArn } },
+        ctx,
+      ),
+    ).resolves.toHaveProperty('kbConfig.modelArn', modelArn);
   });
 
   it('still allows a Converse model AWS continues to serve', async () => {
@@ -393,6 +465,40 @@ describe('aws bedrock provider factory routing', () => {
       );
     },
   );
+
+  it('rejects prefixed Grok ids before native Converse routing', async () => {
+    await expect(
+      bedrockFactory.create(
+        'bedrock:converse:us.xai.grok-4.3',
+        { config: { apiKey: 'bedrock-key' } },
+        ctx,
+      ),
+    ).rejects.toThrow(/Use the bare "bedrock:xai.grok-4.3" id/);
+  });
+
+  it.each(['sol', 'terra', 'luna'])('routes explicit GPT-5.6 %s to Mantle Chat', async (tier) => {
+    const { BedrockMantleChatProvider } = await import('../../../src/providers/bedrock/mantleChat');
+    const provider = await bedrockFactory.create(
+      `bedrock:mantle:openai.gpt-5.6-${tier}`,
+      { config: { apiKey: 'bedrock-key', region: 'us-east-1' } },
+      ctx,
+    );
+    expect(provider).toBeInstanceOf(BedrockMantleChatProvider);
+    expect(provider.id()).toBe(`bedrock:mantle:openai.gpt-5.6-${tier}`);
+  });
+
+  it('routes bare Mythos Preview to the Bedrock Anthropic Messages endpoint', async () => {
+    const model = 'anthropic.claude-mythos-preview';
+    const provider = await bedrockFactory.create(
+      `bedrock:${model}`,
+      { config: { region: 'us-east-1', apiKey: 'bedrock-key' } },
+      ctx,
+    );
+    expect(provider).toBeInstanceOf(BedrockAnthropicMessagesProvider);
+    expect((provider as any).getApiBaseUrl()).toBe(
+      'https://bedrock-mantle.us-east-1.api.aws/anthropic',
+    );
+  });
 
   it.each(['us.openai.gpt-5.6-sol', 'global.openai.gpt-5.6-terra', 'in.openai.gpt-5.6-luna'])(
     'preserves the explicit Converse profile %s and explains unsupported Invoke use',
