@@ -159,3 +159,33 @@ to move dependencies into future packages without guessing at ownership.
 It includes direct, optional, and peer dependency declarations. Peers marked
 optional in `peerDependenciesMeta` appear as `optional-peer`; other peers appear
 as `peer`. These labels describe the package contract, not what is installed.
+
+## Architecture Reports
+
+The checker can report references, cycles, and files reachable from an entrypoint:
+
+```bash
+npm run architecture:check -- --report
+npx tsx scripts/checkArchitectureBoundaries.ts --json > architecture-report.json
+npx tsx scripts/checkArchitectureBoundaries.ts --json --entrypoint=src/contracts.ts
+```
+
+JSON goes to stdout and check diagnostics go to stderr. Failed checks still return
+a nonzero exit status. Reports preserve the existing boundary limits: enforcement
+counts all literal references together and excludes imports from the public facade.
+
+Reports separate explicit type references, value references, dynamic imports, and
+`require.resolve` calls. Mixed imports count as value references. Entrypoint reports
+include the facade and compare all references, value references alone, and value
+references plus dynamic imports. External specifiers name direct source references.
+
+Unresolved internal references, computed loaders, and references to ignored or
+declaration files include source locations. Implementation files take precedence
+over declaration fallbacks. The scanner recognizes single-argument `require()` and
+`require.resolve()` calls, including calls inside functions. It does not follow
+aliased loaders, computed member access, resolution options, or runtime bindings.
+
+These source graphs do not account for compiler import removal, Vite substitutions,
+tree shaking, or transitive installed dependencies. Layer cycles and file cycles
+are reported separately. Back-edges show violations of the configured layer order;
+they do not measure the work needed to remove cycles.
