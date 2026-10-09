@@ -744,6 +744,21 @@ export function buildChatSpanContext(args: {
 }
 
 /**
+ * Extract basic token counts without capturing response bodies or detailed usage.
+ */
+export function extractTokenUsageAttributes(response: ProviderResponse): GenAISpanResult {
+  const result: GenAISpanResult = {};
+  if (response.tokenUsage) {
+    result.tokenUsage = {
+      prompt: response.tokenUsage.prompt,
+      completion: response.tokenUsage.completion,
+      total: response.tokenUsage.total,
+    };
+  }
+  return result;
+}
+
+/**
  * Extract the standard GenAI response attributes (token usage, finish reason,
  * cache hit, response body) from a ProviderResponse. Every field is optional
  * and only emitted when present, so this is safe to share across providers
