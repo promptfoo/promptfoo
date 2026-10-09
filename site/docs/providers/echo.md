@@ -45,7 +45,8 @@ providers:
 
 ### Example
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - echo
   - openai:chat:gpt-5-mini
@@ -84,7 +85,8 @@ Use Echo to run assertions against outputs already generated in production. Echo
 
 Use your logged output directly as the prompt:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - '{{logged_output}}'
 
@@ -95,8 +97,6 @@ tests:
   - vars:
       logged_output: 'Paris is the capital of France.'
     assert:
-      - type: llm-rubric
-        value: 'Answer is factually correct'
       - type: contains
         value: 'Paris'
 ```
@@ -105,7 +105,8 @@ The echo provider returns the prompt as-is, so the assertions receive the logged
 
 For JSON-formatted production logs, use a default transform to extract specific fields:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - '{{logged_output}}'
 
@@ -122,8 +123,8 @@ tests:
       # Production logs often contain JSON strings
       logged_output: '{"response": "Paris is the capital of France.", "confidence": 0.95, "model": "gpt-5"}'
     assert:
-      - type: llm-rubric
-        value: 'Answer is factually correct'
+      - type: contains
+        value: 'Paris'
   - vars:
       logged_output: '{"response": "London is in England.", "confidence": 0.98, "model": "gpt-5"}'
     assert:
@@ -131,7 +132,7 @@ tests:
         value: 'London'
 ```
 
-This pattern is particularly useful for:
+This pattern is useful for:
 
 - Post-deployment evaluation of production prompts
 - Regression testing against known outputs

@@ -159,6 +159,44 @@ describe('VertexLiveProvider', () => {
   );
 
   it.each([
+    ['gemini-robotics-er-2-streaming-preview', 'v1'],
+    ['gemini-robotics-er-2-streaming-preview', 'v1beta1'],
+    ['gemini-3.5-live-translate-preview', 'v1'],
+    ['gemini-3.5-live-translate-preview', 'v1beta1'],
+  ])('accepts the Vertex API version for %s on %s', async (modelName, apiVersion) => {
+    const isTranslation = modelName === 'gemini-3.5-live-translate-preview';
+    const provider = new VertexLiveProvider(modelName, {
+      config: {
+        apiVersion,
+        generationConfig: isTranslation
+          ? { translationConfig: { targetLanguageCode: 'en' } }
+          : { responseModalities: ['TEXT'] },
+      },
+    });
+    const prompt = isTranslation
+      ? JSON.stringify([
+          {
+            role: 'user',
+            parts: [{ inline_data: { mime_type: 'audio/pcm;rate=16000', data: 'AAAAAA==' } }],
+          },
+        ])
+      : 'Say hello.';
+    const { result } = await start(provider, prompt);
+    expect(vi.mocked(WebSocket).mock.calls[0][0]).toContain(`aiplatform.${apiVersion}.`);
+    expect(sent()[0].setup.model).toContain(`/models/${modelName}`);
+    await emit({
+      serverContent: {
+        modelTurn: { parts: [{ text: 'Hello' }] },
+        turnComplete: true,
+      },
+    });
+    const response = await result;
+    expect(response.error).toBeUndefined();
+    expect(response.output).toMatchObject({ text: 'Hello' });
+    expect(ws.close).toHaveBeenCalled();
+  });
+
+  it.each([
     [{ config: { projectId: 'explicit', region: 'europe-west4' } }, 'explicit', 'europe-west4'],
     [
       { env: { VERTEX_PROJECT_ID: 'vertex-env', VERTEX_REGION: 'us-east4' } },

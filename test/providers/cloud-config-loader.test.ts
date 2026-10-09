@@ -153,22 +153,27 @@ describe('cloud provider loader configuration', () => {
     },
   );
 
-  it('rejects a missing named Voyage key before contacting the custom endpoint', async () => {
-    vi.stubEnv('PRIVATE_VOYAGE_KEY', '');
-    vi.stubEnv('VOYAGE_API_KEY', 'fixture-process-default');
-    const provider = (await loadApiProvider('voyage:private:embedding', {
-      options: {
-        config: {
-          apiKeyEnvar: 'PRIVATE_VOYAGE_KEY',
-          apiBaseUrl: 'https://private-voyage.example.test/v1',
+  it.each([undefined, ''])(
+    'rejects a missing named Voyage key (%j) before contacting the custom endpoint',
+    async (key) => {
+      vi.stubEnv('PRIVATE_VOYAGE_KEY', key);
+      vi.stubEnv('VOYAGE_API_KEY', 'fixture-process-default');
+      const provider = (await loadApiProvider('voyage:private:embedding', {
+        options: {
+          config: {
+            apiKeyEnvar: 'PRIVATE_VOYAGE_KEY',
+            apiBaseUrl: 'https://private-voyage.example.test/v1',
+          },
+          env: { VOYAGE_API_KEY: 'fixture-scoped-default' },
         },
-        env: { VOYAGE_API_KEY: 'fixture-scoped-default' },
-      },
-    })) as ApiEmbeddingProvider;
+      })) as ApiEmbeddingProvider;
 
-    await expect(provider.callEmbeddingApi('hello')).rejects.toThrow('Voyage API key must be set');
-    expect(fetchWithCache).not.toHaveBeenCalled();
-  });
+      await expect(provider.callEmbeddingApi('hello')).rejects.toThrow(
+        'Voyage API key must be set',
+      );
+      expect(fetchWithCache).not.toHaveBeenCalled();
+    },
+  );
 
   it('uses provider Voyage env overrides and preserves HTTP errors', async () => {
     vi.mocked(fetchWithCache).mockResolvedValue({

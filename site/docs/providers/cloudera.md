@@ -28,7 +28,7 @@ For per-provider connections, set `config.domain` and `config.apiKey` together. 
 
 Here's a basic example of how to use the Cloudera provider:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: cloudera:your-model-name
     config:
@@ -90,6 +90,7 @@ The Cloudera provider is built on top of the OpenAI protocol, which means it sup
 Example chat conversation:
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - 'You are a helpful assistant. Answer the following question: {{user_input}}'
 
