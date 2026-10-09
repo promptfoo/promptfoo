@@ -4,12 +4,12 @@ import Box from '@mui/material/Box';
 import ButtonBase from '@mui/material/ButtonBase';
 import Skeleton from '@mui/material/Skeleton';
 import Typography from '@mui/material/Typography';
-import { formatPrice } from './useFourthwall';
+import { formatPrice, getProductUrl } from './useFourthwall';
 
-import type { FourthwallProduct } from './types';
+import type { FourthwallCatalogItem, FourthwallProduct } from './types';
 
 interface ProductCardProps {
-  product: FourthwallProduct;
+  product: FourthwallCatalogItem;
   onClick: (product: FourthwallProduct) => void;
 }
 
@@ -24,16 +24,20 @@ export function ProductCard({ product, onClick }: ProductCardProps) {
 
   const lowestPrice = useMemo(
     () =>
-      product.variants.reduce(
-        (min, v) => (v.unitPrice.value < min.value ? v.unitPrice : min),
-        product.variants[0]?.unitPrice ?? { value: 0, currency: 'USD' },
-      ),
-    [product.variants],
+      product.type === 'BUNDLE'
+        ? product.price
+        : product.variants.reduce(
+            (min, v) => (v.unitPrice.value < min.value ? v.unitPrice : min),
+            product.variants[0]?.unitPrice ?? { value: 0, currency: 'USD' },
+          ),
+    [product],
   );
 
   return (
     <ButtonBase
-      onClick={() => onClick(product)}
+      component={product.type === 'BUNDLE' ? 'a' : 'button'}
+      href={product.type === 'BUNDLE' ? getProductUrl(product.slug) : undefined}
+      onClick={product.type === 'BUNDLE' ? undefined : () => onClick(product)}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       sx={{

@@ -43,16 +43,28 @@ export interface FourthwallVariant {
   };
 }
 
-export interface FourthwallProduct {
+interface FourthwallCatalogItemBase {
   id: string;
   name: string;
   slug: string;
   description: string;
-  status: 'AVAILABLE' | 'UNAVAILABLE';
-  access: 'PUBLIC' | 'PRIVATE';
+  state: { type: 'AVAILABLE' | 'UNAVAILABLE' };
+  access: { type: 'PUBLIC' | 'PRIVATE' };
   images: FourthwallImage[];
+}
+
+export interface FourthwallProduct extends FourthwallCatalogItemBase {
+  type: 'PRODUCT';
   variants: FourthwallVariant[];
 }
+
+// Bundles have their own price and constituent offers, not product variants.
+export interface FourthwallBundle extends FourthwallCatalogItemBase {
+  type: 'BUNDLE';
+  price: FourthwallMoney;
+}
+
+export type FourthwallCatalogItem = FourthwallProduct | FourthwallBundle;
 
 // Cart item structure per OpenAPI spec - variant is nested object, no top-level variantId
 export interface FourthwallCartItem {

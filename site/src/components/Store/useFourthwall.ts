@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 
-import type { FourthwallAttributeValue, FourthwallCart, FourthwallProduct } from './types';
+import type { FourthwallAttributeValue, FourthwallCart, FourthwallCatalogItem } from './types';
 
 // Public storefront token - this is INTENTIONALLY public and client-facing.
 // Fourthwall storefront tokens are designed to be exposed in frontend code.
@@ -80,7 +80,7 @@ async function apiFetch<T>(endpoint: string, options?: RequestInit): Promise<T> 
 
 // Fetch all products from a collection (handles pagination)
 export function useProducts(collectionSlug: string = 'all') {
-  const [products, setProducts] = useState<FourthwallProduct[]>([]);
+  const [products, setProducts] = useState<FourthwallCatalogItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -90,12 +90,12 @@ export function useProducts(collectionSlug: string = 'all') {
       setError(null);
 
       try {
-        const allProducts: FourthwallProduct[] = [];
+        const allProducts: FourthwallCatalogItem[] = [];
         let page = 0;
 
         // Fetch pages until we get an empty results array
         while (true) {
-          const response = await apiFetch<{ results: FourthwallProduct[] }>(
+          const response = await apiFetch<{ results: FourthwallCatalogItem[] }>(
             `/collections/${collectionSlug}/products?page=${page}&size=${PAGE_SIZE}`,
           );
 
@@ -338,4 +338,9 @@ export function getAttributeSwatch(attr: FourthwallAttributeValue): string | und
 // Generate checkout URL for a cart
 export function getCheckoutUrl(cartId: string, currency: string = 'USD'): string {
   return `${CHECKOUT_DOMAIN}/checkout/?cartCurrency=${currency}&cartId=${cartId}`;
+}
+
+// Bundles select variants for each included product on the hosted storefront.
+export function getProductUrl(slug: string): string {
+  return `${CHECKOUT_DOMAIN}/products/${encodeURIComponent(slug)}`;
 }
