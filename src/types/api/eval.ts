@@ -268,6 +268,7 @@ export const SubmitRatingRequestSchema = z
   .object({
     pass: z.boolean(),
     score: z.number(),
+    componentResults: z.array(z.object({ pass: z.boolean() }).passthrough()).nullish(),
   })
   .passthrough();
 
