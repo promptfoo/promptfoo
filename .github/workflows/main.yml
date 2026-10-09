@@ -512,6 +512,9 @@ jobs:
         env:
           NO_COLOR: '1'
         run: |
+          # shfmt 3.12.0 cannot disable EditorConfig ignore rules during discovery.
+          find . -name .git -prune -o -name .editorconfig -exec rm -f -- {} +
+          printf 'root = true\n' > .editorconfig
           "$RUNNER_TEMP/shfmt" -f . > "$RUNNER_TEMP/shfmt-files"
           mapfile -t shell_files < "$RUNNER_TEMP/shfmt-files"
           printf 'Checking %s shell scripts\n' "${#shell_files[@]}"
