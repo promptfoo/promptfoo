@@ -38,7 +38,7 @@ import {
   setCachedStandaloneEvals,
 } from './standaloneEvalCache';
 
-import type { StandaloneEval } from './standaloneEvalCache';
+import type { StandaloneEval } from '../types/standaloneEval';
 
 export { clearStandaloneEvalCache } from './standaloneEvalCache';
 

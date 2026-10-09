@@ -25,6 +25,8 @@ Red team strategies can grade responses during an attack. The final assertion ch
 
 When no final strategy prompt is available, a provider-reported chat array without a usable user message uses the original prompt fallback instead of unrelated saved messages. Historical strategy grading usage is counted once across matching assertions, including assertion sets. Replayed grading responses count their full token usage as cached.
 
+For [data-exfil red team assertions](/docs/red-team/plugins/data-exfil#grading), valid page tracking can supply deterministic evidence of exfiltration. Missing or malformed tracking identifiers leave model grading in place and do not automatically pass the test.
+
 In machine learning, "Accuracy" is a metric that measures the proportion of correct predictions made by a model out of the total number of predictions. With `promptfoo`, accuracy is defined as the proportion of prompts that produce the expected or desired output.
 
 ## Using assertions
@@ -169,7 +171,7 @@ Single-line [JavaScript assertions](/docs/configuration/expected-outputs/javascr
 :::tip
 Every test type can be negated by prepending `not-`. For example, `not-equals` or `not-regex`.
 
-When a `not-javascript`, `not-python`, or `not-ruby` assertion returns a full grading result, a negated failure keeps its custom `reason`, falling back to a generic message if it is empty. A negated pass reports `Assertion passed`; the script's score is preserved in either case.
+When a `not-javascript` assertion returns a full grading result, its `reason` is preserved verbatim, including an empty string, for either inverted outcome. For `not-python` and `not-ruby`, a negated failure keeps its custom `reason`, falling back to a generic message if it is empty; a negated pass reports `Assertion passed`. All three preserve the script's score.
 
 The `search-rubric` and `not-search-rubric` assertions require a rubric value that renders to a string.
 

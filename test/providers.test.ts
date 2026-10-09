@@ -151,7 +151,11 @@ describe('loadApiProvider', () => {
       basePath: '/test',
     });
 
-    expect(fileUtil.maybeLoadConfigFromExternalFile).toHaveBeenCalledWith(yamlContentWithRefs);
+    expect(fileUtil.maybeLoadConfigFromExternalFile).toHaveBeenCalledWith(
+      yamlContentWithRefs,
+      undefined,
+      '/test',
+    );
     expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('gpt-4', {
       config: expect.objectContaining({
         apiKey: 'sk-test-key-12345',
@@ -187,7 +191,11 @@ describe('loadApiProvider', () => {
       basePath: '/test',
     });
 
-    expect(fileUtil.maybeLoadConfigFromExternalFile).toHaveBeenCalledWith(jsonContentWithRefs);
+    expect(fileUtil.maybeLoadConfigFromExternalFile).toHaveBeenCalledWith(
+      jsonContentWithRefs,
+      undefined,
+      '/test',
+    );
     expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('gpt-3.5-turbo', {
       config: expect.objectContaining({
         apiKey: 'sk-prod-key-67890',

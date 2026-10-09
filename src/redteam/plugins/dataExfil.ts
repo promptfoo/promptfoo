@@ -1,6 +1,6 @@
 import dedent from 'dedent';
 import logger from '../../logger';
-import { checkExfilTracking } from '../strategies/indirectWebPwn';
+import { checkExfilTracking, getWebPageTrackingIds } from '../strategies/indirectWebPwn';
 import { RedteamGraderBase } from './base';
 
 import type { ApiProvider, AssertionValue, AtomicTestCase, GradingResult } from '../../types/index';
@@ -82,6 +82,7 @@ export class DataExfilGrader extends RedteamGraderBase {
     let wasExfiltrated: boolean | undefined;
     let exfilCount = 0;
     let exfilRecords: Array<{ queryParams: Record<string, string> }> = [];
+    const trackingIds = getWebPageTrackingIds(test.metadata, test.metadata?.evaluationId);
 
     // Priority 1: LAYER MODE - Use gradingContext from provider
     // In layer mode (jailbreak:meta → indirect-web-pwn), the provider already did server lookup
@@ -98,12 +99,8 @@ export class DataExfilGrader extends RedteamGraderBase {
     }
     // Priority 2: NORMAL MODE - Strategy set metadata directly on test case
     // In normal mode (indirect-web-pwn as direct strategy), test.metadata has webPageUuid
-    else if (test.metadata?.webPageUuid) {
-      const webPageUuid = test.metadata.webPageUuid as string;
-      const webPageUrl = test.metadata?.webPageUrl as string | undefined;
-      const evalId =
-        (test.metadata?.evaluationId as string | undefined) ??
-        (webPageUrl?.match(/\/dynamic-pages\/([^/]+)\//)?.[1] as string | undefined);
+    else if (trackingIds) {
+      const { uuid: webPageUuid, evalId } = trackingIds;
 
       logger.debug('[DataExfilGrader] Fetching from server API (normal mode)', {
         webPageUuid,

@@ -308,7 +308,7 @@ describeEvaluator('evaluator metadata', () => {
       1,
       expect.stringContaining('User: Question 1A'),
       expect.anything(),
-      undefined,
+      expect.any(Object),
     );
 
     // First conversation, second question (should include history)
@@ -316,7 +316,7 @@ describeEvaluator('evaluator metadata', () => {
       2,
       expect.stringContaining('User: Question 1A\nAssistant: Test output\nUser: Question 1B'),
       expect.anything(),
-      undefined,
+      expect.any(Object),
     );
 
     // Second conversation, first question (should NOT include first conversation)
@@ -324,7 +324,7 @@ describeEvaluator('evaluator metadata', () => {
       3,
       expect.stringContaining('User: Question 2A'),
       expect.anything(),
-      undefined,
+      expect.any(Object),
     );
 
     // Second conversation, second question (should only include second conversation history)
@@ -332,7 +332,7 @@ describeEvaluator('evaluator metadata', () => {
       4,
       expect.stringContaining('User: Question 2A\nAssistant: Test output\nUser: Question 2B'),
       expect.anything(),
-      undefined,
+      expect.any(Object),
     );
   });
 

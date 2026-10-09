@@ -160,8 +160,15 @@ export class Telemetry {
       }
     }
 
+    // Reporting is best-effort: keep its deadline active through response disposal
+    // so an unavailable endpoint or unread body cannot hold an embedded host open.
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), TELEMETRY_TIMEOUT_MS);
+    timeout.unref();
     fetchWithProxy(R_ENDPOINT, {
       method: 'POST',
+      signal: controller.signal,
+      disableTransientRetries: true,
       headers: {
         'Content-Type': 'application/json',
       },
@@ -174,9 +181,12 @@ export class Telemetry {
           ...propertiesWithMetadata,
         },
       }),
-    }).catch(() => {
-      // pass
-    });
+    })
+      .then((response) => response.body?.cancel())
+      .catch(() => {
+        // Reporting failures must not interrupt evaluation or process shutdown.
+      })
+      .finally(() => clearTimeout(timeout));
   }
 
   async shutdown(): Promise<void> {

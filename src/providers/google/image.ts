@@ -1,8 +1,9 @@
 import { fetchWithCache } from '../../cache';
-import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import { toDataUri } from '../../util/dataUrl';
 import { sleep } from '../../util/time';
+import { resolveProviderApiKey } from '../credentials';
+import { resolveProviderEnv } from '../env';
 import { getRequestTimeoutMs } from '../shared';
 import {
   createAuthCacheDiscriminator,
@@ -123,12 +124,11 @@ export class GoogleImageProvider implements ApiProvider {
       this.config.vertexai === false
         ? undefined
         : this.config.projectId ||
-          this.env?.VERTEX_PROJECT_ID ||
-          this.env?.GOOGLE_PROJECT_ID ||
-          this.env?.GOOGLE_CLOUD_PROJECT ||
-          getEnvString('VERTEX_PROJECT_ID') ||
-          getEnvString('GOOGLE_PROJECT_ID') ||
-          getEnvString('GOOGLE_CLOUD_PROJECT');
+          resolveProviderEnv(this.env, [
+            'VERTEX_PROJECT_ID',
+            'GOOGLE_PROJECT_ID',
+            'GOOGLE_CLOUD_PROJECT',
+          ])?.value;
 
     if (this.config.vertexai === true || projectId) {
       // Use Vertex AI if project ID is available
@@ -152,12 +152,8 @@ export class GoogleImageProvider implements ApiProvider {
   private async callVertexApi(prompt: string): Promise<ProviderResponse> {
     const location =
       this.config.region ||
-      this.env?.VERTEX_REGION ||
-      this.env?.GOOGLE_CLOUD_LOCATION ||
-      this.env?.GOOGLE_LOCATION ||
-      getEnvString('VERTEX_REGION') ||
-      getEnvString('GOOGLE_CLOUD_LOCATION') ||
-      getEnvString('GOOGLE_LOCATION') ||
+      resolveProviderEnv(this.env, ['VERTEX_REGION', 'GOOGLE_CLOUD_LOCATION', 'GOOGLE_LOCATION'])
+        ?.value ||
       'us-central1';
 
     try {
@@ -365,15 +361,11 @@ export class GoogleImageProvider implements ApiProvider {
   }
 
   private getApiKey(): string | undefined {
-    return (
-      this.config.apiKey ||
-      this.env?.GOOGLE_API_KEY ||
-      this.env?.GOOGLE_GENERATIVE_AI_API_KEY ||
-      this.env?.GEMINI_API_KEY ||
-      getEnvString('GOOGLE_API_KEY') ||
-      getEnvString('GOOGLE_GENERATIVE_AI_API_KEY') ||
-      getEnvString('GEMINI_API_KEY')
-    );
+    return resolveProviderApiKey({ apiKey: this.config.apiKey }, this.env, [
+      'GOOGLE_API_KEY',
+      'GOOGLE_GENERATIVE_AI_API_KEY',
+      'GEMINI_API_KEY',
+    ]);
   }
 
   private getModelPath(): string {

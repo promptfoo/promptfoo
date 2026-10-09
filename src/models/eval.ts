@@ -968,7 +968,31 @@ export default class Eval {
       const filterConditions: FilterConditionWithOperator[] = [];
 
       opts.filters.forEach((filter) => {
-        const { logicOperator, type, operator, value, field } = JSON.parse(filter);
+        let parsedFilter: unknown;
+        try {
+          parsedFilter = JSON.parse(filter);
+        } catch {
+          logger.warn('Ignoring malformed eval filter JSON');
+          return;
+        }
+        if (!parsedFilter || typeof parsedFilter !== 'object' || Array.isArray(parsedFilter)) {
+          logger.warn('Ignoring invalid eval filter');
+          return;
+        }
+        const { logicOperator, type, operator, value, field } = parsedFilter as Record<
+          string,
+          unknown
+        >;
+        if (
+          typeof type !== 'string' ||
+          typeof operator !== 'string' ||
+          (logicOperator !== undefined && typeof logicOperator !== 'string') ||
+          (field !== undefined && typeof field !== 'string') ||
+          (value !== undefined && typeof value !== 'string' && typeof value !== 'number')
+        ) {
+          logger.warn('Ignoring invalid eval filter fields');
+          return;
+        }
         let condition: SQL<unknown> | null = null;
 
         if (type === 'metric') {
@@ -981,7 +1005,7 @@ export default class Eval {
           }
 
           // Value must be a number
-          const numericValue = typeof value === 'number' ? value : Number.parseFloat(value);
+          const numericValue = typeof value === 'number' ? value : Number.parseFloat(String(value));
 
           if (operator === 'is_defined' || (operator === 'equals' && !field)) {
             // 'is_defined': new operator that checks if metric exists
@@ -1078,7 +1102,7 @@ export default class Eval {
                 AND LENGTH(TRIM(COALESCE(json_each.value, ''))) > 0
             )`;
           }
-        } else if (type === 'plugin') {
+        } else if (type === 'plugin' && typeof value === 'string') {
           const isCategory = Object.keys(PLUGIN_CATEGORIES).includes(value);
 
           if (operator === 'equals') {
@@ -1386,7 +1410,6 @@ export default class Eval {
   }
 
   async setResults(results: EvalResult[]) {
-    this.results = results;
     if (this.persisted && results.length > 0) {
       const db = await getDb();
       await db
@@ -1401,7 +1424,13 @@ export default class Eval {
         .run();
       notifyEvaluationChanged(this.id);
     }
-    this._resultsLoaded = true;
+    if (this.persisted) {
+      // Upload chunks append in storage; reload the complete set on the next read.
+      this.clearResults();
+    } else {
+      this.results = results;
+      this._resultsLoaded = true;
+    }
   }
 
   async loadResults() {
