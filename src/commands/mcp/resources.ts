@@ -1,15 +1,11 @@
 import { loadDefaultConfig } from '../../util/config/default';
-import { initializeToolRegistry, toolRegistry } from './lib/toolRegistry';
+import { generateToolDocs } from './lib/toolDefinitions';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-
-// Initialize the tool registry on module load
-initializeToolRegistry();
 
 /**
  * Register MCP resources with the server
  */
 export function registerResources(server: McpServer) {
-  // Resources with proper namespacing
   server.resource('promptfoo-config', 'promptfoo://config/default', async () => {
     try {
       const { defaultConfig } = await loadDefaultConfig();
@@ -40,14 +36,11 @@ export function registerResources(server: McpServer) {
   });
 
   server.resource('promptfoo-docs', 'promptfoo://docs/tools', async () => {
-    // Auto-generate documentation from the tool registry
-    const toolDocs = toolRegistry.generateDocs();
-
     return {
       contents: [
         {
           uri: 'promptfoo://docs/tools',
-          text: JSON.stringify(toolDocs, null, 2),
+          text: JSON.stringify(generateToolDocs(), null, 2),
         },
       ],
     };
