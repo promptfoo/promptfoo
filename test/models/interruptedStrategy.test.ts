@@ -5,12 +5,16 @@ import path from 'node:path';
 
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
+import { R_ENDPOINT } from '../../src/constants';
+import { evaluate as evaluateInternal } from '../../src/evaluator';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import EvalResult, {
   getStripFlags,
   sanitizeResultForJsonlArtifact,
 } from '../../src/models/evalResult';
+import { evaluate as evaluateLibrary } from '../../src/node/evaluate';
+import { callTargetProvider } from '../../src/redteam/providers/shared';
 import { type EvaluateResult, type ProviderResponse, ResultFailureReason } from '../../src/types';
 import { writeOutput } from '../../src/util/output';
 import { createEvaluateResult } from '../factories/eval';
@@ -146,6 +150,7 @@ describe('interrupted strategy checkpoints', () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
   });
 
   it.each(['single', 'batch', 'save new', 'save existing'] as const)(
@@ -179,6 +184,130 @@ describe('interrupted strategy checkpoints', () => {
       expect(input).toEqual(original);
     },
   );
+
+  it.each(['internal pause', 'public library'] as const)(
+    'retains a genuinely parentless checkpoint through %s without blob persistence',
+    async (entrypoint) => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (url: string | URL) => {
+          if (String(url) === R_ENDPOINT) {
+            return new Response(null, { status: 204 });
+          }
+          throw new Error('Unexpected network request in parentless checkpoint test');
+        }),
+      );
+      const first: ProviderResponse = {
+        output: 'first audio',
+        audio: { data: audio, format: 'wav' },
+        cost: 0.25,
+        tokenUsage: { total: 5, numRequests: 1 },
+        metadata: {
+          http: { status: 200, statusText: 'OK', headers: { 'Set-Cookie': credential } },
+        },
+      };
+      const last: ProviderResponse = {
+        output: 'last text',
+        cost: 0.25,
+        tokenUsage: { total: 5, numRequests: 1 },
+      };
+      const target = {
+        id: () => 'parentless-target',
+        callApi: vi.fn().mockResolvedValueOnce(first).mockResolvedValueOnce(last),
+      };
+      const controller = new AbortController();
+      const provider = {
+        id: () => 'parentless-strategy',
+        callApi: async () => {
+          const firstResponse = await callTargetProvider(target, 'first private prompt');
+          const lastResponse = await callTargetProvider(target, 'last private prompt');
+          if (entrypoint === 'internal pause') {
+            controller.abort();
+            throw controller.signal.reason;
+          }
+          return {
+            ...lastResponse,
+            error: 'Synthetic supplied checkpoint',
+            cost: 0.5,
+            tokenUsage: { total: 10, numRequests: 2 },
+            metadata: {
+              interruptedStrategy: true,
+              completedTargetResponses: [
+                { prompt: 'first private prompt', response: firstResponse },
+                { prompt: 'last private prompt', response: lastResponse },
+              ],
+            },
+          };
+        },
+      };
+      let record: Eval;
+      if (entrypoint === 'internal pause') {
+        record = new Eval({}, { id: randomUUID() });
+        await evaluateInternal(
+          {
+            providers: [provider],
+            prompts: [{ raw: 'synthetic', label: 'synthetic' }],
+            tests: [{ vars: {} }],
+          },
+          record,
+          { maxConcurrency: 1, pauseSignal: controller.signal, silent: true },
+        );
+      } else {
+        // Public no-write options; the provider supplies the checkpoint. This is
+        // not a claim that CLI --no-write exposes internal graceful pause options.
+        record = await evaluateLibrary(
+          {
+            writeLatestResults: false,
+            sharing: false,
+            providers: [provider],
+            prompts: ['synthetic'],
+            tests: [{ vars: {} }],
+          },
+          { cache: false, maxConcurrency: 1, silent: true },
+        );
+      }
+      expect(await Eval.findById(record.id)).toBeUndefined();
+      expect(await EvalResult.getCompletedIndexPairs(record.id)).toEqual(new Set());
+      expect(record.resultPersistenceFailed).toBe(false);
+      expect(record.results).toHaveLength(1);
+      const row = record.results[0];
+      expect(row.cost).toBe(0.5);
+      expect(row.response?.tokenUsage).toMatchObject({ total: 10, numRequests: 2 });
+      expect(row.response?.audio).toBeUndefined();
+      expect(target.callApi).toHaveBeenCalledTimes(2);
+      for (const metadata of [row.response!.metadata!, row.metadata]) {
+        expect(metadata.completedTargetResponses[0].response.audio).toEqual({
+          data: audio,
+          format: 'wav',
+        });
+      }
+      const projected = row.toEvaluateResult({
+        ...getStripFlags(),
+        shouldStripPromptText: true,
+        shouldStripResponseOutput: true,
+      });
+      for (const metadata of [projected.response!.metadata!, projected.metadata!]) {
+        const firstTarget = metadata.completedTargetResponses[0];
+        expect(firstTarget.prompt).toBe('[prompt stripped]');
+        expect(firstTarget.response.output).toBe('[output stripped]');
+        expect(firstTarget.response.audio).toBeUndefined();
+        expect(firstTarget.response.metadata.http.headers['Set-Cookie']).toBe('[REDACTED]');
+      }
+      expect(first.audio?.data).toBe(audio);
+    },
+  );
+
+  it('reconstructs media-bearing failed results without trying blob persistence again', async () => {
+    const record = new Eval({}, { id: randomUUID() });
+    const input = checkpointFixture();
+    record.recordResultPersistenceFailure(input);
+    const rows = await record.getFailedResultsByTestIdx(0);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].response!.audio!.data).toBe(audio);
+    expect(rows[0].metadata.completedTargetResponses[0].response.audio.data).toBe(audio);
+    expect(await Eval.findById(record.id)).toBeUndefined();
+    expect(await EvalResult.getCompletedIndexPairs(record.id)).toEqual(new Set());
+  });
 
   describe.each(['model', 'jsonl'] as const)('%s checkpoint projections', (boundary) => {
     it.each([

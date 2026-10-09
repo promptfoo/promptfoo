@@ -1021,11 +1021,19 @@ export default class EvalResult {
     // EvalResult round-trips without a Drizzle schema migration.
     const persistedMetadata = persistTraceMetadata(metadata, traceId, evaluationId);
 
-    const processed = await extractAndStoreResultMedia(
-      // Remove circular SDK payloads before traversing either checkpoint copy.
-      { response: sanitizeForDb(result.response), metadata: sanitizeForDb(persistedMetadata) },
-      { evalId, testIdx: result.testIdx, promptIdx: result.promptIdx },
-    );
+    // In-memory evaluations and failed-write reconstruction have no persisted
+    // parent guaranteed to own blob references. Keep their media inline.
+    const fields = {
+      response: sanitizeForDb(result.response),
+      metadata: sanitizeForDb(persistedMetadata),
+    };
+    const processed = persist
+      ? await extractAndStoreResultMedia(fields, {
+          evalId,
+          testIdx: result.testIdx,
+          promptIdx: result.promptIdx,
+        })
+      : fields;
 
     // Sanitize all JSON fields to remove circular references and non-serializable values.
     // `testCase` and `prompt` can contain a resolved runtime provider under

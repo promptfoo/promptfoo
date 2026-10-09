@@ -2,7 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { gunzipSync } from 'node:zlib';
 
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { isBlobAllowedForShare, storeBlob } from '../src/blobs';
+import { getBlobStorageProvider, isBlobAllowedForShare, storeBlob } from '../src/blobs';
 import { cloudConfig } from '../src/globalConfig/cloud';
 import { runDbMigrations } from '../src/migrate';
 import Eval from '../src/models/eval';
@@ -262,4 +262,64 @@ describe('sharing interrupted checkpoints', () => {
     expect(batches.mock.calls[1][0]).toBeGreaterThan(0);
     expect(batches.mock.calls[1][0]).toBeLessThanOrEqual(2);
   });
+
+  it.each([
+    { rows: 1, entries: 20, afterSample: false },
+    { rows: 1, entries: 100, afterSample: false },
+    { rows: 20, entries: 1, afterSample: false },
+    { rows: 101, entries: 20, afterSample: true },
+  ])(
+    'reads repeated media once across sample and chunks: %j',
+    async ({ rows, entries, afterSample }) => {
+      vi.spyOn(cloudConfig, 'isEnabled').mockReturnValue(false);
+      const input = createEvaluateResult();
+      const record = await Eval.create(
+        { sharing: { apiBaseUrl: host, appBaseUrl: host } },
+        [input.prompt],
+        { id: randomUUID() },
+      );
+      record.author = 'synthetic@example.test';
+      const { ref } = await storeBlob(firstBytes, 'audio/wav', {
+        evalId: record.id,
+        kind: 'audio',
+      });
+      for (let index = 0; index < rows; index++) {
+        const metadata = {
+          interruptedStrategy: true,
+          completedTargetResponses: Array.from(
+            { length: afterSample && index < 100 ? 0 : entries },
+            (_, target) => ({
+              prompt: `prompt ${target}`,
+              response: { output: 'checkpoint output', audio: { blobRef: ref, format: 'wav' } },
+            }),
+          ),
+        };
+        await EvalResult.createFromEvaluateResult(record.id, {
+          ...input,
+          testIdx: index,
+          success: false,
+          failureReason: 2,
+          error: 'Synthetic checkpoint',
+          response: { output: 'last text', metadata },
+          metadata,
+        });
+      }
+      const reads = vi.spyOn(getBlobStorageProvider(), 'getByHash');
+      await createShareableUrl(record, { silent: true });
+      expect(reads).toHaveBeenCalledExactlyOnceWith(ref.hash);
+      const sent = requests
+        .filter(({ body }) => Array.isArray(body))
+        .flatMap(({ body }) => body as EvaluateResult[]);
+      expect(sent).toHaveLength(rows);
+      for (const row of sent) {
+        for (const metadata of [row.response!.metadata!, row.metadata!]) {
+          for (const target of metadata.completedTargetResponses) {
+            expect(target.response.audio.data).toBe(firstBytes.toString('base64'));
+            expect(target.response.audio.blobRef).toBeUndefined();
+          }
+        }
+      }
+      expect(unexpectedUrls).toEqual([]);
+    },
+  );
 });
