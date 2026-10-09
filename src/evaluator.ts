@@ -1483,6 +1483,9 @@ async function gradeRunEvalResponse({
       testIdx,
       vars,
     });
+  if (!outputIsText) {
+    ret.metadata = { ...ret.metadata, redteamOutputIsText: false };
+  }
   const traceId = getTraceId(traceContext);
   if (
     traceId &&
@@ -1608,6 +1611,11 @@ async function transformRunEvalResponse({
 
   // Once an observed stage is non-text, later stringification cannot recover numeric tokens.
   outputIsText &&= typeof processedResponse.output === 'string';
+  if (!outputIsText) {
+    // Persist only observed negative lineage of the saved output. Never manufacture
+    // positive strategy provenance from a target's marker or a later stringification.
+    processedResponse.metadata = { ...processedResponse.metadata, redteamOutputIsText: false };
+  }
   invariant(processedResponse.output != null, 'Response output should not be null');
   const blobbedResponse = await extractAndStoreBinaryData(processedResponse, {
     evalId,

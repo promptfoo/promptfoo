@@ -85,8 +85,14 @@ it.each(cases)(
     ];
     for (const pair of pairs) {
       const expectedMetadata = pair.direct.response?.metadata;
-      expect(pair.captured.response?.metadata?.redteamTargetMetadata).toEqual(expectedMetadata);
-      expect(pair.captured.metadata?.redteamTargetMetadata).toEqual(expectedMetadata);
+      const expectedCapturedMetadata = expectedMetadata && {
+        ...expectedMetadata,
+        http: { ...targetMetadata.http, headers: { 'set-cookie': '[REDACTED]' } },
+      };
+      expect(pair.captured.response?.metadata?.redteamTargetMetadata).toEqual(
+        expectedCapturedMetadata,
+      );
+      expect(pair.captured.metadata?.redteamTargetMetadata).toEqual(expectedCapturedMetadata);
       expect(pair.captured.response?.output).toBe(
         flags.shouldStripResponseOutput ? '[output stripped]' : '{"amount":100}',
       );

@@ -479,11 +479,10 @@ function redactTransportHeadersOnMetadata<T>(metadata: T, options?: HeaderRedact
   return nextMetadata as T;
 }
 
-function redactHttpHeadersOnMetadata<T>(metadata: T, options?: HeaderRedactionOptions): T {
-  const redacted = redactTransportHeadersOnMetadata(metadata, options);
-  const record = asRecord(redacted);
+function redactCapturedTargetMetadata<T>(metadata: T): T {
+  const record = asRecord(metadata);
   if (!record || !Object.prototype.hasOwnProperty.call(record, 'redteamTargetMetadata')) {
-    return redacted;
+    return metadata;
   }
   // This executor-owned snapshot contains the selected provider's metadata. Its own
   // legacy headers are transport data too. Follow only this one known metadata path.
@@ -492,14 +491,21 @@ function redactHttpHeadersOnMetadata<T>(metadata: T, options?: HeaderRedactionOp
     redactLegacyHeaders: true,
   });
   return redactedTargetMetadata === targetMetadata
-    ? redacted
+    ? metadata
     : ({ ...record, redteamTargetMetadata: redactedTargetMetadata } as T);
+}
+
+function redactHttpHeadersOnMetadata<T>(metadata: T, options?: HeaderRedactionOptions): T {
+  return redactCapturedTargetMetadata(redactTransportHeadersOnMetadata(metadata, options));
 }
 
 // Walk a `GradingResult`-shaped value and redact `metadata.http` on the result and
 // every nested `componentResults[]`. Limits recursion to the documented schema
 // (`componentResults` only) — does not descend into arbitrary subtrees.
-function redactHttpHeadersOnGradingResult<T>(gradingResult: T): T {
+function redactHttpHeadersOnGradingResult<T>(
+  gradingResult: T,
+  redactMetadata = redactHttpHeadersOnMetadata,
+): T {
   if (!gradingResult || typeof gradingResult !== 'object' || Array.isArray(gradingResult)) {
     return gradingResult;
   }
@@ -509,7 +515,7 @@ function redactHttpHeadersOnGradingResult<T>(gradingResult: T): T {
   const next: Record<string, unknown> = { ...gr };
 
   if (gr.metadata !== undefined) {
-    const redacted = redactHttpHeadersOnMetadata(gr.metadata);
+    const redacted = redactMetadata(gr.metadata);
     if (redacted !== gr.metadata) {
       next.metadata = redacted;
       mutated = true;
@@ -519,7 +525,7 @@ function redactHttpHeadersOnGradingResult<T>(gradingResult: T): T {
   if (Array.isArray(gr.componentResults)) {
     let componentMutated = false;
     const nextComponents = gr.componentResults.map((component) => {
-      const redacted = redactHttpHeadersOnGradingResult(component);
+      const redacted = redactHttpHeadersOnGradingResult(component, redactMetadata);
       if (redacted !== component) {
         componentMutated = true;
       }
@@ -534,12 +540,15 @@ function redactHttpHeadersOnGradingResult<T>(gradingResult: T): T {
   return (mutated ? next : gradingResult) as T;
 }
 
-function sanitizeResponseForDb<T extends ProviderResponse | null | undefined>(response: T): T {
+function sanitizeResponseForDb<T extends ProviderResponse | null | undefined>(
+  response: T,
+  redactMetadata = redactHttpHeadersOnMetadata,
+): T {
   if (!response) {
     return response;
   }
 
-  const redactedMetadata = redactHttpHeadersOnMetadata((response as ProviderResponse).metadata, {
+  const redactedMetadata = redactMetadata((response as ProviderResponse).metadata, {
     redactLegacyHeaders: true,
   });
   if (redactedMetadata === (response as ProviderResponse).metadata) {
@@ -683,34 +692,34 @@ function surfaceTraceMetadata(metadata: Record<string, unknown> | null | undefin
   };
 }
 
-// Apply the credential-header redaction trio to the already-`sanitizeForDb`'d fields bound for
-// the database or a JSONL artifact. Single source of truth for which redactor pairs with which
-// field, shared by DB persistence (`createFromEvaluateResult` / `createManyFromEvaluateResult`)
-// and the JSONL artifact boundary (`sanitizeResultForJsonlArtifact`) so a newly added sensitive
-// field can't be redacted on one path while leaking from another.
-function redactSensitiveResultFieldsForDb<
-  R extends ProviderResponse | null | undefined,
-  G,
-  M,
->(fields: {
-  response: R;
-  gradingResult: G;
-  metadata: M;
-}): {
+// Shared credential-header redaction for persistence and artifact projections. Model
+// export/save use captured-only mode to protect the executor-owned target snapshot while
+// preserving those paths' existing treatment of direct provider headers and live objects.
+function redactSensitiveResultFieldsForDb<R extends ProviderResponse | null | undefined, G, M>(
+  fields: { response: R; gradingResult: G; metadata: M },
+  { capturedTargetOnly = false }: { capturedTargetOnly?: boolean } = {},
+): {
   response: R;
   gradingResult: G;
   metadata: M;
 } {
+  const redactMetadata = capturedTargetOnly
+    ? redactCapturedTargetMetadata
+    : redactHttpHeadersOnMetadata;
   return {
-    response: sanitizeResponseForDb(fields.response),
-    gradingResult: sanitizeGradingResultForDb(fields.gradingResult),
+    response: sanitizeResponseForDb(fields.response, redactMetadata),
+    gradingResult: capturedTargetOnly
+      ? redactHttpHeadersOnGradingResult(fields.gradingResult, redactMetadata)
+      : sanitizeGradingResultForDb(fields.gradingResult),
     // Pass the response metadata as the legacy-header provenance source (see
     // sanitizeMetadataForDb). fields.response is the raw input, so its headers are still
     // cleartext here and can be matched against an echoed result-level metadata.headers.
-    metadata: sanitizeMetadataForDb(
-      fields.metadata,
-      (fields.response as ProviderResponse | null | undefined)?.metadata,
-    ),
+    metadata: capturedTargetOnly
+      ? redactMetadata(fields.metadata)
+      : sanitizeMetadataForDb(
+          fields.metadata,
+          (fields.response as ProviderResponse | null | undefined)?.metadata,
+        ),
   };
 }
 
@@ -1178,16 +1187,21 @@ export default class EvalResult {
     const persistedValues = {
       ...rest,
       error: this.error ?? null,
-      response:
-        this.response?.metadata &&
-        Object.prototype.hasOwnProperty.call(this.response.metadata, 'redteamTargetMetadata')
-          ? await extractAndStoreBinaryData(this.response, blobContext)
-          : this.response,
-      gradingResult: sanitizeGradingResultForDb(this.gradingResult),
-      metadata: persistTraceMetadata(
-        await externalizeCapturedResultMetadata(this.metadata, blobContext),
-        this.traceId,
-        this.evaluationId,
+      ...redactSensitiveResultFieldsForDb(
+        {
+          response:
+            this.response?.metadata &&
+            Object.prototype.hasOwnProperty.call(this.response.metadata, 'redteamTargetMetadata')
+              ? await extractAndStoreBinaryData(this.response, blobContext)
+              : this.response,
+          gradingResult: sanitizeGradingResultForDb(this.gradingResult),
+          metadata: persistTraceMetadata(
+            await externalizeCapturedResultMetadata(this.metadata, blobContext),
+            this.traceId,
+            this.evaluationId,
+          ),
+        },
+        { capturedTargetOnly: true },
       ),
     };
     //check if this exists in the db
@@ -1214,7 +1228,8 @@ export default class EvalResult {
       shouldStripMetadata,
     } = stripFlags;
 
-    const response = projectProviderResponse(this.response, {
+    const redacted = redactSensitiveResultFieldsForDb(this, { capturedTargetOnly: true });
+    const response = projectProviderResponse(redacted.response, {
       stripMetadata: shouldStripMetadata,
       stripOutput: shouldStripResponseOutput,
     });
@@ -1246,7 +1261,7 @@ export default class EvalResult {
       }),
       description: this.description || undefined,
       error: this.error || undefined,
-      gradingResult: shouldStripGradingResult ? null : this.gradingResult,
+      gradingResult: shouldStripGradingResult ? null : redacted.gradingResult,
       id: this.id,
       latencyMs: this.latencyMs,
       namedScores: this.namedScores,
@@ -1266,9 +1281,9 @@ export default class EvalResult {
       metadata: shouldStripMetadata
         ? {}
         : projectOutputMetadata(
-            this.metadata,
+            redacted.metadata,
             shouldStripResponseOutput,
-            this.response?.metadata,
+            redacted.response?.metadata,
             this.testCase.metadata,
           ),
       failureReason: this.failureReason,

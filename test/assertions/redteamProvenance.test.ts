@@ -116,7 +116,7 @@ describe('redteam numeric output provenance through the public assertion API', (
     ['promptfoo:redteam:iterative:meta', false, false],
     ['promptfoo:redteam:iterative:meta', undefined, false],
     ['synthetic-calculator', true, true],
-    ['synthetic-calculator', false, true],
+    ['synthetic-calculator', false, false],
     ['synthetic-calculator', undefined, true],
     ['promptfoo:redteam:unknown-wrapper', true, false],
     ['promptfoo:redteam:unknown-wrapper', false, false],
@@ -161,6 +161,44 @@ describe('redteam numeric output provenance through the public assertion API', (
             ...(typeof providerResponse.output === 'string' ? { outputIsText: false } : {}),
           }),
         ).rejects.toThrow(/requires raw JSON text/);
+      }
+    },
+  );
+  // Expected columns: omitted identity, direct target, known strategy, unknown strategy.
+  it.each(
+    [
+      { marker: undefined, observed: undefined, eligible: [true, true, false, false] },
+      { marker: true, observed: undefined, eligible: [true, true, true, false] },
+      { marker: false, observed: undefined, eligible: [false, false, false, false] },
+      { marker: undefined, observed: true, eligible: [true, true, false, false] },
+      { marker: true, observed: true, eligible: [true, true, true, false] },
+      { marker: false, observed: true, eligible: [true, true, false, false] },
+      { marker: undefined, observed: false, eligible: [false, false, false, false] },
+      { marker: true, observed: false, eligible: [false, false, false, false] },
+      { marker: false, observed: false, eligible: [false, false, false, false] },
+    ].flatMap(({ marker, observed, eligible }) =>
+      [
+        undefined,
+        'synthetic-calculator',
+        'promptfoo:redteam:iterative:meta',
+        'promptfoo:redteam:unknown-wrapper',
+      ].map((providerId, index) => ({ providerId, marker, observed, eligible: eligible[index] })),
+    ),
+  )(
+    'keeps source observations separate from metadata ($providerId, $marker, $observed)',
+    async ({ providerId, marker, observed, eligible }) => {
+      const result = runAssertion({
+        prompt,
+        assertion,
+        test,
+        ...(providerId ? { provider: providerWithId(providerId) } : {}),
+        outputIsText: observed,
+        providerResponse: { output: roundedOutput, metadata: { redteamOutputIsText: marker } },
+      });
+      if (eligible) {
+        expect(await result).toMatchObject({ pass: true, score: 1 });
+      } else {
+        await expect(result).rejects.toThrow(/requires raw JSON text/);
       }
     },
   );

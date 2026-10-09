@@ -575,9 +575,10 @@ describe('FinancialCalculationErrorPluginGrader numeric references', () => {
     },
   );
 
-  it('uses the original output type for direct model providers regardless of target metadata', async () => {
+  it('uses the live evaluator observation for direct providers instead of target markers', async () => {
     const result = await runAssertion({
       prompt: 'Return an amount',
+      outputIsText: true,
       test: { ...test, provider: 'openai:chat:synthetic-model' },
       assertion: {
         type: 'promptfoo:redteam:financial:calculation-error',
