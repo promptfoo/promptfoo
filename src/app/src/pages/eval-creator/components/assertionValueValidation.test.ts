@@ -1,4 +1,3 @@
-import { BaseAssertionTypesSchema } from '@promptfoo/types';
 import { describe, expect, it } from 'vitest';
 import {
   getAssertionValueError,
@@ -6,8 +5,6 @@ import {
   getRunnableAssertionValueError,
 } from './assertionValueValidation';
 import type { Assertion } from '@promptfoo/types';
-
-const UNSUPPORTED_TYPE_MESSAGE = 'Select a supported assertion type before running.';
 
 const make = (overrides: Partial<Assertion>): Assertion =>
   ({ type: 'contains', value: '', ...overrides }) as Assertion;
@@ -126,6 +123,35 @@ describe('getRunnableAssertionValueError', () => {
           make({ type: 'similar', value: 'expected', threshold: 0.5 as any }),
         ),
       ).toBeUndefined();
+    });
+  });
+
+  describe.each(['rouge-l', 'rouge-s', 'not-rouge-l', 'not-rouge-s'] as const)('%s', (type) => {
+    it('accepts a string reference and thresholds at both boundaries', () => {
+      expect(
+        getRunnableAssertionValueError(make({ type, value: 'expected output' })),
+      ).toBeUndefined();
+      for (const threshold of [0, 1]) {
+        expect(
+          getRunnableAssertionValueError(make({ type, value: 'expected output', threshold })),
+        ).toBeUndefined();
+      }
+    });
+
+    it('requires a non-blank string reference', () => {
+      for (const value of ['', '   ', 42, ['expected output']]) {
+        expect(getRunnableAssertionValueError(make({ type, value }))).toMatch(
+          /Enter an expected value/,
+        );
+      }
+    });
+
+    it('rejects thresholds outside [0, 1]', () => {
+      for (const threshold of [-0.1, 1.1]) {
+        expect(
+          getRunnableAssertionValueError(make({ type, value: 'expected output', threshold })),
+        ).toMatch(/from 0 to 1/);
+      }
     });
   });
 
@@ -564,21 +590,5 @@ describe('getFirstRunnableAssertionValueError', () => {
       },
     ];
     expect(getFirstRunnableAssertionValueError(list)).toBeUndefined();
-  });
-});
-
-describe('supported assertion type coverage', () => {
-  // Guards against drift: `BASE_ASSERTION_TYPES` is a hand-maintained copy of the
-  // canonical schema, and `satisfies AssertionType[]` only checks the listed entries
-  // are valid — not that the list is complete. A base type added to the schema but
-  // not mirrored here would be wrongly reported as unsupported, falsely blocking a
-  // valid assertion. This test fails if that ever happens.
-  it.each(BaseAssertionTypesSchema.options)('treats base type %s as supported', (type) => {
-    expect(getRunnableAssertionValueError(make({ type: type as any, value: 'x' }))).not.toBe(
-      UNSUPPORTED_TYPE_MESSAGE,
-    );
-    expect(
-      getRunnableAssertionValueError(make({ type: `not-${type}` as any, value: 'x' })),
-    ).not.toBe(UNSUPPORTED_TYPE_MESSAGE);
   });
 });

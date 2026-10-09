@@ -908,7 +908,9 @@ describe('assertionFromString', () => {
       'levenshtein',
       'perplexity-score',
       'perplexity',
+      'rouge-l',
       'rouge-n',
+      'rouge-s',
       'starts-with',
     ];
 
