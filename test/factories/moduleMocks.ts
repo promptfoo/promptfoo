@@ -27,6 +27,23 @@ export const createFsModuleFactory =
     };
   };
 
+export const createFileUtilitiesFactory = (): MockModuleFactory => async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    maybeLoadFromExternalFile: vi.fn((x) => x),
+    renderVarsInObject: vi.fn((x) => x),
+  };
+};
+
+export const createWarningOrderedLoggerFactory = (): MockModuleFactory => () => ({
+  default: {
+    debug: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    info: vi.fn(),
+  },
+});
+
 export const createDisabledCloudConfigFactory = (): MockModuleFactory => async (importOriginal) => {
   return {
     ...(await importOriginal()),
@@ -111,6 +128,19 @@ export const createExecFileFactory =
         execFile: mockExecFile,
       },
       execFile: mockExecFile,
+    };
+  };
+
+export const createReadFileFactory =
+  (mockReadFile: Mock): MockModuleFactory =>
+  async (importOriginal) => {
+    const actual = await importOriginal<typeof import('fs')>();
+    return {
+      ...actual,
+      promises: {
+        ...actual.promises,
+        readFile: mockReadFile,
+      },
     };
   };
 
