@@ -131,6 +131,19 @@ export const createExecFileFactory =
     };
   };
 
+export const createReadFileFactory =
+  (mockReadFile: Mock): MockModuleFactory =>
+  async (importOriginal) => {
+    const actual = await importOriginal<typeof import('fs')>();
+    return {
+      ...actual,
+      promises: {
+        ...actual.promises,
+        readFile: mockReadFile,
+      },
+    };
+  };
+
 export const createRequestLoggerFactory = (): MockModuleFactory => () => ({
   default: {
     debug: vi.fn(),
