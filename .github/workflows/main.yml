@@ -5,6 +5,11 @@ on:
     branches:
       - main
   workflow_dispatch:
+    inputs:
+      coverage_base:
+        description: 'Base commit or ref for coverage ratchets (use the PR base for stacked branches)'
+        required: false
+        type: string
 
 permissions: &read-only-permissions
   contents: read
@@ -84,7 +89,8 @@ jobs:
         name: Checkout repo
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          fetch-depth: 2
+          # Explicit dispatch bases may be older than the shallow checkout's parents.
+          fetch-depth: ${{ inputs.coverage_base != '' && '0' || '2' }}
           persist-credentials: false
 
       - name: Use Node ${{ matrix.node }}
@@ -154,7 +160,14 @@ jobs:
 
       - name: Check Backend Coverage Ratchets
         if: matrix.os == 'ubuntu-latest' && matrix.node == '22.22' && !matrix.shard
-        run: npm run test:coverage:ratchet -- --report backend
+        env:
+          COVERAGE_BASE: ${{ inputs.coverage_base }}
+        run: |
+          args=(--report backend)
+          if [[ -n "$COVERAGE_BASE" ]]; then
+            args+=(--base "$COVERAGE_BASE")
+          fi
+          npm run test:coverage:ratchet -- "${args[@]}"
 
       - name: Upload Backend Coverage to Codecov
         if: matrix.os == 'ubuntu-latest' && matrix.node == '22.22' && !matrix.shard
@@ -515,13 +528,16 @@ jobs:
         env:
           NO_COLOR: '1'
         run: |
-          "$RUNNER_TEMP/shfmt" -f . > "$RUNNER_TEMP/shell-files.txt"
+          # shfmt 3.12.0 cannot disable EditorConfig ignore rules during discovery.
+          find . -name .git -prune -o -name .editorconfig -exec rm -f -- {} +
+          printf 'root = true\n' > .editorconfig
+          "$RUNNER_TEMP/shfmt" -f=0 . > "$RUNNER_TEMP/shell-files.txt"
           shell_files=()
-          while IFS= read -r file; do
+          while IFS= read -r -d '' file; do
             shell_files+=("$file")
           done < "$RUNNER_TEMP/shell-files.txt"
           if (( ${#shell_files[@]} > 0 )); then
-            "$RUNNER_TEMP/shfmt" -i 2 -d "${shell_files[@]}"
+            "$RUNNER_TEMP/shfmt" -i 2 -d -- "${shell_files[@]/#/./}"
           fi
 
   assets:
@@ -802,7 +818,14 @@ jobs:
         run: npm run test:coverage --prefix src/app
 
       - name: Check Frontend Coverage Ratchets
-        run: npm run test:coverage:ratchet -- --report frontend
+        env:
+          COVERAGE_BASE: ${{ inputs.coverage_base }}
+        run: |
+          args=(--report frontend)
+          if [[ -n "$COVERAGE_BASE" ]]; then
+            args+=(--base "$COVERAGE_BASE")
+          fi
+          npm run test:coverage:ratchet -- "${args[@]}"
 
       - name: Upload Frontend Coverage to Codecov
         # Authentication can fail before fail_ci_if_error applies; uploads are informational.
