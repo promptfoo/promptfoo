@@ -283,7 +283,7 @@ Ultrafast is available for GPT-6.1 Sol and GPT-6 Astra, and in preview for GPT-5
 
 GPT-6.1 Sol and GPT-6 Astra Ultrafast cost six times their Standard token rates. Promptfoo uses the returned service tier to estimate cost when available. For models without published Ultrafast rates, estimates require explicit `inputCost` and `outputCost`. See [Ultrafast pricing](https://developers.openai.com/api/docs/pricing?latest-pricing=ultrafast).
 
-Use the [`openai-ultrafast` example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-ultrafast) to compare Standard and Ultrafast quality, latency, and cost on repeated inputs with `--no-cache`. Choose Ultrafast for interactive workflows when measured time savings justify the premium. Promptfoo's Responses provider uses HTTP; OpenAI recommends persistent WebSockets for frequent tool calls, so measure your application's full workflow separately. For Amazon Bedrock, see [OpenAI models on Bedrock](./aws-bedrock.md#openai-models).
+Compare Standard and Ultrafast quality, latency, and cost on representative inputs with `--no-cache`. Choose Ultrafast for interactive workflows when measured time savings justify the premium. Promptfoo's Responses provider uses HTTP; OpenAI recommends persistent WebSockets for frequent tool calls, so measure your application's full workflow separately. For Amazon Bedrock, see [OpenAI models on Bedrock](./aws-bedrock.md#openai-models).
 
 ### Connection settings
 

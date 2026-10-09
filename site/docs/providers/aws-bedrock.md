@@ -1199,8 +1199,7 @@ Ultrafast costs six times Standard. On Mantle, its short-context rates are $13.2
 $0.66 cache read, $16.50 cache write, and $66 output per million tokens, including the
 regional premium. Priority and Flex are unsupported. See the
 [AWS model card](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-openai-gpt-6-1-sol.html)
-for availability and long-context rates, and the [`openai-ultrafast` example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-ultrafast)
-for a Standard comparison. Bedrock authentication follows the instructions below.
+for availability and long-context rates. Bedrock authentication follows the instructions below.
 
 #### Frontier models (GPT-5.x)
 
