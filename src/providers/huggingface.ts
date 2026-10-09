@@ -1,14 +1,16 @@
 import { type FetchWithCacheResult, fetchWithCache } from '../cache';
-import { getEnvString } from '../envars';
 import logger from '../logger';
 import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
+import { resolveProviderApiKey } from './credentials';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { getRequestTimeoutMs } from './shared';
 
+import type { EnvOverrides } from '../contracts/env';
 import type {
   ApiProvider,
   ApiSimilarityProvider,
   CallApiContextParams,
+  CallApiOptionsParams,
   ProviderClassificationResponse,
   ProviderEmbeddingResponse,
   ProviderOptions,
@@ -117,28 +119,30 @@ export class HuggingfaceChatCompletionProvider extends OpenAiChatCompletionProvi
   }
 
   getApiKey(): string | undefined {
-    return (
-      this.config.apiKey ||
-      this.env?.HF_TOKEN ||
-      this.env?.HF_API_TOKEN ||
-      getEnvString('HF_TOKEN') ||
-      getEnvString('HF_API_TOKEN') ||
-      undefined
-    );
+    return resolveProviderApiKey({ apiKey: this.config.apiKey }, this.env, [
+      'HF_TOKEN',
+      'HF_API_TOKEN',
+    ]);
   }
 }
 
 export class HuggingfaceTextGenerationProvider implements ApiProvider {
   modelName: string;
   config: HuggingfaceTextGenerationOptions;
+  env?: EnvOverrides;
   private chatProvider?: HuggingfaceChatCompletionProvider;
-  private providerOptions: { id?: string; config?: HuggingfaceTextGenerationOptions };
+  private providerOptions: {
+    id?: string;
+    config?: HuggingfaceTextGenerationOptions;
+    env?: EnvOverrides;
+  };
 
   constructor(
     modelName: string,
-    options: { id?: string; config?: HuggingfaceTextGenerationOptions } = {},
+    options: { id?: string; config?: HuggingfaceTextGenerationOptions; env?: EnvOverrides } = {},
   ) {
-    const { id, config } = options;
+    const { id, config, env } = options;
+    this.env = env;
     this.modelName = modelName;
     this.id = id ? () => id : this.id;
     this.config = config || {};
@@ -154,7 +158,10 @@ export class HuggingfaceTextGenerationProvider implements ApiProvider {
   }
 
   getApiKey(): string | undefined {
-    return this.config.apiKey || getEnvString('HF_TOKEN') || getEnvString('HF_API_TOKEN');
+    return resolveProviderApiKey({ apiKey: this.config.apiKey }, this.env, [
+      'HF_TOKEN',
+      'HF_API_TOKEN',
+    ]);
   }
 
   getConfig() {
@@ -290,12 +297,18 @@ type HuggingfaceTextClassificationOptions = HuggingfaceProviderOptions;
 export class HuggingfaceTextClassificationProvider implements ApiProvider {
   modelName: string;
   config: HuggingfaceTextClassificationOptions;
+  env?: EnvOverrides;
 
   constructor(
     modelName: string,
-    options: { id?: string; config?: HuggingfaceTextClassificationOptions } = {},
+    options: {
+      id?: string;
+      config?: HuggingfaceTextClassificationOptions;
+      env?: EnvOverrides;
+    } = {},
   ) {
-    const { id, config } = options;
+    const { id, config, env } = options;
+    this.env = env;
     this.modelName = modelName;
     this.id = id ? () => id : this.id;
     this.config = config || {};
@@ -310,7 +323,10 @@ export class HuggingfaceTextClassificationProvider implements ApiProvider {
   }
 
   getApiKey(): string | undefined {
-    return this.config.apiKey || getEnvString('HF_TOKEN') || getEnvString('HF_API_TOKEN');
+    return resolveProviderApiKey({ apiKey: this.config.apiKey }, this.env, [
+      'HF_TOKEN',
+      'HF_API_TOKEN',
+    ]);
   }
 
   async callClassificationApi(prompt: string): Promise<ProviderClassificationResponse> {
@@ -389,14 +405,18 @@ type HuggingfaceFeatureExtractionOptions = HuggingfaceProviderOptions & {
 };
 
 export class HuggingfaceFeatureExtractionProvider implements ApiProvider {
+  readonly supportsEmbeddingCancellation = true;
+
   modelName: string;
   config: HuggingfaceFeatureExtractionOptions;
+  env?: EnvOverrides;
 
   constructor(
     modelName: string,
-    options: { id?: string; config?: HuggingfaceFeatureExtractionOptions } = {},
+    options: { id?: string; config?: HuggingfaceFeatureExtractionOptions; env?: EnvOverrides } = {},
   ) {
-    const { id, config } = options;
+    const { id, config, env } = options;
+    this.env = env;
     this.modelName = modelName;
     this.id = id ? () => id : this.id;
     this.config = config || {};
@@ -411,14 +431,21 @@ export class HuggingfaceFeatureExtractionProvider implements ApiProvider {
   }
 
   getApiKey(): string | undefined {
-    return this.config.apiKey || getEnvString('HF_TOKEN') || getEnvString('HF_API_TOKEN');
+    return resolveProviderApiKey({ apiKey: this.config.apiKey }, this.env, [
+      'HF_TOKEN',
+      'HF_API_TOKEN',
+    ]);
   }
 
   async callApi(): Promise<ProviderResponse> {
     throw new Error('Cannot use a feature extraction provider for text generation');
   }
 
-  async callEmbeddingApi(text: string): Promise<ProviderEmbeddingResponse> {
+  async callEmbeddingApi(
+    text: string,
+    _context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderEmbeddingResponse> {
     // https://huggingface.co/docs/api-inference/detailed_parameters#feature-extraction-task
     const params = {
       inputs: text,
@@ -443,6 +470,7 @@ export class HuggingfaceFeatureExtractionProvider implements ApiProvider {
             ...(this.getApiKey() ? { Authorization: `Bearer ${this.getApiKey()}` } : {}),
           },
           body: JSON.stringify(params),
+          ...(options?.abortSignal && { signal: options.abortSignal }),
         },
         getRequestTimeoutMs(),
       );
@@ -467,6 +495,7 @@ export class HuggingfaceFeatureExtractionProvider implements ApiProvider {
         embedding,
       };
     } catch (err) {
+      options?.abortSignal?.throwIfAborted();
       return {
         error: `API call error: ${String(err)}. Output:\n${response?.data}`,
       };
@@ -482,12 +511,18 @@ type HuggingfaceSentenceSimilarityOptions = HuggingfaceProviderOptions & {
 export class HuggingfaceSentenceSimilarityProvider implements ApiSimilarityProvider {
   modelName: string;
   config: HuggingfaceSentenceSimilarityOptions;
+  env?: EnvOverrides;
 
   constructor(
     modelName: string,
-    options: { id?: string; config?: HuggingfaceSentenceSimilarityOptions } = {},
+    options: {
+      id?: string;
+      config?: HuggingfaceSentenceSimilarityOptions;
+      env?: EnvOverrides;
+    } = {},
   ) {
-    const { id, config } = options;
+    const { id, config, env } = options;
+    this.env = env;
     this.modelName = modelName;
     this.id = id ? () => id : this.id;
     this.config = config || {};
@@ -498,7 +533,10 @@ export class HuggingfaceSentenceSimilarityProvider implements ApiSimilarityProvi
   }
 
   getApiKey(): string | undefined {
-    return this.config.apiKey || getEnvString('HF_TOKEN') || getEnvString('HF_API_TOKEN');
+    return resolveProviderApiKey({ apiKey: this.config.apiKey }, this.env, [
+      'HF_TOKEN',
+      'HF_API_TOKEN',
+    ]);
   }
 
   toString(): string {
@@ -578,12 +616,18 @@ type HuggingfaceTokenClassificationOptions = HuggingfaceProviderOptions & {
 export class HuggingfaceTokenExtractionProvider implements ApiProvider {
   modelName: string;
   config: HuggingfaceTokenClassificationOptions;
+  env?: EnvOverrides;
 
   constructor(
     modelName: string,
-    options: { id?: string; config?: HuggingfaceTokenClassificationOptions } = {},
+    options: {
+      id?: string;
+      config?: HuggingfaceTokenClassificationOptions;
+      env?: EnvOverrides;
+    } = {},
   ) {
-    const { id, config } = options;
+    const { id, config, env } = options;
+    this.env = env;
     this.modelName = modelName;
     this.id = id ? () => id : this.id;
     this.config = config || {};
@@ -594,7 +638,10 @@ export class HuggingfaceTokenExtractionProvider implements ApiProvider {
   }
 
   getApiKey(): string | undefined {
-    return this.config.apiKey || getEnvString('HF_TOKEN') || getEnvString('HF_API_TOKEN');
+    return resolveProviderApiKey({ apiKey: this.config.apiKey }, this.env, [
+      'HF_TOKEN',
+      'HF_API_TOKEN',
+    ]);
   }
 
   async callClassificationApi(input: string): Promise<ProviderClassificationResponse> {

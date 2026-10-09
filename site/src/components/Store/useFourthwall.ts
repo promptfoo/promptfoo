@@ -3,9 +3,9 @@ import { useCallback, useEffect, useState } from 'react';
 import type {
   FourthwallAttributeValue,
   FourthwallCart,
-  FourthwallCollection,
-  FourthwallProduct,
-  PaginatedResponse,
+  FourthwallCartItem,
+  FourthwallCartRequestItem,
+  FourthwallCatalogItem,
 } from './types';
 
 // Public storefront token - this is INTENTIONALLY public and client-facing.
@@ -84,25 +84,9 @@ async function apiFetch<T>(endpoint: string, options?: RequestInit): Promise<T> 
   return response.json();
 }
 
-// Fetch all collections
-export function useCollections() {
-  const [collections, setCollections] = useState<FourthwallCollection[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    apiFetch<PaginatedResponse<FourthwallCollection>>('/collections')
-      .then((data) => setCollections(data.results))
-      .catch((err) => setError(err.message))
-      .finally(() => setIsLoading(false));
-  }, []);
-
-  return { collections, isLoading, error };
-}
-
 // Fetch all products from a collection (handles pagination)
 export function useProducts(collectionSlug: string = 'all') {
-  const [products, setProducts] = useState<FourthwallProduct[]>([]);
+  const [products, setProducts] = useState<FourthwallCatalogItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -112,12 +96,12 @@ export function useProducts(collectionSlug: string = 'all') {
       setError(null);
 
       try {
-        const allProducts: FourthwallProduct[] = [];
+        const allProducts: FourthwallCatalogItem[] = [];
         let page = 0;
 
         // Fetch pages until we get an empty results array
         while (true) {
-          const response = await apiFetch<{ results: FourthwallProduct[] }>(
+          const response = await apiFetch<{ results: FourthwallCatalogItem[] }>(
             `/collections/${collectionSlug}/products?page=${page}&size=${PAGE_SIZE}`,
           );
 
@@ -152,28 +136,6 @@ export function useProducts(collectionSlug: string = 'all') {
   return { products, isLoading, error };
 }
 
-// Fetch a single product
-export function useProduct(slug: string | null) {
-  const [product, setProduct] = useState<FourthwallProduct | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!slug) {
-      setProduct(null);
-      return;
-    }
-
-    setIsLoading(true);
-    apiFetch<FourthwallProduct>(`/products/${slug}`)
-      .then(setProduct)
-      .catch((err) => setError(err.message))
-      .finally(() => setIsLoading(false));
-  }, [slug]);
-
-  return { product, isLoading, error };
-}
-
 // Cart operations
 const CART_STORAGE_KEY = 'promptfoo_cart_id';
 const storage = safeLocalStorage();
@@ -198,49 +160,31 @@ export function useCart() {
     }
   }, []);
 
-  const createCart = useCallback(async (variantId: string, quantity: number = 1) => {
-    // Validate inputs
-    validateVariantId(variantId);
-    validateQuantity(quantity);
-
-    setIsLoading(true);
-    setError(null);
-    try {
-      const newCart = await apiFetch<FourthwallCart>('/carts', {
-        method: 'POST',
-        body: JSON.stringify({
-          items: [{ variantId, quantity }],
-        }),
-      });
-      storage.setItem(CART_STORAGE_KEY, newCart.id);
-      setCart(newCart);
-      return newCart;
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create cart');
-      throw err;
-    } finally {
-      setIsLoading(false);
-    }
+  const createCart = useCallback(async (items: FourthwallCartRequestItem[]) => {
+    const newCart = await apiFetch<FourthwallCart>('/carts', {
+      method: 'POST',
+      body: JSON.stringify({ items }),
+    });
+    storage.setItem(CART_STORAGE_KEY, newCart.id);
+    setCart(newCart);
+    return newCart;
   }, []);
 
-  const addToCart = useCallback(
-    async (variantId: string, quantity: number = 1) => {
-      // Validate inputs
-      validateVariantId(variantId);
-      validateQuantity(quantity);
-
+  const addItemsToCart = useCallback(
+    async (items: FourthwallCartRequestItem[]) => {
+      for (const item of items) {
+        validateVariantId(item.variantId);
+        validateQuantity(item.quantity);
+      }
       setIsLoading(true);
       setError(null);
       try {
         if (!cart) {
-          return createCart(variantId, quantity);
+          return await createCart(items);
         }
-
         const updatedCart = await apiFetch<FourthwallCart>(`/carts/${cart.id}/add`, {
           method: 'POST',
-          body: JSON.stringify({
-            items: [{ variantId, quantity }],
-          }),
+          body: JSON.stringify({ items }),
         });
         setCart(updatedCart);
         return updatedCart;
@@ -254,8 +198,66 @@ export function useCart() {
     [cart, createCart],
   );
 
+  const addToCart = useCallback(
+    (variantId: string, quantity: number = 1) => addItemsToCart([{ variantId, quantity }]),
+    [addItemsToCart],
+  );
+
+  const addBundleToCart = useCallback(
+    (bundleId: string, variantIds: string[]) => {
+      validateVariantId(bundleId);
+      if (variantIds.length === 0) {
+        throw new Error('Select a variant for each product in the bundle');
+      }
+      return addItemsToCart(variantIds.map((variantId) => ({ variantId, quantity: 1, bundleId })));
+    },
+    [addItemsToCart],
+  );
+
+  // The live /change and /remove endpoints only address ungrouped variants.
+  // Replace a bundle cart atomically, preserving every other item and bundle.
+  const replaceBundle = useCallback(
+    async (groupedId: string, quantity: number) => {
+      if (!cart) return;
+      const batches = new Map<string, FourthwallCartRequestItem[]>();
+      for (const item of cart.items) {
+        const nextQuantity = item.groupedBy?.groupedId === groupedId ? quantity : item.quantity;
+        if (nextQuantity === 0) continue;
+        const key = item.groupedBy?.groupedId ?? 'individual';
+        const items = batches.get(key) ?? [];
+        items.push({
+          variantId: item.variant.id,
+          quantity: nextQuantity,
+          ...(item.groupedBy ? { bundleId: item.groupedBy.bundleId } : {}),
+        });
+        batches.set(key, items);
+      }
+      if (batches.size === 0) {
+        storage.removeItem(CART_STORAGE_KEY);
+        setCart(null);
+        return;
+      }
+      // Each bundle configuration needs its own request. Publish the new cart ID
+      // only after every batch succeeds so a failure leaves the original intact.
+      let replacement: FourthwallCart | undefined;
+      for (const items of batches.values()) {
+        replacement = await apiFetch<FourthwallCart>(
+          replacement ? `/carts/${replacement.id}/add` : '/carts',
+          { method: 'POST', body: JSON.stringify({ items }) },
+        );
+      }
+      if (replacement) {
+        storage.setItem(CART_STORAGE_KEY, replacement.id);
+        setCart(replacement);
+      }
+      return replacement;
+    },
+    [cart],
+  );
+
   const removeFromCart = useCallback(
-    async (variantId: string) => {
+    async (item: FourthwallCartItem) => {
+      const variantId = item.variant.id;
       if (!cart) return;
 
       // Validate input
@@ -264,6 +266,9 @@ export function useCart() {
       setIsLoading(true);
       setError(null);
       try {
+        if (item.groupedBy) {
+          return await replaceBundle(item.groupedBy.groupedId, 0);
+        }
         // API expects: { items: [{ variantId }] }
         const updatedCart = await apiFetch<FourthwallCart>(`/carts/${cart.id}/remove`, {
           method: 'POST',
@@ -280,11 +285,12 @@ export function useCart() {
         setIsLoading(false);
       }
     },
-    [cart],
+    [cart, replaceBundle],
   );
 
   const updateQuantity = useCallback(
-    async (variantId: string, quantity: number) => {
+    async (item: FourthwallCartItem, quantity: number) => {
+      const variantId = item.variant.id;
       if (!cart) return;
 
       // Validate inputs
@@ -294,6 +300,9 @@ export function useCart() {
       setIsLoading(true);
       setError(null);
       try {
+        if (item.groupedBy) {
+          return await replaceBundle(item.groupedBy.groupedId, quantity);
+        }
         // API expects: { items: [{ variantId, quantity }] }
         const updatedCart = await apiFetch<FourthwallCart>(`/carts/${cart.id}/change`, {
           method: 'POST',
@@ -310,7 +319,7 @@ export function useCart() {
         setIsLoading(false);
       }
     },
-    [cart],
+    [cart, replaceBundle],
   );
 
   const clearCart = useCallback(() => {
@@ -318,7 +327,15 @@ export function useCart() {
     setCart(null);
   }, []);
 
-  const itemCount = cart?.items.reduce((sum, item) => sum + item.quantity, 0) ?? 0;
+  const countedBundles = new Set<string>();
+  const itemCount =
+    cart?.items.reduce((sum, item) => {
+      if (item.groupedBy) {
+        if (countedBundles.has(item.groupedBy.groupedId)) return sum;
+        countedBundles.add(item.groupedBy.groupedId);
+      }
+      return sum + item.quantity;
+    }, 0) ?? 0;
 
   return {
     cart,
@@ -326,6 +343,7 @@ export function useCart() {
     error,
     itemCount,
     addToCart,
+    addBundleToCart,
     removeFromCart,
     updateQuantity,
     clearCart,
@@ -340,97 +358,25 @@ export function formatPrice(money: { value: number; currency: string }): string 
   }).format(money.value);
 }
 
-// Common HTML entities for SSR decoding
-const HTML_ENTITIES: Record<string, string> = {
-  '&amp;': '&',
-  '&lt;': '<',
-  '&gt;': '>',
-  '&quot;': '"',
-  '&#39;': "'",
-  '&apos;': "'",
-  '&nbsp;': ' ',
-  '&copy;': '©',
-  '&reg;': '®',
-  '&trade;': '™',
-};
-
-/**
- * Strip HTML tags from a string using indexOf (no regex for tag stripping).
- * Uses DOMParser in browser (safe), string-based fallback for SSR.
- * SSR fallback processes trusted Fourthwall API content only.
- */
+/** Strip product description HTML after the product modal opens in the browser. */
 export function stripHtml(html: string): string {
-  if (!html) return '';
-
-  // Browser: Use DOMParser (safe, handles all edge cases)
-  if (typeof document !== 'undefined') {
-    const doc = new DOMParser().parseFromString(html, 'text/html');
-    // Remove script and style elements before getting textContent
-    doc.querySelectorAll('script, style').forEach((el) => el.remove());
-    return doc.body.textContent || '';
+  if (!html) {
+    return '';
   }
 
-  // SSR fallback: String-based stripping for trusted Fourthwall API content.
-  // Uses indexOf/substring instead of regex to avoid CodeQL js/bad-tag-filter alerts.
-  // The browser path (above) uses safe DOMParser for client-side rendering.
-  let result = html;
-
-  // Remove script/style tags and contents using indexOf (no regex)
-  for (const tag of ['script', 'style']) {
-    let safety = 0;
-    while (safety++ < 100) {
-      const openTag = result.toLowerCase().indexOf(`<${tag}`);
-      if (openTag === -1) break;
-      const closeTag = result.toLowerCase().indexOf(`</${tag}`, openTag);
-      if (closeTag === -1) break;
-      const closeEnd = result.indexOf('>', closeTag);
-      if (closeEnd === -1) break;
-      result = result.substring(0, openTag) + result.substring(closeEnd + 1);
-    }
-  }
-
-  // Remove remaining HTML tags using indexOf (no regex)
-  let safety = 0;
-  while (safety++ < 1000) {
-    const start = result.indexOf('<');
-    if (start === -1) break;
-    const end = result.indexOf('>', start);
-    if (end === -1) break;
-    result = result.substring(0, start) + result.substring(end + 1);
-  }
-
-  // Decode common HTML entities (using string split/join, not regex)
-  for (const [entity, char] of Object.entries(HTML_ENTITIES)) {
-    result = result.split(entity).join(char);
-  }
-
-  // Decode numeric entities (&#123; format) - simple parsing without regex
-  let numericSafety = 0;
-  while (numericSafety++ < 500) {
-    const start = result.indexOf('&#');
-    if (start === -1) break;
-    const end = result.indexOf(';', start);
-    if (end === -1 || end - start > 10) break;
-    const numStr = result.substring(start + 2, end);
-    const isHex = numStr.toLowerCase().startsWith('x');
-    const num = isHex ? Number.parseInt(numStr.substring(1), 16) : Number.parseInt(numStr, 10);
-    if (!Number.isNaN(num) && num > 0 && num < 0x10ffff) {
-      result = result.substring(0, start) + String.fromCodePoint(num) + result.substring(end + 1);
-    } else {
-      break; // Invalid entity, stop processing
-    }
-  }
-
-  return result.trim();
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  // Remove script and style elements before getting textContent
+  doc.querySelectorAll('script, style').forEach((el) => el.remove());
+  return doc.body.textContent || '';
 }
 
 // Check if variant is in stock
-export function isInStock(stock: { type: string; quantity?: number }): boolean {
+export function isInStock(stock: { type: string; quantity?: number; inStock?: number }): boolean {
   if (stock.type === 'UNLIMITED') {
     return true;
   }
-  if (stock.type === 'LIMITED' && typeof stock.quantity === 'number') {
-    return stock.quantity > 0;
+  if (stock.type === 'LIMITED') {
+    return (stock.inStock ?? stock.quantity ?? 0) > 0;
   }
   return false;
 }

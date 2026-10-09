@@ -41,7 +41,7 @@ import {
   Save,
   Settings,
 } from 'lucide-react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router';
 import { customTargetOption, findPredefinedTarget } from './components/constants';
 import Plugins from './components/Plugins';
 import Purpose from './components/Purpose';
@@ -368,7 +368,6 @@ export default function RedTeamSetupPage() {
         target = ProviderOptionsSchema.parse({
           id: targetType ? targetType.value : customTargetOption.value,
           label: target,
-          ...(targetType?.value.startsWith('vertex:gemini-3') && { config: { region: 'global' } }),
         });
       }
 
