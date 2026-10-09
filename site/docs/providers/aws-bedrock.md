@@ -1376,9 +1376,9 @@ providers:
 ```
 
 This route uses the AWS credential chain. A bare `bedrock:us.openai.gpt-5.6-sol` selects
-InvokeModel, which does not support GPT-5.6. The Bedrock provider does not implement Runtime's
-HTTP Chat Completions or Responses endpoints; use the explicit Converse route above or the
-Mantle selectors documented here.
+InvokeModel, which does not support GPT-5.6. For Runtime's HTTP endpoints, use
+`bedrock:runtime:chat:us.openai.gpt-5.6-sol` or
+`bedrock:runtime:responses:us.openai.gpt-5.6-sol`, as described below.
 
 ### xAI Grok Models
 
