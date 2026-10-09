@@ -12,12 +12,8 @@ import logger from '../../src/logger';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import { getTotalResultRowCount } from '../../src/models/evalPerformance';
-import {
-  deleteErrorResults,
-  getErrorResultIds,
-  recalculatePromptMetrics,
-  retryCommand,
-} from '../../src/node/retry';
+import { recalculatePromptMetrics } from '../../src/node/promptMetrics';
+import { deleteErrorResults, getErrorResultIds, retryCommand } from '../../src/node/retry';
 import { ResultFailureReason } from '../../src/types/index';
 import { shouldShareResults } from '../../src/util/sharing';
 

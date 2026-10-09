@@ -361,6 +361,117 @@ describe('HydraProvider', () => {
     },
   );
 
+  it.each(
+    ['bare', 'small-json', 'other-json'].flatMap((shape) =>
+      [false, true].flatMap((inline) =>
+        ['grader', 'later-text'].map((stage) => ({ shape, inline, stage })),
+      ),
+    ),
+  )(
+    'retains completed $shape media through $stage (inline=$inline)',
+    async ({ shape, inline, stage }) => {
+      await runDbMigrations();
+      vi.stubEnv('PROMPTFOO_INLINE_MEDIA', String(inline));
+      const bytes = Buffer.alloc(shape === 'small-json' ? 256 : 2048, 'R').toString('base64');
+      const output =
+        shape === 'bare'
+          ? bytes
+          : JSON.stringify(
+              shape === 'small-json' ? { data: [{ b64_json: bytes }] } : { b64_json: bytes },
+            );
+      const controller = new AbortController();
+      const snapshots: import('../../../../src/types/index').ProviderResponse[] = [];
+      let signalPending!: () => void;
+      const pending = new Promise<void>((resolve) => {
+        signalPending = resolve;
+      });
+      let release: (() => void) | undefined;
+      let attackerCalls = 0;
+      mockAgentProvider.callApi.mockImplementation(async () => {
+        attackerCalls++;
+        if (stage === 'later-text' && attackerCalls === 3) {
+          signalPending();
+          return new Promise((resolve) => {
+            release = () => resolve({ output: 'Late probe' });
+          });
+        }
+        return { output: `Synthetic probe ${attackerCalls}` };
+      });
+      mockTargetProvider.callApi
+        .mockResolvedValueOnce({ output, isBase64: true })
+        .mockResolvedValue({ output: 'Ordinary later response' });
+      mockGrader.getResult.mockImplementation(async () => {
+        if (stage === 'grader') {
+          signalPending();
+          return new Promise((resolve) => {
+            release = () => resolve({ grade: { pass: true, score: 1 } });
+          });
+        }
+        return { grade: { pass: true, score: 1 } };
+      });
+      const test: AtomicTestCase = {
+        assert: [{ type: 'promptfoo:redteam:pii' }],
+        metadata: { pluginId: 'pii' },
+      };
+      const attack = new HydraProvider({ injectVar: 'input', maxTurns: 3 }).callApi(
+        '',
+        {
+          originalProvider: mockTargetProvider,
+          vars: { input: 'Synthetic objective' },
+          prompt: { raw: '{{input}}', label: 'test' },
+          test,
+        },
+        {
+          abortSignal: controller.signal,
+          onProgress: (response) => snapshots.push(structuredClone(response)),
+        },
+      );
+      try {
+        await Promise.race([pending, attack]);
+        const latest = snapshots.at(-1)!;
+        expect(latest.output).toBe(stage === 'grader' ? output : 'Ordinary later response');
+        expect(latest.metadata?.redteamHistory[0]).toMatchObject({ output, isBase64: true });
+        const wireMessage = latest.metadata?.messages.find(
+          (message: { role: string }) => message.role === 'assistant',
+        );
+        expect(wireMessage.content).toBe(
+          inline
+            ? output
+            : shape === 'bare'
+              ? `[binary output redacted; length≈${output.length}]`
+              : `[binary output redacted; b64_json length=${bytes.length}]`,
+        );
+        const projected = sanitizeResultForJsonlArtifact(
+          createEvaluateResult({ response: latest, metadata: latest.metadata }),
+          {
+            shouldStripMetadata: false,
+            shouldStripPromptText: false,
+            shouldStripResponseOutput: true,
+            shouldStripTestVars: false,
+            shouldStripGradingResult: false,
+          },
+        );
+        for (const metadata of [projected.metadata, projected.response?.metadata]) {
+          expect(metadata?.redteamHistory[0].output).toBe('[output stripped]');
+          if (stage === 'later-text') {
+            expect(metadata?.redteamHistory[1].output).toBe('Ordinary later response');
+          }
+        }
+        expect(JSON.stringify(projected)).not.toContain(bytes);
+        expect(latest.metadata?.redteamHistory[0].output).toBe(output);
+        controller.abort();
+        const rejected = expect(attack).rejects.toThrow();
+        release!();
+        await rejected;
+      } finally {
+        controller.abort();
+        release?.();
+        await attack.catch(() => undefined);
+        vi.unstubAllEnvs();
+      }
+    },
+  );
+
   it('checkpoints completed probes before grading and stops on cancellation', async () => {
     const controller = new AbortController();
     const snapshots: import('../../../../src/types/index').ProviderResponse[] = [];

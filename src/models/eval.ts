@@ -932,8 +932,8 @@ export default class Eval {
     }
   }
 
-  async fetchResultsByTestIdx(testIdx: number) {
-    return await EvalResult.findManyByEvalId(this.id, { testIdx });
+  async fetchResultsByTestIdx(testIdx: number, promptIdx?: number) {
+    return await EvalResult.findManyByEvalId(this.id, { testIdx, promptIdx });
   }
 
   /**

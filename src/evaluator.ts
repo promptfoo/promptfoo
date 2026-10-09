@@ -3931,7 +3931,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     if (!cliState.resume || !this.store.persisted) {
       return undefined;
     }
-    return (await this.store.readResultsByTestIdx(row.testIdx)).find(
+    return (await this.store.readResultsByTestIdx(row.testIdx, row.promptIdx)).find(
       (candidate) =>
         candidate.promptIdx === row.promptIdx &&
         candidate.failureReason === ResultFailureReason.ERROR &&

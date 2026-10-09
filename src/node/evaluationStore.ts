@@ -1,5 +1,5 @@
 import EvalResult, { asEvaluateResult } from '../models/evalResult';
-import { recalculatePromptMetrics } from './retry';
+import { recalculatePromptMetrics } from './promptMetrics';
 
 import type { EvaluationStore } from '../evaluator/runtime';
 import type Eval from '../models/eval';
@@ -68,8 +68,10 @@ export class EvalEvaluationStore implements EvaluationStore<Eval, EvalResult> {
     return this.evaluation.getResults();
   }
 
-  readResultsByTestIdx(testIdx: number): Promise<EvalResult[]> {
-    return this.evaluation.fetchResultsByTestIdx(testIdx);
+  readResultsByTestIdx(testIdx: number, promptIdx?: number): Promise<EvalResult[]> {
+    return promptIdx === undefined
+      ? this.evaluation.fetchResultsByTestIdx(testIdx)
+      : this.evaluation.fetchResultsByTestIdx(testIdx, promptIdx);
   }
 
   recordFinalResult(result: EvaluateResult): void {

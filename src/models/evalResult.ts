@@ -993,7 +993,7 @@ export default class EvalResult {
     return result.length > 0 ? new EvalResult({ ...result[0], persisted: true }) : null;
   }
 
-  static async findManyByEvalId(evalId: string, opts?: { testIdx?: number }) {
+  static async findManyByEvalId(evalId: string, opts?: { testIdx?: number; promptIdx?: number }) {
     const db = await getDb();
     const results = await db
       .select()
@@ -1002,6 +1002,7 @@ export default class EvalResult {
         and(
           eq(evalResultsTable.evalId, evalId),
           opts?.testIdx == null ? undefined : eq(evalResultsTable.testIdx, opts.testIdx),
+          opts?.promptIdx == null ? undefined : eq(evalResultsTable.promptIdx, opts.promptIdx),
         ),
       );
     return results.map((result) => new EvalResult({ ...result, persisted: true }));

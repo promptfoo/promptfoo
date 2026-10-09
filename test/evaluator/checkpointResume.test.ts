@@ -9,8 +9,10 @@ import { expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
 import { evaluate } from '../../src/evaluator';
 import Eval from '../../src/models/eval';
+import EvalResult from '../../src/models/evalResult';
 import { nodeEvaluatorRuntime } from '../../src/node/evaluatorRuntime';
-import { deleteErrorResults, recalculatePromptMetrics } from '../../src/node/retry';
+import { recalculatePromptMetrics } from '../../src/node/promptMetrics';
+import { deleteErrorResults } from '../../src/node/retry';
 import { ResultFailureReason } from '../../src/types/index';
 import { JsonlFileWriter } from '../../src/util/exportToFile/writeToFile';
 import { writeMultipleOutputs } from '../../src/util/output';
@@ -28,6 +30,102 @@ function deferred() {
 }
 
 describeEvaluator('resumable checkpoint preparation', () => {
+  it.each([false, true])(
+    'reads only the resumed column and supports legacy stores (legacy=%s)',
+    async (legacyStore) => {
+      const columns = 8;
+      const controller = new AbortController();
+      const allStarted = deferred();
+      let callsStarted = 0;
+      let resuming = false;
+      const providers: ApiProvider[] = Array.from({ length: columns }, (_, index) => ({
+        id: () => `checkpoint-column-${index}`,
+        callApi: vi.fn(async (_prompt, _context, options) => {
+          if (resuming) {
+            return { output: `Completed ${index}`, tokenUsage: { total: 5, numRequests: 1 } };
+          }
+          options?.onProgress?.({
+            output: `Checkpoint ${index}`,
+            tokenUsage: { total: 11, numRequests: 1 },
+          });
+          if (++callsStarted === columns) {
+            allStarted.resolve();
+          }
+          return new Promise<never>(() => {});
+        }),
+      }));
+      const suite: TestSuite = { providers, prompts: [toPrompt('Synthetic probe')], tests: [{}] };
+      const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+      const paused = evaluate(suite, record, {
+        maxConcurrency: columns,
+        timeoutMs: 0,
+        abortSignal: controller.signal,
+      });
+      await allStarted.promise;
+      controller.abort();
+      await paused;
+      const resumed = (await Eval.findById(record.id))!;
+      const reads: Array<{ promptIdx?: number; rows: number }> = [];
+      const findMany = EvalResult.findManyByEvalId;
+      const readSpy = vi
+        .spyOn(EvalResult, 'findManyByEvalId')
+        .mockImplementation(async (evalId, options) => {
+          const rows = await findMany(evalId, options);
+          if (options?.testIdx === 0) {
+            reads.push({ promptIdx: options.promptIdx, rows: rows.length });
+          }
+          return rows;
+        });
+      try {
+        resuming = true;
+        cliState.resume = true;
+        await evaluate(
+          suite,
+          resumed,
+          { maxConcurrency: columns, timeoutMs: 0 },
+          {
+            ...nodeEvaluatorRuntime,
+            createEvaluationStore(evaluation) {
+              const store = nodeEvaluatorRuntime.createEvaluationStore(evaluation);
+              if (legacyStore) {
+                const read = store.readResultsByTestIdx.bind(store);
+                // Existing custom stores may implement only the original one-argument method.
+                store.readResultsByTestIdx = (testIdx) => read(testIdx);
+              }
+              return store;
+            },
+          },
+        );
+        expect(reads).toHaveLength(columns);
+        expect(reads.every((read) => read.rows === (legacyStore ? columns : 1))).toBe(true);
+        if (!legacyStore) {
+          expect(reads.map((read) => read.promptIdx).sort()).toEqual(
+            Array.from({ length: columns }, (_, index) => index),
+          );
+        }
+        const results = await resumed.fetchResultsByTestIdx(0);
+        expect(results).toHaveLength(columns);
+        expect(results.every((result) => result.success)).toBe(true);
+        expect(await resumed.fetchResultsByTestIdx(0, 0)).toEqual(
+          results.filter((result) => result.promptIdx === 0),
+        );
+        expect(
+          resumed.prompts.every(
+            (prompt) =>
+              prompt.metrics?.testPassCount === 1 &&
+              prompt.metrics.testErrorCount === 0 &&
+              prompt.metrics.tokenUsage.total === 5,
+          ),
+        ).toBe(true);
+        for (const provider of providers) {
+          expect(provider.callApi).toHaveBeenCalledTimes(2);
+        }
+      } finally {
+        readSpy.mockRestore();
+      }
+    },
+  );
+
   it.each([
     {
       name: 'absent',

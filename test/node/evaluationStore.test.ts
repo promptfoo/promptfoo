@@ -50,12 +50,14 @@ describe('EvalEvaluationStore', () => {
     expect(await store.readFailedResultsByTestIdx(0)).toEqual([modelResult]);
     expect(await store.readResults()).toEqual([modelResult]);
     expect(await store.readResultsByTestIdx(0)).toEqual([modelResult]);
+    expect(await store.readResultsByTestIdx(0, 0)).toEqual([modelResult]);
     expect(addResult).toHaveBeenCalledWith(result);
     expect(addPrompts).toHaveBeenCalledWith(prompts);
     expect(getCompletedIndexPairs).toHaveBeenCalledWith(evaluation.id, { excludeErrors: true });
     expect(getFailedResultsByTestIdx).toHaveBeenCalledWith(0);
     expect(getResults).toHaveBeenCalledOnce();
     expect(fetchResultsByTestIdx).toHaveBeenCalledWith(0);
+    expect(fetchResultsByTestIdx).toHaveBeenCalledWith(0, 0);
   });
 
   it('delegates persistence failure, final result, and save operations', async () => {

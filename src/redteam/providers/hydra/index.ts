@@ -401,7 +401,9 @@ export class HydraProvider implements ApiProvider {
         });
       }
       options?.onProgress?.({
-        output: lastTargetResponse ? scrubOutputForHistory(lastTargetResponse.output) : undefined,
+        output: lastTargetResponse?.output,
+        isBase64: lastTargetResponse?.isBase64,
+        format: lastTargetResponse?.format,
         error: lastTargetResponse?.error,
         tokenUsage,
         guardrails: lastTargetResponse?.guardrails,
@@ -751,7 +753,7 @@ export class HydraProvider implements ApiProvider {
           prompt: nextMessage,
           promptAudio: lastTransformResult?.audio,
           promptImage: lastTransformResult?.image,
-          output: scrubOutputForHistory(response.output),
+          output: response.output,
           isBase64: response.isBase64,
           images: response.images,
           outputAudio: response.audio
@@ -908,7 +910,7 @@ export class HydraProvider implements ApiProvider {
       }
       lastResponseMessages = getCheckpointMessages();
 
-      completedTurn.output = historyOutput;
+      completedTurn.output = targetResponse.output;
       completedTurn.images = targetResponse.images;
       completedTurn.outputAudio = targetResponse.audio
         ? { ...targetResponse.audio, format: targetResponse.audio.format || 'wav' }

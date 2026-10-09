@@ -5,12 +5,8 @@ import { evaluate } from '../../src/evaluator';
 import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
 import { notifyEvaluationChanged } from '../../src/models/evalMutation';
-import {
-  deleteErrorResults,
-  getErrorResultIds,
-  recalculatePromptMetrics,
-  retryCommand,
-} from '../../src/node/retry';
+import { recalculatePromptMetrics } from '../../src/node/promptMetrics';
+import { deleteErrorResults, getErrorResultIds, retryCommand } from '../../src/node/retry';
 import { createShareableUrl, isSharingEnabled } from '../../src/share';
 import { ResultFailureReason } from '../../src/types/index';
 import { resolveConfigs } from '../../src/util/config/load';

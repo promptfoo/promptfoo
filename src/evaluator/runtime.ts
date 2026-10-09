@@ -46,7 +46,7 @@ export interface EvaluationStore<
   readCompletedIndexPairs(options?: { excludeErrors?: boolean }): Promise<Set<string>>;
   readFailedResultsByTestIdx(testIdx: number): Promise<TResult[]>;
   readResults(): Promise<Array<TResult | EvaluateResult>>;
-  readResultsByTestIdx(testIdx: number): Promise<TResult[]>;
+  readResultsByTestIdx(testIdx: number, promptIdx?: number): Promise<TResult[]>;
   recordFinalResult(result: EvaluateResult): void;
   recordResultPersistenceFailure(result: EvaluateResult): void;
   save(): Promise<void>;

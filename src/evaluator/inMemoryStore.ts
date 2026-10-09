@@ -120,8 +120,11 @@ export class InMemoryEvaluationStore
     return this.evaluation.results;
   }
 
-  async readResultsByTestIdx(testIdx: number): Promise<EvaluateResult[]> {
-    return this.evaluation.results.filter((result) => result.testIdx === testIdx);
+  async readResultsByTestIdx(testIdx: number, promptIdx?: number): Promise<EvaluateResult[]> {
+    return this.evaluation.results.filter(
+      (result) =>
+        result.testIdx === testIdx && (promptIdx === undefined || result.promptIdx === promptIdx),
+    );
   }
 
   recordFinalResult(result: EvaluateResult): void {
