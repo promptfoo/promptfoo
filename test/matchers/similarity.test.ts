@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { handleSimilar } from '../../src/assertions/similar';
 import cliState from '../../src/cliState';
 import { matchesSimilarity } from '../../src/matchers/similarity';
 import { DefaultEmbeddingProvider } from '../../src/providers/openai/defaults';
@@ -9,6 +10,7 @@ import {
   withProviderCallExecutionContext,
   withProviderCallTracingContext,
 } from '../../src/scheduler/providerCallExecutionContext';
+import { withTracedProviderCall } from '../../src/tracing/targetTracer';
 import { createMockProvider } from '../factories/provider';
 import { mockProcessEnv } from '../util/utils';
 
@@ -42,39 +44,63 @@ describe('matchesSimilarity', () => {
   });
 
   it.each([
-    { tracing: false, cancellation: true },
-    { tracing: true, cancellation: false },
-    { tracing: true, cancellation: true },
-  ])('forwards embedding call context: %j', async ({ tracing, cancellation }) => {
-    const abortSignal = cancellation ? new AbortController().signal : undefined;
-    const tracedContext = tracing
-      ? {
-          prompt: { raw: 'fixture', label: 'embedding' },
-          vars: {},
-          bustCache: true,
-          traceparent: '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01',
-        }
-      : undefined;
-    const providerSpan = vi.fn<ProviderCallTracingContext['withProviderSpan']>(
-      async (_options, invoke) => invoke(tracedContext),
-    );
-    await withProviderCallExecutionContext({ abortSignal }, () =>
-      withProviderCallTracingContext(
-        {
-          getActiveTraceparent: () => tracedContext?.traceparent,
-          withGraderSpan: async (_options, invoke) => invoke(),
-          withProviderSpan: providerSpan,
-        },
-        () => matchesSimilarity('Expected output', 'Sample output', 0.5),
-      ),
-    );
-    const calls = vi.mocked(DefaultEmbeddingProvider.callEmbeddingApi).mock.calls;
-    expect(calls).toHaveLength(2);
-    for (const [, context, options] of calls) {
-      expect(context).toBe(tracedContext);
-      expect(options).toEqual(abortSignal ? { abortSignal } : undefined);
-    }
-  });
+    { tracing: false, cancellation: true, array: false },
+    { tracing: true, cancellation: false, array: false },
+    { tracing: true, cancellation: true, array: true },
+  ])(
+    'forwards assertion context through the real tracing path: %j',
+    async ({ tracing, cancellation, array }) => {
+      const abortSignal = cancellation ? new AbortController().signal : undefined;
+      const callContext = {
+        prompt: { raw: 'fixture', label: 'embedding' },
+        vars: { fixture: 'preserved' },
+        bustCache: true,
+        ...(tracing
+          ? { traceparent: '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01' }
+          : {}),
+      };
+      const providerSpan =
+        vi.fn<ProviderCallTracingContext['withProviderSpan']>(withTracedProviderCall);
+      const invoke = () =>
+        handleSimilar({
+          assertion: { type: 'similar', value: 'Expected output', threshold: 0.5 },
+          renderedValue: array ? ['Expected output'] : 'Expected output',
+          outputString: 'Sample output',
+          inverse: false,
+          test: {},
+          baseType: 'similar',
+          output: 'Sample output',
+          providerResponse: { output: 'Sample output' },
+          assertionValueContext: {
+            prompt: 'fixture',
+            vars: callContext.vars,
+            test: {},
+            logProbs: undefined,
+            provider: createMockProvider(),
+            providerResponse: { output: 'Sample output' },
+          },
+          providerCallContext: callContext,
+        });
+      await withProviderCallExecutionContext({ abortSignal }, () =>
+        tracing
+          ? withProviderCallTracingContext(
+              {
+                getActiveTraceparent: () => callContext.traceparent,
+                withGraderSpan: async (_options, run) => run(),
+                withProviderSpan: providerSpan,
+              },
+              invoke,
+            )
+          : invoke(),
+      );
+      const calls = vi.mocked(DefaultEmbeddingProvider.callEmbeddingApi).mock.calls;
+      expect(calls).toHaveLength(2);
+      for (const [, context, options] of calls) {
+        expect(context).toMatchObject(callContext);
+        expect(options).toEqual(abortSignal ? { abortSignal } : undefined);
+      }
+    },
+  );
 
   it('should pass when similarity is above the threshold', async () => {
     const expected = 'Expected output';
