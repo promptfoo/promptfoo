@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { handleMeteorAssertion } from '../../src/assertions/meteor';
 
 import type { AssertionParams } from '../../src/types/index';
@@ -31,6 +31,9 @@ function score(outputString: string, renderedValue: string | string[], inverse =
 }
 
 describe('METEOR matching with the real handler', () => {
+  // Prime the lazy mock before the multiple-reference case can import it concurrently.
+  beforeAll(() => score('cat', 'cat'));
+
   it.each([
     ['exact', 'cat dog cat'],
     ['stem', 'cats dog cats'],
