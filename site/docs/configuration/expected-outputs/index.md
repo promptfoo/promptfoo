@@ -149,7 +149,7 @@ These metrics are programmatic tests that are run on LLM output. [See all detail
 | [meteor](/docs/configuration/expected-outputs/deterministic/#meteor)                                               | METEOR score is above a given threshold (default 0.5); requires `natural` |
 | [perplexity](/docs/configuration/expected-outputs/deterministic/#perplexity)                                       | Perplexity is below a threshold                                           |
 | [perplexity-score](/docs/configuration/expected-outputs/deterministic/#perplexity-score)                           | Normalized perplexity                                                     |
-| [cost](/docs/configuration/expected-outputs/deterministic/#cost)                                                   | Cost is below a threshold (for models with cost info such as GPT)         |
+| [cost](/docs/configuration/expected-outputs/deterministic/#cost)                                                   | Cost is below a threshold, or recorded as a zero-weight named metric      |
 | [is-valid-function-call](/docs/configuration/expected-outputs/deterministic/#is-valid-function-call)               | Ensure that the function call matches the function's JSON schema          |
 | [is-valid-openai-function-call](/docs/configuration/expected-outputs/deterministic/#is-valid-openai-function-call) | Ensure that the function call matches the function's JSON schema          |
 | [is-valid-openai-tools-call](/docs/configuration/expected-outputs/deterministic/#is-valid-openai-tools-call)       | Ensure all tool calls match the tools JSON schema                         |
@@ -164,7 +164,7 @@ These metrics are programmatic tests that are run on LLM output. [See all detail
 | [trajectory:step-count](/docs/configuration/expected-outputs/deterministic/#trajectorystep-count)                  | Count normalized trajectory steps by type or name pattern                 |
 | [guardrails](/docs/configuration/expected-outputs/guardrails)                                                      | Evaluate the target's normalized input or output guardrail signal         |
 
-Single-line [JavaScript assertions](/docs/configuration/expected-outputs/javascript) return the final expression after variable declarations and ignore semicolons inside comments. The final expression can use optional chaining and division, call an async function, or return a grading result object. Multiline JavaScript assertions require an explicit `return`.
+Single-line [JavaScript assertions](/docs/configuration/expected-outputs/javascript) return the final expression after variable declarations and ignore semicolons inside comments. The final expression can use optional chaining and division, call an async function, consume a generator's yielded result, or return a grading result object. Multiline JavaScript assertions require an explicit `return`.
 
 :::tip
 Every test type can be negated by prepending `not-`. For example, `not-equals` or `not-regex`.
@@ -248,7 +248,7 @@ If the LLM outputs `Goodbye world`, the `equals` assertion fails but the `contai
 A `threshold` of `0` makes the test case pass regardless of individual assertion failures, since the combined score is always at least 0. Use it to collect assertion scores without letting any single failure fail the test. The same applies to an `assert-set` threshold.
 
 :::info
-If weight is set to 0, the assertion automatically passes.
+If weight is set to 0, the assertion automatically passes and does not contribute to the aggregate score. Its named metrics still record their measured values, with unit weight for metric aggregation; this also applies to named metrics inside a zero-weight assertion set.
 :::
 
 ### Custom assertion scoring

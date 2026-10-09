@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from 'vitest';
 import { cloudConfig } from '../../src/globalConfig/cloud';
 import * as globalConfigModule from '../../src/globalConfig/globalConfig';
+import logger, { winstonLogger } from '../../src/logger';
 import * as cloudModule from '../../src/util/cloud';
 import {
   ConfigPermissionError,
@@ -54,6 +55,83 @@ describe('cloud utils', () => {
   });
 
   describe('makeRequest', () => {
+    it('should omit credential-bearing error and cause details from failure logs', async () => {
+      mockCloudConfig.getApiHost.mockReturnValue('https://test-user:test-password@example.com');
+      const cause = new Error('Authorization: Bearer test-cause-credential');
+      const error = new Error(
+        'request to https://test-user:test-password@example.com failed: api_key=test-error-credential',
+        { cause },
+      );
+      mockFetchWithProxy.mockRejectedValue(error);
+      const logError = vi.spyOn(winstonLogger, 'error').mockImplementation(() => winstonLogger);
+
+      try {
+        await expect(makeRequest('test/path?api_key=test-query-credential', 'GET')).rejects.toBe(
+          error,
+        );
+        expect(error.cause).toBe(cause);
+        const output = JSON.stringify(logError.mock.calls);
+        expect(output).toContain('[Cloud] Failed to make request');
+        expect(output).toContain('example.com/api/v1/test/path');
+        expect(output).not.toContain('test-user');
+        expect(output).not.toContain('test-password');
+        expect(output).not.toContain('test-query-credential');
+        expect(output).not.toContain('test-error-credential');
+        expect(output).not.toContain('test-cause-credential');
+      } finally {
+        logError.mockRestore();
+      }
+    });
+
+    it('should return the original response without consuming it', async () => {
+      const response = new Response('cloud response');
+      mockFetchWithProxy.mockResolvedValue(response);
+
+      expect(await makeRequest('test/path', 'GET')).toBe(response);
+      expect(response.bodyUsed).toBe(false);
+    });
+
+    it.each([true, false])('should log and rethrow fetch failures (async: %s)', async (async) => {
+      const cause = new Error('connection refused');
+      const error = new Error('fetch failed', { cause });
+      const logError = vi.spyOn(logger, 'error').mockImplementation(() => logger);
+      if (async) {
+        mockFetchWithProxy.mockRejectedValue(error);
+      } else {
+        mockFetchWithProxy.mockImplementation(() => {
+          throw error;
+        });
+      }
+
+      try {
+        await expect(Promise.resolve().then(() => makeRequest('test/path', 'GET'))).rejects.toBe(
+          error,
+        );
+        expect(logError).toHaveBeenCalledWith('[Cloud] Failed to make request', {
+          url: 'https://api.example.com/api/v1/test/path',
+        });
+        expect(error.cause).toBe(cause);
+        expect(logError).toHaveBeenCalledTimes(1);
+      } finally {
+        logError.mockRestore();
+      }
+    });
+
+    it.each([null, undefined, 'network unavailable'])(
+      'should preserve non-Error promise rejections: %s',
+      async (error) => {
+        const logError = vi.spyOn(logger, 'error').mockImplementation(() => logger);
+        mockFetchWithProxy.mockRejectedValue(error);
+
+        try {
+          await expect(makeRequest('test/path', 'GET')).rejects.toBe(error);
+          expect(logError).toHaveBeenCalledTimes(1);
+        } finally {
+          logError.mockRestore();
+        }
+      },
+    );
+
     it('should make request with correct URL and headers', async () => {
       const path = 'test/path';
       const method = 'POST';
