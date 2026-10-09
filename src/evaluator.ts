@@ -15,7 +15,7 @@ import {
   runCompareAssertion,
 } from './assertions/index';
 import { extractAndStoreBinaryData } from './blobs/extractor';
-import { getCache, isCacheEnabled, withCacheNamespace } from './cache';
+import { getCache, isCacheEnabled, withCacheEnabled, withCacheNamespace } from './cache';
 import cliState from './cliState';
 import { DEFAULT_MAX_CONCURRENCY, FILE_METADATA_KEY } from './constants';
 import { getEnvBool, getEnvInt, getEvalTimeoutMs, getMaxEvalTimeMs, isCI } from './envars';
@@ -1177,12 +1177,8 @@ function buildCallApiContext({
   };
 
   if (!isCacheEnabled()) {
-    // Cache was disabled for this run (e.g. --no-cache). The flag lives in
-    // this module's cache state, but the provider under test may have been
-    // built from a different copy of the package (an extension hook importing
-    // "promptfoo"), whose cache module never got flipped. bustCache travels
-    // with the call, so every provider honors it regardless of which copy of
-    // the cache module it reads.
+    // Preserve the context hint for custom providers and older package copies.
+    // The shared async cache policy also disables writes in built-in providers.
     callApiContext.bustCache = true;
   }
 
@@ -1642,9 +1638,10 @@ export function getTraceLinkage(
  * @returns The result of the test case.
  */
 export async function runEval(options: RunEvalOptions): Promise<EvaluateResult[]> {
-  return withCacheNamespace(
-    getRepeatCacheNamespace(options.repeatIndex, options.evaluateOptions),
-    () => runEvalInternal(options),
+  return withCacheEnabled(options.evaluateOptions?.cache === false ? false : isCacheEnabled(), () =>
+    withCacheNamespace(getRepeatCacheNamespace(options.repeatIndex, options.evaluateOptions), () =>
+      runEvalInternal(options),
+    ),
   );
 }
 
@@ -6153,7 +6150,11 @@ export function evaluate<
             options,
             resolvedRuntime,
           );
-          return ev.evaluate();
+          // Capture this entry point's policy for providers and graders loaded
+          // through another package copy, including extension-hook imports.
+          return withCacheEnabled(options.cache === false ? false : isCacheEnabled(), () =>
+            ev.evaluate(),
+          );
         },
         testSuite.providers.map((provider) => ({ id: provider.id(), config: provider.config })),
       ),
