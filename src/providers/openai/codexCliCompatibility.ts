@@ -225,11 +225,24 @@ function runVersionProbe(options: CompatibilityOptions): Promise<string> {
     };
     const timeout = setTimeout(
       () => {
+        if (!supervised && commandExit) {
+          // A native Windows wrapper may exit while a descendant retains its
+          // pipes. Keep draining until this deadline, then preserve the observed
+          // command result instead of inventing a timeout for an exited process.
+          child.stdout?.destroy();
+          child.stderr?.destroy();
+          return;
+        }
         stop(new Error(`Codex CLI version check timed out after ${VERSION_PROBE_TIMEOUT_MS}ms`));
       },
       Math.max(0, deadlineAt - Date.now()),
     );
     const onAbort = () => stop(new DOMException('Codex compatibility check aborted', 'AbortError'));
+    if (!supervised) {
+      child.once('exit', (code, signal) => {
+        commandExit = { code, signal };
+      });
+    }
     child.stdout?.on('data', (chunk: Buffer) => {
       stdoutBytes += chunk.length;
       if (stdoutBytes > VERSION_PROBE_MAX_OUTPUT_BYTES) {
@@ -321,7 +334,7 @@ function runVersionProbe(options: CompatibilityOptions): Promise<string> {
       } catch (error) {
         failure = error instanceof Error ? error : new Error(String(error));
       }
-      const exit = supervised ? commandExit : { code, signal };
+      const exit = commandExit ?? (supervised ? undefined : { code, signal });
       if (failure) {
         reject(failure);
       } else if (exit?.code === 0) {

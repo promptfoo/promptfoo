@@ -33,9 +33,186 @@ describe('checkCodexCliCompatibility', () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     Object.defineProperty(process, 'platform', originalPlatform);
     vi.resetAllMocks();
     fs.rmSync(sdkRoot, { recursive: true, force: true });
+  });
+
+  describe('Windows command exit with inherited capture pipes', () => {
+    beforeEach(() => {
+      Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
+      vi.useFakeTimers();
+    });
+
+    // Model Node's separate exit and close events. These streams deliberately
+    // remain open after the direct process exits. This does not model native
+    // Windows job ownership or claim physical Windows execution.
+    function startHeldPipeProbe(signal?: AbortSignal) {
+      const stdout = new PassThrough();
+      const stderr = new PassThrough();
+      const child = Object.assign(new EventEmitter(), {
+        stdin: null,
+        stdout,
+        stderr,
+        pid: undefined,
+        exitCode: null as number | null,
+        signalCode: null as NodeJS.Signals | null,
+      });
+      let exited = false;
+      let closed = false;
+      let closedPipes = 0;
+      const closeWhenReady = () => {
+        if (exited && closedPipes === 2 && !closed) {
+          closed = true;
+          child.emit('close', child.exitCode, child.signalCode);
+        }
+      };
+      for (const stream of [stdout, stderr]) {
+        stream.once('close', () => {
+          closedPipes++;
+          closeWhenReady();
+        });
+      }
+      mockSpawn.mockReturnValue(child);
+      const result = checkCodexCliCompatibility({
+        sdkEntryPoint,
+        codexPathOverride: '/custom/native-wrapper',
+        env: {},
+        signal,
+      }).then(
+        () => ({ success: true as const }),
+        (error: unknown) => ({ error }),
+      );
+      return {
+        child,
+        stdout,
+        stderr,
+        result,
+        exit(code: number | null, exitSignal: NodeJS.Signals | null = null) {
+          child.exitCode = code;
+          child.signalCode = exitSignal;
+          exited = true;
+          child.emit('exit', code, exitSignal);
+          closeWhenReady();
+        },
+      };
+    }
+
+    it.each(['stdout', 'stderr'] as const)(
+      'retains zero exit and late %s until the original capture deadline',
+      async (stream) => {
+        const probe = startHeldPipeProbe();
+        const settled = vi.fn();
+        void probe.result.then(settled);
+        probe.exit(0);
+        setTimeout(() => probe[stream].write('codex-cli 0.130.0'), 5_000);
+
+        await vi.advanceTimersByTimeAsync(9_999);
+        expect(settled).not.toHaveBeenCalled();
+        expect(probe[stream].destroyed).toBe(false);
+        await vi.advanceTimersByTimeAsync(1);
+
+        await expect(probe.result).resolves.toEqual({ success: true });
+      },
+    );
+
+    it('finishes when delayed captured output closes before the deadline', async () => {
+      const probe = startHeldPipeProbe();
+      probe.exit(0);
+      await vi.advanceTimersByTimeAsync(50);
+      probe.stdout.end('codex-cli 0.130.0');
+      probe.stderr.end();
+
+      await expect(probe.result).resolves.toEqual({ success: true });
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it.each([
+      { code: 7, signal: null, reason: '7' },
+      { code: null, signal: 'SIGTERM' as const, reason: 'SIGTERM' },
+    ])(
+      'preserves unsuccessful exit $reason with inherited pipes',
+      async ({ code, signal, reason }) => {
+        const probe = startHeldPipeProbe();
+        probe.stdout.write('codex-cli 0.130.0');
+        probe.exit(code, signal);
+        await vi.advanceTimersByTimeAsync(10_000);
+
+        await expect(probe.result).resolves.toMatchObject({
+          error: expect.objectContaining({
+            message: expect.stringContaining(`exited with ${reason}`),
+          }),
+        });
+      },
+    );
+
+    it('still validates the captured version after a zero exit', async () => {
+      const probe = startHeldPipeProbe();
+      probe.stdout.write('codex-cli 0.131.0');
+      probe.exit(0);
+      await vi.advanceTimersByTimeAsync(10_000);
+
+      await expect(probe.result).resolves.toMatchObject({
+        error: expect.objectContaining({ message: expect.stringContaining('reports 0.131.0') }),
+      });
+    });
+
+    it('keeps an abort after zero exit authoritative', async () => {
+      const controller = new AbortController();
+      const probe = startHeldPipeProbe(controller.signal);
+      probe.stdout.write('codex-cli 0.130.0');
+      probe.exit(0);
+      controller.abort();
+
+      await expect(probe.result).resolves.toMatchObject({
+        error: expect.objectContaining({ name: 'AbortError' }),
+      });
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it.each(['stdout', 'stderr'] as const)(
+      'keeps %s overflow after zero exit authoritative',
+      async (stream) => {
+        const probe = startHeldPipeProbe();
+        probe.stdout.write('codex-cli 0.130.0');
+        probe.exit(0);
+        probe[stream].write('x'.repeat(1024 * 1024 + 1));
+
+        await expect(probe.result).resolves.toMatchObject({
+          error: expect.objectContaining({
+            message: expect.stringContaining(`${stream} exceeded`),
+          }),
+        });
+        expect(vi.getTimerCount()).toBe(0);
+      },
+    );
+
+    it('keeps a process error after zero exit authoritative', async () => {
+      const probe = startHeldPipeProbe();
+      probe.stdout.write('codex-cli 0.130.0');
+      probe.exit(0);
+      probe.child.emit('error', new Error('version transport failed'));
+
+      await expect(probe.result).resolves.toMatchObject({
+        error: expect.objectContaining({
+          message: expect.stringContaining('version transport failed'),
+        }),
+      });
+    });
+
+    it('still rejects a command that has not exited at the deadline', async () => {
+      const probe = startHeldPipeProbe();
+      probe.stdout.write('codex-cli 0.130.0');
+      await vi.advanceTimersByTimeAsync(10_000);
+      probe.exit(null, 'SIGKILL');
+
+      await expect(probe.result).resolves.toMatchObject({
+        error: expect.objectContaining({
+          message: expect.stringContaining('timed out after 10000ms'),
+        }),
+      });
+    });
   });
 
   function mockVersion(
