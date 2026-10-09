@@ -19,7 +19,7 @@ export function getProxyEnvironment(): Record<string, string> {
         const value = layer?.[name] ?? layer?.[name.toUpperCase()];
         if (value !== undefined) {
           // Lowercase wins within a layer; an explicit empty layer masks inherited values.
-          return [name, value];
+          return [name, String(value)];
         }
       }
       return [name, ''];

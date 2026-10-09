@@ -18,6 +18,14 @@ beforeEach(() => {
 afterEach(() => restore());
 
 describe('effective proxy environment', () => {
+  it('normalizes raw primitive config values to environment strings', () => {
+    const env = JSON.parse('{"HTTPS_PROXY":8080,"NO_PROXY":false}');
+    cliState.withEnv(env, () => {
+      expect(getProxyEnvironment()).toMatchObject({ https_proxy: '8080', no_proxy: 'false' });
+      expect(getProxyForUrl('https://fixture.example')).toBe('https://8080');
+    });
+  });
+
   it('keeps transport settings out of the per-provider configuration contract', () => {
     const provider = ProviderOptionsSchema.parse({
       id: 'http',

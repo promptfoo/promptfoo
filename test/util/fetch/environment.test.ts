@@ -189,26 +189,32 @@ describe('HTTP agent configuration ownership', () => {
     );
   });
 
-  it('retains transport settings in the runtime suite schema', async () => {
-    const parsed = TestSuiteSchema.parse({
-      providers: [],
-      prompts: [],
-      env: {
-        HTTPS_PROXY: 'http://runtime.example:8080',
-        NO_PROXY: '',
-        REQUEST_TIMEOUT_MS: '1250',
-        PROMPTFOO_FETCH_CONNECTIONS: '3',
-      },
-    });
-    await cliState.withEnv(parsed.env, request);
-    expect(ProxyAgent).toHaveBeenCalledWith(
-      expect.objectContaining({
-        uri: 'http://runtime.example:8080',
-        headersTimeout: 1250,
-        connections: 3,
-      }),
-    );
-  });
+  it.each([
+    { timeout: '1250', connections: '3', bypass: '' },
+    { timeout: 1250, connections: 3, bypass: false },
+  ])(
+    'retains runtime transport settings ($timeout, $connections)',
+    async ({ timeout, connections, bypass }) => {
+      const parsed = TestSuiteSchema.parse({
+        providers: [],
+        prompts: [],
+        env: {
+          HTTPS_PROXY: 'http://runtime.example:8080',
+          NO_PROXY: bypass,
+          REQUEST_TIMEOUT_MS: timeout,
+          PROMPTFOO_FETCH_CONNECTIONS: connections,
+        },
+      });
+      await cliState.withEnv(parsed.env, request);
+      expect(ProxyAgent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          uri: 'http://runtime.example:8080',
+          headersTimeout: 1250,
+          connections: 3,
+        }),
+      );
+    },
+  );
 
   it('preserves generic SDK environment values alongside parsed job transport settings', async () => {
     const parsed = CreateJobRequestSchema.parse({

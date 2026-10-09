@@ -181,18 +181,24 @@ export const ProviderEnvOverridesSchema = z.object({
   PROMPTFOO_EVAL_TIMEOUT_MS: z.string().optional(),
 });
 
+// Configuration loading retains YAML primitives after validating normalized env values.
+const TransportEnvValueSchema = z
+  .union([z.string(), z.number(), z.boolean()])
+  .transform(String)
+  .optional();
+
 // These settings apply to the whole evaluation, not an individual provider.
 export const EnvOverridesSchema = ProviderEnvOverridesSchema.extend({
-  PROMPTFOO_FETCH_CONNECTIONS: z.string().optional(),
-  REQUEST_TIMEOUT_MS: z.string().optional(),
-  ALL_PROXY: z.string().optional(),
-  all_proxy: z.string().optional(),
-  HTTP_PROXY: z.string().optional(),
-  http_proxy: z.string().optional(),
-  HTTPS_PROXY: z.string().optional(),
-  https_proxy: z.string().optional(),
-  NO_PROXY: z.string().optional(),
-  no_proxy: z.string().optional(),
+  PROMPTFOO_FETCH_CONNECTIONS: TransportEnvValueSchema,
+  REQUEST_TIMEOUT_MS: TransportEnvValueSchema,
+  ALL_PROXY: TransportEnvValueSchema,
+  all_proxy: TransportEnvValueSchema,
+  HTTP_PROXY: TransportEnvValueSchema,
+  http_proxy: TransportEnvValueSchema,
+  HTTPS_PROXY: TransportEnvValueSchema,
+  https_proxy: TransportEnvValueSchema,
+  NO_PROXY: TransportEnvValueSchema,
+  no_proxy: TransportEnvValueSchema,
 });
 
 // The runtime schema silently strips unknown keys at parse time (zod's default
