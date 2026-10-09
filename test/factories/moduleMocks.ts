@@ -35,6 +35,15 @@ export const createFileUtilitiesFactory = (): MockModuleFactory => async (import
   };
 };
 
+export const createRequireModuleFactory = (): MockModuleFactory => () => {
+  const mockRequire: NodeJS.Require = {
+    resolve: vi.fn() as unknown as NodeJS.RequireResolve,
+  } as unknown as NodeJS.Require;
+  return {
+    createRequire: vi.fn().mockReturnValue(mockRequire),
+  };
+};
+
 export const createWarningOrderedLoggerFactory = (): MockModuleFactory => () => ({
   default: {
     debug: vi.fn(),
@@ -72,6 +81,19 @@ export const createNodeHttpHandlerFactory = (): MockModuleFactory => () => ({
     };
   }),
 });
+
+export const createPathFactory = (): MockModuleFactory => async () => {
+  const actualPath = await vi.importActual<typeof import('path')>('path');
+  const mocked = {
+    ...actualPath,
+    resolve: vi.fn(),
+    extname: vi.fn(),
+  };
+  return {
+    ...mocked,
+    default: mocked,
+  };
+};
 
 export const createBedrockCacheFactory =
   (mockGet: Mock, mockSet: Mock, getMockIsCacheEnabled: () => Mock): MockModuleFactory =>

@@ -534,22 +534,26 @@ describe('assertionFromString', () => {
     expect(result.type).toBe('contains-json');
   });
 
-  it('should create a function assertion', () => {
+  const verifyFunctionAssertion = () => {
     const expected = 'fn:output === "Expected output"';
 
     const result: Assertion = assertionFromString(expected);
     expect(result.type).toBe('javascript');
     expect(result.value).toBe('output === "Expected output"');
-  });
+  };
 
-  it('should create a similarity assertion', () => {
+  it('should create a function assertion', verifyFunctionAssertion);
+
+  const verifySimilarityAssertion = () => {
     const expected = 'similar(0.9):Expected output';
 
     const result: Assertion = assertionFromString(expected);
     expect(result.type).toBe('similar');
     expect(result.value).toBe('Expected output');
     expect(result.threshold).toBe(0.9);
-  });
+  };
+
+  it('should create a similarity assertion', verifySimilarityAssertion);
 
   it('should create a contains assertion', () => {
     const expected = 'contains:substring';
@@ -882,13 +886,7 @@ describe('assertionFromString', () => {
     expect(result.value).toBe('output === "Expected output"');
   });
 
-  it('should handle legacy fn option', () => {
-    const expected = 'fn:output === "Expected output"';
-
-    const result: Assertion = assertionFromString(expected);
-    expect(result.type).toBe('javascript');
-    expect(result.value).toBe('output === "Expected output"');
-  });
+  it('should handle legacy fn option', verifyFunctionAssertion);
 
   it('should use DEFAULT_SEMANTIC_SIMILARITY_THRESHOLD for similar assertion without threshold', () => {
     const expected = 'similar:Expected output';
@@ -942,14 +940,7 @@ describe('assertionFromString', () => {
     }
   });
 
-  it('should use provided threshold when specified', () => {
-    const expected = 'similar(0.9):Expected output';
-
-    const result: Assertion = assertionFromString(expected);
-    expect(result.type).toBe('similar');
-    expect(result.value).toBe('Expected output');
-    expect(result.threshold).toBe(0.9);
-  });
+  it('should use provided threshold when specified', verifySimilarityAssertion);
 
   it('should keep an explicit threshold for types without a CSV default threshold', () => {
     for (const type of [
