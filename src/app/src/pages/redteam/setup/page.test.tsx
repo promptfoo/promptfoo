@@ -2,7 +2,7 @@ import { TooltipProvider } from '@app/components/ui/tooltip';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
 import { callApi } from '@app/utils/api';
-import { getUnifiedConfig } from '@promptfoo/redteam/sharedFrontend';
+import { getUnifiedConfig } from '@promptfoo/presentation/redteamConfig';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { load as loadYaml } from 'js-yaml';
