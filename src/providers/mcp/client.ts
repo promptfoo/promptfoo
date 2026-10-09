@@ -39,6 +39,7 @@ function createOAuthFetch(
 ): FetchLike {
   return async (url, init) => {
     const send = async (rejectedToken?: string) => {
+      init?.signal?.throwIfAborted();
       const { accessToken } = await getOAuthTokenWithExpiry(auth, serverUrl, rejectedToken);
       const headers = new Headers(init?.headers);
       headers.set('Authorization', `Bearer ${accessToken}`);
@@ -335,23 +336,36 @@ export class MCPClient {
     return Array.from(this.tools.values()).flat();
   }
 
-  async callTool(name: string, args: Record<string, unknown>): Promise<MCPToolResult> {
+  async callTool(
+    name: string,
+    args: Record<string, unknown>,
+    signal?: AbortSignal,
+  ): Promise<MCPToolResult> {
+    signal?.throwIfAborted();
     return await withGenAIToolSpan(
       { name, arguments: sanitizeMcpToolData(args), resultFormat: 'mcp' },
-      () => this.callToolInternal(name, args),
+      () => this.callToolInternal(name, args, signal),
     );
   }
 
   private async callToolInternal(
     name: string,
     args: Record<string, unknown>,
+    signal?: AbortSignal,
   ): Promise<MCPToolResult> {
-    const requestOptions = getEffectiveRequestOptions(this.config);
+    const timeoutOptions = getEffectiveRequestOptions(this.config);
+    const requestOptions = signal ? { ...timeoutOptions, signal } : timeoutOptions;
+    const disconnectedServers: string[] = [];
 
     // Find which server has this tool
     for (const [serverKey, serverTools] of this.tools.entries()) {
+      signal?.throwIfAborted();
+      if (!serverTools.some((tool) => tool.name === name)) {
+        continue;
+      }
       const client = this.clients.get(serverKey);
-      if (!client || !serverTools.some((tool) => tool.name === name)) {
+      if (!client) {
+        disconnectedServers.push(serverKey);
         continue;
       }
       try {
@@ -360,6 +374,7 @@ export class MCPClient {
           undefined, // use default result schema
           requestOptions,
         );
+        signal?.throwIfAborted();
 
         // Handle different content types appropriately
         let content = '';
@@ -385,6 +400,7 @@ export class MCPClient {
           raw: result,
         };
       } catch (error) {
+        signal?.throwIfAborted();
         const errorMessage = error instanceof Error ? error.message : String(error);
         if (this.isDebugEnabled) {
           logger.error(`Error calling tool ${name}: ${errorMessage}`);
@@ -394,6 +410,13 @@ export class MCPClient {
           error: errorMessage,
         };
       }
+    }
+
+    if (disconnectedServers.length > 0) {
+      const plural = disconnectedServers.length > 1 ? 's are' : ' is';
+      throw new Error(
+        `Tool ${name} is known but MCP server${plural} disconnected: ${disconnectedServers.join(', ')}`,
+      );
     }
 
     throw new Error(`Tool ${name} not found in any connected MCP server`);
