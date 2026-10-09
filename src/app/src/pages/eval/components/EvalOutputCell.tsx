@@ -456,37 +456,40 @@ function renderEmbeddedImageNode({
   renderMarkdown: boolean;
   markdownComponents: React.ComponentProps<typeof ReactMarkdown>['components'];
   toggleLightbox: (url?: string) => void;
-}): React.ReactNode | undefined {
+}): { node: React.ReactNode; src: string } | undefined {
   const embeddedImage = getEmbeddedImageSource(text);
   if (!embeddedImage) {
     return undefined;
   }
 
-  return (
-    <>
-      <img
-        src={embeddedImage.src}
-        alt={output.prompt}
-        style={{ width: '100%', cursor: 'pointer' }}
-        onClick={() => toggleLightbox(embeddedImage.src)}
-      />
-      {embeddedImage.remainingText && (
-        <div style={{ marginTop: '8px' }}>
-          {renderMarkdown ? (
-            <ReactMarkdown
-              remarkPlugins={REMARK_PLUGINS}
-              urlTransform={IDENTITY_URL_TRANSFORM}
-              components={markdownComponents}
-            >
-              {embeddedImage.remainingText}
-            </ReactMarkdown>
-          ) : (
-            embeddedImage.remainingText
-          )}
-        </div>
-      )}
-    </>
-  );
+  return {
+    src: embeddedImage.src,
+    node: (
+      <>
+        <img
+          src={embeddedImage.src}
+          alt={output.prompt}
+          style={{ width: '100%', cursor: 'pointer' }}
+          onClick={() => toggleLightbox(embeddedImage.src)}
+        />
+        {embeddedImage.remainingText && (
+          <div style={{ marginTop: '8px' }}>
+            {renderMarkdown ? (
+              <ReactMarkdown
+                remarkPlugins={REMARK_PLUGINS}
+                urlTransform={IDENTITY_URL_TRANSFORM}
+                components={markdownComponents}
+              >
+                {embeddedImage.remainingText}
+              </ReactMarkdown>
+            ) : (
+              embeddedImage.remainingText
+            )}
+          </div>
+        )}
+      </>
+    ),
+  };
 }
 
 function renderMarkdownOrJsonNode({
@@ -632,6 +635,7 @@ function renderOutputNode({
 }): React.ReactNode | undefined {
   let node: React.ReactNode | undefined;
   let renderedMarkdownOutput = false;
+  let renderedImageSrc = primaryRenderedImageSrc;
 
   if (showDiffs && firstOutput) {
     const firstOutputText = stringifyOutputText(firstOutput.text);
@@ -656,13 +660,15 @@ function renderOutputNode({
   }
 
   if (!node && !showDiffs) {
-    node = renderEmbeddedImageNode({
+    const embeddedImage = renderEmbeddedImageNode({
       output,
       text,
       renderMarkdown,
       markdownComponents,
       toggleLightbox,
     });
+    node = embeddedImage?.node;
+    renderedImageSrc = embeddedImage?.src ?? renderedImageSrc;
   }
 
   if (!node && !showDiffs) {
@@ -681,7 +687,7 @@ function renderOutputNode({
     node,
     output,
     normalizedText,
-    primaryRenderedImageSrc,
+    primaryRenderedImageSrc: renderedImageSrc,
     renderedMarkdownOutput,
     toggleLightbox,
   });

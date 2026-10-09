@@ -858,6 +858,26 @@ describe('EvalOutputCell', () => {
     expect(renderedSources).toEqual([dataUri, 'https://example.com/secondary-inline.png']);
   });
 
+  it('deduplicates an embedded image from structured images without losing surrounding text', () => {
+    const dataUri = 'data:image/png;base64,aGVsbG8=';
+    const props: MockEvalOutputCellProps = {
+      ...defaultProps,
+      output: {
+        ...defaultProps.output,
+        text: `Generated preview: ${dataUri}\nAssertion details`,
+        images: [
+          { data: dataUri, mimeType: 'image/png' },
+          { data: 'https://example.com/secondary.png', mimeType: 'image/png' },
+        ],
+      },
+    };
+    const { container } = renderWithProviders(<EvalOutputCell {...props} />);
+    expect(
+      [...container.querySelectorAll('img')].map((image) => image.getAttribute('src')),
+    ).toEqual([dataUri, 'https://example.com/secondary.png']);
+    expect(screen.getByText(/Generated preview:/)).toHaveTextContent('Assertion details');
+  });
+
   it('falls back to text when all structured images are invalid/skipped', () => {
     const propsWithInvalidStructuredImages: MockEvalOutputCellProps = {
       ...defaultProps,
