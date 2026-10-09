@@ -39,6 +39,113 @@ describe('checkCodexCliCompatibility', () => {
     fs.rmSync(sdkRoot, { recursive: true, force: true });
   });
 
+  describe('POSIX guardian capture deadline', () => {
+    beforeEach(() => {
+      Object.defineProperty(process, 'platform', { value: 'linux', configurable: true });
+      vi.useFakeTimers();
+    });
+
+    function startPendingGuardian(signal?: AbortSignal) {
+      const stdin = new PassThrough();
+      const stdout = new PassThrough();
+      const stderr = new PassThrough();
+      const status = new PassThrough();
+      const child = Object.assign(new EventEmitter(), {
+        stdin,
+        stdout,
+        stderr,
+        stdio: [stdin, stdout, stderr, status],
+        pid: undefined,
+        kill: vi.fn(),
+      });
+      mockSpawn.mockReturnValue(child);
+      const result = checkCodexCliCompatibility({
+        sdkEntryPoint,
+        codexPathOverride: '/custom/codex',
+        env: {},
+        signal,
+      }).then(
+        () => ({ success: true as const }),
+        (error: unknown) => ({ error }),
+      );
+      return {
+        child,
+        stdout,
+        stderr,
+        result,
+        async close(frame: string) {
+          stdout.end();
+          stderr.end();
+          status.end(frame);
+          await vi.advanceTimersByTimeAsync(0);
+          child.emit('close', null, 'SIGKILL');
+        },
+      };
+    }
+
+    it('requests deadline cleanup without replacing a completed command with a timeout', async () => {
+      const probe = startPendingGuardian();
+      probe.stdout.write('codex-cli 0.130.0');
+      await vi.advanceTimersByTimeAsync(9_999);
+      expect(probe.child.kill).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1);
+      expect(probe.child.kill).toHaveBeenCalledExactlyOnceWith('SIGTERM');
+      await probe.close('{"code":0,"signal":null}');
+      await expect(probe.result).resolves.toEqual({ success: true });
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it.each([
+      { name: 'nonzero exit', frame: '{"code":7,"signal":null}', reason: 'exited with 7' },
+      {
+        name: 'signaled exit',
+        frame: '{"code":null,"signal":"SIGTERM"}',
+        reason: 'exited with SIGTERM',
+      },
+      {
+        name: 'guardian timeout',
+        frame: '{"error":"Codex CLI version check timed out after 10000ms"}',
+        reason: 'timed out after 10000ms',
+      },
+      { name: 'missing status', frame: '', reason: 'timed out after 10000ms' },
+    ])('preserves $name at the capture deadline', async ({ frame, reason }) => {
+      const probe = startPendingGuardian();
+      probe.stdout.write('codex-cli 0.130.0');
+      await vi.advanceTimersByTimeAsync(10_000);
+      await probe.close(frame);
+      await expect(probe.result).resolves.toMatchObject({
+        error: expect.objectContaining({ message: expect.stringContaining(reason) }),
+      });
+    });
+
+    it('does not let a deadline result replace a caller abort', async () => {
+      const controller = new AbortController();
+      const probe = startPendingGuardian(controller.signal);
+      probe.stdout.write('codex-cli 0.130.0');
+      await vi.advanceTimersByTimeAsync(10_000);
+      controller.abort();
+      await probe.close('{"code":0,"signal":null}');
+      await expect(probe.result).resolves.toMatchObject({
+        error: expect.objectContaining({ name: 'AbortError' }),
+      });
+    });
+
+    it.each(['stdout', 'stderr'] as const)(
+      'does not let a deadline result replace %s overflow',
+      async (stream) => {
+        const probe = startPendingGuardian();
+        await vi.advanceTimersByTimeAsync(10_000);
+        probe[stream].write('x'.repeat(1024 * 1024 + 1));
+        await probe.close('{"code":0,"signal":null}');
+        await expect(probe.result).resolves.toMatchObject({
+          error: expect.objectContaining({
+            message: expect.stringContaining(`${stream} exceeded`),
+          }),
+        });
+      },
+    );
+  });
+
   describe('Windows command exit with inherited capture pipes', () => {
     beforeEach(() => {
       Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });

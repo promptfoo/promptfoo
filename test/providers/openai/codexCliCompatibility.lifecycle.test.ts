@@ -13,9 +13,22 @@ const childScript = `
   import fs from 'node:fs';
   import path from 'node:path';
   const directory = process.env.CODEX_PREFLIGHT_TEST_DIR;
-  setInterval(() => {
+  const mode = process.env.CODEX_PREFLIGHT_TEST_MODE;
+  const timer = setInterval(() => {
     fs.writeFileSync(path.join(directory, 'heartbeat'), String(Date.now()));
     if (fs.existsSync(path.join(directory, 'release'))) {
+      if (mode.startsWith('drain-')) {
+        clearInterval(timer);
+        const output = Buffer.concat([
+          Buffer.alloc(256 * 1024, 'x'),
+          Buffer.from(String.fromCharCode(10) + 'codex-cli 0.130.0' + String.fromCharCode(10)),
+        ]);
+        process[mode.slice('drain-'.length)].write(output, () => {
+          fs.writeFileSync(path.join(directory, 'write-done'), String(output.length));
+          process.exit(0);
+        });
+        return;
+      }
       process.stdout.write('codex-cli 0.130.0' + String.fromCharCode(10));
       process.exit(0);
     }
@@ -47,6 +60,11 @@ if (mode === 'early-exit') {
       process.stdout.write('codex-cli 0.130.0' + String.fromCharCode(10));
       process.exit(0);
     }
+  }, 10);
+}
+if (mode.startsWith('drain-') && process.platform !== 'win32') {
+  setInterval(() => {
+    if (fs.existsSync(path.join(directory, 'exit-release'))) process.exit(0);
   }, 10);
 }
 await new Promise(() => {});
@@ -194,6 +212,36 @@ describe('Codex compatibility probe process ownership', () => {
     await expect(probe.result).resolves.toEqual({ success: true });
     await waitUntil(() => !isRunning(owned.wrapper) && !isRunning(owned.child));
   });
+
+  it.each(['stdout', 'stderr'] as const)(
+    "drains the child's complete %s and accepts its trailing version at EOF",
+    async (stream) => {
+      const probe = start(`drain-${stream}`, `drain-${stream}`);
+      const owned = await ready(probe.caseDirectory);
+      if (process.platform === 'win32') {
+        // A Windows Node wrapper owns its child through a kill-on-close job.
+        // Keep it alive while exercising the same complete-output EOF contract.
+        expect(isRunning(owned.wrapper)).toBe(true);
+      } else {
+        // The only version writer is released after the POSIX launcher exits.
+        fs.writeFileSync(path.join(probe.caseDirectory, 'exit-release'), 'exit');
+        await waitUntil(() => !isRunning(owned.wrapper));
+      }
+      expect(isRunning(owned.child)).toBe(true);
+      fs.writeFileSync(path.join(probe.caseDirectory, 'release'), 'write');
+      let settled = false;
+      void probe.result.then(() => {
+        settled = true;
+      });
+      // Natural EOF must complete promptly, rather than waiting the full 10s.
+      await waitUntil(() => settled);
+      await expect(probe.result).resolves.toEqual({ success: true });
+      expect(Number(fs.readFileSync(path.join(probe.caseDirectory, 'write-done'), 'utf8'))).toBe(
+        256 * 1024 + Buffer.byteLength('\ncodex-cli 0.130.0\n'),
+      );
+      await waitUntil(() => !isRunning(owned.wrapper) && !isRunning(owned.child));
+    },
+  );
 
   it('stops the probe when its owning process is terminated', async () => {
     const { caseDirectory, env } = createCase('owner-exit', 'stall');

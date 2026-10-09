@@ -19,6 +19,7 @@ const VERSION_PROBE_MAX_STATUS_BYTES = 8 * 1024;
 const VERSION_PROBE_SUPERVISOR = `
 const { writeSync } = require('node:fs');
 let stopping = false;
+let commandExit;
 const finish = (result) => {
   if (stopping) return;
   stopping = true;
@@ -30,11 +31,15 @@ const finish = (result) => {
     process.kill(-process.pid, 'SIGKILL');
   }
 };
+const timeout = () => finish(commandExit ?? { error: 'Codex CLI version check timed out after ${VERSION_PROBE_TIMEOUT_MS}ms' });
+process.once('SIGTERM', timeout);
 process.stdin.once('end', () => finish({ error: 'Codex CLI version check owner disconnected' }));
 process.stdin.once('error', () => finish({ error: 'Codex CLI version check owner channel failed' }));
+const outputFailed = () => finish({ error: 'Could not capture Codex CLI version output' });
+process.stdout.once('error', outputFailed);
+process.stderr.once('error', outputFailed);
 const { spawn } = require('node:child_process');
 const { createInterface } = require('node:readline');
-const timeout = () => finish({ error: 'Codex CLI version check timed out after ${VERSION_PROBE_TIMEOUT_MS}ms' });
 let deadline = setTimeout(timeout, ${VERSION_PROBE_TIMEOUT_MS});
 createInterface({ input: process.stdin }).once('line', (line) => {
   let options;
@@ -56,10 +61,30 @@ createInterface({ input: process.stdin }).once('line', (line) => {
     const { NODE_CHANNEL_FD, NODE_CHANNEL_SERIALIZATION_MODE, ...env } = options.env;
     const child = spawn(options.command, ['exec', '--experimental-json', '--version'], {
       env,
-      stdio: ['ignore', 1, 2],
+      stdio: ['ignore', 'pipe', 'pipe'],
     });
+    child.stdout.once('error', outputFailed);
+    child.stderr.once('error', outputFailed);
+    child.stdout.pipe(process.stdout, { end: false });
+    child.stderr.pipe(process.stderr, { end: false });
     child.once('error', () => finish({ error: 'Could not start Codex CLI version command' }));
-    child.once('exit', (code, signal) => finish({ code, signal }));
+    child.once('exit', (code, signal) => { commandExit = { code, signal }; });
+    child.once('close', (code, signal) => {
+      // Descendants can finish writing after the launcher exits. Drain both
+      // capture pipes and forwarding queues before ending the owned group.
+      const result = commandExit ?? { code, signal };
+      let pending = 2;
+      const flushed = (error) => {
+        if (error) outputFailed();
+        else if (--pending === 0) finish(result);
+      };
+      try {
+        process.stdout.write('', flushed);
+        process.stderr.write('', flushed);
+      } catch {
+        outputFailed();
+      }
+    });
   } catch {
     // Spawn/JSON diagnostics can include environment values. Keep these private.
     finish({ error: 'Could not start Codex CLI version command' });
@@ -212,6 +237,7 @@ function runVersionProbe(options: CompatibilityOptions): Promise<string> {
     let failure: Error | undefined;
     let termination: Promise<void> | undefined;
     let commandExit: ProbeExit | undefined;
+    let deadlineReached = false;
     const stop = (error: Error) => {
       failure ??= error;
       termination ??= terminateProbe(child)
@@ -225,6 +251,13 @@ function runVersionProbe(options: CompatibilityOptions): Promise<string> {
     };
     const timeout = setTimeout(
       () => {
+        if (supervised) {
+          // Ask the guardian to preserve an already observed command result at
+          // the original deadline while terminating any remaining descendants.
+          deadlineReached = true;
+          child.kill('SIGTERM');
+          return;
+        }
         if (!supervised && commandExit) {
           // A native Windows wrapper may exit while a descendant retains its
           // pipes. Keep draining until this deadline, then preserve the observed
@@ -271,7 +304,11 @@ function runVersionProbe(options: CompatibilityOptions): Promise<string> {
           return;
         }
         statusRead = true;
-        failure ??= new Error('Codex CLI version supervisor exited without a valid command status');
+        failure ??= new Error(
+          deadlineReached
+            ? `Codex CLI version check timed out after ${VERSION_PROBE_TIMEOUT_MS}ms`
+            : 'Codex CLI version supervisor exited without a valid command status',
+        );
         // A missing status means the supervisor died before its own cleanup.
         // Kill only this still-owned group before waiting on descendant-held pipes.
         termination = Promise.resolve()
