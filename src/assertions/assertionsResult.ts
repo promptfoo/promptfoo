@@ -1,7 +1,7 @@
 import { isDeepStrictEqual } from 'node:util';
 
+import { addCompletionDetails } from '../contracts/completionDetails';
 import { getEnvBool } from '../envars';
-import { addCompletionDetails } from '../util/tokenUsageUtils';
 import { asGradingResult } from './scriptResultNormalization';
 
 import type { AssertionSet, GradingResult, ScoringFunction } from '../types/index';
