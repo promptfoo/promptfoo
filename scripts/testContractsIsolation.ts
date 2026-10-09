@@ -77,6 +77,7 @@ try {
       moduleResolution: 'NodeNext',
       strict: true,
       skipLibCheck: false,
+      // The source must typecheck in a browser environment without Node globals.
       lib: ['ES2022', 'DOM'],
       types: [],
       rootDir: 'src',
@@ -90,7 +91,7 @@ try {
 import { defineConfig } from 'tsdown';
 export default defineConfig({
   entry: ['src/index.ts'], format: ['esm', 'cjs'], target: 'es2022', platform: 'neutral',
-  fixedExtension: false, dts: true, deps: { neverBundle: ['zod'] },
+  fixedExtension: false, dts: true, deps: { neverBundle: /^[a-z@][^:]*/ },
 });
 `,
   );
@@ -115,6 +116,7 @@ export default defineConfig({
       ...installFlags,
       path.join(buildDir, packed.filename),
       `typescript@${manifest.devDependencies.typescript}`,
+      `@types/node@${rootManifest.devDependencies['@types/node']}`,
     ],
     consumer,
   );
@@ -169,10 +171,12 @@ void [response, invalid, invalidBlob];
         module,
         moduleResolution: module,
         target: 'ES2022',
+        lib: ['ES2022'],
         strict: true,
         skipLibCheck: false,
         noEmit: true,
-        types: [],
+        // Node supplies cross-platform URL types used by Zod, without supplying DOM globals.
+        types: ['node'],
       },
       files: [file],
     });
