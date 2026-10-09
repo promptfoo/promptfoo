@@ -2,9 +2,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
 import { getEnvBool } from '../../src/envars';
 import { evaluate } from '../../src/evaluator';
+import {
+  type InMemoryEvaluation,
+  InMemoryEvaluationStore,
+} from '../../src/evaluator/inMemoryStore';
 import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
 import { notifyEvaluationChanged } from '../../src/models/evalMutation';
+import { generateIdFromPrompt } from '../../src/models/prompt';
 import {
   deleteErrorResults,
   getErrorResultIds,
@@ -523,6 +528,7 @@ describe('retryCommand', () => {
         delay: 0,
         eventSource: 'cli',
         maxConcurrency: 4,
+        restorePromptColumns: true,
         showProgressBar: true,
       });
       return retriedEval;
@@ -566,6 +572,7 @@ describe('retryCommand', () => {
         delay: 25,
         eventSource: 'cli',
         maxConcurrency: 1,
+        restorePromptColumns: false,
         showProgressBar: false,
       });
       return retriedEval;
@@ -588,6 +595,78 @@ describe('retryCommand', () => {
       'Running at concurrency=1 because 25ms delay was requested between API calls',
     );
   });
+
+  it.each(['test', 'defaultTest', 'scenario'] as const)(
+    'retries an authored-ID selection from %s through the real evaluator',
+    async (selectorSource) => {
+      const authored = [
+        { id: 'other-id', raw: 'other text', label: 'Other' },
+        { id: 'selected-id', raw: 'selected text', label: 'Selected' },
+      ];
+      const provider = {
+        id: () => 'echo',
+        callApi: vi.fn(async (prompt: string) => ({ output: prompt })),
+      };
+      const selection = { prompts: ['selected-id'] };
+      const suite: TestSuite = {
+        providers: [provider],
+        prompts: authored,
+        ...(selectorSource === 'scenario'
+          ? { scenarios: [{ config: [selection], tests: [{}] }] }
+          : {
+              tests: [selectorSource === 'test' ? selection : {}],
+              ...(selectorSource === 'defaultTest' ? { defaultTest: selection } : {}),
+            }),
+      };
+      const originalEval = createEval({
+        config: { prompts: authored, providers: ['echo'] },
+        prompts: authored.map((prompt) => ({
+          ...prompt,
+          id: generateIdFromPrompt(prompt),
+          provider: provider.id(),
+        })),
+      });
+      vi.mocked(Eval.findById).mockResolvedValue(originalEval);
+      dbMocks.errorRows.push({ id: 'mocked-retry-row' });
+      vi.mocked(resolveConfigs).mockResolvedValue({
+        basePath: '',
+        config: originalEval.config as UnifiedConfig,
+        testSuite: suite,
+      });
+      const actual =
+        await vi.importActual<typeof import('../../src/evaluator')>('../../src/evaluator');
+      vi.mocked(evaluate).mockImplementationOnce(async (receivedSuite, receivedEval, options) => {
+        // Exercise real routing with in-memory results; the command's persistence,
+        // error-row cleanup and sharing remain mocked by this test module.
+        const memory: InMemoryEvaluation = {
+          id: originalEval.id,
+          config: originalEval.config,
+          persisted: true,
+          prompts: structuredClone(originalEval.prompts),
+          results: [],
+          vars: [],
+          resultPersistenceFailed: false,
+          finalResults: [],
+          failedResults: [],
+        };
+        await actual.evaluate(receivedSuite, memory, options, {
+          createEvaluationStore: () => new InMemoryEvaluationStore(memory),
+          createResultWriters: () => [],
+        });
+        expect(memory.results).toMatchObject([
+          { promptIdx: 1, testIdx: 0, success: true, response: { output: 'selected text' } },
+        ]);
+        expect(memory.prompts).toMatchObject(originalEval.prompts);
+        return receivedEval as Eval;
+      });
+
+      await expect(retryCommand(originalEval.id, { verbose: true })).resolves.toBe(originalEval);
+
+      expect(evaluate).toHaveBeenCalledOnce();
+      expect(provider.callApi.mock.calls.map(([prompt]) => prompt)).toEqual(['selected text']);
+      expect(createShareableUrl).not.toHaveBeenCalled();
+    },
+  );
 
   it('preserves error results when an explicit config no longer matches the stored filter', async () => {
     const originalEval = createEval({

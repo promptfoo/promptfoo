@@ -371,6 +371,8 @@ describe('Perplexity Provider', () => {
           'json',
           undefined,
           undefined,
+          expect.any(Function),
+          undefined,
         );
       });
 
