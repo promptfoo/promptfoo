@@ -30,16 +30,22 @@ function deferred() {
 }
 
 describeEvaluator('resumable checkpoint preparation', () => {
-  it.each([false, true])(
-    'reads only the resumed column and supports legacy stores (legacy=%s)',
-    async (legacyStore) => {
+  it.each([
+    { legacyStore: false, filtered: false },
+    { legacyStore: true, filtered: false },
+    { legacyStore: false, filtered: true },
+    { legacyStore: true, filtered: true },
+  ])(
+    'reads only resumed columns with legacy=$legacyStore and filtered duplicate providers=$filtered',
+    async ({ legacyStore, filtered }) => {
       const columns = 8;
       const controller = new AbortController();
       const allStarted = deferred();
       let callsStarted = 0;
       let resuming = false;
       const providers: ApiProvider[] = Array.from({ length: columns }, (_, index) => ({
-        id: () => `checkpoint-column-${index}`,
+        id: () => (filtered ? 'checkpoint-duplicate-provider' : `checkpoint-column-${index}`),
+        ...(filtered && { prompts: [`Synthetic probe ${index}`] }),
         callApi: vi.fn(async (_prompt, _context, options) => {
           if (resuming) {
             return { output: `Completed ${index}`, tokenUsage: { total: 5, numRequests: 1 } };
@@ -54,7 +60,13 @@ describeEvaluator('resumable checkpoint preparation', () => {
           return new Promise<never>(() => {});
         }),
       }));
-      const suite: TestSuite = { providers, prompts: [toPrompt('Synthetic probe')], tests: [{}] };
+      const suite: TestSuite = {
+        providers,
+        prompts: filtered
+          ? Array.from({ length: columns }, (_, index) => toPrompt(`Synthetic probe ${index}`))
+          : [toPrompt('Synthetic probe')],
+        tests: [{}],
+      };
       const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
       const paused = evaluate(suite, record, {
         maxConcurrency: columns,
@@ -82,7 +94,7 @@ describeEvaluator('resumable checkpoint preparation', () => {
         await evaluate(
           suite,
           resumed,
-          { maxConcurrency: columns, timeoutMs: 0 },
+          { maxConcurrency: columns, timeoutMs: 0, restorePromptColumns: filtered },
           {
             ...nodeEvaluatorRuntime,
             createEvaluationStore(evaluation) {
@@ -117,8 +129,17 @@ describeEvaluator('resumable checkpoint preparation', () => {
               prompt.metrics.tokenUsage.total === 5,
           ),
         ).toBe(true);
-        for (const provider of providers) {
+        for (const [index, provider] of providers.entries()) {
           expect(provider.callApi).toHaveBeenCalledTimes(2);
+          expect(results.find((result) => result.promptIdx === index)).toMatchObject({
+            response: { output: `Completed ${index}` },
+          });
+          if (filtered) {
+            expect(vi.mocked(provider.callApi).mock.calls.map(([prompt]) => prompt)).toEqual([
+              `Synthetic probe ${index}`,
+              `Synthetic probe ${index}`,
+            ]);
+          }
         }
       } finally {
         readSpy.mockRestore();
