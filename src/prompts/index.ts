@@ -264,18 +264,26 @@ async function processPrompt(
  * @param labelBasePath - When set, prompt files are labeled as if read from this base. Labels
  *   identify prompts, so they should not depend on where the project is checked out even
  *   when `basePath` is absolute.
+ * @param sourceBasePaths - Per-input source directories when combining configuration files.
  * @returns Promise resolving to an array of processed prompts.
  */
 export async function readPrompts(
   promptPathOrGlobs: string | (string | Partial<Prompt>)[] | Record<string, string>,
   basePath: string = '',
   labelBasePath?: string,
+  sourceBasePaths?: readonly string[],
 ): Promise<Prompt[]> {
   logger.debug(`Reading prompts from ${JSON.stringify(promptPathOrGlobs)}`);
   const promptPartials: Partial<Prompt>[] = normalizeInput(promptPathOrGlobs);
   const prompts: Prompt[] = [];
-  for (const prompt of promptPartials) {
-    const promptBatch = await processPrompt(prompt, basePath, 1, labelBasePath);
+  for (const [index, prompt] of promptPartials.entries()) {
+    const sourceBasePath = sourceBasePaths?.[index];
+    const promptBatch = await processPrompt(
+      prompt,
+      sourceBasePath ?? basePath,
+      1,
+      sourceBasePath === undefined ? labelBasePath : path.relative(process.cwd(), sourceBasePath),
+    );
     if (promptBatch.length === 0) {
       throw new Error(`There are no prompts in ${JSON.stringify(prompt.raw)}`);
     }
