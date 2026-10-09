@@ -58,6 +58,7 @@ import {
 } from './evalMutation';
 import {
   getCachedResultsCount,
+  getCachedResultsCounts,
   getTotalResultRowCount,
   queryTestIndicesOptimized,
 } from './evalPerformance';
@@ -1775,6 +1776,11 @@ export default class Eval {
   }
 }
 
+function normalizeSummaryCount(value: unknown): number {
+  // Legacy manual ratings can leave signed counters whose sum still reflects the run count.
+  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+}
+
 /**
  * Queries summaries of all evals, optionally for a given dataset.
  *
@@ -1822,37 +1828,27 @@ export async function getEvalSummaries(
     .orderBy(desc(evalsTable.createdAt), desc(evalsTable.id))
     .all();
 
-  /**
-   * Deserialize the evals. A few things to note:
-   *
-   * - Test statistics are derived from the prompt metrics as this is the only reliable source of truth
-   * that's written to the evals table.
-   */
+  // V4 prompt metrics count outcomes; persisted test indices distinguish cases from runs.
+  const distinctCounts = await getCachedResultsCounts(results.map((result) => result.evalId));
   return results.map((result) => {
-    const passCount =
-      result.prompts?.reduce((memo, prompt) => {
-        return memo + (prompt.metrics?.testPassCount ?? 0);
-      }, 0) ?? 0;
+    let passCount = 0;
+    let failCount = 0;
+    let testRunCount = 0;
+    let testCount = distinctCounts.get(result.evalId) ?? 0;
 
-    const failCount =
-      result.prompts?.reduce((memo, prompt) => {
-        return memo + (prompt.metrics?.testFailCount ?? 0);
-      }, 0) ?? 0;
-
-    // All prompts should have the same number of test cases:
-    const testCounts = result.prompts?.map((p) => {
-      return (
-        (p.metrics?.testPassCount ?? 0) +
-        (p.metrics?.testFailCount ?? 0) +
-        (p.metrics?.testErrorCount ?? 0)
-      );
-    }) ?? [0];
-
-    // Derive the number of tests from the first prompt.
-    const testCount = testCounts.length > 0 ? testCounts[0] : 0;
-
-    // Test count * prompt count
-    const testRunCount = testCount * (result.prompts?.length ?? 0);
+    // Provider selection can give each column a different number of runs.
+    // Before all V4 result chunks arrive, column counts provide only a lower bound
+    // on distinct tests: overlapping and disjoint selections can have identical metrics.
+    for (const prompt of result.prompts ?? []) {
+      const passes = normalizeSummaryCount(prompt.metrics?.testPassCount);
+      const failures = normalizeSummaryCount(prompt.metrics?.testFailCount);
+      const errors = normalizeSummaryCount(prompt.metrics?.testErrorCount);
+      const runs = passes + failures + errors;
+      passCount += passes;
+      failCount += failures;
+      testRunCount += runs;
+      testCount = Math.max(testCount, runs);
+    }
 
     // Construct an array of providers
     const deserializedProviders = [];
