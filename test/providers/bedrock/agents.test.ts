@@ -334,9 +334,7 @@ describe('AwsBedrockAgentsProvider', () => {
     });
     expect(secondResult).toEqual({
       output: 'cached response',
-      metadata: {
-        sessionId: 'cached-session-id',
-      },
+      metadata: {},
       cached: true,
     });
 

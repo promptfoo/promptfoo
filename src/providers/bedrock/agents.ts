@@ -4,6 +4,7 @@ import logger from '../../logger';
 import telemetry from '../../telemetry';
 import { sha256 } from '../../util/createHash';
 import { AwsBedrockGenericProvider } from './base';
+import { isValidBedrockRetrievalFilter } from './retrievalFilter';
 import { createBedrockRequestHandler, hasProxyEnv } from './util';
 import type {
   BedrockAgentRuntimeClient,
@@ -233,56 +234,6 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
   }
 
   /**
-   * Check operator shapes before the SDK silently drops unknown filter keys.
-   */
-  private hasRetrievalFilterShape(filter: unknown): boolean {
-    if (!filter || typeof filter !== 'object' || Array.isArray(filter)) {
-      return false;
-    }
-    const entries = Object.entries(filter).filter(([, value]) => value !== undefined);
-    if (entries.length !== 1) {
-      return false;
-    }
-    const [operator, operand] = entries[0];
-    if (operator === 'andAll' || operator === 'orAll') {
-      return (
-        Array.isArray(operand) &&
-        operand.length >= 2 &&
-        operand.every((child) => this.hasRetrievalFilterShape(child))
-      );
-    }
-    // Preserve the SDK's explicit escape hatch for a newer union member.
-    if (operator === '$unknown') {
-      return (
-        Array.isArray(operand) &&
-        operand.length === 2 &&
-        typeof operand[0] === 'string' &&
-        operand[1] !== undefined
-      );
-    }
-    return (
-      [
-        'equals',
-        'notEquals',
-        'greaterThan',
-        'greaterThanOrEquals',
-        'lessThan',
-        'lessThanOrEquals',
-        'in',
-        'notIn',
-        'startsWith',
-        'listContains',
-        'stringContains',
-      ].includes(operator) &&
-      operand !== null &&
-      typeof operand === 'object' &&
-      !Array.isArray(operand) &&
-      typeof operand.key === 'string' &&
-      operand.value !== undefined
-    );
-  }
-
-  /**
    * Build the session state from configuration
    */
   private buildSessionState(): SessionState | undefined {
@@ -476,9 +427,20 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
       this.config.knowledgeBaseConfigurations ?? []
     ).entries()) {
       const filter = configuration.retrievalConfiguration?.vectorSearchConfiguration?.filter;
-      if (filter !== undefined && !this.hasRetrievalFilterShape(filter)) {
+      if (filter !== undefined && !isValidBedrockRetrievalFilter(filter)) {
         return {
           error: `Invalid knowledgeBaseConfigurations[${index}].retrievalConfiguration.vectorSearchConfiguration.filter: use an AWS RetrievalFilter with one operator, such as equals, or andAll/orAll with at least two operands. Flat metadata maps are not supported.`,
+        };
+      }
+    }
+
+    for (const [index, configuration] of (
+      this.config.sessionState?.knowledgeBaseConfigurations ?? []
+    ).entries()) {
+      const filter = configuration.retrievalConfiguration?.vectorSearchConfiguration?.filter;
+      if (filter !== undefined && !isValidBedrockRetrievalFilter(filter)) {
+        return {
+          error: `Invalid sessionState.knowledgeBaseConfigurations[${index}].retrievalConfiguration.vectorSearchConfiguration.filter: use a valid AWS RetrievalFilter operator.`,
         };
       }
     }
@@ -577,8 +539,14 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
           const parsed = JSON.parse(cached as string);
           // Validate the parsed cache data has expected structure
           if (parsed && typeof parsed === 'object') {
+            const {
+              sessionId: _sessionId,
+              memoryId: _memoryId,
+              ...metadata
+            } = parsed.metadata ?? {};
             return {
               ...parsed,
+              metadata,
               cached: true,
             };
           }
@@ -597,9 +565,10 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
       const result = await this.processResponse(response);
 
       // Cache the successful response
-      if (useCache) {
+      if (useCache && !result.metadata?.returnControl) {
         try {
-          await cache.set(cacheKey, JSON.stringify(result));
+          const { sessionId: _sessionId, memoryId: _memoryId, ...metadata } = result.metadata ?? {};
+          await cache.set(cacheKey, JSON.stringify({ ...result, metadata }));
         } catch (err) {
           logger.error(`Failed to cache response: ${err}`);
         }

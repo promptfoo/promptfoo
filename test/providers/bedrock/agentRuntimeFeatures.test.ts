@@ -52,15 +52,77 @@ async function* events(values: unknown[]) {
   yield* values;
 }
 
+let restoreEnv: (() => void) | undefined;
 beforeEach(() => {
   cache.enabled = false;
   cache.get.mockReset();
   cache.set.mockReset();
-  mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined });
+  restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined });
 });
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  restoreEnv?.();
+  vi.restoreAllMocks();
+});
 
 describe('Knowledge Base runtime features', () => {
+  it.each(['retrieve', 'retrieveAndGenerate', 'native'] as const)(
+    'rejects malformed %s filters before reaching AWS',
+    async (operation) => {
+      const retrievalConfiguration = {
+        vectorSearchConfiguration: { filter: { team: 'private' } as never },
+      };
+      const { provider, send } = kb(
+        operation === 'native'
+          ? {
+              retrieveAndGenerateConfiguration: {
+                type: 'KNOWLEDGE_BASE',
+                knowledgeBaseConfiguration: {
+                  knowledgeBaseId: 'KB12345678',
+                  modelArn: 'model',
+                  retrievalConfiguration,
+                },
+              },
+            }
+          : { operation, retrievalConfiguration },
+      );
+      expect((await provider.callApi('question')).error).toContain(
+        'Invalid Knowledge Base retrieval filter',
+      );
+      expect(send).not.toHaveBeenCalled();
+    },
+  );
+
+  it('does not expose resumable session handles from cache', async () => {
+    cache.enabled = true;
+    const { provider } = kb();
+    const live = await provider.callApi('question');
+    expect(live.metadata?.sessionId).toBe('session');
+    const stored = JSON.parse(cache.set.mock.calls[0][1]);
+    expect(stored.metadata).not.toHaveProperty('sessionId');
+    cache.get.mockResolvedValue(
+      JSON.stringify({ ...stored, metadata: { ...stored.metadata, sessionId: 'old-handle' } }),
+    );
+    const cached = await provider.callApi('question');
+    expect(cached.cached).toBe(true);
+    expect(cached.metadata).not.toHaveProperty('sessionId');
+  });
+
+  it('gives external-source configurations distinct, stable default identities', () => {
+    const create = (uri: string) =>
+      kb({
+        knowledgeBaseId: undefined,
+        retrieveAndGenerateConfiguration: {
+          type: 'EXTERNAL_SOURCES',
+          externalSourcesConfiguration: {
+            modelArn: 'model',
+            sources: [{ sourceType: 'S3', s3Location: { uri } }],
+          },
+        },
+      }).provider.id();
+    expect(create('s3://fixture/a')).toBe(create('s3://fixture/a'));
+    expect(create('s3://fixture/a')).not.toBe(create('s3://fixture/b'));
+    expect(create('s3://fixture/a')).not.toContain('undefined');
+  });
   it('forwards retrieval, generation, orchestration, session and user options', async () => {
     const config: KBConfig = {
       sessionId: 'existing-session',
@@ -264,6 +326,36 @@ describe('Knowledge Base runtime features', () => {
 });
 
 describe('Agent runtime features', () => {
+  it('rejects malformed filters in native session knowledge-base overrides', async () => {
+    const { provider, send } = agent({
+      sessionState: {
+        knowledgeBaseConfigurations: [
+          {
+            knowledgeBaseId: 'KB12345678',
+            retrievalConfiguration: {
+              vectorSearchConfiguration: { filter: { team: 'private' } as never },
+            },
+          },
+        ],
+      },
+    });
+    expect((await provider.callApi('question')).error).toContain(
+      'Invalid sessionState.knowledgeBaseConfigurations',
+    );
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it('does not cache pending return-control invocations', async () => {
+    cache.enabled = true;
+    const { provider, send } = agent();
+    send.mockResolvedValue({
+      sessionId: 'session',
+      completion: events([{ returnControl: { invocationId: 'invocation', invocationInputs: [] } }]),
+    });
+    expect((await provider.callApi('question')).metadata?.returnControl).toBeDefined();
+    expect(cache.set).not.toHaveBeenCalled();
+  });
+
   it('does not replay or store explicit session turns', async () => {
     cache.enabled = true;
     const { provider, send } = agent({ sessionId: 'existing-session' });

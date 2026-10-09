@@ -7,6 +7,7 @@ import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { isSamplingParamsDeprecatedClaudeModel } from '../anthropic/util';
 import { AwsBedrockGenericProvider } from './base';
 import { assertBedrockModelIsAvailable } from './index';
+import { isValidBedrockRetrievalFilter } from './retrievalFilter';
 import { createBedrockRequestHandler, hasProxyEnv, INFERENCE_PROFILE_PREFIX } from './util';
 import type {
   BedrockAgentRuntimeClient,
@@ -83,11 +84,17 @@ export class AwsBedrockKnowledgeBaseProvider
   }
 
   id(): string {
-    return `bedrock:kb:${this.kbConfig.knowledgeBaseId}`;
+    const id =
+      this.kbConfig.knowledgeBaseId ??
+      this.kbConfig.retrieveAndGenerateConfiguration?.knowledgeBaseConfiguration?.knowledgeBaseId;
+    if (id) {
+      return `bedrock:kb:${id}`;
+    }
+    return `bedrock:kb:external:${sha256(JSON.stringify(this.kbConfig.retrieveAndGenerateConfiguration))}`;
   }
 
   toString(): string {
-    return `[Amazon Bedrock Knowledge Base Provider ${this.kbConfig.knowledgeBaseId}]`;
+    return `[Amazon Bedrock Knowledge Base Provider ${this.kbConfig.knowledgeBaseId ?? this.id()}]`;
   }
 
   async getKnowledgeBaseClient() {
@@ -230,6 +237,18 @@ export class AwsBedrockKnowledgeBaseProvider
 
   async callApi(prompt: string): Promise<ProviderResponse> {
     try {
+      const retrieval =
+        this.kbConfig.operation === 'retrieve' || !this.kbConfig.retrieveAndGenerateConfiguration
+          ? this.kbConfig.retrievalConfiguration
+          : this.kbConfig.retrieveAndGenerateConfiguration.knowledgeBaseConfiguration
+              ?.retrievalConfiguration;
+      const filter = retrieval?.vectorSearchConfiguration?.filter;
+      if (filter !== undefined && !isValidBedrockRetrievalFilter(filter)) {
+        return {
+          error:
+            'Invalid Knowledge Base retrieval filter: use an AWS RetrievalFilter with one operator, such as equals, or andAll/orAll with at least two operands. Flat metadata maps are not supported.',
+        };
+      }
       if (this.kbConfig.operation === 'retrieve') {
         if (!this.kbConfig.knowledgeBaseId) {
           return { error: 'Retrieve requires config.knowledgeBaseId.' };
@@ -340,9 +359,12 @@ export class AwsBedrockKnowledgeBaseProvider
         if (cached) {
           logger.debug('Returning cached Bedrock Knowledge Base response');
           const parsed = JSON.parse(cached as string);
+          const { sessionId: _sessionId, ...cachedMetadata } = parsed.metadata ?? {
+            citations: parsed.citations,
+          };
           return {
             output: parsed.output,
-            metadata: parsed.metadata ?? { citations: parsed.citations },
+            metadata: cachedMetadata,
             ...(parsed.guardrails ? { guardrails: parsed.guardrails } : {}),
             tokenUsage: createEmptyTokenUsage(),
             cached: true,
@@ -369,7 +391,9 @@ export class AwsBedrockKnowledgeBaseProvider
       };
       if (useCache) {
         try {
-          await cache.set(cacheKey, JSON.stringify(result));
+          // Cached output is reusable, but the service session belongs to this live call.
+          const { sessionId: _sessionId, ...metadata } = result.metadata ?? {};
+          await cache.set(cacheKey, JSON.stringify({ ...result, metadata }));
         } catch (err) {
           logger.error('Failed to cache knowledge base response', { error: String(err) });
         }
