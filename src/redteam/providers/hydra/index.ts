@@ -730,22 +730,40 @@ export class HydraProvider implements ApiProvider {
         (lastTransformResult?.audio ||
           lastTransformResult?.image ||
           (!this.stateful && !lastTransformResult));
+      let currentGradingInputVars = deliveredInputVars;
+      if (lastTransformResult && forwardsPrompt && !replaysHistory) {
+        // The layer replaces the injected prompt, but separately forwarded
+        // generated variables still reached the target through their own fields.
+        // No original template interpolations prove delivery through a layer;
+        // an empty template leaves only the helper's direct body evidence.
+        const { vars: sideInputVars } = getRenderedInputVariables(
+          getTextInputVariables(injectedInputVars, this.config.inputs),
+          this.injectVar,
+          requestTemplates,
+          { raw: '', label: 'layer-output' },
+          undefined,
+          finalTargetPrompt,
+          renderVariables,
+        );
+        currentGradingInputVars = {
+          ...sideInputVars,
+          ...getRenderedInputVariables(
+            { [this.injectVar]: lastTransformResult.prompt },
+            this.injectVar,
+            requestTemplates,
+            undefined,
+            undefined,
+            finalTargetPrompt,
+          ).vars,
+        };
+      }
       const currentGradingContent = replaysHistory
         ? processedMessage
-        : lastTransformResult && forwardsPrompt
-          ? getRenderedInputVariables(
-              { [this.injectVar]: lastTransformResult.prompt },
-              this.injectVar,
-              requestTemplates,
-              undefined,
-              undefined,
-              finalTargetPrompt,
-            ).vars[this.injectVar]
-          : currentRenderInputVars
-            ? Object.keys(deliveredInputVars).length > 0
-              ? JSON.stringify(deliveredInputVars)
-              : undefined
-            : deliveredInputVars[this.injectVar];
+        : currentRenderInputVars
+          ? Object.keys(currentGradingInputVars).length > 0
+            ? JSON.stringify(currentGradingInputVars)
+            : undefined
+          : currentGradingInputVars[this.injectVar];
       const currentGradingMessages: Message[] =
         currentGradingContent === undefined
           ? []
@@ -757,12 +775,13 @@ export class HydraProvider implements ApiProvider {
           : currentGradingMessages;
       // Unknown or normalized blank input must not hide the prior verified turns
       // or make the last one look current when the result is graded again later.
-      lastCurrentTurnStart =
-        this.stateful &&
-        !replaysHistory &&
-        !getTargetConversation(currentGradingMessages).lastUserPrompt
-          ? statefulGradingHistory.length
-          : undefined;
+      lastCurrentTurnStart = getTargetConversation(currentGradingMessages).lastUserPrompt
+        ? undefined
+        : replaysHistory
+          ? this.conversationHistory.length - 1
+          : this.stateful
+            ? statefulGradingHistory.length
+            : undefined;
       const { conversationTranscript } = getTargetConversation(
         gradingMessages,
         lastCurrentTurnStart,

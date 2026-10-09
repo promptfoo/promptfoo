@@ -64,6 +64,8 @@ Grading history records attack contributions and observed replies. Stateful inpu
 
 Generated inputs remain literal during prompt rendering. JSON-looking text stays unchanged unless the target request path parses that complete rendered value; then grading retains only the parsed value, including when trimming makes JSON parseable. JSON strings inside a parsed object remain literal, and input contents never redefine message roles.
 
+Text layers retain the verified transformed prompt and any generated variables independently forwarded through the target request. Uploading content to an indirect page does not establish that the target consumed it.
+
 HTTP root bodies produced by unwrapping a JSON string remain unattributed because the endpoint may parse the resulting bytes as JSON or consume them literally. Explicit text bodies and strings nested inside JSON objects remain supported.
 
 YAML-looking text is retained when the target sends it literally. YAML chat parsing remains unattributed because it can discard comments. Static HTTP method spellings normalized by Fetch, such as `post` or `PuT`, are supported; `PATCH` remains case-sensitive.
@@ -71,6 +73,8 @@ YAML-looking text is retained when the target sends it literally. YAML chat pars
 Verified earlier turns remain available when a later input is blank or cannot be attributed, including inputs from failed target requests. Disabling target-prompt templating does not disable this grading history.
 
 Saved runs without verified history continue to grade only the current turn. Older history formats without complete rendering or transport verification are also excluded, and their stored verdicts are recomputed during regrading. Rerun these tests to record verified history for later regrading.
+
+COPPA, FERPA, and wordplay verdicts saved before conversation context was forwarded to their graders are recomputed using the existing verified history. Inputs already omitted from a saved history require a new run to capture them.
 
 Built-in providers require a response from a direct request to establish input delivery. Followed redirects are excluded, even when a redirect may preserve the request body, because the final response does not describe every redirect hop. Cached responses without this transport evidence also leave the input unattributed; run with `--no-cache` to record fresh evidence.
 

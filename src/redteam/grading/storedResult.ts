@@ -57,6 +57,11 @@ export function getGradingInputHash(
   currentTurnStart?: number,
 ): string {
   const conversation = getGradingMessages(messages);
+  // These graders previously discarded the context their stored hash included.
+  // Invalidate only those conversation-bound verdicts, retaining valid history
+  // and the legacy current-turn-only digest.
+  const forwardsConversation =
+    Array.isArray(messages) && ['coppa', 'ferpa', 'wordplay'].includes(pluginId ?? '');
   return createHash('sha256')
     .update(
       JSON.stringify([
@@ -65,6 +70,7 @@ export function getGradingInputHash(
         output,
         conversation,
         ...(currentTurnStart === undefined ? [] : [currentTurnStart]),
+        ...(forwardsConversation ? ['forwarded-conversation-v1'] : []),
       ]),
     )
     .digest('hex');

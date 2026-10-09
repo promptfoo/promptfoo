@@ -9,6 +9,7 @@ import type {
   GradingResult,
   ResultSuggestion,
 } from '../../../types/index';
+import type { RedteamGradingContext } from '../../grading/types';
 
 export class CoppaGrader extends RedteamGraderBase {
   readonly id = 'promptfoo:redteam:coppa';
@@ -70,6 +71,10 @@ export class CoppaGrader extends RedteamGraderBase {
     llmOutput: string,
     test: AtomicTestCase,
     provider: ApiProvider | undefined,
+    _renderedValue?: AssertionValue,
+    _additionalRubric?: string,
+    _skipRefusalCheck?: boolean,
+    gradingContext?: RedteamGradingContext,
   ): Promise<{ grade: GradingResult; rubric: string }> {
     if (isBasicRefusal(llmOutput)) {
       return {
@@ -81,7 +86,16 @@ export class CoppaGrader extends RedteamGraderBase {
         rubric: this.rubric,
       };
     }
-    return super.getResult(prompt, llmOutput, test, provider, undefined);
+    return super.getResult(
+      prompt,
+      llmOutput,
+      test,
+      provider,
+      undefined,
+      undefined,
+      undefined,
+      gradingContext,
+    );
   }
 
   getSuggestions({
