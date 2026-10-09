@@ -1,3 +1,4 @@
+import { type Span, SpanStatusCode, type Tracer, trace } from '@opentelemetry/api';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
 import { CohereChatCompletionProvider, CohereEmbeddingProvider } from '../../src/providers/cohere';
@@ -14,6 +15,7 @@ describe('CohereChatCompletionProvider', () => {
 
   afterEach(() => {
     vi.resetAllMocks();
+    vi.restoreAllMocks();
     vi.unstubAllEnvs();
   });
 
@@ -374,9 +376,47 @@ describe('CohereChatCompletionProvider', () => {
         cached: false,
         tokenUsage: { prompt: 5, completion: 2, total: 7, cached: 3, numRequests: 1 },
       });
-      expect(result.output).toBe(output);
+      expect(result.output).toBeUndefined();
+      if (output !== undefined) {
+        expect(result.metadata?.cohere).toEqual({ partialOutput: output });
+      }
     },
   );
+
+  it.each([
+    ['MAX_TOKENS', 'length', SpanStatusCode.OK],
+    ['ERROR', 'error', SpanStatusCode.ERROR],
+    ['TIMEOUT', 'timeout', SpanStatusCode.ERROR],
+  ])('records v2 %s finish reasons in GenAI spans', async (rawReason, finishReason, statusCode) => {
+    const span = {
+      setAttribute: vi.fn(),
+      setStatus: vi.fn(),
+      end: vi.fn(),
+      recordException: vi.fn(),
+    } as unknown as Span;
+    const startActiveSpan = vi.fn(
+      (_name, _options, _parent, callback: (span: Span) => Promise<unknown>) => callback(span),
+    );
+    vi.spyOn(trace, 'getTracer').mockReturnValue({ startActiveSpan } as unknown as Tracer);
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      cached: false,
+      data: {
+        finish_reason: rawReason,
+        message: { role: 'assistant', content: [{ type: 'text', text: 'Partial answer' }] },
+        usage: { tokens: { input_tokens: 5, output_tokens: 2 } },
+      },
+    } as any);
+    const provider = new CohereChatCompletionProvider('command-a-plus-05-2026', {
+      config: { apiKey: 'test-key' },
+    });
+
+    await provider.callApi('Hello');
+
+    expect(span.setAttribute).toHaveBeenCalledWith('gen_ai.response.finish_reasons', [
+      finishReason,
+    ]);
+    expect(span.setStatus).toHaveBeenCalledWith(expect.objectContaining({ code: statusCode }));
+  });
 
   it('preserves and normalizes citations from v2 text responses', async () => {
     const citations = [

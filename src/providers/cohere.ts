@@ -625,6 +625,9 @@ export class CohereChatCompletionProvider implements ApiProvider {
           total: response.tokenUsage.total,
         };
       }
+      if (response.finishReason) {
+        result.finishReasons = [response.finishReason];
+      }
       return result;
     };
 
@@ -890,9 +893,9 @@ export class CohereChatCompletionProvider implements ApiProvider {
         return {
           error: `Cohere v2 Chat API generation failed with finish_reason ${data.finish_reason}.`,
           cached,
-          output,
           tokenUsage,
           finishReason,
+          metadata: { cohere: { partialOutput: output } },
         };
       }
       if (output === undefined) {
