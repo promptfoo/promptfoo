@@ -17,7 +17,12 @@ import {
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
 import { getSessionId } from '../util';
-import { callTargetProvider, getForwardedTargetMetadata, snapshotTargetMetadata } from './shared';
+import {
+  callTargetProvider,
+  getForwardedTargetMetadata,
+  restoreNumericSourceOutput,
+  snapshotTargetMetadata,
+} from './shared';
 
 import type {
   ApiProvider,
@@ -240,7 +245,7 @@ export default class BestOfNProvider implements ApiProvider {
           ...(successfulResponse ? {} : { sessionIds }),
         };
 
-        return aggregatedResponse;
+        return restoreNumericSourceOutput(aggregatedResponse, undefined, context);
       }
 
       return {

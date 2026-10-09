@@ -719,6 +719,7 @@ async function runRedteamConversation({
               tokenUsage: totalTokenUsage,
             },
             bestTargetOutput,
+            context,
           );
         }
 
@@ -1148,6 +1149,7 @@ async function runRedteamConversation({
               guardrails: targetResponse?.guardrails,
             },
             targetOutput,
+            context,
           );
         }
 
@@ -1197,6 +1199,7 @@ async function runRedteamConversation({
               guardrails: targetResponse?.guardrails,
             },
             bestTargetOutput,
+            context,
           );
         }
 
@@ -1247,6 +1250,7 @@ async function runRedteamConversation({
               guardrails: targetResponse?.guardrails,
             },
             bestTargetOutput,
+            context,
           );
         }
 
@@ -1401,6 +1405,7 @@ async function runRedteamConversation({
       ...(finalTargetResponse.error ? { error: finalTargetResponse.error } : {}),
     },
     bestResponse ? bestTargetOutput : undefined,
+    context,
   );
 }
 

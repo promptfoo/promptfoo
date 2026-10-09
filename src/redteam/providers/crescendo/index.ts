@@ -946,6 +946,7 @@ export class CrescendoProvider implements ApiProvider {
         guardrails: reported.guardrails,
       },
       reported.numericOutput,
+      context,
     );
   }
 

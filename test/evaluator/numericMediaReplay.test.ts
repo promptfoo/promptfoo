@@ -43,6 +43,7 @@ const numeric: Assertion = {
   value: { type: 'numeric', expected: { amount: 100 } },
 };
 let images: Record<'small' | 'large', string>;
+const audioData = Buffer.alloc(24 * 1024, 7).toString('base64');
 
 function output(amount: number, size: 'small' | 'large' = 'large') {
   return JSON.stringify({ amount, data: [{ b64_json: images[size] }] });
@@ -56,15 +57,18 @@ async function evaluate(
     assertions = [numeric],
     providerTransform,
     testTransform,
+    metadata = { selectedTurn: 1 },
   }: {
     wrapped?: boolean;
     deferred?: boolean;
     assertions?: AtomicTestCase['assert'];
     providerTransform?: ApiProvider['transform'];
     testTransform?: NonNullable<AtomicTestCase['options']>['transform'];
+    metadata?: ProviderResponse['metadata'];
   } = {},
 ) {
-  const originalResponse = { output: raw, metadata: { selectedTurn: 1 } };
+  const originalResponse = { output: raw, metadata };
+  const originalSnapshot = structuredClone(originalResponse);
   const target: ApiProvider = {
     id: () => 'synthetic-image-calculator',
     callApi: vi.fn(async () => originalResponse),
@@ -117,7 +121,7 @@ async function evaluate(
     await vi.waitFor(() => expect(row.gradingResult || row.error).toBeTruthy());
   }
   expect(target.callApi).toHaveBeenCalledTimes(1);
-  expect(originalResponse).toEqual({ output: raw, metadata: { selectedTurn: 1 } });
+  expect(originalResponse).toEqual(originalSnapshot);
   return { row, record, test: { ...test, provider: wrapped ? strategy.id() : target.id() } };
 }
 
@@ -291,6 +295,62 @@ module.exports = (output, context) => {
     },
   );
 
+  it.each(
+    [false, true].flatMap((wrapped) =>
+      [false, true].flatMap((inline) =>
+        (['transform', 'reference'] as const).map((stage) => ({ wrapped, inline, stage })),
+      ),
+    ),
+  )(
+    'preserves live numeric metadata without changing siblings (wrapped=$wrapped inline=$inline stage=$stage)',
+    async ({ wrapped, inline, stage }) => {
+      vi.stubEnv('PROMPTFOO_INLINE_MEDIA', String(inline));
+      const metadata = {
+        audio: { data: audioData, format: 'wav' },
+        details: { audio: { data: 'ordinary-domain-data' } },
+      };
+      const seen: unknown[] = [];
+      const assertion: Assertion = { ...numeric };
+      if (stage === 'transform') {
+        assertion.transform = (value, context) => {
+          const data = (context.metadata?.audio as { data?: unknown } | undefined)?.data;
+          seen.push(data);
+          return data === audioData ? value : '{"amount":999}';
+        };
+      } else {
+        await fs.writeFile(
+          path.join(directory, 'audio-reference.cjs'),
+          'module.exports = (_output, context) => ({ type: "numeric", expected: { amount: typeof context.metadata?.audio?.data === "string" && context.metadata.audio.data === context.providerResponse.metadata?.audio?.data ? 100 : 999 } });',
+        );
+        assertion.value = 'file://audio-reference.cjs';
+        assertion.config = { numeric: true };
+      }
+      const sibling: Assertion = {
+        type: 'javascript',
+        value:
+          wrapped || inline
+            ? 'typeof context.metadata.audio.data === "string"'
+            : 'context.metadata.audio.data === undefined && context.metadata.audio.blobRef.uri.startsWith("promptfoo://blob/")',
+      };
+      const { row } = await evaluate('{"amount":100}', {
+        wrapped,
+        assertions: [assertion, sibling],
+        metadata,
+      });
+      expect(row.success).toBe(true);
+      expect(row.response?.output).toBe('{"amount":100}');
+      if (stage === 'transform') {
+        expect(seen).toEqual(wrapped ? [audioData, audioData] : [audioData]);
+      }
+      const storedMetadata = wrapped
+        ? row.response?.metadata?.redteamTargetMetadata
+        : row.response?.metadata;
+      expect(storedMetadata.audio.data).toBe(inline ? audioData : undefined);
+      expect(metadata.audio.data).toBe(audioData);
+      expect(metadata.details.audio.data).toBe('ordinary-domain-data');
+    },
+  );
+
   it.each([false, true].flatMap((wrapped) => [false, true].map((inline) => ({ wrapped, inline }))))(
     'retains source validity when numeric assertions are added later (wrapped=$wrapped inline=$inline)',
     async ({ wrapped, inline }) => {
@@ -317,7 +377,12 @@ module.exports = (output, context) => {
       vi.stubEnv('PROMPTFOO_INLINE_MEDIA', String(inline));
       vi.stubEnv('PROMPTFOO_STRIP_RESPONSE_OUTPUT', String(strip));
       const raw = output(100);
-      const originalResponse = { output: raw, metadata: { selectedTurn: 1 } };
+      const targetMetadata = {
+        selectedTurn: 1,
+        audio: { data: audioData, format: 'wav' },
+        details: { audio: { data: 'ordinary-domain-data' } },
+      };
+      const originalResponse = { output: raw, metadata: targetMetadata };
       const target: ApiProvider = {
         id: () => 'synthetic-error-sequence-target',
         callApi: vi.fn(async () => originalResponse),
@@ -391,16 +456,29 @@ module.exports = (output, context) => {
       expect(row.failureReason).toBe(2);
       expect(row.error).toContain('Synthetic attacker request failed');
       expectStoredSource(row, raw, inline);
+      for (const metadata of [row.response?.metadata, row.metadata]) {
+        const capture = metadata?.redteamTargetMetadata;
+        expect(capture.audio.data).toBe(inline ? audioData : undefined);
+        expect(capture.details.audio.data).toBe('ordinary-domain-data');
+        if (!inline) {
+          expect((await getBlobByHash(capture.audio.blobRef.hash)).data.toString('base64')).toBe(
+            audioData,
+          );
+          expect(await isBlobAllowedForShare(capture.audio.blobRef.hash, record.id)).toBe(true);
+        }
+      }
       const streamed = writer.write.mock.calls[0][0] as EvaluateResult;
       expect(streamed.response?.output).toBe(strip ? '[output stripped]' : row.response?.output);
       if (!inline) {
         expect(JSON.stringify(streamed)).not.toContain(images.large);
       }
+      expect(JSON.stringify(streamed).includes(audioData)).toBe(inline && !strip);
       const saved = await EvalResult.createFromEvaluateResult(record.id, row, { persist: true });
       const readback = (await EvalResult.findById(saved.id))!;
       expectStoredSource(readback, raw, inline);
       await expectReplay(readback.response!, { provider: strategy.id() }, !inline, true);
-      expect(originalResponse).toEqual({ output: raw, metadata: { selectedTurn: 1 } });
+      expect(originalResponse).toEqual({ output: raw, metadata: targetMetadata });
+      expect(targetMetadata.audio.data).toBe(audioData);
     },
   );
 

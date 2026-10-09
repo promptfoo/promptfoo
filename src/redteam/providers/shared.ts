@@ -1201,10 +1201,31 @@ export async function externalizeResponseForRedteamHistory<T extends ProviderRes
 }
 
 /** Keep error responses normalized: the evaluator returns them without grading or extraction. */
-export function restoreNumericSourceOutput<T extends ProviderResponse>(
+export async function restoreNumericSourceOutput<T extends ProviderResponse>(
   response: T,
   numericOutput?: string,
-): T {
+  context?: Pick<CallApiContextParams, 'evaluationId' | 'testIdx' | 'promptIdx'>,
+): Promise<T> {
+  const capturedMetadata = response.metadata?.redteamTargetMetadata;
+  if (response.error && capturedMetadata != null) {
+    // Error rows skip evaluator grading/extraction. Normalize only the introduced
+    // selected capture; existing target error outputs and wrapper controls stay intact.
+    const projected = await extractAndStoreBinaryData(
+      { metadata: { redteamTargetMetadata: capturedMetadata } },
+      {
+        evalId: context?.evaluationId,
+        testIdx: context?.testIdx,
+        promptIdx: context?.promptIdx,
+      },
+    );
+    response = {
+      ...response,
+      metadata: {
+        ...response.metadata,
+        redteamTargetMetadata: projected?.metadata?.redteamTargetMetadata ?? capturedMetadata,
+      },
+    };
+  }
   if (numericOutput === undefined || Object.is(response.output, numericOutput)) {
     return response;
   }

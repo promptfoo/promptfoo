@@ -5,7 +5,11 @@ import path from 'path';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { runAssertion } from '../../../src/assertions/index';
 import { FilesystemBlobStorageProvider } from '../../../src/blobs/filesystemProvider';
-import { resetBlobStorageProvider, setBlobStorageProvider } from '../../../src/blobs/index';
+import {
+  getBlobByHash,
+  resetBlobStorageProvider,
+  setBlobStorageProvider,
+} from '../../../src/blobs/index';
 import { runEval } from '../../../src/evaluator';
 import { runDbMigrations } from '../../../src/migrate';
 import { RedteamGraderBase } from '../../../src/redteam/plugins/base';
@@ -83,11 +87,25 @@ function createAttack(strategy: Strategy, maxTurns = 1, continueAfterSuccess = f
   return provider;
 }
 
-function createTarget(amounts: number[], { large = true, object = false, ended = false } = {}) {
+function createTarget(
+  amounts: number[],
+  { large = true, object = false, ended = false, audio = false } = {},
+) {
   const responses: ProviderResponse[] = amounts.map((amount, index) => {
     const output = { amount, data: [{ b64_json: large ? largeImage : smallImage }] };
     return {
       output: object ? output : JSON.stringify(output),
+      ...(audio
+        ? {
+            metadata: {
+              turn: index + 1,
+              audio: {
+                data: Buffer.alloc(24 * 1024, index + 17).toString('base64'),
+                format: 'wav',
+              },
+            },
+          }
+        : {}),
       ...(ended && index === amounts.length - 1 ? { conversationEnded: true } : {}),
     };
   });
@@ -102,6 +120,26 @@ function createTarget(amounts: number[], { large = true, object = false, ended =
     }),
   };
   return { target, responses };
+}
+
+async function expectSelectedAudio(
+  response: ProviderResponse | undefined,
+  selectedResponse: ProviderResponse,
+  inline: boolean,
+) {
+  const source = selectedResponse.metadata!;
+  const captured = response?.metadata?.redteamTargetMetadata;
+  expect(captured.turn).toBe(source.turn);
+  if (inline) {
+    expect(captured.audio.data).toBe(source.audio.data);
+  } else {
+    expect(captured.audio.data).toBeUndefined();
+    expect(captured.audio.blobRef.uri).toMatch(/^promptfoo:\/\/blob\//);
+    expect((await getBlobByHash(captured.audio.blobRef.hash)).data.toString('base64')).toBe(
+      source.audio.data,
+    );
+    expect(JSON.stringify(captured)).not.toContain(source.audio.data);
+  }
 }
 
 async function evaluate(
@@ -277,6 +315,60 @@ describe('raw selected numeric JSON before multi-turn media normalization', () =
       if (ended) {
         expect(row.response?.metadata?.stopReason).toBe('Target ended conversation');
       }
+    },
+  );
+
+  it.each(strategies.flatMap((strategy) => [false, true].map((inline) => ({ strategy, inline }))))(
+    '$strategy normalizes selected error audio with inline=$inline',
+    async ({ strategy, inline }) => {
+      vi.stubEnv('PROMPTFOO_INLINE_MEDIA', String(inline));
+      const { target, responses } = createTarget([100, 101], { audio: true });
+      responses[1].error = 'Synthetic terminal target error';
+      const originalResponses = structuredClone(responses);
+      const row = await evaluate(createAttack(strategy, 2), target, [assertion]);
+
+      expect(target.callApi).toHaveBeenCalledTimes(2);
+      expect(observations).toEqual([100]);
+      expect(row.success).toBe(false);
+      expect(row.failureReason).toBe(2);
+      expect(row.error).toBe('Synthetic terminal target error');
+      await expectSelectedAudio(row.response, originalResponses[1], inline);
+      // Hydra's target-error branch already bypassed output extraction before this change.
+      expect(row.response?.output).toEqual(
+        inline || strategy === 'hydra' || strategy === 'goblin'
+          ? originalResponses[1].output
+          : expect.stringMatching(/^promptfoo:\/\/blob\//),
+      );
+      expect(responses).toEqual(originalResponses);
+      expect(RedteamGraderBase.prototype.getResult).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(
+    (['custom', 'crescendo'] as const).flatMap((strategy) =>
+      [false, true].map((inline) => ({ strategy, inline })),
+    ),
+  )(
+    '$strategy keeps flagged audio after a later target error with inline=$inline',
+    async ({ strategy, inline }) => {
+      vi.stubEnv('PROMPTFOO_INLINE_MEDIA', String(inline));
+      const { target, responses } = createTarget([101, 100], { audio: true });
+      responses[1].error = 'Synthetic later target error';
+      const originalResponses = structuredClone(responses);
+      const row = await evaluate(createAttack(strategy, 2, true), target, [assertion]);
+
+      expect(target.callApi).toHaveBeenCalledTimes(2);
+      expect(observations).toEqual([101, 101]);
+      expect(row.success).toBe(false);
+      expect(row.failureReason).toBe(1);
+      expect(row.response?.error).toBeUndefined();
+      expect(row.response?.metadata?.storedGraderResult.pass).toBe(false);
+      await expectSelectedAudio(row.response, originalResponses[0], inline);
+      expect(row.response?.output).toEqual(
+        inline ? originalResponses[0].output : expect.stringMatching(/^promptfoo:\/\/blob\//),
+      );
+      expect(responses).toEqual(originalResponses);
+      expect(RedteamGraderBase.prototype.getResult).not.toHaveBeenCalled();
     },
   );
 

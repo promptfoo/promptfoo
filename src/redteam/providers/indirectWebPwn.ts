@@ -12,7 +12,7 @@ import {
 import { getRemoteGenerationHeaders, getRemoteGenerationUrl } from '../remoteGeneration';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { WebPageTrackingIdsSchema } from '../types/webPage';
-import { getTargetResponse, snapshotTargetMetadata } from './shared';
+import { getTargetResponse, restoreNumericSourceOutput, snapshotTargetMetadata } from './shared';
 
 import type {
   ApiProvider,
@@ -409,22 +409,26 @@ export default class IndirectWebPwnProvider implements ApiProvider {
       totalTurns: redteamHistory.length,
     });
 
-    return {
-      output: lastOutput,
-      ...(targetError ? { error: targetError } : {}),
-      metadata: {
-        redteamOutputIsText: lastOutputIsText,
-        redteamTargetMetadata: lastTargetMetadata,
-        redteamFinalPrompt: messages[messages.length - 2]?.content || '',
-        messages: messages as unknown as Record<string, unknown>[],
-        stopReason,
-        redteamHistory,
-        webPageUuid,
-        webPageUrl,
-        webFetchActuallyUsed,
-        fetchAttempts,
+    return restoreNumericSourceOutput(
+      {
+        output: lastOutput,
+        ...(targetError ? { error: targetError } : {}),
+        metadata: {
+          redteamOutputIsText: lastOutputIsText,
+          redteamTargetMetadata: lastTargetMetadata,
+          redteamFinalPrompt: messages[messages.length - 2]?.content || '',
+          messages: messages as unknown as Record<string, unknown>[],
+          stopReason,
+          redteamHistory,
+          webPageUuid,
+          webPageUrl,
+          webFetchActuallyUsed,
+          fetchAttempts,
+        },
+        tokenUsage: totalTokenUsage,
       },
-      tokenUsage: totalTokenUsage,
-    };
+      undefined,
+      context,
+    );
   }
 }

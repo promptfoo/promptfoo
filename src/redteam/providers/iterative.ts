@@ -911,6 +911,7 @@ export async function runRedteamConversation({
       tokenUsage: totalTokenUsage,
     },
     bestInjectVar === undefined ? lastTargetOutput : bestTargetOutput,
+    context,
   );
 }
 

@@ -17,7 +17,12 @@ import {
 } from '../remoteGeneration';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
-import { callTargetProvider, getForwardedTargetMetadata, snapshotTargetMetadata } from './shared';
+import {
+  callTargetProvider,
+  getForwardedTargetMetadata,
+  restoreNumericSourceOutput,
+  snapshotTargetMetadata,
+} from './shared';
 
 import type {
   ApiProvider,
@@ -153,11 +158,15 @@ export default class AuthoritativeMarkupInjectionProvider implements ApiProvider
     });
 
     if (targetResponse.error) {
-      return {
-        ...targetResponse,
-        metadata: targetMetadata,
-        tokenUsage: totalTokenUsage,
-      };
+      return restoreNumericSourceOutput(
+        {
+          ...targetResponse,
+          metadata: targetMetadata,
+          tokenUsage: totalTokenUsage,
+        },
+        undefined,
+        context,
+      );
     }
 
     return {

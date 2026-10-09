@@ -1123,6 +1123,7 @@ export class HydraProvider implements ApiProvider {
         guardrails: lastTargetResponse?.guardrails,
       },
       lastNumericOutput,
+      context,
     );
   }
 }

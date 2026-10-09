@@ -2,12 +2,20 @@ import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
 
+import { and, eq } from 'drizzle-orm';
 import sharp from 'sharp';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { runAssertion } from '../../../src/assertions/index';
 import { FilesystemBlobStorageProvider } from '../../../src/blobs/filesystemProvider';
-import { resetBlobStorageProvider, setBlobStorageProvider } from '../../../src/blobs/index';
+import {
+  getBlobByHash,
+  isBlobAllowedForShare,
+  resetBlobStorageProvider,
+  setBlobStorageProvider,
+} from '../../../src/blobs/index';
 import cliState from '../../../src/cliState';
+import { getDb } from '../../../src/database/index';
+import { blobReferencesTable, evalsTable } from '../../../src/database/tables';
 import { runEval } from '../../../src/evaluator';
 import { runDbMigrations } from '../../../src/migrate';
 import { RedteamGraderBase } from '../../../src/redteam/plugins/base';
@@ -34,6 +42,7 @@ const numericAssertion: Assertion = {
   value: { type: 'numeric', expected: { amount: 100 } },
 };
 let images: Record<'small' | 'large', string>;
+const audioData = (turn: number) => Buffer.alloc(24 * 1024, turn).toString('base64');
 
 function output(amount: number, size: 'small' | 'large' = 'large', turn = 1, imageUrl = false) {
   return JSON.stringify({
@@ -53,14 +62,30 @@ async function evaluate(
     treeConfig = {},
     attackerError = false,
     targetError = false,
+    includeAudio = false,
   }: {
     assertion?: Assertion;
     ratings?: Array<number | undefined>;
     treeConfig?: Record<string, number>;
     attackerError?: boolean;
     targetError?: boolean;
+    includeAudio?: boolean;
   } = {},
 ) {
+  const originalMetadata = outputs.map((_output, index) => ({
+    turn: index + 1,
+    ...(includeAudio
+      ? {
+          audio: { data: audioData(index + 1), format: 'wav' },
+          details: { audio: { data: 'Accounting annotation' }, currency: 'USD' },
+        }
+      : {}),
+  }));
+  const expectedMetadata = structuredClone(originalMetadata);
+  const evalId = includeAudio ? crypto.randomUUID() : undefined;
+  if (evalId) {
+    await (await getDb()).insert(evalsTable).values({ id: evalId, config: {}, results: {} });
+  }
   const target: ApiProvider = {
     id: () => 'synthetic-chart-calculator',
     callApi: vi.fn(async () => {
@@ -70,7 +95,7 @@ async function evaluate(
       }
       return {
         output: outputs[turn - 1],
-        metadata: { turn },
+        metadata: originalMetadata[turn - 1],
         ...(targetError && turn === outputs.length ? { error: 'Synthetic target error' } : {}),
       };
     }),
@@ -189,10 +214,51 @@ async function evaluate(
     conversations: {},
     registers: {},
     isRedteam: true,
+    evalId,
   });
   expect(fetch).not.toHaveBeenCalled();
   expect(RedteamGraderBase.prototype.getResult).not.toHaveBeenCalled();
-  return { row, response, target, judgeInputs, visionInputs, test };
+  expect(originalMetadata).toEqual(expectedMetadata);
+  return { row, response, target, judgeInputs, visionInputs, test, originalMetadata, evalId };
+}
+
+async function expectSelectedAudio(
+  result: Awaited<ReturnType<typeof evaluate>>,
+  selectedTurn: number,
+  inline: boolean,
+) {
+  const captured = result.row.response?.metadata?.redteamTargetMetadata;
+  expect(captured.turn).toBe(selectedTurn);
+  expect(captured.details).toEqual({ audio: { data: 'Accounting annotation' }, currency: 'USD' });
+  expect(result.originalMetadata[selectedTurn - 1].audio?.data).toBe(audioData(selectedTurn));
+  if (inline) {
+    expect(captured.audio.data).toBe(audioData(selectedTurn));
+  } else {
+    expect(captured.audio.data).toBeUndefined();
+    const { hash } = captured.audio.blobRef;
+    expect((await getBlobByHash(hash)).data.toString('base64')).toBe(audioData(selectedTurn));
+    expect(await isBlobAllowedForShare(hash, result.evalId!)).toBe(true);
+    const captureReferences = await (await getDb())
+      .select({
+        testIdx: blobReferencesTable.testIdx,
+        kind: blobReferencesTable.kind,
+      })
+      .from(blobReferencesTable)
+      .where(
+        and(
+          eq(blobReferencesTable.evalId, result.evalId!),
+          eq(blobReferencesTable.blobHash, hash),
+          eq(blobReferencesTable.location, 'response.metadata.redteamTargetMetadata.audio.data'),
+        ),
+      );
+    expect(captureReferences).toContainEqual({ testIdx: 0, kind: 'audio' });
+    if (result.response?.error) {
+      expect(result.response.metadata?.redteamTargetMetadata).toEqual(captured);
+      for (const metadata of result.originalMetadata) {
+        expect(JSON.stringify(result.row)).not.toContain(metadata.audio?.data);
+      }
+    }
+  }
 }
 
 describe('original numeric JSON in iterative media responses', () => {
@@ -291,32 +357,46 @@ describe('original numeric JSON in iterative media responses', () => {
     }
   });
 
-  it.each(['iterative', 'tree'] as const)(
-    '%s returns the earlier best raw response while normalizing judge and history inputs',
-    async (strategy) => {
+  it.each(
+    (['iterative', 'tree'] as const).flatMap((strategy) =>
+      [false, true].map((inline) => ({ strategy, inline })),
+    ),
+  )(
+    '$strategy returns the earlier best raw response with inline=$inline',
+    async ({ strategy, inline }) => {
+      vi.stubEnv('PROMPTFOO_INLINE_MEDIA', String(inline));
       const values = [output(100), output(100, 'large', 2)];
-      const { row, response, target, judgeInputs } = await evaluate(strategy, values);
+      const result = await evaluate(strategy, values, { includeAudio: true });
+      const { row, response, target, judgeInputs } = result;
 
       expect(target.callApi).toHaveBeenCalledTimes(2);
       expect(response?.output).toBe(values[0]);
       expect(response?.metadata?.redteamTargetMetadata.turn).toBe(1);
       expect(row.success).toBe(true);
       expect(judgeInputs).toHaveLength(2);
-      expect(judgeInputs.every((request) => request.includes('promptfoo://blob/'))).toBe(true);
-      expect(judgeInputs.every((request) => !request.includes(images.large))).toBe(true);
+      expect(judgeInputs.every((request) => request.includes('promptfoo://blob/'))).toBe(!inline);
+      expect(judgeInputs.every((request) => !request.includes(images.large))).toBe(!inline);
+      await expectSelectedAudio(result, 1, inline);
     },
   );
 
-  it.each(['iterative', 'meta'] as const)(
-    '%s keeps the last fallback raw response',
-    async (strategy) => {
+  it.each(
+    (['iterative', 'meta'] as const).flatMap((strategy) =>
+      [false, true].map((inline) => ({ strategy, inline })),
+    ),
+  )(
+    '$strategy keeps the last fallback raw response with inline=$inline',
+    async ({ strategy, inline }) => {
+      vi.stubEnv('PROMPTFOO_INLINE_MEDIA', String(inline));
       const values = [output(100), output(100, 'large', 2)];
-      const { row, response, target } = await evaluate(strategy, values, { ratings: [] });
+      const result = await evaluate(strategy, values, { ratings: [], includeAudio: true });
+      const { row, response, target } = result;
 
       expect(target.callApi).toHaveBeenCalledTimes(2);
       expect(response?.output).toBe(values[1]);
       expect(response?.metadata?.redteamTargetMetadata.turn).toBe(2);
       expect(row.success).toBe(true);
+      await expectSelectedAudio(result, 2, inline);
     },
   );
 
@@ -328,13 +408,15 @@ describe('original numeric JSON in iterative media responses', () => {
         output(100, inline ? 'large' : 'small', 1, true),
         output(101, 'large', 2, true),
       ];
-      const { row, response, target, visionInputs } = await evaluate('image', values);
+      const result = await evaluate('image', values, { includeAudio: true });
+      const { row, response, target, visionInputs } = result;
 
       expect(target.callApi).toHaveBeenCalledTimes(2);
       expect(response?.output).toBe(values[0]);
       expect(response?.metadata?.redteamTargetMetadata.turn).toBe(1);
       expect(visionInputs).toHaveLength(inline ? 2 : 1);
       expect(row.success).toBe(true);
+      await expectSelectedAudio(result, 1, inline);
     },
   );
 
@@ -404,10 +486,12 @@ describe('original numeric JSON in iterative media responses', () => {
     async ({ strategy, inline }) => {
       vi.stubEnv('PROMPTFOO_INLINE_MEDIA', String(inline));
       const values = [output(100), output(100, 'large', 2)];
-      const { row, response, target } = await evaluate(strategy, values, {
+      const result = await evaluate(strategy, values, {
+        includeAudio: true,
         attackerError: strategy === 'tree' || strategy === 'meta',
         targetError: strategy === 'iterative' || strategy === 'image',
       });
+      const { row, response, target } = result;
       const selectedTurn = strategy === 'image' ? 2 : 1;
 
       expect(target.callApi).toHaveBeenCalledTimes(
@@ -424,6 +508,7 @@ describe('original numeric JSON in iterative media responses', () => {
         expect(response?.output).toMatch(/^promptfoo:\/\/blob\//);
         expect(JSON.stringify(row)).not.toContain(images.large);
       }
+      await expectSelectedAudio(result, selectedTurn, inline);
     },
   );
 });

@@ -730,6 +730,7 @@ export async function runMetaAgentRedteam({
       tokenUsage: totalTokenUsage,
     },
     lastTargetOutput,
+    context,
   );
 }
 

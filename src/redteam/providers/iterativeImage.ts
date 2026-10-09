@@ -622,6 +622,7 @@ async function runRedteamConversation({
       ...(lastResponse?.error ? { error: lastResponse.error } : {}),
     },
     bestResponse?.output ? bestResponse.targetOutput : lastTargetOutput,
+    context,
   );
 }
 
