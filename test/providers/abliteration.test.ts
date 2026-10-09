@@ -332,6 +332,8 @@ describe('AbliterationProvider', () => {
       'json',
       undefined,
       undefined,
+      expect.any(Function),
+      undefined,
     );
     const request = mockFetchWithCache.mock.calls[0][1] as { headers: Record<string, string> };
     expect(request.headers).not.toHaveProperty('OpenAI-Organization');

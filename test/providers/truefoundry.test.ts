@@ -6,17 +6,34 @@ import {
   TrueFoundryProvider,
 } from '../../src/providers/truefoundry';
 import * as fetchModule from '../../src/util/fetch/index';
+import { createChatCompletion, createEnabledSetting } from '../factories/literalFixtures';
 import { createDeferred, mockProcessEnv } from '../util/utils';
+import { createInvalidRequestResponse } from './mockProviderResponses';
+
+const { createFileUtilitiesFactory } = await vi.hoisted(() => import('../factories/moduleMocks'));
+
+const createEmbeddingResponse = () => ({
+  data: [
+    {
+      embedding: [0.1, 0.2, 0.3],
+      index: 0,
+    },
+  ],
+  usage: {
+    prompt_tokens: 5,
+    total_tokens: 5,
+  },
+});
+
+const createLoggingOptions = () => ({
+  config: {
+    loggingConfig: createEnabledSetting(),
+  },
+});
 
 const TRUEFOUNDRY_API_BASE = 'https://llm-gateway.truefoundry.com';
 
-vi.mock('../../src/util', async (importOriginal) => {
-  return {
-    ...(await importOriginal()),
-    maybeLoadFromExternalFile: vi.fn((x) => x),
-    renderVarsInObject: vi.fn((x) => x),
-  };
-});
+vi.mock('../../src/util', createFileUtilitiesFactory());
 
 vi.mock('../../src/util/fetch/index.ts');
 
@@ -140,13 +157,7 @@ describe('TrueFoundry', () => {
     });
 
     it('should handle TrueFoundry-specific logging configuration', () => {
-      const provider = new TrueFoundryProvider('openai/gpt-4', {
-        config: {
-          loggingConfig: {
-            enabled: true,
-          },
-        },
-      });
+      const provider = new TrueFoundryProvider('openai/gpt-4', createLoggingOptions());
 
       expect(provider.toJSON().config).toMatchObject({
         loggingConfig: {
@@ -179,10 +190,7 @@ describe('TrueFoundry', () => {
       });
 
       it('should call TrueFoundry API and return output with correct structure', async () => {
-        const mockResponse = {
-          choices: [{ message: { content: 'Test output' } }],
-          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-        };
+        const mockResponse = createChatCompletion();
 
         const response = new Response(JSON.stringify(mockResponse), {
           status: 200,
@@ -200,19 +208,21 @@ describe('TrueFoundry', () => {
           temperature: 0,
         };
 
-        expect(mockedFetchWithRetries).toHaveBeenCalledWith(
-          `${TRUEFOUNDRY_API_BASE}/chat/completions`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: 'Bearer test-key',
-            },
-            body: JSON.stringify(expectedBody),
+        expect(mockedFetchWithRetries).toHaveBeenCalledTimes(1);
+        const [url, request, timeout, maxRetries, onRateLimitBackoff] =
+          mockedFetchWithRetries.mock.calls[0];
+        expect(url).toBe(`${TRUEFOUNDRY_API_BASE}/chat/completions`);
+        expect(request).toEqual({
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: 'Bearer test-key',
           },
-          300000,
-          undefined,
-        );
+          body: JSON.stringify(expectedBody),
+        });
+        expect(timeout).toBe(300000);
+        expect(maxRetries).toBeUndefined();
+        expect(onRateLimitBackoff).toEqual(expect.any(Function));
 
         expect(result).toEqual({
           output: 'Test output',
@@ -371,10 +381,7 @@ describe('TrueFoundry', () => {
           },
         });
 
-        const mockResponse = {
-          choices: [{ message: { content: 'Test output' } }],
-          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-        };
+        const mockResponse = createChatCompletion();
 
         const response = new Response(JSON.stringify(mockResponse), {
           status: 200,
@@ -399,18 +406,9 @@ describe('TrueFoundry', () => {
       });
 
       it('should add X-TFY-LOGGING-CONFIG header when loggingConfig is provided', async () => {
-        const providerWithLogging = new TrueFoundryProvider('openai/gpt-4', {
-          config: {
-            loggingConfig: {
-              enabled: true,
-            },
-          },
-        });
+        const providerWithLogging = new TrueFoundryProvider('openai/gpt-4', createLoggingOptions());
 
-        const mockResponse = {
-          choices: [{ message: { content: 'Test output' } }],
-          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-        };
+        const mockResponse = createChatCompletion();
 
         const response = new Response(JSON.stringify(mockResponse), {
           status: 200,
@@ -441,10 +439,7 @@ describe('TrueFoundry', () => {
           },
         });
 
-        const mockResponse = {
-          choices: [{ message: { content: 'Test output' } }],
-          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-        };
+        const mockResponse = createChatCompletion();
 
         const response = new Response(JSON.stringify(mockResponse), {
           status: 200,
@@ -505,18 +500,7 @@ describe('TrueFoundry', () => {
       });
 
       it('should handle API errors', async () => {
-        const errorResponse = {
-          error: {
-            message: 'API Error',
-            type: 'invalid_request_error',
-          },
-        };
-
-        const response = new Response(JSON.stringify(errorResponse), {
-          status: 400,
-          statusText: 'Bad Request',
-          headers: new Headers({ 'Content-Type': 'application/json' }),
-        });
+        const response = createInvalidRequestResponse();
         mockedFetchWithRetries.mockResolvedValueOnce(response);
 
         const result = await provider.callApi('Test prompt');
@@ -793,18 +777,7 @@ describe('TrueFoundry', () => {
     });
 
     it('should call embedding API successfully', async () => {
-      const mockResponse = {
-        data: [
-          {
-            embedding: [0.1, 0.2, 0.3],
-            index: 0,
-          },
-        ],
-        usage: {
-          prompt_tokens: 5,
-          total_tokens: 5,
-        },
-      };
+      const mockResponse = createEmbeddingResponse();
 
       const response = new Response(JSON.stringify(mockResponse), {
         status: 200,
@@ -815,20 +788,24 @@ describe('TrueFoundry', () => {
 
       const result = await embeddingProvider.callEmbeddingApi('Test text');
 
-      expect(mockedFetchWithRetries).toHaveBeenCalledWith(
-        `${TRUEFOUNDRY_API_BASE}/embeddings`,
-        expect.objectContaining({
-          method: 'POST',
-          headers: expect.objectContaining({
-            'Content-Type': 'application/json',
-            Authorization: 'Bearer test-key',
-          }),
-        }),
-        300000,
-        undefined,
-      );
+      expect(mockedFetchWithRetries).toHaveBeenCalledTimes(1);
+      const [url, request, timeout, maxRetries, onRateLimitBackoff] =
+        mockedFetchWithRetries.mock.calls[0];
+      expect(url).toBe(`${TRUEFOUNDRY_API_BASE}/embeddings`);
+      expect(request).toEqual({
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer test-key',
+        },
+        body: JSON.stringify({ input: 'Test text', model: 'openai/text-embedding-3-large' }),
+      });
+      expect(timeout).toBe(300000);
+      expect(maxRetries).toBeUndefined();
+      expect(onRateLimitBackoff).toEqual(expect.any(Function));
 
       expect(result).toEqual({
+        cached: false,
         embedding: [0.1, 0.2, 0.3],
         latencyMs: expect.any(Number),
         cost: expect.closeTo(0.00000065, 12),
@@ -901,18 +878,7 @@ describe('TrueFoundry', () => {
         },
       );
 
-      const mockResponse = {
-        data: [
-          {
-            embedding: [0.1, 0.2, 0.3],
-            index: 0,
-          },
-        ],
-        usage: {
-          prompt_tokens: 5,
-          total_tokens: 5,
-        },
-      };
+      const mockResponse = createEmbeddingResponse();
 
       const response = new Response(JSON.stringify(mockResponse), {
         status: 200,
@@ -1050,15 +1016,21 @@ describe('TrueFoundry', () => {
           embedding: [0.1, 0.2],
           tokenUsage: { total: 3, prompt: 3, numRequests: 1 },
         });
-        expect(mockedFetchWithRetries).toHaveBeenCalledWith(
-          'https://tenant.example/gateway/embeddings',
-          expect.objectContaining({
-            headers: expect.objectContaining({ Authorization: 'Bearer scoped-test-key' }),
-            body: JSON.stringify({ input: 'hello', model: modelName, input_type: 'search_query' }),
-          }),
-          expect.any(Number),
-          undefined,
-        );
+        expect(mockedFetchWithRetries).toHaveBeenCalledTimes(1);
+        const [url, request, timeout, maxRetries, onRateLimitBackoff] =
+          mockedFetchWithRetries.mock.calls[0];
+        expect(url).toBe('https://tenant.example/gateway/embeddings');
+        expect(request).toMatchObject({
+          method: 'POST',
+          body: JSON.stringify({ input: 'hello', model: modelName, input_type: 'search_query' }),
+        });
+        expect(request?.headers).toEqual({
+          Authorization: 'Bearer scoped-test-key',
+          'Content-Type': 'application/json',
+        });
+        expect(timeout).toEqual(expect.any(Number));
+        expect(maxRetries).toBeUndefined();
+        expect(onRateLimitBackoff).toEqual(expect.any(Function));
       },
     );
 
