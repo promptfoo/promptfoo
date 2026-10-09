@@ -12,6 +12,12 @@ import { parsePathOrGlob } from '../util/index';
 import { safeJsonStringify } from '../util/json';
 import { providerRegistry } from './providerRegistry';
 import { sanitizeScriptContext } from './scriptContext';
+import {
+  applyCachedCallApiMetadata,
+  buildScriptArgs,
+  hasScriptResultError,
+  validateScriptResult,
+} from './scriptResult';
 
 import type {
   ApiProvider,
@@ -21,6 +27,7 @@ import type {
   ProviderOptions,
   ProviderResponse,
 } from '../types/index';
+import type { ScriptApiType } from './scriptResult';
 
 interface PythonProviderConfig {
   pythonExecutable?: string;
@@ -29,55 +36,7 @@ interface PythonProviderConfig {
   [key: string]: any; // Allow arbitrary config properties for user scripts
 }
 
-type PythonApiType = 'call_api' | 'call_embedding_api' | 'call_classification_api';
-
-function buildPythonScriptArgs(
-  apiType: PythonApiType,
-  prompt: string,
-  optionsWithProcessedConfig: ProviderOptions,
-  sanitizedContext: CallApiContextParams | undefined,
-) {
-  return apiType === 'call_api'
-    ? [prompt, optionsWithProcessedConfig, sanitizedContext]
-    : [prompt, optionsWithProcessedConfig];
-}
-
-function hasPythonResultProperty(
-  result: any,
-  propertyName: 'output' | 'error' | 'embedding' | 'classification',
-): boolean {
-  return (
-    Boolean(result) &&
-    typeof result === 'object' &&
-    Object.prototype.hasOwnProperty.call(result, propertyName)
-  );
-}
-
-function applyCachedCallApiMetadata(apiType: PythonApiType, parsedResult: any) {
-  if (apiType !== 'call_api' || typeof parsedResult !== 'object' || parsedResult === null) {
-    return parsedResult;
-  }
-
-  logger.debug(`PythonProvider setting cached=true for cached ${apiType} result`);
-  parsedResult.cached = true;
-
-  // Update token usage format for cached results
-  if (parsedResult.tokenUsage) {
-    const total = parsedResult.tokenUsage.total || 0;
-    parsedResult.tokenUsage = {
-      cached: total,
-      total,
-      numRequests: parsedResult.tokenUsage.numRequests ?? 1,
-    };
-    logger.debug(
-      `Updated token usage for cached result: ${JSON.stringify(parsedResult.tokenUsage)}`,
-    );
-  }
-
-  return parsedResult;
-}
-
-function applyFreshCallApiMetadata(apiType: PythonApiType, result: any) {
+function applyFreshCallApiMetadata(apiType: ScriptApiType, result: any) {
   if (apiType !== 'call_api' || typeof result !== 'object' || result === null) {
     return result;
   }
@@ -96,83 +55,6 @@ function applyFreshCallApiMetadata(apiType: PythonApiType, result: any) {
   return result;
 }
 
-function hasPythonResultError(result: any): boolean {
-  // Must stay consistent with validateCallApiResult's own-property check:
-  // loosening this to `'error' in result` without also loosening validation
-  // would let a script return an error on the prototype chain, pass validation
-  // via an own `output`, and then be cached as a successful result — a
-  // cache-poisoning vector.
-  return (
-    hasPythonResultProperty(result, 'error') &&
-    result.error !== null &&
-    result.error !== undefined &&
-    result.error !== ''
-  );
-}
-
-function validateCallApiResult(functionName: string, result: any): void {
-  // Log result structure for debugging
-  const resultType = result === null ? 'null' : typeof result;
-  const resultKeys = result && typeof result === 'object' ? Object.keys(result).join(',') : 'none';
-  logger.debug(`Python provider result structure: ${resultType}, keys: ${resultKeys}`);
-  if (hasPythonResultProperty(result, 'output')) {
-    logger.debug(
-      `Python provider output type: ${typeof result.output}, isArray: ${Array.isArray(result.output)}`,
-    );
-  }
-
-  if (!hasPythonResultProperty(result, 'output') && !hasPythonResultProperty(result, 'error')) {
-    throw new Error(
-      `The Python script \`${functionName}\` function must return a dict with an own \`output\` string/object or \`error\` string (inherited prototype properties are rejected), instead got: ${JSON.stringify(
-        result,
-      )}`,
-    );
-  }
-}
-
-function validateEmbeddingResult(functionName: string, result: any): void {
-  if (!hasPythonResultProperty(result, 'embedding') && !hasPythonResultProperty(result, 'error')) {
-    throw new Error(
-      `The Python script \`${functionName}\` function must return a dict with an own \`embedding\` array or \`error\` string (inherited prototype properties are rejected), instead got ${JSON.stringify(
-        result,
-      )}`,
-    );
-  }
-}
-
-function validateClassificationResult(functionName: string, result: any): void {
-  if (
-    !hasPythonResultProperty(result, 'classification') &&
-    !hasPythonResultProperty(result, 'error')
-  ) {
-    throw new Error(
-      `The Python script \`${functionName}\` function must return a dict with an own \`classification\` object or \`error\` string (inherited prototype properties are rejected), instead of ${JSON.stringify(
-        result,
-      )}`,
-    );
-  }
-}
-
-function validatePythonScriptResult(
-  apiType: PythonApiType,
-  functionName: string,
-  result: any,
-): void {
-  switch (apiType) {
-    case 'call_api':
-      validateCallApiResult(functionName, result);
-      return;
-    case 'call_embedding_api':
-      validateEmbeddingResult(functionName, result);
-      return;
-    case 'call_classification_api':
-      validateClassificationResult(functionName, result);
-      return;
-    default:
-      throw new Error(`Unsupported apiType: ${apiType}`);
-  }
-}
-
 export class PythonProvider implements ApiProvider {
   config: PythonProviderConfig;
 
@@ -180,6 +62,7 @@ export class PythonProvider implements ApiProvider {
   private functionName: string | null;
   private isInitialized: boolean = false;
   private initializationPromise: Promise<void> | null = null;
+  private cleanupGeneration = 0;
   public label: string | undefined;
   private pool: PythonWorkerPool | null = null;
 
@@ -218,6 +101,7 @@ export class PythonProvider implements ApiProvider {
       return this.initializationPromise;
     }
 
+    const cleanupGeneration = this.cleanupGeneration;
     // Start initialization and store the promise
     this.initializationPromise = (async () => {
       try {
@@ -241,16 +125,17 @@ export class PythonProvider implements ApiProvider {
         );
 
         await this.pool.initialize();
+        if (cleanupGeneration !== this.cleanupGeneration) {
+          throw new Error('Python provider initialization interrupted by cleanup');
+        }
 
         // Register for cleanup
         providerRegistry.register(this);
 
         this.isInitialized = true;
         logger.debug(`Initialized Python provider ${this.id()} with ${workerCount} workers`);
-      } catch (error) {
-        // Reset the initialization promise so future calls can retry
+      } finally {
         this.initializationPromise = null;
-        throw error;
       }
     })();
 
@@ -318,7 +203,7 @@ export class PythonProvider implements ApiProvider {
   private async executePythonScript(
     prompt: string,
     context: CallApiContextParams | undefined,
-    apiType: PythonApiType,
+    apiType: ScriptApiType,
   ): Promise<any> {
     if (!this.isInitialized || !this.pool) {
       await this.initialize();
@@ -352,8 +237,7 @@ export class PythonProvider implements ApiProvider {
         `PythonProvider parsed cached result type: ${typeof parsedResult}, keys: ${Object.keys(parsedResult).join(',')}`,
       );
 
-      // IMPORTANT: Set cached flag to true so evaluator recognizes this as cached
-      return applyCachedCallApiMetadata(apiType, parsedResult);
+      return applyCachedCallApiMetadata(apiType, parsedResult, 'Python');
     } else {
       const sanitizedContext = sanitizeScriptContext('PythonProvider', context);
 
@@ -367,12 +251,7 @@ export class PythonProvider implements ApiProvider {
         },
       };
 
-      const args = buildPythonScriptArgs(
-        apiType,
-        prompt,
-        optionsWithProcessedConfig,
-        sanitizedContext,
-      );
+      const args = buildScriptArgs(apiType, prompt, optionsWithProcessedConfig, sanitizedContext);
 
       logger.debug(
         `Executing python script ${absPath} via worker pool with args: ${safeJsonStringify(args)}`,
@@ -382,10 +261,10 @@ export class PythonProvider implements ApiProvider {
       // Use worker pool instead of runPython
       const result = await this.pool!.execute(functionName, args);
 
-      validatePythonScriptResult(apiType, functionName, result);
+      validateScriptResult(apiType, functionName, result, 'Python');
 
       // Store result in cache if enabled and no errors
-      const hasError = hasPythonResultError(result);
+      const hasError = hasScriptResultError(result);
 
       if (isCacheEnabled() && !hasError) {
         logger.debug(`PythonProvider caching result: ${cacheKey}`);
@@ -422,12 +301,23 @@ export class PythonProvider implements ApiProvider {
     return this.executePythonScript(prompt, undefined, 'call_classification_api');
   }
 
+  async cleanup(): Promise<void> {
+    await this.shutdown();
+  }
+
   async shutdown(): Promise<void> {
-    if (this.pool) {
-      await this.pool.shutdown();
-      this.pool = null;
+    this.cleanupGeneration++;
+    if (this.initializationPromise) {
+      try {
+        await this.initializationPromise;
+      } catch {
+        // Failed initialization can still leave workers that need disposal.
+      }
     }
-    providerRegistry.unregister(this);
+    const pool = this.pool;
+    this.pool = null;
     this.isInitialized = false;
+    providerRegistry.unregister(this);
+    await pool?.shutdown();
   }
 }

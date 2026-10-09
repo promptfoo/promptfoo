@@ -12,6 +12,9 @@ import {
 import { setupEnv } from '../../src/util/env';
 import { createTempDir, mockProcessEnv, removeTempDir } from './utils';
 
+// These tests exercise default loading against temporary files.
+vi.mock('../../src/util/envFile', async (importOriginal) => importOriginal());
+
 describe('setupEnv', () => {
   let directory: string;
   let restoreEnv: () => void;
