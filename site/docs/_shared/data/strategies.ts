@@ -276,7 +276,7 @@ export const strategies: Strategy[] = [
     longDescription:
       'Tests detection and handling of Arabic text encoded with isolated Unicode presentation forms',
     cost: 'Low',
-    asrIncrease: '20-30%',
+    asrIncrease: 'Variable',
     link: '/docs/red-team/strategies/arabic-presentation-forms/',
   },
   {
