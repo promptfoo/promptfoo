@@ -7,6 +7,7 @@ import { runInNewContext } from 'node:vm';
 
 import * as yaml from 'js-yaml';
 import { afterEach, describe, expect, it } from 'vitest';
+import { runInstallProfileCommand } from '../scripts/installProfileProcess';
 
 type Step = {
   name?: string;
@@ -330,7 +331,7 @@ describe('exact artifact release', () => {
 
   it.each(['none', 'rebuild', 'result', 'version', 'blank-version'])(
     'runs legacy backfill acceptance with %s failure',
-    (failure) => {
+    async (failure) => {
       const root = fs.mkdtempSync(path.join(os.tmpdir(), 'backfill-acceptance-'));
       directories.push(root);
       const fixture = path.join(root, 'fixture', 'package');
@@ -400,24 +401,68 @@ else {
         (step) => step.name === 'Validate npm package',
       )!.run!;
       const evidence = path.join(root, 'cli-calls');
-      const result = spawnSync(bash, ['-e', '-o', 'pipefail'], {
+      const testsInstalledCli = ['result', 'version', 'blank-version'].includes(failure);
+      const fixtureNpm = path.join(root, 'npm-fixture.cjs');
+      if (testsInstalledCli) {
+        // Real install/rebuild acceptance remains covered by the none/rebuild cases.
+        // These cases exercise the workflow's post-install CLI validation, without
+        // repeating slow npm setup under the Windows shard's concurrent workload.
+        fs.writeFileSync(
+          fixtureNpm,
+          `const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const args = process.argv.slice(2);
+const prefixIndex = args.indexOf('--prefix');
+assert(prefixIndex >= 0);
+const modules = path.join(args[prefixIndex + 1], 'node_modules');
+if (args[0] === 'install') {
+  assert(args.includes('--ignore-scripts'));
+  fs.mkdirSync(path.join(modules, '.bin'), { recursive: true });
+  fs.cpSync(process.env.BACKFILL_PACKAGE_SOURCE, path.join(modules, 'promptfoo'), { recursive: true });
+  fs.cpSync(process.env.BACKFILL_NATIVE_SOURCE, path.join(modules, 'better-sqlite3'), { recursive: true });
+  fs.writeFileSync(path.join(modules, '.bin', 'promptfoo'),
+    '#!/usr/bin/env node\\nrequire("../promptfoo/cli.cjs");\\n', { mode: 0o755 });
+} else {
+  assert.equal(args[0], 'rebuild');
+  assert(args.includes('--ignore-scripts=false'));
+  assert.equal(args.at(-1), 'better-sqlite3');
+  process.chdir(path.join(modules, 'better-sqlite3'));
+  require(path.join(process.cwd(), 'install.cjs'));
+}
+`,
+        );
+      }
+      const script = path.join(root, 'acceptance.sh');
+      fs.writeFileSync(
+        script,
         // Git Bash's npm launcher starts several helper processes to rediscover Node and npm.
-        // Use this runner's entrypoints, while still running the real npm install and rebuild.
+        // Use this runner's entrypoints for the real install/rebuild acceptance cases.
         // Relative archive paths avoid GNU tar treating Windows drive letters as remote hosts.
-        input:
-          (directNpm ? 'npm() { "$NODE_BINARY" "$NPM_CLI" "$@"; }\n' : '') +
+        (testsInstalledCli
+          ? 'npm() { "$NODE_BINARY" "$BACKFILL_NPM_FIXTURE" "$@"; }\n'
+          : directNpm
+            ? 'npm() { "$NODE_BINARY" "$NPM_CLI" "$@"; }\n'
+            : '') +
           'tar -czf better-sqlite3-0.0.0.tgz -C native package\n' +
           'tar -czf artifact/promptfoo-0.0.0.tgz -C fixture package\n' +
           'cd fixture/package\n' +
           'export EXPECTED_SHA512="$(node -e \'console.log(require("node:crypto").createHash("sha512").update(require("node:fs").readFileSync(process.argv[1])).digest("hex"))\' "$PACKAGE_TARBALL")"\n' +
           validate,
-        cwd: root,
-        encoding: 'utf8',
-        timeout: 15_000,
-        env: {
+      );
+      // The process-tree runner retains the same deadline and waits for close after
+      // terminating descendants, before afterEach removes the fixture directory.
+      const result = await runInstallProfileCommand(
+        bash,
+        ['-e', '-o', 'pipefail', path.basename(script)],
+        root,
+        {
           ...process.env,
           NODE_BINARY: process.execPath.replaceAll('\\', '/'),
           NPM_CLI: npmCli?.replaceAll('\\', '/'),
+          BACKFILL_NPM_FIXTURE: fixtureNpm.replaceAll('\\', '/'),
+          BACKFILL_PACKAGE_SOURCE: fixture,
+          BACKFILL_NATIVE_SOURCE: native,
           RUNNER_TEMP: root.replaceAll('\\', '/'),
           PACKAGE_TARBALL: tarball,
           PACKAGE_DIR: packageDir.replaceAll('\\', '/'),
@@ -429,18 +474,26 @@ else {
           npm_config_globalconfig: path.join(root, 'fixtures.npmrc'),
           npm_config_cache: path.join(root, 'npm-cache'),
         },
-      });
-      const output = `${result.stdout}\n${result.stderr}`;
-      expect(result.error, output).toBeUndefined();
-      expect(result.status === 0, output).toBe(failure === 'none');
+        path.join(root, 'acceptance'),
+        15_000,
+      );
+      const stdout = fs.readFileSync(result.stdout, 'utf8');
+      const stderr = fs.readFileSync(result.stderr, 'utf8');
+      const output = `${stdout}\n${stderr}`;
+      expect(result.timedOut, output).toBe(false);
+      expect(result.signal, output).toBeNull();
+      expect(result.code === 0, output).toBe(failure === 'none');
       expect(fs.existsSync(evidence)).toBe(failure !== 'rebuild');
       if (failure === 'rebuild') {
-        expect(result.stderr).toContain('fixture native rebuild failed');
+        expect(stderr).toContain('fixture native rebuild failed');
       } else if (failure.endsWith('version')) {
-        expect(result.stderr).toContain('Installed CLI version does not match tag');
+        expect(stderr).toContain('Installed CLI version does not match tag');
         expect(fs.readFileSync(evidence, 'utf8')).toBe('--version\n');
       } else {
         expect(fs.readFileSync(evidence, 'utf8')).toBe('--version\neval\n');
+        if (failure === 'result') {
+          expect(stderr).toContain('0 !== 1');
+        }
       }
       expect(
         fs.readdirSync(root).some((name) => name.startsWith('promptfoo-backfill-consumer.')),
