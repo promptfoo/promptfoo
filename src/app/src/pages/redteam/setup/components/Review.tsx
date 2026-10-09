@@ -32,7 +32,6 @@ import { cn } from '@app/lib/utils';
 import YamlEditor from '@app/pages/eval-creator/components/YamlEditor';
 import { useRedteamJobStore } from '@app/stores/redteamJobStore';
 import { callApi } from '@app/utils/api';
-import { getUnifiedConfig } from '@promptfoo/presentation/redteamConfig';
 import { isFoundationModelProvider } from '@promptfoo/providers/constants';
 import { REDTEAM_DEFAULTS, strategyDisplayNames } from '@promptfoo/redteam/constants';
 import {
@@ -44,7 +43,7 @@ import { BarChart2, ChevronDown, Eye, Info, Play, Save, Search, Sliders, X } fro
 import { Link } from 'react-router';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import { useRedTeamTargetConfigValidation } from '../hooks/useRedTeamTargetConfigValidation';
-import { generateOrderedYaml } from '../utils/yamlHelpers';
+import { generateOrderedYaml, getRuntimeRedteamConfig } from '../utils/yamlHelpers';
 import DefaultTestVariables from './DefaultTestVariables';
 import { EmailVerificationDialog } from './EmailVerificationDialog';
 import EstimationsDisplay from './EstimationsDisplay';
@@ -653,7 +652,7 @@ export default function Review({
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          config: getUnifiedConfig(latestConfig),
+          config: getRuntimeRedteamConfig(latestConfig),
           force: forceRegeneration,
           verbose: latestConfig.target.config?.verbose,
           maxConcurrency,
