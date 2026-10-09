@@ -73,6 +73,20 @@ import EvalResult, {
 
 import type { EvalResultsFilterMode, TraceData } from '../types/index';
 
+// Use one expression for summary groups and their filters, including manual failures.
+// Invalid legacy JSON must not prevent the evaluation table from loading.
+const failureReasonSql = sql`COALESCE(
+  NULLIF(TRIM(error), ''),
+  CASE WHEN json_valid(grading_result) THEN
+    CASE WHEN json_type(grading_result, '$.reason') = 'text'
+      THEN NULLIF(TRIM(json_extract(grading_result, '$.reason')), '') END END,
+  'Failure reason unavailable'
+)`;
+
+// libSQL's SHA3 function keeps group IDs bounded and stable when individual results
+// are re-rated. Include the eval ID so a group cannot be reused across evaluations.
+const failureGroupIdSql = sql`lower(hex(sha3(eval_id || char(0) || ${failureReasonSql}, 256)))`;
+
 /**
  * Database query result type interfaces
  * These types ensure type safety for raw SQL queries that don't use Drizzle's query builder
@@ -919,6 +933,25 @@ export default class Eval {
     return await EvalResult.findManyByEvalId(this.id, { testIdx });
   }
 
+  async getFailureSummary() {
+    const db = await getDb();
+    const rows = await db.all<{ id: string; error: string; count: number }>(sql`
+      SELECT ${failureGroupIdSql} AS id, SUBSTR(${failureReasonSql}, 1, 500) AS error, COUNT(*) AS count
+      FROM eval_results
+      WHERE eval_id = ${this.id} AND success = 0
+      GROUP BY ${failureReasonSql}
+      ORDER BY count DESC, ${failureReasonSql} ASC
+      LIMIT 101
+    `);
+
+    return {
+      failures: rows
+        .slice(0, 100)
+        .map(({ id, error, count }) => ({ id, error, count: Number(count) })),
+      hasMore: rows.length > 100,
+    };
+  }
+
   /**
    * CRITICAL: Builds the WHERE SQL clause for filtering results.
    * This is the single source of truth for all filtering logic.
@@ -1102,6 +1135,12 @@ export default class Eval {
                 AND LENGTH(TRIM(COALESCE(json_each.value, ''))) > 0
             )`;
           }
+        } else if (type === 'error') {
+          // Match the stable full-reason digest, excluding manually overridden passes.
+          condition =
+            operator === 'equals' && typeof value === 'string' && /^[a-f0-9]{64}$/.test(value)
+              ? sql`success = 0 AND ${failureGroupIdSql} = ${value}`
+              : sql`0 = 1`;
         } else if (type === 'plugin' && typeof value === 'string') {
           const isCategory = Object.keys(PLUGIN_CATEGORIES).includes(value);
 
@@ -1156,7 +1195,9 @@ export default class Eval {
           condition = sql`(named_scores LIKE '%PolicyViolation:%' AND named_scores LIKE ${`%${value}%`})`;
         }
 
-        if (condition) {
+        if (condition && type === 'error') {
+          conditions.push(sql`(${condition})`);
+        } else if (condition) {
           filterConditions.push({
             condition,
             logicOperator: logicOperator || 'AND',

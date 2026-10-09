@@ -1,4 +1,4 @@
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, gte, sql } from 'drizzle-orm';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb } from '../../src/database/index';
 import { updateSignalFile, updateSignalFileForDeletedEvals } from '../../src/database/signal';
@@ -1914,6 +1914,175 @@ describe('evaluator', () => {
       expect(result.body).toEqual([]);
       expect(result.totalCount).toBe(0);
       expect(result.filteredCount).toBe(0);
+    });
+  });
+
+  describe('getFailureSummary', () => {
+    it('keeps a selected group stable when its first result is re-rated or removed', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 3, resultTypes: ['error'] });
+      const db = await getDb();
+      await db.run(sql`UPDATE eval_results SET error = 'same failure' WHERE eval_id = ${eval_.id}`);
+      const initial = (await eval_.getFailureSummary()).failures[0];
+      expect(initial.id).toMatch(/^[a-f0-9]{64}$/);
+      const filters = [JSON.stringify({ type: 'error', operator: 'equals', value: initial.id })];
+      await db.run(sql`UPDATE eval_results SET success = 1 WHERE eval_id = ${eval_.id} AND id = (
+        SELECT MIN(id) FROM eval_results WHERE eval_id = ${eval_.id}
+      )`);
+      expect((await eval_.getFailureSummary()).failures).toEqual([{ ...initial, count: 2 }]);
+      expect((await eval_.getTablePage({ filters })).filteredCount).toBe(2);
+      await db.run(sql`DELETE FROM eval_results WHERE eval_id = ${eval_.id} AND success = 1`);
+      expect((await eval_.getTablePage({ filters })).filteredCount).toBe(2);
+      expect((await eval_.getFailureSummary()).failures[0].id).toBe(initial.id);
+    });
+
+    it('includes manual failures, excludes overridden passes, and scopes group IDs to the eval', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 3, resultTypes: ['error'] });
+      const other = await EvalFactory.create({ numResults: 1, resultTypes: ['error'] });
+      const db = await getDb();
+      await db.run(sql`UPDATE eval_results SET error = 'same failure' WHERE eval_id = ${other.id}`);
+      await db
+        .update(evalResultsTable)
+        .set({ error: 'same failure' })
+        .where(eq(evalResultsTable.evalId, eval_.id))
+        .run();
+      await db
+        .update(evalResultsTable)
+        .set({ success: true })
+        .where(and(eq(evalResultsTable.evalId, eval_.id), eq(evalResultsTable.testIdx, 0)))
+        .run();
+      await db
+        .update(evalResultsTable)
+        .set({ error: null, gradingResult: { pass: false, score: 0, reason: 'Manual failure' } })
+        .where(and(eq(evalResultsTable.evalId, eval_.id), eq(evalResultsTable.testIdx, 1)))
+        .run();
+      const summary = await eval_.getFailureSummary();
+      expect(summary.failures.map(({ error, count }) => ({ error, count }))).toEqual([
+        { error: 'Manual failure', count: 1 },
+        { error: 'same failure', count: 1 },
+      ]);
+      for (const group of summary.failures) {
+        const filters = [JSON.stringify({ type: 'error', operator: 'equals', value: group.id })];
+        expect((await eval_.getTablePage({ filters })).filteredCount).toBe(1);
+        expect((await other.getTablePage({ filters })).filteredCount).toBe(0);
+      }
+      const filters = [JSON.stringify({ type: 'error', operator: 'contains', value: 'same' })];
+      expect((await eval_.getTablePage({ filters })).filteredCount).toBe(0);
+    });
+
+    it('matches full long errors with a short ID and retains other outputs in matching rows', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 3, resultTypes: ['error'] });
+      const db = await getDb();
+      const error = 'failure '.repeat(5000);
+      await db
+        .update(evalResultsTable)
+        .set({ error })
+        .where(and(eq(evalResultsTable.evalId, eval_.id), eq(evalResultsTable.testIdx, 0)))
+        .run();
+      await db
+        .update(evalResultsTable)
+        .set({ error: error + 'different' })
+        .where(and(eq(evalResultsTable.evalId, eval_.id), eq(evalResultsTable.testIdx, 1)))
+        .run();
+      await db
+        .update(evalResultsTable)
+        .set({ testIdx: 0, promptIdx: 1, success: true })
+        .where(and(eq(evalResultsTable.evalId, eval_.id), eq(evalResultsTable.testIdx, 2)))
+        .run();
+      const summary = await eval_.getFailureSummary();
+      expect(summary.failures).toHaveLength(2);
+      expect(summary.failures[0].error.length).toBe(500);
+      const group = summary.failures[0];
+      const filters = [JSON.stringify({ type: 'error', operator: 'equals', value: group.id })];
+      expect(filters[0].length).toBeLessThan(250);
+      const page = await eval_.getTablePage({ filters });
+      expect(page.filteredCount).toBe(1);
+      expect(page.body[0].outputs).toHaveLength(2);
+      expect(page.body[0].outputs[1].pass).toBe(true);
+      expect((await eval_.getFilteredMetrics({ filters }))[0].testErrorCount).toBe(1);
+    });
+
+    it('reports truncation and safely groups missing or malformed legacy reasons', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 101, resultTypes: ['error'] });
+      const db = await getDb();
+      await db.run(
+        sql`UPDATE eval_results SET error = 'Error ' || test_idx WHERE eval_id = ${eval_.id}`,
+      );
+      const summary = await eval_.getFailureSummary();
+      expect(summary.hasMore).toBe(true);
+      expect(summary.failures).toHaveLength(100);
+      await db.run(
+        sql`UPDATE eval_results SET error = NULL, grading_result = '{"reason":123}' WHERE eval_id = ${eval_.id}`,
+      );
+      expect(await eval_.getFailureSummary()).toEqual({
+        failures: [{ id: expect.any(String), error: 'Failure reason unavailable', count: 101 }],
+        hasMore: false,
+      });
+    });
+
+    it('keeps the selected failure group required with OR filters', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 2, resultTypes: ['error', 'success'] });
+      const summary = await eval_.getFailureSummary();
+      const filters = [
+        JSON.stringify({
+          type: 'metadata',
+          operator: 'exists',
+          field: 'unavailable',
+          logicOperator: 'or',
+        }),
+        JSON.stringify({
+          type: 'error',
+          operator: 'equals',
+          value: summary.failures[0].id,
+          logicOperator: 'or',
+        }),
+      ];
+      expect((await eval_.getTablePage({ filters })).filteredCount).toBe(0);
+    });
+
+    it('groups failed results by error and supports filtering by a selected group', async () => {
+      const eval_ = await EvalFactory.create({
+        numResults: 5,
+        resultTypes: ['error'],
+      });
+      const db = await getDb();
+
+      await db
+        .update(evalResultsTable)
+        .set({ error: 'Request timed out' })
+        .where(eq(evalResultsTable.evalId, eval_.id))
+        .run();
+      await db
+        .update(evalResultsTable)
+        .set({ error: 'Invalid provider response' })
+        .where(and(eq(evalResultsTable.evalId, eval_.id), gte(evalResultsTable.testIdx, 3)))
+        .run();
+
+      const summary = await eval_.getFailureSummary();
+      expect(summary).toEqual({
+        failures: [
+          { id: expect.any(String), error: 'Request timed out', count: 3 },
+          { id: expect.any(String), error: 'Invalid provider response', count: 2 },
+        ],
+        hasMore: false,
+      });
+
+      const table = await eval_.getTablePage({
+        filters: [
+          JSON.stringify({
+            logicOperator: 'and',
+            type: 'error',
+            operator: 'equals',
+            value: summary.failures[0].id,
+          }),
+        ],
+      });
+
+      expect(table.filteredCount).toBe(3);
+      expect(
+        table.body
+          .flatMap((row) => row.outputs)
+          .every((output) => output.error === 'Request timed out'),
+      ).toBe(true);
     });
   });
 

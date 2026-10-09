@@ -1,5 +1,6 @@
 import { act, StrictMode } from 'react';
 
+import { getCallApiMock } from '@app/tests/apiMocks';
 import { restoreTestTimers, type TestTimers, useTestTimers } from '@app/tests/timers';
 import { renderWithProviders } from '@app/utils/testutils';
 import { FILE_METADATA_KEY } from '@promptfoo/providers/constants';
@@ -10,22 +11,27 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ResultsTable from './ResultsTable';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 
+const { refreshFailureSummaryMock } = vi.hoisted(() => ({ refreshFailureSummaryMock: vi.fn() }));
+
 vi.mock('./store', () => ({
-  useTableStore: vi.fn(() => ({
-    config: {},
-    evalId: '123',
-    setTable: vi.fn(),
-    table: null,
-    version: 4,
-    fetchEvalData: vi.fn(),
-    filters: {
-      values: {},
-      appliedCount: 0,
-      options: {
-        metric: [],
+  useTableStore: Object.assign(
+    vi.fn(() => ({
+      config: {},
+      evalId: '123',
+      setTable: vi.fn(),
+      table: null,
+      version: 4,
+      fetchEvalData: vi.fn(),
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
       },
-    },
-  })),
+    })),
+    { getState: () => ({ refreshFailureSummary: refreshFailureSummaryMock }) },
+  ),
   useResultsViewSettingsStore: vi.fn(() => ({
     inComparisonMode: false,
     renderMarkdown: true,
@@ -4458,6 +4464,13 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
   });
 
   it('persists a cleared human rating without manual override fields', async () => {
+    let finishRating!: (response: Response) => void;
+    getCallApiMock().mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishRating = resolve;
+        }),
+    );
     const user = userEvent.setup();
     const mockTable = createMockTableWithHumanAssertion();
 
@@ -4491,6 +4504,10 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
         expect.objectContaining({ method: 'POST' }),
       );
     });
+
+    expect(refreshFailureSummaryMock).not.toHaveBeenCalled();
+    await act(async () => finishRating(new Response(null, { status: 204 })));
+    expect(refreshFailureSummaryMock).toHaveBeenCalledOnce();
 
     const [, request] = mockCallApi.mock.calls[0];
     const payload = JSON.parse(request.body);

@@ -1770,6 +1770,7 @@ function ResultsTable({
             gradingResult,
             table: newTable,
           });
+          useTableStore.getState().refreshFailureSummary();
         } catch (error) {
           console.error('Failed to update table:', error);
         }
