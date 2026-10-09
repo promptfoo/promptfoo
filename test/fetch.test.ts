@@ -1533,20 +1533,25 @@ describe('computeRateLimitWaitMs', () => {
   ] as const)(
     'uses the effective quota deadline for transport retries: %s',
     (_name, requests, tokens, requestReset, tokenReset, retryAfter, expected) => {
-      const headers = new Headers({
-        'x-ratelimit-reset-requests': requestReset,
-        'x-ratelimit-reset-tokens': tokenReset,
-        'retry-after-ms': retryAfter,
-      });
-      if (requests !== undefined) {
-        headers.set('x-ratelimit-remaining-requests', String(requests));
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date('2026-10-09T00:00:00Z'));
+      try {
+        const headers = new Headers({
+          'x-ratelimit-reset-requests': requestReset,
+          'x-ratelimit-reset-tokens': tokenReset,
+          'retry-after-ms': retryAfter,
+        });
+        if (requests !== undefined) {
+          headers.set('x-ratelimit-remaining-requests', String(requests));
+        }
+        if (tokens !== undefined) {
+          headers.set('x-ratelimit-remaining-tokens', String(tokens));
+        }
+        const wait = computeRateLimitWaitMs(createMockResponse({ headers }));
+        expect(wait).toBe(expected);
+      } finally {
+        vi.useRealTimers();
       }
-      if (tokens !== undefined) {
-        headers.set('x-ratelimit-remaining-tokens', String(tokens));
-      }
-      const wait = computeRateLimitWaitMs(createMockResponse({ headers }));
-      expect(wait).toBeGreaterThanOrEqual(expected - 20);
-      expect(wait).toBeLessThanOrEqual(expected);
     },
   );
 
