@@ -7,6 +7,7 @@ import { getRequestTimeoutMs } from '../shared';
 import { GoogleAuthManager } from './auth';
 import {
   createAuthCacheDiscriminator,
+  determineGoogleVertexMode,
   geminiFormatAndSystemInstructions,
   getGoogleClient,
   loadCredentials,
@@ -117,6 +118,12 @@ export class GeminiImageProvider implements ApiProvider {
     return `[Google Gemini Image Generation Provider ${this.modelName}]`;
   }
 
+  requiresApiKey(): boolean {
+    return (
+      this.config.apiKeyRequired !== false && !determineGoogleVertexMode(this.config, this.env)
+    );
+  }
+
   private getApiKey(): string | undefined {
     return resolveProviderApiKey({ apiKey: this.config.apiKey }, this.env, [
       'GOOGLE_API_KEY',
@@ -159,17 +166,17 @@ export class GeminiImageProvider implements ApiProvider {
     const aiStudioApiKey = this.getApiKey();
 
     // Explicit AI Studio mode must not be overridden by ambient Vertex project configuration.
-    const projectId =
-      this.config.vertexai === false
-        ? undefined
-        : this.config.projectId ||
-          resolveProviderEnv(this.env, [
-            'VERTEX_PROJECT_ID',
-            'GOOGLE_PROJECT_ID',
-            'GOOGLE_CLOUD_PROJECT',
-          ])?.value;
+    const isVertexMode = determineGoogleVertexMode(this.config, this.env);
+    const projectId = isVertexMode
+      ? this.config.projectId ||
+        resolveProviderEnv(this.env, [
+          'VERTEX_PROJECT_ID',
+          'GOOGLE_PROJECT_ID',
+          'GOOGLE_CLOUD_PROJECT',
+        ])?.value
+      : undefined;
 
-    const vertexApiKey = this.config.vertexai === true ? this.getVertexApiKey() : undefined;
+    const vertexApiKey = isVertexMode ? this.getVertexApiKey() : undefined;
     const hasOAuthConfig = Boolean(
       this.config.credentials ||
         this.config.keyFilename ||
@@ -206,7 +213,7 @@ export class GeminiImageProvider implements ApiProvider {
         (effectiveRegion && effectiveRegion !== 'global'),
     );
     const usesVertexExpress =
-      this.config.vertexai === true &&
+      isVertexMode &&
       Boolean(vertexApiKey) &&
       this.config.expressMode !== false &&
       !hasOAuthConfig &&
@@ -222,12 +229,12 @@ export class GeminiImageProvider implements ApiProvider {
       return this.callVertexExpressApi(prompt, context, vertexApiKey);
     }
 
-    if (this.config.vertexai === true || projectId) {
+    if (isVertexMode) {
       return this.callVertexApi(prompt, context);
     }
 
     // Otherwise, try Google AI Studio with API key
-    if (aiStudioApiKey) {
+    if (aiStudioApiKey || this.config.apiKeyRequired === false) {
       return this.callAIStudioApi(prompt, context);
     }
 
@@ -244,7 +251,7 @@ export class GeminiImageProvider implements ApiProvider {
     context?: CallApiContextParams,
   ): Promise<ProviderResponse> {
     const apiKey = this.getApiKey();
-    if (!apiKey) {
+    if (!apiKey && this.config.apiKeyRequired !== false) {
       return {
         error:
           'API key not found. Set GOOGLE_API_KEY, GOOGLE_GENERATIVE_AI_API_KEY, or GEMINI_API_KEY environment variable.',
@@ -263,7 +270,7 @@ export class GeminiImageProvider implements ApiProvider {
     try {
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
-        'x-goog-api-key': apiKey,
+        ...(apiKey ? { 'x-goog-api-key': apiKey } : {}),
         ...(this.config.headers || {}),
       };
       const authDiscriminator = createAuthCacheDiscriminator(headers);

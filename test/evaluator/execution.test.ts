@@ -14,6 +14,9 @@ import Eval from '../../src/models/eval';
 import EvalResult from '../../src/models/evalResult';
 import { EchoProvider } from '../../src/providers/echo';
 import { providerRegistry } from '../../src/providers/providerRegistry';
+import { callTargetProvider } from '../../src/redteam/providers/shared';
+import { ProviderGroupedCallQueue } from '../../src/scheduler/providerCallQueue';
+import { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
 import {
   type ApiProvider,
   type EvaluateResult,
@@ -24,6 +27,7 @@ import {
 import { JsonlFileWriter } from '../../src/util/exportToFile/writeToFile';
 import { sleep } from '../../src/util/time';
 import { createEmptyTokenUsage } from '../../src/util/tokenUsageUtils';
+import { createDeferred } from '../util/utils';
 import { toPrompt } from './helpers';
 import { describeEvaluator } from './lifecycle';
 
@@ -35,29 +39,52 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+function useEvaluationTimers() {
+  // Cancellation unwinds provider promises through setImmediate; keep that real
+  // while controlling the evaluation deadlines and target delays.
+  vi.useFakeTimers({
+    toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'],
+  });
+}
+
 describeEvaluator('evaluator execution control', () => {
   it('evaluates with provider delay', async () => {
-    const mockApiProvider: ApiProvider = {
-      id: vi.fn().mockReturnValue('test-provider'),
+    const started = createDeferred<void>();
+    const provider: ApiProvider = {
+      id: () => 'test-provider',
       delay: 100,
-      callApi: vi.fn().mockResolvedValue({
-        output: 'Test output',
-        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
+      callApi: vi.fn<ApiProvider['callApi']>().mockImplementation(async () => {
+        started.resolve();
+        return { output: 'Test output', tokenUsage: createEmptyTokenUsage() };
       }),
     };
-
     const testSuite: TestSuite = {
-      providers: [mockApiProvider],
+      providers: [provider],
       prompts: [toPrompt('Test prompt')],
       tests: [{}],
     };
-
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
-    await evaluate(testSuite, evalRecord, {});
-
-    expect(sleep).toHaveBeenCalledTimes(1);
-    expect(sleep).toHaveBeenCalledWith(100);
-    expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
+    useEvaluationTimers();
+    let completed = false;
+    const pending = evaluate(testSuite, evalRecord, {}).then((result) => {
+      completed = true;
+      return result;
+    });
+    try {
+      await started.promise;
+      await vi.advanceTimersByTimeAsync(0);
+      expect(provider.callApi).toHaveBeenCalledOnce();
+      expect(completed).toBe(false);
+      await vi.advanceTimersByTimeAsync(99);
+      expect(completed).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      await pending;
+      expect(completed).toBe(true);
+    } finally {
+      await vi.runAllTimersAsync();
+      await pending;
+      vi.useRealTimers();
+    }
   });
 
   it.each([
@@ -703,7 +730,7 @@ describeEvaluator('evaluator execution control', () => {
   });
 
   it('should handle evaluation timeout without tearing down the shared provider', async () => {
-    vi.useFakeTimers();
+    useEvaluationTimers();
 
     const mockAddResult = vi.fn().mockResolvedValue(undefined);
     let longTimer: NodeJS.Timeout | null = null;
@@ -785,8 +812,9 @@ describeEvaluator('evaluator execution control', () => {
   });
 
   it('should not block timeout rows when a provider call does not settle after abort', async () => {
-    vi.useFakeTimers();
+    useEvaluationTimers();
 
+    const providerStarted = createDeferred<void>();
     const mockAddResult = vi.fn().mockResolvedValue(undefined);
 
     const hangingProvider: ApiProvider = {
@@ -794,6 +822,7 @@ describeEvaluator('evaluator execution control', () => {
       callApi: vi.fn().mockImplementation(
         () =>
           new Promise(() => {
+            providerStarted.resolve();
             // Intentionally never resolves; timeout handling must still emit a row.
           }),
       ),
@@ -833,6 +862,7 @@ describeEvaluator('evaluator execution control', () => {
 
     try {
       const evalPromise = evaluate(testSuite, mockEval as unknown as Eval, { timeoutMs: 50 });
+      await providerStarted.promise;
       await vi.advanceTimersByTimeAsync(50);
       await evalPromise;
 
@@ -850,7 +880,7 @@ describeEvaluator('evaluator execution control', () => {
   });
 
   it('should ignore stale provider rows that resolve after a timeout row is recorded', async () => {
-    vi.useFakeTimers();
+    useEvaluationTimers();
 
     const mockAddResult = vi.fn().mockResolvedValue(undefined);
     let resolveLateResponse!: (value: ProviderResponse) => void;
@@ -925,7 +955,7 @@ describeEvaluator('evaluator execution control', () => {
   });
 
   it('should honor external abortSignal when timeoutMs is set', async () => {
-    vi.useFakeTimers();
+    useEvaluationTimers();
 
     const mockAddResult = vi.fn().mockResolvedValue(undefined);
     let longTimer: NodeJS.Timeout | null = null;
@@ -1082,8 +1112,9 @@ describeEvaluator('evaluator execution control', () => {
   });
 
   it('should abort when exceeding maxEvalTimeMs', async () => {
-    vi.useFakeTimers();
+    useEvaluationTimers();
 
+    const providerStarted = createDeferred<void>();
     const mockAddResult = vi.fn().mockResolvedValue(undefined);
     let longTimer: NodeJS.Timeout | null = null;
 
@@ -1091,6 +1122,7 @@ describeEvaluator('evaluator execution control', () => {
       id: vi.fn().mockReturnValue('slow-provider'),
       callApi: vi.fn().mockImplementation((_, __, opts) => {
         return new Promise((resolve, reject) => {
+          providerStarted.resolve();
           longTimer = setTimeout(() => {
             resolve({
               output: 'Slow response',
@@ -1142,6 +1174,7 @@ describeEvaluator('evaluator execution control', () => {
 
     try {
       const evalPromise = evaluate(testSuite, mockEval as unknown as Eval, { maxEvalTimeMs: 100 });
+      await providerStarted.promise;
       await vi.advanceTimersByTimeAsync(100);
       await evalPromise;
 
@@ -1161,7 +1194,7 @@ describeEvaluator('evaluator execution control', () => {
   });
 
   it('retains completed target output and cancels queued grading at the max duration', async () => {
-    vi.useFakeTimers();
+    useEvaluationTimers();
 
     const results: any[] = [];
     const waitForTarget = (ms: number, signal?: AbortSignal) => {
@@ -1254,7 +1287,7 @@ describeEvaluator('evaluator execution control', () => {
   });
 
   it('cancels in-flight grouped grading when the max duration expires', async () => {
-    vi.useFakeTimers();
+    useEvaluationTimers();
 
     const results: any[] = [];
     const provider: ApiProvider = {
@@ -1323,7 +1356,7 @@ describeEvaluator('evaluator execution control', () => {
   it.each([true, false])(
     'ends active grouped grading at the max duration when the grader honors cancellation: %s',
     async (cooperative) => {
-      vi.useFakeTimers();
+      useEvaluationTimers();
       const results: EvaluateResult[] = [];
       let markStarted!: () => void;
       let releaseGrader: (() => void) | undefined;
@@ -1688,6 +1721,437 @@ describeEvaluator('evaluator execution control', () => {
       } finally {
         saveSpy.mockRestore();
         vi.useRealTimers();
+      }
+    },
+  );
+
+  it.each([
+    'incomplete CLI pause',
+    'ordinary caller cancellation',
+    'completed success during CLI pause',
+    'completed tool error during CLI pause',
+    'independent SDK error during CLI pause',
+  ] as const)('preserves resume eligibility for %s', async (mode) => {
+    vi.stubEnv('PROMPTFOO_DISABLE_ADAPTIVE_SCHEDULER', 'false');
+    const controller = new AbortController();
+    const cancelBeforeCall =
+      mode === 'incomplete CLI pause' || mode === 'ordinary caller cancellation';
+    vi.mocked(runExtensionHook).mockImplementation(async (_extensions, hookName, context) => {
+      if (hookName === 'beforeEach' && cancelBeforeCall) {
+        controller.abort();
+      }
+      return context;
+    });
+    const completed: ProviderResponse = {
+      output: 'Completed answer',
+      cost: 0.25,
+      tokenUsage: { ...createEmptyTokenUsage(), prompt: 2, completion: 3, total: 5 },
+      ...(mode === 'completed tool error during CLI pause'
+        ? { error: 'Tool callback failed', metadata: { errorOrigin: 'tool' } }
+        : {}),
+    };
+    const provider: ApiProvider = {
+      id: () => 'pause-contract-provider',
+      callApi: vi.fn<ApiProvider['callApi']>().mockImplementation(async () => {
+        controller.abort();
+        if (mode === 'independent SDK error during CLI pause') {
+          throw new DOMException('Independent SDK failure', 'AbortError');
+        }
+        return completed;
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Pause contract')],
+      tests: [{ assert: [{ type: 'contains', value: 'Completed' }] }],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    try {
+      await evaluate(testSuite, evalRecord, {
+        maxConcurrency: 1,
+        abortSignal: controller.signal,
+        pauseSignal: mode === 'ordinary caller cancellation' ? undefined : controller.signal,
+      });
+      const rows = await evalRecord.getResults();
+      expect(provider.callApi).toHaveBeenCalledTimes(cancelBeforeCall ? 0 : 1);
+      const incomplete = mode === 'incomplete CLI pause';
+      expect(rows).toHaveLength(incomplete ? 0 : 1);
+      // Ordinary errors still count as completed unless retry-errors is explicitly selected.
+      expect(await EvalResult.getCompletedIndexPairs(evalRecord.id)).toEqual(
+        new Set(incomplete ? [] : ['0:0']),
+      );
+      if (incomplete) {
+        return;
+      }
+      const row = rows[0];
+      if (mode.startsWith('completed')) {
+        expect(row.response?.output).toBe(completed.output);
+        expect(row.response?.cost).toBe(0.25);
+        expect(row.response?.tokenUsage).toMatchObject({ prompt: 2, completion: 3, total: 5 });
+        expect(row.cost).toBe(0.25);
+        expect(row.success).toBe(mode === 'completed success during CLI pause');
+        if (mode === 'completed tool error during CLI pause') {
+          expect(row.error).toBe('Tool callback failed');
+          expect(row.response?.metadata).toMatchObject({ errorOrigin: 'tool' });
+        }
+      } else {
+        expect(row.success).toBe(false);
+        expect(row.failureReason).toBe(ResultFailureReason.ERROR);
+        expect(row.response).toBeFalsy();
+        expect(row.error).toContain(
+          mode === 'independent SDK error during CLI pause'
+            ? 'Independent SDK failure'
+            : 'This operation was aborted',
+        );
+      }
+    } finally {
+      vi.unstubAllEnvs();
+      vi.mocked(runExtensionHook).mockImplementation(
+        async (_extensions, _hookName, context) => context,
+      );
+    }
+  });
+  it('retains completed nested target work when a CLI pause interrupts the strategy', async () => {
+    const controller = new AbortController();
+    const target: ApiProvider = {
+      id: () => 'billable-target',
+      callApi: vi.fn(async () => ({
+        output: 'completed target',
+        cost: 0.25,
+        tokenUsage: { total: 5, prompt: 2, completion: 3, numRequests: 1 },
+      })),
+    };
+    const strategy: ApiProvider = {
+      id: () => 'interrupted-strategy',
+      callApi: vi.fn(async () => {
+        await callTargetProvider(target, 'first target prompt');
+        await callTargetProvider(target, 'second target prompt');
+        controller.abort();
+        throw controller.signal.reason;
+      }),
+    };
+    const suite: TestSuite = {
+      providers: [strategy],
+      prompts: [toPrompt('strategy fixture')],
+      tests: [{}],
+    };
+    const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+    await evaluate(suite, record, { maxConcurrency: 1, pauseSignal: controller.signal });
+    const rows = await record.getResults();
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      cost: 0.5,
+      success: false,
+      failureReason: ResultFailureReason.ERROR,
+      response: { output: 'completed target', tokenUsage: { total: 10, numRequests: 2 } },
+    });
+    expect(rows[0].error).toContain('strategy completed');
+    expect(rows[0].response?.metadata?.completedTargetResponses).toHaveLength(2);
+    cliState.resume = true;
+    await evaluate(suite, record, { maxConcurrency: 1 });
+    expect(target.callApi).toHaveBeenCalledTimes(2);
+    expect(strategy.callApi).toHaveBeenCalledOnce();
+  });
+
+  it('leaves a retried call resumable when CLI pause interrupts its next attempt', async () => {
+    vi.stubEnv('PROMPTFOO_DISABLE_ADAPTIVE_SCHEDULER', 'false');
+    const controller = new AbortController();
+    const provider: ApiProvider = {
+      id: () => 'pause-retry-provider',
+      config: { maxRetries: 1 },
+      callApi: vi
+        .fn<ApiProvider['callApi']>()
+        .mockResolvedValueOnce({
+          error: 'Rate limit exceeded on the first attempt',
+          metadata: { headers: { 'retry-after-ms': '0' } },
+          cost: 0.25,
+          tokenUsage: createEmptyTokenUsage(),
+        })
+        .mockImplementationOnce(async () => {
+          controller.abort();
+          throw controller.signal.reason;
+        }),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Retry before pausing')],
+      tests: [{}],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    try {
+      await evaluate(testSuite, evalRecord, {
+        maxConcurrency: 1,
+        abortSignal: controller.signal,
+        pauseSignal: controller.signal,
+      });
+      expect(provider.callApi).toHaveBeenCalledTimes(2);
+      // The first attempt's diagnostic must not become the interrupted retry's result.
+      expect(await evalRecord.getResults()).toEqual([]);
+      expect(await EvalResult.getCompletedIndexPairs(evalRecord.id)).toEqual(new Set());
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+  it('cancels queued grouped grading at maxEvalTimeMs and retains completed target outputs', async () => {
+    useEvaluationTimers();
+
+    const results: any[] = [];
+    const waitForTarget = (ms: number, signal?: AbortSignal) => {
+      let resolveSleep!: () => void;
+      let rejectSleep!: (err: Error) => void;
+      const sleepPromise = new Promise<void>((resolve, reject) => {
+        resolveSleep = resolve;
+        rejectSleep = reject;
+      });
+      const timeout = setTimeout(() => resolveSleep(), ms);
+      signal?.addEventListener(
+        'abort',
+        () => {
+          clearTimeout(timeout);
+          rejectSleep(new Error('target aborted'));
+        },
+        { once: true },
+      );
+      return sleepPromise;
+    };
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('target-provider'),
+      callApi: vi.fn(async (prompt: string, _context, options) => {
+        await waitForTarget(40, options?.abortSignal);
+        return {
+          output: `Target output for ${prompt}`,
+          tokenUsage: createEmptyTokenUsage(),
+        };
+      }),
+    };
+    const judge: ApiProvider = {
+      id: vi.fn().mockReturnValue('judge'),
+      callApi: vi.fn(async () => ({
+        output: JSON.stringify({ pass: true, score: 1, reason: 'judge passed' }),
+        tokenUsage: createEmptyTokenUsage(),
+      })),
+    };
+    const evalRecord = {
+      id: 'grouped-timeout-eval',
+      results,
+      prompts: [],
+      persisted: false,
+      config: {},
+      addPrompts: vi.fn().mockResolvedValue(undefined),
+      addResult: vi.fn(async (result) => {
+        results.push(result);
+      }),
+      fetchResultsByTestIdx: vi.fn().mockResolvedValue([]),
+      getResults: vi.fn().mockResolvedValue(results),
+      save: vi.fn().mockResolvedValue(undefined),
+      setDurationMs: vi.fn(),
+      setVars: vi.fn(),
+      toEvaluateSummary: vi.fn(),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Test prompt {{topic}}')],
+      tests: ['alpha', 'beta', 'gamma'].map((topic) => ({
+        vars: { topic },
+        assert: [{ type: 'llm-rubric', value: `Judge ${topic}`, provider: judge }],
+      })),
+    };
+
+    try {
+      const evalPromise = evaluate(testSuite, evalRecord as unknown as Eval, {
+        maxConcurrency: 1,
+        maxEvalTimeMs: 55,
+      });
+      await vi.advanceTimersByTimeAsync(40);
+      await vi.advanceTimersByTimeAsync(15);
+      await evalPromise;
+    } finally {
+      vi.useRealTimers();
+    }
+
+    const resultByTopic = new Map(results.map((result) => [result.vars.topic, result]));
+
+    expect(judge.callApi).not.toHaveBeenCalled();
+    expect(resultByTopic.get('alpha')).toEqual(
+      expect.objectContaining({
+        success: false,
+        response: expect.objectContaining({
+          output: 'Target output for Test prompt alpha',
+        }),
+      }),
+    );
+    expect(resultByTopic.get('alpha')?.error).toMatch(/abort|cancel/i);
+    expect(resultByTopic.get('gamma')?.error).toContain('Evaluation exceeded max duration');
+  });
+  it.each(['queued', 'active', 'deadline', 'immediate per-step'] as const)(
+    'cancels %s grading without losing completed target outputs',
+    async (mode) => {
+      useEvaluationTimers();
+      const controller = new AbortController();
+      const reason = Object.assign(new Error('original caller cancelled grading'), {
+        name: 'AbortError',
+      });
+      const rows: any[] = [];
+      const drains: (() => void)[] = [];
+      const metrics: { activeRequests: number; queueDepth: number }[] = [];
+      const dispose = RateLimitRegistry.prototype.dispose;
+      const disposeSpy = vi
+        .spyOn(RateLimitRegistry.prototype, 'dispose')
+        .mockImplementation(function (this: RateLimitRegistry) {
+          metrics.push(...Object.values(this.getMetrics()));
+          return dispose.call(this);
+        });
+      const enqueued = vi.spyOn(ProviderGroupedCallQueue.prototype, 'enqueue');
+      const held = (signal?: AbortSignal, ms?: number) =>
+        new Promise<void>((resolve, reject) => {
+          let timer: ReturnType<typeof setTimeout> | undefined;
+          const finish = (error?: unknown) => {
+            if (timer) {
+              clearTimeout(timer);
+            }
+            signal?.removeEventListener('abort', abort);
+            if (error) {
+              reject(error);
+            } else {
+              resolve();
+            }
+          };
+          const abort = () => finish(signal?.reason ?? reason);
+          drains.push(() => finish());
+          if (signal?.aborted) {
+            abort();
+          } else {
+            signal?.addEventListener('abort', abort, { once: true });
+            if (ms !== undefined) {
+              timer = setTimeout(() => finish(), ms);
+            }
+          }
+        });
+      const topics = mode === 'queued' ? ['alpha', 'beta', 'gamma'] : ['alpha'];
+      let activeJudges = 0;
+      let judgeSignal: AbortSignal | undefined;
+      const target: ApiProvider = {
+        id: () => `caller-target-${mode}`,
+        callApi: vi.fn(async (prompt, _context, options) => {
+          if (mode === 'queued' && prompt.includes('beta')) {
+            await held(options?.abortSignal);
+          }
+          if (mode === 'active' || mode === 'deadline') {
+            await held(options?.abortSignal, 10);
+          }
+          return { output: `Completed ${prompt}`, tokenUsage: createEmptyTokenUsage() };
+        }),
+      };
+      const judge: ApiProvider = {
+        id: () => `caller-judge-${mode}`,
+        callApi: vi.fn(async (_prompt, _context, options) => {
+          judgeSignal = options?.abortSignal;
+          activeJudges++;
+          try {
+            if (mode !== 'queued') {
+              await held(judgeSignal);
+            }
+            return {
+              output: JSON.stringify({ pass: true, score: 1, reason: 'passed' }),
+              tokenUsage: createEmptyTokenUsage(),
+            };
+          } finally {
+            activeJudges--;
+          }
+        }),
+      };
+      const record = {
+        id: `caller-grading-${mode}`,
+        results: rows,
+        prompts: [],
+        persisted: false,
+        config: {},
+        addPrompts: vi.fn().mockResolvedValue(undefined),
+        addResult: vi.fn(async (row) => {
+          rows.push(row);
+        }),
+        fetchResultsByTestIdx: vi.fn().mockResolvedValue([]),
+        getResults: vi.fn().mockResolvedValue(rows),
+        save: vi.fn().mockResolvedValue(undefined),
+        setDurationMs: vi.fn(),
+        setVars: vi.fn(),
+        toEvaluateSummary: vi.fn(),
+      };
+      let settled = false;
+      const pending = evaluate(
+        {
+          providers: [target],
+          prompts: [toPrompt('Topic {{topic}}')],
+          tests: topics.map((topic) => ({
+            vars: { topic },
+            assert: [{ type: 'llm-rubric', value: 'Harmless judge', provider: judge }],
+          })),
+        },
+        record as unknown as Eval,
+        {
+          maxConcurrency: 1,
+          abortSignal: controller.signal,
+          ...(mode === 'immediate per-step' ? { timeoutMs: 1000 } : { maxEvalTimeMs: 55 }),
+        },
+      ).finally(() => {
+        settled = true;
+      });
+      try {
+        await vi.advanceTimersByTimeAsync(mode === 'active' || mode === 'deadline' ? 10 : 0);
+        expect(settled).toBe(false);
+        if (mode === 'queued') {
+          expect(target.callApi).toHaveBeenCalledTimes(2);
+          expect(enqueued.mock.calls.some(([id]) => id === judge.id())).toBe(true);
+          expect(judge.callApi).not.toHaveBeenCalled();
+        } else {
+          expect(judge.callApi).toHaveBeenCalledOnce();
+          expect(activeJudges).toBe(1);
+          expect(judgeSignal?.aborted).toBe(false);
+        }
+        if (mode === 'deadline') {
+          await vi.advanceTimersByTimeAsync(44);
+          expect(settled).toBe(false);
+          expect(judgeSignal?.aborted).toBe(false);
+          await vi.advanceTimersByTimeAsync(1);
+          expect(controller.signal.aborted).toBe(false);
+        } else {
+          controller.abort(reason);
+          await vi.advanceTimersByTimeAsync(0);
+        }
+        expect(settled).toBe(true);
+        await pending;
+        expect(activeJudges).toBe(0);
+        expect(judge.callApi).toHaveBeenCalledTimes(mode === 'queued' ? 0 : 1);
+        if (mode !== 'queued') {
+          expect(judgeSignal?.aborted).toBe(true);
+        }
+        const alpha = rows.filter((row) => row.vars.topic === 'alpha');
+        expect(alpha).toHaveLength(1);
+        if (mode !== 'immediate per-step') {
+          expect(alpha[0].response.output).toBe('Completed Topic alpha');
+        }
+        expect(alpha[0].success).toBe(false);
+        expect(alpha[0].error).toMatch(/abort|cancel/i);
+        expect(metrics.length).toBeGreaterThan(0);
+        expect(metrics.every((m) => m.activeRequests === 0 && m.queueDepth === 0)).toBe(true);
+        const calls = [
+          vi.mocked(target.callApi).mock.calls.length,
+          vi.mocked(judge.callApi).mock.calls.length,
+        ];
+        await vi.advanceTimersByTimeAsync(1000);
+        expect([
+          vi.mocked(target.callApi).mock.calls.length,
+          vi.mocked(judge.callApi).mock.calls.length,
+        ]).toEqual(calls);
+      } finally {
+        controller.abort(reason);
+        for (const drain of drains) {
+          drain();
+        }
+        await vi.advanceTimersByTimeAsync(0);
+        await pending;
+        disposeSpy.mockRestore();
+        enqueued.mockRestore();
       }
     },
   );

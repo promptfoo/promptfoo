@@ -65,9 +65,11 @@ These assertions can check LLM output or provider metadata directly. Configured 
 | [perplexity](#perplexity)                                       | Perplexity is below a threshold                                    |
 | [python](/docs/configuration/expected-outputs/python)           | provided Python function validates the output                      |
 | [regex](#regex)                                                 | output matches regex                                               |
+| [rouge-l](#rouge-l)                                             | ROUGE-Lsum score is at least the threshold                         |
 | [rouge-n](#rouge-n)                                             | Rouge-N score is above a given threshold                           |
+| [rouge-s](#rouge-s)                                             | ROUGE-S skip-bigram score is at least the threshold                |
 | [starts-with](#starts-with)                                     | output starts with string                                          |
-| [trace-span-count](#trace-span-count)                           | Count spans matching patterns with min/max thresholds              |
+| [trace-span-count](#trace-span-count)                           | Count spans matching names and attributes with min/max thresholds  |
 | [trace-span-duration](#trace-span-duration)                     | Check span durations with percentile support                       |
 | [trace-error-spans](#trace-error-spans)                         | Detect errors in traces by status codes, attributes, and messages  |
 | [webhook](#webhook)                                             | provided webhook returns \{pass: true\}                            |
@@ -1147,6 +1149,26 @@ Common patterns:
 - `api.*` - Matches spans starting with "api."
 - `*.error` - Matches spans ending with ".error"
 
+All three trace assertions also accept an optional `attributes` object. Use it when different tools or agents emit the same span name:
+
+```yaml
+assert:
+  - type: trace-span-count
+    value:
+      pattern: '*'
+      attributes:
+        gen_ai.tool.name: search
+      min: 1
+      max: 3
+  - type: trace-span-duration
+    value:
+      attributes:
+        gen_ai.tool.name: search
+      max: 2000
+```
+
+A span must match both `pattern` and every attribute. Attribute keys are literal, including dots; values use case-sensitive exact equality without glob matching or type conversion. Values must be strings, booleans, or finite numbers. Missing attributes do not match, while an empty object adds no restriction. Duration percentiles and error percentages use only the selected spans. If matching spans must exist, include a `trace-span-count` assertion with `min: 1`; duration and error assertions retain their existing behavior when no spans match.
+
 ### Trace-Span-Duration
 
 The `trace-span-duration` assertion checks if span durations in a trace are within acceptable limits. It can check individual spans or percentiles across all matching spans.
@@ -1181,6 +1203,7 @@ assert:
 Key features:
 
 - `pattern` (optional): Filter spans by name pattern. Defaults to `*` (all spans)
+- `attributes` (optional): Filter by exact span attributes, as described under [Trace-Span-Count](#trace-span-count)
 - `max`: Maximum allowed duration in milliseconds
 - `percentile` (optional): Check percentile instead of all spans (e.g., 50 for median, 95 for 95th percentile). Must be a number from 0 to 100 inclusive; out-of-range values cause an assertion error. Use the 0-100 scale, not 0-1 — `0.95` is accepted as the 0.95th percentile (effectively the fastest span), not p95
 
@@ -1231,6 +1254,7 @@ Configuration options:
 - `max_count`: Maximum number of error spans allowed
 - `max_percentage`: Maximum error rate as a percentage (0-100)
 - `pattern`: Filter spans by name pattern
+- `attributes`: Filter by exact span attributes; `max_percentage` uses only the matching spans
 
 The assertion provides detailed error information including span names and error messages to help with debugging.
 
@@ -1333,6 +1357,52 @@ tests:
     assert:
       - type: rouge-n
         value: '{{expected}}'
+```
+
+### Rouge-L
+
+`rouge-l` measures summary-level longest common subsequence overlap (ROUGE-Lsum). Words must appear in order within a sentence, but other words can appear between matches. Each reference sentence is compared with every output sentence, so reordering whole sentences does not reduce the score.
+
+| Output vs `the quick brown fox` | rouge-n | rouge-l | rouge-s |
+| ------------------------------- | ------- | ------- | ------- |
+| `the quick brown fox`           | 1.00    | 1.00    | 1.00    |
+| `the very quick brown fox`      | 0.89    | 0.89    | 0.75    |
+| `brown fox quick the`           | 1.00    | 0.50    | 0.17    |
+
+All three ROUGE assertions take a string `value` and an optional `threshold` (default: `0.75`). They compare text case-insensitively and count repeated matches. Scores are F1 scores from 0 to 1; empty or whitespace-only text scores 0. The assertion passes when its score is at least the threshold. A `not-` assertion passes below the threshold and reports `1 - score`.
+
+```yaml
+assert:
+  - type: rouge-l
+    value: hello world
+
+  - type: rouge-l
+    threshold: 0.6
+    value: hello world
+
+  - type: not-rouge-l
+    threshold: 0.75
+    value: hello world
+```
+
+ROUGE-L/S split sentences before tokenizing. ROUGE-N tokenizes the whole text, which can leave a mid-text period attached to the preceding word.
+
+### Rouge-S
+
+`rouge-s` measures skip-bigram overlap: pairs of tokens in the same order, regardless of the distance between them. Pairs can span sentences. For example, `the cat sat. a dog ran.` compared with `a dog ran. the cat sat.` scores 1.00 on `rouge-l` and 0.46 on `rouge-s`.
+
+Either text having fewer than two tokens gives a score of 0, even when a single word matches itself. Punctuation counts as a token.
+
+The options, default threshold and `not-` prefix work as described above. As with `rouge-n` and `rouge-l`, `value` supports templates:
+
+```yaml
+tests:
+  - vars:
+      expected: hello world
+    assert:
+      - type: rouge-s
+        value: '{{expected}}'
+        threshold: 0.6
 ```
 
 ### BLEU
