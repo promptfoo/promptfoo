@@ -23,6 +23,49 @@ import { loadYaml } from './yamlLoad';
 
 import type { NunjucksFilterMap, OutputFile, VarValue } from '../types';
 
+const loadedFileMimeTypes = Symbol('loadedFileMimeTypes');
+type VarsWithFileMimeTypes = Record<string, unknown> & {
+  [loadedFileMimeTypes]?: ReadonlyMap<string, string>;
+};
+
+/** Preserve loaded-file provenance through object copies, outside serialized vars. */
+export function setLoadedFileMimeTypes(
+  vars: Record<string, unknown>,
+  mimeTypes?: ReadonlyMap<string, string>,
+): Map<string, string> {
+  const current = (vars as VarsWithFileMimeTypes)[loadedFileMimeTypes];
+  const next = new Map(mimeTypes);
+  if (!mimeTypes) {
+    // Rerenders keep only unchanged loaded values. Each render owns a fresh map so
+    // pruning or loading another file cannot mutate a sibling copy of vars.
+    for (const value of Object.values(vars)) {
+      if (typeof value === 'string') {
+        const mimeType = current?.get(value);
+        if (mimeType) {
+          next.set(value, mimeType);
+        }
+      }
+    }
+  }
+  if (next.size > 0) {
+    Object.defineProperty(vars, loadedFileMimeTypes, {
+      value: next,
+      enumerable: true,
+      configurable: true,
+    });
+  } else {
+    delete (vars as VarsWithFileMimeTypes)[loadedFileMimeTypes];
+  }
+  return next;
+}
+
+export function getLoadedFileMimeType(
+  vars: Record<string, unknown>,
+  value: string,
+): string | undefined {
+  return (vars as VarsWithFileMimeTypes)[loadedFileMimeTypes]?.get(value);
+}
+
 type CsvParseOptionsWithColumns<T> = Omit<CsvOptions<T>, 'columns'> & {
   columns: Exclude<CsvOptions['columns'], undefined | false>;
 };
@@ -267,12 +310,17 @@ export function getResolvedRelativePath(filePath: string, isCloudConfig?: boolea
  *
  * @param config - The configuration object to process
  * @param context - Optional context to control file loading behavior
+ * @param basePath - Optional file resolution scope; inherits the caller scope when omitted
  * @returns The configuration with external file references resolved
  */
 export function maybeLoadConfigFromExternalFile(
   config: any,
   context?: 'assertion' | 'general' | 'vars',
+  basePath?: string,
 ): any {
+  if (basePath !== undefined) {
+    return cliState.withBasePath(basePath, () => maybeLoadConfigFromExternalFile(config, context));
+  }
   if (Array.isArray(config)) {
     return config.map((item) => maybeLoadConfigFromExternalFile(item, context));
   }

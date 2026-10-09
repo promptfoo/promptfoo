@@ -69,6 +69,11 @@ type EnvVars = {
   PROMPTFOO_OFFICIAL_DOCKER_IMAGE?: boolean;
   PROMPTFOO_RUNNING_IN_DOCKER?: boolean;
   PROMPTFOO_SELF_HOSTED?: boolean;
+  /**
+   * Disables dynamic inline JavaScript execution in transforms and assertions.
+   * Requires pointing to dedicated script files instead (file://...).
+   */
+  PROMPTFOO_SAFE_MODE?: boolean;
   PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES?: boolean;
   PROMPTFOO_STRICT_FILES?: boolean;
   PROMPTFOO_STRIP_GRADING_RESULT?: boolean;
@@ -223,16 +228,17 @@ type EnvVars = {
   // Continuous Integration
   //=========================================================================
   APPVEYOR?: boolean;
-  BITBUCKET_COMMIT?: boolean;
+  BITBUCKET_COMMIT?: string;
   BUDDY?: boolean;
   BUILDKITE?: boolean;
   CI?: boolean;
   CIRCLECI?: boolean;
-  CODEBUILD_BUILD_ID?: boolean;
+  CODEBUILD_BUILD_ID?: string;
   GITHUB_ACTIONS?: boolean;
   GITLAB_CI?: boolean;
   JENKINS?: boolean;
-  TEAMCITY_VERSION?: boolean;
+  JENKINS_URL?: string;
+  TEAMCITY_VERSION?: string;
   TF_BUILD?: boolean;
   TRAVIS?: boolean;
 
@@ -456,6 +462,9 @@ type EnvVars = {
   // TrueFoundry
   TRUEFOUNDRY_API_KEY?: string;
 
+  // TypeSafe
+  TYPESAFE_API_KEY?: string;
+
   // Vertex AI
   VERTEX_API_VERSION?: string;
 
@@ -624,20 +633,26 @@ export function getMaxEvalTimeMs(defaultValue: number = 0): number {
  * @returns True if running in a CI environment, false otherwise.
  */
 export function isCI() {
+  const hasIdentifier = (key: EnvVarKey) => {
+    const value = getEnvString(key);
+    // Keep explicit false/0 opt-outs while accepting build IDs, versions and URLs.
+    return Boolean(value && !['false', '0'].includes(value.toLowerCase()));
+  };
   return (
     getEnvBool('CI') ||
     getEnvBool('GITHUB_ACTIONS') ||
     getEnvBool('TRAVIS') ||
     getEnvBool('CIRCLECI') ||
     getEnvBool('JENKINS') ||
+    hasIdentifier('JENKINS_URL') ||
     getEnvBool('GITLAB_CI') ||
     getEnvBool('APPVEYOR') ||
-    getEnvBool('CODEBUILD_BUILD_ID') ||
+    hasIdentifier('CODEBUILD_BUILD_ID') ||
     getEnvBool('TF_BUILD') ||
-    getEnvBool('BITBUCKET_COMMIT') ||
+    hasIdentifier('BITBUCKET_COMMIT') ||
     getEnvBool('BUDDY') ||
     getEnvBool('BUILDKITE') ||
-    getEnvBool('TEAMCITY_VERSION')
+    hasIdentifier('TEAMCITY_VERSION')
   );
 }
 

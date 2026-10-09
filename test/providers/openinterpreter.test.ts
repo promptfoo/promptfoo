@@ -221,6 +221,60 @@ describe('OpenInterpreterProvider', () => {
     expect(fs.existsSync(threadStart.params.cwd)).toBe(false);
   });
 
+  it.each(['cleanup', 'shutdown', 'shutdownAll'] as const)(
+    'restores cleanup registration and preserves delegate ownership after %s',
+    async (method) => {
+      mockProcessEnv({ OPENAI_API_KEY: undefined, CODEX_API_KEY: undefined });
+      const provider = new OpenInterpreterProvider({
+        config: { working_dir: os.tmpdir(), skip_git_repo_check: true, reuse_server: true },
+      });
+      const delegate = (provider as any).delegate;
+      expect(providerRegistry.has(provider)).toBe(true);
+      expect(providerRegistry.has(delegate)).toBe(false);
+      const cleanup = () =>
+        method === 'shutdownAll' ? providerRegistry.shutdownAll() : provider[method]();
+      await cleanup();
+      await cleanup();
+      expect(providerRegistry.has(provider)).toBe(false);
+
+      for (const prompt of ['First reuse', 'Second reuse']) {
+        const server = createMockAppServer();
+        mocks.spawn.mockReturnValue(server.proc);
+        const resultPromise = provider.callApi(prompt);
+        await startTurn(server);
+        expect(providerRegistry.has(provider)).toBe(true);
+        expect(providerRegistry.has(delegate)).toBe(false);
+        const interpreterHome = mocks.spawn.mock.calls.at(-1)?.[2].env.INTERPRETER_HOME;
+        expect(fs.existsSync(interpreterHome)).toBe(true);
+        completeTurn(server, prompt);
+        expect(await resultPromise).toMatchObject({ output: prompt });
+        expect(server.proc.kill).not.toHaveBeenCalled();
+        await cleanup();
+        expect(providerRegistry.has(provider)).toBe(false);
+        expect(providerRegistry.has(delegate)).toBe(false);
+        expect(fs.existsSync(interpreterHome)).toBe(false);
+        expect(server.proc.kill).toHaveBeenCalledWith('SIGTERM');
+      }
+    },
+  );
+
+  it('retains cleanup registration when delegate cleanup fails', async () => {
+    const provider = new OpenInterpreterProvider();
+    const delegate = (provider as any).delegate;
+    const cleanup = vi
+      .spyOn(delegate, 'cleanup')
+      .mockRejectedValueOnce(new Error('cleanup failed'));
+
+    await expect(provider.cleanup()).rejects.toThrow('cleanup failed');
+    expect(providerRegistry.has(provider)).toBe(true);
+    expect(providerRegistry.has(delegate)).toBe(false);
+    expect(fs.existsSync((provider as any).temporaryHome)).toBe(true);
+
+    cleanup.mockRestore();
+    await provider.cleanup();
+    expect(providerRegistry.has(provider)).toBe(false);
+  });
+
   it('maps backend, harness, workspace, environment, schema, and timeout options without a shell', async () => {
     mockProcessEnv({ OPENAI_API_KEY: undefined });
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'openinterpreter options '));
@@ -1618,7 +1672,7 @@ describe('OpenInterpreterProvider', () => {
     expect(mocks.spawn).not.toHaveBeenCalled();
   });
 
-  it('removes an allocated temporary home if delegate construction fails', () => {
+  it('removes an allocated temporary home if provider registration fails', () => {
     const prefix = 'promptfoo-openinterpreter-home-';
     const mkdtemp = vi.spyOn(fs, 'mkdtempSync');
     vi.spyOn(providerRegistry, 'register').mockImplementationOnce(() => {

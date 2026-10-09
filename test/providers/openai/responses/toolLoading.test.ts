@@ -57,6 +57,7 @@ describe('OpenAiResponsesProvider tool loading', () => {
       const provider = new OpenAiResponsesProvider('o4-mini-deep-research', {
         config: {
           apiKey: 'test-key',
+          apiBaseUrl: 'https://gateway.example/v1',
           tools: [{ type: 'web_search_preview' }],
         },
       });
@@ -90,6 +91,7 @@ describe('OpenAiResponsesProvider tool loading', () => {
       const provider = new OpenAiResponsesProvider('o4-mini-deep-research', {
         config: {
           apiKey: 'test-key',
+          apiBaseUrl: 'https://gateway.example/v1',
           tools: [
             {
               type: 'function',
