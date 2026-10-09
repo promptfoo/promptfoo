@@ -12,6 +12,7 @@ import { getGpt6Variant } from '../../../src/providers/openai/gpt6';
 import { OpenAiResponsesProvider } from '../../../src/providers/openai/responses';
 import { OpenRouterProvider } from '../../../src/providers/openrouter';
 import { TrueFoundryProvider } from '../../../src/providers/truefoundry';
+import { createUnsetOpenAiGenerationEnv } from '../../factories/literalFixtures';
 import { mockProcessEnv } from '../../util/utils';
 
 const statusTool = {
@@ -27,12 +28,7 @@ describe('GPT-6.1 Sol requests', () => {
   let restoreEnv: () => void;
 
   beforeEach(() => {
-    restoreEnv = mockProcessEnv({
-      OPENAI_MAX_TOKENS: undefined,
-      OPENAI_MAX_COMPLETION_TOKENS: undefined,
-      OPENAI_TEMPERATURE: undefined,
-      OPENAI_TOP_P: undefined,
-    });
+    restoreEnv = mockProcessEnv(createUnsetOpenAiGenerationEnv());
   });
 
   afterEach(() => {
@@ -242,12 +238,7 @@ describe('GPT-6 Astra requests', () => {
   let restoreEnv: () => void;
 
   beforeEach(() => {
-    restoreEnv = mockProcessEnv({
-      OPENAI_MAX_TOKENS: undefined,
-      OPENAI_MAX_COMPLETION_TOKENS: undefined,
-      OPENAI_TEMPERATURE: undefined,
-      OPENAI_TOP_P: undefined,
-    });
+    restoreEnv = mockProcessEnv(createUnsetOpenAiGenerationEnv());
   });
 
   afterEach(() => {
@@ -668,12 +659,7 @@ describe.each(['gpt-6-sol', 'gpt-6-luna'])('%s requests', (model) => {
   let restoreEnv: () => void;
 
   beforeEach(() => {
-    restoreEnv = mockProcessEnv({
-      OPENAI_MAX_TOKENS: undefined,
-      OPENAI_MAX_COMPLETION_TOKENS: undefined,
-      OPENAI_TEMPERATURE: undefined,
-      OPENAI_TOP_P: undefined,
-    });
+    restoreEnv = mockProcessEnv(createUnsetOpenAiGenerationEnv());
   });
 
   afterEach(() => {

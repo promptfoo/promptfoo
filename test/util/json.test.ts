@@ -1,5 +1,6 @@
 import dedent from 'dedent';
-import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import cliState from '../../src/cliState';
 import { ResultFailureReason } from '../../src/types/index';
 import {
   convertSlashCommentsToHash,
@@ -49,6 +50,33 @@ describe('json utilities', () => {
       const ajv = getAjv();
       expect(ajv.formats).toBeDefined();
       expect(Object.keys(ajv.formats)).not.toHaveLength(0);
+    });
+
+    it('keeps schema strictness and formats isolated across warm concurrent scopes', async () => {
+      const schema = { type: 'string', format: 'email', fixtureKeyword: true };
+      const strict = cliState.withEnv({ PROMPTFOO_DISABLE_AJV_STRICT_MODE: 'false' }, () =>
+        getAjv(),
+      );
+      await Promise.all(
+        ['true', 'false'].map((disabled) =>
+          cliState.withEnv({ PROMPTFOO_DISABLE_AJV_STRICT_MODE: disabled }, async () => {
+            await Promise.resolve();
+            const ajv = getAjv();
+            if (disabled === 'true') {
+              expect(ajv).not.toBe(strict);
+              const validate = ajv.compile(schema);
+              expect(validate('fixture@example.com')).toBe(true);
+              expect(validate('invalid')).toBe(false);
+            } else {
+              expect(ajv).toBe(strict);
+              expect(() => ajv.compile(schema)).toThrow('unknown keyword');
+            }
+          }),
+        ),
+      );
+      expect(cliState.withEnv({ PROMPTFOO_DISABLE_AJV_STRICT_MODE: 'false' }, () => getAjv())).toBe(
+        strict,
+      );
     });
 
     it('should reuse the same instance on subsequent calls', () => {
@@ -190,6 +218,10 @@ describe('json utilities', () => {
   });
 
   describe('extractJsonObjects', () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
     it('should extract a single JSON object from a string', () => {
       const input = '{"key": "value"}';
       const expectedOutput = [{ key: 'value' }];
@@ -204,6 +236,141 @@ describe('json utilities', () => {
     ])('preserves complete JSON objects with %s', (_name, expected) => {
       expect(extractJsonObjects(JSON.stringify(expected))).toEqual([expected]);
     });
+
+    it.each([
+      { value: '}' },
+      { value: '{' },
+      { value: 'say "}" then \\ continue' },
+      { value: '\\', nested: { list: ['}', { text: '"quoted" {' }] } },
+      { messages: ['}'] },
+      { '{key}': '  }\n{\r\t\u0000😀\\u005c  ' },
+      { value: '{"nested":true}' },
+    ])('extracts embedded JSON without changing string contents: %j', (expected) => {
+      expect(extractJsonObjects(`Result: ${JSON.stringify(expected)} done`)).toEqual([expected]);
+    });
+
+    it('extracts separate objects with string braces without exposing nested string content', () => {
+      const first = { value: '{"nested":true}', close: '}' };
+      const second = { messages: ['{', '}'] };
+      const input = `First: ${JSON.stringify(first)} Second: ${JSON.stringify(second)}`;
+      expect(extractJsonObjects(input)).toEqual([first, second]);
+    });
+
+    it.each([
+      [`{a: '{"}"'} `, { a: '{"}"' }],
+      [`{"a": '{"}"'} `, { a: '{"}"' }],
+      [String.raw`{a: '\"'}`, { a: '\\"' }],
+    ])('preserves repeated YAML records and a following JSON object: %s', (record, expected) => {
+      const later = { keep: '}' };
+      const input = record.repeat(256) + JSON.stringify(later);
+      expect(extractJsonObjects(input)).toEqual([
+        ...Array.from({ length: 256 }, () => expected),
+        later,
+      ]);
+    });
+
+    it.each([
+      [' {"}"'.repeat(256)],
+      [' {"a":"}","b":'.repeat(256)],
+      [' {"a":"}","b":'.repeat(256) + 'invalid' + '}'.repeat(256)],
+    ])('recovers later JSON after repeated malformed prefixes', (prefix) => {
+      expect(extractJsonObjects(prefix + ' Result: {"keep":"}"}')).toEqual([{ keep: '}' }]);
+    });
+
+    it('does not repeatedly parse overlapping invalid objects', () => {
+      const parse = vi.spyOn(JSON, 'parse');
+      const input = ' {"a":"}","b":'.repeat(256) + 'invalid' + '}'.repeat(256) + ' {"keep":"}"}';
+      const objects = extractJsonObjects(input);
+      const parsedCharacters = parse.mock.calls.reduce((total, [text]) => total + text.length, 0);
+
+      expect(objects).toEqual([{ keep: '}' }]);
+      expect(parsedCharacters).toBeLessThanOrEqual(2 * input.length);
+    });
+
+    it('preserves a valid child when its enclosing object is invalid', () => {
+      const input = 'Result: {"child":{"keep":"}"},"invalid":false true} {"later":"{"}';
+      expect(extractJsonObjects(input)).toEqual([{ keep: '}' }, { later: '{' }]);
+    });
+
+    it.each(['early', 'late'])('extracts an %s child from an oversized object', (position) => {
+      const child = { keep: '}' };
+      const padding = 'x'.repeat(100_001);
+      const parent = position === 'early' ? { child, padding } : { padding, child };
+      expect(extractJsonObjects(`Result: ${JSON.stringify(parent)}`)).toEqual([child]);
+    });
+
+    it.each([
+      ['value', '{"value":"', 'x', '"}'],
+      ['key', '{"', 'x', '":1}'],
+      ['unfinished value', '{"value":"', 'x', ''],
+      ['escaped value', '{"value":"', '\\n', '"}'],
+    ])('recovers later JSON after an oversized string %s', (_name, prefix, chunk, suffix) => {
+      const oversized = chunk.repeat(10_000_000 / chunk.length);
+      const input = `Result: ${prefix}${oversized}${suffix} {"keep":true}`;
+      expect(extractJsonObjects(input)).toEqual([{ keep: true }]);
+    });
+
+    it('extracts nested JSON arrays without recursion', () => {
+      const depth = 16_000;
+      const input = `Result: {"value":${'['.repeat(depth)}"}"${']'.repeat(depth)}}`;
+      const objects = extractJsonObjects(input);
+      expect(objects).toHaveLength(1);
+      let value = (objects[0] as { value: unknown }).value;
+      for (let i = 0; i < depth; i++) {
+        value = (value as unknown[])[0];
+      }
+      expect(value).toBe('}');
+    });
+
+    it('bounds tokenization when recovering from oversized nested containers', () => {
+      const exec = vi.spyOn(RegExp.prototype, 'exec');
+      const input = 'Result: {"value":' + '['.repeat(300_000) + ' {"keep":"}"}';
+      const objects = extractJsonObjects(input);
+      const largestInput = exec.mock.calls.reduce(
+        (largest, [text]) => Math.max(largest, text.length),
+        0,
+      );
+
+      expect(objects).toEqual([{ keep: '}' }]);
+      expect(largestInput).toBeLessThanOrEqual(200_000);
+    });
+
+    it.each([99_999, 100_000, 100_001])(
+      'extracts a maximum-size object starting at offset %i',
+      (offset) => {
+        const value = '}' + 'x'.repeat(100_000 - JSON.stringify({ value: '}' }).length);
+        expect(extractJsonObjects(' '.repeat(offset) + JSON.stringify({ value }))).toEqual([
+          { value },
+        ]);
+      },
+    );
+
+    it('recovers a child that extends beyond its oversized parent scan window', () => {
+      const child = { value: '}' + 'x'.repeat(100_000 - JSON.stringify({ value: '}' }).length) };
+      const input =
+        '{"padding":"}' + 'x'.repeat(100_000) + '","child":' + JSON.stringify(child) + '}';
+      expect(extractJsonObjects(input)).toEqual([child]);
+    });
+
+    it('recovers later JSON after malformed prefixes spanning multiple windows', () => {
+      const input = ' {"a":"}","b":'.repeat(16_000) + 'invalid {"keep":"}"}';
+      expect(extractJsonObjects(input)).toEqual([{ keep: '}' }]);
+    });
+
+    it('preserves JSON literals, number forms, empty containers, and escapes', () => {
+      const input = String.raw`Result: {"values":[null,true,false,-0,0.5,-2.3e+5,1E-8,{},[]],"\u0061":"\u0000\/\b\f"}`;
+      expect(extractJsonObjects(input)).toEqual([
+        { values: [null, true, false, -0, 0.5, -230000, 1e-8, {}, []], a: '\u0000/\b\f' },
+      ]);
+    });
+
+    it.each(['01', '+1', 'truefalse', '[1,]', String.raw`"bad\q"`, '"line\nbreak"'])(
+      'recovers later JSON after an invalid value: %s',
+      (invalid) => {
+        const input = `Result: {"reason":"}","value":${invalid}} {"keep":"}"}`;
+        expect(extractJsonObjects(input)).toEqual([{ keep: '}' }]);
+      },
+    );
 
     it('preserves exact string contents with JSON whitespace around the object', () => {
       const expected = { value: '  }\n{\r\t\u0000😀\\u005c  ' };
@@ -220,12 +387,12 @@ describe('json utilities', () => {
     it('retains the scanner fallback above the complete-JSON size limit', () => {
       const value = '}' + 'x'.repeat(100_001 - JSON.stringify({ value: '}' }).length);
       expect(extractJsonObjects(JSON.stringify({ value }))).toEqual([]);
-      expect(extractJsonObjects(' '.repeat(100_000) + '{"value":"}"}')).toEqual([]);
+      expect(extractJsonObjects(' '.repeat(100_000) + '{"value":"}"}')).toEqual([{ value: '}' }]);
     });
 
     it.each([
       ['[{"a":1},{"b":2}]', [{ a: 1 }, { b: 2 }]],
-      ['[{"value":"}"}]', []],
+      ['[{"value":"}"}]', [{ value: '}' }]],
       ['[1,2,3]', []],
       ['null', []],
       ['true', []],
@@ -235,13 +402,15 @@ describe('json utilities', () => {
       ['{"value":1', [{ value: 1 }]],
       ['```json\n{"value":1}\n```', [{ value: 1 }]],
       ['Result: {"value":1}', [{ value: 1 }]],
-      ['```json\n{"value":"}"}\n```', []],
-      ['Result: {"value":"}"}', []],
-    ])('retains fallback behavior for %s', (input, expected) => {
+      ['```json\n{"value":"}"}\n```', [{ value: '}' }]],
+      ['Result: {"value":"}"}', [{ value: '}' }]],
+    ])('extracts objects from surrounding text and tolerant formats: %s', (input, expected) => {
       expect(extractJsonObjects(input)).toEqual(expected);
     });
 
     it.each([
+      ['{reason: mentions "admin, score: 1}', { reason: 'mentions "admin', score: 1 }],
+      ['{reason: said:"admin, score: 1}', { reason: 'said:"admin', score: 1 }],
       ['{reason: uses foo:"admin, score: 1}', { reason: 'uses foo:"admin', score: 1 }],
       ['{reason: says "hello // world", score: 1}', { reason: 'says "hello // world"', score: 1 }],
       ['{reason: dir//file, score: 1}', { reason: 'dir#file', score: 1 }],
@@ -257,6 +426,9 @@ describe('json utilities', () => {
       ],
       ['{"a": 1 # note\r}', { a: 1 }],
       ['{"a": 1 // note\r}', { a: 1 }],
+      ['{"a": 1 // note: "unfinished\n}', { a: 1 }],
+      ['{"a": 1 # note: "unfinished\n}', { a: 1 }],
+      [`{reason: 'said: "admin', score: 1}`, { reason: 'said: "admin', score: 1 }],
     ])('preserves existing YAML extraction for %s', (input, expected) => {
       expect(extractJsonObjects(input)).toEqual([expected]);
     });
@@ -670,6 +842,35 @@ describe('json utilities', () => {
       const result = orderKeys(obj, order);
       expect(Object.keys(result)).toEqual(['a', 'b', 'd', 'c']);
     });
+
+    it('preserves own keys that shadow Object.prototype properties', () => {
+      const obj = { toString: 'text', constructor: 'type', hasOwnProperty: false, a: 1 };
+      const result = orderKeys(obj, ['a']);
+
+      expect(Object.keys(result)).toEqual(['a', 'toString', 'constructor', 'hasOwnProperty']);
+      expect(result).toEqual(obj);
+      expect(Object.getPrototypeOf(result)).toBe(Object.prototype);
+    });
+
+    it.each([{ order: [] }, { order: ['__proto__'] }])(
+      'preserves __proto__ as an own data key with order $order',
+      ({ order }) => {
+        const obj = JSON.parse('{"a":1,"__proto__":{"injected":true},"b":2}');
+        const result = orderKeys(obj, order);
+
+        expect(Object.getOwnPropertyDescriptor(result, '__proto__')).toEqual({
+          value: { injected: true },
+          enumerable: true,
+          configurable: true,
+          writable: true,
+        });
+        expect(Object.getPrototypeOf(result)).toBe(Object.prototype);
+        expect(result.injected).toBeUndefined();
+        expect(Object.keys(result)).toEqual(
+          order.length ? ['__proto__', 'a', 'b'] : ['a', '__proto__', 'b'],
+        );
+      },
+    );
 
     it('ignores specified keys that do not exist in the object', () => {
       const obj = { a: 1, c: 3 };
