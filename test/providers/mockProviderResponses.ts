@@ -7,3 +7,9 @@ export const createMockFetchResponse = <T>(
   status,
   statusText,
 });
+
+export const createMockChatResponse = (content = 'Test output') =>
+  createMockFetchResponse({
+    choices: [{ message: { content } }],
+    usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+  });
