@@ -947,7 +947,7 @@ async function callProviderForRunEval({
   | 'test'
   | 'testSuite'
 > & {
-  onProgress?: CallApiOptionsParams['onProgress'];
+  onProgress?: (response: ProviderResponse, completedTargetCount: number) => void;
   filters: RunEvalOptions['nunjucksFilters'];
   pauseSignal?: AbortSignal;
   promptForRender: Prompt;
@@ -1117,7 +1117,7 @@ async function callActiveProvider({
   RunEvalOptions,
   'abortSignal' | 'evalId' | 'provider' | 'rateLimitRegistry' | 'repeatIndex' | 'test' | 'testSuite'
 > & {
-  onProgress?: CallApiOptionsParams['onProgress'];
+  onProgress?: (response: ProviderResponse, completedTargetCount: number) => void;
   filters: RunEvalOptions['nunjucksFilters'];
   pauseSignal?: AbortSignal;
   onProviderInvoked: () => void;
@@ -1153,7 +1153,13 @@ async function callActiveProvider({
     completedResponse = undefined;
     const callApiOptions =
       abortSignal || onResponseHeaders || onProgress
-        ? { abortSignal, onResponseHeaders, onProgress }
+        ? {
+            abortSignal,
+            onResponseHeaders,
+            onProgress: onProgress
+              ? (response: ProviderResponse) => onProgress(response, completedTargets.length)
+              : undefined,
+          }
         : undefined;
     const invoke = () =>
       providerRegistry.withProvider(
@@ -1838,6 +1844,7 @@ async function runEvalInternal(
   let latencyMs = 0;
   let partialResult: EvaluateResult | undefined;
   let providerProgress: ProviderResponse | undefined;
+  let progressCompletedTargetCount: number | undefined;
   let acceptingProviderProgress = true;
   let providerCallCompleted = false;
   const throwIfHardAborted = (completedResponse?: ProviderResponse) => {
@@ -1950,7 +1957,14 @@ async function runEvalInternal(
             }
           }
         }
-        if (snapshot.output !== progressResponse.output && snapshot.metadata) {
+        // A repeated output can belong to another target attempt, and blob storage can
+        // change a matching output's representation. Match the accepted progress to
+        // the target-completion count captured before that progress was published.
+        if (
+          progressCompletedTargetCount !==
+            reportedResponse.metadata.completedTargetResponses?.length &&
+          snapshot.metadata
+        ) {
           delete snapshot.metadata.storedGraderResult;
         }
       }
@@ -1997,13 +2011,14 @@ async function runEvalInternal(
             abortSignal,
             onProgress:
               onProviderProgress || abortSignal
-                ? (response) => {
+                ? (response, completedTargetCount) => {
                     if (!acceptingProviderProgress) {
                       return;
                     }
                     const progress = checkpoint(response);
                     if (progress) {
                       providerProgress = progress.response;
+                      progressCompletedTargetCount = completedTargetCount;
                     }
                   }
                 : undefined,
@@ -5767,6 +5782,9 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     let base = this.store.persisted
       ? await this.store.readResultsByTestIdx(testIdx)
       : this.store.results.filter((r) => r.testIdx === testIdx);
+    // Replacing a checkpoint changes insertion order in persisted stores. Comparison
+    // assertions and output assignments use the configured prompt-column order.
+    base = [...base].sort((a, b) => a.promptIdx - b.promptIdx);
     // Retry keeps old errors until new results are saved. Compare only their replacements.
     if (this.retryErrorResultIds.size > 0) {
       base = base.filter(

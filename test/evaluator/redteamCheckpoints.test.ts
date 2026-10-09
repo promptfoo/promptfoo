@@ -1,8 +1,11 @@
+import { randomUUID } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { resetBlobStorageProvider, setBlobStorageProvider } from '../../src/blobs';
+import { FilesystemBlobStorageProvider } from '../../src/blobs/filesystemProvider';
 import cliState from '../../src/cliState';
 import { evaluate } from '../../src/evaluator';
 import logger from '../../src/logger';
@@ -83,6 +86,7 @@ afterEach(async () => {
   }
   await Promise.allSettled(running);
   vi.useRealTimers();
+  resetBlobStorageProvider();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   Object.assign(cliState, previousCliState);
@@ -164,7 +168,7 @@ describe('real strategy checkpoint identity', () => {
       const held = holdGrade();
       f.grader.mockResolvedValueOnce(passedGrade).mockImplementationOnce(held.call);
       const caller = controller();
-      const record = await Eval.create({}, f.suite.prompts);
+      const record = await Eval.create({}, f.suite.prompts, { id: randomUUID() });
       const evaluation = evaluate(f.suite, record, { ...options, abortSignal: caller.signal });
       running.push(evaluation);
       await held.entered.promise;
@@ -291,7 +295,9 @@ for (const strategy of strategies) {
       const caller = controller();
       const pause = controller();
       const streamPath = path.join(directory, 'stream.jsonl');
-      const record = await Eval.create({ outputPath: streamPath }, f.suite.prompts);
+      const record = await Eval.create({ outputPath: streamPath }, f.suite.prompts, {
+        id: randomUUID(),
+      });
       vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
       const evaluation = evaluate(f.suite, record, {
         ...options,
@@ -429,7 +435,7 @@ it.each(['caller', 'deadline', 'pause'] as const)(
       queryDelay: 3000,
     };
     const caller = controller();
-    const record = await Eval.create({}, f.suite.prompts);
+    const record = await Eval.create({}, f.suite.prompts, { id: randomUUID() });
     vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
     const evaluation = evaluate(f.suite, record, {
       ...options,
@@ -492,7 +498,7 @@ it.each(strategies)(
         },
       }),
     );
-    const record = await Eval.create({}, f.suite.prompts);
+    const record = await Eval.create({}, f.suite.prompts, { id: randomUUID() });
     const evaluation = evaluate(f.suite, record, options);
     running.push(evaluation);
     await held.entered.promise;
@@ -570,7 +576,7 @@ it.each(strategies)(
       return debug(...args);
     });
     const caller = controller();
-    const record = await Eval.create({}, f.suite.prompts);
+    const record = await Eval.create({}, f.suite.prompts, { id: randomUUID() });
     vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
     const evaluation = evaluate(f.suite, record, { ...options, abortSignal: caller.signal });
     running.push(evaluation);
@@ -611,7 +617,7 @@ it('keeps Hydra costs for a completed target that was backtracked', async () => 
   const held = holdGrade();
   f.grader.mockImplementation(held.call);
   const caller = controller();
-  const record = await Eval.create({}, f.suite.prompts);
+  const record = await Eval.create({}, f.suite.prompts, { id: randomUUID() });
   const evaluation = evaluate(f.suite, record, { ...options, abortSignal: caller.signal });
   running.push(evaluation);
   await held.entered.promise;
@@ -624,4 +630,191 @@ it('keeps Hydra costs for a completed target that was backtracked', async () => 
   expect(row.cost).toBeCloseTo(0.6);
   expect(row.response?.incurredCost).toBeCloseTo(0.5);
   expect(f.target.callApi).toHaveBeenCalledTimes(2);
+});
+
+describe.each(strategies)('%s pause verdict identity', (strategy) => {
+  it.each(['pause', 'caller', 'normal'] as const)(
+    'associates repeated output with its completed target attempt on %s',
+    async (mode) => {
+      const response = {
+        output: 'Repeated target output',
+        cost: 0.25,
+        incurredCost: 0.1,
+        tokenUsage: { total: 11, numRequests: 1 },
+      };
+      const f = fixture(strategy, [response, response]);
+      const caller = controller();
+      let targetCalls = 0;
+      f.target.callApi = vi.fn(async () => {
+        if (++targetCalls === 2 && mode !== 'normal') {
+          caller.abort(new Error('Interrupted before the second target checkpoint'));
+        }
+        return structuredClone(response);
+      });
+      let probe = 0;
+      vi.spyOn(PromptfooChatCompletionProvider.prototype, 'callApi').mockImplementation(
+        async () => ({
+          output: { result: `Distinct probe ${++probe}` },
+        }),
+      );
+      vi.mocked(f.agent.callApi).mockImplementation(async () => ({
+        output: { result: `Distinct probe ${++probe}` },
+      }));
+      f.grader.mockImplementation(async (input) => ({
+        ...passedGrade,
+        grade: { ...passedGrade.grade, reason: `Verdict for ${input}` },
+      }));
+      const record = await Eval.create({}, f.suite.prompts, { id: randomUUID() });
+      await evaluate(f.suite, record, {
+        ...options,
+        ...(mode === 'pause' ? { pauseSignal: caller.signal } : { abortSignal: caller.signal }),
+      });
+      const fresh = (await Eval.findById(record.id))!;
+      const [row] = await fresh.fetchResultsByTestIdx(0);
+      expect(f.target.callApi).toHaveBeenCalledTimes(2);
+      expect(f.grader).toHaveBeenCalledTimes(mode === 'normal' ? 2 : 1);
+      expect(row.response?.output).toBe(response.output);
+      const metadata = row.response?.metadata;
+      if (mode === 'pause') {
+        expect(row).toMatchObject({
+          success: false,
+          score: 0,
+          failureReason: ResultFailureReason.ERROR,
+        });
+        expect(metadata?.storedGraderResult).toBeUndefined();
+        expect(metadata?.completedTargetResponses).toHaveLength(2);
+        expect(
+          metadata?.completedTargetResponses.map(({ prompt }: { prompt: string }) => prompt),
+        ).toEqual([
+          expect.stringContaining('Distinct probe 1'),
+          expect.stringContaining('Distinct probe 2'),
+        ]);
+        expect(metadata?.redteamHistory[0].graderPassed).toBe(true);
+        expect(row.response?.tokenUsage?.assertions?.total).toBe(2);
+        expect(row.response?.tokenUsage?.total).toBe(22);
+        expect(row.cost).toBe(0.5);
+        expect(row.response?.incurredCost).toBe(0.2);
+        expect(await EvalResult.getCompletedIndexPairs(record.id)).toEqual(new Set(['0:0']));
+        cliState.resume = true;
+        await evaluate(f.suite, fresh, options);
+        expect(f.target.callApi).toHaveBeenCalledTimes(2);
+      } else {
+        expect(metadata?.storedGraderResult?.reason).toBe(
+          `Verdict for Distinct probe ${mode === 'normal' ? 2 : 1}`,
+        );
+        if (mode === 'caller') {
+          expect(row).toMatchObject({
+            success: false,
+            score: 0,
+            failureReason: ResultFailureReason.ERROR,
+          });
+          expect(row.metadata?.__promptfoo?.resumable).toBe(true);
+          expect(metadata?.redteamHistory).toHaveLength(1);
+          expect(row.response?.tokenUsage?.total).toBe(11);
+          expect(row.cost).toBe(0.25);
+        }
+      }
+      const beforeLate = row.toEvaluateResult();
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect((await fresh.fetchResultsByTestIdx(0))[0].toEvaluateResult()).toEqual(beforeLate);
+    },
+  );
+
+  it.each(['pause', 'caller', 'normal'] as const)(
+    'retains a graded blob response after %s during subsequent strategy work',
+    async (mode) => {
+      setBlobStorageProvider(new FilesystemBlobStorageProvider({ basePath: directory }));
+      const rawImage = `data:image/png;base64,${Buffer.alloc(2048, 9).toString('base64')}`;
+      const f = fixture(strategy, [
+        { output: rawImage, cost: 0.25, tokenUsage: { total: 11, numRequests: 1 } },
+        { output: 'Later output' },
+      ]);
+      const caller = controller();
+      const entered = createDeferred<void>();
+      const release = createDeferred<ProviderResponse>();
+      releases.push(() => release.resolve({ output: { result: 'Later probe' } }));
+      let requests = 0;
+      const agentCall = vi.fn(async () => {
+        if (++requests === 2) {
+          entered.resolve();
+          if (mode !== 'normal') {
+            return release.promise;
+          }
+        }
+        return { output: { result: requests === 1 ? 'Graded image probe' : 'Later probe' } };
+      });
+      vi.spyOn(PromptfooChatCompletionProvider.prototype, 'callApi').mockImplementation(agentCall);
+      vi.mocked(f.agent.callApi).mockImplementation(agentCall);
+      f.grader.mockImplementation(async (input) => ({
+        ...passedGrade,
+        grade: { ...passedGrade.grade, reason: `Verdict for ${input}` },
+      }));
+      // Keep normal completion on the first image to compare its stored verdict.
+      if (mode === 'normal') {
+        f.grader.mockResolvedValue({
+          ...passedGrade,
+          grade: {
+            ...passedGrade.grade,
+            pass: false,
+            score: 0,
+            reason: 'Verdict for Graded image probe',
+          },
+        });
+      }
+      const record = await Eval.create({}, f.suite.prompts, { id: randomUUID() });
+      const evaluation = evaluate(f.suite, record, {
+        ...options,
+        ...(mode === 'pause' ? { pauseSignal: caller.signal } : { abortSignal: caller.signal }),
+      });
+      running.push(evaluation);
+      if (mode !== 'normal') {
+        await entered.promise;
+        caller.abort(new Error('Interrupted after grading an externalized response'));
+      }
+      await evaluation;
+      const fresh = (await Eval.findById(record.id))!;
+      const [row] = await fresh.fetchResultsByTestIdx(0);
+      const gradedOutput = f.grader.mock.calls[0][1];
+      expect(gradedOutput).toMatch(/^promptfoo:\/\/blob\//);
+      expect(row.response?.output).toBe(gradedOutput);
+      expect(row.response?.metadata?.storedGraderResult?.reason).toBe(
+        'Verdict for Graded image probe',
+      );
+      expect(row.response?.metadata?.redteamHistory[0].graderPassed).toBe(mode !== 'normal');
+      expect(f.target.callApi).toHaveBeenCalledTimes(1);
+      expect(f.grader).toHaveBeenCalledTimes(1);
+      if (mode !== 'normal') {
+        expect(row).toMatchObject({
+          success: false,
+          score: 0,
+          failureReason: ResultFailureReason.ERROR,
+        });
+        expect(row.response?.tokenUsage?.assertions?.total).toBe(2);
+        expect(row.response?.tokenUsage?.total).toBe(11);
+        expect(row.cost).toBe(0.25);
+      }
+      if (mode === 'pause') {
+        expect(await EvalResult.getCompletedIndexPairs(record.id)).toEqual(new Set(['0:0']));
+        cliState.resume = true;
+        await evaluate(f.suite, fresh, options);
+        expect(f.target.callApi).toHaveBeenCalledTimes(1);
+      }
+      const beforeLate = row.toEvaluateResult();
+      release.resolve({ output: { result: 'Late agent completion' } });
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect((await fresh.fetchResultsByTestIdx(0))[0].toEvaluateResult()).toEqual(beforeLate);
+      const jsonPath = path.join(directory, 'identity.json');
+      const jsonlPath = path.join(directory, 'identity.jsonl');
+      await writeOutput(jsonPath, fresh, null);
+      await writeOutput(jsonlPath, fresh, null);
+      const exported = JSON.parse(fs.readFileSync(jsonPath, 'utf8')).results.results[0];
+      const streamed = JSON.parse(fs.readFileSync(jsonlPath, 'utf8').trim());
+      for (const result of [exported, streamed]) {
+        expect(result.response.output).toBe(gradedOutput);
+        expect(result.response.metadata.storedGraderResult.reason).toBe(
+          'Verdict for Graded image probe',
+        );
+      }
+    },
+  );
 });
