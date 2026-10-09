@@ -687,6 +687,17 @@ describe('evaluatorHelpers', () => {
         mixed: 'yes and {% raw %}{{x}}{% endraw %}',
       });
     });
+
+    it('should leave an earlier raw-block occurrence untouched when the placeholder repeats', () => {
+      const variables = {
+        x: 'yes',
+        mixed: '{% raw %}{{x}}{% endraw %} and {{x}}',
+      };
+      expect(resolveVariables(variables)).toEqual({
+        x: 'yes',
+        mixed: '{% raw %}{{x}}{% endraw %} and yes',
+      });
+    });
   });
 
   describe('runExtensionHook', () => {
