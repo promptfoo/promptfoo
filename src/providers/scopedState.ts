@@ -1,12 +1,17 @@
 import cliState from '../cliState';
 import { providerRegistry } from './providerRegistry';
 
+interface StateEntry<T> {
+  value: T;
+  resource?: { shutdown(): Promise<void> };
+}
+
 /** Keep clients and response caches within both their environment and resource lifetime. */
 export function createEnvironmentScopedState<T>(
   create: () => T,
   cleanup?: (state: T) => void | Promise<void>,
 ): (() => T) & { reset: () => void } {
-  const lifetimes = new WeakMap<object, WeakMap<object, T>>();
+  const lifetimes = new WeakMap<object, WeakMap<object, StateEntry<T>>>();
   const fallbackScope = {};
   const getState = () => {
     providerRegistry.throwIfResourceUseAborted();
@@ -14,29 +19,35 @@ export function createEnvironmentScopedState<T>(
     const lifetime = providerRegistry.currentScope ?? scope;
     let states = lifetimes.get(lifetime);
     if (!states) {
-      states = new WeakMap<object, T>();
+      states = new WeakMap<object, StateEntry<T>>();
       lifetimes.set(lifetime, states);
     }
-    let state = states.get(scope);
-    if (state === undefined) {
-      state = create();
-      states.set(scope, state);
+    let entry = states.get(scope);
+    if (!entry) {
+      entry = { value: create() };
+      states.set(scope, entry);
       // Standalone callers retain the provider-owned lifetime they had before
       // scoped cleanup. A global registration would keep them alive indefinitely.
       if (cleanup && providerRegistry.currentScope) {
-        const owned = state;
-        providerRegistry.register({
+        const owned = entry;
+        entry.resource = {
           async shutdown() {
-            // New calls must not reuse a client whose shutdown has started.
+            // Remove the exact entry before asynchronous cleanup starts. A later
+            // lookup can create a new state without reusing a closing client.
             if (states.get(scope) === owned) {
               states.delete(scope);
             }
-            await cleanup(owned);
+            await cleanup(owned.value);
           },
-        });
+        };
       }
     }
-    return state;
+    if (entry.resource) {
+      // Setup hooks can initialize this state before any provider call owns it.
+      // Re-register the same resource to claim it for each actual caller.
+      providerRegistry.register(entry.resource);
+    }
+    return entry.value;
   };
   return Object.assign(getState, {
     reset() {
