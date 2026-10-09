@@ -139,6 +139,8 @@ These metrics are programmatic tests that are run on LLM output. [See all detail
 | [is-xml](/docs/configuration/expected-outputs/deterministic/#is-xml)                                               | output is a supported well-formed XML document                            |
 | [contains-xml](/docs/configuration/expected-outputs/deterministic/#contains-xml)                                   | output contains valid xml fragment(s)                                     |
 | [is-refusal](/docs/configuration/expected-outputs/deterministic/#is-refusal)                                       | the provider reports a refusal or the output indicates one                |
+| [finish-reason](/docs/configuration/expected-outputs/deterministic/#finish-reason)                                 | model stopped generating for the expected reason                          |
+| [word-count](/docs/configuration/expected-outputs/deterministic/#word-count)                                       | output word count matches an exact number or falls within a range         |
 | [javascript](/docs/configuration/expected-outputs/javascript)                                                      | provided Javascript function validates the output                         |
 | [python](/docs/configuration/expected-outputs/python)                                                              | provided Python function validates the output                             |
 | [ruby](/docs/configuration/expected-outputs/ruby)                                                                  | provided Ruby function validates the output                               |
@@ -192,6 +194,8 @@ See [Model-graded evals](/docs/configuration/expected-outputs/model-graded), [cl
 | [classifier](/docs/configuration/expected-outputs/classifier)                                        | Run LLM output through a classifier                                              |
 | [moderation](/docs/configuration/expected-outputs/moderation)                                        | Check output against safety policies and include provider-reported usage metrics |
 | [llm-rubric](/docs/configuration/expected-outputs/model-graded)                                      | Grade text, images, or audio against a rubric with a compatible model            |
+| [agent-rubric](/docs/configuration/expected-outputs/model-graded/agent-rubric)                       | Grade with a coding agent that can inspect files and run tools                   |
+| [search-rubric](/docs/configuration/expected-outputs/model-graded/search-rubric)                     | Grade against a rubric using web search                                          |
 | [g-eval](/docs/configuration/expected-outputs/model-graded/g-eval)                                   | Chain-of-thought evaluation based on custom criteria using the G-Eval framework  |
 | [answer-relevance](/docs/configuration/expected-outputs/model-graded)                                | Ensure that LLM output is related to original query (default threshold 0.5)      |
 | [context-faithfulness](/docs/configuration/expected-outputs/model-graded)                            | Ensure that LLM output uses the context (default threshold 0.5)                  |
