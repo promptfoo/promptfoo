@@ -1971,6 +1971,125 @@ describe('OpenAI Provider', () => {
       expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5, numRequests: 1 });
     });
 
+    it.each(['reasoning', 'reasoning_content'] as const)(
+      'uses per-prompt showThinking for %s on fresh and cached responses',
+      async (field) => {
+        for (const cached of [false, true]) {
+          const data = {
+            choices: [{ message: { content: 'Visible answer', [field]: 'Reasoning summary' } }],
+          };
+          mockFetchWithCache.mockResolvedValue({ data, cached, status: 200, statusText: 'OK' });
+          for (const showThinking of [false, true]) {
+            const provider = new OpenAiChatCompletionProvider('fixture-model', {
+              config: { showThinking: !showThinking },
+            });
+            const result = await provider.callApi('Hello', {
+              vars: {},
+              prompt: { raw: 'Hello', label: 'Hello', config: { showThinking } },
+            });
+            expect(result.output).toBe(
+              showThinking ? 'Thinking: Reasoning summary\n\nVisible answer' : 'Visible answer',
+            );
+            expect(data.choices[0].message[field]).toBe('Reasoning summary');
+          }
+        }
+      },
+    );
+
+    it.each([null, 'Visible answer'])(
+      'preserves tool calls alongside reasoning when content is %s',
+      async (content) => {
+        const toolCalls = [
+          { id: 'call-1', type: 'function', function: { name: 'lookup', arguments: '{}' } },
+        ];
+        const data = {
+          choices: [
+            { message: { content, reasoning: 'Reasoning summary', tool_calls: toolCalls } },
+          ],
+        };
+        mockFetchWithCache.mockResolvedValue({
+          data,
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        });
+        const provider = new OpenAiChatCompletionProvider('fixture-model');
+        const result = await provider.callApi('Hello');
+        expect(result.output).toEqual(content === null ? toolCalls : data.choices[0].message);
+      },
+    );
+
+    it.each([null, undefined, ''])(
+      'preserves reasoning-only content %s with empty tool calls',
+      async (content) => {
+        for (const showThinking of [false, true]) {
+          mockFetchWithCache.mockResolvedValue({
+            data: {
+              choices: [{ message: { content, reasoning: 'Reasoning summary', tool_calls: [] } }],
+            },
+            cached: false,
+            status: 200,
+            statusText: 'OK',
+          });
+          const provider = new OpenAiChatCompletionProvider('fixture-model', {
+            config: { showThinking },
+          });
+          const result = await provider.callApi('Hello');
+          expect(result.output).toBe(
+            showThinking && content === '' ? 'Thinking: Reasoning summary\n\n' : content,
+          );
+        }
+      },
+    );
+
+    it('preserves a reasoning-only response with null content', async () => {
+      mockFetchWithCache.mockResolvedValue({
+        data: { choices: [{ message: { content: null, reasoning: 'Reasoning summary' } }] },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+      const provider = new OpenAiChatCompletionProvider('fixture-model');
+      expect((await provider.callApi('Hello')).output).toBeNull();
+    });
+
+    it('omits hidden reasoning fields from tool output and every retained choice without mutating cache data', async () => {
+      const toolCalls = [
+        { id: 'call-1', type: 'function', function: { name: 'lookup', arguments: '{}' } },
+      ];
+      const data = {
+        choices: [
+          {
+            message: {
+              content: 'First',
+              reasoning: 'First reasoning',
+              reasoning_content: 'First details',
+              tool_calls: toolCalls,
+            },
+          },
+          {
+            message: {
+              content: 'Second',
+              reasoning: 'Second reasoning',
+              reasoning_content: 'Second details',
+            },
+          },
+        ],
+      };
+      const original = structuredClone(data);
+      mockFetchWithCache.mockResolvedValue({ data, cached: true, status: 200, statusText: 'OK' });
+      const provider = new OpenAiChatCompletionProvider('fixture-model', {
+        config: { showThinking: false },
+      });
+      const result = await provider.callApi('Hello');
+      expect(result.output).toEqual({ content: 'First', tool_calls: toolCalls });
+      expect(result.metadata?.choices).toEqual([
+        { message: { content: 'First', tool_calls: toolCalls } },
+        { message: { content: 'Second' } },
+      ]);
+      expect(data).toEqual(original);
+    });
+
     it('should handle OpenAI reasoning field with separate content correctly', async () => {
       const mockResponse = {
         data: {

@@ -814,6 +814,34 @@ describe('OpenRouter', () => {
         mockProcessEnv({ OPENROUTER_API_KEY: undefined });
       });
 
+      it.each([null, 'Visible answer'])(
+        'uses per-prompt showThinking with content %s, including cache replay',
+        async (content) => {
+          mockedFetchWithRetries.mockResolvedValue(
+            Response.json({
+              choices: [{ message: { content, reasoning: 'Reasoning summary' } }],
+            }),
+          );
+          const provider = new OpenRouterProvider('fixture/model', {
+            config: { showThinking: false },
+          });
+          for (const showThinking of [true, false, true]) {
+            const result = await provider.callApi('Hello', {
+              vars: {},
+              prompt: { raw: 'Hello', label: 'Hello', config: { showThinking } },
+            });
+            expect(result.output).toBe(
+              showThinking
+                ? content
+                  ? 'Thinking: Reasoning summary\n\nVisible answer'
+                  : 'Reasoning summary'
+                : (content ?? ''),
+            );
+          }
+          expect(mockedFetchWithRetries).toHaveBeenCalledTimes(1);
+        },
+      );
+
       it('should handle reasoning field correctly when both reasoning and content are present', async () => {
         const mockResponse = {
           choices: [
