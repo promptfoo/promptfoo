@@ -61,7 +61,11 @@ describe('sharing interrupted checkpoints', () => {
             },
           });
         }
-        if (options.method === 'POST' && target.startsWith(host) && target.endsWith('/results')) {
+        if (
+          options.method === 'POST' &&
+          new URL(target).origin === host &&
+          target.endsWith('/results')
+        ) {
           return Response.json(Array.isArray(body) ? {} : { id: 'remote-checkpoint' });
         }
         if (options.method === 'POST' && target === `${host}/api/eval`) {
@@ -77,6 +81,17 @@ describe('sharing interrupted checkpoints', () => {
     vi.restoreAllMocks();
     vi.unstubAllEnvs();
     vi.unstubAllGlobals();
+  });
+
+  it.each([
+    'https://share.fixture.test.invalid/api/v1/results',
+    'https://share.fixture.test@other.fixture.test/api/v1/results',
+    'https://share.fixture.test:8443/api/v1/results',
+  ])('rejects a results request to a different origin: %s', async (url) => {
+    await expect(fetch(url, { method: 'POST', body: '[]' })).rejects.toThrow(
+      'Unexpected request in isolated share test',
+    );
+    expect(unexpectedUrls).toEqual([url]);
   });
 
   async function createCheckpoint(
