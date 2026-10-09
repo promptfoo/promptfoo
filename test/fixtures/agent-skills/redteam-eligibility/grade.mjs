@@ -46,8 +46,9 @@ function checkTarget(target, wanted, sourceRoot) {
   failures.push(...checkEvidence(citations, sourceRoot));
   const evidenceText = citations.map((item) => item.quote).join('\n');
   for (const required of wanted.evidenceContains) {
-    if (!evidenceText.includes(required)) {
-      failures.push(`${wanted.path}: missing evidence for ${required}`);
+    const alternatives = Array.isArray(required) ? required : [required];
+    if (!alternatives.some((text) => evidenceText.includes(text))) {
+      failures.push(`${wanted.path}: missing evidence for ${alternatives.join(' or ')}`);
     }
   }
   if (wanted.verdict === 'candidate') {
@@ -80,8 +81,8 @@ export default function grade(output, context) {
     const target = report.targets.find((item) => item.path === wanted.path);
     failures.push(...checkTarget(target, wanted, sourceRoot));
   }
-  if (report.nextSkill !== context.vars.expectedSkill) {
-    failures.push(`Expected handoff ${context.vars.expectedSkill || '(none)'}`);
+  if (!context.vars.expectedNextSkills.includes(report.nextSkill)) {
+    failures.push(`Expected handoff ${context.vars.expectedNextSkills.join(' or ') || '(none)'}`);
   }
   const summary = typeof report.summary === 'string' ? report.summary : '';
   for (const pattern of context.vars.summaryPatterns ?? []) {

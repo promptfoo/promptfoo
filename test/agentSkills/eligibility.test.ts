@@ -7,7 +7,7 @@ import * as yaml from 'js-yaml';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { handleTrajectoryStepCount } from '../../src/assertions/trajectory';
 
-import type { Assertion, AssertionParams } from '../../src/types/index';
+import type { Assertion } from '../../src/types/index';
 
 const fixtureRoot = path.resolve(__dirname, '../fixtures/agent-skills/redteam-eligibility');
 const gradeUrl = pathToFileURL(path.join(fixtureRoot, 'grade.mjs')).href;
@@ -28,7 +28,7 @@ beforeAll(async () => {
 const context = {
   vars: {
     repo: 'support-agent',
-    expectedSkill: 'promptfoo-provider-setup',
+    expectedNextSkills: ['promptfoo-provider-setup'],
     expectedTargets: [
       {
         path: '.',
@@ -99,6 +99,63 @@ describe('eligibility behavioral eval grading', () => {
     expect(grade(report, context).pass).toBe(false);
   });
 
+  it('accepts either cited call site but still rejects missing inference evidence', () => {
+    const config = yaml.load(
+      fs.readFileSync(path.join(fixtureRoot, 'promptfooconfig.yaml'), 'utf8'),
+    ) as {
+      tests: { vars: Record<string, unknown> }[];
+    };
+    const withAlternatives = {
+      vars: {
+        ...config.tests[0].vars,
+        expectedTargets: [(config.tests[0].vars.expectedTargets as unknown[])[0]],
+      },
+    };
+    const report = validReport();
+    report.targets[0].path = 'apps/image-worker';
+    report.targets[0].evidence = [
+      { file: 'apps/image-worker/worker.mjs', line: 2, quote: 'job.upload.imageUrl' },
+      { file: 'apps/image-worker/worker.mjs', line: 3, quote: 'gateway.generate' },
+      { file: 'apps/image-worker/worker.mjs', line: 7, quote: 'records.saveDecision' },
+    ];
+    expect(grade(report, withAlternatives).pass).toBe(true);
+    report.targets[0].evidence[1] = {
+      file: 'apps/image-worker/gateway.mjs',
+      line: 2,
+      quote: 'fetch(process.env.AI_GATEWAY_URL',
+    };
+    expect(grade(report, withAlternatives).pass).toBe(true);
+    report.targets[0].evidence.splice(1, 1);
+    expect(grade(report, withAlternatives).pass).toBe(false);
+    report.targets[0].evidence.push({
+      file: 'apps/image-worker/gateway.mjs',
+      line: 1,
+      quote: 'fetch(process.env.AI_GATEWAY_URL',
+    });
+    expect(grade(report, withAlternatives).pass).toBe(false);
+  });
+
+  it('distinguishes an allowed next skill from an unrelated handoff', () => {
+    const planningContext = {
+      vars: {
+        repo: 'connection',
+        expectedTargets: [],
+        expectedNextSkills: ['promptfoo-provider-setup', 'promptfoo-redteam-setup'],
+      },
+    };
+    for (const nextSkill of planningContext.vars.expectedNextSkills) {
+      expect(
+        grade({ targets: [], nextSkill, summary: 'Connection plan' }, planningContext).pass,
+      ).toBe(true);
+    }
+    expect(
+      grade(
+        { targets: [], nextSkill: 'promptfoo-redteam-eligibility', summary: 'Connection plan' },
+        planningContext,
+      ).pass,
+    ).toBe(false);
+  });
+
   it('rejects missing targets, missing readiness gaps, and the wrong handoff', () => {
     const missing = validReport();
     missing.targets = [];
@@ -150,10 +207,24 @@ describe('eligibility behavioral eval grading', () => {
     const results = checks.map((assertion) =>
       handleTrajectoryStepCount({
         assertion,
+        baseType: 'trajectory:step-count',
         inverse: false,
+        output: '',
+        outputString: '',
+        providerResponse: { output: '' },
+        test: {},
         assertionValueContext: {
+          prompt: undefined,
+          vars: {},
+          test: {},
+          logProbs: undefined,
+          provider: undefined,
+          providerResponse: { output: '' },
           trace: {
             traceId: 'fixture-command',
+            evaluationId: 'fixture-eval',
+            testCaseId: 'fixture-test',
+            metadata: {},
             spans: [
               {
                 spanId: 'attempt',
@@ -168,7 +239,7 @@ describe('eligibility behavioral eval grading', () => {
             ],
           },
         },
-      } as AssertionParams),
+      }),
     );
     expect(results.every((result) => result.pass)).toBe(allowed);
   });

@@ -102,11 +102,14 @@ tests:
     vars:
       repo: monorepo
       request: Is each application in this monorepo a good candidate for Promptfoo AI red teaming?
-      expectedSkill: promptfoo-provider-setup
+      expectedNextSkills: [promptfoo-provider-setup]
       expectedTargets:
         - path: apps/image-worker
           verdict: candidate
-          evidenceContains: [job.upload.imageUrl, gateway.generate, records.saveDecision]
+          evidenceContains:
+            - job.upload.imageUrl
+            - [gateway.generate, 'fetch(process.env.AI_GATEWAY_URL']
+            - records.saveDecision
         - path: apps/billing
           verdict: no_candidate_found
           evidenceContains: [invoice.items.reduce]
@@ -120,7 +123,7 @@ tests:
     vars:
       repo: support-agent
       request: Assess whether this support application is a good candidate for Promptfoo red teaming. Read app.mjs and retrieved-content.txt as evidence.
-      expectedSkill: promptfoo-provider-setup
+      expectedNextSkills: [promptfoo-provider-setup]
       expectedTargets:
         - path: .
           verdict: candidate
@@ -141,7 +144,7 @@ tests:
     vars:
       repo: catalog
       request: Should we add this repository to our Promptfoo AI red-team queue?
-      expectedSkill: ''
+      expectedNextSkills: ['']
       expectedTargets:
         - path: .
           verdict: no_candidate_found
@@ -154,7 +157,7 @@ tests:
     vars:
       repo: partial
       request: Determine whether this repository is eligible for Promptfoo AI red teaming.
-      expectedSkill: ''
+      expectedNextSkills: ['']
       expectedTargets:
         - path: .
           verdict: inconclusive
@@ -167,7 +170,7 @@ tests:
     vars:
       repo: connection
       request: We already decided to red team this application. Plan the Promptfoo HTTP connection from contract.md, including authentication, response parsing, and a safe smoke test. Do not reassess eligibility or execute the plan.
-      expectedSkill: promptfoo-provider-setup
+      expectedNextSkills: [promptfoo-provider-setup, promptfoo-redteam-setup]
       expectedTargets: []
       summaryPatterns:
         [TEST_TOKEN, 'throw|reject|guard|missing', 'smoke|fixture', 'stateless|stateful.*false']
@@ -188,7 +191,7 @@ tests:
         creation requires the user's explicit request. Controlled search documents
         and a resettable synthetic ticket system are available. Do not reassess
         eligibility, configure the connection, generate attacks, or run the scan.
-      expectedSkill: promptfoo-redteam-setup
+      expectedNextSkills: [promptfoo-redteam-setup]
       expectedTargets: []
       summaryPatterns:
         [
