@@ -28,7 +28,7 @@ Self-hosting enables you to:
 - Keep sensitive data off your local machine
 
 :::caution Enterprise Customers
-If you are an enterprise customer, please do not install this version. Contact us instead for credentials for the enterprise image.
+If you are an enterprise customer, use the [Enterprise on-prem installation guide](/docs/enterprise/on-prem/) and obtain the Enterprise images and deployment files from your Promptfoo contact.
 :::
 
 The self-hosted app is an Express server serving the web UI and API.
