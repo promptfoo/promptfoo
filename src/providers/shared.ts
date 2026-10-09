@@ -1,5 +1,6 @@
 import { getEnvBool, getEnvInt } from '../envars';
 import { loadYaml } from '../util/yamlLoad';
+import { getLiveModelCost, isLivePricingEnabled, refreshLivePricing } from './livePricing';
 
 import type { ApiProvider } from '../types/index';
 
@@ -72,6 +73,16 @@ export interface ProviderConfig {
 }
 
 /**
+ * Warms the opt-in live pricing cache on behalf of callers outside the
+ * providers layer (the evaluator), so models missing from the static tables
+ * can resolve live prices during an evaluation. No-op unless
+ * PROMPTFOO_LIVE_PRICING is enabled and the cache is stale.
+ */
+export function warmLivePricing(signal?: AbortSignal): Promise<void> {
+  return refreshLivePricing(signal);
+}
+
+/**
  * Calculates the cost of an API call based on the model and token usage.
  *
  * @param {string} modelName The name of the model used.
@@ -99,6 +110,16 @@ export function calculateCost(
 
   const model = models.find((m) => m.id === modelName);
   if (!model || !model.cost) {
+    // Opt-in fallback: consult the live pricing cache for models missing from
+    // the static table. Manual overrides still take precedence via ?? below.
+    if (isLivePricingEnabled()) {
+      const liveCost = getLiveModelCost(modelName);
+      if (liveCost) {
+        const inputCost = config.inputCost ?? config.cost ?? liveCost.input;
+        const outputCost = config.outputCost ?? config.cost ?? liveCost.output;
+        return inputCost * promptTokens + outputCost * completionTokens;
+      }
+    }
     return undefined;
   }
 

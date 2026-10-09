@@ -1,4 +1,5 @@
 import { parseDataUrl } from '../../util/dataUrl';
+import { calculateLiveCost } from '../livePricing';
 import { calculateCost as calculateCostBase } from '../shared';
 import type Anthropic from '@anthropic-ai/sdk';
 
@@ -967,6 +968,28 @@ export function calculateAnthropicCost(
   const cacheRead = cacheReadTokens ?? 0;
   const cacheCreation = cacheCreationTokens ?? 0;
   const cacheCreation1h = cacheCreation1hTokens ?? 0;
+
+  if (!modelInfo) {
+    // The catalog has no separate one-hour write or regional/tier price.
+    if (
+      (!usesFlatCost &&
+        (usesRegionalBedrockPricing ||
+          inferenceGeo ||
+          cacheCreation1h ||
+          effectiveConfig.service_tier ||
+          effectiveConfig.speed === 'fast')) ||
+      typeof promptTokens !== 'number' ||
+      typeof completionTokens !== 'number'
+    ) {
+      return undefined;
+    }
+    return calculateLiveCost(pricingModelName, effectiveConfig, {
+      input: promptTokens,
+      output: completionTokens,
+      cacheRead,
+      cacheWrite: cacheCreation,
+    });
+  }
 
   // This shared helper does not infer size-based tiers. Provider-specific callers can supply
   // explicit input/output rates, while cache pricing is applied whenever cache tokens are present.

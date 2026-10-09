@@ -32,7 +32,7 @@ import { CIProgressReporter } from './progress/ciProgressReporter';
 import { type AgentWorkspace, createAgentWorkspaceForConfig } from './providers/agentWorkspace';
 import { maybeEmitAzureOpenAiWarning } from './providers/azure/warnings';
 import { providerRegistry } from './providers/providerRegistry';
-import { isPromptfooSampleTarget } from './providers/shared';
+import { isPromptfooSampleTarget, warmLivePricing } from './providers/shared';
 import { maybeWrapMcpProviderForRedteam } from './redteam/mcpTargetProvider';
 import { redteamProviderManager } from './redteam/providers/shared';
 import { throwIfTargetPromptExceedsMaxChars } from './redteam/shared/promptLength';
@@ -5671,6 +5671,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         otelInitialized = true;
       }
 
+      await warmLivePricing(deadline.providerAbortSignal);
       return await this._runEvaluation(deadline);
     } catch (error) {
       evaluationError = error;

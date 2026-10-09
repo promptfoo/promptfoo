@@ -1,3 +1,4 @@
+import { calculateLiveCost } from '../livePricing';
 import { getGpt6Variant, isGpt6Model } from './gpt6';
 import {
   GPT_LONG_CONTEXT_THRESHOLD,
@@ -1358,7 +1359,38 @@ export function calculateOpenAIUsageCost(
         }
       : undefined);
   if (!modelRates) {
-    return calculateCustomUsageCost(usage, config, options.cachedResponse);
+    const explicitCost = calculateCustomUsageCost(usage, config, options.cachedResponse);
+    if (explicitCost !== undefined) {
+      return explicitCost;
+    }
+    // A public base text rate cannot price tier, regional, audio, or image usage.
+    if (
+      OPENAI_BILLING_MODELS.some((model) => model.id === modelName) ||
+      OPENAI_DAYBREAK_ALIASES.has(modelName) ||
+      tier !== 'standard' ||
+      options.regionalProcessing ||
+      options.region ||
+      options.provider === 'bedrock' ||
+      usesAzureOpenAiBilling(config, options.apiUrl, options.provider) ||
+      usage.audioInputTokens ||
+      usage.audioOutputTokens ||
+      usage.imageInputTokens ||
+      usage.imageOutputTokens
+    ) {
+      return undefined;
+    }
+    const cacheRead = Math.min(usage.cachedInputTokens, usage.totalInputTokens);
+    const cacheWrite = Math.min(
+      usage.cacheWriteInputTokens,
+      Math.max(usage.totalInputTokens - cacheRead, 0),
+    );
+    const liveCost = calculateLiveCost(modelName, config, {
+      input: Math.max(usage.totalInputTokens - cacheRead - cacheWrite, 0),
+      output: usage.totalOutputTokens,
+      cacheRead,
+      cacheWrite,
+    });
+    return liveCost === undefined ? undefined : options.cachedResponse ? 0 : liveCost;
   }
   const rates = bedrockMantleTextRates
     ? modelRates

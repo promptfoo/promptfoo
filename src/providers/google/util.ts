@@ -11,6 +11,7 @@ import { parseFileUrl } from '../../util/functions/loadFunction';
 import { renderVarsInObject } from '../../util/index';
 import { getAjv } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
+import { calculateLiveCost } from '../livePricing';
 import {
   calculateCost,
   clampCachedTokens,
@@ -635,7 +636,32 @@ export function calculateGoogleCost(
     usesNonGlobalVertexEndpoint,
   );
   if (!baseModelCost) {
-    return undefined;
+    const serviceTier = normalizeGoogleServiceTier(
+      actualServiceTier ??
+        requestedServiceTier ??
+        config.service_tier ??
+        (config.passthrough as { service_tier?: unknown } | undefined)?.service_tier ??
+        (config.passthrough as { serviceTier?: unknown } | undefined)?.serviceTier,
+    );
+    if (
+      model ||
+      isVertexMode ||
+      (serviceTier !== undefined && serviceTier !== 'standard') ||
+      audioPromptTokens ||
+      audioCompletionTokens ||
+      videoCompletionTokens ||
+      imagePromptTokens ||
+      cachedAudioPromptTokens ||
+      cachedImagePromptTokens
+    ) {
+      return undefined;
+    }
+    const cacheRead = clampCachedTokens(cachedPromptTokens, promptTokens);
+    return calculateLiveCost(modelName, config, {
+      input: promptTokens - cacheRead,
+      output: completionTokens,
+      cacheRead,
+    });
   }
 
   const vertexRegionalMultiplier =
