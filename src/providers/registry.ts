@@ -26,7 +26,6 @@ import { AzureResponsesProvider } from './azure/responses';
 import { AzureVideoProvider } from './azure/video';
 import { getBedrockTextRoute } from './bedrock/routing';
 import { BrowserProvider } from './browser';
-import { createCerebrasProvider } from './cerebras';
 import { ClouderaAiChatCompletionProvider } from './cloudera';
 import { CohereChatCompletionProvider, CohereEmbeddingProvider } from './cohere';
 import { DatabricksMosaicAiChatCompletionProvider } from './databricks';
@@ -40,7 +39,6 @@ import {
   ElevenLabsSTTProvider,
   ElevenLabsTTSProvider,
 } from './elevenlabs';
-import { createEnvoyProvider } from './envoy';
 import { FalImageGenerationProvider } from './fal';
 import { createGitHubProvider } from './github/index';
 import { GolangProvider } from './golangCompletion';
@@ -71,8 +69,6 @@ import { MistralChatCompletionProvider, MistralEmbeddingProvider } from './mistr
 import { MlflowGatewayChatCompletionProvider } from './mlflow-gateway';
 import { createMoonshotProvider } from './moonshot';
 import { createN8nProvider } from './n8n';
-import { createNovitaProvider } from './novita';
-import { createNscaleProvider } from './nscale';
 import { OllamaChatProvider, OllamaCompletionProvider, OllamaEmbeddingProvider } from './ollama';
 import { resolveOpenAiApiUrl } from './openai';
 import { loadOpenAiAgentsModule } from './openai/agents-availability';
@@ -113,7 +109,6 @@ import { modelNameFromProviderPath } from './shared';
 import { SimulatedUser } from './simulatedUser';
 import { loadSlackProviderModule } from './slack-availability';
 import { createSnowflakeProvider } from './snowflake';
-import { createTogetherAiProvider } from './togetherai';
 import { TransformersEmbeddingProvider, TransformersTextGenerationProvider } from './transformers';
 import { createTrueFoundryProvider } from './truefoundry';
 import { createVercelProvider } from './vercel';
@@ -128,7 +123,7 @@ import { createXAIVideoProvider } from './xai/video';
 import { createXAIVoiceProvider } from './xai/voice';
 
 import type { LoadApiProviderContext } from '../types/index';
-import type { ProviderOptions } from '../types/providers';
+import type { ApiProvider, ProviderOptions } from '../types/providers';
 import type { ProviderFactory, ProviderFamily } from './registryTypes';
 
 const CODEX_CLI_PROVIDER_PATH = /^openai:(?:codex|codex-sdk|codex-app-server|codex-desktop)(?::|$)/;
@@ -320,6 +315,20 @@ function shouldDefaultToOpenAiResponses(modelName: string): boolean {
   const major = Number(version[1]);
   const minor = Number(version[2] ?? 0);
   return major > 5 || (major === 5 && minor >= 6);
+}
+
+function configuredProviderFactory(
+  prefix: string,
+  getCreateProvider: () => (
+    providerPath: string,
+    options: { config: ProviderOptions; env: LoadApiProviderContext['env'] },
+  ) => ApiProvider,
+): ProviderFactory {
+  return {
+    test: (providerPath: string) => providerPath.startsWith(prefix),
+    create: async (providerPath, providerOptions, context) =>
+      getCreateProvider()(providerPath, { config: providerOptions, env: context.env }),
+  };
 }
 
 const OPENAI_CONFIG_MODEL_OVERRIDE_ROUTES = new Set(['image', 'video']);
@@ -552,19 +561,7 @@ export const providerMap: ProviderFactory[] = [
       );
     },
   },
-  {
-    test: (providerPath: string) => providerPath.startsWith('atlascloud:'),
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
-    ) => {
-      return createAtlasCloudProvider(providerPath, {
-        config: providerOptions,
-        env: context.env,
-      });
-    },
-  },
+  configuredProviderFactory('atlascloud:', () => createAtlasCloudProvider),
   {
     test: (providerPath: string) =>
       providerPath.startsWith('azure:') || providerPath.startsWith('azureopenai:'),
@@ -688,32 +685,6 @@ export const providerMap: ProviderFactory[] = [
     },
   },
   {
-    test: (providerPath: string) => providerPath.startsWith('cerebras:'),
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
-    ) => {
-      return createCerebrasProvider(providerPath, {
-        config: providerOptions,
-        env: context.env,
-      });
-    },
-  },
-  {
-    test: (providerPath: string) => providerPath.startsWith('novita:'),
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
-    ) => {
-      return createNovitaProvider(providerPath, {
-        config: providerOptions,
-        env: context.env,
-      });
-    },
-  },
-  {
     test: (providerPath: string) => providerPath.startsWith('cloudera:'),
     create: async (
       providerPath: string,
@@ -805,19 +776,7 @@ export const providerMap: ProviderFactory[] = [
       });
     },
   },
-  {
-    test: (providerPath: string) => providerPath.startsWith('deepseek:'),
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
-    ) => {
-      return createDeepSeekProvider(providerPath, {
-        config: providerOptions,
-        env: context.env,
-      });
-    },
-  },
+  configuredProviderFactory('deepseek:', () => createDeepSeekProvider),
   {
     test: (providerPath: string) => providerPath === 'echo',
     create: async (
@@ -876,19 +835,6 @@ export const providerMap: ProviderFactory[] = [
             `ElevenLabs capability "${capability}" is not supported. Available: tts, stt, agents, history, isolation, alignment`,
           );
       }
-    },
-  },
-  {
-    test: (providerPath: string) => providerPath.startsWith('envoy:'),
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
-    ) => {
-      return createEnvoyProvider(providerPath, {
-        config: providerOptions,
-        env: context.env,
-      });
     },
   },
   {
@@ -1043,20 +989,6 @@ export const providerMap: ProviderFactory[] = [
     },
   },
   {
-    test: (providerPath: string) => providerPath.startsWith('litellm:'),
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
-    ) => {
-      const { createLiteLLMProvider } = await import('./litellm');
-      return createLiteLLMProvider(providerPath, {
-        config: providerOptions,
-        env: context.env,
-      });
-    },
-  },
-  {
     test: (providerPath: string) => providerPath.startsWith('localai:'),
     create: async (
       providerPath: string,
@@ -1091,19 +1023,7 @@ export const providerMap: ProviderFactory[] = [
       });
     },
   },
-  {
-    test: (providerPath: string) => providerPath.startsWith('minimax:'),
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
-    ) => {
-      return createMiniMaxProvider(providerPath, {
-        config: providerOptions,
-        env: context.env,
-      });
-    },
-  },
+  configuredProviderFactory('minimax:', () => createMiniMaxProvider),
   {
     test: (providerPath: string) => providerPath.startsWith('mistral:'),
     create: async (
@@ -1133,15 +1053,6 @@ export const providerMap: ProviderFactory[] = [
       return createMoonshotProvider(providerPath, {
         ...providerOptions,
         env: providerOptions.env ?? context.env,
-      });
-    },
-  },
-  {
-    test: (providerPath: string) => providerPath.startsWith('nscale:'),
-    create: async (providerPath: string, providerOptions: ProviderOptions) => {
-      return createNscaleProvider(providerPath, {
-        config: providerOptions,
-        env: providerOptions.env,
       });
     },
   },
@@ -1457,32 +1368,8 @@ export const providerMap: ProviderFactory[] = [
       return new OpenAiChatCompletionProvider(modelType, providerOptions);
     },
   },
-  {
-    test: (providerPath: string) => providerPath.startsWith('openrouter:'),
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
-    ) => {
-      return createOpenRouterProvider(providerPath, {
-        config: providerOptions,
-        env: context.env,
-      });
-    },
-  },
-  {
-    test: (providerPath: string) => providerPath.startsWith('orcarouter:'),
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
-    ) => {
-      return createOrcaRouterProvider(providerPath, {
-        config: providerOptions,
-        env: context.env,
-      });
-    },
-  },
+  configuredProviderFactory('openrouter:', () => createOpenRouterProvider),
+  configuredProviderFactory('orcarouter:', () => createOrcaRouterProvider),
   {
     test: (providerPath: string) => providerPath.startsWith('package:'),
     create: async (
@@ -1493,19 +1380,7 @@ export const providerMap: ProviderFactory[] = [
       return parsePackageProvider(providerPath, context.basePath || process.cwd(), providerOptions);
     },
   },
-  {
-    test: (providerPath: string) => providerPath.startsWith('perplexity:'),
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
-    ) => {
-      return createPerplexityProvider(providerPath, {
-        config: providerOptions,
-        env: context.env,
-      });
-    },
-  },
+  configuredProviderFactory('perplexity:', () => createPerplexityProvider),
   {
     test: (providerPath: string) => providerPath.startsWith('portkey:'),
     create: async (
@@ -1579,32 +1454,7 @@ export const providerMap: ProviderFactory[] = [
       );
     },
   },
-  {
-    test: (providerPath: string) => providerPath.startsWith('togetherai:'),
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
-    ) => {
-      return createTogetherAiProvider(providerPath, {
-        config: providerOptions,
-        env: context.env,
-      });
-    },
-  },
-  {
-    test: (providerPath: string) => providerPath.startsWith('truefoundry:'),
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
-    ) => {
-      return createTrueFoundryProvider(providerPath, {
-        config: providerOptions,
-        env: context.env,
-      });
-    },
-  },
+  configuredProviderFactory('truefoundry:', () => createTrueFoundryProvider),
   {
     test: (providerPath: string) => providerPath.startsWith('typesafe:'),
     create: async (
@@ -1625,19 +1475,7 @@ export const providerMap: ProviderFactory[] = [
       });
     },
   },
-  {
-    test: (providerPath: string) => providerPath.startsWith('llamaapi:'),
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
-    ) => {
-      return createLlamaApiProvider(providerPath, {
-        config: providerOptions,
-        env: context.env,
-      });
-    },
-  },
+  configuredProviderFactory('llamaapi:', () => createLlamaApiProvider),
   {
     test: (providerPath: string) => providerPath.startsWith('aimlapi:'),
     create: async (
@@ -2112,6 +1950,19 @@ function isGoogleProviderPath(providerPath: string): boolean {
 }
 
 const providerFamilies: ProviderFamily[] = [
+  {
+    canHandle: (value) => /^(cerebras|envoy|litellm|novita|nscale|togetherai):/.test(value),
+    factories: async () => {
+      const { getCompatibleProviderFactories } = await import('./families/compatible');
+      return getCompatibleProviderFactories((path, providerOptions, context) =>
+        mergeProviderEnv(
+          { id: path, config: providerOptions.config },
+          context.env,
+          providerOptions.env,
+        ),
+      );
+    },
+  },
   {
     canHandle: isAwsProviderPath,
     factories: async () => {
