@@ -26,8 +26,8 @@ Choose two upstream models and separate the upstream credential from the caller 
 ```bash
 export OPENAI_API_KEY="YOUR_PROVIDER_API_KEY"
 export PROMPTFOO_CALLER_KEY="YOUR_LOCAL_CALLER_KEY"
-export UPSTREAM_STABLE_MODEL="gpt-5.4-mini"
-export UPSTREAM_CANDIDATE_MODEL="gpt-5.6"
+export UPSTREAM_STABLE_MODEL="gpt-6-luna"
+export UPSTREAM_CANDIDATE_MODEL="gpt-6-sol"
 export AISIX_BASE_URL="http://127.0.0.1:3000"
 ```
 
@@ -62,11 +62,13 @@ docker run -d --name aisix-promptfoo \
   ghcr.io/api7/aisix:1.2.0
 ```
 
-If you do not want the Promptfoo process to inherit the upstream credential, remove it from the current shell after the AISIX container starts:
+After the AISIX container starts, remove the upstream credential from the current shell:
 
 ```bash
 unset OPENAI_API_KEY
 ```
+
+The evaluation commands below set `DOTENV_PATH=/dev/null` so a local `.env` file cannot restore the upstream key. The caller key and gateway URL still come from the exported shell variables.
 
 Confirm that the caller key can see both aliases:
 
@@ -82,7 +84,7 @@ The response data should include `eval-stable` and `eval-candidate`.
 If you are working in the Promptfoo repository, run the example from the repository root instead:
 
 ```bash
-npm run local -- eval \
+DOTENV_PATH=/dev/null npm run local -- eval \
   -c examples/integration-aisix/promptfooconfig.yaml \
   --no-cache \
   --no-share \
@@ -92,7 +94,7 @@ npm run local -- eval \
 For the published CLI package, run:
 
 ```bash
-npx promptfoo@latest eval \
+DOTENV_PATH=/dev/null npx promptfoo@latest eval \
   -c promptfooconfig.yaml \
   --no-cache \
   --no-share \
