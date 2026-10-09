@@ -271,6 +271,32 @@ jobs:
           PROMPTFOO_POSTHOG_KEY: ''
         run: npm run test:smoke -- test/smoke/agent-skill-examples.test.ts
 
+  contracts-isolation:
+    needs: ci-config
+    name: Isolated Contracts on Node ${{ matrix.node }}
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.ci-config.outputs.build-matrix) }}
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Use Node ${{ matrix.node }}
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ matrix.node == '22.22' && '22.22.0' || matrix.node }}
+
+      - name: Test Isolated Contracts
+        # The script uses only Node builtins; no root dependency install or build secrets needed.
+        # Pin npm 11 because bundled npm 10 crashes while resolving these standalone inputs.
+        run: npx --ignore-scripts --registry=https://registry.npmjs.org/ -y npm@11.18.0 run test:contracts-isolation
+
   # Publish the Node 24 archive before Linux acceptance so platform checks can
   # validate the same immutable upload without waiting for any other build lane.
   package-build:

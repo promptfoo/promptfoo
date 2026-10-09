@@ -1,4 +1,4 @@
-import { addEncoding } from './encoding';
+import { mapEncodingTestCases } from './encoding';
 
 import type { TestCase } from '../../types/index';
 
@@ -11,5 +11,9 @@ export function addRot13(testCases: TestCase[], injectVar: string): TestCase[] {
     });
   };
 
-  return addEncoding(testCases, injectVar, 'rot13', 'Rot13', rot13);
+  return mapEncodingTestCases(testCases, injectVar, {
+    transform: rot13,
+    metricSuffix: 'Rot13',
+    metadata: { strategyId: 'rot13' },
+  });
 }

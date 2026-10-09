@@ -1,28 +1,33 @@
-import { appendMetricSuffix } from './assertions';
+import type { Strategy } from './types';
 
-import type { TestCase } from '../../types/index';
+type StrategyTestCases = Awaited<ReturnType<Strategy['action']>>;
 
-export function addEncoding(
-  testCases: TestCase[],
+interface EncodingOptions {
+  transform: (text: string) => string;
+  metricSuffix: string;
+  metadata: Record<string, unknown>;
+}
+
+export function mapEncodingTestCases(
+  testCases: StrategyTestCases,
   injectVar: string,
-  strategyId: string,
-  metricSuffix: string,
-  encode: (text: string) => string,
-  encodingType?: string,
-): TestCase[] {
+  { transform, metricSuffix, metadata }: EncodingOptions,
+): StrategyTestCases {
   return testCases.map((testCase) => {
     const originalText = String(testCase.vars![injectVar]);
     return {
       ...testCase,
-      assert: appendMetricSuffix(testCase, metricSuffix),
+      assert: testCase.assert?.map((assertion) => ({
+        ...assertion,
+        metric: assertion.metric ? `${assertion.metric}/${metricSuffix}` : assertion.metric,
+      })),
       vars: {
         ...testCase.vars,
-        [injectVar]: encode(originalText),
+        [injectVar]: transform(originalText),
       },
       metadata: {
         ...testCase.metadata,
-        strategyId,
-        ...(encodingType === undefined ? {} : { encodingType }),
+        ...metadata,
         originalText,
       },
     };

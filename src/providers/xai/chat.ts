@@ -1,4 +1,6 @@
 import logger from '../../logger';
+import { isCallerAbortError } from '../../util/fetch/requestSignal';
+import { preserveResponseHeadersObserverErrorResponse } from '../../util/fetch/responseHeadersObserver';
 import { renderVarsInObject } from '../../util/index';
 import invariant from '../../util/invariant';
 import { type OpenAiChatCompletionCostData, OpenAiChatCompletionProvider } from '../openai/chat';
@@ -6,6 +8,7 @@ import {
   clampCachedTokens,
   getOpenAIChatOutputLimitFromEnv,
   resolveDirectTestVariable,
+  throwIfAborted,
 } from '../shared';
 
 import type { ApiProvider, ProviderOptions } from '../../types/index';
@@ -703,7 +706,11 @@ export function calculateXAICost(
     : completion > 0
       ? completion
       : (reasoningTokens ?? 0);
-  if (promptTokens == null || billableOutputTokens <= 0) {
+  if (
+    promptTokens == null ||
+    billableOutputTokens < 0 ||
+    (promptTokens <= 0 && billableOutputTokens === 0)
+  ) {
     return undefined;
   }
 
@@ -730,9 +737,6 @@ export function calculateXAICost(
   const inputCost = inputCostOverride ?? (modelCost && modelCost.input * catalogMultiplier);
   const outputCost =
     config.outputCost ?? config.cost ?? (modelCost && modelCost.output * catalogMultiplier);
-  if (inputCost === undefined || outputCost === undefined) {
-    return undefined;
-  }
   const cacheReadCost =
     config.cacheReadCost ??
     inputCostOverride ??
@@ -740,12 +744,20 @@ export function calculateXAICost(
 
   const billableCachedTokens = clampCachedTokens(cachedTokens, promptTokens);
   const uncachedPromptTokens = promptTokens - billableCachedTokens;
+  if (
+    (uncachedPromptTokens > 0 && inputCost === undefined) ||
+    (billableCachedTokens > 0 && cacheReadCost === undefined) ||
+    (billableOutputTokens > 0 && outputCost === undefined)
+  ) {
+    return undefined;
+  }
 
   // Cached prompt tokens (prompt_tokens_details.cached_tokens) use the reduced
   // cache-read rate. When no cache rate is known, cacheReadCost falls back to the
   // full input rate so this formula preserves the undiscounted behavior.
-  const inputCostTotal = inputCost * uncachedPromptTokens + cacheReadCost * billableCachedTokens;
-  const outputCostTotal = outputCost * billableOutputTokens;
+  const inputCostTotal =
+    (inputCost ?? 0) * uncachedPromptTokens + (cacheReadCost ?? 0) * billableCachedTokens;
+  const outputCostTotal = (outputCost ?? 0) * billableOutputTokens;
 
   logger.debug(
     `XAI cost calculation for ${modelName}: ` +
@@ -1028,16 +1040,19 @@ class XAIProvider extends OpenAiChatCompletionProvider {
             response.error.includes('authentication error'))
         ) {
           // Provide a more helpful error message for x.ai specific issues
-          return {
+          return preserveResponseHeadersObserverErrorResponse(response, {
             ...response,
             error: `x.ai API error: ${response.error}\n\nTip: Ensure your XAI_API_KEY environment variable is set correctly. You can get an API key from https://x.ai/`,
-          };
+          });
         }
         return response;
       }
 
       return response;
     } catch (err) {
+      if (isCallerAbortError(err, callApiOptions?.abortSignal)) {
+        throwIfAborted(callApiOptions?.abortSignal);
+      }
       if (err instanceof XAIRequestConfigError) {
         return { error: `xAI request error: ${err.message}` };
       }

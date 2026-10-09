@@ -8,8 +8,13 @@ import logger from '../../logger';
 import { OpenAiChatCompletionProvider } from '../../providers/openai/chat';
 import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
 import {
+  createProviderRateLimitOptions,
+  getProviderCallExecutionContext,
   getProviderCallTracingContext,
+  getRateLimitKey,
+  isRateLimitWrapped,
   type RateLimitRegistry,
+  sleepWithAbort,
   wrapProviderWithRateLimiting,
 } from '../../scheduler';
 import {
@@ -27,9 +32,14 @@ import {
   type TokenUsage,
   type VarValue,
 } from '../../types/index';
+import { isCallerAbortError } from '../../util/fetch/requestSignal';
+import {
+  composeResponseHeadersObservers,
+  preserveResponseHeadersObserverError,
+  preserveResponseHeadersObserverErrorResponse,
+} from '../../util/fetch/responseHeadersObserver';
 import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
-import { sleep } from '../../util/time';
 import { TokenUsageTracker } from '../../util/tokenUsage';
 import {
   accumulateGradingResponseTokenUsage,
@@ -471,6 +481,20 @@ export type TargetResponse = {
   };
 } & Omit<ProviderResponse, 'output'> & { output: string };
 
+/** Retain only the selected error's origin when a strategy rebuilds its response. */
+export function preserveSelectedError<T extends ProviderResponse>(
+  response: T,
+  selected: ProviderResponse | undefined,
+): T {
+  if (!response.error || !selected?.error) {
+    return response;
+  }
+  if (selected.metadata?.errorOrigin === 'tool') {
+    response.metadata = { ...response.metadata, errorOrigin: 'tool' };
+  }
+  return preserveResponseHeadersObserverErrorResponse(selected, response);
+}
+
 export function isConversationEndedResponse(
   response: Pick<ProviderResponse, 'conversationEnded'> | undefined,
 ): boolean {
@@ -502,14 +526,51 @@ export function callTargetProvider(
   context?: CallApiContextParams,
   options?: CallApiOptionsParams,
 ): Promise<ProviderResponse> {
+  const executionContext = getProviderCallExecutionContext();
   const tracingContext = getProviderCallTracingContext();
-  if (!tracingContext) {
-    return targetProvider.callApi(targetPrompt, context, options);
+  const invoke = (onResponseHeaders?: CallApiOptionsParams['onResponseHeaders']) => {
+    const targetOptions = onResponseHeaders
+      ? {
+          ...options,
+          onResponseHeaders: composeResponseHeadersObservers(
+            onResponseHeaders,
+            options?.onResponseHeaders,
+          ),
+        }
+      : options;
+    const call = async (callContext?: CallApiContextParams) => {
+      const response = await targetProvider.callApi(targetPrompt, callContext, targetOptions);
+      executionContext?.onTargetResponse?.(targetPrompt, response);
+      return response;
+    };
+    return tracingContext
+      ? tracingContext.withProviderSpan({ provider: targetProvider, callContext: context }, call)
+      : call(context);
+  };
+  const registry = executionContext?.rateLimitRegistry;
+  const activeProvider = executionContext?.rateLimitProvider;
+  // The evaluator already owns the slot when a same-pool override delegates.
+  // A different raw target needs its own observer; preserve the original object
+  // for rendering, tracing and the actual call receiver.
+  if (
+    registry &&
+    !isRateLimitWrapped(targetProvider) &&
+    (!activeProvider || getRateLimitKey(activeProvider) !== getRateLimitKey(targetProvider))
+  ) {
+    return registry.execute(
+      targetProvider,
+      invoke,
+      createProviderRateLimitOptions(options?.abortSignal),
+    );
   }
+  return invoke();
+}
 
-  return tracingContext.withProviderSpan(
-    { provider: targetProvider, callContext: context },
-    async (callContext) => targetProvider.callApi(targetPrompt, callContext, options),
+/** Preserve caller cancellation across target and strategy error accounting. */
+export function isTargetCallAbortError(error: unknown, signal?: AbortSignal): boolean {
+  return (
+    (error instanceof Error && error.name === 'AbortError') ||
+    isCallerAbortError(error, signal, { requireReasonMatch: true })
   );
 }
 
@@ -558,21 +619,34 @@ export async function getTargetResponse(
     targetRespRaw = await callTargetProvider(targetProvider, targetPrompt, context, options);
   } catch (error) {
     // Re-throw abort errors to properly cancel the operation
-    if (error instanceof Error && error.name === 'AbortError') {
+    if (isTargetCallAbortError(error, options?.abortSignal)) {
       throw error;
     }
-    return {
+    return preserveResponseHeadersObserverError(options?.onResponseHeaders, error, {
       output: '',
       error: (error as Error).message,
       tokenUsage: {
         numRequests:
           error instanceof Error && error.message.includes('maxCharsPerMessage=') ? 0 : 1,
       },
-    };
+    });
   }
-  if (!targetRespRaw.cached && targetProvider.delay && targetProvider.delay > 0) {
+  if (
+    !targetRespRaw.cached &&
+    targetProvider.delay &&
+    targetProvider.delay > 0 &&
+    !options?.abortSignal?.aborted
+  ) {
     logger.debug(`Sleeping for ${targetProvider.delay}ms`);
-    await sleep(targetProvider.delay);
+    try {
+      await sleepWithAbort(targetProvider.delay, options?.abortSignal);
+    } catch (error) {
+      // The target already completed. Only cancellation of this caller's delay
+      // may shorten pacing without replacing its response or accounting.
+      if (!isCallerAbortError(error, options?.abortSignal, { requireReasonMatch: true })) {
+        throw error;
+      }
+    }
   }
   const tokenUsage = { numRequests: 1, ...targetRespRaw.tokenUsage };
   const hasOutput =
@@ -586,12 +660,15 @@ export async function getTargetResponse(
           ? targetRespRaw.output
           : safeJsonStringify(targetRespRaw.output)) as string)
       : '';
-    return {
-      ...(targetRespRaw as ProviderResponse),
-      output,
-      error: targetRespRaw.error,
-      tokenUsage,
-    };
+    return preserveSelectedError(
+      {
+        ...(targetRespRaw as ProviderResponse),
+        output,
+        error: targetRespRaw.error,
+        tokenUsage,
+      },
+      targetRespRaw,
+    );
   }
 
   if (hasOutput) {
@@ -937,6 +1014,7 @@ export async function createIterationContext({
 type SharedBacktrackingStopReason =
   | 'Grader failed'
   | 'Max backtracks reached'
+  | 'Target error'
   | 'Target ended conversation';
 
 export type RoundBacktrackingStopReason = SharedBacktrackingStopReason | 'Max rounds reached';
