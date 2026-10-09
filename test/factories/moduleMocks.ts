@@ -50,3 +50,10 @@ export const createLocalGenerationFactory = (): MockModuleFactory => async (impo
     getRemoteGenerationUrl: vi.fn().mockReturnValue('http://test-url'),
   };
 };
+export const createUuidModuleFactory = (): MockModuleFactory => () => ({
+  isUuid: vi.fn((str: string) => {
+    // Check if the string looks like a UUID
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    return uuidRegex.test(str);
+  }),
+});

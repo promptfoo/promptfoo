@@ -10,8 +10,8 @@ import {
 
 describe('Strategy IDs', () => {
   const findStrategyIdAssignments = (fileContent: string): string[] => {
-    // Look for patterns like `strategyId: 'strategy-name'`
-    const regex = /strategyId:\s*['"]([^'"]+)['"]/g;
+    // Look for literal strategyId fields and shared encoding-helper arguments.
+    const regex = /(?:strategyId:\s*|addEncoding\(testCases,\s*injectVar,\s*)['"]([^'"]+)['"]/g;
     const matches = [];
     let match;
     while ((match = regex.exec(fileContent)) !== null) {
