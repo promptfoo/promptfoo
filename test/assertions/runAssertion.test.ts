@@ -2060,6 +2060,42 @@ describe('runAssertion', () => {
     expect(result.score).toBeCloseTo(0.78, 2);
   });
 
+  describe.each(['rouge-l', 'rouge-s'] as const)('%s dispatch', (baseType) => {
+    it.each([
+      { output: 'The cat sat on the mat', inverse: false, pass: true, score: 1 },
+      { output: 'The cat sat on the mat', inverse: true, pass: false, score: 0 },
+      { output: 'completely different words', inverse: false, pass: false, score: 0 },
+      { output: 'completely different words', inverse: true, pass: true, score: 1 },
+      { output: '', inverse: false, pass: false, score: 0 },
+      { output: '', inverse: true, pass: true, score: 1 },
+      { output: '\u0085', inverse: false, pass: false, score: 0 },
+      { output: '\u0085', inverse: true, pass: true, score: 1 },
+    ])(
+      'grades output "$output" with inverse=$inverse',
+      async ({ output, inverse, pass, score }) => {
+        const result = await runAssertion({
+          prompt: 'Some prompt',
+          assertion: {
+            type: inverse ? `not-${baseType}` : baseType,
+            value: 'The cat sat on the mat',
+          },
+          test: {} as AtomicTestCase,
+          providerResponse: { output },
+          provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        });
+
+        const rawScore = inverse ? 1 - score : score;
+        expect(result).toMatchObject({
+          pass,
+          score,
+          reason: `${baseType.toUpperCase()} score ${rawScore.toFixed(2)} is ${
+            rawScore >= 0.75 ? 'greater than or equal to' : 'less than'
+          } threshold 0.75`,
+        });
+      },
+    );
+  });
+
   it('should fail when the not-rouge-n assertion score is above threshold', async () => {
     const output = 'This is the expected output.';
 

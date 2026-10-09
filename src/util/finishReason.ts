@@ -21,7 +21,7 @@
  * normalizeFinishReason('tool_use')     // Returns: 'tool_calls'
  * normalizeFinishReason('refusal')      // Returns: 'content_filter'
  * normalizeFinishReason('function_call') // Returns: 'tool_calls'
- * normalizeFinishReason('unknown')      // Returns: 'unknown' (passthrough)
+ * normalizeFinishReason(' CUSTOM_REASON ') // Returns: 'custom_reason'
  * ```
  */
 export const FINISH_REASON_MAP: Record<string, string> = {
@@ -55,8 +55,8 @@ export const FINISH_REASON_MAP: Record<string, string> = {
  * Normalize a provider-specific finish or stop reason to a standard OpenAI-compatible value.
  *
  * This function standardizes finish reasons across different LLM providers to enable
- * consistent handling in assertions and application logic. Unknown values are passed
- * through unchanged to preserve provider-specific reasons.
+ * consistent handling in assertions and application logic. Unknown values are trimmed
+ * and lowercased to preserve provider-specific reasons in a normalized form.
  *
  * @param raw - The raw finish_reason/stop_reason from the provider response
  * @returns A normalized finish reason string, or undefined if input is invalid
@@ -65,7 +65,7 @@ export const FINISH_REASON_MAP: Record<string, string> = {
  * ```typescript
  * const result = await provider.callApi('Hello world');
  * const normalized = normalizeFinishReason(result.finishReason);
- * // normalized will be one of: 'stop', 'length', 'content_filter', 'tool_calls', or original value
+ * // normalized will be one of: 'stop', 'length', 'content_filter', 'tool_calls', or a trimmed, lowercased value
  * ```
  *
  * @example With finish-reason assertion

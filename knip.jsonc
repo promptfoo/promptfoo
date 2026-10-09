@@ -94,7 +94,9 @@
     // POSIX process-tree discovery for package fixture cleanup.
     "ps",
     "ruby",
-    "security"
+    "security",
+    // Windows system utility used to terminate install-profile subprocess descendants.
+    "taskkill"
   ],
   "ignoreExportsUsedInFile": true,
   "ignoreIssues": {
