@@ -5779,3 +5779,11 @@ describe('util', () => {
     });
   });
 });
+
+it('keeps mutable prices independent across model aliases', () => {
+  const costs = GOOGLE_MODELS.flatMap(({ cost }) => (cost ? [cost] : []));
+  expect(new Set(costs).size).toBe(costs.length);
+  const tiers = GOOGLE_MODELS.flatMap(({ tieredCost }) => (tieredCost ? [tieredCost] : []));
+  expect(new Set(tiers).size).toBe(tiers.length);
+  expect(new Set(tiers.map(({ above }) => above)).size).toBe(tiers.length);
+});
