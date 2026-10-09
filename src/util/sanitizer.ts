@@ -694,6 +694,178 @@ export function sanitizeTracingConfigForPersistence(
   };
 }
 
+const JSON_SCHEMA_MAP_KEYWORDS = new Set([
+  '$defs',
+  'definitions',
+  'properties',
+  'patternProperties',
+  'dependentSchemas',
+  'dependencies',
+  'dependentRequired',
+]);
+const JSON_SCHEMA_CHILD_KEYWORDS = new Set([
+  'additionalProperties',
+  'unevaluatedProperties',
+  'propertyNames',
+  'items',
+  'additionalItems',
+  'unevaluatedItems',
+  'contains',
+  'not',
+  'if',
+  'then',
+  'else',
+  'contentSchema',
+]);
+const JSON_SCHEMA_ARRAY_KEYWORDS = new Set(['allOf', 'anyOf', 'oneOf', 'prefixItems']);
+// These keywords describe structure or validation rules, rather than example data.
+const JSON_SCHEMA_STRUCTURAL_KEYWORDS = new Set([
+  '$schema',
+  '$id',
+  '$ref',
+  '$anchor',
+  '$dynamicRef',
+  '$dynamicAnchor',
+  '$recursiveRef',
+  '$recursiveAnchor',
+  '$vocabulary',
+  'type',
+  'format',
+  'required',
+  'multipleOf',
+  'minimum',
+  'maximum',
+  'exclusiveMinimum',
+  'exclusiveMaximum',
+  'minLength',
+  'maxLength',
+  'minItems',
+  'maxItems',
+  'uniqueItems',
+  'minContains',
+  'maxContains',
+  'minProperties',
+  'maxProperties',
+  'contentEncoding',
+  'contentMediaType',
+  'readOnly',
+  'writeOnly',
+  'deprecated',
+  'nullable',
+]);
+
+function isSchemaObject(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function sanitizeAssertionSchemaMap(
+  value: Record<string, unknown>,
+  keyword: string,
+  credentialProperty: boolean,
+): Record<string, unknown> {
+  const options = { sanitizeUrls: true, throwOnError: true, maxDepth: Number.POSITIVE_INFINITY };
+  const properties: Record<string, unknown> = Object.create(null);
+  let keySuffix = 0;
+  for (const [name, definition] of Object.entries(value)) {
+    const safeName = URL_REFERENCE.test(name) ? sanitizeUrl(name) : name;
+    let uniqueName = safeName;
+    while (
+      Object.prototype.hasOwnProperty.call(properties, uniqueName) ||
+      (uniqueName !== name && Object.prototype.hasOwnProperty.call(value, uniqueName))
+    ) {
+      uniqueName = `${safeName}#${++keySuffix}`;
+    }
+    properties[uniqueName] =
+      isSchemaObject(definition) || typeof definition === 'boolean'
+        ? sanitizeAssertionJsonSchema(
+            definition,
+            credentialProperty || isSecretField(name) || name.toLowerCase() === 'headers',
+          )
+        : (keyword === 'dependencies' || keyword === 'dependentRequired') &&
+            Array.isArray(definition)
+          ? sanitizeObject(definition, options)
+          : Object.values(sanitizeObject({ [name]: definition }, options))[0];
+  }
+  return properties;
+}
+
+/** Schema property names describe data; they are not credential-bearing config fields. */
+function sanitizeAssertionJsonSchema(schema: unknown, credentialProperty = false): unknown {
+  const options = { sanitizeUrls: true, throwOnError: true, maxDepth: Number.POSITIVE_INFINITY };
+  if (!isSchemaObject(schema)) {
+    return sanitizeObject(schema, options);
+  }
+  return Object.fromEntries(
+    Object.entries(schema).flatMap(([keyword, value]) => {
+      if (JSON_SCHEMA_MAP_KEYWORDS.has(keyword) && isSchemaObject(value)) {
+        return [[keyword, sanitizeAssertionSchemaMap(value, keyword, credentialProperty)]];
+      }
+      if (
+        JSON_SCHEMA_CHILD_KEYWORDS.has(keyword) ||
+        (JSON_SCHEMA_ARRAY_KEYWORDS.has(keyword) && Array.isArray(value))
+      ) {
+        return [
+          [
+            keyword,
+            Array.isArray(value)
+              ? value.map((child) => sanitizeAssertionJsonSchema(child, credentialProperty))
+              : sanitizeAssertionJsonSchema(value, credentialProperty),
+          ],
+        ];
+      }
+      // Retain the existing secret-field/header boundary while restoring schema structure.
+      // Patterns and annotations can contain literal credentials just like defaults do.
+      if (credentialProperty && !JSON_SCHEMA_STRUCTURAL_KEYWORDS.has(keyword)) {
+        const redacted =
+          keyword === 'pattern'
+            ? String.raw`^\[REDACTED\]$`
+            : keyword === 'enum' && Array.isArray(value) && value.length > 0
+              ? [REDACTED]
+              : Array.isArray(value)
+                ? value.map(() => REDACTED)
+                : REDACTED;
+        return [[keyword, redacted]];
+      }
+      return Object.entries(sanitizeObject({ [keyword]: value }, options));
+    }),
+  );
+}
+
+/** Repair only the schema-valued assertions, including nested assertion sets. */
+function preserveAssertionSchemas(source: unknown, sanitized: unknown): void {
+  if (!Array.isArray(source) || !Array.isArray(sanitized)) {
+    return;
+  }
+  for (const [index, assertion] of source.entries()) {
+    const output = sanitized[index];
+    if (!isSchemaObject(assertion) || !isSchemaObject(output)) {
+      continue;
+    }
+    if (assertion.type === 'assert-set') {
+      preserveAssertionSchemas(assertion.assert, output.assert);
+    } else if (
+      ['is-json', 'not-is-json', 'contains-json', 'not-contains-json'].includes(
+        assertion.type as string,
+      )
+    ) {
+      const schema = assertion.value;
+      if (isSchemaObject(schema)) {
+        // Match sanitizeObject's JSON snapshot, including its handling of circular values.
+        output.value = sanitizeAssertionJsonSchema(JSON.parse(safeStringify(schema)));
+      } else if (typeof schema === 'string') {
+        try {
+          const parsed: unknown = JSON.parse(schema);
+          if (isSchemaObject(parsed)) {
+            output.value = JSON.stringify(sanitizeAssertionJsonSchema(parsed));
+          }
+        } catch {
+          // File references and YAML strings retain their existing sanitization.
+        }
+      }
+    }
+  }
+}
+
 /** Sanitize exported/shared configuration while preserving safe tracing env references. */
 export function sanitizeConfigForOutput(
   config: Partial<UnifiedConfig>,
@@ -738,6 +910,14 @@ export function sanitizeConfigForOutput(
       continue;
     }
     const sourceTest = sourceTests[index];
+    if (
+      sourceTest &&
+      typeof sourceTest === 'object' &&
+      'assert' in sourceTest &&
+      'assert' in test
+    ) {
+      preserveAssertionSchemas(sourceTest.assert, test.assert);
+    }
     const sourceMetadata =
       sourceTest && typeof sourceTest === 'object' && 'metadata' in sourceTest
         ? sourceTest.metadata?.__promptfoo
