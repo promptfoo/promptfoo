@@ -137,6 +137,8 @@ class LiteLLMCompletionProvider extends LiteLLMProviderWrapper {
  * LiteLLM Embedding Provider
  */
 class LiteLLMEmbeddingProvider extends LiteLLMProviderWrapper implements ApiEmbeddingProvider {
+  readonly supportsEmbeddingCancellation = true;
+
   private embeddingProvider: OpenAiEmbeddingProvider;
 
   constructor(modelName: string, options: ProviderOptions) {
@@ -148,8 +150,12 @@ class LiteLLMEmbeddingProvider extends LiteLLMProviderWrapper implements ApiEmbe
     }
   }
 
-  async callEmbeddingApi(text: string): Promise<ProviderEmbeddingResponse> {
-    return this.withAuthHint(await this.embeddingProvider.callEmbeddingApi(text));
+  async callEmbeddingApi(
+    text: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderEmbeddingResponse> {
+    return this.withAuthHint(await this.embeddingProvider.callEmbeddingApi(text, context, options));
   }
 }
 
