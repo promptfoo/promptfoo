@@ -19,9 +19,11 @@ npx promptfoo@latest validate -c promptfooconfig.yaml
 # Test configured target connectivity (sends test requests)
 npx promptfoo@latest validate target -c promptfooconfig.yaml
 
-# Check whether a provider key is set without printing its value
-test -n "$OPENAI_API_KEY" && echo 'OPENAI_API_KEY is set' || echo 'OPENAI_API_KEY is not set'
+# Check the current shell without printing the key (does not load .env)
+test -n "${OPENAI_API_KEY:-}" && echo 'OPENAI_API_KEY is set in this shell' || echo 'OPENAI_API_KEY is not set in this shell'
 ```
+
+Promptfoo can also load credentials from `.env` or `--env-file`; the shell check does not inspect those files. Replace `OPENAI_API_KEY` with the variable your provider uses.
 
 ## Common Issues Table
 
