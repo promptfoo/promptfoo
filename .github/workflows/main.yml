@@ -137,7 +137,13 @@ jobs:
         # CI. Real test/assertion failures still fail; see vitest.config.ts.
         env:
           PROMPTFOO_IGNORE_UNHANDLED_TEST_ERRORS: 'true'
-        run: npm run test${{ matrix.shard && format(' -- --shard={0}/3', matrix.shard) || '' }}${{ matrix.os == 'ubuntu-latest' && matrix.node == '22.22' && !matrix.shard && ' -- --coverage' || '' }}
+        run: npm run test${{ matrix.shard && format(' -- --shard={0}/3', matrix.shard) || '' }}${{ matrix.os == 'ubuntu-latest' && matrix.node == '22.22' && !matrix.shard && ' -- --coverage' || '' }}${{ startsWith(matrix.os, 'windows-') && ' --exclude=test/release-artifact.test.ts' || '' }}
+
+      - name: Test release artifact acceptance without parallel workers
+        # Cold npm install/rebuild fixtures need the runner's CPU and disk without
+        # competing test forks. Run the unchanged suite once per Windows Node version.
+        if: startsWith(matrix.os, 'windows-') && matrix.shard == 1
+        run: npm run test -- test/release-artifact.test.ts --maxWorkers=1
 
       - name: Run built agent skill examples
         if: matrix.os != 'ubuntu-latest' && (!matrix.shard || matrix.shard == '1')
@@ -257,6 +263,32 @@ jobs:
         env:
           PROMPTFOO_POSTHOG_KEY: ''
         run: npm run test:smoke -- test/smoke/agent-skill-examples.test.ts
+
+  contracts-isolation:
+    needs: ci-config
+    name: Isolated Contracts on Node ${{ matrix.node }}
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.ci-config.outputs.build-matrix) }}
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Use Node ${{ matrix.node }}
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ matrix.node == '22.22' && '22.22.0' || matrix.node }}
+
+      - name: Test Isolated Contracts
+        # The script uses only Node builtins; no root dependency install or build secrets needed.
+        # Pin npm 11 because bundled npm 10 crashes while resolving these standalone inputs.
+        run: npx --ignore-scripts --registry=https://registry.npmjs.org/ -y npm@11.18.0 run test:contracts-isolation
 
   # Publish the Node 24 archive before Linux acceptance so platform checks can
   # validate the same immutable upload without waiting for any other build lane.
@@ -464,13 +496,33 @@ jobs:
     name: Shell Format Check
     timeout-minutes: 5
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
+      - name: Install shfmt
+        run: |
+          curl --fail --location --retry 3 --connect-timeout 15 --max-time 60 \
+            https://github.com/mvdan/sh/releases/download/v3.12.0/shfmt_v3.12.0_linux_amd64 \
+            --output "$RUNNER_TEMP/shfmt"
+          printf '%s  %s\n' 'd9fbb2a9c33d13f47e7618cf362a914d029d02a6df124064fff04fd688a745ea' "$RUNNER_TEMP/shfmt" | sha256sum --check
+          chmod +x "$RUNNER_TEMP/shfmt"
+
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-      - uses: luizm/action-sh-checker@883217215b11c1fabbf00eb1a9a041f62d74c744
-        env:
-          SHFMT_OPTS: '-i 2' # 2 space indent
         with:
-          sh_checker_shellcheck_disable: true
+          persist-credentials: false
+
+      - name: Check shell formatting
+        env:
+          NO_COLOR: '1'
+        run: |
+          "$RUNNER_TEMP/shfmt" -f . > "$RUNNER_TEMP/shell-files.txt"
+          shell_files=()
+          while IFS= read -r file; do
+            shell_files+=("$file")
+          done < "$RUNNER_TEMP/shell-files.txt"
+          if (( ${#shell_files[@]} > 0 )); then
+            "$RUNNER_TEMP/shfmt" -i 2 -d "${shell_files[@]}"
+          fi
 
   assets:
     name: Generate Assets

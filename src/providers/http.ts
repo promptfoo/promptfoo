@@ -324,17 +324,15 @@ export function urlEncodeRawRequestPath(rawRequest: string) {
     // Use the built-in URL class to parse and encode the URL
     const parsedUrl = new URL(url, 'http://placeholder-base.com');
 
-    // Replace the original URL in the first line
-    rawRequest = rawRequest.replace(
+    // A callback preserves literal dollar patterns in the URL.
+    return rawRequest.replace(
       firstLine,
-      `${method} ${parsedUrl.pathname}${parsedUrl.search}${protocol ? ' ' + protocol : ''}`,
+      () => `${method} ${parsedUrl.pathname}${parsedUrl.search}${protocol ? ' ' + protocol : ''}`,
     );
   } catch (err) {
     logger.error(`[Http Provider] Error parsing URL in HTTP request: ${String(err)}`);
     throw new Error(`[Http Provider] Error parsing URL in HTTP request: ${String(err)}`);
   }
-
-  return rawRequest;
 }
 
 /**
@@ -536,7 +534,7 @@ export async function generateSignature(
 
             const pem = pemModule.default as any;
 
-            let result: { key: string; cert: string };
+            let pfxInput: Buffer | string;
 
             if (signatureAuth.pfxContent || signatureAuth.certificateContent) {
               // Use base64 encoded content from database
@@ -548,15 +546,7 @@ export async function generateSignature(
                 `[Signature Auth][PFX] Base64 content length: ${content.length}, decoded bytes: ${pfxBuffer.byteLength}`,
               );
 
-              result = await new Promise<{ key: string; cert: string }>((resolve, reject) => {
-                pem.readPkcs12(pfxBuffer, { p12Password: pfxPassword }, (err: any, data: any) => {
-                  if (err) {
-                    reject(err);
-                  } else {
-                    resolve(data);
-                  }
-                });
-              });
+              pfxInput = pfxBuffer;
             } else {
               // Use file path (existing behavior)
               const resolvedPath = safeResolve(cliState.basePath || '', signatureAuth.pfxPath);
@@ -568,20 +558,18 @@ export async function generateSignature(
                 logger.debug(`[Signature Auth][PFX] Could not stat PFX file: ${String(e)}`);
               }
 
-              result = await new Promise<{ key: string; cert: string }>((resolve, reject) => {
-                pem.readPkcs12(
-                  resolvedPath,
-                  { p12Password: pfxPassword },
-                  (err: any, data: any) => {
-                    if (err) {
-                      reject(err);
-                    } else {
-                      resolve(data);
-                    }
-                  },
-                );
-              });
+              pfxInput = resolvedPath;
             }
+
+            const result = await new Promise<{ key: string; cert: string }>((resolve, reject) => {
+              pem.readPkcs12(pfxInput, { p12Password: pfxPassword }, (err: any, data: any) => {
+                if (err) {
+                  reject(err);
+                } else {
+                  resolve(data);
+                }
+              });
+            });
 
             if (!result.key) {
               logger.error('[Signature Auth][PFX] No private key extracted from PFX');

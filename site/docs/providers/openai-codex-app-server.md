@@ -187,6 +187,8 @@ The provider validates top-level provider config strictly. Prompt-level config i
 | `turn_timeout_ms`          | number        | Overall turn timeout.                                                                                                                                               | None                 |
 | `server_request_policy`    | object        | Deterministic responses for approvals, user input, MCP elicitations, and dynamic tools.                                                                             | Safe declines        |
 
+The app-server provider does not use the SDK provider's exact-version preflight. If you point both providers at a floating global or custom Codex binary, review the SDK provider's [custom binary compatibility requirements](./openai-codex-sdk.md#custom-binary-path).
+
 :::note GPT-5.6 requires Codex 0.144.0 or later
 The app-server provider starts the `codex` binary on your PATH, or `codex_path_override`. Use version 0.144.0 or later so its model catalog recognizes GPT-5.6 and the corresponding reasoning levels. Confirm the effective reasoning with `deep_tracing` when using a custom binary.
 :::
