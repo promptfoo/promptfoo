@@ -6,7 +6,7 @@ import {
   TrueFoundryProvider,
 } from '../../src/providers/truefoundry';
 import * as fetchModule from '../../src/util/fetch/index';
-import { mockProcessEnv } from '../util/utils';
+import { createDeferred, mockProcessEnv } from '../util/utils';
 
 const TRUEFOUNDRY_API_BASE = 'https://llm-gateway.truefoundry.com';
 
@@ -934,6 +934,51 @@ describe('TrueFoundry', () => {
       expect(requestOptions.headers['X-TFY-LOGGING-CONFIG']).toBe(
         JSON.stringify({ enabled: true }),
       );
+      expect(providerWithHeaders.config.headers).toBeUndefined();
+    });
+
+    it('keeps shared embedding headers unchanged while overlapping requests finish in start order', async () => {
+      const headers = { 'X-Custom': 'original' };
+      const provider = new TrueFoundryEmbeddingProvider('openai/text-embedding-3-large', {
+        config: { headers, metadata: { user_id: 'test-user' } },
+      });
+      const firstStarted = createDeferred<void>();
+      const secondStarted = createDeferred<void>();
+      const firstResponse = createDeferred<Response>();
+      const secondResponse = createDeferred<Response>();
+      mockedFetchWithRetries
+        .mockImplementationOnce(() => {
+          firstStarted.resolve();
+          return firstResponse.promise;
+        })
+        .mockImplementationOnce(() => {
+          secondStarted.resolve();
+          return secondResponse.promise;
+        });
+      const response = () => new Response(JSON.stringify({ data: [{ embedding: [0.1] }] }));
+      const first = provider.callEmbeddingApi('first text');
+      await firstStarted.promise;
+      const second = provider.callEmbeddingApi('second text');
+      await secondStarted.promise;
+      try {
+        expect(provider.config.headers).toBe(headers);
+        for (const [, options] of mockedFetchWithRetries.mock.calls) {
+          expect(options?.headers).toMatchObject({
+            'X-Custom': 'original',
+            'X-TFY-METADATA': JSON.stringify({ user_id: 'test-user' }),
+          });
+        }
+        firstResponse.resolve(response());
+        expect(await first).toMatchObject({ embedding: [0.1] });
+        expect(provider.config.headers).toBe(headers);
+        secondResponse.resolve(response());
+        expect(await second).toMatchObject({ embedding: [0.1] });
+        expect(provider.config.headers).toBe(headers);
+      } finally {
+        firstResponse.resolve(response());
+        secondResponse.resolve(response());
+        await Promise.all([first, second]);
+      }
     });
 
     it('should handle embedding API errors', async () => {

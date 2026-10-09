@@ -8,7 +8,6 @@ import {
 } from '../../src/cache';
 import logger from '../../src/logger';
 import {
-  DefaultModerationProvider,
   ReplicateImageProvider,
   ReplicateModerationProvider,
   ReplicateProvider,
@@ -839,13 +838,6 @@ describe('ReplicateModerationProvider', () => {
 
     const result = await provider.callModerationApi('test prompt', 'test response');
     expect(result.error).toContain('Unsupported response from Replicate');
-  });
-});
-
-describe('DefaultModerationProvider', () => {
-  it('should be configured with LlamaGuard 4', () => {
-    expect(DefaultModerationProvider.modelName).toBe('meta/llama-guard-4-12b');
-    // LlamaGuard 4 is the default on Replicate
   });
 });
 

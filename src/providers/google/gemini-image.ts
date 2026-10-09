@@ -1,7 +1,8 @@
 import { fetchWithCache } from '../../cache';
-import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import { toDataUri } from '../../util/dataUrl';
+import { resolveProviderApiKey } from '../credentials';
+import { resolveProviderEnv } from '../env';
 import { getRequestTimeoutMs } from '../shared';
 import { GoogleAuthManager } from './auth';
 import {
@@ -117,24 +118,15 @@ export class GeminiImageProvider implements ApiProvider {
   }
 
   private getApiKey(): string | undefined {
-    return (
-      this.config.apiKey ||
-      this.env?.GOOGLE_API_KEY ||
-      this.env?.GOOGLE_GENERATIVE_AI_API_KEY ||
-      this.env?.GEMINI_API_KEY ||
-      getEnvString('GOOGLE_API_KEY') ||
-      getEnvString('GOOGLE_GENERATIVE_AI_API_KEY') ||
-      getEnvString('GEMINI_API_KEY')
-    );
+    return resolveProviderApiKey({ apiKey: this.config.apiKey }, this.env, [
+      'GOOGLE_API_KEY',
+      'GOOGLE_GENERATIVE_AI_API_KEY',
+      'GEMINI_API_KEY',
+    ]);
   }
 
   private getVertexApiKey(): string | undefined {
-    return (
-      this.config.apiKey ||
-      this.env?.VERTEX_API_KEY ||
-      this.env?.GOOGLE_API_KEY ||
-      GoogleAuthManager.getApiKey(this.config, undefined, true).apiKey
-    );
+    return GoogleAuthManager.getApiKey(this.config, this.env, true).apiKey;
   }
 
   /**
@@ -171,12 +163,11 @@ export class GeminiImageProvider implements ApiProvider {
       this.config.vertexai === false
         ? undefined
         : this.config.projectId ||
-          this.env?.VERTEX_PROJECT_ID ||
-          this.env?.GOOGLE_PROJECT_ID ||
-          this.env?.GOOGLE_CLOUD_PROJECT ||
-          getEnvString('VERTEX_PROJECT_ID') ||
-          getEnvString('GOOGLE_PROJECT_ID') ||
-          getEnvString('GOOGLE_CLOUD_PROJECT');
+          resolveProviderEnv(this.env, [
+            'VERTEX_PROJECT_ID',
+            'GOOGLE_PROJECT_ID',
+            'GOOGLE_CLOUD_PROJECT',
+          ])?.value;
 
     const vertexApiKey = this.config.vertexai === true ? this.getVertexApiKey() : undefined;
     const hasOAuthConfig = Boolean(
@@ -206,10 +197,9 @@ export class GeminiImageProvider implements ApiProvider {
       (Boolean(this.env?.VERTEX_API_KEY || this.env?.GOOGLE_API_KEY) &&
         !hasProviderScopedOAuthConfig);
     const effectiveRegion =
-      providerScopedRegion ||
-      getEnvString('VERTEX_REGION') ||
-      getEnvString('GOOGLE_CLOUD_LOCATION') ||
-      getEnvString('GOOGLE_LOCATION');
+      this.config.region ||
+      resolveProviderEnv(this.env, ['VERTEX_REGION', 'GOOGLE_CLOUD_LOCATION', 'GOOGLE_LOCATION'])
+        ?.value;
     const hasProjectScopedOAuthConfig = Boolean(
       projectId ||
         this.config.googleAuthOptions?.projectId ||
@@ -308,17 +298,13 @@ export class GeminiImageProvider implements ApiProvider {
     const configuredHost =
       this.config.apiBaseUrl ||
       this.config.apiHost ||
-      this.env?.VERTEX_API_HOST ||
-      getEnvString('VERTEX_API_HOST') ||
+      resolveProviderEnv(this.env, ['VERTEX_API_HOST'])?.value ||
       'aiplatform.googleapis.com';
     const apiHost = /^https?:\/\//i.test(configuredHost)
       ? configuredHost
       : `https://${configuredHost}`;
     const apiVersion =
-      this.config.apiVersion ||
-      this.env?.VERTEX_API_VERSION ||
-      getEnvString('VERTEX_API_VERSION') ||
-      'v1';
+      this.config.apiVersion || resolveProviderEnv(this.env, ['VERTEX_API_VERSION'])?.value || 'v1';
     const endpoint = `${apiHost.replace(/\/+$/, '')}/${apiVersion}/publishers/google/models/${this.modelName}:generateContent`;
     const { contents } = geminiFormatAndSystemInstructions(prompt, context?.vars);
     const body = this.buildRequestBody(contents);
@@ -360,12 +346,8 @@ export class GeminiImageProvider implements ApiProvider {
     const location = usesGlobalVertexEndpoint
       ? 'global'
       : this.config.region ||
-        this.env?.VERTEX_REGION ||
-        this.env?.GOOGLE_CLOUD_LOCATION ||
-        this.env?.GOOGLE_LOCATION ||
-        getEnvString('VERTEX_REGION') ||
-        getEnvString('GOOGLE_CLOUD_LOCATION') ||
-        getEnvString('GOOGLE_LOCATION') ||
+        resolveProviderEnv(this.env, ['VERTEX_REGION', 'GOOGLE_CLOUD_LOCATION', 'GOOGLE_LOCATION'])
+          ?.value ||
         'us-central1';
 
     try {

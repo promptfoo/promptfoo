@@ -3,11 +3,11 @@ import fs from 'fs';
 import path from 'path';
 
 import { storeBlob } from '../../blobs';
-import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import { fetchWithTimeout } from '../../util/fetch/index';
 import { ellipsize } from '../../util/text';
 import { sleep } from '../../util/time';
+import { resolveProviderEnv } from '../env';
 import { sanitizeVideoSourceUri } from '../video/utils';
 import {
   determineGoogleVertexMode,
@@ -369,12 +369,8 @@ export class GoogleVideoProvider implements ApiProvider {
   private getLocation(config: GoogleVideoOptions = this.config): string {
     return (
       config.region ||
-      this.env?.VERTEX_REGION ||
-      this.env?.GOOGLE_CLOUD_LOCATION ||
-      this.env?.GOOGLE_LOCATION ||
-      getEnvString('VERTEX_REGION') ||
-      getEnvString('GOOGLE_CLOUD_LOCATION') ||
-      getEnvString('GOOGLE_LOCATION') ||
+      resolveProviderEnv(this.env, ['VERTEX_REGION', 'GOOGLE_CLOUD_LOCATION', 'GOOGLE_LOCATION'])
+        ?.value ||
       DEFAULT_LOCATION
     );
   }
