@@ -27,6 +27,7 @@ describe('OpenAiModerationProvider', () => {
     vi.mocked(getCacheWriteContext).mockImplementation(() => ({
       generation: 0,
       isCurrent: () => true,
+      get: <T>(key: string) => getCache().get<T>(key),
       set: async (key, value) => {
         await getCache().set(key, value);
       },

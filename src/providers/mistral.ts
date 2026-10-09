@@ -3,7 +3,6 @@ import { createHmac } from 'crypto';
 import {
   fetchWithCache,
   getAbortSignalScopedKey,
-  getCache,
   getCacheWriteContext,
   getScopedCacheKey,
   isCacheEnabled,
@@ -705,20 +704,17 @@ export class MistralChatCompletionProvider implements ApiProvider {
       apiUrl,
     )}:${getMistralAuthCacheNamespace(apiKey)}:${hashMistralCacheValue(params)}`;
     if (isCacheEnabled()) {
-      const cache = getCache();
-      if (cache) {
-        const cachedResult = await cache.get<ProviderResponse>(cacheKey);
-        if (cachedResult) {
-          logger.debug('Returning cached Mistral response', { model: this.modelName });
-          return {
-            ...cachedResult,
-            cached: true,
-            tokenUsage: {
-              ...cachedResult.tokenUsage,
-              cached: cachedResult.tokenUsage?.total,
-            },
-          };
-        }
+      const cachedResult = await cacheContext.get<ProviderResponse>(cacheKey);
+      if (cachedResult) {
+        logger.debug('Returning cached Mistral response', { model: this.modelName });
+        return {
+          ...cachedResult,
+          cached: true,
+          tokenUsage: {
+            ...cachedResult.tokenUsage,
+            cached: cachedResult.tokenUsage?.total,
+          },
+        };
       }
     }
 
@@ -913,16 +909,17 @@ export class MistralEmbeddingProvider implements ApiProvider {
 
     let data;
     let cached = false;
-    const cache = isCacheEnabled() ? getCache() : undefined;
-    if (cache) {
+    const useCache = isCacheEnabled();
+    if (useCache) {
       try {
-        const cachedData = await cache.get<any>(cacheKey);
+        const cachedData = await cacheContext.get<any>(cacheKey, options?.abortSignal);
         if (cachedData) {
           logger.debug('Returning cached Mistral embedding response', { model: this.modelName });
           data = cachedData;
           cached = true;
         }
       } catch (err) {
+        options?.abortSignal?.throwIfAborted();
         logger.error(`Failed to read Mistral embedding cache: ${String(err)}`);
       }
     }
@@ -986,7 +983,7 @@ export class MistralEmbeddingProvider implements ApiProvider {
         cost: calculateMistralCost(this.modelName, this.config, promptTokens, completionTokens),
         ...(cached ? { cached: true } : {}),
       };
-      if (!cached && cache) {
+      if (!cached && useCache) {
         try {
           await cacheContext.set(cacheKey, data);
         } catch (err) {

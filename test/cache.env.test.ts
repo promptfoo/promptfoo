@@ -1056,7 +1056,7 @@ describe('invocation-scoped cache settings', () => {
   );
 
   it.each(['', 'fixture'])(
-    'keeps a write context bound to its original backend and namespace (%s)',
+    'keeps a cache context bound to its original backend and namespace (%s)',
     async (namespace) => {
       const selected = disk(path.join(tempDir, 'context-original'));
       const elsewhere = disk(path.join(tempDir, 'context-other'));
@@ -1067,12 +1067,69 @@ describe('invocation-scoped cache settings', () => {
         cache.withCacheNamespace('other', () => context.set('key', 'original')),
       );
       expect(await original(() => cache.getCache().get('key'))).toBe('original');
+      expect(await cliState.withEnv(elsewhere, () => context.get('key'))).toBe('original');
       expect(await cliState.withEnv(elsewhere, () => cache.getCache().get('key'))).toBeUndefined();
       await original(() => cache.getCache().clear());
       await cliState.withEnv(elsewhere, () => context.set('key', 'stale'));
       expect(await original(() => cache.getCache().get('key'))).toBeUndefined();
+      await original(() => cache.getCache().set('key', 'fresh'));
+      expect(await context.get('key')).toBeUndefined();
+      expect(await original(() => cache.getCache().get('key'))).toBe('fresh');
     },
   );
+
+  it('discards a provider cache lookup that completes after its generation is cleared', async () => {
+    await cliState.withEnv(memory, async () => {
+      const selected = cache.getCache();
+      const context = cache.getCacheWriteContext();
+      const lookup = createDeferred<string>();
+      const entered = createDeferred<void>();
+      vi.spyOn(selected, 'get').mockImplementationOnce(() => {
+        entered.resolve();
+        return lookup.promise;
+      });
+      const reading = context.get('key');
+      await entered.promise;
+      await selected.clear();
+      lookup.resolve('old');
+      expect(await reading).toBeUndefined();
+    });
+  });
+
+  it('cancels a provider read waiting for a clear without cancelling the clear', async () => {
+    await cliState.withEnv(memory, async () => {
+      const store = cache.getCache().stores[0];
+      const clear = store.clear.bind(store);
+      const entered = createDeferred<void>();
+      const release = createDeferred<void>();
+      vi.spyOn(store, 'clear').mockImplementationOnce(async () => {
+        entered.resolve();
+        await release.promise;
+        return clear();
+      });
+      const clearing = cache.getCache().clear();
+      await entered.promise;
+      const context = cache.getCacheWriteContext();
+      const controller = new AbortController();
+      const reason = new DOMException('provider read cancelled', 'AbortError');
+      let settled = false;
+      const reading = context.get('key', controller.signal).catch((error) => {
+        settled = true;
+        return error;
+      });
+      try {
+        controller.abort(reason);
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        expect(settled).toBe(true);
+      } finally {
+        release.resolve();
+        await Promise.all([reading, clearing]);
+      }
+      expect(await reading).toBe(reason);
+      await context.set('key', 'fresh');
+      expect(await context.get('key')).toBe('fresh');
+    });
+  });
 
   it('keeps the original TTL when a write context is used from another environment', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });

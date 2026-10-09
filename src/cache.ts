@@ -359,7 +359,7 @@ export function getCacheClearGeneration() {
   return getCacheGeneration(getCacheBackend()).clearGeneration;
 }
 
-/** Retain an active request's cache scope until its response has been handled. */
+/** Capture the cache scope that requests and provider-local entries depend on. */
 export function getCacheWriteContext() {
   const backend = getCacheBackend();
   const ttl = getCacheTtlMs();
@@ -369,6 +369,24 @@ export function getCacheWriteContext() {
   return {
     generation,
     isCurrent: () => generationState.clearGeneration === generation,
+    async get<T>(key: string, signal?: AbortSignal | null): Promise<T | undefined> {
+      throwIfAborted(signal);
+      const scopedKey = getScopedCacheKey(key, namespace);
+      const clearing = getPendingCacheClears(backend, scopedKey);
+      if (clearing.length > 0) {
+        await waitForPromiseWithAbort(Promise.allSettled(clearing), signal);
+        throwIfAborted(signal);
+      }
+      if (generationState.clearGeneration !== generation) {
+        return undefined;
+      }
+      const value = await waitForPromiseWithAbort(
+        getCacheInstance(backend, ttl).get<T>(scopedKey),
+        signal,
+      );
+      throwIfAborted(signal);
+      return generationState.clearGeneration === generation ? value : undefined;
+    },
     set: (key: string, value: unknown) => {
       const scopedKey = getScopedCacheKey(key, namespace);
       return mutateCacheIfCurrent(backend, generationState, generation, scopedKey, () =>
@@ -378,6 +396,12 @@ export function getCacheWriteContext() {
   };
 }
 
+function getPendingCacheClears(backend: CacheBackend, cacheKey: string) {
+  return [...backend.clears]
+    .filter(([, prefix]) => !prefix || cacheKey.startsWith(prefix))
+    .map(([clearing]) => clearing);
+}
+
 async function mutateCacheIfCurrent(
   backend: CacheBackend,
   generationState: { clearGeneration: number },
@@ -385,11 +409,7 @@ async function mutateCacheIfCurrent(
   cacheKey: string,
   mutate: () => Promise<unknown>,
 ) {
-  await Promise.allSettled(
-    [...backend.clears]
-      .filter(([, prefix]) => !prefix || cacheKey.startsWith(prefix))
-      .map(([clearing]) => clearing),
-  );
+  await Promise.allSettled(getPendingCacheClears(backend, cacheKey));
   if (generationState.clearGeneration !== clearGeneration) {
     return;
   }
@@ -1267,9 +1287,7 @@ export async function fetchWithCache<T = unknown>(
     mutateCacheIfCurrent(backend, generationState, clearGeneration, cacheKey, () =>
       cache.del(cacheKey),
     );
-  const pendingClears = [...backend.clears]
-    .filter(([, prefix]) => !prefix || cacheKey.startsWith(prefix))
-    .map(([clearing]) => clearing);
+  const pendingClears = getPendingCacheClears(backend, cacheKey);
   if (pendingClears.length > 0) {
     await waitForPromiseWithAbort(Promise.allSettled(pendingClears), signal);
     throwIfAborted(signal);

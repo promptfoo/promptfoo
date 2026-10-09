@@ -1,6 +1,5 @@
 import { APIError } from '@anthropic-ai/sdk';
 import {
-  getCache,
   getCacheTtlMs,
   getCacheWriteContext,
   getScopedCacheKey,
@@ -1136,7 +1135,6 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       this.shouldCacheResponses() &&
       !this.hasCustomHeaders() &&
       Object.keys(config.headers ?? {}).length === 0;
-    const cache = shouldUseResponseCache ? await getCache() : undefined;
     const { metadata: _metadata, ...cacheKeyParams } = params;
     const cacheKeyHeaders = normalizeHeadersForCacheKey(headers);
     const cacheKey = shouldUseResponseCache
@@ -1149,15 +1147,14 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       : undefined;
     const ephemeralCacheKey = cacheKey ? getScopedCacheKey(cacheKey) : undefined;
     const cacheContext = getCacheWriteContext();
-    const cacheClearGeneration = cacheContext.generation;
 
-    if (cache && cacheKey && ephemeralCacheKey) {
+    if (cacheKey && ephemeralCacheKey) {
       // Try to get the cached response
       const cachedResponse = await this.getCachedResponse(
-        cache,
         cacheKey,
         ephemeralCacheKey,
-        cacheClearGeneration,
+        cacheContext,
+        options?.abortSignal,
       );
       if (cachedResponse) {
         try {
@@ -1223,7 +1220,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       }
 
       const message = toCachedMessage(resolvedMessage, responses);
-      if (cache && cacheKey && ephemeralCacheKey && message.stop_reason !== 'pause_turn') {
+      if (cacheKey && ephemeralCacheKey && message.stop_reason !== 'pause_turn') {
         try {
           await this.setCachedResponse(
             cacheKey,

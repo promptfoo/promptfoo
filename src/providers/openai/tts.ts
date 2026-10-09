@@ -1,4 +1,4 @@
-import { getCache, getCacheWriteContext, getScopedCacheKey, isCacheEnabled } from '../../cache';
+import { getCacheWriteContext, getScopedCacheKey, isCacheEnabled } from '../../cache';
 import logger from '../../logger';
 import { sha256 } from '../../util/createHash';
 import {
@@ -122,9 +122,11 @@ function getValidationError(
 async function getCachedResponse(
   cacheKey: string,
   startedAt: number,
+  cacheContext: ReturnType<typeof getCacheWriteContext>,
+  signal?: AbortSignal,
 ): Promise<ProviderResponse | undefined> {
   try {
-    const cachedResponse = await getCache().get<string>(cacheKey);
+    const cachedResponse = await cacheContext.get<string>(cacheKey, signal);
     if (!cachedResponse) {
       return undefined;
     }
@@ -135,6 +137,9 @@ async function getCachedResponse(
       latencyMs: Date.now() - startedAt,
     };
   } catch (error) {
+    if (signal?.aborted) {
+      throw getAbortError(signal);
+    }
     logger.debug('[OpenAI TTS] Failed to read cached response', { error });
     return undefined;
   }
@@ -310,7 +315,12 @@ export class OpenAiTtsProvider extends OpenAiGenericProvider {
     const cacheContext = getCacheWriteContext();
     const clearGeneration = cacheContext.generation;
     if (useCache) {
-      const cachedResponse = await getCachedResponse(cacheKey, startedAt);
+      const cachedResponse = await getCachedResponse(
+        cacheKey,
+        startedAt,
+        cacheContext,
+        callApiOptions?.abortSignal,
+      );
       if (cachedResponse) {
         return cachedResponse;
       }

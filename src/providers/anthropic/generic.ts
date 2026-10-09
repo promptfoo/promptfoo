@@ -12,7 +12,6 @@ import {
   loadClaudeCodeCredential,
 } from './claudeCodeAuth';
 import type { ClientOptions } from '@anthropic-ai/sdk';
-import type { Cache } from 'cache-manager';
 
 import type { getCacheWriteContext } from '../../cache';
 import type { EnvOverrides } from '../../types/env';
@@ -219,7 +218,11 @@ export class AnthropicGenericProvider implements ApiProvider {
   private readonly ephemeralCacheNamespace = randomUUID();
   private readonly ephemeralResponseCache = new Map<
     string,
-    { response: string; expiresAt: number }
+    {
+      response: string;
+      expiresAt: number;
+      cacheContext: ReturnType<typeof getCacheWriteContext>;
+    }
   >();
 
   constructor(
@@ -391,22 +394,22 @@ export class AnthropicGenericProvider implements ApiProvider {
   }
 
   protected async getCachedResponse(
-    cache: Cache,
     cacheKey: string,
     ephemeralCacheKey: string,
-    clearGeneration: number,
+    cacheContext: ReturnType<typeof getCacheWriteContext>,
+    signal?: AbortSignal,
   ): Promise<string | undefined> {
     if (this.label) {
-      return cache.get<string | undefined>(cacheKey);
+      return cacheContext.get<string>(cacheKey, signal);
     }
 
     // The generation identifies both the backend and its most recent clear.
-    const key = `${clearGeneration}:${ephemeralCacheKey}`;
+    const key = `${cacheContext.generation}:${ephemeralCacheKey}`;
     const entry = this.ephemeralResponseCache.get(key);
     if (!entry) {
       return undefined;
     }
-    if (entry.expiresAt <= Date.now()) {
+    if (!entry.cacheContext.isCurrent() || entry.expiresAt <= Date.now()) {
       this.ephemeralResponseCache.delete(key);
       return undefined;
     }
@@ -442,6 +445,8 @@ export class AnthropicGenericProvider implements ApiProvider {
     this.ephemeralResponseCache.set(key, {
       response,
       expiresAt: ttlMs <= 0 ? Number.POSITIVE_INFINITY : Date.now() + ttlMs,
+      // Live local entries depend on this scope's generation even when it leaves the idle LRU.
+      cacheContext,
     });
   }
 

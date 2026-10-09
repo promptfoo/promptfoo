@@ -237,3 +237,81 @@ it.each([
     }
   },
 );
+
+it.each(['namespace', 'backend'] as const)(
+  'retains idle Anthropic response entries across %s eviction and GC',
+  (axis) => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-anthropic-idle-'));
+    try {
+      const script = `
+        import { setImmediate } from 'node:timers/promises';
+        let calls = 0;
+        globalThis.fetch = async request => {
+          if (String(request?.url ?? request) !== 'https://api.anthropic.com/v1/messages') {
+            throw new Error('Unexpected network request');
+          }
+          calls++;
+          return Response.json({
+            id: 'msg_fixture', type: 'message', role: 'assistant', model: 'claude-sonnet-4-6',
+            content: [{ type: 'text', text: 'fixture answer' }], stop_reason: 'end_turn',
+            usage: { input_tokens: 1, output_tokens: 1 },
+          });
+        };
+        const cache = await import(${JSON.stringify(pathToFileURL(path.resolve(__dirname, '../src/cache.ts')).href)});
+        const { default: cliState } = await import(${JSON.stringify(pathToFileURL(path.resolve(__dirname, '../src/cliState.ts')).href)});
+        const { AnthropicMessagesProvider } = await import(${JSON.stringify(pathToFileURL(path.resolve(__dirname, '../src/providers/anthropic/messages.ts')).href)});
+        const provider = new AnthropicMessagesProvider('claude-sonnet-4-6', {
+          config: { apiKey: 'fixture-key', maxRetries: 0 },
+        });
+        const directory = ${JSON.stringify(directory)};
+        const env = { PROMPTFOO_CACHE_TYPE: 'disk', PROMPTFOO_CACHE_PATH: directory + '/active' };
+        const inScope = fn => cliState.withEnv(env, () => cache.withCacheNamespace('idle', fn));
+        const call = () => inScope(() => provider.callApi('fixture'));
+        const first = await call();
+        const control = await call();
+        const generation = await inScope(async () => cache.getCacheClearGeneration());
+        for (let index = 0; index < 80; index++) {
+          await cliState.withEnv(
+            ${JSON.stringify(axis)} === 'namespace' ? env : { ...env, PROMPTFOO_CACHE_PATH: directory + '/other-' + index },
+            () => cache.withCacheNamespace('other-' + index, async () => cache.getCacheClearGeneration()),
+          );
+        }
+        for (let turn = 0; turn < 5; turn++) {
+          await setImmediate();
+          global.gc();
+        }
+        const retained = generation === await inScope(async () => cache.getCacheClearGeneration());
+        const repeated = await call();
+        const callsBeforeClear = calls;
+        await inScope(() => cache.getCache().clear());
+        const afterClear = await call();
+        console.log(JSON.stringify({
+          retained, callsBeforeClear, calls, firstError: first.error, controlCached: control.cached,
+          repeatedError: repeated.error, repeatedOutput: repeated.output, repeatedCached: repeated.cached,
+          afterClearError: afterClear.error, afterClearOutput: afterClear.output,
+        }));
+      `;
+      const child = spawnSync(
+        process.execPath,
+        ['--expose-gc', '--import', 'tsx', '--input-type=module', '--eval', script],
+        {
+          cwd: path.resolve(__dirname, '..'),
+          env: { ...process.env, LOG_LEVEL: 'error', PROMPTFOO_DISABLE_TELEMETRY: 'true' },
+          encoding: 'utf8',
+        },
+      );
+      expect(child.status, child.stderr).toBe(0);
+      expect(JSON.parse(child.stdout.trim())).toEqual({
+        retained: true,
+        callsBeforeClear: 1,
+        calls: 2,
+        controlCached: true,
+        repeatedOutput: 'fixture answer',
+        repeatedCached: true,
+        afterClearOutput: 'fixture answer',
+      });
+    } finally {
+      fs.rmSync(directory, { recursive: true, force: true });
+    }
+  },
+);

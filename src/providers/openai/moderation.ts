@@ -2,7 +2,6 @@ import { createHmac } from 'crypto';
 
 import {
   fetchWithCache,
-  getCache,
   getCacheWriteContext,
   getScopedCacheKey,
   isCacheEnabled,
@@ -264,8 +263,7 @@ export class OpenAiModerationProvider
     });
 
     if (useCache) {
-      const cache = await getCache();
-      const cachedResponse = await cache.get(cacheKey);
+      const cachedResponse = await cacheContext.get(cacheKey);
 
       if (cachedResponse) {
         logger.debug('Returning cached moderation response');

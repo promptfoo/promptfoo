@@ -3,8 +3,15 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { getCache, getCacheClearGeneration, withCacheNamespace } from '../../src/cache';
+import {
+  getCache,
+  getCacheClearGeneration,
+  getCacheWriteContext,
+  withCacheNamespace,
+} from '../../src/cache';
 import cliState from '../../src/cliState';
+import { AnthropicCompletionProvider } from '../../src/providers/anthropic/completion';
+import { AnthropicMessagesProvider } from '../../src/providers/anthropic/messages';
 import {
   MistralChatCompletionProvider,
   MistralEmbeddingProvider,
@@ -195,6 +202,48 @@ describe.each(cases)('$name cache scope', (fixture) => {
     },
   );
 
+  it.each(['backend', 'namespace'])(
+    'waits for a %s clear before reading an existing provider cache entry',
+    async (cleared) => {
+      const call = fixture.create();
+      const warming = scope('a', 'shared', call);
+      await requestStarted.promise;
+      await finishRequests();
+      expect(await warming).toBe('1');
+      const entered = createDeferred<void>();
+      const release = createDeferred<void>();
+      const store = await scope('a', 'shared', async () => getCache().stores[0]);
+      const set = store.set.bind(store);
+      const setSpy = vi.spyOn(store, 'set').mockImplementationOnce(async (...args) => {
+        entered.resolve();
+        await release.promise;
+        return set(...args);
+      });
+      const writing = scope('a', 'shared', () =>
+        getCacheWriteContext().set('held-write', 'fixture'),
+      );
+      await entered.promise;
+      const clearing = scope('a', cleared === 'backend' ? '' : 'shared', () => getCache().clear());
+      let settled = false;
+      const reading = scope('a', 'shared', call).then((value) => {
+        settled = true;
+        return value;
+      });
+      try {
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        expect(settled).toBe(false);
+        expect(requests).toHaveLength(1);
+      } finally {
+        release.resolve();
+        await Promise.all([writing, clearing, reading]);
+        setSpy.mockRestore();
+      }
+      expect(await reading).toBe('2');
+      expect(await scope('a', 'shared', call)).toBe('2');
+      expect(requests).toHaveLength(2);
+    },
+  );
+
   it('does not join or cache a response started before clearing its namespace', async () => {
     const call = fixture.create();
     const first = scope('a', 'shared', call);
@@ -248,6 +297,70 @@ describe.each(cases)('$name cache scope', (fixture) => {
     });
   }
 });
+
+it.each(['messages', 'completion'] as const)(
+  'waits for clearing before reusing a labeled Anthropic %s response',
+  async (kind) => {
+    await cliState.withEnv({ PROMPTFOO_CACHE_TYPE: 'memory', ANTHROPIC_CUSTOM_HEADERS: '' }, () =>
+      withCacheNamespace(`anthropic-clear-${kind}`, async () => {
+        const provider =
+          kind === 'messages'
+            ? new AnthropicMessagesProvider('claude-sonnet-4-6', {
+                label: 'fixture-tenant',
+                config: { apiKey: 'fixture-key' },
+              })
+            : new AnthropicCompletionProvider('claude-2.1', {
+                label: 'fixture-tenant',
+                config: { apiKey: 'fixture-key' },
+              });
+        const create =
+          kind === 'messages'
+            ? vi
+                .spyOn(provider.anthropic.messages, 'create')
+                .mockResolvedValueOnce({ content: [{ type: 'text', text: 'old' }] } as any)
+                .mockResolvedValueOnce({ content: [{ type: 'text', text: 'fresh' }] } as any)
+            : vi
+                .spyOn(provider.anthropic.completions, 'create')
+                .mockResolvedValueOnce({ completion: 'old' } as any)
+                .mockResolvedValueOnce({ completion: 'fresh' } as any);
+        expect(await provider.callApi('fixture')).toMatchObject({ output: 'old' });
+        const entered = createDeferred<void>();
+        const release = createDeferred<void>();
+        const store = getCache().stores[0];
+        const set = store.set.bind(store);
+        const setSpy = vi.spyOn(store, 'set').mockImplementationOnce(async (...args) => {
+          entered.resolve();
+          await release.promise;
+          return set(...args);
+        });
+        const writing = getCacheWriteContext().set('held-write', 'fixture');
+        await entered.promise;
+        const clearing = getCache().clear();
+        let settled = false;
+        const reading = provider.callApi('fixture').then((value) => {
+          settled = true;
+          return value;
+        });
+        try {
+          await new Promise<void>((resolve) => setImmediate(resolve));
+          expect(settled).toBe(false);
+          expect(create).toHaveBeenCalledTimes(1);
+        } finally {
+          release.resolve();
+          await Promise.all([writing, clearing, reading]);
+          setSpy.mockRestore();
+        }
+        expect(await reading).toMatchObject({ output: 'fresh' });
+        expect(await provider.callApi('fixture')).toMatchObject({
+          output: 'fresh',
+          cached: true,
+        });
+        expect(create).toHaveBeenCalledTimes(2);
+        create.mockRestore();
+      }),
+    );
+  },
+);
 
 it('does not open disk storage when speech policy bypasses response caching', async () => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-cache-bypass-'));
