@@ -118,8 +118,7 @@ tests:
 ```
 
 ```txt title="rubric.txt"
-Fail unless the output mentions "{{topic}}".
-Start your reason with: GOT=[{{topic}}]
+The response mentions {{topic}}.
 ```
 
 ## Overriding the LLM grader
