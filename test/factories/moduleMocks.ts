@@ -27,6 +27,14 @@ export const createFsModuleFactory =
     };
   };
 
+export const createFileUtilitiesFactory = (): MockModuleFactory => async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    maybeLoadFromExternalFile: vi.fn((x) => x),
+    renderVarsInObject: vi.fn((x) => x),
+  };
+};
+
 export const createWarningOrderedLoggerFactory = (): MockModuleFactory => () => ({
   default: {
     debug: vi.fn(),

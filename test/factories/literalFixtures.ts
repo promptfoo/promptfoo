@@ -193,6 +193,10 @@ export const createGoogleSearchTool = () => ({
   googleSearch: {},
 });
 
+export const createEnabledSetting = () => ({
+  enabled: true,
+});
+
 export const createUnsetOpenAiGenerationEnv = () => ({
   OPENAI_MAX_TOKENS: undefined,
   OPENAI_MAX_COMPLETION_TOKENS: undefined,
