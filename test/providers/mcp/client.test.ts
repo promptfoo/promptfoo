@@ -1489,6 +1489,55 @@ describe('MCPClient', () => {
       );
     });
 
+    it.each(['caller cancellation', 'SDK timeout'])(
+      'does not dispatch after %s while the token refresh is pending',
+      async (mode) => {
+        const oauthFetch = await initializeOAuthFetch();
+        let releaseToken!: (value: { accessToken: string; expiresAt: number }) => void;
+        mockGetOAuthTokenWithExpiry.mockReturnValueOnce(
+          new Promise((resolve) => {
+            releaseToken = resolve;
+          }),
+        );
+        const fetchSpy = stubFetch(200);
+        const transportSignal = new AbortController();
+        const caller = new AbortController();
+        let rejectSdk!: (reason: Error) => void;
+        let request!: Promise<Response>;
+        mockClient.callTool.mockImplementationOnce(() => {
+          request = oauthFetch('http://localhost:3000/', {
+            method: 'POST',
+            body: '{"method":"tools/call"}',
+            signal: transportSignal.signal,
+          });
+          void request.catch(() => {});
+          return new Promise((_resolve, reject) => {
+            rejectSdk = reject;
+          });
+        });
+        const reason = new Error(mode);
+        const call = mcpClient!.callTool('tool1', {}, caller.signal);
+        void call.catch(() => {});
+        await vi.waitFor(() => expect(releaseToken).toBeDefined());
+        if (mode === 'caller cancellation') {
+          caller.abort(reason);
+        }
+        rejectSdk(reason);
+        if (mode === 'caller cancellation') {
+          await expect(call).rejects.toBe(reason);
+        } else {
+          expect(await call).toMatchObject({ error: mode });
+        }
+        releaseToken({ accessToken: 'fresh', expiresAt: Date.now() + 30_000 });
+        await expect(request).rejects.toThrow();
+        expect(fetchSpy).not.toHaveBeenCalled();
+        expect(transportSignal.signal.aborted).toBe(false);
+        // Other requests sharing the connection remain usable.
+        await oauthFetch('http://localhost:3000/', { method: 'POST', body: '{}' });
+        expect(fetchSpy).toHaveBeenCalledOnce();
+      },
+    );
+
     it.each([
       [[401, 401], 401, 2],
       [[403], 403, 1],

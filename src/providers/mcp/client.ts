@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import path from 'path';
 
 import cliState from '../../cliState';
@@ -29,6 +30,8 @@ import type {
   MCPToolResult,
 } from './types';
 
+const oauthRequestSignal = new AsyncLocalStorage<AbortSignal>();
+
 /**
  * Refresh tokens per request without reconnecting and aborting other tool calls.
  * Retry a rejected token once on HTTP 401; return other failures without a retry.
@@ -38,13 +41,30 @@ function createOAuthFetch(
   serverUrl: string,
 ): FetchLike {
   return async (url, init) => {
+    // SDK transports pass their lifetime signal, not the individual tool request's signal.
+    // Only bind tools/call: the SDK must still be able to send notifications/cancelled.
+    let requestSignal: AbortSignal | undefined;
+    if (typeof init?.body === 'string') {
+      try {
+        if (JSON.parse(init.body).method === 'tools/call') {
+          requestSignal = oauthRequestSignal.getStore();
+        }
+      } catch {
+        // Non-JSON transport requests use only their transport signal.
+      }
+    }
+    const signal =
+      requestSignal && init?.signal
+        ? AbortSignal.any([requestSignal, init.signal])
+        : (requestSignal ?? init?.signal);
     const send = async (rejectedToken?: string) => {
-      init?.signal?.throwIfAborted();
+      signal?.throwIfAborted();
       const { accessToken } = await getOAuthTokenWithExpiry(auth, serverUrl, rejectedToken);
+      signal?.throwIfAborted();
       const headers = new Headers(init?.headers);
       headers.set('Authorization', `Bearer ${accessToken}`);
       // biome-ignore lint/style/noRestrictedGlobals: SDK default; fetchWithProxy retries tool calls on 5xx
-      return { accessToken, response: await fetch(url, { ...init, headers }) };
+      return { accessToken, response: await fetch(url, { ...init, headers, signal }) };
     };
     const first = await send();
     if (first.response.status !== 401) {
@@ -369,11 +389,22 @@ export class MCPClient {
         continue;
       }
       try {
-        const result = await client.callTool(
-          { name, arguments: args },
-          undefined, // use default result schema
-          requestOptions,
-        );
+        const finished = new AbortController();
+        const requestSignal = signal ? AbortSignal.any([signal, finished.signal]) : finished.signal;
+        let result;
+        try {
+          result = await oauthRequestSignal.run(requestSignal, () =>
+            client.callTool(
+              { name, arguments: args },
+              undefined, // use default result schema
+              requestOptions,
+            ),
+          );
+        } finally {
+          // A timeout can reject the SDK request while a shared token refresh is still pending.
+          // Stop that request's eventual send without cancelling other callers' refreshes.
+          finished.abort();
+        }
         signal?.throwIfAborted();
 
         // Handle different content types appropriately
