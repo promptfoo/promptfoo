@@ -34,6 +34,7 @@ export class ElevenLabsAgentsProvider implements ApiProvider {
   private cleanupPromise: Promise<void> | null = null;
   private activeCalls = 0;
   private onIdle: (() => void) | null = null;
+  private shutdownController = new AbortController();
   private initPromise: Promise<void> | null = null;
 
   constructor(
@@ -118,6 +119,7 @@ export class ElevenLabsAgentsProvider implements ApiProvider {
     while (this.cleanupPromise) {
       await this.cleanupPromise;
     }
+    const shutdownSignal = this.shutdownController.signal;
     this.activeCalls++;
     if (!this.config.agentId) {
       providerRegistry.register(this);
@@ -125,8 +127,10 @@ export class ElevenLabsAgentsProvider implements ApiProvider {
     const startTime = Date.now();
 
     try {
-      // Get or create agent
+      // Registration can synchronously initiate process shutdown.
+      providerRegistry.throwIfResourceUseAborted(shutdownSignal);
       const agentId = await this.getOrCreateAgent();
+      providerRegistry.throwIfResourceUseAborted(shutdownSignal);
 
       logger.debug('[ElevenLabs Agents] Running simulation', {
         agentId,
@@ -158,6 +162,7 @@ export class ElevenLabsAgentsProvider implements ApiProvider {
         `/convai/agents/${agentId}/simulate-conversation`,
         simulationRequest,
       );
+      shutdownSignal.throwIfAborted();
 
       // Check for failed simulation
       if (response.status === 'failed') {
@@ -386,23 +391,36 @@ export class ElevenLabsAgentsProvider implements ApiProvider {
     this.cleanupPromise ??= Promise.resolve()
       .then(() => this.cleanupOwnedAgent())
       .finally(() => {
+        // Stay discoverable while graceful cleanup waits, so process shutdown can force it.
+        providerRegistry.unregister(this);
         this.cleanupPromise = null;
+        this.shutdownController = new AbortController();
       });
     return this.cleanupPromise;
   }
 
+  cleanupAfterEvaluation(): Promise<void> {
+    return this.cleanup();
+  }
+
   shutdown(): Promise<void> {
+    this.shutdownController.abort(
+      new DOMException('ElevenLabs provider was shut down', 'AbortError'),
+    );
+    this.onIdle?.();
+    this.onIdle = null;
     return this.cleanup();
   }
 
   private async cleanupOwnedAgent(): Promise<void> {
-    providerRegistry.unregister(this);
-    if (this.activeCalls > 0) {
+    if (this.activeCalls > 0 && !this.shutdownController.signal.aborted) {
       await new Promise<void>((resolve) => {
         this.onIdle = resolve;
       });
     }
-    // Delete ephemeral agent if created
+    // An already-started creation must yield its owned ID before it can be deleted.
+    // A failed creation has no resource to release.
+    await this.agentCreationPromise?.catch(() => {});
     if (this.ephemeralAgentId) {
       const agentId = this.ephemeralAgentId;
       try {

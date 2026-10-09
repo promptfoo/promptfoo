@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { withCacheEnabled } from '../../../../src/cache';
 import { evaluate } from '../../../../src/node';
 import { ElevenLabsAgentsProvider } from '../../../../src/providers/elevenlabs/agents';
-import { providerRegistry } from '../../../../src/providers/providerRegistry';
+import { ProviderRegistry, providerRegistry } from '../../../../src/providers/providerRegistry';
 import { createDeferred } from '../../../util/utils';
 
 const { post, deleteAgent } = vi.hoisted(() => ({ post: vi.fn(), deleteAgent: vi.fn() }));
@@ -170,13 +170,16 @@ describe('ElevenLabs ephemeral agent ownership', () => {
     });
   });
 
-  it('does not delete an agent supplied by the caller', async () => {
-    const provider = createProvider('caller-owned');
-    expect((await provider.callApi('First')).error).toBeUndefined();
-    await provider.cleanup();
-    expect(creations()).toHaveLength(0);
-    expect(deleteAgent).not.toHaveBeenCalled();
-  });
+  it.each(['cleanup', 'shutdown'] as const)(
+    'does not delete a caller-supplied agent during %s',
+    async (method) => {
+      const provider = createProvider('caller-owned');
+      expect((await provider.callApi('First')).error).toBeUndefined();
+      await provider[method]();
+      expect(creations()).toHaveLength(0);
+      expect(deleteAgent).not.toHaveBeenCalled();
+    },
+  );
   it('cleans up after public API evaluations and re-registers a reused provider', async () => {
     const provider = createProvider();
     await runEvaluation(provider);
@@ -251,7 +254,7 @@ describe('ElevenLabs ephemeral agent ownership', () => {
     ]);
   });
 
-  it.each(['explicit cleanup', 'registry shutdown'])(
+  it.each(['explicit cleanup', 'evaluation cleanup'])(
     'waits for an active simulation and deletion during %s',
     async (mode) => {
       const simulationStarted = createDeferred<void>();
@@ -273,7 +276,7 @@ describe('ElevenLabs ephemeral agent ownership', () => {
       await simulationStarted.promise;
       let finished = false;
       const cleanup = (
-        mode === 'explicit cleanup' ? provider.cleanup() : providerRegistry.shutdownAll()
+        mode === 'explicit cleanup' ? provider.cleanup() : provider.cleanupAfterEvaluation()
       ).then(() => {
         finished = true;
       });
@@ -292,6 +295,144 @@ describe('ElevenLabs ephemeral agent ownership', () => {
       expect(deleteAgent.mock.calls).toEqual([['/convai/agents/active-agent']]);
     },
   );
+
+  it('forces an already-waiting graceful cleanup and awaits one DELETE', async () => {
+    const entered = createDeferred<void>();
+    const releaseSimulation = createDeferred<void>();
+    const finishDeletion = createDeferred<void>();
+    let nextAgent = 0;
+    let activeSimulations = 0;
+    post.mockImplementation(async (endpoint: string) => {
+      if (endpoint === '/convai/agents/create') {
+        return { agent_id: `agent-${++nextAgent}` };
+      }
+      if (endpoint === '/convai/agents/agent-1/simulate-conversation') {
+        if (++activeSimulations === 2) {
+          entered.resolve();
+        }
+        await releaseSimulation.promise;
+      }
+      return { status: 'completed', simulated_conversation: [] };
+    });
+    deleteAgent.mockImplementationOnce(() => finishDeletion.promise);
+    const provider = createProvider();
+    const first = provider.callApi('First');
+    const second = provider.callApi('Second');
+    await entered.promise;
+    const graceful = provider.cleanup();
+    let forced: Promise<void> | undefined;
+    let replacement: Promise<Awaited<ReturnType<typeof provider.callApi>>> | undefined;
+    let finished = false;
+    try {
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(providerRegistry.has(provider)).toBe(true);
+      forced = providerRegistry.shutdownAll().then(() => {
+        finished = true;
+      });
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(deleteAgent.mock.calls).toEqual([['/convai/agents/agent-1']]);
+      expect(finished).toBe(false);
+      replacement = provider.callApi('Replacement');
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(creations()).toHaveLength(1);
+      finishDeletion.resolve();
+      await Promise.all([forced, graceful]);
+      expect((await replacement).metadata?.agentId).toBe('agent-2');
+      expect(providerRegistry.has(provider)).toBe(true);
+    } finally {
+      finishDeletion.resolve();
+      releaseSimulation.resolve();
+      await Promise.all([first, second, graceful, forced, replacement]);
+    }
+    expect((await first).error).toContain('shut down');
+    expect((await second).error).toContain('shut down');
+    await providerRegistry.shutdownAll();
+    expect(deleteAgent.mock.calls).toEqual([
+      ['/convai/agents/agent-1'],
+      ['/convai/agents/agent-2'],
+    ]);
+  });
+
+  it('waits for creation during forced shutdown without starting simulation', async () => {
+    const entered = createDeferred<void>();
+    const created = createDeferred<{ agent_id: string }>();
+    post.mockImplementationOnce(() => {
+      entered.resolve();
+      return created.promise;
+    });
+    const provider = createProvider();
+    const call = provider.callApi('First');
+    await entered.promise;
+    const shutdown = providerRegistry.shutdownAll();
+    try {
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(deleteAgent).not.toHaveBeenCalled();
+    } finally {
+      created.resolve({ agent_id: 'late-agent' });
+      await Promise.all([call, shutdown]);
+    }
+    expect((await call).error).toContain('shut down');
+    expect(simulations()).toHaveLength(0);
+    expect(deleteAgent.mock.calls).toEqual([['/convai/agents/late-agent']]);
+  });
+
+  it('does not create an agent when registration encounters process shutdown', async () => {
+    const closedRegistry = new ProviderRegistry(false);
+    await closedRegistry.shutdownForProcess();
+    const registration = vi
+      .spyOn(providerRegistry, 'register')
+      .mockImplementation((resource) => closedRegistry.register(resource));
+    try {
+      const response = await createProvider().callApi('Too late');
+      expect(response.error).toContain('shut down');
+      expect(post).not.toHaveBeenCalled();
+      expect(deleteAgent).not.toHaveBeenCalled();
+    } finally {
+      await closedRegistry.shutdownForProcess();
+      registration.mockRestore();
+    }
+  });
+
+  it('does not create a replacement while process shutdown overlaps retirement', async () => {
+    const registry = new ProviderRegistry(false);
+    const registration = vi
+      .spyOn(providerRegistry, 'register')
+      .mockImplementation((resource) => registry.register(resource));
+    const unregister = vi
+      .spyOn(providerRegistry, 'unregister')
+      .mockImplementation((resource) => registry.unregister(resource));
+    const aborted = vi
+      .spyOn(providerRegistry, 'throwIfResourceUseAborted')
+      .mockImplementation((signal) => registry.throwIfResourceUseAborted(signal));
+    const deletionStarted = createDeferred<void>();
+    const finishDeletion = createDeferred<void>();
+    let retiring: Promise<void> | undefined;
+    let shutdown: Promise<void> | undefined;
+    let nextCall: Promise<Awaited<ReturnType<ElevenLabsAgentsProvider['callApi']>>> | undefined;
+    try {
+      const provider = createProvider();
+      await provider.callApi('First');
+      deleteAgent.mockImplementationOnce(() => {
+        deletionStarted.resolve();
+        return finishDeletion.promise;
+      });
+      retiring = registry.shutdownAll();
+      await deletionStarted.promise;
+      nextCall = provider.callApi('After retirement');
+      shutdown = registry.shutdownForProcess();
+      finishDeletion.resolve();
+      await Promise.all([retiring, shutdown, nextCall]);
+      expect((await nextCall).error).toMatch(/shut(?:ting)? down/);
+      expect(creations()).toHaveLength(1);
+      expect(deleteAgent.mock.calls).toEqual([['/convai/agents/agent-1']]);
+    } finally {
+      finishDeletion.resolve();
+      await Promise.all([retiring, shutdown, nextCall]);
+      registration.mockRestore();
+      unregister.mockRestore();
+      aborted.mockRestore();
+    }
+  });
 
   it('leaves caller-owned agents unregistered during public API evaluations', async () => {
     const provider = createProvider('caller-owned');
