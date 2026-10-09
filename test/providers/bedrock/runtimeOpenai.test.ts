@@ -323,3 +323,12 @@ describe('Runtime Chat streaming', () => {
     expect(result.output).toBeUndefined();
   });
 });
+
+it('preserves an explicit completion cap for models outside the reasoning catalog', async () => {
+  const provider = new BedrockRuntimeChatProvider('example.future-model', {
+    config: { apiKey: 'fixture', max_completion_tokens: 64 },
+  });
+  const { body } = await provider.getOpenAiBody('hello');
+  expect(body.max_completion_tokens).toBe(64);
+  expect(body.max_tokens).toBeUndefined();
+});

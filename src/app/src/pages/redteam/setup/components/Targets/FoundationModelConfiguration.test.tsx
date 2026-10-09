@@ -1054,4 +1054,41 @@ describe('FoundationModelConfiguration', () => {
       'bedrock:converse:amazon.nova-pro-v1:0',
     );
   });
+  it('edits Runtime Chat output caps using max_completion_tokens and identifies Runtime', async () => {
+    const user = userEvent.setup();
+    render(
+      <FoundationModelConfiguration
+        selectedTarget={{
+          id: 'bedrock:runtime:chat:us.openai.gpt-5.6-sol',
+          config: { max_completion_tokens: 512 },
+        }}
+        updateCustomTarget={mockUpdateCustomTarget}
+        providerType="bedrock"
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: /Advanced Configuration/ }));
+    expect(screen.getByLabelText('Max Tokens')).toHaveValue(512);
+    await user.click(screen.getByLabelText('Max Tokens'));
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste('256');
+    expect(mockUpdateCustomTarget).toHaveBeenLastCalledWith('max_completion_tokens', 256);
+    expect(screen.getByText(/Promptfoo uses the Bedrock Runtime endpoint/)).toBeInTheDocument();
+    expect(screen.queryByText(/defaults to the Bedrock Mantle endpoint/)).not.toBeInTheDocument();
+  });
+
+  it('migrates a Responses cap when switching to Runtime Chat', async () => {
+    const user = userEvent.setup();
+    render(
+      <FoundationModelConfiguration
+        selectedTarget={{
+          id: 'bedrock:runtime:responses:us.openai.gpt-5.6-sol',
+          config: { max_output_tokens: 256 },
+        }}
+        updateCustomTarget={mockUpdateCustomTarget}
+        providerType="bedrock"
+      />,
+    );
+    await user.selectOptions(screen.getByLabelText(/Bedrock API/), 'runtime-chat');
+    expect(mockUpdateCustomTarget).toHaveBeenCalledWith('config', { max_completion_tokens: 256 });
+  });
 });

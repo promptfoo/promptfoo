@@ -128,6 +128,16 @@ export class BedrockRuntimeChatProvider extends BedrockMantleChatProvider {
 
   async getOpenAiBody(...args: Parameters<BedrockMantleChatProvider['getOpenAiBody']>) {
     const result = await super.getOpenAiBody(...args);
+    // Runtime accepts the OpenAI completion cap even when a new model is not in the
+    // shared reasoning catalog. Preserve an explicit cap rather than silently omit it.
+    if (
+      result.config.max_completion_tokens !== undefined &&
+      result.body.max_completion_tokens === undefined &&
+      (result.config.passthrough as { max_tokens?: unknown } | undefined)?.max_tokens === undefined
+    ) {
+      result.body.max_completion_tokens = result.config.max_completion_tokens;
+      delete result.body.max_tokens;
+    }
     if (result.config.stream || result.body.stream) {
       result.body.stream = true;
       result.body.stream_options = { include_usage: true, ...result.body.stream_options };

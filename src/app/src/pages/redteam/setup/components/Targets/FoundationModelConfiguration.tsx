@@ -43,6 +43,13 @@ const BEDROCK_API_OPTIONS: { value: BedrockApiMode; label: string }[] = [
   { value: 'runtime-responses', label: 'Responses (Bedrock Runtime)' },
 ];
 
+function getBedrockTokenLimitKey(mode?: BedrockApiMode) {
+  if (mode === 'responses' || mode === 'runtime-responses') {
+    return 'max_output_tokens';
+  }
+  return mode === 'runtime-chat' ? 'max_completion_tokens' : 'max_tokens';
+}
+
 const BEDROCK_API_HELP: Record<BedrockApiMode, string> = {
   invoke: 'Uses the model-specific InvokeModel API on Bedrock Runtime.',
   converse:
@@ -207,14 +214,8 @@ const FoundationModelConfiguration = ({
   };
 
   const updateProviderId = (id: string, apiMode = bedrockApiMode) => {
-    const source =
-      bedrockApiMode === 'responses' || bedrockApiMode === 'runtime-responses'
-        ? 'max_output_tokens'
-        : 'max_tokens';
-    const destination =
-      apiMode === 'responses' || apiMode === 'runtime-responses'
-        ? 'max_output_tokens'
-        : 'max_tokens';
+    const source = getBedrockTokenLimitKey(bedrockApiMode);
+    const destination = getBedrockTokenLimitKey(apiMode);
     if (source !== destination && selectedTarget.config?.[source] !== undefined) {
       const { [source]: limit, ...config } = selectedTarget.config;
       updateCustomTarget('config', { ...config, [destination]: limit });
@@ -418,9 +419,11 @@ const FoundationModelConfiguration = ({
                 {isBedrockHttpApi &&
                   (selectedTarget.config?.apiBaseUrl
                     ? 'Uses your custom endpoint from Advanced Configuration.'
-                    : bedrockApiMode === 'messages'
-                      ? 'Promptfoo selects Bedrock Mantle or Runtime based on the model ID. You can configure a custom endpoint under Advanced Configuration.'
-                      : 'Promptfoo defaults to the Bedrock Mantle endpoint. You can configure a custom endpoint under Advanced Configuration.')}
+                    : bedrockApiMode?.startsWith('runtime-')
+                      ? 'Promptfoo uses the Bedrock Runtime endpoint. You can configure a custom endpoint under Advanced Configuration.'
+                      : bedrockApiMode === 'messages'
+                        ? 'Promptfoo selects Bedrock Mantle or Runtime based on the model ID. You can configure a custom endpoint under Advanced Configuration.'
+                        : 'Promptfoo defaults to the Bedrock Mantle endpoint. You can configure a custom endpoint under Advanced Configuration.')}
               </p>
             </div>
           )}
@@ -668,16 +671,10 @@ const FoundationModelConfiguration = ({
                 id="max-tokens"
                 type="number"
                 min={1}
-                value={
-                  bedrockApiMode === 'responses' || bedrockApiMode === 'runtime-responses'
-                    ? (selectedTarget.config?.max_output_tokens ?? '')
-                    : (selectedTarget.config?.max_tokens ?? '')
-                }
+                value={selectedTarget.config?.[getBedrockTokenLimitKey(bedrockApiMode)] ?? ''}
                 onChange={(e) =>
                   updateCustomTarget(
-                    bedrockApiMode === 'responses' || bedrockApiMode === 'runtime-responses'
-                      ? 'max_output_tokens'
-                      : 'max_tokens',
+                    getBedrockTokenLimitKey(bedrockApiMode),
                     parseInt(e.target.value) || undefined,
                   )
                 }
