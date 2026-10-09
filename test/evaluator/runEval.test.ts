@@ -748,42 +748,60 @@ describe('runEval', () => {
     expect(result.failureReason).toBe(ResultFailureReason.ERROR);
   });
 
-  it('should handle null output differently for red team tests', async () => {
-    const nullOutputProvider: ApiProvider = {
-      id: vi.fn().mockReturnValue('null-provider'),
-      callApi: vi.fn().mockResolvedValue({
-        output: null,
-        tokenUsage: { total: 5, prompt: 5, completion: 0, cached: 0, numRequests: 1 },
-      }),
+  it.each([false, true])(
+    'errors on missing provider outputs with isRedteam=%s',
+    async (isRedteam) => {
+      for (const response of [{}, { output: undefined }, { output: null }]) {
+        const provider: ApiProvider = {
+          id: () => 'missing-output-provider',
+          callApi: vi.fn().mockResolvedValue(response),
+        };
+        const assertion = vi.fn(() => true);
+        const [result] = await runEval({
+          ...defaultOptions,
+          provider,
+          prompt: { raw: 'Test prompt', label: 'test-label' },
+          test: { assert: [{ type: 'javascript', value: assertion }] },
+          conversations: {},
+          registers: {},
+          isRedteam,
+        });
+
+        expect(result.success).toBe(false);
+        expect(result.score).toBe(0);
+        expect(result.error).toBe('No output');
+        expect(result.failureReason).toBe(ResultFailureReason.ERROR);
+        expect(assertion).not.toHaveBeenCalled();
+      }
+    },
+  );
+
+  it.each([
+    { output: '' },
+    { output: 'null' },
+    { output: 'undefined' },
+    { output: '', images: [{ data: 'data:image/png;base64,aGVsbG8=', mimeType: 'image/png' }] },
+    { output: [{ type: 'function', function: { name: 'lookup', arguments: '{}' } }] },
+  ])('grades present output instead of treating it as missing: %j', async (response) => {
+    const provider: ApiProvider = {
+      id: () => 'present-output-provider',
+      callApi: vi.fn().mockResolvedValue(response),
     };
-
-    // Regular test
-    const regularResults = await runEval({
+    const assertion = vi.fn(() => false);
+    const [result] = await runEval({
       ...defaultOptions,
-      provider: nullOutputProvider,
+      provider,
       prompt: { raw: 'Test prompt', label: 'test-label' },
-      test: {},
-      conversations: {},
-      registers: {},
-      isRedteam: false,
-    });
-
-    expect(regularResults[0].success).toBe(false);
-    expect(regularResults[0].error).toBe('No output');
-
-    // Red team test
-    const redTeamResults = await runEval({
-      ...defaultOptions,
-      provider: nullOutputProvider,
-      prompt: { raw: 'Test prompt', label: 'test-label' },
-      test: {},
+      test: { assert: [{ type: 'javascript', value: assertion }] },
       conversations: {},
       registers: {},
       isRedteam: true,
     });
 
-    expect(redTeamResults[0].success).toBe(true);
-    expect(redTeamResults[0].error).toBeUndefined();
+    expect(assertion).toHaveBeenCalledOnce();
+    expect(result.success).toBe(false);
+    expect(result.failureReason).toBe(ResultFailureReason.ASSERT);
+    expect(result.error).not.toContain('No output');
   });
 
   it.each(['provider', 'test', 'postprocess', 'assertion'] as const)(
