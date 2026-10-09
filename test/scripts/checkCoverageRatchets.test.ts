@@ -306,7 +306,12 @@ describe('explicit coverage bases', () => {
     git('merge', '--no-commit', '--no-ff', 'foundation');
     git('restore', '--source=foundation', '--staged', '--worktree', 'src/assertions/legacy.ts');
     git('commit', '-m', 'restack and keep only the owned feature');
-    git('remote', 'add', 'origin', repo);
+    const remote = path.join(repo, 'remote.git');
+    git('clone', '--bare', repo, remote);
+    git('--git-dir', remote, 'update-ref', 'refs/heads/remote-foundation', baseSha);
+    git('--git-dir', remote, 'update-ref', 'refs/heads/fetch-only-foundation', baseSha);
+    git('remote', 'add', 'origin', remote);
+    git('update-ref', 'refs/remotes/origin/remote-foundation', baseSha);
   });
 
   beforeEach(() => {
@@ -330,6 +335,29 @@ describe('explicit coverage bases', () => {
     expect(() => getChangedFiles(repo, 'missing-coverage-base')).toThrow(
       'Unable to determine changed files from explicit coverage base missing-coverage-base',
     );
+  });
+
+  it('resolves a base branch that exists only as a remote-tracking ref', () => {
+    expect(getChangedFiles(repo, 'remote-foundation')).toEqual([
+      { path: 'src/feature.ts', status: 'A' },
+    ]);
+  });
+
+  it('uses a fetched base without reusing FETCH_HEAD after a later failed fetch', () => {
+    expect(getChangedFiles(repo, 'fetch-only-foundation')).toEqual([
+      { path: 'src/feature.ts', status: 'A' },
+    ]);
+    expect(() => getChangedFiles(repo, 'missing-after-successful-fetch')).toThrow(
+      'Unable to determine changed files from explicit coverage base',
+    );
+  });
+
+  it('rejects fetch refspecs without rewriting the checked out branch', () => {
+    const head = git('rev-parse', 'HEAD');
+    expect(() => getChangedFiles(repo, 'foundation:refs/heads/feature')).toThrow(
+      'Unable to determine changed files from explicit coverage base',
+    );
+    expect(git('rev-parse', 'HEAD')).toBe(head);
   });
 
   it('fails instead of falling back when the explicit base has unrelated history', () => {

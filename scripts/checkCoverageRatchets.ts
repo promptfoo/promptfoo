@@ -191,6 +191,26 @@ export function parseChangedFileList(output: string): ChangedFile[] {
     });
 }
 
+function resolveExplicitCoverageBase(baseRef: string, cwd: string): string {
+  for (const candidate of [baseRef, `refs/remotes/origin/${baseRef}`]) {
+    try {
+      return git(
+        ['rev-parse', '--verify', '--end-of-options', `${candidate}^{commit}`],
+        cwd,
+      ).trim();
+    } catch {
+      // Actions checkouts keep other branch names only as remote-tracking refs.
+    }
+  }
+
+  // Only fetch a single ref, never a refspec that could rewrite local branches.
+  git(['check-ref-format', '--allow-onelevel', baseRef], cwd);
+  git(['fetch', '--no-tags', 'origin', baseRef], cwd);
+  // Read FETCH_HEAD only after a successful fetch, so a missing ref cannot reuse
+  // the previous fetch's commit and silently check the wrong diff.
+  return git(['rev-parse', '--verify', 'FETCH_HEAD^{commit}'], cwd).trim();
+}
+
 export function getChangedFiles(cwd: string, baseRef?: string): ChangedFile[] {
   if (baseRef) {
     if (baseRef.startsWith('-')) {
@@ -199,12 +219,8 @@ export function getChangedFiles(cwd: string, baseRef?: string): ChangedFile[] {
 
     // An explicit base is authoritative. Never silently check a different diff
     // when the requested ref is missing or its merge base is unavailable.
-    fetchGitRef(baseRef, cwd);
     try {
-      const baseSha = git(
-        ['rev-parse', '--verify', '--end-of-options', `${baseRef}^{commit}`],
-        cwd,
-      ).trim();
+      const baseSha = resolveExplicitCoverageBase(baseRef, cwd);
       return parseChangedFileList(
         git(['diff', '--name-status', '--diff-filter=ACMRTUXB', `${baseSha}...HEAD`, '--'], cwd),
       );
