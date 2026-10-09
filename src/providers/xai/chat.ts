@@ -704,7 +704,11 @@ export function calculateXAICost(
     : completion > 0
       ? completion
       : (reasoningTokens ?? 0);
-  if (promptTokens == null || billableOutputTokens <= 0) {
+  if (
+    promptTokens == null ||
+    billableOutputTokens < 0 ||
+    (promptTokens <= 0 && billableOutputTokens === 0)
+  ) {
     return undefined;
   }
 
@@ -731,9 +735,6 @@ export function calculateXAICost(
   const inputCost = inputCostOverride ?? (modelCost && modelCost.input * catalogMultiplier);
   const outputCost =
     config.outputCost ?? config.cost ?? (modelCost && modelCost.output * catalogMultiplier);
-  if (inputCost === undefined || outputCost === undefined) {
-    return undefined;
-  }
   const cacheReadCost =
     config.cacheReadCost ??
     inputCostOverride ??
@@ -741,12 +742,20 @@ export function calculateXAICost(
 
   const billableCachedTokens = clampCachedTokens(cachedTokens, promptTokens);
   const uncachedPromptTokens = promptTokens - billableCachedTokens;
+  if (
+    (uncachedPromptTokens > 0 && inputCost === undefined) ||
+    (billableCachedTokens > 0 && cacheReadCost === undefined) ||
+    (billableOutputTokens > 0 && outputCost === undefined)
+  ) {
+    return undefined;
+  }
 
   // Cached prompt tokens (prompt_tokens_details.cached_tokens) use the reduced
   // cache-read rate. When no cache rate is known, cacheReadCost falls back to the
   // full input rate so this formula preserves the undiscounted behavior.
-  const inputCostTotal = inputCost * uncachedPromptTokens + cacheReadCost * billableCachedTokens;
-  const outputCostTotal = outputCost * billableOutputTokens;
+  const inputCostTotal =
+    (inputCost ?? 0) * uncachedPromptTokens + (cacheReadCost ?? 0) * billableCachedTokens;
+  const outputCostTotal = (outputCost ?? 0) * billableOutputTokens;
 
   logger.debug(
     `XAI cost calculation for ${modelName}: ` +
