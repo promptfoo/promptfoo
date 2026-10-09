@@ -459,6 +459,26 @@ describe('getSourceFiles', () => {
     ]);
   });
 
+  it('supports repository-wide architecture roots', () => {
+    write('src/index.ts');
+    write('internal/tool.ts');
+    write('root.ts');
+    const config = {
+      publicFacade: 'src/index.ts',
+      leafLayers: [],
+      layers: [{ name: 'all', roots: ['.'], allowedDependencies: [] }],
+    };
+    write('architecture/layers.json', JSON.stringify(config));
+    const loaded = readLayerConfig(repoRoot);
+    expect(loaded.layers[0].roots).toEqual(['.']);
+    expect(getSourceFiles(repoRoot, true, [], ['.'])).toEqual([
+      'internal/tool.ts',
+      'root.ts',
+      'src/index.ts',
+    ]);
+    expect(getLayerForFile('internal/tool.ts', loaded)).toBe('all');
+  });
+
   it('rejects empty scan and ignore roots before starting the glob', () => {
     expect(() => getSourceFiles(repoRoot, true, [], [''])).toThrow('root');
     expect(() => getSourceFiles(repoRoot, true, [''])).toThrow('root');

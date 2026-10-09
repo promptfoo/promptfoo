@@ -213,7 +213,19 @@ function getShadowRanges(
   };
   const addParams = (node: { start: number; end: number; params: unknown[] }) => {
     if (node.params.some(bindsName)) {
-      ranges.push([node.start, node.end]);
+      // Parameter decorators run in the enclosing scope, before these bindings
+      // exist. Initializers and the body still see the parameter bindings.
+      let start = node.start;
+      for (const param of node.params) {
+        const { decorators = [] } = param as { decorators?: Array<{ start: number; end: number }> };
+        for (const decorator of decorators) {
+          if (start < decorator.start) {
+            ranges.push([start, decorator.start - 1]);
+          }
+          start = Math.max(start, decorator.end);
+        }
+      }
+      ranges.push([start, node.end]);
     }
   };
   new Visitor({

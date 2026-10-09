@@ -1053,6 +1053,34 @@ describe('dependency ownership report', () => {
     ]);
   });
 
+  it.each(['require', 'module'])(
+    'counts %s loads in parameter decorators outside parameter scope',
+    (loader) => {
+      const call = loader === 'require' ? 'require' : 'module.require';
+      write(
+        'src/index.ts',
+        `class Example {
+      method(@dec(${call}('driver')) ${loader}: Loader = ${call}('local-default')) {
+        ${call}('local-body');
+      }
+    }`,
+      );
+      expect(reportDependencyOwnership(root, config).undeclaredUsages).toEqual([
+        expect.objectContaining({ dependency: 'driver' }),
+      ]);
+    },
+  );
+
+  it('retains enclosing loader bindings inside parameter decorators', () => {
+    write(
+      'src/index.ts',
+      `function outer(require: Loader) {
+      class Example { method(@dec(require('local')) require: Loader) {} }
+    }`,
+    );
+    expect(reportDependencyOwnership(root, config).undeclaredUsages).toEqual([]);
+  });
+
   it('does not extend body-local loader bindings into default parameters', () => {
     write(
       'src/index.js',

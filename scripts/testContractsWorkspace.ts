@@ -55,6 +55,7 @@ try {
     });
   }
   const manifest = JSON.parse(fs.readFileSync(path.join(workspace, 'package.json'), 'utf8'));
+  const rootManifest = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
   assert.equal(manifest.private, true);
   assert.deepEqual(Object.keys(manifest.dependencies), ['zod']);
   writeJson(path.join(workspace, 'package.json'), {
@@ -82,6 +83,7 @@ try {
       ...installFlags,
       path.join(workspace, packed.filename),
       `typescript@${manifest.devDependencies.typescript}`,
+      `@types/node@${rootManifest.devDependencies['@types/node']}`,
     ],
     consumer,
   );
@@ -107,6 +109,8 @@ assert.equal('TRACE_CREDENTIAL_PATH_SEGMENT' in contracts, false);
     `const assert = require('node:assert/strict');\nconst contracts = require('${manifest.name}');\n${runtimeChecks}`,
   );
   const typeChecks = `
+// @ts-expect-error This consumer must not inherit TypeScript's default DOM library.
+type UnexpectedBrowserGlobal = Document;
 const prompt: contracts.Prompt = { raw: 'hello', label: 'greeting' };
 const blob: contracts.BlobRef = { hash: 'abc', mimeType: 'image/png', provider: 'filesystem', sizeBytes: 3, uri: 'promptfoo://blob/abc' };
 const response: contracts.ProviderResponse = { images: [{ blobRef: blob }], output: prompt.raw };
@@ -136,10 +140,11 @@ void [response, invalid, invalidBlob];
         module,
         moduleResolution: module,
         target: 'ES2022',
+        lib: ['ES2022'],
         strict: true,
         skipLibCheck: false,
         noEmit: true,
-        types: [],
+        types: ['node'],
       },
       files: [file],
     });

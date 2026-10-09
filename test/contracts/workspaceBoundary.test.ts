@@ -16,6 +16,34 @@ function collectSourceFiles(directory: string): string[] {
   });
 }
 
+function unwrapExpression(node: Node): Node {
+  while (
+    node.type === 'TSAsExpression' ||
+    node.type === 'TSSatisfiesExpression' ||
+    node.type === 'TSTypeAssertion' ||
+    node.type === 'TSNonNullExpression' ||
+    node.type === 'TSInstantiationExpression' ||
+    node.type === 'ParenthesizedExpression'
+  ) {
+    node = node.expression;
+  }
+  return node;
+}
+
+function staticString(expression: Node | undefined): string | undefined {
+  if (!expression) {
+    return undefined;
+  }
+  const node = unwrapExpression(expression);
+  if (node.type === 'Literal' && typeof node.value === 'string') {
+    return node.value;
+  }
+  if (node.type === 'TemplateLiteral' && node.expressions.length === 0) {
+    return node.quasis[0]?.value.cooked ?? undefined;
+  }
+  return undefined;
+}
+
 function findBoundaryViolations(sourceText: string, filePath: string): string[] {
   const parsed = parseSync(filePath, sourceText);
   if (parsed.errors.length > 0) {
@@ -28,15 +56,7 @@ function findBoundaryViolations(sourceText: string, filePath: string): string[] 
     const line = precedingText.split('\n').length;
     const character = precedingText.length - precedingText.lastIndexOf('\n');
     const location = `${line}:${character}`;
-    let specifier: string | undefined;
-    if (specifierNode?.type === 'Literal' && typeof specifierNode.value === 'string') {
-      specifier = specifierNode.value;
-    } else if (
-      specifierNode?.type === 'TemplateLiteral' &&
-      specifierNode.expressions.length === 0
-    ) {
-      specifier = specifierNode.quasis[0]?.value.cooked ?? undefined;
-    }
+    const specifier = staticString(specifierNode);
     if (specifier === undefined) {
       violations.push(`${location}: computed module specifier is not allowed`);
       return;
@@ -92,15 +112,17 @@ function findBoundaryViolations(sourceText: string, filePath: string): string[] 
       checkSpecifier(node.source, node);
     },
     CallExpression(node) {
-      const callee = node.callee;
+      const callee = unwrapExpression(node.callee);
+      const object =
+        callee.type === 'MemberExpression' ? unwrapExpression(callee.object) : undefined;
       const isRequire =
         (callee.type === 'Identifier' && callee.name === 'require') ||
         (callee.type === 'MemberExpression' &&
-          !callee.computed &&
-          callee.object.type === 'Identifier' &&
-          callee.object.name === 'module' &&
-          callee.property.type === 'Identifier' &&
-          callee.property.name === 'require');
+          object?.type === 'Identifier' &&
+          object.name === 'module' &&
+          (callee.computed
+            ? staticString(callee.property) === 'require'
+            : callee.property.type === 'Identifier' && callee.property.name === 'require'));
       if (isRequire) {
         checkSpecifier(node.arguments[0], node);
       }
@@ -151,6 +173,10 @@ describe('contracts workspace dependency boundary', () => {
     });
 
     it.each([
+      ['computed module require', "module['require']('node:fs');"],
+      ['template module require', "module[`require`]('node:fs');"],
+      ['typed module require', "(module as any)['require']('node:fs' as const);"],
+      ['typed require', "(require as any)('node:fs');"],
       ['builtin import', "import fs from 'node:fs';"],
       ['bare builtin import', "import 'fs';"],
       ['other package', "export * from '@promptfoo/contracts';"],

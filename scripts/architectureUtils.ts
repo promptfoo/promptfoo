@@ -72,10 +72,10 @@ function normalizeSourceRoot(repoRoot: string, root: unknown): string {
     );
   }
   const relative = normalizePath(path.relative(repoRoot, path.resolve(repoRoot, root)));
-  if (!relative || relative === '..' || relative.startsWith('../')) {
+  if (relative === '..' || relative.startsWith('../')) {
     throw new Error(`Architecture root "${root}" must be inside the repository.`);
   }
-  return relative;
+  return relative || '.';
 }
 
 function validateLayerDefinition(
