@@ -75,7 +75,9 @@ export class RateLimitRegistry extends EventEmitter {
 
     const run = () =>
       state.executeWithRetry(requestId, callFn, {
-        ...options,
+        getHeaders: options?.getHeaders,
+        isRateLimited: options?.isRateLimited,
+        getRetryAfter: options?.getRetryAfter,
         maxRetriesOverride: provider.handlesOwnRetries ? 0 : providerMaxRetries,
       });
 
