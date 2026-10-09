@@ -2337,7 +2337,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     delete preflightEnv.OTEL_RESOURCE_ATTRIBUTES;
 
     if (abortSignal?.aborted) {
-      throw this.createAbortError('Codex compatibility check aborted');
+      throw createAbortError('Codex compatibility check aborted');
     }
 
     const compatibilityCheck = checkCodexCliCompatibility({
@@ -2351,7 +2351,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     }
     let onAbort: (() => void) | undefined;
     const abortPromise = new Promise<void>((_, reject) => {
-      onAbort = () => reject(this.createAbortError('Codex compatibility check aborted'));
+      onAbort = () => reject(createAbortError('Codex compatibility check aborted'));
       abortSignal.addEventListener('abort', onAbort, { once: true });
     });
     try {

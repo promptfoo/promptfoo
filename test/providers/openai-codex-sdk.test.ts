@@ -2873,6 +2873,7 @@ describe('OpenAICodexSDKProvider', () => {
         const resultPromise = provider.callApi('Test prompt', undefined, {
           abortSignal: abortController.signal,
         });
+        await vi.waitFor(() => expect(mockCompatibilityPreflight).toHaveBeenCalledOnce());
         abortController.abort();
 
         await expect(resultPromise).resolves.toEqual({ error: 'OpenAI Codex SDK call aborted' });
