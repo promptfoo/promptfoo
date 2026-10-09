@@ -1,5 +1,38 @@
 import { describe, expect, it } from 'vitest';
-import { isMissingPackageImportError } from '../../src/util/packageImportErrors';
+import {
+  isMissingPackageImportError,
+  optionalPackageInstallHint,
+} from '../../src/util/packageImportErrors';
+
+describe('optionalPackageInstallHint', () => {
+  it('gives the command for a project install and for a global one', () => {
+    expect(optionalPackageInstallHint('npm install promptfoo @slack/web-api@^8.1.1')).toBe(
+      'Install it with: npm install promptfoo @slack/web-api@^8.1.1 ' +
+        '(or, if Promptfoo is installed globally with npm: npm install -g promptfoo @slack/web-api@^8.1.1; ' +
+        'with pnpm, Yarn or Bun, use its global install instead)',
+    );
+  });
+
+  it('keeps every package of a multi-package command in the global form', () => {
+    expect(
+      optionalPackageInstallHint(
+        'npm install promptfoo @ibm-cloud/watsonx-ai@^1.7.16 ibm-cloud-sdk-core@5.6.2',
+      ),
+    ).toContain(
+      'with npm: npm install -g promptfoo @ibm-cloud/watsonx-ai@^1.7.16 ibm-cloud-sdk-core@5.6.2;',
+    );
+  });
+
+  it('keeps every step of a multi-line installation global', () => {
+    expect(
+      optionalPackageInstallHint(
+        'npm install promptfoo ibm-cloud-sdk-core@5.6.2\nnpm install --save-exact ibm-cloud-sdk-core@5.6.2',
+      ),
+    ).toContain(
+      'with npm: npm install -g promptfoo ibm-cloud-sdk-core@5.6.2\nnpm install -g --save-exact ibm-cloud-sdk-core@5.6.2;',
+    );
+  });
+});
 
 describe('isMissingPackageImportError', () => {
   it('recognizes missing optional packages', () => {
