@@ -1313,7 +1313,9 @@ describe('runEval', () => {
       const actualTime =
         await vi.importActual<typeof import('../../src/util/time')>('../../src/util/time');
       vi.mocked(sleep).mockImplementation(actualTime.sleep);
-      vi.useFakeTimers();
+      vi.useFakeTimers({
+        toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'],
+      });
       const registry = new RateLimitRegistry({ maxConcurrency: 1 });
       const controller = new AbortController();
       const reason = Object.freeze(
@@ -1366,6 +1368,7 @@ describe('runEval', () => {
           expect(outcome).toBeUndefined();
           await vi.advanceTimersByTimeAsync(1);
         }
+        await pending;
         expect(outcome).toBeDefined();
         if (!outcome || 'error' in outcome) {
           throw new Error('runEval did not settle with a result');

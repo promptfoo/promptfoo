@@ -39,6 +39,14 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+function useEvaluationTimers() {
+  // Cancellation unwinds provider promises through setImmediate; keep that real
+  // while controlling the evaluation deadlines and target delays.
+  vi.useFakeTimers({
+    toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'],
+  });
+}
+
 describeEvaluator('evaluator execution control', () => {
   it('evaluates with provider delay', async () => {
     const started = createDeferred<void>();
@@ -56,7 +64,7 @@ describeEvaluator('evaluator execution control', () => {
       tests: [{}],
     };
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
-    vi.useFakeTimers();
+    useEvaluationTimers();
     let completed = false;
     const pending = evaluate(testSuite, evalRecord, {}).then((result) => {
       completed = true;
@@ -722,7 +730,7 @@ describeEvaluator('evaluator execution control', () => {
   });
 
   it('should handle evaluation timeout without tearing down the shared provider', async () => {
-    vi.useFakeTimers();
+    useEvaluationTimers();
 
     const mockAddResult = vi.fn().mockResolvedValue(undefined);
     let longTimer: NodeJS.Timeout | null = null;
@@ -804,7 +812,7 @@ describeEvaluator('evaluator execution control', () => {
   });
 
   it('should not block timeout rows when a provider call does not settle after abort', async () => {
-    vi.useFakeTimers();
+    useEvaluationTimers();
 
     const providerStarted = createDeferred<void>();
     const mockAddResult = vi.fn().mockResolvedValue(undefined);
@@ -872,7 +880,7 @@ describeEvaluator('evaluator execution control', () => {
   });
 
   it('should ignore stale provider rows that resolve after a timeout row is recorded', async () => {
-    vi.useFakeTimers();
+    useEvaluationTimers();
 
     const mockAddResult = vi.fn().mockResolvedValue(undefined);
     let resolveLateResponse!: (value: ProviderResponse) => void;
@@ -947,7 +955,7 @@ describeEvaluator('evaluator execution control', () => {
   });
 
   it('should honor external abortSignal when timeoutMs is set', async () => {
-    vi.useFakeTimers();
+    useEvaluationTimers();
 
     const mockAddResult = vi.fn().mockResolvedValue(undefined);
     let longTimer: NodeJS.Timeout | null = null;
@@ -1104,7 +1112,7 @@ describeEvaluator('evaluator execution control', () => {
   });
 
   it('should abort when exceeding maxEvalTimeMs', async () => {
-    vi.useFakeTimers();
+    useEvaluationTimers();
 
     const providerStarted = createDeferred<void>();
     const mockAddResult = vi.fn().mockResolvedValue(undefined);
@@ -1186,7 +1194,7 @@ describeEvaluator('evaluator execution control', () => {
   });
 
   it('retains completed target output and cancels queued grading at the max duration', async () => {
-    vi.useFakeTimers();
+    useEvaluationTimers();
 
     const results: any[] = [];
     const waitForTarget = (ms: number, signal?: AbortSignal) => {
@@ -1279,7 +1287,7 @@ describeEvaluator('evaluator execution control', () => {
   });
 
   it('cancels in-flight grouped grading when the max duration expires', async () => {
-    vi.useFakeTimers();
+    useEvaluationTimers();
 
     const results: any[] = [];
     const provider: ApiProvider = {
@@ -1348,7 +1356,7 @@ describeEvaluator('evaluator execution control', () => {
   it.each([true, false])(
     'ends active grouped grading at the max duration when the grader honors cancellation: %s',
     async (cooperative) => {
-      vi.useFakeTimers();
+      useEvaluationTimers();
       const results: EvaluateResult[] = [];
       let markStarted!: () => void;
       let releaseGrader: (() => void) | undefined;
@@ -1885,7 +1893,7 @@ describeEvaluator('evaluator execution control', () => {
     }
   });
   it('cancels queued grouped grading at maxEvalTimeMs and retains completed target outputs', async () => {
-    vi.useFakeTimers();
+    useEvaluationTimers();
 
     const results: any[] = [];
     const waitForTarget = (ms: number, signal?: AbortSignal) => {
@@ -1978,7 +1986,7 @@ describeEvaluator('evaluator execution control', () => {
   it.each(['queued', 'active', 'deadline', 'immediate per-step'] as const)(
     'cancels %s grading without losing completed target outputs',
     async (mode) => {
-      vi.useFakeTimers();
+      useEvaluationTimers();
       const controller = new AbortController();
       const reason = Object.assign(new Error('original caller cancelled grading'), {
         name: 'AbortError',
