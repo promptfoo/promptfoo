@@ -305,7 +305,7 @@ providers:
   - openai:gpt-4.1 # target — no longer in defaultTest.provider
 defaultTest:
   options:
-    provider: openai:gpt-6-sol # judge — now effective in both standard and red-team grading
+    provider: openai:gpt-6-astra # judge — now effective in both standard and red-team grading
 redteam:
   provider: openai:gpt-6-sol # attack generator — choose independently of the judge
 ```
