@@ -193,6 +193,42 @@ describe('ElevenLabs ephemeral agent ownership', () => {
     ]);
   });
 
+  it('keeps a direct call alive while a public evaluation retires the shared agent', async () => {
+    const simulationStarted = createDeferred<void>();
+    const releaseSimulation = createDeferred<void>();
+    const teardownStarted = createDeferred<void>();
+    post.mockResolvedValueOnce({ agent_id: 'shared-agent' });
+    post.mockImplementationOnce(async () => {
+      simulationStarted.resolve();
+      await releaseSimulation.promise;
+      return { status: 'completed', simulated_conversation: [] };
+    });
+    deleteAgent.mockImplementation(() => {
+      teardownStarted.resolve();
+      return Promise.resolve();
+    });
+    const provider = createProvider();
+    const cleanup = provider.cleanupAfterEvaluation.bind(provider);
+    vi.spyOn(provider, 'cleanupAfterEvaluation').mockImplementation(() => {
+      teardownStarted.resolve();
+      return cleanup();
+    });
+    const direct = provider.callApi('Direct');
+    await simulationStarted.promise;
+    const evaluation = runEvaluation(provider);
+    try {
+      await teardownStarted.promise;
+      expect(deleteAgent).not.toHaveBeenCalled();
+    } finally {
+      releaseSimulation.resolve();
+      await Promise.all([direct, evaluation]);
+    }
+    expect((await direct).error).toBeUndefined();
+    expect((await direct).output).toBe('Agent conversation completed');
+    expect(creations()).toHaveLength(1);
+    expect(deleteAgent.mock.calls).toEqual([['/convai/agents/shared-agent']]);
+  });
+
   it('keeps an active peer evaluation alive during scoped teardown', async () => {
     const simulationStarted = createDeferred<void>();
     const releaseSimulation = createDeferred<void>();

@@ -127,7 +127,11 @@ export class ElevenLabsAgentsProvider implements ApiProvider {
     const startTime = Date.now();
 
     try {
-      // Registration can synchronously initiate process shutdown.
+      if (!this.config.agentId) {
+        // Evaluations must use graceful cleanup even for caller-supplied provider instances.
+        await providerRegistry.cleanupWhenIdle([this]);
+      }
+      // Registration or the awaited cleanup reservation can initiate process shutdown.
       providerRegistry.throwIfResourceUseAborted(shutdownSignal);
       const agentId = await this.getOrCreateAgent();
       providerRegistry.throwIfResourceUseAborted(shutdownSignal);
