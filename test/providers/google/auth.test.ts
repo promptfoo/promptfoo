@@ -319,6 +319,41 @@ describe('GoogleAuthManager', () => {
       expect(GoogleAuthManager.determineVertexMode({})).toBe(true);
     });
 
+    it('auto-detects Vertex mode from a scoped-only cloud project', () => {
+      vi.mocked(getEnvString).mockReturnValue(undefined as unknown as string);
+
+      expect(
+        GoogleAuthManager.determineVertexMode(
+          { apiKey: 'local-fixture-key' },
+          { GOOGLE_CLOUD_PROJECT: 'scoped-project' },
+        ),
+      ).toBe(true);
+    });
+
+    it('preserves explicit false over a scoped cloud project', () => {
+      vi.mocked(getEnvString).mockReturnValue(undefined as unknown as string);
+
+      expect(
+        GoogleAuthManager.determineVertexMode(
+          { vertexai: false },
+          { GOOGLE_CLOUD_PROJECT: 'scoped-project' },
+        ),
+      ).toBe(false);
+    });
+
+    it.each(['true', 'false'])(
+      'preserves GOOGLE_GENAI_USE_VERTEXAI=%s priority over scoped project detection',
+      (value) => {
+        vi.mocked(getEnvString).mockImplementation((key) =>
+          key === 'GOOGLE_GENAI_USE_VERTEXAI' ? value : (undefined as unknown as string),
+        );
+
+        expect(
+          GoogleAuthManager.determineVertexMode({}, { GOOGLE_CLOUD_PROJECT: 'scoped-project' }),
+        ).toBe(value === 'true');
+      },
+    );
+
     it('should auto-detect vertex mode from provider-scoped GOOGLE_CLOUD_PROJECT', () => {
       vi.mocked(getEnvString).mockReturnValue(undefined as unknown as string);
 
@@ -396,6 +431,57 @@ describe('GoogleAuthManager', () => {
       expect(logger.warn).toHaveBeenCalledWith(
         expect.stringContaining('Both GOOGLE_CLOUD_PROJECT and config.projectId are set'),
       );
+    });
+
+    it.each([
+      { scoped: 'config-project', processProject: 'different-project', warns: false },
+      { scoped: 'different-project', processProject: 'config-project', warns: true },
+      { scoped: '', processProject: 'different-project', warns: false },
+    ])(
+      'uses the effective cloud project for conflict diagnostics: $scoped / $processProject',
+      ({ scoped, processProject, warns }) => {
+        vi.mocked(getEnvString).mockImplementation((key) =>
+          key === 'GOOGLE_CLOUD_PROJECT' ? processProject : (undefined as unknown as string),
+        );
+
+        GoogleAuthManager.validateAndWarn(
+          { projectId: 'config-project' },
+          { GOOGLE_CLOUD_PROJECT: scoped },
+        );
+
+        const conflict = expect.stringContaining(
+          'Both GOOGLE_CLOUD_PROJECT and config.projectId are set',
+        );
+        if (warns) {
+          expect(logger.warn).toHaveBeenCalledWith(conflict);
+        } else {
+          expect(logger.warn).not.toHaveBeenCalledWith(conflict);
+        }
+      },
+    );
+
+    it('does not report missing Vertex project when only the scoped cloud project is set', () => {
+      vi.mocked(getEnvString).mockReturnValue(undefined as unknown as string);
+
+      GoogleAuthManager.validateAndWarn(
+        { vertexai: true },
+        { GOOGLE_CLOUD_PROJECT: 'scoped-project' },
+      );
+
+      expect(logger.debug).not.toHaveBeenCalledWith(
+        expect.stringContaining('no projectId, credentials, or ADC detected'),
+      );
+    });
+
+    it('keeps strict mutual exclusivity limited to explicit project configuration', () => {
+      vi.mocked(getEnvString).mockReturnValue(undefined as unknown as string);
+
+      expect(() =>
+        GoogleAuthManager.validateAndWarn(
+          { apiKey: 'local-fixture-key', vertexai: true, strictMutualExclusivity: true },
+          { GOOGLE_CLOUD_PROJECT: 'scoped-project' },
+        ),
+      ).not.toThrow();
     });
 
     it('should use provider-scoped GOOGLE_CLOUD_PROJECT for conflict checks', () => {

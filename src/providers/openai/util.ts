@@ -1330,3 +1330,11 @@ function transcriptionModelsWithCost(
 ) {
   return ids.map((id) => ({ id, cost: { ...cost } }));
 }
+
+export function flattenResponseTool(tool: any) {
+  if (tool?.type !== 'function' || !tool.function) {
+    return tool;
+  }
+  const { function: functionDefinition, ...rest } = tool;
+  return { ...rest, ...functionDefinition };
+}

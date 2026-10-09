@@ -2106,7 +2106,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
         sensitiveMcpConfig ||
         sensitiveBaseUrl ||
         perCallTracing
-          ? { shouldCache: false, shouldReadCache: false, shouldWriteCache: false }
+          ? { shouldReadCache: false, shouldWriteCache: false }
           : await initializeAgenticCache(
               {
                 cacheKeyPrefix: 'opencode:sdk',
