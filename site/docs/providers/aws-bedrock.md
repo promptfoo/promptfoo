@@ -1593,7 +1593,8 @@ require cross-region inference profiles. Use `bedrock:us.zai.glm-5.3` or
 `bedrock:us.moonshotai.kimi-k3`; both also accept `global.` profiles, and Kimi K3 accepts
 `in.moonshotai.kimi-k3` from supported India regions. GLM 5.3 InvokeModel accepts `reasoning_effort: max`; on Converse, set `additionalModelRequestFields: { reasoning_effort: max }`.
 For Converse, add `converse:` after `bedrock:`. Kimi K3 and GLM 5.3 Converse cost estimates
-include cache reads/writes. Kimi K3 Converse/Invoke support Standard only; its Priority/Flex
+include cache reads/writes for the published US/global rates; India Kimi costs remain unknown.
+Kimi K3 Converse/Invoke support Standard only; its Priority/Flex
 tiers require the Responses or Chat Completions APIs. GLM 5.3 Converse estimates include
 Standard, Priority, and Flex. InvokeModel cost remains unavailable for both models. Rates follow the model card and [AWS pricing](https://aws.amazon.com/bedrock/pricing/). AWS documents Kimi K3 Converse limitations for document inputs
 and multi-turn history containing reasoning blocks; remove earlier reasoning blocks
