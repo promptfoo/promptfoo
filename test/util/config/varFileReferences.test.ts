@@ -319,29 +319,32 @@ describe('file:// var references in loaded configs', () => {
     expect(test.assert?.[0]).toMatchObject({ type: 'equals', value: 'expected from project' });
   });
 
-  it('expands a --tests glob from a working directory whose name has glob characters', async () => {
-    const project = writeProject('project', {});
-    // The config is elsewhere, so the tests are not resolved from the working directory,
-    // and its name must still not be read as part of the pattern.
-    const work = path.join(directory, 'work [acme]');
-    fs.mkdirSync(work);
-    fs.writeFileSync(path.join(work, 'cases-1.yaml'), '- vars:\n    doc: first\n');
-    fs.writeFileSync(path.join(work, 'cases-2.yaml'), '- vars:\n    doc: second\n');
-    // What the pattern matches when the brackets are taken for a set of characters.
-    for (const name of ['work a', 'work c']) {
-      fs.mkdirSync(path.join(directory, name));
-      fs.writeFileSync(path.join(directory, name, 'cases-9.yaml'), '- vars:\n    doc: other\n');
-    }
-    process.chdir(work);
+  it.each(['project', '.'])(
+    'expands a --tests glob from a bracketed working directory with config in %s',
+    async (configDirectory) => {
+      const project = writeProject(configDirectory, {});
+      // The config is outside the working directory, either beside it or above it.
+      // Its location must not cause the working directory's brackets to become a pattern.
+      const work = path.join(directory, 'work [acme]');
+      fs.mkdirSync(work);
+      fs.writeFileSync(path.join(work, 'cases-1.yaml'), '- vars:\n    doc: first\n');
+      fs.writeFileSync(path.join(work, 'cases-2.yaml'), '- vars:\n    doc: second\n');
+      // What the pattern matches when the brackets are taken for a set of characters.
+      for (const name of ['work a', 'work c']) {
+        fs.mkdirSync(path.join(directory, name));
+        fs.writeFileSync(path.join(directory, name, 'cases-9.yaml'), '- vars:\n    doc: other\n');
+      }
+      process.chdir(work);
 
-    const { testSuite } = await resolve({
-      config: [path.join(project, 'promptfooconfig.json')],
-      tests: 'cases-*.yaml',
-    });
+      const { testSuite } = await resolve({
+        config: [path.join(project, 'promptfooconfig.json')],
+        tests: 'cases-*.yaml',
+      });
 
-    const docs = (testSuite.tests as TestCase[]).map((test) => test.vars?.doc);
-    expect(docs.sort()).toEqual(['first', 'second']);
-  });
+      const docs = (testSuite.tests as TestCase[]).map((test) => test.vars?.doc);
+      expect(docs.sort()).toEqual(['first', 'second']);
+    },
+  );
 
   it('reads replayable rows without rewriting vars unless the suite uses another directory', async () => {
     const project = writeProject('project', {});

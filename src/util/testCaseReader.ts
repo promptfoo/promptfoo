@@ -657,7 +657,7 @@ async function loadTestsFromGlobWithEnv(
 
   const testFiles: string[] = fs.existsSync(resolvedPath)
     ? [resolvedPath]
-    : globSync(toTestsGlob(basePath, resolvedPath), {
+    : globSync(toTestsGlob(basePath, loadTestsGlob), {
         windowsPathsNoEscape: true,
       });
 
@@ -988,18 +988,19 @@ function hasGlobMagic(reference: string): boolean {
 }
 
 /**
- * The glob pattern for a tests reference that was resolved from `basePath`.
+ * The glob pattern for a tests reference resolved from `basePath`.
  *
- * The directory a reference is resolved from is not part of its pattern, whatever characters
- * its name has. A reference that leads out of that directory, such as an absolute one, has
- * no such starting point, so its leading directories count as written for as long as they
- * exist: `/work [acme]/cases-*.yaml` then looks for `cases-*.yaml` in `/work [acme]`.
+ * Relative references retain their patterns below the literal base directory. Absolute
+ * references (including pinned CLI references) and references outside that base use their
+ * existing leading directories literally: `/work [acme]/cases-*.yaml` looks for
+ * `cases-*.yaml` in `/work [acme]`, even when that directory is beneath the config directory.
  */
-function toTestsGlob(basePath: string, resolvedPath: string): string {
+function toTestsGlob(basePath: string, reference: string): string {
   const escape = (directory: string) => escapeGlob(directory, { windowsPathsNoEscape: true });
   const base = path.resolve(basePath);
+  const resolvedPath = path.resolve(base, reference);
   const relative = path.relative(base, resolvedPath);
-  if (!relative.startsWith('..') && !path.isAbsolute(relative)) {
+  if (!path.isAbsolute(reference) && !relative.startsWith('..') && !path.isAbsolute(relative)) {
     return path.resolve(escape(base), relative);
   }
 
@@ -1035,8 +1036,8 @@ function resolveTestsFileReference(reference: string, basePath: string): string[
   }
 
   const resolved = path.resolve(basePath, withoutScheme);
-  if (hasGlobMagic(withoutScheme)) {
-    const matches = globSync(toTestsGlob(basePath, resolved), { windowsPathsNoEscape: true });
+  if (!fs.existsSync(resolved) && hasGlobMagic(withoutScheme)) {
+    const matches = globSync(toTestsGlob(basePath, withoutScheme), { windowsPathsNoEscape: true });
     if (matches.length > 0) {
       return matches.map((match) => stripSheetSelector(match));
     }
@@ -1147,9 +1148,9 @@ function collectConfigFileReferences(
 export function resolveTestsWatchPaths(
   tests: TestSuiteConfig['tests'],
   basePath: string = cliState.basePath || '',
-  // Directory the evaluation resolves inline `file://` vars from. It differs from
+  // Directory the evaluation resolves row dependencies from. It differs from
   // `basePath` for `--tests`, which is located from the working directory.
-  inlineVarsBasePath: string = basePath,
+  rowBasePath: string = basePath,
 ): string[] {
   if (tests == null) {
     return [];
@@ -1171,8 +1172,8 @@ export function resolveTestsWatchPaths(
         file,
         ...collectNestedFileReferences(
           file,
-          inlineVarsBasePath,
-          useSourceDirectory ? path.dirname(file) : basePath,
+          rowBasePath,
+          useSourceDirectory ? path.dirname(file) : rowBasePath,
         ),
       ]);
     }
