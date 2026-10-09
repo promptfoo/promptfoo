@@ -93,3 +93,27 @@ export const createUuidModuleFactory = (): MockModuleFactory => () => ({
     return uuidRegex.test(str);
   }),
 });
+
+export const createFsPromiseOverlayFactory =
+  (fsPromiseMocks: Record<string, unknown>): MockModuleFactory =>
+  async (importOriginal) => {
+    const actual = await importOriginal<typeof import('fs/promises')>();
+    return {
+      ...actual,
+      default: {
+        ...actual,
+        ...fsPromiseMocks,
+      },
+      ...fsPromiseMocks,
+    };
+  };
+
+export const createRequestLoggerFactory = (): MockModuleFactory => () => ({
+  default: {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  },
+  logRequestResponse: vi.fn(),
+});

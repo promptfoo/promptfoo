@@ -14,6 +14,7 @@ export class PythonWorkerPool {
   private queue: QueuedRequest[] = [];
   private isInitialized: boolean = false;
   private shuttingDown: boolean = false;
+  private shutdownPromise: Promise<void> | null = null;
 
   constructor(
     private scriptPath: string,
@@ -111,7 +112,11 @@ export class PythonWorkerPool {
   private processQueue(): void {
     if (this.workers.length > 0 && this.workers.every((worker) => worker.hasFailed())) {
       for (const request of this.queue.splice(0)) {
-        request.reject(new Error('Python worker pool has no usable workers'));
+        request.reject(
+          new Error(
+            `All ${this.workers.length} Python worker(s) for ${this.scriptPath} crashed and could not be restarted. Check the logs for the Python worker stderr output.`,
+          ),
+        );
       }
       return;
     }
@@ -141,6 +146,11 @@ export class PythonWorkerPool {
   }
 
   async shutdown(): Promise<void> {
+    this.shutdownPromise ??= this.shutdownWorkers();
+    return this.shutdownPromise;
+  }
+
+  private async shutdownWorkers(): Promise<void> {
     this.shuttingDown = true;
     this.isInitialized = false;
     logger.debug(`Shutting down Python worker pool (${this.workers.length} workers)`);

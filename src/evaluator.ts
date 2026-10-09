@@ -38,12 +38,7 @@ import { maybeWrapMcpProviderForRedteam } from './redteam/mcpTargetProvider';
 import { redteamProviderManager } from './redteam/providers/shared';
 import { throwIfTargetPromptExceedsMaxChars } from './redteam/shared/promptLength';
 import { getSessionId } from './redteam/util';
-import {
-  createProviderRateLimitOptions,
-  createRateLimitRegistry,
-  type RateLimitRegistry,
-  sleepWithAbort,
-} from './scheduler';
+import { createProviderRateLimitOptions, RateLimitRegistry, sleepWithAbort } from './scheduler';
 import {
   withProviderCallExecutionContext,
   withProviderCallTracingContext,
@@ -4088,7 +4083,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     });
 
     // Create rate limit registry for adaptive concurrency control
-    this.rateLimitRegistry = createRateLimitRegistry({
+    this.rateLimitRegistry = new RateLimitRegistry({
       maxConcurrency: options.maxConcurrency || DEFAULT_MAX_CONCURRENCY,
     });
 

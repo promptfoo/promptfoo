@@ -21,6 +21,7 @@ import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import type { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import type { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import type { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import type { RequestOptions as MCPRequestOptions } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import type { FetchLike } from '@modelcontextprotocol/sdk/shared/transport.js';
 
 import type {
@@ -86,15 +87,6 @@ function createOAuthFetch(
 function getStdioEnv(server: MCPServerConfig): Record<string, string> {
   const parentEnv = getProcessEnv() as Record<string, string>;
   return server.env ? { ...parentEnv, ...server.env } : parentEnv;
-}
-
-/**
- * MCP SDK RequestOptions type for timeout configuration.
- */
-interface MCPRequestOptions {
-  timeout?: number;
-  resetTimeoutOnProgress?: boolean;
-  maxTotalTimeout?: number;
 }
 
 async function loadMcpClientSdk(): Promise<
