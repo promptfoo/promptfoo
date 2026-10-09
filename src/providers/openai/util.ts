@@ -1539,3 +1539,11 @@ export function formatOpenAiError(data: {
   errorMessage += '\n\n' + safeJsonStringify(data, true /* prettyPrint */);
   return errorMessage;
 }
+
+export function flattenResponseTool(tool: any) {
+  if (tool?.type !== 'function' || !tool.function) {
+    return tool;
+  }
+  const { function: functionDefinition, ...rest } = tool;
+  return { ...rest, ...functionDefinition };
+}
