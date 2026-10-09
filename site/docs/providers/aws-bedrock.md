@@ -1389,10 +1389,10 @@ Mantle selectors documented here.
 
 Grok reaches Bedrock two different ways, depending on the model.
 
-**Grok 4.6** (`xai.grok-4.6`) supports Runtime **InvokeModel and Converse** through the
+**Grok 4.6** (`xai.grok-4.6`) supports Runtime **Converse** through the
 `us.xai.grok-4.6` and `global.xai.grok-4.6` inference profiles. The current
 [AWS model card](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-xai-grok-4-6.html)
-lists both native APIs. Use `bedrock:us.xai.grok-4.6` for InvokeModel or the explicit Converse selector with **ordinary AWS
+does not list InvokeModel support. Use the explicit Converse selector with **ordinary AWS
 credentials** (no Bedrock API key required):
 
 ```yaml
