@@ -13,6 +13,7 @@ import {
 } from '../src/evaluatorHelpers';
 import logger from '../src/logger';
 import { AIStudioChatProvider } from '../src/providers/google/ai.studio';
+import { getNunjucksEngine } from '../src/util/templates';
 import { transform } from '../src/util/transform';
 import { createMockProvider } from './factories/provider';
 import { mockProcessEnv } from './util/utils';
@@ -712,6 +713,50 @@ describe('evaluatorHelpers', () => {
         y: 'no',
         nested: '{% raw %}{% raw %}{{x}}{% endraw %} {{y}}{% endraw %}',
       });
+    });
+
+    it('should protect an unterminated raw block through its last raw token', () => {
+      // parseRaw swallows everything through the last raw/endraw token even
+      // when the nesting never closes, so {{x}} stays literal while the
+      // trailing {{y}} parses normally.
+      const variables = {
+        x: 'yes',
+        y: 'no',
+        nested: '{% raw %}{% raw %}{{x}}{% endraw %} {{y}}',
+      };
+      expect(resolveVariables(variables)).toEqual({
+        x: 'yes',
+        y: 'no',
+        nested: '{% raw %}{% raw %}{{x}}{% endraw %} no',
+      });
+    });
+
+    it('should still resolve placeholders after a lone unclosed raw tag', () => {
+      // A {% raw %} with no further raw/endraw token is inert: Nunjucks
+      // renders what follows as a normal template.
+      const variables = {
+        x: 'yes',
+        v: '{% raw %}foo {{x}}',
+      };
+      expect(resolveVariables(variables)).toEqual({
+        x: 'yes',
+        v: '{% raw %}foo yes',
+      });
+    });
+
+    it.each([
+      ['balanced nested', '{% raw %}{% raw %}{{x}}{% endraw %} {{y}}{% endraw %}'],
+      ['unterminated nested', '{% raw %}{% raw %}{{x}}{% endraw %} {{y}}'],
+      ['lone unclosed', '{% raw %}foo {{x}}'],
+      ['balanced then unclosed', '{% raw %}{{x}}{% endraw %} {% raw %}{{y}}'],
+    ])('should render %s raw blocks exactly like Nunjucks does', async (_name, template) => {
+      const rendered = await renderPrompt(
+        toPrompt('{{v}}'),
+        { v: template, x: 'yes', y: 'no' },
+        {},
+      );
+      const engine = getNunjucksEngine();
+      expect(rendered).toBe(engine.renderString(template, { x: 'yes', y: 'no' }));
     });
   });
 
