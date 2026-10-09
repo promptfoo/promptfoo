@@ -426,8 +426,14 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
     for (const [index, configuration] of (
       this.config.knowledgeBaseConfigurations ?? []
     ).entries()) {
-      const filter = configuration.retrievalConfiguration?.vectorSearchConfiguration?.filter;
-      if (filter !== undefined && !isValidBedrockRetrievalFilter(filter)) {
+      const retrieval = configuration.retrievalConfiguration;
+      const filters = [
+        retrieval?.vectorSearchConfiguration?.filter,
+        retrieval?.managedSearchConfiguration?.filter,
+      ];
+      if (
+        filters.some((filter) => filter !== undefined && !isValidBedrockRetrievalFilter(filter))
+      ) {
         return {
           error: `Invalid knowledgeBaseConfigurations[${index}].retrievalConfiguration.vectorSearchConfiguration.filter: use an AWS RetrievalFilter with one operator, such as equals, or andAll/orAll with at least two operands. Flat metadata maps are not supported.`,
         };
@@ -437,10 +443,16 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
     for (const [index, configuration] of (
       this.config.sessionState?.knowledgeBaseConfigurations ?? []
     ).entries()) {
-      const filter = configuration.retrievalConfiguration?.vectorSearchConfiguration?.filter;
-      if (filter !== undefined && !isValidBedrockRetrievalFilter(filter)) {
+      const retrieval = configuration.retrievalConfiguration;
+      const filters = [
+        retrieval?.vectorSearchConfiguration?.filter,
+        retrieval?.managedSearchConfiguration?.filter,
+      ];
+      if (
+        filters.some((filter) => filter !== undefined && !isValidBedrockRetrievalFilter(filter))
+      ) {
         return {
-          error: `Invalid sessionState.knowledgeBaseConfigurations[${index}].retrievalConfiguration.vectorSearchConfiguration.filter: use a valid AWS RetrievalFilter operator.`,
+          error: `Invalid sessionState.knowledgeBaseConfigurations[${index}].retrievalConfiguration filter: use a valid AWS RetrievalFilter operator.`,
         };
       }
     }

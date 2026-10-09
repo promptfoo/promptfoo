@@ -242,8 +242,13 @@ export class AwsBedrockKnowledgeBaseProvider
           ? this.kbConfig.retrievalConfiguration
           : this.kbConfig.retrieveAndGenerateConfiguration.knowledgeBaseConfiguration
               ?.retrievalConfiguration;
-      const filter = retrieval?.vectorSearchConfiguration?.filter;
-      if (filter !== undefined && !isValidBedrockRetrievalFilter(filter)) {
+      const filters = [
+        retrieval?.vectorSearchConfiguration?.filter,
+        retrieval?.managedSearchConfiguration?.filter,
+      ];
+      if (
+        filters.some((filter) => filter !== undefined && !isValidBedrockRetrievalFilter(filter))
+      ) {
         return {
           error:
             'Invalid Knowledge Base retrieval filter: use an AWS RetrievalFilter with one operator, such as equals, or andAll/orAll with at least two operands. Flat metadata maps are not supported.',

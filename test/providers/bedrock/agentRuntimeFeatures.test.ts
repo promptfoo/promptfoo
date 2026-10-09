@@ -495,3 +495,29 @@ describe('Agent runtime features', () => {
     expect(result.output).toBeUndefined();
   });
 });
+
+describe('managed-search filter validation', () => {
+  const invalid = { managedSearchConfiguration: { filter: { team: 'private' } as never } };
+  it('rejects malformed managed retrieval filters', async () => {
+    const { provider, send } = kb({ operation: 'retrieve', retrievalConfiguration: invalid });
+    expect((await provider.callApi('question')).error).toContain(
+      'Invalid Knowledge Base retrieval filter',
+    );
+    expect(send).not.toHaveBeenCalled();
+  });
+  it.each(['root', 'session'] as const)(
+    'rejects malformed agent %s managed-search filters',
+    async (scope) => {
+      const knowledgeBaseConfigurations = [
+        { knowledgeBaseId: 'KB12345678', retrievalConfiguration: invalid },
+      ];
+      const { provider, send } = agent(
+        scope === 'root'
+          ? { knowledgeBaseConfigurations }
+          : { sessionState: { knowledgeBaseConfigurations } },
+      );
+      expect((await provider.callApi('question')).error).toContain('Invalid');
+      expect(send).not.toHaveBeenCalled();
+    },
+  );
+});
