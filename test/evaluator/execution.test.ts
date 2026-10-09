@@ -10,6 +10,7 @@ import cliState from '../../src/cliState';
 import { __resetPromptConversationCacheForTests, evaluate } from '../../src/evaluator';
 import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
+import { EchoProvider } from '../../src/providers/echo';
 import { providerRegistry } from '../../src/providers/providerRegistry';
 import {
   type ApiProvider,
@@ -51,8 +52,27 @@ describeEvaluator('evaluator execution control', () => {
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
     await evaluate(testSuite, evalRecord, {});
 
+    expect(sleep).toHaveBeenCalledTimes(1);
     expect(sleep).toHaveBeenCalledWith(100);
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ['the provider', 100, undefined],
+    ['the evaluation', undefined, 125],
+  ])('applies the Echo delay only once when set on %s', async (_name, providerDelay, evalDelay) => {
+    const provider = new EchoProvider({ delay: providerDelay });
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Echo test')],
+      tests: [{}],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await evaluate(testSuite, evalRecord, { delay: evalDelay });
+
+    expect(sleep).toHaveBeenCalledTimes(1);
+    expect(sleep).toHaveBeenCalledWith(providerDelay ?? evalDelay);
   });
 
   it('evaluates with no provider delay', async () => {
@@ -117,13 +137,13 @@ describeEvaluator('evaluator execution control', () => {
         await originalClose.call(this);
         throw new Error('simulated close failure');
       });
-    const shutdownSpy = vi.spyOn(providerRegistry, 'shutdownAll').mockResolvedValue();
+    const registered = { shutdown: vi.fn(async () => {}) };
     const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
     const provider: ApiProvider = {
       id: vi.fn().mockReturnValue('test-provider'),
-      callApi: vi.fn().mockResolvedValue({
-        output: 'Test output',
-        tokenUsage: createEmptyTokenUsage(),
+      callApi: vi.fn(async () => {
+        providerRegistry.register(registered);
+        return { output: 'Test output', tokenUsage: createEmptyTokenUsage() };
       }),
     };
     const testSuite: TestSuite = {
@@ -137,12 +157,12 @@ describeEvaluator('evaluator execution control', () => {
       // Results persisted, so the close failure is recoverable (the output file is
       // regenerated from the database) — the run still succeeds and cleanup still runs.
       await expect(evaluate(testSuite, evalRecord, {})).resolves.toBeDefined();
-      expect(shutdownSpy).toHaveBeenCalledOnce();
+      expect(registered.shutdown).toHaveBeenCalledOnce();
       expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('simulated close failure'));
     } finally {
       warnSpy.mockRestore();
       closeSpy.mockRestore();
-      shutdownSpy.mockRestore();
+      providerRegistry.unregister(registered);
       fs.rmSync(outputPath, { force: true });
     }
   });
@@ -1074,7 +1094,7 @@ describeEvaluator('evaluator execution control', () => {
     }
   });
 
-  it('flushes queued grouped grading before writing max-duration timeout rows', async () => {
+  it('retains completed target output and cancels queued grading at the max duration', async () => {
     vi.useFakeTimers();
 
     const results: any[] = [];
@@ -1153,16 +1173,17 @@ describeEvaluator('evaluator execution control', () => {
 
     const resultByTopic = new Map(results.map((result) => [result.vars.topic, result]));
 
-    expect(judge.callApi).toHaveBeenCalledTimes(1);
+    expect(judge.callApi).not.toHaveBeenCalled();
     expect(resultByTopic.get('alpha')).toEqual(
       expect.objectContaining({
-        success: true,
+        success: false,
+        failureReason: ResultFailureReason.ERROR,
         response: expect.objectContaining({
           output: 'Target output for Test prompt alpha',
         }),
       }),
     );
-    expect(resultByTopic.get('alpha')?.error).toBeUndefined();
+    expect(resultByTopic.get('alpha')?.error).toMatch(/^Aborted: /);
     expect(resultByTopic.get('gamma')?.error).toContain('Evaluation exceeded max duration');
   });
 });

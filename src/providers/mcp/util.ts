@@ -1,7 +1,9 @@
+import { getProcessEnv } from '../../envars';
 import logger from '../../logger';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { renderVarsInObject } from '../../util/index';
 import { fetchOAuthToken, type OAuthTokenResult, TOKEN_REFRESH_BUFFER_MS } from '../../util/oauth';
+import { sanitizeObject } from '../../util/sanitizer';
 import { normalizeRenderedOAuthScopes } from './auth';
 
 import type { VarValue } from '../../types/shared';
@@ -14,6 +16,46 @@ import type {
 } from './types';
 
 export type { OAuthTokenResult };
+
+export function sanitizeMcpToolData<T>(value: T): T {
+  return sanitizeObject(value, { context: 'MCP tool data', sanitizeUrls: true });
+}
+
+export function normalizeMcpToolContent(
+  content: unknown,
+  onUnknownContent?: (part: object) => void,
+): string {
+  if (content == null) {
+    return '';
+  }
+  if (typeof content === 'string') {
+    return content;
+  }
+  if (Array.isArray(content)) {
+    return content
+      .map((part) => {
+        if (typeof part === 'string') {
+          return part;
+        }
+        if (part && typeof part === 'object') {
+          if ('text' in part && (part as { text?: unknown }).text != null) {
+            return String((part as { text: unknown }).text);
+          }
+          if ('json' in part) {
+            return JSON.stringify((part as { json: unknown }).json);
+          }
+          if ('data' in part) {
+            return JSON.stringify((part as { data: unknown }).data);
+          }
+          onUnknownContent?.(part);
+          return JSON.stringify(part);
+        }
+        return String(part);
+      })
+      .join('\n');
+  }
+  return JSON.stringify(content);
+}
 
 export function isMcpToolNameFilter(tools: unknown): tools is string | string[] {
   const isPlainToolName = (tool: unknown): tool is string =>
@@ -55,7 +97,7 @@ export function renderAuthVars(
   }
 
   // Use process.env as default vars if none provided
-  const renderVars = vars || (process.env as Record<string, string>);
+  const renderVars = vars || (getProcessEnv() as Record<string, string>);
 
   return {
     ...server,
