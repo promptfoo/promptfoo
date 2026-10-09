@@ -109,6 +109,11 @@ const createStringAssertion = <TType extends string>(type: TType, value: string)
   value,
 });
 
+export const createThresholdAssertion = <TType extends string>(type: TType, threshold: number) => ({
+  type,
+  threshold,
+});
+
 export const createResponseMessage = (text: string) => ({
   type: 'message',
   role: 'assistant',
@@ -118,6 +123,14 @@ export const createResponseMessage = (text: string) => ({
       text,
     },
   ],
+});
+
+export const createQueryContext = (query: string, context: string) => ({
+  vars: {
+    query,
+    context,
+  },
+  options: {},
 });
 
 export const createCompletedResponse = (
@@ -173,6 +186,11 @@ export const createGeminiUsageCounts = (
 
 export const createTypeConfig = <TType extends string>(type: TType) => ({
   type,
+});
+
+export const createEmbeddingResult = (embedding: number, embedding2: number) => ({
+  embedding: [embedding, embedding2, 0],
+  tokenUsage: { total: 5, prompt: 2, completion: 3 },
 });
 
 export const createStatusResponse = (status = 500, statusText = 'Internal Server Error') => ({
