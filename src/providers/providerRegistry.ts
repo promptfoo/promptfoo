@@ -16,6 +16,7 @@ class ProviderRegistry {
   private providers = new Map<CleanupProvider, object | undefined>();
   private shutdownRegistered: boolean = false;
   private readonly scopeContext = new AsyncLocalStorage<object>();
+  private readonly closedScopes = new WeakSet<object>();
 
   get currentScope(): object | undefined {
     return this.scopeContext.getStore();
@@ -27,15 +28,29 @@ class ProviderRegistry {
       try {
         return await fn();
       } finally {
+        this.closedScopes.add(scope);
         await this.shutdownAll(scope);
       }
     });
   }
 
-  register(provider: CleanupProvider, scope?: object): void {
+  register(
+    provider: CleanupProvider,
+    scope: object | undefined = this.currentScope,
+    manageProcessSignals = true,
+  ): void {
+    if (scope && this.closedScopes.has(scope)) {
+      // Timed-out work can resume in its original async scope after evaluation
+      // cleanup. Let the caller finish assigning its initialization promise,
+      // then release that resource without retaining it in the registry.
+      void Promise.resolve()
+        .then(() => provider.shutdown())
+        .catch((error) => logger.warn('Error shutting down late provider', { error }));
+      return;
+    }
     this.providers.set(provider, scope);
 
-    if (!this.shutdownRegistered) {
+    if (manageProcessSignals && !this.shutdownRegistered) {
       this.registerShutdownHandlers();
       this.shutdownRegistered = true;
     }

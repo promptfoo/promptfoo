@@ -177,6 +177,53 @@ describe('sanitizeConfigForOutput', () => {
     expect(sanitizeConfigForOutput({ basePath }).basePath).toBe(basePath);
   });
 
+  it.each([false, true])(
+    'preserves imported provider origins in every test location (strip metadata: %s)',
+    (stripMetadata) => {
+      const providerBasePath = `/home/${'nested/'.repeat(15)}project/tests`;
+      const test = {
+        provider: 'python:provider.py',
+        metadata: { note: 'private-note', __promptfoo: { providerBasePath } },
+      };
+      const config = {
+        tests: [test],
+        defaultTest: test,
+        scenarios: [{ config: [test], tests: [test] }],
+      };
+      const output = sanitizeConfigForOutput(config, { shouldStripMetadata: stripMetadata });
+      const expected = {
+        ...test,
+        metadata: {
+          ...(!stripMetadata && { note: 'private-note' }),
+          __promptfoo: { providerBasePath },
+        },
+      };
+      expect(output.tests).toEqual([expected]);
+      expect(output.defaultTest).toEqual(expected);
+      expect(output.scenarios).toEqual([{ config: [expected], tests: [expected] }]);
+      expect(config.tests[0].metadata.note).toBe('private-note');
+      expect(sanitizeObject(providerBasePath)).toBe('[REDACTED]');
+    },
+  );
+
+  it('keeps redaction and remote safety for untrusted origin metadata', () => {
+    const secret = `sk-${'a'.repeat(32)}`;
+    const remotePath = `/home/${'nested/'.repeat(15)}remote`;
+    const config = {
+      tests: [
+        { metadata: { apiKey: secret, __promptfoo: { providerBasePath: secret } } },
+        { metadata: { __promptfoo: { remote: true, providerBasePath: remotePath } } },
+      ],
+    };
+    const output = sanitizeConfigForOutput(config);
+    expect(JSON.stringify(output)).not.toContain(secret);
+    expect(JSON.stringify(output)).not.toContain(remotePath);
+    const stripped = sanitizeConfigForOutput(config, { shouldStripMetadata: true });
+    expect(Array.isArray(stripped.tests) && stripped.tests[1]).toEqual({
+      metadata: { __promptfoo: { remote: true } },
+    });
+  });
+
   it('limits general URL redaction to config output, preserving saved test inputs', () => {
     const url = 'https://cdn.example/doc?X-Amz-Signature=short-secret&q=hello world';
     const vars = { image: url, noteUrl: 'see https://shop.example/?token=abc for details' };

@@ -15,7 +15,7 @@ import { CreateJobRequestSchema } from '../../../src/types/api/eval';
 import { getProviderFromCloud } from '../../../src/util/cloud';
 import { mockProcessEnv } from '../../util/utils';
 
-import type { EnvOverrides } from '../../../src/types/env';
+const readFile = fs.promises.readFile.bind(fs.promises);
 
 const makeClient = (value: string) => ({
   quotaProjectId: 'host-quota',
@@ -28,6 +28,10 @@ vi.mock('../../../src/util/cloud', async (importOriginal) => ({
 }));
 let restore: () => void;
 beforeEach(() => {
+  vi.spyOn(fs.promises, 'readFile').mockImplementation(((filename: string, ...options: any[]) =>
+    fs.existsSync(filename)
+      ? Reflect.apply(readFile, fs.promises, [filename, ...options])
+      : Promise.resolve('{}')) as typeof fs.promises.readFile);
   restore = mockProcessEnv({
     GOOGLE_API_KEY: undefined,
     GEMINI_API_KEY: undefined,
@@ -49,7 +53,12 @@ beforeEach(() => {
         }
         return makeClient(String(options?.keyFilename));
       }),
-      fromJSON: vi.fn(async (data) => makeClient(data.client_id)),
+      fromJSON: vi.fn(async (data) => {
+        if (options?.keyFilename === 'missing.json') {
+          throw new Error('fixture absent');
+        }
+        return makeClient(data.client_id ?? String(options?.keyFilename));
+      }),
       getProjectId: vi.fn(async () => options?.projectId),
     } as unknown as GoogleAuth;
   });
@@ -61,68 +70,6 @@ afterEach(() => {
 });
 
 describe('Google scoped ADC inputs', () => {
-  it.each(['vertex:gemini-2.5-flash', 'google:live:gemini-3.8-live'])(
-    '%s retains lower ADC after a loaded higher blank key',
-    async (route) => {
-      const provider = await loadApiProvider(route, {
-        env: {
-          GOOGLE_APPLICATION_CREDENTIALS: 'scoped.json',
-          VERTEX_API_KEY: 'lower-vertex-key',
-          GEMINI_API_KEY: 'lower-studio-key',
-        },
-        options: { env: { GOOGLE_API_KEY: ' \t ' } },
-      });
-      if (provider instanceof VertexChatProvider) {
-        expect(provider.getApiKey()).toBeUndefined();
-        expect(await provider.getAuthHeaders()).not.toHaveProperty('x-goog-api-key');
-        await provider.getClientWithCredentials();
-      } else {
-        const result = await Reflect.get(provider, 'getConnection').call(provider, provider.config);
-        expect(new URL(result.url).searchParams.get('access_token')).toBe('scoped.json');
-        expect(new URL(result.url).searchParams.has('key')).toBe(false);
-      }
-      expect(GoogleAuth).toHaveBeenCalledWith(
-        expect.objectContaining({ keyFilename: 'scoped.json' }),
-      );
-    },
-  );
-
-  it.each([
-    ['provider Google mask', { GOOGLE_API_KEY: '' }, {}, { VERTEX_API_KEY: 'file-key' }],
-    ['suite Google mask', {}, { GOOGLE_API_KEY: '' }, { VERTEX_API_KEY: 'file-key' }],
-    ['provider Vertex mask', { VERTEX_API_KEY: '' }, {}, { GOOGLE_API_KEY: 'file-key' }],
-    ['suite Vertex mask', {}, { VERTEX_API_KEY: '' }, { GOOGLE_API_KEY: 'file-key' }],
-    [
-      'masked intermediate Google alias',
-      { GOOGLE_API_KEY: '' },
-      { GOOGLE_API_KEY: 'masked-suite-key' },
-      { VERTEX_API_KEY: 'file-key' },
-    ],
-    [
-      'masked intermediate Vertex alias',
-      { VERTEX_API_KEY: '' },
-      { VERTEX_API_KEY: 'masked-suite-key' },
-      { GOOGLE_API_KEY: 'file-key' },
-    ],
-  ] satisfies [string, EnvOverrides, EnvOverrides, EnvOverrides][])(
-    'selects lower Vertex ADC before its API key after a %s',
-    async (_name, env, suite, file) => {
-      await cliState.withEnvFileOverrides(
-        { ...file, GOOGLE_APPLICATION_CREDENTIALS: 'file.json' },
-        () =>
-          cliState.withEnv(suite, async () => {
-            const provider = new VertexChatProvider('gemini-2.5-flash', { env });
-            expect(provider.getApiKey()).toBeUndefined();
-            expect(await provider.getAuthHeaders()).not.toHaveProperty('x-goog-api-key');
-            await provider.getClientWithCredentials();
-            expect(GoogleAuth).toHaveBeenCalledWith(
-              expect.objectContaining({ keyFilename: 'file.json' }),
-            );
-          }),
-      );
-    },
-  );
-
   it.each(['provider', 'suite', 'config'] as const)(
     'keeps a usable %s API key above lower Vertex ADC',
     async (scope) => {
@@ -136,18 +83,6 @@ describe('Google scoped ADC inputs', () => {
           expect(GoogleAuth).not.toHaveBeenCalled();
         }),
       );
-    },
-  );
-
-  it.each(['scoped.json', ''])(
-    'keeps same-layer host ADC %j ahead of an API key while allowing SDK discovery',
-    async (adc) => {
-      mockProcessEnv({ GOOGLE_APPLICATION_CREDENTIALS: adc, GOOGLE_API_KEY: 'host-key' });
-      const provider = new VertexChatProvider('gemini-2.5-flash');
-      expect(await provider.getAuthHeaders()).not.toHaveProperty('x-goog-api-key');
-      await provider.getClientWithCredentials();
-      expect(GoogleAuth).toHaveBeenCalledOnce();
-      expect(vi.mocked(GoogleAuth).mock.calls[0][0]?.keyFilename).toBe(adc);
     },
   );
 
@@ -276,6 +211,9 @@ describe('Google scoped ADC inputs', () => {
         getClient: async () => {
           throw new Error('temporary credentials failure');
         },
+        fromJSON: async () => {
+          throw new Error('temporary credentials failure');
+        },
       } as unknown as GoogleAuth;
     });
     await cliState.withEnv({ GOOGLE_APPLICATION_CREDENTIALS: 'scoped.json' }, async () => {
@@ -289,6 +227,7 @@ describe('Google scoped ADC inputs', () => {
   it.each(['provider', 'suite', 'file'] as const)(
     'preserves invalid %s ADC diagnostics for Live connections',
     async (scope) => {
+      mockProcessEnv({ GOOGLE_APPLICATION_CREDENTIALS: 'host.json' });
       const { GoogleLiveProvider } = await import('../../../src/providers/google/live');
       for (const [filename, error] of [
         ['', 'Scoped GOOGLE_APPLICATION_CREDENTIALS is empty'],
@@ -317,6 +256,7 @@ describe('Google scoped ADC inputs', () => {
   });
 
   it('does not reuse a previous Live client when ADC is explicitly masked', async () => {
+    mockProcessEnv({ GOOGLE_APPLICATION_CREDENTIALS: 'host.json' });
     await cliState.withEnv({}, async () => {
       expect(
         await getGoogleAccessToken(undefined, { GOOGLE_APPLICATION_CREDENTIALS: 'scoped.json' }),
@@ -328,17 +268,17 @@ describe('Google scoped ADC inputs', () => {
     });
   });
 
-  it('preserves SDK discovery for an empty host ADC variable without weakening scoped masks', async () => {
+  it('preserves SDK discovery for empty ADC placeholders without host values to mask', async () => {
     mockProcessEnv({ GOOGLE_APPLICATION_CREDENTIALS: '' });
     vi.mocked(GoogleAuth).mockImplementation(function () {
       return { getClient: async () => makeClient('discovered') } as unknown as GoogleAuth;
     });
     await cliState.withEnv({}, async () => {
       expect(await getGoogleAccessToken()).toBe('discovered');
-      await expect(
-        getGoogleAccessToken(undefined, { GOOGLE_APPLICATION_CREDENTIALS: '' }),
-      ).rejects.toThrow('Scoped GOOGLE_APPLICATION_CREDENTIALS is empty');
-      expect(GoogleAuth).toHaveBeenCalledOnce();
+      expect(await getGoogleAccessToken(undefined, { GOOGLE_APPLICATION_CREDENTIALS: '' })).toBe(
+        'discovered',
+      );
+      expect(GoogleAuth).toHaveBeenCalledTimes(2);
     });
   });
 
@@ -555,15 +495,15 @@ describe('Google scoped ADC inputs', () => {
     });
     expect(GoogleAuth).toHaveBeenCalledTimes(2);
   });
-  it('keeps host-empty ADC discovery distinct from an explicit empty probe mask', async () => {
+  it('preserves ambient discovery for an explicit empty probe placeholder', async () => {
     mockProcessEnv({ GOOGLE_APPLICATION_CREDENTIALS: '' });
     await cliState.withEnv({}, async () => {
       await expect(GoogleAuthManager.hasDefaultCredentials()).resolves.toBe(true);
       expect(GoogleAuth).toHaveBeenCalledOnce();
       await expect(
         GoogleAuthManager.hasDefaultCredentials({ GOOGLE_APPLICATION_CREDENTIALS: '' }),
-      ).resolves.toBe(false);
-      expect(GoogleAuth).toHaveBeenCalledOnce();
+      ).resolves.toBe(true);
+      expect(GoogleAuth).toHaveBeenCalledTimes(2);
     });
   });
 

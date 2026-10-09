@@ -1,6 +1,5 @@
 import { getEnvString } from '../../envars';
 import { resolveProviderApiKey } from '../credentials';
-import { resolveProviderEnv } from '../env';
 import { isGpt6Model } from './gpt6';
 
 import type { EnvOverrides } from '../../types/env';
@@ -17,6 +16,30 @@ export const OPENAI_ORIGINATOR_HEADER = 'X-OpenAI-Originator';
 export const OPENAI_ORGANIZATION_HEADER = 'OpenAI-Organization';
 export const DEFAULT_OPENAI_ORIGINATOR = 'promptfoo';
 
+export function resolveOpenAiApiUrl(
+  config: Pick<OpenAiSharedOptions, 'apiHost' | 'apiBaseUrl'>,
+  env?: EnvOverrides,
+  defaultUrl = 'https://api.openai.com/v1',
+): string {
+  if (config.apiHost) {
+    return `https://${config.apiHost}/v1`;
+  }
+  if (config.apiBaseUrl) {
+    return config.apiBaseUrl;
+  }
+  const envApiHost = env?.OPENAI_API_HOST || getEnvString('OPENAI_API_HOST');
+  if (envApiHost) {
+    return `https://${envApiHost}/v1`;
+  }
+  return (
+    env?.OPENAI_API_BASE_URL ||
+    env?.OPENAI_BASE_URL ||
+    getEnvString('OPENAI_API_BASE_URL') ||
+    getEnvString('OPENAI_BASE_URL') ||
+    defaultUrl
+  );
+}
+
 /**
  * Whether `customHeaders` contains a case-insensitive override for `headerName`.
  * A differently-cased duplicate would otherwise survive an object spread and be
@@ -29,29 +52,6 @@ export function hasHeaderOverride(
 ): boolean {
   const target = headerName.toLowerCase();
   return Object.keys(customHeaders ?? {}).some((key) => key.toLowerCase() === target);
-}
-
-export function resolveOpenAiApiUrl(
-  config: OpenAiSharedOptions = {},
-  env?: EnvOverrides,
-  defaultUrl = 'https://api.openai.com/v1',
-): string {
-  if (config.apiHost) {
-    return `https://${config.apiHost}/v1`;
-  }
-  if (config.apiBaseUrl) {
-    return config.apiBaseUrl;
-  }
-  const endpoint = resolveProviderEnv(env, [
-    'OPENAI_API_HOST',
-    'OPENAI_API_BASE_URL',
-    'OPENAI_BASE_URL',
-  ]);
-  return endpoint
-    ? endpoint.name === 'OPENAI_API_HOST'
-      ? `https://${endpoint.value}/v1`
-      : endpoint.value
-    : defaultUrl;
 }
 
 export class OpenAiGenericProvider implements ApiProvider {
@@ -132,7 +132,6 @@ export class OpenAiGenericProvider implements ApiProvider {
     return 'https://api.openai.com/v1';
   }
 
-  /** Pass a prompt-merged config to resolve that call's endpoint. */
   getApiUrl(config: OpenAiSharedOptions = this.config): string {
     return resolveOpenAiApiUrl(config, this.env, this.getApiUrlDefault());
   }
@@ -165,6 +164,11 @@ export class OpenAiGenericProvider implements ApiProvider {
    */
   protected getCapabilityModelName(): string {
     return this.modelName;
+  }
+
+  /** Normalize capability checks without rewriting the request model. */
+  protected normalizeCapabilityModelName(modelName: string): string {
+    return modelName;
   }
 
   protected isGPT5Model(modelName = this.getCapabilityModelName()): boolean {

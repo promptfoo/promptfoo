@@ -15,6 +15,7 @@ import { pathExists } from '../../src/util/file';
 import { mockProcessEnv } from '../util/utils';
 
 vi.unmock('../../src/logger');
+vi.unmock('../../src/util/envFile');
 vi.mock('../../src/telemetry', () => ({ default: { record: vi.fn() } }));
 vi.mock('../../src/util/config/load', () => ({ resolveConfigs: vi.fn() }));
 vi.mock('../../src/util/file', async (importOriginal) => ({

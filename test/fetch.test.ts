@@ -1099,13 +1099,41 @@ describe('fetchWithProxy', () => {
     expect(dispatchers[1]).not.toBe(dispatchers[0]);
   });
 
-  it('should compose default Agent dispatchers with response decompression', async () => {
-    await fetchWithProxy('https://example.com/api');
+  it.each([
+    { name: 'default Agent', agentClass: Agent, proxyUrl: undefined },
+    { name: 'ProxyAgent', agentClass: ProxyAgent, proxyUrl: 'http://proxy.example.com' },
+  ])(
+    'should compose $name dispatchers with response decompression without a warning',
+    async ({ agentClass, proxyUrl }) => {
+      mockProcessEnv({ HTTPS_PROXY: proxyUrl });
+      const emitWarning = vi.spyOn(process, 'emitWarning').mockImplementation(() => {});
+      const decompressionInterceptor = vi.fn();
+      vi.mocked(interceptors.decompress).mockImplementationOnce(() => {
+        process.emitWarning(
+          'DecompressInterceptor is experimental and subject to change',
+          'ExperimentalWarning',
+        );
+        return decompressionInterceptor;
+      });
 
-    const agent = vi.mocked(Agent).mock.results[0]?.value as { compose: ReturnType<typeof vi.fn> };
-    expect(interceptors.decompress).toHaveBeenCalledTimes(1);
-    expect(agent.compose).toHaveBeenCalledWith({ name: 'decompress' });
-  });
+      try {
+        await fetchWithProxy('https://example.com/api');
+
+        const agent = vi.mocked(agentClass).mock.results[0]?.value as {
+          compose: ReturnType<typeof vi.fn>;
+        };
+        expect(interceptors.decompress).toHaveBeenCalledExactlyOnceWith({
+          skipErrorResponses: false,
+        });
+        expect(agent.compose).toHaveBeenCalledWith(decompressionInterceptor);
+        expect(emitWarning).not.toHaveBeenCalled();
+        expect(process.emitWarning).toBe(emitWarning);
+      } finally {
+        emitWarning.mockRestore();
+        vi.mocked(interceptors.decompress).mockReset();
+      }
+    },
+  );
 
   it('should create a dedicated ProxyAgent dispatcher per proxy URL and maxConcurrency value', async () => {
     const mockProxyUrl = 'http://proxy.example.com';
@@ -1135,18 +1163,6 @@ describe('fetchWithProxy', () => {
         connections: 5,
       }),
     );
-  });
-
-  it('should compose ProxyAgent dispatchers with response decompression', async () => {
-    mockProcessEnv({ HTTPS_PROXY: 'http://proxy.example.com' });
-
-    await fetchWithProxy('https://example.com/api');
-
-    const proxyAgent = vi.mocked(ProxyAgent).mock.results[0]?.value as {
-      compose: ReturnType<typeof vi.fn>;
-    };
-    expect(interceptors.decompress).toHaveBeenCalledTimes(1);
-    expect(proxyAgent.compose).toHaveBeenCalledWith({ name: 'decompress' });
   });
 
   it('should preserve a caller-provided dispatcher instead of overwriting it', async () => {

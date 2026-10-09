@@ -717,26 +717,50 @@ export function sanitizeConfigForOutput(
     shouldStripMetadata: stripMetadata,
     shouldStripResponseOutput: stripOutput,
   } = options;
-  const tests = [
-    ...(Array.isArray(sanitized.tests) ? sanitized.tests : []),
-    sanitized.defaultTest,
-    ...(sanitized.scenarios ?? []).flatMap((scenario) =>
+  const collectTests = (value: Partial<UnifiedConfig>) => [
+    ...(Array.isArray(value.tests) ? value.tests : []),
+    value.defaultTest,
+    ...(value.scenarios ?? []).flatMap((scenario) =>
       typeof scenario === 'object'
         ? [...(scenario.config ?? []), ...(Array.isArray(scenario.tests) ? scenario.tests : [])]
         : [],
     ),
   ];
-  for (const test of tests) {
+  const sourceTests = collectTests(safe);
+  for (const [index, test] of collectTests(sanitized).entries()) {
     if (!test || typeof test !== 'object') {
       continue;
+    }
+    const sourceTest = sourceTests[index];
+    const sourceMetadata =
+      sourceTest && typeof sourceTest === 'object' && 'metadata' in sourceTest
+        ? sourceTest.metadata?.__promptfoo
+        : undefined;
+    const providerBasePath = sourceMetadata?.providerBasePath;
+    // Like the config's basePath, local provider origins are operational paths, not
+    // opaque tokens. Keep them for replay; sharing removes them from its own copy.
+    if (
+      'metadata' in test &&
+      sourceMetadata?.remote !== true &&
+      typeof providerBasePath === 'string' &&
+      /^(?:\/|[a-zA-Z]:[\\/]|\\\\)/.test(providerBasePath)
+    ) {
+      test.metadata = {
+        ...test.metadata,
+        __promptfoo: { ...test.metadata?.__promptfoo, providerBasePath },
+      };
     }
     if (stripVars && 'vars' in test) {
       delete test.vars;
     }
     if (stripMetadata && 'metadata' in test) {
-      // Keep the internal marker so exported remote rows cannot execute local file references.
+      // Remote-row safety and local replay origins are operational metadata.
       if (test.metadata?.__promptfoo?.remote === true) {
         test.metadata = { __promptfoo: { remote: true } };
+      } else if (typeof test.metadata?.__promptfoo?.providerBasePath === 'string') {
+        test.metadata = {
+          __promptfoo: { providerBasePath: test.metadata.__promptfoo.providerBasePath },
+        };
       } else {
         delete test.metadata;
       }

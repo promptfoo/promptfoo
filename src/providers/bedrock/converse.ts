@@ -70,6 +70,17 @@ import type { TokenUsage, VarValue } from '../../types/shared';
 import type { ClaudeEffort, ClaudeThinkingConfig } from '../anthropic/types';
 import type { MCPConfig, MCPTool } from '../mcp/types';
 
+function getOneHourCacheWriteTokens(
+  cacheDetails?: ReadonlyArray<{ ttl?: string; inputTokens?: number }>,
+): number {
+  return (
+    cacheDetails?.reduce(
+      (total, detail) => total + (detail.ttl === '1h' ? (detail.inputTokens ?? 0) : 0),
+      0,
+    ) ?? 0
+  );
+}
+
 /**
  * Configuration options for the Bedrock Converse API provider
  * Extends base BedrockOptions with Converse-specific parameters
@@ -100,7 +111,7 @@ export interface BedrockConverseOptions extends BedrockOptions {
     latency: 'standard' | 'optimized';
   };
   serviceTier?: {
-    type: 'priority' | 'default' | 'flex';
+    type: 'priority' | 'default' | 'flex' | 'reserved';
   };
 
   // Tool configuration
@@ -1416,6 +1427,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     const totalTokens = usage?.totalTokens;
     const cacheReadTokens = usage?.cacheReadInputTokens;
     const cacheWriteTokens = usage?.cacheWriteInputTokens;
+    const cacheWrite1hTokens = getOneHourCacheWriteTokens(usage?.cacheDetails);
 
     const tokenUsage: Partial<TokenUsage> = {
       prompt: promptTokens,
@@ -1433,6 +1445,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       cacheWriteTokens,
       this.getRegion(),
       this.config.serviceTier,
+      cacheWrite1hTokens,
     );
 
     // Build metadata
@@ -1693,6 +1706,10 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
         totalTokens?: number;
         cacheReadInputTokens?: number;
         cacheWriteInputTokens?: number;
+        cacheDetails?: Array<{
+          ttl?: string;
+          inputTokens?: number;
+        }>;
       } = {};
 
       // Track tool use blocks being streamed
@@ -1797,6 +1814,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
         usage.cacheWriteInputTokens,
         this.getRegion(),
         this.config.serviceTier,
+        getOneHourCacheWriteTokens(usage.cacheDetails),
       );
 
       // Surface MCP failures via the response `error` field. If the model also

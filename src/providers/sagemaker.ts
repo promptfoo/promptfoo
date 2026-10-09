@@ -1,14 +1,19 @@
 import crypto from 'crypto';
 
 import { z } from 'zod';
-import { getEnvString } from '../envars';
+import { getEnvString, getMergedEnvOverrides } from '../envars';
 import logger from '../logger';
 import telemetry from '../telemetry';
 import { getTransformErrorMessage, TransformInputType, transform } from '../util/transform';
 import { StringOrFunctionSchema } from '../validators/shared';
-import { getScopedAwsCredentialConfig, resolveAwsCredentials } from './awsCredentials';
-import { resolveProviderEnv } from './env';
-import { createEnvironmentScopedState } from './scopedState';
+import {
+  getAwsCredentialCacheNamespace,
+  getAwsCredentialProviderOptions,
+  getAwsSdkProfile,
+  resolveAwsCredentials,
+} from './awsCredentials';
+import { getScopedAwsEndpointOptions } from './awsEndpointConfig';
+import { createEnvironmentScopedState, destroyScopedClient } from './scopedState';
 
 import type { EnvOverrides } from '../types/env';
 import type {
@@ -95,21 +100,20 @@ interface SageMakerOptions extends ProviderOptions {
 abstract class SageMakerGenericProvider {
   private readonly getSdkState = createEnvironmentScopedState(
     () => ({
-      namespace: crypto.randomUUID(),
+      cacheNamespace: getAwsCredentialCacheNamespace(this.config, this.env),
       client: undefined as any,
       runtimes: new Map<string, Promise<any>>(),
     }),
-    async (state) => {
-      const clients = await Promise.allSettled(state.runtimes.values());
-      for (const client of clients) {
-        if (client.status === 'fulfilled') {
-          client.value.destroy();
-        }
+    (state) => {
+      for (const initialization of state.runtimes.values()) {
+        destroyScopedClient(undefined, initialization, (error) =>
+          logger.warn('Error destroying late SDK client', { error }),
+        );
       }
     },
   );
-  protected get responseCacheNamespace(): string {
-    return this.getSdkState().namespace;
+  protected get responseCacheNamespace(): string | undefined {
+    return this.getSdkState().cacheNamespace;
   }
   env?: EnvOverrides;
 
@@ -200,14 +204,22 @@ abstract class SageMakerGenericProvider {
           },
         );
         const credentials = await this.getCredentials();
-        const profile = getScopedAwsCredentialConfig(this.config, this.env)?.profile;
+        const profile = getAwsSdkProfile(this.config, this.env);
+        const sdkOptions = { ...getAwsCredentialProviderOptions(this.env), profile };
+        const endpointOptions = await getScopedAwsEndpointOptions(
+          'SageMaker Runtime',
+          sdkOptions,
+          getMergedEnvOverrides(this.env),
+        );
 
         const runtime = new SageMakerRuntimeClient({
+          ...getAwsCredentialProviderOptions(this.env),
+          ...endpointOptions,
           region: runtimeRegion,
           maxAttempts: this.getNumericEnv('AWS_SAGEMAKER_MAX_RETRIES', true, 3),
           retryMode: 'adaptive',
           ...(credentials ? { credentials } : {}),
-          ...(profile ? { profile } : {}),
+          ...(profile === undefined ? {} : { profile }),
         });
 
         state.client = runtime;
@@ -228,7 +240,10 @@ abstract class SageMakerGenericProvider {
   getRegion(): string {
     return (
       this.config?.region ||
-      resolveProviderEnv(this.env, ['AWS_REGION', 'AWS_DEFAULT_REGION'])?.value ||
+      this.env?.AWS_REGION ||
+      getEnvString('AWS_REGION') ||
+      this.env?.AWS_DEFAULT_REGION ||
+      getEnvString('AWS_DEFAULT_REGION') ||
       'us-east-1'
     );
   }
@@ -894,7 +909,7 @@ export class SageMakerEmbeddingProvider
 
     // Generate shorter, more efficient hashed keys
     const textHash = crypto.createHash('sha256').update(text).digest('hex').substring(0, 16);
-    const configHash = crypto.createHash('sha256').update(configStr).digest('hex');
+    const configHash = crypto.createHash('sha256').update(configStr).digest('hex').substring(0, 8);
 
     return `sagemaker:embedding:v1:${this.getEndpointName()}:${textHash}:${configHash}`;
   }

@@ -1,7 +1,6 @@
 import { fetchWithCache } from '../cache';
-import { type EnvVarKey, getEnvString } from '../envars';
+import { getEnvString } from '../envars';
 import logger from '../logger';
-import { resolveProviderEnv } from './env';
 import { getRequestTimeoutMs } from './shared';
 
 import type {
@@ -43,18 +42,21 @@ export class VoyageEmbeddingProvider implements ApiEmbeddingProvider {
   }
 
   getApiKey(): string | undefined {
-    const namedKey = this.config.apiKeyEnvar
-      ? (this.env?.[this.config.apiKeyEnvar] ?? getEnvString(this.config.apiKeyEnvar as EnvVarKey))
-      : undefined;
-    return (
-      this.config.apiKey || (namedKey ?? this.env?.VOYAGE_API_KEY ?? getEnvString('VOYAGE_API_KEY'))
-    );
+    const apiKeyCandidate =
+      this.config?.apiKey ||
+      (this.config?.apiKeyEnvar
+        ? this.env?.[this.config.apiKeyEnvar as keyof any] || getEnvString(this.config.apiKeyEnvar)
+        : undefined) ||
+      this.env?.VOYAGE_API_KEY ||
+      getEnvString('VOYAGE_API_KEY');
+    return apiKeyCandidate;
   }
 
   getApiUrl(): string {
     return (
       this.config.apiBaseUrl ||
-      resolveProviderEnv(this.env, ['VOYAGE_API_BASE_URL'])?.value ||
+      this.env?.VOYAGE_API_BASE_URL ||
+      getEnvString('VOYAGE_API_BASE_URL') ||
       'https://api.voyageai.com/v1'
     );
   }

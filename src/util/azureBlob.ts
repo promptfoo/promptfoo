@@ -1,4 +1,4 @@
-import { getEnvOverrides, getEnvString } from '../envars';
+import { getEnvString } from '../envars';
 import { createAzureCredential } from './azureCredentials';
 
 type AzureBlobServiceClient = {
@@ -178,18 +178,7 @@ async function createAzureBlobServiceClient(
     return new BlobServiceClient(accountUrl);
   }
 
-  // Select the credential scope before choosing connection-string or principal authentication.
-  const authScope = [getEnvOverrides(), getEnvOverrides('file')].find((layer) =>
-    [
-      'AZURE_STORAGE_CONNECTION_STRING',
-      'AZURE_CLIENT_ID',
-      'AZURE_CLIENT_SECRET',
-      'AZURE_TENANT_ID',
-    ].some((key) => layer?.[key] !== undefined),
-  );
-  const connectionString = authScope
-    ? authScope.AZURE_STORAGE_CONNECTION_STRING
-    : getEnvString('AZURE_STORAGE_CONNECTION_STRING');
+  const connectionString = getEnvString('AZURE_STORAGE_CONNECTION_STRING');
   if (connectionString) {
     assertConnectionStringMatchesUriAccount(uri, parts, connectionString);
     return BlobServiceClient.fromConnectionString(connectionString);

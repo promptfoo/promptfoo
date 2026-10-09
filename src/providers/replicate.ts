@@ -15,7 +15,6 @@ import { safeJsonStringify } from '../util/json';
 import { ellipsize } from '../util/text';
 import { sleep, sleepWithAbort } from '../util/time';
 import { createEmptyTokenUsage } from '../util/tokenUsageUtils';
-import { resolveProviderApiKey } from './credentials';
 import { parseChatPrompt } from './shared';
 
 import type { EnvOverrides } from '../types/env';
@@ -241,23 +240,7 @@ function getReplicateValueSummary(prefix: string, value: unknown): Record<string
 
 export class ReplicateProvider implements ApiProvider {
   modelName: string;
-  // null preserves an explicit public assignment of undefined.
-  #configuredApiKey?: string | null;
-  readonly #env?: EnvOverrides;
-  get apiKey(): string | undefined {
-    if (this.#configuredApiKey !== undefined) {
-      return this.#configuredApiKey ?? undefined;
-    }
-    return resolveProviderApiKey(
-      undefined,
-      this.#env,
-      ['REPLICATE_API_KEY', 'REPLICATE_API_TOKEN'],
-      ['REPLICATE_API_TOKEN', 'REPLICATE_API_KEY'],
-    );
-  }
-  set apiKey(value: string | undefined) {
-    this.#configuredApiKey = value ?? null;
-  }
+  apiKey?: string;
   config: ReplicateCompletionOptions;
 
   constructor(
@@ -267,8 +250,12 @@ export class ReplicateProvider implements ApiProvider {
     const { config, id, env } = options;
     const { apiKey, ...restConfig } = config ?? {};
     this.modelName = modelName;
-    this.#configuredApiKey = apiKey || undefined;
-    this.#env = env;
+    this.apiKey =
+      apiKey ||
+      env?.REPLICATE_API_KEY ||
+      env?.REPLICATE_API_TOKEN ||
+      getEnvString('REPLICATE_API_TOKEN') ||
+      getEnvString('REPLICATE_API_KEY');
     this.config = restConfig;
     this.id = id ? () => id : this.id;
   }
@@ -624,6 +611,14 @@ export class ReplicateModerationProvider
     }
   }
 }
+
+// LlamaGuard 4 is the preferred default on Replicate
+// LlamaGuard 4 adds S14: Code Interpreter Abuse category for enhanced safety
+export const LLAMAGUARD_4_MODEL_ID = 'meta/llama-guard-4-12b';
+
+export const DefaultModerationProvider = new ReplicateModerationProvider(
+  LLAMAGUARD_4_MODEL_ID, // Using LlamaGuard 4 as the default
+);
 
 export class ReplicateImageProvider extends ReplicateProvider {
   constructor(

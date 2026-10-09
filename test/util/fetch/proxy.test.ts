@@ -57,7 +57,7 @@ describe('effective proxy environment', () => {
     'ws_proxy',
     'WSS_PROXY',
     'wss_proxy',
-  ])('excludes unsupported %s from config while retaining resolver compatibility', (name) => {
+  ])('keeps generic %s overrides without exposing them in provider env', (name) => {
     const protocol = name.toLowerCase().replace('_proxy', '');
     const restoreHost = mockProcessEnv({
       [`${protocol}_proxy`]: 'http://host-proxy.example:8080',
@@ -70,8 +70,9 @@ describe('effective proxy environment', () => {
           prompts: ['fixture'],
           env,
         });
-        expect(job.env).toEqual({ ALL_PROXY: '', NO_PROXY: '' });
-        cliState.withEnv(env, () => {
+        expect(job.env).toEqual(env);
+        expect(ProviderOptionsSchema.parse({ id: 'http', env }).env).toEqual({});
+        cliState.withEnv(job.env, () => {
           expect(getProxyForUrl(`${protocol}://external.example`)).toBe(selected);
         });
       }

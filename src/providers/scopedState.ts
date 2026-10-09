@@ -20,7 +20,9 @@ export function createEnvironmentScopedState<T>(
     if (state === undefined) {
       state = create();
       states.set(scope, state);
-      if (cleanup) {
+      // Standalone callers retain the provider-owned lifetime they had before
+      // scoped cleanup. A global registration would keep them alive indefinitely.
+      if (cleanup && providerRegistry.currentScope) {
         const owned = state;
         providerRegistry.register(
           {
@@ -33,6 +35,7 @@ export function createEnvironmentScopedState<T>(
             },
           },
           lifetime,
+          false,
         );
       }
     }
@@ -46,4 +49,24 @@ export function createEnvironmentScopedState<T>(
       lifetimes.get(lifetime)?.delete(scope);
     },
   });
+}
+
+/** Release a completed SDK client without waiting for abandoned construction. */
+export function destroyScopedClient<T extends { destroy(): void }>(
+  client: T | undefined,
+  initialization: Promise<T> | undefined,
+  onError: (error: unknown) => void,
+): void {
+  if (client) {
+    client.destroy();
+    return;
+  }
+  // Evaluation timeouts must still return when initialization never settles.
+  // Retain cleanup ownership if the abandoned operation eventually succeeds.
+  void initialization
+    ?.then(
+      (initialized) => initialized.destroy(),
+      () => undefined,
+    )
+    .catch(onError);
 }

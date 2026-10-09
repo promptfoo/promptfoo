@@ -759,7 +759,6 @@ function createRunEvalState({
  * producer in lockstep.
  */
 const EVAL_RUNTIME_VAR_KEYS = ['__evalId', '__evalStepId', '__repeatIndex'] as const;
-const EVAL_RUNTIME_VAR_KEY_SET: ReadonlySet<string> = new Set(EVAL_RUNTIME_VAR_KEYS);
 type EvalRuntimeVars = Partial<Record<(typeof EVAL_RUNTIME_VAR_KEYS)[number], Vars[string]>>;
 
 function getEvalRuntimeVars({
@@ -790,11 +789,10 @@ function getEvalRuntimeVars({
  * with the provider call context.
  */
 function omitEvalRuntimeVars(vars: Vars): Vars {
-  const result: Vars = {};
-  for (const [key, value] of Object.entries(vars)) {
-    if (!EVAL_RUNTIME_VAR_KEY_SET.has(key)) {
-      result[key] = value;
-    }
+  // Keep non-serialized metadata needed by assertion and grader providers.
+  const result: Vars = { ...vars };
+  for (const key of EVAL_RUNTIME_VAR_KEYS) {
+    delete result[key];
   }
   return result;
 }

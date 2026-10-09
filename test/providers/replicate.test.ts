@@ -6,9 +6,9 @@ import {
   getCache,
   isCacheEnabled,
 } from '../../src/cache';
-import cliState from '../../src/cliState';
 import logger from '../../src/logger';
 import {
+  DefaultModerationProvider,
   ReplicateImageProvider,
   ReplicateModerationProvider,
   ReplicateProvider,
@@ -39,137 +39,6 @@ describe('ReplicateProvider', () => {
   afterEach(() => {
     vi.unstubAllEnvs();
     enableCache();
-  });
-
-  it.each(['REPLICATE_API_KEY', 'REPLICATE_API_TOKEN'])(
-    'preserves empty scoped %s masks instead of borrowing the host token',
-    async (key) => {
-      const restore = mockProcessEnv({
-        REPLICATE_API_KEY: undefined,
-        REPLICATE_API_TOKEN: undefined,
-        [key]: 'host-token',
-      });
-      try {
-        expect(
-          new ReplicateProvider('fixture', { env: { [key]: '' } }).getApiKey(),
-        ).toBeUndefined();
-        await cliState.withEnv({ [key]: '' }, () => {
-          expect(new ReplicateProvider('fixture').getApiKey()).toBeUndefined();
-        });
-        await cliState.withEnvFileOverrides({ [key]: '' }, () => {
-          expect(new ReplicateProvider('fixture').getApiKey()).toBeUndefined();
-        });
-      } finally {
-        restore();
-      }
-    },
-  );
-
-  it('preserves scoped KEY precedence and ambient TOKEN precedence when both aliases are set', async () => {
-    const restore = mockProcessEnv({
-      REPLICATE_API_KEY: 'host-key',
-      REPLICATE_API_TOKEN: 'host-token',
-    });
-    const env = { REPLICATE_API_KEY: 'scoped-key', REPLICATE_API_TOKEN: 'scoped-token' };
-    try {
-      expect(new ReplicateProvider('fixture').getApiKey()).toBe('host-token');
-      expect(new ReplicateProvider('fixture', { env }).getApiKey()).toBe('scoped-key');
-      await cliState.withEnv(env, () => {
-        expect(new ReplicateProvider('fixture').getApiKey()).toBe('scoped-key');
-      });
-      await cliState.withEnvFileOverrides(env, () => {
-        expect(new ReplicateProvider('fixture').getApiKey()).toBe('scoped-key');
-      });
-    } finally {
-      restore();
-    }
-  });
-
-  it('keeps provider environment credentials out of serialization and object spread', () => {
-    const provider = new ReplicateProvider('fixture', {
-      env: { REPLICATE_API_KEY: 'private-provider-fixture' },
-    });
-    expect(provider.getApiKey()).toBe('private-provider-fixture');
-    expect(JSON.stringify(provider)).not.toContain('private-provider-fixture');
-    expect(JSON.stringify({ ...provider })).not.toContain('private-provider-fixture');
-  });
-
-  it('keeps an explicitly assigned token authoritative without serializing its backing field', () => {
-    const provider = new ReplicateProvider('fixture', {
-      env: { REPLICATE_API_TOKEN: 'scope-token' },
-    });
-    provider.apiKey = 'assigned-fixture-token';
-    expect(provider.getApiKey()).toBe('assigned-fixture-token');
-    expect(JSON.stringify(provider)).not.toContain('assigned-fixture-token');
-  });
-
-  it.each(['config', 'provider', 'suite', 'file', 'host'])(
-    'preserves an explicit API key clear after resolving %s credentials',
-    async (source) => {
-      const restore = mockProcessEnv({
-        REPLICATE_API_KEY: undefined,
-        REPLICATE_API_TOKEN: 'host-token',
-      });
-      const env = { REPLICATE_API_TOKEN: 'selected-token' };
-      const provider = new ReplicateProvider('fixture', {
-        ...(source === 'config' ? { config: { apiKey: 'selected-token' } } : {}),
-        ...(source === 'provider' ? { env } : {}),
-      });
-      const check = async () => {
-        expect(provider.getApiKey()).toBe(source === 'host' ? 'host-token' : 'selected-token');
-        provider.apiKey = undefined;
-        expect(provider.getApiKey()).toBeUndefined();
-        await expect(provider.callApi('fixture')).rejects.toThrow('Replicate API key is not set');
-        expect(mockedFetchWithCache).not.toHaveBeenCalled();
-        provider.apiKey = 'replacement-token';
-        expect(provider.getApiKey()).toBe('replacement-token');
-        expect(JSON.stringify(provider)).not.toContain('replacement-token');
-        provider.apiKey = '';
-        expect(provider.getApiKey()).toBe('');
-        await expect(provider.callApi('fixture')).rejects.toThrow('Replicate API key is not set');
-        expect(mockedFetchWithCache).not.toHaveBeenCalled();
-      };
-      try {
-        if (source === 'suite') {
-          await cliState.withEnv(env, check);
-        } else if (source === 'file') {
-          await cliState.withEnvFileOverrides(env, check);
-        } else {
-          await check();
-        }
-      } finally {
-        restore();
-      }
-    },
-  );
-
-  it('preserves constructor fallback for an empty configured API key', () => {
-    const provider = new ReplicateProvider('fixture', {
-      config: { apiKey: '' },
-      env: { REPLICATE_API_TOKEN: 'provider-token' },
-    });
-    expect(provider.getApiKey()).toBe('provider-token');
-  });
-
-  it('uses each active scope token when a provider is reused concurrently', async () => {
-    mockedFetchWithCache.mockResolvedValue({
-      data: { id: 'fixture', status: 'succeeded', output: 'fixture' },
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    });
-    const provider = new ReplicateProvider('fixture-model');
-    await Promise.all(
-      ['first', 'second'].map((token) =>
-        cliState.withEnv({ REPLICATE_API_TOKEN: token }, async () => {
-          expect(await provider.callApi('fixture')).toMatchObject({ output: 'fixture' });
-        }),
-      ),
-    );
-    const headers = mockedFetchWithCache.mock.calls
-      .map(([, options]) => (options?.headers as Record<string, string>).Authorization)
-      .sort();
-    expect(headers).toEqual(['Bearer first', 'Bearer second']);
   });
 
   it('should handle successful API calls', async () => {
@@ -970,6 +839,13 @@ describe('ReplicateModerationProvider', () => {
 
     const result = await provider.callModerationApi('test prompt', 'test response');
     expect(result.error).toContain('Unsupported response from Replicate');
+  });
+});
+
+describe('DefaultModerationProvider', () => {
+  it('should be configured with LlamaGuard 4', () => {
+    expect(DefaultModerationProvider.modelName).toBe('meta/llama-guard-4-12b');
+    // LlamaGuard 4 is the default on Replicate
   });
 });
 

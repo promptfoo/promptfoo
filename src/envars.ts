@@ -223,16 +223,17 @@ type EnvVars = {
   // Continuous Integration
   //=========================================================================
   APPVEYOR?: boolean;
-  BITBUCKET_COMMIT?: boolean;
+  BITBUCKET_COMMIT?: string;
   BUDDY?: boolean;
   BUILDKITE?: boolean;
   CI?: boolean;
   CIRCLECI?: boolean;
-  CODEBUILD_BUILD_ID?: boolean;
+  CODEBUILD_BUILD_ID?: string;
   GITHUB_ACTIONS?: boolean;
   GITLAB_CI?: boolean;
   JENKINS?: boolean;
-  TEAMCITY_VERSION?: boolean;
+  JENKINS_URL?: string;
+  TEAMCITY_VERSION?: string;
   TF_BUILD?: boolean;
   TRAVIS?: boolean;
 
@@ -298,9 +299,6 @@ type EnvVars = {
   AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME?: string;
   AZURE_TENANT_ID?: string;
   AZURE_TOKEN_SCOPE?: string;
-
-  // Azure Blob Storage test references
-  AZURE_STORAGE_CONNECTION_STRING?: string;
 
   // Azure Content Safety params
   AZURE_CONTENT_SAFETY_API_KEY?: string;
@@ -459,6 +457,9 @@ type EnvVars = {
   // TrueFoundry
   TRUEFOUNDRY_API_KEY?: string;
 
+  // TypeSafe
+  TYPESAFE_API_KEY?: string;
+
   // Vertex AI
   VERTEX_API_VERSION?: string;
 
@@ -493,6 +494,22 @@ export function getEnvOverrides(layer: 'suite' | 'file' = 'suite'): EnvOverrides
     // All environment reads must still fall back normally when registration fails.
     return undefined;
   }
+}
+
+/** Merge scoped defaults without letting an unset higher-priority value clear them. */
+export function getMergedEnvOverrides(env?: EnvOverrides): EnvOverrides {
+  const merged: EnvOverrides = {};
+  for (const layer of [getEnvOverrides('file'), getEnvOverrides(), env]) {
+    for (const [key, value] of Object.entries(layer ?? {})) {
+      if (value !== undefined) {
+        // YAML config keeps its original primitive values after validation.
+        // SDK environment selectors expect the strings process.env would hold.
+        merged[key] =
+          typeof value === 'boolean' || typeof value === 'number' ? String(value) : value;
+      }
+    }
+  }
+  return merged;
 }
 
 /** Environment inherited by child processes, including invocation-local file values. */
@@ -627,20 +644,26 @@ export function getMaxEvalTimeMs(defaultValue: number = 0): number {
  * @returns True if running in a CI environment, false otherwise.
  */
 export function isCI() {
+  const hasIdentifier = (key: EnvVarKey) => {
+    const value = getEnvString(key);
+    // Keep explicit false/0 opt-outs while accepting build IDs, versions and URLs.
+    return Boolean(value && !['false', '0'].includes(value.toLowerCase()));
+  };
   return (
     getEnvBool('CI') ||
     getEnvBool('GITHUB_ACTIONS') ||
     getEnvBool('TRAVIS') ||
     getEnvBool('CIRCLECI') ||
     getEnvBool('JENKINS') ||
+    hasIdentifier('JENKINS_URL') ||
     getEnvBool('GITLAB_CI') ||
     getEnvBool('APPVEYOR') ||
-    getEnvBool('CODEBUILD_BUILD_ID') ||
+    hasIdentifier('CODEBUILD_BUILD_ID') ||
     getEnvBool('TF_BUILD') ||
-    getEnvBool('BITBUCKET_COMMIT') ||
+    hasIdentifier('BITBUCKET_COMMIT') ||
     getEnvBool('BUDDY') ||
     getEnvBool('BUILDKITE') ||
-    getEnvBool('TEAMCITY_VERSION')
+    hasIdentifier('TEAMCITY_VERSION')
   );
 }
 

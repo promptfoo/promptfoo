@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events';
 
+import OpenAI from 'openai';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ProviderOptionsSchema } from '../../../src/validators/providers';
 
 const mockRun = vi.hoisted(() => vi.fn());
 const mockGetOrCreateTrace = vi.hoisted(() => vi.fn(async (fn: () => Promise<unknown>) => fn()));
@@ -38,6 +38,7 @@ vi.mock('@openai/agents', async (importOriginal) => {
     handoffOutputTypeWarningEnabled?: boolean;
     outputType?: unknown;
     tools: any[];
+    private toolsExplicitlyConfigured: boolean;
     handoffs: any[];
     inputGuardrails: any[];
     outputGuardrails: any[];
@@ -56,6 +57,7 @@ vi.mock('@openai/agents', async (importOriginal) => {
       this.handoffOutputTypeWarningEnabled = config.handoffOutputTypeWarningEnabled;
       this.outputType = config.outputType;
       this.tools = config.tools ?? [];
+      this.toolsExplicitlyConfigured = config.tools !== undefined;
       this.handoffs = config.handoffs ?? [];
       this.inputGuardrails = config.inputGuardrails ?? [];
       this.outputGuardrails = config.outputGuardrails ?? [];
@@ -71,6 +73,35 @@ vi.mock('@openai/agents', async (importOriginal) => {
       });
     }
 
+    hasExplicitToolConfig() {
+      return this.toolsExplicitlyConfigured;
+    }
+
+    async getEnabledHandoffs() {
+      return this.handoffs;
+    }
+
+    asTool(options: Record<string, any> = {}) {
+      const sourceAgent = this;
+      const handlers = new Map<string, Set<(event: unknown) => unknown>>();
+      const agentTool: Record<string, any> = {
+        type: 'function',
+        name: options.toolName ?? this.name,
+        description: options.toolDescription ?? '',
+        invoke: vi.fn(async () => ({
+          model: sourceAgent.model,
+          modelSettings: sourceAgent.modelSettings,
+        })),
+        on: (name: string, handler: (event: unknown) => unknown) => {
+          const registered = handlers.get(name) ?? new Set();
+          registered.add(handler);
+          handlers.set(name, registered);
+          return agentTool;
+        },
+      };
+      return agentTool;
+    }
+
     on(type: string, listener: (...args: any[]) => void) {
       this.eventEmitter.on(type, listener);
       return this;
@@ -80,6 +111,24 @@ vi.mock('@openai/agents', async (importOriginal) => {
       return this.eventEmitter.emit(type, ...args);
     }
   }
+
+  const createMockHandoff = (agent: MockAgent, config?: Record<string, any>) => {
+    const mockHandoff: Record<string, any> = {
+      agent,
+      agentName: agent.name,
+      getHandoffAsFunctionTool: vi.fn(),
+      onInvokeHandoff: vi.fn(async () => agent),
+      toolDescription: config?.toolDescriptionOverride,
+      isEnabled: vi.fn(async () => true),
+    };
+    mockHandoff.clone = vi.fn((overrides: Record<string, any> = {}) => ({
+      ...mockHandoff,
+      ...overrides,
+      agent: overrides.agent ?? mockHandoff.agent,
+      agentName: overrides.agentName ?? overrides.agent?.name ?? mockHandoff.agentName,
+    }));
+    return mockHandoff;
+  };
 
   return {
     ...actual,
@@ -95,15 +144,13 @@ vi.mock('@openai/agents', async (importOriginal) => {
     },
     addTraceProcessor: vi.fn(),
     getOrCreateTrace: mockGetOrCreateTrace,
-    handoff: vi.fn((agent: MockAgent, config?: Record<string, any>) => ({
-      agent,
-      agentName: agent.name,
-      getHandoffAsFunctionTool: vi.fn(),
-      onInvokeHandoff: vi.fn(async () => agent),
-      toolDescription: config?.toolDescriptionOverride,
-      isEnabled: vi.fn(async () => true),
-    })),
+    handoff: vi.fn(createMockHandoff),
     retryPolicies: mockRetryPolicies,
+    Runner: class MockRunner {
+      run(...args: unknown[]) {
+        return mockRun(...args);
+      }
+    },
     run: mockRun,
     setTraceProcessors: vi.fn(),
     startTraceExportLoop: vi.fn(),
@@ -148,19 +195,21 @@ import {
   MemorySession,
   OpenAIConversationsSession,
   OpenAIResponsesCompactionSession,
+  setDefaultOpenAIClient,
   setTraceProcessors,
   tool,
 } from '@openai/agents';
 import { Manifest, SandboxAgent } from '@openai/agents/sandbox';
 import cliState from '../../../src/cliState';
 import { importModule } from '../../../src/esm';
-import logger from '../../../src/logger';
 import { OpenAiAgentsProvider } from '../../../src/providers/openai/agents';
 import {
   loadAgentDefinition,
   loadSandboxConfig,
   loadSessionDefinition,
 } from '../../../src/providers/openai/agents-loader';
+
+import type { OpenAiAgentsOptions } from '../../../src/providers/openai/agents-types';
 
 function resetOpenAiAgentsMocks() {
   mockRun.mockReset().mockResolvedValue({
@@ -201,6 +250,8 @@ describe('OpenAiAgentsProvider', () => {
 
   afterEach(() => {
     cliState.basePath = undefined;
+    setDefaultOpenAIClient(undefined as never);
+    vi.unstubAllEnvs();
   });
 
   it('creates a real SDK agent from inline definitions', async () => {
@@ -392,9 +443,10 @@ describe('OpenAiAgentsProvider', () => {
       'base-output',
       'file-output',
     ]);
-    expect(runOptions.model).toBe('gpt-5-mini');
-    expect(runOptions.modelSettings.retry.maxRetries).toBe(2);
-    expect(typeof runOptions.modelSettings.retry.policy).toBe('function');
+    expect(agent.model).toBe('gpt-5-mini');
+    expect(runOptions.model).toBeUndefined();
+    expect(agent.modelSettings.retry.maxRetries).toBe(2);
+    expect(typeof agent.modelSettings.retry.policy).toBe('function');
     expect(mockRetryPolicies.providerSuggested).toHaveBeenCalledTimes(1);
     expect(mockRetryPolicies.httpStatus).toHaveBeenCalledWith([429]);
     expect(mockRetryPolicies.any).toHaveBeenCalledTimes(1);
@@ -1102,6 +1154,173 @@ describe('OpenAiAgentsProvider', () => {
     expect(mockRun.mock.calls[0][2].model).toBeUndefined();
   });
 
+  it.each(['gpt-transcribe', 'gpt-live-transcribe', 'gpt-5-chat-latest', 'gpt-5.3-codex-spark'])(
+    'defers explicit model override %s to the configured SDK provider',
+    async (model) => {
+      const provider = new OpenAiAgentsProvider('support-agent', {
+        config: {
+          agent: {
+            name: 'Inline Support Agent',
+            instructions: 'Help the user.',
+          },
+          model,
+        },
+      });
+
+      await provider.callApi('Where is my order?');
+
+      expect(mockRun.mock.calls[0][0]).toMatchObject({ model });
+    },
+  );
+
+  it('applies explicit model and model settings to the whole run', async () => {
+    const provider = new OpenAiAgentsProvider('support-agent', {
+      config: {
+        agent: {
+          name: 'Inline Support Agent',
+          instructions: 'Help the user.',
+          handoffs: [
+            new Agent({
+              name: 'Escalation Agent',
+              instructions: 'Handle escalations.',
+              model: 'gpt-5.4-mini',
+            }),
+          ],
+        },
+        model: 'gpt-5.6-terra',
+        modelSettings: {
+          temperature: 0.2,
+        },
+      },
+    });
+
+    await provider.callApi('Escalate this request.');
+
+    const executedAgent = mockRun.mock.calls[0][0] as Agent<any, any>;
+    expect(executedAgent).toMatchObject({
+      model: 'gpt-5.6-terra',
+      modelSettings: { temperature: 0.2 },
+    });
+    expect(executedAgent.handoffs[0]).toMatchObject({
+      agent: { model: 'gpt-5.6-terra', modelSettings: { temperature: 0.2 } },
+    });
+  });
+
+  it('preserves nested agent tools while applying overrides to the root agent', async () => {
+    const childAgent = new Agent({
+      name: 'Child Agent',
+      instructions: 'Handle delegated work.',
+      model: 'gpt-5.4-mini',
+      modelSettings: { temperature: 0.9 },
+    });
+    const childTool = childAgent.asTool({ toolName: 'delegate_to_child' });
+    const provider = new OpenAiAgentsProvider('support-agent', {
+      config: {
+        agent: {
+          name: 'Inline Support Agent',
+          instructions: 'Help the user.',
+          tools: [childTool],
+        },
+        model: 'gpt-5.6-terra',
+        modelSettings: { temperature: 0.2 },
+      },
+    });
+
+    await provider.callApi('Delegate this request.');
+
+    const executedAgent = mockRun.mock.calls[0][0] as Agent<any, any>;
+    expect(executedAgent).toMatchObject({
+      model: 'gpt-5.6-terra',
+      modelSettings: { temperature: 0.2 },
+    });
+    expect(executedAgent.tools[0]).toBe(childTool);
+  });
+
+  it.each([
+    ['inline', 'gpt-transcribe'],
+    ['direct', 'gpt-5-chat-latest'],
+    ['file', 'gpt-5.3-codex-spark'],
+  ])(
+    'defers %s agent definition model %s to the configured SDK provider',
+    async (source, model) => {
+      let agentConfig: OpenAiAgentsOptions['agent'];
+      if (source === 'inline') {
+        agentConfig = {
+          name: 'Inline Support Agent',
+          instructions: 'Help the user.',
+          model,
+        };
+      } else {
+        const agent = new Agent({
+          name: 'SDK Support Agent',
+          instructions: 'Help the user.',
+          model,
+        });
+        if (source === 'file') {
+          mockImportModule.mockResolvedValueOnce({ default: agent });
+          agentConfig = 'file:///tmp/agent.ts';
+        } else {
+          agentConfig = agent;
+        }
+      }
+
+      const provider = new OpenAiAgentsProvider('support-agent', {
+        config: { agent: agentConfig },
+      });
+
+      await provider.callApi('Where is my order?');
+
+      expect(mockRun.mock.calls[0][0]).toMatchObject({ model });
+    },
+  );
+
+  it('allows agent models when the Agents SDK uses a custom endpoint', async () => {
+    vi.stubEnv('OPENAI_BASE_URL', 'https://gateway.example/v1');
+
+    const provider = new OpenAiAgentsProvider('support-agent', {
+      config: {
+        agent: {
+          name: 'Inline Support Agent',
+          instructions: 'Help the user.',
+          model: 'gpt-5-chat-latest',
+        },
+      },
+    });
+
+    await expect(provider.callApi('Where is my order?')).resolves.toMatchObject({
+      output: 'Agent answer',
+    });
+    expect(mockRun.mock.calls[0][0]).toMatchObject({
+      model: 'gpt-5-chat-latest',
+    });
+  });
+
+  it('allows agent models when the Agents SDK uses an explicitly configured client', async () => {
+    setDefaultOpenAIClient(
+      new OpenAI({
+        apiKey: 'test-key',
+        baseURL: 'https://gateway.example/v1',
+      }) as unknown as Parameters<typeof setDefaultOpenAIClient>[0],
+    );
+
+    const provider = new OpenAiAgentsProvider('support-agent', {
+      config: {
+        agent: {
+          name: 'Inline Support Agent',
+          instructions: 'Help the user.',
+        },
+        model: 'gpt-5-chat-latest',
+      },
+    });
+
+    await expect(provider.callApi('Where is my order?')).resolves.toMatchObject({
+      output: 'Agent answer',
+    });
+    expect(mockRun.mock.calls[0][0]).toMatchObject({
+      model: 'gpt-5-chat-latest',
+    });
+  });
+
   it('passes Promptfoo vars through the SDK local run context', async () => {
     const provider = new OpenAiAgentsProvider('gpt-5-mini', {
       config: {
@@ -1289,44 +1508,6 @@ describe('OpenAiAgentsProvider', () => {
 
     expect(mockRun.mock.calls[0][2].sessionInputCallback).toBe(sessionInputCallback);
   });
-
-  it.each(['suite', 'file'] as const)(
-    'reads tracing enablement from the %s layer',
-    async (layer) => {
-      const provider = new OpenAiAgentsProvider('gpt-5-mini', {
-        config: { agent: { name: 'Scoped Agent', instructions: 'Return a test answer.' } },
-      });
-      const run =
-        layer === 'suite'
-          ? cliState.withEnv.bind(cliState)
-          : cliState.withEnvFileOverrides.bind(cliState);
-      await run({ PROMPTFOO_TRACING_ENABLED: 'true' }, () => provider.callApi('hello'));
-      expect(logger.debug).toHaveBeenCalledWith('[AgentsProvider] Setting up tracing');
-    },
-  );
-
-  it.each([
-    ['true', 'false', true],
-    ['false', 'true', false],
-    ['', 'true', false],
-  ])(
-    'retains provider tracing=%s over suite tracing=%s',
-    async (providerValue, suiteValue, enabled) => {
-      const provider = new OpenAiAgentsProvider(
-        'gpt-5-mini',
-        ProviderOptionsSchema.parse({
-          config: { agent: { name: 'Scoped Agent', instructions: 'Return a test answer.' } },
-          env: { PROMPTFOO_TRACING_ENABLED: providerValue },
-        }),
-      );
-      await cliState.withEnv({ PROMPTFOO_TRACING_ENABLED: suiteValue }, () =>
-        provider.callApi('hello'),
-      );
-      expect(logger.debug).toHaveBeenCalledWith(
-        enabled ? '[AgentsProvider] Setting up tracing' : '[AgentsProvider] Tracing not enabled',
-      );
-    },
-  );
 
   it('adds the Promptfoo trace exporter without replacing existing processors', async () => {
     vi.resetModules();

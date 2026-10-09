@@ -3,7 +3,6 @@ import os from 'os';
 import path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import cliState from '../../../src/cliState';
 import { providerRegistry } from '../../../src/providers/providerRegistry';
 import { createDeferred, mockProcessEnv } from '../../util/utils';
 
@@ -257,64 +256,6 @@ describe('Codex default providers', () => {
     );
   });
 
-  it.each(['provider', 'evaluation', 'file'] as const)(
-    'partitions bundles by the %s credential before lower-scope aliases',
-    async (scope) => {
-      const { getCodexDefaultProviders } = await import(
-        '../../../src/providers/openai/codexDefaults'
-      );
-      mockProcessEnv({ OPENAI_API_KEY: 'host-key' });
-      const get = (key: string) => {
-        const env = { CODEX_API_KEY: key };
-        if (scope === 'provider') {
-          return getCodexDefaultProviders(env);
-        }
-        return scope === 'evaluation'
-          ? cliState.withEnv(env, () => getCodexDefaultProviders())
-          : cliState.withEnvFileOverrides(env, () => getCodexDefaultProviders());
-      };
-      const first = get('first-key');
-      const second = get('second-key');
-      expect(second).not.toBe(first);
-      expect(get('first-key')).toBe(first);
-      expect((first.gradingProvider as OpenAICodexSDKProvider).apiKey).toBe('first-key');
-      expect((second.gradingProvider as OpenAICodexSDKProvider).apiKey).toBe('second-key');
-    },
-  );
-
-  it('does not select masked host credentials or reuse their bundle', async () => {
-    const { getCodexDefaultProviders, hasCodexDefaultCredentials } = await import(
-      '../../../src/providers/openai/codexDefaults'
-    );
-    mockProcessEnv({ OPENAI_API_KEY: 'host-key', CODEX_API_KEY: 'host-fallback' });
-    const host = getCodexDefaultProviders();
-    const masked = { OPENAI_API_KEY: '', CODEX_API_KEY: '' };
-    expect(hasCodexDefaultCredentials(masked)).toBe(false);
-    const withoutCredentials = getCodexDefaultProviders(masked);
-    expect(withoutCredentials).not.toBe(host);
-    expect(
-      (withoutCredentials.gradingProvider as OpenAICodexSDKProvider).getApiKey(),
-    ).toBeUndefined();
-  });
-
-  it('does not select an explicitly masked host Codex home', async () => {
-    const { getCodexDefaultProviders, hasCodexDefaultCredentials } = await import(
-      '../../../src/providers/openai/codexDefaults'
-    );
-    fs.writeFileSync(path.join(codexHome, 'auth.json'), '{"ok":true}');
-    const homedir = vi.spyOn(os, 'homedir').mockReturnValue(path.join(codexHome, 'empty-home'));
-    try {
-      expect(hasCodexDefaultCredentials()).toBe(true);
-      expect(hasCodexDefaultCredentials({ CODEX_HOME: '' })).toBe(false);
-      const host = getCodexDefaultProviders();
-      const masked = getCodexDefaultProviders({ CODEX_HOME: '' });
-      expect(masked).not.toBe(host);
-      expect(masked.gradingProvider.config?.cli_env?.CODEX_HOME).toBeUndefined();
-    } finally {
-      homedir.mockRestore();
-    }
-  });
-
   it('evicts and shuts down idle least-recently-used cached providers when credentials rotate', async () => {
     vi.useFakeTimers();
 
@@ -532,21 +473,15 @@ describe('Codex default providers', () => {
       '../../../src/providers/openai/codexDefaults'
     );
 
-    const first = getCodexDefaultProviders({
-      OPENAI_API_KEY: 'shared-openai-key',
-      CODEX_API_KEY: 'codex-A',
-    });
-    const second = getCodexDefaultProviders({
-      OPENAI_API_KEY: 'shared-openai-key',
-      CODEX_API_KEY: 'codex-B',
-    });
+    mockProcessEnv({ OPENAI_API_KEY: 'shared-openai-key' });
+
+    const first = getCodexDefaultProviders({ CODEX_API_KEY: 'codex-A' });
+    const second = getCodexDefaultProviders({ CODEX_API_KEY: 'codex-B' });
     expect(second).toBe(first);
 
     // Rotating the OPENAI key (the resolved credential) does invalidate the cache.
-    const third = getCodexDefaultProviders({
-      OPENAI_API_KEY: 'rotated-openai-key',
-      CODEX_API_KEY: 'codex-A',
-    });
+    mockProcessEnv({ OPENAI_API_KEY: 'rotated-openai-key' });
+    const third = getCodexDefaultProviders({ CODEX_API_KEY: 'codex-A' });
     expect(third).not.toBe(first);
   });
 

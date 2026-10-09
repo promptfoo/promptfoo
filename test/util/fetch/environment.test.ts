@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../../src/cliState';
 import logger from '../../../src/logger';
 import { CreateJobRequestSchema } from '../../../src/types/api/eval';
+import { TestSuiteSchema } from '../../../src/types/index';
 import { clearAgentCache, fetchWithProxy } from '../../../src/util/fetch/index';
 import { ProviderOptionsSchema } from '../../../src/validators/providers';
 import { mockProcessEnv, PROXY_ENV_KEYS } from '../utils';
@@ -185,6 +186,50 @@ describe('HTTP agent configuration ownership', () => {
         headersTimeout: 1250,
         connections: 3,
       }),
+    );
+  });
+
+  it('retains transport settings in the runtime suite schema', async () => {
+    const parsed = TestSuiteSchema.parse({
+      providers: [],
+      prompts: [],
+      env: {
+        HTTPS_PROXY: 'http://runtime.example:8080',
+        NO_PROXY: '',
+        REQUEST_TIMEOUT_MS: '1250',
+        PROMPTFOO_FETCH_CONNECTIONS: '3',
+      },
+    });
+    await cliState.withEnv(parsed.env, request);
+    expect(ProxyAgent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        uri: 'http://runtime.example:8080',
+        headersTimeout: 1250,
+        connections: 3,
+      }),
+    );
+  });
+
+  it('preserves generic SDK environment values alongside parsed job transport settings', async () => {
+    const parsed = CreateJobRequestSchema.parse({
+      providers: ['echo'],
+      prompts: ['fixture'],
+      env: {
+        AWS_ENDPOINT_URL: 'https://sdk.example',
+        AWS_USE_FIPS_ENDPOINT: true,
+        REQUEST_TIMEOUT_MS: 1250,
+        PROMPTFOO_FETCH_CONNECTIONS: 3,
+      },
+    });
+    expect(parsed.env).toEqual({
+      AWS_ENDPOINT_URL: 'https://sdk.example',
+      AWS_USE_FIPS_ENDPOINT: 'true',
+      REQUEST_TIMEOUT_MS: '1250',
+      PROMPTFOO_FETCH_CONNECTIONS: '3',
+    });
+    await cliState.withEnv(parsed.env, request);
+    expect(Agent).toHaveBeenCalledWith(
+      expect.objectContaining({ headersTimeout: 1250, connections: 3 }),
     );
   });
 

@@ -1,5 +1,4 @@
-import { getEnvOverrides } from '../../envars';
-import { resolveProviderEnv } from '../env';
+import { getEnvOverrides, getEnvString } from '../../envars';
 import { GoogleAuthManager } from './auth';
 import { GoogleLiveProvider } from './live';
 
@@ -19,7 +18,10 @@ export class VertexLiveProvider extends GoogleLiveProvider {
   protected override async getConnection(config: CompletionOptions) {
     const region =
       config.region ||
-      resolveProviderEnv(this.env, ['VERTEX_REGION', 'GOOGLE_CLOUD_LOCATION'])?.value ||
+      this.env?.VERTEX_REGION ||
+      this.env?.GOOGLE_CLOUD_LOCATION ||
+      getEnvString('VERTEX_REGION') ||
+      getEnvString('GOOGLE_CLOUD_LOCATION') ||
       'us-central1';
     // Live uses the Cloud API versions, not Gemini API v1alpha/v1beta.
     const apiVersion = config.apiVersion || 'v1';
@@ -46,10 +48,13 @@ export class VertexLiveProvider extends GoogleLiveProvider {
         !config.credentials &&
         !config.keyFilename &&
         !config.googleAuthOptions?.credentials &&
+        !config.googleAuthOptions?.authClient &&
         !config.googleAuthOptions?.keyFilename &&
         !config.googleAuthOptions?.keyFile &&
+        !config.googleAuthOptions?.apiKey &&
+        !config.googleAuthOptions?.clientOptions?.apiKey &&
         [this.env, getEnvOverrides(), getEnvOverrides('file')].some(
-          (env) => env?.GOOGLE_APPLICATION_CREDENTIALS !== undefined,
+          (layer) => layer?.GOOGLE_APPLICATION_CREDENTIALS !== undefined,
         )
       ) {
         throw error;
@@ -60,11 +65,12 @@ export class VertexLiveProvider extends GoogleLiveProvider {
     }
     const projectId =
       config.projectId ||
-      resolveProviderEnv(this.env, [
-        'VERTEX_PROJECT_ID',
-        'GOOGLE_PROJECT_ID',
-        'GOOGLE_CLOUD_PROJECT',
-      ])?.value ||
+      this.env?.VERTEX_PROJECT_ID ||
+      this.env?.GOOGLE_PROJECT_ID ||
+      this.env?.GOOGLE_CLOUD_PROJECT ||
+      getEnvString('VERTEX_PROJECT_ID') ||
+      getEnvString('GOOGLE_PROJECT_ID') ||
+      getEnvString('GOOGLE_CLOUD_PROJECT') ||
       authProjectId;
     if (!projectId) {
       throw new Error(

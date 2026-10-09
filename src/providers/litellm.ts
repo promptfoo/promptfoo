@@ -1,4 +1,4 @@
-import { resolveProviderEnv } from './env';
+import { getEnvString } from '../envars';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiCompletionProvider } from './openai/completion';
 import { OpenAiEmbeddingProvider } from './openai/embedding';
@@ -191,10 +191,9 @@ export function createLiteLLMProvider(
   // Resolve apiBaseUrl: config > provider env > context env > process env > default
   const resolvedApiBaseUrl =
     config.apiBaseUrl ||
-    resolveProviderEnv(
-      { LITELLM_API_BASE: options.config?.env?.LITELLM_API_BASE ?? options.env?.LITELLM_API_BASE },
-      ['LITELLM_API_BASE'],
-    )?.value ||
+    options.config?.env?.LITELLM_API_BASE ||
+    options.env?.LITELLM_API_BASE ||
+    getEnvString('LITELLM_API_BASE') ||
     'http://0.0.0.0:4000';
 
   // Build the config object with proper defaults

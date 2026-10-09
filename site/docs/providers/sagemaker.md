@@ -56,8 +56,6 @@ Use the `sagemaker` provider to test models on your Amazon SageMaker AI endpoint
 
 ## Authentication
 
-Scoped `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`, and `AWS_PROFILE` values are passed to the SDK. Keep a complete key tuple in one scope; empty or incomplete tuples are rejected. Without scoped credentials, the SDK uses its ambient credential chain.
-
 Configure Amazon SageMaker authentication in your provider's `config` section using one of these methods:
 
 1. Access key authentication:
@@ -536,7 +534,6 @@ providers:
 When caching is enabled:
 
 - Responses for identical prompts are stored and reused
-- Clients and cached responses are isolated by provider instance and invocation environment.
 - Token usage statistics are maintained with a `cached` flag
 - Debug mode will bypass the cache when needed
 
