@@ -23,10 +23,10 @@ import {
 } from '../../util/functions/loadFunction';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { getNunjucksEngine } from '../../util/templates';
+import { executeCallback } from '../functionCallbackExecutor';
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToGoogle } from '../mcp/transform';
 import { getRequestTimeoutMs, transformTools } from '../shared';
-import { withGenAIToolSpan } from '../tracing';
 import { GoogleAuthManager } from './auth';
 import { getVertexModelDefaultRegion } from './shared';
 import {
@@ -353,12 +353,6 @@ export abstract class GoogleGenericProvider implements ApiProvider {
   /** Cache of loaded function callbacks */
   protected loadedFunctionCallbacks: Record<string, Function> = {};
 
-  /** References used to populate the callback cache, for prompt-level overrides. */
-  protected loadedFunctionCallbackRefs: Record<string, string | Function | undefined> = {};
-
-  /** Effective owning directories for cached file callbacks, including CLI/cwd fallback. */
-  protected loadedFunctionCallbackBasePaths: Record<string, string | undefined> = {};
-
   /** Custom provider ID function */
   protected customId?: () => string;
 
@@ -585,70 +579,37 @@ export abstract class GoogleGenericProvider implements ApiProvider {
         typeof callbackRef === 'string' && callbackRef.startsWith('file://')
           ? resolveCallbackPath('.', config.basePath)
           : undefined;
-      let callback: Function | undefined = Object.prototype.hasOwnProperty.call(
-        this.loadedFunctionCallbacks,
-        functionName,
-      )
-        ? this.loadedFunctionCallbacks[functionName]
-        : undefined;
-
-      if (
-        this.loadedFunctionCallbackRefs[functionName] !== callbackRef ||
-        this.loadedFunctionCallbackBasePaths[functionName] !== callbackBasePath
-      ) {
-        callback = undefined;
-      }
-
-      // If not loaded yet, try to load it now
-      if (!callback) {
-        if (callbackRef && typeof callbackRef === 'string') {
-          const callbackStr: string = callbackRef;
-          if (callbackStr.startsWith('file://')) {
-            callback = await this.loadExternalFunction(callbackStr, callbackBasePath);
-          } else {
-            // Inline function string (backward compatibility with existing behavior)
-            // This uses Function constructor which has security implications
-            logger.warn(
-              `[GoogleProvider] Inline function string for '${functionName}' is deprecated. ` +
-                `Use 'file://path/to/module.js:functionName' for better security.`,
-            );
-            try {
-              // eslint-disable-next-line no-new-func
-              callback = new Function('return ' + callbackStr)();
-              if (typeof callback !== 'function') {
-                throw new Error(`Expression did not return a function`);
-              }
-            } catch (err) {
-              throw new Error(
-                `Failed to parse inline function for '${functionName}': ${err}. ` +
-                  `Consider using 'file://' prefix to reference an external file.`,
-              );
+      const execution = await executeCallback({
+        name: functionName,
+        args,
+        callId,
+        reference: callbackRef,
+        cache: this.loadedFunctionCallbacks,
+        cacheScope: callbackBasePath,
+        loadFile: (reference) => this.loadExternalFunction(reference, callbackBasePath),
+        loadInline: (expression) => {
+          logger.warn(
+            `[GoogleProvider] Inline function string for '${functionName}' is deprecated. ` +
+              `Use 'file://path/to/module.js:functionName' for better security.`,
+          );
+          try {
+            const callback = new Function('return ' + expression)();
+            if (typeof callback !== 'function') {
+              throw new Error('Expression did not return a function');
             }
+            return callback;
+          } catch (err) {
+            throw new Error(
+              `Failed to parse inline function for '${functionName}': ${err}. ` +
+                `Consider using 'file://' prefix to reference an external file.`,
+            );
           }
-
-          // Cache for future use
-          this.loadedFunctionCallbacks[functionName] = callback;
-          this.loadedFunctionCallbackRefs[functionName] = callbackRef;
-          this.loadedFunctionCallbackBasePaths[functionName] = callbackBasePath;
-        } else if (typeof callbackRef === 'function') {
-          callback = callbackRef;
-          this.loadedFunctionCallbacks[functionName] = callback;
-          this.loadedFunctionCallbackRefs[functionName] = callbackRef;
-          this.loadedFunctionCallbackBasePaths[functionName] = callbackBasePath;
-        }
+        },
+      });
+      if (execution.isError) {
+        throw execution.error;
       }
-
-      if (!callback) {
-        throw new Error(`No callback found for function '${functionName}'`);
-      }
-
-      // Execute the callback
-      logger.debug(`Executing function '${functionName}' with args: ${args}`);
-      const result = await withGenAIToolSpan({ name: functionName, arguments: args, callId }, () =>
-        callback(args),
-      );
-
-      return result;
+      return execution.output;
     } catch (error: any) {
       logger.error(`Error executing function '${functionName}': ${error.message || String(error)}`);
       throw error;
