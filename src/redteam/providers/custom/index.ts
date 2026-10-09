@@ -10,7 +10,6 @@ import { sleep } from '../../../util/time';
 import { TokenUsageTracker } from '../../../util/tokenUsage';
 import {
   accumulateAttackerTokenUsage,
-  accumulateGradingResponseTokenUsage,
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../../../util/tokenUsageUtils';
@@ -24,15 +23,14 @@ import {
   type TransformResult,
 } from '../../shared/runtimeTransform';
 import { Strategies } from '../../strategies';
-import { getSessionId, isBasicRefusal } from '../../util';
-import { EVAL_SYSTEM_PROMPT, REFUSAL_SYSTEM_PROMPT } from '../crescendo/prompts';
-import { MemorySystem } from '../memory';
+import { getSessionId } from '../../util';
+import { MemorySystem } from '../conversationMemory';
+import { getEvalScore, getRefusalScore } from '../conversationScoring';
 import { getGoalRubric } from '../prompts';
 import {
   accumulateGraderResult,
   accumulateUnblockingTokenUsage,
   buildGraderResultAssertion,
-  callGradingProvider,
   captureFlaggedTurn,
   externalizeResponseForRedteamHistory,
   getGraderAssertionValue,
@@ -650,7 +648,7 @@ export class CustomProvider implements ApiProvider {
           }
         }
 
-        const [evalScore] = await this.getEvalScore(lastResponse.output, totalTokenUsage, options);
+        const evalScore = await this.getEvalScore(lastResponse.output, totalTokenUsage, options);
 
         evalFlag = evalScore.value;
         evalPercentage = evalScore.metadata;
@@ -1041,140 +1039,36 @@ export class CustomProvider implements ApiProvider {
     tokenUsage: TokenUsage,
     options?: CallApiOptionsParams,
   ): Promise<[boolean, string]> {
-    logger.debug(`[Custom] Getting refusal score for prompt: ${attackPrompt}`);
-    // Short-circuit refusal grading for standard refusal prefixes
-    if (isBasicRefusal(lastResponse)) {
-      logger.debug(
-        '[Custom] Response contains a standard refusal prefix. Short-circuiting refusal grading.',
-      );
-      return [true, 'The output contains a standard refusal.'];
-    }
-
-    // Otherwise, use the scoring chat to grade the refusal
-    const refusalInput = JSON.stringify({
-      conversationObjective: attackPrompt,
-      responseToEvaluateInput: lastResponse,
-    });
-
-    const refusalSystemPrompt = this.nunjucks.renderString(REFUSAL_SYSTEM_PROMPT, {
-      conversationObjective: this.userGoal,
-    });
-
-    const refusalBody = JSON.stringify([
-      { role: 'system', content: refusalSystemPrompt },
-      { role: 'user', content: refusalInput },
-    ]);
-
-    const scoringProvider = await this.getScoringProvider();
-    const refusalResponse = await callGradingProvider(
-      scoringProvider,
-      refusalBody,
+    return getRefusalScore(
       {
-        prompt: {
-          raw: refusalBody,
-          label: 'refusal',
-        },
-        vars: {},
+        logPrefix: 'Custom',
+        userGoal: this.userGoal,
+        nunjucks: this.nunjucks,
+        getScoringProvider: () => this.getScoringProvider(),
       },
+      attackPrompt,
+      lastResponse,
+      tokenUsage,
       options,
     );
-    TokenUsageTracker.getInstance().trackResponseUsage(scoringProvider.id(), refusalResponse);
-    accumulateGradingResponseTokenUsage(tokenUsage, refusalResponse);
-    if (scoringProvider.delay) {
-      logger.debug(`[Custom] Sleeping for ${scoringProvider.delay}ms`);
-      await sleep(scoringProvider.delay);
-    }
-    if (refusalResponse.error) {
-      throw new Error(`Error from redteam (refusal) provider: ${refusalResponse.error}`);
-    }
-
-    logger.debug(`[Custom] Refusal score response: ${refusalResponse.output}`);
-
-    const parsed =
-      typeof refusalResponse.output === 'string'
-        ? extractFirstJsonObject<{
-            value: boolean;
-            metadata: number;
-            rationale: string;
-          }>(refusalResponse.output)
-        : refusalResponse.output;
-
-    logger.debug('[Custom] Refusal score parsed response', { parsed });
-    invariant(typeof parsed.value === 'boolean', 'Expected refusal grader value to be a boolean');
-    invariant(
-      typeof parsed.metadata === 'number',
-      'Expected refusal grader metadata to be a number',
-    );
-
-    return [parsed.value, parsed.rationale];
   }
 
   private async getEvalScore(
     lastResponse: string,
     tokenUsage: TokenUsage,
     options?: CallApiOptionsParams,
-  ): Promise<[any, TokenUsage | undefined]> {
-    logger.debug(`[Custom] Getting eval score for response: ${lastResponse.substring(0, 100)}...`);
-    const evalInput = JSON.stringify({
-      conversationObjective: this.userGoal,
-      responseToEvaluateInput: lastResponse,
-    });
-
-    const evalSystemPrompt = this.nunjucks.renderString(EVAL_SYSTEM_PROMPT, {
-      conversationObjective: this.userGoal,
-    });
-
-    const evalBody = JSON.stringify([
-      { role: 'system', content: evalSystemPrompt },
-      { role: 'user', content: evalInput },
-    ]);
-
-    const scoringProvider = await this.getScoringProvider();
-    const evalResponse = await callGradingProvider(
-      scoringProvider,
-      evalBody,
+  ): Promise<any> {
+    return getEvalScore(
       {
-        prompt: {
-          raw: evalBody,
-          label: 'eval',
-        },
-        vars: {},
+        logPrefix: 'Custom',
+        userGoal: this.userGoal,
+        nunjucks: this.nunjucks,
+        getScoringProvider: () => this.getScoringProvider(),
       },
+      lastResponse,
+      tokenUsage,
       options,
     );
-    TokenUsageTracker.getInstance().trackResponseUsage(scoringProvider.id(), evalResponse);
-    accumulateGradingResponseTokenUsage(tokenUsage, evalResponse);
-    if (scoringProvider.delay) {
-      logger.debug(`[Custom] Sleeping for ${scoringProvider.delay}ms`);
-      await sleep(scoringProvider.delay);
-    }
-    if (evalResponse.error) {
-      throw new Error(`Error from redteam (eval) provider: ${evalResponse.error}`);
-    }
-
-    logger.debug(`[Custom] Eval score response: ${evalResponse.output}`);
-
-    const parsed =
-      typeof evalResponse.output === 'string'
-        ? extractFirstJsonObject<{
-            value: boolean;
-            description: string;
-            rationale: string;
-            metadata: number;
-          }>(evalResponse.output)
-        : evalResponse.output;
-
-    logger.debug('[Custom] Eval score parsed response', { parsed });
-    invariant(
-      typeof parsed.value === 'boolean',
-      `Expected eval grader value to be a boolean: ${parsed}`,
-    );
-    invariant(
-      typeof parsed.metadata === 'number',
-      `Expected eval grader metadata to be a number: ${parsed}`,
-    );
-
-    return [parsed, evalResponse.tokenUsage];
   }
 
   private async backtrackMemory(conversationId: string): Promise<string> {
