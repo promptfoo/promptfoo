@@ -542,6 +542,7 @@ const sidebars = {
         { type: 'doc', id: 'enterprise/authentication' },
         { type: 'doc', id: 'enterprise/service-accounts' },
         { type: 'doc', id: 'enterprise/teams' },
+        { type: 'doc', id: 'enterprise/media-storage' },
         { type: 'doc', id: 'enterprise/red-teams' },
         { type: 'doc', id: 'enterprise/findings' },
         { type: 'doc', id: 'enterprise/guardrails' },
