@@ -61,7 +61,7 @@ describe('sanitizeTraceAttributes', () => {
     });
   });
 
-  it('redacts token attributes that do not hold a count', () => {
+  it('redacts token attributes that do not hold a number', () => {
     expect(
       sanitizeTraceAttributes({
         'session.tokens': 'sk-live-1234567890',
@@ -81,32 +81,74 @@ describe('sanitizeTraceAttributes', () => {
         'authorization.tokens': 150,
         'api_key.token_count': 42,
         'secret.tokens': 7,
+        'llm.token_count.api_key': 42,
+        'gen_ai.usage.password_tokens': 7,
       }),
     ).toEqual({
       'authorization.tokens': '<redacted>',
       'api_key.token_count': '<redacted>',
       'secret.tokens': '<redacted>',
+      'llm.token_count.api_key': '<redacted>',
+      'gen_ai.usage.password_tokens': '<redacted>',
     });
   });
 
-  it('preserves camelCase token counters', () => {
+  it('redacts numeric credential-like token keys outside the usage namespaces', () => {
+    expect(
+      sanitizeTraceAttributes({
+        access_tokens: 654321,
+        sessionTokens: 123456,
+        'prompt.tokens': 150,
+      }),
+    ).toEqual({
+      access_tokens: '<redacted>',
+      sessionTokens: '<redacted>',
+      'prompt.tokens': 150,
+    });
+  });
+
+  it('redacts numeric token counters outside the recognised names and namespaces', () => {
     expect(
       sanitizeTraceAttributes({
         promptTokenCount: 150,
-        completionTokenCount: 85,
-        totalTokenCount: 235,
+        LLMTokenCount: 85,
+        'session.tokens': 42,
+        'auth.token_count': 7,
       }),
-    ).toEqual({ promptTokenCount: 150, completionTokenCount: 85, totalTokenCount: 235 });
+    ).toEqual({
+      promptTokenCount: '<redacted>',
+      LLMTokenCount: '<redacted>',
+      'session.tokens': '<redacted>',
+      'auth.token_count': '<redacted>',
+    });
   });
 
-  it('preserves acronym-prefixed token counters', () => {
+  it('preserves numeric counters under the recognised usage namespaces', () => {
     expect(
       sanitizeTraceAttributes({
-        LLMTokenCount: 150,
-        OpenAITokenCount: 85,
-        LLMTokens: 235,
+        'gen_ai.usage.input_tokens': 150,
+        'gen_ai.usage.output_tokens': 85,
+        'llm.usage.prompt_tokens': 150,
+        'llm.usage.completion_tokens': 85,
+        'llm.token_count.completion': 85,
+        'llm.token_count.prompt_details.cache_read': 20,
+        'ai.usage.inputTokens': 150,
+        'ai.usage.outputTokens': 85,
+        'ai.usage.totalTokens': 235,
+        'completion.tokens': 85,
       }),
-    ).toEqual({ LLMTokenCount: 150, OpenAITokenCount: 85, LLMTokens: 235 });
+    ).toEqual({
+      'gen_ai.usage.input_tokens': 150,
+      'gen_ai.usage.output_tokens': 85,
+      'llm.usage.prompt_tokens': 150,
+      'llm.usage.completion_tokens': 85,
+      'llm.token_count.completion': 85,
+      'llm.token_count.prompt_details.cache_read': 20,
+      'ai.usage.inputTokens': 150,
+      'ai.usage.outputTokens': 85,
+      'ai.usage.totalTokens': 235,
+      'completion.tokens': 85,
+    });
   });
 
   it('redacts well-known usage keys that do not hold a number', () => {
@@ -114,8 +156,15 @@ describe('sanitizeTraceAttributes', () => {
       sanitizeTraceAttributes({
         'gen_ai.usage.input_tokens': '150',
         'gen_ai.usage.output_tokens': 85,
+        'llm.token_count.prompt': 'sk-live-1234567890',
+        'ai.usage.promptTokens': Number.NaN,
       }),
-    ).toEqual({ 'gen_ai.usage.input_tokens': '<redacted>', 'gen_ai.usage.output_tokens': 85 });
+    ).toEqual({
+      'gen_ai.usage.input_tokens': '<redacted>',
+      'gen_ai.usage.output_tokens': 85,
+      'llm.token_count.prompt': '<redacted>',
+      'ai.usage.promptTokens': '<redacted>',
+    });
   });
 
   it('lets explicit redactions override token counters', () => {

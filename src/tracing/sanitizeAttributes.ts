@@ -43,42 +43,44 @@ const SAFE_TOKEN_ATTRIBUTE_KEYS = new Set([
   'gen_ai.usage.rejected_prediction_tokens',
   'gen_ai.usage.cache_read_input_tokens',
   'gen_ai.usage.cache_creation_input_tokens',
+  // Counters used in the application examples in the tracing docs.
+  'prompt.tokens',
+  'response.tokens',
+  'completion.tokens',
+  // Vercel AI SDK (`ai.usage.*`), v4 and v5 names, matched case-insensitively.
+  'ai.usage.prompttokens',
+  'ai.usage.completiontokens',
+  'ai.usage.inputtokens',
+  'ai.usage.outputtokens',
+  'ai.usage.totaltokens',
+  'ai.usage.reasoningtokens',
+  'ai.usage.cachedinputtokens',
 ]);
+
+/**
+ * Usage namespaces whose attributes are counters by definition. The exemption is bounded
+ * to these prefixes so a key such as `access_tokens` or `sessionTokens` elsewhere in a
+ * span is still treated as credential material.
+ *
+ * - `gen_ai.usage.*_tokens`, `llm.usage.*_tokens`, `promptfoo.usage.*_tokens`
+ * - `llm.token_count.*` (OpenInference)
+ */
+const SAFE_TOKEN_COUNTER_NAMESPACE_PATTERNS = [
+  /^(?:gen_ai|llm|promptfoo)\.usage\.[a-z0-9_.]*_tokens$/,
+  /^llm\.token_count\.[a-z0-9_.]+$/,
+];
 
 const TOKEN_MARKER = 'token';
 
-/**
- * Matches keys that count tokens rather than carry one, so counters from any
- * instrumentation stay readable: `prompt.tokens` and `response.tokens` from the tracing
- * docs, `ai.usage.promptTokens` (Vercel AI SDK) and `llm.token_count.prompt`
- * (OpenInference).
- */
-const TOKEN_COUNT_KEY_PATTERN = /tokens$|(?:^|[^a-z0-9])token_?counts?(?:[^a-z0-9]|$)/;
-
-/**
- * Lowercasing on its own destroys the camel-case boundary, so `promptTokenCount`
- * would read as `prompttokencount` and match neither branch of the pattern. Insert the
- * boundary first.
- *
- * Two passes, because an acronym needs the opposite rule: the first splits a lower or
- * digit followed by an upper (`promptToken`), the second splits an upper run followed by
- * a capitalised word (`LLMToken`, `OpenAIToken`).
- */
-function toBoundaryKey(key: string): string {
-  return key
-    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
-    .replace(/([A-Z]+)([A-Z][a-z])/g, '$1_$2')
-    .toLowerCase();
-}
-
-function isTokenCountAttribute(key: string, lowerKey: string, value: unknown): boolean {
-  // A count is a number. Anything else under the same key could be a credential,
-  // including under a well-known usage key.
-  if (typeof value !== 'number') {
+function isTokenCountAttribute(lowerKey: string, value: unknown): boolean {
+  // A count is a finite number. Any other value under the same key could be a credential,
+  // including under a recognised usage key.
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
     return false;
   }
   return (
-    SAFE_TOKEN_ATTRIBUTE_KEYS.has(lowerKey) || TOKEN_COUNT_KEY_PATTERN.test(toBoundaryKey(key))
+    SAFE_TOKEN_ATTRIBUTE_KEYS.has(lowerKey) ||
+    SAFE_TOKEN_COUNTER_NAMESPACE_PATTERNS.some((pattern) => pattern.test(lowerKey))
   );
 }
 
@@ -96,14 +98,14 @@ function isSensitiveAttributeKey(key: string, value: unknown): boolean {
     return false;
   }
 
-  // Only the `token` marker can be waived, and only for a count. A key such as
-  // `authorization.tokens` or `api_key.token_count` also names credential material, so it
-  // stays redacted whatever its value.
+  // Only the `token` marker can be waived, and only for a numeric value under a recognised
+  // usage-counter key. A key such as `api_key.token_count` also names credential material,
+  // so it stays redacted whatever its value.
   if (matchedMarkers.some((marker) => marker !== TOKEN_MARKER)) {
     return true;
   }
 
-  return !isTokenCountAttribute(key, lowerKey, value);
+  return !isTokenCountAttribute(lowerKey, value);
 }
 
 export function sanitizeTraceAttributes(
