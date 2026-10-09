@@ -1,14 +1,14 @@
 import crypto from 'node:crypto';
 
 import { getCache, isCacheEnabled } from '../../cache';
-import { getEnvString } from '../../envars';
+import { type EnvVarKey, getEnvString } from '../../envars';
 import logger from '../../logger';
 import { fetchWithProxy } from '../../util/fetch/index';
+import { resolveProviderApiKey } from '../credentials';
+import { resolveProviderEnv } from '../env';
 import { getRequestTimeoutMs } from '../shared';
 import { AzureGenericProvider } from './generic';
 
-import type { EnvVarKey } from '../../envars';
-import type { EnvOverrides } from '../../types/env';
 import type {
   ApiModerationProvider,
   ModerationFlag,
@@ -166,14 +166,11 @@ export class AzureModerationProvider extends AzureGenericProvider implements Api
     this.configWithHeaders = config || {};
     this.apiVersion =
       config?.apiVersion ||
-      env?.AZURE_CONTENT_SAFETY_API_VERSION ||
-      getEnvString('AZURE_CONTENT_SAFETY_API_VERSION') ||
+      (env?.AZURE_CONTENT_SAFETY_API_VERSION ?? getEnvString('AZURE_CONTENT_SAFETY_API_VERSION')) ||
       '2024-09-01';
 
     this.endpoint =
-      config?.endpoint ||
-      env?.AZURE_CONTENT_SAFETY_ENDPOINT ||
-      getEnvString('AZURE_CONTENT_SAFETY_ENDPOINT');
+      config?.endpoint || resolveProviderEnv(env, ['AZURE_CONTENT_SAFETY_ENDPOINT'])?.value;
 
     if (!AzureModerationProvider.MODERATION_MODEL_IDS.includes(modelName)) {
       logger.warn(`Using unknown Azure moderation model: ${modelName}`);
@@ -187,19 +184,18 @@ export class AzureModerationProvider extends AzureGenericProvider implements Api
   }
 
   getContentSafetyApiKey(): string | undefined {
-    const extendedEnv = this.env as EnvOverrides & { AZURE_CONTENT_SAFETY_API_KEY?: string };
-
+    const namedKey = this.configWithHeaders.apiKeyEnvar
+      ? (this.env?.[this.configWithHeaders.apiKeyEnvar] ??
+        getEnvString(this.configWithHeaders.apiKeyEnvar as EnvVarKey))
+      : undefined;
     return (
       this.configWithHeaders.apiKey ||
-      (this.configWithHeaders.apiKeyEnvar
-        ? getEnvString(this.configWithHeaders.apiKeyEnvar as EnvVarKey) ||
-          (this.env && this.configWithHeaders.apiKeyEnvar in this.env
-            ? (this.env as any)[this.configWithHeaders.apiKeyEnvar]
-            : undefined)
-        : undefined) ||
-      extendedEnv?.AZURE_CONTENT_SAFETY_API_KEY ||
-      getEnvString('AZURE_CONTENT_SAFETY_API_KEY') ||
-      this.getApiKey()
+      (namedKey ??
+        resolveProviderApiKey(undefined, this.env, [
+          'AZURE_CONTENT_SAFETY_API_KEY',
+          'AZURE_API_KEY',
+          'AZURE_OPENAI_API_KEY',
+        ]))
     );
   }
 

@@ -14,6 +14,15 @@ export interface ConcurrencyChangeResult {
   reason: 'recovery' | 'ratelimit' | 'proactive';
 }
 
+function concurrencyChange(
+  previous: number,
+  current: number,
+  reason: ConcurrencyChangeResult['reason'],
+  changed = previous !== current,
+): ConcurrencyChangeResult {
+  return { changed, previous, current, reason };
+}
+
 /**
  * Manages adaptive concurrency based on rate limit feedback.
  *
@@ -52,20 +61,10 @@ export class AdaptiveConcurrency {
       this.current = Math.min(this.initial, Math.ceil(this.current * RECOVERY_FACTOR));
       this.consecutiveSuccesses = 0;
 
-      return {
-        changed: previous !== this.current,
-        previous,
-        current: this.current,
-        reason: 'recovery',
-      };
+      return concurrencyChange(previous, this.current, 'recovery');
     }
 
-    return {
-      changed: false,
-      previous: this.current,
-      current: this.current,
-      reason: 'recovery',
-    };
+    return concurrencyChange(this.current, this.current, 'recovery', false);
   }
 
   /**
@@ -78,12 +77,7 @@ export class AdaptiveConcurrency {
     const previous = this.current;
     this.current = Math.max(this.min, Math.floor(this.current * BACKOFF_FACTOR));
 
-    return {
-      changed: previous !== this.current,
-      previous,
-      current: this.current,
-      reason: 'ratelimit',
-    };
+    return concurrencyChange(previous, this.current, 'ratelimit');
   }
 
   /**
@@ -102,12 +96,7 @@ export class AdaptiveConcurrency {
     const clampedRatio = Math.max(0, Math.min(1, ratio));
 
     if (clampedRatio >= WARNING_THRESHOLD || this.current <= this.min) {
-      return {
-        changed: false,
-        previous: this.current,
-        current: this.current,
-        reason: 'proactive',
-      };
+      return concurrencyChange(this.current, this.current, 'proactive', false);
     }
 
     const previous = this.current;
@@ -120,12 +109,7 @@ export class AdaptiveConcurrency {
     const reductionFactor = 0.2 + (clampedRatio / WARNING_THRESHOLD) * 0.4;
     this.current = Math.max(this.min, Math.floor(this.current * reductionFactor));
 
-    return {
-      changed: previous !== this.current,
-      previous,
-      current: this.current,
-      reason: 'proactive',
-    };
+    return concurrencyChange(previous, this.current, 'proactive');
   }
 
   getCurrent(): number {
