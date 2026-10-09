@@ -11,6 +11,8 @@ Use the Enterprise images and deployment files supplied by your Promptfoo contac
 
 The supplied Compose stack runs Promptfoo, FusionAuth, and PostgreSQL 16, with separate `promptfoo` and `fusionauth` databases. An external PostgreSQL service is also supported through the packaged external-database configuration. Use the database requirements and configuration delivered with your release.
 
+In the supplied Compose and Helm deployments, the scan runner is bundled with the Promptfoo service. Server scans start worker processes inside the Promptfoo container or pod; no separate runner image is required. Give that container or pod network access to your targets and inference providers, and verify execution with a small [server scan](./red-teams.md#running-a-scan).
+
 ## Before installing
 
 - Obtain your license, customer registry credentials, and bootstrap script from Promptfoo.
