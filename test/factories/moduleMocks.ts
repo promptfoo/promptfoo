@@ -171,3 +171,11 @@ export const createOpenAiCacheFactory = (): MockModuleFactory => async (importOr
     disableCache: vi.fn(),
   };
 };
+
+export const createUuidModuleFactory = (): MockModuleFactory => () => ({
+  isUuid: vi.fn((str: string) => {
+    // Check if the string looks like a UUID
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    return uuidRegex.test(str);
+  }),
+});
