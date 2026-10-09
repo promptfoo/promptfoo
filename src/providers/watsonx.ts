@@ -454,31 +454,28 @@ export class WatsonXProvider implements ApiProvider {
   }
 
   private getApiKey(): string | undefined {
+    const namedKey = this.config.apiKeyEnvar
+      ? (this.env?.[this.config.apiKeyEnvar] ?? getEnvString(this.config.apiKeyEnvar as EnvVarKey))
+      : undefined;
     return (
       this.config.apiKey ||
-      (this.config.apiKeyEnvar
-        ? getEnvString(this.config.apiKeyEnvar as EnvVarKey) ||
-          this.env?.[this.config.apiKeyEnvar as keyof EnvOverrides]
-        : undefined) ||
-      this.env?.WATSONX_AI_APIKEY ||
-      getEnvString('WATSONX_AI_APIKEY')
+      (namedKey ?? this.env?.WATSONX_AI_APIKEY ?? getEnvString('WATSONX_AI_APIKEY'))
     );
   }
 
   private getBearerToken(): string | undefined {
+    const namedToken = this.config.apiBearerTokenEnvar
+      ? (this.env?.[this.config.apiBearerTokenEnvar] ??
+        getEnvString(this.config.apiBearerTokenEnvar as EnvVarKey))
+      : undefined;
     return (
       this.config.apiBearerToken ||
-      (this.config.apiBearerTokenEnvar
-        ? getEnvString(this.config.apiBearerTokenEnvar as EnvVarKey) ||
-          this.env?.[this.config.apiBearerTokenEnvar as keyof EnvOverrides]
-        : undefined) ||
-      this.env?.WATSONX_AI_BEARER_TOKEN ||
-      getEnvString('WATSONX_AI_BEARER_TOKEN')
+      (namedToken ?? this.env?.WATSONX_AI_BEARER_TOKEN ?? getEnvString('WATSONX_AI_BEARER_TOKEN'))
     );
   }
 
   private getAuthType(): string | undefined {
-    return this.env?.WATSONX_AI_AUTH_TYPE || getEnvString('WATSONX_AI_AUTH_TYPE');
+    return this.env?.WATSONX_AI_AUTH_TYPE ?? getEnvString('WATSONX_AI_AUTH_TYPE');
   }
 
   private getAuthSelection(): WatsonXAuthSelection {
@@ -541,14 +538,13 @@ export class WatsonXProvider implements ApiProvider {
   }
 
   getProjectId(): string {
+    const namedProject = this.options.config.projectIdEnvar
+      ? (this.env?.[this.options.config.projectIdEnvar] ??
+        getEnvString(this.options.config.projectIdEnvar))
+      : undefined;
     const projectId =
       this.options.config.projectId ||
-      (this.options.config.projectIdEnvar
-        ? getEnvString(this.options.config.projectIdEnvar) ||
-          this.env?.[this.options.config.projectIdEnvar as keyof EnvOverrides]
-        : undefined) ||
-      this.env?.WATSONX_AI_PROJECT_ID ||
-      getEnvString('WATSONX_AI_PROJECT_ID');
+      (namedProject ?? this.env?.WATSONX_AI_PROJECT_ID ?? getEnvString('WATSONX_AI_PROJECT_ID'));
     invariant(
       projectId && projectId.trim() !== '',
       'WatsonX project ID is not set. Set the WATSONX_AI_PROJECT_ID environment variable or add `projectId` to the provider config.',
