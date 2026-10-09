@@ -39,7 +39,7 @@ These assertions can check LLM output or provider metadata directly. Configured 
 | [contains-html](#contains-html)                                 | output contains HTML content                                       |
 | [contains-sql](#contains-sql)                                   | output is valid SQL or contains a valid SQL code block             |
 | [contains-xml](#contains-xml)                                   | output contains valid xml fragment(s)                              |
-| [cost](#cost)                                                   | Inference cost is below a threshold                                |
+| [cost](#cost)                                                   | Inference cost limit or zero-weight cost metric                    |
 | [equals](#equality)                                             | output matches exactly                                             |
 | [finish-reason](#finish-reason)                                 | model stopped for the expected reason                              |
 | [icontains](#contains)                                          | output contains substring, case insensitive                        |
@@ -310,6 +310,21 @@ assert:
   - type: cost
     threshold: 0.001
 ```
+
+To record the provider's cost in USD without a pass/fail limit, omit `threshold` and set a named `metric` with `weight: 0`. The measurement is reported without contributing to the aggregate quality score. Missing, negative, or non-finite costs produce an error instead of a zero measurement.
+
+```yaml
+defaultTest:
+  assert:
+    - type: cost
+      metric: inference_cost
+      weight: 0
+derivedMetrics:
+  - name: average_inference_cost
+    value: 'inference_cost / __count'
+```
+
+Threshold-based `cost` assertions, including `not-cost`, continue to report binary pass/fail scores.
 
 ### Equality
 
@@ -1322,9 +1337,7 @@ tests:
 
 ### Rouge-L
 
-The `rouge-l` assertion measures summary-level **longest common subsequence** (ROUGE-Lsum) overlap. It rewards matching words in order within a sentence, allowing extra words between matches. Each expected sentence is matched against every output sentence, so reordering whole sentences does not lower the score.
-
-These single-sentence examples show how the variants score added and reordered words:
+`rouge-l` measures summary-level longest common subsequence overlap (ROUGE-Lsum). Words must appear in order within a sentence, but other words can appear between matches. Each reference sentence is compared with every output sentence, so reordering whole sentences does not reduce the score.
 
 | Output vs `the quick brown fox` | rouge-n | rouge-l | rouge-s |
 | ------------------------------- | ------- | ------- | ------- |
@@ -1332,50 +1345,31 @@ These single-sentence examples show how the variants score added and reordered w
 | `the very quick brown fox`      | 0.89    | 0.89    | 0.75    |
 | `brown fox quick the`           | 1.00    | 0.50    | 0.17    |
 
-Use `rouge-l` when word order within sentences matters and `rouge-n` when unigram overlap is sufficient.
-
-For example, `the cat sat. a dog ran.` compared with `a dog ran. the cat sat.` scores 1.00 on `rouge-l` and 0.46 on `rouge-s`, which also counts order across sentences. Tokenization differs from `rouge-n`: L/S split sentences before tokenizing, while N tokenizes the whole text and can leave a mid-text period attached to the preceding word.
+All three ROUGE assertions take a string `value` and an optional `threshold` (default: `0.75`). They compare text case-insensitively and count repeated matches. Scores are F1 scores from 0 to 1; empty or whitespace-only text scores 0. The assertion passes when its score is at least the threshold. A `not-` assertion passes below the threshold and reports `1 - score`.
 
 ```yaml
 assert:
-  # Ensure Rouge-L score compared to "hello world" is >= 0.75 (default threshold)
   - type: rouge-l
     value: hello world
 
-  # With custom threshold
   - type: rouge-l
     threshold: 0.6
     value: hello world
 
-  # Ensure Rouge-L score is below a threshold
   - type: not-rouge-l
     threshold: 0.75
     value: hello world
 ```
 
+ROUGE-L/S split sentences before tokenizing. ROUGE-N tokenizes the whole text, which can leave a mid-text period attached to the preceding word.
+
 ### Rouge-S
 
-The `rouge-s` assertion measures **skip-bigram** overlap: every ordered pair of tokens, however many tokens separate them, including pairs across sentences.
+`rouge-s` measures skip-bigram overlap: pairs of tokens in the same order, regardless of the distance between them. Pairs can span sentences. For example, `the cat sat. a dog ran.` compared with `a dog ran. the cat sat.` scores 1.00 on `rouge-l` and 0.46 on `rouge-s`.
 
-Use it to compare ordered pairs of terms. In the reordered example above, it scores 0.17, compared with 0.50 for `rouge-l` and 1.00 for `rouge-n`.
+Either text having fewer than two tokens gives a score of 0, even when a single word matches itself. Punctuation counts as a token.
 
-A skip-bigram needs two tokens, so an output or expected value with fewer than two tokens scores 0, including a single word compared against itself. Punctuation counts as a token.
-
-```yaml
-assert:
-  - type: rouge-s
-    value: hello world
-
-  - type: rouge-s
-    threshold: 0.6
-    value: hello world
-
-  - type: not-rouge-s
-    threshold: 0.75
-    value: hello world
-```
-
-`value` can reference other variables using template syntax, the same as `rouge-n`:
+The options, default threshold and `not-` prefix work as described above. As with `rouge-n` and `rouge-l`, `value` supports templates:
 
 ```yaml
 tests:
@@ -1384,11 +1378,8 @@ tests:
     assert:
       - type: rouge-s
         value: '{{expected}}'
+        threshold: 0.6
 ```
-
-:::note
-All three ROUGE variants use a 0.75 default threshold and compare text case-insensitively. Repeated matches count toward the score. An empty or whitespace-only output or expected value scores 0; `rouge-s` also scores 0 when either text has fewer than two tokens.
-:::
 
 ### BLEU
 
@@ -1848,7 +1839,9 @@ The assertion detects common refusal patterns like:
 - "That would not be ethical"
 - "As an AI, I cannot..."
 - Content filter blocks
-- Empty or null responses
+- Intentional empty responses
+
+A provider that omits `output` or returns `null` or `undefined` produces an eval error. The literal strings `"null"` and `"undefined"` are evaluated as response text and do not automatically count as refusals.
 
 Example:
 

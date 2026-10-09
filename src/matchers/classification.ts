@@ -1,5 +1,9 @@
-import { callGradingProvider, getAndCheckProvider } from './providers';
-import { graderFail } from './shared';
+import {
+  callGradingProvider,
+  getAndCheckProvider,
+  getGradingProviderCallOptions,
+} from './providers';
+import { graderFail, normalizeMatcherTokenUsage } from './shared';
 
 import type { ApiClassificationProvider, GradingConfig, GradingResult } from '../types/index';
 
@@ -24,43 +28,38 @@ export async function matchesClassification(
     'classification check',
   )) as ApiClassificationProvider;
 
+  const callApiOptions = getGradingProviderCallOptions();
   const resp = await callGradingProvider(finalProvider, 'classification', () =>
-    finalProvider.callClassificationApi(output),
+    callApiOptions
+      ? finalProvider.callClassificationApi(output, callApiOptions)
+      : finalProvider.callClassificationApi(output),
   );
 
-  if (!resp.classification) {
-    return graderFail(resp.error || 'Unknown error fetching classification');
-  }
-  const scores = Object.values(resp.classification);
-  if (scores.length === 0) {
-    // No scores means there is no verdict, even when a specific label was requested.
-    return graderFail('No classification scores returned');
-  }
-
-  let score: number;
-  if (expected === undefined) {
-    score = Math.max(...scores);
-  } else {
-    score = resp.classification[expected] || 0;
-  }
-
-  if (score >= threshold - Number.EPSILON) {
-    const reason =
-      expected === undefined
-        ? `Maximum classification score ${score.toFixed(2)} >= ${threshold}`
-        : `Classification ${expected} has score ${score.toFixed(2)} >= ${threshold}`;
+  const scores = Object.values(resp.classification ?? {});
+  if (!resp.classification || scores.length === 0) {
+    const failure = graderFail(
+      resp.classification
+        ? 'No classification scores returned'
+        : resp.error || 'Unknown error fetching classification',
+      resp.tokenUsage,
+    );
     return {
-      pass: true,
-      score,
-      reason,
+      ...failure,
+      ...(resp.cached && { metadata: { ...failure.metadata, cachedResponse: true } }),
     };
   }
+
+  const score = expected === undefined ? Math.max(...scores) : resp.classification[expected] || 0;
+  const pass = score >= threshold - Number.EPSILON;
+  const subject =
+    expected === undefined
+      ? 'Maximum classification score'
+      : `Classification ${expected} has score`;
   return {
-    pass: false,
+    pass,
     score,
-    reason:
-      expected === undefined
-        ? `Maximum classification score ${score.toFixed(2)} < ${threshold}`
-        : `Classification ${expected} has score ${score.toFixed(2)} < ${threshold}`,
+    reason: `${subject} ${score.toFixed(2)} ${pass ? '>=' : '<'} ${threshold}`,
+    ...(resp.tokenUsage && { tokensUsed: normalizeMatcherTokenUsage(resp.tokenUsage) }),
+    ...(resp.cached && { metadata: { cachedResponse: true } }),
   };
 }

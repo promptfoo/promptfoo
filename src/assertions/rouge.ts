@@ -14,23 +14,8 @@ function countNGrams(ngrams: string[]): Map<string, number> {
   return counts;
 }
 
-/**
- * Computes a ROUGE-N F-score using clipped n-gram counts.
- *
- * js-rouge's own ROUGE-N counts the overlap of *deduplicated* n-grams but divides
- * by the *total* n-gram counts, so identical text that contains a repeated token
- * scores below 1.0 — e.g. "the cat sat on the mat" vs itself scores 0.83, and a
- * sentence-initial "The" recurring as lowercase "the" triggers the same drop once
- * inputs are lowercased. We instead use clipped counts — `min(count in candidate,
- * count in reference)`, the standard Lin (2004) definition, matching BLEU — so a
- * perfect match scores 1.0 regardless of repeated tokens.
- *
- * Reuses js-rouge's tokenizer / n-gram / f-measure helpers, so the result is
- * identical to js-rouge for inputs without repeated n-grams. The caller is
- * responsible for any case normalization.
- *
- * @internal
- */
+// Keep ROUGE-N's whole-text tokenization. js-rouge's scorers split sentences first,
+// which changes punctuation tokens in existing rouge-n assertions.
 function rougeNScore(candidate: string, reference: string, n = 1, beta = 1): number {
   const candidateTokens = rouge.treeBankTokenize(candidate);
   const referenceTokens = rouge.treeBankTokenize(reference);
@@ -57,15 +42,6 @@ function rougeNScore(candidate: string, reference: string, n = 1, beta = 1): num
   return rouge.fMeasure(precision, recall, beta);
 }
 
-function jsRougeScore(fnName: 'l' | 's', candidate: string, reference: string): number {
-  // js-rouge rejects blanks, including NEXT LINE (which String.trim does not remove).
-  // Match ROUGE-N's zero score for inputs with no tokens.
-  if (/^[\s\u0085]*$/u.test(candidate) || /^[\s\u0085]*$/u.test(reference)) {
-    return 0;
-  }
-  return rouge[fnName](candidate, reference, { caseSensitive: false });
-}
-
 export function handleRougeScore({
   baseType,
   assertion,
@@ -76,11 +52,15 @@ export function handleRougeScore({
   invariant(typeof renderedValue === 'string', '"rouge" assertion type must be a string value');
   const fnName = baseType[baseType.length - 1] as 'n' | 'l' | 's';
 
-  // Preserve ROUGE-N's local scoring; let js-rouge segment L/S text before folding case.
-  const score =
-    fnName === 'n'
-      ? rougeNScore(outputString.toLowerCase(), renderedValue.toLowerCase())
-      : jsRougeScore(fnName, outputString, renderedValue);
+  // js-rouge rejects blank text, including NEXT LINE (which trim does not remove).
+  let score = 0;
+  if (!/^[\s\u0085]*$/u.test(outputString) && !/^[\s\u0085]*$/u.test(renderedValue)) {
+    // Segment L/S text before folding case to preserve sentence boundaries.
+    score =
+      fnName === 'n'
+        ? rougeNScore(outputString.toLowerCase(), renderedValue.toLowerCase())
+        : rouge[fnName](outputString, renderedValue, { caseSensitive: false });
+  }
 
   const threshold = assertion.threshold ?? 0.75;
   const pass = score >= threshold !== inverse;

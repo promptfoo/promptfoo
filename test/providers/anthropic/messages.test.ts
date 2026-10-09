@@ -9,6 +9,7 @@ import {
   getCache,
   withCacheNamespace,
 } from '../../../src/cache';
+import cliState from '../../../src/cliState';
 import logger from '../../../src/logger';
 import { hashAnthropicCacheValue } from '../../../src/providers/anthropic/generic';
 import { AnthropicMessagesProvider } from '../../../src/providers/anthropic/messages';
@@ -1452,6 +1453,27 @@ describe('AnthropicMessagesProvider', () => {
       expect(result.cost).toBeGreaterThan(0);
     });
 
+    it('prices the actual response inference geography from workspace defaults', async () => {
+      const provider = createProvider('claude-opus-4-8');
+
+      vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+        content: [{ type: 'text', text: 'Test response' }],
+        stop_reason: 'end_turn',
+        usage: {
+          input_tokens: 1_000_000,
+          output_tokens: 1_000_000,
+          cache_read_input_tokens: 0,
+          cache_creation_input_tokens: 0,
+          inference_geo: 'us',
+          server_tool_use: null,
+        },
+      } as unknown as Anthropic.Messages.Message);
+
+      const result = await provider.callApi('Test prompt');
+
+      expect(result.cost).toBeCloseTo(33, 10);
+    });
+
     it('should forward cache tokens from cached responses', async () => {
       const provider = createProvider('claude-3-5-sonnet-20241022');
 
@@ -1760,6 +1782,7 @@ describe('AnthropicMessagesProvider', () => {
         role: 'assistant',
         model,
         container: null,
+        diagnostics: null,
         stop_details: null,
         stop_reason: round < 2 ? 'tool_use' : 'end_turn',
         stop_sequence: null,
@@ -1924,6 +1947,74 @@ describe('AnthropicMessagesProvider', () => {
         total: 26,
         completionDetails: { reasoning: 5 },
       });
+    });
+
+    it('preserves cache TTL usage across MCP continuation rounds for billing', async () => {
+      provider = createProvider('claude-opus-4-8', {
+        config: {
+          mcp: {
+            enabled: true,
+            server: {
+              command: 'npm',
+              args: ['start'],
+            },
+          },
+        },
+      });
+
+      mcpMocks.callTool.mockResolvedValueOnce({ content: 'Found Acme Solar.' });
+
+      vi.spyOn(provider.anthropic.messages, 'create')
+        .mockResolvedValueOnce({
+          content: [
+            {
+              type: 'tool_use',
+              id: 'toolu_search',
+              name: 'search_companies',
+              input: { query: 'clean energy' },
+            },
+          ],
+          stop_reason: 'tool_use',
+          usage: {
+            input_tokens: 10,
+            output_tokens: 5,
+            cache_read_input_tokens: 2,
+            cache_creation_input_tokens: 7,
+            cache_creation: {
+              ephemeral_5m_input_tokens: 3,
+              ephemeral_1h_input_tokens: 4,
+            },
+            server_tool_use: null,
+          },
+        } as Anthropic.Messages.Message)
+        .mockResolvedValueOnce({
+          content: [{ type: 'text', text: 'Acme Solar matches your query.' }],
+          stop_reason: 'end_turn',
+          usage: {
+            input_tokens: 7,
+            output_tokens: 4,
+            cache_read_input_tokens: 1,
+            cache_creation_input_tokens: 5,
+            cache_creation: {
+              ephemeral_5m_input_tokens: 2,
+              ephemeral_1h_input_tokens: 3,
+            },
+            server_tool_use: null,
+          },
+        } as Anthropic.Messages.Message);
+
+      const result = await provider.callApi('Find clean energy companies');
+
+      expect(result.tokenUsage).toMatchObject({
+        prompt: 32,
+        completion: 9,
+        total: 41,
+        completionDetails: {
+          cacheReadInputTokens: 3,
+          cacheCreationInputTokens: 12,
+        },
+      });
+      expect(result.cost).toBeCloseTo(0.00041275, 10);
     });
 
     it('does not cache MCP continuation results by default', async () => {
@@ -2868,6 +2959,7 @@ describe('AnthropicMessagesProvider', () => {
       type: 'message',
       role: 'assistant',
       container: null,
+      diagnostics: null,
       stop_details: null,
       stop_sequence: null,
       content: [
@@ -3757,6 +3849,7 @@ describe('AnthropicMessagesProvider', () => {
         stop_sequence: null,
         type: 'message',
         container: null,
+        diagnostics: null,
         usage: {
           input_tokens: 10,
           output_tokens: 5,
@@ -4105,6 +4198,23 @@ describe('AnthropicMessagesProvider', () => {
       );
     });
 
+    it.each(['', 'invalid'])(
+      'does not revive ambient sampling after a provider temperature mask of %j',
+      async (temperature) => {
+        await cliState.withEnv({ ANTHROPIC_TEMPERATURE: '0.9' }, async () => {
+          const provider = createProvider('claude-sonnet-4-6', {
+            config: {},
+            env: { ANTHROPIC_TEMPERATURE: temperature },
+          });
+          const create = vi
+            .spyOn(provider.anthropic.messages, 'create')
+            .mockResolvedValue(mockResponse);
+          await provider.callApi('Masked sampling');
+          expect(create.mock.calls[0][0]).toHaveProperty('temperature', 0);
+        });
+      },
+    );
+
     it('should prefer config temperature over provider-scoped env', async () => {
       const provider = createProvider('claude-sonnet-4-6', {
         config: { temperature: 0.1 },
@@ -4378,6 +4488,47 @@ describe('AnthropicMessagesProvider', () => {
       );
       expect(warnings).toHaveLength(1);
     });
+
+    it.each(['suite', 'file'] as const)(
+      'warns for deprecated sampling supplied by the %s layer',
+      async (layer) => {
+        const provider = createProvider('claude-sonnet-5', { config: {} });
+        const createSpy = vi
+          .spyOn(provider.anthropic.messages, 'create')
+          .mockResolvedValue(mockResp);
+        const warnSpy = vi.spyOn(logger, 'warn');
+        const run =
+          layer === 'suite'
+            ? cliState.withEnv.bind(cliState)
+            : cliState.withEnvFileOverrides.bind(cliState);
+        await run({ ANTHROPIC_TEMPERATURE: '0.3' }, () => provider.callApi('Scoped sampling test'));
+        expect(createSpy.mock.calls[0][0]).not.toHaveProperty('temperature');
+        expect(warnSpy).toHaveBeenCalledWith(
+          expect.stringContaining('temperature is deprecated on Claude Sonnet 5'),
+        );
+      },
+    );
+
+    it.each(['', 'invalid'])(
+      'does not warn for masked deprecated sampling: %j',
+      async (temperature) => {
+        await cliState.withEnv({ ANTHROPIC_TEMPERATURE: '0.9' }, async () => {
+          const provider = createProvider('claude-sonnet-5', {
+            config: {},
+            env: { ANTHROPIC_TEMPERATURE: temperature },
+          });
+          const create = vi
+            .spyOn(provider.anthropic.messages, 'create')
+            .mockResolvedValue(mockResp);
+          const warn = vi.spyOn(logger, 'warn');
+          await provider.callApi('Masked sampling');
+          expect(create.mock.calls[0][0]).not.toHaveProperty('temperature');
+          expect(warn).not.toHaveBeenCalledWith(
+            expect.stringContaining('temperature is deprecated'),
+          );
+        });
+      },
+    );
 
     it('warns on Opus 4.7 when temperature set via env override', async () => {
       const provider = createProvider('claude-opus-4-7', {
@@ -5047,14 +5198,44 @@ describe('AnthropicMessagesProvider', () => {
         type: 'message',
         usage: { input_tokens: 10, output_tokens: 5 },
       } as Anthropic.Messages.Message;
-      vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue(mockResp);
+      const createSpy = vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue(mockResp);
 
       const result = await provider.callApi('Test prompt');
 
       expect(result.output).toBe('Response');
+      expect(createSpy.mock.calls[0][0]).not.toHaveProperty('temperature');
+      expect(createSpy.mock.calls[0][0]).not.toHaveProperty('top_p');
+      expect(createSpy.mock.calls[0][0]).not.toHaveProperty('top_k');
       expect(warnSpy).not.toHaveBeenCalledWith(
         expect.stringContaining('Using unknown Anthropic model'),
       );
+    });
+
+    it.each([
+      { name: 'default', sampling: {} },
+      { name: 'explicit', sampling: { temperature: 0.5, top_p: 0.7, top_k: 40 } },
+    ])('omits $name sampling parameters with adaptive thinking', async ({ sampling }) => {
+      const provider = createProvider('claude-mythos-preview', {
+        config: { thinking: { type: 'adaptive' }, ...sampling },
+      });
+      const createSpy = vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+        content: [{ type: 'text', text: 'Response' }],
+        model: 'claude-mythos-preview',
+        id: 'msg-mythos-preview-sampling',
+        role: 'assistant',
+        stop_reason: 'end_turn',
+        stop_sequence: null,
+        type: 'message',
+        usage: { input_tokens: 10, output_tokens: 5 },
+      } as Anthropic.Messages.Message);
+
+      await provider.callApi('Test prompt');
+
+      const params = createSpy.mock.calls[0][0];
+      expect(params.thinking).toEqual({ type: 'adaptive' });
+      expect(params).not.toHaveProperty('temperature');
+      expect(params).not.toHaveProperty('top_p');
+      expect(params).not.toHaveProperty('top_k');
     });
   });
 

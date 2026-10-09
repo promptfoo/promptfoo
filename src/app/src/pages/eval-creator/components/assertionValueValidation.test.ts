@@ -552,11 +552,6 @@ describe('getFirstRunnableAssertionValueError', () => {
 });
 
 describe('supported assertion type coverage', () => {
-  // Guards against drift: `BASE_ASSERTION_TYPES` is a hand-maintained copy of the
-  // canonical schema, and `satisfies AssertionType[]` only checks the listed entries
-  // are valid — not that the list is complete. A base type added to the schema but
-  // not mirrored here would be wrongly reported as unsupported, falsely blocking a
-  // valid assertion. This test fails if that ever happens.
   it.each(BaseAssertionTypesSchema.options)('treats base type %s as supported', (type) => {
     expect(getRunnableAssertionValueError(make({ type: type as any, value: 'x' }))).not.toBe(
       UNSUPPORTED_TYPE_MESSAGE,

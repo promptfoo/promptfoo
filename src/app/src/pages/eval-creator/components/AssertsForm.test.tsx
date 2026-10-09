@@ -113,14 +113,14 @@ describe('AssertsForm', () => {
       renderComponent(
         <AssertsForm
           onAdd={onAdd}
-          initialValues={[{ type: 'equals', value: 'expected output' }]}
+          initialValues={[{ type: 'equals', value: 'expected output', threshold: 0.6 }]}
         />,
       );
 
       await user.click(screen.getByRole('combobox', { name: 'Type' }));
       await user.click(await screen.findByRole('option', { name: type }));
 
-      expect(onAdd).toHaveBeenCalledWith([{ type, value: 'expected output' }]);
+      expect(onAdd).toHaveBeenCalledWith([{ type, value: 'expected output', threshold: 0.6 }]);
     },
   );
 

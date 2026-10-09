@@ -3,9 +3,6 @@ import { handleRougeScore } from '../../src/assertions/rouge';
 
 import type { Assertion, AssertionParams } from '../../src/types/index';
 
-// These tests use the real js-rouge library (ROUGE-N is computed in-house with
-// clipped counts; ROUGE-L/S delegate to js-rouge), so they assert real scores
-// end-to-end rather than that a particular option is forwarded to a mock.
 const makeParams = (
   outputString: string,
   renderedValue: string,
@@ -73,10 +70,7 @@ describe('handleRougeScore', () => {
   });
 
   it('should score an identical answer 1.0 even when a token repeats', () => {
-    // js-rouge counts deduplicated n-grams over total-count denominators, so it
-    // scores these 0.83 and 0.5; clipped counts give the correct 1.0. This also
-    // guards the case-collision regression: a sentence-initial "The" recurring as
-    // lowercase "the" must not drop the score once inputs are lowercased.
+    // Case folding must retain repeated-token counts.
     expect(
       handleRougeScore(makeParams('The cat sat on the mat', 'The cat sat on the mat')).score,
     ).toBe(1);
@@ -146,6 +140,14 @@ describe('handleRougeScore', () => {
       expect(result.pass).toBe(false);
     });
 
+    it.each([false, true])('uses threshold zero for blank text with inverse=%s', (inverse) => {
+      const result = handleRougeScore(
+        makeParams('', 'reference', { baseType, threshold: 0, inverse }),
+      );
+      expect(result).toMatchObject({ pass: !inverse, score: inverse ? 1 : 0 });
+      expect(result.reason).toBe(`${label} score 0.00 is greater than or equal to threshold 0`);
+    });
+
     it('keeps a partial match between 0 and 1', () => {
       const result = handleRougeScore(
         makeParams('the dog sat on the mat', 'the cat sat on the mat', { baseType }),
@@ -185,6 +187,11 @@ describe('handleRougeScore', () => {
       expect(result.score).toBe(0);
       expect(result.pass).toBe(false);
     });
+  });
+
+  it('preserves ROUGE-N whole-text punctuation tokens', () => {
+    const result = handleRougeScore(makeParams('hello world. next', 'hello world next'));
+    expect(result.score).toBeCloseTo(2 / 3, 12);
   });
 
   describe('js-rouge scoring', () => {
@@ -288,10 +295,10 @@ describe('handleRougeScore', () => {
     });
   });
 
-  it('should throw if renderedValue is not a string', () => {
+  it.each(['rouge-n', 'rouge-l', 'rouge-s'])('%s rejects non-string references', (baseType) => {
     expect(() =>
       handleRougeScore({
-        ...makeParams('actual text', 'expected text'),
+        ...makeParams('actual text', 'expected text', { baseType }),
         renderedValue: 123 as any,
       }),
     ).toThrow('"rouge" assertion type must be a string value');
