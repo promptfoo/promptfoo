@@ -338,7 +338,7 @@ function deriveSkillCalls(toolCalls: ToolCallEntry[]): SkillCallEntry[] {
  * Claude Agent SDK Provider
  *
  * This provider requires the @anthropic-ai/claude-agent-sdk package to be installed separately:
- *   npm install promptfoo @anthropic-ai/claude-agent-sdk@^0.3.273
+ *   npm install promptfoo @anthropic-ai/claude-agent-sdk@^0.3.284
  *
  * Two default configurations:
  * - No working_dir: Runs in temp directory with no tools - behaves like plain chat API
@@ -371,7 +371,7 @@ export const CLAUDE_CODE_MODEL_ALIASES = [
 ];
 
 // Accept compatible 0.3.x updates without requiring a Promptfoo release for each SDK patch.
-const CLAUDE_AGENT_SDK_RANGE = '^0.3.273';
+const CLAUDE_AGENT_SDK_RANGE = '^0.3.284';
 
 /**
  * Helper to load the Claude Agent SDK ESM module
@@ -2181,7 +2181,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
           let lastMainResultMsg: SDKResultMessage | undefined;
           let resultMsgCount = 0;
           const workflowTasks = new Map<string, { sessionId: string; status: string }>();
-          const pendingWorkflowResults = new Set<string>();
+          const pendingWorkflowResults = new Map<string, number>();
 
           for await (const msg of res) {
             if (msg.type === 'assistant') {
@@ -2251,9 +2251,12 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
               }
             } else if (msg.type === 'system' && msg.subtype === 'task_notification') {
               const task = workflowTasks.get(msg.task_id);
-              if (task?.sessionId === msg.session_id) {
+              if (task?.sessionId === msg.session_id && task.status === 'running') {
                 task.status = msg.status;
-                pendingWorkflowResults.add(msg.session_id);
+                pendingWorkflowResults.set(
+                  msg.session_id,
+                  (pendingWorkflowResults.get(msg.session_id) ?? 0) + 1,
+                );
               }
             } else if (msg.type === 'result') {
               lastResultMsg = msg;
@@ -2281,7 +2284,18 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
                 msg.origin.producer === 'session-task';
               if (!isBackgroundTaskResult || isWorkflowContinuation) {
                 lastMainResultMsg = msg;
-                pendingWorkflowResults.delete(msg.session_id);
+              }
+              if (isWorkflowContinuation) {
+                const pending = pendingWorkflowResults.get(msg.session_id) ?? 0;
+                // Batched notifications still emit one result per task. Earlier
+                // results can be empty; only the last carries the shared answer.
+                // An initial human result must not consume notifications that
+                // arrived while the launch turn was still running.
+                if (pending > 1) {
+                  pendingWorkflowResults.set(msg.session_id, pending - 1);
+                } else {
+                  pendingWorkflowResults.delete(msg.session_id);
+                }
               }
             }
           }
@@ -2464,7 +2478,10 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
           if (
             finalMsg.subtype === 'success' &&
             (pendingWorkflowResults.size > 0 ||
-              [...workflowTasks.values()].some((task) => task.status !== 'completed'))
+              [...workflowTasks.values()].some((task) => task.status !== 'completed') ||
+              (workflowTasks.size > 0 &&
+                !finalMsg.result &&
+                finalMsg.structured_output === undefined))
           ) {
             return {
               error: 'Claude Agent SDK workflow did not complete with a final main-agent response',

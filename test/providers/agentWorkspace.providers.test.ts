@@ -79,7 +79,7 @@ describe('copy_working_dir in agentic providers', () => {
   beforeEach(async () => {
     vi.resetAllMocks();
     vi.mocked(getPackageVersion).mockImplementation((name) =>
-      name === '@openai/codex-sdk' ? '0.156.1' : '0.3.273',
+      name === '@openai/codex-sdk' ? '0.156.1' : '0.3.284',
     );
     source = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-workspace-provider-'));
     execFileSync('git', ['init', '--quiet', source]);

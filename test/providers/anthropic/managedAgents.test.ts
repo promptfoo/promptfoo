@@ -86,6 +86,65 @@ afterEach(() => {
 });
 
 describe('Claude Managed Agents', () => {
+  it.each([429, 500])(
+    'preserves a completed answer when usage retrieval returns HTTP %i',
+    async (status) => {
+      const streamedUsage = status === 429 ? [{ type: 'session.usage', usage }] : [];
+      const f = setup({}, [...streamedUsage, message('answer'), idle()]);
+      f.retrieve.mockRejectedValue(
+        new Anthropic.APIError(status, { secret: 'test-key' }, 'test-key', new Headers()),
+      );
+      const result = await f.provider.callApi('test');
+      expect(result.output).toBe('answer');
+      expect(result.error).toBeUndefined();
+      expect(result.cost).toBe(status === 429 ? 1.23 : undefined);
+      expect(result.metadata?.usageError).toContain(String(status));
+      expect(result.metadata?.usageError).not.toContain('test-key');
+      expect(f.retrieve).toHaveBeenCalledWith(
+        'sesn-test',
+        expect.anything(),
+        expect.objectContaining({ maxRetries: 2 }),
+      );
+      expect(result.metadata?.sessionArchived).toBe(true);
+      expect(f.send).toHaveBeenCalledOnce();
+    },
+  );
+
+  it('attempts archival even if interrupting a failed run is rejected', async () => {
+    const f = setup({}, [idle('budget_reached')]);
+    f.send
+      .mockResolvedValueOnce({} as never)
+      .mockRejectedValueOnce(new Anthropic.APIError(500, {}, 'test-key', new Headers()));
+    const result = await f.provider.callApi('test');
+    expect(result.error).toContain('budget_reached');
+    expect(result.metadata?.interruptError).toContain('500');
+    expect(result.metadata?.interruptError).not.toContain('test-key');
+    expect(result.metadata?.sessionArchived).toBe(true);
+  });
+
+  it('reports an open workflow that cannot be archived after interruption', async () => {
+    const f = setup({}, [
+      { type: 'workflow_run.created', workflow_run_id: 'run-open' },
+      idle('budget_reached'),
+    ]);
+    f.archive.mockRejectedValue(
+      new Anthropic.APIError(400, {}, 'workflow_run_open', new Headers()),
+    );
+    const result = await f.provider.callApi('test');
+    expect(result.error).toContain('cleanup failed');
+    expect(result.metadata).toMatchObject({
+      interruptRequested: true,
+      sessionArchived: false,
+      openWorkflowRunIds: ['run-open'],
+      sessionId: 'sesn-test',
+    });
+    // Never raise the user's budget or resume paid work to try to stop a run.
+    expect(f.send.mock.calls.map((call) => call[1].events[0].type)).toEqual([
+      'user.message',
+      'user.interrupt',
+    ]);
+  });
+
   it('subscribes before sending, returns the final answer and full session usage, then archives only its session', async () => {
     const f = setup({}, [
       message('working'),
@@ -233,7 +292,11 @@ describe('Claude Managed Agents', () => {
         { id: 'tool', type, name: 'approval', input: {}, evaluated_permission: 'ask' },
       ]);
       expect((await f.provider.callApi('test')).error).toContain('requires client action');
-      expect(f.send).toHaveBeenCalledOnce(); // Never grants approval implicitly.
+      // Cleanup interrupts the run; it never grants approval or executes tools.
+      expect(f.send.mock.calls.map((call) => call[1].events[0].type)).toEqual([
+        'user.message',
+        'user.interrupt',
+      ]);
     },
   );
 
@@ -420,7 +483,7 @@ describe('Claude Managed Agents', () => {
       const result = await f.provider.callApi('test');
       expect(result.error).toContain(String(status));
       expect(result.error).not.toContain('test-key');
-      expect(f.send).toHaveBeenCalledOnce();
+      expect(f.send).toHaveBeenCalledTimes(2);
       expect(f.archive).toHaveBeenCalledOnce();
     },
   );
@@ -487,6 +550,15 @@ describe('Claude Managed Agents', () => {
       expect(result.error).toContain(mode === 'abort' ? 'aborted' : 'timed out');
       expect(f.archive).toHaveBeenCalledOnce();
       expect(f.archive.mock.calls[0][2]?.signal?.aborted).toBe(false);
+      expect(f.send).toHaveBeenLastCalledWith(
+        'sesn-test',
+        { events: [{ type: 'user.interrupt' }] },
+        expect.objectContaining({ signal: expect.any(AbortSignal), maxRetries: 0 }),
+      );
+      expect(f.send.mock.calls[1][2]?.signal?.aborted).toBe(false);
+      expect(f.send.mock.invocationCallOrder[1]).toBeLessThan(
+        f.archive.mock.invocationCallOrder[0],
+      );
     },
   );
 

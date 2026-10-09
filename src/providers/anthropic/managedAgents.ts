@@ -440,9 +440,19 @@ export class AnthropicManagedAgentsProvider extends AnthropicGenericProvider {
       }
       signal.throwIfAborted();
       const output = state.finalOutput();
-      // Authoritative totals include every workflow thread and hosted runtime cost.
-      state.usage = (await this.anthropic.beta.sessions.retrieve(sessionId, params, request)).usage;
       response.output = output;
+      // Authoritative totals include every workflow thread and hosted runtime cost.
+      // This read is safe to retry. Telemetry failure must not discard the answer.
+      try {
+        state.usage = (
+          await this.anthropic.beta.sessions.retrieve(sessionId, params, {
+            ...request,
+            maxRetries: 2,
+          })
+        ).usage;
+      } catch (error) {
+        metadata.usageError = this.describeError(error);
+      }
     } catch (error) {
       // Retrying the entire invocation could duplicate hosted side effects and billing.
       metadata.rateLimitRetryable = false;
@@ -492,6 +502,9 @@ export class AnthropicManagedAgentsProvider extends AnthropicGenericProvider {
     const cleanupErrors: string[] = [];
     try {
       if (sessionId) {
+        if (response.error) {
+          await this.interruptSession(sessionId, params, cleanupRequest, metadata);
+        }
         try {
           await this.anthropic.beta.sessions.archive(sessionId, params, cleanupRequest);
           metadata.sessionArchived = true;
@@ -506,16 +519,15 @@ export class AnthropicManagedAgentsProvider extends AnthropicGenericProvider {
           ['agent', config.agent ? agentId : undefined],
           ['environment', config.environment ? environmentId : undefined],
         ] as const) {
-          if (id) {
-            try {
-              if (kind === 'agent') {
-                await this.anthropic.beta.agents.archive(id, params, cleanupRequest);
-              } else {
-                await this.anthropic.beta.environments.archive(id, params, cleanupRequest);
-              }
-            } catch (error) {
-              cleanupErrors.push(`${kind} ${id}: ${this.describeError(error)}`);
-            }
+          if (!id) {
+            continue;
+          }
+          try {
+            const resource =
+              kind === 'agent' ? this.anthropic.beta.agents : this.anthropic.beta.environments;
+            await resource.archive(id, params, cleanupRequest);
+          } catch (error) {
+            cleanupErrors.push(`${kind} ${id}: ${this.describeError(error)}`);
           }
         }
       }
@@ -531,6 +543,26 @@ export class AnthropicManagedAgentsProvider extends AnthropicGenericProvider {
       ]
         .filter(Boolean)
         .join('. ');
+    }
+  }
+
+  private async interruptSession(
+    sessionId: string,
+    params: { workspace_id?: string },
+    request: Anthropic.RequestOptions,
+    metadata: NonNullable<ProviderResponse['metadata']>,
+  ): Promise<void> {
+    try {
+      await this.anthropic.beta.sessions.events.send(
+        sessionId,
+        { ...params, events: [{ type: 'user.interrupt' }] },
+        request,
+      );
+      metadata.interruptRequested = true;
+    } catch (error) {
+      // Still attempt archival if the interrupt fails. An interrupt alone
+      // does not end dynamic workflow runs; only archival confirms cleanup.
+      metadata.interruptError = this.describeError(error);
     }
   }
 
