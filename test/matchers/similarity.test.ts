@@ -11,6 +11,7 @@ import {
   withProviderCallTracingContext,
 } from '../../src/scheduler/providerCallExecutionContext';
 import { withTracedProviderCall } from '../../src/tracing/targetTracer';
+import { createEmbeddingResult, createPassingGrade } from '../factories/literalFixtures';
 import { createMockProvider } from '../factories/provider';
 import { mockProcessEnv } from '../util/utils';
 
@@ -18,21 +19,30 @@ import type { OpenAiChatCompletionProvider } from '../../src/providers/openai/ch
 import type { ProviderCallTracingContext } from '../../src/scheduler/providerCallExecutionContext';
 import type { GradingConfig } from '../../src/types/index';
 
+const createEmbeddingProviderConfig = () => ({
+  provider: {
+    id: 'openai:embedding:text-embedding-ada-9999999',
+    config: {
+      apiKey: 'abc123',
+      temperature: 3.1415926,
+    },
+  },
+});
+
+const createSimilarityResponse = () => ({
+  similarity: 0.9,
+  tokenUsage: { total: 5, prompt: 2, completion: 3 },
+});
+
 describe('matchesSimilarity', () => {
   beforeEach(() => {
     cliState.config = {};
     cliState.selectedProviderConfigs = undefined;
     vi.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi').mockImplementation((text) => {
       if (text === 'Expected output' || text === 'Sample output') {
-        return Promise.resolve({
-          embedding: [1, 0, 0],
-          tokenUsage: { total: 5, prompt: 2, completion: 3 },
-        });
+        return Promise.resolve(createEmbeddingResult(1, 0));
       } else if (text === 'Different output') {
-        return Promise.resolve({
-          embedding: [0, 1, 0],
-          tokenUsage: { total: 5, prompt: 2, completion: 3 },
-        });
+        return Promise.resolve(createEmbeddingResult(0, 1));
       }
       return Promise.reject(new Error('Unexpected input'));
     });
@@ -193,11 +203,7 @@ describe('matchesSimilarity', () => {
       redteam: {},
     };
     vi.spyOn(remoteGeneration, 'shouldGenerateRemote').mockReturnValue(true);
-    vi.spyOn(remoteGrading, 'doRemoteGrading').mockResolvedValue({
-      pass: true,
-      score: 1,
-      reason: 'remote',
-    });
+    vi.spyOn(remoteGrading, 'doRemoteGrading').mockResolvedValue(createPassingGrade(1, 'remote'));
 
     await matchesSimilarity('Expected output', 'Sample output', 0.5);
 
@@ -218,11 +224,7 @@ describe('matchesSimilarity', () => {
     };
     cliState.selectedProviderConfigs = ['promptfoo://provider/selected-target'];
     vi.spyOn(remoteGeneration, 'shouldGenerateRemote').mockReturnValue(true);
-    vi.spyOn(remoteGrading, 'doRemoteGrading').mockResolvedValue({
-      pass: true,
-      score: 1,
-      reason: 'remote',
-    });
+    vi.spyOn(remoteGrading, 'doRemoteGrading').mockResolvedValue(createPassingGrade(1, 'remote'));
 
     await matchesSimilarity('Expected output', 'Sample output', 0.5);
 
@@ -284,24 +286,13 @@ describe('matchesSimilarity', () => {
     const expected = 'Expected output';
     const output = 'Sample output';
     const threshold = 0.5;
-    const grading: GradingConfig = {
-      provider: {
-        id: 'openai:embedding:text-embedding-ada-9999999',
-        config: {
-          apiKey: 'abc123',
-          temperature: 3.1415926,
-        },
-      },
-    };
+    const grading: GradingConfig = createEmbeddingProviderConfig();
 
     const mockCallApi = vi.spyOn(OpenAiEmbeddingProvider.prototype, 'callEmbeddingApi');
     mockCallApi.mockImplementation(function (this: OpenAiChatCompletionProvider) {
       expect(this.config.temperature).toBe(3.1415926);
       expect(this.getApiKey()).toBe('abc123');
-      return Promise.resolve({
-        embedding: [1, 0, 0],
-        tokenUsage: { total: 5, prompt: 2, completion: 3 },
-      });
+      return Promise.resolve(createEmbeddingResult(1, 0));
     });
 
     await expect(matchesSimilarity(expected, output, threshold, false, grading)).resolves.toEqual({
@@ -326,15 +317,7 @@ describe('matchesSimilarity', () => {
     const expected = 'Expected output';
     const output = 'Sample output';
     const threshold = 0.5;
-    const grading: GradingConfig = {
-      provider: {
-        id: 'openai:embedding:text-embedding-ada-9999999',
-        config: {
-          apiKey: 'abc123',
-          temperature: 3.1415926,
-        },
-      },
-    };
+    const grading: GradingConfig = createEmbeddingProviderConfig();
 
     vi.spyOn(OpenAiEmbeddingProvider.prototype, 'callEmbeddingApi').mockRejectedValueOnce(
       new Error('API call failed'),
@@ -414,15 +397,9 @@ describe('matchesSimilarity', () => {
     beforeEach(() => {
       vi.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi').mockImplementation((text) => {
         if (text === 'Expected output' || text === 'Sample output') {
-          return Promise.resolve({
-            embedding: [1, 0, 0],
-            tokenUsage: { total: 5, prompt: 2, completion: 3 },
-          });
+          return Promise.resolve(createEmbeddingResult(1, 0));
         } else if (text === 'Different output') {
-          return Promise.resolve({
-            embedding: [0, 1, 0],
-            tokenUsage: { total: 5, prompt: 2, completion: 3 },
-          });
+          return Promise.resolve(createEmbeddingResult(0, 1));
         }
         return Promise.reject(new Error('Unexpected input'));
       });
@@ -513,10 +490,7 @@ describe('matchesSimilarity', () => {
 
     it('should normalize missing completion details for native similarity providers', async () => {
       const mockProvider = Object.assign(createMockProvider({ id: 'test-similarity-provider' }), {
-        callSimilarityApi: vi.fn().mockResolvedValue({
-          similarity: 0.9,
-          tokenUsage: { total: 5, prompt: 2, completion: 3 },
-        }),
+        callSimilarityApi: vi.fn().mockResolvedValue(createSimilarityResponse()),
       });
 
       const grading: GradingConfig = {
@@ -538,10 +512,7 @@ describe('matchesSimilarity', () => {
 
     it('should reject non-cosine metric for callSimilarityApi providers', async () => {
       const mockProvider = Object.assign(createMockProvider({ id: 'test-similarity-provider' }), {
-        callSimilarityApi: vi.fn().mockResolvedValue({
-          similarity: 0.9,
-          tokenUsage: { total: 5, prompt: 2, completion: 3 },
-        }),
+        callSimilarityApi: vi.fn().mockResolvedValue(createSimilarityResponse()),
       });
 
       const grading: GradingConfig = {
@@ -587,11 +558,7 @@ describe('matchesSimilarity', () => {
     it('should keep non-cosine metrics local when remote grading is enabled', async () => {
       (cliState as any).config = { redteam: {} };
       vi.spyOn(remoteGeneration, 'shouldGenerateRemote').mockReturnValue(true);
-      vi.spyOn(remoteGrading, 'doRemoteGrading').mockResolvedValue({
-        pass: true,
-        score: 1,
-        reason: 'remote',
-      });
+      vi.spyOn(remoteGrading, 'doRemoteGrading').mockResolvedValue(createPassingGrade(1, 'remote'));
 
       await expect(
         matchesSimilarity('Expected output', 'Sample output', 0.5, false, undefined, 'dot_product'),
