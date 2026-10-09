@@ -11,6 +11,7 @@ import {
 } from '../scheduler/providerCallExecutionContext';
 import { createProviderRateLimitOptions, isRateLimitWrapped } from '../scheduler/providerWrapper';
 import invariant from '../util/invariant';
+import { sanitizeProviderIdForLog } from '../util/provider';
 
 import type {
   ApiProvider,
@@ -292,14 +293,19 @@ export async function getGradingProvider(
       finalProvider = await getGradingProvider(type, cfg, defaultProvider);
       if (finalProvider) {
         const logContext = {
-          providerId: finalProvider.id(),
+          providerId: sanitizeProviderIdForLog(finalProvider.id()),
         };
-        if (fallback.source === 'defaultTest.provider') {
-          logger.warn(
-            '[Grading] defaultTest.provider is being used as the grader because no explicit grader is configured',
-            logContext,
-          );
-        } else {
+        if (type === 'text' && fallback.source === 'defaultTest.provider') {
+          const scope = cliState.envScope ?? defaultTestObj!;
+          const warned = warnedImplicitGraders.get(scope) ?? new Set<string>();
+          if (!warned.has(logContext.providerId)) {
+            warned.add(logContext.providerId);
+            warnedImplicitGraders.set(scope, warned);
+            logger.warn(
+              '[Grading] defaultTest.provider is being used as the grader because no explicit grader is configured',
+              logContext,
+            );
+          }        } else {
           logger.debug('[Grading] Using provider from defaultTest fallback', logContext);
         }
       }

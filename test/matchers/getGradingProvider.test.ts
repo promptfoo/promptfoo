@@ -28,11 +28,12 @@ vi.mock('../../src/cliState');
 vi.mock('../../src/logger');
 
 describe('getGradingProvider', () => {
-  const mockProvider = createMockProvider();
+  let mockProvider = createMockProvider();
 
   beforeEach(() => {
     vi.clearAllMocks();
     vi.resetAllMocks();
+    mockProvider = createMockProvider();
     (cliState as any).config = {};
   });
 
@@ -178,6 +179,54 @@ describe('getGradingProvider', () => {
           providerId: 'openai:gpt-4.1',
         },
       );
+    });
+
+    it('does not warn for a chat fallback considered for embedding grading', async () => {
+      cliState.config = { defaultTest: { provider: 'echo' } };
+      vi.mocked(loadApiProvider).mockResolvedValue(mockProvider);
+
+      await getGradingProvider('embedding', undefined, null);
+
+      expect(logger.warn).not.toHaveBeenCalled();
+    });
+
+    it('redacts URL credentials from the implicit-grader warning', async () => {
+      const id = 'https://fixture-user:fixture-password@example.test/judge?api_key=fixture-secret';
+      cliState.config = { defaultTest: { provider: id } };
+      vi.mocked(loadApiProvider).mockResolvedValue(createMockProvider({ id }));
+
+      await getGradingProvider('text', undefined, null);
+
+      const logged = JSON.stringify(vi.mocked(logger.warn).mock.calls);
+      expect(logger.warn).toHaveBeenCalledOnce();
+      expect(logged).toContain('example.test/judge');
+      expect(logged).not.toContain('fixture-user');
+      expect(logged).not.toContain('fixture-password');
+      expect(logged).not.toContain('fixture-secret');
+    });
+
+    it('warns once per implicit grader within a configuration', async () => {
+      cliState.config = { defaultTest: { provider: 'echo' } };
+      vi.mocked(loadApiProvider).mockResolvedValue(mockProvider);
+
+      await getGradingProvider('text', undefined, null);
+      await getGradingProvider('text', undefined, null);
+
+      expect(logger.warn).toHaveBeenCalledTimes(1);
+    });
+
+    it('warns again in a separate evaluation scope using the same configuration', async () => {
+      cliState.config = { defaultTest: { provider: 'echo' } };
+      vi.mocked(loadApiProvider).mockResolvedValue(mockProvider);
+
+      for (let run = 0; run < 2; run++) {
+        await cliState.withEnv(undefined, async () => {
+          await getGradingProvider('text', undefined, null);
+          await getGradingProvider('text', undefined, null);
+        });
+      }
+
+      expect(logger.warn).toHaveBeenCalledTimes(2);
     });
 
     it('should not warn when an explicit provider selects the grader', async () => {
