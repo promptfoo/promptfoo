@@ -22,9 +22,9 @@ export function collectBedrockChatStream(body: string): Record<string, any> {
       break;
     }
     const chunk = JSON.parse(payload);
-    if (chunk.error) {
+    if (chunk.error || chunk.type === 'error' || /^event:\s*error$/m.test(event)) {
       throw new Error(
-        `Bedrock chat stream error: ${chunk.error.message ?? JSON.stringify(chunk.error)}`,
+        `Bedrock chat stream error: ${chunk.error?.message ?? chunk.message ?? JSON.stringify(chunk.error ?? chunk)}`,
       );
     }
     for (const key of ['id', 'model', 'created', 'system_fingerprint', 'service_tier', 'usage']) {
@@ -41,6 +41,14 @@ export function collectBedrockChatStream(body: string): Record<string, any> {
         message: { role: 'assistant', content: '' },
         finish_reason: null,
       };
+      if (part.logprobs) {
+        choice.logprobs ??= {};
+        for (const key of ['content', 'refusal']) {
+          if (Array.isArray(part.logprobs[key])) {
+            choice.logprobs[key] = [...(choice.logprobs[key] ?? []), ...part.logprobs[key]];
+          }
+        }
+      }
       const delta = part.delta ?? {};
       for (const key of ['content', 'refusal', 'reasoning', 'reasoning_content']) {
         if (typeof delta[key] === 'string') {

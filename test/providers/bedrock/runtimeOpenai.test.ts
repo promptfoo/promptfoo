@@ -332,3 +332,61 @@ it('preserves an explicit completion cap for models outside the reasoning catalo
   expect(body.max_completion_tokens).toBe(64);
   expect(body.max_tokens).toBeUndefined();
 });
+
+it('preserves streamed log probabilities for perplexity assertions', async () => {
+  const chunks = [
+    {
+      choices: [
+        {
+          index: 0,
+          delta: { content: 'REA' },
+          logprobs: { content: [{ token: 'REA', logprob: -0.2 }] },
+        },
+      ],
+    },
+    {
+      choices: [
+        {
+          index: 0,
+          delta: { content: 'DY' },
+          logprobs: { content: [{ token: 'DY', logprob: -0.1 }] },
+          finish_reason: 'stop',
+        },
+      ],
+    },
+  ];
+  vi.mocked(fetchWithCache).mockResolvedValue({
+    data: chunks.map((part) => `data: ${JSON.stringify(part)}\n\n`).join('') + 'data: [DONE]\n\n',
+    status: 200,
+    statusText: 'OK',
+    cached: false,
+  });
+  const provider = new BedrockRuntimeChatProvider('openai.gpt-oss-120b-1:0', {
+    config: { apiKey: 'fixture', stream: true },
+  });
+  const result = await provider.callApi('hello', undefined, { includeLogProbs: true });
+  expect(result.output).toBe('READY');
+  expect(result.logProbs).toEqual([-0.2, -0.1]);
+});
+
+it.each(['event: error\n', ''])(
+  'rejects late typed SSE errors even after a finish reason',
+  async (event) => {
+    const data =
+      'data: {"choices":[{"index":0,"delta":{"content":"partial"},"finish_reason":"stop"}]}\n\n' +
+      event +
+      'data: {"type":"error","message":"late failure"}\n\ndata: [DONE]\n\n';
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data,
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    });
+    const provider = new BedrockRuntimeChatProvider('openai.gpt-oss-120b-1:0', {
+      config: { apiKey: 'fixture', stream: true },
+    });
+    const result = await provider.callApi('hello');
+    expect(result.error).toContain('late failure');
+    expect(result.output).toBeUndefined();
+  },
+);
