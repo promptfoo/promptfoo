@@ -1,14 +1,17 @@
 import { type FetchWithCacheResult, fetchWithCache } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
-import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
+import { extractGenAIResponse, type GenAISpanContext, withGenAISpan } from '../tracing/genaiTracer';
 import { normalizeFinishReason } from '../util/finishReason';
 import { maybeLoadToolsFromExternalFile } from '../util/index';
+import { resolveProviderEnv } from './env';
 import { getRequestTimeoutMs, parseChatPrompt, transformTools } from './shared';
 
+import type { EnvOverrides } from '../contracts/env';
 import type {
   ApiProvider,
   CallApiContextParams,
+  CallApiOptionsParams,
   ProviderEmbeddingResponse,
   ProviderResponse,
   TokenUsage,
@@ -525,9 +528,14 @@ function applyOllamaThinking(output: unknown, thinking: string, showThinking?: b
 export class OllamaCompletionProvider implements ApiProvider {
   modelName: string;
   config: OllamaCompletionOptions;
+  env?: EnvOverrides;
 
-  constructor(modelName: string, options: { id?: string; config?: OllamaCompletionOptions } = {}) {
-    const { id, config } = options;
+  constructor(
+    modelName: string,
+    options: { id?: string; config?: OllamaCompletionOptions; env?: EnvOverrides } = {},
+  ) {
+    const { id, config, env } = options;
+    this.env = env;
     this.modelName = modelName;
     this.id = id ? () => id : this.id;
     this.config = config || {};
@@ -558,23 +566,11 @@ export class OllamaCompletionProvider implements ApiProvider {
       traceparent: context?.traceparent,
     };
 
-    // Result extractor to set response attributes on the span
-    const resultExtractor = (response: ProviderResponse): GenAISpanResult => {
-      const result: GenAISpanResult = {};
-      if (response.tokenUsage) {
-        result.tokenUsage = {
-          prompt: response.tokenUsage.prompt,
-          completion: response.tokenUsage.completion,
-          total: response.tokenUsage.total,
-        };
-      }
-      if (response.finishReason) {
-        result.finishReasons = [response.finishReason];
-      }
-      return result;
-    };
-
-    return withGenAISpan(spanContext, () => this.callApiInternal(prompt, context), resultExtractor);
+    return withGenAISpan(
+      spanContext,
+      () => this.callApiInternal(prompt, context),
+      (response) => extractGenAIResponse(response, true),
+    );
   }
 
   private async callApiInternal(
@@ -600,17 +596,16 @@ export class OllamaCompletionProvider implements ApiProvider {
 
     logger.debug('Calling Ollama API', { params });
 
+    const apiKey = this.env?.OLLAMA_API_KEY ?? getEnvString('OLLAMA_API_KEY');
     let response: FetchWithCacheResult<string> | undefined;
     try {
       response = await fetchWithCache<string>(
-        `${getEnvString('OLLAMA_BASE_URL') || 'http://localhost:11434'}/api/generate`,
+        `${resolveProviderEnv(this.env, ['OLLAMA_BASE_URL'])?.value || 'http://localhost:11434'}/api/generate`,
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            ...(getEnvString('OLLAMA_API_KEY')
-              ? { Authorization: `Bearer ${getEnvString('OLLAMA_API_KEY')}` }
-              : {}),
+            ...(apiKey && { Authorization: `Bearer ${apiKey}` }),
           },
           body: JSON.stringify(params),
         },
@@ -685,9 +680,14 @@ export class OllamaCompletionProvider implements ApiProvider {
 export class OllamaChatProvider implements ApiProvider {
   modelName: string;
   config: OllamaCompletionOptions;
+  env?: EnvOverrides;
 
-  constructor(modelName: string, options: { id?: string; config?: OllamaCompletionOptions } = {}) {
-    const { id, config } = options;
+  constructor(
+    modelName: string,
+    options: { id?: string; config?: OllamaCompletionOptions; env?: EnvOverrides } = {},
+  ) {
+    const { id, config, env } = options;
+    this.env = env;
     this.modelName = modelName;
     this.id = id ? () => id : this.id;
     this.config = config || {};
@@ -718,23 +718,11 @@ export class OllamaChatProvider implements ApiProvider {
       traceparent: context?.traceparent,
     };
 
-    // Result extractor to set response attributes on the span
-    const resultExtractor = (response: ProviderResponse): GenAISpanResult => {
-      const result: GenAISpanResult = {};
-      if (response.tokenUsage) {
-        result.tokenUsage = {
-          prompt: response.tokenUsage.prompt,
-          completion: response.tokenUsage.completion,
-          total: response.tokenUsage.total,
-        };
-      }
-      if (response.finishReason) {
-        result.finishReasons = [response.finishReason];
-      }
-      return result;
-    };
-
-    return withGenAISpan(spanContext, () => this.callApiInternal(prompt, context), resultExtractor);
+    return withGenAISpan(
+      spanContext,
+      () => this.callApiInternal(prompt, context),
+      (response) => extractGenAIResponse(response, true),
+    );
   }
 
   private async callApiInternal(
@@ -768,17 +756,16 @@ export class OllamaChatProvider implements ApiProvider {
 
     logger.debug('[Ollama Chat] Calling Ollama API', { params });
 
+    const apiKey = this.env?.OLLAMA_API_KEY ?? getEnvString('OLLAMA_API_KEY');
     let response: FetchWithCacheResult<string> | undefined;
     try {
       response = await fetchWithCache<string>(
-        `${getEnvString('OLLAMA_BASE_URL') || 'http://localhost:11434'}/api/chat`,
+        `${resolveProviderEnv(this.env, ['OLLAMA_BASE_URL'])?.value || 'http://localhost:11434'}/api/chat`,
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            ...(getEnvString('OLLAMA_API_KEY')
-              ? { Authorization: `Bearer ${getEnvString('OLLAMA_API_KEY')}` }
-              : {}),
+            ...(apiKey && { Authorization: `Bearer ${apiKey}` }),
           },
           body: JSON.stringify(params),
         },
@@ -878,7 +865,13 @@ export class OllamaChatProvider implements ApiProvider {
 }
 
 export class OllamaEmbeddingProvider extends OllamaCompletionProvider {
-  async callEmbeddingApi(text: string): Promise<ProviderEmbeddingResponse> {
+  readonly supportsEmbeddingCancellation = true;
+
+  async callEmbeddingApi(
+    text: string,
+    _context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderEmbeddingResponse> {
     const { passthroughOptions, passthroughRest } = splitOllamaPassthrough(this.config);
     const params = {
       model: this.modelName,
@@ -902,24 +895,25 @@ export class OllamaEmbeddingProvider extends OllamaCompletionProvider {
       prompt_eval_count?: number;
     }
 
+    const apiKey = this.env?.OLLAMA_API_KEY ?? getEnvString('OLLAMA_API_KEY');
     let response: FetchWithCacheResult<OllamaEmbedResponse>;
     try {
       response = await fetchWithCache<OllamaEmbedResponse>(
-        `${getEnvString('OLLAMA_BASE_URL') || 'http://localhost:11434'}/api/embed`,
+        `${resolveProviderEnv(this.env, ['OLLAMA_BASE_URL'])?.value || 'http://localhost:11434'}/api/embed`,
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            ...(getEnvString('OLLAMA_API_KEY')
-              ? { Authorization: `Bearer ${getEnvString('OLLAMA_API_KEY')}` }
-              : {}),
+            ...(apiKey && { Authorization: `Bearer ${apiKey}` }),
           },
           body: JSON.stringify(params),
+          ...(options?.abortSignal && { signal: options.abortSignal }),
         },
         getRequestTimeoutMs(),
         'json',
       );
     } catch (err) {
+      options?.abortSignal?.throwIfAborted();
       return {
         error: `API call error: ${String(err)}`,
       };

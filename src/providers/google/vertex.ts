@@ -2,11 +2,10 @@ import { createHmac } from 'crypto';
 
 import { getCache, isCacheEnabled } from '../../cache';
 import cliState from '../../cliState';
-import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import {
+  extractGenAIResponse,
   type GenAISpanContext,
-  type GenAISpanResult,
   withGenAISpan,
 } from '../../tracing/genaiTracer';
 import { fetchWithProxy } from '../../util/fetch/index';
@@ -24,6 +23,7 @@ import {
   parseMessages,
   resolveClaudeSamplingParams,
 } from '../anthropic/util';
+import { resolveProviderEnv } from '../env';
 import { getRequestTimeoutMs, parseChatPrompt } from '../shared';
 import { GoogleAuthManager } from './auth';
 import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
@@ -58,6 +58,7 @@ import type { EnvOverrides } from '../../types/env';
 import type {
   ApiEmbeddingProvider,
   CallApiContextParams,
+  CallApiOptionsParams,
   GuardrailResponse,
   ProviderEmbeddingResponse,
   ProviderResponse,
@@ -226,8 +227,7 @@ function getVertexApiHost(
 ): string {
   return (
     configApiHost ||
-    envOverrides?.VERTEX_API_HOST ||
-    getEnvString('VERTEX_API_HOST') ||
+    resolveProviderEnv(envOverrides, ['VERTEX_API_HOST'])?.value ||
     getVertexApiHostForRegion(region)
   );
 }
@@ -239,6 +239,17 @@ function getVertexBodyCacheKey(prefix: string, body: unknown, apiHost: string): 
     .update('\0')
     .update(serialized)
     .digest('hex')}`;
+}
+
+function getVertexClientOptions(provider: { config: GoogleProviderConfig }) {
+  const credentials = loadCredentials(provider.config.credentials);
+
+  return {
+    credentials,
+    googleAuthOptions: provider.config.googleAuthOptions,
+    scopes: provider.config.scopes,
+    keyFilename: provider.config.keyFilename,
+  };
 }
 
 /**
@@ -269,10 +280,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
    */
   private getApiVersion(): string {
     return (
-      this.config.apiVersion ||
-      this.env?.VERTEX_API_VERSION ||
-      getEnvString('VERTEX_API_VERSION') ||
-      'v1'
+      this.config.apiVersion || resolveProviderEnv(this.env, ['VERTEX_API_VERSION'])?.value || 'v1'
     );
   }
 
@@ -281,10 +289,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
    */
   private getPublisher(): string {
     return (
-      this.config.publisher ||
-      this.env?.VERTEX_PUBLISHER ||
-      getEnvString('VERTEX_PUBLISHER') ||
-      'google'
+      this.config.publisher || resolveProviderEnv(this.env, ['VERTEX_PUBLISHER'])?.value || 'google'
     );
   }
 
@@ -325,13 +330,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
    * Public for use by integrations like Adaline Gateway.
    */
   async getClientWithCredentials() {
-    const credentials = loadCredentials(this.config.credentials);
-    const { client } = await getGoogleClient({
-      credentials,
-      googleAuthOptions: this.config.googleAuthOptions,
-      scopes: this.config.scopes,
-      keyFilename: this.config.keyFilename,
-    });
+    const { client } = await getGoogleClient(getVertexClientOptions(this));
     return client;
   }
 
@@ -360,20 +359,11 @@ export class VertexChatProvider extends GoogleGenericProvider {
       traceparent: context?.traceparent,
     };
 
-    // Result extractor to set response attributes on the span
-    const resultExtractor = (response: ProviderResponse): GenAISpanResult => {
-      const result: GenAISpanResult = {};
-      if (response.tokenUsage) {
-        result.tokenUsage = {
-          prompt: response.tokenUsage.prompt,
-          completion: response.tokenUsage.completion,
-          total: response.tokenUsage.total,
-        };
-      }
-      return result;
-    };
-
-    return withGenAISpan(spanContext, () => this.callApiInternal(prompt, context), resultExtractor);
+    return withGenAISpan(
+      spanContext,
+      () => this.callApiInternal(prompt, context),
+      extractGenAIResponse,
+    );
   }
 
   private async callApiInternal(
@@ -1355,6 +1345,8 @@ export class VertexChatProvider extends GoogleGenericProvider {
 }
 
 export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
+  readonly supportsEmbeddingCancellation = true;
+
   modelName: string;
   config: VertexEmbeddingProviderConfig;
   env?: EnvOverrides;
@@ -1369,13 +1361,7 @@ export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
    * Helper method to get Google client with credentials support
    */
   async getClientWithCredentials() {
-    const credentials = loadCredentials(this.config.credentials);
-    const { client } = await getGoogleClient({
-      credentials,
-      googleAuthOptions: this.config.googleAuthOptions,
-      scopes: this.config.scopes,
-      keyFilename: this.config.keyFilename,
-    });
+    const { client } = await getGoogleClient(getVertexClientOptions(this));
     return client;
   }
 
@@ -1403,7 +1389,11 @@ export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
     throw new Error('Vertex API does not provide text inference.');
   }
 
-  async callEmbeddingApi(input: string): Promise<ProviderEmbeddingResponse> {
+  async callEmbeddingApi(
+    input: string,
+    _context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderEmbeddingResponse> {
     // See https://cloud.google.com/vertex-ai/generative-ai/docs/embeddings/get-text-embeddings#get_text_embeddings_for_a_snippet_of_text
     const body = {
       instances: [{ content: input }],
@@ -1423,9 +1413,11 @@ export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
         url,
         method: 'POST',
         data: body,
+        ...(options?.abortSignal && { signal: options.abortSignal }),
       });
       data = res.data as VertexEmbeddingPredictResponse;
     } catch (err) {
+      options?.abortSignal?.throwIfAborted();
       logger.error(`Vertex API call error: ${err}`);
       throw err;
     }

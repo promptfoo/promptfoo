@@ -195,6 +195,10 @@ providers:
       apiKey: your_api_key_here
 ```
 
+For providers that support `env` overrides, values are resolved in this order:
+provider `env`, evaluation `env`, `--env-file`, then shell variables. Explicit provider
+`config` values take priority. See each provider's documentation for supported settings.
+
 ### Overriding Pricing
 
 For providers with built-in token pricing, you can override promptfoo's cost estimates in
