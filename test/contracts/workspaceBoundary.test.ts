@@ -115,15 +115,24 @@ function findBoundaryViolations(sourceText: string, filePath: string): string[] 
       const callee = unwrapExpression(node.callee);
       const object =
         callee.type === 'MemberExpression' ? unwrapExpression(callee.object) : undefined;
+      const property =
+        callee.type === 'MemberExpression'
+          ? callee.computed
+            ? staticString(callee.property)
+            : callee.property.type === 'Identifier'
+              ? callee.property.name
+              : undefined
+          : undefined;
       const isRequire =
         (callee.type === 'Identifier' && callee.name === 'require') ||
-        (callee.type === 'MemberExpression' &&
-          object?.type === 'Identifier' &&
-          object.name === 'module' &&
-          (callee.computed
-            ? staticString(callee.property) === 'require'
-            : callee.property.type === 'Identifier' && callee.property.name === 'require'));
-      if (isRequire) {
+        (object?.type === 'Identifier' && object.name === 'module' && property === 'require');
+      const isResolve =
+        property === 'resolve' &&
+        ((object?.type === 'Identifier' && object.name === 'require') ||
+          (object?.type === 'MetaProperty' &&
+            object.meta.name === 'import' &&
+            object.property.name === 'meta'));
+      if (isRequire || isResolve) {
         checkSpecifier(node.arguments[0], node);
       }
     },
@@ -173,6 +182,14 @@ describe('contracts workspace dependency boundary', () => {
     });
 
     it.each([
+      ['require resolve', "require.resolve('node:fs');"],
+      ['computed require resolve', "require['resolve']('node:fs');"],
+      ['template require resolve', "require[`resolve`]('node:fs');"],
+      ['typed require resolve', "(require as any)['resolve']('node:fs' as const);"],
+      ['import meta resolve', "import.meta.resolve('node:fs');"],
+      ['computed import meta resolve', "import.meta['resolve']('node:fs');"],
+      ['template import meta resolve', "import.meta[`resolve`]('node:fs');"],
+      ['typed import meta resolve', "(import.meta as any)['resolve']('node:fs' as const);"],
       ['computed module require', "module['require']('node:fs');"],
       ['template module require', "module[`require`]('node:fs');"],
       ['typed module require', "(module as any)['require']('node:fs' as const);"],

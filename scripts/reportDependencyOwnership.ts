@@ -165,7 +165,9 @@ function getShadowRanges(
       lexicalScopes.push([node.start, node.end]);
     },
     SwitchStatement(node) {
-      lexicalScopes.push([node.start, node.end]);
+      // Case bindings exist for the case expressions and bodies, but the
+      // discriminant runs in the enclosing lexical environment.
+      lexicalScopes.push([node.discriminant.end, node.end]);
     },
     FunctionDeclaration(node) {
       addFunctionScope(node);
@@ -181,8 +183,11 @@ function getShadowRanges(
   }).visit(program);
   const scopeFor = (offset: number, scopes: Array<[number, number]>) =>
     scopes
-      .filter(([start, end]) => offset >= start && offset <= end)
-      .sort(([left], [right]) => right - left)[0];
+      .filter(([start, end]) => offset >= start && offset < end)
+      .sort(
+        ([leftStart, leftEnd], [rightStart, rightEnd]) =>
+          rightStart - leftStart || leftEnd - rightEnd,
+      )[0];
   const bindsName = (node: unknown): boolean => {
     if (!node || typeof node !== 'object') {
       return false;
@@ -220,7 +225,7 @@ function getShadowRanges(
         const { decorators = [] } = param as { decorators?: Array<{ start: number; end: number }> };
         for (const decorator of decorators) {
           if (start < decorator.start) {
-            ranges.push([start, decorator.start - 1]);
+            ranges.push([start, decorator.start]);
           }
           start = Math.max(start, decorator.end);
         }
@@ -808,9 +813,9 @@ export function reportDependencyOwnership(
     const requireShadowRanges = getShadowRanges(result.program, 'require');
     const moduleShadowRanges = getShadowRanges(result.program, 'module');
     const isRequireShadowed = (offset: number) =>
-      requireShadowRanges.some(([start, end]) => offset >= start && offset <= end);
+      requireShadowRanges.some(([start, end]) => offset >= start && offset < end);
     const isModuleShadowed = (offset: number) =>
-      moduleShadowRanges.some(([start, end]) => offset >= start && offset <= end);
+      moduleShadowRanges.some(([start, end]) => offset >= start && offset < end);
     new Visitor({
       ImportDeclaration(node) {
         add(

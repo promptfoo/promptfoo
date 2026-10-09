@@ -1014,6 +1014,37 @@ describe('dependency ownership report', () => {
     ]);
   });
 
+  it.each(['require', 'module'])(
+    'counts %s in a switch discriminant before case bindings exist',
+    (loader) => {
+      const call = loader === 'require' ? 'require' : 'module.require';
+      write(
+        'src/index.js',
+        `switch (${call}('driver')) { case ${call}('case-local'): let ${loader}; ${call}('body-local'); }`,
+      );
+      expect(reportDependencyOwnership(root, config).undeclaredUsages).toEqual([
+        expect.objectContaining({ dependency: 'driver' }),
+      ]);
+    },
+  );
+
+  it.each([
+    "function f(require){}require('driver');",
+    "function f(module){}module.require('driver');",
+    "{let require;}require('driver');",
+    "{let module;}module.require('driver');",
+    "try{}catch(require){}require('driver');",
+    "try{}catch(module){}module.require('driver');",
+    "class C { static { let require; } }require('driver');",
+    "class C { static { let module; } }module.require('driver');",
+    "function f(require){}const module = {};require('driver');",
+  ])('keeps an adjacent loader outside exclusive scope ends: %s', (source) => {
+    write('src/index.js', source);
+    expect(reportDependencyOwnership(root, config).undeclaredUsages).toEqual([
+      expect.objectContaining({ dependency: 'driver' }),
+    ]);
+  });
+
   it('ignores require calls shadowed by a function parameter', () => {
     write(
       'src/index.js',
