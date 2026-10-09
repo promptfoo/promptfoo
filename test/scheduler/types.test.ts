@@ -43,11 +43,93 @@ describe('isProviderResponseRateLimited', () => {
       expect(isProviderResponseRateLimited(result, undefined)).toBe(true);
     });
 
+    it.each([
+      '429',
+      '429 Too Many Requests',
+      'Request failed with status code 429.',
+      'API error (429)',
+      '{"error":{"code":429}}',
+    ])('should detect a standalone 429 in returned and thrown errors: %s', (error) => {
+      expect(isProviderResponseRateLimited({ error }, undefined)).toBe(true);
+      expect(isProviderResponseRateLimited(undefined, new Error(error))).toBe(true);
+    });
+
+    it.each([
+      'HTTP 400: prompt is too long: 204291 tokens > 200000 maximum',
+      'API error: 500 Internal Server Error (request_id: req_a4290f)',
+      'Invalid value for max_tokens: 4290',
+    ])('should preserve non-rate-limit returned and thrown errors: %s', (error) => {
+      expect(isProviderResponseRateLimited({ error }, undefined)).toBe(false);
+      expect(isProviderResponseRateLimited(undefined, new Error(error))).toBe(false);
+    });
+
     it('should handle undefined result.error gracefully', () => {
       const result: ProviderResponse = {
         output: 'success',
       };
       expect(isProviderResponseRateLimited(result, undefined)).toBe(false);
+    });
+  });
+
+  describe('Tool diagnostic attribution', () => {
+    it.each(['Tool returned 429', 'Tool rate limit exceeded', 'Quota exceeded: tool 429'])(
+      'ignores tool quota text: %s',
+      (error) => {
+        expect(
+          isProviderResponseRateLimited({ error, metadata: { errorOrigin: 'tool' } }, undefined),
+        ).toBe(false);
+      },
+    );
+
+    it.each(['Model returned 429', 'Model rate limit exceeded'])(
+      'retains unmarked model error detection: %s',
+      (error) => {
+        expect(
+          isProviderResponseRateLimited(
+            { error, metadata: { http: { status: 200, statusText: 'OK' } } },
+            undefined,
+          ),
+        ).toBe(true);
+      },
+    );
+
+    it('retains an actual target HTTP 429 despite tool hard-quota text', () => {
+      expect(
+        isProviderResponseRateLimited(
+          {
+            error: 'Quota exceeded: tool 429',
+            metadata: {
+              errorOrigin: 'tool',
+              http: { status: 429, statusText: 'Too Many Requests' },
+            },
+          },
+          undefined,
+        ),
+      ).toBe(true);
+    });
+
+    it.each([
+      ['quota', false],
+      ['rate_limit', true],
+    ] as const)('retains structured target quota kind %s', (rateLimitKind, expected) => {
+      expect(
+        isProviderResponseRateLimited(
+          {
+            error: 'Quota exceeded: tool 429',
+            metadata: { errorOrigin: 'tool', rateLimitKind },
+          },
+          undefined,
+        ),
+      ).toBe(expected);
+    });
+
+    it('retains an independent thrown target rate-limit error', () => {
+      expect(
+        isProviderResponseRateLimited(
+          { error: 'Quota exceeded: tool 429', metadata: { errorOrigin: 'tool' } },
+          new Error('Target rate limit exceeded'),
+        ),
+      ).toBe(true);
     });
   });
 

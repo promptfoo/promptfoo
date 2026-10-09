@@ -1896,6 +1896,72 @@ describe('runAssertion', () => {
     });
   });
 
+  describe.each(['webhook', 'not-webhook'] as const)('%s response validation', (type) => {
+    const checkResponse = (json: string) => {
+      vi.mocked(fetchWithRetries).mockResolvedValueOnce(
+        new Response(json, { headers: { 'Content-Type': 'application/json' } }),
+      );
+      return runAssertion({
+        prompt: 'Some prompt',
+        assertion: { ...webhookAssertion, type },
+        test: {} as AtomicTestCase,
+        providerResponse: { output: 'Expected output' },
+        provider: createMockProvider(),
+      });
+    };
+
+    it.each([
+      {},
+      { error: 'Grader unavailable' },
+      { pass: 'false' },
+      { pass: 'true' },
+      { pass: 0 },
+      { pass: 1 },
+      { pass: null },
+      { pass: [] },
+      { pass: {} },
+      null,
+      [],
+      true,
+      'false',
+    ])('rejects a response without a boolean pass: %j', async (response) => {
+      await expect(checkResponse(JSON.stringify(response))).resolves.toMatchObject({
+        pass: false,
+        score: 0,
+        reason:
+          'Webhook error: Invariant failed: Webhook response must be a JSON object with a boolean "pass" property',
+      });
+    });
+
+    it.each([
+      [true, undefined, 1],
+      [false, undefined, 0],
+      [true, 0, 0],
+      [true, 0.25, 0.25],
+      [false, 0.25, 0.25],
+      [true, 1, 1],
+    ] as const)('preserves pass %s and score %s', async (pass, score, expectedScore) => {
+      const result = await checkResponse(JSON.stringify({ pass, score, reason: 'Custom grade' }));
+      expect(result).toMatchObject({
+        pass: type === 'webhook' ? pass : !pass,
+        score: type === 'webhook' ? expectedScore : 1 - expectedScore,
+        reason: 'Custom grade',
+      });
+    });
+
+    it.each(['null', '"0.5"', 'false', '-0.1', '1.1', '1e400', '-1e400'])(
+      'rejects an invalid JSON score: %s',
+      async (score) => {
+        await expect(checkResponse(`{"pass":true,"score":${score}}`)).resolves.toMatchObject({
+          pass: false,
+          score: 0,
+          reason:
+            'Webhook error: Invariant failed: Webhook response "score" must be a finite number between 0 and 1',
+        });
+      },
+    );
+  });
+
   it('should fail when the webhook returns an error', async () => {
     const output = 'Expected output';
 
@@ -1980,6 +2046,42 @@ describe('runAssertion', () => {
       reason: 'ROUGE-N score 0.22 is less than threshold 0.75',
     });
     expect(result.score).toBeCloseTo(0.78, 2);
+  });
+
+  describe.each(['rouge-l', 'rouge-s'] as const)('%s dispatch', (baseType) => {
+    it.each([
+      { output: 'The cat sat on the mat', inverse: false, pass: true, score: 1 },
+      { output: 'The cat sat on the mat', inverse: true, pass: false, score: 0 },
+      { output: 'completely different words', inverse: false, pass: false, score: 0 },
+      { output: 'completely different words', inverse: true, pass: true, score: 1 },
+      { output: '', inverse: false, pass: false, score: 0 },
+      { output: '', inverse: true, pass: true, score: 1 },
+      { output: '\u0085', inverse: false, pass: false, score: 0 },
+      { output: '\u0085', inverse: true, pass: true, score: 1 },
+    ])(
+      'grades output "$output" with inverse=$inverse',
+      async ({ output, inverse, pass, score }) => {
+        const result = await runAssertion({
+          prompt: 'Some prompt',
+          assertion: {
+            type: inverse ? `not-${baseType}` : baseType,
+            value: 'The cat sat on the mat',
+          },
+          test: {} as AtomicTestCase,
+          providerResponse: { output },
+          provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        });
+
+        const rawScore = inverse ? 1 - score : score;
+        expect(result).toMatchObject({
+          pass,
+          score,
+          reason: `${baseType.toUpperCase()} score ${rawScore.toFixed(2)} is ${
+            rawScore >= 0.75 ? 'greater than or equal to' : 'less than'
+          } threshold 0.75`,
+        });
+      },
+    );
   });
 
   it('should fail when the not-rouge-n assertion score is above threshold', async () => {
