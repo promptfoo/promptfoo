@@ -4,6 +4,7 @@ import { getEnvBool, getEnvInt } from '../envars';
 import logger from '../logger';
 import { withFetchRetryContext } from '../util/fetch/retryContext';
 import { sanitizeProviderIdForLog } from '../util/provider';
+import { runProviderCallWithAbort } from './providerCallExecutionContext';
 import {
   type ProviderMetrics,
   ProviderRateLimitState,
@@ -58,7 +59,9 @@ export class RateLimitRegistry extends EventEmitter {
     // `fetchWithRetries` picks up the provider's `maxRetries` as its default
     // and `fetchWithProxy` disables transient retries when `maxRetries: 0`.
     if (!this.enabled) {
-      return withFetchRetryContext(providerMaxRetries, callFn);
+      return withFetchRetryContext(providerMaxRetries, () =>
+        runProviderCallWithAbort(callFn, options?.abortSignal),
+      );
     }
 
     const rateLimitKey = getRateLimitKey(provider);
@@ -75,12 +78,20 @@ export class RateLimitRegistry extends EventEmitter {
 
     const run = () =>
       state.executeWithRetry(requestId, callFn, {
-        ...options,
+        getHeaders: options?.getHeaders,
+        isRateLimited: options?.isRateLimited,
+        getRetryAfter: options?.getRetryAfter,
+        isRetryableResult: options?.isRetryableResult,
+        finalizeResult: options?.finalizeResult,
+        onRateLimitExhausted: options?.onRateLimitExhausted,
+        abortSignal: options?.abortSignal,
         maxRetriesOverride: provider.handlesOwnRetries ? 0 : providerMaxRetries,
       });
 
     try {
-      const result = await withFetchRetryContext(providerMaxRetries, run);
+      const result = await withFetchRetryContext(providerMaxRetries, () =>
+        runProviderCallWithAbort(run, options?.abortSignal),
+      );
 
       this.emit('request:completed', {
         rateLimitKey,

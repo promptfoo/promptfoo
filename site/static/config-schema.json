@@ -570,6 +570,12 @@
         "PROMPTFOO_INSECURE_SSL": {
           "type": "string"
         },
+        "PROMPTFOO_PYTHON": {
+          "type": "string"
+        },
+        "PROMPTFOO_PYTHON_WORKERS": {
+          "type": "string"
+        },
         "QUIVERAI_API_KEY": {
           "type": "string"
         },
@@ -898,6 +904,9 @@
         "id": {},
         "callApi": {},
         "callEmbeddingApi": {},
+        "supportsEmbeddingCancellation": {
+          "type": "boolean"
+        },
         "callClassificationApi": {},
         "label": {},
         "transform": {

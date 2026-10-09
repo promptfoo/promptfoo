@@ -122,6 +122,10 @@ export interface CallApiOptionsParams {
   abortSignal?: AbortSignal;
 }
 
+export interface ProviderCleanupContext {
+  reason: 'evaluation-complete';
+}
+
 export interface ApiProvider extends MinimalApiProvider {
   callApi: CallApiFunction;
   callClassificationApi?: (
@@ -129,6 +133,8 @@ export interface ApiProvider extends MinimalApiProvider {
     options?: CallApiOptionsParams,
   ) => Promise<ProviderClassificationResponse>;
   callEmbeddingApi?: (input: string) => Promise<ProviderEmbeddingResponse>;
+  /** Opt in to receiving evaluation cancellation through CancellableEmbeddingProvider. */
+  supportsEmbeddingCancellation?: boolean;
   config?: any;
   delay?: number;
   /** True when callApi applies delay itself and the evaluator should not wait again. */
@@ -149,14 +155,28 @@ export interface ApiProvider extends MinimalApiProvider {
   toJSON?: () => any;
   /**
    * Provider-wide cleanup hook for releasing long-lived resources such as worker
-   * processes, browser sessions, or pooled connections at eval shutdown.
+   * processes, browser sessions, or pooled connections. The CLI calls it without
+   * arguments unless `cleanupAfterEvaluation` is implemented or the provider registers
+   * itself for shutdown; a registered provider's `shutdown()` may delegate to this hook.
    * Request-scoped cancellation should be implemented with `abortSignal`.
    */
   cleanup?: () => void | Promise<void>;
+  /** Release idle evaluation resources separately from an explicit `cleanup()` call. */
+  cleanupAfterEvaluation?: (context: ProviderCleanupContext) => void | Promise<void>;
 }
 
 export interface ApiEmbeddingProvider extends ApiProvider {
   callEmbeddingApi: (input: string) => Promise<ProviderEmbeddingResponse>;
+}
+
+/** Embedding calls that explicitly reserve the third argument for evaluation cancellation. */
+export interface CancellableEmbeddingProvider extends ApiEmbeddingProvider {
+  supportsEmbeddingCancellation: true;
+  callEmbeddingApi: (
+    input: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ) => Promise<ProviderEmbeddingResponse>;
 }
 
 export interface ApiSimilarityProvider extends ApiProvider {
