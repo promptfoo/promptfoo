@@ -95,6 +95,17 @@ describe('package TypeScript coverage', () => {
     expect(result.stdout).toContain('internal/shared/index.ts(1,14): error TS2322');
   });
 
+  it('requires every tracked TypeScript file under a repository-root layer', () => {
+    write('custom/worker.ts', 'export {};');
+    write('architecture/layers.json', {
+      publicFacade: 'src/index.ts',
+      layers: [{ name: 'repository', roots: ['.'], allowedDependencies: [] }],
+    });
+    expect(findMissingRootTypeScriptFiles(repositoryRoot)).toEqual(['custom/worker.ts']);
+    write('tsconfig.json', { include: ['src', 'custom'] });
+    expect(findMissingRootTypeScriptFiles(repositoryRoot)).toEqual([]);
+  });
+
   it('accepts referenced projects owning configured product roots outside packages', () => {
     write('internal/widget/src/index.ts', 'export {};');
     write('internal/widget/src/omitted.ts', 'export {};');

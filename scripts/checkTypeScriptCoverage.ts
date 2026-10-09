@@ -27,7 +27,9 @@ function isRootOwnedTypeScriptFile(filePath: string, configuredRoots: string[]):
   return (
     !filePath.includes('/') ||
     hasPrefix(filePath, rootOwnedPrefixes) ||
-    configuredRoots.some((root) => filePath === root || filePath.startsWith(`${root}/`))
+    configuredRoots.some(
+      (root) => root === '.' || filePath === root || filePath.startsWith(`${root}/`),
+    )
   );
 }
 

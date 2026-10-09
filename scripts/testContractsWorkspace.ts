@@ -120,7 +120,7 @@ contracts.GetUserResponseSchema.parse(user);
 // @ts-expect-error Public declarations must retain the required string prompt body.
 const invalid: contracts.Prompt = { raw: 3, label: 'bad' };
 // @ts-expect-error Provider output images retain the BlobRef contract.
-const invalidBlob: contracts.BlobRef = { hash: 3 };
+const invalidBlob: contracts.BlobRef = { ...blob, hash: 3 };
 void [response, invalid, invalidBlob];
 `;
   fs.writeFileSync(

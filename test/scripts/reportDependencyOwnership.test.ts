@@ -1158,6 +1158,22 @@ ${call}('external');`,
     expect(reportDependencyOwnership(root, config).undeclaredUsages).toEqual([]);
   });
 
+  it.each([
+    "declare const require: (id: string) => unknown; require('driver');",
+    "declare function require(id: string): unknown; require('driver');",
+    "declare var module: { require(id: string): unknown }; module.require('driver');",
+    "declare namespace require { function resolve(id: string): string; } require.resolve('driver');",
+    "declare class require {} require('driver');",
+    "import type require from './loader'; require('driver');",
+    "import { type Loader as require } from './loader'; require('driver');",
+    "import type require = require('./loader'); require('driver');",
+  ])('does not treat erased ambient declarations as runtime loader shadows: %s', (source) => {
+    write('src/ambient.cts', source);
+    expect(reportDependencyOwnership(root, config).undeclaredUsages).toEqual([
+      expect.objectContaining({ dependency: 'driver' }),
+    ]);
+  });
+
   it('ignores require imported under that name', () => {
     write('src/index.js', "import require from './local.js'; require('local-only');");
     write('src/import-equals.ts', "import require = require('./local'); require('local-equals');");
@@ -1378,6 +1394,10 @@ ${call}('external');`,
     ['ts', 'export {};'],
     ['d.ts', 'export {};'],
     ['cts', 'import shared = require("shared");'],
+    ['mts', ''],
+    ['cts', ''],
+    ['d.mts', ''],
+    ['d.cts', ''],
   ])('records module augmentations in %s files', (extension, moduleMarker) => {
     write(
       `src/augment.${extension}`,

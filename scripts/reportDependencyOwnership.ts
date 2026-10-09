@@ -252,27 +252,34 @@ function getShadowRanges(
       addParams(node);
     },
     VariableDeclaration(node) {
-      if (node.declarations.some((declaration) => bindsName(declaration.id))) {
+      if (!node.declare && node.declarations.some((declaration) => bindsName(declaration.id))) {
         ranges.push(scopeFor(node.start, node.kind === 'var' ? functionScopes : lexicalScopes));
       }
     },
     ImportDeclaration(node) {
-      if (node.specifiers.some((specifier) => specifier.local.name === name)) {
+      if (
+        node.importKind !== 'type' &&
+        node.specifiers.some(
+          (specifier) =>
+            specifier.local.name === name &&
+            (specifier.type !== 'ImportSpecifier' || specifier.importKind !== 'type'),
+        )
+      ) {
         ranges.push([0, Number.POSITIVE_INFINITY]);
       }
     },
     TSImportEqualsDeclaration(node) {
-      if (node.id.name === name) {
+      if (node.importKind !== 'type' && node.id.name === name) {
         ranges.push(scopeFor(node.start, lexicalScopes));
       }
     },
     TSModuleDeclaration(node) {
-      if (node.id.type === 'Identifier' && node.id.name === name) {
+      if (!node.declare && node.id.type === 'Identifier' && node.id.name === name) {
         ranges.push(scopeFor(node.start, lexicalScopes));
       }
     },
     ClassDeclaration(node) {
-      if (node.id?.name === name) {
+      if (!node.declare && node.id?.name === name) {
         ranges.push(scopeFor(node.start, lexicalScopes));
       }
     },
@@ -805,6 +812,7 @@ export function reportDependencyOwnership(
     }
     const externalModule =
       result.module.hasModuleSyntax ||
+      result.program.sourceType !== 'script' ||
       result.program.body.some(
         (node) =>
           node.type === 'TSImportEqualsDeclaration' &&
