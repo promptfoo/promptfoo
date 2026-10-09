@@ -1,6 +1,7 @@
 ---
+title: OrcaReplay record and replay
 sidebar_label: OrcaReplay
-description: Record and replay OpenAI-compatible provider calls in a promptfoo evaluation
+description: Record OpenAI-compatible Promptfoo provider requests with OrcaReplay, replay saved responses, and verify capture while avoiding cache and endpoint conflicts.
 ---
 
 # OrcaReplay integration
