@@ -1750,6 +1750,181 @@ describe('ClaudeCodeSDKProvider', () => {
         }
       });
 
+      it('enables Workflow and records its tool result while grading the main answer', async () => {
+        const final: Partial<SDKMessage> = {
+          type: 'result',
+          subtype: 'success',
+          session_id: 'main-session',
+          result: 'Verified: 42',
+          usage: createMockUsage(20, 30),
+          total_cost_usd: 0.01,
+          duration_ms: 100,
+          duration_api_ms: 80,
+          is_error: false,
+          num_turns: 3,
+          permission_denials: [],
+          terminal_reason: 'completed',
+          origin: { kind: 'human' },
+        };
+        mockQuery.mockReturnValue(
+          createMockQuery([
+            {
+              type: 'assistant',
+              parent_tool_use_id: null,
+              session_id: 'main-session',
+              message: createMockBetaMessage([
+                {
+                  type: 'tool_use',
+                  id: 'workflow-1',
+                  name: 'Workflow',
+                  input: { code: 'fixture workflow' },
+                },
+              ]),
+            },
+            {
+              type: 'system',
+              subtype: 'task_started',
+              task_id: 'task-1',
+              tool_use_id: 'workflow-1',
+              task_type: 'local_workflow',
+              workflow_name: 'Verify',
+              description: 'Verify the result',
+              session_id: 'main-session',
+            },
+            {
+              type: 'user',
+              parent_tool_use_id: null,
+              session_id: 'main-session',
+              message: {
+                role: 'user',
+                content: [
+                  {
+                    type: 'tool_result',
+                    tool_use_id: 'workflow-1',
+                    content: 'All checks completed',
+                  },
+                ],
+              },
+            },
+            { ...final, result: 'Workflow launched', total_cost_usd: 0.001 },
+            {
+              type: 'system',
+              subtype: 'task_notification',
+              task_id: 'task-1',
+              tool_use_id: 'workflow-1',
+              status: 'completed',
+              session_id: 'main-session',
+              output_file: '/tmp/workflow.output',
+              summary: 'Done',
+            },
+            {
+              ...final,
+              origin: {
+                kind: 'task-notification',
+                producer: 'session-task',
+              } as SDKResultMessage['origin'],
+            },
+            {
+              ...final,
+              result: 'Unrelated late worker result',
+              origin: { kind: 'task-notification' },
+            },
+          ]),
+        );
+        const provider = new ClaudeCodeSDKProvider({
+          config: { apiKey: 'test-key', custom_allowed_tools: ['Workflow'] },
+        });
+        const result = await provider.callApi('Use a workflow to verify the calculation');
+        expect(mockQuery.mock.calls[0][0].options).toMatchObject({
+          allowedTools: ['Workflow'],
+          tools: ['Workflow'],
+        });
+        expect(result.error).toBeUndefined();
+        expect(result.output).toBe('Verified: 42');
+        expect(result.metadata?.toolCalls).toMatchObject([
+          { name: 'Workflow', output: 'All checks completed', is_error: false },
+        ]);
+        expect(result.cost).toBe(0.01);
+      });
+
+      it.each([
+        'missing-notification',
+        'missing-answer',
+        'failed',
+        'stopped',
+        'peer',
+        'wrong-session',
+      ])('does not grade workflow progress when continuation is %s', async (scenario) => {
+        const main: Partial<SDKResultMessage> = {
+          type: 'result',
+          subtype: 'success',
+          session_id: 'main-session',
+          result: 'Workflow launched',
+          usage: createMockUsage(1, 1),
+          total_cost_usd: 0.001,
+          is_error: false,
+          num_turns: 1,
+          permission_denials: [],
+          terminal_reason: 'completed',
+          origin: { kind: 'human' },
+        };
+        const messages: Partial<SDKMessage>[] = [
+          {
+            type: 'assistant',
+            session_id: 'main-session',
+            parent_tool_use_id: null,
+            message: createMockBetaMessage([
+              { type: 'tool_use', id: 'workflow-1', name: 'Workflow', input: {} },
+            ]),
+          },
+          {
+            type: 'system',
+            subtype: 'task_started',
+            task_id: 'task-1',
+            tool_use_id: 'workflow-1',
+            task_type: 'local_workflow',
+            description: 'Verify',
+            session_id: 'main-session',
+          },
+          main,
+        ];
+        if (scenario !== 'missing-notification') {
+          messages.push({
+            type: 'system',
+            subtype: 'task_notification',
+            task_id: 'task-1',
+            status:
+              scenario === 'failed' ? 'failed' : scenario === 'stopped' ? 'stopped' : 'completed',
+            session_id: 'main-session',
+            summary: 'Done',
+            output_file: '/tmp/workflow.output',
+          });
+        }
+        if (scenario !== 'missing-answer' && scenario !== 'missing-notification') {
+          messages.push({
+            ...main,
+            result: 'VERIFIED',
+            session_id: scenario === 'wrong-session' ? 'child-session' : 'main-session',
+            origin: (scenario === 'peer'
+              ? {
+                  kind: 'task-notification',
+                  subkind: 'peer-send-message',
+                  producer: 'session-task',
+                }
+              : {
+                  kind: 'task-notification',
+                  producer: 'session-task',
+                }) as NonNullable<SDKResultMessage['origin']> & { producer: 'session-task' },
+          });
+        }
+        mockQuery.mockReturnValue(createMockQuery(messages));
+        const result = await new ClaudeCodeSDKProvider({
+          config: { apiKey: 'test-key', custom_allowed_tools: ['Workflow'] },
+        }).callApi('Verify');
+        expect(result.error).toContain('workflow did not complete');
+        expect(result.output).toBeUndefined();
+      });
+
       it('should select the human-origin result regardless of position when SDK reports origin', async () => {
         // SDK >= 0.2.126 tags result messages with `origin.kind`. When the
         // human-origin (user-prompted) result arrives BEFORE a trailing

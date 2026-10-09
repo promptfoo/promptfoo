@@ -1,0 +1,25 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Claude Agent SDK dynamic workflow
+
+prompts:
+  - >-
+    Use a dynamic workflow with two independent agents to check these calculations:
+    17 + 25 = 42; 9 * 8 = 72. Wait for both checks to finish, then reply with
+    exactly VERIFIED if both are correct, or INCORRECT otherwise.
+
+providers:
+  - id: anthropic:claude-agent-sdk
+    config:
+      model: claude-sonnet-5
+      custom_allowed_tools: [Workflow]
+      max_turns: 12
+      max_budget_usd: 1
+
+tests:
+  - assert:
+      - type: equals
+        value: VERIFIED
+      - type: javascript
+        value: >-
+          context.providerResponse.metadata.toolCalls.some(call =>
+          call.name === 'Workflow' && !call.is_error)

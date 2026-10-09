@@ -528,6 +528,16 @@ export const providerMap: ProviderFactory[] = [
       const modelType = splits[1];
       const modelName = modelNameFromProviderPath(providerPath, 2);
 
+      if (modelType === 'managed-agents') {
+        const { AnthropicManagedAgentsProvider } = await import('./anthropic/managedAgents');
+        return new AnthropicManagedAgentsProvider({
+          ...providerOptions,
+          config: {
+            ...providerOptions.config,
+            ...(modelName ? { agent_id: modelName } : {}),
+          },
+        });
+      }
       if (modelType === 'messages') {
         return new AnthropicMessagesProvider(modelName, providerOptions);
       }
@@ -557,6 +567,7 @@ export const providerMap: ProviderFactory[] = [
         dedent`Unknown Anthropic model type or model name: ${modelType}. Use one of the following formats:
         - anthropic:messages:<model name> - For Messages API
         - anthropic:completion:<model name> - For Completion API
+        - anthropic:managed-agents[:<agent id>] - For hosted Managed Agents
         - anthropic:<model name> - Shorthand for Messages API, for a model id starting with "claude-"`,
       );
     },

@@ -23,6 +23,14 @@ export ANTHROPIC_API_KEY=your_api_key_here
 
 ## Examples
 
+### Dynamic Workflows
+
+`./dynamic-workflows/` asks Claude to verify calculations with independent agents and checks both the final answer and the `Workflow` tool call.
+
+```bash
+promptfoo eval -c dynamic-workflows/promptfooconfig.yaml --no-cache
+```
+
 ### Basic Usage
 
 This example shows Claude Agent SDK in its simplest form - running in a temporary directory with no file system access or tools enabled, behaving similarly to the standard Anthropic provider.

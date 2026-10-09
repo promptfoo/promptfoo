@@ -1849,6 +1849,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
             {
               prompt,
               cacheKeyQueryOptions,
+              resultSelectionVersion: 2,
               ...(credentialCacheScope ? { credentialCacheScope } : {}),
               ...(config.ask_user_question ? { ask_user_question: config.ask_user_question } : {}),
             },
@@ -2179,6 +2180,8 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
           let lastResultMsg: SDKResultMessage | undefined;
           let lastMainResultMsg: SDKResultMessage | undefined;
           let resultMsgCount = 0;
+          const workflowTasks = new Map<string, { sessionId: string; status: string }>();
+          const pendingWorkflowResults = new Set<string>();
 
           for await (const msg of res) {
             if (msg.type === 'assistant') {
@@ -2237,6 +2240,21 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
                   }
                 }
               }
+            } else if (msg.type === 'system' && msg.subtype === 'task_started') {
+              const tool = msg.tool_use_id ? toolCallsMap.get(msg.tool_use_id) : undefined;
+              if (
+                msg.task_type === 'local_workflow' &&
+                tool?.name === 'Workflow' &&
+                !tool.parentToolUseId
+              ) {
+                workflowTasks.set(msg.task_id, { sessionId: msg.session_id, status: 'running' });
+              }
+            } else if (msg.type === 'system' && msg.subtype === 'task_notification') {
+              const task = workflowTasks.get(msg.task_id);
+              if (task?.sessionId === msg.session_id) {
+                task.status = msg.status;
+                pendingWorkflowResults.add(msg.session_id);
+              }
             } else if (msg.type === 'result') {
               lastResultMsg = msg;
               resultMsgCount++;
@@ -2250,8 +2268,20 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
               const isBackgroundTaskResult =
                 msg.origin?.kind === 'task-notification' &&
                 !('subkind' in msg.origin && msg.origin.subkind === 'scheduled-trigger');
-              if (!isBackgroundTaskResult) {
+              // A Workflow completion wakes the main session for another turn. Its
+              // answer is tagged task-notification, just like unrelated background
+              // deliveries. Accept only the session-task producer after a matching
+              // top-level workflow notification, never a peer or child-session result.
+              // `producer` is emitted by CLI 2.1.284, ahead of the SDK origin type.
+              const isWorkflowContinuation =
+                pendingWorkflowResults.has(msg.session_id) &&
+                msg.origin?.kind === 'task-notification' &&
+                !msg.origin.subkind &&
+                'producer' in msg.origin &&
+                msg.origin.producer === 'session-task';
+              if (!isBackgroundTaskResult || isWorkflowContinuation) {
                 lastMainResultMsg = msg;
+                pendingWorkflowResults.delete(msg.session_id);
               }
             }
           }
@@ -2430,6 +2460,23 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
 
           const toolCallsArray = Array.from(toolCallsMap.values());
           const skillCalls = deriveSkillCalls(toolCallsArray);
+
+          if (
+            finalMsg.subtype === 'success' &&
+            (pendingWorkflowResults.size > 0 ||
+              [...workflowTasks.values()].some((task) => task.status !== 'completed'))
+          ) {
+            return {
+              error: 'Claude Agent SDK workflow did not complete with a final main-agent response',
+              tokenUsage,
+              cost,
+              sessionId,
+              metadata: {
+                toolCalls: toolCallsArray,
+                workflowTasks: Object.fromEntries(workflowTasks),
+              },
+            };
+          }
 
           // Aborted terminal reasons mean the agent stopped unexpectedly mid-run.
           // Mark the provider span ERROR directly — without poisoning the
