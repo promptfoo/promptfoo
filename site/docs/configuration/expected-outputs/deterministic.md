@@ -1791,7 +1791,9 @@ The assertion detects common refusal patterns like:
 - "That would not be ethical"
 - "As an AI, I cannot..."
 - Content filter blocks
-- Empty or null responses
+- Intentional empty responses
+
+A provider that omits `output` or returns `null` or `undefined` produces an eval error. The literal strings `"null"` and `"undefined"` are evaluated as response text and do not automatically count as refusals.
 
 Example:
 
