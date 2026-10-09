@@ -22,6 +22,16 @@ export const createRequiredTestSchema = () => ({
   additionalProperties: false as const,
 });
 
+export const createMcpServerOptions = (command = 'npm', args = 'start') => ({
+  enabled: true,
+  server: createMcpServerConfig(command, args),
+});
+
+export const createBasePathOptions = () => ({
+  id: 'testId',
+  config: { basePath: '/base' },
+});
+
 export const createChatCompletion = (
   content = 'Test output',
   total_tokens = 10,
@@ -43,14 +53,55 @@ export const createAzureApiOptions = () => ({
   },
 });
 
+export const createHttpResponse = (data = 'response', status = 200, statusText = 'OK') => ({
+  data,
+  status,
+  statusText,
+  cached: false,
+});
+
+export const createOtlpOptions = () => ({
+  host: '127.0.0.1',
+  port: 4318,
+  acceptFormats: ['json' as const],
+});
+
 export const createChatUsage = (prompt_tokens = 10, completion_tokens = 20, total_tokens = 30) => ({
   prompt_tokens,
   completion_tokens,
   total_tokens,
 });
 
+export const createGetOptions = () => ({
+  config: {
+    method: 'GET',
+  },
+});
+
+export const createPassingGrade = (score = 0.8, reason = 'test reason') => ({
+  pass: true,
+  score,
+  reason,
+});
+
+export const createStreamingOptions = () => ({
+  config: { apiKey: 'test-key', stream: true },
+});
+
+export const createAnthropicEnvOptions = () => ({
+  env: { ANTHROPIC_API_KEY: 'test-api-key' },
+});
+
 export const createTemperatureOptions = () => ({
   config: { temperature: 0.7 },
+});
+
+export const createLocationProperties = () => ({
+  location: { type: 'string' },
+});
+
+export const createTestOutput = (output = 'Test output') => ({
+  output,
 });
 
 const createStringAssertion = <TType extends string>(type: TType, value: string) => ({
@@ -67,6 +118,18 @@ export const createResponseMessage = (text: string) => ({
       text,
     },
   ],
+});
+
+export const createCompletedResponse = (
+  text: string,
+  input_tokens: number,
+  total_tokens: number,
+) => ({
+  id: 'resp_abc123',
+  status: 'completed',
+  model: 'gpt-4o',
+  output: [createResponseMessage(text)],
+  usage: { input_tokens, output_tokens: 10, total_tokens },
 });
 
 export const createSingleAssertionTest = <TType extends string>(type: TType, value: string) => ({
@@ -108,6 +171,10 @@ export const createGeminiUsageCounts = (
   candidatesTokenCount,
 });
 
+export const createTypeConfig = <TType extends string>(type: TType) => ({
+  type,
+});
+
 export const createStatusResponse = (status = 500, statusText = 'Internal Server Error') => ({
   status,
   statusText,
@@ -117,6 +184,22 @@ export const createImageUsageCounts = (candidatesTokenCount: number, totalTokenC
   promptTokenCount: 10,
   candidatesTokenCount,
   totalTokenCount,
+});
+
+export const createDebugContextFixture = (raw: string, label: string) => ({
+  debug: true,
+  prompt: { raw, label },
+  vars: {},
+});
+
+export const createContentTypeResponse = (Content_Type = 'application/json') => ({
+  status: 200,
+  headers: { 'Content-Type': Content_Type },
+});
+
+export const createOAuthToken = (access_token: string) => ({
+  access_token,
+  expires_in: 3600,
 });
 
 export const createTextParts = (text: string, role: string) => ({
@@ -134,6 +217,22 @@ export const createInputOutputUsage = (input_tokens: number, output_tokens: numb
   output_tokens,
 });
 
+export const createMcpServerConfig = (command = 'npm', arg = 'start') => ({
+  command,
+  args: [arg],
+});
+
 export const createGoogleSearchTool = () => ({
   googleSearch: {},
+});
+
+export const createEnabledSetting = () => ({
+  enabled: true,
+});
+
+export const createUnsetOpenAiGenerationEnv = () => ({
+  OPENAI_MAX_TOKENS: undefined,
+  OPENAI_MAX_COMPLETION_TOKENS: undefined,
+  OPENAI_TEMPERATURE: undefined,
+  OPENAI_TOP_P: undefined,
 });

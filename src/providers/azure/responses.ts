@@ -71,14 +71,6 @@ export class AzureResponsesProvider extends AzureGenericProvider {
             usage?.output_tokens_details?.image_tokens,
         ),
     });
-
-    if (this.config.mcp?.enabled) {
-      this.initializationPromise = this.initializeMCP();
-    }
-  }
-
-  private async initializeMCP(): Promise<void> {
-    // TODO: Initialize MCP if needed
   }
 
   /**
@@ -292,9 +284,6 @@ export class AzureResponsesProvider extends AzureGenericProvider {
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    if (this.initializationPromise != null) {
-      await this.initializationPromise;
-    }
     await this.ensureInitialized();
     invariant(this.authHeaders, 'auth headers are not initialized');
 
