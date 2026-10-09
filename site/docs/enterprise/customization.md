@@ -2,24 +2,24 @@
 title: Policies and Grading Customization
 sidebar_label: Policies and Grading
 sidebar_position: 45
-description: Configure reusable policies, uploaded grading guidelines, and per-target severity overrides in Promptfoo Enterprise to match your security requirements.
+description: Configure reusable policies, uploaded grading guidelines, and plugin severity overrides in Promptfoo Enterprise to match application security requirements.
 ---
 
 # Policies and Grading Customization
 
-Use the **Policies** menu to tailor red team testing to your application's requirements. These instructions cover the Enterprise on-prem interface; available controls can differ in hosted deployments.
+Use the **Policy Library**, **Grading Guidelines**, and **Severity Overrides** pages to tailor red team testing to your application's requirements. These instructions cover the Enterprise on-prem interface; available controls can differ by release and in hosted deployments.
 
-| Your goal                                 | Control                | What it changes                                          |
-| ----------------------------------------- | ---------------------- | -------------------------------------------------------- |
-| Test an application-specific rule         | **Policy Library**     | The behavior that generated attacks try to violate       |
-| Review failures against a policy document | **Grading Guidelines** | Saved FAIL results that may be revised to PASS           |
-| Adjust the risk assigned to a plugin      | **Severity Overrides** | Severity levels used by selected targets in future scans |
+| Your goal                                 | Control                | What it changes                                           |
+| ----------------------------------------- | ---------------------- | --------------------------------------------------------- |
+| Test an application-specific rule         | **Policy Library**     | The behavior that generated attacks try to violate        |
+| Review failures against a policy document | **Grading Guidelines** | Saved FAIL results that may be revised to PASS            |
+| Adjust the risk assigned to a plugin      | **Severity Overrides** | Plugin severity levels used during future test generation |
 
 Select the intended team before creating these resources. Your role needs permission to view or manage the relevant resource. Applying guidelines to results also requires permission to update evals; attaching a severity set requires permission to update the target and severity overrides.
 
 ## Reusable policies
 
-1. Open **Policies → Policy Library** and select **Create Policy**.
+1. Open **Red Team → Policy Library** and select **Create**.
 2. Enter a name, **Policy Text**, and severity. The description is optional. Write a rule that can be tested, such as: "The assistant must not disclose another customer's order details."
 3. Select **Save**.
 4. In a scan template or plugin collection, open **Custom Policies**, select **Add from Library**, choose the policies, and select **Add** or **Apply**. Save the template or collection.
@@ -38,7 +38,7 @@ Guidelines are documents belonging to a team. Use them when the default grader n
 
 ### Upload a document
 
-1. Open **Policies → Grading Guidelines** and select **Upload Grading Guideline**.
+1. Open **Red Team → Grading Guidelines** and select **Upload Grading Guideline**.
 2. Enter a name and upload a PDF, TXT, or Markdown file, or paste text into **Document Text**. PDF files can be up to 10 MB.
 3. Review the extracted text, then select **Upload**. Open the saved guideline to inspect **Document Content** or download the saved text.
 
@@ -46,11 +46,11 @@ Use a PDF with extractable text. If the preview is empty or incomplete, paste th
 
 ### Apply guidelines to results
 
-On-prem review requires server-side jobs and a configured **Agent Provider**. If the guideline page shows **Configure Agent Provider**, ask an administrator to configure it under **Organization → Global Providers → Agent Provider**.
+On-prem review requires a configured **Agent Provider**. Ask an administrator to configure it on the **Agent Provider** settings page (`/server/edit/agentProvider`).
 
 1. Open the red team eval's results.
 2. Select **Apply Grading Guidelines**.
-3. Review the selected documents. All available guidelines from the eval's team are selected initially; clear any that should not apply.
+3. Review the selected documents. All guidelines shown in the dialog are selected initially; clear any that should not apply. If an expected guideline is missing, check the active team before opening the dialog.
 4. Confirm the selected guidelines and follow the progress in the results view.
 
 This reviews saved responses, without sending new probes to the target. It reviews all FAIL results in the eval, rather than only the rows currently visible through a filter. A failure can be confirmed or revised to PASS; a revised result receives a passing score and a review reason.
@@ -67,21 +67,24 @@ You can apply a saved guideline as soon as its document text is available. For g
 
 Use severity overrides when a plugin's default risk level does not match your application. For example, a team might classify unauthorized financial commitments as critical for a customer-facing purchasing assistant.
 
-1. Open **Policies → Severity Overrides** and create an override. Enter a name and optional description.
-2. Select **Choose Plugins to Override**, choose at least one plugin, set its severity, and save.
-3. Open the target's **Plugin Severities** page and choose the set under **Selected severity set**. The selection saves automatically.
+1. Open **Red Team → Plugins**, select **Severity Overrides** in the sidebar, and create an override. Enter a name and optional description.
+2. Change at least one plugin's severity in the table, then save.
+3. Open the target's **Plugin Severities** page and choose the set under **Selected severities**. The selection saves automatically.
 
-A set belongs to a team and affects only targets that select it. Editing a set affects future scans for every linked target; check the associated targets before changing it.
+A set belongs to a team. Editing a set affects future scans that load it; check the associated targets before changing it.
 
-During new test generation, a selected set's entries override severities configured for the same plugins in the scan. Plugins without an entry keep their configured severity or the Promptfoo default. Select **Promptfoo Defaults** on the target to remove its association with the set.
+For CLI generation, use a saved Enterprise target provider (`promptfoo://provider/<target-id>`), including for on-prem targets. With a single saved target provider, its selected set's entries override severities configured for the same plugins in the scan. Plugins without an entry keep their configured severity or the Promptfoo default. Select **Promptfoo Defaults** on the target to remove its association with the set.
+
+For CLI configs with multiple targets, severity lookup uses only the first provider. If it is a saved target provider, its overrides apply to the shared plugin list for every target in the scan. Generate each target separately when targets need different severity sets.
 
 Severity controls risk classification, not whether an attack passes or fails. Saving an override does not regrade existing results. To change an existing finding, use its severity control in [Findings and Reports](./findings.md#viewing-vulnerabilities).
 
 ## Check your configuration
 
 - If a library policy is missing, check the active team and whether the owning team shared it.
-- If **Apply Grading Guidelines** is missing, check server-side jobs, the Agent Provider, and your eval permissions.
+- If **Apply Grading Guidelines** is missing, check the Agent Provider and your eval permissions.
 - If a severity override has no effect, check that the target selects it and generate a new scan; an existing test file retains its saved severities.
+- Local providers using `config.linkedTargetId` do not load the linked target's severity set during CLI generation. Use the saved target provider directly to load the set, or [configure plugin severities explicitly](/docs/red-team/configuration/#severity-levels) for the local provider.
 
 ## Related documentation
 
