@@ -39,6 +39,46 @@ import type { ClaudeThinkingConfig } from '../anthropic/types';
 export const coerceStrToNum = (value: string | number | undefined): number | undefined =>
   value === undefined ? undefined : typeof value === 'string' ? Number(value) : value;
 
+function getNovaTokenUsage(responseJson: any): TokenUsage {
+  const usage = responseJson?.usage;
+  if (!usage) {
+    return missingBedrockTokenUsage();
+  }
+
+  return {
+    prompt: coerceStrToNum(usage.inputTokens),
+    completion: coerceStrToNum(usage.outputTokens),
+    total: coerceStrToNum(usage.totalTokens),
+    numRequests: 1,
+  };
+}
+
+function getCohereTokenUsage(responseJson: any): TokenUsage {
+  if (responseJson?.meta?.billed_units) {
+    const inputTokens = coerceStrToNum(responseJson.meta.billed_units.input_tokens);
+    const outputTokens = coerceStrToNum(responseJson.meta.billed_units.output_tokens);
+
+    return {
+      prompt: inputTokens,
+      completion: outputTokens,
+      total: (inputTokens ?? 0) + (outputTokens ?? 0),
+      numRequests: 1,
+    };
+  }
+
+  // Return undefined values when token counts aren't provided by the API
+  return missingBedrockTokenUsage();
+}
+
+function missingBedrockTokenUsage(): TokenUsage {
+  return {
+    prompt: undefined,
+    completion: undefined,
+    total: undefined,
+    numRequests: 1,
+  };
+}
+
 export type BedrockModelFamily =
   | 'claude'
   | 'nova'
@@ -747,12 +787,7 @@ const BEDROCK_MISTRAL_CHAT_MODEL = {
       };
     }
 
-    return {
-      prompt: undefined,
-      completion: undefined,
-      total: undefined,
-      numRequests: 1,
-    };
+    return missingBedrockTokenUsage();
   },
 } satisfies IBedrockModel;
 
@@ -1212,12 +1247,7 @@ export const getLlamaModelHandler = (version: LlamaVersion) => {
       }
 
       // Return undefined values when token counts aren't provided by the API
-      return {
-        prompt: undefined,
-        completion: undefined,
-        total: undefined,
-        numRequests: 1,
-      };
+      return missingBedrockTokenUsage();
     },
   };
 };
@@ -1336,24 +1366,8 @@ export const BEDROCK_MODEL = {
       return params;
     },
     output: (_config: BedrockOptions, responseJson: any) => novaOutputFromMessage(responseJson),
-    tokenUsage: (responseJson: any, _promptText: string): TokenUsage => {
-      const usage = responseJson?.usage;
-      if (!usage) {
-        return {
-          prompt: undefined,
-          completion: undefined,
-          total: undefined,
-          numRequests: 1,
-        };
-      }
-
-      return {
-        prompt: coerceStrToNum(usage.inputTokens),
-        completion: coerceStrToNum(usage.outputTokens),
-        total: coerceStrToNum(usage.totalTokens),
-        numRequests: 1,
-      };
-    },
+    tokenUsage: (responseJson: any, _promptText: string): TokenUsage =>
+      getNovaTokenUsage(responseJson),
   },
   /**
    * Amazon Nova 2 model handler with extended thinking (reasoning) support.
@@ -1489,24 +1503,8 @@ export const BEDROCK_MODEL = {
 
       return parts.join('\n\n');
     },
-    tokenUsage: (responseJson: any, _promptText: string): TokenUsage => {
-      const usage = responseJson?.usage;
-      if (!usage) {
-        return {
-          prompt: undefined,
-          completion: undefined,
-          total: undefined,
-          numRequests: 1,
-        };
-      }
-
-      return {
-        prompt: coerceStrToNum(usage.inputTokens),
-        completion: coerceStrToNum(usage.outputTokens),
-        total: coerceStrToNum(usage.totalTokens),
-        numRequests: 1,
-      };
-    },
+    tokenUsage: (responseJson: any, _promptText: string): TokenUsage =>
+      getNovaTokenUsage(responseJson),
   },
   CLAUDE_COMPLETION: {
     params: async (
@@ -1538,12 +1536,7 @@ export const BEDROCK_MODEL = {
     output: (_config: BedrockOptions, responseJson: any) => responseJson?.completion,
     tokenUsage: (responseJson: any, _promptText: string): TokenUsage => {
       if (!responseJson?.usage) {
-        return {
-          prompt: undefined,
-          completion: undefined,
-          total: undefined,
-          numRequests: 1,
-        };
+        return missingBedrockTokenUsage();
       }
 
       const usage = responseJson.usage;
@@ -1711,12 +1704,7 @@ export const BEDROCK_MODEL = {
     },
     tokenUsage: (responseJson: any, _promptText: string): TokenUsage => {
       if (!responseJson?.usage) {
-        return {
-          prompt: undefined,
-          completion: undefined,
-          total: undefined,
-          numRequests: 1,
-        };
+        return missingBedrockTokenUsage();
       }
 
       // Bedrock relays the Anthropic Messages `usage` object, so read it with the shared
@@ -1821,27 +1809,8 @@ export const BEDROCK_MODEL = {
       return params;
     },
     output: (_config: BedrockOptions, responseJson: any) => responseJson?.generations?.[0]?.text,
-    tokenUsage: (responseJson: any, _promptText: string): TokenUsage => {
-      if (responseJson?.meta?.billed_units) {
-        const inputTokens = coerceStrToNum(responseJson.meta.billed_units.input_tokens);
-        const outputTokens = coerceStrToNum(responseJson.meta.billed_units.output_tokens);
-
-        return {
-          prompt: inputTokens,
-          completion: outputTokens,
-          total: (inputTokens ?? 0) + (outputTokens ?? 0),
-          numRequests: 1,
-        };
-      }
-
-      // Return undefined values when token counts aren't provided by the API
-      return {
-        prompt: undefined,
-        completion: undefined,
-        total: undefined,
-        numRequests: 1,
-      };
-    },
+    tokenUsage: (responseJson: any, _promptText: string): TokenUsage =>
+      getCohereTokenUsage(responseJson),
   },
   COHERE_COMMAND_R: {
     params: async (
@@ -1882,27 +1851,8 @@ export const BEDROCK_MODEL = {
       return params;
     },
     output: (_config: BedrockOptions, responseJson: any) => responseJson?.text,
-    tokenUsage: (responseJson: any, _promptText: string): TokenUsage => {
-      if (responseJson?.meta?.billed_units) {
-        const inputTokens = coerceStrToNum(responseJson.meta.billed_units.input_tokens);
-        const outputTokens = coerceStrToNum(responseJson.meta.billed_units.output_tokens);
-
-        return {
-          prompt: inputTokens,
-          completion: outputTokens,
-          total: (inputTokens ?? 0) + (outputTokens ?? 0),
-          numRequests: 1,
-        };
-      }
-
-      // Return undefined values when token counts aren't provided by the API
-      return {
-        prompt: undefined,
-        completion: undefined,
-        total: undefined,
-        numRequests: 1,
-      };
-    },
+    tokenUsage: (responseJson: any, _promptText: string): TokenUsage =>
+      getCohereTokenUsage(responseJson),
   },
   DEEPSEEK: {
     params: async (
@@ -2031,12 +1981,7 @@ ${prompt}
       }
 
       // Return undefined values when token counts aren't provided by the API
-      return {
-        prompt: undefined,
-        completion: undefined,
-        total: undefined,
-        numRequests: 1,
-      };
+      return missingBedrockTokenUsage();
     },
   },
   MISTRAL_CHAT: BEDROCK_MISTRAL_CHAT_MODEL,
@@ -2146,12 +2091,7 @@ ${prompt}
       }
 
       // Return undefined values when token counts aren't provided by the API
-      return {
-        prompt: undefined,
-        completion: undefined,
-        total: undefined,
-        numRequests: 1,
-      };
+      return missingBedrockTokenUsage();
     },
   },
   QWEN: {

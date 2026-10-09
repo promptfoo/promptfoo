@@ -76,7 +76,7 @@ describeEvaluator('evaluator transforms', () => {
         expect(mockApiProvider.callApi).toHaveBeenCalledExactlyOnceWith(
           transformedPrompt,
           expect.objectContaining({ vars: expect.objectContaining(inputs) }),
-          undefined,
+          expect.objectContaining({ onResponseHeaders: expect.any(Function) }),
         );
       } else {
         expect(summary.results[0].error).toContain('PDF attachment differs');

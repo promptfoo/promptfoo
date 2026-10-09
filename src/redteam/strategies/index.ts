@@ -4,6 +4,7 @@ import logger from '../../logger';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { safeJoin } from '../../util/pathUtils';
 import { isCustomStrategy } from '../constants/strategies';
+import { addArabicPresentationForms } from './arabicPresentationForms';
 import { addAuthoritativeMarkupInjectionTestCases } from './authoritativeMarkupInjection';
 import { addBase64Encoding } from './base64';
 import { addBestOfNTestCases } from './bestOfN';
@@ -72,6 +73,15 @@ export const Strategies: Strategy[] = [
       logger.debug(`Adding Homoglyph encoding to ${testCases.length} test cases`);
       const newTestCases = addHomoglyphs(testCases, injectVar);
       logger.debug(`Added ${newTestCases.length} Homoglyph encoded test cases`);
+      return newTestCases;
+    },
+  },
+  {
+    id: 'arabic-presentation-forms',
+    action: async (testCases, injectVar) => {
+      logger.debug(`Adding Arabic presentation forms encoding to ${testCases.length} test cases`);
+      const newTestCases = addArabicPresentationForms(testCases, injectVar);
+      logger.debug(`Added ${newTestCases.length} Arabic presentation forms encoded test cases`);
       return newTestCases;
     },
   },

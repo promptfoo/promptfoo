@@ -4,6 +4,7 @@ import { disableCache, enableCache, fetchWithCache } from '../../../src/cache';
 import logger from '../../../src/logger';
 import { OpenAiCompletionProvider } from '../../../src/providers/openai/completion';
 import { mockProcessEnv } from '../../util/utils';
+import { createMockFetchResponse } from '../mockProviderResponses';
 import { getOpenAiMissingApiKeyMessage, restoreEnvVar } from './shared';
 
 vi.mock('../../../src/cache');
@@ -537,14 +538,11 @@ describe('OpenAI Provider', () => {
     });
 
     it('should handle responses without usage information', async () => {
-      mockFetchWithCache.mockResolvedValue({
-        data: {
+      mockFetchWithCache.mockResolvedValue(
+        createMockFetchResponse({
           choices: [{ text: 'Test output' }],
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+        }),
+      );
 
       const provider = new OpenAiCompletionProvider('text-davinci-003');
       const result = await provider.callApi('Test prompt');

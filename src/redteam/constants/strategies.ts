@@ -86,6 +86,7 @@ export const DATASET_PLUGINS = [
 ] as const;
 
 export const ADDITIONAL_STRATEGIES = [
+  'arabic-presentation-forms',
   'audio',
   'authoritative-markup-injection',
   'base64',
@@ -163,6 +164,7 @@ export const CONFIGURABLE_STRATEGIES_SET: ReadonlySet<string> = new Set(CONFIGUR
  * Set of strategy IDs that represent encoding transformations where originalText should be shown
  */
 export const ENCODING_STRATEGIES = new Set([
+  'arabic-presentation-forms',
   'base64',
   'hex',
   'rot13',
