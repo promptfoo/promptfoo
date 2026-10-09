@@ -74,6 +74,7 @@ function projectOutputMetadata<T>(
   stripOutput: boolean,
   responseMetadata: ProviderResponse['metadata'],
   testMetadata?: AtomicTestCase['metadata'],
+  projectCapturedTarget = true,
 ): T {
   if (!stripOutput || !metadata || !responseMetadata || typeof metadata !== 'object') {
     return metadata;
@@ -85,6 +86,16 @@ function projectOutputMetadata<T>(
         (testMetadata && isDeepStrictEqual(value, testMetadata[key]))
       ) {
         return [[key, value]];
+      }
+      if (key === 'redteamTargetMetadata' && projectCapturedTarget) {
+        const targetMetadata = asRecord(value);
+        if (targetMetadata) {
+          // Apply the provider metadata projection at this one captured boundary.
+          // Other nested model metadata keeps the existing media-reference rules.
+          return [
+            [key, projectOutputMetadata(targetMetadata, true, targetMetadata, undefined, false)],
+          ];
+        }
       }
       return key === 'audio' || key === 'blobUris'
         ? []
@@ -524,10 +535,9 @@ function redactSensitiveHeaders(
 // `audio`, arbitrary model output) — walking arbitrary subtrees risks rewriting user-controlled
 // content that legitimately uses an `http` key (see
 // https://github.com/promptfoo/promptfoo/pull/8876#issuecomment-4315002350).
-function redactHttpHeadersOnMetadata<T>(
-  metadata: T,
-  options?: { legacyHeadersSource?: unknown; redactLegacyHeaders?: boolean },
-): T {
+type HeaderRedactionOptions = { legacyHeadersSource?: unknown; redactLegacyHeaders?: boolean };
+
+function redactTransportHeadersOnMetadata<T>(metadata: T, options?: HeaderRedactionOptions): T {
   if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) {
     return metadata;
   }
@@ -594,10 +604,33 @@ function redactHttpHeadersOnMetadata<T>(
   return nextMetadata as T;
 }
 
+function redactCapturedTargetMetadata<T>(metadata: T): T {
+  const record = asRecord(metadata);
+  if (!record || !Object.prototype.hasOwnProperty.call(record, 'redteamTargetMetadata')) {
+    return metadata;
+  }
+  // This executor-owned snapshot contains the selected provider's metadata. Its own
+  // legacy headers are transport data too. Follow only this one known metadata path.
+  const targetMetadata = record.redteamTargetMetadata;
+  const redactedTargetMetadata = redactTransportHeadersOnMetadata(targetMetadata, {
+    redactLegacyHeaders: true,
+  });
+  return redactedTargetMetadata === targetMetadata
+    ? metadata
+    : ({ ...record, redteamTargetMetadata: redactedTargetMetadata } as T);
+}
+
+function redactHttpHeadersOnMetadata<T>(metadata: T, options?: HeaderRedactionOptions): T {
+  return redactCapturedTargetMetadata(redactTransportHeadersOnMetadata(metadata, options));
+}
+
 // Walk a `GradingResult`-shaped value and redact `metadata.http` on the result and
 // every nested `componentResults[]`. Limits recursion to the documented schema
 // (`componentResults` only) — does not descend into arbitrary subtrees.
-function redactHttpHeadersOnGradingResult<T>(gradingResult: T): T {
+function redactHttpHeadersOnGradingResult<T>(
+  gradingResult: T,
+  redactMetadata = redactHttpHeadersOnMetadata,
+): T {
   if (!gradingResult || typeof gradingResult !== 'object' || Array.isArray(gradingResult)) {
     return gradingResult;
   }
@@ -607,7 +640,7 @@ function redactHttpHeadersOnGradingResult<T>(gradingResult: T): T {
   const next: Record<string, unknown> = { ...gr };
 
   if (gr.metadata !== undefined) {
-    const redacted = redactHttpHeadersOnMetadata(gr.metadata);
+    const redacted = redactMetadata(gr.metadata);
     if (redacted !== gr.metadata) {
       next.metadata = redacted;
       mutated = true;
@@ -617,7 +650,7 @@ function redactHttpHeadersOnGradingResult<T>(gradingResult: T): T {
   if (Array.isArray(gr.componentResults)) {
     let componentMutated = false;
     const nextComponents = gr.componentResults.map((component) => {
-      const redacted = redactHttpHeadersOnGradingResult(component);
+      const redacted = redactHttpHeadersOnGradingResult(component, redactMetadata);
       if (redacted !== component) {
         componentMutated = true;
       }
@@ -632,12 +665,15 @@ function redactHttpHeadersOnGradingResult<T>(gradingResult: T): T {
   return (mutated ? next : gradingResult) as T;
 }
 
-function sanitizeResponseForDb<T extends ProviderResponse | null | undefined>(response: T): T {
+function sanitizeResponseForDb<T extends ProviderResponse | null | undefined>(
+  response: T,
+  redactMetadata = redactHttpHeadersOnMetadata,
+): T {
   if (!response) {
     return response;
   }
 
-  const redactedMetadata = redactHttpHeadersOnMetadata((response as ProviderResponse).metadata, {
+  const redactedMetadata = redactMetadata((response as ProviderResponse).metadata, {
     redactLegacyHeaders: true,
   });
   if (redactedMetadata === (response as ProviderResponse).metadata) {
@@ -781,34 +817,34 @@ function surfaceTraceMetadata(metadata: Record<string, unknown> | null | undefin
   };
 }
 
-// Apply the credential-header redaction trio to the already-`sanitizeForDb`'d fields bound for
-// the database or a JSONL artifact. Single source of truth for which redactor pairs with which
-// field, shared by DB persistence (`createFromEvaluateResult` / `createManyFromEvaluateResult`)
-// and the JSONL artifact boundary (`sanitizeResultForJsonlArtifact`) so a newly added sensitive
-// field can't be redacted on one path while leaking from another.
-function redactSensitiveResultFieldsForDb<
-  R extends ProviderResponse | null | undefined,
-  G,
-  M,
->(fields: {
-  response: R;
-  gradingResult: G;
-  metadata: M;
-}): {
+// Shared credential-header redaction for persistence and artifact projections. Model
+// export/save use captured-only mode to protect the executor-owned target snapshot while
+// preserving those paths' existing treatment of direct provider headers and live objects.
+function redactSensitiveResultFieldsForDb<R extends ProviderResponse | null | undefined, G, M>(
+  fields: { response: R; gradingResult: G; metadata: M },
+  { capturedTargetOnly = false }: { capturedTargetOnly?: boolean } = {},
+): {
   response: R;
   gradingResult: G;
   metadata: M;
 } {
+  const redactMetadata = capturedTargetOnly
+    ? redactCapturedTargetMetadata
+    : redactHttpHeadersOnMetadata;
   return {
-    response: sanitizeResponseForDb(fields.response),
-    gradingResult: sanitizeGradingResultForDb(fields.gradingResult),
+    response: sanitizeResponseForDb(fields.response, redactMetadata),
+    gradingResult: capturedTargetOnly
+      ? redactHttpHeadersOnGradingResult(fields.gradingResult, redactMetadata)
+      : sanitizeGradingResultForDb(fields.gradingResult),
     // Pass the response metadata as the legacy-header provenance source (see
     // sanitizeMetadataForDb). fields.response is the raw input, so its headers are still
     // cleartext here and can be matched against an echoed result-level metadata.headers.
-    metadata: sanitizeMetadataForDb(
-      fields.metadata,
-      (fields.response as ProviderResponse | null | undefined)?.metadata,
-    ),
+    metadata: capturedTargetOnly
+      ? redactMetadata(fields.metadata)
+      : sanitizeMetadataForDb(
+          fields.metadata,
+          (fields.response as ProviderResponse | null | undefined)?.metadata,
+        ),
   };
 }
 
@@ -909,6 +945,41 @@ export function sanitizeResultForJsonlArtifact<T extends object>(
   } as T;
 }
 
+/** A stored media replacement cannot establish the original JSON numeric tokens. */
+export function preserveResponseOutputProvenance(
+  response: ProviderResponse | null | undefined,
+  originalOutput: ProviderResponse['output'],
+): ProviderResponse | null | undefined {
+  if (!response || Object.is(response.output, originalOutput)) {
+    return response;
+  }
+  return { ...response, metadata: { ...response.metadata, redteamOutputIsText: false } };
+}
+
+function withResponseOutputProvenance(
+  metadata: EvaluateResult['metadata'],
+  response: ProviderResponse | null | undefined,
+): EvaluateResult['metadata'] {
+  return response?.metadata?.redteamOutputIsText === false
+    ? { ...metadata, redteamOutputIsText: false }
+    : metadata;
+}
+
+/** Project the duplicated target snapshot using the same media lifecycle as response metadata. */
+async function externalizeCapturedResultMetadata(
+  metadata: EvaluateResult['metadata'],
+  context: Parameters<typeof extractAndStoreBinaryData>[1],
+): Promise<EvaluateResult['metadata']> {
+  if (!metadata || !Object.prototype.hasOwnProperty.call(metadata, 'redteamTargetMetadata')) {
+    return metadata;
+  }
+  const extracted = await extractAndStoreBinaryData(
+    { metadata: { redteamTargetMetadata: metadata.redteamTargetMetadata } },
+    context,
+  );
+  return { ...metadata, redteamTargetMetadata: extracted?.metadata?.redteamTargetMetadata };
+}
+
 export default class EvalResult {
   static async createFromEvaluateResult(
     evalId: string,
@@ -935,13 +1006,24 @@ export default class EvalResult {
 
     // Persist trace linkage inside a private metadata namespace so it survives
     // EvalResult round-trips without a Drizzle schema migration.
-    const persistedMetadata = persistTraceMetadata(metadata, traceId, evaluationId);
+    const persistedMetadata = persistTraceMetadata(
+      await externalizeCapturedResultMetadata(metadata, {
+        evalId,
+        testIdx: result.testIdx,
+        promptIdx: result.promptIdx,
+      }),
+      traceId,
+      evaluationId,
+    );
 
-    const processedResponse = await extractAndStoreBinaryData(result.response, {
-      evalId,
-      testIdx: result.testIdx,
-      promptIdx: result.promptIdx,
-    });
+    const processedResponse = preserveResponseOutputProvenance(
+      await extractAndStoreBinaryData(result.response, {
+        evalId,
+        testIdx: result.testIdx,
+        promptIdx: result.promptIdx,
+      }),
+      result.response?.output,
+    );
 
     // Sanitize all JSON fields to remove circular references and non-serializable values.
     // `testCase` and `prompt` can contain a resolved runtime provider under
@@ -967,7 +1049,7 @@ export default class EvalResult {
       provider: sanitizeProvider(provider),
       latencyMs,
       cost,
-      metadata: sanitizeForDb(persistedMetadata),
+      metadata: sanitizeForDb(withResponseOutputProvenance(persistedMetadata, processedResponse)),
       failureReason,
     };
     if (persist) {
@@ -993,16 +1075,27 @@ export default class EvalResult {
     const returnResults: EvalResult[] = [];
     const processedResults: EvaluateResult[] = [];
     for (const result of results) {
-      const processedResponse = isBlobStorageEnabled()
-        ? await extractAndStoreBinaryData(result.response, {
-            evalId,
-            testIdx: result.testIdx,
-            promptIdx: result.promptIdx,
-          })
-        : result.response;
+      const processedResponse = preserveResponseOutputProvenance(
+        isBlobStorageEnabled()
+          ? await extractAndStoreBinaryData(result.response, {
+              evalId,
+              testIdx: result.testIdx,
+              promptIdx: result.promptIdx,
+            })
+          : result.response,
+        result.response?.output,
+      );
       processedResults.push({
         ...serializeResultProviderRefs(result),
         response: processedResponse ?? undefined,
+        metadata: withResponseOutputProvenance(
+          await externalizeCapturedResultMetadata(result.metadata, {
+            evalId,
+            testIdx: result.testIdx,
+            promptIdx: result.promptIdx,
+          }),
+          processedResponse,
+        ),
       });
     }
 
@@ -1244,11 +1337,33 @@ export default class EvalResult {
       pluginId: _pluginId,
       ...rest
     } = serializeResultProviderRefs(this);
+    const blobContext = { evalId: this.evalId, testIdx: this.testIdx, promptIdx: this.promptIdx };
+    const processedResponse =
+      this.response?.metadata &&
+      Object.prototype.hasOwnProperty.call(this.response.metadata, 'redteamTargetMetadata')
+        ? preserveResponseOutputProvenance(
+            await extractAndStoreBinaryData(this.response, blobContext),
+            this.response.output,
+          )
+        : this.response;
     const persistedValues = {
       ...rest,
       error: this.error ?? null,
-      gradingResult: sanitizeGradingResultForDb(rest.gradingResult),
-      metadata: persistTraceMetadata(this.metadata, this.traceId, this.evaluationId),
+      ...redactSensitiveResultFieldsForDb(
+        {
+          response: processedResponse,
+          gradingResult: sanitizeGradingResultForDb(rest.gradingResult),
+          metadata: persistTraceMetadata(
+            withResponseOutputProvenance(
+              await externalizeCapturedResultMetadata(this.metadata, blobContext),
+              processedResponse,
+            ),
+            this.traceId,
+            this.evaluationId,
+          ),
+        },
+        { capturedTargetOnly: true },
+      ),
     };
     //check if this exists in the db
     if (this.persisted) {
@@ -1274,7 +1389,8 @@ export default class EvalResult {
       shouldStripMetadata,
     } = stripFlags;
 
-    const response = projectProviderResponse(this.response, {
+    const redacted = redactSensitiveResultFieldsForDb(this, { capturedTargetOnly: true });
+    const response = projectProviderResponse(redacted.response, {
       stripMetadata: shouldStripMetadata,
       stripOutput: shouldStripResponseOutput,
     });
@@ -1309,7 +1425,7 @@ export default class EvalResult {
       error: this.error || undefined,
       gradingResult: shouldStripGradingResult
         ? null
-        : projectGradingResult(this.gradingResult, shouldStripPromptText),
+        : projectGradingResult(redacted.gradingResult, shouldStripPromptText),
       id: this.id,
       latencyMs: this.latencyMs,
       namedScores: this.namedScores,
@@ -1329,9 +1445,9 @@ export default class EvalResult {
       metadata: shouldStripMetadata
         ? {}
         : projectOutputMetadata(
-            this.metadata,
+            redacted.metadata,
             shouldStripResponseOutput,
-            this.response?.metadata,
+            redacted.response?.metadata,
             this.testCase.metadata,
           ),
       failureReason: this.failureReason,

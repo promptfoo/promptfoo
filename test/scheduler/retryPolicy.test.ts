@@ -38,6 +38,22 @@ describe('getRetryDelay', () => {
 });
 
 describe('shouldRetry', () => {
+  it.each(['timeout', 'network', '503', '429 rate limit'])(
+    'does not retry fatal grading configuration errors containing %s',
+    (message) => {
+      const error = new Error(message);
+      error.name = 'RedteamGradingConfigError';
+      expect(shouldRetry(0, error, false, DEFAULT_RETRY_POLICY)).toBe(false);
+      expect(shouldRetry(0, error, true, DEFAULT_RETRY_POLICY)).toBe(false);
+    },
+  );
+
+  it('keeps retries disabled when maxRetries is zero', () => {
+    const policy = { ...DEFAULT_RETRY_POLICY, maxRetries: 0 };
+    expect(shouldRetry(0, new Error('network timeout'), false, policy)).toBe(false);
+    expect(shouldRetry(0, undefined, true, policy)).toBe(false);
+  });
+
   it('should retry on rate limit error', () => {
     const result = shouldRetry(0, undefined, true, DEFAULT_RETRY_POLICY);
     expect(result).toBe(true);

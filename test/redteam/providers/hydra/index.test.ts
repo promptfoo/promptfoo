@@ -312,6 +312,7 @@ describe('HydraProvider', () => {
             result.output as string,
             undefined,
             'pii:social',
+            true,
           ),
           redteamGradingAssertionHash: getGradingAssertionHash(assertion),
         });
@@ -1722,47 +1723,55 @@ describe('HydraProvider', () => {
       });
     });
 
-    it('passes target response evidence and image outputs into the grader', async () => {
-      mockAgentProvider.callApi.mockResolvedValue({
-        output: 'Attack message',
-        tokenUsage: { total: 100, prompt: 50, completion: 50 },
-      });
+    it.each([true, false])(
+      'passes target output type into the grader (text: %s)',
+      async (outputIsText) => {
+        const output = outputIsText ? '84' : { answer: 84 };
+        const normalizedOutput = outputIsText ? output : JSON.stringify(output);
+        mockAgentProvider.callApi.mockResolvedValue({
+          output: 'Attack message',
+          tokenUsage: { total: 100, prompt: 50, completion: 50 },
+        });
 
-      mockTargetProvider.callApi.mockResolvedValue({
-        output: 'Target response',
-        raw: JSON.stringify({ finalResponse: 'Target response', items: ['raw evidence'] }),
-        images: [{ data: 'data:image/png;base64,abc123', mimeType: 'image/png' }],
-      });
+        mockTargetProvider.callApi.mockResolvedValue({
+          output,
+          raw: JSON.stringify({ finalResponse: 'Target response', items: ['raw evidence'] }),
+          images: [{ data: 'data:image/png;base64,abc123', mimeType: 'image/png' }],
+        });
 
-      const provider = new HydraProvider({
-        injectVar: 'input',
-        maxTurns: 1,
-      });
+        const provider = new HydraProvider({
+          injectVar: 'input',
+          maxTurns: 1,
+        });
 
-      const context: CallApiContextParams = {
-        originalProvider: mockTargetProvider,
-        vars: { input: 'test goal' },
-        prompt: { raw: 'test prompt', label: 'test' },
-        test: {
-          assert: [{ type: 'harmful:test' }],
-          metadata: { goal: 'test goal', pluginId: 'harmful:test' },
-        } as any,
-      };
+        const context: CallApiContextParams = {
+          originalProvider: mockTargetProvider,
+          vars: { input: 'test goal' },
+          prompt: { raw: 'test prompt', label: 'test' },
+          test: {
+            assert: [{ type: 'harmful:test' }],
+            metadata: { goal: 'test goal', pluginId: 'harmful:test' },
+          } as any,
+        };
 
-      await provider.callApi('', context);
+        const result = await provider.callApi('', context);
+        expect(result.output).toBe(normalizedOutput);
+        expect(result.metadata.redteamOutputIsText).toBe(outputIsText);
+        expect(mockGrader.getResult.mock.calls[0][7]).toMatchObject({ outputIsText });
 
-      const gradingContext = mockGrader.getResult.mock.calls[0][7] as {
-        imageOutputs?: Array<{ data?: string; mimeType?: string }>;
-        providerResponse?: { output?: unknown; raw?: unknown };
-      };
-      expect(gradingContext.imageOutputs).toEqual([
-        { data: 'data:image/png;base64,abc123', mimeType: 'image/png' },
-      ]);
-      expect(gradingContext.providerResponse).toMatchObject({
-        output: 'Target response',
-        raw: JSON.stringify({ finalResponse: 'Target response', items: ['raw evidence'] }),
-      });
-    });
+        const gradingContext = mockGrader.getResult.mock.calls[0][7] as {
+          imageOutputs?: Array<{ data?: string; mimeType?: string }>;
+          providerResponse?: { output?: unknown; raw?: unknown };
+        };
+        expect(gradingContext.imageOutputs).toEqual([
+          { data: 'data:image/png;base64,abc123', mimeType: 'image/png' },
+        ]);
+        expect(gradingContext.providerResponse).toMatchObject({
+          output: normalizedOutput,
+          raw: JSON.stringify({ finalResponse: 'Target response', items: ['raw evidence'] }),
+        });
+      },
+    );
   });
 
   describe('callApi() - scan learning', () => {

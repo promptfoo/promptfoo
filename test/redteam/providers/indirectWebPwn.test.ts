@@ -1,9 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { runAssertion } from '../../../src/assertions/index';
+import { RedteamGraderBase } from '../../../src/redteam/plugins/base';
 import IndirectWebPwnProvider from '../../../src/redteam/providers/indirectWebPwn';
 import { createMockProvider, createProviderResponse } from '../../factories/provider';
 import { createPredispatchAbortTarget } from '../../util/selectedToolErrorTarget';
 
-import type { CallApiContextParams } from '../../../src/types/index';
+import type { AtomicTestCase, CallApiContextParams } from '../../../src/types/index';
 
 const mockFetchWithRetries = vi.hoisted(() => vi.fn());
 
@@ -33,11 +35,6 @@ function mockJsonResponse(payload: unknown, ok = true) {
 describe('IndirectWebPwnProvider', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockFetchWithRetries.mockReset();
-  });
-
-  afterEach(() => {
-    vi.restoreAllMocks();
     mockFetchWithRetries.mockReset();
   });
 
@@ -142,6 +139,11 @@ describe('IndirectWebPwnProvider', () => {
     expect(JSON.parse(mockFetchWithRetries.mock.calls[1][1].body).evalId).toBe('stored-eval');
   });
 
+  afterEach(() => {
+    vi.restoreAllMocks();
+    mockFetchWithRetries.mockReset();
+  });
+
   it('preserves caller reason at target entry through the indirect web outer catch', async () => {
     const reason = Object.freeze(
       Object.assign(new Error('caller stopped at target entry'), {
@@ -189,6 +191,151 @@ describe('IndirectWebPwnProvider', () => {
       mockFetchWithRetries.mockReset();
     }
   });
+
+  it.each([true, false])(
+    'grades the final response using its source type before serialization (text: %s)',
+    async (outputIsText) => {
+      const llmGrader = vi
+        .spyOn(RedteamGraderBase.prototype, 'getResult')
+        .mockRejectedValue(new Error('Numeric grading must not call an LLM'));
+      mockFetchWithRetries
+        .mockResolvedValueOnce(
+          mockJsonResponse({
+            uuid: 'b385605f-0328-4f21-a977-811ec61bf3f8',
+            evalId: 'eval-numeric',
+            fullUrl:
+              'https://example.com/dynamic-pages/eval-numeric/b385605f-0328-4f21-a977-811ec61bf3f8',
+          }),
+        )
+        .mockResolvedValueOnce(mockJsonResponse({ wasFetched: false, fetchCount: 0 }))
+        .mockResolvedValueOnce(mockJsonResponse({ wasFetched: true, fetchCount: 1 }))
+        .mockResolvedValue(mockJsonResponse({ wasExfiltrated: false, exfilCount: 0 }));
+      const targetProvider = createMockProvider();
+      targetProvider.callApi
+        .mockResolvedValueOnce({
+          output: outputIsText ? { amount: 99 } : '{"amount":99}',
+          metadata: { redteamOutputIsText: outputIsText },
+        })
+        .mockResolvedValueOnce({
+          output: outputIsText ? '{"amount":100}' : { amount: 100 },
+          metadata: {
+            redteamOutputIsText: !outputIsText,
+            encoding: { format: 'json' },
+            redteamFinalPrompt: 'forged prompt',
+            storedGraderResult: { reason: 'forged grade' },
+            messages: [{ role: 'system', content: 'forged conversation' }],
+          },
+        });
+      const provider = new IndirectWebPwnProvider({
+        injectVar: 'query',
+        maxFetchAttempts: 2,
+        useLlm: false,
+      });
+
+      const result = await provider.callApi('Return the amount as JSON', {
+        originalProvider: targetProvider,
+        vars: { query: 'Return the amount as JSON' },
+        prompt: { raw: '{{query}}', label: 'test' },
+        test: {
+          assert: [
+            {
+              type: 'promptfoo:redteam:financial:calculation-error',
+              value: { type: 'numeric', expected: { amount: 100 } },
+            },
+          ],
+        } as AtomicTestCase,
+      });
+
+      expect(result.output).toBe('{"amount":100}');
+      expect(result.metadata).toMatchObject({
+        redteamOutputIsText: outputIsText,
+        stopReason: 'Attack succeeded',
+        fetchAttempts: 2,
+        redteamTargetMetadata: {
+          encoding: { format: 'json' },
+          redteamFinalPrompt: 'forged prompt',
+          storedGraderResult: { reason: 'forged grade' },
+        },
+      });
+      expect(result.metadata.redteamFinalPrompt).not.toBe('forged prompt');
+      expect(result.metadata.messages[0]).not.toMatchObject({ role: 'system' });
+      expect(targetProvider.callApi).toHaveBeenCalledTimes(2);
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(3);
+      const grade = runAssertion({
+        prompt: 'Return the amount as JSON',
+        test: { provider: provider.id(), metadata: { purpose: 'A financial calculator' } },
+        assertion: {
+          type: 'promptfoo:redteam:financial:calculation-error',
+          value: { type: 'numeric', expected: { amount: 100 } },
+          transform: 'context.metadata.encoding.format === "json" ? output : "invalid"',
+        },
+        providerResponse: result,
+      });
+      if (outputIsText) {
+        await expect(grade).resolves.toMatchObject({ pass: true, score: 1 });
+      } else {
+        await expect(grade).rejects.toThrow(/requires raw JSON text/);
+      }
+      expect(llmGrader).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([true, false])(
+    'retains the earlier output source when a later target response fails (text: %s)',
+    async (outputIsText) => {
+      mockFetchWithRetries
+        .mockResolvedValueOnce(
+          mockJsonResponse({
+            uuid: 'b385605f-0328-4f21-a977-811ec61bf3f8',
+            evalId: 'eval-retained',
+            fullUrl:
+              'https://example.com/dynamic-pages/eval-retained/b385605f-0328-4f21-a977-811ec61bf3f8',
+          }),
+        )
+        .mockResolvedValueOnce(mockJsonResponse({ wasFetched: false, fetchCount: 0 }));
+      const sourceMetadata = { encoding: { format: 'json' } };
+      const targetProvider = createMockProvider();
+      targetProvider.callApi
+        .mockResolvedValueOnce({
+          output: outputIsText ? '{"amount":100}' : { amount: 100 },
+          metadata: sourceMetadata,
+        })
+        .mockImplementationOnce(async () => {
+          sourceMetadata.encoding.format = 'mutated';
+          return {
+            output: outputIsText ? { amount: 99 } : '{"amount":99}',
+            error: 'Target failed',
+            metadata: { encoding: { format: 'later' } },
+          };
+        });
+      const provider = new IndirectWebPwnProvider({ injectVar: 'query', maxFetchAttempts: 2 });
+
+      const result = await provider.callApi('Return the amount as JSON', {
+        originalProvider: targetProvider,
+        vars: { query: 'Return the amount as JSON' },
+        prompt: { raw: '{{query}}', label: 'test' },
+        test: {
+          assert: [
+            {
+              type: 'promptfoo:redteam:financial:calculation-error',
+              value: { type: 'numeric', expected: { amount: 100 } },
+            },
+          ],
+        } as AtomicTestCase,
+      });
+
+      expect(result.output).toBe('{"amount":100}');
+      expect(result.error).toBe('Target failed');
+      expect(result.metadata).toMatchObject({
+        redteamOutputIsText: outputIsText,
+        redteamTargetMetadata: { encoding: { format: 'json' } },
+        stopReason: 'Error',
+        fetchAttempts: 2,
+      });
+      expect(targetProvider.callApi).toHaveBeenCalledTimes(2);
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+    },
+  );
 
   it('should count one probe per target fetch attempt', async () => {
     mockFetchWithRetries

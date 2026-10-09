@@ -1,5 +1,12 @@
 import { randomUUID } from 'crypto';
 
+import {
+  getAssertionLeaves,
+  isExternalAssertionValue,
+  isNumericFinancialAssertion,
+  resolveExternalAssertionValue,
+  validateNumericReferenceMode,
+} from '../../assertions/utils';
 import { extractAndStoreBinaryData, isBlobStorageEnabled } from '../../blobs/extractor';
 import { shouldAttemptRemoteBlobUpload } from '../../blobs/remoteUpload';
 import cliState from '../../cliState';
@@ -46,6 +53,7 @@ import {
   accumulateTokenUsage,
 } from '../../util/tokenUsageUtils';
 import { TransformInputType, transform } from '../../util/transform';
+import { RedteamGradingConfigError } from '../grading/errors';
 import {
   getGradingAssertionHash,
   getGradingInputHash,
@@ -58,6 +66,7 @@ import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL, TEMPERATURE } from './constants';
 import type { TraceContextData } from '../../tracing/traceContext';
 import type { ProviderOptions } from '../../types/providers';
 import type { TransformContext, TransformFunction } from '../../types/transform';
+import type { RedteamGrader, RedteamGradingContext } from '../grading/types';
 import type { RedteamHistoryEntry } from '../types';
 
 export const BLOCKING_QUESTION_ANALYSIS_FEATURE_FLAG_TIMESTAMP = '2025-06-16T14:49:11-07:00';
@@ -473,6 +482,8 @@ class RedteamProviderManager {
 export const redteamProviderManager = new RedteamProviderManager();
 
 export type TargetResponse = {
+  /** Captured before object-valued target outputs are serialized. */
+  outputIsText?: boolean;
   traceContext?: TraceContextData | null;
   traceSummary?: string;
   image?: {
@@ -631,6 +642,17 @@ export async function getTargetResponse(
       },
     });
   }
+  // Detach numeric metadata before pacing or any later target call can mutate it.
+  const metadataSnapshot = snapshotTargetMetadata(
+    targetRespRaw,
+    context?.test as AtomicTestCase | undefined,
+  );
+  if (metadataSnapshot !== undefined) {
+    targetRespRaw = preserveSelectedError(
+      { ...targetRespRaw, metadata: metadataSnapshot ?? undefined },
+      targetRespRaw,
+    );
+  }
   if (
     !targetRespRaw.cached &&
     targetProvider.delay &&
@@ -664,6 +686,7 @@ export async function getTargetResponse(
       {
         ...(targetRespRaw as ProviderResponse),
         output,
+        outputIsText: typeof targetRespRaw.output === 'string',
         error: targetRespRaw.error,
         tokenUsage,
       },
@@ -680,6 +703,7 @@ export async function getTargetResponse(
     return {
       ...(targetRespRaw as ProviderResponse),
       output,
+      outputIsText: typeof targetRespRaw.output === 'string',
       tokenUsage,
     };
   }
@@ -688,6 +712,7 @@ export async function getTargetResponse(
     return {
       ...(targetRespRaw as ProviderResponse),
       output: '',
+      outputIsText: false,
       tokenUsage,
     };
   }
@@ -695,36 +720,198 @@ export async function getTargetResponse(
   return {
     ...(targetRespRaw as ProviderResponse),
     output: '',
+    outputIsText: false,
     error:
       'Target returned malformed response: expected either `output` or `error` property to be set. Empty strings are valid output values; null and undefined are not.',
     tokenUsage,
   };
 }
 
-interface TraceableRedteamGrader<TResult, TArgs extends unknown[]> {
-  id: string;
-  getResult: (
-    prompt: string,
-    output: string,
-    test: AtomicTestCase,
-    ...args: TArgs
-  ) => Promise<TResult>;
+interface RedteamGraderInput {
+  assertion?: AssertionOrSet;
+  targetProvider?: ApiProvider;
+  prompt?: CallApiContextParams['prompt'];
+  context?: CallApiContextParams;
+  preparedNumeric?: PreparedNumericGrading;
+  /** Original selected metadata captured before history media externalization. */
+  targetMetadata?: ProviderResponse['metadata'] | null;
+  /** Original output before history media extraction, for live numeric preparation only. */
+  targetOutput?: string;
 }
 
-/** Trace every strategy grader at one boundary, including graders with custom getResult methods. */
-export function runRedteamGrader<TResult, TArgs extends unknown[]>(
-  grader: TraceableRedteamGrader<TResult, TArgs>,
+type PreparedNumericGrading =
+  | { numeric: false }
+  | {
+      numeric: true;
+      output: string;
+      value: Assertion['value'];
+      gradingContext: RedteamGradingContext;
+    };
+
+/** Keep existing top-level selection, with support for grouped explicit numeric checks. */
+export function getRedteamAssertion(test: AtomicTestCase | undefined): AssertionOrSet | undefined {
+  const pluginId = test?.metadata?.pluginId;
+  const matching = test?.assert?.find(
+    (assertion) => assertion.type && assertion.type.includes(pluginId),
+  );
+  const matchingNumericChild =
+    !matching && typeof pluginId === 'string'
+      ? getAssertionLeaves(test?.assert).find(
+          (assertion) =>
+            isNumericFinancialAssertion(assertion) && assertion.type?.includes(pluginId),
+        )
+      : undefined;
+  const selected =
+    matching ?? matchingNumericChild ?? test?.assert?.find((assertion) => assertion.type);
+  return selected?.type === 'assert-set'
+    ? (getAssertionLeaves([selected]).find(isNumericFinancialAssertion) ?? selected)
+    : selected;
+}
+
+/** Resolve once before optional refusal shortcuts without invoking a legacy LLM grader. */
+export async function prepareNumericGrading(
+  input: Omit<RedteamGraderInput, 'preparedNumeric'>,
   prompt: string,
   output: string,
   test: AtomicTestCase,
-  ...args: TArgs
-): Promise<TResult> {
-  const invoke = () => grader.getResult(prompt, output, test, ...args);
+  _value: Assertion['value'],
+  gradingContext?: RedteamGradingContext,
+): Promise<PreparedNumericGrading> {
+  const assertion = input.assertion;
+  if (!isSingleAssertion(assertion)) {
+    return { numeric: false };
+  }
+  try {
+    validateNumericReferenceMode(assertion);
+    if (!isNumericFinancialAssertion(assertion)) {
+      return { numeric: false };
+    }
+    const assertionPrompt = input.context?.originalAssertionInput?.prompt ?? prompt;
+    const vars = input.context?.originalAssertionInput?.getVars() ?? test.vars ?? {};
+    const assertionTest = (input.context?.test as AtomicTestCase | undefined) ?? test;
+    const rawProviderResponse = gradingContext?.providerResponse ?? { output };
+    const targetMetadata = snapshotTargetMetadata(
+      input.targetMetadata === undefined
+        ? rawProviderResponse
+        : { metadata: input.targetMetadata ?? undefined },
+      { assert: [assertion] },
+    );
+    const providerResponse = { ...rawProviderResponse, metadata: targetMetadata ?? undefined };
+    const transformPrompt = input.context?.originalAssertionInput?.transformPrompt ??
+      input.prompt ?? { raw: prompt, label: prompt };
+    let preparedOutput: ProviderResponse['output'] = input.targetOutput ?? output;
+    let outputIsText = gradingContext?.outputIsText === true;
+    if (input.targetProvider?.transform) {
+      preparedOutput = await transform(input.targetProvider.transform, preparedOutput, {
+        vars,
+        prompt: transformPrompt,
+      });
+    }
+    outputIsText &&= typeof preparedOutput === 'string';
+    const providerTransformedOutput = preparedOutput;
+    const testTransform = assertionTest.options?.transform || assertionTest.options?.postprocess;
+    if (testTransform) {
+      preparedOutput = await transform(testTransform, preparedOutput, {
+        vars,
+        prompt: transformPrompt,
+        ...(providerResponse.metadata && { metadata: providerResponse.metadata }),
+      });
+    }
+    outputIsText &&= typeof preparedOutput === 'string';
+    const assertionProviderResponse = {
+      ...providerResponse,
+      output: preparedOutput,
+      providerTransformedOutput,
+    };
+    if (assertion.transform) {
+      preparedOutput = await transform(assertion.transform, preparedOutput, {
+        vars,
+        prompt: { label: assertionPrompt },
+        ...(providerResponse.metadata && { metadata: providerResponse.metadata }),
+      });
+    }
+    outputIsText &&= typeof preparedOutput === 'string';
+    const traceData = isExternalAssertionValue(assertion.value)
+      ? ((await input.context?.originalAssertionInput?.getTraceData?.()) ??
+        gradingContext?.traceData)
+      : undefined;
+    const resolved = await resolveExternalAssertionValue(
+      assertion,
+      preparedOutput,
+      {
+        prompt: assertionPrompt,
+        vars,
+        test: assertionTest,
+        logProbs: providerResponse.logProbs,
+        provider: input.targetProvider,
+        providerResponse: assertionProviderResponse,
+        ...(assertion.config ? { config: structuredClone(assertion.config) } : {}),
+        ...(providerResponse.metadata && { metadata: providerResponse.metadata }),
+        ...(traceData && { trace: traceData }),
+      },
+      assertion.type,
+    );
+    if (resolved.errorResult) {
+      throw new RedteamGradingConfigError(resolved.errorResult.reason);
+    }
+    return {
+      numeric: true,
+      output: typeof preparedOutput === 'string' ? preparedOutput : JSON.stringify(preparedOutput),
+      value: resolved.renderedValue,
+      gradingContext: { ...gradingContext, outputIsText },
+    };
+  } catch (error) {
+    if (
+      error instanceof RedteamGradingConfigError ||
+      (error instanceof Error && error.name === 'AbortError')
+    ) {
+      throw error;
+    }
+    throw new RedteamGradingConfigError(error instanceof Error ? error.message : String(error));
+  }
+}
+
+/** Trace every strategy grader and prepare opt-in numeric inputs at the shared boundary. */
+export function runRedteamGrader(
+  grader: RedteamGrader,
+  input: RedteamGraderInput,
+  ...args: Parameters<RedteamGrader['getResult']>
+): ReturnType<RedteamGrader['getResult']> {
+  const [
+    prompt,
+    output,
+    test,
+    provider,
+    value,
+    additionalRubric,
+    skipRefusalCheck,
+    gradingContext,
+  ] = args;
+  const invoke = async (): ReturnType<RedteamGrader['getResult']> => {
+    if (grader.id !== 'promptfoo:redteam:financial:calculation-error') {
+      return grader.getResult(...args);
+    }
+    const prepared =
+      input.preparedNumeric ??
+      (await prepareNumericGrading(input, prompt, output, test, value, gradingContext));
+    if (!prepared.numeric) {
+      return grader.getResult(...args);
+    }
+    return grader.getResult(
+      prompt,
+      prepared.output,
+      test,
+      provider,
+      prepared.value,
+      additionalRubric,
+      skipRefusalCheck,
+      prepared.gradingContext,
+    );
+  };
   const tracingContext = getProviderCallTracingContext();
   if (!tracingContext) {
     return invoke();
   }
-
   return tracingContext.withGraderSpan(
     {
       graderId: grader.id,
@@ -744,6 +931,7 @@ export function accumulateGraderResult(
     output: string;
     messages?: unknown;
     pluginId?: string;
+    outputIsText?: boolean;
     assertion?: AssertionOrSet;
   },
 ): GradingResult {
@@ -758,6 +946,7 @@ export function accumulateGraderResult(
           input.output,
           input.messages,
           input.pluginId,
+          input.outputIsText,
         ),
       },
     };
@@ -827,7 +1016,52 @@ export function accumulateGraderResult(
   return withGradingUsage(current, tokensUsed);
 }
 
+/** Detach current target metadata without mixing it with executor-owned result fields. */
+export function snapshotTargetMetadata(
+  response: Pick<ProviderResponse, 'metadata'> | undefined,
+  test: AtomicTestCase | CallApiContextParams['test'],
+): ProviderResponse['metadata'] | null | undefined {
+  // Provider contexts expose a narrowed test interface; runtime tests retain assertions.
+  const usesNumericReference = getAssertionLeaves(
+    (test as AtomicTestCase | undefined)?.assert,
+  ).some(isNumericFinancialAssertion);
+  if (!usesNumericReference) {
+    return undefined;
+  }
+  return JSON.parse(safeJsonStringify(response?.metadata) ?? 'null');
+}
+
+// These fields are interpreted as framework state rather than target data.
+const STRATEGY_CONTROL_METADATA_KEYS = new Set([
+  'storedGraderResult',
+  'redteamFinalPrompt',
+  'messages',
+  'redteamHistory',
+  'redteamTreeHistory',
+  'redteamOutputIsText',
+  'redteamTargetMetadata',
+  'webPageUuid',
+  'webPageUrl',
+  '__promptfoo',
+]);
+
+/** Keep target reporting and operational metadata without granting it strategy authority. */
+export function getForwardedTargetMetadata(
+  metadata: ProviderResponse['metadata'] | null,
+): ProviderResponse['metadata'] {
+  if (!metadata) {
+    return undefined;
+  }
+  return Object.fromEntries(
+    Object.entries(metadata).filter(([key]) => !STRATEGY_CONTROL_METADATA_KEYS.has(key)),
+  );
+}
+
 export interface FlaggedTurn {
+  outputIsText?: boolean;
+  /** Raw numeric source paired with this selected turn; never stored as a separate field. */
+  numericOutput?: string;
+  targetMetadata?: ProviderResponse['metadata'] | null;
   graderResult: GradingResult;
   output: string;
   prompt: string | undefined;
@@ -1027,12 +1261,62 @@ export type TurnBacktrackingStopReason = SharedBacktrackingStopReason | 'Max tur
 export async function externalizeResponseForRedteamHistory<T extends ProviderResponse>(
   response: T,
   context?: { evalId?: string; testIdx?: number; promptIdx?: number },
+  numericOutput?: string,
 ): Promise<T> {
   if (!isBlobStorageEnabled() && !shouldAttemptRemoteBlobUpload()) {
     return response;
   }
   const blobbed = await extractAndStoreBinaryData(response, context);
-  return (blobbed as T) || response;
+  if (!blobbed) {
+    return response;
+  }
+  // Only an extraction that changes output can invalidate its source evidence.
+  // Retained numeric text keeps the original flag, including false or unknown;
+  // display placeholders for empty responses must not affect that evidence.
+  const sourceRetained = numericOutput !== undefined && Object.is(numericOutput, response.output);
+  const projected = (
+    Object.is(blobbed.output, response.output) || sourceRetained
+      ? blobbed
+      : { ...blobbed, outputIsText: false }
+  ) as T;
+  return projected === response ? response : preserveSelectedError(projected, response);
+}
+
+/** Keep error responses normalized: the evaluator returns them without grading or extraction. */
+export async function restoreNumericSourceOutput<T extends ProviderResponse>(
+  response: T,
+  numericOutput?: string,
+  context?: Pick<CallApiContextParams, 'evaluationId' | 'testIdx' | 'promptIdx'>,
+): Promise<T> {
+  const originalResponse = response;
+  const capturedMetadata = response.metadata?.redteamTargetMetadata;
+  if (response.error && capturedMetadata != null) {
+    // Error rows skip evaluator grading/extraction. Normalize only the introduced
+    // selected capture; existing target error outputs and wrapper controls stay intact.
+    const projected = await extractAndStoreBinaryData(
+      { metadata: { redteamTargetMetadata: capturedMetadata } },
+      {
+        evalId: context?.evaluationId,
+        testIdx: context?.testIdx,
+        promptIdx: context?.promptIdx,
+      },
+    );
+    response = {
+      ...response,
+      metadata: {
+        ...response.metadata,
+        redteamTargetMetadata: projected?.metadata?.redteamTargetMetadata ?? capturedMetadata,
+      },
+    };
+  }
+  if (numericOutput !== undefined && !Object.is(response.output, numericOutput)) {
+    response = response.error
+      ? { ...response, metadata: { ...response.metadata, redteamOutputIsText: false } }
+      : { ...response, output: numericOutput };
+  }
+  return response === originalResponse
+    ? response
+    : preserveSelectedError(response, originalResponse);
 }
 
 /**

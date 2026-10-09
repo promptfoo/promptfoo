@@ -27,8 +27,11 @@ import {
 } from '../../../src/redteam/providers/shared';
 import { isRateLimitWrapped, RateLimitRegistry } from '../../../src/scheduler';
 import { withProviderCallTracingContext } from '../../../src/scheduler/providerCallExecutionContext';
+import { isProviderResponseRateLimited } from '../../../src/scheduler/types';
+import { isResponseHeadersObserverErrorResponse } from '../../../src/util/fetch/responseHeadersObserver';
 import { sleep } from '../../../src/util/time';
 import { createMockProvider } from '../../factories/provider';
+import { createSelectedObserverErrorResponse } from '../../util/selectedObserverError';
 import { mockProcessEnv } from '../../util/utils';
 
 import type { RedteamGraderBase } from '../../../src/redteam/plugins/base';
@@ -37,6 +40,7 @@ import type {
   ApiProvider,
   Assertion,
   AssertionSet,
+  AtomicTestCase,
   CallApiContextParams,
   CallApiOptionsParams,
   Prompt,
@@ -927,6 +931,7 @@ describe('shared redteam provider utilities', () => {
       const result = await getTargetResponse(mockProvider, 'test prompt');
 
       expect(result).toEqual({
+        outputIsText: true,
         output: 'test response',
         tokenUsage: { total: 10, prompt: 5, completion: 5, numRequests: 1 },
         sessionId: 'test-session',
@@ -1016,9 +1021,22 @@ describe('shared redteam provider utilities', () => {
       const result = await getTargetResponse(mockProvider, 'test prompt');
 
       expect(result).toEqual({
+        outputIsText: false,
         output: '{"key":"value"}',
         tokenUsage: { numRequests: 1 },
       });
+    });
+
+    it('derives source type before serialization, ignoring target-provided markers', async () => {
+      const response = {
+        output: { amount: 100 },
+        outputIsText: true,
+        metadata: { redteamOutputIsText: true },
+      };
+      const mockProvider = createMockProvider({ response });
+      const result = await getTargetResponse(mockProvider, 'test prompt');
+      expect(result.output).toBe('{"amount":100}');
+      expect(result.outputIsText).toBe(false);
     });
 
     it('handles provider error response', async () => {
@@ -1032,12 +1050,118 @@ describe('shared redteam provider utilities', () => {
       const result = await getTargetResponse(mockProvider, 'test prompt');
 
       expect(result).toEqual({
+        outputIsText: false,
         output: '',
         error: 'API error',
         sessionId: 'error-session',
         tokenUsage: { numRequests: 1 },
       });
     });
+
+    it.each([true, false])(
+      'detaches numeric=%s metadata before provider pacing',
+      async (numeric) => {
+        const metadata = { nested: { encoding: 'original' } };
+        const provider = createMockProvider({
+          delay: 100,
+          response: { output: '{"amount":100}', metadata },
+        });
+        const test: AtomicTestCase = {
+          vars: {},
+          assert: [
+            {
+              type: 'promptfoo:redteam:financial:calculation-error',
+              value: numeric
+                ? { type: 'numeric', expected: { amount: 100 } }
+                : 'Legacy arithmetic rubric',
+            },
+          ],
+        };
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+        const pending = getTargetResponse(provider, 'Return amount', {
+          prompt: { raw: 'Return amount', label: 'numeric' },
+          vars: {},
+          test,
+        });
+        try {
+          await vi.advanceTimersByTimeAsync(0);
+          metadata.nested.encoding = 'mutated';
+          await vi.advanceTimersByTimeAsync(100);
+          const result = await pending;
+          expect(result.metadata?.nested.encoding).toBe(numeric ? 'original' : 'mutated');
+          if (numeric) {
+            expect(result.metadata).not.toBe(metadata);
+          } else {
+            expect(result.metadata).toBe(metadata);
+          }
+        } finally {
+          await vi.runAllTimersAsync();
+          await Promise.allSettled([pending]);
+          vi.useRealTimers();
+        }
+      },
+    );
+
+    it.each([true, false])(
+      'keeps selected observer identity across numeric metadata detachment and canceled pacing (marked: %s)',
+      async (marked) => {
+        const metadata = { nested: { selectedTurn: 1 } };
+        const original = {
+          output: '{"amount":100}',
+          error: 'metrics rate limit exceeded',
+          metadata,
+          tokenUsage: { total: 9, numRequests: 1 },
+        };
+        const selected = marked ? createSelectedObserverErrorResponse(original) : original;
+        const provider = createMockProvider({ delay: 100, response: selected });
+        const controller = new AbortController();
+        const reason = new Error('caller stopped completed target pacing');
+        const test: AtomicTestCase = {
+          assert: [
+            {
+              type: 'promptfoo:redteam:financial:calculation-error',
+              value: { type: 'numeric', expected: { amount: 100 } },
+            },
+          ],
+        };
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+        const pending = getTargetResponse(
+          provider,
+          'Return amount',
+          {
+            prompt: { raw: 'Return amount', label: 'numeric' },
+            vars: {},
+            test,
+          },
+          { abortSignal: controller.signal },
+        );
+        try {
+          await vi.advanceTimersByTimeAsync(0);
+          metadata.nested.selectedTurn = 2;
+          controller.abort(reason);
+          await vi.advanceTimersByTimeAsync(0);
+          const result = await pending;
+          expect(result.metadata?.nested.selectedTurn).toBe(1);
+          expect(result.metadata).not.toBe(metadata);
+          expect(result.output).toBe(original.output);
+          expect(result.tokenUsage).toEqual(original.tokenUsage);
+          expect(result.error).toBe(original.error);
+          expect(result.outputIsText).toBe(true);
+          expect(isResponseHeadersObserverErrorResponse(result)).toBe(marked);
+          expect(isProviderResponseRateLimited(result, undefined)).toBe(!marked);
+          expect(isResponseHeadersObserverErrorResponse(JSON.parse(JSON.stringify(result)))).toBe(
+            false,
+          );
+          expect(provider.callApi).toHaveBeenCalledOnce();
+          expect(controller.signal.reason).toBe(reason);
+        } finally {
+          controller.abort(reason);
+          await vi.runAllTimersAsync();
+          await Promise.allSettled([pending]);
+          vi.useRealTimers();
+        }
+      },
+    );
 
     it.each(['success', 'completed error'] as const)(
       'retains a completed %s when cancellation interrupts target delay',
@@ -1164,6 +1288,7 @@ describe('shared redteam provider utilities', () => {
       const result = await getTargetResponse(mockProvider, 'test prompt');
 
       expect(result).toEqual({
+        outputIsText: true,
         output: 'test response',
         tokenUsage: { numRequests: 1 },
       });
@@ -1180,6 +1305,7 @@ describe('shared redteam provider utilities', () => {
       const result = await getTargetResponse(mockProvider, 'test prompt');
 
       expect(result).toEqual({
+        outputIsText: false,
         output: '',
         conversationEnded: true,
         conversationEndReason: 'thread_closed',
@@ -1199,6 +1325,7 @@ describe('shared redteam provider utilities', () => {
         const result = await getTargetResponse(mockProvider, 'test prompt');
 
         expect(result).toEqual({
+          outputIsText: true,
           output: '',
           tokenUsage: { numRequests: 1 },
         });
@@ -1215,6 +1342,7 @@ describe('shared redteam provider utilities', () => {
         const result = await getTargetResponse(mockProvider, 'test prompt');
 
         expect(result).toEqual({
+          outputIsText: false,
           output: '0', // Should be stringified
           tokenUsage: { numRequests: 1 },
         });
@@ -1231,6 +1359,7 @@ describe('shared redteam provider utilities', () => {
         const result = await getTargetResponse(mockProvider, 'test prompt');
 
         expect(result).toEqual({
+          outputIsText: false,
           output: 'false', // Should be stringified
           tokenUsage: { numRequests: 1 },
         });
@@ -1310,6 +1439,7 @@ describe('shared redteam provider utilities', () => {
 
         await expect(getTargetResponse(mockProvider, 'test prompt')).resolves.toEqual({
           output: '',
+          outputIsText: false,
           error: 'Target request failed',
           sessionId: 'error-session',
           tokenUsage: { numRequests: 1, total: 12 },
@@ -1330,6 +1460,7 @@ describe('shared redteam provider utilities', () => {
 
           await expect(getTargetResponse(mockProvider, 'test prompt')).resolves.toEqual({
             output: output ?? '',
+            outputIsText: typeof output === 'string',
             conversationEnded: true,
             conversationEndReason: 'thread_closed',
             tokenUsage: { numRequests: 1, total: 12 },
@@ -1708,7 +1839,15 @@ describe('shared redteam provider utilities', () => {
           withProviderSpan: async ({ callContext }, invoke) => invoke(callContext),
         },
         () =>
-          runRedteamGrader(grader, 'attack prompt', 'target output', test, undefined, undefined),
+          runRedteamGrader(
+            grader,
+            {},
+            'attack prompt',
+            'target output',
+            test,
+            undefined,
+            undefined,
+          ),
       );
 
       expect(result).toEqual({ grade, rubric: 'custom rubric' });

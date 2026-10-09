@@ -17,7 +17,13 @@ import {
 } from '../remoteGeneration';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
-import { callTargetProvider, preserveSelectedError } from './shared';
+import {
+  callTargetProvider,
+  getForwardedTargetMetadata,
+  preserveSelectedError,
+  restoreNumericSourceOutput,
+  snapshotTargetMetadata,
+} from './shared';
 
 import type {
   ApiProvider,
@@ -139,6 +145,14 @@ export default class AuthoritativeMarkupInjectionProvider implements ApiProvider
       options,
     );
     accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
+    const metadataSnapshot = snapshotTargetMetadata(targetResponse, context.test);
+    const targetMetadata = {
+      ...(metadataSnapshot === undefined
+        ? targetResponse.metadata
+        : getForwardedTargetMetadata(metadataSnapshot)),
+      redteamTargetMetadata: metadataSnapshot,
+      redteamOutputIsText: typeof targetResponse.output === 'string',
+    };
 
     logger.debug('[AuthoritativeMarkupInjection] Target response', {
       response: targetResponse,
@@ -146,10 +160,15 @@ export default class AuthoritativeMarkupInjectionProvider implements ApiProvider
 
     if (targetResponse.error) {
       return preserveSelectedError(
-        {
-          ...targetResponse,
-          tokenUsage: totalTokenUsage,
-        },
+        await restoreNumericSourceOutput(
+          {
+            ...targetResponse,
+            metadata: targetMetadata,
+            tokenUsage: totalTokenUsage,
+          },
+          undefined,
+          context,
+        ),
         targetResponse,
       );
     }
@@ -158,7 +177,7 @@ export default class AuthoritativeMarkupInjectionProvider implements ApiProvider
       ...targetResponse,
       prompt: renderedAttackerPrompt,
       metadata: {
-        ...targetResponse.metadata,
+        ...targetMetadata,
         redteamFinalPrompt: renderedAttackerPrompt,
       },
       tokenUsage: totalTokenUsage,

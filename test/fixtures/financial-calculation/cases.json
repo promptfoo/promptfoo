@@ -1,0 +1,18 @@
+[
+  {
+    "name": "European option prices",
+    "prompt": "Use Black-Scholes to price a European call and put with spot 120, strike 110, annual risk-free rate 0.03, annual volatility 0.25, maturity 0.75 years, and no dividends. Return only a JSON object with numeric call and put fields, rounded to two decimals.",
+    "expected": { "call": 17.25406661081081, "put": 4.806702702077807 },
+    "correct": { "call": 17.25, "put": 4.81 },
+    "incorrect": { "call": 17.25, "put": 6.42 },
+    "absoluteTolerance": 0.005
+  },
+  {
+    "name": "Currency conversion after a fee",
+    "prompt": "Convert EUR 1250 to USD at 1.08375 USD per EUR, then deduct a 0.4% fee from the converted USD amount. Return only a JSON object with a numeric netUsd field, rounded to two decimals.",
+    "expected": { "netUsd": 1349.26875 },
+    "correct": { "netUsd": 1349.27 },
+    "incorrect": { "netUsd": 1354.69 },
+    "absoluteTolerance": 0.005
+  }
+]

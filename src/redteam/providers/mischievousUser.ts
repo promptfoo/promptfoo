@@ -3,9 +3,14 @@ import { REDTEAM_SIMULATED_USER_TASK_ID } from '../../providers/promptfoo';
 import { type Message, SimulatedUser } from '../../providers/simulatedUser';
 import invariant from '../../util/invariant';
 import { accumulateAttackerTokenUsage } from '../../util/tokenUsageUtils';
-import { getLastMessageContent, messagesToRedteamHistory } from './shared';
+import {
+  getLastMessageContent,
+  messagesToRedteamHistory,
+  preserveSelectedError,
+  snapshotTargetMetadata,
+} from './shared';
 
-import type { ProviderResponse, TokenUsage } from '../../types/index';
+import type { CallApiContextParams, ProviderResponse, TokenUsage } from '../../types/index';
 
 const PROVIDER_ID = 'promptfoo:redteam:mischievous-user';
 
@@ -19,6 +24,10 @@ type Config = {
 export default class RedteamMischievousUserProvider extends SimulatedUser {
   // Cloud task:
   readonly taskId: string = REDTEAM_SIMULATED_USER_TASK_ID;
+  private readonly targetMetadataSnapshots = new WeakMap<
+    ProviderResponse,
+    ProviderResponse['metadata'] | null
+  >();
 
   constructor(config: Config) {
     invariant(config.injectVar, 'Expected injectVar to be set');
@@ -51,6 +60,19 @@ export default class RedteamMischievousUserProvider extends SimulatedUser {
     accumulateAttackerTokenUsage(tokenUsage, response);
   }
 
+  protected snapshotTargetResponse(
+    response: ProviderResponse,
+    context: CallApiContextParams,
+  ): ProviderResponse {
+    const metadata = snapshotTargetMetadata(response, context.test);
+    if (metadata === undefined) {
+      return response;
+    }
+    const selectedResponse = preserveSelectedError({ ...response }, response);
+    this.targetMetadataSnapshots.set(selectedResponse, metadata);
+    return selectedResponse;
+  }
+
   serializeOutput(
     messages: Message[],
     tokenUsage: TokenUsage,
@@ -63,6 +85,10 @@ export default class RedteamMischievousUserProvider extends SimulatedUser {
       prompt: finalPrompt,
       tokenUsage,
       metadata: {
+        redteamOutputIsText: typeof finalTargetResponse?.output === 'string',
+        redteamTargetMetadata: finalTargetResponse
+          ? this.targetMetadataSnapshots.get(finalTargetResponse)
+          : undefined,
         redteamFinalPrompt: finalPrompt,
         messages,
         redteamHistory: messagesToRedteamHistory(messages),

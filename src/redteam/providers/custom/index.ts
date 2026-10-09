@@ -13,6 +13,7 @@ import {
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../../../util/tokenUsageUtils';
+import { RedteamGradingConfigError } from '../../grading/errors';
 import { getTargetConversation } from '../../grading/storedResult';
 import { shouldGenerateRemote } from '../../remoteGeneration';
 import { remoteGenerationContextPayload } from '../../remoteGenerationContext';
@@ -35,14 +36,18 @@ import {
   externalizeResponseForRedteamHistory,
   getGraderAssertionValue,
   getLastMessageContent,
+  getRedteamAssertion,
   getTargetResponse,
   isConversationEndedResponse,
   isTargetCallAbortError,
+  prepareNumericGrading,
   preserveSelectedError,
   type RoundBacktrackingStopReason,
   redteamProviderManager,
   resolveStoredGraderResult,
+  restoreNumericSourceOutput,
   runRedteamGrader,
+  snapshotTargetMetadata,
   type TargetResponse,
   tryUnblocking,
 } from '../shared';
@@ -120,6 +125,8 @@ const CUSTOM_PARENT_TEMPLATE = dedent`
  * Represents metadata for the Custom conversation process.
  */
 export interface CustomMetadata extends BaseRedteamMetadata {
+  redteamOutputIsText?: boolean;
+  redteamTargetMetadata?: TargetResponse['metadata'] | null;
   customRoundsCompleted: number;
   customBacktrackCount: number;
   customResult: boolean;
@@ -308,6 +315,8 @@ export class CustomProvider implements ApiProvider {
 
     let lastFeedback = '';
     let lastResponse: TargetResponse = { output: '' };
+    let lastTargetMetadata: TargetResponse['metadata'] | null;
+    let lastNumericOutput: string | undefined;
     let hasTargetResponse = false;
     let lastAttemptError: string | undefined;
     let lastResponseMessages: Message[] = [];
@@ -332,14 +341,7 @@ export class CustomProvider implements ApiProvider {
     }> = [];
     let lastTransformResult: TransformResult | undefined;
 
-    let assertToUse = test?.assert?.find(
-      (a: { type: string }) => a.type && a.type.includes(test.metadata?.pluginId),
-    );
-
-    // Fallback: if no assertion matches the pluginId, use the first assertion with a type
-    if (!assertToUse) {
-      assertToUse = test?.assert?.find((a: { type: string }) => a.type);
-    }
+    const assertToUse = getRedteamAssertion(test);
 
     const { getGraderById } = await import('../../graders');
     let graderPassed: boolean | undefined;
@@ -405,7 +407,7 @@ export class CustomProvider implements ApiProvider {
 
         logger.debug(`[Custom] Generated attack prompt: ${attackPrompt}`);
 
-        const { response, transformResult } = await this.sendPrompt(
+        const { response, targetMetadata, numericOutput, transformResult } = await this.sendPrompt(
           attackPrompt,
           prompt,
           vars,
@@ -423,6 +425,8 @@ export class CustomProvider implements ApiProvider {
           continue;
         }
         lastResponse = response;
+        lastTargetMetadata = targetMetadata;
+        lastNumericOutput = numericOutput;
         hasTargetResponse = true;
         lastResponseMessages = [...this.memory.getConversation(this.targetConversationId)];
         lastTransformResult = transformResult;
@@ -465,14 +469,34 @@ export class CustomProvider implements ApiProvider {
           context.vars['sessionId'] = lastResponse.sessionId;
         }
 
+        const preparedNumeric =
+          test && assertToUse
+            ? await prepareNumericGrading(
+                {
+                  assertion: assertToUse,
+                  targetProvider: provider,
+                  prompt,
+                  context,
+                  targetMetadata: lastTargetMetadata,
+                  targetOutput: lastNumericOutput,
+                },
+                lastFinalAttackPrompt,
+                lastResponse.output,
+                test,
+                getGraderAssertionValue(assertToUse),
+                { providerResponse: lastResponse, outputIsText: lastResponse.outputIsText },
+              )
+            : undefined;
         // Check if the target is asking a blocking question that needs an answer to proceed
-        const unblockingResult = await tryUnblocking({
-          messages: this.memory.getConversation(this.targetConversationId),
-          lastResponse: lastResponse.output,
-          goal: this.userGoal,
-          purpose: context?.test?.metadata?.purpose,
-          targetId: this.config.targetId,
-        });
+        const unblockingResult = preparedNumeric?.numeric
+          ? { success: false }
+          : await tryUnblocking({
+              messages: this.memory.getConversation(this.targetConversationId),
+              lastResponse: lastResponse.output,
+              goal: this.userGoal,
+              purpose: context?.test?.metadata?.purpose,
+              targetId: this.config.targetId,
+            });
         accumulateUnblockingTokenUsage(totalTokenUsage, unblockingResult);
 
         if (unblockingResult.success && unblockingResult.unblockingPrompt) {
@@ -481,17 +505,21 @@ export class CustomProvider implements ApiProvider {
             `[Custom] Sending unblocking response: ${unblockingResult.unblockingPrompt}`,
           );
 
-          const { response: unblockingResponse, transformResult: unblockingTransform } =
-            await this.sendPrompt(
-              unblockingResult.unblockingPrompt,
-              prompt,
-              vars,
-              filters,
-              provider,
-              roundNum,
-              context,
-              options,
-            );
+          const {
+            response: unblockingResponse,
+            targetMetadata: unblockingTargetMetadata,
+            numericOutput: unblockingNumericOutput,
+            transformResult: unblockingTransform,
+          } = await this.sendPrompt(
+            unblockingResult.unblockingPrompt,
+            prompt,
+            vars,
+            filters,
+            provider,
+            roundNum,
+            context,
+            options,
+          );
 
           if (unblockingTransform?.error) {
             if (unblockingTransform.tokenUsage) {
@@ -508,6 +536,8 @@ export class CustomProvider implements ApiProvider {
           // Update lastResponse to the unblocking response and continue
           // Note: unblocking prompts don't use audio/image transforms
           lastResponse = unblockingResponse;
+          lastTargetMetadata = unblockingTargetMetadata;
+          lastNumericOutput = unblockingNumericOutput;
           lastResponseMessages = [...this.memory.getConversation(this.targetConversationId)];
           lastFinalAttackPrompt =
             unblockingTransform?.prompt ||
@@ -541,12 +571,9 @@ export class CustomProvider implements ApiProvider {
           }
         }
 
-        const [isRefusal, refusalRationale] = await this.getRefusalScore(
-          attackPrompt,
-          lastResponse.output,
-          totalTokenUsage,
-          options,
-        );
+        const [isRefusal, refusalRationale] = preparedNumeric?.numeric
+          ? [false, 'Explicit numeric reference grading']
+          : await this.getRefusalScore(attackPrompt, lastResponse.output, totalTokenUsage, options);
         logger.debug(
           `[Custom] Refusal check result: isRefusal=${isRefusal}, rationale=${refusalRationale}`,
         );
@@ -586,6 +613,7 @@ export class CustomProvider implements ApiProvider {
           if (grader) {
             const gradingContext: RedteamGradingContext | undefined = {
               providerResponse: lastResponse,
+              outputIsText: lastResponse.outputIsText,
               conversationTranscript:
                 getTargetConversation(lastResponseMessages).conversationTranscript,
               ...(lastResponse.images?.length ? { imageOutputs: lastResponse.images } : {}),
@@ -593,11 +621,21 @@ export class CustomProvider implements ApiProvider {
             const gradedTurn = {
               prompt: lastFinalAttackPrompt,
               output: lastResponse.output,
+              outputIsText: lastResponse.outputIsText,
+              targetMetadata: lastTargetMetadata,
+              numericOutput: lastNumericOutput,
               messages: lastResponseMessages,
               guardrails: lastResponse.guardrails,
             };
             const { grade, rubric } = await runRedteamGrader(
               grader,
+              {
+                assertion: assertToUse,
+                targetProvider: provider,
+                prompt,
+                context,
+                preparedNumeric,
+              },
               gradedTurn.prompt,
               gradedTurn.output,
               test,
@@ -693,6 +731,9 @@ export class CustomProvider implements ApiProvider {
 
         logger.debug('[Custom] Jailbreak Unsuccessful, continuing to next round');
       } catch (error) {
+        if (error instanceof RedteamGradingConfigError) {
+          throw error;
+        }
         // Re-throw abort errors to properly cancel the operation
         if (isTargetCallAbortError(error, options?.abortSignal)) {
           logger.debug('[Custom] Operation aborted');
@@ -728,6 +769,9 @@ export class CustomProvider implements ApiProvider {
 
     const reported = flaggedRound ?? {
       output: lastResponse.output,
+      outputIsText: lastResponse.outputIsText,
+      targetMetadata: lastTargetMetadata,
+      numericOutput: lastNumericOutput,
       prompt: lastFinalAttackPrompt || getLastMessageContent(lastResponseMessages, 'user'),
       messages: lastResponseMessages,
       guardrails: lastResponse.guardrails,
@@ -738,30 +782,36 @@ export class CustomProvider implements ApiProvider {
       targetError ||
       (hasTargetResponse ? undefined : lastAttemptError || 'No target request was completed.');
     return preserveSelectedError(
-      {
-        output: reported.output,
-        prompt: reported.prompt,
-        metadata: {
-          redteamFinalPrompt: reported.prompt,
-          messages: reported.messages as Record<string, any>[],
-          customRoundsCompleted: roundNum,
-          customBacktrackCount: backtrackCount,
-          customResult: evalFlag,
-          customConfidence: evalPercentage,
-          stopReason: exitReason,
-          redteamHistory,
-          successfulAttacks: this.successfulAttacks,
-          totalSuccessfulAttacks: this.successfulAttacks.length,
-          storedGraderResult: resolveStoredGraderResult(
-            flaggedRound?.graderResult,
-            storedGraderResult,
-          ),
-          sessionId: getSessionId(lastResponse, context),
+      await restoreNumericSourceOutput(
+        {
+          output: reported.output,
+          prompt: reported.prompt,
+          metadata: {
+            redteamOutputIsText: reported.outputIsText,
+            redteamTargetMetadata: reported.targetMetadata,
+            redteamFinalPrompt: reported.prompt,
+            messages: reported.messages as Record<string, any>[],
+            customRoundsCompleted: roundNum,
+            customBacktrackCount: backtrackCount,
+            customResult: evalFlag,
+            customConfidence: evalPercentage,
+            stopReason: exitReason,
+            redteamHistory,
+            successfulAttacks: this.successfulAttacks,
+            totalSuccessfulAttacks: this.successfulAttacks.length,
+            storedGraderResult: resolveStoredGraderResult(
+              flaggedRound?.graderResult,
+              storedGraderResult,
+            ),
+            sessionId: getSessionId(lastResponse, context),
+          },
+          tokenUsage: totalTokenUsage,
+          guardrails: reported.guardrails,
+          ...(!flaggedRound && error ? { error } : {}),
         },
-        tokenUsage: totalTokenUsage,
-        guardrails: reported.guardrails,
-        ...(!flaggedRound && error ? { error } : {}),
-      },
+        reported.numericOutput,
+        context,
+      ),
       lastResponse,
     );
   }
@@ -894,7 +944,12 @@ export class CustomProvider implements ApiProvider {
     _roundNum: number,
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
-  ): Promise<{ response: TargetResponse; transformResult?: TransformResult }> {
+  ): Promise<{
+    response: TargetResponse;
+    targetMetadata?: TargetResponse['metadata'] | null;
+    numericOutput?: string;
+    transformResult?: TransformResult;
+  }> {
     let lastTransformResult: TransformResult | undefined;
 
     const targetVars = { ...vars, [this.config.injectVar]: attackPrompt };
@@ -1017,14 +1072,20 @@ export class CustomProvider implements ApiProvider {
       context && { ...context, vars: targetVars },
       options,
     );
+    const targetMetadata = snapshotTargetMetadata(targetResponse, context?.test);
+    const numericOutput = targetMetadata === undefined ? undefined : targetResponse.output;
     for (const message of pendingMessages) {
       this.memory.addMessage(this.targetConversationId, message);
     }
-    targetResponse = await externalizeResponseForRedteamHistory(targetResponse, {
-      evalId: context?.evaluationId,
-      testIdx: context?.testIdx,
-      promptIdx: context?.promptIdx,
-    });
+    targetResponse = await externalizeResponseForRedteamHistory(
+      targetResponse,
+      {
+        evalId: context?.evaluationId,
+        testIdx: context?.testIdx,
+        promptIdx: context?.promptIdx,
+      },
+      numericOutput,
+    );
     logger.debug('[Custom] Target response', { response: targetResponse });
 
     invariant(
@@ -1038,7 +1099,12 @@ export class CustomProvider implements ApiProvider {
       content: targetResponse.output,
     });
 
-    return { response: targetResponse, transformResult: lastTransformResult };
+    return {
+      response: targetResponse,
+      targetMetadata,
+      numericOutput,
+      transformResult: lastTransformResult,
+    };
   }
 
   private async getRefusalScore(

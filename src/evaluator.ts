@@ -9,7 +9,10 @@ import { LRUCache } from 'lru-cache';
 import Clone from 'rfdc';
 import {
   getAssertionBaseType,
+  getNumericPreparationMetadata,
+  hasNumericFinancialAssertions,
   hasTraceAwareAssertions,
+  loadTraceData,
   MODEL_GRADED_ASSERTION_TYPES,
   runAssertions,
   runCompareAssertion,
@@ -25,6 +28,7 @@ import { selectMaxScore } from './matchers/comparison';
 import {
   getResultIndexKey,
   PROMPTFOO_METADATA_KEY,
+  preserveResponseOutputProvenance,
   sanitizeResultForJsonlArtifact,
 } from './models/evalResult';
 import { generateIdFromPrompt } from './models/prompt';
@@ -920,6 +924,7 @@ async function callProviderForRunEval({
   evalId,
   filters,
   promptForRender,
+  transformPrompt,
   provider,
   rateLimitRegistry,
   renderedPrompt,
@@ -943,6 +948,7 @@ async function callProviderForRunEval({
   filters: RunEvalOptions['nunjucksFilters'];
   pauseSignal?: AbortSignal;
   promptForRender: Prompt;
+  transformPrompt: Prompt;
   renderedPrompt: string;
   testIndex: number;
   traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>>;
@@ -971,6 +977,7 @@ async function callProviderForRunEval({
           providerInvoked = true;
         },
         promptForRender,
+        transformPrompt,
         provider,
         rateLimitRegistry,
         renderedPrompt,
@@ -1094,6 +1101,7 @@ async function callActiveProvider({
   filters,
   onProviderInvoked,
   promptForRender,
+  transformPrompt,
   provider,
   rateLimitRegistry,
   renderedPrompt,
@@ -1111,6 +1119,7 @@ async function callActiveProvider({
   pauseSignal?: AbortSignal;
   onProviderInvoked: () => void;
   promptForRender: Prompt;
+  transformPrompt: Prompt;
   renderedPrompt: string;
   testIndex: number;
   traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>>;
@@ -1129,6 +1138,8 @@ async function callActiveProvider({
     filters,
     originalProvider,
     promptForRender,
+    transformPrompt,
+    renderedPrompt,
     repeatIndex,
     test,
     testIndex,
@@ -1242,6 +1253,8 @@ function buildCallApiContext({
   filters,
   originalProvider,
   promptForRender,
+  transformPrompt,
+  renderedPrompt,
   repeatIndex,
   test,
   testIndex,
@@ -1252,6 +1265,8 @@ function buildCallApiContext({
   filters: RunEvalOptions['nunjucksFilters'];
   originalProvider: ApiProvider;
   promptForRender: Prompt;
+  transformPrompt: Prompt;
+  renderedPrompt: string;
   repeatIndex: number;
   test: AtomicTestCase;
   testIndex: number;
@@ -1263,6 +1278,37 @@ function buildCallApiContext({
     prompt: promptForRender,
     filters,
     originalProvider,
+    ...(hasNumericFinancialAssertions(test.assert)
+      ? {
+          originalAssertionInput: {
+            prompt: renderedPrompt,
+            transformPrompt,
+            getVars: () => omitEvalRuntimeVars(vars),
+            getTraceData: async () => {
+              const traceId = getTraceId(traceContext);
+              if (!traceId) {
+                return null;
+              }
+              await flushOtel();
+              try {
+                const trace = await loadTraceData(traceId);
+                return (
+                  trace && {
+                    traceId: trace.traceId,
+                    evaluationId: trace.evaluationId,
+                    testCaseId: trace.testCaseId,
+                    metadata: trace.metadata,
+                    spans: trace.spans || [],
+                  }
+                );
+              } catch (error) {
+                logger.debug(`Failed to fetch trace data for numeric reference: ${error}`);
+                return null;
+              }
+            },
+          },
+        }
+      : {}),
     test,
     logger: logger as unknown as winston.Logger,
     getCache,
@@ -1562,7 +1608,14 @@ async function gradeRunEvalResponse({
   traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>>;
   vars: Vars;
 }) {
-  const { processedResponse, providerTransformedOutput } = await transformRunEvalResponse({
+  const {
+    processedResponse,
+    gradingResponse,
+    numericOutput,
+    numericMetadata,
+    providerTransformedOutput,
+    outputIsText,
+  } = await transformRunEvalResponse({
     evalId,
     prompt,
     promptIdx,
@@ -1572,6 +1625,9 @@ async function gradeRunEvalResponse({
     testIdx,
     vars,
   });
+  if (processedResponse.metadata?.redteamOutputIsText === false) {
+    ret.metadata = { ...ret.metadata, redteamOutputIsText: false };
+  }
   const traceId = getTraceId(traceContext);
   if (
     traceId &&
@@ -1582,12 +1638,44 @@ async function gradeRunEvalResponse({
   }
 
   const assertionProviderResponse = {
-    ...processedResponse,
+    ...gradingResponse,
     // Keep generated audio available to graders after persistence replaces its
     // inline bytes with a blob reference in the saved result.
     ...(response.audio?.data ? { audio: response.audio } : {}),
+    // Numeric callbacks see the live selected turn; storage keeps the extracted copy.
+    ...(hasNumericFinancialAssertions(test.assert) &&
+      response.metadata &&
+      Object.prototype.hasOwnProperty.call(response.metadata, 'redteamTargetMetadata') && {
+        metadata: {
+          ...gradingResponse.metadata,
+          redteamTargetMetadata: response.metadata.redteamTargetMetadata,
+        },
+      }),
     providerTransformedOutput,
   };
+  const numericGradingInput = hasNumericFinancialAssertions(test.assert)
+    ? {
+        providerResponse: {
+          ...assertionProviderResponse,
+          output: numericOutput,
+          metadata: numericMetadata,
+        },
+        outputIsText,
+      }
+    : undefined;
+  // The normal artifact view may no longer contain the JSON numeric source. An
+  // external legacy reference that resolves numeric must fail closed on that view.
+  const normalizedOutputIsText = outputIsText && Object.is(gradingResponse.output, numericOutput);
+  if (
+    ret.metadata &&
+    response.metadata &&
+    Object.prototype.hasOwnProperty.call(response.metadata, 'redteamTargetMetadata')
+  ) {
+    ret.metadata = {
+      ...ret.metadata,
+      redteamTargetMetadata: processedResponse.metadata?.redteamTargetMetadata,
+    };
+  }
 
   if (deferGrading) {
     invariant(providerCallQueue, 'providerCallQueue is required when deferGrading is enabled');
@@ -1599,6 +1687,8 @@ async function gradeRunEvalResponse({
           prompt: renderedPrompt,
           provider,
           providerResponse: assertionProviderResponse,
+          numericGradingInput,
+          outputIsText: normalizedOutputIsText,
           test,
           vars,
           latencyMs: response.latencyMs ?? latencyMs,
@@ -1620,6 +1710,8 @@ async function gradeRunEvalResponse({
           prompt: renderedPrompt,
           provider,
           providerResponse: assertionProviderResponse,
+          numericGradingInput,
+          outputIsText: normalizedOutputIsText,
           test,
           vars,
           latencyMs: response.latencyMs ?? latencyMs,
@@ -1657,8 +1749,13 @@ async function transformRunEvalResponse({
   vars: Vars;
 }): Promise<{
   processedResponse: ProviderResponse;
+  gradingResponse: ProviderResponse;
+  numericOutput: ProviderResponse['output'];
+  numericMetadata: ProviderResponse['metadata'];
   providerTransformedOutput: ProviderResponse['output'];
+  outputIsText: boolean;
 }> {
+  let outputIsText = typeof response.output === 'string';
   const processedResponse = { ...response };
   if (provider.transform) {
     processedResponse.output = await transform(provider.transform, processedResponse.output, {
@@ -1666,27 +1763,48 @@ async function transformRunEvalResponse({
       prompt,
     });
   }
+  outputIsText &&= typeof processedResponse.output === 'string';
   const providerTransformedOutput = processedResponse.output;
 
   const testTransform = test.options?.transform || test.options?.postprocess;
+  const transformMetadata = getNumericPreparationMetadata(test.assert, test, provider, response);
   if (testTransform) {
     processedResponse.output = await transform(testTransform, processedResponse.output, {
       vars,
       prompt,
-      ...(response && response.metadata && { metadata: response.metadata }),
+      ...(transformMetadata && { metadata: transformMetadata }),
     });
   }
 
+  // Once an observed stage is non-text, later stringification cannot recover numeric tokens.
+  outputIsText &&= typeof processedResponse.output === 'string';
+  if (!outputIsText) {
+    // Persist only observed negative lineage of the saved output. Never manufacture
+    // positive strategy provenance from a target's marker or a later stringification.
+    processedResponse.metadata = { ...processedResponse.metadata, redteamOutputIsText: false };
+  }
   invariant(processedResponse.output != null, 'Response output should not be null');
+  // Capture the numeric callback view after transforms but before media storage.
+  // Keep framework provenance from the processed response, including observed false.
+  const numericMetadata = hasNumericFinancialAssertions(test.assert)
+    ? (JSON.parse(safeJsonStringify(processedResponse.metadata) ?? 'null') ?? undefined)
+    : undefined;
   const blobbedResponse = await extractAndStoreBinaryData(processedResponse, {
     evalId,
     testIdx,
     promptIdx,
   });
 
+  const gradingResponse = blobbedResponse || processedResponse;
   return {
-    processedResponse: blobbedResponse || processedResponse,
+    processedResponse:
+      preserveResponseOutputProvenance(gradingResponse, processedResponse.output) ||
+      gradingResponse,
+    gradingResponse,
+    numericOutput: processedResponse.output,
+    numericMetadata,
     providerTransformedOutput,
+    outputIsText,
   };
 }
 
@@ -1857,6 +1975,7 @@ async function runEvalInternal(
         executionTraceContext?.rootSpan,
         async () => {
           const providerCall = await callProviderForRunEval({
+            transformPrompt: prompt,
             abortSignal,
             pauseSignal: orchestrationOptions.pauseSignal,
             evalId,

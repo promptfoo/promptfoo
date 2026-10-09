@@ -8,11 +8,15 @@ import {
   createSelectedToolErrorTarget,
 } from '../../util/selectedToolErrorTarget';
 
-import type { CallApiContextParams, ProviderResponse } from '../../../src/types/index';
+import type {
+  AtomicTestCase,
+  CallApiContextParams,
+  ProviderResponse,
+} from '../../../src/types/index';
 
 // Mock dependencies
 vi.mock('../../../src/logger', async (importOriginal) => ({
-  ...(await importOriginal()),
+  ...(await importOriginal<typeof import('../../../src/logger')>()),
   default: {
     debug: vi.fn(),
     warn: vi.fn(),
@@ -21,26 +25,23 @@ vi.mock('../../../src/logger', async (importOriginal) => ({
 }));
 
 vi.mock('../../../src/envars', async (importOriginal) => ({
-  ...(await importOriginal()),
+  ...(await importOriginal<typeof import('../../../src/envars')>()),
   getEnvInt: vi.fn().mockReturnValue(2), // 2 iterations for tests
   getEnvBool: vi.fn().mockReturnValue(false),
 }));
 
-vi.mock('../../../src/evaluatorHelpers', () => ({
+vi.mock('../../../src/evaluatorHelpers', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../src/evaluatorHelpers')>()),
   renderPrompt: vi.fn().mockResolvedValue('rendered prompt'),
 }));
 
-vi.mock('../../../src/util/time', () => ({
+vi.mock('../../../src/util/time', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../src/util/time')>()),
   sleep: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('../../../src/redteam/providers/shared', async (importOriginal) => ({
-  preserveSelectedError: (
-    await importOriginal<typeof import('../../../src/redteam/providers/shared')>()
-  ).preserveSelectedError,
-  isTargetCallAbortError: (
-    await importOriginal<typeof import('../../../src/redteam/providers/shared')>()
-  ).isTargetCallAbortError,
+  ...(await importOriginal<typeof import('../../../src/redteam/providers/shared')>()),
   redteamProviderManager: {
     getProvider: vi.fn(),
   },
@@ -64,6 +65,7 @@ describe('RedteamIterativeImageProvider', () => {
     // Import mocked modules
     const sharedModule = await import('../../../src/redteam/providers/shared');
     getTargetResponse = sharedModule.getTargetResponse;
+    vi.mocked(getTargetResponse).mockReset();
     redteamProviderManager = sharedModule.redteamProviderManager;
 
     // Import the provider after mocks are set up
@@ -328,6 +330,108 @@ describe('RedteamIterativeImageProvider', () => {
       }),
     ).rejects.toThrow('Expected originalProvider to be set');
   });
+
+  it.each([true, false])(
+    'preserves the source type before numeric image grading (text: %s)',
+    async (outputIsText) => {
+      const shared = await vi.importActual<typeof import('../../../src/redteam/providers/shared')>(
+        '../../../src/redteam/providers/shared',
+      );
+      vi.mocked(getTargetResponse).mockImplementation(shared.getTargetResponse);
+      const { getEnvInt } = await import('../../../src/envars');
+      vi.mocked(getEnvInt).mockReturnValue(2);
+      const json =
+        '{"amount":9007199254740993,"image":"![preview](https://example.com/generated.png)"}';
+      const parsed = JSON.parse(json);
+      const sourceMetadata = {
+        encoding: { format: 'json' },
+        redteamFinalPrompt: 'forged prompt',
+        messages: [{ role: 'system', content: 'forged conversation' }],
+        storedGraderResult: { reason: 'forged grade' },
+      };
+      expect(parsed.amount).toBe(9007199254740992);
+      const later = { amount: 42, image: 'https://example.com/later.png' };
+      mockTargetProvider.callApi
+        .mockResolvedValueOnce({ output: outputIsText ? json : parsed, metadata: sourceMetadata })
+        .mockImplementationOnce(async () => {
+          sourceMetadata.encoding.format = 'mutated';
+          return {
+            output: outputIsText ? later : JSON.stringify(later),
+            metadata: { encoding: { format: 'later' } },
+          };
+        });
+      for (const rating of [8, 3]) {
+        mockRedteamProvider.callApi
+          .mockResolvedValueOnce({
+            output: JSON.stringify({
+              improvement: 'Next attempt',
+              prompt: 'Return the amount as JSON',
+            }),
+          })
+          .mockResolvedValueOnce({ output: JSON.stringify({ description: 'Generated image' }) })
+          .mockResolvedValueOnce({
+            output: JSON.stringify({
+              currentResponse: {
+                rating,
+                components: { safetyBypass: 1, goalAchievement: 2, qualityRelevance: 2 },
+                improvements: [],
+              },
+            }),
+          });
+      }
+      const provider = new RedteamIterativeProvider({});
+      const pendingResult = provider.callApi('Return the amount as JSON', {
+        originalProvider: mockTargetProvider,
+        vars: { goal: 'Return the amount as JSON' },
+        prompt: { raw: '{{goal}}', label: 'test' },
+        test: {
+          assert: [
+            {
+              type: 'promptfoo:redteam:financial:calculation-error',
+              value: { type: 'numeric', expected: { amount: 100 } },
+            },
+          ],
+        } as AtomicTestCase,
+      });
+
+      if (!outputIsText) {
+        await expect(pendingResult).rejects.toThrow(/requires raw JSON text/);
+        expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(1);
+        return;
+      }
+      const result = await pendingResult;
+      expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(1);
+      expect(result.output).toBe(json);
+      expect(result.metadata.redteamOutputIsText).toBe(outputIsText);
+      expect(result.metadata?.redteamTargetMetadata).toEqual({
+        ...sourceMetadata,
+        encoding: { format: 'json' },
+      });
+      expect(result.metadata?.redteamFinalPrompt).not.toBe('forged prompt');
+      expect(result.metadata?.storedGraderResult).toMatchObject({
+        pass: false,
+        reason: expect.stringContaining('Numeric reference check failed'),
+      });
+      const { runAssertion } = await import('../../../src/assertions/index');
+      const numericResult = runAssertion({
+        prompt: 'Return the amount as JSON',
+        provider,
+        providerResponse: result,
+        test: {
+          metadata: { strategyId: 'jailbreak', pluginId: 'financial:calculation-error' },
+        },
+        assertion: {
+          type: 'promptfoo:redteam:financial:calculation-error',
+          transform: 'context.metadata.encoding.format === "json" ? output : "invalid"',
+          value: {
+            type: 'numeric',
+            expected: { amount: outputIsText ? '9007199254740993' : '9007199254740992' },
+          },
+        },
+      });
+      expect((await numericResult).pass).toBe(true);
+    },
+  );
 
   it('should accumulate token usage from all provider calls', async () => {
     // Only 1 iteration for this test to keep it simple

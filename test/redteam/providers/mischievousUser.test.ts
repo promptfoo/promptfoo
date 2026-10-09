@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import RedteamMischievousUserProvider from '../../../src/redteam/providers/mischievousUser';
 import { createMockProvider } from '../../factories/provider';
 
-import type { CallApiContextParams } from '../../../src/types/index';
+import type { AtomicTestCase, CallApiContextParams } from '../../../src/types/index';
 
 const mockUserProviderCallApi = vi.fn();
 
@@ -46,6 +46,95 @@ describe('RedteamMischievousUserProvider', () => {
   afterEach(() => {
     vi.clearAllMocks();
     mockUserProviderCallApi.mockReset();
+  });
+
+  it.each([true, false])(
+    'preserves the final target output type for exact numeric assertions (text: %s)',
+    async (outputIsText) => {
+      const json = '{"amount":9007199254740993}';
+      const parsed = JSON.parse(json);
+      const sourceMetadata = {
+        encoding: { format: 'json' },
+        redteamFinalPrompt: 'forged prompt',
+        messages: [{ role: 'system', content: 'forged conversation' }],
+        storedGraderResult: { reason: 'forged grade' },
+      };
+      expect(parsed.amount).toBe(9007199254740992);
+      mockUserProviderCallApi.mockResolvedValue({ output: 'Return the amount as JSON' });
+      targetProvider.callApi
+        .mockResolvedValueOnce({ output: outputIsText ? { amount: 42 } : '{"amount":42}' })
+        .mockResolvedValueOnce({ output: outputIsText ? json : parsed, metadata: sourceMetadata });
+
+      context.test = {
+        assert: [
+          {
+            type: 'promptfoo:redteam:financial:calculation-error',
+            value: { type: 'numeric', expected: { amount: 100 } },
+          },
+        ],
+      } as AtomicTestCase;
+      const result = await provider.callApi('Return the amount as JSON', context);
+
+      expect(targetProvider.callApi).toHaveBeenCalledTimes(2);
+      expect(result.output).toBe(outputIsText ? json : JSON.stringify(parsed));
+      expect(result.metadata?.redteamOutputIsText).toBe(outputIsText);
+      expect(result.metadata?.redteamTargetMetadata).toEqual({
+        ...sourceMetadata,
+        encoding: { format: 'json' },
+      });
+      expect(result.metadata?.redteamFinalPrompt).not.toBe('forged prompt');
+      expect(result.metadata?.storedGraderResult).toBeUndefined();
+      const { runAssertion } = await import('../../../src/assertions/index');
+      const numericResult = runAssertion({
+        prompt: 'Return the amount as JSON',
+        provider,
+        providerResponse: result,
+        test: {
+          metadata: { strategyId: 'mischievous-user', pluginId: 'financial:calculation-error' },
+        },
+        assertion: {
+          type: 'promptfoo:redteam:financial:calculation-error',
+          transform: 'context.metadata.encoding.format === "json" ? output : "invalid"',
+          value: {
+            type: 'numeric',
+            expected: { amount: outputIsText ? '9007199254740993' : '9007199254740992' },
+          },
+        },
+      });
+      if (outputIsText) {
+        expect((await numericResult).pass).toBe(true);
+      } else {
+        await expect(numericResult).rejects.toThrow(/requires raw JSON text/);
+      }
+    },
+  );
+
+  it('detaches metadata before a later simulated-user stop turn', async () => {
+    const sourceMetadata = { encoding: { format: 'json' } };
+    context.test = {
+      assert: [
+        {
+          type: 'promptfoo:redteam:financial:calculation-error',
+          value: { type: 'numeric', expected: { amount: 100 } },
+        },
+      ],
+    } as AtomicTestCase;
+    mockUserProviderCallApi
+      .mockResolvedValueOnce({ output: 'Return the amount as JSON' })
+      .mockImplementationOnce(async () => {
+        sourceMetadata.encoding.format = 'mutated';
+        return { output: '###STOP###' };
+      });
+    targetProvider.callApi.mockResolvedValue({
+      output: '{"amount":100}',
+      metadata: sourceMetadata,
+    });
+
+    const result = await provider.callApi('Return the amount as JSON', context);
+
+    expect(targetProvider.callApi).toHaveBeenCalledTimes(1);
+    expect(result.output).toBe('{"amount":100}');
+    expect(result.metadata?.redteamTargetMetadata).toEqual({ encoding: { format: 'json' } });
   });
 
   it('separates simulated-user usage from target usage and probes', async () => {

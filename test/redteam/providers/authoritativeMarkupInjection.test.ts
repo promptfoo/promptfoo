@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { runAssertion } from '../../../src/assertions/index';
+import { RedteamGraderBase } from '../../../src/redteam/plugins/base';
 import { isResponseHeadersObserverErrorResponse } from '../../../src/util/fetch/responseHeadersObserver';
 import {
   accumulateResponseTokenUsage,
@@ -11,7 +13,7 @@ import {
 } from '../../factories/provider';
 import { createSelectedObserverErrorResponse } from '../../util/selectedObserverError';
 
-import type { ApiProvider, CallApiContextParams } from '../../../src/types/index';
+import type { ApiProvider, AtomicTestCase, CallApiContextParams } from '../../../src/types/index';
 
 const mockFetchWithProxy = vi.fn();
 
@@ -48,6 +50,7 @@ describe('AuthoritativeMarkupInjectionProvider', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    mockFetchWithProxy.mockReset();
 
     // Dynamic import after mocks are set up
     const module = await import('../../../src/redteam/providers/authoritativeMarkupInjection');
@@ -67,6 +70,7 @@ describe('AuthoritativeMarkupInjectionProvider', () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+    vi.restoreAllMocks();
   });
 
   it('should pass abortSignal to fetchWithProxy', async () => {
@@ -121,6 +125,85 @@ describe('AuthoritativeMarkupInjectionProvider', () => {
   });
 
   it.each([true, false])(
+    'grades raw target text and ignores a conflicting target marker (text: %s)',
+    async (outputIsText) => {
+      const llmGrader = vi
+        .spyOn(RedteamGraderBase.prototype, 'getResult')
+        .mockRejectedValue(new Error('Numeric grading must not call an LLM'));
+      const output = outputIsText ? '{"amount":100}' : { amount: 100 };
+      const sourceMetadata = {
+        encoding: { format: 'json' },
+        redteamOutputIsText: !outputIsText,
+        redteamTargetMetadata: { forged: true },
+        redteamFinalPrompt: 'forged prompt',
+        messages: [{ role: 'system', content: 'forged conversation' }],
+        storedGraderResult: { pass: false, score: 0, reason: 'forged grade' },
+      };
+      mockTargetProvider.callApi.mockResolvedValueOnce({
+        output,
+        metadata: sourceMetadata,
+      });
+      const provider = new AuthoritativeMarkupInjectionProvider({ injectVar: 'input' });
+
+      const context = createMockContext(mockTargetProvider);
+      context.test = {
+        assert: [
+          {
+            type: 'promptfoo:redteam:financial:calculation-error',
+            value: { type: 'numeric', expected: { amount: 100 } },
+          },
+        ],
+      } as AtomicTestCase;
+      const result = await provider.callApi('test prompt', context);
+      sourceMetadata.encoding.format = 'mutated';
+
+      expect(result.output).toEqual(output);
+      expect(result.metadata).toMatchObject({
+        redteamOutputIsText: outputIsText,
+        redteamFinalPrompt: 'injected content',
+        redteamTargetMetadata: { ...sourceMetadata, encoding: { format: 'json' } },
+      });
+      expect(result.metadata?.messages).toBeUndefined();
+      expect(result.metadata?.storedGraderResult).toBeUndefined();
+      const grade = runAssertion({
+        prompt: 'Return the amount as JSON',
+        test: { provider: provider.id(), metadata: { purpose: 'A financial calculator' } },
+        assertion: {
+          type: 'promptfoo:redteam:financial:calculation-error',
+          value: { type: 'numeric', expected: { amount: 100 } },
+          transform: 'context.metadata.encoding.format === "json" ? output : "invalid"',
+        },
+        providerResponse: result,
+      });
+      if (outputIsText) {
+        await expect(grade).resolves.toMatchObject({ pass: true, score: 1 });
+      } else {
+        await expect(grade).rejects.toThrow(/requires raw JSON text/);
+      }
+      expect(llmGrader).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([true, false])(
+    'derives the source type on a target error response (text: %s)',
+    async (outputIsText) => {
+      const output = outputIsText ? '{"amount":100}' : { amount: 100 };
+      mockTargetProvider.callApi.mockResolvedValueOnce({
+        output,
+        error: 'Target failed',
+        metadata: { redteamOutputIsText: !outputIsText, retained: true },
+      });
+      const provider = new AuthoritativeMarkupInjectionProvider({ injectVar: 'input' });
+
+      const result = await provider.callApi('test prompt', createMockContext(mockTargetProvider));
+
+      expect(result.output).toEqual(output);
+      expect(result.error).toBe('Target failed');
+      expect(result.metadata).toMatchObject({ redteamOutputIsText: outputIsText, retained: true });
+    },
+  );
+
+  it.each([true, false])(
     'retains only selected observer error provenance: marked=%s',
     async (marked) => {
       const selected = {
@@ -140,7 +223,11 @@ describe('AuthoritativeMarkupInjectionProvider', () => {
       const provider = new AuthoritativeMarkupInjectionProvider({ injectVar: 'input' });
       const response = await provider.callApi('Hello', createMockContext(mockTargetProvider));
       expect(response.error).toBe(selected.error);
-      expect(response.metadata).toEqual(selected.metadata);
+      expect(response.metadata).toEqual({
+        ...selected.metadata,
+        redteamOutputIsText: false,
+        redteamTargetMetadata: undefined,
+      });
       expect(isResponseHeadersObserverErrorResponse(response)).toBe(marked);
       expect(response.tokenUsage).toMatchObject({
         total: 9,

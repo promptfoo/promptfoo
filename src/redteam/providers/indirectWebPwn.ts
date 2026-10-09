@@ -12,7 +12,12 @@ import {
 import { getRemoteGenerationHeaders, getRemoteGenerationUrl } from '../remoteGeneration';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { WebPageTrackingIdsSchema } from '../types/webPage';
-import { getTargetResponse, isTargetCallAbortError } from './shared';
+import {
+  getTargetResponse,
+  isTargetCallAbortError,
+  restoreNumericSourceOutput,
+  snapshotTargetMetadata,
+} from './shared';
 
 import type {
   ApiProvider,
@@ -45,6 +50,8 @@ interface IndirectWebPwnConfig {
  * Metadata returned by the Indirect Web Pwn provider.
  */
 interface IndirectWebPwnMetadata extends BaseRedteamMetadata {
+  redteamOutputIsText?: boolean;
+  redteamTargetMetadata?: ProviderResponse['metadata'] | null;
   redteamFinalPrompt?: string;
   stopReason: 'Attack succeeded' | 'Max fetch attempts reached' | 'Error';
   webPageUuid?: string;
@@ -278,6 +285,8 @@ export default class IndirectWebPwnProvider implements ApiProvider {
     const redteamHistory: Array<{ prompt: string; output: string }> = [];
 
     let lastOutput = '';
+    let lastOutputIsText: boolean | undefined;
+    let lastTargetMetadata: ProviderResponse['metadata'] | null | undefined;
     let targetError: string | undefined;
     let stopReason: IndirectWebPwnMetadata['stopReason'] = 'Max fetch attempts reached';
     let webPageUuid: string | undefined;
@@ -355,6 +364,8 @@ export default class IndirectWebPwnProvider implements ApiProvider {
         messages.push({ role: 'assistant', content: responseOutput });
         redteamHistory.push({ prompt: fetchPrompt, output: responseOutput });
         lastOutput = responseOutput;
+        lastOutputIsText = targetResponse.outputIsText;
+        lastTargetMetadata = snapshotTargetMetadata(targetResponse, context.test);
 
         // 3. Check if page was fetched
         const tracking = await this.checkPageFetched(webPage.uuid, evalId, webPage.fullUrl);
@@ -403,20 +414,26 @@ export default class IndirectWebPwnProvider implements ApiProvider {
       totalTurns: redteamHistory.length,
     });
 
-    return {
-      output: lastOutput,
-      ...(targetError ? { error: targetError } : {}),
-      metadata: {
-        redteamFinalPrompt: messages[messages.length - 2]?.content || '',
-        messages: messages as unknown as Record<string, unknown>[],
-        stopReason,
-        redteamHistory,
-        webPageUuid,
-        webPageUrl,
-        webFetchActuallyUsed,
-        fetchAttempts,
+    return restoreNumericSourceOutput(
+      {
+        output: lastOutput,
+        ...(targetError ? { error: targetError } : {}),
+        metadata: {
+          redteamOutputIsText: lastOutputIsText,
+          redteamTargetMetadata: lastTargetMetadata,
+          redteamFinalPrompt: messages[messages.length - 2]?.content || '',
+          messages: messages as unknown as Record<string, unknown>[],
+          stopReason,
+          redteamHistory,
+          webPageUuid,
+          webPageUrl,
+          webFetchActuallyUsed,
+          fetchAttempts,
+        },
+        tokenUsage: totalTokenUsage,
       },
-      tokenUsage: totalTokenUsage,
-    };
+      undefined,
+      context,
+    );
   }
 }
