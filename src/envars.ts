@@ -169,7 +169,7 @@ type EnvVars = {
   PROMPTFOO_CSRF_ALLOWED_ORIGINS?: string;
 
   //=========================================================================
-  // HTTP proxy settings
+  // Proxy settings
   //=========================================================================
   ALL_PROXY?: string;
   all_proxy?: string;

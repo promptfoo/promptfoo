@@ -203,6 +203,92 @@ describe('looksLikeSecret', () => {
   });
 });
 
+describe('proxy environment redaction', () => {
+  it.each([
+    'HTTP_PROXY',
+    'http_proxy',
+    'HTTPS_PROXY',
+    'https_proxy',
+    'ALL_PROXY',
+    'all_proxy',
+    'WS_PROXY',
+    'ws_proxy',
+    'WSS_PROXY',
+    'wss_proxy',
+    'FTP_PROXY',
+    'ftp_proxy',
+    'GOPHER_PROXY',
+    'gopher_proxy',
+    'NPM_CONFIG_PROXY',
+    'npm_config_proxy',
+    'NPM_CONFIG_HTTP_PROXY',
+    'npm_config_http_proxy',
+    'NPM_CONFIG_HTTPS_PROXY',
+    'npm_config_https_proxy',
+    'httpProxy',
+    'httpsProxy',
+    'allProxy',
+  ])('redacts credentials in %s from logs and output', (key) => {
+    for (const proxy of [
+      'http://fixture-user:fixture-password@proxy.example:8080',
+      'fixture-user:fixture-password@proxy.example:8080',
+      'socks5://fixture-user:fixture-password@proxy.example:1080',
+    ]) {
+      const config = { env: { [key]: proxy } };
+      for (const output of [sanitizeObject(config), sanitizeConfigForOutput(config)]) {
+        expect(JSON.stringify(output)).not.toContain('fixture-user');
+        expect(JSON.stringify(output)).not.toContain('fixture-password');
+        expect(output.env[key]).toContain('proxy.example');
+      }
+      expect(config.env[key]).toBe(proxy);
+    }
+  });
+
+  const opaqueCredentials = [
+    `sk-${'x'.repeat(32)}`,
+    `AKIA${'X'.repeat(16)}`,
+    `AIza${'x'.repeat(35)}`,
+  ];
+
+  it.each(['HTTPS_PROXY', 'all_proxy', 'httpsProxy', 'npm_config_proxy'])(
+    'redacts opaque credentials in raw and normalized %s values',
+    (key) => {
+      for (const token of opaqueCredentials) {
+        for (const value of [token, `https://${token}`, new URL(`https://${token}`).href]) {
+          const config = { env: { [key]: value } };
+          expect(sanitizeObject(config).env[key]).toBe('[REDACTED]');
+          expect(sanitizeConfigForOutput(config)).toEqual({ env: { [key]: '[REDACTED]' } });
+        }
+      }
+    },
+  );
+
+  it.each(['http', 'https', 'socks5'])(
+    'redacts an opaque credential used as a %s proxy hostname',
+    (protocol) => {
+      for (const token of opaqueCredentials) {
+        for (const value of [
+          `${protocol}://${token}:8080`,
+          new URL(`${protocol}://${token}:8080`).href,
+        ]) {
+          expect(sanitizeUrl(value)).toBe('[REDACTED]');
+          expect(sanitizeUrlForLogging(value)).toBe('[REDACTED]');
+        }
+      }
+      expect(sanitizeUrl(`${protocol}://proxy.example:8080/health`)).toBe(
+        `${protocol}://proxy.example:8080/health`,
+      );
+      expect(sanitizeUrl('/proxy/health')).toBe('/proxy/health');
+    },
+  );
+
+  it('preserves proxy endpoints without credentials and bypass lists', () => {
+    const config = { env: { HTTP_PROXY: 'proxy.example:8080', NO_PROXY: 'localhost,.example' } };
+    expect(sanitizeObject(config)).toEqual(config);
+    expect(sanitizeConfigForOutput(config)).toEqual(config);
+  });
+});
+
 describe('stripProviderPromptSelectors', () => {
   it.each([
     {},

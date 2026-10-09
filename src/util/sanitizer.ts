@@ -395,12 +395,12 @@ export function looksLikeSecret(value: string): boolean {
   }
 
   // AWS-style access keys (AKIA...)
-  if (/^AKIA[A-Z0-9]{16}/.test(value)) {
+  if (/^AKIA[A-Z0-9]{16}/i.test(value)) {
     return true;
   }
 
   // Google API keys (AIza...)
-  if (/^AIza[a-zA-Z0-9_-]{35}/.test(value)) {
+  if (/^AIza[a-zA-Z0-9_-]{35}/i.test(value)) {
     return true;
   }
 
@@ -1389,9 +1389,14 @@ function sanitizePlainObject(
             : REDACTED,
         ]),
       );
+    } else if (typeof value === 'string' && looksLikeSecret(value)) {
+      // Redact opaque credential values before trying URL-specific handling.
+      sanitized[key] = REDACTED;
     } else if (
       typeof value === 'string' &&
-      (key === 'apiHost' || (isEnvMap && key.toUpperCase().endsWith('_HOST')))
+      (key === 'apiHost' ||
+        (isEnvMap && key.toUpperCase().endsWith('_HOST')) ||
+        /^(?:(?:npm_config_)?(?:https?|wss?|ftp|gopher|all)_?proxy|npm_config_proxy)$/i.test(key))
     ) {
       const scheme = /^[a-z][a-z\d+.-]*:\/\//i;
       const hasScheme = scheme.test(value);
@@ -1411,9 +1416,6 @@ function sanitizePlainObject(
         (isEnvMap && key.toUpperCase().endsWith('_URL') && !/^OPENAI_(?:API_)?BASE_URL$/i.test(key))
           ? sanitizeUrl(value)
           : sanitizeUrlForLogging(value);
-    } else if (typeof value === 'string' && looksLikeSecret(value)) {
-      // Redact opaque credential values before trying URL-specific handling.
-      sanitized[key] = REDACTED;
     } else {
       // An `env` map is handed verbatim to a subprocess, so its keys are environment
       // variable names and get the broader credential-word match one level down.
@@ -1629,6 +1631,11 @@ export function sanitizeUrl(url: string): string {
     // new URL() requires a fully qualified URL, so prepend a dummy base for parsing.
     const isPathOnly = url.startsWith('/') && !url.startsWith('//');
     const parsedUrl = isPathOnly ? new URL(url, DUMMY_BASE) : new URL(url);
+
+    // A malformed endpoint may contain a credential where its hostname should be.
+    if (looksLikeSecret(parsedUrl.hostname)) {
+      return REDACTED;
+    }
 
     // Create a copy for sanitization to avoid modifying the original URL
     // Use href instead of toString() for better cross-platform compatibility

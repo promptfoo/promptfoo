@@ -90,7 +90,7 @@ describe('config-schema.json', () => {
 
     expect(providerEnvSchemas.length).toBeGreaterThan(0);
     for (const providerEnvSchema of providerEnvSchemas) {
-      expect(providerEnvSchema.properties).toHaveProperty('GOOGLE_CLOUD_PROJECT', {
+      expect(resolveRef(providerEnvSchema.properties.GOOGLE_CLOUD_PROJECT)).toEqual({
         type: 'string',
       });
     }

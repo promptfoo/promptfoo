@@ -1,8 +1,6 @@
 import * as fsPromises from 'node:fs/promises';
 import path from 'path';
-import type { ConnectionOptions } from 'tls';
 
-import { getProxyForUrl } from 'proxy-from-env';
 import { Agent, type Dispatcher, ProxyAgent } from 'undici';
 import cliState from '../../cliState';
 import { DEFAULT_MAX_CONCURRENCY, VERSION } from '../../constants';
@@ -22,6 +20,7 @@ import {
   type SystemError,
 } from './errors';
 import { monkeyPatchFetch, preserveCloudAuthRedirects } from './monkeyPatchFetch';
+import { getProxyForUrl } from './proxy';
 import { getEffectiveRequestSignal } from './requestSignal';
 import { getFetchRetryContextMaxRetries } from './retryContext';
 
@@ -60,17 +59,18 @@ async function resolveAuthenticationHeaders(
   return Object.fromEntries(headers);
 }
 
-// Cached agents to avoid recreating on every request.
-// Keep separate entries per resolved connection count so overlapping requests
-// with different request-scoped concurrency caps do not evict each other.
-// Without caching, concurrent requests race on setGlobalDispatcher(),
-// corrupting TLS session state and producing "bad record mac" errors.
-//
-// Note: TLS options (rejectUnauthorized, CA cert) are captured at agent
-// creation time. This is acceptable because these env vars don't change
-// mid-process. If that assumption changes, add cache-invalidation logic.
-const cachedAgents: Map<number, Dispatcher> = new Map();
-const cachedProxyAgents: Map<string, Dispatcher> = new Map();
+type AgentSettings = {
+  connections: number;
+  headersTimeout: number;
+  rejectUnauthorized: boolean;
+  ca?: string;
+  proxyUrl?: string;
+};
+
+// A bounded pool keeps configuration (including proxy credentials) out of serialized cache keys.
+type CachedAgent = { settings: AgentSettings; dispatcher: Dispatcher; users: number };
+const cachedAgents: CachedAgent[] = [];
+const MAX_CACHED_AGENTS = 32;
 
 /**
  * Get the connection pool size for HTTP agents.
@@ -90,68 +90,74 @@ function getConnectionPoolSize(): number {
   return cliState.maxConcurrency || DEFAULT_MAX_CONCURRENCY;
 }
 
-/**
- * Clear cached agents so the next request creates fresh ones.
- * Exported for testing only.
- */
+/** Clear cached agents and let their outstanding requests drain. */
 export function clearAgentCache(): void {
-  for (const agent of cachedAgents.values()) {
-    if (typeof agent.close === 'function') {
-      agent.close();
+  for (const entry of cachedAgents.splice(0)) {
+    if (entry.users === 0) {
+      closeAgent(entry.dispatcher);
     }
   }
-  cachedAgents.clear();
-  for (const agent of cachedProxyAgents.values()) {
-    if (typeof agent.close === 'function') {
-      agent.close();
+}
+
+function closeAgent(dispatcher: Dispatcher): void {
+  void Promise.resolve(dispatcher.close()).catch((error) => {
+    logger.debug('Failed to close cached HTTP agent', { error });
+  });
+}
+
+function acquireAgent(
+  tlsOptions: { rejectUnauthorized: boolean; ca?: string },
+  proxyUrl?: string,
+): CachedAgent {
+  const settings: AgentSettings = {
+    connections: getConnectionPoolSize(),
+    headersTimeout: getRequestTimeoutMs(),
+    ...tlsOptions,
+    proxyUrl,
+  };
+  const index = cachedAgents.findIndex(
+    ({ settings: previous }) =>
+      previous.connections === settings.connections &&
+      previous.headersTimeout === settings.headersTimeout &&
+      previous.rejectUnauthorized === settings.rejectUnauthorized &&
+      previous.ca === settings.ca &&
+      previous.proxyUrl === settings.proxyUrl,
+  );
+  if (index !== -1) {
+    const [entry] = cachedAgents.splice(index, 1);
+    cachedAgents.unshift(entry);
+    entry.users++;
+    return entry;
+  }
+  const options = {
+    headersTimeout: settings.headersTimeout,
+    keepAliveTimeout: 30_000,
+    keepAliveMaxTimeout: 60_000,
+    connections: settings.connections,
+  };
+  const dispatcher = (
+    proxyUrl
+      ? new ProxyAgent({ ...options, uri: proxyUrl, proxyTls: tlsOptions, requestTls: tlsOptions })
+      : new Agent({ ...options, connect: tlsOptions })
+  )
+    .compose(createDecompressionInterceptor())
+    .compose(stripDecompressionHeaders());
+  const entry = { settings, dispatcher, users: 1 };
+  cachedAgents.unshift(entry);
+  if (cachedAgents.length > MAX_CACHED_AGENTS) {
+    const evicted = cachedAgents.pop()!;
+    if (evicted.users === 0) {
+      closeAgent(evicted.dispatcher);
     }
   }
-  cachedProxyAgents.clear();
+  return entry;
 }
 
-function getOrCreateAgent(tlsOptions: ConnectionOptions): Dispatcher {
-  const concurrency = getConnectionPoolSize();
-  const existing = cachedAgents.get(concurrency);
-  if (existing) {
-    return existing;
+function releaseAgent(entry: CachedAgent): void {
+  entry.users--;
+  if (entry.users === 0 && !cachedAgents.includes(entry)) {
+    closeAgent(entry.dispatcher);
   }
-  const agent = new Agent({
-    headersTimeout: getRequestTimeoutMs(),
-    keepAliveTimeout: 30_000,
-    keepAliveMaxTimeout: 60_000,
-    connections: concurrency,
-    connect: tlsOptions,
-  })
-    .compose(createDecompressionInterceptor())
-    .compose(stripDecompressionHeaders());
-  cachedAgents.set(concurrency, agent);
-  return agent;
-}
-
-function getProxyAgentCacheKey(proxyUrl: string, concurrency: number): string {
-  return `${proxyUrl}::${concurrency}`;
-}
-
-function getOrCreateProxyAgent(proxyUrl: string, tlsOptions: ConnectionOptions): Dispatcher {
-  const concurrency = getConnectionPoolSize();
-  const cacheKey = getProxyAgentCacheKey(proxyUrl, concurrency);
-  const existing = cachedProxyAgents.get(cacheKey);
-  if (existing) {
-    return existing;
-  }
-  const agent = new ProxyAgent({
-    uri: proxyUrl,
-    proxyTls: tlsOptions,
-    requestTls: tlsOptions,
-    headersTimeout: getRequestTimeoutMs(),
-    keepAliveTimeout: 30_000,
-    keepAliveMaxTimeout: 60_000,
-    connections: concurrency,
-  })
-    .compose(createDecompressionInterceptor())
-    .compose(stripDecompressionHeaders());
-  cachedProxyAgents.set(cacheKey, agent);
-  return agent;
 }
 
 /**
@@ -283,8 +289,8 @@ export async function fetchWithProxy(
     }
   }
 
-  const tlsOptions: ConnectionOptions = {
-    rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL', true),
+  const tlsOptions: { rejectUnauthorized: boolean; ca?: string } = {
+    rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL'),
   };
 
   // Support custom CA certificates
@@ -303,19 +309,17 @@ export async function fetchWithProxy(
       }
     }
   }
-  const proxyUrl = finalUrlString ? getProxyForUrl(finalUrlString) : '';
+  const proxyUrl = getProxyForUrl(finalUrlString);
 
   // Bind the dispatcher per-request to avoid global state races under concurrency.
   // Respect a caller-provided dispatcher (e.g. HTTP provider's custom TLS agent for mTLS).
+  let ownedAgent: CachedAgent | undefined;
   if (!finalOptions.dispatcher) {
-    if (proxyUrl) {
-      if (logEnabled) {
-        logger.debug(`Using proxy: ${sanitizeUrl(proxyUrl)}`);
-      }
-      finalOptions.dispatcher = getOrCreateProxyAgent(proxyUrl, tlsOptions);
-    } else {
-      finalOptions.dispatcher = getOrCreateAgent(tlsOptions);
+    if (proxyUrl && logEnabled) {
+      logger.debug(`Using proxy: ${sanitizeUrl(proxyUrl)}`);
     }
+    ownedAgent = acquireAgent(tlsOptions, proxyUrl || undefined);
+    finalOptions.dispatcher = ownedAgent.dispatcher;
   }
 
   // Transient error retry logic (502/503/504/524 with matching status text).
@@ -324,36 +328,48 @@ export async function fetchWithProxy(
   const disableTransientRetries = resolveTransientRetryDisabled(options.disableTransientRetries);
   const maxTransientRetries = disableTransientRetries ? 0 : 3;
 
-  for (let attempt = 0; attempt <= maxTransientRetries; attempt++) {
-    let attemptOptions = finalOptions;
-    if (getAuthHeaders) {
-      attemptOptions = {
-        ...finalOptions,
-        headers: await resolveAuthenticationHeaders(
-          getAuthHeaders,
-          finalOptions.headers,
-          combinedSignal,
-        ),
-      };
-    }
-    const response = await monkeyPatchFetch(finalUrl, attemptOptions);
-
-    if (!disableTransientRetries && isTransientError(response) && attempt < maxTransientRetries) {
-      const backoffMs = Math.pow(2, attempt) * 1000; // 1s, 2s, 4s
-      if (logEnabled) {
-        logger.debug(
-          `Transient error (${response.status} ${response.statusText}), retry ${attempt + 1}/${maxTransientRetries} after ${backoffMs}ms`,
-        );
+  try {
+    for (let attempt = 0; attempt <= maxTransientRetries; attempt++) {
+      let attemptOptions = finalOptions;
+      if (getAuthHeaders) {
+        attemptOptions = {
+          ...finalOptions,
+          headers: await resolveAuthenticationHeaders(
+            getAuthHeaders,
+            finalOptions.headers,
+            combinedSignal,
+          ),
+        };
       }
-      await sleep(backoffMs);
-      continue;
+      const response = await monkeyPatchFetch(
+        finalUrl,
+        attemptOptions,
+        ownedAgent ? proxyUrl : undefined,
+      );
+
+      if (!disableTransientRetries && isTransientError(response) && attempt < maxTransientRetries) {
+        const backoffMs = Math.pow(2, attempt) * 1000; // 1s, 2s, 4s
+        if (logEnabled) {
+          logger.debug(
+            `Transient error (${response.status} ${response.statusText}), retry ${attempt + 1}/${maxTransientRetries} after ${backoffMs}ms`,
+          );
+        }
+        await sleep(backoffMs);
+        continue;
+      }
+
+      return response;
     }
 
-    return response;
+    // This should be unreachable, but TypeScript needs it
+    throw new Error('Unexpected end of transient retry loop');
+  } finally {
+    // Keep the dispatcher alive across authentication, request preparation, and retries.
+    // Undici's close() drains any response body still being consumed by the caller.
+    if (ownedAgent) {
+      releaseAgent(ownedAgent);
+    }
   }
-
-  // This should be unreachable, but TypeScript needs it
-  throw new Error('Unexpected end of transient retry loop');
 }
 
 export function fetchWithTimeout(
