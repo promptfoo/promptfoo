@@ -28,6 +28,33 @@ export const createDisabledCloudConfigFactory = (): MockModuleFactory => async (
   };
 };
 
+export const createEmptyGlobFactory = (): MockModuleFactory => async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    globSync: vi.fn().mockReturnValue([]),
+
+    hasMagic: (path: string) => {
+      // Match the real hasMagic behavior: only detect patterns in forward-slash paths
+      // This mimics glob's actual behavior where backslash paths return false
+      return /[*?[\]{}]/.test(path) && !path.includes('\\');
+    },
+  };
+};
+
+export const createFsPromiseOverlayFactory =
+  (fsPromiseMocks: Record<string, unknown>): MockModuleFactory =>
+  async (importOriginal) => {
+    const actual = await importOriginal<typeof import('fs/promises')>();
+    return {
+      ...actual,
+      default: {
+        ...actual,
+        ...fsPromiseMocks,
+      },
+      ...fsPromiseMocks,
+    };
+  };
+
 export const createExecFileFactory =
   (mockExecFile: Mock): MockModuleFactory =>
   async (importOriginal) => {
@@ -41,6 +68,16 @@ export const createExecFileFactory =
       execFile: mockExecFile,
     };
   };
+
+export const createRequestLoggerFactory = (): MockModuleFactory => () => ({
+  default: {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  },
+  logRequestResponse: vi.fn(),
+});
 
 export const createLocalGenerationFactory = (): MockModuleFactory => async (importOriginal) => {
   return {

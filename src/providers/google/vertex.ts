@@ -4,8 +4,8 @@ import { getCache, isCacheEnabled } from '../../cache';
 import cliState from '../../cliState';
 import logger from '../../logger';
 import {
+  extractGenAIResponse,
   type GenAISpanContext,
-  type GenAISpanResult,
   withGenAISpan,
 } from '../../tracing/genaiTracer';
 import { fetchWithProxy } from '../../util/fetch/index';
@@ -364,16 +364,11 @@ export class VertexChatProvider extends GoogleGenericProvider {
       traceparent: context?.traceparent,
     };
 
-    // Result extractor to set response attributes on the span
-    const resultExtractor = (response: ProviderResponse): GenAISpanResult => {
-      const result: GenAISpanResult = {};
-      if (response.tokenUsage) {
-        result.tokenUsage = response.tokenUsage;
-      }
-      return result;
-    };
-
-    return withGenAISpan(spanContext, () => this.callApiInternal(prompt, context), resultExtractor);
+    return withGenAISpan(
+      spanContext,
+      () => this.callApiInternal(prompt, context),
+      extractGenAIResponse,
+    );
   }
 
   private async callApiInternal(

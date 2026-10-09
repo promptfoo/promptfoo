@@ -10,7 +10,92 @@ import {
 import * as util from '../../../src/providers/google/util';
 import { getNunjucksEngineForFilePath } from '../../../src/util/file';
 import * as templates from '../../../src/util/templates';
+import {
+  createApiKeyOptions,
+  createGeminiUsageCounts,
+  createGoogleSearchTool,
+  createImageUsageCounts,
+  createTextParts,
+} from '../../factories/literalFixtures';
 import { mockProcessEnv } from '../../util/utils';
+import { createMockFetchResponse } from '../mockProviderResponses';
+
+const createOkGeminiFetchResponse = () => ({
+  data: { candidates: [{ content: { parts: [{ text: 'ok' }] } }] },
+  cached: false,
+  status: 200,
+  statusText: 'OK',
+  headers: {},
+});
+
+const createGeminiUsageResponse = () => ({
+  data: {
+    candidates: [{ content: { parts: [{ text: 'response text' }] } }],
+    usageMetadata: createImageUsageCounts(5, 15),
+  },
+  cached: false,
+});
+
+const createBudgetedThinkingOptions = () => ({
+  config: {
+    apiKey: 'test-key',
+    generationConfig: { thinkingConfig: { thinkingBudget: 1024 } },
+  },
+});
+
+const createWeatherFunctionDeclaration = () => ({
+  functionDeclarations: [
+    {
+      name: 'get_weather',
+      parameters: {
+        type: 'OBJECT' as const,
+        properties: { location: { type: 'STRING' as const } },
+        required: ['location'],
+      },
+    },
+  ],
+});
+
+const createGeminiTextResponse = (text: string = 'response text') => ({
+  data: {
+    candidates: [{ content: { parts: [{ text }] } }],
+  },
+  cached: false,
+});
+
+const createGoogleSearchOptions = () => ({
+  config: {
+    apiKey: 'test-key',
+    tools: [createGoogleSearchTool()],
+  },
+});
+
+const createThinkingTokenUsage = () => ({
+  promptTokenCount: 10,
+  candidatesTokenCount: 5,
+  totalTokenCount: 315,
+  thoughtsTokenCount: 300,
+});
+
+const createBostonWeatherCall = () => ({
+  id: 'call-1',
+  name: 'get_weather',
+  args: { location: 'Boston' },
+});
+
+const createPreparedPrompt = (text: string) => ({
+  contents: [{ role: 'user' as const, parts: [{ text }] }],
+  coerced: false,
+  systemInstruction: undefined,
+});
+
+function createPreparedTestPrompt() {
+  return createPreparedPrompt('test prompt');
+}
+
+function createPreparedHiPrompt() {
+  return createPreparedPrompt('hi');
+}
 
 vi.mock('../../../src/cache', async (importOriginal) => {
   return {
@@ -136,9 +221,7 @@ describe('AIStudioChatProvider', () => {
 
     it('should resolve API endpoint correctly', () => {
       // Test that getApiEndpoint returns correct URL with model and action
-      const provider = new AIStudioChatProvider('gemini-pro', {
-        config: { apiKey: 'test-key' },
-      });
+      const provider = new AIStudioChatProvider('gemini-pro', createApiKeyOptions());
 
       // Check endpoint format (v1beta for standard models)
       const endpoint = provider.getApiEndpoint('generateContent');
@@ -215,19 +298,9 @@ describe('AIStudioChatProvider', () => {
     });
 
     it('should handle empty candidate responses', async () => {
-      const provider = new AIStudioChatProvider('gemini-pro', {
-        config: {
-          apiKey: 'test-key',
-        },
-      });
+      const provider = new AIStudioChatProvider('gemini-pro', createApiKeyOptions());
 
-      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementationOnce(function () {
-        return {
-          contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
-          coerced: false,
-          systemInstruction: undefined,
-        };
-      });
+      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementationOnce(createPreparedTestPrompt);
 
       vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
         data: {
@@ -245,19 +318,9 @@ describe('AIStudioChatProvider', () => {
     });
 
     it('should handle malformed API responses', async () => {
-      const provider = new AIStudioChatProvider('gemini-pro', {
-        config: {
-          apiKey: 'test-key',
-        },
-      });
+      const provider = new AIStudioChatProvider('gemini-pro', createApiKeyOptions());
 
-      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementationOnce(function () {
-        return {
-          contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
-          coerced: false,
-          systemInstruction: undefined,
-        };
-      });
+      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementationOnce(createPreparedTestPrompt);
 
       const mockResponse = {
         candidates: [
@@ -285,11 +348,7 @@ describe('AIStudioChatProvider', () => {
     });
 
     it('should accumulate incremental chunks in array responses', async () => {
-      const provider = new AIStudioChatProvider('gemini-pro', {
-        config: {
-          apiKey: 'test-key',
-        },
-      });
+      const provider = new AIStudioChatProvider('gemini-pro', createApiKeyOptions());
 
       vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
         data: [
@@ -322,11 +381,7 @@ describe('AIStudioChatProvider', () => {
     });
 
     it('should preserve grounding metadata from earlier incremental chunks', async () => {
-      const provider = new AIStudioChatProvider('gemini-pro', {
-        config: {
-          apiKey: 'test-key',
-        },
-      });
+      const provider = new AIStudioChatProvider('gemini-pro', createApiKeyOptions());
       const groundingMetadata = {
         webSearchQueries: ['source query'],
       };
@@ -360,11 +415,7 @@ describe('AIStudioChatProvider', () => {
     });
 
     it('should merge grounding metadata distributed across multiple chunks', async () => {
-      const provider = new AIStudioChatProvider('gemini-pro', {
-        config: {
-          apiKey: 'test-key',
-        },
-      });
+      const provider = new AIStudioChatProvider('gemini-pro', createApiKeyOptions());
 
       vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
         data: [
@@ -420,11 +471,7 @@ describe('AIStudioChatProvider', () => {
     });
 
     it('should aggregate flat grounding fields when present on multiple candidates', async () => {
-      const provider = new AIStudioChatProvider('gemini-pro', {
-        config: {
-          apiKey: 'test-key',
-        },
-      });
+      const provider = new AIStudioChatProvider('gemini-pro', createApiKeyOptions());
 
       vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
         data: [
@@ -467,11 +514,7 @@ describe('AIStudioChatProvider', () => {
     });
 
     it('should ignore terminal STOP chunks without parts after streamed output', async () => {
-      const provider = new AIStudioChatProvider('gemini-pro', {
-        config: {
-          apiKey: 'test-key',
-        },
-      });
+      const provider = new AIStudioChatProvider('gemini-pro', createApiKeyOptions());
 
       vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
         data: [
@@ -502,11 +545,7 @@ describe('AIStudioChatProvider', () => {
     });
 
     it('should preserve prompt safety ratings from separate streaming chunks', async () => {
-      const provider = new AIStudioChatProvider('gemini-pro', {
-        config: {
-          apiKey: 'test-key',
-        },
-      });
+      const provider = new AIStudioChatProvider('gemini-pro', createApiKeyOptions());
 
       vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
         data: [
@@ -547,11 +586,7 @@ describe('AIStudioChatProvider', () => {
     });
 
     it('should reject array responses that never provide output', async () => {
-      const provider = new AIStudioChatProvider('gemini-pro', {
-        config: {
-          apiKey: 'test-key',
-        },
-      });
+      const provider = new AIStudioChatProvider('gemini-pro', createApiKeyOptions());
 
       vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
         data: [
@@ -571,9 +606,7 @@ describe('AIStudioChatProvider', () => {
     });
 
     it('rejects MAX_TOKENS responses that contain only an empty text part', async () => {
-      const provider = new AIStudioChatProvider('gemini-3.6-flash', {
-        config: { apiKey: 'test-key' },
-      });
+      const provider = new AIStudioChatProvider('gemini-3.6-flash', createApiKeyOptions());
       vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
         data: {
           candidates: [{ content: { parts: [{ text: '' }] }, finishReason: 'MAX_TOKENS' }],
@@ -592,19 +625,9 @@ describe('AIStudioChatProvider', () => {
     });
 
     it('should handle responses blocked with promptFeedback', async () => {
-      const provider = new AIStudioChatProvider('gemini-pro', {
-        config: {
-          apiKey: 'test-key',
-        },
-      });
+      const provider = new AIStudioChatProvider('gemini-pro', createApiKeyOptions());
 
-      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementationOnce(function () {
-        return {
-          contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
-          coerced: false,
-          systemInstruction: undefined,
-        };
-      });
+      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementationOnce(createPreparedTestPrompt);
 
       vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
         data: {
@@ -632,19 +655,9 @@ describe('AIStudioChatProvider', () => {
     });
 
     it('should handle candidates blocked with finish reason', async () => {
-      const provider = new AIStudioChatProvider('gemini-pro', {
-        config: {
-          apiKey: 'test-key',
-        },
-      });
+      const provider = new AIStudioChatProvider('gemini-pro', createApiKeyOptions());
 
-      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementationOnce(function () {
-        return {
-          contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
-          coerced: false,
-          systemInstruction: undefined,
-        };
-      });
+      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementationOnce(createPreparedTestPrompt);
 
       vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
         data: {
@@ -701,11 +714,7 @@ describe('AIStudioChatProvider', () => {
     });
 
     it('should handle errors for non-Gemini models', async () => {
-      const provider = new AIStudioChatProvider('palm2', {
-        config: {
-          apiKey: 'test-key',
-        },
-      });
+      const provider = new AIStudioChatProvider('palm2', createApiKeyOptions());
 
       vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
         data: {
@@ -747,11 +756,7 @@ describe('AIStudioChatProvider', () => {
     });
 
     it('should call the correct API endpoint for non-Gemini models', async () => {
-      const provider = new AIStudioChatProvider('palm2', {
-        config: {
-          apiKey: 'test-key',
-        },
-      });
+      const provider = new AIStudioChatProvider('palm2', createApiKeyOptions());
 
       await provider.callApi('test prompt');
 
@@ -771,11 +776,7 @@ describe('AIStudioChatProvider', () => {
 
   describe('Gemma models', () => {
     it('should route Gemma 4 models to the generateContent API', async () => {
-      const provider = new AIStudioChatProvider('gemma-4-31b-it', {
-        config: {
-          apiKey: 'test-key',
-        },
-      });
+      const provider = new AIStudioChatProvider('gemma-4-31b-it', createApiKeyOptions());
 
       vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
         data: {
@@ -810,11 +811,7 @@ describe('AIStudioChatProvider', () => {
     });
 
     it('should preserve cache busting for Gemma models routed through generateContent', async () => {
-      const provider = new AIStudioChatProvider('gemma-4-31b-it', {
-        config: {
-          apiKey: 'test-key',
-        },
-      });
+      const provider = new AIStudioChatProvider('gemma-4-31b-it', createApiKeyOptions());
 
       vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
         data: {
@@ -873,13 +870,7 @@ describe('AIStudioChatProvider', () => {
       };
 
       vi.mocked(cache.fetchWithCache).mockResolvedValue(mockResponse as any);
-      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementation(function () {
-        return {
-          contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
-          coerced: false,
-          systemInstruction: undefined,
-        };
-      });
+      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementation(createPreparedTestPrompt);
 
       await provider.callGemini('test prompt');
 
@@ -919,19 +910,16 @@ describe('AIStudioChatProvider', () => {
             } as any,
           },
         });
-        vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
-          data: {
+        vi.mocked(cache.fetchWithCache).mockResolvedValueOnce(
+          createMockFetchResponse({
             candidates: [{ content: { parts: [{ text: 'response text' }] } }],
             usageMetadata: {
               promptTokenCount: 1000,
               candidatesTokenCount: 500,
               totalTokenCount: 1500,
             },
-          },
-          cached: false,
-          status: 200,
-          statusText: 'OK',
-        });
+          }),
+        );
 
         const result = await latestProvider.callGemini('test prompt');
         const request = vi.mocked(cache.fetchWithCache).mock.calls.at(-1);
@@ -966,12 +954,7 @@ describe('AIStudioChatProvider', () => {
     it.each(['gemini-3.8-flash', 'gemini-3.7-flash'])(
       'rejects deprecated thinking budgets before requesting %s',
       async (modelName) => {
-        const latestProvider = new AIStudioChatProvider(modelName, {
-          config: {
-            apiKey: 'test-key',
-            generationConfig: { thinkingConfig: { thinkingBudget: 1024 } },
-          },
-        });
+        const latestProvider = new AIStudioChatProvider(modelName, createBudgetedThinkingOptions());
 
         await expect(latestProvider.callGemini('test prompt')).rejects.toThrow(
           `${modelName} does not support thinkingBudget. Use thinkingLevel`,
@@ -985,8 +968,8 @@ describe('AIStudioChatProvider', () => {
         config: { apiKey: 'test-key', generationConfig: { response_modalities: ['audio'] } },
       });
       const pcm = Buffer.from([1, 2, 3, 4]);
-      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
-        data: {
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce(
+        createMockFetchResponse({
           candidates: [
             {
               content: {
@@ -1002,11 +985,8 @@ describe('AIStudioChatProvider', () => {
             },
           ],
           usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5, totalTokenCount: 15 },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+        }),
+      );
 
       const result = await ttsProvider.callApi('Say hello.');
 
@@ -1026,26 +1006,10 @@ describe('AIStudioChatProvider', () => {
     });
 
     it('should call the Gemini API and return the response with token usage', async () => {
-      const mockResponse = {
-        data: {
-          candidates: [{ content: { parts: [{ text: 'response text' }] } }],
-          usageMetadata: {
-            promptTokenCount: 10,
-            candidatesTokenCount: 5,
-            totalTokenCount: 15,
-          },
-        },
-        cached: false,
-      };
+      const mockResponse = createGeminiUsageResponse();
 
       vi.mocked(cache.fetchWithCache).mockResolvedValue(mockResponse as any);
-      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementation(function () {
-        return {
-          contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
-          coerced: false,
-          systemInstruction: undefined,
-        };
-      });
+      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementation(createPreparedTestPrompt);
 
       const response = await provider.callGemini('test prompt');
 
@@ -1090,13 +1054,7 @@ describe('AIStudioChatProvider', () => {
       };
 
       vi.mocked(cache.fetchWithCache).mockResolvedValue(mockResponse as any);
-      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementation(function () {
-        return {
-          contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
-          coerced: false,
-          systemInstruction: undefined,
-        };
-      });
+      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementation(createPreparedTestPrompt);
 
       const response = await provider.callGemini('test prompt');
 
@@ -1115,9 +1073,7 @@ describe('AIStudioChatProvider', () => {
     });
 
     it('should use v1alpha API for thinking model', async () => {
-      provider = new AIStudioChatProvider('gemini-2.0-flash-thinking-exp', {
-        config: { apiKey: 'test-key' },
-      });
+      provider = new AIStudioChatProvider('gemini-2.0-flash-thinking-exp', createApiKeyOptions());
       const mockResponse = {
         data: {
           candidates: [{ content: { parts: [{ text: 'thinking response' }] } }],
@@ -1126,13 +1082,7 @@ describe('AIStudioChatProvider', () => {
       };
 
       vi.mocked(cache.fetchWithCache).mockResolvedValue(mockResponse as any);
-      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementation(function () {
-        return {
-          contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
-          coerced: false,
-          systemInstruction: undefined,
-        };
-      });
+      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementation(createPreparedTestPrompt);
 
       await provider.callGemini('test prompt');
 
@@ -1150,9 +1100,7 @@ describe('AIStudioChatProvider', () => {
       async (modelId) => {
         // Regression: all Gemini 3.x models use v1beta, including dash-named
         // gemini-3-* preview IDs that were previously forced onto v1alpha.
-        provider = new AIStudioChatProvider(modelId, {
-          config: { apiKey: 'test-key' },
-        });
+        provider = new AIStudioChatProvider(modelId, createApiKeyOptions());
         const mockResponse = {
           data: {
             candidates: [{ content: { parts: [{ text: 'gemini 3 response' }] } }],
@@ -1161,13 +1109,7 @@ describe('AIStudioChatProvider', () => {
         };
 
         vi.mocked(cache.fetchWithCache).mockResolvedValue(mockResponse as any);
-        vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementation(function () {
-          return {
-            contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
-            coerced: false,
-            systemInstruction: undefined,
-          };
-        });
+        vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementation(createPreparedTestPrompt);
 
         await provider.callGemini('test prompt');
 
@@ -1182,19 +1124,9 @@ describe('AIStudioChatProvider', () => {
     );
 
     it('should handle API call errors', async () => {
-      const provider = new AIStudioChatProvider('gemini-pro', {
-        config: {
-          apiKey: 'test-key',
-        },
-      });
+      const provider = new AIStudioChatProvider('gemini-pro', createApiKeyOptions());
 
-      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementationOnce(function () {
-        return {
-          contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
-          coerced: false,
-          systemInstruction: undefined,
-        };
-      });
+      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementationOnce(createPreparedTestPrompt);
 
       vi.mocked(cache.fetchWithCache).mockRejectedValueOnce(new Error('API call failed'));
 
@@ -1213,23 +1145,13 @@ describe('AIStudioChatProvider', () => {
       const mockResponse = {
         data: {
           candidates: [{ content: { parts: [{ text: '{"name":"John"}' }] } }],
-          usageMetadata: {
-            promptTokenCount: 10,
-            candidatesTokenCount: 5,
-            totalTokenCount: 15,
-          },
+          usageMetadata: createImageUsageCounts(5, 15),
         },
         cached: false,
       };
 
       vi.mocked(cache.fetchWithCache).mockResolvedValue(mockResponse as any);
-      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementation(function () {
-        return {
-          contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
-          coerced: false,
-          systemInstruction: undefined,
-        };
-      });
+      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementation(createPreparedTestPrompt);
 
       const response = await provider.callGemini('test prompt');
 
@@ -1363,13 +1285,7 @@ describe('AIStudioChatProvider', () => {
       };
 
       vi.mocked(cache.fetchWithCache).mockResolvedValue(mockResponse as any);
-      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementation(function () {
-        return {
-          contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
-          coerced: false,
-          systemInstruction: undefined,
-        };
-      });
+      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementation(createPreparedTestPrompt);
 
       const response = await provider.callGemini('test prompt');
 
@@ -1402,23 +1318,13 @@ describe('AIStudioChatProvider', () => {
               finishReason: 'STOP',
             },
           ],
-          usageMetadata: {
-            promptTokenCount: 10,
-            candidatesTokenCount: 5,
-            totalTokenCount: 15,
-          },
+          usageMetadata: createImageUsageCounts(5, 15),
         },
         cached: false,
       };
 
       vi.mocked(cache.fetchWithCache).mockResolvedValue(mockResponse as any);
-      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementation(function () {
-        return {
-          contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
-          coerced: false,
-          systemInstruction: undefined,
-        };
-      });
+      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementation(createPreparedTestPrompt);
 
       const response = await provider.callGemini('test prompt');
 
@@ -1490,21 +1396,10 @@ describe('AIStudioChatProvider', () => {
         },
       });
 
-      const mockResponse = {
-        data: {
-          candidates: [{ content: { parts: [{ text: 'response text' }] } }],
-        },
-        cached: false,
-      };
+      const mockResponse = createGeminiTextResponse();
 
       vi.mocked(cache.fetchWithCache).mockResolvedValue(mockResponse as any);
-      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementation(function () {
-        return {
-          contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
-          coerced: false,
-          systemInstruction: undefined,
-        };
-      });
+      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementation(createPreparedTestPrompt);
 
       await provider.callGemini('test prompt');
 
@@ -1549,10 +1444,7 @@ describe('AIStudioChatProvider', () => {
             },
           },
         });
-        vi.mocked(cache.fetchWithCache).mockResolvedValue({
-          data: { candidates: [{ content: { parts: [{ text: 'response text' }] } }] },
-          cached: false,
-        } as any);
+        vi.mocked(cache.fetchWithCache).mockResolvedValue(createGeminiTextResponse() as any);
         vi.mocked(util.maybeCoerceToGeminiFormat).mockReturnValue({
           contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
           coerced: false,
@@ -1581,10 +1473,7 @@ describe('AIStudioChatProvider', () => {
             },
           },
         });
-        vi.mocked(cache.fetchWithCache).mockResolvedValue({
-          data: { candidates: [{ content: { parts: [{ text: 'response text' }] } }] },
-          cached: false,
-        } as any);
+        vi.mocked(cache.fetchWithCache).mockResolvedValue(createGeminiTextResponse() as any);
         vi.mocked(util.maybeCoerceToGeminiFormat).mockReturnValue({
           contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
           coerced: false,
@@ -1665,20 +1554,7 @@ describe('AIStudioChatProvider', () => {
       provider = new AIStudioChatProvider('gemini-3.6-flash', {
         config: {
           apiKey: 'test-key',
-          tools: [
-            {
-              functionDeclarations: [
-                {
-                  name: 'get_weather',
-                  parameters: {
-                    type: 'OBJECT',
-                    properties: { location: { type: 'STRING' } },
-                    required: ['location'],
-                  },
-                },
-              ],
-            },
-          ],
+          tools: [createWeatherFunctionDeclaration()],
           functionToolCallbacks: { get_weather: callback },
         },
       });
@@ -1689,11 +1565,7 @@ describe('AIStudioChatProvider', () => {
               content: {
                 parts: [
                   {
-                    functionCall: {
-                      id: 'call-1',
-                      name: 'get_weather',
-                      args: { location: 'Boston' },
-                    },
+                    functionCall: createBostonWeatherCall(),
                     thoughtSignature: 'signed-thought',
                   },
                 ],
@@ -1787,11 +1659,7 @@ describe('AIStudioChatProvider', () => {
         },
       });
       const functionCall = {
-        functionCall: {
-          id: 'call-1',
-          name: 'get_weather',
-          args: { location: 'Boston' },
-        },
+        functionCall: createBostonWeatherCall(),
       };
       vi.mocked(cache.fetchWithCache).mockResolvedValue({
         data: {
@@ -1819,20 +1687,7 @@ describe('AIStudioChatProvider', () => {
       provider = new AIStudioChatProvider('gemini-3.6-flash', {
         config: {
           apiKey: 'test-key',
-          tools: [
-            {
-              functionDeclarations: [
-                {
-                  name: 'get_weather',
-                  parameters: {
-                    type: 'OBJECT',
-                    properties: { location: { type: 'STRING' } },
-                    required: ['location'],
-                  },
-                },
-              ],
-            },
-          ],
+          tools: [createWeatherFunctionDeclaration()],
         },
       });
       vi.mocked(cache.fetchWithCache).mockResolvedValue({
@@ -1875,28 +1730,16 @@ describe('AIStudioChatProvider', () => {
     });
 
     it('should handle API version selection', async () => {
-      const v1alphaProvider = new AIStudioChatProvider('gemini-2.0-flash-thinking-exp', {
-        config: { apiKey: 'test-key' },
-      });
-      const v1betaProvider = new AIStudioChatProvider('gemini-pro', {
-        config: { apiKey: 'test-key' },
-      });
+      const v1alphaProvider = new AIStudioChatProvider(
+        'gemini-2.0-flash-thinking-exp',
+        createApiKeyOptions(),
+      );
+      const v1betaProvider = new AIStudioChatProvider('gemini-pro', createApiKeyOptions());
 
-      const mockResponse = {
-        data: {
-          candidates: [{ content: { parts: [{ text: 'response' }] } }],
-        },
-        cached: false,
-      };
+      const mockResponse = createGeminiTextResponse('response');
 
       vi.mocked(cache.fetchWithCache).mockResolvedValue(mockResponse as any);
-      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementation(function () {
-        return {
-          contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
-          coerced: false,
-          systemInstruction: undefined,
-        };
-      });
+      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementation(createPreparedTestPrompt);
 
       await v1alphaProvider.callGemini('test prompt');
       await v1betaProvider.callGemini('test prompt');
@@ -1929,21 +1772,10 @@ describe('AIStudioChatProvider', () => {
         },
       });
 
-      const mockResponse = {
-        data: {
-          candidates: [{ content: { parts: [{ text: 'response' }] } }],
-        },
-        cached: false,
-      };
+      const mockResponse = createGeminiTextResponse('response');
 
       vi.mocked(cache.fetchWithCache).mockResolvedValue(mockResponse as any);
-      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementation(function () {
-        return {
-          contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
-          coerced: false,
-          systemInstruction: undefined,
-        };
-      });
+      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementation(createPreparedTestPrompt);
 
       await providerWithOverride.callGemini('test prompt');
 
@@ -1989,12 +1821,9 @@ describe('AIStudioChatProvider', () => {
           coerced: false,
           systemInstruction: undefined,
         });
-        vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
-          data: { candidates: [{ content: { parts: [{ text: 'Done' }] } }] },
-          cached: false,
-          status: 200,
-          statusText: 'OK',
-        });
+        vi.mocked(cache.fetchWithCache).mockResolvedValueOnce(
+          createMockFetchResponse({ candidates: [{ content: { parts: [{ text: 'Done' }] } }] }),
+        );
 
         expect((await provider.callGemini('Look up the code')).error).toBeUndefined();
         const body = JSON.parse(vi.mocked(cache.fetchWithCache).mock.calls[0][1]?.body as string);
@@ -2058,11 +1887,7 @@ describe('AIStudioChatProvider', () => {
               },
             },
           ],
-          usageMetadata: {
-            totalTokenCount: 15,
-            promptTokenCount: 8,
-            candidatesTokenCount: 7,
-          },
+          usageMetadata: createGeminiUsageCounts(15, 8, 7),
         },
         cached: false,
         status: 200,
@@ -2071,11 +1896,7 @@ describe('AIStudioChatProvider', () => {
       };
 
       vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementationOnce(function () {
-        return {
-          contents: [{ role: 'user', parts: [{ text: 'What is the weather in San Francisco?' }] }],
-          coerced: false,
-          systemInstruction: undefined,
-        };
+        return createPreparedPrompt('What is the weather in San Francisco?');
       });
 
       vi.mocked(cache.fetchWithCache).mockResolvedValueOnce(mockResponse);
@@ -2184,11 +2005,7 @@ describe('AIStudioChatProvider', () => {
       };
 
       vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementationOnce(function () {
-        return {
-          contents: [{ role: 'user', parts: [{ text: 'What is the weather in San Francisco?' }] }],
-          coerced: false,
-          systemInstruction: undefined,
-        };
+        return createPreparedPrompt('What is the weather in San Francisco?');
       });
 
       vi.mocked(cache.fetchWithCache).mockResolvedValueOnce(mockResponse);
@@ -2267,20 +2084,8 @@ describe('AIStudioChatProvider', () => {
         } as any,
       });
 
-      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementationOnce(function () {
-        return {
-          contents: [{ role: 'user', parts: [{ text: 'hi' }] }],
-          coerced: false,
-          systemInstruction: undefined,
-        };
-      });
-      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
-        data: { candidates: [{ content: { parts: [{ text: 'ok' }] } }] },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-        headers: {},
-      });
+      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementationOnce(createPreparedHiPrompt);
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce(createOkGeminiFetchResponse());
 
       await provider.callGemini('hi');
 
@@ -2307,20 +2112,8 @@ describe('AIStudioChatProvider', () => {
           },
         } as any,
       });
-      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementationOnce(function () {
-        return {
-          contents: [{ role: 'user', parts: [{ text: 'hi' }] }],
-          coerced: false,
-          systemInstruction: undefined,
-        };
-      });
-      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
-        data: { candidates: [{ content: { parts: [{ text: 'ok' }] } }] },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-        headers: {},
-      });
+      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementationOnce(createPreparedHiPrompt);
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce(createOkGeminiFetchResponse());
 
       await provider.callGemini('hi');
 
@@ -2343,20 +2136,8 @@ describe('AIStudioChatProvider', () => {
           passthrough: { toolConfig: { functionCallingConfig: { mode: 'ANY' } } },
         } as any,
       });
-      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementationOnce(function () {
-        return {
-          contents: [{ role: 'user', parts: [{ text: 'hi' }] }],
-          coerced: false,
-          systemInstruction: undefined,
-        };
-      });
-      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
-        data: { candidates: [{ content: { parts: [{ text: 'ok' }] } }] },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-        headers: {},
-      });
+      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementationOnce(createPreparedHiPrompt);
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce(createOkGeminiFetchResponse());
 
       await provider.callGemini('hi');
 
@@ -2382,20 +2163,8 @@ describe('AIStudioChatProvider', () => {
           },
         } as any,
       });
-      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementationOnce(function () {
-        return {
-          contents: [{ role: 'user', parts: [{ text: 'hi' }] }],
-          coerced: false,
-          systemInstruction: undefined,
-        };
-      });
-      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
-        data: { candidates: [{ content: { parts: [{ text: 'ok' }] } }] },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-        headers: {},
-      });
+      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementationOnce(createPreparedHiPrompt);
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce(createOkGeminiFetchResponse());
 
       await provider.callGemini('hi');
 
@@ -2421,20 +2190,8 @@ describe('AIStudioChatProvider', () => {
         },
       });
 
-      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementationOnce(function () {
-        return {
-          contents: [{ role: 'user', parts: [{ text: 'hi' }] }],
-          coerced: false,
-          systemInstruction: undefined,
-        };
-      });
-      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
-        data: { candidates: [{ content: { parts: [{ text: 'ok' }] } }] },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-        headers: {},
-      });
+      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementationOnce(createPreparedHiPrompt);
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce(createOkGeminiFetchResponse());
 
       await provider.callGemini('hi');
 
@@ -2474,20 +2231,8 @@ describe('AIStudioChatProvider', () => {
         },
         { googleSearch: {} },
       ]);
-      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementationOnce(function () {
-        return {
-          contents: [{ role: 'user', parts: [{ text: 'hi' }] }],
-          coerced: false,
-          systemInstruction: undefined,
-        };
-      });
-      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
-        data: { candidates: [{ content: { parts: [{ text: 'ok' }] } }] },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-        headers: {},
-      });
+      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementationOnce(createPreparedHiPrompt);
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce(createOkGeminiFetchResponse());
 
       await provider.callGemini('hi');
 
@@ -2525,20 +2270,8 @@ describe('AIStudioChatProvider', () => {
         },
       });
 
-      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementationOnce(function () {
-        return {
-          contents: [{ role: 'user', parts: [{ text: 'hi' }] }],
-          coerced: false,
-          systemInstruction: undefined,
-        };
-      });
-      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
-        data: { candidates: [{ content: { parts: [{ text: 'ok' }] } }] },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-        headers: {},
-      });
+      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementationOnce(createPreparedHiPrompt);
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce(createOkGeminiFetchResponse());
 
       await provider.callGemini('hi', {
         prompt: { raw: 'hi', label: 'hi', config: { tool_choice: 'none' } },
@@ -2588,25 +2321,13 @@ describe('AIStudioChatProvider', () => {
         } as any;
       });
 
-      provider = new AIStudioChatProvider('gemini-2.0-flash', {
-        config: {
-          apiKey: 'test-key',
-          tools: [
-            {
-              googleSearch: {},
-            },
-          ],
-        },
-      });
+      provider = new AIStudioChatProvider('gemini-2.0-flash', createGoogleSearchOptions());
 
       const mockResponse = {
         data: {
           candidates: [
             {
-              content: {
-                parts: [{ text: 'response with search results' }],
-                role: 'model',
-              },
+              content: createTextParts('response with search results', 'model'),
               groundingMetadata: {
                 searchEntryPoint: {
                   renderedContent: '<rendered search suggestion HTML>',
@@ -2623,11 +2344,7 @@ describe('AIStudioChatProvider', () => {
               },
             },
           ],
-          usageMetadata: {
-            totalTokenCount: 15,
-            promptTokenCount: 8,
-            candidatesTokenCount: 7,
-          },
+          usageMetadata: createGeminiUsageCounts(15, 8, 7),
         },
         cached: false,
         status: 200,
@@ -2636,13 +2353,7 @@ describe('AIStudioChatProvider', () => {
       };
 
       vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementationOnce(function () {
-        return {
-          contents: [
-            { role: 'user', parts: [{ text: 'What is the current Google stock price?' }] },
-          ],
-          coerced: false,
-          systemInstruction: undefined,
-        };
+        return createPreparedPrompt('What is the current Google stock price?');
       });
 
       vi.mocked(cache.fetchWithCache).mockResolvedValueOnce(mockResponse);
@@ -2727,11 +2438,7 @@ describe('AIStudioChatProvider', () => {
               },
             },
           ],
-          usageMetadata: {
-            totalTokenCount: 15,
-            promptTokenCount: 8,
-            candidatesTokenCount: 7,
-          },
+          usageMetadata: createGeminiUsageCounts(15, 8, 7),
         },
         cached: false,
         status: 200,
@@ -2740,13 +2447,7 @@ describe('AIStudioChatProvider', () => {
       };
 
       vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementationOnce(function () {
-        return {
-          contents: [
-            { role: 'user', parts: [{ text: 'What is the current Google stock price?' }] },
-          ],
-          coerced: false,
-          systemInstruction: undefined,
-        };
+        return createPreparedPrompt('What is the current Google stock price?');
       });
 
       vi.mocked(cache.fetchWithCache).mockResolvedValueOnce(mockResponse);
@@ -2793,21 +2494,13 @@ describe('AIStudioChatProvider', () => {
         } as any;
       });
 
-      provider = new AIStudioChatProvider('gemini-2.0-flash', {
-        config: {
-          apiKey: 'test-key',
-          tools: [{ googleSearch: {} }],
-        },
-      });
+      provider = new AIStudioChatProvider('gemini-2.0-flash', createGoogleSearchOptions());
 
       const mockResponse = {
         data: {
           candidates: [
             {
-              content: {
-                parts: [{ text: 'response with search results' }],
-                role: 'model',
-              },
+              content: createTextParts('response with search results', 'model'),
               groundingMetadata: {
                 webSearchQueries: ['test query'],
               },
@@ -2826,11 +2519,7 @@ describe('AIStudioChatProvider', () => {
       };
 
       vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementationOnce(function () {
-        return {
-          contents: [{ role: 'user', parts: [{ text: 'What is the latest news?' }] }],
-          coerced: false,
-          systemInstruction: undefined,
-        };
+        return createPreparedPrompt('What is the latest news?');
       });
 
       vi.mocked(cache.fetchWithCache).mockResolvedValueOnce(mockResponse);
@@ -2879,26 +2568,10 @@ describe('AIStudioChatProvider', () => {
         },
       });
 
-      const mockResponse = {
-        data: {
-          candidates: [{ content: { parts: [{ text: 'response text' }] } }],
-          usageMetadata: {
-            promptTokenCount: 10,
-            candidatesTokenCount: 5,
-            totalTokenCount: 15,
-          },
-        },
-        cached: false,
-      };
+      const mockResponse = createGeminiUsageResponse();
 
       vi.mocked(cache.fetchWithCache).mockResolvedValue(mockResponse as any);
-      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementation(function () {
-        return {
-          contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
-          coerced: false,
-          systemInstruction: undefined,
-        };
-      });
+      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementation(createPreparedTestPrompt);
 
       await provider.callGemini('test prompt');
 
@@ -2936,26 +2609,10 @@ describe('AIStudioChatProvider', () => {
         },
       });
 
-      const mockResponse = {
-        data: {
-          candidates: [{ content: { parts: [{ text: 'response text' }] } }],
-          usageMetadata: {
-            promptTokenCount: 10,
-            candidatesTokenCount: 5,
-            totalTokenCount: 15,
-          },
-        },
-        cached: false,
-      };
+      const mockResponse = createGeminiUsageResponse();
 
       vi.mocked(cache.fetchWithCache).mockResolvedValue(mockResponse as any);
-      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementation(function () {
-        return {
-          contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
-          coerced: false,
-          systemInstruction: undefined,
-        };
-      });
+      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementation(createPreparedTestPrompt);
 
       await provider.callGemini('test prompt');
 
@@ -3058,16 +2715,10 @@ describe('AIStudioChatProvider', () => {
 
     describe('thinking token tracking', () => {
       it('should track thinking tokens when present in response', async () => {
-        const provider = new AIStudioChatProvider('gemini-2.5-flash', {
-          config: {
-            apiKey: 'test-key',
-            generationConfig: {
-              thinkingConfig: {
-                thinkingBudget: 1024,
-              },
-            },
-          },
-        });
+        const provider = new AIStudioChatProvider(
+          'gemini-2.5-flash',
+          createBudgetedThinkingOptions(),
+        );
 
         const mockResponse = {
           data: {
@@ -3083,13 +2734,7 @@ describe('AIStudioChatProvider', () => {
         };
 
         vi.mocked(cache.fetchWithCache).mockResolvedValue(mockResponse as any);
-        vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementation(function () {
-          return {
-            contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
-            coerced: false,
-            systemInstruction: undefined,
-          };
-        });
+        vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementation(createPreparedTestPrompt);
 
         const response = await provider.callGemini('test prompt');
 
@@ -3107,11 +2752,7 @@ describe('AIStudioChatProvider', () => {
       });
 
       it('should handle response without thinking tokens', async () => {
-        const provider = new AIStudioChatProvider('gemini-2.5-flash', {
-          config: {
-            apiKey: 'test-key',
-          },
-        });
+        const provider = new AIStudioChatProvider('gemini-2.5-flash', createApiKeyOptions());
 
         const mockResponse = {
           data: {
@@ -3127,13 +2768,7 @@ describe('AIStudioChatProvider', () => {
         };
 
         vi.mocked(cache.fetchWithCache).mockResolvedValue(mockResponse as any);
-        vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementation(function () {
-          return {
-            contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
-            coerced: false,
-            systemInstruction: undefined,
-          };
-        });
+        vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementation(createPreparedTestPrompt);
 
         const response = await provider.callGemini('test prompt');
 
@@ -3147,16 +2782,10 @@ describe('AIStudioChatProvider', () => {
       });
 
       it('should track thinking tokens with zero value', async () => {
-        const provider = new AIStudioChatProvider('gemini-2.5-flash', {
-          config: {
-            apiKey: 'test-key',
-            generationConfig: {
-              thinkingConfig: {
-                thinkingBudget: 1024,
-              },
-            },
-          },
-        });
+        const provider = new AIStudioChatProvider(
+          'gemini-2.5-flash',
+          createBudgetedThinkingOptions(),
+        );
 
         const mockResponse = {
           data: {
@@ -3172,13 +2801,7 @@ describe('AIStudioChatProvider', () => {
         };
 
         vi.mocked(cache.fetchWithCache).mockResolvedValue(mockResponse as any);
-        vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementation(function () {
-          return {
-            contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
-            coerced: false,
-            systemInstruction: undefined,
-          };
-        });
+        vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementation(createPreparedTestPrompt);
 
         const response = await provider.callGemini('test prompt');
 
@@ -3196,16 +2819,10 @@ describe('AIStudioChatProvider', () => {
       });
 
       it('should track thinking tokens in cached responses', async () => {
-        const provider = new AIStudioChatProvider('gemini-2.5-flash', {
-          config: {
-            apiKey: 'test-key',
-            generationConfig: {
-              thinkingConfig: {
-                thinkingBudget: 1024,
-              },
-            },
-          },
-        });
+        const provider = new AIStudioChatProvider(
+          'gemini-2.5-flash',
+          createBudgetedThinkingOptions(),
+        );
 
         const mockResponse = {
           data: {
@@ -3221,13 +2838,7 @@ describe('AIStudioChatProvider', () => {
         };
 
         vi.mocked(cache.fetchWithCache).mockResolvedValue(mockResponse as any);
-        vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementation(function () {
-          return {
-            contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
-            coerced: false,
-            systemInstruction: undefined,
-          };
-        });
+        vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementation(createPreparedTestPrompt);
 
         const response = await provider.callGemini('test prompt');
 
@@ -3248,11 +2859,9 @@ describe('AIStudioChatProvider', () => {
     });
 
     it('should not double-count tool-use prompt tokens when pricing a standard Gemini response', async () => {
-      const provider = new AIStudioChatProvider('gemini-2.5-flash', {
-        config: { apiKey: 'test-key' },
-      });
-      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
-        data: {
+      const provider = new AIStudioChatProvider('gemini-2.5-flash', createApiKeyOptions());
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce(
+        createMockFetchResponse({
           candidates: [{ content: { parts: [{ text: 'response' }] } }],
           usageMetadata: {
             promptTokenCount: 1_000,
@@ -3260,11 +2869,8 @@ describe('AIStudioChatProvider', () => {
             candidatesTokenCount: 500,
             totalTokenCount: 1_900,
           },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+        }),
+      );
 
       vi.mocked(util.maybeCoerceToGeminiFormat).mockReturnValue({
         contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
@@ -3280,33 +2886,18 @@ describe('AIStudioChatProvider', () => {
 
     describe('thinking token cost calculation', () => {
       it('should include thinking tokens in cost calculation', async () => {
-        const provider = new AIStudioChatProvider('gemini-2.5-flash', {
-          config: {
-            apiKey: 'test-key',
-          },
-        });
+        const provider = new AIStudioChatProvider('gemini-2.5-flash', createApiKeyOptions());
 
         const mockResponse = {
           data: {
             candidates: [{ content: { parts: [{ text: 'response with thinking' }] } }],
-            usageMetadata: {
-              promptTokenCount: 10,
-              candidatesTokenCount: 5,
-              totalTokenCount: 315,
-              thoughtsTokenCount: 300,
-            },
+            usageMetadata: createThinkingTokenUsage(),
           },
           cached: false,
         };
 
         vi.mocked(cache.fetchWithCache).mockResolvedValue(mockResponse as any);
-        vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementation(function () {
-          return {
-            contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
-            coerced: false,
-            systemInstruction: undefined,
-          };
-        });
+        vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementation(createPreparedTestPrompt);
 
         const response = await provider.callGemini('test prompt');
 
@@ -3340,13 +2931,7 @@ describe('AIStudioChatProvider', () => {
           },
           cached: false,
         } as any);
-        vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementation(function () {
-          return {
-            contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
-            coerced: false,
-            systemInstruction: undefined,
-          };
-        });
+        vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementation(createPreparedTestPrompt);
 
         const response = await provider.callGemini('test prompt');
 
@@ -3386,33 +2971,18 @@ describe('AIStudioChatProvider', () => {
       });
 
       it('preserves the estimated cost for a cached thinking response', async () => {
-        const provider = new AIStudioChatProvider('gemini-2.5-flash', {
-          config: {
-            apiKey: 'test-key',
-          },
-        });
+        const provider = new AIStudioChatProvider('gemini-2.5-flash', createApiKeyOptions());
 
         const mockResponse = {
           data: {
             candidates: [{ content: { parts: [{ text: 'cached response' }] } }],
-            usageMetadata: {
-              promptTokenCount: 10,
-              candidatesTokenCount: 5,
-              totalTokenCount: 315,
-              thoughtsTokenCount: 300,
-            },
+            usageMetadata: createThinkingTokenUsage(),
           },
           cached: true,
         };
 
         vi.mocked(cache.fetchWithCache).mockResolvedValue(mockResponse as any);
-        vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementation(function () {
-          return {
-            contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
-            coerced: false,
-            systemInstruction: undefined,
-          };
-        });
+        vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementation(createPreparedTestPrompt);
 
         const response = await provider.callGemini('test prompt');
 
@@ -3421,11 +2991,7 @@ describe('AIStudioChatProvider', () => {
       });
 
       it('should calculate cost correctly when thoughtsTokenCount is absent', async () => {
-        const provider = new AIStudioChatProvider('gemini-2.5-flash', {
-          config: {
-            apiKey: 'test-key',
-          },
-        });
+        const provider = new AIStudioChatProvider('gemini-2.5-flash', createApiKeyOptions());
 
         const mockResponse = {
           data: {
@@ -3441,13 +3007,7 @@ describe('AIStudioChatProvider', () => {
         };
 
         vi.mocked(cache.fetchWithCache).mockResolvedValue(mockResponse as any);
-        vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementation(function () {
-          return {
-            contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
-            coerced: false,
-            systemInstruction: undefined,
-          };
-        });
+        vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementation(createPreparedTestPrompt);
 
         const response = await provider.callGemini('test prompt');
 

@@ -314,6 +314,21 @@ function serializeToolAttribute(value: unknown): string | undefined {
   }
 }
 
+// Extract provider token usage for response attributes on the span.
+export function extractGenAIResponse(
+  response: ProviderResponse,
+  includeFinishReason = false,
+): GenAISpanResult {
+  const result: GenAISpanResult = {};
+  if (response.tokenUsage) {
+    result.tokenUsage = response.tokenUsage;
+  }
+  if (includeFinishReason && response.finishReason) {
+    result.finishReasons = [response.finishReason];
+  }
+  return result;
+}
+
 /**
  * Execute a function within a GenAI span.
  *
