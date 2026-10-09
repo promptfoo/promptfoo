@@ -27,7 +27,9 @@ import {
   getGraderAssertionValue,
   getRedteamAssertion,
   getTargetResponse,
+  isTargetCallAbortError,
   prepareNumericGrading,
+  preserveSelectedError,
   redteamProviderManager,
   restoreNumericSourceOutput,
   runRedteamGrader,
@@ -424,6 +426,9 @@ async function runRedteamConversation({
       if (targetResponse.error) {
         logger.debug(`Iteration ${i + 1}: Target provider error: ${targetResponse.error}`);
         // Keep lastResponse with its output so final result can surface mapped output while marking error
+        if (options?.abortSignal?.aborted) {
+          break;
+        }
         continue;
       }
 
@@ -666,7 +671,7 @@ async function runRedteamConversation({
     } catch (err) {
       if (
         err instanceof RedteamGradingConfigError ||
-        (err instanceof Error && err.name === 'AbortError')
+        isTargetCallAbortError(err, options?.abortSignal)
       ) {
         throw err;
       }
@@ -675,37 +680,40 @@ async function runRedteamConversation({
     }
   }
 
-  return restoreNumericSourceOutput(
-    {
-      output:
-        bestResponse?.output ||
-        (typeof lastResponse?.output === 'string' ? lastResponse.output : undefined),
-      prompt: targetPrompt || undefined,
-      metadata: {
-        redteamTargetMetadata: bestResponse?.output
-          ? bestResponse.targetMetadata
-          : lastTargetMetadata,
-        redteamOutputIsText: bestResponse?.output
-          ? bestResponse.outputIsText
-          : lastResponse?.outputIsText,
-        finalIteration,
-        highestScore,
-        redteamHistory,
-        redteamFinalPrompt: targetPrompt || undefined,
-        bestImageUrl: bestResponse?.imageUrl,
-        bestImageDescription: bestResponse?.imageDescription,
-        ...(storedGraderResult && {
-          storedGraderResult:
-            bestResponse?.output && bestGraderResult
-              ? withGradingUsage(bestGraderResult, storedGraderResult.tokensUsed)
-              : storedGraderResult,
-        }),
+  return preserveSelectedError(
+    await restoreNumericSourceOutput(
+      {
+        output:
+          bestResponse?.output ||
+          (typeof lastResponse?.output === 'string' ? lastResponse.output : undefined),
+        prompt: targetPrompt || undefined,
+        metadata: {
+          redteamTargetMetadata: bestResponse?.output
+            ? bestResponse.targetMetadata
+            : lastTargetMetadata,
+          redteamOutputIsText: bestResponse?.output
+            ? bestResponse.outputIsText
+            : lastResponse?.outputIsText,
+          finalIteration,
+          highestScore,
+          redteamHistory,
+          redteamFinalPrompt: targetPrompt || undefined,
+          bestImageUrl: bestResponse?.imageUrl,
+          bestImageDescription: bestResponse?.imageDescription,
+          ...(storedGraderResult && {
+            storedGraderResult:
+              bestResponse?.output && bestGraderResult
+                ? withGradingUsage(bestGraderResult, storedGraderResult.tokensUsed)
+                : storedGraderResult,
+          }),
+        },
+        tokenUsage: totalTokenUsage,
+        ...(lastResponse?.error ? { error: lastResponse.error } : {}),
       },
-      tokenUsage: totalTokenUsage,
-      ...(lastResponse?.error ? { error: lastResponse.error } : {}),
-    },
-    bestResponse?.output ? bestResponse.targetOutput : lastTargetOutput,
-    context,
+      bestResponse?.output ? bestResponse.targetOutput : lastTargetOutput,
+      context,
+    ),
+    lastResponse,
   );
 }
 

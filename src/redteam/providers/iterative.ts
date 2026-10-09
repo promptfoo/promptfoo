@@ -55,6 +55,7 @@ import {
   getGraderAssertionValue,
   getRedteamAssertion,
   getTargetResponse,
+  preserveSelectedError,
   redteamProviderManager,
   resolveStoredGraderResult,
   restoreNumericSourceOutput,
@@ -494,6 +495,9 @@ export async function runRedteamConversation({
         error: targetResponse.error,
         response: targetResponse,
       });
+      if (options?.abortSignal?.aborted) {
+        break;
+      }
       continue;
     }
     if (!Object.prototype.hasOwnProperty.call(targetResponse, 'output')) {
@@ -886,32 +890,35 @@ export async function runRedteamConversation({
     }
   }
 
-  return restoreNumericSourceOutput(
-    {
-      output: bestInjectVar === undefined ? lastResponse?.output || '' : bestResponse,
-      ...(lastResponse?.error ? { error: lastResponse.error } : {}),
-      prompt: bestInjectVar ?? lastInjectVar,
-      metadata: {
-        redteamTargetMetadata:
-          bestInjectVar === undefined ? lastTargetMetadata : bestTargetMetadata,
-        redteamOutputIsText:
-          bestInjectVar === undefined ? lastResponse?.outputIsText : bestResponseIsText,
-        finalIteration,
-        highestScore,
-        redteamHistory: previousOutputs,
-        redteamFinalPrompt: bestInjectVar ?? lastInjectVar,
-        storedGraderResult: resolveStoredGraderResult(bestGraderResult, storedGraderResult),
-        stopReason: stopReason,
-        sessionIds,
-        traceSnapshots:
-          traceSnapshots.length > 0
-            ? traceSnapshots.map((snapshot) => formatTraceForMetadata(snapshot))
-            : undefined,
+  return preserveSelectedError(
+    await restoreNumericSourceOutput(
+      {
+        output: bestInjectVar === undefined ? lastResponse?.output || '' : bestResponse,
+        ...(lastResponse?.error ? { error: lastResponse.error } : {}),
+        prompt: bestInjectVar ?? lastInjectVar,
+        metadata: {
+          redteamTargetMetadata:
+            bestInjectVar === undefined ? lastTargetMetadata : bestTargetMetadata,
+          redteamOutputIsText:
+            bestInjectVar === undefined ? lastResponse?.outputIsText : bestResponseIsText,
+          finalIteration,
+          highestScore,
+          redteamHistory: previousOutputs,
+          redteamFinalPrompt: bestInjectVar ?? lastInjectVar,
+          storedGraderResult: resolveStoredGraderResult(bestGraderResult, storedGraderResult),
+          stopReason: stopReason,
+          sessionIds,
+          traceSnapshots:
+            traceSnapshots.length > 0
+              ? traceSnapshots.map((snapshot) => formatTraceForMetadata(snapshot))
+              : undefined,
+        },
+        tokenUsage: totalTokenUsage,
       },
-      tokenUsage: totalTokenUsage,
-    },
-    bestInjectVar === undefined ? lastTargetOutput : bestTargetOutput,
-    context,
+      bestInjectVar === undefined ? lastTargetOutput : bestTargetOutput,
+      context,
+    ),
+    lastResponse,
   );
 }
 

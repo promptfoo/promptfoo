@@ -17,6 +17,9 @@ import Eval from '../../../src/models/eval';
 import AuthoritativeMarkupInjectionProvider from '../../../src/redteam/providers/authoritativeMarkupInjection';
 import BestOfNProvider from '../../../src/redteam/providers/bestOfN';
 import IndirectWebPwnProvider from '../../../src/redteam/providers/indirectWebPwn';
+import { isProviderResponseRateLimited } from '../../../src/scheduler/types';
+import { isResponseHeadersObserverErrorResponse } from '../../../src/util/fetch/responseHeadersObserver';
+import { createSelectedObserverErrorResponse } from '../../util/selectedObserverError';
 import { mockProcessEnv } from '../../util/utils';
 
 import type { ApiProvider, AtomicTestCase, ProviderResponse } from '../../../src/types/index';
@@ -91,6 +94,66 @@ describe('selected error media in single-response strategy wrappers', () => {
       await fs.rm(directory, { recursive: true, force: true });
     }
   });
+
+  it.each(
+    (['best-of-n', 'authoritative-markup-injection'] as const).flatMap((strategy) =>
+      [false, true].flatMap((inline) =>
+        [false, true].map((marked) => ({ strategy, inline, marked })),
+      ),
+    ),
+  )(
+    '$strategy preserves selected observer identity through numeric capture storage (inline=$inline, marked=$marked)',
+    async ({ strategy, inline, marked }) => {
+      vi.stubEnv('PROMPTFOO_INLINE_MEDIA', String(inline));
+      const provider =
+        strategy === 'best-of-n'
+          ? new BestOfNProvider({ injectVar: 'query', maxConcurrency: 1 })
+          : new AuthoritativeMarkupInjectionProvider({ injectVar: 'query' });
+      const original = {
+        output: '{"amount":100}',
+        error: 'metrics rate limit exceeded',
+        metadata: { selectedTurn: 1, audio: { data: audio, format: 'wav' } },
+        tokenUsage: { total: 9, numRequests: 1 },
+      };
+      const selected = marked ? createSelectedObserverErrorResponse(original) : original;
+      const target: ApiProvider = {
+        id: () => 'synthetic-selected-observer-target',
+        callApi: vi.fn(async () => selected),
+      };
+      const result = await provider.callApi('Return an amount', {
+        originalProvider: target,
+        prompt,
+        vars: { query: 'Return an amount' },
+        test: {
+          assert: [
+            {
+              type: 'promptfoo:redteam:financial:calculation-error',
+              value: { type: 'numeric', expected: { amount: 100 } },
+            },
+          ],
+        } as AtomicTestCase,
+      });
+      expect(result.error).toBe(original.error);
+      expect(result.output).toBe(original.output);
+      expect(result.tokenUsage).toMatchObject(original.tokenUsage);
+      expect(result.metadata?.redteamTargetMetadata.selectedTurn).toBe(1);
+      const capturedAudio = result.metadata?.redteamTargetMetadata.audio;
+      expect(capturedAudio.data).toBe(inline ? audio : undefined);
+      if (!inline) {
+        expect((await getBlobByHash(capturedAudio.blobRef.hash)).data.toString('base64')).toBe(
+          audio,
+        );
+      }
+      expect(isResponseHeadersObserverErrorResponse(result)).toBe(marked);
+      expect(isProviderResponseRateLimited(result, undefined)).toBe(!marked);
+      expect(isResponseHeadersObserverErrorResponse(JSON.parse(JSON.stringify(result)))).toBe(
+        false,
+      );
+      expect(selected.metadata).toBe(original.metadata);
+      expect(original.metadata.audio.data).toBe(audio);
+      expect(target.callApi).toHaveBeenCalledOnce();
+    },
+  );
 
   it.each(
     strategies.flatMap((strategy) =>

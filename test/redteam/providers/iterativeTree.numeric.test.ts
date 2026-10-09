@@ -9,9 +9,12 @@ import { FinancialCalculationErrorPluginGrader } from '../../../src/redteam/plug
 import RedteamIterativeTreeProvider from '../../../src/redteam/providers/iterativeTree';
 import { redteamProviderManager } from '../../../src/redteam/providers/shared';
 import * as remoteGeneration from '../../../src/redteam/remoteGeneration';
+import { isProviderResponseRateLimited } from '../../../src/scheduler/types';
+import { isResponseHeadersObserverErrorResponse } from '../../../src/util/fetch/responseHeadersObserver';
 import { createMockProvider, type MockApiProvider } from '../../factories/provider';
+import { createSelectedObserverErrorResponse } from '../../util/selectedObserverError';
 
-import type { Assertion, AtomicTestCase } from '../../../src/types/index';
+import type { Assertion, AtomicTestCase, CallApiOptionsParams } from '../../../src/types/index';
 
 const assertionType = 'promptfoo:redteam:financial:calculation-error';
 const numericReference = { type: 'numeric', expected: { amount: 100 } };
@@ -70,7 +73,7 @@ describe('tree numeric grading order', () => {
     fs.rmSync(temporaryDirectory, { recursive: true, force: true });
   });
 
-  function runTree(assertion: Assertion) {
+  function runTree(assertion: Assertion, options?: CallApiOptionsParams) {
     const provider = new RedteamIterativeTreeProvider({
       injectVar: 'query',
       maxDepth: 1,
@@ -87,12 +90,16 @@ describe('tree numeric grading order', () => {
         purpose: 'synthetic calculator',
       },
     };
-    return provider.callApi('', {
-      originalProvider: target,
-      vars: test.vars!,
-      prompt: { raw: '{{query}}', label: 'synthetic calculation' },
-      test,
-    });
+    return provider.callApi(
+      '',
+      {
+        originalProvider: target,
+        vars: test.vars!,
+        prompt: { raw: '{{query}}', label: 'synthetic calculation' },
+        test,
+      },
+      options,
+    );
   }
 
   function externalReference(value: unknown): { assertion: Assertion; calls: () => string } {
@@ -111,6 +118,50 @@ describe('tree numeric grading order', () => {
       calls: () => fs.readFileSync(calls, 'utf8'),
     };
   }
+
+  it.each([false, true])(
+    'retains the completed numeric branch observer identity after caller cancellation (marked: %s)',
+    async (marked) => {
+      const caller = new AbortController();
+      const reason = new Error('caller stopped after completed target');
+      const original = {
+        output: '{"amount":100}',
+        error: 'metrics rate limit exceeded',
+        metadata: { selectedTurn: 1 },
+        tokenUsage: { total: 9, numRequests: 1 },
+      };
+      const selected = marked ? createSelectedObserverErrorResponse(original) : original;
+      target.callApi.mockImplementation(async () => {
+        events.push('target');
+        caller.abort(reason);
+        return selected;
+      });
+      const result = await runTree(
+        { type: assertionType, value: numericReference },
+        {
+          abortSignal: caller.signal,
+        },
+      );
+      expect(result.output).toBe(original.output);
+      expect(result.error).toBe(original.error);
+      expect(result.tokenUsage).toMatchObject(original.tokenUsage);
+      expect(result.metadata).toMatchObject({
+        stopReason: 'TARGET_ERROR',
+        redteamOutputIsText: true,
+        redteamTargetMetadata: original.metadata,
+      });
+      expect(result.metadata.redteamTargetMetadata).not.toBe(original.metadata);
+      expect(isResponseHeadersObserverErrorResponse(result)).toBe(marked);
+      expect(isProviderResponseRateLimited(result, undefined)).toBe(!marked);
+      expect(isResponseHeadersObserverErrorResponse(JSON.parse(JSON.stringify(result)))).toBe(
+        false,
+      );
+      expect(events).toEqual(['target']);
+      expect(target.callApi).toHaveBeenCalledOnce();
+      expect(judge.callApi).not.toHaveBeenCalled();
+      expect(caller.signal.reason).toBe(reason);
+    },
+  );
 
   it.each([false, true])(
     'returns a numeric failure without the auxiliary judge (judge unavailable: %s)',

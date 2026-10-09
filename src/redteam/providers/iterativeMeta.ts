@@ -46,6 +46,7 @@ import {
   getGraderAssertionValue,
   getRedteamAssertion,
   getTargetResponse,
+  preserveSelectedError,
   redteamProviderManager,
   restoreNumericSourceOutput,
   runRedteamGrader,
@@ -480,6 +481,9 @@ export async function runMetaAgentRedteam({
     );
     lastResponse = targetResponse;
     accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
+    if (targetResponse.error && options?.abortSignal?.aborted) {
+      break;
+    }
 
     // Fetch trace context if tracing is enabled
     let traceContext: TraceContextData | null = null;
@@ -703,34 +707,37 @@ export async function runMetaAgentRedteam({
   }
 
   const error = agentRequestError || failClosedError || lastResponse?.error;
-  return restoreNumericSourceOutput(
-    {
-      output: bestResponse || lastResponse?.output || '',
-      prompt: bestPrompt,
-      ...(error ? { error } : {}),
-      metadata: {
-        redteamOutputIsText: lastResponse?.outputIsText,
-        redteamTargetMetadata: lastTargetMetadata,
-        finalIteration,
-        vulnerabilityAchieved,
-        // Use the last prompt sent to target (e.g., fetchPrompt for indirect-web-pwn layer)
-        // This ensures UI shows what was actually sent, not the pre-transform jailbreak
-        redteamFinalPrompt: lastFinalAttackPrompt || bestPrompt,
-        storedGraderResult,
-        stopReason,
-        redteamHistory,
-        sessionIds,
-        traceSnapshots:
-          traceSnapshots.length > 0
-            ? traceSnapshots.map((t) => formatTraceForMetadata(t))
-            : undefined,
-        // Include display vars from per-turn layer transforms (e.g., fetchPrompt, webPageUrl)
-        ...(lastTransformDisplayVars && { transformDisplayVars: lastTransformDisplayVars }),
+  return preserveSelectedError(
+    await restoreNumericSourceOutput(
+      {
+        output: bestResponse || lastResponse?.output || '',
+        prompt: bestPrompt,
+        ...(error ? { error } : {}),
+        metadata: {
+          redteamOutputIsText: lastResponse?.outputIsText,
+          redteamTargetMetadata: lastTargetMetadata,
+          finalIteration,
+          vulnerabilityAchieved,
+          // Use the last prompt sent to target (e.g., fetchPrompt for indirect-web-pwn layer)
+          // This ensures UI shows what was actually sent, not the pre-transform jailbreak
+          redteamFinalPrompt: lastFinalAttackPrompt || bestPrompt,
+          storedGraderResult,
+          stopReason,
+          redteamHistory,
+          sessionIds,
+          traceSnapshots:
+            traceSnapshots.length > 0
+              ? traceSnapshots.map((t) => formatTraceForMetadata(t))
+              : undefined,
+          // Include display vars from per-turn layer transforms (e.g., fetchPrompt, webPageUrl)
+          ...(lastTransformDisplayVars && { transformDisplayVars: lastTransformDisplayVars }),
+        },
+        tokenUsage: totalTokenUsage,
       },
-      tokenUsage: totalTokenUsage,
-    },
-    lastTargetOutput,
-    context,
+      lastTargetOutput,
+      context,
+    ),
+    agentRequestError || failClosedError ? undefined : lastResponse,
   );
 }
 

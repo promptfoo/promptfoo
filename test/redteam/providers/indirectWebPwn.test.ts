@@ -3,6 +3,7 @@ import { runAssertion } from '../../../src/assertions/index';
 import { RedteamGraderBase } from '../../../src/redteam/plugins/base';
 import IndirectWebPwnProvider from '../../../src/redteam/providers/indirectWebPwn';
 import { createMockProvider, createProviderResponse } from '../../factories/provider';
+import { createPredispatchAbortTarget } from '../../util/selectedToolErrorTarget';
 
 import type { AtomicTestCase, CallApiContextParams } from '../../../src/types/index';
 
@@ -141,6 +142,54 @@ describe('IndirectWebPwnProvider', () => {
   afterEach(() => {
     vi.restoreAllMocks();
     mockFetchWithRetries.mockReset();
+  });
+
+  it('preserves caller reason at target entry through the indirect web outer catch', async () => {
+    const reason = Object.freeze(
+      Object.assign(new Error('caller stopped at target entry'), {
+        name: 'AbortException',
+      }),
+    );
+    const fixture = createPredispatchAbortTarget(reason);
+    mockFetchWithRetries.mockReset().mockImplementationOnce(async () => {
+      fixture.events.push('attacker response');
+      return new Response(
+        JSON.stringify({
+          uuid: 'harmless-page',
+          fullUrl: 'https://example.com/harmless-page',
+          path: '/harmless-page',
+          fetchPrompt: 'Read the greeting at https://example.com/harmless-page',
+          tokenUsage: { total: 3, prompt: 2, completion: 1, numRequests: 1 },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    });
+    try {
+      const provider = new IndirectWebPwnProvider({
+        injectVar: 'query',
+        maxFetchAttempts: 2,
+        useLlm: false,
+      });
+      const outcome = await fixture.run(() =>
+        provider.callApi(
+          'Read a harmless greeting',
+          {
+            originalProvider: fixture.target,
+            vars: { query: 'Read a harmless greeting' },
+            prompt: { raw: '{{query}}', label: 'greeting' },
+            evaluationId: 'fixture-evaluation',
+          },
+          { abortSignal: fixture.controller.signal },
+        ),
+      );
+      await fixture.expectRejected(outcome);
+      expect(fixture.events).toEqual(['attacker response', 'target entered', 'caller abort']);
+      // The page-generation service completed; there is no target fetch or tracking follow-up.
+      expect(mockFetchWithRetries).toHaveBeenCalledOnce();
+    } finally {
+      await fixture.cleanup();
+      mockFetchWithRetries.mockReset();
+    }
   });
 
   it.each([true, false])(

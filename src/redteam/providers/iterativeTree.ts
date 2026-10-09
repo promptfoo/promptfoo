@@ -66,10 +66,12 @@ import {
   getRedteamAssertion,
   getTargetResponse,
   prepareNumericGrading,
+  preserveSelectedError,
   redteamProviderManager,
   restoreNumericSourceOutput,
   runRedteamGrader,
   snapshotTargetMetadata,
+  type TargetResponse,
 } from './shared';
 import type { Environment } from 'nunjucks';
 
@@ -506,7 +508,8 @@ type StopReason =
   | 'MAX_DEPTH'
   | 'NO_IMPROVEMENT'
   | 'GRADER_FAILED'
-  | 'ATTACKER_ERROR';
+  | 'ATTACKER_ERROR'
+  | 'TARGET_ERROR';
 
 /**
  * Represents metadata for the iterative tree search process.
@@ -649,6 +652,46 @@ async function runRedteamConversation({
   // - bestFinalAttackPrompt: the transform from the BEST scoring turn (what we want to show)
   let lastFinalAttackPrompt: string | undefined;
   let bestFinalAttackPrompt: string | undefined;
+
+  async function buildFinalResponse(
+    finalTargetResponse: TargetResponse,
+    finalTargetMetadata: ProviderResponse['metadata'] | null | undefined,
+    finalTargetOutput?: string,
+  ): Promise<RedteamTreeResponse> {
+    return preserveSelectedError(
+      await restoreNumericSourceOutput<RedteamTreeResponse>(
+        {
+          output:
+            bestResponse ||
+            (typeof finalTargetResponse.output === 'string' ? finalTargetResponse.output : ''),
+          prompt: bestNode.prompt,
+          metadata: {
+            redteamOutputIsText: bestResponse
+              ? bestResponseIsText
+              : finalTargetResponse.outputIsText,
+            redteamTargetMetadata: bestResponse ? bestTargetMetadata : finalTargetMetadata,
+            highestScore: maxScore,
+            redteamFinalPrompt: bestFinalAttackPrompt || lastFinalAttackPrompt || bestNode.prompt,
+            messages: treeOutputs as Record<string, any>[],
+            attempts,
+            redteamTreeHistory: treeOutputs,
+            stopReason: stoppingReason,
+            storedGraderResult: getBestGraderResult(),
+            sessionIds: extractSessionIds(treeOutputs),
+            ...((bestTransformDisplayVars || lastTransformDisplayVars) && {
+              transformDisplayVars: bestTransformDisplayVars || lastTransformDisplayVars,
+            }),
+          },
+          tokenUsage: totalTokenUsage,
+          guardrails: finalTargetResponse?.guardrails,
+          ...(finalTargetResponse.error ? { error: finalTargetResponse.error } : {}),
+        },
+        bestResponse ? bestTargetOutput : finalTargetOutput,
+        context,
+      ),
+      finalTargetResponse,
+    );
+  }
 
   for (let depth = 0; depth < MAX_DEPTH; depth++) {
     logger.debug(
@@ -900,6 +943,10 @@ async function runRedteamConversation({
             guardrails: targetResponse?.guardrails,
             sessionId: getSessionId(targetResponse, iterationContext),
           });
+          if (options?.abortSignal?.aborted) {
+            stoppingReason = 'TARGET_ERROR';
+            return buildFinalResponse(targetResponse, targetMetadata, targetOutput);
+          }
           continue;
         }
         invariant(
@@ -1379,34 +1426,7 @@ async function runRedteamConversation({
     guardrails: finalTargetResponse?.guardrails,
     sessionId: getSessionId(finalTargetResponse, context),
   });
-  return restoreNumericSourceOutput(
-    {
-      output:
-        bestResponse ||
-        (typeof finalTargetResponse.output === 'string' ? finalTargetResponse.output : ''),
-      prompt: bestNode.prompt,
-      metadata: {
-        redteamOutputIsText: bestResponse ? bestResponseIsText : finalTargetResponse.outputIsText,
-        redteamTargetMetadata: bestResponse ? bestTargetMetadata : finalTargetMetadata,
-        highestScore: maxScore,
-        redteamFinalPrompt: bestFinalAttackPrompt || lastFinalAttackPrompt || bestNode.prompt,
-        messages: treeOutputs as Record<string, any>[],
-        attempts,
-        redteamTreeHistory: treeOutputs,
-        stopReason: stoppingReason,
-        storedGraderResult: getBestGraderResult(),
-        sessionIds: extractSessionIds(treeOutputs),
-        ...((bestTransformDisplayVars || lastTransformDisplayVars) && {
-          transformDisplayVars: bestTransformDisplayVars || lastTransformDisplayVars,
-        }),
-      },
-      tokenUsage: totalTokenUsage,
-      guardrails: finalTargetResponse?.guardrails,
-      ...(finalTargetResponse.error ? { error: finalTargetResponse.error } : {}),
-    },
-    bestResponse ? bestTargetOutput : undefined,
-    context,
-  );
+  return buildFinalResponse(finalTargetResponse, finalTargetMetadata);
 }
 
 /**

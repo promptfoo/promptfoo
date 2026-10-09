@@ -3,7 +3,12 @@ import { REDTEAM_SIMULATED_USER_TASK_ID } from '../../providers/promptfoo';
 import { type Message, SimulatedUser } from '../../providers/simulatedUser';
 import invariant from '../../util/invariant';
 import { accumulateAttackerTokenUsage } from '../../util/tokenUsageUtils';
-import { getLastMessageContent, messagesToRedteamHistory, snapshotTargetMetadata } from './shared';
+import {
+  getLastMessageContent,
+  messagesToRedteamHistory,
+  preserveSelectedError,
+  snapshotTargetMetadata,
+} from './shared';
 
 import type { CallApiContextParams, ProviderResponse, TokenUsage } from '../../types/index';
 
@@ -63,7 +68,7 @@ export default class RedteamMischievousUserProvider extends SimulatedUser {
     if (metadata === undefined) {
       return response;
     }
-    const selectedResponse = { ...response };
+    const selectedResponse = preserveSelectedError({ ...response }, response);
     this.targetMetadataSnapshots.set(selectedResponse, metadata);
     return selectedResponse;
   }

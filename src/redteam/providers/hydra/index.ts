@@ -53,6 +53,7 @@ import {
   isConversationEndedResponse,
   type Message,
   prepareNumericGrading,
+  preserveSelectedError,
   restoreNumericSourceOutput,
   runRedteamGrader,
   snapshotTargetMetadata,
@@ -696,6 +697,9 @@ export class HydraProvider implements ApiProvider {
         { role: 'assistant', content: targetResponse.output || '' },
       ];
       accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
+      if (targetResponse.error && options?.abortSignal?.aborted) {
+        break;
+      }
 
       // Fetch trace context if tracing is enabled
       let traceContext: TraceContextData | null = null;
@@ -1032,7 +1036,7 @@ export class HydraProvider implements ApiProvider {
     }
 
     // Update scan learnings
-    if (scanId) {
+    if (scanId && !options?.abortSignal?.aborted) {
       try {
         const turnsCompleted = this.conversationHistory.filter((m) => m.role === 'user').length;
         const learningRequest = {
@@ -1092,38 +1096,41 @@ export class HydraProvider implements ApiProvider {
             hydraResult: vulnerabilityAchieved,
           };
 
-    return restoreNumericSourceOutput(
-      {
-        output: lastTargetResponse?.output || '',
-        ...(failClosedError
-          ? { error: failClosedError }
-          : lastTargetResponse?.error
-            ? { error: lastTargetResponse.error }
-            : {}),
-        metadata: {
-          redteamOutputIsText: lastTargetResponse?.outputIsText,
-          redteamTargetMetadata: lastTargetMetadata,
-          sessionId: this.sessionId || getSessionId(lastTargetResponse, context),
-          messages,
-          ...strategyMetadata,
-          stopReason,
-          successfulAttacks,
-          totalSuccessfulAttacks: successfulAttacks.length,
-          storedGraderResult,
-          redteamHistory,
-          sessionIds,
-          traceSnapshots:
-            traceSnapshots.length > 0
-              ? traceSnapshots.map((t) => formatTraceForMetadata(t))
-              : undefined,
-          ...(lastTransformDisplayVars && { transformDisplayVars: lastTransformDisplayVars }),
-          redteamFinalPrompt: lastFinalAttackPrompt || successfulAttacks[0]?.message,
+    return preserveSelectedError(
+      await restoreNumericSourceOutput(
+        {
+          output: lastTargetResponse?.output || '',
+          ...(failClosedError
+            ? { error: failClosedError }
+            : lastTargetResponse?.error
+              ? { error: lastTargetResponse.error }
+              : {}),
+          metadata: {
+            redteamOutputIsText: lastTargetResponse?.outputIsText,
+            redteamTargetMetadata: lastTargetMetadata,
+            sessionId: this.sessionId || getSessionId(lastTargetResponse, context),
+            messages,
+            ...strategyMetadata,
+            stopReason,
+            successfulAttacks,
+            totalSuccessfulAttacks: successfulAttacks.length,
+            storedGraderResult,
+            redteamHistory,
+            sessionIds,
+            traceSnapshots:
+              traceSnapshots.length > 0
+                ? traceSnapshots.map((t) => formatTraceForMetadata(t))
+                : undefined,
+            ...(lastTransformDisplayVars && { transformDisplayVars: lastTransformDisplayVars }),
+            redteamFinalPrompt: lastFinalAttackPrompt || successfulAttacks[0]?.message,
+          },
+          tokenUsage: totalTokenUsage,
+          guardrails: lastTargetResponse?.guardrails,
         },
-        tokenUsage: totalTokenUsage,
-        guardrails: lastTargetResponse?.guardrails,
-      },
-      lastNumericOutput,
-      context,
+        lastNumericOutput,
+        context,
+      ),
+      failClosedError ? undefined : lastTargetResponse,
     );
   }
 }

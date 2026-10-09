@@ -20,6 +20,7 @@ import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
 import {
   callTargetProvider,
   getForwardedTargetMetadata,
+  preserveSelectedError,
   restoreNumericSourceOutput,
   snapshotTargetMetadata,
 } from './shared';
@@ -158,14 +159,17 @@ export default class AuthoritativeMarkupInjectionProvider implements ApiProvider
     });
 
     if (targetResponse.error) {
-      return restoreNumericSourceOutput(
-        {
-          ...targetResponse,
-          metadata: targetMetadata,
-          tokenUsage: totalTokenUsage,
-        },
-        undefined,
-        context,
+      return preserveSelectedError(
+        await restoreNumericSourceOutput(
+          {
+            ...targetResponse,
+            metadata: targetMetadata,
+            tokenUsage: totalTokenUsage,
+          },
+          undefined,
+          context,
+        ),
+        targetResponse,
       );
     }
 
