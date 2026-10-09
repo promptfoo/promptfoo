@@ -48,6 +48,9 @@ export class PythonWorker {
   }
 
   private async startWorker(validatedPythonPath?: string): Promise<void> {
+    if (this.shuttingDown) {
+      throw new Error('Worker shutting down');
+    }
     if (this.failed) {
       throw new Error('Worker has failed');
     }
@@ -372,6 +375,7 @@ export class PythonWorker {
   }
 
   async shutdown(): Promise<void> {
+    const needsForce = !this.ready || this.busy;
     this.shuttingDown = true;
     this.ready = false;
     if (!this.process) {
@@ -396,7 +400,11 @@ export class PythonWorker {
         this.pendingRequest.reject(new Error('Worker shutting down'));
         this.pendingRequest = null;
       }
-      workerProcess.send('SHUTDOWN');
+      if (needsForce) {
+        workerProcess.kill('SIGTERM');
+      } else {
+        workerProcess.send('SHUTDOWN');
+      }
       await closed;
     } catch (error) {
       handleShutdownError(error);
