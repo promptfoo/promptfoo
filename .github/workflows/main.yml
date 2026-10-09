@@ -515,13 +515,16 @@ jobs:
         env:
           NO_COLOR: '1'
         run: |
-          "$RUNNER_TEMP/shfmt" -f . > "$RUNNER_TEMP/shell-files.txt"
+          # shfmt 3.12.0 cannot disable EditorConfig ignore rules during discovery.
+          find . -name .git -prune -o -name .editorconfig -exec rm -f -- {} +
+          printf 'root = true\n' > .editorconfig
+          "$RUNNER_TEMP/shfmt" -f=0 . > "$RUNNER_TEMP/shell-files.txt"
           shell_files=()
-          while IFS= read -r file; do
+          while IFS= read -r -d '' file; do
             shell_files+=("$file")
           done < "$RUNNER_TEMP/shell-files.txt"
           if (( ${#shell_files[@]} > 0 )); then
-            "$RUNNER_TEMP/shfmt" -i 2 -d "${shell_files[@]}"
+            "$RUNNER_TEMP/shfmt" -i 2 -d -- "${shell_files[@]/#/./}"
           fi
 
   assets:
