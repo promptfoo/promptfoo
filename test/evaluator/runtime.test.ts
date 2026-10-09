@@ -329,7 +329,7 @@ describeEvaluator('evaluator runtime ports', () => {
   });
 
   it.each([false, true])(
-    'drains active cancellation checkpoints before closing JSONL with queued work and metricsFailure=%s',
+    'drains active cancellation checkpoints across a later deadline before closing JSONL with metricsFailure=%s',
     async (metricsFailure) => {
       const outputDir = await mkdtemp(path.join(tmpdir(), 'promptfoo-cancel-drain-'));
       const outputPath = path.join(outputDir, 'results.jsonl');
@@ -393,7 +393,7 @@ describeEvaluator('evaluator runtime ports', () => {
       const evaluation = evaluate(
         suite,
         record,
-        { maxConcurrency: 2, timeoutMs: 0, abortSignal: controller.signal },
+        { maxConcurrency: 2, timeoutMs: 0, maxEvalTimeMs: 1000, abortSignal: controller.signal },
         runtime,
       ).then((result) => {
         returned = true;
@@ -403,7 +403,7 @@ describeEvaluator('evaluator runtime ports', () => {
         await vi.waitFor(() => expect(provider.callApi).toHaveBeenCalledTimes(2));
         controller.abort();
         await firstWrite;
-        await vi.advanceTimersByTimeAsync(0);
+        await vi.advanceTimersByTimeAsync(1000);
         expect(close).not.toHaveBeenCalled();
         expect(returned).toBe(false);
         expect(provider.callApi).toHaveBeenCalledTimes(2);
@@ -416,6 +416,10 @@ describeEvaluator('evaluator runtime ports', () => {
           .map((line) => JSON.parse(line));
         expect(rows.map((row) => row.testIdx).sort()).toEqual([0, 1]);
         expect(rows.every((row) => row.failureReason === ResultFailureReason.ERROR)).toBe(true);
+        expect(
+          rows.every((row) => row.metadata?.incomplete && row.metadata?.__promptfoo?.resumable),
+        ).toBe(true);
+        expect(rows.every((row) => row.error.startsWith('Evaluation aborted:'))).toBe(true);
         expect(record.getStats()).toMatchObject({
           errors: 2,
           tokenUsage: { total: 22, numRequests: 2 },

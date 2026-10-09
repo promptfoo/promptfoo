@@ -4,8 +4,12 @@ import { randomUUID } from 'crypto';
 
 import { expect, it, vi } from 'vitest';
 import { clearCache, getCache } from '../../src/cache';
+import cliState from '../../src/cliState';
 import { evaluate, runEval } from '../../src/evaluator';
+import { runExtensionHook } from '../../src/evaluatorHelpers';
 import Eval from '../../src/models/eval';
+import EvalResult from '../../src/models/evalResult';
+import telemetry from '../../src/telemetry';
 import {
   type ApiProvider,
   type RateLimitRegistryRef,
@@ -617,6 +621,101 @@ describeEvaluator('evaluator grading concurrency', () => {
 
     errorSpy.mockRestore();
   });
+
+  it.each(['grouped', 'serial', 'concurrent'] as const)(
+    'preserves interruption when the last %s row is cancelled during embedding grading',
+    async (mode) => {
+      const { default: logger } = await import('../../src/logger');
+      const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => logger);
+      const controller = new AbortController();
+      const reason = new Error('custom embedding shutdown');
+      const target: ApiProvider = {
+        id: () => 'target-provider',
+        callApi: vi.fn(async () => ({
+          output: 'Target output',
+          tokenUsage: createEmptyTokenUsage(),
+        })),
+      };
+      const embedding: ApiProvider = {
+        id: () => 'embedding-judge',
+        callApi: async () => ({ output: '' }),
+        supportsEmbeddingCancellation: true,
+        callEmbeddingApi: async (
+          _input: string,
+          _context?: unknown,
+          options?: { abortSignal?: AbortSignal },
+        ) => {
+          controller.abort(reason);
+          options?.abortSignal?.throwIfAborted();
+          throw new Error('Expected grading signal');
+        },
+      };
+      const suite: TestSuite = {
+        providers: [target],
+        prompts: [toPrompt('Test prompt')],
+        extensions: ['file://unused-extension.js'],
+        tests: [
+          {
+            vars: { topic: 'alpha' },
+            options: { runSerially: mode === 'serial' },
+            assert: [{ type: 'similar', value: 'Expected', provider: embedding }],
+          },
+        ],
+      };
+      const evalRecord = await Eval.create({}, suite.prompts, { id: randomUUID() });
+      const recordEvent = vi.spyOn(telemetry, 'record');
+      const save = vi.spyOn(evalRecord, 'save');
+      try {
+        await evaluate(suite, evalRecord, {
+          maxConcurrency: mode === 'grouped' ? 1 : 2,
+          abortSignal: controller.signal,
+        });
+        const result = (await evalRecord.toEvaluateSummary()).results.find(
+          (row) => row.vars.topic === 'alpha',
+        );
+        expect(result).toMatchObject({
+          error: `Evaluation aborted: ${String(reason)}`,
+          success: false,
+          score: 0,
+          failureReason: ResultFailureReason.ERROR,
+          response: { output: 'Target output' },
+          metadata: { incomplete: true, __promptfoo: { resumable: true } },
+        });
+        expect(await EvalResult.getCompletedIndexPairs(evalRecord.id)).toEqual(new Set());
+        expect(vi.mocked(runExtensionHook).mock.calls.map((call) => call[1])).not.toContain(
+          'afterAll',
+        );
+        expect(recordEvent.mock.calls.some(([event]) => event === 'eval_ran')).toBe(false);
+        expect(save).not.toHaveBeenCalled();
+        expect(
+          errorSpy.mock.calls.some(([message]) =>
+            String(message).includes('Assertion grading failed'),
+          ),
+        ).toBe(false);
+
+        cliState.resume = true;
+        embedding.callEmbeddingApi = async () => ({
+          embedding: [1, 0],
+          tokenUsage: createEmptyTokenUsage(),
+        });
+        await evaluate(suite, evalRecord, { maxConcurrency: mode === 'grouped' ? 1 : 2 });
+        const resumed = (await evalRecord.toEvaluateSummary()).results;
+        expect(target.callApi).toHaveBeenCalledTimes(2);
+        expect(resumed).toHaveLength(1);
+        expect(resumed[0]).toMatchObject({
+          success: true,
+          score: 1,
+          response: { output: 'Target output' },
+        });
+        expect(resumed[0].metadata?.__promptfoo?.resumable).toBeUndefined();
+        expect(await EvalResult.getCompletedIndexPairs(evalRecord.id)).toEqual(new Set(['0:0']));
+      } finally {
+        errorSpy.mockRestore();
+        recordEvent.mockRestore();
+        save.mockRestore();
+      }
+    },
+  );
 
   it('suppresses the error log when deferred grading throws AbortException under abort', async () => {
     const { default: logger } = await import('../../src/logger');
