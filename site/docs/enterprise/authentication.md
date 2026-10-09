@@ -34,7 +34,7 @@ You may wish to authenticate into the CLI when using Promptfoo Enterprise. Follo
 
 1. Install the Promptfoo CLI. Read [getting started](/docs/getting-started/) for help installing the CLI.
 
-2. In the Promptfoo Enterprise app, open your profile menu and select **CLI Login**.
+2. In the Promptfoo Enterprise app, open your profile menu and select **CLI Login Information**.
 
 3. Select **Generate CLI Token**, then copy and run the `promptfoo auth login` command in your terminal.
 

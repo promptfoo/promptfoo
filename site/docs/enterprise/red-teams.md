@@ -45,21 +45,17 @@ Configure the **Plugins** and **Strategies** tabs, then check **Review** and sav
 
 ## Running a Scan
 
-Save your scan template, then select **Run Scan From Template** in its **Review** section. Choose the target and review the run settings.
+Save your scan template, then select **Scan Now** in its **Review** section. Choose the target, confirm the selected scan template, and review the run options.
 
-If server-side execution is enabled and the target supports it, select **Server**, then **Run scan**. The scan executes on your deployment's runner. On-prem scans require a configured Red Team Provider; the run screen links to provider settings if setup is missing.
-
-![Run scan controls with the Server tab selected and the Run scan button](/img/enterprise-docs/run-scan-server-tab.png)
+If server-side execution is enabled and the target supports it, select **Run on Server**, then **Run Red Team Scan**. The scan executes on your deployment's runner. Before starting, verify that generation and grading use the intended inference providers and credentials.
 
 Follow the scan's status, probe progress, and logs in **Scan History** or the target's run history.
 
-To stop a running server scan, open its details and select **Stop**. With permission to update jobs, you can choose **Cancel Run** to stop without publishing, or **Publish Partial Report** to publish the completed probes. Partial reports require at least one completed probe and do not represent a completed scan. Open the available results with **View Report** or **View Partial Report**.
+To stop a running server scan, open its details and select **Stop**. With permission to update jobs, you can choose **Cancel Scan** to stop without publishing, or **Publish Partial Report** to publish the completed probes. Partial reports require at least one completed probe and do not represent a completed scan. Open the available results with **View Report** or **View Partial Report**.
 
 For programmatic runs, the **Jobs** section of the [API reference](/docs/api-reference/) documents **Start job**, **Get job**, **Stream job logs**, and **Stop job**, including the request fields for canceling a run or publishing a partial report.
 
-To execute from your machine, select **CLI** and use the generated command, or download the YAML configuration. [Authenticate](./authentication.md) to the correct deployment and team before running the command.
-
-![Run scan controls with the CLI tab selected and the generated command](/img/enterprise-docs/run-scan-cli-tab.png)
+To execute from your machine, select **Run via CLI** and use the generated command, or use **Export Config** to download the YAML configuration. [Authenticate](./authentication.md) to the correct deployment and team before running the command.
 
 `promptfoo redteam run` generates adversarial probes and runs them against your target. When sharing is enabled, it uploads the results to your configured Promptfoo Enterprise instance. Review them through the report link in the terminal or the Enterprise UI; see [Findings and Reports](./findings.md).
 
