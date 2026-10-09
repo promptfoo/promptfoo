@@ -24,6 +24,10 @@ interface CliState {
   // Forces remote inference wherever possible
   remote?: boolean;
 
+  // Safe mode: disables dynamic inline JavaScript execution
+  safeMode?: boolean;
+  withSafeMode<T>(enabled: boolean, fn: () => T): T;
+
   // Indicates we're running in web UI mode
   webUI?: boolean;
 
@@ -69,6 +73,8 @@ interface CliState {
   /** The innermost environment scope, or the last config's env outside a scope. */
   readonly env?: EnvOverrides;
   readonly envFileOverrides?: EnvOverrides;
+  /** Opaque lifetime identity for resources owned by this environment invocation. */
+  readonly envScope?: object;
   /** File values act as process defaults beneath each nested suite environment. */
   withEnvFileOverrides<T>(env: EnvOverrides | undefined, fn: () => T): T;
   /** Replaces the outer env for this call and its async work; undefined masks config env. */
@@ -85,9 +91,12 @@ const configContext = new AsyncLocalStorage<ConfigState>();
 const globalConfigState: ConfigState = {};
 
 const maxConcurrencyContext = new AsyncLocalStorage<{ maxConcurrency: number | undefined }>();
+const safeModeContext = new AsyncLocalStorage<{ enabled: boolean }>();
+let globalSafeMode: boolean | undefined;
 const basePathContext = new AsyncLocalStorage<{ basePath: string | undefined }>();
 let globalBasePath: string | undefined;
 const envContext = new AsyncLocalStorage<{
+  scope: object;
   env: EnvOverrides | undefined;
   envFileOverrides?: EnvOverrides;
 }>();
@@ -98,6 +107,20 @@ let globalMaxConcurrency: number | undefined;
 let activeOtlpReceiver: ActiveOtlpReceiver | undefined;
 
 const state: CliState = {
+  get safeMode() {
+    return safeModeContext.getStore()?.enabled ?? globalSafeMode;
+  },
+  set safeMode(enabled: boolean | undefined) {
+    const scope = safeModeContext.getStore();
+    if (scope) {
+      scope.enabled = Boolean(enabled);
+    } else {
+      globalSafeMode = enabled;
+    }
+  },
+  withSafeMode<T>(enabled: boolean, fn: () => T): T {
+    return safeModeContext.run({ enabled: enabled || Boolean(state.safeMode) }, fn);
+  },
   get config() {
     return (configContext.getStore() ?? globalConfigState).config;
   },
@@ -157,11 +180,14 @@ const state: CliState = {
   get envFileOverrides() {
     return envContext.getStore()?.envFileOverrides;
   },
+  get envScope() {
+    return envContext.getStore()?.scope;
+  },
   withEnvFileOverrides<T>(env: EnvOverrides | undefined, fn: () => T): T {
-    return envContext.run({ env: undefined, envFileOverrides: env }, fn);
+    return envContext.run({ scope: {}, env: undefined, envFileOverrides: env }, fn);
   },
   withEnv<T>(env: EnvOverrides | undefined, fn: () => T): T {
-    return envContext.run({ env, envFileOverrides: state.envFileOverrides }, fn);
+    return envContext.run({ scope: {}, env, envFileOverrides: state.envFileOverrides }, fn);
   },
   get requestTracingConfig() {
     return requestTracingConfigContext.getStore()?.tracingConfig;

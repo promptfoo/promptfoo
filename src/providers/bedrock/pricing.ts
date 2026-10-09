@@ -6,10 +6,11 @@ import {
   isClaudeOpus55Model,
   isClaudeRegionalPremiumModel,
   isClaudeSonnet5Model,
+  isClaudeSonnet55Model,
 } from '../anthropic/util';
 
 export type BedrockServiceTier = {
-  type: 'priority' | 'default' | 'flex';
+  type: 'priority' | 'default' | 'flex' | 'reserved';
 };
 
 type BedrockPricing = {
@@ -67,6 +68,10 @@ const BEDROCK_PRICING: Record<string, BedrockPricing> = {
   'anthropic.claude-opus-4-5': { input: 5, output: 25 },
   // Claude Opus 4/4.1
   'anthropic.claude-opus-4': { input: 15, output: 75 },
+  // Claude Sonnet 5.5 ($2/$10 global, $2.20/$11 regional per the AWS price list on 2026-09-29).
+  // Must precede Sonnet 5: lookup is first-match `includes()`, and `anthropic.claude-sonnet-5-5`
+  // contains `anthropic.claude-sonnet-5`.
+  'anthropic.claude-sonnet-5-5': { input: 2, output: 10 },
   // Claude Sonnet 5 (standard list pricing; full 1M context bills at the standard rate)
   'anthropic.claude-sonnet-5': { input: 3, output: 15 },
   // Claude Sonnet 4.x — the point releases must precede the bare `-4` prefix: lookup is first-match-wins
@@ -165,9 +170,8 @@ const BEDROCK_PRICING: Record<string, BedrockPricing> = {
   'gemma-3-4b': { input: 0.04, output: 0.08 },
   'gemma-3-12b': { input: 0.09, output: 0.29 },
   'gemma-3-27b': { input: 0.23, output: 0.38 },
-  // OpenAI GPT-OSS (open-weight models served via InvokeModel/Converse). The frontier
-  // gpt-5.x models are not available through Converse — they use the OpenAI-compatible
-  // Responses API (see src/providers/bedrock/openaiResponses.ts).
+  // Open-weight GPT-OSS Runtime entries. Frontier Mantle selectors use separate billing
+  // through the OpenAI-compatible adapters (see src/providers/bedrock/openaiResponses.ts).
   'openai.gpt-oss-120b': { input: 0.15, output: 0.6 },
   'openai.gpt-oss-20b': { input: 0.07, output: 0.3 },
 };
@@ -302,6 +306,8 @@ const EU_SOUTH_1_AND_EU_WEST_1_PRICING: Record<string, BedrockPricing> = {
 };
 
 const US_GOV_PRICING: Record<string, BedrockPricing> = {
+  // AWS publishes GovCloud rates directly; do not apply the commercial regional premium again.
+  'anthropic.claude-opus-4-8': { input: 6, output: 30 },
   'nemotron-nano-12b-v2': { input: 0.24, output: 0.72 },
   'nemotron-nano-3-30b': { input: 0.072, output: 0.288 },
   'nemotron-nano': { input: 0.072, output: 0.276 },
@@ -373,6 +379,19 @@ const BEDROCK_REGION_PRICING: Record<string, Record<string, BedrockPricing>> = {
   'us-gov-west-1': US_GOV_PRICING,
 };
 
+function getBedrockRegionPricing(
+  normalizedModelId: string,
+  region?: string,
+): Record<string, BedrockPricing> | undefined {
+  if (region) {
+    return BEDROCK_REGION_PRICING[region.toLowerCase()];
+  }
+  if (normalizedModelId.startsWith('us-gov.') || normalizedModelId.includes('/us-gov.')) {
+    return US_GOV_PRICING;
+  }
+  return undefined;
+}
+
 export function getBedrockPricing(
   normalizedModelId: string,
   region?: string,
@@ -390,7 +409,7 @@ export function getBedrockPricing(
     return undefined;
   }
 
-  const regionPricing = region ? BEDROCK_REGION_PRICING[region.toLowerCase()] : undefined;
+  const regionPricing = getBedrockRegionPricing(normalizedModelId, region);
   if (regionPricing) {
     for (const [modelPrefix, pricing] of Object.entries(regionPricing)) {
       if (normalizedModelId.includes(modelPrefix)) {
@@ -412,6 +431,13 @@ export function getBedrockPricing(
   return undefined;
 }
 
+function hasPublishedRegionalPricing(normalizedModelId: string, region?: string): boolean {
+  const regionPricing = getBedrockRegionPricing(normalizedModelId, region);
+  return regionPricing
+    ? Object.keys(regionPricing).some((modelPrefix) => normalizedModelId.includes(modelPrefix))
+    : false;
+}
+
 const BEDROCK_INVOKE_PRICING_MODEL_PREFIXES = [
   'zai.glm-',
   'minimax.minimax-',
@@ -421,6 +447,11 @@ const BEDROCK_INVOKE_PRICING_MODEL_PREFIXES = [
   'writer.palmyra-',
   'openai.gpt-oss-',
 ] as const;
+
+/** Only the documented US and global Grok 4.6 Runtime inference profiles. */
+export function isBedrockGrok46Profile(modelId: string): boolean {
+  return /(?:^|inference-profile\/)(?:us|global)\.xai\.grok-4\.6$/.test(modelId.toLowerCase());
+}
 
 /**
  * Calculate cost based on model and token usage
@@ -433,12 +464,31 @@ export function calculateBedrockCost(
   cacheWriteTokens = 0,
   region?: string,
   serviceTier?: BedrockServiceTier,
+  cacheWrite1hTokens = 0,
 ): number | undefined {
   if (promptTokens === undefined || completionTokens === undefined) {
     return undefined;
   }
+  // Reserved throughput is billed as fixed monthly capacity per reserved TPM, not per token.
+  // The token-only response shape cannot represent that contract without inventing a rate.
+  if (serviceTier?.type === 'reserved') {
+    return undefined;
+  }
 
   const normalizedModelId = modelId.toLowerCase();
+  if (isBedrockGrok46Profile(normalizedModelId)) {
+    // AWS publishes Standard rates for these profiles, with a separate cached-input rate.
+    // No other service tier or cache-write price is established by the model card.
+    if ((serviceTier?.type && serviceTier.type !== 'default') || cacheWriteTokens > 0) {
+      return undefined;
+    }
+    const globalProfile =
+      normalizedModelId.startsWith('global.') || normalizedModelId.includes('/global.');
+    const [input, output, cachedInput] = globalProfile ? [2, 6, 0.5] : [2.2, 6.6, 0.55];
+    return (
+      (promptTokens * input + cacheReadTokens * cachedInput + completionTokens * output) / 1_000_000
+    );
+  }
   const pricing = getBedrockPricing(normalizedModelId, region);
   if (!pricing) {
     return undefined;
@@ -449,7 +499,9 @@ export function calculateBedrockCost(
   const isGlobalEndpoint =
     normalizedModelId.startsWith('global.') || normalizedModelId.includes('/global.');
   const endpointMultiplier =
-    isClaudeRegionalPremiumModel(normalizedModelId) && !isGlobalEndpoint
+    isClaudeRegionalPremiumModel(normalizedModelId) &&
+    !isGlobalEndpoint &&
+    !hasPublishedRegionalPricing(normalizedModelId, region)
       ? CLAUDE_REGIONAL_ENDPOINT_PREMIUM
       : 1;
   const serviceTierMultiplier =
@@ -471,6 +523,7 @@ export function calculateBedrockCost(
         cacheReadTokens,
         cacheWriteTokens,
         normalizedModelId,
+        cacheWrite1hTokens,
       )
     : isNovaPromptCachingModel(normalizedModelId)
       ? promptTokens * inputRate + cacheReadTokens * inputRate * NOVA_CACHE_READ_RATIO
@@ -487,7 +540,7 @@ export function calculateBedrockCost(
  * reported Claude 5 cost. Keep that fail-closed behavior for legacy Runtime models instead of
  * emitting a plausible but incorrect cost.
  *
- * Claude 5 models (Fable 5, Mythos 5, Opus 5, Opus 5.5, and Sonnet 5) have verified Runtime rates, so they
+ * Claude 5 models (Fable 5, Mythos 5, Opus 5, Opus 5.5, Sonnet 5, and Sonnet 5.5) have verified Runtime rates, so they
  * report cost on the default `bedrock:` InvokeModel path — without this, `bedrock:anthropic.claude-opus-5`
  * reports token usage but `cost: 0`. Legacy Claude (e.g. Sonnet/Opus 4.x) stays fail-closed.
  */
@@ -498,12 +551,15 @@ export function calculateBedrockInvokeModelCost(
   cacheReadTokens = 0,
   cacheWriteTokens = 0,
   region?: string,
+  cacheWrite1hTokens = 0,
 ): number | undefined {
   const normalizedModelId = modelId.toLowerCase();
   if (
+    !isBedrockGrok46Profile(normalizedModelId) &&
     !isClaudeFableOrMythos5Model(normalizedModelId) &&
     !isClaudeOpus5Model(normalizedModelId) &&
     !isClaudeOpus55Model(normalizedModelId) &&
+    !isClaudeSonnet55Model(normalizedModelId) &&
     !isClaudeSonnet5Model(normalizedModelId) &&
     !BEDROCK_INVOKE_PRICING_MODEL_PREFIXES.some((prefix) => normalizedModelId.includes(prefix))
   ) {
@@ -517,5 +573,7 @@ export function calculateBedrockInvokeModelCost(
     cacheReadTokens,
     cacheWriteTokens,
     region,
+    undefined,
+    cacheWrite1hTokens,
   );
 }
