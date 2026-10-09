@@ -36,7 +36,7 @@ Team secrets store encrypted provider credentials that can be reused within a te
 
 In a provider's API Key field, use the key button to choose a team secret. This saves a reference such as `%__PF_SECRET.OPENAI_API_KEY__%` instead of copying the credential into the provider configuration. Team Red Team Provider overrides can also use these references.
 
-Secret permissions are separate from provider permissions. Grant read access only to users who may receive the secret values: the list API returns decrypted values. The UI requires update access to reveal, copy, or edit a value. Creating and deleting secrets require their respective permissions.
+Secret permissions are separate from provider permissions. Grant read access only to users who may receive the secret values: the list API returns decrypted values, and the UI lets them reveal or copy values. Editing a value requires update access. Creating and deleting secrets require their respective permissions.
 
 To rotate a value without changing its references, use **Edit** in the Team Secrets table and enter the replacement value. For API-based rotation, find the secret ID with `GET /api/v1/teams/{teamId}/secrets`, then send `PATCH /api/v1/teams/{teamId}/secrets/{secretId}` with the replacement value. See **List team secrets** and **Update team secret** in the [API reference](/docs/api-reference/) for request and response schemas.
 
