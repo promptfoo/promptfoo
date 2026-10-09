@@ -37,7 +37,7 @@ async function evaluate(testSuite: EvaluateTestSuite, options?: EvaluateOptions)
 **Parameters:**
 
 - `testSuite`: Configuration object containing `prompts`, `providers`, and `tests`
-- `options`: Optional evaluation settings (caching, output, concurrency, etc.)
+- `options`: Optional execution settings (caching, concurrency, progress, etc.)
 
 **Returns:** `Eval` record. Call `toEvaluateSummary()` when you need the serializable results summary.
 
