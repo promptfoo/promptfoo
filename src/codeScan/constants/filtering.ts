@@ -2,7 +2,7 @@
  * File Filtering Constants
  *
  * Shared constants for code scan file filtering used by both CLI and server.
- * Extracted to avoid pulling in ESM dependencies (like execa) into server tests.
+ * Kept separate so server callers do not load the diff-processing pipeline.
  */
 
 import { minimatch } from 'minimatch';

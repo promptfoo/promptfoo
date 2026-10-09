@@ -2,7 +2,7 @@
   "name": "promptfoo",
   "description": "LLM eval & testing toolkit",
   "author": "Ian Webster",
-  "version": "0.123.0",
+  "version": "0.124.1",
   "license": "MIT",
   "type": "module",
   "repository": {
@@ -43,7 +43,8 @@
     "dist",
     "!dist/test",
     "!dist/src/__mocks__",
-    "!dist/**/*.map"
+    "!dist/**/*.map",
+    "!dist/**/*.tsbuildinfo"
   ],
   "engines": {
     "node": ">=22.22.0"
@@ -58,7 +59,7 @@
     "architecture:check": "tsx scripts/checkArchitectureBoundaries.ts",
     "bin": "dist/src/entrypoint.js",
     "build:app": "npm run build --prefix src/app",
-    "build:clean": "shx rm -rf dist",
+    "build:clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
     "build:watch": "NODE_OPTIONS='--max-old-space-size=8192' tsdown --watch",
     "build": "concurrently -g --kill-others-on-fail \"npm run tsc\" \"NODE_OPTIONS='--max-old-space-size=8192' tsdown\" \"npm run build:app\"",
     "postbuild": "tsx scripts/postbuild.ts",
@@ -90,6 +91,7 @@
     "preversion": "command -v gh >/dev/null 2>&1 || (echo \"Error: GitHub CLI required.\" && exit 1) && [ \"$(git rev-parse --abbrev-ref HEAD)\" = \"main\" ] || (echo \"Error: Must be on main branch to version\" && exit 1) && git pull origin main && git checkout -b \"chore/bump-version-$(date +%s)\"",
     "changelog:release": "node scripts/update-changelog-version.cjs",
     "postversion": "npm run changelog:release && npm run citation:generate && git add CHANGELOG.md CITATION.cff && git commit --amend --no-edit && gh pr create --repo promptfoo/promptfoo --title \"chore: bump version $npm_package_version\" --body \"\"",
+    "package:pack": "tsx scripts/packPackageArtifact.ts",
     "prepublishOnly": "node -e \"if (!process.env.PROMPTFOO_POSTHOG_KEY) { console.error('Error: PROMPTFOO_POSTHOG_KEY must be set'); process.exit(1); }\" && npm run build:clean && npm run build",
     "test:app": "npm --prefix src/app run test --",
     "test:app:browser": "npm --prefix src/app run test:browser --",
@@ -111,28 +113,26 @@
     "prepare": "husky || exit 0"
   },
   "overrides": {
+    "@ibm-cloud/watsonx-ai": {
+      "ibm-cloud-sdk-core": "5.6.2"
+    },
+    "nunjucks": {
+      "chokidar": "$chokidar"
+    },
     "uri-js": "npm:uri-js-replace",
-    "chokidar": "5.0.0",
     "whatwg-url": "16.0.1",
     "esbuild": "0.28.2",
     "jsdom": {
       "@asamuzakjp/css-color": "6.0.7"
     },
-    "storybook": {
-      "esbuild": "0.28.2"
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "react-is": "^19.3.0",
+    "react-router-config": {
+      "react-router": "^5.3.4"
     },
-    "react": "^19.2.4",
-    "react-dom": "^19.2.4",
-    "react-is": "^19.2.4",
     "@ai-sdk/provider-utils": {
       "undici": "$undici"
-    },
-    "*": {
-      "whatwg-url": "16.0.1",
-      "chokidar": "5.0.0",
-      "esbuild": "0.28.2",
-      "react": "^19.2.4",
-      "react-dom": "^19.2.4"
     },
     "@opentelemetry/exporter-trace-otlp-http": {
       "@opentelemetry/core": "2.11.0"
@@ -158,10 +158,9 @@
     "@opentelemetry/sdk-trace-node": {
       "@opentelemetry/core": "2.11.0"
     },
-    "serialize-javascript": ">=7.0.5",
+    "serialize-javascript": ">=7.1.2",
     "gaxios": "^8.0.0",
-    "https-proxy-agent": "^9.0.0",
-    "ip-address": "10.7.0",
+    "ip-address": "10.7.2",
     "mongoose": {
       "gcp-metadata": "^9.0.2"
     },
@@ -170,11 +169,11 @@
     },
     "launch-editor": "2.14.1",
     "engine.io": {
-      ".": "6.6.10",
+      ".": "6.6.11",
       "ws": "$ws"
     },
     "engine.io-client": {
-      ".": "6.6.6",
+      ".": "6.6.7",
       "ws": "$ws"
     },
     "socket.io-adapter": {
@@ -184,57 +183,39 @@
     "socket.io-parser": ">=4.2.7 <5",
     "qs": ">=6.15.2 <7.0.0",
     "@cacheable/utils": ">=2.5.0 <2.5.1",
-    "@isaacs/brace-expansion": ">=5.0.1",
     "brace-expansion@5": "^5.0.6",
     "fast-xml-parser": "$fast-xml-parser",
     "minimatch@<=3.1.3": "3.1.5",
     "vite": "^8.0.16",
     "lodash-es": "^4.18.1",
-    "langium": {
-      ".": "4.3.1",
-      "@chevrotain/regexp-to-ast": "11.2.0",
-      "chevrotain": "11.2.0",
-      "chevrotain-allstar": "0.4.4"
-    },
-    "chevrotain": {
-      ".": "11.2.0",
-      "@chevrotain/cst-dts-gen": "11.2.0",
-      "@chevrotain/gast": "11.2.0",
-      "@chevrotain/regexp-to-ast": "11.2.0",
-      "@chevrotain/types": "11.2.0",
-      "@chevrotain/utils": "11.2.0"
-    },
-    "@chevrotain/cst-dts-gen": {
-      ".": "11.2.0",
-      "@chevrotain/gast": "11.2.0",
-      "@chevrotain/types": "11.2.0"
-    },
-    "chevrotain-allstar": {
-      ".": "0.4.4",
-      "chevrotain": "11.2.0"
-    },
-    "webpack": "5.110.3",
-    "dompurify": "3.4.15",
+    "webpack": "5.111.1",
+    "dompurify": "3.4.16",
     "monaco-editor": {
-      ".": "0.56.0",
-      "dompurify": "3.4.15"
+      ".": "0.57.0",
+      "dompurify": "3.4.16"
     }
   },
+  "resolutions": {
+    "ibm-cloud-sdk-core": "5.6.2"
+  },
   "devDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.263",
+    "@anthropic-ai/claude-agent-sdk": "0.3.284",
     "@asteasolutions/zod-to-openapi": "^9.1.0",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
     "@aws-sdk/client-s3": "^3.1003.0",
     "@aws-sdk/client-sagemaker-runtime": "^3.1045.0",
     "@aws-sdk/credential-provider-sso": "^3.972.16",
-    "@aws-sdk/types": "^3.973.5",
-    "@azure/identity": "^4.13.0",
-    "@azure/openai-assistants": "^1.0.0-beta.6",
-    "@biomejs/biome": "2.5.12",
+    "@aws/bedrock-token-generator": "^1.1.0",
+    "@azure/identity": "^4.13.3",
+    "@biomejs/biome": "2.5.14",
     "@fal-ai/client": "~1.10.1",
     "@ibm-cloud/watsonx-ai": "^1.7.16",
-    "@langfuse/client": "^5.11.0",
+    "@langfuse/client": "^5.11.1",
+    "@openai/agents": "^0.14.1",
+    "@openai/codex-sdk": "^0.156.1",
+    "@openai/codex-security": "^0.2.0",
+    "@slack/web-api": "^8.1.1",
     "@smithy/types": "^4.13.0",
     "@types/async": "^3.2.25",
     "@types/cli-progress": "^3.11.6",
@@ -242,7 +223,7 @@
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/jsdom": "^30.0.0",
-    "@types/node": "^24.12.0",
+    "@types/node": "^24.13.6",
     "@types/nunjucks": "^3.2.6",
     "@types/opener": "^1.4.3",
     "@types/pem": "^1.14.4",
@@ -250,78 +231,59 @@
     "@types/semver": "^7.7.1",
     "@types/source-map-support": "^0.5.10",
     "@types/supertest": "^7.0.0",
-    "@vitest/coverage-v8": "^5.0.0",
+    "@types/ws": "^8.18.1",
+    "@vitest/coverage-v8": "^5.0.2",
     "block-no-verify": "^1.2.0",
     "concurrently": "^9.2.3",
-    "drizzle-kit": "^0.31.10",
+    "drizzle-kit": "^0.31.11",
     "husky": "^9.1.7",
-    "ibm-cloud-sdk-core": "^5.6.0",
+    "ibm-cloud-sdk-core": "5.6.2",
     "knip": "~6.27.0",
-    "langium": "4.3.1",
     "node-sql-parser": "^5.4.0",
-    "oxc-parser": "^0.148.0",
+    "oxc-parser": "^0.151.0",
     "pdf-parse": "^2.4.5",
+    "playwright": "^1.63.0",
+    "playwright-extra": "^4.3.6",
     "prettier": "^3.8.1",
+    "puppeteer-extra-plugin-stealth": "^2.11.2",
     "read-excel-file": "^9.3.9",
-    "shx": "^0.4.0",
     "source-map-support": "^0.5.21",
-    "supertest": "^7.2.2",
-    "ts-dedent": "^2.2.0",
+    "supertest": "^7.3.0",
     "tsdown": "0.23.0",
     "typescript": "^7.0.0",
-    "vitest": "^5.0.0",
-    "winston-transport": "^4.9.0",
+    "vitest": "^5.0.2",
     "yaml": "^2.9.0"
   },
   "optionalDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.263",
+    "@aws/bedrock-token-generator": "^1.1.0",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
     "@aws-sdk/client-s3": "^3.1003.0",
     "@aws-sdk/client-sagemaker-runtime": "^3.1045.0",
     "@aws-sdk/credential-provider-sso": "^3.972.16",
     "@azure/ai-projects": "^2.1.1",
-    "@azure/identity": "^4.13.0",
-    "@azure/msal-node": "^6.0.0",
-    "@azure/openai-assistants": "^1.0.0-beta.6",
+    "@azure/identity": "^4.13.3",
+    "@azure/msal-node": "^7.0.0",
     "@azure/storage-blob": "^12.31.0",
     "@fal-ai/client": "~1.10.1",
-    "@googleapis/sheets": "^14.0.0",
-    "@huggingface/transformers": "^4.0.0",
-    "@ibm-cloud/watsonx-ai": "^1.7.16",
-    "@langfuse/client": "^5.11.0",
-    "@modelcontextprotocol/sdk": "^1.30.0",
-    "@openai/agents": "^0.11.3",
-    "@openai/codex-sdk": "^0.153.2",
-    "@openai/codex-security": "^0.1.18",
-    "@opencode-ai/sdk": "^1.18.27",
-    "@playwright/browser-chromium": "^1.63.0",
-    "@rollup/rollup-linux-x64-gnu": "^4.63.1",
-    "@slack/web-api": "^8.1.1",
+    "@googleapis/sheets": "^18.0.1",
+    "@modelcontextprotocol/sdk": "^1.32.0",
+    "@modelcontextprotocol/server-filesystem": "2026.8.31",
+    "@opencode-ai/sdk": "^1.18.32",
     "@smithy/node-http-handler": "^4.4.14",
-    "@swc/core": "^1.16.2",
-    "@swc/core-darwin-arm64": "^1.16.2",
-    "@swc/core-darwin-x64": "^1.16.2",
-    "@swc/core-linux-x64-gnu": "^1.16.2",
-    "@swc/core-linux-x64-musl": "^1.16.2",
-    "@swc/core-win32-x64-msvc": "^1.16.2",
-    "google-auth-library": "^11.0.2",
-    "hono": "^4.13.7",
-    "ibm-cloud-sdk-core": "^5.6.0",
+    "google-auth-library": "^11.1.0",
+    "hono": "^4.13.9",
     "jks-js": "^1.1.5",
     "natural": "^8.1.1",
     "node-sql-parser": "^5.4.0",
     "pdf-parse": "^2.4.5",
     "pem": "~1.14.8",
-    "playwright": "^1.63.0",
-    "playwright-extra": "^4.3.6",
-    "puppeteer-extra-plugin-stealth": "^2.11.2",
     "read-excel-file": "^9.3.9",
-    "sharp": "^0.35.4"
+    "sharp": "^0.35.5"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "0.124.0",
-    "@apidevtools/json-schema-ref-parser": "^16.0.2",
+    "@anthropic-ai/sdk": "0.129.0",
+    "@apidevtools/json-schema-ref-parser": "^16.0.3",
     "@hono/node-server": "2.1.1",
     "@inquirer/checkbox": "^5.1.0",
     "@inquirer/confirm": "^6.0.8",
@@ -335,30 +297,26 @@
     "@opentelemetry/core": "2.11.0",
     "@opentelemetry/exporter-trace-otlp-http": "^0.222.0",
     "@opentelemetry/resources": "^2.6.0",
-    "@opentelemetry/sdk-trace-base": "^2.6.0",
     "@opentelemetry/sdk-trace-node": "^2.6.0",
     "@opentelemetry/semantic-conventions": "^1.40.0",
-    "@types/ws": "^8.18.1",
-    "ai": "^6.0.264",
+    "acorn": "^8.18.0",
+    "ai": "^6.0.286",
     "ajv": "^8.18.0",
     "ajv-formats": "^3.0.1",
     "async": "^3.2.6",
-    "binary-extensions": "^3.1.0",
+    "binary-extensions": "^3.2.0",
     "cache-manager": ">=7.2.8 <7.2.10",
     "chalk": "^6.0.0",
     "chokidar": "5.0.0",
     "cli-progress": "^3.12.0",
     "cli-table3": "^0.6.5",
     "commander": "^15.0.0",
-    "compression": "^1.8.1",
+    "compression": "^1.8.2",
     "cors": "^2.8.6",
-    "csv-parse": "^7.0.0",
-    "csv-stringify": "^6.7.0",
-    "debounce": "^3.0.0",
+    "csv-parse": "^7.0.3",
+    "csv-stringify": "^6.9.0",
     "dedent": "^1.7.2",
-    "dotenv": "^17.3.1",
-    "drizzle-orm": "^0.45.1",
-    "execa": "^10.0.0",
+    "drizzle-orm": "^0.45.3",
     "express": "^5.2.1",
     "exsolve": "^1.0.8",
     "fast-deep-equal": "^3.1.3",
@@ -370,15 +328,15 @@
     "http-z": "^8.1.1",
     "istextorbinary": "^9.5.0",
     "js-rouge": "^3.2.0",
-    "js-yaml": "5.4.1",
+    "js-yaml": "5.4.2",
     "json5": "^2.2.3",
     "keyv": "^5.6.0",
     "keyv-file": "^5.3.3",
-    "lru-cache": "^11.3.0",
+    "lru-cache": "^11.5.3",
     "mathjs": "^15.1.1",
     "minimatch": "^10.2.4",
     "nunjucks": "^3.2.4",
-    "openai": "^7.1.0",
+    "openai": "^7.20.0",
     "opener": "^1.5.2",
     "ora": "^9.3.0",
     "parse5": "^8.0.0",
@@ -388,12 +346,12 @@
     "proxy-from-env": "^2.1.0",
     "python-shell": "^5.0.0",
     "rfdc": "^1.4.1",
-    "rxjs": "^7.8.2",
     "saxes": "^6.0.0",
     "semver": "^7.7.4",
-    "simple-git": "^3.33.0",
-    "socket.io": "^4.8.3",
-    "socket.io-client": "^4.8.3",
+    "signal-exit": "4.1.0",
+    "simple-git": "^4.0.2",
+    "socket.io": "^4.8.4",
+    "socket.io-client": "^4.8.4",
     "text-extensions": "^3.1.0",
     "tsx": "^4.23.11",
     "undici": ">=7.29.1 <8",
@@ -414,8 +372,6 @@
   "pnpm": {
     "onlyBuiltDependencies": [
       "@huggingface/transformers",
-      "@playwright/browser-chromium",
-      "@swc/core",
       "core-js",
       "core-js-pure",
       "esbuild",
@@ -424,5 +380,57 @@
     ],
     "ignoredBuiltDependencies": []
   },
-  "homepage": "https://promptfoo.dev"
+  "homepage": "https://promptfoo.dev",
+  "peerDependencies": {
+    "@anthropic-ai/claude-agent-sdk": "*",
+    "@huggingface/transformers": "*",
+    "@ibm-cloud/watsonx-ai": "*",
+    "@langfuse/client": "*",
+    "@openai/agents": "*",
+    "@openai/codex-sdk": "*",
+    "@openai/codex-security": "^0.2.0",
+    "@slack/web-api": "*",
+    "ibm-cloud-sdk-core": "*",
+    "playwright": "*",
+    "playwright-extra": "*",
+    "puppeteer-extra-plugin-stealth": "*"
+  },
+  "peerDependenciesMeta": {
+    "@anthropic-ai/claude-agent-sdk": {
+      "optional": true
+    },
+    "@huggingface/transformers": {
+      "optional": true
+    },
+    "@ibm-cloud/watsonx-ai": {
+      "optional": true
+    },
+    "@langfuse/client": {
+      "optional": true
+    },
+    "@openai/agents": {
+      "optional": true
+    },
+    "@openai/codex-sdk": {
+      "optional": true
+    },
+    "@openai/codex-security": {
+      "optional": true
+    },
+    "@slack/web-api": {
+      "optional": true
+    },
+    "ibm-cloud-sdk-core": {
+      "optional": true
+    },
+    "playwright": {
+      "optional": true
+    },
+    "playwright-extra": {
+      "optional": true
+    },
+    "puppeteer-extra-plugin-stealth": {
+      "optional": true
+    }
+  }
 }

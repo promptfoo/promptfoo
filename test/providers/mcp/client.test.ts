@@ -180,6 +180,33 @@ describe('MCPClient', () => {
   });
 
   describe('initialize', () => {
+    it('passes file defaults below explicit MCP server environment values', async () => {
+      mockClient.listTools.mockResolvedValueOnce({ tools: [] });
+      mcpClient = new MCPClient({
+        enabled: true,
+        server: {
+          command: 'mcp-server',
+          env: { PROMPTFOO_REVIEW_ENV_OVERRIDE: 'explicit' },
+        },
+      });
+      await cliState.withEnvFileOverrides(
+        {
+          PROMPTFOO_REVIEW_ENV_PROBE: 'file',
+          PROMPTFOO_REVIEW_ENV_OVERRIDE: 'file',
+        },
+        () => mcpClient.initialize(),
+      );
+      expect(StdioClientTransport).toHaveBeenCalledWith(
+        expect.objectContaining({
+          env: expect.objectContaining({
+            PROMPTFOO_REVIEW_ENV_PROBE: 'file',
+            PROMPTFOO_REVIEW_ENV_OVERRIDE: 'explicit',
+          }),
+        }),
+      );
+      await mcpClient.cleanup();
+    });
+
     it.each([
       { server: {} },
       { server: { url: 'https://mcp.example.test', auth: { type: 'api_key' } } },
@@ -849,6 +876,49 @@ describe('MCPClient', () => {
   });
 
   describe('callTool', () => {
+    it('preserves SDK timeout options and cancels an active request without retrying', async () => {
+      mockClient.connect.mockResolvedValueOnce(undefined);
+      mockClient.listTools.mockResolvedValueOnce({
+        tools: [{ name: 'ping', description: 'Health check', inputSchema: {} }],
+      });
+      let markStarted!: () => void;
+      const started = new Promise<void>((resolve) => {
+        markStarted = resolve;
+      });
+      mockClient.callTool.mockImplementation(
+        (_params, _schema, options: { signal: AbortSignal }) =>
+          new Promise((_resolve, reject) => {
+            options.signal.addEventListener('abort', () => reject(new Error('transport stopped')), {
+              once: true,
+            });
+            markStarted();
+          }),
+      );
+      mcpClient = new MCPClient({ enabled: true, timeout: 1200, server: { command: 'mock-mcp' } });
+      await mcpClient.initialize();
+      const abort = new AbortController();
+      const reason = new Error('token request cancelled');
+      const pending = mcpClient.callTool('ping', {}, abort.signal);
+      void pending.catch(() => {});
+      try {
+        await started;
+        expect(mockClient.callTool).toHaveBeenCalledExactlyOnceWith(
+          { name: 'ping', arguments: {} },
+          undefined,
+          { timeout: 1200, signal: abort.signal },
+        );
+        abort.abort(reason);
+        await expect(pending).rejects.toBe(reason);
+        expect(mockClient.callTool).toHaveBeenCalledOnce();
+        await expect(mcpClient.callTool('ping', {}, abort.signal)).rejects.toBe(reason);
+        expect(mockClient.callTool).toHaveBeenCalledOnce();
+      } finally {
+        abort.abort(reason);
+        await Promise.allSettled([pending]);
+        await mcpClient.cleanup();
+      }
+    });
+
     it('records one tool execution span around an MCP request', async () => {
       mockClient.connect.mockResolvedValueOnce(undefined);
       mockClient.listTools.mockResolvedValueOnce({
@@ -873,10 +943,16 @@ describe('MCPClient', () => {
       const tracerSpy = vi.spyOn(trace, 'getTracer').mockReturnValue({ startActiveSpan } as any);
 
       try {
-        expect(await mcpClient.callTool('tool1', { query: 'inventory' })).toEqual({
+        const args = { query: 'inventory', session: 'opaque-session', nested: { apiKey: 'short' } };
+        expect(await mcpClient.callTool('tool1', args)).toEqual({
           content: 'result',
           raw: { content: 'result' },
         });
+        expect(mockClient.callTool).toHaveBeenCalledWith(
+          { name: 'tool1', arguments: args },
+          undefined,
+          undefined,
+        );
 
         expect(startActiveSpan).toHaveBeenCalledExactlyOnceWith(
           'execute_tool tool1',
@@ -884,7 +960,8 @@ describe('MCPClient', () => {
             attributes: expect.objectContaining({
               'gen_ai.operation.name': 'execute_tool',
               'gen_ai.tool.name': 'tool1',
-              'tool.arguments': '{"query":"inventory"}',
+              'tool.arguments':
+                '{"query":"inventory","session":"[REDACTED]","nested":{"apiKey":"[REDACTED]"}}',
             }),
           }),
           expect.any(Function),

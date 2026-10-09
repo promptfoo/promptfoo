@@ -575,10 +575,12 @@ export async function getTargetResponse(
     await sleep(targetProvider.delay);
   }
   const tokenUsage = { numRequests: 1, ...targetRespRaw.tokenUsage };
-  const hasOutput = targetRespRaw && Object.prototype.hasOwnProperty.call(targetRespRaw, 'output');
-  const hasError = targetRespRaw && Object.prototype.hasOwnProperty.call(targetRespRaw, 'error');
+  const hasOutput =
+    targetRespRaw &&
+    Object.prototype.hasOwnProperty.call(targetRespRaw, 'output') &&
+    targetRespRaw.output != null;
 
-  if (hasError) {
+  if (targetRespRaw?.error) {
     const output = hasOutput
       ? ((typeof targetRespRaw.output === 'string'
           ? targetRespRaw.output
@@ -605,15 +607,6 @@ export async function getTargetResponse(
     };
   }
 
-  if (targetRespRaw?.error) {
-    return {
-      ...(targetRespRaw as ProviderResponse),
-      output: '',
-      error: targetRespRaw.error,
-      tokenUsage,
-    };
-  }
-
   if (targetRespRaw?.conversationEnded) {
     return {
       ...(targetRespRaw as ProviderResponse),
@@ -622,15 +615,13 @@ export async function getTargetResponse(
     };
   }
 
-  throw new Error(
-    `
-    Target returned malformed response: expected either \`output\` or \`error\` property to be set.
-
-    Instead got: ${safeJsonStringify(targetRespRaw)}
-
-    Note: Empty strings are valid output values.
-    `,
-  );
+  return {
+    ...(targetRespRaw as ProviderResponse),
+    output: '',
+    error:
+      'Target returned malformed response: expected either `output` or `error` property to be set. Empty strings are valid output values; null and undefined are not.',
+    tokenUsage,
+  };
 }
 
 interface TraceableRedteamGrader<TResult, TArgs extends unknown[]> {
@@ -757,6 +748,36 @@ export function accumulateGraderResult(
   }
 
   return withGradingUsage(current, tokensUsed);
+}
+
+export interface FlaggedTurn {
+  graderResult: GradingResult;
+  output: string;
+  prompt: string | undefined;
+  messages: Message[];
+  guardrails?: ProviderResponse['guardrails'];
+  transformDisplayVars?: Record<string, string>;
+}
+
+/** Keep the verdict and its inputs together; grader errors do not identify vulnerabilities. */
+export function captureFlaggedTurn(
+  graderResult: GradingResult,
+  turn: Omit<FlaggedTurn, 'graderResult'>,
+): FlaggedTurn | undefined {
+  if (graderResult.pass || graderResult.metadata?.graderError === true) {
+    return undefined;
+  }
+  return { graderResult, ...turn, messages: [...turn.messages] };
+}
+
+/** Preserve the flagged verdict with grading usage from all turns. */
+export function resolveStoredGraderResult(
+  flaggedResult: GradingResult | undefined,
+  storedGraderResult: GradingResult | undefined,
+): GradingResult | undefined {
+  return flaggedResult
+    ? withGradingUsage(flaggedResult, storedGraderResult?.tokensUsed)
+    : storedGraderResult;
 }
 
 export interface Message {
