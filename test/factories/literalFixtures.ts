@@ -1,3 +1,7 @@
+export const createApiKeyOptions = (apiKey = 'test-key') => ({
+  config: { apiKey },
+});
+
 export const createJsonPromptContext = () => ({
   prompt: {
     config: {
@@ -94,9 +98,30 @@ export const createToolCall = (
   },
 });
 
+export const createGeminiUsageCounts = (
+  totalTokenCount: number,
+  promptTokenCount: number,
+  candidatesTokenCount: number,
+) => ({
+  totalTokenCount,
+  promptTokenCount,
+  candidatesTokenCount,
+});
+
 export const createStatusResponse = (status = 500, statusText = 'Internal Server Error') => ({
   status,
   statusText,
+});
+
+export const createImageUsageCounts = (candidatesTokenCount: number, totalTokenCount: number) => ({
+  promptTokenCount: 10,
+  candidatesTokenCount,
+  totalTokenCount,
+});
+
+export const createTextParts = (text: string, role: string) => ({
+  parts: [{ text }],
+  role,
 });
 
 export const createChatMessage = (role: string, content: string) => ({
@@ -107,4 +132,8 @@ export const createChatMessage = (role: string, content: string) => ({
 export const createInputOutputUsage = (input_tokens: number, output_tokens: number) => ({
   input_tokens,
   output_tokens,
+});
+
+export const createGoogleSearchTool = () => ({
+  googleSearch: {},
 });
