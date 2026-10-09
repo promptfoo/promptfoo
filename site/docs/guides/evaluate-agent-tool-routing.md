@@ -31,6 +31,8 @@ You do not need every metric on day one. Add the signals your incident reviews a
 
 Give each routing policy its own provider label. The provider can be a Python script, HTTP endpoint, SDK-backed agent provider, or any other Promptfoo provider that returns the agent's final output and metadata.
 
+The configuration below assumes you have implemented `providers/current_agent.py` and `providers/candidate_agent.py` using the [Python provider interface](/docs/providers/python). Adapt these paths to your agent adapters and return the output fields shown below from runtime records.
+
 :::warning
 
 Tool-use assertions run after the provider returns. They can detect a blocked tool call, but cannot prevent or undo its side effects. Use mocked or sandboxed tools with non-production credentials and data, and enforce destructive-action approvals in the agent runtime itself.
@@ -267,4 +269,4 @@ npx promptfoo@latest eval -c promptfooconfig.yaml --no-cache
 npx promptfoo@latest view
 ```
 
-A candidate router is usually ready when it preserves or improves `success`, `correct_tool`, `safe_action`, and `resolved`, and stays inside the cost, latency, and context budgets. If it improves final-answer quality but regresses safety or routing metrics, keep it behind a flag and add the failing cases to your release gate.
+Require every blocked-action and required-policy check to pass. Set minimum task and routing pass rates and cost, latency, and context budgets before comparing candidates; matching a failing baseline is not enough. Compare each provider's named metrics against those criteria, inspect failed rows, and add regressions to the release suite before shipping the routing change.
