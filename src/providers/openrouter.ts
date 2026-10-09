@@ -1,4 +1,4 @@
-import { fetchWithCache } from '../cache';
+import { type FetchWithCacheResult, fetchWithCache } from '../cache';
 import logger from '../logger';
 import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
 import { isCallerAbortError } from '../util/fetch/requestSignal';
@@ -25,7 +25,6 @@ import { calculateOpenRouterResponseCost, getOpenRouterBillingMetadata } from '.
 import { getRequestTimeoutMs, throwIfAborted, waitForPromiseWithAbort } from './shared';
 import type OpenAI from 'openai';
 
-import type { FetchWithCacheResult } from '../cache';
 import type {
   ApiProvider,
   CallApiContextParams,
