@@ -152,6 +152,61 @@ describe.each(['bedrock', 'sagemaker'])('%s direct environment credential refres
     });
   });
 
+  describe.each(['file', 'suite', 'provider'])('%s metadata-only overrides', (scope) => {
+    it.each([
+      ['AWS_CREDENTIAL_EXPIRATION', 'expiration', new Date(now + 600_000).toISOString()],
+      ['AWS_ACCOUNT_ID', 'accountId', 'scoped-account'],
+      ['AWS_CREDENTIAL_SCOPE', 'credentialScope', 'scoped-scope'],
+    ] as const)(
+      'honors %s without scoped keys or a profile selector',
+      async (key, field, value) => {
+        mockProcessEnv({ ...host('first', now + 3_600_000), AWS_PROFILE: undefined });
+        const credentials = await createCredentials(service, scope, { [key]: value });
+        const first = await credentials();
+        expect(first.accessKeyId).toBe('first-access');
+        expect(first[field]).toEqual(field === 'expiration' ? new Date(value) : value);
+
+        const masked = await createCredentials(service, scope, { [key]: '' });
+        expect((await masked())[field]).toBeUndefined();
+      },
+    );
+
+    it('refreshes inherited keys at the scoped expiration outside the invocation', async () => {
+      mockProcessEnv({ ...host('first', now + 3_600_000), AWS_PROFILE: undefined });
+      const expiration = new Date(now + 600_000);
+      const credentials = await createCredentials(service, scope, {
+        AWS_CREDENTIAL_EXPIRATION: expiration.toISOString(),
+      });
+      await expect(credentials()).resolves.toMatchObject({ accessKeyId: 'first-access' });
+      mockProcessEnv(host('second', now + 3_600_000));
+      vi.setSystemTime(now + 600_001);
+      const next = await cliState.withEnv(host('foreign', now + 7_200_000), () => credentials());
+      expect(next).toMatchObject({
+        accessKeyId: 'second-access',
+        secretAccessKey: 'second-secret',
+        expiration,
+        accountId: 'second-account',
+      });
+    });
+  });
+
+  it.each(['host', 'scoped'])(
+    'retains the %s profile ahead of environment metadata',
+    async (kind) => {
+      fs.writeFileSync(
+        path.join(directory, 'credentials'),
+        '[masked-host-profile]\naws_access_key_id=profile-access\naws_secret_access_key=profile-secret\n',
+      );
+      const credentials = await createCredentials(service, 'provider', {
+        AWS_ACCOUNT_ID: 'scoped-account',
+        ...(kind === 'scoped' ? { AWS_PROFILE: 'masked-host-profile' } : {}),
+      });
+      const identity = await credentials();
+      expect(identity.accessKeyId).toBe('profile-access');
+      expect(identity.accountId).toBeUndefined();
+    },
+  );
+
   it.each(['file', 'suite', 'provider'])(
     'binds partial %s overrides while refreshing inherited fields outside their invocation',
     async (scope) => {
@@ -235,7 +290,10 @@ describe.each(['bedrock', 'sagemaker'])('%s direct environment credential refres
       const credentials = await createCredentials(
         service,
         scope,
-        { AWS_PROFILE: '' },
+        {
+          AWS_CREDENTIAL_EXPIRATION: new Date(now + 600_000).toISOString(),
+          AWS_ACCOUNT_ID: 'scoped-account',
+        },
         {
           accessKeyId: 'configured-access',
           secretAccessKey: 'configured-secret',

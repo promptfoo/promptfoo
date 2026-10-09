@@ -76,12 +76,14 @@ export function getScopedAwsCredentialConfig(
   const scoped = getMergedEnvOverrides(env);
   const value = (key: string) => scoped[key] ?? getEnvString(key);
   const keyFields = ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY'];
+  const metadataFields = ['AWS_CREDENTIAL_EXPIRATION', 'AWS_ACCOUNT_ID', 'AWS_CREDENTIAL_SCOPE'];
   const harmlessStaticPlaceholders =
     keyFields.every((key) => !value(key)) &&
     !value('AWS_SESSION_TOKEN')?.trim() &&
     !keyFields.some((key) => scoped[key] === '' && process.env[key]);
   const fields = [
     ...(harmlessStaticPlaceholders ? [] : [...keyFields, 'AWS_SESSION_TOKEN']),
+    ...metadataFields,
     'AWS_PROFILE',
     ...(includeBearer ? ['AWS_BEARER_TOKEN_BEDROCK'] : []),
   ];
@@ -94,6 +96,8 @@ export function getScopedAwsCredentialConfig(
   const hasScopedKeys =
     !harmlessStaticPlaceholders &&
     [...keyFields, 'AWS_SESSION_TOKEN'].some((key) => scoped[key] !== undefined);
+  const hasScopedEnvironmentCredentials =
+    hasScopedKeys || metadataFields.some((key) => scoped[key] !== undefined);
   // A selected profile or bearer token must not be displaced by the host's key tuple.
   if (!hasScopedKeys && includeBearer && scoped.AWS_BEARER_TOKEN_BEDROCK !== undefined) {
     return { apiKey: scoped.AWS_BEARER_TOKEN_BEDROCK };
@@ -111,10 +115,10 @@ export function getScopedAwsCredentialConfig(
   // With no selected profile, the SDK tries ambient access keys before files or
   // web identity. Scoping only those later sources must not select them early
   // or change the response-cache namespace for the unchanged ambient identity.
-  if (!profile && !hasScopedKeys && hasCompleteKeys) {
+  if (!profile && !hasScopedEnvironmentCredentials && hasCompleteKeys) {
     return undefined;
   }
-  if (profile || !hasScopedKeys) {
+  if (profile || !hasScopedEnvironmentCredentials) {
     return {
       // The SDK's nested INI loader restores process.env for an empty profile.
       // Normalize its implicit default after fromEnv is ruled out so cache
