@@ -1,8 +1,13 @@
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
 import { Command } from 'commander';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
 import { debugCommand } from '../../src/commands/debug';
 import { setLogger, winstonLogger } from '../../src/logger';
+import { addCommonOptionsRecursively } from '../../src/mainUtils';
 import { checkRemoteHealth } from '../../src/util/apiHealth';
 import { resolveConfigs } from '../../src/util/config/load';
 import { fetchWithTimeout } from '../../src/util/fetch/index';
@@ -10,6 +15,7 @@ import { pathExists } from '../../src/util/file';
 import { mockProcessEnv } from '../util/utils';
 
 vi.unmock('../../src/logger');
+vi.mock('../../src/telemetry', () => ({ default: { record: vi.fn() } }));
 vi.mock('../../src/util/config/load', () => ({ resolveConfigs: vi.fn() }));
 vi.mock('../../src/util/file', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../src/util/file')>()),
@@ -19,8 +25,10 @@ vi.mock('../../src/util/fetch/index', () => ({ fetchWithTimeout: vi.fn() }));
 
 const capture = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };
 let restoreEnvironment: () => void;
+let envDirectory: string;
 
 beforeEach(() => {
+  envDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-debug-env-'));
   vi.clearAllMocks();
   vi.mocked(resolveConfigs).mockReset();
   vi.mocked(pathExists).mockResolvedValue(true);
@@ -39,12 +47,62 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  fs.rmSync(envDirectory, { recursive: true, force: true });
   restoreEnvironment();
   setLogger(winstonLogger);
   vi.restoreAllMocks();
 });
 
 describe('proxy diagnostics', () => {
+  it.each(['before', 'after', 'alias', 'repeated', 'comma-separated'])(
+    'preserves explicit env-file precedence with %s command options',
+    async (placement) => {
+      mockProcessEnv({ https_proxy: 'http://shell.example:8080', no_proxy: 'shell.example' });
+      const firstPath = path.join(envDirectory, 'first.env');
+      const secondPath = path.join(envDirectory, 'second.env');
+      fs.writeFileSync(
+        firstPath,
+        'HTTPS_PROXY=http://fixture-user:fixture-password@file.example:8080\nNO_PROXY=\n',
+      );
+      fs.writeFileSync(secondPath, 'HTTPS_PROXY=\n');
+      vi.mocked(resolveConfigs).mockResolvedValue({ config: { env: {} } } as Awaited<
+        ReturnType<typeof resolveConfigs>
+      >);
+      const program = new Command();
+      debugCommand(program, {}, undefined);
+      addCommonOptionsRecursively(program);
+      let envBeforeAction: NodeJS.ProcessEnv | undefined;
+      program.commands[0].hook('preAction', () => {
+        envBeforeAction = { ...process.env };
+      });
+      const args = ['debug', '-c', 'fixture.yaml'];
+      if (placement === 'before') {
+        args.unshift('--env-file', firstPath);
+      } else if (placement === 'repeated') {
+        args.push('--env-file', firstPath, '--env-file', secondPath);
+      } else if (placement === 'comma-separated') {
+        args.push('--env-file', `${firstPath},${secondPath}`);
+      } else {
+        args.push(placement === 'alias' ? '--env-path' : '--env-file', firstPath);
+      }
+      const previousFileEnv = cliState.envFileOverrides;
+
+      await program.parseAsync(args, { from: 'user' });
+
+      const output = capture.info.mock.calls.find(([message]) => message.startsWith('{'))?.[0];
+      expect(JSON.parse(output).env).toMatchObject({
+        httpsProxy: ['repeated', 'comma-separated'].includes(placement)
+          ? ''
+          : 'http://***:***@file.example:8080',
+        noProxy: '',
+      });
+      expect(output).not.toContain('fixture-user');
+      expect(output).not.toContain('fixture-password');
+      expect(cliState.envFileOverrides).toBe(previousFileEnv);
+      expect(process.env).toEqual(envBeforeAction);
+    },
+  );
+
   it.each(['specified', 'default'] as const)(
     'reports the resolved %s config environment without an external scope',
     async (source) => {
