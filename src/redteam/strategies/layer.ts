@@ -1,10 +1,11 @@
 import logger from '../../logger';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { getAttackProviderFullId, isAttackProvider } from '../shared/attackProviders';
+import { addIterativeJailbreaks } from './iterative';
 import { withPersistableGenerationProvider } from './types';
 import { pluginMatchesStrategyTargets } from './util';
 
-import type { TestCase, TestCaseWithPlugin } from '../../types/index';
+import type { ProviderOptions, TestCase, TestCaseWithPlugin } from '../../types/index';
 import type { LayerConfig } from '../shared/runtimeTransform';
 import type { Strategy, StrategyRuntimeContext } from './types';
 
@@ -64,97 +65,25 @@ export async function addLayerTestCases(
   for (let i = 0; i < steps.length; i++) {
     const step = steps[i];
     const stepObj = typeof step === 'string' ? { id: step } : step;
-
-    // ═══════════════════════════════════════════════════════════════════════
-    // CHECK: Is this an attack provider (hydra, crescendo, etc.)?
-    // If so, remaining steps become per-turn transforms
-    // ═══════════════════════════════════════════════════════════════════════
-    if (isAttackProvider(stepObj.id)) {
-      logger.debug(
-        `layer strategy: detected attack provider '${stepObj.id}' at step ${i}, remaining steps will be per-turn transforms`,
-      );
-
-      // Collect remaining steps as per-turn layer configs
-      const remainingSteps = steps.slice(i + 1);
-      const perTurnLayers: LayerConfig[] = remainingSteps.map((s) =>
-        typeof s === 'string' ? s : { id: s.id, config: s.config },
-      );
-
-      // Get the full provider ID
-      const providerId = getAttackProviderFullId(stepObj.id);
-      const shouldPersistGenerationProvider = [
-        'promptfoo:redteam:crescendo',
-        'promptfoo:redteam:custom',
-        'promptfoo:redteam:iterative',
-        'promptfoo:redteam:iterative:meta',
-        'promptfoo:redteam:iterative:tree',
-      ].includes(providerId);
-      const metricSuffix = getMetricSuffix(stepObj.id);
-      const label = typeof config?.label === 'string' ? config.label : undefined;
-      const strategyId = getStrategyId(stepObj.id, perTurnLayers, label);
-      const scanId = crypto.randomUUID();
-
-      logger.debug(`layer strategy: configuring attack provider`, {
-        providerId,
-        perTurnLayers: perTurnLayers.map((l) => (typeof l === 'string' ? l : l.id)),
-        testCaseCount: current.length,
-      });
-
-      // Transform current test cases to use the attack provider
-      // with per-turn layers configured
-      return current.map((testCase) => {
-        const originalText = String(testCase.vars?.[injectVar] ?? '');
-        return {
-          ...testCase,
-          provider: {
-            id: providerId,
-            config: {
-              injectVar,
-              scanId,
-              ...(shouldPersistGenerationProvider
-                ? withPersistableGenerationProvider(stepObj.config || {}, runtimeContext)
-                : stepObj.config),
-              ...remoteGenerationContextPayload(
-                typeof config?.targetId === 'string' ? config.targetId : undefined,
-              ),
-              // Pass per-turn layers for runtime application
-              ...(perTurnLayers.length > 0 && { _perTurnLayers: perTurnLayers }),
-            },
-          },
-          assert: testCase.assert?.map((assertion) => ({
-            ...assertion,
-            metric: assertion.metric ? `${assertion.metric}/${metricSuffix}` : assertion.metric,
-          })),
-          metadata: {
-            ...testCase.metadata,
-            strategyId,
-            originalText,
-          },
-        };
-      });
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════
-    // REGULAR STRATEGY: Apply transform to test cases (existing behavior)
-    // ═══════════════════════════════════════════════════════════════════════
+    const attackProvider = isAttackProvider(stepObj.id);
+    const actionId = attackProvider ? getAttackStrategyId(stepObj.id) : stepObj.id;
     let stepAction: Strategy['action'] | undefined;
 
     try {
-      if (stepObj.id.startsWith('file://')) {
-        const loaded = await loadStrategy(stepObj.id);
-        stepAction = loaded.action;
+      if (attackProvider && actionId === 'jailbreak') {
+        // Layer's legacy jailbreak step uses iterative, unlike the top-level meta alias.
+        stepAction = async (tests, variable, options) =>
+          addIterativeJailbreaks(tests, variable, 'iterative', options);
+      } else if (stepObj.id.startsWith('file://')) {
+        stepAction = (await loadStrategy(stepObj.id)).action;
       } else {
-        // Try exact match first, then base id before ':'
-        let builtin = strategies.find((s) => s.id === stepObj.id);
-        if (!builtin && stepObj.id.includes(':')) {
-          const baseId = stepObj.id.split(':')[0];
-          builtin = strategies.find((s) => s.id === baseId);
-        }
+        const builtin =
+          strategies.find((strategy) => strategy.id === actionId) ||
+          strategies.find((strategy) => strategy.id === actionId.split(':')[0]);
         stepAction = builtin?.action;
       }
     } catch (e) {
       logger.error(`layer strategy: error loading step ${stepObj.id}: ${e}`);
-      stepAction = undefined;
     }
 
     if (!stepAction) {
@@ -162,26 +91,101 @@ export async function addLayerTestCases(
       continue;
     }
 
-    // Determine applicable test cases for this step using the same targeting rules
-    const stepTargets =
-      (stepObj.config as Record<string, unknown>)?.plugins ?? (config?.plugins as unknown);
-    const applicable = current.filter((t) =>
-      pluginMatchesStrategyTargets(t, stepObj.id, stepTargets as string[] | undefined),
+    const stepTargets = stepObj.config?.plugins ?? config?.plugins;
+    const applicable = current.filter(
+      (test) =>
+        pluginMatchesStrategyTargets(test, stepObj.id, stepTargets as string[] | undefined) &&
+        (!attackProvider ||
+          pluginMatchesStrategyTargets(test, actionId, stepTargets as string[] | undefined)),
     );
 
-    const stepConfig = {
-      ...(stepObj.config || {}),
-      ...(config || {}),
-    };
+    if (attackProvider) {
+      const perTurnLayers: LayerConfig[] = steps
+        .slice(i + 1)
+        .map((remaining) =>
+          typeof remaining === 'string'
+            ? remaining
+            : { id: remaining.id, config: remaining.config },
+        );
+      const providerId = getAttackProviderFullId(stepObj.id.replace('promptfoo:redteam:', ''));
+      const persistProvider = [
+        'promptfoo:redteam:crescendo',
+        'promptfoo:redteam:custom',
+        'promptfoo:redteam:iterative',
+        'promptfoo:redteam:iterative:meta',
+        'promptfoo:redteam:iterative:tree',
+      ].includes(providerId);
+      const scanId = crypto.randomUUID();
+      const label = typeof config?.label === 'string' ? config.label : undefined;
+      const strategyId = getStrategyId(stepObj.id, perTurnLayers, label);
+      const metricSuffix = getMetricSuffix(stepObj.id);
+      const action = stepAction;
+
+      return Promise.all(
+        applicable.map(async (originalTest) => {
+          const options: Record<string, unknown> = {
+            scanId,
+            ...(persistProvider
+              ? withPersistableGenerationProvider(stepObj.config || {}, runtimeContext)
+              : stepObj.config),
+            ...remoteGenerationContextPayload(
+              typeof config?.targetId === 'string' ? config.targetId : undefined,
+            ),
+            ...(perTurnLayers.length > 0 && { _perTurnLayers: perTurnLayers }),
+          };
+          const [test] = await action(
+            [originalTest.vars ? originalTest : { ...originalTest, vars: {} }],
+            injectVar,
+            options,
+            actionId,
+            runtimeContext,
+          );
+          // Layers retain explicit step inputs; plugin metadata does not enable provider inputs.
+          const providerConfig = (test.provider as ProviderOptions).config!;
+          delete providerConfig.inputs;
+          if (Object.prototype.hasOwnProperty.call(options, 'inputs')) {
+            providerConfig.inputs = options.inputs;
+          }
+          return {
+            ...test,
+            vars: originalTest.vars,
+            assert: originalTest.assert?.map((assertion) => ({
+              ...assertion,
+              metric: assertion.metric ? `${assertion.metric}/${metricSuffix}` : assertion.metric,
+            })),
+            metadata: {
+              ...test.metadata,
+              strategyId,
+              originalText: String(originalTest.vars?.[injectVar] ?? ''),
+            },
+          };
+        }),
+      );
+    }
+
+    const stepConfig = { ...(stepObj.config || {}), ...(config || {}) };
     const next = runtimeContext
       ? await stepAction(applicable, injectVar, stepConfig, undefined, runtimeContext)
       : await stepAction(applicable, injectVar, stepConfig);
-
-    // Feed output to next step. If a step yields nothing, subsequent steps operate on empty set.
     current = next as TestCaseWithPlugin[];
   }
 
   return current;
+}
+
+function getAttackStrategyId(stepId: string): string {
+  const normalized = stepId.replace('promptfoo:redteam:', '');
+  const provider = getAttackProviderFullId(normalized).replace('promptfoo:redteam:', '');
+  if (provider === 'iterative') {
+    return 'jailbreak';
+  }
+  if (provider.startsWith('iterative:')) {
+    return provider.replace('iterative:', 'jailbreak:');
+  }
+  if (provider === 'hydra' || provider === 'goblin') {
+    return `jailbreak:${provider}`;
+  }
+  return normalized.startsWith('custom:') ? normalized : provider;
 }
 
 /**

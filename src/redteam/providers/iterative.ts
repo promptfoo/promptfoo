@@ -438,6 +438,8 @@ export async function runRedteamConversation({
       ...iterationVars,
       [injectVar]: finalInjectVar,
       ...(currentRenderInputVars || {}),
+      // A configured transform owns the injected value, including for overlapping input fields.
+      ...(perTurnLayers.length > 0 && { [injectVar]: finalInjectVar }),
     };
 
     targetPrompt = await renderPrompt(
