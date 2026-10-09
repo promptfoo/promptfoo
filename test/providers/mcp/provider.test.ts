@@ -1,6 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import logger from '../../../src/logger';
 
+const createStructuredToolResult = () => ({
+  content: [{ type: 'text', text: 'raw response' }],
+  structuredContent: { answer: 'structured response' },
+});
+
+const createTraversalErrorResult = () => ({
+  content: [{ type: 'text', text: 'Path traversal not allowed' }],
+  isError: true,
+});
+
 const mcpClientMock = vi.hoisted(() => ({
   initialize: vi.fn().mockResolvedValue(undefined),
   getAllTools: vi.fn().mockReturnValue([]),
@@ -33,10 +43,7 @@ describe('MCPProvider', () => {
   });
 
   it('should preserve existing output behavior without a response transform', async () => {
-    const rawResult = {
-      content: [{ type: 'text', text: 'raw response' }],
-      structuredContent: { answer: 'structured response' },
-    };
+    const rawResult = createStructuredToolResult();
     mcpClientMock.callTool.mockResolvedValue({
       content: 'normalized response',
       raw: rawResult,
@@ -169,10 +176,7 @@ describe('MCPProvider', () => {
   });
 
   it('should preserve MCP tool error results as direct provider output', async () => {
-    const rawResult = {
-      content: [{ type: 'text', text: 'Path traversal not allowed' }],
-      isError: true,
-    };
+    const rawResult = createTraversalErrorResult();
     mcpClientMock.callTool.mockResolvedValue({
       content: 'Path traversal not allowed',
       isError: true,
@@ -192,10 +196,7 @@ describe('MCPProvider', () => {
   });
 
   it('should preserve MCP tool error results as direct provider output via callApi', async () => {
-    const rawResult = {
-      content: [{ type: 'text', text: 'Path traversal not allowed' }],
-      isError: true,
-    };
+    const rawResult = createTraversalErrorResult();
     mcpClientMock.callTool.mockResolvedValue({
       content: 'Path traversal not allowed',
       isError: true,
@@ -230,10 +231,7 @@ describe('MCPProvider', () => {
   });
 
   it('should transform raw MCP results and merge provider metadata', async () => {
-    const rawResult = {
-      content: [{ type: 'text', text: 'raw response' }],
-      structuredContent: { answer: 'structured response' },
-    };
+    const rawResult = createStructuredToolResult();
     mcpClientMock.callTool.mockResolvedValue({
       content: 'normalized response',
       raw: rawResult,

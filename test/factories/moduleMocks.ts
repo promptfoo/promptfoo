@@ -27,6 +27,15 @@ export const createFsModuleFactory =
     };
   };
 
+export const createWarningOrderedLoggerFactory = (): MockModuleFactory => () => ({
+  default: {
+    debug: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    info: vi.fn(),
+  },
+});
+
 export const createDisabledCloudConfigFactory = (): MockModuleFactory => async (importOriginal) => {
   return {
     ...(await importOriginal()),

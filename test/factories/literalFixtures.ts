@@ -48,6 +48,12 @@ export const createAzureApiOptions = () => ({
   },
 });
 
+export const createOtlpOptions = () => ({
+  host: '127.0.0.1',
+  port: 4318,
+  acceptFormats: ['json' as const],
+});
+
 export const createChatUsage = (prompt_tokens = 10, completion_tokens = 20, total_tokens = 30) => ({
   prompt_tokens,
   completion_tokens,
@@ -62,6 +68,10 @@ export const createPassingGrade = (score = 0.8, reason = 'test reason') => ({
 
 export const createStreamingOptions = () => ({
   config: { apiKey: 'test-key', stream: true },
+});
+
+export const createAnthropicEnvOptions = () => ({
+  env: { ANTHROPIC_API_KEY: 'test-api-key' },
 });
 
 export const createTemperatureOptions = () => ({
@@ -174,7 +184,7 @@ export const createInputOutputUsage = (input_tokens: number, output_tokens: numb
   output_tokens,
 });
 
-const createMcpServerConfig = (command = 'npm', arg = 'start') => ({
+export const createMcpServerConfig = (command = 'npm', arg = 'start') => ({
   command,
   args: [arg],
 });
