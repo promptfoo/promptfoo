@@ -38,6 +38,8 @@ import {
   getLastMessageContent,
   getTargetResponse,
   isConversationEndedResponse,
+  isTargetCallAbortError,
+  preserveSelectedError,
   type RoundBacktrackingStopReason,
   redteamProviderManager,
   resolveStoredGraderResult,
@@ -465,6 +467,10 @@ export class CustomProvider implements ApiProvider {
           break;
         }
         if (lastResponse.error) {
+          if (options?.abortSignal?.aborted) {
+            exitReason = 'Target error';
+            break;
+          }
           logger.info(`[Custom] ROUND ${roundNum} - Target error`, {
             error: lastResponse.error,
             response: lastResponse,
@@ -541,6 +547,10 @@ export class CustomProvider implements ApiProvider {
           }
 
           if (lastResponse.error) {
+            if (options?.abortSignal?.aborted) {
+              exitReason = 'Target error';
+              break;
+            }
             logger.info(
               `[Custom] ROUND ${roundNum} - Target error after unblocking: ${lastResponse.error}.`,
               { lastResponse },
@@ -708,7 +718,7 @@ export class CustomProvider implements ApiProvider {
         logger.debug('[Custom] Jailbreak Unsuccessful, continuing to next round');
       } catch (error) {
         // Re-throw abort errors to properly cancel the operation
-        if (error instanceof Error && error.name === 'AbortError') {
+        if (isTargetCallAbortError(error, options?.abortSignal)) {
           logger.debug('[Custom] Operation aborted');
           throw error;
         }
@@ -751,30 +761,33 @@ export class CustomProvider implements ApiProvider {
     const error =
       targetError ||
       (hasTargetResponse ? undefined : lastAttemptError || 'No target request was completed.');
-    return {
-      output: reported.output,
-      prompt: reported.prompt,
-      metadata: {
-        redteamFinalPrompt: reported.prompt,
-        messages: reported.messages as Record<string, any>[],
-        customRoundsCompleted: roundNum,
-        customBacktrackCount: backtrackCount,
-        customResult: evalFlag,
-        customConfidence: evalPercentage,
-        stopReason: exitReason,
-        redteamHistory,
-        successfulAttacks: this.successfulAttacks,
-        totalSuccessfulAttacks: this.successfulAttacks.length,
-        storedGraderResult: resolveStoredGraderResult(
-          flaggedRound?.graderResult,
-          storedGraderResult,
-        ),
-        sessionId: getSessionId(lastResponse, context),
+    return preserveSelectedError(
+      {
+        output: reported.output,
+        prompt: reported.prompt,
+        metadata: {
+          redteamFinalPrompt: reported.prompt,
+          messages: reported.messages as Record<string, any>[],
+          customRoundsCompleted: roundNum,
+          customBacktrackCount: backtrackCount,
+          customResult: evalFlag,
+          customConfidence: evalPercentage,
+          stopReason: exitReason,
+          redteamHistory,
+          successfulAttacks: this.successfulAttacks,
+          totalSuccessfulAttacks: this.successfulAttacks.length,
+          storedGraderResult: resolveStoredGraderResult(
+            flaggedRound?.graderResult,
+            storedGraderResult,
+          ),
+          sessionId: getSessionId(lastResponse, context),
+        },
+        tokenUsage: totalTokenUsage,
+        guardrails: reported.guardrails,
+        ...(!flaggedRound && error ? { error } : {}),
       },
-      tokenUsage: totalTokenUsage,
-      guardrails: reported.guardrails,
-      ...(!flaggedRound && error ? { error } : {}),
-    };
+      lastResponse,
+    );
   }
 
   private async getAttackPrompt(
