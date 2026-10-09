@@ -28,7 +28,7 @@ Under the hood, `llm-rubric` uses a model to evaluate the output based on the cr
 
 - **OpenAI API key**: `gpt-5`
 - **Codex/ChatGPT login**: `openai:codex-sdk` when the Codex SDK package is installed, Codex is signed in, and no higher-priority API credentials are set
-- **Anthropic API key**: `claude-sonnet-4-5-20250929`
+- **Anthropic API key**: `claude-sonnet-5`
 - **Google AI Studio API key**: `gemini-2.5-pro` (GEMINI_API_KEY, GOOGLE_API_KEY, or PALM_API_KEY)
 - **Google Vertex credentials**: `gemini-2.5-pro` (service account credentials)
 - **Mistral API key**: `mistral-large-latest`

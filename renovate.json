@@ -16,12 +16,7 @@
       "before 3am on the 15th day of the month"
     ]
   },
-  "ignorePaths": [
-    "examples/**/requirements.txt",
-    "examples/**/pyproject.toml",
-    "examples/**/go.mod",
-    "test/**/go.mod"
-  ],
+  "ignorePaths": ["examples/**/go.mod", "test/**/go.mod"],
   "packageRules": [
     {
       "description": "Disable major Node.js version updates",
@@ -106,6 +101,14 @@
       "groupName": "Docusaurus packages"
     },
     {
+      "description": "Keep Docusaurus's react-router-config override on Router v5 until Docusaurus migrates away from it. The app's direct Router v8 dependency remains independently upgradable.",
+      "matchManagers": ["npm"],
+      "matchFileNames": ["package.json"],
+      "matchDepTypes": ["overrides"],
+      "matchPackageNames": ["react-router"],
+      "allowedVersions": "<6"
+    },
+    {
       "description": "Group GitHub Actions packages together",
       "matchPackagePatterns": ["^@actions/"],
       "groupName": "GitHub Actions"
@@ -127,6 +130,11 @@
         "peerDependencies"
       ],
       "groupName": "IBM packages"
+    },
+    {
+      "description": "Hold ibm-cloud-sdk-core below 5.6.3 until upstream fixes JSON secret redaction with escaped quotes; 5.6.3 can expose secret suffixes in debug logs (#11472).",
+      "matchPackageNames": ["ibm-cloud-sdk-core"],
+      "allowedVersions": "<5.6.3"
     },
     {
       "description": "Group MUI packages together",
@@ -250,22 +258,10 @@
       "allowedVersions": "<7"
     },
     {
-      "description": "Chevrotain ships as one lockstep release train: chevrotain@X declares @chevrotain/gast, @chevrotain/types, @chevrotain/regexp-to-ast, @chevrotain/utils and @chevrotain/cst-dts-gen at exactly X, and all six reach npm within about a minute of each other. Renovate bumps one of them at a time and rewrites package.json overrides without regenerating package-lock.json, so the resulting PRs fail at `npm ci` with EUSAGE (see the closed #10293, #10294 and #10297) or leave a mixed tree (#10345 pulled @chevrotain/cst-dts-gen to 13.1.0 under chevrotain 11.2.0, which asks for 11.2.0 exactly). The family stays frozen until langium, chevrotain-allstar and every @chevrotain/* pin move together in one PR that also regenerates the lockfile; langium@4.3.1 declares chevrotain ~12.0.0, so 12.x is the next coherent target, not 13.x. test/package-manifests.test.ts asserts this rule keeps the whole family disabled and that the grammar pins equal the pinned parser version.",
-      "matchPackageNames": [
-        "chevrotain",
-        "chevrotain-allstar",
-        "@chevrotain/gast",
-        "@chevrotain/types",
-        "@chevrotain/regexp-to-ast",
-        "@chevrotain/utils",
-        "@chevrotain/cst-dts-gen"
-      ],
-      "enabled": false
-    },
-    {
-      "description": "Keep undici in sync across root and code-scan-action",
+      "description": "Keep undici in sync across root and code-scan-action, and below 8 until engines.node is >=26. Promptfoo hands undici dispatchers to Node's built-in fetch; on Node 22 and 24 that fetch rejects undici 8 dispatchers and every request hangs (test/fetch.compression.test.ts times out on those CI lanes).",
       "matchPackageNames": ["undici"],
-      "groupName": "undici"
+      "groupName": "undici",
+      "allowedVersions": "<8"
     },
     {
       "description": "Keep dedent in sync across all workspaces",
@@ -322,7 +318,6 @@
       "matchDatasources": ["npm"],
       "minimumReleaseAge": "10 days"
     },
-
     {
       "description": "@opencode-ai/sdk: weekly updates to reduce noise from daily releases",
       "matchPackageNames": ["@opencode-ai/sdk"],
@@ -406,6 +401,23 @@
       "schedule": ["before 6am on the first day of the month"],
       "rangeStrategy": "bump",
       "minimumReleaseAge": "10 days"
+    },
+    {
+      "description": "Update Python dependencies monthly in separate branches for each example",
+      "matchManagers": ["pip_requirements", "pep621"],
+      "matchFileNames": ["examples/**/requirements*.txt", "examples/**/pyproject.toml"],
+      "additionalBranchPrefix": "{{packageFileDir}}-",
+      "groupName": null,
+      "rangeStrategy": "bump",
+      "schedule": ["before 6am on the first day of the month"],
+      "minimumReleaseAge": "10 days"
+    },
+    {
+      "description": "Review Python support floor changes separately from dependency updates",
+      "matchManagers": ["pep621"],
+      "matchFileNames": ["examples/**/pyproject.toml"],
+      "matchDepTypes": ["requires-python"],
+      "enabled": false
     }
   ]
 }
