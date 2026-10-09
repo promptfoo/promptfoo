@@ -1,55 +1,170 @@
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
+import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
+import { normalizePath, readLayerConfig } from './architectureUtils';
+
 const repoRoot = path.resolve(import.meta.dirname, '..');
-const rootOwnedPrefixes = ['src/', 'test/', 'scripts/'];
+const rootOwnedPrefixes = ['src/', 'test/', 'scripts/', 'packages/'];
 const externalProjectPrefixes = ['src/app/', 'test/code-scan-action/'];
 
-function normalizePath(filePath: string): string {
-  return filePath.split(path.sep).join('/');
+interface ProjectConfig {
+  files?: string[];
+  references?: { path: string }[];
 }
 
-export function getTrackedTypeScriptFiles(): string[] {
-  return execFileSync('git', ['ls-files'], {
-    cwd: repoRoot,
+function isTypeScriptFile(filePath: string): boolean {
+  return /\.(?:[cm]?ts|tsx)$/.test(filePath);
+}
+
+function hasPrefix(filePath: string, prefixes: string[]): boolean {
+  return prefixes.some((prefix) => filePath.startsWith(prefix));
+}
+
+function isRootOwnedTypeScriptFile(filePath: string, configuredRoots: string[]): boolean {
+  return (
+    !filePath.includes('/') ||
+    hasPrefix(filePath, rootOwnedPrefixes) ||
+    configuredRoots.some((root) => filePath === root || filePath.startsWith(`${root}/`))
+  );
+}
+
+function getConfiguredRoots(repositoryRoot: string): string[] {
+  return fs.existsSync(path.join(repositoryRoot, 'architecture/layers.json'))
+    ? readLayerConfig(repositoryRoot).layers.flatMap((layer) => layer.roots)
+    : [];
+}
+
+export function getTrackedTypeScriptFiles(repositoryRoot = repoRoot): string[] {
+  const configuredRoots = getConfiguredRoots(repositoryRoot);
+  return execFileSync('git', ['ls-files', '-z'], {
+    cwd: repositoryRoot,
     encoding: 'utf8',
   })
-    .split('\n')
-    .map((filePath) => filePath.trim())
+    .split('\0')
     .filter(Boolean)
     .map(normalizePath)
     .filter(
       (filePath) =>
-        /\.(?:[cm]?ts|tsx)$/.test(filePath) &&
-        (!filePath.includes('/') ||
-          rootOwnedPrefixes.some((prefix) => filePath.startsWith(prefix))) &&
-        !externalProjectPrefixes.some((prefix) => filePath.startsWith(prefix)),
+        isTypeScriptFile(filePath) &&
+        isRootOwnedTypeScriptFile(filePath, configuredRoots) &&
+        !hasPrefix(filePath, externalProjectPrefixes),
     )
     .sort();
 }
 
-export function getRootProjectFiles(): Set<string> {
+function runCompiler(configPath: string, repositoryRoot: string, args: string[]): string {
   const compilerPath = fileURLToPath(
     new URL('./bin/tsc', import.meta.resolve('typescript/package.json')),
   );
-  const compilerOutput = execFileSync(process.execPath, [compilerPath, '--showConfig'], {
-    cwd: repoRoot,
+  const result = spawnSync(process.execPath, [compilerPath, '--project', configPath, ...args], {
+    cwd: repositoryRoot,
     encoding: 'utf8',
+    // The root project includes dependency declarations; its file list is large.
+    maxBuffer: 16 * 1024 * 1024,
   });
-  const config: { files: string[] } = JSON.parse(compilerOutput);
+  if (result.error) {
+    throw result.error;
+  }
+  if (result.status !== 0) {
+    const output = args.includes('--listFilesOnly')
+      ? result.stdout
+          .split(/\r?\n/)
+          .filter((line) => /\berror TS\d+:/.test(line) || /^\s+\S/.test(line))
+          .join('\n')
+      : result.stdout;
+    const diagnostics = [output.trim(), result.stderr.trim()].filter(Boolean).join('\n');
+    throw new Error(
+      `Could not read TypeScript project ${normalizePath(path.relative(repositoryRoot, configPath))}:\n${diagnostics || `Compiler exited with status ${result.status}`}`,
+    );
+  }
+  return result.stdout;
+}
 
+function readProjectConfig(configPath: string, repositoryRoot: string): ProjectConfig {
+  // --showConfig can discard invalid options without returning an error.
+  // Validate every project, including root reference diagnostics, without emitting.
+  runCompiler(configPath, repositoryRoot, ['--listFilesOnly', '--pretty', 'false']);
+  return JSON.parse(runCompiler(configPath, repositoryRoot, ['--showConfig']));
+}
+
+function getProjectFiles(
+  config: ProjectConfig,
+  configPath: string,
+  repositoryRoot: string,
+): Set<string> {
   return new Set(
-    config.files.map((filePath) =>
-      normalizePath(path.relative(repoRoot, path.resolve(repoRoot, filePath))),
+    (config.files ?? []).map((filePath) =>
+      normalizePath(
+        path.relative(repositoryRoot, path.resolve(path.dirname(configPath), filePath)),
+      ),
     ),
   );
 }
 
-export function findMissingRootTypeScriptFiles(): string[] {
-  const projectFiles = getRootProjectFiles();
-  return getTrackedTypeScriptFiles().filter((filePath) => !projectFiles.has(filePath));
+export function getRootProjectFiles(repositoryRoot = repoRoot): Set<string> {
+  const configPath = path.join(repositoryRoot, 'tsconfig.json');
+  return getProjectFiles(readProjectConfig(configPath, repositoryRoot), configPath, repositoryRoot);
+}
+
+export function findMissingRootTypeScriptFiles(repositoryRoot = repoRoot): string[] {
+  const rootConfigPath = path.join(repositoryRoot, 'tsconfig.json');
+  const rootConfig = readProjectConfig(rootConfigPath, repositoryRoot);
+  const projectFiles = getProjectFiles(rootConfig, rootConfigPath, repositoryRoot);
+  const productProjectFiles = new Map<string, Set<string>>();
+  const configuredRoots = getConfiguredRoots(repositoryRoot).filter(
+    (root) => !hasPrefix(`${root}/`, rootOwnedPrefixes),
+  );
+  const visited = new Set([rootConfigPath]);
+
+  function visitReferences(config: ProjectConfig, configPath: string): void {
+    for (const reference of config.references ?? []) {
+      const referencePath = path.resolve(path.dirname(configPath), reference.path);
+      const referencedConfigPath = fs.statSync(referencePath).isDirectory()
+        ? path.join(referencePath, 'tsconfig.json')
+        : referencePath;
+      if (visited.has(referencedConfigPath)) {
+        continue;
+      }
+      visited.add(referencedConfigPath);
+      const referencedConfig = readProjectConfig(referencedConfigPath, repositoryRoot);
+      const projectPrefix = `${normalizePath(
+        path.relative(repositoryRoot, path.dirname(referencedConfigPath)),
+      )}/`;
+
+      // Referenced product projects own only files beneath their own directory.
+      // Standard source and tooling directories keep the root compiler requirement.
+      if (
+        projectPrefix.startsWith('packages/') ||
+        configuredRoots.some(
+          (root) => root.startsWith(projectPrefix) || projectPrefix.startsWith(`${root}/`),
+        )
+      ) {
+        const ownedFiles = productProjectFiles.get(projectPrefix) ?? new Set<string>();
+        for (const filePath of getProjectFiles(
+          referencedConfig,
+          referencedConfigPath,
+          repositoryRoot,
+        )) {
+          if (filePath.startsWith(projectPrefix)) {
+            ownedFiles.add(filePath);
+          }
+        }
+        productProjectFiles.set(projectPrefix, ownedFiles);
+      }
+      visitReferences(referencedConfig, referencedConfigPath);
+    }
+  }
+
+  visitReferences(rootConfig, rootConfigPath);
+  // Prefer the closest project so a parent cannot mask a child's missing files.
+  const productProjects = [...productProjectFiles].sort(([a], [b]) => b.length - a.length);
+  return getTrackedTypeScriptFiles(repositoryRoot).filter((filePath) => {
+    const owner = productProjects.find(([prefix]) => filePath.startsWith(prefix));
+    return !(owner?.[1] ?? projectFiles).has(filePath);
+  });
 }
 
 export function runTypeScriptCoverageCheck(): number {
@@ -59,12 +174,12 @@ export function runTypeScriptCoverageCheck(): number {
     return 0;
   }
 
-  console.error('Root tsconfig.json is not type-checking these tracked TypeScript files:');
+  console.error('Tracked TypeScript files are missing from their owning compiler project:');
   for (const filePath of missingFiles) {
     console.error(`- ${filePath}`);
   }
   console.error(
-    'Add them to the root project, or add the owning subtree to externalProjectPrefixes with a separate typecheck.',
+    'Add them to their owning tsconfig: the nearest referenced project for packages or configured product roots, otherwise the root project.',
   );
   return 1;
 }
