@@ -6,6 +6,7 @@
 
 import { getEnvString } from '../../../envars';
 import logger from '../../../logger';
+import { providerRegistry } from '../../providerRegistry';
 import { ElevenLabsClient } from '../client';
 import { CostTracker } from '../cost-tracker';
 import { buildSimulationRequest, parseConversation } from './conversation';
@@ -30,6 +31,10 @@ export class ElevenLabsAgentsProvider implements ApiProvider {
   private env?: EnvOverrides;
   private ephemeralAgentId: string | null = null;
   private agentCreationPromise: Promise<string> | null = null;
+  private cleanupPromise: Promise<void> | null = null;
+  private activeCalls = 0;
+  private onIdle: (() => void) | null = null;
+  private shutdownRequested = false;
   private initPromise: Promise<void> | null = null;
 
   constructor(
@@ -110,6 +115,14 @@ export class ElevenLabsAgentsProvider implements ApiProvider {
       this.initPromise = null;
     }
 
+    // Finish retiring the previous agent before a new call can register or reuse it.
+    while (this.cleanupPromise) {
+      await this.cleanupPromise;
+    }
+    this.activeCalls++;
+    if (!this.config.agentId) {
+      providerRegistry.register(this);
+    }
     const startTime = Date.now();
 
     try {
@@ -169,6 +182,15 @@ export class ElevenLabsAgentsProvider implements ApiProvider {
           latency: Date.now() - startTime,
         },
       };
+    } finally {
+      this.activeCalls--;
+      if (this.activeCalls === 0) {
+        this.onIdle?.();
+        this.onIdle = null;
+        if (this.shutdownRequested) {
+          await this.cleanup();
+        }
+      }
     }
   }
 
@@ -364,9 +386,30 @@ export class ElevenLabsAgentsProvider implements ApiProvider {
   /**
    * Clean up resources
    */
-  async cleanup(): Promise<void> {
-    if (this.agentCreationPromise) {
-      await this.agentCreationPromise.catch(() => undefined);
+  cleanup(): Promise<void> {
+    this.cleanupPromise ??= Promise.resolve()
+      .then(() => this.cleanupOwnedAgent())
+      .finally(() => {
+        this.cleanupPromise = null;
+      });
+    return this.cleanupPromise;
+  }
+
+  async shutdown(): Promise<void> {
+    // A different evaluation can request global teardown while this provider is active.
+    this.shutdownRequested = true;
+    if (this.activeCalls === 0) {
+      await this.cleanup();
+    }
+  }
+
+  private async cleanupOwnedAgent(): Promise<void> {
+    this.shutdownRequested = false;
+    providerRegistry.unregister(this);
+    if (this.activeCalls > 0) {
+      await new Promise<void>((resolve) => {
+        this.onIdle = resolve;
+      });
     }
     // Delete ephemeral agent if created
     if (this.ephemeralAgentId) {
