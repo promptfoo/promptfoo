@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ElevenLabsAgentsProvider } from '../../../../src/providers/elevenlabs/agents';
+import { ElevenLabsAPIError } from '../../../../src/providers/elevenlabs/errors';
 import { providerRegistry } from '../../../../src/providers/providerRegistry';
 
 const client = vi.hoisted(() => ({ post: vi.fn(), delete: vi.fn() }));
@@ -55,15 +56,45 @@ describe('ephemeral agent lifecycle', () => {
     expect(client.delete).not.toHaveBeenCalled();
 
     expect(
-      (await providerRegistry.withScope([provider], () => provider.callApi('again'))).error,
+      (
+        await providerRegistry.withEvaluation(() =>
+          providerRegistry.withProvider(provider, () => provider.callApi('again')),
+        )
+      ).error,
     ).toBeUndefined();
     expect(client.delete).toHaveBeenCalledOnce();
+  });
+
+  it('starts a fresh creation when a direct caller retries immediately after cancellation', async () => {
+    let started!: () => void;
+    const ready = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    client.post.mockImplementationOnce(
+      (_path, _body, options) =>
+        new Promise((_resolve, reject) => {
+          options.signal.addEventListener('abort', () => reject(options.signal.reason), {
+            once: true,
+          });
+          started();
+        }),
+    );
+    const provider = createProvider();
+    const controller = new AbortController();
+    const first = provider.callApi('first', undefined, { abortSignal: controller.signal });
+    await ready;
+    controller.abort();
+    expect((await first).error).toContain('aborted');
+    expect((await provider.callApi('replacement')).error).toBeUndefined();
+    expect(client.post.mock.calls.filter(([path]) => path.endsWith('/create'))).toHaveLength(2);
   });
 
   it('creates a fresh agent after each evaluation, including with a new instance', async () => {
     const provider = createProvider();
     for (const current of [provider, provider, createProvider()]) {
-      const result = await providerRegistry.withScope([current], () => current.callApi('hello'));
+      const result = await providerRegistry.withEvaluation(() =>
+        providerRegistry.withProvider(current, () => current.callApi('hello')),
+      );
       expect(result.error).toBeUndefined();
     }
     expect(client.delete.mock.calls.map(([path]) => path)).toEqual([
@@ -79,7 +110,7 @@ describe('ephemeral agent lifecycle', () => {
   it('coalesces creation within an instance but keeps different instances independent', async () => {
     const first = createProvider();
     const second = createProvider();
-    await providerRegistry.withScope([first, second], async () => {
+    await providerRegistry.withEvaluation(async () => {
       const results = await Promise.all([
         first.callApi('a'),
         first.callApi('b'),
@@ -99,7 +130,9 @@ describe('ephemeral agent lifecycle', () => {
     const provider = new ElevenLabsAgentsProvider('agent', {
       config: { apiKey: 'fixture', agentId: 'user-owned' },
     });
-    await providerRegistry.withScope([provider], () => provider.callApi('hello'));
+    await providerRegistry.withEvaluation(() =>
+      providerRegistry.withProvider(provider, () => provider.callApi('hello')),
+    );
     expect(client.delete).not.toHaveBeenCalled();
   });
 
@@ -108,7 +141,11 @@ describe('ephemeral agent lifecycle', () => {
     const provider = createProvider();
     expect((await provider.callApi('hello')).error).toContain('creation failed');
     expect(
-      (await providerRegistry.withScope([provider], () => provider.callApi('again'))).error,
+      (
+        await providerRegistry.withEvaluation(() =>
+          providerRegistry.withProvider(provider, () => provider.callApi('again')),
+        )
+      ).error,
     ).toBeUndefined();
     expect(client.delete).toHaveBeenCalledOnce();
   });
@@ -126,6 +163,97 @@ describe('ephemeral agent lifecycle', () => {
       '/convai/agents/owned-1',
       '/convai/agents/owned-2',
     ]);
+  });
+
+  it('aborts a pending simulation during cleanup and permits reuse', async () => {
+    let started!: () => void;
+    const ready = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    client.post
+      .mockImplementationOnce(async () => ({ agent_id: 'owned-1' }))
+      .mockImplementationOnce(
+        (_path, _body, options) =>
+          new Promise((_resolve, reject) => {
+            options.signal.addEventListener('abort', () => reject(options.signal.reason), {
+              once: true,
+            });
+            started();
+          }),
+      );
+    const provider = createProvider();
+    const call = provider.callApi('hello');
+    await ready;
+    await provider.cleanup();
+    expect((await call).error).toContain('aborted');
+    expect(client.delete).toHaveBeenCalledWith('/convai/agents/owned-1', {
+      signal: expect.any(AbortSignal),
+    });
+    expect((await provider.callApi('again')).error).toBeUndefined();
+  });
+
+  it('cancels only the requested simulation when calls share a provider', async () => {
+    let started!: () => void;
+    const ready = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    client.post
+      .mockImplementationOnce(async () => ({ agent_id: 'shared' }))
+      .mockImplementationOnce(
+        (_path, _body, options) =>
+          new Promise((_resolve, reject) => {
+            options.signal.addEventListener('abort', () => reject(options.signal.reason), {
+              once: true,
+            });
+            started();
+          }),
+      );
+    const provider = createProvider();
+    const controller = new AbortController();
+    const first = provider.callApi('first', undefined, { abortSignal: controller.signal });
+    await ready;
+    const second = provider.callApi('second');
+    controller.abort();
+    expect((await first).error).toContain('aborted');
+    expect((await second).error).toBeUndefined();
+    expect(client.post.mock.calls.filter(([path]) => path.endsWith('/create'))).toHaveLength(1);
+  });
+
+  it('uses one aggregate deadline for retained deletion retries', async () => {
+    const provider = createProvider();
+    client.delete.mockRejectedValueOnce(new Error('temporary'));
+    await provider.callApi('first');
+    await provider.cleanup();
+    await provider.callApi('second');
+    const controller = new AbortController();
+    const timeout = vi.spyOn(AbortSignal, 'timeout').mockReturnValue(controller.signal);
+    client.delete.mockClear().mockImplementation(
+      (_path, options) =>
+        new Promise((_resolve, reject) =>
+          options.signal.addEventListener('abort', () => reject(options.signal.reason), {
+            once: true,
+          }),
+        ),
+    );
+    const cleanup = provider.cleanup();
+    await vi.waitFor(() => expect(client.delete).toHaveBeenCalledTimes(2));
+    expect(timeout).toHaveBeenCalledOnce();
+    expect(client.delete.mock.calls.map(([, options]) => options.signal)).toEqual([
+      controller.signal,
+      controller.signal,
+    ]);
+    controller.abort();
+    await cleanup;
+    client.delete.mockResolvedValue(undefined);
+  });
+
+  it('forgets a retained deletion once the remote agent is already absent', async () => {
+    const provider = createProvider();
+    await provider.callApi('hello');
+    client.delete.mockRejectedValueOnce(new ElevenLabsAPIError('Not found', 404));
+    await provider.cleanup();
+    await provider.cleanup();
+    expect(client.delete).toHaveBeenCalledOnce();
   });
 
   it('bounds deletion and retains an agent whose deletion timed out', async () => {

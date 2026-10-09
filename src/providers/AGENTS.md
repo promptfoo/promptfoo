@@ -13,15 +13,15 @@ Each provider:
 
 ## Provider Lifecycle & Cleanup
 
-The evaluator (`src/evaluator.ts`) manages provider lifecycle with `providerRegistry.withScope()`. Each evaluation releases only resources it owns, and shared providers remain open until all owning evaluations finish. `shutdownAll()` is reserved for process shutdown or explicit caller cleanup.
+Evaluations use `providerRegistry.withEvaluation()` (`src/providers/providerRegistry.ts`). Providers and registered resources stay open until their last evaluation and any active calls finish. A new caller waits for cleanup of the same provider; unrelated evaluations continue. Nested entry points share one scope.
 
 **If your provider allocates resources** (Python workers, connections, child processes):
 
-- Implement a `cleanup()` method on your provider
-- Evaluation targets exposing `cleanup()` or legacy `shutdown()` are adopted automatically
-- Register dynamically created resources with `providerRegistry` before initialization and on reuse to claim the current evaluation scope
-- Allow initialization after cleanup when the same provider instance is reused
-- Resources are released in the evaluator's `finally` block
+- Implement `cleanup()` without required arguments. For a provider that registers itself, the registry calls `shutdown()` instead; it can delegate to `cleanup()`. Use `cleanupAfterEvaluation({ reason: 'evaluation-complete' })` when automatic cleanup must differ from explicit shutdown.
+- Register resources before asynchronous initialization creates processes or connections. Registration of a provider instance is restored when an evaluation reuses it. An idle cleanup hook may leave the provider registered for process shutdown.
+- For shared singleton transports, await `useResource()` on every access and call `throwIfResourceUseAborted()` after asynchronous acquisition. Both use the current provider call's signal; direct callers can supply one.
+- Pass the request signal to `withProvider()`. When using a temporary adapter, retain ownership on the provider that performs cleanup. Cancelled calls waiting for cleanup never start; active calls retain resources until they settle.
+- Process shutdown closes registered resources immediately. The CLI also cleans up its own targets, including targets without registered resources. Caller-supplied graders remain borrowed.
 
 **Reference implementations:**
 

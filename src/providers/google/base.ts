@@ -18,6 +18,7 @@ import logger from '../../logger';
 import {
   CallbackPathTraversalError,
   loadCallbackFromFileUrl,
+  resolveCallbackPath,
   wrapError,
 } from '../../util/functions/loadFunction';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
@@ -27,6 +28,7 @@ import { transformMCPToolsToGoogle } from '../mcp/transform';
 import { getRequestTimeoutMs, transformTools } from '../shared';
 import { withGenAIToolSpan } from '../tracing';
 import { GoogleAuthManager } from './auth';
+import { getVertexModelDefaultRegion } from './shared';
 import {
   normalizeTools,
   resolveGoogleToolConfig,
@@ -65,7 +67,8 @@ interface PendingFunctionCall {
 }
 
 const MAX_STREAMED_FUNCTION_ARG_DEPTH = 64;
-const MAX_STREAMED_FUNCTION_ARG_ARRAY_SLOTS = 10_000;
+const MAX_STREAMED_FUNCTION_ARG_INDEX = 10_000;
+const MAX_STREAMED_FUNCTION_ARG_ARRAY_SLOTS = MAX_STREAMED_FUNCTION_ARG_INDEX + 1;
 
 function setPartialFunctionArg(
   args: Record<string, unknown>,
@@ -87,7 +90,7 @@ function setPartialFunctionArg(
       (segment) =>
         ['__proto__', 'prototype', 'constructor'].includes(String(segment)) ||
         (typeof segment === 'number' &&
-          (!Number.isSafeInteger(segment) || segment >= MAX_STREAMED_FUNCTION_ARG_ARRAY_SLOTS)),
+          (!Number.isSafeInteger(segment) || segment > MAX_STREAMED_FUNCTION_ARG_INDEX)),
     )
   ) {
     return false;
@@ -110,12 +113,18 @@ function setPartialFunctionArg(
   for (let index = 0; index < segments.length; index++) {
     const segment = segments[index];
     if (Array.isArray(current)) {
-      // Reject special properties such as length and quoted indices that bypass numeric validation.
-      if (typeof segment !== 'number') {
+      // Only canonical array indices are supported, including quoted indices.
+      const arrayIndex = Number(segment);
+      if (
+        !/^\d+$/.test(String(segment)) ||
+        !Number.isSafeInteger(arrayIndex) ||
+        String(arrayIndex) !== String(segment) ||
+        arrayIndex > MAX_STREAMED_FUNCTION_ARG_INDEX
+      ) {
         return false;
       }
       // JSON.stringify materializes sparse holes. Bound expansion across the entire response.
-      const addedSlots = Math.max(0, segment + 1 - current.length);
+      const addedSlots = Math.max(0, arrayIndex + 1 - current.length);
       if (budget.arraySlots + addedSlots > MAX_STREAMED_FUNCTION_ARG_ARRAY_SLOTS) {
         return false;
       }
@@ -180,6 +189,10 @@ function finalizeStreamedFunctionCall(
   return pending.name ? { id: pending.id, name: pending.name, args: pending.args } : undefined;
 }
 
+function isAnonymousFunctionCallFragment(functionCall: StreamedFunctionCall): boolean {
+  return functionCall.id === undefined && functionCall.name === undefined;
+}
+
 function assembleStreamedFunctionCalls(parts: any[]): StreamedFunctionCall[] | undefined {
   const completed: StreamedFunctionCall[] = [];
   const pendingById = new Map<string, PendingFunctionCall>();
@@ -194,12 +207,12 @@ function assembleStreamedFunctionCalls(parts: any[]): StreamedFunctionCall[] | u
 
     const id = functionCall.id;
     let pending = id ? pendingById.get(id) : pendingUnnamed;
-    if (!id && pendingById.size > 0) {
+    if (isAnonymousFunctionCallFragment(functionCall)) {
       // Vertex can omit the ID after the first chunk. Only associate an unambiguous continuation.
-      if (pendingUnnamed || pendingById.size !== 1) {
+      if (pendingById.size + (pendingUnnamed ? 1 : 0) > 1) {
         return undefined;
       }
-      pending = pendingById.values().next().value;
+      pending = pendingUnnamed ?? pendingById.values().next().value;
     }
     if (!pending) {
       pending = { id, name: functionCall.name, args: {}, argsText: '' };
@@ -272,7 +285,9 @@ function restoreStreamedFunctionCallParts(
 
     const activeId =
       fragment.id ||
-      (unnamedCallPart === undefined && activeCallParts.size === 1
+      (isAnonymousFunctionCallFragment(fragment) &&
+      unnamedCallPart === undefined &&
+      activeCallParts.size === 1
         ? activeCallParts.keys().next().value
         : undefined);
     const activePart = activeId ? activeCallParts.get(activeId) : unnamedCallPart;
@@ -341,6 +356,9 @@ export abstract class GoogleGenericProvider implements ApiProvider {
 
   /** References used to populate the callback cache, for prompt-level overrides. */
   protected loadedFunctionCallbackRefs: Record<string, string | Function | undefined> = {};
+
+  /** Effective owning directories for cached file callbacks, including CLI/cwd fallback. */
+  protected loadedFunctionCallbackBasePaths: Record<string, string | undefined> = {};
 
   /** Custom provider ID function */
   protected customId?: () => string;
@@ -454,7 +472,10 @@ export abstract class GoogleGenericProvider implements ApiProvider {
    */
   getRegion(): string {
     const hasApiKey = Boolean(this.getApiKey());
-    return GoogleAuthManager.resolveRegion(this.config, this.env, hasApiKey);
+    const modelDefaultRegion = this.isVertexMode
+      ? getVertexModelDefaultRegion(this.modelName)
+      : undefined;
+    return GoogleAuthManager.resolveRegion(this.config, this.env, hasApiKey, modelDefaultRegion);
   }
 
   /**
@@ -478,12 +499,12 @@ export abstract class GoogleGenericProvider implements ApiProvider {
   /**
    * Initialize the MCP client for tool integration.
    */
-  protected async initializeMCP(): Promise<void> {
+  protected async initializeMCP(signal?: AbortSignal): Promise<void> {
     if (!this.config.mcp?.enabled) {
       return;
     }
-    this.mcpSession ??= new McpClientSession(this.config.mcp, this);
-    this.mcpClient = await this.mcpSession.initialize();
+    this.mcpSession ??= new McpClientSession(this.config.mcp);
+    this.mcpClient = await this.mcpSession.initialize(signal);
   }
 
   /**
@@ -531,9 +552,9 @@ export abstract class GoogleGenericProvider implements ApiProvider {
    * @param fileRef - File reference in format 'file://path/to/file:functionName'
    * @returns The loaded function
    */
-  protected async loadExternalFunction(fileRef: string): Promise<Function> {
+  protected async loadExternalFunction(fileRef: string, basePath?: string): Promise<Function> {
     try {
-      return await loadCallbackFromFileUrl(fileRef);
+      return await loadCallbackFromFileUrl(fileRef, { basePath });
     } catch (error) {
       if (error instanceof CallbackPathTraversalError) {
         throw error;
@@ -553,7 +574,7 @@ export abstract class GoogleGenericProvider implements ApiProvider {
   protected async executeFunctionCallback(
     functionName: string,
     args: string,
-    config: CompletionOptions,
+    config: GoogleProviderConfig,
     callId?: string,
   ): Promise<any> {
     try {
@@ -562,6 +583,10 @@ export abstract class GoogleGenericProvider implements ApiProvider {
         callbacks && Object.prototype.hasOwnProperty.call(callbacks, functionName)
           ? callbacks[functionName]
           : undefined;
+      const callbackBasePath =
+        typeof callbackRef === 'string' && callbackRef.startsWith('file://')
+          ? resolveCallbackPath('.', config.basePath)
+          : undefined;
       let callback: Function | undefined = Object.prototype.hasOwnProperty.call(
         this.loadedFunctionCallbacks,
         functionName,
@@ -569,7 +594,10 @@ export abstract class GoogleGenericProvider implements ApiProvider {
         ? this.loadedFunctionCallbacks[functionName]
         : undefined;
 
-      if (this.loadedFunctionCallbackRefs[functionName] !== callbackRef) {
+      if (
+        this.loadedFunctionCallbackRefs[functionName] !== callbackRef ||
+        this.loadedFunctionCallbackBasePaths[functionName] !== callbackBasePath
+      ) {
         callback = undefined;
       }
 
@@ -578,7 +606,7 @@ export abstract class GoogleGenericProvider implements ApiProvider {
         if (callbackRef && typeof callbackRef === 'string') {
           const callbackStr: string = callbackRef;
           if (callbackStr.startsWith('file://')) {
-            callback = await this.loadExternalFunction(callbackStr);
+            callback = await this.loadExternalFunction(callbackStr, callbackBasePath);
           } else {
             // Inline function string (backward compatibility with existing behavior)
             // This uses Function constructor which has security implications
@@ -603,10 +631,12 @@ export abstract class GoogleGenericProvider implements ApiProvider {
           // Cache for future use
           this.loadedFunctionCallbacks[functionName] = callback;
           this.loadedFunctionCallbackRefs[functionName] = callbackRef;
+          this.loadedFunctionCallbackBasePaths[functionName] = callbackBasePath;
         } else if (typeof callbackRef === 'function') {
           callback = callbackRef;
           this.loadedFunctionCallbacks[functionName] = callback;
           this.loadedFunctionCallbackRefs[functionName] = callbackRef;
+          this.loadedFunctionCallbackBasePaths[functionName] = callbackBasePath;
         }
       }
 
@@ -628,20 +658,18 @@ export abstract class GoogleGenericProvider implements ApiProvider {
   }
 
   /**
-   * Execute explicitly configured callbacks from native parts or trusted JSON
-   * function-call envelopes. Local eval configuration and model-output feedback
-   * loops share the trusted execution model documented in SECURITY.md.
+   * Execute explicitly configured callbacks from native parts or parseable JSON envelopes.
    */
   protected async executeFunctionToolCallbacks(
     output: ProviderResponse['output'],
-    config: CompletionOptions,
+    config: GoogleProviderConfig,
     toolsDisabled: boolean,
   ): Promise<ProviderResponse['output']> {
     if (toolsDisabled) {
       return output;
     }
 
-    let parsedOutput: any = output;
+    let parsedOutput = output;
     if (typeof output === 'string') {
       try {
         parsedOutput = JSON.parse(output);
@@ -649,15 +677,43 @@ export abstract class GoogleGenericProvider implements ApiProvider {
         return output;
       }
     }
-
     const parts = Array.isArray(parsedOutput) ? parsedOutput : [parsedOutput];
+    // JSON text opts into tool handling only through an explicitly mapped name.
+    // A mapped opening fragment can still own later nameless continuations.
+    if (
+      typeof output === 'string' &&
+      !parts.some(
+        (part) =>
+          typeof part?.functionCall?.name === 'string' &&
+          config.functionToolCallbacks &&
+          Object.prototype.hasOwnProperty.call(
+            config.functionToolCallbacks,
+            part.functionCall.name,
+          ),
+      )
+    ) {
+      return output;
+    }
     const { toolConfig } = resolveGoogleToolConfig(config);
     const streamsFunctionCallArguments =
       config.streaming === true &&
       toolConfig?.functionCallingConfig?.streamFunctionCallArguments === true;
+    const nativeFunctionCalls = parts.flatMap((part) =>
+      part?.functionCall ? [part.functionCall] : [],
+    );
+    if (
+      !streamsFunctionCallArguments &&
+      nativeFunctionCalls.some(
+        (call) => call.willContinue === true || (call.partialArgs?.length ?? 0) > 0,
+      )
+    ) {
+      throw new Error(
+        'Streamed function-call arguments require streaming: true and toolConfig.functionCallingConfig.streamFunctionCallArguments: true.',
+      );
+    }
     const functionCalls = streamsFunctionCallArguments
       ? assembleStreamedFunctionCalls(parts)
-      : parts.flatMap((part) => (part?.functionCall ? [part.functionCall] : []));
+      : nativeFunctionCalls;
     if (!functionCalls?.length) {
       return output;
     }
@@ -672,7 +728,10 @@ export abstract class GoogleGenericProvider implements ApiProvider {
     const preparedCalls: Array<{ functionName: string; args: string; callId?: string }> = [];
     for (const functionCall of functionCalls) {
       const functionName = functionCall.name;
-      if (!Object.prototype.hasOwnProperty.call(config.functionToolCallbacks, functionName)) {
+      if (
+        typeof functionName !== 'string' ||
+        !Object.prototype.hasOwnProperty.call(config.functionToolCallbacks, functionName)
+      ) {
         return normalizedOutput;
       }
       try {

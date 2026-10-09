@@ -22,8 +22,8 @@ interface MCPProviderOptions {
 }
 
 export class MCPProvider implements ApiProvider {
-  private mcpClient: MCPClient | null = null;
-  private mcpSession: McpClientSession;
+  private mcpClient!: MCPClient;
+  private readonly mcpSession: McpClientSession;
   config: McpConfigParsed;
   private defaultArgs?: Record<string, unknown>;
   private transformResponse: Promise<
@@ -38,9 +38,7 @@ export class MCPProvider implements ApiProvider {
     this.config = McpConfigSchema.parse(options.config ?? {});
     this.defaultArgs = options.defaultArgs ?? this.config.defaultArgs ?? {};
 
-    this.mcpSession = new McpClientSession(this.config, this);
-    // Initialization starts eagerly, so mark the rejection as observed until callers await it.
-    void this.initialize().catch(() => undefined);
+    this.mcpSession = new McpClientSession(this.config);
     this.transformResponse = loadTransformModule(
       this.config.transformResponse || this.config.responseParser,
     ).then(createTransformResponse);
@@ -59,13 +57,11 @@ export class MCPProvider implements ApiProvider {
     return `[MCP Provider]`;
   }
 
-  private async initialize(): Promise<void> {
-    const client = await this.mcpSession.initialize();
-    const changed = this.mcpClient !== client;
-    this.mcpClient = client;
+  private async initialize(signal?: AbortSignal): Promise<void> {
+    this.mcpClient = await this.mcpSession.initialize(signal);
 
-    if (this.config.verbose && changed) {
-      const tools = this.mcpClient!.getAllTools();
+    if (this.config.verbose) {
+      const tools = this.mcpClient.getAllTools();
       console.log(
         'MCP Provider initialized with tools:',
         tools.map((t) => t.name),
@@ -76,11 +72,14 @@ export class MCPProvider implements ApiProvider {
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
-    _options?: CallApiOptionsParams,
+    options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
+    const signal = options?.abortSignal;
     try {
+      signal?.throwIfAborted();
       // Ensure initialization is complete
-      await this.initialize();
+      await this.initialize(signal);
+      signal?.throwIfAborted();
 
       // Parse the prompt as JSON to extract tool call information
       let toolCallData: any;
@@ -134,7 +133,10 @@ export class MCPProvider implements ApiProvider {
       });
 
       // Call the MCP tool
-      const result = await this.mcpClient!.callTool(toolName, finalArgs);
+      const result = signal
+        ? await this.mcpClient.callTool(toolName, finalArgs, signal)
+        : await this.mcpClient.callTool(toolName, finalArgs);
+      signal?.throwIfAborted();
 
       if (result.error) {
         return {
@@ -149,6 +151,7 @@ export class MCPProvider implements ApiProvider {
         originalPayload: toolCallData,
       });
     } catch (error) {
+      signal?.throwIfAborted();
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error('MCP Provider error', { error: errorMessage });
       return {
@@ -168,12 +171,21 @@ export class MCPProvider implements ApiProvider {
   }
 
   // Method to call specific MCP tools directly
-  async callTool(toolName: string, args: Record<string, unknown>): Promise<ProviderResponse> {
+  async callTool(
+    toolName: string,
+    args: Record<string, unknown>,
+    signal?: AbortSignal,
+  ): Promise<ProviderResponse> {
     try {
-      await this.initialize();
+      signal?.throwIfAborted();
+      await this.initialize(signal);
+      signal?.throwIfAborted();
 
       const toolArgs = { ...this.defaultArgs, ...args };
-      const result = await this.mcpClient!.callTool(toolName, toolArgs);
+      const result = signal
+        ? await this.mcpClient.callTool(toolName, toolArgs, signal)
+        : await this.mcpClient.callTool(toolName, toolArgs);
+      signal?.throwIfAborted();
 
       if (result.error) {
         return {
@@ -186,6 +198,7 @@ export class MCPProvider implements ApiProvider {
         toolArgs,
       });
     } catch (error) {
+      signal?.throwIfAborted();
       const errorMessage = error instanceof Error ? error.message : String(error);
       return {
         error: `MCP tool call error: ${errorMessage}`,
@@ -197,7 +210,7 @@ export class MCPProvider implements ApiProvider {
   async getAvailableTools() {
     await this.initialize();
 
-    return this.mcpClient!.getAllTools();
+    return this.mcpClient.getAllTools();
   }
 
   private async transformToolResult(
@@ -226,6 +239,6 @@ export class MCPProvider implements ApiProvider {
 
   // Get connected servers
   getConnectedServers() {
-    return this.mcpSession.client?.connectedServers ?? [];
+    return this.mcpClient.connectedServers;
   }
 }
