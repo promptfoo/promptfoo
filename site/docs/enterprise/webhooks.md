@@ -60,7 +60,7 @@ Use `GET /api/v1/webhooks/event-types` to list the events supported by your inst
 
 ### Webhook Payload Structure
 
-Webhook payloads are sent as JSON with `event`, `timestamp`, and `data` fields. Issue events have the following structure:
+Webhook payloads are sent as JSON with `event`, `timestamp`, and `data` fields. These examples show selected issue fields; the full `data.issue` object also includes issue history and other metadata.
 
 ```json
 {
@@ -68,27 +68,23 @@ Webhook payloads are sent as JSON with `event`, `timestamp`, and `data` fields. 
   "timestamp": "2025-03-14T12:34:56Z",
   "data": {
     "issue": {
-      "id": "issue-uuid",
-      "pluginId": "plugin-id",
+      "id": "123e4567-e89b-42d3-a456-426614174001",
+      "pluginId": "hijacking",
       "status": "open",
       "severity": "high",
-      "organizationId": "org-id",
-      "targetId": "target-id",
-      "providerId": "provider-id",
       "createdAt": "2025-03-14T12:30:00Z",
-      "updatedAt": "2025-03-14T12:30:00Z",
-      "weakness": "display-name-of-plugin",
-      "history": [...]
+      "updatedAt": "2025-03-14T12:30:00Z"
     },
     "eventData": {
-      // Additional data specific to the event type
+      "status": "open",
+      "severity": "high",
+      "pluginId": "hijacking"
     }
   }
 }
-
 ```
 
-For `issue.updated` events, the `eventData` field includes information about what changed:
+The optional `eventData` field varies by event type. An `issue.updated` event for a combined status and severity update includes the current issue state and, for user-initiated changes, `userId`:
 
 ```json
 {
@@ -96,12 +92,14 @@ For `issue.updated` events, the `eventData` field includes information about wha
   "timestamp": "2025-03-14T14:22:33Z",
   "data": {
     "issue": {
-      // Complete issue data with the current state
+      "id": "123e4567-e89b-42d3-a456-426614174001",
+      "pluginId": "hijacking",
+      "status": "fixed",
+      "severity": "low",
+      "createdAt": "2025-03-14T12:30:00Z",
+      "updatedAt": "2025-03-14T14:22:33Z"
     },
-    "eventData": {
-      "changes": ["status changed to fixed", "severity changed to low"]
-    },
-    "userId": "user-123" // If the update was performed by a user
+    "userId": "123e4567-e89b-42d3-a456-426614174002"
   }
 }
 ```
@@ -185,7 +183,7 @@ For task tracking systems like JIRA, you can:
 - Listen for `issue.status_changed` if you only care about vulnerability status transitions
 - Listen for `issue.comment_added` to sync comments between systems
 
-The `changes` array included with `issue.updated` events makes it easy to add appropriate comments to your task tracking system (e.g., "Vulnerability status changed from open to fixed").
+Use the issue's current state and history to add appropriate comments to your task tracking system (e.g., "Vulnerability status changed from open to fixed"). Do not assume every event includes `eventData` or a `changes` array.
 
 ### Custom Notification System
 
@@ -193,5 +191,5 @@ You could build a custom notification system that:
 
 1. Creates different notification channels based on event types
 2. Routes notifications to different teams based on severity levels
-3. Uses the `changes` information in `issue.updated` events to craft appropriately detailed messages
+3. Uses issue state and history to craft appropriately detailed messages
 4. Filters out specific types of changes that aren't relevant to particular teams
