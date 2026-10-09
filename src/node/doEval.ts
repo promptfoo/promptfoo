@@ -60,6 +60,7 @@ import { resolveTestsWatchPaths } from '../util/testCaseReader';
 import { TokenUsageTracker } from '../util/tokenUsage';
 import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import { isUuid } from '../util/uuid';
+import { createEvalBar, lockedThresholdPercent, verifyEvalLock, writeEvalLock } from './evalLock';
 import { deleteErrorResults, getErrorResultIds, recalculatePromptMetrics } from './retry';
 import { notCloudEnabledShareInstructions } from './shareInstructions';
 import type { FSWatcher } from 'chokidar';
@@ -75,6 +76,7 @@ import type {
 } from '../types/index';
 import type { InternalEvaluateOptions } from '../types/internal';
 import type { FilterOptions } from '../util/eval/filterTests';
+import type { EvalLockFile } from './evalLock';
 
 export const EvalCommandSchema = CommandLineOptionsSchema.extend({
   help: z.boolean().optional(),
@@ -85,6 +87,8 @@ export const EvalCommandSchema = CommandLineOptionsSchema.extend({
   // CLI alias preserved for the existing --suggest-prompts <n> flag; canonical key is suggestionsCount.
   suggestPrompts: z.coerce.number().int().positive().max(MAX_SUGGESTIONS_COUNT).optional(),
   extension: z.array(z.string()).optional(),
+  lock: z.string().optional(),
+  verify: z.string().optional(),
   // Allow --resume or --resume <id>
   resume: z.union([z.string(), z.boolean()]).optional(),
 }).partial();
@@ -156,17 +160,19 @@ export class EvalRunError extends Error {
 function failEvalRun(
   message: string,
   isCliInvocation: boolean,
-  options: { logForCli?: () => void; cliFallback?: Eval } = {},
+  options: { logForCli?: () => void; cliFallback?: Eval; exitCode?: number } = {},
 ): Eval {
+  const exitCode = options.exitCode ?? 1;
   if (isCliInvocation) {
     (options.logForCli ?? (() => logger.error(chalk.red(message))))();
-    process.exitCode = 1;
+    process.exitCode =
+      Number.isInteger(exitCode) && exitCode >= 1 && exitCode <= 255 ? exitCode : 1;
     // Preserve a real Eval (e.g. a just-completed run flagged for a follow-up
     // failure like watch-mode setup) so downstream summaries don't misreport.
     return options.cliFallback ?? new Eval({}, { persisted: false });
   }
 
-  throw new EvalRunError(message);
+  throw new EvalRunError(message, exitCode);
 }
 
 function handleRecoverableWatchError(error: unknown): boolean {
@@ -296,6 +302,23 @@ async function doEvalWithEnv(
   const isCliInvocation = isCliEventSource(evaluateOptions);
   const inputCommand = cmdObj;
   const initialEnvFileOverrides = envFileOverrides && { ...envFileOverrides };
+  const { lock: evalLockPath, verify: verifyLockPath } = cmdObj as EvalCommandOptions;
+
+  if (evalLockPath && verifyLockPath) {
+    return failEvalRun('--lock and --verify cannot be used together', isCliInvocation);
+  }
+  if ((evalLockPath || verifyLockPath) && cmdObj.watch) {
+    return failEvalRun('--lock and --verify cannot be used with --watch', isCliInvocation);
+  }
+  if (
+    (evalLockPath || verifyLockPath) &&
+    ((cmdObj as EvalCommandOptions).resume || cmdObj.retryErrors)
+  ) {
+    return failEvalRun(
+      '--lock and --verify cannot be used with --resume or --retry-errors',
+      isCliInvocation,
+    );
+  }
 
   const configArgs = Array.isArray(cmdObj.config)
     ? cmdObj.config
@@ -349,6 +372,7 @@ async function doEvalWithEnv(
     let _basePath: string | undefined;
     let commandLineOptions: Record<string, any> | undefined;
     let testSources: Awaited<ReturnType<typeof resolveConfigs>>['testSources'];
+    let activeEvalLock: EvalLockFile | undefined;
     telemetry.record('command_used', {
       name: 'eval - started',
       watch: Boolean(cmdObj.watch),
@@ -843,6 +867,48 @@ async function doEvalWithEnv(
       );
     }
 
+    if (evalLockPath || verifyLockPath) {
+      if (evalLockPath) {
+        const threshold = getEnvFloat('PROMPTFOO_PASS_RATE_THRESHOLD');
+        if (threshold === undefined) {
+          return failEvalRun(
+            'Set PROMPTFOO_PASS_RATE_THRESHOLD explicitly when creating an evaluation lock',
+            isCliInvocation,
+          );
+        }
+        try {
+          const bar = createEvalBar(testSuite, { repeat, filterRange });
+          activeEvalLock = await writeEvalLock(evalLockPath, bar, threshold);
+          logger.info(
+            chalk.green(
+              `Locked resolved eval bar at ${path.resolve(process.cwd(), evalLockPath)} (sha256 ${activeEvalLock.manifest.dataset.hash})`,
+            ),
+          );
+        } catch (error) {
+          return failEvalRun(
+            error instanceof Error ? error.message : `Could not create evaluation lock: ${error}`,
+            isCliInvocation,
+          );
+        }
+      } else if (verifyLockPath) {
+        try {
+          const bar = createEvalBar(testSuite, { repeat, filterRange });
+          activeEvalLock = await verifyEvalLock(verifyLockPath, bar);
+          logger.info(
+            chalk.green(
+              `Verified eval bar against ${path.resolve(process.cwd(), verifyLockPath)} before running`,
+            ),
+          );
+        } catch (error) {
+          return failEvalRun(
+            `TAMPERED: ${error instanceof Error ? error.message : error}`,
+            isCliInvocation,
+            { exitCode: 3 },
+          );
+        }
+      }
+    }
+
     const runtimeOptions: EvalRuntimeOptions = {
       ...options,
       ...(providerFilter ? { providerFilter } : {}),
@@ -1264,7 +1330,10 @@ async function doEvalWithEnv(
           );
       }
     } else {
-      const passRateThreshold = getEnvFloat('PROMPTFOO_PASS_RATE_THRESHOLD', 100);
+      const configuredPassRateThreshold = getEnvFloat('PROMPTFOO_PASS_RATE_THRESHOLD');
+      const passRateThreshold = activeEvalLock
+        ? lockedThresholdPercent(activeEvalLock)
+        : (configuredPassRateThreshold ?? 100);
       const failedTestExitCode = getEnvInt('PROMPTFOO_FAILED_TEST_EXIT_CODE', 100);
 
       const belowThreshold =
@@ -1272,10 +1341,10 @@ async function doEvalWithEnv(
       // An eval stopped because its target is unavailable did not run every test, so it
       // fails whatever the tests before the stop did.
       if (isCliInvocation && (belowThreshold || targetErrorStatus != null)) {
-        if (belowThreshold && getEnvFloat('PROMPTFOO_PASS_RATE_THRESHOLD') !== undefined) {
+        if (belowThreshold && (activeEvalLock || configuredPassRateThreshold !== undefined)) {
           logger.info(
             chalk.white(
-              `Pass rate ${chalk.red.bold(passRate.toFixed(2))}${chalk.red('%')} is below the threshold of ${chalk.red.bold(passRateThreshold)}${chalk.red('%')}`,
+              `Pass rate ${chalk.red.bold(passRate.toFixed(2))}${chalk.red('%')} is below the ${activeEvalLock ? 'locked ' : ''}threshold of ${chalk.red.bold(passRateThreshold)}${chalk.red('%')}`,
             ),
           );
         }
@@ -1285,6 +1354,11 @@ async function doEvalWithEnv(
         if (targetErrorStatus == null) {
           return ret;
         }
+      }
+      if (activeEvalLock && targetErrorStatus == null && !belowThreshold) {
+        logger.info(
+          chalk.green(`Evaluation lock passed: ${passRate.toFixed(2)}% >= ${passRateThreshold}%`),
+        );
       }
     }
     if (testSuite.redteam) {
