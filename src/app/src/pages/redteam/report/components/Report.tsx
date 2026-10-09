@@ -41,11 +41,11 @@ import {
   type EvaluateSummaryV2,
   type GradingResult,
   isProviderOptions,
-  ResultFailureReason,
   type ResultLightweightWithLabel,
   type ResultsFile,
   type SharedResults,
 } from '@promptfoo/types';
+import { ResultFailureReason } from '@promptfoo/types/results';
 import { AlertTriangle, Filter, ListOrdered, Printer, Settings, X } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import FrameworkCompliance from './FrameworkCompliance';
