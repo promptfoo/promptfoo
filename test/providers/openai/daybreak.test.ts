@@ -3,6 +3,7 @@ import { fetchWithCache } from '../../../src/cache';
 import { loadApiProvider } from '../../../src/providers';
 import { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
 import { OpenAiResponsesProvider } from '../../../src/providers/openai/responses';
+import { createUnsetOpenAiGenerationEnv } from '../../factories/literalFixtures';
 import { mockProcessEnv } from '../../util/utils';
 
 vi.mock('../../../src/cache', async (importOriginal) => ({
@@ -17,12 +18,7 @@ describe.each([
   let restoreEnv: () => void;
 
   beforeEach(() => {
-    restoreEnv = mockProcessEnv({
-      OPENAI_MAX_TOKENS: undefined,
-      OPENAI_MAX_COMPLETION_TOKENS: undefined,
-      OPENAI_TEMPERATURE: undefined,
-      OPENAI_TOP_P: undefined,
-    });
+    restoreEnv = mockProcessEnv(createUnsetOpenAiGenerationEnv());
   });
 
   afterEach(() => {

@@ -87,3 +87,12 @@ export const createLocalGenerationFactory = (): MockModuleFactory => async (impo
     getRemoteGenerationUrl: vi.fn().mockReturnValue('http://test-url'),
   };
 };
+
+export const createOpenAiCacheFactory = (): MockModuleFactory => async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    fetchWithCache: vi.fn(),
+    enableCache: vi.fn(),
+    disableCache: vi.fn(),
+  };
+};
