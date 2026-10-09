@@ -13,9 +13,9 @@ keywords:
 
 ## Connecting to Promptfoo
 
-Promptfoo requires access to [\*.promptfoo.app](https://promptfoo.app) to function.
+When using Promptfoo-hosted services, your browser and CLI need access to the relevant `*.promptfoo.app` endpoints. If you use a proxy or VPN, see [remote generation troubleshooting](/docs/red-team/troubleshooting/remote-generation/) for connectivity checks.
 
-If you are using a proxy or VPN, you may need to add these domains to your whitelist before you can generate red teams.
+On-prem deployments use your organization's app, API, and authentication URLs. The scan runner must reach the target and the configured inference providers. Access to Promptfoo-hosted generation is needed only when your deployment is configured to use it.
 
 ## Creating Targets
 
@@ -65,17 +65,21 @@ Once you have selected a plugin collection, you will be prompted to select the s
 
 ## Running a Scan
 
-Once you have configured a scan by selecting a target, plugin collection, and strategies, you can generate a red team scan by navigating to the "Review" section. Click on "Save Configuration" for Promptfoo to generate a CLI command. You will need to [authenticate](./authentication.md) into the CLI to run the scan and share the results.
+Save your scan configuration, then select **Run Scan From Template** in its **Review** section. Choose the target and review the run settings.
+
+If server-side execution is enabled and the target supports it, select **Server**, then **Run scan**. The scan executes on your deployment's runner. Follow its status, probe progress, and logs in **Run History** or the target's run history. On-prem scans need a configured Red Team Provider; if setup is missing, the run screen links to the relevant provider settings.
+
+To stop a running server scan, open its details and select **Stop**. With permission to update jobs, you can choose **Cancel Run** to stop without publishing, or **Publish Partial Report** to publish the completed probes. Partial reports require at least one completed probe and do not represent a completed scan. Open the available results with **View Report** or **View Partial Report**.
 
 ![Run Scan configuration screen](/img/enterprise-docs/run-scan.png)
 
-Alternatively, you can download the Promptfoo YAML file and run the scan locally.
+To execute from your machine, select **CLI** and use the generated command, or download the YAML configuration. [Authenticate](./authentication.md) to the correct deployment and team before running the command.
 
 When you enter the command into your terminal, Promptfoo will generate the adversarial probes and write the test cases locally.
 
 ![Running scan in CLI](/img/enterprise-docs/run-scan-cli.png)
 
-Once generated, Promptfoo will execute the test cases against your target and upload the results to Promptfoo Enterprise. You can review the results by clicking on the evaluation link that is generated in the terminal or by navigating to Promptfoo Enterprise.
+Once generated, Promptfoo executes the test cases against your target. When sharing is enabled, it uploads the results to your configured Promptfoo Enterprise instance. Review them through the report link in the terminal or the Enterprise UI; see [Findings and Reports](./findings.md).
 
 ## See Also
 
