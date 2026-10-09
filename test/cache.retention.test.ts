@@ -141,6 +141,8 @@ it.each([
   { providerKind: 'tts', axis: 'namespace' },
   { providerKind: 'tts', axis: 'backend' },
   { providerKind: 'anthropic', axis: 'namespace' },
+  { providerKind: 'responses-creation', axis: 'namespace' },
+  { providerKind: 'responses-polling', axis: 'namespace' },
 ])(
   'retains active $providerKind requests across $axis eviction and GC',
   ({ providerKind, axis }) => {
@@ -151,17 +153,24 @@ it.each([
       const providerKind = ${JSON.stringify(providerKind)};
       const axis = ${JSON.stringify(axis)};
       const directory = ${JSON.stringify(directory)};
+      const background = providerKind.startsWith('responses-');
       const gate = Promise.withResolvers();
       const entered = Promise.withResolvers();
       let calls = 0;
       globalThis.fetch = async request => {
         const url = String(request?.url ?? request);
-        if (!['https://api.openai.com/v1/audio/speech', 'https://api.anthropic.com/v1/messages'].includes(url)) {
+        if (!['https://api.openai.com/v1/audio/speech', 'https://api.anthropic.com/v1/messages', 'https://api.openai.com/v1/responses', 'https://api.openai.com/v1/responses/resp_shared'].includes(url)) {
           throw new Error('Unexpected network request: ' + url);
+        }
+        if (providerKind === 'responses-polling' && url.endsWith('/responses')) {
+          return Response.json({ id: 'resp_shared', status: 'queued', output: [], usage: null });
         }
         const requestIndex = ++calls;
         entered.resolve();
         await gate.promise;
+        if (background) {
+          return Response.json({ id: 'resp_shared', status: 'completed', output: [{ type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'fixture answer' }] }], usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 } });
+        }
         return providerKind === 'tts'
           ? new Response('audio-' + requestIndex)
           : Response.json({
@@ -172,11 +181,13 @@ it.each([
       };
       const cache = await import(${JSON.stringify(pathToFileURL(path.resolve(__dirname, '../src/cache.ts')).href)});
       const { default: cliState } = await import(${JSON.stringify(pathToFileURL(path.resolve(__dirname, '../src/cliState.ts')).href)});
-      const Provider = providerKind === 'tts'
-        ? (await import(${JSON.stringify(pathToFileURL(path.resolve(__dirname, '../src/providers/openai/tts.ts')).href)})).OpenAiTtsProvider
-        : (await import(${JSON.stringify(pathToFileURL(path.resolve(__dirname, '../src/providers/anthropic/messages.ts')).href)})).AnthropicMessagesProvider;
-      const provider = new Provider(providerKind === 'tts' ? 'tts-1' : 'claude-sonnet-4-6', {
-        config: { apiKey: 'fixture-api-key', maxRetries: 0 },
+      const Provider = background
+        ? (await import(${JSON.stringify(pathToFileURL(path.resolve(__dirname, '../src/providers/openai/responses.ts')).href)})).OpenAiResponsesProvider
+        : providerKind === 'tts'
+          ? (await import(${JSON.stringify(pathToFileURL(path.resolve(__dirname, '../src/providers/openai/tts.ts')).href)})).OpenAiTtsProvider
+          : (await import(${JSON.stringify(pathToFileURL(path.resolve(__dirname, '../src/providers/anthropic/messages.ts')).href)})).AnthropicMessagesProvider;
+      const provider = new Provider(background ? 'gpt-4.1' : providerKind === 'tts' ? 'tts-1' : 'claude-sonnet-4-6', {
+        config: { apiKey: 'fixture-api-key', maxRetries: 0, ...(background ? { background: true } : {}) },
       });
       const env = { PROMPTFOO_CACHE_TYPE: 'disk', PROMPTFOO_CACHE_PATH: directory + '/active' };
       const call = () => cliState.withEnv(env, () => cache.withCacheNamespace('active', () => provider.callApi('fixture')));
@@ -192,14 +203,15 @@ it.each([
         await setImmediate();
         global.gc();
       }
-      // TTS also shares concurrent requests; Anthropic's existing policy caches completed responses.
-      const concurrent = providerKind === 'tts' ? call() : undefined;
+      // TTS and background Responses share concurrent requests; Anthropic caches completed responses.
+      const concurrent = providerKind !== 'anthropic' ? call() : undefined;
       await setImmediate();
       gate.resolve();
       const first = await pending;
-      if (concurrent) { await concurrent; }
+      const joined = concurrent ? await concurrent : undefined;
+      const concurrentRequests = calls;
       const repeated = await call();
-      console.log(JSON.stringify({ calls, firstError: first.error, repeatedError: repeated.error, cached: repeated.cached }));
+      console.log(JSON.stringify({ calls, firstError: first.error, firstOutput: first.output, concurrentError: joined?.error, concurrentOutput: joined?.output, repeatedError: repeated.error, repeatedOutput: repeated.output, cached: repeated.cached, ...(background ? { concurrentRequests } : {}) }));
     `;
       const child = spawnSync(
         process.execPath,
@@ -211,7 +223,15 @@ it.each([
         },
       );
       expect(child.status, child.stderr).toBe(0);
-      expect(JSON.parse(child.stdout.trim())).toEqual({ calls: 1, cached: true });
+      const output = providerKind === 'tts' ? 'Generated 7 characters of speech' : 'fixture answer';
+      expect(JSON.parse(child.stdout.trim())).toEqual({
+        calls: providerKind.startsWith('responses-') ? 2 : 1,
+        cached: !providerKind.startsWith('responses-'),
+        firstOutput: output,
+        repeatedOutput: output,
+        ...(providerKind === 'anthropic' ? {} : { concurrentOutput: output }),
+        ...(providerKind.startsWith('responses-') ? { concurrentRequests: 1 } : {}),
+      });
     } finally {
       fs.rmSync(directory, { recursive: true, force: true });
     }

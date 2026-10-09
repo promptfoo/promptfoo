@@ -2,7 +2,7 @@ import {
   claimCacheKeyOnce,
   type FetchWithCacheResult,
   fetchWithCache,
-  getCacheClearGeneration,
+  getCacheWriteContext,
   getScopedCacheKey,
   isCacheEnabled,
 } from '../../cache';
@@ -163,6 +163,8 @@ const inFlightBackgroundCreations = new Map<
   string,
   {
     promise: Promise<FetchWithCacheResult<OpenAIResponsesResponse>>;
+    // Bypassed response caching provides no fetch callback to retain the active scope.
+    cacheContext: ReturnType<typeof getCacheWriteContext>;
     subscribers: number;
     billed: boolean;
   }
@@ -171,6 +173,7 @@ const inFlightBackgroundResponses = new Map<
   string,
   {
     promise: Promise<BackgroundResponseResult>;
+    cacheContext: ReturnType<typeof getCacheWriteContext>;
     controller: AbortController;
     subscribers: number;
     billed: boolean;
@@ -450,7 +453,8 @@ async function createBackgroundResponseWithCancellation(
   const effectiveCacheOptions = cacheIdentity.cacheable
     ? { bust: bustCache, cacheKey: cacheIdentity.key }
     : true;
-  const cacheKey = `${getCacheClearGeneration()}:${getScopedCacheKey(cacheIdentity.key)}`;
+  const cacheContext = getCacheWriteContext();
+  const cacheKey = `${cacheContext.generation}:${getScopedCacheKey(cacheIdentity.key)}`;
   let inFlight = canCoalesce ? inFlightBackgroundCreations.get(cacheKey) : undefined;
   if (!inFlight) {
     const promise = fetchWithCache<OpenAIResponsesResponse>(
@@ -466,7 +470,7 @@ async function createBackgroundResponseWithCancellation(
       effectiveCacheOptions,
       maxRetries,
     );
-    inFlight = { promise, subscribers: 0, billed: false };
+    inFlight = { promise, cacheContext, subscribers: 0, billed: false };
     if (canCoalesce) {
       inFlightBackgroundCreations.set(cacheKey, inFlight);
       void promise
@@ -639,7 +643,8 @@ async function coalesceBackgroundResponse(
       deadline,
     );
   }
-  const cacheKey = `${getCacheClearGeneration()}:${getScopedCacheKey(cacheIdentity.key)}`;
+  const cacheContext = getCacheWriteContext();
+  const cacheKey = `${cacheContext.generation}:${getScopedCacheKey(cacheIdentity.key)}`;
   let inFlight = inFlightBackgroundResponses.get(cacheKey);
   if (!inFlight) {
     const controller = new AbortController();
@@ -654,7 +659,7 @@ async function coalesceBackgroundResponse(
       cancelOnStop,
       deadline,
     );
-    inFlight = { promise, controller, subscribers: 0, billed: false };
+    inFlight = { promise, cacheContext, controller, subscribers: 0, billed: false };
     inFlightBackgroundResponses.set(cacheKey, inFlight);
     void promise
       .finally(() => {
