@@ -221,6 +221,101 @@ describe('interrupted checkpoint JSON and media shapes', () => {
         expect(input).toEqual(original);
       }
     });
+
+    it.each([
+      { name: 'data URL', fields: { attachment: outputData }, collapses: false },
+      { name: 'blob URI', fields: { attachment: outputRef.uri }, collapses: false },
+      { name: 'blob record', fields: { attachment: outputRef }, collapses: false },
+      {
+        name: 'nested media',
+        fields: { attachment: { items: [null, outputRef, { data: outputData }] } },
+        collapses: false,
+      },
+      {
+        name: 'undeclared input aliases',
+        fields: { input: outputData, materializedVars: { image: outputRef } },
+        collapses: false,
+      },
+      {
+        name: 'entry media record',
+        fields: { ...outputRef, data: bytes.toString('base64') },
+        collapses: true,
+      },
+      {
+        name: 'ordinary extra data',
+        fields: { attachment: { label: 'ordinary', values: [null, 0, false] } },
+        collapses: false,
+      },
+    ])('projects extra entry fields: $name', async ({ fields, collapses }) => {
+      for (const location of ['mirrored', 'response-only', 'row-only']) {
+        const metadata = {
+          interruptedStrategy: true,
+          completedTargetResponses: [
+            {
+              ...fields,
+              note: 'ordinary extra note',
+              prompt: promptMedia,
+              response: {
+                prompt: promptMedia,
+                output: 'private output',
+                materializedVars: { image: inputMedia },
+                inputMaterialization: { image: inputMedia },
+                cost: 0.25,
+                tokenUsage: { total: 5 },
+              },
+            },
+          ],
+        };
+        const input = legacyResult(
+          { output: 'text', metadata: location === 'row-only' ? {} : metadata },
+          location === 'response-only' ? {} : metadata,
+        );
+        const original = structuredClone(input);
+        const row = await EvalResult.createFromEvaluateResult(randomUUID(), input, {
+          persist: false,
+        });
+        for (const [stripPrompt, stripOutput] of [
+          [false, false],
+          [false, true],
+          [true, false],
+          [true, true],
+        ]) {
+          const flags = {
+            ...getStripFlags(),
+            shouldStripPromptText: stripPrompt,
+            shouldStripResponseOutput: stripOutput,
+          };
+          const projected =
+            boundary === 'model'
+              ? row.toEvaluateResult(flags)
+              : sanitizeResultForJsonlArtifact(input, flags);
+          expect(collectBlobHashes(projected).has(outputHash)).toBe(
+            !stripOutput && JSON.stringify(input).includes(outputHash),
+          );
+          expect(JSON.stringify(projected).includes(bytes.toString('base64'))).toBe(
+            !stripOutput && JSON.stringify(input).includes(bytes.toString('base64')),
+          );
+          const copies = [projected.response?.metadata, projected.metadata].filter(
+            (copy) => copy?.interruptedStrategy,
+          );
+          expect(copies).toHaveLength(location === 'mirrored' ? 2 : 1);
+          for (const copy of copies) {
+            const entry = copy!.completedTargetResponses[0];
+            expect(entry.note).toBe(stripOutput && collapses ? undefined : 'ordinary extra note');
+            expect(entry.prompt).toBe(stripPrompt ? '[prompt stripped]' : promptMedia);
+            expect(entry.response).toMatchObject({
+              prompt: stripPrompt ? '[prompt stripped]' : promptMedia,
+              output: stripOutput ? '[output stripped]' : 'private output',
+              materializedVars: { image: inputMedia },
+              inputMaterialization: { image: inputMedia },
+              cost: 0.25,
+              tokenUsage: { total: 5 },
+            });
+          }
+        }
+        expect(input).toEqual(original);
+      }
+    });
   });
 
   it.each([

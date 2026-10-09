@@ -117,12 +117,22 @@ function projectOutputMetadata<T>(
   }
   return mapCompletedTargetResponses(
     sanitizeCompletedTargetResponses(projected),
-    (entry) => ({
-      ...entry,
-      ...('prompt' in entry && options.stripPromptText ? { prompt: '[prompt stripped]' } : {}),
-      // Old stored rows and non-persisted JSON/JSONL exports also cross this boundary.
-      response: projectProviderResponse(entry.response, { ...options, checkpointOutput: true })!,
-    }),
+    (entry) => {
+      const { prompt, response, ...extra } = entry;
+      // Only prompt/response are declared checkpoint fields. Additional imported
+      // fields retain the generic media scrub, including a media-shaped remainder.
+      const projectedExtra = options.stripOutput
+        ? stripMediaReferences(sanitizeForDb(extra))
+        : extra;
+      return {
+        ...(asRecord(projectedExtra) ?? {}),
+        ...('prompt' in entry
+          ? { prompt: options.stripPromptText ? '[prompt stripped]' : prompt }
+          : {}),
+        // Old stored rows and non-persisted JSON/JSONL exports also cross this boundary.
+        response: projectProviderResponse(response, { ...options, checkpointOutput: true })!,
+      };
+    },
     options.stripOutput ? (value) => stripMediaReferences(sanitizeForDb(value)) : undefined,
   );
 }
