@@ -1240,8 +1240,8 @@ describe('retry command', () => {
 
       await recalculatePromptMetrics(evalRecord);
 
-      // Verify fetchResultsBatched was called with batch size 1000
-      expect(fetchSpy).toHaveBeenCalledWith(1000);
+      // Verify the metric projection retains the streaming batch size.
+      expect(fetchSpy).toHaveBeenCalledWith(1000, { projection: 'metrics' });
       expect(fetchSpy).toHaveBeenCalledTimes(1);
 
       fetchSpy.mockRestore();
