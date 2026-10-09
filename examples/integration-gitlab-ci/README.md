@@ -5,7 +5,7 @@ Run this example without API credentials:
 ```bash
 npx promptfoo@latest init --example integration-gitlab-ci
 cd integration-gitlab-ci
-npx promptfoo@0.123.0 eval --config promptfooconfig.yaml --no-cache --no-share
+npx promptfoo@0.124.1 eval --config promptfooconfig.yaml --no-cache --no-share
 ```
 
 Commit the downloaded files to a GitLab project to run the bundled echo eval. The local `.gitlab-ci.yml` extends the `.promptfoo-eval` job from `gitlab-ci.yml`.
@@ -16,8 +16,8 @@ Use a Docker or Kubernetes runner. To include the template without copying it:
 
 ```yaml
 include:
-  - remote: 'https://raw.githubusercontent.com/promptfoo/promptfoo/3df5b0063de0ffffc4798b35f840855b39927fa5/examples/integration-gitlab-ci/gitlab-ci.yml'
-    integrity: 'sha256-SgzKzJQY6AAFx/tlDmV/d/N0l6O+X2cLt/nZeXwybSE='
+  - remote: 'https://raw.githubusercontent.com/promptfoo/promptfoo/ec50c5ba1a356d335289cf919d17775c78766e1f/examples/integration-gitlab-ci/gitlab-ci.yml'
+    integrity: 'sha256-cz2wVf0zjR0hztQqPoLIJw8d7xUc2oqVhG9nmFWSS0I='
 
 promptfoo-eval:
   extends: .promptfoo-eval

@@ -22,8 +22,8 @@ Add this to `.gitlab-ci.yml`:
 
 ```yaml title=".gitlab-ci.yml"
 include:
-  - remote: 'https://raw.githubusercontent.com/promptfoo/promptfoo/3df5b0063de0ffffc4798b35f840855b39927fa5/examples/integration-gitlab-ci/gitlab-ci.yml'
-    integrity: 'sha256-SgzKzJQY6AAFx/tlDmV/d/N0l6O+X2cLt/nZeXwybSE='
+  - remote: 'https://raw.githubusercontent.com/promptfoo/promptfoo/ec50c5ba1a356d335289cf919d17775c78766e1f/examples/integration-gitlab-ci/gitlab-ci.yml'
+    integrity: 'sha256-cz2wVf0zjR0hztQqPoLIJw8d7xUc2oqVhG9nmFWSS0I='
 
 promptfoo-eval:
   extends: .promptfoo-eval

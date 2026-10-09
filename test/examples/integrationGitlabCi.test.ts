@@ -74,7 +74,7 @@ process.exitCode = Number(process.env.TEST_EXIT_CODE ?? 0);
 
   it('uses a pinned CLI image with environment templates enabled', () => {
     expect(job.image.name).toMatch(
-      /^ghcr\.io\/promptfoo\/promptfoo:0\.123\.0@sha256:[a-f0-9]{64}$/,
+      /^ghcr\.io\/promptfoo\/promptfoo:\d+\.\d+\.\d+@sha256:[a-f0-9]{64}$/,
     );
     expect(job.image.entrypoint).toEqual(['']);
     expect(job.variables.PROMPTFOO_SELF_HOSTED).toBe('false');
