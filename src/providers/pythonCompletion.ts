@@ -3,8 +3,9 @@ import path from 'path';
 
 import { getCache, isCacheEnabled } from '../cache';
 import cliState from '../cliState';
+import { getEnvInt } from '../envars';
 import logger from '../logger';
-import { getConfiguredPythonPath, getEnvInt } from '../python/pythonUtils';
+import { getConfiguredPythonPath } from '../python/pythonUtils';
 import { PythonWorkerPool } from '../python/workerPool';
 import { sha256 } from '../util/createHash';
 import { processConfigFileReferences } from '../util/fileReference';
@@ -120,7 +121,10 @@ export class PythonProvider implements ApiProvider {
           absPath,
           this.functionName || 'call_api',
           workerCount,
-          getConfiguredPythonPath(this.config.pythonExecutable),
+          getConfiguredPythonPath(
+            this.config.pythonExecutable,
+            this.options?.env?.PROMPTFOO_PYTHON,
+          ),
           this.config.timeout,
         );
 
@@ -162,8 +166,12 @@ export class PythonProvider implements ApiProvider {
     }
 
     // 2. Environment variable (explicit Python-specific setting)
-    const envWorkers = getEnvInt('PROMPTFOO_PYTHON_WORKERS');
-    if (envWorkers !== undefined) {
+    const providerWorkers = this.options?.env?.PROMPTFOO_PYTHON_WORKERS;
+    const envWorkers =
+      providerWorkers === undefined
+        ? getEnvInt('PROMPTFOO_PYTHON_WORKERS')
+        : Number.parseInt(providerWorkers, 10);
+    if (envWorkers !== undefined && !Number.isNaN(envWorkers)) {
       if (envWorkers < 1) {
         logger.warn(
           `Invalid worker count ${envWorkers} in PROMPTFOO_PYTHON_WORKERS, using minimum of 1`,
