@@ -390,3 +390,59 @@ it.each(['event: error\n', ''])(
     expect(result.output).toBeUndefined();
   },
 );
+
+it('preserves environment sampling defaults for Runtime reasoning models', async () => {
+  const restore = mockProcessEnv({ OPENAI_TOP_P: '0.7' });
+  try {
+    const provider = new BedrockRuntimeResponsesProvider('us.xai.grok-4-7', {
+      config: { apiKey: 'fixture', reasoning_effort: 'high' },
+    });
+    const { body } = await provider.getOpenAiBody('hello');
+    expect(body.top_p).toBe(0.7);
+    expect(body.reasoning).toMatchObject({ effort: 'high' });
+  } finally {
+    restore();
+  }
+});
+
+it.each(['<html>upstream unavailable</html>', '{"error":{"message":"upstream unavailable"}}'])(
+  'preserves HTTP status and diagnostic bodies for streaming failures',
+  async (data) => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data,
+      status: 502,
+      statusText: 'Bad Gateway',
+      cached: false,
+    });
+    const provider = new BedrockRuntimeChatProvider('openai.gpt-oss-120b-1:0', {
+      config: { apiKey: 'fixture', stream: true },
+    });
+    const result = await provider.callApi('hello');
+    expect(result.error).toContain('502 Bad Gateway');
+    expect(result.error).toContain('upstream unavailable');
+    expect(result.metadata?.http).toMatchObject({ status: 502 });
+  },
+);
+
+it('joins legacy function-call deltas before parsing the completed response', async () => {
+  const chunks = [
+    { choices: [{ index: 0, delta: { function_call: { name: 'lookup', arguments: '{"x":' } } }] },
+    {
+      choices: [
+        { index: 0, delta: { function_call: { arguments: '1}' } }, finish_reason: 'function_call' },
+      ],
+    },
+  ];
+  vi.mocked(fetchWithCache).mockResolvedValue({
+    data: chunks.map((part) => `data: ${JSON.stringify(part)}\n\n`).join('') + 'data: [DONE]\n\n',
+    status: 200,
+    statusText: 'OK',
+    cached: false,
+  });
+  const provider = new BedrockRuntimeChatProvider('openai.gpt-oss-120b-1:0', {
+    config: { apiKey: 'fixture', stream: true },
+  });
+  const result = await provider.callApi('hello');
+  expect(result.error).toBeUndefined();
+  expect(result.output).toEqual({ name: 'lookup', arguments: '{"x":1}' });
+});

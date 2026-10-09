@@ -838,6 +838,12 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       : !this.isReasoningCapabilityModel(modelName);
   }
 
+  protected getConfiguredTopP(config: OpenAiCompletionOptions): number | undefined {
+    return config.top_p !== undefined || getEnvString('OPENAI_TOP_P')
+      ? (config.top_p ?? getEnvFloat('OPENAI_TOP_P', 1))
+      : undefined;
+  }
+
   private getEffectiveModelName(config: OpenAiCompletionOptions): string {
     const passthroughModel = (config.passthrough as { model?: unknown } | undefined)?.model;
     return typeof passthroughModel === 'string'
@@ -1111,6 +1117,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         ? (config.temperature ?? temperatureDefault)
         : undefined;
     const reasoningEffort = isReasoningModel ? effectiveReasoningEffort : undefined;
+    const topP = this.getConfiguredTopP(config);
 
     const instructions = config.instructions;
 
@@ -1179,9 +1186,8 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       ...(reasoningEffort ? { reasoning: { effort: reasoningEffort } } : {}),
       ...(temperature === undefined ? {} : { temperature }),
       ...(instructions ? { instructions } : {}),
-      ...((isGPT6Model || !reasoningEffort || reasoningEffort === 'none') &&
-      (config.top_p !== undefined || getEnvString('OPENAI_TOP_P'))
-        ? { top_p: config.top_p ?? getEnvFloat('OPENAI_TOP_P', 1) }
+      ...((isGPT6Model || !reasoningEffort || reasoningEffort === 'none') && topP !== undefined
+        ? { top_p: topP }
         : {}),
       ...(responsesTools ? { tools: responsesTools } : {}),
       ...(toolChoice ? { tool_choice: toolChoice } : {}),

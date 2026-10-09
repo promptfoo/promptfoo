@@ -50,6 +50,14 @@ export function collectBedrockChatStream(body: string): Record<string, any> {
         }
       }
       const delta = part.delta ?? {};
+      if (delta.function_call) {
+        choice.message.function_call ??= { name: '', arguments: '' };
+        for (const key of ['name', 'arguments']) {
+          if (typeof delta.function_call[key] === 'string') {
+            choice.message.function_call[key] += delta.function_call[key];
+          }
+        }
+      }
       for (const key of ['content', 'refusal', 'reasoning', 'reasoning_content']) {
         if (typeof delta[key] === 'string') {
           choice.message[key] = (choice.message[key] ?? '') + delta[key];

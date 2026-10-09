@@ -230,12 +230,9 @@ export class BedrockRuntimeResponsesProvider extends BedrockOpenAiResponsesProvi
         'Bedrock Runtime Responses does not support server-side tools. Use client-side functions or a Mantle Responses provider.',
       );
     }
-    if (
-      flexibleReasoningModel(body.model) &&
-      result.config.top_p !== undefined &&
-      body.top_p === undefined
-    ) {
-      body.top_p = result.config.top_p;
+    const topP = this.getConfiguredTopP(result.config);
+    if (flexibleReasoningModel(body.model) && topP !== undefined && body.top_p === undefined) {
+      body.top_p = topP;
     }
     return result;
   }

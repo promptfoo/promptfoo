@@ -945,7 +945,15 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           : undefined,
       ));
 
-      data = this.parseChatResponse(data, body);
+      if (status >= 200 && status < 300) {
+        data = this.parseChatResponse(data, body);
+      } else if (typeof data === 'string') {
+        try {
+          data = JSON.parse(data);
+        } catch {
+          // Preserve non-JSON error bodies and their HTTP status, including streaming requests.
+        }
+      }
 
       const gatewayErrorFormat = this.usesGatewayErrorFormat();
       const policy = getOpenAiPolicyRefusal(data, gatewayErrorFormat);
@@ -1149,7 +1157,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       } else if (
         message.content === null ||
         message.content === undefined ||
-        (message.content === '' && message.tool_calls)
+        (message.content === '' && (message.function_call || message.tool_calls))
       ) {
         output = message.function_call || message.tool_calls;
       } else {
