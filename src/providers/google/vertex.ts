@@ -240,6 +240,17 @@ function getVertexBodyCacheKey(prefix: string, body: unknown, apiHost: string): 
     .digest('hex')}`;
 }
 
+function getVertexClientOptions(provider: { config: GoogleProviderConfig }) {
+  const credentials = loadCredentials(provider.config.credentials);
+
+  return {
+    credentials,
+    googleAuthOptions: provider.config.googleAuthOptions,
+    scopes: provider.config.scopes,
+    keyFilename: provider.config.keyFilename,
+  };
+}
+
 /**
  * Vertex AI provider for Gemini, Claude, Llama, and Palm2 models.
  *
@@ -318,13 +329,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
    * Public for use by integrations like Adaline Gateway.
    */
   async getClientWithCredentials() {
-    const credentials = loadCredentials(this.config.credentials);
-    const { client } = await getGoogleClient({
-      credentials,
-      googleAuthOptions: this.config.googleAuthOptions,
-      scopes: this.config.scopes,
-      keyFilename: this.config.keyFilename,
-    });
+    const { client } = await getGoogleClient(getVertexClientOptions(this));
     return client;
   }
 
@@ -1362,13 +1367,7 @@ export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
    * Helper method to get Google client with credentials support
    */
   async getClientWithCredentials() {
-    const credentials = loadCredentials(this.config.credentials);
-    const { client } = await getGoogleClient({
-      credentials,
-      googleAuthOptions: this.config.googleAuthOptions,
-      scopes: this.config.scopes,
-      keyFilename: this.config.keyFilename,
-    });
+    const { client } = await getGoogleClient(getVertexClientOptions(this));
     return client;
   }
 

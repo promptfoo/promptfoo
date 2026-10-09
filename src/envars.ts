@@ -657,3 +657,11 @@ export function isCI() {
 export function isNonInteractive() {
   return isCI() || !process.stdin.isTTY || !process.stdout.isTTY;
 }
+
+export function parseEnvFloat(value: string | undefined): number | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  const parsed = Number.parseFloat(value);
+  return Number.isNaN(parsed) ? undefined : parsed;
+}

@@ -1,5 +1,5 @@
 import { fetchWithCache } from '../cache';
-import { getEnvFloat } from '../envars';
+import { getEnvFloat, parseEnvFloat } from '../envars';
 import { resolveProviderEnv } from './env';
 import { getRequestTimeoutMs, parseChatPrompt } from './shared';
 
@@ -10,14 +10,6 @@ import type {
   ProviderEmbeddingResponse,
   ProviderResponse,
 } from '../types/index';
-
-function parseEnvFloat(value: string | undefined): number | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
-  const parsed = Number.parseFloat(value);
-  return Number.isNaN(parsed) ? undefined : parsed;
-}
 
 interface LocalAiCompletionOptions {
   apiBaseUrl?: string;
