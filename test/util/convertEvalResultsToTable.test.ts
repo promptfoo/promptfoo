@@ -274,6 +274,35 @@ describe('convertResultsToTable', () => {
     });
   });
 
+  it('preserves inline and blob-backed images in table cells without mutating the response', () => {
+    const images = [
+      { data: 'data:image/png;base64,aW1hZ2U=', mimeType: 'image/png' },
+      {
+        blobRef: {
+          uri: 'promptfoo://blob/image-hash',
+          hash: 'image-hash',
+          mimeType: 'image/webp',
+          sizeBytes: 128,
+          provider: 'filesystem',
+        },
+        mimeType: 'image/webp',
+      },
+    ];
+    const audio = { id: 'audio1', data: 'YXVkaW8=', format: 'mp3', transcript: 'Image summary' };
+    const response = { output: 'Generated images', images, audio };
+    const originalResponse = structuredClone(response);
+    const resultsFile = createResultsFile([createResult({ response, vars: {} })]);
+
+    const cell = convertResultsToTable(resultsFile).body[0].outputs[0];
+
+    expect(cell.text).toBe('Generated images');
+    expect(cell.images).toEqual(images);
+    expect(cell.audio).toEqual(audio);
+    expect(cell.images).not.toBe(images);
+    expect(cell.images?.[0]).not.toBe(images[0]);
+    expect(response).toEqual(originalResponse);
+  });
+
   it('should format object and array variables with pretty-printed JSON', () => {
     const resultsFile: ResultsFile = createResultsFile(
       [
