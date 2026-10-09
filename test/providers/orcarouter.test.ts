@@ -4,15 +4,38 @@ import { createOrcaRouterProvider, OrcaRouterProvider } from '../../src/provider
 import * as fetchModule from '../../src/util/fetch/index';
 import { mockProcessEnv } from '../util/utils';
 
+const { createFileUtilitiesFactory } = await vi.hoisted(() => import('../factories/moduleMocks'));
+
+const createOkChatResponse = () => ({
+  choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }],
+  usage: { total_tokens: 4, prompt_tokens: 2, completion_tokens: 2 },
+});
+
+const createStructuredNameOptions = () => ({
+  config: {
+    response_format: {
+      type: 'json_schema',
+      json_schema: {
+        name: 'test_schema',
+        schema: { type: 'object', properties: { name: { type: 'string' } } },
+      },
+    },
+  },
+});
+
+const createOutputChatResponse = () => ({
+  choices: [{ message: { content: 'Out' }, finish_reason: 'stop' }],
+  usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+});
+
+const createFallbackRouteConfig = () => ({
+  route: 'fallback',
+  models: ['openai/gpt-5.5', 'anthropic/claude-opus-4.7'],
+});
+
 const ORCAROUTER_API_BASE = 'https://api.orcarouter.ai/v1';
 
-vi.mock('../../src/util', async (importOriginal) => {
-  return {
-    ...(await importOriginal()),
-    maybeLoadFromExternalFile: vi.fn((x) => x),
-    renderVarsInObject: vi.fn((x) => x),
-  };
-});
+vi.mock('../../src/util', createFileUtilitiesFactory());
 
 vi.mock('../../src/util/fetch');
 
@@ -128,17 +151,11 @@ describe('OrcaRouter', () => {
         expect(p.getOrganization()).toBeUndefined();
 
         mockedFetchWithRetries.mockResolvedValueOnce(
-          new Response(
-            JSON.stringify({
-              choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }],
-              usage: { total_tokens: 4, prompt_tokens: 2, completion_tokens: 2 },
-            }),
-            {
-              status: 200,
-              statusText: 'OK',
-              headers: new Headers({ 'Content-Type': 'application/json' }),
-            },
-          ),
+          new Response(JSON.stringify(createOkChatResponse()), {
+            status: 200,
+            statusText: 'OK',
+            headers: new Headers({ 'Content-Type': 'application/json' }),
+          }),
         );
 
         await p.callApi('Hi');
@@ -237,17 +254,11 @@ describe('OrcaRouter', () => {
         });
 
         mockedFetchWithRetries.mockResolvedValueOnce(
-          new Response(
-            JSON.stringify({
-              choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }],
-              usage: { total_tokens: 4, prompt_tokens: 2, completion_tokens: 2 },
-            }),
-            {
-              status: 200,
-              statusText: 'OK',
-              headers: new Headers({ 'Content-Type': 'application/json' }),
-            },
-          ),
+          new Response(JSON.stringify(createOkChatResponse()), {
+            status: 200,
+            statusText: 'OK',
+            headers: new Headers({ 'Content-Type': 'application/json' }),
+          }),
         );
 
         await p.callApi('Hi');
@@ -269,17 +280,11 @@ describe('OrcaRouter', () => {
       try {
         const p = new OrcaRouterProvider('anthropic/claude-opus-4.7', {});
         mockedFetchWithRetries.mockResolvedValueOnce(
-          new Response(
-            JSON.stringify({
-              choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }],
-              usage: { total_tokens: 4, prompt_tokens: 2, completion_tokens: 2 },
-            }),
-            {
-              status: 200,
-              statusText: 'OK',
-              headers: new Headers({ 'Content-Type': 'application/json' }),
-            },
-          ),
+          new Response(JSON.stringify(createOkChatResponse()), {
+            status: 200,
+            statusText: 'OK',
+            headers: new Headers({ 'Content-Type': 'application/json' }),
+          }),
         );
 
         await p.callApi('Hi');
@@ -297,17 +302,11 @@ describe('OrcaRouter', () => {
       try {
         const p = new OrcaRouterProvider('deepseek/deepseek-reasoner', {});
         mockedFetchWithRetries.mockResolvedValueOnce(
-          new Response(
-            JSON.stringify({
-              choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }],
-              usage: { total_tokens: 4, prompt_tokens: 2, completion_tokens: 2 },
-            }),
-            {
-              status: 200,
-              statusText: 'OK',
-              headers: new Headers({ 'Content-Type': 'application/json' }),
-            },
-          ),
+          new Response(JSON.stringify(createOkChatResponse()), {
+            status: 200,
+            statusText: 'OK',
+            headers: new Headers({ 'Content-Type': 'application/json' }),
+          }),
         );
 
         await p.callApi('Hi');
@@ -327,17 +326,11 @@ describe('OrcaRouter', () => {
           config: { passthrough: { temperature: 0.7 } },
         });
         mockedFetchWithRetries.mockResolvedValueOnce(
-          new Response(
-            JSON.stringify({
-              choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }],
-              usage: { total_tokens: 4, prompt_tokens: 2, completion_tokens: 2 },
-            }),
-            {
-              status: 200,
-              statusText: 'OK',
-              headers: new Headers({ 'Content-Type': 'application/json' }),
-            },
-          ),
+          new Response(JSON.stringify(createOkChatResponse()), {
+            status: 200,
+            statusText: 'OK',
+            headers: new Headers({ 'Content-Type': 'application/json' }),
+          }),
         );
 
         await p.callApi('Hi');
@@ -355,17 +348,11 @@ describe('OrcaRouter', () => {
       try {
         const p = new OrcaRouterProvider('anthropic/claude-opus-3', {});
         mockedFetchWithRetries.mockResolvedValueOnce(
-          new Response(
-            JSON.stringify({
-              choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }],
-              usage: { total_tokens: 4, prompt_tokens: 2, completion_tokens: 2 },
-            }),
-            {
-              status: 200,
-              statusText: 'OK',
-              headers: new Headers({ 'Content-Type': 'application/json' }),
-            },
-          ),
+          new Response(JSON.stringify(createOkChatResponse()), {
+            status: 200,
+            statusText: 'OK',
+            headers: new Headers({ 'Content-Type': 'application/json' }),
+          }),
         );
 
         await p.callApi('Hi');
@@ -388,17 +375,11 @@ describe('OrcaRouter', () => {
       try {
         const p = new OrcaRouterProvider('openai/gpt-5.5', {});
         mockedFetchWithRetries.mockResolvedValueOnce(
-          new Response(
-            JSON.stringify({
-              choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }],
-              usage: { total_tokens: 4, prompt_tokens: 2, completion_tokens: 2 },
-            }),
-            {
-              status: 200,
-              statusText: 'OK',
-              headers: new Headers({ 'Content-Type': 'application/json' }),
-            },
-          ),
+          new Response(JSON.stringify(createOkChatResponse()), {
+            status: 200,
+            statusText: 'OK',
+            headers: new Headers({ 'Content-Type': 'application/json' }),
+          }),
         );
 
         await p.callApi('Hi');
@@ -414,10 +395,7 @@ describe('OrcaRouter', () => {
       const restoreEnv = mockProcessEnv({ ORCAROUTER_API_KEY: 'test-key' });
       const cacheModule = await import('../../src/cache');
       const fetchWithCacheSpy = vi.spyOn(cacheModule, 'fetchWithCache').mockResolvedValueOnce({
-        data: {
-          choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }],
-          usage: { total_tokens: 4, prompt_tokens: 2, completion_tokens: 2 },
-        } as never,
+        data: createOkChatResponse() as never,
         cached: false,
         status: 200,
         statusText: 'OK',
@@ -480,23 +458,14 @@ describe('OrcaRouter', () => {
       const restoreEnv = mockProcessEnv({ ORCAROUTER_API_KEY: 'test-key' });
       try {
         const p = new OrcaRouterProvider('openai/gpt-5.5', {
-          config: {
-            route: 'fallback',
-            models: ['openai/gpt-5.5', 'anthropic/claude-opus-4.7'],
-          },
+          config: createFallbackRouteConfig(),
         });
 
-        const response = new Response(
-          JSON.stringify({
-            choices: [{ message: { content: 'Out' }, finish_reason: 'stop' }],
-            usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-          }),
-          {
-            status: 200,
-            statusText: 'OK',
-            headers: new Headers({ 'Content-Type': 'application/json' }),
-          },
-        );
+        const response = new Response(JSON.stringify(createOutputChatResponse()), {
+          status: 200,
+          statusText: 'OK',
+          headers: new Headers({ 'Content-Type': 'application/json' }),
+        });
         mockedFetchWithRetries.mockResolvedValueOnce(response);
 
         await p.callApi('Test prompt');
@@ -516,17 +485,11 @@ describe('OrcaRouter', () => {
         const p = new OrcaRouterProvider('openai/gpt-5.5', {});
 
         mockedFetchWithRetries.mockResolvedValueOnce(
-          new Response(
-            JSON.stringify({
-              choices: [{ message: { content: 'Out' }, finish_reason: 'stop' }],
-              usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-            }),
-            {
-              status: 200,
-              statusText: 'OK',
-              headers: new Headers({ 'Content-Type': 'application/json' }),
-            },
-          ),
+          new Response(JSON.stringify(createOutputChatResponse()), {
+            status: 200,
+            statusText: 'OK',
+            headers: new Headers({ 'Content-Type': 'application/json' }),
+          }),
         );
 
         await p.callApi('Test prompt', {
@@ -534,10 +497,7 @@ describe('OrcaRouter', () => {
           prompt: {
             raw: 'Test prompt',
             label: 'Test prompt',
-            config: {
-              route: 'fallback',
-              models: ['openai/gpt-5.5', 'anthropic/claude-opus-4.7'],
-            },
+            config: createFallbackRouteConfig(),
           },
         });
 
@@ -561,17 +521,11 @@ describe('OrcaRouter', () => {
         });
 
         mockedFetchWithRetries.mockResolvedValueOnce(
-          new Response(
-            JSON.stringify({
-              choices: [{ message: { content: 'Out' }, finish_reason: 'stop' }],
-              usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-            }),
-            {
-              status: 200,
-              statusText: 'OK',
-              headers: new Headers({ 'Content-Type': 'application/json' }),
-            },
-          ),
+          new Response(JSON.stringify(createOutputChatResponse()), {
+            status: 200,
+            statusText: 'OK',
+            headers: new Headers({ 'Content-Type': 'application/json' }),
+          }),
         );
 
         await p.callApi('Test prompt', {
@@ -603,17 +557,11 @@ describe('OrcaRouter', () => {
         });
 
         mockedFetchWithRetries.mockResolvedValueOnce(
-          new Response(
-            JSON.stringify({
-              choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }],
-              usage: { total_tokens: 4, prompt_tokens: 2, completion_tokens: 2 },
-            }),
-            {
-              status: 200,
-              statusText: 'OK',
-              headers: new Headers({ 'Content-Type': 'application/json' }),
-            },
-          ),
+          new Response(JSON.stringify(createOkChatResponse()), {
+            status: 200,
+            statusText: 'OK',
+            headers: new Headers({ 'Content-Type': 'application/json' }),
+          }),
         );
 
         await p.callApi('Hi');
@@ -637,17 +585,11 @@ describe('OrcaRouter', () => {
           config: { models: ['openai/gpt-4o', 'anthropic/claude-opus-4.7'] },
         });
         mockedFetchWithRetries.mockResolvedValueOnce(
-          new Response(
-            JSON.stringify({
-              choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }],
-              usage: { total_tokens: 4, prompt_tokens: 2, completion_tokens: 2 },
-            }),
-            {
-              status: 200,
-              statusText: 'OK',
-              headers: new Headers({ 'Content-Type': 'application/json' }),
-            },
-          ),
+          new Response(JSON.stringify(createOkChatResponse()), {
+            status: 200,
+            statusText: 'OK',
+            headers: new Headers({ 'Content-Type': 'application/json' }),
+          }),
         );
 
         await p.callApi('Hi');
@@ -666,17 +608,11 @@ describe('OrcaRouter', () => {
       try {
         const p = new OrcaRouterProvider('deepseek/deepseek-r3', {});
         mockedFetchWithRetries.mockResolvedValueOnce(
-          new Response(
-            JSON.stringify({
-              choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }],
-              usage: { total_tokens: 4, prompt_tokens: 2, completion_tokens: 2 },
-            }),
-            {
-              status: 200,
-              statusText: 'OK',
-              headers: new Headers({ 'Content-Type': 'application/json' }),
-            },
-          ),
+          new Response(JSON.stringify(createOkChatResponse()), {
+            status: 200,
+            statusText: 'OK',
+            headers: new Headers({ 'Content-Type': 'application/json' }),
+          }),
         );
 
         await p.callApi('Hi');
@@ -694,17 +630,11 @@ describe('OrcaRouter', () => {
       try {
         const p = new OrcaRouterProvider('anthropic/claude-opus-25', {});
         mockedFetchWithRetries.mockResolvedValueOnce(
-          new Response(
-            JSON.stringify({
-              choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }],
-              usage: { total_tokens: 4, prompt_tokens: 2, completion_tokens: 2 },
-            }),
-            {
-              status: 200,
-              statusText: 'OK',
-              headers: new Headers({ 'Content-Type': 'application/json' }),
-            },
-          ),
+          new Response(JSON.stringify(createOkChatResponse()), {
+            status: 200,
+            statusText: 'OK',
+            headers: new Headers({ 'Content-Type': 'application/json' }),
+          }),
         );
 
         await p.callApi('Hi');
@@ -729,17 +659,11 @@ describe('OrcaRouter', () => {
           },
         });
         mockedFetchWithRetries.mockResolvedValueOnce(
-          new Response(
-            JSON.stringify({
-              choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }],
-              usage: { total_tokens: 4, prompt_tokens: 2, completion_tokens: 2 },
-            }),
-            {
-              status: 200,
-              statusText: 'OK',
-              headers: new Headers({ 'Content-Type': 'application/json' }),
-            },
-          ),
+          new Response(JSON.stringify(createOkChatResponse()), {
+            status: 200,
+            statusText: 'OK',
+            headers: new Headers({ 'Content-Type': 'application/json' }),
+          }),
         );
 
         await p.callApi('Hi');
@@ -772,17 +696,11 @@ describe('OrcaRouter', () => {
           config: { reasoning_effort: '{{ effort }}' },
         });
         mockedFetchWithRetries.mockResolvedValueOnce(
-          new Response(
-            JSON.stringify({
-              choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }],
-              usage: { total_tokens: 4, prompt_tokens: 2, completion_tokens: 2 },
-            }),
-            {
-              status: 200,
-              statusText: 'OK',
-              headers: new Headers({ 'Content-Type': 'application/json' }),
-            },
-          ),
+          new Response(JSON.stringify(createOkChatResponse()), {
+            status: 200,
+            statusText: 'OK',
+            headers: new Headers({ 'Content-Type': 'application/json' }),
+          }),
         );
 
         await p.callApi('Hi', {
@@ -815,17 +733,11 @@ describe('OrcaRouter', () => {
         });
 
         mockedFetchWithRetries.mockResolvedValueOnce(
-          new Response(
-            JSON.stringify({
-              choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }],
-              usage: { total_tokens: 4, prompt_tokens: 2, completion_tokens: 2 },
-            }),
-            {
-              status: 200,
-              statusText: 'OK',
-              headers: new Headers({ 'Content-Type': 'application/json' }),
-            },
-          ),
+          new Response(JSON.stringify(createOkChatResponse()), {
+            status: 200,
+            statusText: 'OK',
+            headers: new Headers({ 'Content-Type': 'application/json' }),
+          }),
         );
 
         const vars = {
@@ -951,17 +863,7 @@ describe('OrcaRouter', () => {
       });
 
       it('parses JSON when response_format.type is json_schema', async () => {
-        const p = new OrcaRouterProvider('openai/gpt-5.5', {
-          config: {
-            response_format: {
-              type: 'json_schema',
-              json_schema: {
-                name: 'test_schema',
-                schema: { type: 'object', properties: { name: { type: 'string' } } },
-              },
-            },
-          },
-        });
+        const p = new OrcaRouterProvider('openai/gpt-5.5', createStructuredNameOptions());
 
         mockedFetchWithRetries.mockResolvedValueOnce(
           new Response(
@@ -982,17 +884,10 @@ describe('OrcaRouter', () => {
       });
 
       it('preserves parsed JSON output when reasoning is returned with json_schema', async () => {
-        const p = new OrcaRouterProvider('anthropic/claude-opus-4.7', {
-          config: {
-            response_format: {
-              type: 'json_schema',
-              json_schema: {
-                name: 'test_schema',
-                schema: { type: 'object', properties: { name: { type: 'string' } } },
-              },
-            },
-          },
-        });
+        const p = new OrcaRouterProvider(
+          'anthropic/claude-opus-4.7',
+          createStructuredNameOptions(),
+        );
 
         mockedFetchWithRetries.mockResolvedValueOnce(
           new Response(
