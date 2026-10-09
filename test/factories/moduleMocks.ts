@@ -13,6 +13,20 @@ export const createProxyAgentFactory = (): MockModuleFactory => async (importOri
   };
 };
 
+export const createFsModuleFactory =
+  (fsMocks: Record<string, unknown>): MockModuleFactory =>
+  async (importOriginal) => {
+    const actual = await importOriginal<typeof import('fs')>();
+    return {
+      ...actual,
+      default: {
+        ...actual,
+        ...fsMocks,
+      },
+      ...fsMocks,
+    };
+  };
+
 export const createDisabledCloudConfigFactory = (): MockModuleFactory => async (importOriginal) => {
   return {
     ...(await importOriginal()),
@@ -42,15 +56,6 @@ export const createExecFileFactory =
     };
   };
 
-export const createLocalGenerationFactory = (): MockModuleFactory => async (importOriginal) => {
-  return {
-    ...(await importOriginal()),
-    shouldGenerateRemote: vi.fn().mockReturnValue(false),
-    neverGenerateRemote: vi.fn().mockReturnValue(false),
-    getRemoteGenerationUrl: vi.fn().mockReturnValue('http://test-url'),
-  };
-};
-
 export const createChildLoggerFactory = (): MockModuleFactory => () => ({
   default: {
     info: vi.fn(),
@@ -72,19 +77,14 @@ export const createGeneratorFsPromisesFactory =
     writeFile: fsMocks.writeFileSync,
   });
 
-export const createFsModuleFactory =
-  (fsMocks: Record<string, unknown>): MockModuleFactory =>
-  async (importOriginal) => {
-    const actual = await importOriginal<typeof import('fs')>();
-    return {
-      ...actual,
-      default: {
-        ...actual,
-        ...fsMocks,
-      },
-      ...fsMocks,
-    };
+export const createLocalGenerationFactory = (): MockModuleFactory => async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    shouldGenerateRemote: vi.fn().mockReturnValue(false),
+    neverGenerateRemote: vi.fn().mockReturnValue(false),
+    getRemoteGenerationUrl: vi.fn().mockReturnValue('http://test-url'),
   };
+};
 
 export const createUuidModuleFactory = (): MockModuleFactory => () => ({
   isUuid: vi.fn((str: string) => {

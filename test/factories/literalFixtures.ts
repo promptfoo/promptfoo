@@ -30,19 +30,6 @@ export const createTokenOutput = (
   tokenUsage: { total, prompt, completion, cached: 0, numRequests: 1 },
 });
 
-const createStringAssertion = <TType extends string>(type: TType, value: string) => ({
-  type,
-  value,
-});
-
-export const createSingleAssertionTest = <TType extends string>(type: TType, value: string) => ({
-  assert: [createStringAssertion(type, value)],
-});
-
-export const createTestOutput = (output = 'Test output') => ({
-  output,
-});
-
 export const createChatCompletion = (
   content = 'Test output',
   total_tokens = 10,
@@ -55,6 +42,19 @@ export const createChatCompletion = (
     prompt_tokens,
     completion_tokens,
   },
+});
+
+export const createTestOutput = (output = 'Test output') => ({
+  output,
+});
+
+const createStringAssertion = <TType extends string>(type: TType, value: string) => ({
+  type,
+  value,
+});
+
+export const createSingleAssertionTest = <TType extends string>(type: TType, value: string) => ({
+  assert: [createStringAssertion(type, value)],
 });
 
 export const createStatusResponse = (status = 500, statusText = 'Internal Server Error') => ({
