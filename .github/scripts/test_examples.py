@@ -7,6 +7,7 @@ import tempfile
 import types
 import unittest
 from pathlib import Path
+from unittest.mock import call as mock_call
 from unittest.mock import patch
 
 from examples import (
@@ -15,6 +16,7 @@ from examples import (
     changed_paths,
     check_gate,
     minimum_constraints,
+    pull_docker_image,
     run_example,
     select_examples,
     validate_registry,
@@ -26,12 +28,14 @@ SCRIPT = Path(__file__).with_name("examples.py")
 class SelectionTests(unittest.TestCase):
     def test_full_run_preserves_every_registered_runtime(self):
         rows = select_examples(None)
-        self.assertEqual(len(rows), 20)
+        self.assertEqual(len(rows), 22)
         self.assertEqual(
             [(row["example"], row["python"]) for row in rows],
             [
                 ("docker-sandbox", "3.10"),
                 ("docker-sandbox", "3.14"),
+                ("e2b", "3.10"),
+                ("e2b", "3.14"),
                 ("python-provider-upgrade", "3.10"),
                 ("python-provider-minimums", "3.14"),
                 ("redteam-langchain", "3.10"),
@@ -51,6 +55,25 @@ class SelectionTests(unittest.TestCase):
                 ("google-adk-minimums", "3.10"),
                 ("google-adk-litellm", "3.12"),
             ],
+        )
+
+    def test_e2b_changes_select_its_offline_sdk_tests(self):
+        for filename in (
+            "validate_and_run_code_e2b.py",
+            "validate_and_run_code_e2b_test.py",
+            "requirements.txt",
+        ):
+            with self.subTest(filename=filename):
+                self.assertEqual(
+                    select_examples([f"examples/integration-e2b/{filename}"]),
+                    [
+                        {"example": "e2b", "python": "3.10", "node": False},
+                        {"example": "e2b", "python": "3.14", "node": False},
+                    ],
+                )
+        self.assertEqual(EXAMPLES["e2b"].suites, ((".", "*_test.py"),))
+        self.assertEqual(
+            select_examples(["examples/integration-e2b-other/file.py"]), []
         )
 
     def test_example_changes_select_only_its_profiles(self):
@@ -306,7 +329,159 @@ class GitSelectionTests(unittest.TestCase):
             changed_paths("0" * 40, self.base, self.root)
 
 
+class DockerPullTests(unittest.TestCase):
+    def test_throttled_pull_recovers_with_bounded_backoff(self):
+        command = ("docker", "pull", "registry/image@sha256:fixture")
+        throttled = subprocess.CalledProcessError(
+            1, command, stderr="toomanyrequests: Rate exceeded\n"
+        )
+        environment = {"EXAMPLE_SETTING": "retained"}
+        with (
+            patch(
+                "examples.subprocess.run",
+                side_effect=[
+                    throttled,
+                    throttled,
+                    subprocess.CompletedProcess(command, 0, stderr=""),
+                ],
+            ) as run,
+            patch("examples.time.sleep") as sleep,
+        ):
+            pull_docker_image(command[2], environment)
+        self.assertEqual(sleep.call_args_list, [mock_call(10), mock_call(30)])
+        self.assertEqual(run.call_count, 3)
+        for invocation in run.call_args_list:
+            self.assertEqual(invocation.args[0], command)
+            self.assertEqual(invocation.kwargs["env"], environment)
+            self.assertEqual(invocation.kwargs["cwd"], ROOT)
+            self.assertTrue(invocation.kwargs["check"])
+
+    def test_exhausted_throttling_preserves_the_failure(self):
+        command = ("docker", "pull", "registry/image@sha256:fixture")
+        throttled = subprocess.CalledProcessError(
+            1, command, stderr="toomanyrequests: Rate exceeded\n"
+        )
+        with (
+            patch("examples.subprocess.run", side_effect=throttled) as run,
+            patch("examples.time.sleep") as sleep,
+            self.assertRaises(subprocess.CalledProcessError) as raised,
+        ):
+            pull_docker_image(command[2], {})
+        self.assertIs(raised.exception, throttled)
+        self.assertEqual(run.call_count, 4)
+        self.assertEqual(
+            sleep.call_args_list, [mock_call(10), mock_call(30), mock_call(60)]
+        )
+
+    def test_other_pull_failures_are_not_retried(self):
+        for stderr in (
+            None,
+            "manifest unknown",
+            "unauthorized: authentication required",
+        ):
+            failure = subprocess.CalledProcessError(
+                1, ("docker", "pull"), stderr=stderr
+            )
+            with (
+                self.subTest(stderr=stderr),
+                patch("examples.subprocess.run", side_effect=failure) as run,
+                patch("examples.time.sleep") as sleep,
+                self.assertRaises(subprocess.CalledProcessError) as raised,
+            ):
+                pull_docker_image("registry/image@sha256:fixture", {})
+            self.assertIs(raised.exception, failure)
+            self.assertEqual(run.call_count, 1)
+            sleep.assert_not_called()
+
+
 class RunnerTests(unittest.TestCase):
+    def test_example_failure_is_never_retried(self):
+        def fail_example(command, **_kwargs):
+            if command[1:3] == (str(SCRIPT), "test"):
+                raise subprocess.CalledProcessError(
+                    1, command, stderr="toomanyrequests in an example assertion"
+                )
+            return subprocess.CompletedProcess(command, 0, stderr="")
+
+        with (
+            patch(
+                "examples.sys.version_info", types.SimpleNamespace(major=3, minor=10)
+            ),
+            patch("examples.Path.is_file", return_value=True),
+            patch("examples.venv.EnvBuilder.create"),
+            patch("examples.subprocess.run", side_effect=fail_example) as run,
+            patch("examples.time.sleep") as sleep,
+            self.assertRaises(subprocess.CalledProcessError),
+        ):
+            run_example("docker-sandbox")
+        commands = [invocation.args[0] for invocation in run.call_args_list]
+        self.assertEqual(
+            sum(command[:2] == ("docker", "pull") for command in commands), 1
+        )
+        self.assertEqual(
+            sum(command[1:3] == (str(SCRIPT), "test") for command in commands), 1
+        )
+        sleep.assert_not_called()
+
+    def test_docker_mirror_retains_the_example_tag_and_runs_both_suites(self):
+        for minor in (10, 14):
+            with (
+                self.subTest(python=minor),
+                patch(
+                    "examples.sys.version_info",
+                    types.SimpleNamespace(major=3, minor=minor),
+                ),
+                patch("examples.Path.is_file", return_value=True),
+                patch("examples.venv.EnvBuilder.create"),
+                patch("examples.subprocess.run") as run,
+            ):
+                run_example("docker-sandbox")
+            commands = [call.args[0] for call in run.call_args_list]
+            self.assertEqual(len(commands), 6)
+            self.assertEqual(commands[2][:2], ("docker", "pull"))
+            source = commands[2][2]
+            self.assertRegex(
+                source,
+                r"^public\.ecr\.aws/docker/library/python@sha256:[a-f0-9]{64}$",
+            )
+            self.assertEqual(
+                commands[3], ("docker", "tag", source, "python:3.9-alpine")
+            )
+            for command, relative in zip(commands[4:], (".", "tests")):
+                self.assertEqual(command[1:3], (str(SCRIPT), "test"))
+                self.assertEqual(
+                    Path(command[3]),
+                    ROOT / EXAMPLES["docker-sandbox"].directory / relative,
+                )
+                self.assertEqual(command[4], "test_*.py")
+            self.assertTrue(all(call.kwargs["check"] for call in run.call_args_list))
+
+    def test_docker_pull_or_tag_failure_stops_before_example_tests(self):
+        for operation in ("pull", "tag"):
+
+            def fail_docker(command, operation=operation, **_kwargs):
+                if command[:2] == ("docker", operation):
+                    raise subprocess.CalledProcessError(1, command)
+                return subprocess.CompletedProcess(command, 0, stderr="")
+
+            with (
+                self.subTest(operation=operation),
+                patch(
+                    "examples.sys.version_info",
+                    types.SimpleNamespace(major=3, minor=10),
+                ),
+                patch("examples.Path.is_file", return_value=True),
+                patch("examples.venv.EnvBuilder.create"),
+                patch("examples.subprocess.run", side_effect=fail_docker) as run,
+                self.assertRaises(subprocess.CalledProcessError),
+            ):
+                run_example("docker-sandbox")
+            commands = [call.args[0] for call in run.call_args_list]
+            self.assertEqual(commands[-1][:2], ("docker", operation))
+            self.assertFalse(
+                any(command[1:3] == (str(SCRIPT), "test") for command in commands)
+            )
+
     def test_adk_optional_adapter_is_isolated_and_runs_its_own_suite(self):
         with (
             patch(
