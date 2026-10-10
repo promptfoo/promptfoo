@@ -1452,6 +1452,9 @@ select the OpenAI-compatible APIs on `bedrock-runtime`. These routes preserve Ru
 model IDs, including supported geographic/global inference profiles and model ARNs.
 They use `https://bedrock-runtime.<region>.amazonaws.com/openai/v1` and accept the
 same Bedrock API key or AWS credential configuration as the Mantle adapters.
+Closed OpenAI GPT models on Runtime Responses require a system inference profile,
+such as `us.openai.gpt-5.6-sol` or `global.openai.gpt-5.6-sol`, instead of a bare
+model ID or foundation-model ARN.
 
 ```yaml
 providers:
