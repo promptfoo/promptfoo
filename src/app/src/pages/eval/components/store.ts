@@ -1,4 +1,5 @@
 import { HIDDEN_METADATA_KEYS } from '@app/constants';
+import useApiConfig from '@app/stores/apiConfig';
 import { callApi } from '@app/utils/api';
 import { convertResultsToTable } from '@promptfoo/presentation/evalResults';
 import { getRiskCategorySeverityMap } from '@promptfoo/presentation/redteamConfig';
@@ -303,6 +304,13 @@ interface TableState {
 
   fetchEvalData: (id: string, options?: FetchEvalOptions) => Promise<EvalTableDTO | null>;
   isFetching: boolean;
+  tableError: boolean;
+  tableErrorStatus: number | null;
+  tableSource: {
+    apiBaseUrl: string | undefined;
+    evalId: string;
+    comparisonEvalIds: string[];
+  } | null;
   isStreaming: boolean;
   setIsStreaming: (isStreaming: boolean) => void;
 
@@ -466,7 +474,13 @@ export const useResultsViewSettingsStore = create<SettingsState>()(
       inComparisonMode: false,
       setInComparisonMode: (inComparisonMode: boolean) => set(() => ({ inComparisonMode })),
       comparisonEvalIds: [],
-      setComparisonEvalIds: (comparisonEvalIds: string[]) => set(() => ({ comparisonEvalIds })),
+      setComparisonEvalIds: (comparisonEvalIds: string[]) =>
+        set((state) =>
+          state.comparisonEvalIds.length === comparisonEvalIds.length &&
+          state.comparisonEvalIds.every((id, index) => id === comparisonEvalIds[index])
+            ? state
+            : { comparisonEvalIds },
+        ),
       stickyHeader: true,
       setStickyHeader: (stickyHeader: boolean) => set(() => ({ stickyHeader })),
 
@@ -531,6 +545,8 @@ const isFilterApplied = (filter: Partial<ResultsFilter> | ResultsFilter): boolea
   return Boolean(filter.value);
 };
 
+let evalDataRequestId = 0;
+
 export const useTableStore = create<TableState>()(
   subscribeWithSelector((set, get) => ({
     evalId: null,
@@ -543,14 +559,22 @@ export const useTableStore = create<TableState>()(
     setVersion: (version: number) => set(() => ({ version })),
 
     table: null,
+    tableSource: null,
 
     /**
      * Note: This method is only used when ratings are updated; therefore filters
      * are not updated.
      */
     setTable: (table: EvaluateTable | null) => {
+      if (table === null) {
+        evalDataRequestId += 1;
+      }
       set((prevState) => ({
         table,
+        isFetching: table === null ? false : prevState.isFetching,
+        tableError: table === null ? false : prevState.tableError,
+        tableErrorStatus: table === null ? null : prevState.tableErrorStatus,
+        tableSource: table ? prevState.tableSource : null,
         highlightedResultsCount: computeHighlightCount(table),
         userRatedResultsCount: computeUserRatedCount(table),
         filters: prevState.filters,
@@ -569,6 +593,9 @@ export const useTableStore = create<TableState>()(
 
         set((prevState) => ({
           table,
+          tableError: false,
+          tableErrorStatus: null,
+          tableSource: null,
           version: resultsFile.version,
           highlightedResultsCount: computeHighlightCount(table),
           userRatedResultsCount: computeUserRatedCount(table),
@@ -593,6 +620,9 @@ export const useTableStore = create<TableState>()(
 
         set((prevState) => ({
           table: results.table,
+          tableError: false,
+          tableErrorStatus: null,
+          tableSource: null,
           version: resultsFile.version,
           highlightedResultsCount: computeHighlightCount(results.table),
           userRatedResultsCount: computeUserRatedCount(results.table),
@@ -626,12 +656,15 @@ export const useTableStore = create<TableState>()(
     userRatedResultsCount: 0,
 
     isFetching: false,
+    tableError: false,
+    tableErrorStatus: null,
     isStreaming: false,
     setIsStreaming: (isStreaming: boolean) => set(() => ({ isStreaming })),
 
     shouldHighlightSearchText: false,
 
     fetchEvalData: async (id: string, options: FetchEvalOptions = {}) => {
+      const requestId = ++evalDataRequestId;
       const {
         pageIndex = 0,
         pageSize = 50,
@@ -653,6 +686,8 @@ export const useTableStore = create<TableState>()(
 
       set({
         isFetching: skipLoadingState ? get().isFetching : true,
+        tableError: false,
+        tableErrorStatus: null,
         shouldHighlightSearchText: false,
         // Clear previous metadata keys to prevent memory accumulation
         metadataKeys: [],
@@ -700,6 +735,7 @@ export const useTableStore = create<TableState>()(
         });
 
         // Remove the origin as it was only added to satisfy the URL constructor.
+        const { apiBaseUrl } = useApiConfig.getState();
         const resp = await callApi(url.toString().replace(window.location.origin, ''));
 
         if (resp.ok) {
@@ -711,8 +747,16 @@ export const useTableStore = create<TableState>()(
             extractPolicyIdToNameMap(data.config?.redteam?.plugins ?? []),
           ]);
 
+          // Navigation or comparison changes can finish out of order.
+          if (requestId !== evalDataRequestId) {
+            return data;
+          }
+
           set((prevState) => ({
             table: data.table,
+            tableError: false,
+            tableErrorStatus: null,
+            tableSource: { apiBaseUrl, evalId: id, comparisonEvalIds },
             filteredResultsCount: data.filteredCount,
             totalResultsCount: data.totalCount,
             highlightedResultsCount: computeHighlightCount(data.table),
@@ -721,7 +765,7 @@ export const useTableStore = create<TableState>()(
             version: data.version,
             author: data.author,
             evalId: skipSettingEvalId ? get().evalId : id,
-            isFetching: skipLoadingState ? prevState.isFetching : false,
+            isFetching: false,
             shouldHighlightSearchText: searchText !== '',
             // Store filtered metrics from backend (null when no filters or feature disabled)
             filteredMetrics: data.filteredMetrics || null,
@@ -743,14 +787,19 @@ export const useTableStore = create<TableState>()(
           return data;
         }
 
-        if (!skipLoadingState) {
-          set({ isFetching: false });
+        if (requestId === evalDataRequestId) {
+          set({ isFetching: false, tableError: true, tableErrorStatus: resp.status });
         }
         return null;
       } catch (error) {
+        if (requestId !== evalDataRequestId) {
+          return null;
+        }
         console.error('Error fetching eval data:', error);
         set({
-          isFetching: skipLoadingState ? get().isFetching : false,
+          isFetching: false,
+          tableError: true,
+          tableErrorStatus: null,
           isStreaming: false,
           metadataKeysLoading: false,
           currentMetadataKeysRequest: null,

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import EnterpriseBanner from '@app/components/EnterpriseBanner';
+import { Button } from '@app/components/ui/button';
 import { Spinner } from '@app/components/ui/spinner';
 import { IS_RUNNING_LOCALLY } from '@app/constants';
 import { EVAL_ROUTES } from '@app/constants/routes';
@@ -14,11 +15,13 @@ import { io as SocketIOClient } from 'socket.io-client';
 import EmptyState from './EmptyState';
 import ResultsView from './ResultsView';
 import { ResultsFilter, useResultsViewSettingsStore, useTableStore } from './store';
+import type { PaginationState } from '@tanstack/react-table';
 import './Eval.css';
 
 import { useToast } from '@app/hooks/useToast';
 import logger from '../../../../../logger';
 import { useFilterMode } from './FilterModeProvider';
+import { useComparisonEvalIds } from './useComparisonEvalIds';
 import {
   buildEvalUrlWithSearchParams,
   parseEvalOutputPromptHash,
@@ -66,6 +69,9 @@ export default function Eval({ fetchId }: EvalOptions) {
 
   const {
     table,
+    tableError,
+    tableErrorStatus,
+    tableSource,
     setTable,
     config,
     setConfig,
@@ -79,6 +85,9 @@ export default function Eval({ fetchId }: EvalOptions) {
   const { filterMode } = useFilterMode();
 
   const { setInComparisonMode, setComparisonEvalIds } = useResultsViewSettingsStore();
+  const [comparisonEvalIds, updateComparisonEvalIds] = useComparisonEvalIds(fetchId);
+  const searchRef = useRef(location.search);
+  searchRef.current = location.search;
 
   // ================================
   // State
@@ -86,10 +95,18 @@ export default function Eval({ fetchId }: EvalOptions) {
 
   const [loaded, setLoaded] = useState(false);
   const [failed, setFailed] = useState(false);
+  const [retryAttempt, setRetryAttempt] = useState(0);
   const [recentEvals, setRecentEvals] = useState<ResultLightweightWithLabel[]>([]);
   const [defaultEvalId, setDefaultEvalId] = useState<string | undefined>(undefined);
   const isHydratingFiltersRef = useRef(false);
   const currentEvalIdRef = useRef(evalId);
+  const routeContextRef = useRef({ apiBaseUrl, fetchId });
+  routeContextRef.current = { apiBaseUrl, fetchId };
+  const loadRequestIdRef = useRef(0);
+  const tablePaginationRef = useRef<PaginationState | null>(null);
+  const handlePaginationChange = useCallback((pagination: PaginationState | null) => {
+    tablePaginationRef.current = pagination;
+  }, []);
   currentEvalIdRef.current = evalId;
 
   // ================================
@@ -123,7 +140,15 @@ export default function Eval({ fetchId }: EvalOptions) {
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const loadEvalById = useCallback(
     async (id: string, isBackgroundUpdate = false) => {
+      const requestId = ++loadRequestIdRef.current;
       try {
+        const pagination = (currentEvalIdRef.current === id
+          ? tablePaginationRef.current
+          : null) ?? { pageIndex: 0, pageSize: 50 };
+        setFailed(false);
+        const comparisons = comparisonEvalIds.filter((comparisonId) => comparisonId !== id);
+        setComparisonEvalIds(comparisons);
+        setInComparisonMode(comparisons.length > 0);
         setEvalId(id);
 
         const { filters } = useTableStore.getState();
@@ -131,29 +156,55 @@ export default function Eval({ fetchId }: EvalOptions) {
         const data = await fetchEvalData(id, {
           skipSettingEvalId: true,
           skipLoadingState: isBackgroundUpdate,
+          ...pagination,
           filterMode,
-          filters: Object.values(filters.values).filter((filter) =>
-            filter.type === 'metadata'
-              ? Boolean(filter.value && filter.field)
-              : Boolean(filter.value),
-          ),
+          searchText: new URLSearchParams(searchRef.current).get('search') || '',
+          filters: Object.values(filters.values).filter((filter) => {
+            if (filter.type === 'metadata') {
+              return Boolean(filter.field && (filter.operator === 'exists' || filter.value));
+            }
+            if (filter.type === 'metric' && filter.operator === 'is_defined') {
+              return Boolean(filter.field);
+            }
+            return Boolean(filter.value);
+          }),
         });
 
+        if (requestId !== loadRequestIdRef.current) {
+          return false;
+        }
         if (!data) {
-          setFailed(true);
           return false;
         }
         return true;
       } catch (error) {
         console.error('Error loading eval:', error);
-        setFailed(true);
+        if (requestId === loadRequestIdRef.current) {
+          setFailed(true);
+        }
         return false;
       }
     },
-    [fetchEvalData, setFailed, setEvalId, filterMode],
+    [
+      apiBaseUrl,
+      fetchId,
+      fetchEvalData,
+      setFailed,
+      setEvalId,
+      filterMode,
+      comparisonEvalIds,
+      setComparisonEvalIds,
+      setInComparisonMode,
+    ],
   );
 
+  // Loader identity includes route/API context to invalidate socket lookups after navigation.
+  const loadEvalByIdRef = useRef(loadEvalById);
+  loadEvalByIdRef.current = loadEvalById;
+
   const clearEvalState = useCallback(() => {
+    loadRequestIdRef.current += 1;
+    setFailed(false);
     setTable(null);
     setConfig(null);
     setEvalId('');
@@ -165,8 +216,7 @@ export default function Eval({ fetchId }: EvalOptions) {
    * Populates the table store from a websocket signal. Explicit /eval/:id routes stay
    * pinned (they only reload when their own eval changes), while the root /eval route
    * follows the latest eval. Held in a ref (below) so the socket effect never has to tear
-   * down and reopen the connection when this handler's dependencies (e.g. filterMode via
-   * loadEvalById, or fetchId on navigation) change.
+   * down and reopen the connection when the route or comparison selection changes.
    */
   const handleResultsFile = async (data: EvalRefreshSignal) => {
     if (!data) {
@@ -185,7 +235,8 @@ export default function Eval({ fetchId }: EvalOptions) {
     const reloadInBackground = async (id: string) => {
       setIsStreaming(true);
       try {
-        await loadEvalById(id, true);
+        const reload = deletedEvalIds === undefined ? loadEvalById : loadEvalByIdRef.current;
+        await reload(id, true);
       } finally {
         setIsStreaming(false);
       }
@@ -199,6 +250,9 @@ export default function Eval({ fetchId }: EvalOptions) {
         fetchRecentFileEvals({ reportFailure: false }),
         reloadInBackground(fetchId),
       ]);
+      if (loadEvalById !== loadEvalByIdRef.current) {
+        return;
+      }
       if (recents && recents.length > 0) {
         setDefaultEvalId(recents[0].evalId);
       }
@@ -206,14 +260,23 @@ export default function Eval({ fetchId }: EvalOptions) {
     }
 
     const newRecentEvals = await fetchRecentFileEvals({ reportFailure: false });
+    const activeRoute = routeContextRef.current;
+    if (apiBaseUrl !== activeRoute.apiBaseUrl) {
+      return;
+    }
+    const activeFetchId = deletedEvalIds === undefined ? fetchId : activeRoute.fetchId;
+    if (deletedEvalIds !== undefined) {
+      // A deletion still applies after in-page changes, but not to a different selected record.
+      if (!displayedEvalWasDeleted(activeFetchId ?? currentEvalIdRef.current, deletedEvalIds)) {
+        return;
+      }
+    } else if (loadEvalById !== loadEvalByIdRef.current) {
+      return;
+    }
     if (!newRecentEvals) {
       // Recents are unavailable. If the socket told us the pinned eval was deleted, don't strand
       // the user on a now-gone /eval/:id — fall back to the root route, which reconciles on load.
-      if (
-        fetchId &&
-        deletedEvalIds !== undefined &&
-        displayedEvalWasDeleted(fetchId, deletedEvalIds)
-      ) {
+      if (activeFetchId && deletedEvalIds !== undefined) {
         clearEvalState();
         navigate(EVAL_ROUTES.ROOT, { replace: true });
       }
@@ -221,23 +284,20 @@ export default function Eval({ fetchId }: EvalOptions) {
     }
     if (newRecentEvals.length === 0) {
       clearEvalState();
-      if (fetchId) {
+      if (activeFetchId) {
         navigate(EVAL_ROUTES.ROOT, { replace: true });
       }
       return;
     }
 
     const latestEvalId = newRecentEvals[0].evalId;
-    const displayedEvalId = fetchId ?? currentEvalIdRef.current;
     setDefaultEvalId(latestEvalId);
 
-    if (deletedEvalIds) {
-      if (displayedEvalWasDeleted(displayedEvalId, deletedEvalIds)) {
-        if (fetchId) {
-          navigate(EVAL_ROUTES.DETAIL(latestEvalId), { replace: true });
-        } else {
-          await reloadInBackground(latestEvalId);
-        }
+    if (deletedEvalIds !== undefined) {
+      if (activeFetchId) {
+        navigate(EVAL_ROUTES.DETAIL(latestEvalId), { replace: true });
+      } else {
+        await reloadInBackground(latestEvalId);
       }
       return;
     }
@@ -271,6 +331,7 @@ export default function Eval({ fetchId }: EvalOptions) {
           { pathname: EVAL_ROUTES.DETAIL(id), search: location.search, hash: '' },
           (params) => {
             params.delete('rowId');
+            params.delete('comparisonEvalIds');
           },
         ),
       );
@@ -371,11 +432,12 @@ export default function Eval({ fetchId }: EvalOptions) {
       return;
     }
 
+    let cancelled = false;
     if (fetchId) {
       logger.debug('[Eval] Fetching eval by id', { fetchId });
       const run = async () => {
         const success = await loadEvalById(fetchId);
-        if (success) {
+        if (success && !cancelled) {
           setDefaultEvalId(fetchId);
           // Load other recent eval runs
           fetchRecentFileEvals({ reportFailure: false });
@@ -383,15 +445,32 @@ export default function Eval({ fetchId }: EvalOptions) {
         }
       };
       run();
-    } else if (!IS_RUNNING_LOCALLY) {
+    } else {
       logger.debug('[Eval] Fetching eval via recent', {});
       // Fetch from server
       const run = async () => {
-        const evals = await fetchRecentFileEvals();
-        if (evals && evals.length > 0) {
+        const loadRequestId = loadRequestIdRef.current;
+        const evals = await fetchRecentFileEvals({ reportFailure: false }).catch(() => undefined);
+        if (cancelled || loadRequestId !== loadRequestIdRef.current) {
+          return;
+        }
+        if (!evals) {
+          const current = useTableStore.getState();
+          if (
+            current.table &&
+            current.tableSource?.evalId === current.evalId &&
+            current.tableSource.apiBaseUrl === apiBaseUrl
+          ) {
+            await loadEvalById(current.evalId);
+          } else {
+            setFailed(true);
+          }
+          return;
+        }
+        if (evals.length > 0) {
           const defaultEvalId = evals[0].evalId;
           const success = await loadEvalById(defaultEvalId);
-          if (success) {
+          if (success && !cancelled) {
             setDefaultEvalId(defaultEvalId);
             // Note: setLoaded(true) is handled by the useEffect that watches for table updates
           }
@@ -402,17 +481,16 @@ export default function Eval({ fetchId }: EvalOptions) {
       };
       run();
     }
-    logger.debug('[Eval] Resetting comparison mode', {});
-    setInComparisonMode(false);
-    setComparisonEvalIds([]);
+    return () => {
+      cancelled = true;
+    };
   }, [
     apiBaseUrl,
     clearEvalState,
     fetchId,
     loadEvalById,
+    retryAttempt,
     setDefaultEvalId,
-    setInComparisonMode,
-    setComparisonEvalIds,
     // Note: resetFilters and addFilter are accessed via getState() to avoid dependency issues
   ]);
 
@@ -514,7 +592,31 @@ export default function Eval({ fetchId }: EvalOptions) {
   // Rendering
   // ================================
 
-  if (failed) {
+  const tableMatchesSelection =
+    tableSource?.apiBaseUrl === apiBaseUrl &&
+    tableSource?.evalId === evalId &&
+    JSON.stringify(tableSource?.comparisonEvalIds) ===
+      JSON.stringify(comparisonEvalIds.filter((id) => id !== evalId));
+
+  if (failed || (tableError && (!table || !tableMatchesSelection))) {
+    if (comparisonEvalIds.length > 0) {
+      return (
+        <div className="notice space-y-3">
+          <p>
+            {tableErrorStatus === 400 || tableErrorStatus === 404
+              ? 'Unable to load comparison. All evaluations must exist and use the same dataset.'
+              : 'Unable to load comparison. Please try again.'}
+          </p>
+          {tableErrorStatus === 413 && (
+            <p>Clear comparison, choose fewer results per page, and compare again.</p>
+          )}
+          <div className="flex justify-center gap-2">
+            <Button onClick={() => setRetryAttempt((attempt) => attempt + 1)}>Retry</Button>
+            <Button onClick={() => updateComparisonEvalIds([])}>Clear comparison</Button>
+          </div>
+        </div>
+      );
+    }
     return <div className="notice">404 Eval not found</div>;
   }
 
@@ -543,6 +645,12 @@ export default function Eval({ fetchId }: EvalOptions) {
         defaultEvalId={defaultEvalId}
         recentEvals={recentEvals}
         onRecentEvalSelected={handleRecentEvalSelection}
+        onPaginationChange={handlePaginationChange}
+        onRetry={() => {
+          if (evalId) {
+            void loadEvalById(evalId);
+          }
+        }}
       />
     </ShiftKeyProvider>
   );

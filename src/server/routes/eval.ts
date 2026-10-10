@@ -336,6 +336,22 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
     return;
   }
 
+  // A URL can select comparisons without going through the dataset-filtered picker.
+  // Rows are joined by test index, so only evaluations of the same dataset are safe to merge.
+  const comparisonEvals = await Promise.all(comparisonEvalIds.map((id) => Eval.findById(id)));
+  if (comparisonEvals.some((comparison) => !comparison)) {
+    res.status(404).json({ error: 'Comparison eval not found' });
+    return;
+  }
+  if (
+    comparisonEvals.some(
+      (comparison) => !eval_.datasetId || comparison?.datasetId !== eval_.datasetId,
+    )
+  ) {
+    res.status(400).json({ error: 'Comparison evals must use the same dataset' });
+    return;
+  }
+
   // Unified CSV export path - handles both simple and comparison exports
   // This is the same code path used by CLI exports, ensuring consistent output
   if (format === 'csv') {
@@ -345,7 +361,8 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
         searchQuery: searchText,
         filters,
         comparisonEvalIds,
-        findEvalById: Eval.findById.bind(Eval),
+        findEvalById: async (id) =>
+          comparisonEvals.find((comparison) => comparison?.id === id) ?? null,
       });
       setDownloadHeaders(res, `${id}.csv`, 'text/csv');
       res.send(csvData);
@@ -374,8 +391,7 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
   if (comparisonEvalIds.length > 0) {
     // Fetch comparison evals and their tables, keeping track of eval IDs
     const comparisonData = await Promise.all(
-      comparisonEvalIds.map(async (comparisonEvalId) => {
-        const comparisonEval_ = await Eval.findById(comparisonEvalId);
+      comparisonEvals.map(async (comparisonEval_) => {
         if (!comparisonEval_) {
           return null;
         }
