@@ -56,10 +56,15 @@ export function getWilsonScoreInterval(
   };
 }
 
+interface RepeatStabilityGradingResult {
+  metadata?: { cachedResponse?: boolean };
+  componentResults?: RepeatStabilityGradingResult[] | null;
+}
+
 interface RepeatStabilityResult {
   description?: string | null;
   failureReason: number;
-  gradingResult?: { metadata?: { cachedResponse?: boolean } } | null;
+  gradingResult?: RepeatStabilityGradingResult | null;
   prompt: { label?: string };
   promptIdx: number;
   provider: { id?: string; label?: string };
@@ -73,9 +78,33 @@ interface RepeatStabilityResult {
 type MutableRepeatStabilityGroup = RepeatStabilityGroup & { scored: number };
 
 function isCachedResult(result: RepeatStabilityResult): boolean {
-  return (
-    result.response?.cached === true || result.gradingResult?.metadata?.cachedResponse === true
-  );
+  if (result.response?.cached === true) {
+    return true;
+  }
+  if (!result.gradingResult) {
+    return false;
+  }
+
+  // Mixed aggregates can retain cached components without being fully cached themselves.
+  const pending = [result.gradingResult];
+  const visited = new Set<RepeatStabilityGradingResult>();
+  for (let index = 0; index < pending.length; index++) {
+    const gradingResult = pending[index];
+    if (visited.has(gradingResult)) {
+      continue;
+    }
+    visited.add(gradingResult);
+    if (gradingResult.metadata?.cachedResponse === true) {
+      return true;
+    }
+    const components = gradingResult.componentResults;
+    if (components) {
+      for (let childIndex = 0; childIndex < components.length; childIndex++) {
+        pending.push(components[childIndex]);
+      }
+    }
+  }
+  return false;
 }
 
 function getGroupKey(result: RepeatStabilityResult): string {
