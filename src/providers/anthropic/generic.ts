@@ -39,6 +39,16 @@ export function getAnthropicEnvHeaders(env?: EnvOverrides): Record<string, strin
 }
 
 /**
+ * The ANTHROPIC_CUSTOM_HEADERS headers a client built here sends. A value scoped to
+ * the provider or the config replaces the process one; it does not add to it.
+ */
+export function getActiveAnthropicEnvHeaders(env?: EnvOverrides): Record<string, string> {
+  return parseAnthropicCustomHeaders(
+    getScopedCustomHeaders(env) ?? process.env.ANTHROPIC_CUSTOM_HEADERS,
+  );
+}
+
+/**
  * Map each ANTHROPIC_CUSTOM_HEADERS header name to null so the SDK omits it.
  * Providers that reuse the SDK against Anthropic-compatible third-party
  * endpoints use this to keep Anthropic-scoped headers (often gateway/proxy

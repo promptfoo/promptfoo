@@ -35,7 +35,7 @@ You can also put the agent ID in the provider ID: `anthropic:managed-agents:agen
 
 ## Create an agent with dynamic workflows
 
-Use `agent` instead of `agent_id` to create a temporary agent, and `environment` instead of `environment_id` to create a cloud environment. These objects use the Anthropic API's field names. Values in `agent`, `environment`, `session`, and `headers` support Promptfoo templates; `apiKey` and `apiBaseUrl` are read once, when the provider is created.
+Use `agent` instead of `agent_id` to create a temporary agent, and `environment` instead of `environment_id` to create a cloud environment. These objects use the Anthropic API's field names. Values in `agent`, `environment`, `session`, `headers`, and `apiKey` support Promptfoo templates; `apiBaseUrl` is read once, when the provider is created. A credential passed through a test variable is saved with the eval's results like any other variable, so prefer `ANTHROPIC_API_KEY` or an `{{env.NAME}}` reference.
 
 ```yaml
 providers:
@@ -69,7 +69,7 @@ providers:
 
 The budget is in whole **cents**, so `'100'` means $1 of list-cost usage. Configure the agent's `tools`, `mcp_servers`, `skills`, and workflow `predefined_agents` as needed. See Anthropic's [multiagent configuration](https://platform.claude.com/docs/en/managed-agents/multiagent-orchestration) for inline agents and predefined agent rosters.
 
-Enabling workflows gives the agent access to them; your prompt should ask it to use one. Promptfoo waits until every observed workflow run has ended and a subsequent main-session idle event reports `end_turn`. An early progress message or an idle child thread does not finish the eval.
+Enabling workflows gives the agent access to them; your prompt should ask it to use one. Promptfoo waits until every observed workflow run has ended and a subsequent main-session idle event reports `end_turn`. An early progress message or an idle child thread does not finish the eval. If the agent gives up on a turn (`retries_exhausted`) while a run is open, Promptfoo keeps waiting, because the run's ending notice starts the agent's next turn; the call fails if the session has not resumed 30 seconds after its last run ended.
 
 ## Configuration
 
@@ -81,7 +81,7 @@ Enabling workflows gives the agent access to them; your prompt should ask it to 
 | `session`                        | Session `title`, `metadata`, `resources`, `vault_ids`, and `budget`.                                                              |
 | `apiKey`                         | Overrides `ANTHROPIC_API_KEY`. Claude Code subscription OAuth is not supported by this hosted API.                                |
 | `apiBaseUrl`                     | Overrides `ANTHROPIC_BASE_URL`; defaults to the Anthropic API.                                                                    |
-| `headers`                        | Additional request headers. `anthropic-beta` values are added to the beta that Managed Agents requires.                           |
+| `headers`                        | Additional request headers. `anthropic-beta` values, here or in `ANTHROPIC_CUSTOM_HEADERS`, are added to the required beta.       |
 | `workspace_id`                   | Optional Anthropic workspace selector.                                                                                            |
 | `timeoutMs`                      | Deadline for the whole invocation, including setup; default `600000` (10 minutes).                                                |
 | `cleanupTimeoutMs`               | Separate deadline for stopping the session and archiving owned resources; default `10000`.                                        |
@@ -91,14 +91,16 @@ Enabling workflows gives the agent access to them; your prompt should ask it to 
 
 Each call sends the rendered prompt as one text user message in a fresh session. Sessions are isolated across concurrent tests, and hosted responses are not cached. The provider returns the last main-agent text message as `output`, which must come after any workflow run has ended, and includes `sessionId`, `agentId`, `environmentId`, `workflowRuns`, and primary-thread `toolCalls` in response metadata. A workflow's child messages and tool calls stay in its own hosted thread and are not included in `toolCalls`.
 
-Usage comes from the session totals, including workflow threads. Prompt-token totals include uncached input, cache reads, and cache creation. `cost` is the session's reported USD list cost, including hosted runtime, converted from cents. Anthropic rounds list cost to the nearest cent, so a session that costs less than half a cent reports `0`. If the final usage read fails, the completed answer is preserved, `metadata.usageError` records the failure, and any streamed usage snapshot is used instead. Missing cost is left unknown.
+Usage comes from the session totals, including workflow threads. Prompt-token totals include uncached input, cache reads, and cache creation. `cost` is the session's reported USD list cost, including hosted runtime, converted from cents. Anthropic rounds list cost to the nearest cent, so a session that costs less than half a cent reports `0`. If the final usage read fails, the completed answer is preserved, `metadata.usageError` records the failure, and any streamed usage snapshot is used instead. A timeout or cancellation that arrives during that read is still reported as one. Missing cost is left unknown.
 
 Promptfoo archives its session when finished, then archives any agent or environment it created. Existing agent and environment definitions are left intact. Failed, timed-out, and cancelled calls first request an interrupt. Anthropic accepts archival only after a session stops running, and an interrupted session keeps running until its current step, such as an in-flight tool call, finishes. Promptfoo waits for the session to stop, up to `cleanupTimeoutMs`, and then archives it. Raise `cleanupTimeoutMs` for agents that make long tool calls.
 
 [Interrupts do not end dynamic workflow runs](https://platform.claude.com/docs/en/managed-agents/workflow-runs#interrupt-a-session-with-runs-open), and an open run can prevent archival. If cleanup fails, the eval reports an error and preserves resource IDs in `metadata.cleanupErrors` and the corresponding ID fields; inspect that session in the Anthropic Console to stop the run and archive it. Promptfoo does not raise a session's budget to resume or stop its runs.
 
-Interrupted, failed, budget-limited, and truncated runs are reported as errors. So is a workflow start that Anthropic refuses; `metadata.workflowStartErrors` records the reason. API failures include Anthropic's error type and message. Requests that start or steer a hosted run are not automatically retried, because repeating them can duplicate tool side effects. The final usage read and archival can be retried.
+If the event stream drops while a session is running, Promptfoo reconnects and reads the session's event history to fill the gap, so no event is missed or counted twice. It gives up, with an error, after three attempts in a row that fail to connect or that end within five seconds with nothing new.
 
-This provider supports server-executed tools in cloud environments. Custom tools requiring client execution, permission confirmations, and self-hosted tool execution are not supported. A request for client action returns an error; Promptfoo does not grant tool permissions automatically.
+Interrupted, failed, and budget-limited runs are reported as errors. So is a workflow start that Anthropic refuses; `metadata.workflowStartErrors` records the reason. API failures include Anthropic's error type and message. Requests that start or steer a hosted run are not automatically retried, because repeating them can duplicate tool side effects. Reads and archival can be retried, and a call that meets a rate limit before its prompt is sent can be retried as a whole. A create request that gets no response may still have gone through. Promptfoo finds and archives such a session when it also created the agent; otherwise the error says so and `metadata.unconfirmedCreate` names the resource to look for in the Anthropic Console.
+
+This provider supports server-executed tools in cloud environments. Custom tools requiring client execution, permission confirmations, and self-hosted tool execution are not supported. A request for client action returns an error; Promptfoo does not grant tool permissions automatically. An existing `environment_id` is checked before a session is created and is rejected if it is self-hosted.
 
 Try the [complete example](https://github.com/promptfoo/promptfoo/tree/main/examples/claude-managed-agents), which verifies both the answer and a completed workflow run.

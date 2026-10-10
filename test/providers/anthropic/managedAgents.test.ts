@@ -11,16 +11,68 @@ const usage = {
   list_cost: { amount: '123', currency: 'USD' },
   active_seconds: 7,
 };
+// The API gives every event its own id, which is what a reconnect deduplicates on.
+let eventSequence = 0;
+const eventId = () => `sevt-${++eventSequence}`;
 const message = (text: string) => ({
-  id: `msg-${text}`,
+  id: eventId(),
   type: 'agent.message',
   content: [{ type: 'text', text }],
 });
 const idle = (reason = 'end_turn') => ({
-  id: 'idle',
+  id: eventId(),
   type: 'session.status_idle',
   stop_reason: { type: reason },
 });
+const sse = (events: unknown[]) =>
+  new ReadableStream({
+    start(controller) {
+      for (const event of events) {
+        controller.enqueue(
+          new TextEncoder().encode(
+            `event: ${(event as { type: string }).type}\ndata: ${JSON.stringify(event)}\n\n`,
+          ),
+        );
+      }
+      controller.close();
+    },
+  });
+const history = (events: unknown[]) =>
+  (async function* () {
+    yield* events;
+  })() as never;
+const connection = (body: ReadableStream) =>
+  (() => ({ asResponse: async () => new Response(body) })) as never;
+// A connection that delivers its events and then stays open, as a live stream does.
+const openStream = (events: unknown[]) =>
+  new ReadableStream({
+    start(controller) {
+      for (const event of events) {
+        controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(event)}\n\n`));
+      }
+    },
+  });
+// A connection the test feeds and ends as time passes.
+const feed = () => {
+  let controller!: ReadableStreamDefaultController<Uint8Array>;
+  const cancelled = vi.fn();
+  const body = new ReadableStream<Uint8Array>({
+    start(streamController) {
+      controller = streamController;
+    },
+    cancel: cancelled,
+  });
+  return {
+    body,
+    cancelled,
+    push(...events: unknown[]) {
+      for (const event of events) {
+        controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(event)}\n\n`));
+      }
+    },
+    drop: () => controller.error(new Error('socket hang up')),
+  };
+};
 const config = { apiKey: 'test-key', agent_id: 'agent-existing', environment_id: 'env-existing' };
 const apiError = (status: number, message: string, type = 'invalid_request_error') =>
   new Anthropic.APIError(
@@ -51,6 +103,8 @@ function setup(
   const create = vi.spyOn(beta.sessions, 'create').mockResolvedValue({ id: 'sesn-test' } as never);
   const retrieve = vi.spyOn(beta.sessions, 'retrieve').mockResolvedValue({ usage } as never);
   const send = vi.spyOn(beta.sessions.events, 'send').mockResolvedValue({} as never);
+  const list = vi.spyOn(beta.sessions.events, 'list').mockImplementation(() => history([]));
+  const sessionsList = vi.spyOn(beta.sessions, 'list').mockResolvedValue({ data: [] } as never);
   const controller = new AbortController();
   const stream = vi.spyOn(beta.sessions.events, 'stream').mockImplementation(
     () =>
@@ -89,6 +143,8 @@ function setup(
     create,
     retrieve,
     send,
+    list,
+    sessionsList,
     stream,
     controller,
     archive,
@@ -430,7 +486,7 @@ describe('Claude Managed Agents', () => {
       expect(result.error).toBe(
         'Claude Managed Agents API request failed (HTTP 404): not_found_error: `model.id`: model "claude-not-a-model": model is not supported ([REDACTED], [REDACTED], [REDACTED])',
       );
-      expect(result.metadata).toMatchObject({ http: { status: 404 }, rateLimitRetryable: false });
+      expect(result.metadata).toMatchObject({ http: { status: 404 } });
     }
     // A 404 aborts the eval before rows are shown, so the reason is also logged, once.
     expect(errorLog).toHaveBeenCalledOnce();
@@ -488,6 +544,561 @@ describe('Claude Managed Agents', () => {
       'Headers.append: "[REDACTED]" is an invalid header value ([REDACTED]).',
     );
   });
+
+  describe('a dropped event stream', () => {
+    const tool = {
+      id: eventId(),
+      type: 'agent.tool_use',
+      name: 'bash',
+      input: { command: 'echo ok' },
+      evaluated_permission: 'allow',
+    };
+    const answer = message('answer');
+    const done = idle();
+
+    it('resumes from history without missing or repeating events', async () => {
+      const f = setup();
+      f.stream
+        .mockImplementationOnce(connection(sse([tool])))
+        .mockImplementationOnce(connection(sse([answer, done])));
+      f.list.mockImplementation(() => history([tool, answer]));
+      const result = await f.provider.callApi('test');
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('answer');
+      // The tool call arrived on the first stream and again in the history.
+      expect(result.metadata?.toolCalls).toHaveLength(1);
+      // A stream does not replay, so the next one is open before history is read.
+      expect(f.stream.mock.invocationCallOrder[1]).toBeLessThan(f.list.mock.invocationCallOrder[0]);
+      expect(f.stream).toHaveBeenCalledTimes(2);
+      expect(f.stream.mock.calls[1][2]).toMatchObject({ maxRetries: 2 });
+    });
+
+    it('finishes from history when the session ended while disconnected', async () => {
+      const f = setup();
+      // An event arrives, and then the read fails.
+      let reads = 0;
+      const broken = new ReadableStream({
+        pull(controller) {
+          if (reads++ === 0) {
+            controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(tool)}\n\n`));
+          } else {
+            controller.error(new Error('socket hang up'));
+          }
+        },
+      });
+      const second = feed();
+      f.stream
+        .mockImplementationOnce(connection(broken))
+        .mockImplementationOnce(connection(second.body));
+      f.list.mockImplementation(() => history([tool, answer, done]));
+      const result = await f.provider.callApi('test');
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('answer');
+      expect(result.metadata?.toolCalls).toHaveLength(1);
+      // The stream opened for the reconnect is not left open once history ends the call.
+      expect(second.cancelled).toHaveBeenCalledOnce();
+    });
+
+    it('does not take a slow history read for a stream that was served', async () => {
+      vi.useFakeTimers();
+      // Every stream delivers the same event and closes at once.
+      const f = setup({ config: { ...config, timeoutMs: 60_000 } }, [tool]);
+      // The history takes six seconds to arrive, on the test's clock.
+      f.list.mockImplementation(
+        () =>
+          (async function* () {
+            yield await new Promise((resolve) => setTimeout(() => resolve(tool), 6_000));
+          })() as never,
+      );
+      const pending = f.provider.callApi('test');
+      await vi.advanceTimersByTimeAsync(60_000);
+      const result = await pending;
+      expect(result.error).toBe(
+        'Claude Managed Agents event stream ended before the session completed (the connection closed)',
+      );
+      expect(f.stream).toHaveBeenCalledTimes(4);
+    });
+
+    it('retries a reconnect that fails for now', async () => {
+      const f = setup();
+      f.stream
+        .mockImplementationOnce(connection(sse([tool])))
+        .mockImplementationOnce((() => ({
+          asResponse: () => Promise.reject(apiError(503, 'Try again later.', 'api_error')),
+        })) as never)
+        .mockImplementationOnce(connection(sse([done])));
+      f.list.mockImplementation(() => history([tool, answer]));
+      const result = await f.provider.callApi('test');
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('answer');
+      expect(f.stream).toHaveBeenCalledTimes(3);
+    });
+
+    it('gives up after three connections in a row end at once with nothing new', async () => {
+      const f = setup({}, [tool]);
+      f.list.mockImplementation(() => history([tool]));
+      const result = await f.provider.callApi('test');
+      expect(result.error).toBe(
+        'Claude Managed Agents event stream ended before the session completed (the connection closed)',
+      );
+      expect(f.stream).toHaveBeenCalledTimes(4);
+      expect(result.metadata?.toolCalls).toHaveLength(1);
+      expect(result.metadata).toMatchObject({ sessionArchived: true });
+    });
+
+    it('keeps reconnecting while each stream stays open before it is cut off', async () => {
+      vi.useFakeTimers();
+      const f = setup();
+      // A gateway that caps how long a response may last ends a quiet stream this way.
+      const cutOff = (() => ({
+        asResponse: async () =>
+          new Response(
+            new ReadableStream({
+              start(controller) {
+                setTimeout(() => controller.close(), 6_000);
+              },
+            }),
+          ),
+      })) as never;
+      f.stream
+        .mockImplementationOnce(connection(sse([tool])))
+        .mockImplementationOnce(cutOff)
+        .mockImplementationOnce(cutOff)
+        .mockImplementationOnce(cutOff)
+        .mockImplementationOnce(cutOff)
+        .mockImplementationOnce(connection(sse([answer, done])));
+      f.list.mockImplementation(() => history([tool]));
+      const pending = f.provider.callApi('test');
+      await vi.advanceTimersByTimeAsync(30_000);
+      const result = await pending;
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('answer');
+      expect(f.stream).toHaveBeenCalledTimes(6);
+    });
+
+    it('counts a reconnect that fails slowly as bringing nothing new', async () => {
+      vi.useFakeTimers();
+      const f = setup({ config: { ...config, timeoutMs: 25_000 } });
+      // The SDK's own retries can outlast the time a served stream is told apart by.
+      const failSlowly = (() => ({
+        asResponse: () =>
+          new Promise((_resolve, reject) =>
+            setTimeout(() => reject(apiError(503, 'Try again later.', 'api_error')), 6_000),
+          ),
+      })) as never;
+      f.stream.mockImplementationOnce(connection(sse([tool]))).mockImplementation(failSlowly);
+      const pending = f.provider.callApi('test');
+      await vi.advanceTimersByTimeAsync(25_000);
+      const result = await pending;
+      expect(result.error).toBe(
+        'Claude Managed Agents event stream ended before the session completed (the reconnect failed)',
+      );
+      expect(f.stream).toHaveBeenCalledTimes(4);
+    });
+
+    it('does not reconnect after a failure that will not clear', async () => {
+      const f = setup();
+      f.stream.mockImplementationOnce(connection(sse([tool]))).mockImplementationOnce((() => ({
+        asResponse: () => Promise.reject(apiError(404, 'Session not found.', 'not_found_error')),
+      })) as never);
+      const result = await f.provider.callApi('test');
+      expect(result.error).toContain('(HTTP 404): not_found_error: Session not found.');
+      expect(f.stream).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('a turn the agent gave up on', () => {
+    const run = { id: eventId(), type: 'workflow_run.created', workflow_run_id: 'run' };
+    const ended = {
+      id: eventId(),
+      type: 'workflow_run.status_ended',
+      workflow_run_id: 'run',
+      result: { type: 'completed' },
+    };
+    const gaveUp = idle('retries_exhausted');
+    const running = () => ({ id: eventId(), type: 'session.status_running' });
+
+    it('is waited out when a workflow run can still restart the session', async () => {
+      const f = setup({}, [run, gaveUp, ended, running(), message('answer'), idle()]);
+      const result = await f.provider.callApi('test');
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('answer');
+    });
+
+    it('does not leave what the agent wrote in it as the answer', async () => {
+      const f = setup({}, [
+        run,
+        ended,
+        running(),
+        message('Partial: 12 of the 300'),
+        gaveUp,
+        running(),
+        idle(),
+      ]);
+      const result = await f.provider.callApi('test');
+      expect(result.output).toBeUndefined();
+      expect(result.error).toBe('Claude Managed Agents completed without a text response');
+    });
+
+    it('fails the call when the session does not start another turn', async () => {
+      vi.useFakeTimers();
+      const f = setup();
+      f.stream.mockImplementation(connection(openStream([run, ended, gaveUp])));
+      const pending = f.provider.callApi('test');
+      await vi.advanceTimersByTimeAsync(29_000);
+      expect(f.archive).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1_000);
+      const result = await pending;
+      expect(result.error).toBe('Claude Managed Agents stopped: retries_exhausted');
+      expect(result.metadata).toMatchObject({ stopReason: 'retries_exhausted' });
+      expect(f.archive).toHaveBeenCalledOnce();
+    });
+
+    it('keeps waiting through the turn the session then starts by itself', async () => {
+      vi.useFakeTimers();
+      const f = setup();
+      const live = feed();
+      f.stream.mockImplementation(connection(live.body));
+      const pending = f.provider.callApi('test');
+      await vi.advanceTimersByTimeAsync(1);
+      live.push(run, ended, gaveUp);
+      await vi.advanceTimersByTimeAsync(20_000);
+      live.push(running());
+      // The new turn takes longer than the wait for it to start.
+      await vi.advanceTimersByTimeAsync(40_000);
+      expect(f.archive).not.toHaveBeenCalled();
+      live.push(message('answer'), idle());
+      await vi.advanceTimersByTimeAsync(1);
+      const result = await pending;
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('answer');
+    });
+
+    it('does not count time spent reconnecting, when the session may resume unseen', async () => {
+      vi.useFakeTimers();
+      const f = setup();
+      const first = feed();
+      const second = feed();
+      f.stream.mockImplementationOnce(connection(first.body)).mockImplementationOnce((() => ({
+        // The reconnect gets no response for longer than the wait lasts.
+        asResponse: () =>
+          new Promise((resolve) => setTimeout(() => resolve(new Response(second.body)), 40_000)),
+      })) as never);
+      f.list.mockImplementation(() =>
+        history([run, ended, gaveUp, running(), message('answer'), idle()]),
+      );
+      const pending = f.provider.callApi('test');
+      await vi.advanceTimersByTimeAsync(1);
+      first.push(run, ended, gaveUp);
+      await vi.advanceTimersByTimeAsync(1_000);
+      first.drop();
+      await vi.advanceTimersByTimeAsync(45_000);
+      const result = await pending;
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('answer');
+    });
+
+    it('starts the wait again once a reconnect shows the session still stopped', async () => {
+      vi.useFakeTimers();
+      const f = setup();
+      const first = feed();
+      const second = feed();
+      f.stream
+        .mockImplementationOnce(connection(first.body))
+        .mockImplementationOnce(connection(second.body));
+      f.list.mockImplementation(() => history([run, ended, gaveUp]));
+      const pending = f.provider.callApi('test');
+      await vi.advanceTimersByTimeAsync(1);
+      first.push(run, ended, gaveUp);
+      await vi.advanceTimersByTimeAsync(10_000);
+      first.drop();
+      // 35 seconds after the agent gave up, but only 25 since the session was seen again.
+      await vi.advanceTimersByTimeAsync(25_000);
+      expect(f.archive).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(6_000);
+      const result = await pending;
+      expect(result.error).toBe('Claude Managed Agents stopped: retries_exhausted');
+    });
+
+    it('has no deadline of its own while a run is still open', async () => {
+      vi.useFakeTimers();
+      const f = setup({ config: { ...config, timeoutMs: 45_000 } });
+      f.stream.mockImplementation(connection(openStream([run, gaveUp])));
+      const pending = f.provider.callApi('test');
+      await vi.advanceTimersByTimeAsync(45_000);
+      const result = await pending;
+      expect(result.error).toBe(
+        'Claude Managed Agents timed out after 45000ms waiting for the session to resume after retries_exhausted',
+      );
+    });
+  });
+
+  describe('an existing environment', () => {
+    it('is rejected before anything is created when it is self-hosted', async () => {
+      const f = setup({
+        config: {
+          apiKey: 'key',
+          agent: { name: 'QA', model: 'claude-sonnet-5' },
+          environment_id: 'env-self-hosted',
+        },
+      });
+      f.environmentRetrieve.mockResolvedValue({ config: { type: 'self_hosted' } } as never);
+      const result = await f.provider.callApi('test');
+      expect(result.error).toContain('requires a cloud environment');
+      expect(f.agentCreate).not.toHaveBeenCalled();
+      expect(f.create).not.toHaveBeenCalled();
+    });
+
+    it('is looked up once it is known to be a cloud environment', async () => {
+      const f = setup();
+      f.environmentRetrieve.mockResolvedValue({ config: { type: 'cloud' } } as never);
+      await f.provider.callApi('one');
+      await f.provider.callApi('two');
+      expect(f.environmentRetrieve).toHaveBeenCalledOnce();
+      expect(f.environmentRetrieve).toHaveBeenCalledWith(
+        'env-existing',
+        expect.anything(),
+        expect.objectContaining({ maxRetries: 2 }),
+      );
+    });
+
+    it('is not looked up when the call creates its own', async () => {
+      const f = setup({
+        config: { apiKey: 'key', agent_id: 'agent-existing', environment: { name: 'QA' } },
+      });
+      expect((await f.provider.callApi('test')).error).toBeUndefined();
+      expect(f.environmentRetrieve).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('a session create that got no response', () => {
+    const owned = {
+      apiKey: 'key',
+      agent: { name: 'QA', model: 'claude-sonnet-5' },
+      environment: { name: 'QA' },
+    };
+    const lost = () => new Anthropic.APIConnectionTimeoutError();
+
+    it('is found through the agent the call created, and archived', async () => {
+      const f = setup({ config: owned });
+      f.create.mockRejectedValue(lost());
+      f.sessionsList.mockResolvedValue({
+        data: [{ id: 'sesn-orphan', agent: { id: 'agent-created' } }],
+      } as never);
+      const result = await f.provider.callApi('test');
+      // Every session of an agent the call created is its own.
+      expect(f.sessionsList).toHaveBeenCalledWith(
+        expect.objectContaining({ agent_id: 'agent-created' }),
+        expect.anything(),
+      );
+      expect(f.archive).toHaveBeenCalledWith('sesn-orphan', expect.anything(), expect.anything());
+      expect(result.error).toBe('Claude Managed Agents API request failed (timed out)');
+      expect(result.metadata).toMatchObject({ sessionId: 'sesn-orphan', sessionArchived: true });
+      expect(result.metadata).not.toHaveProperty('unconfirmedCreate');
+      expect(f.agentArchive).toHaveBeenCalledOnce();
+      expect(f.environmentArchive).toHaveBeenCalledOnce();
+    });
+
+    it('leaves a listed session alone when it belongs to another agent', async () => {
+      const f = setup({ config: owned });
+      f.create.mockRejectedValue(lost());
+      f.sessionsList.mockResolvedValue({
+        data: [{ id: 'sesn-other', agent: { id: 'agent-other' } }],
+      } as never);
+      const result = await f.provider.callApi('test');
+      expect(f.archive).not.toHaveBeenCalled();
+      expect(result.error).toContain('The session may still have been created');
+      expect(result.metadata).toMatchObject({ unconfirmedCreate: 'session' });
+    });
+
+    it('is not looked for under an agent that other sessions share', async () => {
+      const f = setup({
+        config: { ...config, environment_id: undefined, environment: owned.environment },
+      });
+      f.create.mockRejectedValue(lost());
+      const result = await f.provider.callApi('test');
+      expect(f.sessionsList).not.toHaveBeenCalled();
+      expect(result.error).toContain('The session may still have been created');
+      expect(f.environmentArchive).toHaveBeenCalledOnce();
+    });
+
+    it('is still reported when the lookup fails', async () => {
+      const f = setup({ config: owned });
+      f.create.mockRejectedValue(lost());
+      f.sessionsList.mockRejectedValue(apiError(503, 'Try again later.', 'api_error'));
+      const result = await f.provider.callApi('test');
+      expect(result.error).toBe(
+        'Claude Managed Agents API request failed (timed out). The session may still have been created; check the Anthropic Console',
+      );
+      expect(f.agentArchive).toHaveBeenCalledOnce();
+      expect(f.environmentArchive).toHaveBeenCalledOnce();
+    });
+  });
+
+  describe('a rate limit', () => {
+    const limited = () =>
+      apiError(429, 'This request would exceed your rate limit.', 'rate_limit_error');
+
+    it.each(['environmentRetrieve', 'create', 'stream'] as const)(
+      'may be retried by the scheduler when %s meets it before the prompt is sent',
+      async (step) => {
+        const f = setup();
+        if (step === 'stream') {
+          f.stream.mockImplementation((() => ({
+            asResponse: () => Promise.reject(limited()),
+          })) as never);
+        } else {
+          f[step].mockRejectedValue(limited());
+        }
+        const result = await f.provider.callApi('test');
+        expect(result.metadata).toMatchObject({ http: { status: 429 } });
+        // Nothing has run yet, so repeating the call repeats nothing.
+        expect(result.metadata).not.toHaveProperty('rateLimitRetryable');
+        // Cleanup may send an interrupt, but the prompt never went out.
+        expect(f.send).not.toHaveBeenCalledWith(
+          expect.anything(),
+          expect.objectContaining({ events: [expect.objectContaining({ type: 'user.message' })] }),
+          expect.anything(),
+        );
+      },
+    );
+
+    it('is final once the prompt may have reached the session', async () => {
+      const f = setup();
+      f.send.mockRejectedValue(limited());
+      const result = await f.provider.callApi('test');
+      expect(result.metadata).toMatchObject({ http: { status: 429 }, rateLimitRetryable: false });
+    });
+  });
+
+  it.each([
+    'ECONNREFUSED',
+    'ENOTFOUND',
+    'EAI_AGAIN',
+    'EHOSTUNREACH',
+    'EPROTO',
+    'DEPTH_ZERO_SELF_SIGNED_CERT',
+    'UNABLE_TO_VERIFY_LEAF_SIGNATURE',
+    'ERR_TLS_CERT_ALTNAME_INVALID',
+  ])('does not suggest a create went through when the connection failed with %s', async (code) => {
+    const f = setup({
+      config: {
+        apiKey: 'key',
+        agent: { name: 'QA', model: 'claude-sonnet-5' },
+        environment_id: 'env',
+      },
+    });
+    // What the SDK throws when the runtime could not reach a server at all.
+    const unreachable = Object.assign(new TypeError('fetch failed'), {
+      cause: Object.assign(new Error(`connect ${code}`), { code }),
+    });
+    f.agentCreate.mockRejectedValue(new Anthropic.APIConnectionError({ cause: unreachable }));
+    const result = await f.provider.callApi('test');
+    expect(result.error).toBe('Claude Managed Agents API request failed (connection error)');
+    expect(result.metadata).not.toHaveProperty('unconfirmedCreate');
+  });
+
+  it.each([
+    ['{{tenantKey}}', 'tenant-key-123'],
+    ['test-key', undefined],
+  ])('sends an API key rendered from %s with each request', async (apiKey, header) => {
+    const f = setup({ config: { ...config, apiKey } });
+    const result = await f.provider.callApi('test', {
+      vars: { tenantKey: 'tenant-key-123' },
+      prompt: { raw: 'test', label: 'test' },
+    });
+    expect(result.error).toBeUndefined();
+    // The client was built with the unrendered value.
+    for (const request of [
+      f.create.mock.calls[0][1],
+      f.stream.mock.calls[0][2],
+      f.send.mock.calls[0][2],
+      f.archive.mock.calls[0][2],
+    ]) {
+      expect(request?.headers).toEqual(header ? { 'x-api-key': header } : {});
+    }
+  });
+
+  it('reports an API key template that renders to nothing', async () => {
+    const f = setup({ config: { ...config, apiKey: '{{tenantKey}}' } });
+    const result = await f.provider.callApi('test');
+    expect(result.error).toBe('Claude Managed Agents apiKey rendered to an empty value');
+    expect(f.environmentRetrieve).not.toHaveBeenCalled();
+    expect(f.create).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['an API key', { apiKey: '{{credential}}' }],
+    ['a header value', { headers: { 'x-gateway': '{{credential}}' } }],
+  ])(
+    'scrubs %s as it was sent, without the whitespace it was rendered with',
+    async (_name, extra) => {
+      const f = setup({ config: { ...config, ...extra } });
+      f.create.mockRejectedValue(
+        apiError(401, 'no such credential: tenant-key-123', 'authentication_error'),
+      );
+      // A YAML block scalar ends in a newline, which a header value does not keep.
+      const result = await f.provider.callApi('test', {
+        vars: { credential: 'tenant-key-123\n' },
+        prompt: { raw: 'test', label: 'test' },
+      });
+      expect(result.error).toBe(
+        'Claude Managed Agents API request failed (HTTP 401): authentication_error: no such credential: [REDACTED]',
+      );
+    },
+  );
+
+  it('reports cancellation that arrives during the final usage read', async () => {
+    const f = setup();
+    const caller = new AbortController();
+    f.retrieve.mockImplementation((async () => {
+      caller.abort();
+      throw new Anthropic.APIUserAbortError();
+    }) as never);
+    const result = await f.provider.callApi('test', undefined, { abortSignal: caller.signal });
+    expect(result.error).toBe('Claude Managed Agents invocation aborted');
+    // The answer was complete, so it stays on the response.
+    expect(result.output).toBe('answer');
+    expect(result.metadata).not.toHaveProperty('usageError');
+  });
+
+  it('says a create may have gone through when the connection was reset after it was sent', async () => {
+    const f = setup({
+      config: {
+        apiKey: 'key',
+        agent: { name: 'QA', model: 'claude-sonnet-5' },
+        environment_id: 'env',
+      },
+    });
+    const reset = Object.assign(new TypeError('fetch failed'), {
+      cause: Object.assign(new Error('read ECONNRESET'), { code: 'ECONNRESET' }),
+    });
+    f.agentCreate.mockRejectedValue(new Anthropic.APIConnectionError({ cause: reset }));
+    const result = await f.provider.callApi('test');
+    expect(result.metadata).toMatchObject({ unconfirmedCreate: 'agent' });
+  });
+
+  it.each(['agent', 'environment', 'session'] as const)(
+    'says so when the %s may have been created without a response',
+    async (kind) => {
+      const f = setup({
+        config: {
+          apiKey: 'key',
+          agent: { name: 'QA', model: 'claude-sonnet-5' },
+          environment: { name: 'QA' },
+        },
+      });
+      const spy = { agent: f.agentCreate, environment: f.environmentCreate, session: f.create }[
+        kind
+      ];
+      spy.mockRejectedValue(new Anthropic.APIConnectionTimeoutError());
+      const result = await f.provider.callApi('test');
+      expect(result.error).toBe(
+        `Claude Managed Agents API request failed (timed out). The ${kind} may still have been created; check the Anthropic Console`,
+      );
+      expect(result.metadata).toMatchObject({ unconfirmedCreate: kind });
+    },
+  );
 
   it('subscribes before sending, returns the final answer and full session usage, then archives only its session', async () => {
     const f = setup({}, [
