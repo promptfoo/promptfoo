@@ -1,5 +1,6 @@
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { HIDDEN_METADATA_KEYS } from '@app/constants';
+import { isValidUrl } from '@app/utils/isValidUrl';
 import {
   determinePolicyTypeFromId,
   makeCustomPolicyCloudUrl,
@@ -8,15 +9,6 @@ import { Check, Copy, ExternalLink, SlidersHorizontal } from 'lucide-react';
 import { ellipsize } from '../../../../../util/text';
 
 import type { CloudConfigData } from '../../../hooks/useCloudConfig';
-
-const isValidUrl = (str: string): boolean => {
-  try {
-    new URL(str);
-    return true;
-  } catch {
-    return false;
-  }
-};
 
 export interface ExpandedMetadataState {
   [key: string]: {
