@@ -317,7 +317,7 @@ Use `promptfooconfig.nova-2-5-sonic.yaml` for Nova 2.5 Sonic. Install FFmpeg and
 AWS credentials in a supported region, then run:
 
 ```bash
-promptfoo eval -c examples/amazon-bedrock/models/promptfooconfig.nova-2-5-sonic.yaml --no-cache -o sonic-results.json
+promptfoo eval -c promptfooconfig.nova-2-5-sonic.yaml --no-cache -o sonic-results.json
 ```
 
 The prompt function converts the bundled WAV to mono PCM16 at 16 kHz before sending it.

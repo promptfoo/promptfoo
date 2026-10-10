@@ -714,7 +714,7 @@ Amazon Nova Sonic models support real-time speech-to-speech conversations with t
 
 | Model ID                   | Promptfoo shorthand      | Notes                                                       |
 | -------------------------- | ------------------------ | ----------------------------------------------------------- |
-| `amazon.nova-2-5-sonic`    | `bedrock:nova-2-5-sonic` | Nova 2.5 Sonic; current speech model                        |
+| `amazon.nova-2-5-sonic`    | `bedrock:nova-2-5-sonic` | Nova 2.5 Sonic speech model                                 |
 | `amazon.nova-2-sonic-v1:0` | `bedrock:nova-2-sonic`   | Nova 2 Sonic; retained for existing configurations          |
 | `amazon.nova-sonic-v1:0`   | `bedrock:nova-sonic`     | Original Nova Sonic; reached end of life September 14, 2026 |
 
@@ -760,7 +760,7 @@ providers:
 
 `inferenceConfiguration` takes precedence over the older `inferenceConfig` and `interfaceConfig` aliases, in that order. Omitted settings use provider defaults. Legacy `interfaceConfig.max_new_tokens` and `interfaceConfig.top_p` map to `maxTokens` and `topP`.
 
-Audio input must be base64-encoded. You can use either the exact Bedrock model ID shown above or its Promptfoo shorthand.
+Use either the exact Bedrock model ID shown above or its Promptfoo shorthand.
 
 Audio input must be base64-encoded raw PCM matching `audioInputConfiguration`, including
 sample rate, bit depth, and channel count. A WAV file includes a container header and
