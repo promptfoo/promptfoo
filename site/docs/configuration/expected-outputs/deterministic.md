@@ -311,14 +311,14 @@ assert:
     threshold: 0.001
 ```
 
-To record the provider's cost in USD without a pass/fail limit, omit `threshold` and set a named `metric` with `weight: 0`. The measurement is reported without contributing to the aggregate quality score. Missing, negative, or non-finite costs produce an error instead of a zero measurement.
+To record the provider's cost in USD without a pass/fail limit, omit `threshold` and set a named `metric` with `metricOnly: true`. Legacy `weight: 0` measurements remain supported. Missing, negative, or non-finite costs produce an error instead of a zero measurement.
 
 ```yaml
 defaultTest:
   assert:
     - type: cost
       metric: inference_cost
-      weight: 0
+      metricOnly: true
 derivedMetrics:
   - name: average_inference_cost
     value: 'inference_cost / __count'
