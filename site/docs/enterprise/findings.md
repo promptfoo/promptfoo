@@ -85,6 +85,7 @@ There are several ways to share findings outside of the Promptfoo application:
 
 ## See Also
 
+- [Media Storage](./media-storage.md) - Store generated eval media in an on-prem storage provider.
 - [Running Red Teams](./red-teams.md)
 - [Service Accounts](./service-accounts.md)
 - [Authentication](./authentication.md)
