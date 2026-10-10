@@ -1,6 +1,6 @@
 import search from '@inquirer/search';
 import { Command } from 'commander';
-import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { authCommand } from '../../src/commands/auth';
 import { isNonInteractive } from '../../src/envars';
 import { getUserEmail, setUserEmail } from '../../src/globalConfig/accounts';
@@ -70,11 +70,14 @@ afterAll(() => {
   restoreFetch();
 });
 
+afterEach(() => {
+  vi.resetAllMocks();
+});
+
 describe('auth command', () => {
   let program: Command;
 
   beforeEach(() => {
-    vi.clearAllMocks();
     vi.resetAllMocks();
     program = new Command();
     process.exitCode = undefined;
@@ -226,6 +229,83 @@ describe('auth command', () => {
         false,
         'X-Promptfoo-Api-Key',
       );
+    });
+
+    it.each([
+      '',
+      'https://api.example.com/tenant?copied=true',
+      'https://api.example.com/tenant#settings',
+      'https://api.example.com/tenant?',
+      'https://api.example.com/tenant#',
+      'https://fixture-user:fixture-password@api.example.com',
+      'file:///tmp/api',
+      'api.example.com',
+    ])('rejects invalid API base %s before validating or saving credentials', async (host) => {
+      await program.parseAsync([
+        'node',
+        'test',
+        'auth',
+        'login',
+        '--api-key',
+        'test-key',
+        '--host',
+        host,
+      ]);
+
+      expect(process.exitCode).toBe(1);
+      expect(logger.error).toHaveBeenCalledWith(
+        'Authentication failed: --host must be an HTTP(S) base URL without credentials, a query, or a fragment.',
+      );
+      expect(cloudConfig.validateApiToken).not.toHaveBeenCalled();
+      expect(cloudConfig.saveValidatedApiToken).not.toHaveBeenCalled();
+      expect(getUserTeams).not.toHaveBeenCalled();
+    });
+
+    it('preserves an API path prefix and custom auth header through team selection', async () => {
+      const team = {
+        id: 'team-1',
+        name: 'Default',
+        slug: 'default',
+        organizationId: '1',
+        createdAt: '2024-01-01',
+        updatedAt: '2024-01-01',
+      };
+      vi.mocked(getUserTeams).mockResolvedValue([team]);
+      await program.parseAsync([
+        'node',
+        'test',
+        'auth',
+        'login',
+        '--api-key',
+        'test-key',
+        '--host',
+        'http://127.0.0.1:15500/tenant///',
+        '--auth-header-name',
+        'X-Promptfoo-Api-Key',
+        '--team',
+        'default',
+      ]);
+
+      expect(cloudConfig.validateApiToken).toHaveBeenCalledWith(
+        'test-key',
+        'http://127.0.0.1:15500/tenant',
+        'X-Promptfoo-Api-Key',
+      );
+      expect(getUserTeams).toHaveBeenCalledWith(
+        'http://127.0.0.1:15500/tenant',
+        'test-key',
+        'X-Promptfoo-Api-Key',
+      );
+      expect(cloudConfig.saveValidatedApiToken).toHaveBeenCalledWith(
+        'test-key',
+        'http://127.0.0.1:15500/tenant',
+        mockCloudUser,
+        mockApp,
+        false,
+        'X-Promptfoo-Api-Key',
+      );
+      expect(cloudConfig.setCurrentTeamId).toHaveBeenCalledWith('team-1', '1');
+      expect(process.exitCode).toBeUndefined();
     });
 
     it('should fall back to the currently configured auth header name when --auth-header-name is omitted', async () => {
