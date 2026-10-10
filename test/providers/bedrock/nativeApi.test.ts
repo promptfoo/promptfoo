@@ -1,3 +1,4 @@
+import { BedrockAgentRuntime } from '@aws-sdk/client-bedrock-agent-runtime';
 import { BedrockRuntime } from '@aws-sdk/client-bedrock-runtime';
 import { NodeHttpHandler } from '@smithy/node-http-handler';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -236,6 +237,78 @@ describe('native Bedrock APIs', () => {
     await provider.cleanup();
     expect(client.destroy).toHaveBeenCalledOnce();
     expect(provider.bedrock).toBeUndefined();
+  });
+
+  it('shares concurrent Agent Runtime initialization and cleans up the shared client', async () => {
+    const provider = new AwsBedrockNativeApiProvider('Rerank', {
+      config: { region: 'us-east-1', accessKeyId: 'synthetic', secretAccessKey: 'synthetic' },
+    });
+    const clients = await Promise.all([
+      provider.getAgentRuntimeClient(),
+      provider.getAgentRuntimeClient(),
+    ]);
+    const destroy = vi.spyOn(clients[0], 'destroy');
+    try {
+      await provider.cleanup();
+      expect(new Set(clients).size).toBe(1);
+      expect(destroy).toHaveBeenCalledOnce();
+    } finally {
+      for (const client of new Set(clients)) {
+        client.destroy();
+      }
+    }
+  });
+
+  it('retries Agent Runtime initialization after a credential failure', async () => {
+    const provider = new AwsBedrockNativeApiProvider('Retrieve', {
+      config: { region: 'us-east-1' },
+    });
+    vi.spyOn(provider, 'getCredentials')
+      .mockRejectedValueOnce(new Error('Credentials unavailable'))
+      .mockResolvedValue(undefined);
+    await expect(provider.getAgentRuntimeClient()).rejects.toThrow('Credentials unavailable');
+    const client = await provider.getAgentRuntimeClient();
+    const destroy = vi.spyOn(client, 'destroy');
+    await provider.cleanup();
+    expect(destroy).toHaveBeenCalledOnce();
+  });
+
+  it('preserves native managed search and user context through the SDK', async () => {
+    const handle = vi.fn().mockResolvedValue({
+      response: {
+        statusCode: 200,
+        headers: { 'content-type': 'application/json' },
+        body: Buffer.from('{"retrievalResults":[]}'),
+      },
+    });
+    const client = new BedrockAgentRuntime({
+      region: 'us-east-1',
+      credentials: { accessKeyId: 'synthetic', secretAccessKey: 'synthetic' },
+      requestHandler: { handle },
+    });
+    const provider = new AwsBedrockNativeApiProvider('Retrieve');
+    vi.spyOn(provider, 'getAgentRuntimeClient').mockResolvedValue(client);
+    const request = {
+      knowledgeBaseId: 'fixture',
+      retrievalQuery: { text: 'hello' },
+      userContext: { userId: 'fixture-user' },
+      retrievalConfiguration: {
+        managedSearchConfiguration: {
+          numberOfResults: 3,
+          filter: { equals: { key: 'tenant', value: 'fixture' } },
+        },
+      },
+    };
+    try {
+      const result = await provider.callApi(JSON.stringify(request));
+      expect(result.error).toBeUndefined();
+      expect(JSON.parse(handle.mock.calls[0][0].body)).toMatchObject({
+        userContext: request.userContext,
+        retrievalConfiguration: request.retrievalConfiguration,
+      });
+    } finally {
+      client.destroy();
+    }
   });
 
   it('serializes InvokeModel native controls through the real SDK', async () => {

@@ -86,7 +86,7 @@ function encodeBlobs(value: any): any {
 /** Native request/response access for model features that do not fit the text/embedding adapters. */
 export class AwsBedrockNativeApiProvider extends AwsBedrockGenericProvider {
   private readonly operation: NativeOperation;
-  private agentRuntime?: BedrockAgentRuntime;
+  private agentRuntime?: Promise<BedrockAgentRuntime>;
 
   constructor(
     operation: string,
@@ -112,15 +112,20 @@ export class AwsBedrockNativeApiProvider extends AwsBedrockGenericProvider {
 
   async getAgentRuntimeClient() {
     if (!this.agentRuntime) {
-      const { BedrockAgentRuntime } = await import('@aws-sdk/client-bedrock-agent-runtime');
-      const credentials = await this.getCredentials();
-      this.agentRuntime = new BedrockAgentRuntime({
-        region: this.getRegion(),
-        maxAttempts: this.getMaxAttempts(),
-        retryMode: 'adaptive',
-        requestHandler: await createBedrockRequestHandler(),
-        ...(credentials ? { credentials } : {}),
-        ...(this.config.endpoint ? { endpoint: this.config.endpoint } : {}),
+      this.agentRuntime = (async () => {
+        const { BedrockAgentRuntime } = await import('@aws-sdk/client-bedrock-agent-runtime');
+        const credentials = await this.getCredentials();
+        return new BedrockAgentRuntime({
+          region: this.getRegion(),
+          maxAttempts: this.getMaxAttempts(),
+          retryMode: 'adaptive',
+          requestHandler: await createBedrockRequestHandler(),
+          ...(credentials ? { credentials } : {}),
+          ...(this.config.endpoint ? { endpoint: this.config.endpoint } : {}),
+        });
+      })().catch((error) => {
+        this.agentRuntime = undefined;
+        throw error;
       });
     }
     return this.agentRuntime;
@@ -128,7 +133,7 @@ export class AwsBedrockNativeApiProvider extends AwsBedrockGenericProvider {
 
   async cleanup(): Promise<void> {
     this.bedrock?.destroy();
-    this.agentRuntime?.destroy();
+    (await this.agentRuntime)?.destroy();
     this.bedrock = undefined;
     this.agentRuntime = undefined;
   }
@@ -184,29 +189,22 @@ export class AwsBedrockNativeApiProvider extends AwsBedrockGenericProvider {
       }
       const request = decodeBlobs(input);
       const operation = OPERATIONS[this.operation];
-      let response: Record<string, any>;
-      if (operation.service === 'runtime') {
-        const client = await this.getBedrockInstance();
-        throwIfAborted(options?.abortSignal);
-        // The operation name comes only from the fixed inference allowlist above.
-        const invoke = client[operation.method] as (input: any, options: any) => Promise<any>;
-        if (typeof invoke !== 'function') {
-          throw new Error(
-            `Installed AWS SDK does not expose ${this.operation}; update the Bedrock ${operation.service} SDK package.`,
-          );
-        }
-        response = await invoke.call(client, request, { abortSignal: options?.abortSignal });
-      } else {
-        const client = await this.getAgentRuntimeClient();
-        throwIfAborted(options?.abortSignal);
-        const invoke = client[operation.method] as (input: any, options: any) => Promise<any>;
-        if (typeof invoke !== 'function') {
-          throw new Error(
-            `Installed AWS SDK does not expose ${this.operation}; update the Bedrock ${operation.service} SDK package.`,
-          );
-        }
-        response = await invoke.call(client, request, { abortSignal: options?.abortSignal });
+      const client =
+        operation.service === 'runtime'
+          ? await this.getBedrockInstance()
+          : await this.getAgentRuntimeClient();
+      throwIfAborted(options?.abortSignal);
+      // The operation name comes only from the fixed inference allowlist above.
+      const invoke = client[operation.method as keyof typeof client] as (
+        input: any,
+        options: any,
+      ) => Promise<Record<string, any>>;
+      if (typeof invoke !== 'function') {
+        throw new Error(
+          `Installed AWS SDK does not expose ${this.operation}; update the Bedrock ${operation.service} SDK package.`,
+        );
       }
+      const response = await invoke.call(client, request, { abortSignal: options?.abortSignal });
       const { $metadata, ...native } = response;
       if ('stream' in operation) {
         const stream = native[operation.stream];
