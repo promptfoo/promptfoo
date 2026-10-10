@@ -4,6 +4,17 @@ import type {
   ConverseStreamCommandOutput,
 } from '@aws-sdk/client-bedrock-runtime';
 
+/** A completed stream can fail validation while still reporting billable usage. */
+export class ConverseStreamValidationError extends Error {
+  constructor(
+    message: string,
+    readonly response: ConverseCommandOutput,
+  ) {
+    super(message);
+    this.name = 'ConverseStreamValidationError';
+  }
+}
+
 /** Collect SDK events before executing any tools: a failed stream must never dispatch a tool. */
 export async function collectConverseStream(
   response: ConverseStreamCommandOutput,
@@ -163,8 +174,9 @@ export async function collectConverseStream(
     result.stopReason !== 'tool_use' &&
     [...blocks.values()].some((block) => block.toolUse && block.toolUse.type !== 'server_tool_use')
   ) {
-    throw new Error(
+    throw new ConverseStreamValidationError(
       `Bedrock response stream stopped with ${result.stopReason} before completing a client tool request`,
+      result,
     );
   }
   for (const [index, raw] of toolInputs) {
@@ -175,7 +187,10 @@ export async function collectConverseStream(
       }
       blocks.get(index)!.toolUse!.input = input as NonNullable<ContentBlock['toolUse']>['input'];
     } catch {
-      throw new Error('Bedrock model emitted invalid JSON arguments for a tool');
+      throw new ConverseStreamValidationError(
+        'Bedrock model emitted invalid JSON arguments for a tool',
+        result,
+      );
     }
   }
   result.output = {

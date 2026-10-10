@@ -834,11 +834,13 @@ describe('createShareableUrl', () => {
         const inputUri = `promptfoo://blob/${'c'.repeat(64)}`;
         const dataUrl = 'data:image/png;base64,cHJpdmF0ZSBvdXRwdXQ=';
         const svgUrl = 'data:image/svg+xml,%3Csvg%3Eprivate%20output%3C%2Fsvg%3E';
+        const content = [{ text: 'native-response-secret' }];
         const preview = { samples: [outputUri, dataUrl, svgUrl], caption: 'data:ready' };
         const row = {
           id: 'media-row',
           testCase: { vars: { input: inputUri } },
           metadata: {
+            content,
             audio: { data: outputUri },
             blobUris: [outputUri],
             preview,
@@ -851,6 +853,7 @@ describe('createShareableUrl', () => {
             video: { url: outputUri },
             images: [{ url: outputUri }],
             metadata: {
+              content,
               blobUris: [outputUri],
               audio: { data: outputUri },
               preview,
@@ -874,6 +877,7 @@ describe('createShareableUrl', () => {
         expect(scans.length).toBeGreaterThan(0);
         for (const [value] of scans) {
           expect(JSON.stringify(value)).not.toContain(outputUri);
+          expect(JSON.stringify(value)).not.toContain('native-response-secret');
           expect(JSON.stringify(value)).not.toContain(dataUrl);
           expect(JSON.stringify(value)).not.toContain(svgUrl);
           expect(JSON.stringify(value)).toContain(inputUri);
@@ -891,6 +895,7 @@ describe('createShareableUrl', () => {
         });
         expect(uploaded.metadata).toEqual(uploaded.response.metadata);
         expect(row.response.metadata.blobUris).toEqual([outputUri]);
+        expect(row.response.metadata.content).toEqual(content);
       },
     );
 

@@ -137,7 +137,10 @@ describe('Converse native request features', () => {
         { metadata: { usage: reply.usage } },
       ]),
     );
-    expect((await provider.callApi('hello')).error).toContain(`stopped with ${stopReason}`);
+    const response = await provider.callApi('hello');
+    expect(response.error).toContain(`stopped with ${stopReason}`);
+    expect(response.tokenUsage).toMatchObject({ prompt: 3, completion: 2, total: 5 });
+    expect(response.cost).toBeGreaterThan(0);
     expect(callback).not.toHaveBeenCalled();
     expect(mcpCall).not.toHaveBeenCalled();
     expect(cache.set).not.toHaveBeenCalled();
@@ -695,29 +698,37 @@ describe('ConverseStream response parity', () => {
     expect(result.output).toContain('part two');
   });
 
-  it('rejects invalid local tool arguments without invoking the callback', async () => {
-    const callback = vi.fn();
-    const { provider, send } = fixture({
-      streaming: true,
-      functionToolCallbacks: { lookup: callback },
-    });
-    send.mockResolvedValue(
-      stream([
-        {
-          contentBlockStart: {
-            contentBlockIndex: 0,
-            start: { toolUse: { name: 'lookup', toolUseId: 'id' } },
+  it.each(['{broken', 'null', '[]', '1'])(
+    'rejects invalid local tool arguments %s without invoking the callback',
+    async (input) => {
+      cache.enabled = true;
+      const callback = vi.fn();
+      const { provider, send } = fixture({
+        streaming: true,
+        functionToolCallbacks: { lookup: callback },
+      });
+      send.mockResolvedValue(
+        stream([
+          {
+            contentBlockStart: {
+              contentBlockIndex: 0,
+              start: { toolUse: { name: 'lookup', toolUseId: 'id' } },
+            },
           },
-        },
-        { contentBlockDelta: { contentBlockIndex: 0, delta: { toolUse: { input: '{broken' } } } },
-        { contentBlockStop: { contentBlockIndex: 0 } },
-        { messageStop: { stopReason: 'tool_use' } },
-        { metadata: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } } },
-      ]),
-    );
-    expect((await provider.callApi('hello')).error).toContain('invalid JSON arguments');
-    expect(callback).not.toHaveBeenCalled();
-  });
+          { contentBlockDelta: { contentBlockIndex: 0, delta: { toolUse: { input } } } },
+          { contentBlockStop: { contentBlockIndex: 0 } },
+          { messageStop: { stopReason: 'tool_use' } },
+          { metadata: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } } },
+        ]),
+      );
+      const response = await provider.callApi('hello');
+      expect(response.error).toContain('invalid JSON arguments');
+      expect(response.tokenUsage).toMatchObject({ prompt: 0, completion: 0, total: 0 });
+      expect(response.cost).toBe(0);
+      expect(cache.set).not.toHaveBeenCalled();
+      expect(callback).not.toHaveBeenCalled();
+    },
+  );
 
   it('keeps citations, signatures, redacted blocks, usage, guardrails and metadata', async () => {
     const { provider, send } = fixture({ streaming: true });
@@ -868,6 +879,8 @@ describe('ConverseStream response parity', () => {
     const result = await provider.callApi('hello');
     expect(result.error).toBeDefined();
     expect(result.output).toBeUndefined();
+    expect(result.tokenUsage).toBeUndefined();
+    expect(result.cost).toBeUndefined();
   });
 });
 

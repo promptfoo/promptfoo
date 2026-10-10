@@ -1375,6 +1375,52 @@ describe('EvalResult', () => {
 
   describe('toEvaluateResult', () => {
     it.each(
+      ['model', 'persisted', 'jsonl'].flatMap((boundary) =>
+        [false, true].map((strip) => ({ boundary, strip })),
+      ),
+    )(
+      'projects native response content at $boundary output (strip: $strip)',
+      async ({ boundary, strip }) => {
+        const content = [
+          { text: 'native-response-secret' },
+          { toolUse: { name: 'lookup', input: { value: 'native-response-secret' } } },
+        ];
+        const metadata = { content, latencyMs: 42, note: 'retain diagnostics' };
+        const input = createEvaluateResult({
+          id: `native-content-${boundary}-${strip}`,
+          response: { output: 'native-response-secret', metadata },
+          metadata,
+          testCase: createAtomicTestCase({ metadata: { content: 'test-owned note' } }),
+        });
+        const flags = getStripFlags({ PROMPTFOO_STRIP_RESPONSE_OUTPUT: String(strip) });
+        let projected: EvaluateResult;
+        if (boundary === 'jsonl') {
+          projected = sanitizeResultForJsonlArtifact(input, flags);
+        } else {
+          const saved = await EvalResult.createFromEvaluateResult(
+            'native-content-projection',
+            input,
+            { persist: boundary === 'persisted' },
+          );
+          const loaded = saved.persisted ? await EvalResult.findById(saved.id) : saved;
+          projected = loaded!.toEvaluateResult(flags);
+          expect(loaded!.response?.metadata?.content).toEqual(content);
+        }
+        if (strip) {
+          expect(projected.response?.metadata).not.toHaveProperty('content');
+          expect(projected.metadata).not.toHaveProperty('content');
+          expect(JSON.stringify(projected)).not.toContain('native-response-secret');
+        } else {
+          expect(projected.response?.metadata?.content).toEqual(content);
+          expect(projected.metadata?.content).toEqual(content);
+        }
+        expect(projected.response?.metadata?.latencyMs).toBe(42);
+        expect(projected.testCase.metadata?.content).toBe('test-owned note');
+        expect(input.response?.metadata?.content).toEqual(content);
+      },
+    );
+
+    it.each(
       [
         { boundary: 'model', strip: true },
         { boundary: 'model', strip: false },

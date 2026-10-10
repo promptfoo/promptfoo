@@ -46,7 +46,7 @@ import {
   withResponseCacheMetadata,
 } from '../shared';
 import { AwsBedrockGenericProvider, type BedrockOptions, createBedrockCacheKeyHash } from './base';
-import { collectConverseStream } from './converseStream';
+import { ConverseStreamValidationError, collectConverseStream } from './converseStream';
 import { calculateBedrockCost } from './pricing';
 import type {
   ContentBlock,
@@ -1451,6 +1451,16 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     } catch (err: any) {
       const errorMessage = err?.message || String(err);
       logger.error('Bedrock Converse API error', { error: errorMessage });
+
+      if (err instanceof ConverseStreamValidationError) {
+        const result = await this.parseResponse(
+          err.response,
+          true,
+          betweenToolsThinking,
+          streaming,
+        );
+        return { ...result, error: `Bedrock ConverseStream API error: ${errorMessage}` };
+      }
 
       // Provide helpful error messages for common issues
       if (errorMessage.includes('ValidationException')) {
