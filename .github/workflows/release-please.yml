@@ -12,7 +12,7 @@ on:
         required: false
         type: string
 
-permissions:
+permissions: &read-only-permissions
   contents: read
 
 concurrency:
@@ -69,13 +69,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     needs: release-please
-    permissions:
-      contents: read
+    permissions: *read-only-permissions
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-        with:
+        with: &no-persisted-credentials
           persist-credentials: false
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+      - &actions-setup-node
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version-file: '.nvmrc'
           cache: 'npm'
@@ -94,25 +94,21 @@ jobs:
     needs: [build, release-please]
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    permissions:
-      contents: read
-    outputs:
+    permissions: *read-only-permissions
+    outputs: &npm-package-outputs
       artifact-id: ${{ steps.upload.outputs.artifact-id }}
       sha512: ${{ steps.package-artifact.outputs.sha512 }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-        with:
-          persist-credentials: false
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
-        with:
-          node-version-file: '.nvmrc'
-          cache: 'npm'
+        with: *no-persisted-credentials
+      - *actions-setup-node
       # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
       - run: npm install -g npm@11.11.0 --registry=https://registry.npmjs.org/
       - run: npm ci --registry=https://registry.npmjs.org/
       # Publishing a tarball does not run prepublishOnly. Run its clean build and
       # required telemetry-key guard here, before packing and validating the bytes.
-      - name: Build npm package
+      - &build-npm-package
+        name: Build npm package
         run: npm run prepublishOnly
         env:
           PROMPTFOO_POSTHOG_KEY: ${{ secrets.PROMPTFOO_POSTHOG_KEY }}
@@ -122,7 +118,8 @@ jobs:
           tarball="$(npm run --silent package:pack -- --destination "$RUNNER_TEMP/promptfoo-package")"
           echo "tarball=$tarball" >> "$GITHUB_OUTPUT"
           echo "sha512=$(sha512sum "$tarball" | cut -d ' ' -f 1)" >> "$GITHUB_OUTPUT"
-      - name: Upload npm package
+      - &upload-npm-package
+        name: Upload npm package
         id: upload
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
@@ -153,7 +150,7 @@ jobs:
           registry-url: 'https://registry.npmjs.org'
       - name: Download verified npm package
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        with:
+        with: &npm-package-download
           artifact-ids: ${{ needs.build-npm.outputs.artifact-id || needs.build-npm-backfill.outputs.artifact-id }}
           path: ${{ runner.temp }}/promptfoo-package
       - name: Publish verified npm package
@@ -193,11 +190,8 @@ jobs:
     if: github.event_name == 'workflow_dispatch' && inputs.tag_name != ''
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    permissions:
-      contents: read
-    outputs:
-      artifact-id: ${{ steps.upload.outputs.artifact-id }}
-      sha512: ${{ steps.package-artifact.outputs.sha512 }}
+    permissions: *read-only-permissions
+    outputs: *npm-package-outputs
     env:
       TAG_NAME: ${{ inputs.tag_name }}
     steps:
@@ -211,10 +205,7 @@ jobs:
         with:
           ref: refs/tags/${{ inputs.tag_name }}
           persist-credentials: false
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
-        with:
-          node-version-file: '.nvmrc'
-          cache: 'npm'
+      - *actions-setup-node
       - name: Verify package version matches tag
         run: |
           package_version="$(node -p "require('./package.json').version")"
@@ -224,10 +215,7 @@ jobs:
           fi
       - run: npm install -g npm@11.11.0 --registry=https://registry.npmjs.org/
       - run: npm ci --registry=https://registry.npmjs.org/
-      - name: Build npm package
-        run: npm run prepublishOnly
-        env:
-          PROMPTFOO_POSTHOG_KEY: ${{ secrets.PROMPTFOO_POSTHOG_KEY }}
+      - *build-npm-package
       - name: Pack npm package
         id: package-artifact
         # Preserve inventory checks on capable tags; older tags pack prebuilt output directly.
@@ -243,14 +231,7 @@ jobs:
           fi
           echo "tarball=$tarball" >> "$GITHUB_OUTPUT"
           echo "sha512=$(sha512sum "$tarball" | cut -d ' ' -f 1)" >> "$GITHUB_OUTPUT"
-      - name: Upload npm package
-        id: upload
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: promptfoo-npm-package
-          path: ${{ steps.package-artifact.outputs.tarball }}
-          if-no-files-found: error
-          retention-days: 7
+      - *upload-npm-package
 
   validate-npm:
     # Consumer dependencies can modify this runner, but not the builder's uploaded bytes.
@@ -262,8 +243,7 @@ jobs:
     needs: [build-npm, build-npm-backfill]
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    permissions:
-      contents: read
+    permissions: *read-only-permissions
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
@@ -277,9 +257,7 @@ jobs:
       - run: npm ci --registry=https://registry.npmjs.org/
       - name: Download npm package
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        with:
-          artifact-ids: ${{ needs.build-npm.outputs.artifact-id || needs.build-npm-backfill.outputs.artifact-id }}
-          path: ${{ runner.temp }}/promptfoo-package
+        with: *npm-package-download
       - name: Validate npm package
         env:
           PACKAGE_DIR: ${{ runner.temp }}/promptfoo-package
@@ -361,7 +339,7 @@ jobs:
     with:
       tag_name: ${{ needs.release-please.outputs.tag_name }}
 
-  publish-code-scan-action:
+  build-code-scan-action-release:
     if: >-
       ${{
         always() &&
@@ -376,8 +354,7 @@ jobs:
     # `publish-npm` is in `needs` for ordering only, not gating — see the
     # npm-availability check below for the rationale.
     needs: [release-please, build, publish-npm]
-    permissions:
-      contents: read
+    permissions: *read-only-permissions
     env:
       # Plain release-artifact files mirrored into promptfoo/code-scan-action.
       # `dist/` (a directory) and `.release-source.json` (generated below, not
@@ -387,25 +364,11 @@ jobs:
         README.md
         CHANGELOG.md
     steps:
-      # Token is scoped to the foreign repo (code-scan-action) via owner/
-      # repositories. Do NOT add `permission-*` inputs here until the App
-      # installation is confirmed to grant every requested permission — see
-      # the matching note on the release-please job above.
-      - name: Create app token for code-scan-action mirror
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3
-        id: mirror-token
-        with:
-          app-id: ${{ vars.PROMPTFOOBOT_APP_ID }}
-          private-key: ${{ secrets.PROMPTFOOBOT_APP_PRIVATE_KEY }}
-          owner: promptfoo
-          repositories: code-scan-action
-
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
-          node-version-file: '.nvmrc'
-          cache: 'npm'
+          persist-credentials: false
+
+      - *actions-setup-node
 
       # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
       - run: npm install -g npm@11.11.0 --registry=https://registry.npmjs.org/
@@ -424,7 +387,7 @@ jobs:
           set -euo pipefail
           version="$(node -p "require('./package.json').version")"
           for attempt in 1 2 3 4 5; do
-            if npm view "promptfoo@${version}" version; then
+            if npm view "promptfoo@${version}" version --registry=https://registry.npmjs.org/; then
               exit 0
             fi
             if [[ "$attempt" -lt 5 ]]; then
@@ -436,11 +399,11 @@ jobs:
           exit 1
 
       # Install root deps first; code-scan-action imports shared source from ../../src
-      - run: npm ci
+      - run: npm ci --registry=https://registry.npmjs.org/
 
       - name: Install Code Scan Action dependencies
         working-directory: code-scan-action
-        run: npm ci
+        run: npm ci --registry=https://registry.npmjs.org/
 
       - name: Type Check Code Scan Action
         working-directory: code-scan-action
@@ -477,8 +440,8 @@ jobs:
           rm -rf "$export_dir"
           mkdir -p "$export_dir"
 
-          mapfile -t mirror_artifact_files <<< "$MIRROR_ARTIFACT_FILES"
-          for file in "${mirror_artifact_files[@]}"; do
+          mapfile -t artifact_paths <<< "$MIRROR_ARTIFACT_FILES"
+          for file in "${artifact_paths[@]}"; do
             cp "code-scan-action/$file" "$export_dir/$file"
           done
           cp -R code-scan-action/dist "$export_dir/dist"
@@ -493,9 +456,9 @@ jobs:
           }
           JSON
 
-      # Hand the executable payload (dist/ plus the action.yml that selects the
-      # entrypoint) to attest-code-scan-action — see that job for why attestation
-      # is isolated from this one.
+      # Hand the complete mirror payload to the isolated attestation and
+      # publication jobs. The hidden source manifest is required by the mirror
+      # repository's reproducible-build validation.
       - name: Upload release payload for attestation
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
@@ -504,6 +467,68 @@ jobs:
           path: |
             ${{ runner.temp }}/code-scan-action-export/dist
             ${{ runner.temp }}/code-scan-action-export/action.yml
+            ${{ runner.temp }}/code-scan-action-export/README.md
+            ${{ runner.temp }}/code-scan-action-export/CHANGELOG.md
+            ${{ runner.temp }}/code-scan-action-export/.release-source.json
+          include-hidden-files: true
+
+  attest-code-scan-action:
+    # Signed build provenance for the executable bytes mirrored into
+    # promptfoo/code-scan-action. Keep OIDC/attestation permissions isolated
+    # from dependency installation and make successful attestation a hard gate
+    # before any mirror branch or PR can be published. The status guard also
+    # permits action-only releases whose npm-publish ancestor was skipped.
+    if: ${{ always() && !cancelled() && needs.build-code-scan-action-release.result == 'success' }}
+    needs: [build-code-scan-action-release]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - name: Download release payload
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: code-scan-action-release-payload
+          path: ${{ runner.temp }}/code-scan-action-attest
+
+      - name: Attest build provenance for mirrored artifacts
+        uses: actions/attest-build-provenance@96278af6caaf10aea03fd8d33a09a777ca52d62f # v3.2.0
+        with:
+          subject-path: |
+            ${{ runner.temp }}/code-scan-action-attest/dist/*
+            ${{ runner.temp }}/code-scan-action-attest/action.yml
+
+  publish-code-scan-action:
+    if: ${{ always() && !cancelled() && needs.attest-code-scan-action.result == 'success' }}
+    needs: [release-please, attest-code-scan-action]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    env:
+      MIRROR_ARTIFACT_FILES: |-
+        action.yml
+        README.md
+        CHANGELOG.md
+    steps:
+      - name: Download attested release payload
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: code-scan-action-release-payload
+          path: ${{ runner.temp }}/code-scan-action-export
+
+      # Mint the foreign-repository write token only after all dependency
+      # installation, build, and payload preparation steps have completed.
+      - name: Create app token for code-scan-action mirror
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3
+        id: mirror-token
+        with:
+          app-id: ${{ vars.PROMPTFOOBOT_APP_ID }}
+          private-key: ${{ secrets.PROMPTFOOBOT_APP_PRIVATE_KEY }}
+          owner: promptfoo
+          repositories: code-scan-action
 
       - name: Open mirror release PR
         env:
@@ -529,7 +554,7 @@ jobs:
             "https://github.com/promptfoo/code-scan-action.git" "$mirror_dir"
           cd "$mirror_dir"
 
-          git switch -C "$branch" origin/main
+          git -c core.hooksPath=/dev/null switch -C "$branch" origin/main
 
           # Replace only the generated release-artifact paths. The mirror repo
           # owns every other path (.github/, renovate.json, AGENTS.md, ...);
@@ -537,13 +562,13 @@ jobs:
           # and broke the mirror's validate-release-pr check.
           rm -rf dist
           cp -R "$export_dir/dist" dist
-          mapfile -t mirror_artifact_files <<< "$MIRROR_ARTIFACT_FILES"
-          for file in "${mirror_artifact_files[@]}"; do
+          mapfile -t artifact_paths <<< "$MIRROR_ARTIFACT_FILES"
+          for file in "${artifact_paths[@]}"; do
             cp "$export_dir/$file" "$file"
           done
           cp "$export_dir/.release-source.json" .release-source.json
 
-          git add "${mirror_artifact_files[@]}" dist .release-source.json
+          git add "${artifact_paths[@]}" dist .release-source.json
           if git diff --cached --quiet; then
             echo "No mirror changes to publish for code-scan-action v${CODE_SCAN_ACTION_VERSION}"
             exit 0
@@ -553,6 +578,13 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git -c core.hooksPath=/dev/null \
             commit -m "Release code-scan-action v${CODE_SCAN_ACTION_VERSION}"
+
+          unexpected_paths="$(git diff-tree --no-commit-id --name-only -r HEAD | grep -Ev '^(action\.yml|README\.md|CHANGELOG\.md|\.release-source\.json|dist/.+)$' || true)"
+          if [[ -n "$unexpected_paths" ]]; then
+            echo "::error::Refusing to push unexpected mirror paths: $unexpected_paths"
+            exit 1
+          fi
+
           git -c "$auth_header" -c core.hooksPath=/dev/null \
             push --force-with-lease origin "HEAD:$branch"
 
@@ -572,36 +604,3 @@ jobs:
           else
             gh pr create --repo promptfoo/code-scan-action --base main --head "$branch" --title "Release code-scan-action v${CODE_SCAN_ACTION_VERSION}" --body "$pr_body"
           fi
-
-  attest-code-scan-action:
-    # Signed build provenance for the exact bytes mirrored into
-    # promptfoo/code-scan-action — both the dist/ bundle and the action.yml that
-    # selects the entrypoint — so consumers can verify the committed artifacts came
-    # from this workflow without re-running the build:
-    #   gh attestation verify dist/index.js --repo promptfoo/promptfoo
-    #   gh attestation verify action.yml --repo promptfoo/promptfoo
-    # Kept as a separate job so id-token/attestations permissions are confined to
-    # steps that never install packages or execute repository code — a compromised
-    # dependency lifecycle script in the publish job must not be able to mint OIDC
-    # tokens or sign attestations as this repository. Default `needs` gating (run
-    # only when the publish job succeeded) is exactly the behavior wanted here.
-    needs: [publish-code-scan-action]
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      contents: read
-      id-token: write
-      attestations: write
-    steps:
-      - name: Download release payload
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        with:
-          name: code-scan-action-release-payload
-          path: ${{ runner.temp }}/code-scan-action-attest
-
-      - name: Attest build provenance for mirrored artifacts
-        uses: actions/attest-build-provenance@96278af6caaf10aea03fd8d33a09a777ca52d62f # v3.2.0
-        with:
-          subject-path: |
-            ${{ runner.temp }}/code-scan-action-attest/dist/*
-            ${{ runner.temp }}/code-scan-action-attest/action.yml

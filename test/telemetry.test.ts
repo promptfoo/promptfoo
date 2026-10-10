@@ -748,6 +748,97 @@ describe('Telemetry', () => {
     });
   });
 
+  describe('reporting request lifecycle', () => {
+    beforeEach(() => {
+      mockProcessEnv({ PROMPTFOO_DISABLE_TELEMETRY: '1' });
+      fetchWithProxySpy.mockReset();
+    });
+
+    afterEach(() => {
+      fetchWithProxySpy.mockReset();
+    });
+
+    it('aborts a stalled reporting request without retrying it', async () => {
+      let signal: AbortSignal | undefined;
+      fetchWithProxySpy.mockImplementation((_url, options) => {
+        signal = options?.signal ?? undefined;
+        return new Promise((_resolve, reject) => {
+          signal?.addEventListener('abort', () => reject(signal?.reason), { once: true });
+        });
+      });
+
+      new Telemetry(false).record('eval_ran', {});
+
+      expect(signal).toBeInstanceOf(AbortSignal);
+      expect(signal?.aborted).toBe(false);
+      expect(fetchWithProxySpy).toHaveBeenCalledWith(
+        'https://r.promptfoo.app/',
+        expect.objectContaining({ disableTransientRetries: true }),
+      );
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(signal?.aborted).toBe(true);
+      expect(fetchWithProxySpy).toHaveBeenCalledOnce();
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it('cancels an unused streaming response body and clears its deadline', async () => {
+      const cancel = vi.fn();
+      const response = new Response(new ReadableStream({ cancel }));
+      fetchWithProxySpy.mockResolvedValue(response);
+
+      new Telemetry(false).record('eval_ran', {});
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(cancel).toHaveBeenCalledOnce();
+      expect(vi.getTimerCount()).toBe(0);
+      expect(fetchWithProxySpy.mock.calls[0][1]?.signal?.aborted).toBe(false);
+    });
+
+    it('keeps the deadline active while response disposal is pending', async () => {
+      let signal: AbortSignal | undefined;
+      const cancel = vi.fn(
+        () =>
+          new Promise<void>((_resolve, reject) => {
+            signal?.addEventListener('abort', () => reject(signal?.reason), { once: true });
+          }),
+      );
+      fetchWithProxySpy.mockImplementation((_url, options) => {
+        signal = options?.signal ?? undefined;
+        return Promise.resolve(new Response(new ReadableStream({ cancel })));
+      });
+
+      new Telemetry(false).record('eval_ran', {});
+      await vi.advanceTimersByTimeAsync(0);
+      expect(cancel).toHaveBeenCalledOnce();
+      expect(signal?.aborted).toBe(false);
+
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(signal?.aborted).toBe(true);
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it.each(['request', 'body'])(
+      'silently clears the deadline after a %s failure',
+      async (failure) => {
+        if (failure === 'request') {
+          fetchWithProxySpy.mockRejectedValue(new Error('Synthetic reporting failure'));
+        } else {
+          fetchWithProxySpy.mockResolvedValue(
+            new Response(
+              new ReadableStream({
+                cancel: () => Promise.reject(new Error('Synthetic disposal failure')),
+              }),
+            ),
+          );
+        }
+
+        expect(() => new Telemetry(false).record('eval_ran', {})).not.toThrow();
+        await vi.advanceTimersByTimeAsync(0);
+        expect(vi.getTimerCount()).toBe(0);
+      },
+    );
+  });
+
   describe('telemetry disabled recording', () => {
     it('should record telemetry disabled event only once', () => {
       mockProcessEnv({ PROMPTFOO_DISABLE_TELEMETRY: '1' });

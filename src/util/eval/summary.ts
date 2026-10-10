@@ -1,7 +1,7 @@
 import chalk from 'chalk';
 import { formatDuration } from '../../util/formatDuration';
 
-import type { TokenUsage } from '../../types/index';
+import type { RepeatStabilitySummary, TokenUsage } from '../../types/index';
 import type { TokenUsageTracker } from '../../util/tokenUsage';
 
 /**
@@ -43,6 +43,8 @@ export interface EvalSummaryParams {
   tracker: TokenUsageTracker;
   /** HTTP status code if the scan was aborted due to a non-transient target error (401, 403, 404, 501) */
   targetErrorStatus?: number;
+  /** Aggregate pass/fail consistency for repeated test executions. */
+  repeatStability?: RepeatStabilitySummary;
 }
 
 type TokenUsageBreakdown = Pick<
@@ -199,23 +201,10 @@ function getTokenUsageLines(
     return [];
   }
 
-  const evalTokens = {
-    prompt: tokenUsage.prompt || 0,
-    completion: tokenUsage.completion || 0,
-    total: primaryTokens,
-    cached: tokenUsage.cached || 0,
-    numRequests: tokenUsage.numRequests || 0,
-    completionDetails: tokenUsage.completionDetails || {
-      reasoning: 0,
-      acceptedPrediction: 0,
-      rejectedPrediction: 0,
-    },
-  };
-
   const lines = [
     `${chalk.bold('Total Tokens:')} ${chalk.white.bold(
       (
-        evalTokens.total +
+        primaryTokens +
         attackerTokens +
         getTokenUsageTotal(tokenUsage.assertions) +
         generationTokens
@@ -229,12 +218,12 @@ function getTokenUsageLines(
     );
   }
 
-  if (evalTokens.total > 0) {
-    const evalParts = buildUsageDetails(evalTokens, evalTokens.total);
+  if (primaryTokens > 0) {
+    const evalParts = buildUsageDetails(tokenUsage, primaryTokens);
     const primaryUsageLabel = isRedteam ? 'Target' : 'Provider';
     lines.push(
       `  ${chalk.gray(`${primaryUsageLabel}:`)} ${chalk.white(
-        evalTokens.total.toLocaleString(),
+        primaryTokens.toLocaleString(),
       )} (${evalParts.join(', ')})`,
     );
   }
@@ -270,10 +259,7 @@ function getTokenUsageLines(
       getTokenUsageTotal(incurredUsage.assertions) +
       getTokenUsageTotal(incurredUsage.generation);
     const evaluationTokens =
-      evalTokens.total +
-      attackerTokens +
-      getTokenUsageTotal(tokenUsage.assertions) +
-      generationTokens;
+      primaryTokens + attackerTokens + getTokenUsageTotal(tokenUsage.assertions) + generationTokens;
     const cachedSavings = Math.max(evaluationTokens - incurredTokens, 0);
 
     if (cachedSavings > 0) {
@@ -364,6 +350,57 @@ function getResultsLines({
   ];
 }
 
+function formatPassRate(value: number): string {
+  return `${(value * 100).toFixed(1)}%`;
+}
+
+function getRepeatStabilityLines(summary: RepeatStabilitySummary | undefined): string[] {
+  if (!summary) {
+    return [];
+  }
+
+  const lines = [
+    '',
+    chalk.bold('Repeat stability:'),
+    `  ${summary.totalGroups.toLocaleString()} repeated group${summary.totalGroups === 1 ? '' : 's'}; ${summary.unstableGroups.toLocaleString()} unstable`,
+  ];
+
+  for (const group of summary.groups.filter((group) => group.unstable).slice(0, 5)) {
+    const scored = group.passed + group.failed;
+    const label =
+      group.description || group.promptLabel || group.provider.label || group.provider.id;
+    const interval = group.passRateConfidenceInterval;
+    const intervalText = interval
+      ? `; 95% CI ${formatPassRate(interval.lower)}–${formatPassRate(interval.upper)}`
+      : '';
+    lines.push(
+      chalk.yellow(
+        `  ⚠ ${label}: ${group.passed}/${scored} passed across ${group.repetitions} runs${intervalText}`,
+      ),
+    );
+  }
+
+  if (summary.unstableGroups > 5) {
+    lines.push(chalk.gray(`  … and ${summary.unstableGroups - 5} more unstable groups`));
+  }
+  if (summary.groupsWithErrors > 0) {
+    lines.push(
+      chalk.red(
+        `  ${summary.groupsWithErrors} repeated group${summary.groupsWithErrors === 1 ? '' : 's'} contained errors`,
+      ),
+    );
+  }
+  if (summary.cachedResults > 0) {
+    lines.push(
+      chalk.gray(
+        `  ${summary.cachedResults} cached result${summary.cachedResults === 1 ? '' : 's'} detected; confidence intervals are omitted for affected groups`,
+      ),
+    );
+  }
+
+  return lines;
+}
+
 /**
  * Generate formatted evaluation summary output for CLI display.
  *
@@ -423,6 +460,7 @@ export function generateEvalSummary(params: EvalSummaryParams): string[] {
     }),
     '',
     ...getTokenUsageLines(params.tokenUsage, params.isRedteam, params.tracker),
+    ...getRepeatStabilityLines(params.repeatStability),
     ...getResultsLines(params),
   ];
 }
