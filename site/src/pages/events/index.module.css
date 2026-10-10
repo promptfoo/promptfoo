@@ -53,29 +53,6 @@
   font-weight: 400;
 }
 
-/* Section Headers */
-.sectionHeader {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  margin-bottom: 1.5rem;
-  margin-top: 3rem;
-}
-
-.sectionTitle {
-  font-size: 1.25rem;
-  font-weight: 700;
-  color: var(--ifm-heading-color);
-  margin: 0;
-  letter-spacing: -0.01em;
-}
-
-.sectionLine {
-  flex: 1;
-  height: 1px;
-  background: linear-gradient(90deg, var(--ifm-color-emphasis-200) 0%, transparent 100%);
-}
-
 /* Events Grid */
 .grid {
   display: grid;
@@ -341,15 +318,6 @@
     width: 100%;
     justify-content: center;
     padding: 1rem 1.5rem;
-  }
-
-  .sectionHeader {
-    margin-top: 2rem;
-    margin-bottom: 1rem;
-  }
-
-  .sectionTitle {
-    font-size: 1.125rem;
   }
 }
 
