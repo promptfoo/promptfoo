@@ -52,6 +52,221 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 
 describe('Converse native request features', () => {
+  it('keeps text-only max-token responses without invoking tools', async () => {
+    const { provider, send } = fixture({ streaming: true });
+    send.mockResolvedValueOnce(
+      stream([
+        { contentBlockDelta: { contentBlockIndex: 0, delta: { text: 'Partial answer' } } },
+        { contentBlockStop: { contentBlockIndex: 0 } },
+        { messageStop: { stopReason: 'max_tokens' } },
+        { metadata: { usage: reply.usage } },
+      ]),
+    );
+    const response = await provider.callApi('hello');
+    expect(response.error).toBeUndefined();
+    expect(response.output).toBe('Partial answer');
+  });
+
+  it('preserves unknown token counts when usage is absent', async () => {
+    const { provider, send } = fixture();
+    send.mockResolvedValueOnce({ ...reply, usage: undefined });
+    const response = await provider.callApi('hello');
+    expect(response.tokenUsage).toEqual({
+      prompt: undefined,
+      completion: undefined,
+      total: undefined,
+      numRequests: 1,
+    });
+  });
+
+  it.each([
+    'max_tokens',
+    'malformed_tool_use',
+    'malformed_model_output',
+    'guardrail_intervened',
+    'end_turn',
+  ])('does not cache or execute interrupted streamed client tools after %s', async (stopReason) => {
+    cache.enabled = true;
+    const callback = vi.fn().mockResolvedValue('side effect');
+    const mcpCall = vi.fn().mockResolvedValue({ content: [] });
+    const { provider, send } = fixture({
+      streaming: true,
+      functionToolCallbacks: { local: callback },
+    });
+    Object.assign(provider, {
+      mcpClient: { getAllTools: () => [{ name: 'remote' }], callTool: mcpCall },
+    });
+    send.mockResolvedValueOnce(
+      stream([
+        {
+          contentBlockStart: {
+            contentBlockIndex: 0,
+            start: { toolUse: { toolUseId: 'local-1', name: 'local' } },
+          },
+        },
+        { contentBlockDelta: { contentBlockIndex: 0, delta: { toolUse: { input: '{}' } } } },
+        { contentBlockStop: { contentBlockIndex: 0 } },
+        {
+          contentBlockStart: {
+            contentBlockIndex: 1,
+            start: { toolUse: { toolUseId: 'remote-1', name: 'remote' } },
+          },
+        },
+        { contentBlockStop: { contentBlockIndex: 1 } },
+        { messageStop: { stopReason } },
+        { metadata: { usage: reply.usage } },
+      ]),
+    );
+    expect((await provider.callApi('hello')).error).toContain(`stopped with ${stopReason}`);
+    expect(callback).not.toHaveBeenCalled();
+    expect(mcpCall).not.toHaveBeenCalled();
+    expect(cache.set).not.toHaveBeenCalled();
+  });
+
+  it('preserves completed server tool streams without executing matching local callbacks', async () => {
+    const callback = vi.fn();
+    const { provider, send } = fixture({
+      streaming: true,
+      functionToolCallbacks: { search: callback },
+    });
+    send.mockResolvedValueOnce(
+      stream([
+        {
+          contentBlockStart: {
+            contentBlockIndex: 0,
+            start: { toolUse: { type: 'server_tool_use', toolUseId: 'search-1', name: 'search' } },
+          },
+        },
+        {
+          contentBlockDelta: {
+            contentBlockIndex: 0,
+            delta: { toolUse: { input: '{"query":"hello"}' } },
+          },
+        },
+        { contentBlockStop: { contentBlockIndex: 0 } },
+        { messageStop: { stopReason: 'end_turn' } },
+        { metadata: { usage: reply.usage } },
+      ]),
+    );
+    const response = await provider.callApi('hello');
+    expect(response.error).toBeUndefined();
+    expect(response.metadata?.content).toEqual([
+      {
+        toolUse: {
+          type: 'server_tool_use',
+          toolUseId: 'search-1',
+          name: 'search',
+          input: { query: 'hello' },
+        },
+      },
+    ]);
+    expect(callback).not.toHaveBeenCalled();
+  });
+
+  it.each([false, true])('accounts for all cached input with streaming=%s', async (streaming) => {
+    const { provider, send } = fixture({ streaming }, 'global.anthropic.claude-opus-5-5');
+    const usage = {
+      inputTokens: 100,
+      outputTokens: 10,
+      cacheReadInputTokens: 200,
+      cacheWriteInputTokens: 300,
+    };
+    send.mockResolvedValueOnce(
+      streaming
+        ? stream([
+            { contentBlockDelta: { contentBlockIndex: 0, delta: { text: 'READY' } } },
+            { contentBlockStop: { contentBlockIndex: 0 } },
+            { messageStop: { stopReason: 'end_turn' } },
+            { metadata: { usage } },
+          ])
+        : { ...reply, usage },
+    );
+    const response = await provider.callApi('hello');
+    expect(response.tokenUsage).toMatchObject({
+      prompt: 600,
+      completion: 10,
+      total: 610,
+      completionDetails: { cacheReadInputTokens: 200, cacheCreationInputTokens: 300 },
+    });
+    expect(response.cost).toBeCloseTo((100 * 4 + 200 * 0.2 + 300 * 5 + 10 * 20) / 1e6);
+  });
+
+  it('keeps compatibility adapters for untyped content blocks', () => {
+    const content = [
+      { image: { source: { media_type: 'image/jpeg', data: 'YWJj' } } },
+      { image: { source: { bytes: 'YWJj' } } },
+      { document: { source: { bytes: 'YWJj' } } },
+      { toolUse: { id: 'call-1', name: 'lookup', input: { query: 'hello' } } },
+      { toolResult: { tool_use_id: 'call-1', content: 'ok' } },
+      { toolResult: { toolUseId: 'call-2', content: ['first', 'second'] } },
+    ];
+    const { messages } = parseConverseMessages(JSON.stringify([{ role: 'user', content }]));
+    expect(messages[0].content).toEqual([
+      { image: { format: 'jpeg', source: { bytes: Buffer.from('abc') } } },
+      { image: { format: 'png', source: { bytes: Buffer.from('abc') } } },
+      { document: { format: 'txt', name: 'document', source: { bytes: Buffer.from('abc') } } },
+      { toolUse: { toolUseId: 'call-1', name: 'lookup', input: { query: 'hello' } } },
+      { toolResult: { toolUseId: 'call-1', content: [{ text: 'ok' }] } },
+      { toolResult: { toolUseId: 'call-2', content: [{ text: 'first' }, { text: 'second' }] } },
+    ]);
+  });
+
+  it.each([false, true])(
+    'excludes logging metadata from cache keys with streaming=%s',
+    async (streaming) => {
+      cache.enabled = true;
+      const { provider, send } = fixture({
+        streaming,
+        requestMetadata: { tenantToken: 'first-token' },
+      });
+      const events = [
+        { messageStop: { stopReason: 'end_turn' } },
+        { metadata: { usage: reply.usage } },
+      ];
+      if (streaming) {
+        send.mockImplementation(async () => stream(events));
+      }
+      await provider.callApi('hello');
+      provider.config.requestMetadata = { tenantToken: 'rotated-token' };
+      await provider.callApi('hello');
+      expect(cache.get.mock.calls[0][0]).toBe(cache.get.mock.calls[1][0]);
+      expect(send.mock.calls.map(([command]) => command.input.requestMetadata)).toEqual([
+        { tenantToken: 'first-token' },
+        { tenantToken: 'rotated-token' },
+      ]);
+    },
+  );
+
+  it.each([false, true])('reports the required IAM action with streaming=%s', async (streaming) => {
+    const { provider, send } = fixture({ streaming });
+    send.mockRejectedValueOnce(new Error('AccessDeniedException: not authorized'));
+    const response = await provider.callApi('hello');
+    expect(response.error).toContain(
+      `bedrock:${streaming ? 'InvokeModelWithResponseStream' : 'InvokeModel'} permission`,
+    );
+  });
+
+  it('concatenates citation text fragments without adding separators', async () => {
+    const { provider, send } = fixture();
+    send.mockResolvedValueOnce({
+      ...reply,
+      output: {
+        message: {
+          role: 'assistant',
+          content: [
+            {
+              citationsContent: {
+                content: [{ text: 'The answer ' }, { text: 'is READY.' }],
+                citations: [],
+              },
+            },
+          ],
+        },
+      },
+    });
+    expect((await provider.callApi('hello')).output).toBe('The answer is READY.');
+  });
+
   it.each(['none', 'auto'])(
     'lets prompt-native tool choice override provider %s',
     async (toolChoice) => {
@@ -526,7 +741,7 @@ describe('ConverseStream response parity', () => {
             usage: {
               inputTokens: 5,
               outputTokens: 8,
-              totalTokens: 13,
+              totalTokens: 18,
               cacheReadInputTokens: 2,
               cacheWriteInputTokens: 3,
             },
@@ -543,7 +758,7 @@ describe('ConverseStream response parity', () => {
     expect(result.output).toContain('Answer with evidence');
     expect(result.output).toContain('Signature: signed');
     expect(result.guardrails?.flagged).toBe(true);
-    expect(result.tokenUsage).toMatchObject({ prompt: 5, completion: 8, total: 13, cached: 2 });
+    expect(result.tokenUsage).toMatchObject({ prompt: 10, completion: 8, total: 18, cached: 2 });
     expect(result.metadata).toMatchObject({
       latencyMs: 42,
       trace: { guardrail: {} },

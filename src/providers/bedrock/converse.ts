@@ -390,6 +390,35 @@ const nativeContentKeys = [
   'toolRemoval',
 ];
 
+function isNativeContentBlock(block: Record<string, any>): boolean {
+  if (
+    !block ||
+    typeof block !== 'object' ||
+    block.type ||
+    !nativeContentKeys.some((key) => key in block)
+  ) {
+    return false;
+  }
+  // Untyped compatibility blocks still need their format, ID, or content adapters below.
+  if (block.image) {
+    return Boolean(block.image.format && !block.image.source?.data);
+  }
+  if (block.document) {
+    return Boolean(block.document.name);
+  }
+  if (block.toolUse) {
+    return Boolean(block.toolUse.toolUseId);
+  }
+  if (block.toolResult) {
+    return Boolean(
+      block.toolResult.toolUseId &&
+        Array.isArray(block.toolResult.content) &&
+        block.toolResult.content.every((part: unknown) => typeof part !== 'string'),
+    );
+  }
+  return true;
+}
+
 function decodeNativeBytes(bytes: unknown): Uint8Array {
   if (bytes instanceof Uint8Array) {
     return Buffer.from(bytes);
@@ -496,7 +525,7 @@ export function parseConverseMessages(prompt: string): {
             for (const block of msg.content) {
               if (typeof block === 'string') {
                 contentBlocks.push({ text: block });
-              } else if (block && !block.type && nativeContentKeys.some((key) => key in block)) {
+              } else if (isNativeContentBlock(block)) {
                 contentBlocks.push(normalizeNativeContentBlock(block));
               } else if (block.type === 'text') {
                 contentBlocks.push({ text: block.text });
@@ -734,7 +763,7 @@ function extractTextFromContentBlocks(
     if ('text' in block && block.text) {
       parts.push(block.text);
     } else if (block.citationsContent) {
-      parts.push(...(block.citationsContent.content ?? []).map((part) => part.text ?? ''));
+      parts.push((block.citationsContent.content ?? []).map((part) => part.text ?? '').join(''));
     } else if (block.toolResult || block.image || block.audio || block.video) {
       parts.push(JSON.stringify(block));
     } else if ('reasoningContent' in block && block.reasoningContent) {
@@ -1382,7 +1411,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     const cacheKey = `bedrock:${streaming ? 'converse-stream' : 'converse'}:${this.modelName}:${region}:${createBedrockCacheKeyHash(
       {
         config: this.config,
-        params: converseInput,
+        params: { ...converseInput, requestMetadata: undefined },
         region,
       },
     )}`;
@@ -1428,7 +1457,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       }
       if (errorMessage.includes('AccessDeniedException')) {
         return {
-          error: `Bedrock access denied: ${errorMessage}. Ensure you have bedrock:InvokeModel permission and model access is enabled.`,
+          error: `Bedrock access denied: ${errorMessage}. Ensure you have bedrock:${streaming ? 'InvokeModelWithResponseStream' : 'InvokeModel'} permission and model access is enabled.`,
         };
       }
 
@@ -1576,12 +1605,30 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     const cacheWriteTokens = usage?.cacheWriteInputTokens;
     const cacheWrite1hTokens = getOneHourCacheWriteTokens(usage?.cacheDetails);
 
+    const totalInputTokens =
+      promptTokens === undefined
+        ? undefined
+        : promptTokens + (cacheReadTokens ?? 0) + (cacheWriteTokens ?? 0);
     const tokenUsage: Partial<TokenUsage> = {
-      prompt: promptTokens,
+      prompt: totalInputTokens,
       completion: completionTokens,
-      total: totalTokens || (promptTokens || 0) + (completionTokens || 0),
+      total:
+        totalTokens ??
+        (totalInputTokens !== undefined && completionTokens !== undefined
+          ? totalInputTokens + completionTokens
+          : undefined),
       numRequests: 1,
       ...(cacheReadTokens === undefined ? {} : { cached: cacheReadTokens }),
+      ...(cacheReadTokens === undefined && cacheWriteTokens === undefined
+        ? {}
+        : {
+            completionDetails: {
+              ...(cacheReadTokens === undefined ? {} : { cacheReadInputTokens: cacheReadTokens }),
+              ...(cacheWriteTokens === undefined
+                ? {}
+                : { cacheCreationInputTokens: cacheWriteTokens }),
+            },
+          }),
     };
 
     // Calculate cost
@@ -1656,7 +1703,9 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
 
     const toolUseBlocks = content.filter(
       (block): block is ContentBlock & { toolUse: NonNullable<ContentBlock['toolUse']> } =>
-        'toolUse' in block && block.toolUse !== undefined,
+        'toolUse' in block &&
+        block.toolUse !== undefined &&
+        block.toolUse.type !== 'server_tool_use',
     );
 
     // Mixed dispatch: each tool_use block goes to MCP if a matching MCP tool
@@ -1671,7 +1720,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     const mcpErrors: string[] = [];
     const handledIndexes = new Set<number>();
 
-    if (!toolsDisabled && toolUseBlocks.length > 0) {
+    if (!toolsDisabled && response.stopReason === 'tool_use' && toolUseBlocks.length > 0) {
       // 1) MCP for matching tool names.
       const mcpEligible: { idx: number; name: string; input: unknown }[] = [];
       toolUseBlocks.forEach((block, idx) => {

@@ -159,6 +159,14 @@ export async function collectConverseStream(
   if (!receivedMetadata || openBlocks.size) {
     throw new Error('Bedrock response stream ended before terminal metadata or contentBlockStop');
   }
+  if (
+    result.stopReason !== 'tool_use' &&
+    [...blocks.values()].some((block) => block.toolUse && block.toolUse.type !== 'server_tool_use')
+  ) {
+    throw new Error(
+      `Bedrock response stream stopped with ${result.stopReason} before completing a client tool request`,
+    );
+  }
   for (const [index, raw] of toolInputs) {
     try {
       const input: unknown = JSON.parse(raw || '{}');
