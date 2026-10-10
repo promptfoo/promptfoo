@@ -1690,6 +1690,7 @@ describe('evalCommand', () => {
     const lock = evalLock.createEvalLock(
       {
         version: 1,
+        implementation: { id: 'promptfoo', version: 'test' },
         defaultTest: null,
         tests: [],
         scenarios: null,

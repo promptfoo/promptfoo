@@ -28,14 +28,14 @@ describe('eval lock CLI', () => {
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
 
-  function runEval(args: string[], threshold = '75') {
+  function runEval(args: string[], threshold = '75', selectedConfigPath = configPath) {
     return spawnSync(
       process.execPath,
       [
         CLI_PATH,
         'eval',
         '-c',
-        configPath,
+        selectedConfigPath,
         '--no-cache',
         '--no-progress-bar',
         '--no-table',
@@ -59,6 +59,25 @@ describe('eval lock CLI', () => {
   }
 
   it('locks the resolved bar, verifies it, and rejects a doctored config before running', () => {
+    const scriptConfigPath = path.join(tempDir, 'script-config.yaml');
+    const scriptLockPath = path.join(tempDir, 'script.lock.json');
+    fs.writeFileSync(
+      scriptConfigPath,
+      `providers: [echo]
+prompts: ['actual']
+tests:
+  - assert:
+      - type: javascript
+        value: output === process.env.EVAL_LOCK_EXPECTED
+`,
+    );
+    const scripted = runEval(['--lock', scriptLockPath], '100', scriptConfigPath);
+    expect(scripted.status, scripted.stderr || scripted.stdout).toBe(1);
+    expect(scripted.stdout + scripted.stderr).toContain(
+      'only support data-only assertion criteria',
+    );
+    expect(fs.existsSync(scriptLockPath)).toBe(false);
+
     const collidingLockPath = path.join(tempDir, 'colliding.lock.json');
     const colliding = runEval(['--output', collidingLockPath, '--lock', collidingLockPath]);
     expect(colliding.status, colliding.stderr || colliding.stdout).toBe(1);

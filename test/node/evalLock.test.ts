@@ -15,7 +15,7 @@ import {
   writeEvalLock,
 } from '../../src/node/evalLock';
 
-import type { ApiProvider, TestSuite } from '../../src/types';
+import type { Assertion, TestSuite } from '../../src/types';
 
 function createSuite(expected = 'Paris', input = 'Paris'): TestSuite {
   return {
@@ -71,78 +71,63 @@ describe('evalLock', () => {
     ).toBe(5);
   });
 
-  it('binds configured grading providers referenced by label', () => {
-    const createGradedSuite = (model: string): TestSuite => {
-      const suite = createSuite();
-      suite.providers = [
-        {
-          id: () => 'grader-id',
-          label: 'grader',
-          config: { model },
-          callApi: async () => ({ output: 'ok' }),
-        } as ApiProvider,
-      ];
-      suite.tests![0].assert = [{ type: 'llm-rubric', value: 'Be correct', provider: 'grader' }];
-      return suite;
-    };
-
-    const first = hashEvalBar(createEvalBar(createGradedSuite('model-a'), { repeat: 1 }));
-    const changed = hashEvalBar(createEvalBar(createGradedSuite('model-b'), { repeat: 1 }));
-
-    expect(changed).not.toBe(first);
-  });
-
-  it('rejects credential-dependent implicit grading providers', () => {
+  it.each([
+    ['inline scripts', { type: 'javascript', value: 'output === process.env.EXPECTED' }],
+    ['provider-backed graders', { type: 'llm-rubric', value: 'Be correct', provider: 'grader' }],
+    ['webhooks', { type: 'webhook', value: 'https://example.test/grade' }],
+    ['manual grading', { type: 'human' }],
+  ])('rejects %s as mutable criteria', (_name, assertion) => {
     const suite = createSuite();
-    suite.tests![0].assert = [{ type: 'llm-rubric', value: 'Be correct' }];
+    suite.tests![0].assert = [assertion as Assertion];
 
     expect(() => createEvalBar(suite, { repeat: 1 })).toThrow(
-      'require an explicit grading provider for "llm-rubric"',
+      'only support data-only assertion criteria',
     );
-
-    suite.defaultTest = { options: { provider: 'grader' } };
-    expect(() => createEvalBar(suite, { repeat: 1 })).not.toThrow();
   });
 
-  it('binds top-level redteam grading settings', () => {
-    const createRedteamSuite = (model: string, expectedOutput: string): TestSuite => {
-      const suite = createSuite();
-      suite.providers = [
-        {
-          id: () => 'grader-id',
-          label: 'redteam-grader',
-          config: { model },
-          callApi: async () => ({ output: 'ok' }),
-        } as ApiProvider,
-      ];
-      suite.redteam = {
-        provider: 'redteam-grader',
-        graderExamples: [{ output: expectedOutput, pass: true }],
-      } as TestSuite['redteam'];
-      return suite;
-    };
-
-    const original = hashEvalBar(
-      createEvalBar(createRedteamSuite('model-a', 'safe'), { repeat: 1 }),
-    );
-    const changedProvider = hashEvalBar(
-      createEvalBar(createRedteamSuite('model-b', 'safe'), { repeat: 1 }),
-    );
-    const changedExamples = hashEvalBar(
-      createEvalBar(createRedteamSuite('model-a', 'different'), { repeat: 1 }),
-    );
-
-    expect(changedProvider).not.toBe(original);
-    expect(changedExamples).not.toBe(original);
-  });
-
-  it('rejects redteam locks without an explicit grading provider', () => {
+  it('rejects redteam criteria even with an explicit grading provider', () => {
     const suite = createSuite();
-    suite.redteam = { graderExamples: [] } as TestSuite['redteam'];
+    suite.redteam = { provider: 'grader', graderExamples: [] } as TestSuite['redteam'];
 
-    expect(() => createEvalBar(suite, { repeat: 1 })).toThrow(
-      'require an explicit redteam grading provider',
-    );
+    expect(() => createEvalBar(suite, { repeat: 1 })).toThrow('do not support redteam criteria');
+  });
+
+  it.each([
+    [
+      'assertion transforms',
+      (suite: TestSuite) => {
+        (suite.tests![0].assert![0] as Assertion).transform = 'output === process.env.EXPECTED';
+      },
+    ],
+    [
+      'test transforms',
+      (suite: TestSuite) => {
+        suite.tests![0].options = { transform: 'output === process.env.EXPECTED' };
+      },
+    ],
+    [
+      'variable transforms',
+      (suite: TestSuite) => {
+        suite.tests![0].options = { transformVars: 'vars.expected = process.env.EXPECTED' };
+      },
+    ],
+    [
+      'postprocessors',
+      (suite: TestSuite) => {
+        suite.tests![0].options = { postprocess: 'return process.env.EXPECTED' };
+      },
+    ],
+    [
+      'custom scoring functions',
+      (suite: TestSuite) => {
+        suite.tests![0].assertScoringFunction = 'scores.expected = process.env.EXPECTED' as never;
+      },
+    ],
+  ])('rejects deferred %s', (_name, mutateSuite) => {
+    const suite = createSuite();
+    mutateSuite(suite);
+
+    expect(() => createEvalBar(suite, { repeat: 1 })).toThrow('mutable runtime state');
   });
 
   it('strips checkout-specific provider base paths from the bar', () => {
@@ -169,9 +154,7 @@ describe('evalLock', () => {
   it('rejects closure-dependent function criteria', () => {
     const suite = createSuite();
     const expected = 'Paris';
-    suite.tests![0].options = {
-      transform: (value: unknown) => (value === expected ? value : 'unexpected'),
-    };
+    (suite.tests![0].assert![0] as Assertion).value = (() => expected) as never;
 
     expect(() => hashEvalBar(createEvalBar(suite, { repeat: 1 }))).toThrow(
       'cannot safely bind function values',
@@ -183,7 +166,7 @@ describe('evalLock', () => {
     async (value) => {
       const lockPath = path.join(tempDir, 'eval.lock.json');
       const suite = createSuite();
-      suite.tests![0].assert = [{ type: 'javascript', value }];
+      suite.tests![0].assert = [{ type: 'equals', value }];
 
       await expect(
         writeEvalLock(lockPath, createEvalBar(suite, { repeat: 1 }), 80),

@@ -13,6 +13,12 @@ import {
 const SHA256_HEX = /^[a-f0-9]{64}$/;
 const UUID_V7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+declare const __PROMPTFOO_VERSION__: string | undefined;
+const IMPLEMENTATION_VERSION =
+  typeof __PROMPTFOO_VERSION__ === 'undefined'
+    ? (process.env.npm_package_version ?? '0.0.0-development')
+    : __PROMPTFOO_VERSION__;
+
 // PRML v0.1 canonicalization follows the portable YAML scalar rules in section 3.6.
 const YAML_INDICATORS = new Set([
   '#',
@@ -81,6 +87,10 @@ type EvalBarSource = {
 
 export type EvalBar = {
   version: 1;
+  implementation: {
+    id: 'promptfoo';
+    version: string;
+  };
   defaultTest: unknown;
   tests: unknown;
   scenarios: unknown;
@@ -91,26 +101,52 @@ export type EvalBar = {
   };
 };
 
-const EXPLICIT_GRADER_ASSERTION_TYPES = new Set([
-  'agent-rubric',
-  'answer-relevance',
-  'context-faithfulness',
-  'context-recall',
-  'context-relevance',
-  'factuality',
-  'g-eval',
-  'llm-rubric',
-  'model-graded-closedqa',
-  'model-graded-factuality',
-  'moderation',
-  'search-rubric',
-  'select-best',
-  'similar',
-  'similar:cosine',
-  'similar:dot',
-  'similar:euclidean',
-  'trajectory:goal-success',
+const DATA_ONLY_ASSERTION_TYPES = new Set([
+  'bleu',
+  'contains',
+  'contains-all',
+  'contains-any',
+  'contains-html',
+  'contains-json',
+  'contains-sql',
+  'contains-xml',
+  'cost',
+  'equals',
+  'finish-reason',
+  'gleu',
+  'guardrails',
+  'icontains',
+  'icontains-all',
+  'icontains-any',
+  'is-html',
+  'is-json',
+  'is-refusal',
+  'is-sql',
+  'is-xml',
+  'latency',
+  'levenshtein',
+  'max-score',
+  'meteor',
+  'perplexity',
+  'perplexity-score',
+  'regex',
+  'rouge-l',
+  'rouge-n',
+  'rouge-s',
+  'skill-used',
+  'starts-with',
+  'tool-call-f1',
+  'trace-error-spans',
+  'trace-span-count',
+  'trace-span-duration',
+  'trajectory:step-count',
+  'trajectory:tool-args-match',
+  'trajectory:tool-sequence',
+  'trajectory:tool-used',
+  'word-count',
 ]);
+
+const DEFERRED_TEST_OPTION_KEYS = ['postprocess', 'transform', 'transformVars'] as const;
 
 function isRuntimeApiProvider(value: unknown): value is {
   id: () => string;
@@ -191,15 +227,7 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
     : undefined;
 }
 
-function getTestOption(record: Record<string, unknown> | undefined, key: string): unknown {
-  return asRecord(record?.options)?.[key];
-}
-
-function getDefaultGradingProvider(defaultTest: Record<string, unknown> | undefined): unknown {
-  return getTestOption(defaultTest, 'provider') ?? defaultTest?.provider;
-}
-
-function validateExplicitAssertionGraders(assertions: unknown, inheritedProvider: unknown): void {
+function validateDataOnlyAssertions(assertions: unknown): void {
   if (!Array.isArray(assertions)) {
     return;
   }
@@ -210,67 +238,62 @@ function validateExplicitAssertionGraders(assertions: unknown, inheritedProvider
       continue;
     }
     if (assertion.type === 'assert-set') {
-      validateExplicitAssertionGraders(assertion.assert, inheritedProvider);
+      validateDataOnlyAssertions(assertion.assert);
       continue;
     }
 
     const baseType = assertion.type.startsWith('not-')
       ? assertion.type.slice('not-'.length)
       : assertion.type;
-    if (
-      EXPLICIT_GRADER_ASSERTION_TYPES.has(baseType) &&
-      assertion.provider == null &&
-      inheritedProvider == null
-    ) {
+    if (!DATA_ONLY_ASSERTION_TYPES.has(baseType)) {
       throw new Error(
-        `Evaluation locks require an explicit grading provider for "${assertion.type}" assertions; set assertion.provider, test options.provider, or a default-test provider`,
+        `Evaluation locks only support data-only assertion criteria; "${assertion.type}" may execute code, call an external grader, or require mutable runtime state`,
+      );
+    }
+    if (assertion.transform != null || assertion.contextTransform != null) {
+      throw new Error(
+        `Evaluation locks do not support transforms on "${assertion.type}" assertions because transforms can depend on mutable runtime state`,
       );
     }
   }
 }
 
-function validateTestGraders(
-  test: Record<string, unknown>,
-  defaultTest?: Record<string, unknown>,
-  scenarioConfig?: Record<string, unknown>,
-): void {
-  const inheritedProvider =
-    getTestOption(test, 'provider') ??
-    getTestOption(scenarioConfig, 'provider') ??
-    getDefaultGradingProvider(defaultTest);
-  const disableDefaultAsserts =
-    getTestOption(test, 'disableDefaultAsserts') ??
-    getTestOption(scenarioConfig, 'disableDefaultAsserts') ??
-    getTestOption(defaultTest, 'disableDefaultAsserts');
-
-  if (disableDefaultAsserts !== true) {
-    validateExplicitAssertionGraders(defaultTest?.assert, inheritedProvider);
+function validateDataOnlyTest(test: Record<string, unknown>): void {
+  if (test.assertScoringFunction != null) {
+    throw new Error(
+      'Evaluation locks do not support assertScoringFunction because scoring callbacks can depend on mutable runtime state',
+    );
   }
-  validateExplicitAssertionGraders(scenarioConfig?.assert, inheritedProvider);
-  validateExplicitAssertionGraders(test.assert, inheritedProvider);
+  const options = asRecord(test.options);
+  for (const key of DEFERRED_TEST_OPTION_KEYS) {
+    if (options?.[key] != null) {
+      throw new Error(
+        `Evaluation locks do not support test option "${key}" because it can execute against mutable runtime state`,
+      );
+    }
+  }
+  validateDataOnlyAssertions(test.assert);
 }
 
-function validateExplicitGraders(testSuite: EvalBarSource): void {
+function validateDataOnlyCriteria(testSuite: EvalBarSource): void {
   const defaultTest = asRecord(testSuite.defaultTest);
   const tests = Array.isArray(testSuite.tests) ? testSuite.tests : [];
   const scenarios = Array.isArray(testSuite.scenarios) ? testSuite.scenarios : [];
-  const redteam = asRecord(testSuite.redteam);
 
-  if (redteam && redteam.provider == null && getDefaultGradingProvider(defaultTest) == null) {
+  if (testSuite.redteam != null) {
     throw new Error(
-      'Evaluation locks require an explicit redteam grading provider; set redteam.provider or a default-test provider',
+      'Evaluation locks do not support redteam criteria because redteam grading requires mutable provider execution',
     );
   }
 
-  if (tests.length > 0) {
-    for (const testValue of tests) {
-      const test = asRecord(testValue);
-      if (test) {
-        validateTestGraders(test, defaultTest);
-      }
+  if (defaultTest) {
+    validateDataOnlyTest(defaultTest);
+  }
+  for (const testValue of tests) {
+    const test = asRecord(testValue);
+    if (test) {
+      validateDataOnlyTest(test);
     }
-  } else if (scenarios.length === 0) {
-    validateTestGraders({}, defaultTest);
   }
 
   for (const scenarioValue of scenarios) {
@@ -282,10 +305,11 @@ function validateExplicitGraders(testSuite: EvalBarSource): void {
       if (!scenarioConfig) {
         continue;
       }
+      validateDataOnlyTest(scenarioConfig);
       for (const testValue of scenarioTests) {
         const test = asRecord(testValue);
         if (test) {
-          validateTestGraders(test, defaultTest, scenarioConfig);
+          validateDataOnlyTest(test);
         }
       }
     }
@@ -461,7 +485,7 @@ export function createEvalBar(
       'Evaluation locks do not support extension hooks because hooks can mutate tests after verification',
     );
   }
-  validateExplicitGraders(testSuite);
+  validateDataOnlyCriteria(testSuite);
 
   const runtimeProviders = Array.isArray(testSuite.providers)
     ? testSuite.providers.filter(isRuntimeApiProvider)
@@ -476,6 +500,7 @@ export function createEvalBar(
 
   return {
     version: 1,
+    implementation: { id: 'promptfoo', version: IMPLEMENTATION_VERSION },
     defaultTest: snapshotProviderContainer(testSuite.defaultTest ?? null),
     tests: snapshot(testSuite.tests ?? []),
     scenarios: snapshot(testSuite.scenarios ?? null),
