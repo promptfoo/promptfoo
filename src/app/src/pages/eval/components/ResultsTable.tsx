@@ -94,10 +94,8 @@ const PAGE_SIZE_OPTIONS = [10, 50, 100, 500, 1000].filter(
  *   - storage ref/blob ref string understood by `isStorageRef` / `isBlobRef`
  *   - data URL (`data:audio/...`)
  *   - raw base64 audio data
- * @param format Audio MIME subtype used when constructing inline base64 sources and the `<source>` type.
- * Defaults to `'mp3'`. Typical values include `'mp3'`, `'wav'`, `'ogg'`, and `'webm'`.
  */
-function StorageRefAudioPlayer({ data, format = 'mp3' }: { data: string; format?: string }) {
+function StorageRefAudioPlayer({ data }: { data: string }) {
   const [audioUrl, setAudioUrl] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(isStorageRef(data) || isBlobRef(data));
 
@@ -106,7 +104,7 @@ function StorageRefAudioPlayer({ data, format = 'mp3' }: { data: string; format?
 
     if (isStorageRef(data) || isBlobRef(data)) {
       setLoading(true);
-      resolveAudioUrl(data, format).then((url) => {
+      resolveAudioUrl(data).then((url) => {
         if (!cancelled) {
           setAudioUrl(url);
           setLoading(false);
@@ -114,7 +112,7 @@ function StorageRefAudioPlayer({ data, format = 'mp3' }: { data: string; format?
       });
     } else {
       // Inline base64
-      const url = data.startsWith('data:') ? data : `data:audio/${format};base64,${data}`;
+      const url = data.startsWith('data:') ? data : `data:audio/mp3;base64,${data}`;
       setAudioUrl(url);
       setLoading(false);
     }
@@ -122,7 +120,7 @@ function StorageRefAudioPlayer({ data, format = 'mp3' }: { data: string; format?
     return () => {
       cancelled = true;
     };
-  }, [data, format]);
+  }, [data]);
 
   if (loading) {
     return (
@@ -139,7 +137,7 @@ function StorageRefAudioPlayer({ data, format = 'mp3' }: { data: string; format?
 
   return (
     <audio controls style={{ maxWidth: '100%', height: '32px' }}>
-      <source src={audioUrl} type={`audio/${format}`} />
+      <source src={audioUrl} type="audio/mp3" />
       Your browser does not support the audio element.
     </audio>
   );

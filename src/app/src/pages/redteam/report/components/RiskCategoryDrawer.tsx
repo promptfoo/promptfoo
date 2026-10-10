@@ -10,6 +10,7 @@ import {
 import { Sheet, SheetContent, SheetTitle } from '@app/components/ui/sheet';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@app/components/ui/tabs';
 import { cn } from '@app/lib/utils';
+import { getRedteamHistoryMessages } from '@app/utils/redteamHistory';
 import { categoryAliases, displayNameOverrides } from '@promptfoo/redteam/constants';
 import { getActualPrompt } from '@promptfoo/util/providerResponse';
 import { ChevronDown, Lightbulb } from 'lucide-react';
@@ -87,40 +88,8 @@ function getOutputDisplay(output: string | object): string {
   return JSON.stringify(output);
 }
 
-interface RedteamHistoryEntry {
-  prompt?: string;
-  promptAudio?: { data?: string; format?: string };
-  promptImage?: { data?: string; format?: string };
-  output?: string;
-  outputAudio?: { data?: string; format?: string };
-  outputImage?: { data?: string; format?: string };
-}
-
 function buildChatMessages(test: TestWithMetadata): Message[] {
-  const metadata = test.result?.metadata;
-  const redteamHistoryRaw = (metadata?.redteamHistory || metadata?.redteamTreeHistory || []) as
-    | RedteamHistoryEntry[]
-    | unknown[];
-
-  const historyMessages = (Array.isArray(redteamHistoryRaw) ? redteamHistoryRaw : [])
-    .filter((entry): entry is RedteamHistoryEntry => {
-      const e = entry as RedteamHistoryEntry;
-      return Boolean(e?.prompt && e?.output);
-    })
-    .flatMap((entry: RedteamHistoryEntry): Message[] => [
-      {
-        role: 'user' as const,
-        content: entry.prompt!,
-        audio: entry.promptAudio,
-        image: entry.promptImage,
-      },
-      {
-        role: 'assistant' as const,
-        content: entry.output!,
-        audio: entry.outputAudio,
-        image: entry.outputImage,
-      },
-    ]);
+  const historyMessages = getRedteamHistoryMessages(test.result?.metadata);
 
   if (historyMessages.length > 0) {
     return historyMessages;
