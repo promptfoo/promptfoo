@@ -2,7 +2,7 @@ import type { ComponentProps } from 'react';
 
 import { TooltipProvider } from '@app/components/ui/tooltip';
 import { mockBrowserProperty, restoreBrowserMocks } from '@app/tests/browserMocks';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { parse } from 'csv-parse/browser/esm/sync';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -126,6 +126,7 @@ describe('report exports', () => {
   it.each(['owasp:llm', 'nist:ai:measure'] as const)(
     'exports tested and untested rows for %s',
     async (framework) => {
+      const user = userEvent.setup();
       render(
         <FrameworkCsvExporter
           categoryStats={{ 'pii:direct': { pass: 8, total: 10, failCount: 2 } }}
@@ -133,7 +134,7 @@ describe('report exports', () => {
           frameworksToShow={[framework]}
         />,
       );
-      fireEvent.click(screen.getByRole('button', { name: 'Export framework results to CSV' }));
+      await user.click(screen.getByRole('button', { name: 'Export framework results to CSV' }));
       const rows: Record<string, string>[] = parse(await readBlob(exportedBlob), { columns: true });
       expect(downloadedName).toMatch(/^framework-compliance-\d{4}-\d{2}-\d{2}\.csv$/);
       const testedRows = rows.filter((row) => row['Tests Run'] === '10');
