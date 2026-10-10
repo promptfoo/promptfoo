@@ -636,6 +636,68 @@ describe('prepareVoiceInterventions', () => {
     },
   );
 
+  describe.each(['explicit', 'named'] as const)('dual credentials with %s caller key', (source) => {
+    it.each(['response', 'transport', 'abort'] as const)(
+      'preserves both HTTP credentials but redacts both from %s failures',
+      async (failureKind) => {
+        const callerKey = 'dual-caller-opaque-key';
+        const gatewayKey = 'dual-gateway-opaque-key';
+        mockProcessEnv({ CALLER_VOICE_KEY: callerKey });
+        const caller: VoiceParticipantOptions = {
+          apiBaseUrl: 'https://gateway.example.test/v1',
+          ...(source === 'explicit' ? { apiKey: callerKey } : { apiKeyEnvar: 'CALLER_VOICE_KEY' }),
+          headers: { 'api-key': gatewayKey },
+        };
+        const diagnostic = `Rejected ${callerKey} and ${gatewayKey}; reference dual-42.`;
+        if (failureKind === 'response') {
+          mockedFetch.mockResolvedValue({
+            ok: false,
+            status: 401,
+            statusText: 'Unauthorized',
+            text: async () => JSON.stringify({ error: { message: diagnostic } }),
+          } as Response);
+        } else {
+          const failure = new Error(diagnostic, {
+            cause: new Error(`Nested credentials ${callerKey} and ${gatewayKey}`),
+          });
+          if (failureKind === 'abort') {
+            failure.name = 'AbortError';
+          }
+          mockedFetch.mockRejectedValue(failure);
+        }
+        const onResponse = vi.fn();
+
+        const error = await prepare(undefined, caller, undefined, undefined, onResponse).catch(
+          (caught) => caught,
+        );
+
+        expect(mockedFetch).toHaveBeenCalledOnce();
+        const requestHeaders = new Headers(mockedFetch.mock.calls[0][1]?.headers);
+        expect(requestHeaders.get('authorization')).toBe(`Bearer ${callerKey}`);
+        expect(requestHeaders.get('api-key')).toBe(gatewayKey);
+        expect(error).toBeInstanceOf(Error);
+        expect(error.name).toBe(failureKind === 'abort' ? 'AbortError' : 'Error');
+        expect(error.message).toContain('Rejected [REDACTED] and [REDACTED]; reference dual-42.');
+        expect(error.cause).toBeUndefined();
+        expect(onResponse).toHaveBeenCalledOnce();
+        if (failureKind === 'abort') {
+          expect(onResponse).toHaveBeenCalledWith({
+            error: 'Speech preparation ended without a response; usage is unconfirmed.',
+          });
+        } else {
+          expect(onResponse.mock.calls[0][0].error).toContain(
+            'Rejected [REDACTED] and [REDACTED]; reference dual-42.',
+          );
+        }
+        for (const secret of [callerKey, gatewayKey]) {
+          expect(error.message).not.toContain(secret);
+          expect(error.stack).not.toContain(secret);
+          expect(JSON.stringify(onResponse.mock.calls)).not.toContain(secret);
+        }
+      },
+    );
+  });
+
   it('redacts a thrown transport cancellation while retaining its AbortError classification', async () => {
     const failure = new Error(
       'Speech transport aborted for caller-private-key; reference diag-73.',

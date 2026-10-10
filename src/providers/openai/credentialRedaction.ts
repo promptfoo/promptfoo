@@ -12,19 +12,28 @@ export function isOpenAiCredentialHeader(name: string, value?: string): boolean 
   );
 }
 
-function collectCredentials(headers: Record<string, string>): string[] {
-  return Object.entries(headers)
+function collectCredentials(
+  headers: Record<string, string>,
+  additionalCredentials: readonly string[],
+): string[] {
+  const headerCredentials = Object.entries(headers)
     .filter(([name, value]) => typeof value === 'string' && isOpenAiCredentialHeader(name, value))
-    .flatMap(([, value]) => credentialForms(value))
+    .map(([, value]) => value);
+  return [...headerCredentials, ...additionalCredentials]
+    .flatMap(credentialForms)
     .filter((value) => value.length > 0)
     .sort((left, right) => right.length - left.length);
 }
 
-/** Reuse the same credential-aware diagnostic policy across OpenAI voice transports. */
+/**
+ * Reuse the same credential-aware diagnostic policy across OpenAI voice transports.
+ * Resolved keys can be supplied separately without overwriting a custom credential header.
+ */
 export function createOpenAiCredentialRedactor(
   headers: Record<string, string>,
+  additionalCredentials: readonly string[] = [],
 ): (text: string) => string {
-  const credentials = collectCredentials(headers);
+  const credentials = collectCredentials(headers, additionalCredentials);
   return (text) => {
     let redacted = text;
     for (const credential of credentials) {

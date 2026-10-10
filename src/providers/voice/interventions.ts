@@ -158,10 +158,10 @@ export async function prepareVoiceInterventions(
       response_format: 'pcm',
     },
   });
-  const redact = createOpenAiCredentialRedactor({
-    ...provider.getOpenAiRequestHeaders(),
-    ...(apiKey ? { 'api-key': String(apiKey) } : {}),
-  });
+  const redact = createOpenAiCredentialRedactor(
+    provider.getOpenAiRequestHeaders(),
+    apiKey ? [String(apiKey)] : [],
+  );
   const prepared: PreparedVoiceIntervention[] = [];
   for (const [index, entry] of entries.entries()) {
     signal.throwIfAborted();
