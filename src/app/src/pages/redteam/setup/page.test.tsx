@@ -75,7 +75,6 @@ vi.mock('@app/stores/redteamJobStore', () => ({
 }));
 
 // Mock child components to isolate the page component
-vi.mock('./components/Targets', () => ({ default: () => <div>Targets</div> }));
 vi.mock('./components/Targets/TargetTypeSelection', () => ({
   default: () => <div>TargetTypeSelection</div>,
 }));
