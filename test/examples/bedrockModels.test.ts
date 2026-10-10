@@ -20,7 +20,10 @@ vi.mock('../../src/telemetry');
 let restoreEnv: () => void;
 
 beforeEach(() => {
-  restoreEnv = mockProcessEnv({}, { clearPrefixes: ['AWS_BEDROCK_'] });
+  restoreEnv = mockProcessEnv(
+    { AWS_BEDROCK_MAX_TOKENS: '512' },
+    { clearPrefixes: ['AWS_BEDROCK_'] },
+  );
 });
 
 afterEach(() => {

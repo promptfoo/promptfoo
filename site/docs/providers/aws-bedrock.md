@@ -40,7 +40,17 @@ aws bedrock list-inference-profiles --region us-east-1 \
   --query 'inferenceProfileSummaries[].{id:inferenceProfileId,status:status,type:type}'
 ```
 
-These commands describe the Runtime catalog. Mantle has a separate `/v1/models` catalog; see [Mantle Chat Completions](#mantle-chat-completions). Check the model card's API and endpoint compatibility before copying a returned ID into a configuration. Profile geography (`us.`, `eu.`, `global.`, and others) controls eligible routing destinations; choose it according to your data residency requirements.
+These commands describe the Runtime catalog. Mantle has a separate `/v1/models` catalog; see [Mantle Chat Completions](#mantle-chat-completions). Check the model card's API and endpoint compatibility before copying a returned ID into a configuration.
+
+For data residency requirements, [verify every destination region](https://docs.aws.amazon.com/bedrock/latest/userguide/inference-profiles-support.html) for each profile from every source region you plan to use:
+
+```bash
+aws bedrock get-inference-profile --region us-east-1 \
+  --inference-profile-identifier YOUR_PROFILE_ID \
+  --query 'models[].modelArn'
+```
+
+The region in each returned model ARN is a possible routing destination. Profiles and destinations can differ by source region; do not rely on the profile's geographic prefix alone.
 
 Treat example model IDs as reproducible selections, not an automatically updated inventory. Before adopting or rerunning them, check the [current lifecycle policy](https://docs.aws.amazon.com/bedrock/latest/userguide/model-lifecycle.html), the [lifecycle table for older models](https://docs.aws.amazon.com/bedrock/latest/userguide/model-lifecycle-legacy.html), and the model's card. Legacy models can restrict new access and carry different pricing. EOL models fail unless you have a private extended-access arrangement; migration is not automatic.
 
