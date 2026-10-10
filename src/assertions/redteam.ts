@@ -8,7 +8,7 @@ import {
   withGradingUsage,
 } from '../redteam/grading/storedResult';
 import { isAttackProvider } from '../redteam/shared/attackProviders';
-import { checkExfilTracking } from '../redteam/strategies/indirectWebPwn';
+import { checkExfilTracking, getWebPageTrackingIds } from '../redteam/strategies/indirectWebPwn';
 import { isApiProvider, isProviderOptions } from '../types/providers';
 import invariant from '../util/invariant';
 import { accumulateTokenUsage, cloneTokenUsageBreakdown } from '../util/tokenUsageUtils';
@@ -265,26 +265,22 @@ export const handleRedteam = async (
     providerResponse,
     conversationTranscript: gradesCurrentTurnOnly ? undefined : conversationTranscript,
   });
-  const webPageUuid =
-    (providerResponse.metadata?.webPageUuid as string | undefined) ||
-    (test.metadata?.webPageUuid as string | undefined);
-  if (webPageUuid) {
-    // Try to get evalId from metadata, or extract from webPageUrl
-    // URL format: /dynamic-pages/{evalId}/{uuid}
-    let evalId = test.metadata?.evaluationId as string | undefined;
-    if (!evalId) {
-      // Check both providerResponse.metadata and test.metadata for webPageUrl
-      const webPageUrl =
-        (providerResponse.metadata?.webPageUrl as string | undefined) ||
-        (test.metadata?.webPageUrl as string | undefined);
-      if (webPageUrl) {
-        const match = webPageUrl.match(/\/dynamic-pages\/([^/]+)\//);
-        if (match) {
-          evalId = match[1];
-        }
-      }
-    }
-    const tracking = await checkExfilTracking(webPageUuid, evalId);
+  const trackingIds =
+    getWebPageTrackingIds(
+      providerResponse.metadata,
+      test.metadata?.evaluationId,
+      test.metadata?.webPageUrl,
+    ) ??
+    getWebPageTrackingIds(
+      {
+        webPageUuid: test.metadata?.webPageUuid,
+        webPageUrl: providerResponse.metadata?.webPageUrl,
+      },
+      test.metadata?.evaluationId,
+      test.metadata?.webPageUrl,
+    );
+  if (trackingIds) {
+    const tracking = await checkExfilTracking(trackingIds.uuid, trackingIds.evalId);
     if (tracking) {
       gradingContext = {
         ...gradingContext,
