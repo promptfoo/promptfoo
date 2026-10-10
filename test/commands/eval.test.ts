@@ -564,6 +564,86 @@ describe('evalCommand', () => {
     );
   });
 
+  it.each([
+    ['evaluateOptions', { evaluateOptions: { cache: false } }],
+    ['commandLineOptions', { commandLineOptions: { cache: false } }],
+  ])('should honor %s.cache from a config passed with -c', async (_source, configCache) => {
+    evalCommand(program, defaultConfig, defaultConfigPath);
+    const config = { ...configCache } as UnifiedConfig;
+    vi.mocked(resolveConfigs).mockResolvedValue({
+      config,
+      testSuite: { prompts: [], providers: [] },
+      basePath: path.resolve('/'),
+      commandLineOptions: config.commandLineOptions,
+    });
+    vi.mocked(evaluate).mockImplementation(async (_testSuite, evalRecord) => evalRecord as Eval);
+
+    await program.parseAsync([
+      'node',
+      'test',
+      'eval',
+      '-c',
+      'other/promptfooconfig.yaml',
+      '--no-table',
+      '--no-write',
+    ]);
+
+    expect(evaluate).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({ cache: false }),
+    );
+  });
+
+  it('should keep the cache enabled when neither the CLI nor the config disables it', async () => {
+    evalCommand(program, defaultConfig, defaultConfigPath);
+    vi.mocked(evaluate).mockImplementation(async (_testSuite, evalRecord) => evalRecord as Eval);
+
+    await program.parseAsync([
+      'node',
+      'test',
+      'eval',
+      '-c',
+      'other/promptfooconfig.yaml',
+      '--no-table',
+      '--no-write',
+    ]);
+
+    expect(evaluate).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({ cache: true }),
+    );
+  });
+
+  it('should let --no-cache override a config that enables the cache', async () => {
+    evalCommand(program, defaultConfig, defaultConfigPath);
+    const config = { evaluateOptions: { cache: true } } as UnifiedConfig;
+    vi.mocked(resolveConfigs).mockResolvedValue({
+      config,
+      testSuite: { prompts: [], providers: [] },
+      basePath: path.resolve('/'),
+    });
+    vi.mocked(evaluate).mockImplementation(async (_testSuite, evalRecord) => evalRecord as Eval);
+
+    await program.parseAsync([
+      'node',
+      'test',
+      'eval',
+      '-c',
+      'other/promptfooconfig.yaml',
+      '--no-cache',
+      '--no-table',
+      '--no-write',
+    ]);
+
+    expect(evaluate).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({ cache: false }),
+    );
+  });
+
   it('should document the repeatable --tag option in help text', () => {
     const cmd = evalCommand(program, defaultConfig, defaultConfigPath);
     const helpText = cmd.helpInformation();
