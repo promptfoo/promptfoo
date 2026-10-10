@@ -554,6 +554,74 @@ describe('App component categoryStats calculation with moderation', () => {
 });
 
 describe('Filter panel regression tests', () => {
+  it('excludes provider errors and composes category, strategy, status, and search filters', async () => {
+    const user = userEvent.setup();
+    const customFailure = createComponentMockResult(0, 'pii:direct', false);
+    const customPass = createComponentMockResult(0, 'pii:direct', true);
+    const basicFailure = createComponentMockResult(0, 'pii:direct', false);
+    const otherCategory = createComponentMockResult(0, 'harmful:violent-crime', false);
+    const providerError = createComponentMockResult(0, 'pii:direct', false);
+    for (const result of [customFailure, customPass, otherCategory, providerError]) {
+      result.testCase.metadata = { strategyId: 'custom' };
+    }
+    customFailure.response = { output: 'Selected failure output' };
+    providerError.error = 'transport unavailable';
+    providerError.failureReason = ResultFailureReason.ERROR;
+    mockCallApiResponse({
+      data: createComponentMockEvalData(1, [
+        customFailure,
+        customPass,
+        basicFailure,
+        otherCategory,
+        providerError,
+      ]),
+    });
+    renderWithProviders(<App />);
+    const readGroups = () => JSON.parse(screen.getByTestId('report-groups').textContent!);
+    await screen.findByTestId('report-groups');
+    expect(JSON.stringify(readGroups())).not.toContain('transport unavailable');
+    expect(readGroups().failuresByPlugin['pii:direct']).toHaveLength(2);
+    expect(readStrategyStats()).toEqual({
+      custom: { pass: 1, total: 3, failCount: 2 },
+      basic: { pass: 0, total: 1, failCount: 1 },
+    });
+
+    await user.click(screen.getAllByLabelText('filter results')[0]);
+    const [status, category, strategy] = screen.getAllByRole('combobox');
+    await user.click(category);
+    await user.click(await screen.findByRole('option', { name: 'pii:direct' }));
+    expect(Object.keys(readGroups().failuresByPlugin)).toEqual(['pii:direct']);
+    expect(readStrategyStats()).toEqual({
+      custom: { pass: 1, total: 2, failCount: 1 },
+      basic: { pass: 0, total: 1, failCount: 1 },
+    });
+
+    await user.click(strategy);
+    await user.click(await screen.findByRole('option', { name: 'custom' }));
+    expect(readStrategyStats()).toEqual({ custom: { pass: 1, total: 2, failCount: 1 } });
+    expect(screen.getByTestId('overview-total')).toHaveTextContent('2');
+
+    await user.click(status);
+    await user.click(await screen.findByRole('option', { name: 'Pass Only' }));
+    expect(readGroups().failuresByPlugin).toEqual({});
+    expect(readStrategyStats()).toEqual({ custom: { pass: 1, total: 1, failCount: 0 } });
+
+    await user.click(status);
+    await user.click(await screen.findByRole('option', { name: 'Fail Only' }));
+    expect(readGroups().passesByPlugin).toEqual({});
+    expect(readStrategyStats()).toEqual({ custom: { pass: 0, total: 1, failCount: 1 } });
+    expect(screen.getByTestId('overview-total')).toHaveTextContent('1');
+
+    const search = screen.getByPlaceholderText('Search prompts & outputs');
+    await user.type(search, 'SELECTED');
+    expect(readStrategyStats()).toEqual({ custom: { pass: 0, total: 1, failCount: 1 } });
+    await user.clear(search);
+    await user.type(search, 'missing');
+    expect(readGroups()).toEqual({ failuresByPlugin: {}, passesByPlugin: {} });
+    expect(readStrategyStats()).toEqual({});
+    expect(screen.getByTestId('overview-total')).toHaveTextContent('0');
+  });
+
   it('should open filter panel without errors when filter button is clicked', async () => {
     // Regression test for #7246 - clicking filter button caused Radix UI error
     // due to SelectItem components with empty string values
