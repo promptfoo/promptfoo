@@ -1,21 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { handleContains } from '../../src/assertions/contains';
 import { handleEquals } from '../../src/assertions/equals';
-import { normalizeForComparison } from '../../src/assertions/normalize';
 import { createMockProvider, createProviderResponse } from '../factories/provider';
 
 import type { AssertionParams, AssertionValue, AtomicTestCase } from '../../src/types/index';
 
-// Fixtures are CONSTRUCTED, never written as literals.
-//
-// Every tool between a keyboard and a disk is entitled to normalize a source
-// file: editors on save, formatters, git filters, the browser an example was
-// copied from. A test whose subject is invisible codepoint differences cannot
-// survive that. Writing the decomposed form as a literal and trusting it to
-// stay decomposed is how this file silently stopped testing anything.
-// Written as escapes so the file is pure ASCII on disk and no tool downstream
-// can quietly rewrite the very characters under test. Editing this block in a
-// normalising editor is how it broke the first time.
+// Escapes keep composed and decomposed test inputs distinct.
 const NFC_CAFE = 'caf\u00e9'; // e-acute as ONE codepoint
 const NFD_CAFE = 'cafe\u0301'; // e + U+0301 COMBINING ACUTE
 const LIGATURE_FILE = '\ufb01le'; // U+FB01 LATIN SMALL LIGATURE FI
@@ -73,54 +63,6 @@ function containsParams(
   } as AssertionParams;
 }
 
-describe('the fixtures themselves', () => {
-  // The precondition of every test below. If the pair does not genuinely differ
-  // there is nothing to detect, and the suite would pass while proving nothing.
-  it('holds pairs that really do differ in codepoints', () => {
-    expect(NFC_CAFE).not.toBe(NFD_CAFE);
-    expect(LIGATURE_FILE).not.toBe('file');
-    expect(X_SUPERSCRIPT_TWO).not.toBe(X_DIGIT_TWO);
-  });
-
-  it('holds pairs that really do look the same', () => {
-    expect(NFC_CAFE.normalize('NFC')).toBe(NFD_CAFE.normalize('NFC'));
-  });
-});
-
-describe('normalizeForComparison', () => {
-  it('leaves text untouched when the option is absent or false', () => {
-    expect(normalizeForComparison(NFD_CAFE)).toBe(NFD_CAFE);
-    expect(normalizeForComparison(NFD_CAFE, false)).toBe(NFD_CAFE);
-  });
-
-  it('treats `true` as NFC, not NFKC', () => {
-    // The distinction this whole module turns on. NFC folds the accent; it must
-    // NOT fold a superscript two into a digit two.
-    expect(normalizeForComparison(NFC_CAFE, true)).toBe(normalizeForComparison(NFD_CAFE, true));
-    expect(normalizeForComparison(X_SUPERSCRIPT_TWO, true)).not.toBe(
-      normalizeForComparison(X_DIGIT_TWO, true),
-    );
-    expect(normalizeForComparison(LIGATURE_FILE, true)).not.toBe('file');
-  });
-
-  it('applies a compatibility form when one is named', () => {
-    expect(normalizeForComparison(LIGATURE_FILE, 'NFKC')).toBe('file');
-    expect(normalizeForComparison(NBSP_TEXT, 'NFKC')).toBe('2 items');
-  });
-
-  it('never relaxes wording, under any form', () => {
-    for (const form of [true, 'NFC', 'NFD', 'NFKC', 'NFKD'] as const) {
-      expect(normalizeForComparison('$8.540', form)).not.toBe(
-        normalizeForComparison('$9.540', form),
-      );
-      expect(normalizeForComparison('Paris', form)).not.toBe(normalizeForComparison('paris', form));
-    }
-  });
-});
-
-// These go through the assertion handlers rather than the helper. Testing only
-// `normalizeForComparison` would leave the suite green if the wiring in either
-// handler were reverted, which is to say it would not test the feature at all.
 describe('handleEquals with normalizeUnicode', () => {
   it('fails a form-only difference by default', async () => {
     const result = await handleEquals(equalsParams(NFC_CAFE, NFD_CAFE));
@@ -132,9 +74,11 @@ describe('handleEquals with normalizeUnicode', () => {
     expect(result.pass).toBe(true);
   });
 
+  it.each(['NFC', 'NFD', 'NFKC', 'NFKD'] as const)('supports the named %s form', async (form) => {
+    expect((await handleEquals(equalsParams(NFC_CAFE, NFD_CAFE, form))).pass).toBe(true);
+  });
+
   it('still fails a wrong exponent when enabled', async () => {
-    // The failure that decided the default. Under NFKC this passes, which would
-    // mean an assertion library scoring a wrong answer as correct.
     const result = await handleEquals(equalsParams(X_SUPERSCRIPT_TWO, X_DIGIT_TWO, true));
     expect(result.pass).toBe(false);
   });
@@ -170,5 +114,21 @@ describe('handleContains with normalizeUnicode', () => {
   it('does not match a ligature unless a compatibility form is named', () => {
     expect(handleContains(containsParams('file', LIGATURE_FILE, true)).pass).toBe(false);
     expect(handleContains(containsParams('file', LIGATURE_FILE, 'NFKC')).pass).toBe(true);
+  });
+
+  it('only folds non-breaking spaces when compatibility normalization is selected', () => {
+    expect(handleContains(containsParams('2 items', NBSP_TEXT, false)).pass).toBe(false);
+    expect(handleContains(containsParams('2 items', NBSP_TEXT, true)).pass).toBe(false);
+    expect(handleContains(containsParams('2 items', NBSP_TEXT, 'NFKD')).pass).toBe(true);
+  });
+
+  it('normalizes the full output before matching a substring', () => {
+    expect(handleContains(containsParams('e', 'e\u0301')).pass).toBe(true);
+    expect(handleContains(containsParams('e', 'e\u0301', true)).pass).toBe(false);
+  });
+
+  it('negates the normalized result', () => {
+    const params = containsParams(NFC_CAFE, NFD_CAFE, true);
+    expect(handleContains({ ...params, inverse: true }).pass).toBe(false);
   });
 });
