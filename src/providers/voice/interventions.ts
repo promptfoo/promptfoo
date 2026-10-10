@@ -188,7 +188,43 @@ export async function prepareVoiceInterventions(
       throw redactPreparationFailure(error, redact);
     }
     if (response.error) {
-      response = { ...response, error: redact(response.error) };
+      const metadata = response.metadata;
+      const http = metadata?.http;
+      response = {
+        ...response,
+        error: redact(response.error),
+        // Retain standard failure signals for the outer scheduler's retry policy,
+        // but never expose arbitrary gateway headers or metadata as diagnostics.
+        ...(metadata
+          ? {
+              metadata: {
+                ...(metadata?.rateLimitKind === 'quota' || metadata?.rateLimitKind === 'rate_limit'
+                  ? { rateLimitKind: metadata.rateLimitKind }
+                  : {}),
+                ...(typeof metadata?.rateLimitRetryable === 'boolean'
+                  ? { rateLimitRetryable: metadata.rateLimitRetryable }
+                  : {}),
+                ...(http
+                  ? {
+                      http: {
+                        status: http.status,
+                        statusText: redact(http.statusText),
+                        headers: Object.fromEntries(
+                          Object.entries(http.headers ?? {})
+                            .filter(([name]) =>
+                              /^(?:retry-after(?:-ms)?|(?:x-)?ratelimit-(?:limit|remaining|reset)(?:-(?:requests|tokens))?)$/i.test(
+                                name,
+                              ),
+                            )
+                            .map(([name, value]) => [name.toLowerCase(), redact(value)]),
+                        ),
+                      },
+                    }
+                  : {}),
+              },
+            }
+          : {}),
+      };
     }
     onResponse(response);
     signal.throwIfAborted();

@@ -146,6 +146,9 @@ export function formatVoiceResult({
     ? [...responses, ...preparationResponses].reduce((sum, response) => sum + response!.cost!, 0)
     : undefined;
   const pcm = Buffer.concat(recordings);
+  // Preparation failures happen before Live starts. Preserve their sanitized HTTP
+  // retry hints on the outward result instead of reducing them to an error string.
+  const preparationFailure = preparationResponses.find((response) => response.error)?.metadata;
   return {
     output,
     ...(error ? { error } : {}),
@@ -169,6 +172,13 @@ export function formatVoiceResult({
         }
       : {}),
     metadata: {
+      ...(preparationFailure?.http ? { http: preparationFailure.http } : {}),
+      ...(preparationFailure?.rateLimitKind === undefined
+        ? {}
+        : { rateLimitKind: preparationFailure.rateLimitKind }),
+      ...(preparationFailure?.rateLimitRetryable === undefined
+        ? {}
+        : { rateLimitRetryable: preparationFailure.rateLimitRetryable }),
       messages,
       voice: {
         version: 1,

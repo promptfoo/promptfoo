@@ -5,6 +5,7 @@ import { convertPcm16ToWav } from '../../../src/providers/openai/audio';
 import { OpenAiTtsProvider } from '../../../src/providers/openai/tts';
 import { providerRegistry } from '../../../src/providers/providerRegistry';
 import { SimulatedVoiceUser } from '../../../src/providers/voice/simulatedVoiceUser';
+import { createProviderRateLimitOptions } from '../../../src/scheduler/providerWrapper';
 import { mockProcessEnv } from '../../util/utils';
 
 import type { SimulatedVoiceUserConfig } from '../../../src/providers/voice/types';
@@ -628,6 +629,34 @@ describe('SimulatedVoiceUser', () => {
       knownCost: 0.01,
     });
     expect(response.tokenUsage?.numRequests).toBe(1);
+  });
+
+  it('preserves an explicit preparation retry veto without exposing unrelated metadata', async () => {
+    vi.mocked(OpenAiTtsProvider.prototype.callApi).mockResolvedValue({
+      error: 'Rate limit exceeded',
+      metadata: {
+        rateLimitRetryable: false,
+        diagnostic: 'caller-key',
+        http: {
+          status: 429,
+          statusText: 'Too Many Requests',
+          headers: { 'retry-after': '120', 'x-api-key': 'caller-key' },
+          requestHeaders: { Authorization: 'Bearer caller-key' },
+        },
+      },
+    });
+    const response = await provider({
+      callerInterventions: [{ atMs: 100, text: 'Hello' }],
+    }).callApi('Cafe');
+    const scheduler = createProviderRateLimitOptions();
+
+    expect(response.metadata?.rateLimitRetryable).toBe(false);
+    expect(scheduler.isRateLimited?.(response, undefined)).toBe(false);
+    expect(scheduler.getHeaders?.(response)).toBeUndefined();
+    expect(scheduler.getRetryAfter?.(response, undefined)).toBeUndefined();
+    expect(JSON.stringify(response)).not.toContain('caller-key');
+    expect(response.metadata?.diagnostic).toBeUndefined();
+    expect(sockets).toHaveLength(0);
   });
 
   it('reports a rejected intervention and stops both sessions', async () => {
