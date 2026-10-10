@@ -12,6 +12,7 @@ import { sha256 } from '../util/createHash';
 import { pathExists } from '../util/file';
 import { parsePathOrGlob } from '../util/index';
 import { safeJsonStringify } from '../util/json';
+import { sanitizeScriptContext } from './scriptContext';
 
 import type {
   ApiProvider,
@@ -94,17 +95,9 @@ export class GolangProvider implements ApiProvider {
       logger.debug(`Returning cached ${apiType} result for script ${absPath}`);
       return { ...JSON.parse(cachedResult), cached: true };
     } else {
-      if (context) {
-        // Remove properties not useful in Golang and non-serializable objects
-        // These can contain circular references (e.g., Timeout objects) that break JSON serialization
-        delete context.getCache;
-        delete context.logger;
-        delete context.filters; // NunjucksFilterMap contains functions
-        delete context.originalProvider; // ApiProvider object with methods
-      }
-
+      const sanitizedContext = sanitizeScriptContext('GolangProvider', context);
       const args =
-        apiType === 'call_api' ? [prompt, this.options, context] : [prompt, this.options];
+        apiType === 'call_api' ? [prompt, this.options, sanitizedContext] : [prompt, this.options];
       logger.debug(
         `Running Golang script ${absPath} with scriptPath ${this.scriptPath} and args: ${safeJsonStringify(args)}`,
       );
