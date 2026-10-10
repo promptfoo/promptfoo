@@ -9,6 +9,7 @@ import { handleFinishReason } from '../../../../src/assertions/finishReason';
 import * as cache from '../../../../src/cache';
 import { OpenAiResponsesProvider } from '../../../../src/providers/openai/responses';
 import { extractProviderResponseAttributes } from '../../../../src/tracing/genaiTracer';
+import { fetchWithRetries } from '../../../../src/util/fetch/index';
 import { mockProcessEnv } from '../../../util/utils';
 
 import type { AssertionParams } from '../../../../src/types/index';
@@ -82,15 +83,22 @@ describe('OpenAiResponsesProvider HTTP metadata', () => {
         ],
         usage: { input_tokens: 10, output_tokens: 20, total_tokens: 30 },
       };
-      vi.mocked(cache.fetchWithCache).mockResolvedValue({
-        data: stream
-          ? `event: response.incomplete\ndata: ${JSON.stringify({ type: 'response.incomplete', response: mockApiResponse })}\n\n`
-          : mockApiResponse,
-        cached,
-        status: 200,
-        statusText: 'OK',
-        headers: { 'content-type': stream ? 'text/event-stream' : 'application/json' },
-      });
+      if (stream) {
+        vi.mocked(fetchWithRetries).mockResolvedValue(
+          new Response(
+            `event: response.incomplete\ndata: ${JSON.stringify({ type: 'response.incomplete', response: mockApiResponse })}\n\n`,
+            { headers: { 'content-type': 'text/event-stream' } },
+          ),
+        );
+      } else {
+        vi.mocked(cache.fetchWithCache).mockResolvedValue({
+          data: mockApiResponse,
+          cached,
+          status: 200,
+          statusText: 'OK',
+          headers: { 'content-type': 'application/json' },
+        });
+      }
       const provider = new OpenAiResponsesProvider('gpt-4o', {
         config: { apiKey: 'test-key', stream },
       });
@@ -195,68 +203,130 @@ describe('OpenAiResponsesProvider HTTP metadata', () => {
       usage: { input_tokens: 10, output_tokens: 10, total_tokens: 20 },
     };
 
-    vi.mocked(cache.fetchWithCache).mockResolvedValue({
-      data: `event: response.completed\ndata: ${JSON.stringify({ type: 'response.completed', response: mockApiResponse })}\n\ndata: [DONE]\n\n`,
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-      headers: { 'content-type': 'text/event-stream' },
-    });
+    vi.mocked(fetchWithRetries).mockResolvedValue(
+      new Response(
+        `event: response.completed\ndata: ${JSON.stringify({ type: 'response.completed', response: mockApiResponse })}\n\ndata: [DONE]\n\n`,
+        { status: 200, statusText: 'OK', headers: { 'content-type': 'text/event-stream' } },
+      ),
+    );
 
     const provider = new OpenAiResponsesProvider('gpt-4o', createStreamingOptions());
 
     const result = await provider.callApi('Test prompt');
 
-    expect(cache.fetchWithCache).toHaveBeenCalledWith(
+    expect(fetchWithRetries).toHaveBeenCalledWith(
       expect.any(String),
       expect.objectContaining({
         body: expect.stringContaining('"stream":true'),
       }),
       expect.any(Number),
-      'text',
-      true,
       undefined,
     );
     expect(result.output).toBe('Streaming response');
   });
 
-  it('should time out a streaming response that stalls after headers', async () => {
+  it.each([false, true])(
+    'aborts the transport after a parser error with background=%s',
+    async (background) => {
+      let signal: AbortSignal | null | undefined;
+      let finishResponse = () => {};
+      let loggingRead: Promise<string> | undefined;
+      const cancellationSignals: boolean[] = [];
+      const closeTransport = vi.fn(() => finishResponse());
+      vi.mocked(cache.fetchWithCache).mockImplementation(async () => {
+        cancellationSignals.push(signal?.aborted === true);
+        return { data: { status: 'cancelled' }, cached: false, status: 200, statusText: 'OK' };
+      });
+      vi.mocked(fetchWithRetries).mockImplementation(async (_url, options) => {
+        signal = options?.signal;
+        const response = new Response(
+          new ReadableStream({
+            start(controller) {
+              let closed = false;
+              finishResponse = () => {
+                if (!closed) {
+                  closed = true;
+                  controller.close();
+                }
+              };
+              controller.enqueue(
+                new TextEncoder().encode(
+                  (background
+                    ? 'data: {"type":"response.created","response":{"id":"resp_fixture","status":"in_progress"}}\n\n'
+                    : '') + 'data: {"type":"error","message":"fixture failure"}\n\n',
+                ),
+              );
+            },
+          }),
+        );
+        signal?.addEventListener('abort', closeTransport, { once: true });
+        loggingRead = response.clone().text();
+        return response;
+      });
+
+      try {
+        const result = await new OpenAiResponsesProvider('gpt-4o', {
+          config: { apiKey: 'test-key', stream: true, background },
+        }).callApi('Test prompt');
+        expect(result.error).toContain('fixture failure');
+        expect(result.error).not.toContain('timed out');
+        expect(signal?.aborted).toBe(true);
+        expect(closeTransport).toHaveBeenCalledOnce();
+        expect(cancellationSignals).toEqual(background ? [true] : []);
+      } finally {
+        signal?.removeEventListener('abort', closeTransport);
+        finishResponse();
+        await loggingRead;
+      }
+    },
+  );
+
+  it('times out and cancels a response body that stalls after headers', async () => {
+    vi.useFakeTimers();
     const restoreEnv = mockProcessEnv({ REQUEST_TIMEOUT_MS: '20' });
-    vi.mocked(cache.fetchWithCache).mockImplementation(async (_url, options) => {
-      const signal = options?.signal;
-      return new Promise((_resolve, reject) =>
-        signal?.addEventListener('abort', () => {
-          reject(new DOMException('The operation was aborted.', 'AbortError'));
-        }),
-      );
-    });
-
-    const provider = new OpenAiResponsesProvider('gpt-4o', createStreamingOptions());
-
+    const cancel = vi.fn();
+    vi.mocked(fetchWithRetries).mockResolvedValue(new Response(new ReadableStream({ cancel })));
     try {
-      const result = await provider.callApi('Test prompt');
+      const pending = new OpenAiResponsesProvider('gpt-4o', {
+        config: { apiKey: 'test-key', stream: true },
+      }).callApi('Test prompt');
+      await vi.runAllTimersAsync();
+      const result = await pending;
       expect(result.error).toContain('OpenAI streaming response timed out after 20ms');
+      expect(cancel).toHaveBeenCalledOnce();
     } finally {
+      vi.useRealTimers();
       restoreEnv();
     }
   });
 
-  it('should stop a streaming response when the eval is cancelled', async () => {
+  it('cancels an open response body when the eval is cancelled', async () => {
     const controller = new AbortController();
-    vi.mocked(cache.fetchWithCache).mockImplementation(async (_url, options) => {
-      const signal = options?.signal;
-      return new Promise((_resolve, reject) => {
-        signal?.addEventListener('abort', () => {
-          reject(new DOMException('The operation was aborted.', 'AbortError'));
-        });
-        queueMicrotask(() => controller.abort());
-      });
+    const cancel = vi.fn();
+    let started!: () => void;
+    const reading = new Promise<void>((resolve) => {
+      started = resolve;
     });
-
-    const provider = new OpenAiResponsesProvider('gpt-4o', createStreamingOptions());
-
-    await expect(
-      provider.callApi('Cancellable stream', undefined, { abortSignal: controller.signal }),
-    ).rejects.toMatchObject({ name: 'AbortError' });
+    vi.mocked(fetchWithRetries).mockResolvedValue(
+      new Response(
+        new ReadableStream(
+          {
+            pull() {
+              started();
+            },
+            cancel,
+          },
+          { highWaterMark: 0 },
+        ),
+      ),
+    );
+    const pending = new OpenAiResponsesProvider('gpt-4o', {
+      config: { apiKey: 'test-key', stream: true },
+    }).callApi('Cancellable stream', undefined, { abortSignal: controller.signal });
+    const assertion = expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+    await reading;
+    controller.abort();
+    await assertion;
+    expect(cancel).toHaveBeenCalledOnce();
   });
 });

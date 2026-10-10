@@ -1502,6 +1502,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
                   }
                 },
                 {
+                  signal: controller.signal,
                   preserveFailedOutput: this.usesGatewayErrorFormat(),
                   classifyError: classifyOpenAiGatewayStreamError,
                 },
@@ -1521,10 +1522,12 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
               headers: Object.fromEntries(response.headers.entries()),
             };
           } catch (err) {
+            const timedOut = controller.signal.aborted && !abortSignal?.aborted;
+            controller.abort();
             if (backgroundResponseId) {
               await cancelBackgroundResponse(backgroundResponseId, url, request);
             }
-            if (controller.signal.aborted && !abortSignal?.aborted) {
+            if (timedOut) {
               throw new Error(`OpenAI streaming response timed out after ${timeout}ms`);
             }
             throw err;
@@ -1547,39 +1550,34 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
           ? AbortSignal.any([controller.signal, abortSignal])
           : controller.signal;
         try {
-          const response = await fetchWithCache<string>(
+          const response = await fetchWithRetries(
             url,
             { ...request, signal },
             timeout,
-            'text',
-            true,
             config.maxRetries,
           );
           status = response.status;
           statusText = response.statusText;
-          responseHeaders = response.headers;
+          responseHeaders = Object.fromEntries(response.headers.entries());
           if (status >= 200 && status < 300) {
-            data = await readResponsesStream(
-              new Response(response.data),
-              'OpenAI',
-              logger,
-              undefined,
-              {
-                preserveFailedOutput: this.usesGatewayErrorFormat(),
-                classifyError: classifyOpenAiGatewayStreamError,
-              },
-            );
+            data = await readResponsesStream(response, 'OpenAI', logger, undefined, {
+              signal,
+              preserveFailedOutput: this.usesGatewayErrorFormat(),
+              classifyError: classifyOpenAiGatewayStreamError,
+            });
           } else {
+            const text = await response.text();
             try {
-              data = JSON.parse(response.data);
+              data = JSON.parse(text);
             } catch {
-              data = response.data as OpenAIResponsesResponse;
+              data = text as OpenAIResponsesResponse;
             }
           }
         } catch (err) {
           if (controller.signal.aborted) {
             throw new Error(`OpenAI streaming response timed out after ${timeout}ms`);
           }
+          controller.abort();
           throw err;
         } finally {
           clearTimeout(timeoutHandle);
