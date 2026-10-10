@@ -393,6 +393,51 @@ describe('matchesSimilarity', () => {
     });
   });
 
+  describe('score range', () => {
+    beforeEach(() => {
+      vi.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi').mockImplementation((text) => {
+        const vectors: Record<string, [number, number]> = {
+          small: [3, 4],
+          large: [6, 8],
+          opposite: [-3, -4],
+          huge: [1e200, 1e200],
+        };
+        const vector = vectors[text];
+        return vector
+          ? Promise.resolve(createEmbeddingResult(vector[0], vector[1]))
+          : Promise.reject(new Error('Unexpected input'));
+      });
+    });
+
+    it('caps an unnormalized dot product score at 1', async () => {
+      await expect(
+        matchesSimilarity('small', 'large', 0.75, false, undefined, 'dot_product'),
+      ).resolves.toMatchObject({ pass: true, score: 1 });
+    });
+
+    it('does not report a negative score for opposite vectors', async () => {
+      await expect(
+        matchesSimilarity('small', 'opposite', 0.75, false, undefined, 'cosine'),
+      ).resolves.toMatchObject({ pass: false, score: 0 });
+    });
+
+    it('caps the inverse score at 1 for opposite vectors', async () => {
+      await expect(
+        matchesSimilarity('small', 'opposite', 0.75, true, undefined, 'cosine'),
+      ).resolves.toMatchObject({ pass: true, score: 1 });
+    });
+
+    it('fails instead of passing when the dot product overflows', async () => {
+      await expect(
+        matchesSimilarity('huge', 'huge', 0.75, false, undefined, 'dot_product'),
+      ).resolves.toMatchObject({
+        pass: false,
+        score: 0,
+        reason: 'Invalid similarity score: Infinity',
+      });
+    });
+  });
+
   describe('euclidean metric', () => {
     beforeEach(() => {
       vi.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi').mockImplementation((text) => {
