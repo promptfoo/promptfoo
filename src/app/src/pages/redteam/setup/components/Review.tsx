@@ -24,7 +24,6 @@ import { Spinner } from '@app/components/ui/spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { EVAL_ROUTES, REDTEAM_ROUTES } from '@app/constants/routes';
 import { useApiHealth } from '@app/hooks/useApiHealth';
-import { useEmailVerification } from '@app/hooks/useEmailVerification';
 import { useEvalHistoryRefresh } from '@app/hooks/useEvalHistoryRefresh';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
@@ -32,6 +31,7 @@ import { cn } from '@app/lib/utils';
 import YamlEditor from '@app/pages/eval-creator/components/YamlEditor';
 import { useRedteamJobStore } from '@app/stores/redteamJobStore';
 import { callApi } from '@app/utils/api';
+import { checkEmailStatus } from '@app/utils/emailVerification';
 import { isFoundationModelProvider } from '@promptfoo/providers/constants';
 import { REDTEAM_DEFAULTS, strategyDisplayNames } from '@promptfoo/redteam/constants';
 import {
@@ -188,7 +188,6 @@ export default function Review({
   const confirmedRunTargetRef = useRef<ProviderOptions | null>(null);
   const [emailVerificationMessage, setEmailVerificationMessage] = useState('');
   const [emailVerificationError, setEmailVerificationError] = useState<string | null>(null);
-  const { checkEmailStatus } = useEmailVerification();
   const [isPurposeExpanded, setIsPurposeExpanded] = useState(false);
   const [isTestInstructionsExpanded, setIsTestInstructionsExpanded] = useState(false);
   const [isRunOptionsExpanded, setIsRunOptionsExpanded] = useState(true);
