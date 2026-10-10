@@ -12,6 +12,7 @@ import {
 import { analyzeTemplateReference } from '../../util/templates';
 import { sleepWithAbort } from '../../util/time';
 import { buildChatSpanContext, extractProviderResponseAttributes, withGenAISpan } from '../tracing';
+import { decodeUrlComponent } from '../urlEncoding';
 import { calculateOpenAIUsageCost } from './billing';
 import { OpenAiGenericProvider } from './index';
 import { appendOpenAiApiPath, assertOpenAiApiModel } from './util';
@@ -48,8 +49,8 @@ interface Usage {
   input_tokens: number;
   output_tokens: number;
   total_tokens: number;
-  input_tokens_details?: { cached_tokens?: number };
-  output_tokens_details?: { reasoning_tokens?: number };
+  input_tokens_details?: { cached_tokens?: number | null };
+  output_tokens_details?: { reasoning_tokens?: number | null };
 }
 
 interface Session {
@@ -161,14 +162,6 @@ function addCredential(credentials: Set<string>, value: unknown): void {
       credentials.add(candidate);
       credentials.add(encodeURIComponent(candidate));
     }
-  }
-}
-
-function decodeUrlComponent(value: string): string {
-  try {
-    return decodeURIComponent(value);
-  } catch {
-    return value;
   }
 }
 
@@ -339,12 +332,20 @@ function redactCredentials(text: string, credentials: readonly string[]): string
     .replace(/\b(Bearer|Basic)\s+[\w.~+/=-]{8,}/gi, `$1 ${REDACTED}`);
 }
 
+function isNonNegativeSafeInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
+}
+
 function isUsage(value: unknown): value is Usage {
   const usage = value as Usage | null | undefined;
+  const cached = usage?.input_tokens_details?.cached_tokens;
+  const reasoning = usage?.output_tokens_details?.reasoning_tokens;
   return (
-    typeof usage?.input_tokens === 'number' &&
-    typeof usage.output_tokens === 'number' &&
-    typeof usage.total_tokens === 'number'
+    isNonNegativeSafeInteger(usage?.input_tokens) &&
+    isNonNegativeSafeInteger(usage.output_tokens) &&
+    isNonNegativeSafeInteger(usage.total_tokens) &&
+    (cached == null || isNonNegativeSafeInteger(cached)) &&
+    (reasoning == null || isNonNegativeSafeInteger(reasoning))
   );
 }
 
@@ -353,8 +354,8 @@ function toTokenUsage(usage: Usage) {
     prompt: usage.input_tokens,
     completion: usage.output_tokens,
     total: usage.total_tokens,
-    cached: usage.input_tokens_details?.cached_tokens,
-    completionDetails: { reasoning: usage.output_tokens_details?.reasoning_tokens },
+    cached: usage.input_tokens_details?.cached_tokens ?? undefined,
+    completionDetails: { reasoning: usage.output_tokens_details?.reasoning_tokens ?? undefined },
   };
 }
 
@@ -626,7 +627,6 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
         return {};
       }
       let sum: Usage | undefined;
-      let complete = true;
       for (const id of subagentIds) {
         const turns = await this.list<Turn>(
           `${endpoint}/subagents/${encodeURIComponent(id)}/turns`,
@@ -634,17 +634,16 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
           signal,
         );
         for (const turn of turns) {
-          if (isUsage(turn.usage)) {
-            sum = sum ? addUsage(sum, turn.usage) : turn.usage;
-          } else {
-            complete = false;
+          if (!isUsage(turn.usage)) {
+            return { usageMayExcludeSubagents: true };
           }
+          sum = sum ? addUsage(sum, turn.usage) : turn.usage;
         }
       }
       return {
         usageMayExcludeSubagents: true,
-        // A partial sum would understate subagent work, so it is reported only when complete.
-        ...(complete && sum ? { subagentUsage: toTokenUsage(sum) } : {}),
+        // A partial or inexact sum would misstate subagent work, so it is reported only when exact.
+        ...(isUsage(sum) ? { subagentUsage: toTokenUsage(sum) } : {}),
       };
     } catch (error) {
       evalSignal?.throwIfAborted();

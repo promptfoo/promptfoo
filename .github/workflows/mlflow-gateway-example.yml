@@ -1,0 +1,76 @@
+name: MLflow Gateway example
+
+on:
+  pull_request:
+    paths: &watched-paths
+      - 'examples/provider-mlflow-gateway/**'
+      - 'src/providers/mlflow-gateway.ts'
+      - 'src/providers/openai/**'
+      - '.nvmrc'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/mlflow-gateway-example.yml'
+  push:
+    branches: [main]
+    paths: *watched-paths
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gateway-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with: &no-persisted-credentials
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: '.nvmrc'
+          cache: npm
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with: &python-3-14
+          python-version: '3.14'
+      - name: Install Promptfoo
+        run: |
+          npm install -g npm@11.19.0 --registry=https://registry.npmjs.org/
+          npm ci --registry=https://registry.npmjs.org/
+      - name: Install MLflow using the documented requirement
+        run: |
+          python -m venv .venv
+          .venv/bin/python - <<'PY'
+          import pathlib
+          import shlex
+          import subprocess
+          import sys
+
+          readme = pathlib.Path('examples/provider-mlflow-gateway/README.md').read_text()
+          commands = [line for line in readme.splitlines()
+                      if line.startswith('.venv/bin/python -m pip install ')]
+          if len(commands) != 1:
+              raise RuntimeError('README must contain one POSIX Python pip install command')
+          subprocess.run([sys.executable, '-m', 'pip', *shlex.split(commands[0])[3:]], check=True)
+          subprocess.run([sys.executable, '-m', 'pip', 'check'], check=True)
+          PY
+      - name: Run the example against a local MLflow server and model fixture
+        run: .venv/bin/python -m unittest discover -s examples/provider-mlflow-gateway/tests -v
+
+  windows-setup:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with: *no-persisted-credentials
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: '.nvmrc'
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with: *python-3-14
+      - name: Execute the documented PowerShell setup and check server health
+        shell: pwsh
+        run: ./examples/provider-mlflow-gateway/tests/test_windows_setup.ps1

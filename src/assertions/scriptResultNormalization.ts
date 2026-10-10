@@ -12,7 +12,126 @@ export interface ScriptLabels {
   language: string;
 }
 
-function appendToReason(reason: string, suffix: AssertionParams['assertion']['value']): string {
+/**
+ * Whether `value` is an object literal or an object without a prototype. A grader can build
+ * its result in another realm, for example with `vm.runInNewContext`, so the check does not
+ * compare against this realm's `Object.prototype`. Class instances and built-in containers
+ * inherit from a prototype that has one of its own, and are not plain.
+ */
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  if (typeof value !== 'object' || value === null || Symbol.toStringTag in value) {
+    return false;
+  }
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === null || Object.getPrototypeOf(prototype) === null;
+}
+
+/** The number earlier releases recorded for a named score, when their arithmetic produced one. */
+function toRecordedScore(value: unknown): unknown {
+  if (
+    typeof value === 'boolean' ||
+    value === null ||
+    (typeof value === 'string' && value.trim() !== '')
+  ) {
+    const score = Number(value);
+    return Number.isFinite(score) ? score : value;
+  }
+  return value;
+}
+
+function withRecordedScores(namedScores: unknown): unknown {
+  if (!isPlainObject(namedScores)) {
+    return namedScores;
+  }
+  const entries = Object.entries(namedScores);
+  // An undefined score is not a value, as in JSON.
+  const recorded = entries
+    .filter(([, value]) => value !== undefined)
+    .map(([name, value]) => [name, toRecordedScore(value)] as const);
+  const changed =
+    recorded.length !== entries.length ||
+    recorded.some(([name, value]) => value !== namedScores[name]);
+  return changed ? Object.fromEntries(recorded) : namedScores;
+}
+
+function withLegacyShapes(
+  result: unknown,
+  isComponent: boolean,
+  converted: WeakMap<object, unknown>,
+): unknown {
+  if (!isPlainObject(result)) {
+    return result;
+  }
+  if (converted.has(result)) {
+    return converted.get(result);
+  }
+  // A result that contains itself stays as it is, for validation to reject.
+  converted.set(result, result);
+
+  const changes: Record<string, unknown> = {};
+  if (isComponent && typeof result.pass === 'boolean') {
+    if (result.reason == null) {
+      changes.reason = '';
+    }
+    if (result.score == null) {
+      changes.score = result.pass ? 1 : 0;
+    }
+  }
+  const namedScores = withRecordedScores(result.namedScores);
+  if (namedScores !== result.namedScores) {
+    changes.namedScores = namedScores;
+  }
+  const components = result.componentResults;
+  // Sparse arrays are left alone so that validation still rejects them.
+  if (
+    Array.isArray(components) &&
+    components.every((_, index) => Object.prototype.hasOwnProperty.call(components, index)) &&
+    Object.keys(components).length === components.length
+  ) {
+    const convertedComponents = components.map((component) =>
+      withLegacyShapes(component, true, converted),
+    );
+    if (convertedComponents.some((component, index) => component !== components[index])) {
+      changes.componentResults = convertedComponents;
+    }
+  }
+
+  const normalized = Object.keys(changes).length > 0 ? { ...result, ...changes } : result;
+  converted.set(result, normalized);
+  return normalized;
+}
+
+/**
+ * Returns `result` as a grading result, or undefined when it is not one.
+ *
+ * Grading results must hold finite numbers, and nested component results must be complete.
+ * Custom graders written for earlier releases can return a few shapes those releases
+ * accepted, so they are converted to what was recorded then instead of failing the grader:
+ *
+ * - a named score that is a boolean, `null`, or a numeric string becomes its number
+ *   (`true` is 1; `false` and `null` are 0), and an `undefined` one is dropped;
+ * - a nested component result may omit `reason`, and `score`, which then follows `pass`.
+ *
+ * Only plain objects are converted. Anything else that is not valid, such as `NaN`, an
+ * infinity, or a result without `reason`, is still rejected.
+ */
+export function asGradingResult(result: unknown): GradingResult | undefined {
+  if (isGradingResult(result)) {
+    return result;
+  }
+  try {
+    const converted = withLegacyShapes(result, false, new WeakMap());
+    return converted !== result && isGradingResult(converted) ? converted : undefined;
+  } catch {
+    // An unreadable or too deeply nested result is not a grading result.
+    return undefined;
+  }
+}
+
+export function appendToReason(
+  reason: string,
+  suffix: AssertionParams['assertion']['value'],
+): string {
   return typeof suffix === 'string' && suffix ? `${reason}\n${suffix}` : reason;
 }
 
@@ -56,12 +175,11 @@ export function normalizeScriptAssertionResult(
   return {
     ...result,
     pass,
-    reason:
-      pass === result.pass
-        ? result.reason
-        : pass
-          ? 'Assertion passed'
-          : `${labels.code} returned ${result.pass ? 'true' : 'false'}`,
+    reason: inverse
+      ? pass
+        ? 'Assertion passed'
+        : result.reason || `${labels.code} returned true`
+      : result.reason,
     assertion: result.assertion ?? assertion,
   };
 }
@@ -77,19 +195,16 @@ export function normalizeScriptObjectResult(
   labels: ScriptLabels,
   reasonSuffix?: AssertionParams['assertion']['value'],
 ): GradingResult {
-  const mappedObj = mapSnakeCaseToCamelCase(result);
+  const gradingResult: Omit<GradingResult, 'assertion'> | undefined = asGradingResult(
+    mapSnakeCaseToCamelCase(result),
+  );
 
-  if (!isGradingResult(mappedObj)) {
+  if (!gradingResult) {
     throw new Error(
-      `${labels.language} assertion must return a boolean, number, or {pass, score, reason} object. Got instead:\n${JSON.stringify(
-        mappedObj,
-        null,
-        2,
-      )}`,
+      `${labels.language} assertion must return a boolean, number, or {pass, score, reason} object with finite scores and weights. Got type ${typeof result}.`,
     );
   }
 
-  const gradingResult = mappedObj as Omit<GradingResult, 'assertion'>;
   if (assertion.threshold !== undefined && gradingResult.score < assertion.threshold) {
     gradingResult.pass = false;
     const scoreMessage = `${labels.language} score ${gradingResult.score} is less than threshold ${assertion.threshold}`;

@@ -2,16 +2,56 @@ type ResponsesStreamEvent = {
   type?: string;
   response?: any;
   delta?: string;
+  output_index?: number;
+  content_index?: number;
   output_text?: { delta?: string };
   output?: any[];
   code?: string;
   message?: string;
-  error?: { code?: string; message?: string };
+  error_type?: string;
+  error?: {
+    code?: string;
+    message?: string;
+    error_type?: string;
+    metadata?: Record<string, unknown>;
+  };
 };
 
 type ResponsesStreamLogger = {
   debug(message: string, context?: Record<string, unknown>): unknown;
 };
+
+type StreamErrorClassification = 'refusal' | 'content_policy_violation' | 'potential' | 'technical';
+
+export function getResponsesOutputText(response: any): string | undefined {
+  if (typeof response.output_text === 'string' && response.output_text.trim()) {
+    return response.output_text;
+  }
+  if (!Array.isArray(response.output)) {
+    return undefined;
+  }
+  const result = response.output
+    .flatMap((item: any) => {
+      if (
+        !['message', 'output_message'].includes(item?.type) ||
+        (item.role && item.role !== 'assistant')
+      ) {
+        return [];
+      }
+      const text = Array.isArray(item.content)
+        ? item.content
+            .filter(
+              (part: any) =>
+                ['output_text', 'text'].includes(part?.type) && typeof part.text === 'string',
+            )
+            .map((part: any) => part.text)
+            .join('')
+        : '';
+      return text.trim() ? [text] : [];
+    })
+    .join('\n');
+  return result || undefined;
+}
 
 function parseSseEvent(
   chunk: string,
@@ -44,6 +84,10 @@ export async function readResponsesStream(
   providerName: string,
   logger: ResponsesStreamLogger,
   onResponse?: (response: any) => void,
+  options?: {
+    preserveFailedOutput?: boolean;
+    classifyError?: (response: unknown) => StreamErrorClassification | undefined;
+  },
 ): Promise<any> {
   if (!response.body) {
     throw new Error(`${providerName} streaming response has no body`);
@@ -54,6 +98,10 @@ export async function readResponsesStream(
   let buffer = '';
   let latestResponse: any;
   let outputText = '';
+  const textByOutputIndex = new Map<number, Map<number, string>>();
+  let pendingError:
+    | { error: Error; response: Record<string, unknown>; classification: StreamErrorClassification }
+    | undefined;
 
   const processChunk = (chunk: string) => {
     const event = parseSseEvent(chunk, providerName, logger);
@@ -64,9 +112,22 @@ export async function readResponsesStream(
     if (event.type === 'error') {
       const code = event.error?.code ?? event.code;
       const message = event.error?.message ?? event.message ?? 'unknown stream error';
-      throw new Error(
+      const error = new Error(
         `${providerName} streaming response error${code ? ` (${code})` : ''}: ${message}`,
       );
+      const errorResponse = {
+        status: 'failed',
+        error: event.error ?? { code, message },
+        ...(event.error_type ? { error_type: event.error_type } : {}),
+      };
+      const classification = options?.preserveFailedOutput
+        ? options.classifyError?.(errorResponse)
+        : undefined;
+      if (!classification || classification === 'technical') {
+        throw error;
+      }
+      pendingError = { error, response: errorResponse, classification };
+      return;
     }
 
     if (event.response && typeof event.response === 'object') {
@@ -77,10 +138,16 @@ export async function readResponsesStream(
     }
 
     if (event.type === 'response.output_text.delta') {
-      if (typeof event.delta === 'string') {
-        outputText += event.delta;
-      } else if (typeof event.output_text?.delta === 'string') {
-        outputText += event.output_text.delta;
+      const delta = typeof event.delta === 'string' ? event.delta : event.output_text?.delta;
+      if (typeof delta === 'string') {
+        outputText += delta;
+        if (options?.preserveFailedOutput) {
+          const index = typeof event.output_index === 'number' ? event.output_index : 0;
+          const partIndex = typeof event.content_index === 'number' ? event.content_index : 0;
+          const content = textByOutputIndex.get(index) ?? new Map<number, string>();
+          content.set(partIndex, (content.get(partIndex) ?? '') + delta);
+          textByOutputIndex.set(index, content);
+        }
       }
     }
   };
@@ -104,7 +171,47 @@ export async function readResponsesStream(
     processChunk(buffer);
   }
 
+  if (pendingError) {
+    const terminal =
+      latestResponse?.status === 'failed' ? options?.classifyError?.(latestResponse) : undefined;
+    if (
+      terminal === 'technical' ||
+      (terminal !== 'refusal' &&
+        terminal !== 'content_policy_violation' &&
+        pendingError.classification === 'potential')
+    ) {
+      throw pendingError.error;
+    }
+    if (terminal !== 'refusal' && terminal !== 'content_policy_violation') {
+      latestResponse = {
+        ...latestResponse,
+        ...pendingError.response,
+        error_type: pendingError.classification,
+      };
+    }
+  }
+
   if (latestResponse) {
+    if (options?.preserveFailedOutput && latestResponse.status === 'failed' && outputText) {
+      const streamedText = Array.from(textByOutputIndex)
+        .sort(([left], [right]) => left - right)
+        .map(([, content]) =>
+          Array.from(content)
+            .sort(([left], [right]) => left - right)
+            .map(([, text]) => text)
+            .join(''),
+        )
+        .filter((text) => text.trim())
+        .join('\n');
+      const reportedText = getResponsesOutputText(latestResponse);
+      if (
+        streamedText &&
+        (!reportedText ||
+          (streamedText.length > reportedText.length && streamedText.startsWith(reportedText)))
+      ) {
+        return { ...latestResponse, output_text: streamedText };
+      }
+    }
     return latestResponse;
   }
 

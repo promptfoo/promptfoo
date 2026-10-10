@@ -70,6 +70,10 @@ export const McpConfigInputSchema = z.strictObject({
       'Servers to connect to; an empty array is allowed. The Claude adapter also includes server',
     ),
   serverName: z.string().optional().describe('Server name supplied by mcp:<name> provider IDs'),
+  defaultArgs: z
+    .record(z.string(), z.unknown())
+    .optional()
+    .describe('Arguments merged into every tool call; per-call arguments take precedence'),
   transformResponse: z
     .string()
     .optional()
@@ -175,5 +179,4 @@ export interface McpConfigParsed extends McpRequestOptions, z.output<typeof McpC
 export const McpConfigInputJsonSchema = z.toJSONSchema(McpConfigInputSchema, {
   target: 'draft-07',
   io: 'input',
-  unrepresentable: 'throw',
 });
