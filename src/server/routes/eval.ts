@@ -7,6 +7,7 @@ import Eval, { EvalQueries } from '../../models/eval';
 import EvalResult from '../../models/evalResult';
 import { evaluateWithSource } from '../../node';
 import { EvalSchemas } from '../../types/api/eval';
+import { ResultFailureReason } from '../../types/index';
 import { deleteEval, deleteEvals, updateResult, writeResultsToDatabase } from '../../util/database';
 import {
   ComparisonEvalNotFoundError,
@@ -767,7 +768,14 @@ evalRouter.post(
         if (result.success) {
           // Result changed from fail to pass
           prompt.metrics.testPassCount += 1;
-          prompt.metrics.testFailCount -= 1;
+          if (result.failureReason === ResultFailureReason.ERROR) {
+            // A manually approved grader-error row leaves the error bucket and
+            // clears the marker so error retries skip the approved row.
+            prompt.metrics.testErrorCount -= 1;
+            result.failureReason = ResultFailureReason.NONE;
+          } else {
+            prompt.metrics.testFailCount -= 1;
+          }
           prompt.metrics.assertPassCount += 1;
           prompt.metrics.score += scoreChange;
           if (hasExistingManualOverride) {

@@ -306,7 +306,12 @@ export class AssertionsResult {
 
     this.failedReason = result.reason;
 
-    if (getEnvBool('PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES')) {
+    // A zero-weight assert-set is metric-only and can't fail: its children must
+    // neither fail the test nor abort the evaluation under short-circuiting.
+    if (
+      getEnvBool('PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES') &&
+      this._parentAssertionSet?.assertionSet.weight !== 0
+    ) {
       throw new Error(result.reason);
     }
   }
@@ -366,20 +371,43 @@ export class AssertionsResult {
       this.componentResults.length > 0 &&
       this.componentResults.every((result) => result.metadata?.cachedResponse === true);
 
+    // A grader execution failure (provider/transport/no-output/malformed judge
+    // output, tagged `metadata.graderError` by the matcher) is not evidence that
+    // the criterion was or was not met. Propagate the marker so the evaluator
+    // can surface the row as ERROR rather than an ordinary assertion failure.
+    // Inspect only failed direct components: nested assert-sets propagate the
+    // marker to their own top level when they fail, while an effectively-passed
+    // set (e.g. `threshold: 0`) or a `weight: 0` metric-only assertion may still
+    // carry a grader failure that must not reclassify an unrelated failure.
+    // Keep the first failing grader component's reason: by this point `reason`
+    // may be an aggregate threshold summary or another component's failure.
+    // componentResults can be sparse: comparison assertions (select-best,
+    // max-score) skip addResult, leaving holes that Array.prototype.find
+    // visits as undefined. Existence comes from the matched component itself,
+    // not its reason, so an empty-string reason still marks the failure.
+    const failedGrader = pass
+      ? undefined
+      : this.componentResults.find(
+          (result) => result !== undefined && !result.pass && result.metadata?.graderError === true,
+        );
+    const graderFailureReason = failedGrader?.reason;
+    const hasGraderError = failedGrader !== undefined;
+
     this.result = {
       pass,
       score,
-      reason,
+      reason: graderFailureReason || reason,
       namedScores: normalizedNamedScores,
       ...(hasNamedScoreWeights && { namedScoreWeights: { ...this.namedScoreWeights } }),
       tokensUsed: this.tokensUsed,
       componentResults: flattenedComponentResults,
-      ...((this._parentAssertionSet || cachedResponse) && {
+      ...((this._parentAssertionSet || cachedResponse || hasGraderError) && {
         metadata: {
           ...(this._parentAssertionSet && {
             assertionSet: buildAssertionSetMetadata(this._parentAssertionSet.assertionSet),
           }),
           ...(cachedResponse && { cachedResponse: true }),
+          ...(hasGraderError && { graderError: true as const }),
         },
       }),
     };
@@ -452,6 +480,21 @@ export class AssertionsResult {
           );
         }
       }
+    }
+
+    // A custom scoring function (or the guards above) can fail the result after
+    // preliminary aggregation passed it. Re-derive the marker from the final
+    // state so a failed grader is never recorded as an ordinary assertion
+    // failure. Only the marker is applied here: a custom scorer owns its
+    // reason.
+    if (
+      !this.result.pass &&
+      this.result.metadata?.graderError !== true &&
+      this.componentResults.some(
+        (result) => result !== undefined && !result.pass && result.metadata?.graderError === true,
+      )
+    ) {
+      this.result.metadata = { ...this.result.metadata, graderError: true as const };
     }
 
     return this.result;

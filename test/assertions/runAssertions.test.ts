@@ -195,6 +195,63 @@ describe('runAssertions', () => {
     });
   });
 
+  it('does not fail the test for grader errors inside a zero-weight assertion set', async () => {
+    const failingGrader: ApiProvider = {
+      id: () => 'failing-grading-provider',
+      callApi: vi.fn().mockResolvedValue({ error: 'Grader unavailable' }),
+    };
+    const result = await runAssertions({
+      prompt: 'The question',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      test: {
+        assert: [
+          { type: 'equals', value: 'Expected output' },
+          {
+            type: 'assert-set',
+            weight: 0,
+            assert: [{ type: 'model-graded-closedqa', value: 'The reference answer' }],
+          },
+        ],
+        options: { provider: failingGrader },
+      },
+      providerResponse: { output: 'Expected output' },
+    });
+
+    expect(result).toMatchObject({ pass: true, score: 1 });
+    expect(result.metadata?.graderError).toBeUndefined();
+  });
+
+  it('does not short-circuit on failures inside a zero-weight assertion set', async () => {
+    const restoreEnv = mockProcessEnv({ PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES: 'true' });
+    try {
+      const result: GradingResult = await runAssertions({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        test: {
+          assert: [
+            { type: 'equals', value: 'Expected output' },
+            {
+              type: 'assert-set',
+              weight: 0,
+              assert: [
+                {
+                  type: 'javascript' as const,
+                  value: () => ({ pass: false, score: 0, reason: 'metric miss' }),
+                },
+              ],
+            },
+          ],
+        },
+        providerResponse: { output: 'Expected output' },
+      });
+
+      expect(result).toMatchObject({ pass: true, score: 1 });
+      expect(result.metadata?.graderError).toBeUndefined();
+    } finally {
+      restoreEnv();
+    }
+  });
+
   it('should fail when any assertion fails', async () => {
     const output = 'Actual output';
 
