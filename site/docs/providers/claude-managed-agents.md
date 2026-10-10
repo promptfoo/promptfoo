@@ -97,7 +97,7 @@ Promptfoo archives its session when finished, then archives any agent or environ
 
 [Interrupts do not end dynamic workflow runs](https://platform.claude.com/docs/en/managed-agents/workflow-runs#interrupt-a-session-with-runs-open), and an open run can prevent archival. If cleanup fails, the eval reports an error and preserves resource IDs in `metadata.cleanupErrors` and the corresponding ID fields; inspect that session in the Anthropic Console to stop the run and archive it. Promptfoo does not raise a session's budget to resume or stop its runs.
 
-Interrupted, failed, budget-limited, and truncated runs are reported as errors. API failures include Anthropic's error type and message. Mutating requests are not automatically retried because repeating a hosted run can duplicate tool side effects; the final usage read can be retried.
+Interrupted, failed, budget-limited, and truncated runs are reported as errors. So is a workflow start that Anthropic refuses; `metadata.workflowStartErrors` records the reason. API failures include Anthropic's error type and message. Requests that start or steer a hosted run are not automatically retried, because repeating them can duplicate tool side effects. The final usage read and archival can be retried.
 
 This provider supports server-executed tools in cloud environments. Custom tools requiring client execution, permission confirmations, and self-hosted tool execution are not supported. A request for client action returns an error; Promptfoo does not grant tool permissions automatically.
 

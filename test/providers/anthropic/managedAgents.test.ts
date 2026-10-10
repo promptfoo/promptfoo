@@ -208,6 +208,54 @@ describe('Claude Managed Agents', () => {
     expect(result.metadata).not.toHaveProperty('cleanupErrors');
   });
 
+  it('confirms archival when the archive response was lost', async () => {
+    const f = setup({
+      config: {
+        apiKey: 'key',
+        agent: { name: 'QA', model: 'claude-sonnet-5' },
+        environment: { name: 'QA' },
+      },
+    });
+    f.archive.mockRejectedValue(new Anthropic.APIConnectionError({ message: 'socket hang up' }));
+    f.retrieve.mockResolvedValue({
+      status: 'terminated',
+      archived_at: '2026-10-09',
+      usage,
+    } as never);
+    const result = await f.provider.callApi('test');
+    expect(result.error).toBeUndefined();
+    expect(result.metadata).toMatchObject({ sessionArchived: true });
+    expect(f.archive).toHaveBeenCalledOnce();
+    // The definitions it created are still released.
+    expect(f.agentArchive).toHaveBeenCalledOnce();
+    expect(f.environmentArchive).toHaveBeenCalledOnce();
+  });
+
+  it.each([429, 503])('retries archival after a transient HTTP %i', async (status) => {
+    vi.useFakeTimers();
+    const f = setup();
+    f.archive
+      .mockRejectedValueOnce(apiError(status, 'Try again later.', 'api_error'))
+      .mockResolvedValue({} as never);
+    f.retrieve.mockResolvedValue({ status: 'idle', usage } as never);
+    const pending = f.provider.callApi('test');
+    await vi.advanceTimersByTimeAsync(250);
+    const result = await pending;
+    expect(f.archive).toHaveBeenCalledTimes(2);
+    expect(result.error).toBeUndefined();
+    expect(result.metadata).toMatchObject({ sessionArchived: true });
+  });
+
+  it.each([401, 403, 404])('does not retry an archive rejected with HTTP %i', async (status) => {
+    const f = setup();
+    f.archive.mockRejectedValue(apiError(status, 'Not permitted.', 'permission_error'));
+    const result = await f.provider.callApi('test');
+    expect(f.archive).toHaveBeenCalledOnce();
+    expect(result.error).toContain(`cleanup failed: Session sesn-test:`);
+    expect(result.error).toContain(`(HTTP ${status}): permission_error: Not permitted.`);
+    expect(result.metadata).toMatchObject({ sessionArchived: false });
+  });
+
   it('accepts a refusal for a session that is already archived', async () => {
     const f = setup({}, [idle('budget_reached')]);
     f.archive.mockRejectedValue(apiError(400, 'Session sesn-test is already archived.'));
@@ -315,6 +363,7 @@ describe('Claude Managed Agents', () => {
     });
     // Prompt-cache reads are not a response replayed from Promptfoo's cache.
     expect(result.tokenUsage).not.toHaveProperty('cached');
+    expect(result.metadata).not.toHaveProperty('workflowStartErrors');
     expect(result.error).toBeUndefined();
     expect(f.stream.mock.invocationCallOrder[0]).toBeLessThan(f.send.mock.invocationCallOrder[0]);
     expect(f.send).toHaveBeenCalledWith(
@@ -422,6 +471,28 @@ describe('Claude Managed Agents', () => {
       expect((await f.provider.callApi('test')).error).toContain(`ended with ${type}`);
     },
   );
+
+  it('reports a workflow start the server refused, which leaves no run to wait for', async () => {
+    const refusal = {
+      type: 'max_workflow_runs_error',
+      message: 'The session has reached its limit of open workflow runs.',
+    };
+    const f = setup({}, [
+      { type: 'workflow_run.error', workflow_run_id: null, error: refusal },
+      message('I could not start the workflow, so here is my own answer.'),
+      idle(),
+    ]);
+    const result = await f.provider.callApi('test');
+    expect(result.error).toBe(
+      'Claude Managed Agents could not start a workflow (max_workflow_runs_error: The session has reached its limit of open workflow runs.)',
+    );
+    expect(result.output).toBeUndefined();
+    expect(result.metadata).toMatchObject({
+      workflowRuns: [],
+      workflowStartErrors: [refusal],
+      sessionArchived: true,
+    });
+  });
 
   it('includes the reason the server gives for a failed workflow', async () => {
     const f = setup({}, [

@@ -48,6 +48,7 @@ type WorkflowEvent = {
   workflow_run_id: string | null;
   name?: string;
   result?: { type: string; error?: { type: string; message: string } };
+  error?: { type: string; message: string };
 };
 type WorkflowRun = { id: string; name?: string; status: string; result?: WorkflowEvent['result'] };
 
@@ -59,12 +60,17 @@ class SessionState {
   stopReason?: string;
   runs = new Map<string, WorkflowRun>();
   openRuns = new Set<string>();
+  /** Workflow starts the server refused. No run exists for these to end. */
+  startErrors: { type: string; message: string }[] = [];
   toolCalls: { id: string; name: string; input: unknown; output?: unknown; is_error?: boolean }[] =
     [];
 
   recordWorkflow(event: WorkflowEvent): void {
     const id = event.workflow_run_id;
     if (!id) {
+      if (event.type === 'workflow_run.error' && event.error) {
+        this.startErrors.push(event.error);
+      }
       return;
     }
     const run = this.runs.get(id) ?? { id, status: 'created' };
@@ -150,12 +156,18 @@ class SessionState {
     if (this.output === undefined) {
       throw new Error('Claude Managed Agents completed without a text response');
     }
+    // The server writes this error text itself; it carries no content from a run.
     const failedRun = [...this.runs.values()].find((run) => run.result?.type !== 'completed');
     if (failedRun) {
-      // The server writes this error text itself; it carries no content from the run.
       const cause = failedRun.result?.error;
       throw new Error(
         `Claude Managed Agents workflow ${failedRun.id} ended with ${failedRun.result?.type ?? 'unknown result'}${cause ? ` (${cause.type}: ${cause.message})` : ''}`,
+      );
+    }
+    const refused = this.startErrors[0];
+    if (refused) {
+      throw new Error(
+        `Claude Managed Agents could not start a workflow (${refused.type}: ${refused.message})`,
       );
     }
     return this.output;
@@ -538,6 +550,9 @@ export class AnthropicManagedAgentsProvider extends AnthropicGenericProvider {
       controller.abort();
       metadata.workflowRuns = [...state.runs.values()];
       metadata.openWorkflowRunIds = [...state.openRuns];
+      if (state.startErrors.length) {
+        metadata.workflowStartErrors = state.startErrors;
+      }
       metadata.stopReason = state.stopReason;
       applyUsage(response, state.usage);
       await this.cleanupResources(config, { agentId, environmentId, sessionId }, response, secrets);
@@ -658,6 +673,7 @@ export class AnthropicManagedAgentsProvider extends AnthropicGenericProvider {
     let settled = false;
     try {
       for (let delayMs = 250; ; delayMs = Math.min(delayMs * 2, 2_000)) {
+        let transient = false;
         try {
           await this.anthropic.beta.sessions.archive(sessionId, params, request);
           return undefined;
@@ -666,10 +682,11 @@ export class AnthropicManagedAgentsProvider extends AnthropicGenericProvider {
             throw error;
           }
           refusal = describeError(error, secrets);
-          if (
-            !(error instanceof Anthropic.APIError) ||
-            (error.status !== 400 && error.status !== 409)
-          ) {
+          const status = error instanceof Anthropic.APIError ? error.status : null;
+          // A lost response, rate limit, or server error may still have archived the
+          // session, or may clear on retry. Archiving again repeats no hosted work.
+          transient = status === undefined || status === 429 || (status ?? 0) >= 500;
+          if (!transient && status !== 400 && status !== 409) {
             return refusal;
           }
         }
@@ -680,12 +697,12 @@ export class AnthropicManagedAgentsProvider extends AnthropicGenericProvider {
         running = session.status === 'running' || session.status === 'rescheduling';
         // Refused while settled both before and after the attempt: waiting will not
         // help a session that, for example, still has an open workflow run.
-        if (!running && settled) {
+        if (!transient && !running && settled) {
           return refusal;
         }
-        settled = !running;
+        settled = !transient && !running;
         // A session that settled since the refusal is retried at once.
-        if (running) {
+        if (running || transient) {
           await sleepWithAbort(delayMs, request.signal);
         }
       }
