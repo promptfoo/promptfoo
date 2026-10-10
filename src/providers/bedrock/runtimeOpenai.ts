@@ -1,6 +1,7 @@
 import { calculateOpenAIUsageCost } from '../openai/billing';
-import { getOpenAICacheWriteInputTokens } from '../openai/util';
-import { collectBedrockChatStream } from './chatStream';
+import { getOpenAICacheWriteInputTokens, getTokenUsage } from '../openai/util';
+import { getResponsesTokenUsage } from '../responses/processor';
+import { BedrockChatStreamError, collectBedrockChatStream } from './chatStream';
 import { resolveBedrockMantleRegion } from './mantle';
 import { BedrockMantleChatProvider } from './mantleChat';
 import { BedrockOpenAiResponsesProvider } from './openaiResponses';
@@ -165,6 +166,18 @@ export class BedrockRuntimeChatProvider extends BedrockMantleChatProvider {
     return body.stream && typeof data === 'string' ? collectBedrockChatStream(data) : data;
   }
 
+  protected getChatResponseErrorAccounting(error: unknown, config: OpenAiCompletionOptions) {
+    if (!(error instanceof BedrockChatStreamError) || !error.response.usage) {
+      return undefined;
+    }
+    const cost = this.calculateResponseCost(error.response, config, false);
+    return {
+      tokenUsage: getTokenUsage(error.response, false),
+      cached: false,
+      ...(cost === undefined ? {} : { cost }),
+    };
+  }
+
   protected calculateResponseCost(
     data: OpenAiChatCompletionCostData,
     config: OpenAiCompletionOptions,
@@ -268,6 +281,12 @@ export class BedrockRuntimeResponsesProvider extends BedrockOpenAiResponsesProvi
       cached,
     );
     const { cost: _previousCost, ...unbilled } = result;
-    return { ...unbilled, ...(cost === undefined ? {} : { cost }) };
+    return {
+      ...unbilled,
+      ...(result.error && !result.tokenUsage && data.usage
+        ? { tokenUsage: getResponsesTokenUsage(data, cached), cached }
+        : {}),
+      ...(cost === undefined ? {} : { cost }),
+    };
   }
 }

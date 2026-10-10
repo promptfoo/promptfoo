@@ -334,6 +334,88 @@ describe('Runtime Chat streaming', () => {
     expect(result.cost).toBeGreaterThan(0);
   });
 
+  it.each([
+    'missing-done',
+    'missing-finish',
+    'invalid-tool',
+    'invalid-json',
+    'service-error',
+    'no-usage',
+  ])(
+    'preserves reported accounting before rejecting %s without executing tools or publishing to cache',
+    async (failure) => {
+      const callback = vi.fn();
+      const chunks: unknown[] = [
+        {
+          choices: [
+            {
+              index: 0,
+              delta: {
+                tool_calls: [
+                  {
+                    index: 0,
+                    id: 'call-1',
+                    type: 'function',
+                    function: { name: 'lookup', arguments: '{"x":1}' },
+                  },
+                ],
+              },
+              finish_reason: failure === 'missing-finish' ? null : 'tool_calls',
+            },
+          ],
+        },
+      ];
+      if (failure !== 'no-usage') {
+        chunks.push({ choices: [], usage: chatReply.usage, service_tier: 'default' });
+      }
+      if (failure === 'invalid-tool') {
+        chunks.push({ choices: [{ index: 0, delta: { tool_calls: [{ index: -1 }] } }] });
+      } else if (failure === 'service-error') {
+        chunks.push({ error: { message: 'Service failed' } });
+      }
+      const data =
+        sse(chunks, failure === 'missing-finish') +
+        (failure === 'invalid-json' ? 'data: {broken}\n\n' : '');
+      const published = vi.fn();
+      vi.mocked(fetchWithCache).mockImplementation(async (...args) => {
+        const response = { data, status: 200, statusText: 'OK', cached: false };
+        await args[6]?.(response);
+        published();
+        return response;
+      });
+      const provider = new BedrockRuntimeChatProvider('us.xai.grok-4.6', {
+        config: {
+          apiKey: 'fixture',
+          stream: true,
+          inputCost: 0.01,
+          outputCost: 0.02,
+          functionToolCallbacks: { lookup: callback },
+        },
+      });
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const result = await provider.callApi('hello');
+        expect(result.error).toBeTruthy();
+        expect(result.output).toBeUndefined();
+        expect(result.cached).not.toBe(true);
+        if (failure === 'no-usage') {
+          expect(result.tokenUsage).toBeUndefined();
+          expect(result.cost).toBeUndefined();
+        } else {
+          expect(result.tokenUsage).toMatchObject({
+            total: 120,
+            prompt: 100,
+            completion: 20,
+            completionDetails: { cacheReadInputTokens: 40, cacheCreationInputTokens: 0 },
+          });
+          expect(result.cost).toBeCloseTo(1.4);
+        }
+      }
+      expect(fetchWithCache).toHaveBeenCalledTimes(2);
+      expect(callback).not.toHaveBeenCalled();
+      expect(published).not.toHaveBeenCalled();
+    },
+  );
+
   it('joins fragmented client tool arguments', async () => {
     vi.mocked(fetchWithCache).mockResolvedValue({
       data: sse([
@@ -404,6 +486,53 @@ describe('Runtime Chat streaming', () => {
     expect(result.output).toBeUndefined();
   });
 });
+
+it.each([true, false])(
+  'preserves Runtime Responses parsing-error accounting only when reported (usage: %s)',
+  async (reported) => {
+    const callback = vi.fn();
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: {
+        ...responsesReply,
+        usage: reported ? responsesReply.usage : undefined,
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: { type: 'function_call', name: 'lookup', arguments: '{}' },
+          },
+        ],
+      },
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    });
+    const provider = new BedrockRuntimeResponsesProvider('us.xai.grok-4.6', {
+      config: {
+        apiKey: 'fixture',
+        inputCost: 0.01,
+        outputCost: 0.02,
+        functionToolCallbacks: { lookup: callback },
+      },
+    });
+    const result = await provider.callApi('hello');
+    expect(result.error).toContain('Error parsing response');
+    expect(result.output).toBeUndefined();
+    expect(callback).not.toHaveBeenCalled();
+    if (reported) {
+      expect(result.tokenUsage).toMatchObject({
+        total: 120,
+        prompt: 100,
+        completion: 20,
+        completionDetails: { cacheReadInputTokens: 40, cacheCreationInputTokens: 0 },
+      });
+      expect(result.cost).toBeCloseTo(1.4);
+    } else {
+      expect(result.tokenUsage).toBeUndefined();
+      expect(result.cost).toBeUndefined();
+    }
+  },
+);
 
 it('preserves an explicit completion cap for models outside the reasoning catalog', async () => {
   const provider = new BedrockRuntimeChatProvider('example.future-model', {

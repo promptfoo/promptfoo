@@ -754,6 +754,14 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     return data;
   }
 
+  // A stream adapter can preserve reported usage without accepting a failed completion.
+  protected getChatResponseErrorAccounting(
+    _error: unknown,
+    _config: OpenAiCompletionOptions,
+  ): Pick<ProviderResponse, 'tokenUsage' | 'cost' | 'cached'> | undefined {
+    return undefined;
+  }
+
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
@@ -1115,6 +1123,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       }
       return preserveResponseHeadersObserverError(callApiOptions?.onResponseHeaders, err, {
         error: `API call error: ${String(err)}`,
+        ...this.getChatResponseErrorAccounting(err, config),
         metadata: {
           http: {
             status: 0,
