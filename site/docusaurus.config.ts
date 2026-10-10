@@ -24,12 +24,6 @@ const BUILD_TIMESTAMP = new Date().toISOString();
 function webpackProgressCompatibilityPlugin(): Plugin {
   return {
     name: 'webpack-progress-compatibility-plugin',
-    configureWebpack(config) {
-      config.plugins = config.plugins?.filter(
-        (plugin) => plugin?.constructor?.name !== 'WebpackBarPlugin',
-      );
-      return {};
-    },
   };
 }
 
