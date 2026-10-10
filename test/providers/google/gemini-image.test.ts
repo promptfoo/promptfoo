@@ -205,25 +205,119 @@ describe('GeminiImageProvider', () => {
       },
     );
 
-    it.each(['IMAGE_SAFETY', 'IMAGE_PROHIBITED_CONTENT', 'IMAGE_RECITATION'])(
-      'preserves the %s refusal and message',
+    it.each([
+      'IMAGE_SAFETY',
+      'IMAGE_PROHIBITED_CONTENT',
+      'IMAGE_RECITATION',
+      'NO_IMAGE',
+      'IMAGE_OTHER',
+    ])('preserves the %s refusal and message', async (finishReason) => {
+      mockFetchWithCache.mockResolvedValueOnce({
+        ...createMockFetchResponse(),
+        data: {
+          candidates: [
+            { content: {}, finishReason, finishMessage: 'Unable to show the generated image.' },
+          ],
+        },
+      });
+      const provider = new GeminiImageProvider('gemini-nano-banana-2.1', {
+        config: { vertexai: false },
+      });
+      expect((await provider.callApi('Draw')).error).toContain(
+        `${finishReason}: Unable to show the generated image.`,
+      );
+    });
+
+    it.each([false, true])(
+      'prices implicit cached input only on Vertex (Vertex: %s)',
+      async (vertexai) => {
+        const data = {
+          candidates: [createInlineImageCandidate()],
+          usageMetadata: {
+            promptTokenCount: 1000,
+            cachedContentTokenCount: 800,
+            candidatesTokenCount: 1120,
+            totalTokenCount: 2120,
+          },
+        };
+        mockFetchWithCache.mockResolvedValueOnce({ ...createMockFetchResponse(), data });
+        const provider = new GeminiImageProvider('gemini-nano-banana-2.1', {
+          config: { vertexai, apiKey: 'test-key', expressMode: true },
+        });
+        const result = await provider.callApi('Draw');
+        expect(result.error).toBeUndefined();
+        expect(result.cached).toBe(false);
+        expect(result.tokenUsage).toMatchObject({ prompt: 1000, cached: 800 });
+        expect(result.cost).toBeCloseTo(
+          0.0336 + (vertexai ? (200 * 1.5 + 800 * 0.15) / 1e6 : (1000 * 1.5) / 1e6),
+          12,
+        );
+      },
+    );
+
+    it.each(['NO_IMAGE', 'IMAGE_OTHER'])(
+      'does not treat explanatory text after %s as success',
       async (finishReason) => {
         mockFetchWithCache.mockResolvedValueOnce({
           ...createMockFetchResponse(),
           data: {
             candidates: [
-              { content: {}, finishReason, finishMessage: 'Unable to show the generated image.' },
+              {
+                content: { parts: [{ text: 'Could not generate an image.' }] },
+                finishReason,
+                finishMessage: 'Try another prompt.',
+              },
             ],
           },
         });
         const provider = new GeminiImageProvider('gemini-nano-banana-2.1', {
           config: { vertexai: false },
         });
-        expect((await provider.callApi('Draw')).error).toContain(
-          `${finishReason}: Unable to show the generated image.`,
-        );
+        const result = await provider.callApi('Draw');
+        expect(result.error).toContain(`${finishReason}: Try another prompt.`);
+        expect(result.output).toBeUndefined();
       },
     );
+
+    it('resolves prompt-owned instruction files against their own base path', async () => {
+      mockSuccessfulImageResponse();
+      const provider = new GeminiImageProvider('gemini-nano-banana-2.1', {
+        config: {
+          vertexai: false,
+          basePath: '/provider',
+          systemInstruction: 'provider instruction',
+        },
+      });
+      await provider.callApi('Draw', {
+        vars: {},
+        prompt: {
+          raw: 'Draw',
+          label: 'Draw',
+          config: {
+            systemInstruction: 'file://instruction.txt',
+            basePath: '/prompt',
+            useAssistantRole: true,
+          },
+        },
+      });
+      expect(googleUtil.geminiFormatAndSystemInstructions).toHaveBeenCalledWith(
+        'Draw',
+        {},
+        'file://instruction.txt',
+        { basePath: '/prompt', useAssistantRole: true },
+      );
+      mockSuccessfulImageResponse();
+      await provider.callApi('Draw', {
+        vars: {},
+        prompt: { raw: 'Draw', label: 'Draw', config: { basePath: '/prompt' } },
+      });
+      expect(googleUtil.geminiFormatAndSystemInstructions).toHaveBeenLastCalledWith(
+        'Draw',
+        {},
+        'provider instruction',
+        { basePath: '/provider', useAssistantRole: undefined },
+      );
+    });
 
     it('uses the global Vertex endpoint', async () => {
       const client = createMockVertexClient();

@@ -163,6 +163,99 @@ describe('Google provider factories', () => {
     });
   });
 
+  it.each([
+    'google:gemini-3.8-flash-lite-tts',
+    'palm:gemini-3.8-flash-lite-tts',
+    'vertex:gemini-3.8-flash-lite-tts',
+  ])('selects the streaming endpoint and assembles PCM chunks for %s', async (id) => {
+    const chunks = [Buffer.from([1, 0, 2, 0]), Buffer.from([3, 0, 4, 0])];
+    const data = chunks.map((bytes) => ({
+      candidates: [
+        {
+          content: {
+            parts: [
+              { inlineData: { mimeType: 'audio/pcm;rate=24000', data: bytes.toString('base64') } },
+            ],
+          },
+        },
+      ],
+    }));
+    data.push({
+      usageMetadata: {
+        promptTokenCount: 3,
+        candidatesTokenCount: 5,
+        totalTokenCount: 8,
+        candidatesTokensDetails: [{ modality: 'AUDIO', tokenCount: 5 }],
+      },
+    } as any);
+    vi.mocked(cache.fetchWithCache).mockResolvedValue(createMockFetchResponse(data));
+    vi.mocked(fetchUtil.fetchWithProxy).mockResolvedValue(Response.json(data));
+    const provider = await loadApiProvider(id, {
+      options: { config: { apiKey: 'test-key', streaming: false } },
+    });
+    const response = await provider.callApi('Hello', {
+      prompt: { raw: 'Hello', label: 'Hello', config: { streaming: true } },
+      vars: {},
+    });
+    expect(response.error).toBeUndefined();
+    const request = id.startsWith('vertex:')
+      ? vi.mocked(fetchUtil.fetchWithProxy).mock.calls[0]
+      : vi.mocked(cache.fetchWithCache).mock.calls[0];
+    expect(request[0]).toMatch(/:streamGenerateContent$/);
+    const wav = Buffer.from(response.audio!.data!, 'base64');
+    expect(wav.subarray(0, 4).toString()).toBe('RIFF');
+    expect(wav.subarray(44)).toEqual(Buffer.concat(chunks));
+    expect(response.tokenUsage).toMatchObject({ prompt: 3, completion: 5, total: 8 });
+    expect(response.cost).toBeGreaterThan(0);
+  });
+
+  it.each(['native', 'express', 'oauth'] as const)(
+    'preserves prompt-owned image instructions on %s',
+    async (mode) => {
+      const data = {
+        candidates: [
+          {
+            content: { parts: [{ inlineData: { mimeType: 'image/png', data: 'aW1hZ2U=' } }] },
+            finishReason: 'STOP',
+          },
+        ],
+      };
+      vi.mocked(cache.fetchWithCache).mockResolvedValue(createMockFetchResponse(data));
+      const request = vi.fn().mockResolvedValue({ data });
+      vi.mocked(googleUtil.getGoogleClient).mockResolvedValue({
+        client: { request } as unknown as Awaited<
+          ReturnType<typeof googleUtil.getGoogleClient>
+        >['client'],
+        projectId: 'test-project',
+      });
+      const provider = await loadApiProvider('google:gemini-nano-banana-2.1', {
+        options: {
+          config: {
+            vertexai: mode !== 'native',
+            ...(mode === 'oauth'
+              ? { projectId: 'test-project', expressMode: false }
+              : { apiKey: 'test-key' }),
+            systemInstruction: 'Provider instruction',
+          },
+        },
+      });
+      const result = await provider.callApi('Draw a bird', {
+        vars: { shade: 'red' },
+        prompt: {
+          raw: 'Draw a bird',
+          label: 'Draw',
+          config: { systemInstruction: 'Use {{shade}} feathers' },
+        },
+      });
+      expect(result.error).toBeUndefined();
+      const body =
+        mode === 'oauth'
+          ? request.mock.calls[0][0].data
+          : JSON.parse(vi.mocked(cache.fetchWithCache).mock.calls[0][1]?.body as string);
+      expect(body.systemInstruction).toEqual({ parts: [{ text: 'Use red feathers' }] });
+    },
+  );
+
   it('uses OAuth when Vertex Express is explicitly disabled', async () => {
     const request = vi.fn().mockResolvedValue({ data });
     vi.mocked(googleUtil.getGoogleClient).mockResolvedValue({
