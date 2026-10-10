@@ -16,7 +16,7 @@ import { calculateFilteredMetrics } from '../../src/util/calculateFilteredMetric
 import { createEvaluateResult } from '../factories/eval';
 import EvalFactory from '../factories/evalFactory';
 
-import type { Assertion, TokenUsage } from '../../src/types/index';
+import type { Assertion, GradingResult, TokenUsage } from '../../src/types/index';
 
 describe('calculateFilteredMetrics', () => {
   beforeAll(async () => {
@@ -30,6 +30,52 @@ describe('calculateFilteredMetrics', () => {
   });
 
   describe('basic metrics aggregation', () => {
+    it.each(['assertion', 'metadata'] as const)(
+      'excludes only JSON boolean true in stored %s markers',
+      async (marker) => {
+        const eval_ = await EvalFactory.create({ numResults: 0 });
+        const components = [
+          undefined,
+          null,
+          false,
+          0,
+          1,
+          'false',
+          'true',
+          '1',
+          [],
+          {},
+          true,
+        ].flatMap((metricOnly) =>
+          [true, false].map(
+            (pass) =>
+              ({
+                pass,
+                score: pass ? 1 : 0,
+                reason: 'Legacy stored result',
+                [marker]: { metricOnly },
+              }) as unknown as GradingResult,
+          ),
+        );
+        await eval_.addResult(
+          createEvaluateResult({
+            gradingResult: {
+              pass: false,
+              score: 0.5,
+              reason: 'Legacy aggregate',
+              componentResults: components,
+            },
+          }),
+        );
+        const metrics = await calculateFilteredMetrics({
+          evalId: eval_.id,
+          numPrompts: 1,
+          whereSql: sql`eval_id = ${eval_.id}`,
+        });
+        expect(metrics[0]).toMatchObject({ assertPassCount: 10, assertFailCount: 10 });
+      },
+    );
+
     it('should aggregate basic metrics for all results', async () => {
       const eval_ = await EvalFactory.create({
         numResults: 10,

@@ -144,7 +144,8 @@ function formatSingleResult(
         score: cr.score,
         reason: truncateText(cr.reason || '', 100),
         metric: result.testCase.assert?.[idx]?.metric,
-        metricOnly: cr.metadata?.metricOnly || cr.assertion?.metricOnly,
+        metricOnly:
+          cr.metadata?.metricOnly === true || cr.assertion?.metricOnly === true || undefined,
       })),
     };
   }

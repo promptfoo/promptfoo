@@ -20,6 +20,51 @@ function checkEmittedAssertions(result: GradingResult) {
 }
 
 describe('metric-only result contract', () => {
+  it.each(['assertion', 'metadata'] as const)(
+    'ranks and formats legacy non-boolean %s markers as ordinary results',
+    async (marker) => {
+      for (const metricOnly of ['false', 'true', '1', 1]) {
+        const rows = [0, 1].map((index) => ({
+          testCase: {},
+          vars: {},
+          gradingResult: {
+            pass: false,
+            score: 0.5,
+            reason: 'Stored aggregate',
+            componentResults: [
+              {
+                pass: true,
+                score: index === 0 ? 0.8 : 0.6,
+                reason: 'Quality',
+                assertion: { type: 'javascript' },
+              },
+              {
+                pass: index === 1,
+                score: index,
+                reason: 'Legacy result',
+                assertion: { type: 'javascript' },
+                [marker]: { type: 'javascript', metricOnly },
+              },
+            ],
+          },
+        }));
+        const stored = JSON.parse(JSON.stringify(rows));
+        const ranked = await selectMaxScore(['A', 'B'], stored, { type: 'max-score' });
+        expect(ranked.map((result) => result.pass)).toEqual([false, true]);
+        const formatted = formatEvaluationResults({
+          results: stored,
+        } as unknown as EvaluateSummaryV3);
+        expect(formatted.results.map((row) => row.assertions?.totalAssertions)).toEqual([2, 2]);
+        expect(formatted.results[0].assertions).toMatchObject({
+          passedAssertions: 1,
+          failedAssertions: 1,
+        });
+        expect(formatted.results[0].assertions!.componentResults[1].metricOnly).toBeUndefined();
+        expect(stored).toEqual(rows);
+      }
+    },
+  );
+
   it('excludes result metadata markers during ranking', async () => {
     const results = await selectMaxScore(
       ['A', 'B'],

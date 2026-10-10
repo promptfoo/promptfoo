@@ -1818,23 +1818,99 @@ describe('getManualRatingUpdate - restoring metric-only aggregates', () => {
     });
   });
 
-  it('does not use snapshots from ordinary assertions or create them on mixed rows', () => {
+  it.each(['assertion', 'metadata'] as const)(
+    'restores mixed custom aggregates with a %s metric-only marker',
+    (marker) => {
+      const original = createOutput(false, 0.25, undefined, marker);
+      original.gradingResult!.componentResults!.push({
+        pass: true,
+        score: 1,
+        reason: 'Ordinary assertion',
+        assertion: { type: 'javascript' },
+        metadata: { originalGradingResult: { pass: true, score: 0.1, reason: 'Unrelated' } },
+      });
+      const expected = { pass: false, score: 0.25, reason: 'Custom scoring result' };
+      const first = serializeVote(original, true);
+      expect(first.gradingResult?.componentResults?.[2].metadata?.originalGradingResult).toEqual(
+        expected,
+      );
+      const replaced = serializeVote(first, false);
+      const clear = getManualRatingUpdate({ existingOutput: replaced, isPass: null });
+      expect(clear).toMatchObject(expected);
+      expect(clear.componentResults).toEqual(original.gradingResult?.componentResults);
+      expect(getManualRatingUpdate({ existingOutput: original, isPass: null })).toMatchObject(
+        expected,
+      );
+    },
+  );
+
+  it('ignores snapshots on ordinary-only rows and retains their existing clear calculation', () => {
+    const original = createOutput();
+    original.gradingResult!.componentResults = [
+      {
+        pass: true,
+        score: 0.8,
+        reason: 'Ordinary assertion',
+        assertion: { type: 'javascript' },
+        metadata: { originalGradingResult: { pass: false, score: 0.1, reason: 'Unrelated' } },
+      },
+    ];
+    const rated = serializeVote(original, false);
+    expect(
+      rated.gradingResult?.componentResults?.[1].metadata?.originalGradingResult,
+    ).toBeUndefined();
+    rated.gradingResult!.componentResults![1].metadata = {
+      originalGradingResult: { pass: false, score: 0.1, reason: 'Unrelated' },
+    };
+    expect(getManualRatingUpdate({ existingOutput: rated, isPass: null })).toMatchObject({
+      pass: true,
+      score: 0.8,
+    });
+  });
+
+  it('uses the existing counted-result fallback for a mixed legacy vote with no valid snapshot', () => {
     const original = createOutput();
     original.gradingResult!.componentResults!.push({
       pass: true,
       score: 0.8,
       reason: 'Ordinary assertion',
       assertion: { type: 'javascript' },
-      metadata: { originalGradingResult: { pass: false, score: 0.1, reason: 'Unrelated' } },
     });
     const rated = serializeVote(original, false);
-    expect(
-      rated.gradingResult?.componentResults?.[2].metadata?.originalGradingResult,
-    ).toBeUndefined();
     rated.gradingResult!.componentResults![2].metadata = {
-      originalGradingResult: { pass: false, score: 0.1, reason: 'Unrelated' },
+      originalGradingResult: { pass: false, score: 'invalid', reason: 'Invalid' },
     };
     expect(getManualRatingUpdate({ existingOutput: rated, isPass: null })).toMatchObject({
+      pass: true,
+      score: 0.8,
+    });
+  });
+
+  it('does not treat additional human components as automated metric-only evidence', () => {
+    const original = createOutput();
+    original.gradingResult!.componentResults = [
+      {
+        pass: true,
+        score: 0.8,
+        reason: 'Ordinary assertion',
+        assertion: { type: 'javascript' },
+      },
+      {
+        pass: false,
+        score: 0,
+        reason: 'Manual rating',
+        assertion: { type: 'human' },
+        metadata: { originalGradingResult: { pass: false, score: 0.1, reason: 'Unrelated' } },
+      },
+      {
+        pass: true,
+        score: 1,
+        reason: 'Additional manual rating',
+        assertion: { type: 'human' },
+        metadata: { metricOnly: true },
+      },
+    ];
+    expect(getManualRatingUpdate({ existingOutput: original, isPass: null })).toMatchObject({
       pass: true,
       score: 0.8,
     });

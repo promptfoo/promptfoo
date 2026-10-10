@@ -947,6 +947,11 @@ export function getManualRatingUpdate({
     (result) => result?.assertion?.type === HUMAN_ASSERTION_TYPE,
   );
   const existingHumanResult = componentResults[humanResultIndex];
+  const hasMetricOnlyResults = componentResults.some(
+    (result) =>
+      result?.assertion?.type !== HUMAN_ASSERTION_TYPE &&
+      (result?.assertion?.metricOnly === true || result?.metadata?.metricOnly === true),
+  );
 
   if (isPass === null) {
     let reason: GradingResult['reason'] | undefined;
@@ -955,7 +960,18 @@ export function getManualRatingUpdate({
     }
 
     const countedResults = countedComponentResults(componentResults);
-    if (countedResults.length > 0) {
+    const originalResult = hasMetricOnlyResults
+      ? readOriginalGradingResult(
+          existingHumanResult
+            ? existingHumanResult.metadata?.originalGradingResult
+            : existingOutput.gradingResult,
+        )
+      : undefined;
+    if (originalResult) {
+      finalPass = originalResult.pass;
+      finalScore = originalResult.score;
+      reason = originalResult.reason;
+    } else if (countedResults.length > 0) {
       finalPass = countedResults.filter((result) => result.pass).length === countedResults.length;
       finalScore = averageComponentResultScore(countedResults, finalScore);
     } else if (componentResults.some(Boolean)) {
@@ -977,9 +993,7 @@ export function getManualRatingUpdate({
   finalPass = isPass;
 
   const originalResult =
-    humanResultIndex === -1 &&
-    componentResults.some(Boolean) &&
-    countedComponentResults(componentResults).length === 0
+    humanResultIndex === -1 && hasMetricOnlyResults
       ? readOriginalGradingResult(existingOutput.gradingResult)
       : undefined;
 

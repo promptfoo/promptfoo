@@ -501,7 +501,7 @@ async function aggregateAssertions(
   // SQLite query to count assertions from nested JSON
   // This is complex but avoids fetching all results into memory
   // Metric-only assertions don't participate in pass/fail, so they're excluded
-  // from both counts (absent/null metricOnly must still count).
+  // from both counts only for JSON boolean true. Legacy non-boolean markers count.
   const query = sql`
     SELECT
       prompt_idx,
@@ -512,8 +512,8 @@ async function aggregateAssertions(
               SELECT COUNT(*)
               FROM json_each(json_extract(grading_result, '$.componentResults'))
               WHERE CAST(json_extract(json_each.value, '$.pass') AS INTEGER) = 1
-                AND COALESCE(CAST(json_extract(json_each.value, '$.assertion.metricOnly') AS INTEGER), 0) = 0
-                AND COALESCE(CAST(json_extract(json_each.value, '$.metadata.metricOnly') AS INTEGER), 0) = 0
+                AND json_type(json_each.value, '$.assertion.metricOnly') IS NOT 'true'
+                AND json_type(json_each.value, '$.metadata.metricOnly') IS NOT 'true'
             )
           ELSE 0
         END
@@ -525,8 +525,8 @@ async function aggregateAssertions(
               SELECT COUNT(*)
               FROM json_each(json_extract(grading_result, '$.componentResults'))
               WHERE CAST(json_extract(json_each.value, '$.pass') AS INTEGER) = 0
-                AND COALESCE(CAST(json_extract(json_each.value, '$.assertion.metricOnly') AS INTEGER), 0) = 0
-                AND COALESCE(CAST(json_extract(json_each.value, '$.metadata.metricOnly') AS INTEGER), 0) = 0
+                AND json_type(json_each.value, '$.assertion.metricOnly') IS NOT 'true'
+                AND json_type(json_each.value, '$.metadata.metricOnly') IS NOT 'true'
             )
           ELSE 0
         END

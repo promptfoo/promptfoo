@@ -17,7 +17,8 @@ export function isResultFailureReason(value: number): value is ResultFailureReas
 /**
  * Component results that participate in pass/fail: everything except
  * metric-only assertions, which only emit named scores. Use this wherever
- * assertion outcomes are aggregated into pass/fail stats or reasons.
+ * assertion outcomes are aggregated into pass/fail stats or reasons. Only
+ * boolean true marks a result as metric-only, including for legacy stored data.
  */
 export function countedComponentResults<
   T extends {
@@ -30,6 +31,8 @@ export function countedComponentResults<
 >(componentResults: (T | null | undefined)[] | null | undefined): T[] {
   return (componentResults ?? []).filter(
     (result): result is T =>
-      result != null && !result.assertion?.metricOnly && !result.metadata?.metricOnly,
+      result != null &&
+      result.assertion?.metricOnly !== true &&
+      result.metadata?.metricOnly !== true,
   );
 }
