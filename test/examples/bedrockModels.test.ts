@@ -8,7 +8,7 @@ import { runAssertions } from '../../src/assertions';
 import cliState from '../../src/cliState';
 import { evaluate } from '../../src/evaluator';
 import Eval from '../../src/models/eval';
-import { AwsBedrockCompletionProvider } from '../../src/providers/bedrock/index';
+import { AwsBedrockGenericProvider } from '../../src/providers/bedrock/base';
 import { UnifiedConfigSchema } from '../../src/types';
 import { resolveConfigs } from '../../src/util/config/load';
 
@@ -51,7 +51,7 @@ describe('Bedrock model examples', () => {
         {},
       );
       testSuite.tests = testSuite.tests?.slice(0, 1);
-      const handle = vi.fn(async (_request: { body?: unknown }) => ({
+      const handle = vi.fn(async (_request: { body?: unknown; path?: string }) => ({
         response: {
           statusCode: 200,
           headers: { 'content-type': 'application/json' },
@@ -70,9 +70,7 @@ describe('Bedrock model examples', () => {
         maxAttempts: 1,
         requestHandler: { handle },
       });
-      vi.spyOn(AwsBedrockCompletionProvider.prototype, 'getBedrockInstance').mockResolvedValue(
-        client,
-      );
+      vi.spyOn(AwsBedrockGenericProvider.prototype, 'getBedrockInstance').mockResolvedValue(client);
       try {
         const evaluation = new Eval(config);
         await evaluate(testSuite, evaluation, { cache: false, maxConcurrency: 1 });
@@ -83,10 +81,19 @@ describe('Bedrock model examples', () => {
           errors: 0,
         });
         expect(handle).toHaveBeenCalledTimes(testSuite.providers.length);
+        if (example === 'nova') {
+          expect(handle.mock.calls.some(([request]) => request.path?.includes('nova-2-lite'))).toBe(
+            true,
+          );
+        }
         for (const [request] of handle.mock.calls) {
           const body = JSON.parse(String(request.body));
           if (example === 'deepseek') {
             expect(body).toMatchObject({ temperature: 0.7, max_tokens: 4096 });
+          } else if (request.path?.includes('nova-2-lite')) {
+            expect(request.path).toMatch(/\/converse$/);
+            expect(body.inferenceConfig).toMatchObject({ temperature: 0.7, maxTokens: 256 });
+            expect(body.inferenceConfig).not.toHaveProperty('max_new_tokens');
           } else {
             expect(body.inferenceConfig).toMatchObject({ temperature: 0.7, max_new_tokens: 256 });
           }

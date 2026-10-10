@@ -544,12 +544,11 @@ providers:
       interfaceConfig:
         temperature: 0.7
         max_new_tokens: 256
-  - id: bedrock:us.amazon.nova-2-lite-v1:0
+  - id: bedrock:converse:us.amazon.nova-2-lite-v1:0
     config:
       region: 'us-east-1'
-      interfaceConfig:
-        temperature: 0.7
-        max_new_tokens: 256
+      temperature: 0.7
+      maxTokens: 256
   # Claude 5 models reject temperature/top_p/top_k
   - id: bedrock:us.anthropic.claude-opus-5-5
     config:
@@ -692,7 +691,7 @@ Nova 2 models require cross-region inference profiles for on-demand access:
 
 - `us.amazon.nova-2-lite-v1:0` - US region (recommended)
 - `eu.amazon.nova-2-lite-v1:0` - EU region
-- `apac.amazon.nova-2-lite-v1:0` - Asia Pacific region
+- `jp.amazon.nova-2-lite-v1:0` - Japan region
 - `global.amazon.nova-2-lite-v1:0` - Global cross-region inference
 
 **Using Nova 2 with Converse API:**
@@ -1627,7 +1626,7 @@ providers:
 or AWS model cards to confirm which of these models are enabled in your target region. Use
 `aws bedrock list-foundation-models` for direct foundation model IDs and
 `aws bedrock list-inference-profiles` for inference profiles such as Writer Palmyra's `us.`
-route — availability varies by model and region. TwelveLabs Pegasus uses a separate video-understanding request schema, not Converse or this chat handler. See its [model card](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-twelvelabs-pegasus-v1-5.html) and use a custom provider. TwelveLabs Marengo is an embedding family; check the [embedding section](#embeddings) for supported versions and input types.
+route — availability varies by model and region. TwelveLabs Pegasus uses a separate video-understanding request schema, not Converse or this chat handler. See its [model card](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-twelvelabs-pegasus-v1-5.html) and use a custom provider. TwelveLabs Marengo uses a [model-specific embedding schema](https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-marengo-3.html). Use a custom provider for versions or input types without a documented built-in adapter.
 
 ## Model-graded tests
 

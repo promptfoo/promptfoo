@@ -11,12 +11,11 @@ providers:
       interfaceConfig:
         temperature: 0.7
         max_new_tokens: 256
-  - id: bedrock:us.amazon.nova-2-lite-v1:0
+  - id: bedrock:converse:us.amazon.nova-2-lite-v1:0
     config:
       region: 'us-west-2'
-      interfaceConfig:
-        temperature: 0.7
-        max_new_tokens: 256
+      temperature: 0.7
+      maxTokens: 256
 
 tests:
   - vars:
