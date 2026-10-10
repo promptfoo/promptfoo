@@ -1,3 +1,4 @@
+import { sampleArray } from '../../../util/generation';
 import data from './data';
 
 import type { TestCase } from '../../../types/index';
@@ -14,10 +15,9 @@ export async function addInjections(
       ? // Take skeleton key (the first one) by default
         [(prompt: string) => data[0].replace(/__PROMPT__/g, () => prompt)]
       : // Otherwise, take random samples
-        data
-          .sort(() => 0.5 - Math.random())
-          .slice(0, sampleSize)
-          .map((injection) => (prompt: string) => injection.replace(/__PROMPT__/g, () => prompt));
+        sampleArray(data, sampleSize).map(
+          (injection) => (prompt: string) => injection.replace(/__PROMPT__/g, () => prompt),
+        );
 
   const filteredTests = harmfulOnly
     ? testCases.filter((t) => t.metadata?.pluginId?.startsWith('harmful:'))
