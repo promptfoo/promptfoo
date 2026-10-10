@@ -25,8 +25,8 @@ import { selectMaxScore } from './matchers/comparison';
 import {
   getResultIndexKey,
   PROMPTFOO_METADATA_KEY,
-  RESPONSE_OUTPUT_METADATA_KEYS,
   sanitizeResultForJsonlArtifact,
+  synchronizeResponseMetadata,
 } from './models/evalResult';
 import { generateIdFromPrompt } from './models/prompt';
 import { nodeEvaluatorRuntime } from './node/evaluatorRuntime';
@@ -592,36 +592,6 @@ function logGroupedGradingStatus({
       `Serial grading grouping disabled because ${reasons.join(' and ')}; model-graded judges may reload between rows.`,
     );
   }
-}
-
-// Keep copied response output and transport headers aligned when hooks replace metadata.
-// Only update a provider-derived copy that the hook left unchanged.
-function synchronizeResponseMetadata(
-  originalMetadata: Record<string, unknown> | undefined,
-  originalResponseMetadata: Record<string, unknown> | undefined,
-  hookMetadata: Record<string, unknown> | undefined,
-  hookResponseMetadata: Record<string, unknown> | undefined,
-  testMetadata: Record<string, unknown> | undefined,
-) {
-  let metadata = hookMetadata;
-  for (const key of ['headers', ...RESPONSE_OUTPUT_METADATA_KEYS]) {
-    const originalValue = originalMetadata?.[key];
-    if (
-      originalValue === undefined ||
-      !isDeepStrictEqual(originalValue, originalResponseMetadata?.[key]) ||
-      !isDeepStrictEqual(hookMetadata?.[key], originalValue) ||
-      (key !== 'headers' && testMetadata && isDeepStrictEqual(originalValue, testMetadata[key]))
-    ) {
-      continue;
-    }
-
-    const { [key]: _staleValue, ...metadataWithoutKey } = metadata ?? {};
-    metadata =
-      hookResponseMetadata?.[key] === undefined
-        ? metadataWithoutKey
-        : { ...metadataWithoutKey, [key]: hookResponseMetadata[key] };
-  }
-  return metadata;
 }
 
 function applyGradingResult(row: EvaluateResult, checkResult: GradingResult) {
@@ -1581,6 +1551,13 @@ async function gradeRunEvalResponse({
     testIdx,
     vars,
   });
+  ret.metadata = synchronizeResponseMetadata(
+    ret.metadata,
+    response.metadata,
+    ret.metadata,
+    processedResponse.metadata,
+    test.metadata,
+  );
   const traceId = getTraceId(traceContext);
   if (
     traceId &&

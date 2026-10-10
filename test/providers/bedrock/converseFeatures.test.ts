@@ -128,6 +128,8 @@ describe('Converse native request features', () => {
     );
     const response = await provider.callApi('hello');
     expect(response.error).toBeDefined();
+    expect(response.output).toBe(hasText ? 'Partial answer' : '');
+    expect(response.metadata?.content).toEqual(hasText ? [{ text: 'Partial answer' }] : []);
     expect(response.tokenUsage).toMatchObject({ prompt: 3, completion: 2, total: 5 });
     expect(response.cost).toBeGreaterThan(0);
     expect(callback).not.toHaveBeenCalled();

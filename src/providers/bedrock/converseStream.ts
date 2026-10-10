@@ -170,6 +170,12 @@ export async function collectConverseStream(
   if (!receivedMetadata || openBlocks.size) {
     throw new Error('Bedrock response stream ended before terminal metadata or contentBlockStop');
   }
+  result.output = {
+    message: {
+      role: 'assistant',
+      content: [...blocks.entries()].sort(([a], [b]) => a - b).map(([, block]) => block),
+    },
+  };
   if (
     result.stopReason === 'malformed_tool_use' ||
     result.stopReason === 'malformed_model_output'
@@ -208,11 +214,5 @@ export async function collectConverseStream(
       );
     }
   }
-  result.output = {
-    message: {
-      role: 'assistant',
-      content: [...blocks.entries()].sort(([a], [b]) => a - b).map(([, block]) => block),
-    },
-  };
   return result;
 }

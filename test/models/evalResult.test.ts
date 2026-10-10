@@ -1,6 +1,7 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import logger from '../../src/logger';
 import { runDbMigrations } from '../../src/migrate';
+import Eval from '../../src/models/eval';
 import EvalResult, {
   getStripFlags,
   projectPrompt,
@@ -1374,6 +1375,70 @@ describe('EvalResult', () => {
   });
 
   describe('toEvaluateResult', () => {
+    it.each(
+      ['memory', 'persisted', 'batch'].flatMap((boundary) =>
+        ['provider', 'test', 'hook'].map((owner) => ({ boundary, owner })),
+      ),
+    )(
+      'strips extracted provider media at $boundary (owner: $owner)',
+      async ({ boundary, owner }) => {
+        const base64 = Buffer.alloc(2048, 65).toString('base64');
+        const dataUrl = `data:image/png;base64,${base64}`;
+        const nativeMetadata = {
+          audio: { data: base64, format: 'wav', transcript: 'private-audio-transcript' },
+          content: [{ text: 'private-native-output' }, { text: dataUrl }],
+          trace: { guardrail: { modelOutput: ['private-native-output', dataUrl] } },
+          additionalModelResponseFields: { text: 'private-native-output', image: dataUrl },
+        };
+        const ownedMetadata = {
+          content: 'owned content',
+          trace: { note: 'owned trace' },
+          additionalModelResponseFields: { note: 'owned fields' },
+        };
+        const metadata =
+          owner === 'provider' ? nativeMetadata : { ...nativeMetadata, ...ownedMetadata };
+        const input = createEvaluateResult({
+          id: crypto.randomUUID(),
+          response: { output: 'private-native-output', metadata: nativeMetadata },
+          metadata,
+          testCase: createAtomicTestCase({ metadata: owner === 'test' ? ownedMetadata : {} }),
+        });
+        const evalRecord = await Eval.create({}, [input.prompt], { id: crypto.randomUUID() });
+        const saved =
+          boundary === 'batch'
+            ? (await EvalResult.createManyFromEvaluateResult([input], evalRecord.id))[0]
+            : await EvalResult.createFromEvaluateResult(evalRecord.id, input, {
+                persist: boundary === 'persisted',
+              });
+        const loaded = saved.persisted ? await EvalResult.findById(saved.id) : saved;
+        expect(loaded!.response?.metadata?.audio).toHaveProperty('blobRef');
+        expect(JSON.stringify(loaded!.response?.metadata)).not.toContain(dataUrl);
+        const flags = getStripFlags({ PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'true' });
+        for (const projected of [
+          loaded!.toEvaluateResult(flags),
+          sanitizeResultForJsonlArtifact(loaded!, flags),
+        ]) {
+          expect(projected.response?.metadata).not.toHaveProperty('audio');
+          expect(projected.metadata).not.toHaveProperty('audio');
+          for (const key of ['content', 'trace', 'additionalModelResponseFields']) {
+            expect(projected.response?.metadata).not.toHaveProperty(key);
+            if (owner === 'provider') {
+              expect(projected.metadata).not.toHaveProperty(key);
+            } else {
+              expect(projected.metadata?.[key]).toEqual(
+                ownedMetadata[key as keyof typeof ownedMetadata],
+              );
+            }
+          }
+          expect(JSON.stringify(projected)).not.toContain('private-native-output');
+          expect(JSON.stringify(projected)).not.toContain('private-audio-transcript');
+          expect(JSON.stringify(projected)).not.toContain(base64);
+        }
+        expect(input.response?.metadata?.audio.data).toBe(base64);
+        expect(input.metadata).toEqual(metadata);
+      },
+    );
+
     it.each(
       ['model', 'persisted', 'jsonl'].flatMap((boundary) =>
         [false, true].flatMap((strip) =>
