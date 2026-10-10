@@ -756,14 +756,21 @@ export class AnthropicManagedAgentsProvider extends AnthropicGenericProvider {
         .stream(sessionId, params, request)
         .asResponse();
       promptSent = true;
-      await this.anthropic.beta.sessions.events.send(
-        sessionId,
-        {
-          ...params,
-          events: [{ type: 'user.message', content: [{ type: 'text', text: prompt }] }],
-        },
-        request,
-      );
+      try {
+        await this.anthropic.beta.sessions.events.send(
+          sessionId,
+          {
+            ...params,
+            events: [{ type: 'user.message', content: [{ type: 'text', text: prompt }] }],
+          },
+          request,
+        );
+      } catch (error) {
+        // A 429 is the server declining the message, so nothing has run and the call
+        // can be made again. Any other failure may have delivered it.
+        promptSent = !(error instanceof Anthropic.APIError && error.status === 429);
+        throw error;
+      }
 
       await this.followSession(sessionId, stream, state, { params, read, signal });
       signal.throwIfAborted();
@@ -1087,9 +1094,10 @@ export class AnthropicManagedAgentsProvider extends AnthropicGenericProvider {
     request: CleanupRequest,
   ): Promise<string | undefined> {
     try {
+      // A lookup is safe to repeat, and a missed session would be left behind.
       const page = await this.anthropic.beta.sessions.list(
         { ...params, agent_id: agentId },
-        request,
+        { ...request, maxRetries: 2 },
       );
       // Only a session that names the agent is this call's to archive.
       return page.data.find((session) => session.agent.id === agentId)?.id;

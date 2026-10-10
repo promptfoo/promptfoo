@@ -930,10 +930,11 @@ describe('Claude Managed Agents', () => {
         data: [{ id: 'sesn-orphan', agent: { id: 'agent-created' } }],
       } as never);
       const result = await f.provider.callApi('test');
-      // Every session of an agent the call created is its own.
+      // Every session of an agent the call created is its own. The lookup is a read,
+      // so a passing failure is retried instead of leaving the session behind.
       expect(f.sessionsList).toHaveBeenCalledWith(
         expect.objectContaining({ agent_id: 'agent-created' }),
-        expect.anything(),
+        expect.objectContaining({ maxRetries: 2 }),
       );
       expect(f.archive).toHaveBeenCalledWith('sesn-orphan', expect.anything(), expect.anything());
       expect(result.error).toBe('Claude Managed Agents API request failed (timed out)');
@@ -1007,11 +1008,26 @@ describe('Claude Managed Agents', () => {
       },
     );
 
-    it('is final once the prompt may have reached the session', async () => {
+    it('may be retried when the server declines the prompt itself', async () => {
       const f = setup();
-      f.send.mockRejectedValue(limited());
+      f.send.mockRejectedValueOnce(limited());
       const result = await f.provider.callApi('test');
-      expect(result.metadata).toMatchObject({ http: { status: 429 }, rateLimitRetryable: false });
+      expect(result.metadata).toMatchObject({ http: { status: 429 } });
+      expect(result.metadata).not.toHaveProperty('rateLimitRetryable');
+    });
+
+    it('is final once the prompt has reached the session', async () => {
+      const f = setup({}, [idle('budget_reached')]);
+      const result = await f.provider.callApi('test');
+      expect(result.error).toContain('budget_reached');
+      expect(result.metadata).toMatchObject({ rateLimitRetryable: false });
+    });
+
+    it('is final when the prompt may have been delivered without a response', async () => {
+      const f = setup();
+      f.send.mockRejectedValueOnce(new Anthropic.APIConnectionTimeoutError());
+      const result = await f.provider.callApi('test');
+      expect(result.metadata).toMatchObject({ rateLimitRetryable: false });
     });
 
     it('gives the scheduler the wait the server asked for, and keeps no other response header', async () => {
