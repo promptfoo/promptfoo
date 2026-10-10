@@ -130,6 +130,62 @@ describe('evalLock', () => {
     expect(() => createEvalBar(suite, { repeat: 1 })).toThrow('mutable runtime state');
   });
 
+  it.each([
+    [
+      'default tests',
+      (suite: TestSuite) => {
+        suite.defaultTest = {
+          assert: [{ type: 'javascript', value: 'output === process.env.EXPECTED' }],
+        };
+      },
+    ],
+    [
+      'scenario configs',
+      (suite: TestSuite) => {
+        suite.scenarios = [
+          {
+            config: [
+              { assert: [{ type: 'javascript', value: 'output === process.env.EXPECTED' }] },
+            ],
+            tests: [{}],
+          },
+        ];
+      },
+    ],
+    [
+      'scenario tests',
+      (suite: TestSuite) => {
+        suite.scenarios = [
+          {
+            config: [{}],
+            tests: [{ assert: [{ type: 'javascript', value: 'output === process.env.EXPECTED' }] }],
+          },
+        ];
+      },
+    ],
+  ])('rejects mutable criteria in %s', (_name, mutateSuite) => {
+    const suite = createSuite();
+    mutateSuite(suite);
+
+    expect(() => createEvalBar(suite, { repeat: 1 })).toThrow(
+      'only support data-only assertion criteria',
+    );
+  });
+
+  it('accepts nested and negated data-only assertions', () => {
+    const suite = createSuite();
+    suite.defaultTest = {
+      assert: [
+        {
+          type: 'assert-set',
+          assert: [{ type: 'not-contains', value: 'London' }],
+        },
+      ],
+    };
+
+    expect(() => createEvalBar(suite, { repeat: 1 })).not.toThrow();
+  });
+
   it('strips checkout-specific provider base paths from the bar', () => {
     const createImportedSuite = (providerBasePath: string, note = 'stable'): TestSuite => {
       const suite = createSuite();
