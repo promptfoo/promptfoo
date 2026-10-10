@@ -4,6 +4,86 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.125.0](https://github.com/promptfoo/promptfoo/compare/0.124.1...0.125.0) (2026-10-10)
+
+
+### ⚠ BREAKING CHANGES
+
+* **providers:** make Claude Agent and Codex SDKs opt-in ([#11134](https://github.com/promptfoo/promptfoo/issues/11134))
+
+### Features
+
+* **assertions:** add rouge-l and rouge-s assertion types ([#10256](https://github.com/promptfoo/promptfoo/issues/10256)) ([6842fc3](https://github.com/promptfoo/promptfoo/commit/6842fc3932e42d3a0da6feb42f51a1b656b378bf))
+* **assertions:** filter trace spans by attributes ([#10648](https://github.com/promptfoo/promptfoo/issues/10648)) ([faf08b4](https://github.com/promptfoo/promptfoo/commit/faf08b45e17675a89b42c016589eae848964bb2c))
+* **assertions:** optional Unicode normalization for equals and contains ([#10555](https://github.com/promptfoo/promptfoo/issues/10555)) ([92ae1ec](https://github.com/promptfoo/promptfoo/commit/92ae1ecc6f4332c7198a9caea0f8cfaf0a2d75f2))
+* **eval:** add safe mode to disable inline JavaScript execution ([#11382](https://github.com/promptfoo/promptfoo/issues/11382)) ([80a27b6](https://github.com/promptfoo/promptfoo/commit/80a27b663efc77f2d43d85229a9391d8cc3c2524))
+* **eval:** report stability across repeated tests ([#11416](https://github.com/promptfoo/promptfoo/issues/11416)) ([3f7bfa7](https://github.com/promptfoo/promptfoo/commit/3f7bfa7457f1ce1721daf06220278b02f59382d8))
+* **examples:** add local Hermeneutic wording assertion ([#10663](https://github.com/promptfoo/promptfoo/issues/10663)) ([636d59e](https://github.com/promptfoo/promptfoo/commit/636d59ed8dc46982a30bbebdfec21049576bda80))
+* **providers:** add templated request metadata for a2a provider ([#10242](https://github.com/promptfoo/promptfoo/issues/10242)) ([f86c893](https://github.com/promptfoo/promptfoo/commit/f86c893c2c18e215f03dfcbcfc361ecb2e0f5243))
+* **redteam:** add arabic-presentation-forms static encoding strategy ([#11404](https://github.com/promptfoo/promptfoo/issues/11404)) ([ce7adab](https://github.com/promptfoo/promptfoo/commit/ce7adabf6b59ef74dd8093444c0a59c548422387))
+
+
+### Bug Fixes
+
+* **accounting:** ignore malformed optional token usage ([#10112](https://github.com/promptfoo/promptfoo/issues/10112)) ([4f3b359](https://github.com/promptfoo/promptfoo/commit/4f3b359c426d539c7c197693b22c9ac3c5f04b3f))
+* **assertions:** preserve custom reason in not-javascript GradingResult inversion ([#10880](https://github.com/promptfoo/promptfoo/issues/10880)) ([62cbfee](https://github.com/promptfoo/promptfoo/commit/62cbfeec1d83cefaf4a2de9d1faa6daf437080e2))
+* bound telemetry request lifetime ([#11536](https://github.com/promptfoo/promptfoo/issues/11536)) ([04ab6fb](https://github.com/promptfoo/promptfoo/commit/04ab6fb633feeaaa179de46b56627cd7769d74b2))
+* **cache:** honor disabled caching across package copies ([#10793](https://github.com/promptfoo/promptfoo/issues/10793)) ([1b256fe](https://github.com/promptfoo/promptfoo/commit/1b256fef739eb94b810db99c51bfa8b22365e0af))
+* **ci:** secure code-scan action releases ([#10108](https://github.com/promptfoo/promptfoo/issues/10108)) ([b5d6b20](https://github.com/promptfoo/promptfoo/commit/b5d6b20382fcfb6a48c23d05de98c39bc6437fad))
+* **config:** scope runtime environment defaults ([#11091](https://github.com/promptfoo/promptfoo/issues/11091)) ([fb50526](https://github.com/promptfoo/promptfoo/commit/fb50526deb0478f17f4296665804e016bbc371da))
+* correct provider billing, configuration, and JUnit output ([#11060](https://github.com/promptfoo/promptfoo/issues/11060)) ([c09adb3](https://github.com/promptfoo/promptfoo/commit/c09adb3f1f5d8df5d117050657247748b467936a))
+* **csv:** parse similar:cosine/dot/euclidean assertion types from CSV ([#11365](https://github.com/promptfoo/promptfoo/issues/11365)) ([eb07d64](https://github.com/promptfoo/promptfoo/commit/eb07d644ad28606407f78defb883240a7ca8072a))
+* **dataset:** gracefully extract personas from varied JSON responses during dataset synthesis ([#11293](https://github.com/promptfoo/promptfoo/issues/11293)) ([#11298](https://github.com/promptfoo/promptfoo/issues/11298)) ([2310a94](https://github.com/promptfoo/promptfoo/commit/2310a946dfb9ec6a8ee984c4adb7b935ef76b132))
+* **deps:** hold IBM SDK before redaction regression ([cbebb0e](https://github.com/promptfoo/promptfoo/commit/cbebb0e24bb9769b2c4846f6b1e8156bfcdf2754))
+* **deps:** synchronize Anthropic SDK upgrades ([#11483](https://github.com/promptfoo/promptfoo/issues/11483)) ([be8b169](https://github.com/promptfoo/promptfoo/commit/be8b169f428ec1a28da4465ae6e421f889cf96b2))
+* **deps:** synchronize Claude Agent SDK upgrade ([#11553](https://github.com/promptfoo/promptfoo/issues/11553)) ([b4caec3](https://github.com/promptfoo/promptfoo/commit/b4caec3d188b4f780d2a6da8fb5b97acdd996684))
+* **deps:** update dependency @hono/node-server to v2.1.2 ([#11535](https://github.com/promptfoo/promptfoo/issues/11535)) ([7afa715](https://github.com/promptfoo/promptfoo/commit/7afa715d17c389d5ef9cdd82e0e9508d22835179))
+* **deps:** update dependency @hono/node-server to v2.1.3 ([#11551](https://github.com/promptfoo/promptfoo/issues/11551)) ([6177a8b](https://github.com/promptfoo/promptfoo/commit/6177a8bc2fe352a71651caedc4649588a3670fb5))
+* **eval:** allow empty dynamic variable values ([#10551](https://github.com/promptfoo/promptfoo/issues/10551)) ([244b7a2](https://github.com/promptfoo/promptfoo/commit/244b7a296930cb9fccb500d59802323fe18f4c08))
+* **eval:** insert nested var values literally when they contain $ patterns ([#11366](https://github.com/promptfoo/promptfoo/issues/11366)) ([af6fa65](https://github.com/promptfoo/promptfoo/commit/af6fa65a65b2d9c1283b94ee6191e9911bd88969))
+* **eval:** keep shared providers alive across evaluations ([#11020](https://github.com/promptfoo/promptfoo/issues/11020)) ([7d11ea2](https://github.com/promptfoo/promptfoo/commit/7d11ea21643e588fe4e601efbeb3d8f055f8edaa))
+* **eval:** preserve row metrics and harden sanitization ([#10889](https://github.com/promptfoo/promptfoo/issues/10889)) ([76dd354](https://github.com/promptfoo/promptfoo/commit/76dd35430a5ba621060b3903dd7235813b346432))
+* **eval:** propagate grading cancellation through embedding providers ([#11017](https://github.com/promptfoo/promptfoo/issues/11017)) ([f29d43e](https://github.com/promptfoo/promptfoo/commit/f29d43e2191a7e55094970cf417b45817eced442))
+* **examples:** require patched Pydantic AI minimum ([#11484](https://github.com/promptfoo/promptfoo/issues/11484)) ([2a54f11](https://github.com/promptfoo/promptfoo/commit/2a54f119d9a19ecfe895f3e8d6f81f9e71a3218b))
+* **generation:** handle unexpected response shapes in dataset and assertion synthesis ([#11302](https://github.com/promptfoo/promptfoo/issues/11302)) ([4b6a417](https://github.com/promptfoo/promptfoo/commit/4b6a41752c4bef675dafc519c9d5e174e1ba4f28))
+* isolate evaluation state and schema loading ([#11626](https://github.com/promptfoo/promptfoo/issues/11626)) ([2e347de](https://github.com/promptfoo/promptfoo/commit/2e347de5656aeb340cf1effc68e4c8236ad1c480))
+* **matchers:** fail closed when llm-rubric grader response omits its verdict ([#10611](https://github.com/promptfoo/promptfoo/issues/10611)) ([37cfe71](https://github.com/promptfoo/promptfoo/commit/37cfe7146f7abe770867659ad7b01ff57b723033))
+* preserve ordered JSON keys and verify meta history ([#11476](https://github.com/promptfoo/promptfoo/issues/11476)) ([0bef225](https://github.com/promptfoo/promptfoo/commit/0bef225c24362df0e735910724098750aca6fd6c))
+* preserve per-provider prompt filters through loading and replay ([#11443](https://github.com/promptfoo/promptfoo/issues/11443)) ([ddf052a](https://github.com/promptfoo/promptfoo/commit/ddf052ad22af9d9e19a4ad3135d5b81b43eebe0f))
+* preserve prompt metadata and provider controls ([#11260](https://github.com/promptfoo/promptfoo/issues/11260)) ([14178fb](https://github.com/promptfoo/promptfoo/commit/14178fb20c38cf487d285b63ec894b1571a45338))
+* **providers:** align Azure Responses service tier ([#10149](https://github.com/promptfoo/promptfoo/issues/10149)) ([fcfd526](https://github.com/promptfoo/promptfoo/commit/fcfd526dd411d32ec0782883e475c2c21747fa04))
+* **providers:** align MCP initialization and cleanup ([#10676](https://github.com/promptfoo/promptfoo/issues/10676)) ([94356d0](https://github.com/promptfoo/promptfoo/commit/94356d0e9e3d64d2f57dd97fa4971c3afe787a0e))
+* **providers:** clean up custom Codex version probes ([#11588](https://github.com/promptfoo/promptfoo/issues/11588)) ([0b6a9d2](https://github.com/promptfoo/promptfoo/commit/0b6a9d26e35285a6ceb73b04410d3c1962b8f390))
+* **providers:** constrain MCP retries and repair OAuth discovery ([#10967](https://github.com/promptfoo/promptfoo/issues/10967)) ([1da4637](https://github.com/promptfoo/promptfoo/commit/1da4637ee10ab9cceb98ce377385b5c35e44182e))
+* **providers:** decode base64 OpenAI embeddings ([#11383](https://github.com/promptfoo/promptfoo/issues/11383)) ([e4e3388](https://github.com/promptfoo/promptfoo/commit/e4e33887046ebda2138f79e115028f4a6e1ce26a))
+* **providers:** harden malformed completion responses ([#9872](https://github.com/promptfoo/promptfoo/issues/9872)) ([60da518](https://github.com/promptfoo/promptfoo/commit/60da51862a809051c6352bb60a048b588f0c5089))
+* **providers:** honor scoped environment overrides ([#11094](https://github.com/promptfoo/promptfoo/issues/11094)) ([763b437](https://github.com/promptfoo/promptfoo/commit/763b437952574fee35e91255f0c13508801ba1ad))
+* **providers:** honor scoped Envoy gateway URLs ([#10859](https://github.com/promptfoo/promptfoo/issues/10859)) ([e4347d3](https://github.com/promptfoo/promptfoo/commit/e4347d3d0d50b706d9a079d0d96bd1cc5f1c0695))
+* **providers:** preflight Codex SDK compatibility ([#9937](https://github.com/promptfoo/promptfoo/issues/9937)) ([c8f2ff2](https://github.com/promptfoo/promptfoo/commit/c8f2ff24cf4f17eb7482a5176ad1e5085b42775e))
+* **providers:** preserve active WebSocket streams and retry stalls ([#10305](https://github.com/promptfoo/promptfoo/issues/10305)) ([f7ddd45](https://github.com/promptfoo/promptfoo/commit/f7ddd452c69f222dfeaec9ec2cc1eb849229a969))
+* **providers:** preserve cancellation, quota accounting, and evaluation deadlines ([#10860](https://github.com/promptfoo/promptfoo/issues/10860)) ([00d6ce4](https://github.com/promptfoo/promptfoo/commit/00d6ce47021aec0644faa7e15f77e54e4c14be06))
+* **providers:** preserve prompts in raw HTTP request URLs ([#11438](https://github.com/promptfoo/promptfoo/issues/11438)) ([1f304f9](https://github.com/promptfoo/promptfoo/commit/1f304f9ef2f91e954d1c8cdb6448d3a88e805f0c))
+* **providers:** retain supported scoped environment settings ([#10744](https://github.com/promptfoo/promptfoo/issues/10744)) ([75c4ac6](https://github.com/promptfoo/promptfoo/commit/75c4ac6f5b00f0b0293f1b1a61fe15201f531e69))
+* **providers:** return a clean error on empty choices in localai and OpenAI completions ([#10437](https://github.com/promptfoo/promptfoo/issues/10437)) ([81cd1c1](https://github.com/promptfoo/promptfoo/commit/81cd1c111154caf1d687a8c789aecee51d2208ae))
+* **providers:** share cache bypass and replay metadata ([#10687](https://github.com/promptfoo/promptfoo/issues/10687)) ([e7eb4a7](https://github.com/promptfoo/promptfoo/commit/e7eb4a7b861ab9537a68a0bb6ef73c36a0a740af))
+* **python:** fail requests when workers crash or hang ([#10929](https://github.com/promptfoo/promptfoo/issues/10929)) ([ad5eaec](https://github.com/promptfoo/promptfoo/commit/ad5eaec9cf591902f9bfbee4618663ec119480d3))
+* **redteam:** correct generated provider targets ([#10857](https://github.com/promptfoo/promptfoo/issues/10857)) ([20e221a](https://github.com/promptfoo/promptfoo/commit/20e221a64456e7f54a1c5ffa0cc0d34e01ff2a2e))
+* **redteam:** honor explicit redteamProvider in custom strategy ([#10978](https://github.com/promptfoo/promptfoo/issues/10978)) ([2603c54](https://github.com/promptfoo/promptfoo/commit/2603c54126338b737af6b6971ef270cdd67309ea))
+* **redteam:** keep $ sequences literal when datamarking an injection ([#11381](https://github.com/promptfoo/promptfoo/issues/11381)) ([667ebe3](https://github.com/promptfoo/promptfoo/commit/667ebe3e39177cec13405aa948501f01606e478a))
+* **redteam:** normalize generation error callbacks ([#11591](https://github.com/promptfoo/promptfoo/issues/11591)) ([ff83c4f](https://github.com/promptfoo/promptfoo/commit/ff83c4f0f76c08d5b73e5de2c79dee49ee8ccf1c))
+* **redteam:** preserve attack prompts in jailbreak templates ([#11437](https://github.com/promptfoo/promptfoo/issues/11437)) ([39226cc](https://github.com/promptfoo/promptfoo/commit/39226cc462ded45cd8281d1139e9dab26976a618))
+* **redteam:** preserve setup plugin options and workload counts ([#11218](https://github.com/promptfoo/promptfoo/issues/11218)) ([6ae0024](https://github.com/promptfoo/promptfoo/commit/6ae00244df143f39dfcbd8ed59ac8790c7a62aa0))
+* **redteam:** use FIPS-compatible config fingerprints ([#11070](https://github.com/promptfoo/promptfoo/issues/11070)) ([ebb4948](https://github.com/promptfoo/promptfoo/commit/ebb4948489b97e06c7215b651cbb7e0138ac53bf))
+* **redteam:** validate web page tracking identifiers ([#11522](https://github.com/promptfoo/promptfoo/issues/11522)) ([46102b7](https://github.com/promptfoo/promptfoo/commit/46102b7df66ef8c96ec892f1ad59a66b5110d7ea))
+* **scheduler:** require 429 to be a standalone token ([#11369](https://github.com/promptfoo/promptfoo/issues/11369)) ([40ff7a5](https://github.com/promptfoo/promptfoo/commit/40ff7a5a04f8c56b3c8ff819009709fd86c38142))
+* **util:** ignore braces inside strings when extracting JSON objects ([#10268](https://github.com/promptfoo/promptfoo/issues/10268)) ([cf63b47](https://github.com/promptfoo/promptfoo/commit/cf63b472e817412fc269a384c02a72caec2ee19a))
+* **webui:** redirect stale dashboard URLs to eval ([#11477](https://github.com/promptfoo/promptfoo/issues/11477)) ([a6922a1](https://github.com/promptfoo/promptfoo/commit/a6922a195440aa222b03dc13112b9271617dc921))
+
+
+### Performance Improvements
+
+* **providers:** make Claude Agent and Codex SDKs opt-in ([#11134](https://github.com/promptfoo/promptfoo/issues/11134)) ([d46ee50](https://github.com/promptfoo/promptfoo/commit/d46ee504e366be7788df5d389420ff36bb7e03c3))
+
 ## [0.124.1](https://github.com/promptfoo/promptfoo/compare/0.124.0...0.124.1) (2026-10-08)
 
 ### Features
