@@ -26,6 +26,34 @@ You can also create service accounts at the team level, which will allow you to 
 Only system admins can create service accounts.
 :::
 
+## Team Secrets (On-Prem)
+
+Before creating team secrets, a deployment administrator must configure `TEAM_SECRET_ENCRYPTION_KEY` in the Promptfoo server environment. Use the same persistent value for every server instance and preserve it with deployment backups. Without it, secret encryption and decryption fail.
+
+This deployment key is separate from the provider credentials stored in team secrets. Replacing or losing it makes existing encrypted values unreadable; do not change it when rotating a provider API key.
+
+Team secrets store encrypted provider credentials that can be reused within a team. Open the team's settings, select **Team Secrets**, and click **Create Secret**. Enter a name, value, and optional description. Names must be unique within the team.
+
+In a provider's API Key field, use the key button to choose a team secret. This saves a reference such as `%__PF_SECRET.OPENAI_API_KEY__%` instead of copying the credential into the provider configuration. Team Red Team Provider overrides can also use these references.
+
+Secret permissions are separate from provider permissions. Grant read access only to users who may receive the secret values: the list API returns decrypted values, and the UI lets them reveal or copy values. Editing a value requires update access. Creating and deleting secrets require their respective permissions.
+
+To rotate a value without changing its references, use **Edit** in the Team Secrets table and enter the replacement value. For API-based rotation, find the secret ID with `GET /api/v1/teams/{teamId}/secrets`, then send `PATCH /api/v1/teams/{teamId}/secrets/{secretId}` with the replacement value. See **List team secrets** and **Update team secret** in the [API reference](/docs/api-reference/) for request and response schemas.
+
+```json
+{ "value": "<replacement-provider-api-key>" }
+```
+
+Start a new scan to verify the replacement before revoking the old key with your model provider.
+
+Before deleting a secret, check its **References** column. Promptfoo lists references from saved targets and enabled team inference-provider overrides, and blocks deletion while those references remain. Remove or replace them first. Disabled overrides are not included; update their references before re-enabling them.
+
+## Team Probe Limits (On-Prem)
+
+When the organization has a licensed probe limit, an organization admin can set **Probe limit** in the team's settings and click **Save Changes**. Leave it blank for no additional team cap; the organization limit still applies. The sum of configured team caps cannot exceed the organization's licensed limit.
+
+Probe caps control scan volume, not model-provider token spend. Use your model provider's billing controls for spending budgets and alerts.
+
 ## CLI Team Context
 
 When using the Promptfoo CLI with multiple teams, you can control which team context your operations use:
