@@ -503,8 +503,12 @@ export function parseConverseMessages(prompt: string): {
       const messages: Message[] = [];
 
       for (const msg of parsed) {
-        if (msg.role === 'system') {
-          // System messages go to the system field
+        const isToolChangeMessage =
+          msg.role === 'system' &&
+          Array.isArray(msg.content) &&
+          msg.content.some((block: ContentBlock) => block?.toolAddition || block?.toolRemoval);
+        if (msg.role === 'system' && !isToolChangeMessage) {
+          // Static system instructions go to the top-level system field.
           if (Array.isArray(msg.content)) {
             systemMessages.push(
               ...msg.content.map((block: SystemContentBlock | string) =>
@@ -518,7 +522,8 @@ export function parseConverseMessages(prompt: string): {
               text: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content),
             });
           }
-        } else if (msg.role === 'user' || msg.role === 'assistant') {
+        } else if (msg.role === 'user' || msg.role === 'assistant' || isToolChangeMessage) {
+          // Keep tool changes in their original conversation position.
           // Convert content to ContentBlock format
           const contentBlocks: ContentBlock[] = [];
 

@@ -508,8 +508,6 @@ describe('Converse native request features', () => {
           status: 'success',
         },
       },
-      { toolAddition: { tools: [] } },
-      { toolRemoval: { toolNames: ['lookup'] } },
     ];
     const system = [{ text: 'instructions' }, { cachePoint: { type: 'default' } }];
     const parsed = parseConverseMessages(
@@ -531,7 +529,7 @@ describe('Converse native request features', () => {
     expect(parsed.messages[0].content).toEqual(expected);
   });
 
-  it('serializes binary content and structured output through the real AWS SDK', async () => {
+  it('serializes native tool-change messages, binary content and structured output through the real AWS SDK', async () => {
     const handle = vi.fn(async (_request: { body?: unknown }) => ({
       response: {
         statusCode: 200,
@@ -549,9 +547,15 @@ describe('Converse native request features', () => {
       requestMetadata: { suite: 'parity' },
     });
     vi.spyOn(provider, 'getBedrockInstance').mockResolvedValue(client);
+    const toolChanges = [
+      { toolRemoval: { tool: { type: 'tool_reference', name: 'lookup' } } },
+      { toolAddition: { tool: { type: 'tool_reference', name: 'lookup' } } },
+      { text: 'Tool set updated.' },
+    ];
     try {
       const result = await provider.callApi(
         JSON.stringify([
+          { role: 'system', content: 'Initial instructions' },
           {
             role: 'user',
             content: [
@@ -559,11 +563,22 @@ describe('Converse native request features', () => {
               { image: { format: 'png', source: { bytes: 'YWJj' } } },
             ],
           },
+          { role: 'system', content: toolChanges },
+          { role: 'assistant', content: 'Tools updated.' },
+          { role: 'user', content: 'Continue.' },
         ]),
       );
       expect(result.output).toBe('READY');
       const body = JSON.parse(String(handle.mock.calls[0][0].body));
       expect(body.messages[0].content[1].image.source.bytes).toBe('YWJj');
+      expect(body.system).toEqual([{ text: 'Initial instructions' }]);
+      expect(body.messages.map((message: { role: string }) => message.role)).toEqual([
+        'user',
+        'system',
+        'assistant',
+        'user',
+      ]);
+      expect(body.messages[1].content).toEqual(toolChanges);
       expect(body.outputConfig).toEqual({ effort: 'low' });
       expect(body.requestMetadata).toEqual({ suite: 'parity' });
     } finally {

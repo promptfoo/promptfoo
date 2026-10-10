@@ -834,13 +834,17 @@ describe('createShareableUrl', () => {
         const inputUri = `promptfoo://blob/${'c'.repeat(64)}`;
         const dataUrl = 'data:image/png;base64,cHJpdmF0ZSBvdXRwdXQ=';
         const svgUrl = 'data:image/svg+xml,%3Csvg%3Eprivate%20output%3C%2Fsvg%3E';
-        const content = [{ text: 'native-response-secret' }];
+        const nativeMetadata = {
+          content: [{ text: 'native-response-secret' }],
+          trace: { guardrail: { modelOutput: ['native-response-secret'] } },
+          additionalModelResponseFields: { text: 'native-response-secret' },
+        };
         const preview = { samples: [outputUri, dataUrl, svgUrl], caption: 'data:ready' };
         const row = {
           id: 'media-row',
           testCase: { vars: { input: inputUri } },
           metadata: {
-            content,
+            ...nativeMetadata,
             audio: { data: outputUri },
             blobUris: [outputUri],
             preview,
@@ -853,7 +857,7 @@ describe('createShareableUrl', () => {
             video: { url: outputUri },
             images: [{ url: outputUri }],
             metadata: {
-              content,
+              ...nativeMetadata,
               blobUris: [outputUri],
               audio: { data: outputUri },
               preview,
@@ -895,7 +899,7 @@ describe('createShareableUrl', () => {
         });
         expect(uploaded.metadata).toEqual(uploaded.response.metadata);
         expect(row.response.metadata.blobUris).toEqual([outputUri]);
-        expect(row.response.metadata.content).toEqual(content);
+        expect(row.response.metadata).toMatchObject(nativeMetadata);
       },
     );
 

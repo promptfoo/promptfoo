@@ -1376,21 +1376,37 @@ describe('EvalResult', () => {
   describe('toEvaluateResult', () => {
     it.each(
       ['model', 'persisted', 'jsonl'].flatMap((boundary) =>
-        [false, true].map((strip) => ({ boundary, strip })),
+        [false, true].flatMap((strip) =>
+          [false, true].map((testOwned) => ({ boundary, strip, testOwned })),
+        ),
       ),
     )(
-      'projects native response content at $boundary output (strip: $strip)',
-      async ({ boundary, strip }) => {
-        const content = [
-          { text: 'native-response-secret' },
-          { toolUse: { name: 'lookup', input: { value: 'native-response-secret' } } },
-        ];
-        const metadata = { content, latencyMs: 42, note: 'retain diagnostics' };
+      'projects native response metadata at $boundary output (strip: $strip, test-owned: $testOwned)',
+      async ({ boundary, strip, testOwned }) => {
+        const nativeMetadata = {
+          content: [
+            { text: 'native-response-secret' },
+            { toolUse: { name: 'lookup', input: { value: 'native-response-secret' } } },
+          ],
+          trace: {
+            guardrail: {
+              modelOutput: ['native-response-secret'],
+              outputAssessments: { guardrail: [{ match: 'native-response-secret' }] },
+            },
+          },
+          additionalModelResponseFields: { content: 'native-response-secret' },
+        };
+        const testMetadata = {
+          content: 'test-owned note',
+          trace: { note: 'test-owned trace' },
+          additionalModelResponseFields: { note: 'test-owned fields' },
+        };
+        const metadata = { ...nativeMetadata, latencyMs: 42, note: 'retain diagnostics' };
         const input = createEvaluateResult({
-          id: `native-content-${boundary}-${strip}`,
+          id: `native-content-${boundary}-${strip}-${testOwned}`,
           response: { output: 'native-response-secret', metadata },
-          metadata,
-          testCase: createAtomicTestCase({ metadata: { content: 'test-owned note' } }),
+          metadata: testOwned ? testMetadata : metadata,
+          testCase: createAtomicTestCase({ metadata: testMetadata }),
         });
         const flags = getStripFlags({ PROMPTFOO_STRIP_RESPONSE_OUTPUT: String(strip) });
         let projected: EvaluateResult;
@@ -1404,19 +1420,30 @@ describe('EvalResult', () => {
           );
           const loaded = saved.persisted ? await EvalResult.findById(saved.id) : saved;
           projected = loaded!.toEvaluateResult(flags);
-          expect(loaded!.response?.metadata?.content).toEqual(content);
+          expect(loaded!.response?.metadata).toEqual(metadata);
+        }
+        for (const [key, value] of Object.entries(nativeMetadata)) {
+          if (strip) {
+            expect(projected.response?.metadata).not.toHaveProperty(key);
+            if (!testOwned) {
+              expect(projected.metadata).not.toHaveProperty(key);
+            }
+          } else {
+            expect(projected.response?.metadata?.[key]).toEqual(value);
+            if (!testOwned) {
+              expect(projected.metadata?.[key]).toEqual(value);
+            }
+          }
         }
         if (strip) {
-          expect(projected.response?.metadata).not.toHaveProperty('content');
-          expect(projected.metadata).not.toHaveProperty('content');
           expect(JSON.stringify(projected)).not.toContain('native-response-secret');
-        } else {
-          expect(projected.response?.metadata?.content).toEqual(content);
-          expect(projected.metadata?.content).toEqual(content);
+        }
+        if (testOwned) {
+          expect(projected.metadata).toEqual(testMetadata);
         }
         expect(projected.response?.metadata?.latencyMs).toBe(42);
-        expect(projected.testCase.metadata?.content).toBe('test-owned note');
-        expect(input.response?.metadata?.content).toEqual(content);
+        expect(projected.testCase.metadata).toEqual(testMetadata);
+        expect(input.response?.metadata).toEqual(metadata);
       },
     );
 
