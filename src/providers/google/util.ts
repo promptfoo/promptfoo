@@ -13,6 +13,8 @@ import { getNunjucksEngine } from '../../util/templates';
 import {
   calculateCost,
   clampCachedTokens,
+  hasOpenAIToolMessages,
+  openaiChatToGoogle,
   type ProviderConfig,
   parseChatPrompt,
   transformToolChoice,
@@ -878,7 +880,16 @@ export function maybeCoerceToGeminiFormat(
     };
   }
 
-  if (typeof contents === 'string') {
+  if (hasOpenAIToolMessages(contents)) {
+    // OpenAI-style chat history with tool calls: map to native
+    // functionCall/functionResponse parts so the model sees completed
+    // tool turns instead of re-invoking the tool.
+    coercedContents = openaiChatToGoogle(
+      contents,
+      options?.useAssistantRole,
+    ) as unknown as GeminiFormat;
+    coerced = true;
+  } else if (typeof contents === 'string') {
     coercedContents = [
       {
         parts: [{ text: contents }],

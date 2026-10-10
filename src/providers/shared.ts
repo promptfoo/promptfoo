@@ -485,6 +485,253 @@ export function openaiToolsToGoogle(tools: OpenAITool[]): GoogleTool[] {
   return [{ functionDeclarations }];
 }
 
+// ==================
+// Chat History with Tool Calls (Canonical Format)
+// ==================
+
+/**
+ * OpenAI-style tool call as it appears in chat history (`assistant.tool_calls`).
+ * `function.arguments` may be an object (as in promptfoo YAML/JSON prompts)
+ * or a JSON string (as returned by the OpenAI API).
+ */
+export interface OpenAIChatToolCall {
+  id?: string;
+  type?: string;
+  function: {
+    name: string;
+    arguments?: string | Record<string, unknown>;
+  };
+}
+
+/**
+ * OpenAI-style chat message. This is the canonical history format:
+ * providers transform it to their native representation.
+ */
+export interface OpenAIChatMessage {
+  role: string;
+  content?: string | unknown[] | Record<string, unknown> | null;
+  tool_calls?: OpenAIChatToolCall[];
+  tool_call_id?: string;
+  name?: string;
+}
+
+export type ChatHistoryFormat = 'openai' | 'anthropic' | 'bedrock' | 'google';
+
+/**
+ * Returns true when the array contains OpenAI-style tool history:
+ * an assistant message with `tool_calls`, or a tool-result message
+ * (`role: 'tool'` or `tool_call_id` present).
+ */
+export function hasOpenAIToolMessages(messages: unknown): messages is OpenAIChatMessage[] {
+  if (!Array.isArray(messages) || messages.length === 0) {
+    return false;
+  }
+  return messages.some(
+    (msg) =>
+      typeof msg === 'object' &&
+      msg !== null &&
+      (Array.isArray((msg as Record<string, unknown>).tool_calls) ||
+        typeof (msg as Record<string, unknown>).tool_call_id === 'string' ||
+        (msg as Record<string, unknown>).role === 'tool'),
+  );
+}
+
+/** Parse `function.arguments` which may be an object or a JSON string. */
+function parseToolCallArguments(args: unknown): Record<string, unknown> {
+  if (args === undefined || args === null) {
+    return {};
+  }
+  if (typeof args === 'object') {
+    return args as Record<string, unknown>;
+  }
+  if (typeof args === 'string') {
+    const trimmed = args.trim();
+    if (trimmed === '') {
+      return {};
+    }
+    try {
+      const parsed = JSON.parse(trimmed);
+      return typeof parsed === 'object' && parsed !== null ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+  return {};
+}
+
+/** Normalize message content to a string for tool-result blocks. */
+function toolResultContentToString(content: unknown): string {
+  if (content === undefined || content === null) {
+    return '';
+  }
+  if (typeof content === 'string') {
+    return content;
+  }
+  try {
+    return JSON.stringify(content);
+  } catch {
+    return String(content);
+  }
+}
+
+/**
+ * Transforms OpenAI-style chat history with tool calls to Anthropic format
+ * (`tool_use` / `tool_result` content blocks).
+ */
+export function openaiChatToAnthropic(messages: OpenAIChatMessage[]): Array<{
+  role: 'user' | 'assistant';
+  content: Array<Record<string, unknown>>;
+}> {
+  return messages
+    .filter((msg) => msg && typeof msg === 'object' && typeof msg.role === 'string')
+    .flatMap((msg) => {
+      if (msg.role === 'system') {
+        // System prompts are extracted separately by the Anthropic provider.
+        return [];
+      }
+      if (msg.role === 'tool' || msg.tool_call_id) {
+        return [
+          {
+            role: 'user' as const,
+            content: [
+              {
+                type: 'tool_result',
+                tool_use_id: msg.tool_call_id ?? msg.name ?? '',
+                content: toolResultContentToString(msg.content),
+              },
+            ],
+          },
+        ];
+      }
+      if (msg.role === 'assistant' && Array.isArray(msg.tool_calls) && msg.tool_calls.length > 0) {
+        const blocks: Array<Record<string, unknown>> = [];
+        if (typeof msg.content === 'string' && msg.content !== '') {
+          blocks.push({ type: 'text', text: msg.content });
+        }
+        for (const call of msg.tool_calls) {
+          if (!call || typeof call !== 'object' || !call.function) {
+            continue;
+          }
+          blocks.push({
+            type: 'tool_use',
+            id: call.id ?? call.function.name,
+            name: call.function.name,
+            input: parseToolCallArguments(call.function.arguments),
+          });
+        }
+        return [{ role: 'assistant' as const, content: blocks }];
+      }
+      const role = msg.role === 'assistant' ? ('assistant' as const) : ('user' as const);
+      const text =
+        typeof msg.content === 'string' ? msg.content : toolResultContentToString(msg.content);
+      return [{ role, content: [{ type: 'text', text }] }];
+    });
+}
+
+/**
+ * Maps a single OpenAI-style message to Gemini parts. Returns an empty array
+ * for system messages (handled as `systemInstruction` downstream).
+ */
+function openaiMessageToGoogleParts(msg: OpenAIChatMessage): Array<Record<string, unknown>> {
+  if (msg.role === 'tool' || msg.tool_call_id) {
+    return [
+      {
+        functionResponse: {
+          ...(msg.tool_call_id ? { id: msg.tool_call_id } : {}),
+          name: msg.name ?? 'function',
+          response: { result: toolResultContentToString(msg.content) },
+        },
+      },
+    ];
+  }
+  if (msg.role === 'assistant' && Array.isArray(msg.tool_calls) && msg.tool_calls.length > 0) {
+    const parts: Array<Record<string, unknown>> = [];
+    if (typeof msg.content === 'string' && msg.content !== '') {
+      parts.push({ text: msg.content });
+    }
+    for (const call of msg.tool_calls) {
+      if (!call || typeof call !== 'object' || !call.function) {
+        continue;
+      }
+      parts.push({
+        functionCall: {
+          ...(call.id ? { id: call.id } : {}),
+          name: call.function.name,
+          args: parseToolCallArguments(call.function.arguments),
+        },
+      });
+    }
+    return parts;
+  }
+  const text =
+    typeof msg.content === 'string' ? msg.content : toolResultContentToString(msg.content);
+  return [{ text }];
+}
+
+function openaiMessageToGoogleRole(
+  msg: OpenAIChatMessage,
+  targetAssistantRole: 'model' | 'assistant',
+): 'user' | 'model' | 'assistant' {
+  if (msg.role === 'tool' || msg.tool_call_id) {
+    return 'user';
+  }
+  return msg.role === 'assistant' ? targetAssistantRole : 'user';
+}
+
+/**
+ * Transforms OpenAI-style chat history with tool calls to Gemini format
+ * (`functionCall` / `functionResponse` parts).
+ */
+export function openaiChatToGoogle(
+  messages: OpenAIChatMessage[],
+  useAssistantRole = false,
+): Array<{ role?: 'user' | 'model' | 'assistant'; parts: Array<Record<string, unknown>> }> {
+  const targetAssistantRole = useAssistantRole ? 'assistant' : 'model';
+  return messages
+    .filter((msg) => msg && typeof msg === 'object' && typeof msg.role === 'string')
+    .filter((msg) => msg.role !== 'system')
+    .map((msg) => ({
+      role: openaiMessageToGoogleRole(msg, targetAssistantRole),
+      parts: openaiMessageToGoogleParts(msg),
+    }));
+}
+
+/**
+ * Transforms OpenAI-style chat history with tool calls to Bedrock Converse
+ * format. Emits Anthropic-compatible `tool_use` / `tool_result` blocks, which
+ * the Bedrock Converse provider already converts to native
+ * `toolUse` / `toolResult` content blocks.
+ */
+export function openaiChatToBedrock(messages: OpenAIChatMessage[]): Array<{
+  role: 'user' | 'assistant';
+  content: Array<Record<string, unknown>>;
+}> {
+  return openaiChatToAnthropic(messages);
+}
+
+/**
+ * Transforms OpenAI-style chat history with tool calls to the specified
+ * provider format. Messages without tool history, or that are already in a
+ * native format, are returned as-is.
+ */
+export function transformChatMessages(messages: unknown, format: ChatHistoryFormat): unknown {
+  if (!hasOpenAIToolMessages(messages)) {
+    return messages;
+  }
+  switch (format) {
+    case 'openai':
+      return messages;
+    case 'anthropic':
+      return openaiChatToAnthropic(messages);
+    case 'bedrock':
+      return openaiChatToBedrock(messages);
+    case 'google':
+      return openaiChatToGoogle(messages);
+    default:
+      return messages;
+  }
+}
+
 export type ToolFormat = 'openai' | 'anthropic' | 'bedrock' | 'google';
 
 /**
