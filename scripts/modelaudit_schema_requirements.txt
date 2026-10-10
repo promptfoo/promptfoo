@@ -6,9 +6,9 @@
 # helpers are a matched set: pydantic enforces an exact pydantic-core pair at
 # import time, so they must move together. Renovate is configured to skip
 # standalone updates of these transitive pins to avoid incompatible pairs.
-modelaudit==0.2.51
-pydantic==2.13.4
-pydantic-core==2.46.4
-annotated-types==0.7.0
-typing-extensions==4.15.0
-typing-inspection==0.4.2
+modelaudit==0.2.52
+pydantic==2.13.5
+pydantic-core==2.46.5
+annotated-types==0.8.0
+typing-extensions==4.16.0
+typing-inspection==0.4.4

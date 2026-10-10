@@ -3,6 +3,7 @@ import { matchesGEval, matchesLlmRubric } from '../../src/matchers/llmGrading';
 import { matchesAnswerRelevance } from '../../src/matchers/rag';
 import { loadApiProvider } from '../../src/providers/index';
 import { DefaultGradingProvider } from '../../src/providers/openai/defaults';
+import { createPassingGrade } from '../factories/literalFixtures';
 
 describe('Matcher Token Tracking', () => {
   beforeEach(() => {
@@ -18,11 +19,7 @@ describe('Matcher Token Tracking', () => {
     it('should track numRequests in token usage', async () => {
       const mockProvider = await loadApiProvider('echo');
       const mockCallApi = vi.fn().mockResolvedValue({
-        output: JSON.stringify({
-          pass: true,
-          score: 1,
-          reason: 'Test passed',
-        }),
+        output: JSON.stringify(createPassingGrade(1, 'Test passed')),
         tokenUsage: {
           total: 100,
           prompt: 60,
@@ -53,11 +50,7 @@ describe('Matcher Token Tracking', () => {
     it('should default numRequests to 0 when not provided', async () => {
       const mockProvider = await loadApiProvider('echo');
       const mockCallApi = vi.fn().mockResolvedValue({
-        output: JSON.stringify({
-          pass: true,
-          score: 1,
-          reason: 'Test passed',
-        }),
+        output: JSON.stringify(createPassingGrade(1, 'Test passed')),
         tokenUsage: {
           total: 100,
           prompt: 60,

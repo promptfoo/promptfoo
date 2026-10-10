@@ -1,8 +1,35 @@
-import { describe, expect, it } from 'vitest';
-import { ProviderOptionsSchema, ProviderSchema } from '../../src/validators/providers';
+import { describe, expect, it, vi } from 'vitest';
+import { InputsSchema } from '../../src/contracts/shared';
+import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
+import { createTogetherAiProvider } from '../../src/providers/togetherai';
+import {
+  ApiProviderSchema,
+  ProviderOptionsSchema,
+  ProviderSchema,
+} from '../../src/validators/providers';
 import { createMockProvider } from '../factories/provider';
 
 describe('ProviderOptionsSchema', () => {
+  it('uses the canonical input schema for configured and callable providers', () => {
+    expect(ProviderOptionsSchema.shape.inputs.unwrap()).toBe(InputsSchema);
+    expect(ApiProviderSchema.shape.inputs.unwrap()).toBe(InputsSchema);
+    const inputs = { question: 'User question', context: { type: 'text', description: 'Context' } };
+    expect(ProviderOptionsSchema.parse({ inputs }).inputs).toEqual(inputs);
+    expect(
+      ApiProviderSchema.parse({ id: () => 'local', callApi: async () => ({}), inputs }).inputs,
+    ).toEqual(inputs);
+  });
+
+  it.each([{ 'invalid-name': 'question' }, { question: 42 }, { question: { type: 'unknown' } }])(
+    'rejects invalid input contracts: %j',
+    (inputs) => {
+      expect(ProviderOptionsSchema.safeParse({ inputs }).success).toBe(false);
+      expect(
+        ApiProviderSchema.safeParse({ id: () => 'local', callApi: async () => ({}), inputs })
+          .success,
+      ).toBe(false);
+    },
+  );
   it('should filter unknown keys without erroring', () => {
     const input = {
       id: 'test-provider',
@@ -42,9 +69,42 @@ describe('ProviderOptionsSchema', () => {
     expect(result.success).toBe(true);
     expect(result.data).toEqual({});
   });
+
+  it('uses process env for a custom Together AI credential name after config parsing', () => {
+    vi.stubEnv('CUSTOM_TOGETHER_KEY', 'process-key');
+    try {
+      const parsed = ProviderOptionsSchema.parse({
+        config: { apiKeyEnvar: 'CUSTOM_TOGETHER_KEY' },
+        env: { CUSTOM_TOGETHER_KEY: 'provider-key', TOGETHER_API_KEY: 'registered-key' },
+      });
+      expect(parsed.env).toEqual({ TOGETHER_API_KEY: 'registered-key' });
+      const provider = createTogetherAiProvider('togetherai:chat:fixture', { config: parsed });
+      expect((provider as OpenAiChatCompletionProvider).getApiKey()).toBe('process-key');
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
 });
 
 describe('ProviderSchema union', () => {
+  it('preserves the explicit embedding cancellation capability without requiring it', () => {
+    const provider = {
+      id: () => 'custom-embedding',
+      callApi: vi.fn(async () => ({ output: 'text' })),
+      callEmbeddingApi: vi.fn(async () => ({ embedding: [1, 0] })),
+    };
+    expect(ApiProviderSchema.parse(provider)).not.toHaveProperty('supportsEmbeddingCancellation');
+    expect(
+      ProviderSchema.parse({ ...provider, supportsEmbeddingCancellation: true }),
+    ).toMatchObject({
+      supportsEmbeddingCancellation: true,
+      callEmbeddingApi: provider.callEmbeddingApi,
+    });
+    expect(
+      ApiProviderSchema.safeParse({ ...provider, supportsEmbeddingCancellation: 'true' }).success,
+    ).toBe(false);
+  });
+
   it('should match ApiProviderSchema before ProviderOptionsSchema when callApi is present', () => {
     const input = createMockProvider({
       id: 'custom-provider',

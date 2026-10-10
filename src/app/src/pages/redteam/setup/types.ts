@@ -88,20 +88,22 @@ export interface ProviderOptions {
   id: string;
   label?: string;
   delay?: number;
+  transform?: CoreProviderOptions['transform'];
+  env?: CoreProviderOptions['env'];
   // Multi-variable inputs for test case generation
   inputs?: Inputs;
   config: {
     // biome-ignore lint/suspicious/noExplicitAny: Custom provider config can have anything
     [key: string]: any;
 
-    type?: 'http' | 'websocket' | 'browser';
+    type?: 'http' | 'websocket' | 'browser' | 'llamafile' | 'vllm' | 'text-generation-webui';
     // HTTP/WebSocket specific options
     url?: string;
     method?: string;
     headers?: Record<string, string>;
     body?: string | object;
     messageTemplate?: string;
-    protocols?: string[];
+    protocols?: string | string[];
     // Browser specific options
     steps?: BrowserStep[];
     headless?: boolean;

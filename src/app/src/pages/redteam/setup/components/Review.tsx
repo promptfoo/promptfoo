@@ -37,11 +37,12 @@ import {
   isValidPolicyObject,
   makeDefaultPolicyName,
 } from '@promptfoo/redteam/plugins/policy/utils';
-import { getUnifiedConfig } from '@promptfoo/redteam/sharedFrontend';
+import isEqual from 'fast-deep-equal';
 import { BarChart2, ChevronDown, Eye, Info, Play, Save, Search, Sliders, X } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
-import { generateOrderedYaml } from '../utils/yamlHelpers';
+import { useRedTeamTargetConfigValidation } from '../hooks/useRedTeamTargetConfigValidation';
+import { generateOrderedYaml, getRuntimeRedteamConfig } from '../utils/yamlHelpers';
 import DefaultTestVariables from './DefaultTestVariables';
 import { EmailVerificationDialog } from './EmailVerificationDialog';
 import EstimationsDisplay from './EstimationsDisplay';
@@ -50,6 +51,8 @@ import PageWrapper from './PageWrapper';
 import { RunOptionsContent } from './RunOptions';
 import type { PluginConfig, Policy, PolicyObject, RedteamPlugin } from '@promptfoo/redteam/types';
 import type { Job, RedteamRunOptions } from '@promptfoo/types';
+
+import type { ProviderOptions } from '../types';
 
 interface ReviewProps {
   onBack?: () => void;
@@ -67,6 +70,19 @@ interface JobStatusResponse {
   hasRunningJob: boolean;
   jobId?: string;
 }
+
+const getRunTargetValidationError = (
+  targetConfigError: string | null,
+  confirmedTarget: ProviderOptions,
+  latestTarget: ProviderOptions,
+): string | null => {
+  if (targetConfigError) {
+    return targetConfigError;
+  }
+  return isEqual(confirmedTarget, latestTarget)
+    ? null
+    : 'Target configuration changed while preparing the run. Review and try again.';
+};
 
 interface IntentEntry {
   display: string;
@@ -146,6 +162,7 @@ export default function Review({
   navigateToPurpose,
 }: ReviewProps) {
   const { config, updateConfig } = useRedTeamConfig();
+  const { targetConfigError } = useRedTeamTargetConfigValidation();
   const { recordEvent } = useTelemetry();
   const {
     data: { status: apiHealthStatus },
@@ -166,6 +183,7 @@ export default function Review({
   );
   const [isJobStatusDialogOpen, setIsJobStatusDialogOpen] = useState(false);
   const [isEmailDialogOpen, setIsEmailDialogOpen] = useState(false);
+  const confirmedRunTargetRef = useRef<ProviderOptions | null>(null);
   const [emailVerificationMessage, setEmailVerificationMessage] = useState('');
   const [emailVerificationError, setEmailVerificationError] = useState<string | null>(null);
   const { checkEmailStatus } = useEmailVerification();
@@ -333,6 +351,11 @@ export default function Review({
   }, [_hasHydrated]); // Run once after hydration completes
 
   const handleSaveYaml = () => {
+    if (targetConfigError) {
+      showToast(targetConfigError, 'error');
+      return;
+    }
+
     const blob = new Blob([yamlContent], { type: 'text/yaml' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -349,6 +372,11 @@ export default function Review({
   };
 
   const handleOpenYamlDialog = () => {
+    if (targetConfigError) {
+      showToast(targetConfigError, 'error');
+      return;
+    }
+
     setIsYamlDialogOpen(true);
   };
 
@@ -419,12 +447,20 @@ export default function Review({
   }, [config.strategies]);
 
   const isRunNowDisabled = useMemo(() => {
-    return isRunning || ['blocked', 'disabled', 'unknown'].includes(apiHealthStatus);
-  }, [isRunning, apiHealthStatus]);
+    return (
+      isRunning ||
+      Boolean(targetConfigError) ||
+      ['blocked', 'disabled', 'unknown'].includes(apiHealthStatus)
+    );
+  }, [isRunning, apiHealthStatus, targetConfigError]);
 
   const runNowTooltipMessage = useMemo((): string | undefined => {
     if (isRunning) {
       return undefined;
+    }
+
+    if (targetConfigError) {
+      return targetConfigError;
     }
 
     switch (apiHealthStatus) {
@@ -437,7 +473,7 @@ export default function Review({
       default:
         return undefined;
     }
-  }, [isRunning, apiHealthStatus]);
+  }, [isRunning, apiHealthStatus, targetConfigError]);
 
   const checkForRunningJob = async (): Promise<JobStatusResponse> => {
     try {
@@ -515,6 +551,15 @@ export default function Review({
   );
 
   const handleRunWithSettings = async () => {
+    if (targetConfigError) {
+      confirmedRunTargetRef.current = null;
+      showToast(targetConfigError, 'error');
+      return;
+    }
+    const confirmedTarget =
+      confirmedRunTargetRef.current ?? structuredClone(useRedTeamConfig.getState().config.target);
+    confirmedRunTargetRef.current = confirmedTarget;
+
     // Check email verification first
     const emailResult = await checkEmailStatus();
 
@@ -540,10 +585,25 @@ export default function Review({
 
     const { hasRunningJob } = await checkForRunningJob();
 
+    const { config: latestConfig } = useRedTeamConfig.getState();
+    const { targetConfigError: latestTargetConfigError } =
+      useRedTeamTargetConfigValidation.getState();
+    const runTargetValidationError = getRunTargetValidationError(
+      latestTargetConfigError,
+      confirmedTarget,
+      latestConfig.target,
+    );
+    if (runTargetValidationError) {
+      confirmedRunTargetRef.current = null;
+      showToast(runTargetValidationError, 'error');
+      return;
+    }
+
     if (hasRunningJob) {
       setIsJobStatusDialogOpen(true);
       return;
     }
+    confirmedRunTargetRef.current = null;
 
     // Clear any existing polling interval before starting a new job
     if (pollIntervalRef.current) {
@@ -553,12 +613,15 @@ export default function Review({
 
     recordEvent('feature_used', {
       feature: 'redteam_config_run',
-      numPlugins: config.plugins.length,
-      numStrategies: config.strategies.length,
-      targetType: config.target.id,
+      numPlugins: latestConfig.plugins.length,
+      numStrategies: latestConfig.strategies.length,
+      targetType: latestConfig.target.id,
     });
 
-    if (config.target.id === 'http' && config.target.config.url?.includes('promptfoo.app')) {
+    if (
+      latestConfig.target.id === 'http' &&
+      latestConfig.target.config?.url?.includes('promptfoo.app')
+    ) {
       // Track report export
       recordEvent('webui_action', {
         action: 'redteam_run_with_example',
@@ -569,9 +632,9 @@ export default function Review({
       type: 'redteam',
       step: 'webui_evaluation_started',
       source: 'webui',
-      numPlugins: config.plugins.length,
-      numStrategies: config.strategies.length,
-      targetType: config.target.id,
+      numPlugins: latestConfig.plugins.length,
+      numStrategies: latestConfig.strategies.length,
+      targetType: latestConfig.target.id,
     });
 
     setIsRunning(true);
@@ -585,11 +648,11 @@ export default function Review({
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          config: getUnifiedConfig(config),
+          config: getRuntimeRedteamConfig(latestConfig),
           force: forceRegeneration,
-          verbose: config.target.config.verbose,
+          verbose: latestConfig.target.config?.verbose,
           maxConcurrency,
-          delay: config.target.config.delay,
+          delay: latestConfig.target.config?.delay,
         }),
       });
 
@@ -1124,8 +1187,8 @@ export default function Review({
                   maxCharsPerMessage={config.maxCharsPerMessage}
                   runOptions={{
                     maxConcurrency: config.maxConcurrency,
-                    delay: config.target.config.delay,
-                    verbose: config.target.config.verbose,
+                    delay: config.target.config?.delay,
+                    verbose: config.target.config?.verbose,
                   }}
                   updateConfig={updateConfig}
                   updateRunOption={(
@@ -1168,11 +1231,20 @@ export default function Review({
             </p>
             <Code>promptfoo redteam run</Code>
             <div className="mt-4 flex gap-3">
-              <Button onClick={handleSaveYaml} className="gap-2">
+              <Button
+                onClick={handleSaveYaml}
+                disabled={Boolean(targetConfigError)}
+                className="gap-2"
+              >
                 <Save className="size-4" />
                 Save YAML
               </Button>
-              <Button variant="outline" onClick={handleOpenYamlDialog} className="gap-2">
+              <Button
+                variant="outline"
+                onClick={handleOpenYamlDialog}
+                disabled={Boolean(targetConfigError)}
+                className="gap-2"
+              >
                 <Eye className="size-4" />
                 View YAML
               </Button>
@@ -1206,7 +1278,10 @@ export default function Review({
                   <TooltipTrigger asChild>
                     <span>
                       <Button
-                        onClick={handleRunWithSettings}
+                        onClick={() => {
+                          confirmedRunTargetRef.current = null;
+                          handleRunWithSettings();
+                        }}
                         disabled={isRunNowDisabled}
                         className="gap-2"
                       >
@@ -1258,7 +1333,15 @@ export default function Review({
         </Dialog>
 
         {/* Job Status Dialog */}
-        <Dialog open={isJobStatusDialogOpen} onOpenChange={setIsJobStatusDialogOpen}>
+        <Dialog
+          open={isJobStatusDialogOpen}
+          onOpenChange={(open) => {
+            setIsJobStatusDialogOpen(open);
+            if (!open) {
+              confirmedRunTargetRef.current = null;
+            }
+          }}
+        >
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Job Already Running</DialogTitle>
@@ -1268,7 +1351,13 @@ export default function Review({
               a new one?
             </p>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setIsJobStatusDialogOpen(false)}>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setIsJobStatusDialogOpen(false);
+                  confirmedRunTargetRef.current = null;
+                }}
+              >
                 Cancel
               </Button>
               <Button onClick={handleCancelExistingAndRun}>Cancel Existing & Run New</Button>
@@ -1286,7 +1375,10 @@ export default function Review({
 
         <EmailVerificationDialog
           open={isEmailDialogOpen}
-          onClose={() => setIsEmailDialogOpen(false)}
+          onClose={() => {
+            setIsEmailDialogOpen(false);
+            confirmedRunTargetRef.current = null;
+          }}
           onSuccess={() => {
             setIsEmailDialogOpen(false);
             handleRunWithSettings();

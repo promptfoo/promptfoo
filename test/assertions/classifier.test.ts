@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleClassifier } from '../../src/assertions/classifier';
 import { matchesClassification } from '../../src/matchers/classification';
 import { createMockProvider, createProviderResponse } from '../factories/provider';
@@ -47,12 +47,17 @@ function createParams(overrides: Partial<AssertionParams> = {}): AssertionParams
 }
 
 describe('handleClassifier', () => {
+  afterEach(() => {
+    vi.resetAllMocks();
+  });
+
   beforeEach(() => {
     vi.resetAllMocks();
     mockedMatchesClassification.mockResolvedValue({
       pass: true,
       score: 0.9,
       reason: 'classification passed',
+      tokensUsed: { total: 16, prompt: 12, completion: 4, numRequests: 1 },
     });
   });
 
@@ -64,6 +69,7 @@ describe('handleClassifier', () => {
       pass: true,
       score: 0.9,
       reason: 'classification passed',
+      tokensUsed: { total: 16, prompt: 12, completion: 4, numRequests: 1 },
     });
 
     expect(mockedMatchesClassification).toHaveBeenCalledWith(
@@ -79,6 +85,8 @@ describe('handleClassifier', () => {
       pass: false,
       score: 0.25,
       reason: 'classification failed',
+      tokensUsed: { total: 0, cached: 16, numRequests: 0 },
+      metadata: { cachedResponse: true },
     });
     const params = createParams({
       assertion: {
@@ -94,6 +102,8 @@ describe('handleClassifier', () => {
       pass: true,
       score: 0.75,
       reason: 'classification failed',
+      tokensUsed: { total: 0, cached: 16, numRequests: 0 },
+      metadata: { cachedResponse: true },
     });
 
     expect(mockedMatchesClassification).toHaveBeenCalledWith(
@@ -114,4 +124,35 @@ describe('handleClassifier', () => {
     );
     expect(mockedMatchesClassification).not.toHaveBeenCalled();
   });
+
+  it.each([false, true])(
+    'preserves the full grader failure result (inverse=%s)',
+    async (inverse) => {
+      mockedMatchesClassification.mockResolvedValue({
+        pass: false,
+        score: 0,
+        reason: 'Unknown error fetching classification',
+        tokensUsed: { total: 5, prompt: 3, completion: 2 },
+        metadata: { graderError: true, cachedResponse: true },
+      });
+      const params = createParams({
+        assertion: {
+          type: inverse ? 'not-classifier' : 'classifier',
+          value: 'harmful',
+          threshold: 0.5,
+        },
+        renderedValue: 'harmful',
+        inverse,
+      });
+
+      await expect(handleClassifier(params)).resolves.toEqual({
+        assertion: params.assertion,
+        pass: false,
+        score: 0,
+        reason: 'Unknown error fetching classification',
+        tokensUsed: { total: 5, prompt: 3, completion: 2 },
+        metadata: { graderError: true, cachedResponse: true },
+      });
+    },
+  );
 });

@@ -5,9 +5,10 @@ import { Button } from '@app/components/ui/button';
 import { Spinner } from '@app/components/ui/spinner';
 import { EVAL_ROUTES } from '@app/constants/routes';
 import { useToast } from '@app/hooks/useToast';
+import { normalizeLocalProviders } from '@app/pages/redteam/setup/components/Targets/helpers';
 import { useStore } from '@app/stores/evalConfig';
 import { callApi } from '@app/utils/api';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router';
 import {
   countTests,
   normalizePrompts,
@@ -31,6 +32,7 @@ const RunTestSuiteButton = () => {
     providers,
     scenarios,
     tests,
+    tracing,
     extensions,
   } = config;
   const [isRunning, setIsRunning] = useState(false);
@@ -85,9 +87,10 @@ const RunTestSuiteButton = () => {
       env,
       evaluateOptions,
       prompts: jobPrompts,
-      providers,
+      providers: normalizeLocalProviders(providers, { forRuntime: true }),
       scenarios,
       tests, // Note: This is 'tests' in the API, not 'testCases'
+      tracing,
       extensions,
       ...(sourceEvalId && { sourceEvalId }),
     };

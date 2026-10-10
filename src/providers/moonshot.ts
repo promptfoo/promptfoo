@@ -1,10 +1,9 @@
-import { getEnvString } from '../envars';
 import { renderVarsInObject } from '../util/index';
+import { resolveConfiguredApiKey } from './credentials';
 import { OpenAiChatCompletionProvider } from './openai/chat';
+import { serializeProvider } from './serialization';
 import { clampCachedTokens } from './shared';
 
-import type { EnvVarKey } from '../envars';
-import type { EnvOverrides } from '../types/env';
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -28,14 +27,6 @@ type MoonshotConfig = OpenAiCompletionOptions & {
 type MoonshotProviderOptions = Omit<ProviderOptions, 'config'> & {
   config?: MoonshotConfig;
 };
-
-function getProviderEnvString(env: EnvOverrides | undefined, key: EnvVarKey): string | undefined {
-  if (env && Object.prototype.hasOwnProperty.call(env, key)) {
-    const value = env[key as keyof EnvOverrides];
-    return value === undefined ? undefined : String(value);
-  }
-  return undefined;
-}
 
 // The Kimi models (kimi-k3, kimi-k2.5 / kimi-k2.6 / kimi-k2.7-code, …) are
 // "thinking" models that pin temperature, top_p, n and the penalties to fixed
@@ -112,13 +103,7 @@ class MoonshotProvider extends OpenAiChatCompletionProvider {
   // base provider we do NOT fall back to OPENAI_API_KEY, which would send an
   // OpenAI key to Moonshot and 401.
   override getApiKey(): string | undefined {
-    if (this.config.apiKey !== undefined) {
-      return this.config.apiKey;
-    }
-    const apiKeyEnvar = this.config.apiKeyEnvar as EnvVarKey | undefined;
-    return apiKeyEnvar
-      ? (getProviderEnvString(this.env, apiKeyEnvar) ?? getEnvString(apiKeyEnvar))
-      : undefined;
+    return resolveConfiguredApiKey(this);
   }
 
   override getApiUrl(): string {
@@ -147,14 +132,7 @@ class MoonshotProvider extends OpenAiChatCompletionProvider {
   }
 
   toJSON() {
-    return {
-      provider: 'moonshot',
-      model: this.modelName,
-      config: {
-        ...this.config,
-        ...(this.config.apiKey && { apiKey: undefined }),
-      },
-    };
+    return serializeProvider(this, 'moonshot');
   }
 
   // Strip the sampling params promptfoo injects (temperature defaults to 0,
@@ -169,13 +147,15 @@ class MoonshotProvider extends OpenAiChatCompletionProvider {
   ) {
     const result = await super.getOpenAiBody(prompt, context, callApiOptions);
 
+    const modelName = typeof result.body.model === 'string' ? result.body.model : this.modelName;
+
     // reasoning_effort is K3-only per Moonshot's parameter matrix; fail fast on
     // other models instead of silently dropping it or sending it unsupported.
     // https://platform.kimi.ai/docs/api/models-overview
     if (result.config.reasoning_effort !== undefined) {
-      if (!/^kimi-k3/i.test(this.modelName)) {
+      if (!/^kimi-k3/i.test(modelName)) {
         throw new Error(
-          `Moonshot model ${this.modelName} does not support reasoning_effort (kimi-k3 family only). ` +
+          `Moonshot model ${modelName} does not support reasoning_effort (kimi-k3 family only). ` +
             'Remove it, use `passthrough: { thinking: ... }` on K2.x, or force-send it via `passthrough: { reasoning_effort: ... }`.',
         );
       }
@@ -185,39 +165,54 @@ class MoonshotProvider extends OpenAiChatCompletionProvider {
       );
     }
 
-    if (!pinsSamplingParams(this.modelName)) {
-      return result;
-    }
-
     const { body, config } = result;
-    if (config.temperature === undefined) {
-      delete body.temperature;
-    }
-    if (config.top_p === undefined) {
-      delete body.top_p;
-    }
-    if (config.presence_penalty === undefined) {
-      delete body.presence_penalty;
-    }
-    if (config.frequency_penalty === undefined) {
-      delete body.frequency_penalty;
-    }
     // Moonshot's canonical field is max_completion_tokens (max_tokens is a
     // deprecated alias). Honor an explicit value on either field — prompt-level
     // config beats provider-level regardless of which alias each layer used —
     // and drop the base provider's injected max_tokens: 1024 default so
     // reasoning can use Moonshot's server budget (32k for K2.x, 131k for K3).
     const promptConfig = (context?.prompt?.config ?? {}) as OpenAiCompletionOptions;
+    const promptPassthrough = promptConfig.passthrough as
+      | { max_completion_tokens?: unknown; max_tokens?: unknown }
+      | undefined;
     const maxTokens =
+      promptPassthrough?.max_completion_tokens ??
+      promptPassthrough?.max_tokens ??
       promptConfig.max_completion_tokens ??
       promptConfig.max_tokens ??
+      config.passthrough?.max_completion_tokens ??
+      config.passthrough?.max_tokens ??
       config.max_completion_tokens ??
       config.max_tokens;
-    delete body.max_tokens;
-    if (maxTokens === undefined) {
-      delete body.max_completion_tokens;
-    } else {
-      body.max_completion_tokens = maxTokens;
+    if (maxTokens !== undefined || pinsSamplingParams(modelName)) {
+      delete body.max_tokens;
+      if (maxTokens === undefined) {
+        delete body.max_completion_tokens;
+      } else {
+        body.max_completion_tokens = maxTokens;
+      }
+    }
+
+    if (!pinsSamplingParams(modelName)) {
+      return result;
+    }
+    if (config.temperature === undefined && config.passthrough?.temperature === undefined) {
+      delete body.temperature;
+    }
+    if (config.top_p === undefined && config.passthrough?.top_p === undefined) {
+      delete body.top_p;
+    }
+    if (
+      config.presence_penalty === undefined &&
+      config.passthrough?.presence_penalty === undefined
+    ) {
+      delete body.presence_penalty;
+    }
+    if (
+      config.frequency_penalty === undefined &&
+      config.passthrough?.frequency_penalty === undefined
+    ) {
+      delete body.frequency_penalty;
     }
     return result;
   }

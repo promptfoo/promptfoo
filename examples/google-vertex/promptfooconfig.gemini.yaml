@@ -1,6 +1,6 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 
-description: 'Evaluation of Gemini 2.5 models with function calling capabilities'
+description: 'Evaluation of Gemini models with function calling capabilities'
 
 prompts:
   - label: 'Direct Question'
@@ -19,10 +19,10 @@ providers:
       generationConfig:
         temperature: 0.7
         maxOutputTokens: 1024
-      toolConfig:
+      toolConfig: &geminiToolConfig
         functionCallingConfig:
           mode: 'AUTO'
-      tools:
+      tools: &geminiTools
         - functionDeclarations:
             - name: 'get_weather'
               description: 'Get weather information for a location'
@@ -46,6 +46,46 @@ providers:
                     description: 'Type of place'
                     enum: ['restaurant', 'hotel', 'attraction']
                 required: ['query']
+
+  - id: vertex:gemini-3.8-flash
+    config:
+      region: global
+      generationConfig:
+        maxOutputTokens: 2048
+        thinkingConfig:
+          thinkingLevel: MEDIUM
+      toolConfig: *geminiToolConfig
+      tools: *geminiTools
+
+  - id: vertex:gemini-3.7-flash
+    config:
+      region: global
+      generationConfig:
+        maxOutputTokens: 2048
+        thinkingConfig:
+          thinkingLevel: MEDIUM
+      toolConfig: *geminiToolConfig
+      tools: *geminiTools
+
+  - id: vertex:gemini-3.6-flash
+    config:
+      region: global
+      generationConfig:
+        maxOutputTokens: 2048
+        thinkingConfig:
+          thinkingLevel: HIGH
+      toolConfig: *geminiToolConfig
+      tools: *geminiTools
+
+  - id: vertex:gemini-3.5-flash-lite
+    config:
+      region: global
+      generationConfig:
+        maxOutputTokens: 2048
+        thinkingConfig:
+          thinkingLevel: LOW
+      toolConfig: *geminiToolConfig
+      tools: *geminiTools
 
   - id: vertex:gemini-3.5-flash
     config:

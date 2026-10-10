@@ -1,6 +1,14 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { looksLikeSecret, redactAzureBlobSasTokens } from '../../../util/sanitizer';
+import {
+  looksLikeSecret,
+  redactAzureBlobSasTokens,
+  sanitizeUrlForLogging,
+} from '../../../util/sanitizer';
+import {
+  isProviderOptionsMap,
+  normalizeLocalProviders,
+} from '../pages/redteam/setup/components/Targets/helpers';
 
 import type { EvaluateTestSuiteWithEvaluateOptions, UnifiedConfig } from '../../../types/index';
 
@@ -51,6 +59,14 @@ const HEADER_CREDENTIAL_NAMES = new Set([
   'x_honeycomb_team',
   'proxy_authorization',
   'x_amz_security_token',
+]);
+const SAFE_TRACING_PROVIDER_HEADER_NAMES = new Set([
+  'accept',
+  'content_type',
+  'x_org_id',
+  'x_organization_id',
+  'x_scope_org_id',
+  'x_tenant_id',
 ]);
 // Bare parameter aliases are credential carriers only in HTTP request data
 // (query params, form bodies, and multipart fields).
@@ -109,12 +125,12 @@ const looksLikeCredential = (name: string): boolean => {
   );
 };
 
-const looksLikeCredentialHeader = (headerName: string): boolean => {
+export const looksLikeCredentialHeader = (headerName: string): boolean => {
   const normalized = normalizeCredentialName(headerName);
   return HEADER_CREDENTIAL_NAMES.has(normalized) || looksLikeCredential(headerName);
 };
 
-const looksLikeRequestCredentialParameter = (name: string): boolean =>
+export const looksLikeRequestCredentialParameter = (name: string): boolean =>
   BARE_CREDENTIAL_PARAMETER_NAMES.has(normalizeCredentialName(name)) || looksLikeCredential(name);
 
 const URL_USERINFO = /^((?:webhook:)?[a-z][a-z0-9+.-]*:\/\/)([^/?#@\r\n]+)@/i;
@@ -297,7 +313,7 @@ const scrubProviderUrl = (value: string, templatePaths?: Set<string>): string =>
     : scrubbed;
 };
 
-const looksLikeCredentialValue = (value: string, templatePaths?: Set<string>): boolean =>
+export const looksLikeCredentialValue = (value: string, templatePaths?: Set<string>): boolean =>
   !isTemplatedCredentialReference(value) &&
   (looksLikeSecret(value.trim()) || scrubProviderUrl(value, templatePaths) !== value);
 
@@ -590,6 +606,14 @@ const walkValue = (
 
     return Object.fromEntries(
       Object.entries(record).flatMap(([key, nestedValue]) => {
+        // This credential selector is safe to persist only as a literal boolean.
+        // Imported YAML can contain strings or nested values despite the TS type.
+        if (normalizeCredentialName(key) === 'use_default_api_key') {
+          if (typeof nestedValue === 'string') {
+            recordCredentialTemplatePaths(nestedValue, templatePaths);
+          }
+          return typeof nestedValue === 'boolean' ? [[key, nestedValue]] : [];
+        }
         const credential = isHeaders
           ? looksLikeHeaderCredential(key, nestedValue)
           : isQueryParams
@@ -659,7 +683,7 @@ const omitReferencedProviderEnv = (
   );
 };
 
-const omitProviderCredentials = (
+export const omitProviderCredentials = (
   value: unknown,
   parentKey?: string,
   templatePaths?: Set<string>,
@@ -683,34 +707,13 @@ const omitProviderCredentials = (
   return omitReferencedProviderEnv(sanitized, providerTemplatePaths);
 };
 
-const PROVIDER_OPTION_KEYS = new Set([
-  'id',
-  'label',
-  'config',
-  'prompts',
-  'transform',
-  'delay',
-  'env',
-  'inputs',
-]);
-
 const scrubProviderIdentifier = (value: string, templatePaths?: Set<string>): string =>
   scrubProviderUrl(redactAzureBlobSasTokens(value), templatePaths);
 
-// A provider can be supplied as an options-map keyed by the provider id —
-// `{ '<provider-id>': { ...options } }` — where the id key itself may embed
-// credentials (URL userinfo, an Azure SAS token). Those keys are scrubbed via
-// scrubProviderIdentifier; the values are sanitized via omitProviderCredentials.
-// Only an unambiguous map takes this path: at least one key outside the known
-// option fields AND every value a record. A provider OBJECT with a stray
-// non-record field (e.g. `{ id, apiKey: '...' }` or a top-level headers bag)
-// must take the normal walk instead, which drops credential-named keys and
-// applies parent-key semantics (headers, opaque tool schemas, raw requests,
-// env indirection) that the map path would bypass.
-const isProviderOptionsMap = (value: unknown): value is Record<string, unknown> =>
-  isRecord(value) &&
-  Object.keys(value).some((key) => !PROVIDER_OPTION_KEYS.has(key)) &&
-  Object.values(value).every(isRecord);
+const normalizeLocalConfig = (config: Partial<UnifiedConfig>): Partial<UnifiedConfig> =>
+  hasOwn(config, 'providers')
+    ? { ...config, providers: normalizeLocalProviders(config.providers) }
+    : config;
 
 // walkValue never rewrites object keys, so after the walk the surviving
 // top-level keys are scrubbed here. This covers a credential-bearing id key on
@@ -964,15 +967,69 @@ const omitPromptCredentials = (prompts: unknown, templatePaths?: Set<string>): u
   };
 };
 
-// OTLP trace forwarding can carry an `Authorization` header. The rest of the
-// tracing block is non-secret runtime config.
+// OTLP forwarding and external trace providers can both contain credentials.
 const omitTracingCredentials = (tracing: unknown, templatePaths?: Set<string>): unknown => {
-  if (!isRecord(tracing) || !isRecord(tracing.forwarding)) {
+  if (!isRecord(tracing)) {
     return tracing;
   }
+
+  const sanitizedProvider = isRecord(tracing.provider)
+    ? (omitProviderCredentials(tracing.provider, undefined, templatePaths) as Record<
+        string,
+        unknown
+      >)
+    : undefined;
+  if (sanitizedProvider && typeof sanitizedProvider.endpoint === 'string') {
+    const providerEndpoint = sanitizedProvider.endpoint;
+    try {
+      const endpoint = new URL(providerEndpoint);
+      if (endpoint.username || endpoint.password || endpoint.search || endpoint.hash) {
+        endpoint.username = '';
+        endpoint.password = '';
+        endpoint.search = '';
+        endpoint.hash = '';
+        sanitizedProvider.endpoint = endpoint.toString();
+      }
+      const safeEndpoint = sanitizeUrlForLogging(endpoint.toString());
+      if (safeEndpoint !== endpoint.toString()) {
+        sanitizedProvider.endpoint = safeEndpoint;
+      }
+    } catch {
+      sanitizedProvider.endpoint = scrubProviderUrl(providerEndpoint, templatePaths);
+    }
+  }
+  if (sanitizedProvider && isRecord(sanitizedProvider.headers)) {
+    sanitizedProvider.headers = Object.fromEntries(
+      Object.entries(sanitizedProvider.headers).filter(([name, value]) => {
+        if (typeof value !== 'string') {
+          return false;
+        }
+        const knownSafeHeader = SAFE_TRACING_PROVIDER_HEADER_NAMES.has(
+          normalizeCredentialName(name),
+        );
+        if (isTemplatedCredentialReference(value)) {
+          if (!knownSafeHeader) {
+            preserveCredentialTemplate(value, templatePaths);
+          }
+          return true;
+        }
+        return knownSafeHeader && !looksLikeHeaderCredential(name, value, templatePaths);
+      }),
+    );
+  }
+
+  const sanitizedTracing = {
+    ...tracing,
+    ...(sanitizedProvider ? { provider: sanitizedProvider } : {}),
+  };
+
+  if (!isRecord(tracing.forwarding)) {
+    return sanitizedTracing;
+  }
+
   const forwarding = tracing.forwarding;
   return {
-    ...tracing,
+    ...sanitizedTracing,
     forwarding: {
       ...forwarding,
       ...(typeof forwarding.endpoint === 'string'
@@ -1262,11 +1319,11 @@ export const useStore = create<EvalConfigState>()(
     (set, get) => ({
       config: { ...DEFAULT_CONFIG },
 
-      setConfig: (config) => set({ config }),
+      setConfig: (config) => set({ config: normalizeLocalConfig(config) }),
 
       updateConfig: (updates) =>
         set((state) => ({
-          config: { ...state.config, ...updates },
+          config: normalizeLocalConfig({ ...state.config, ...updates }),
         })),
 
       reset: () => set({ config: { ...DEFAULT_CONFIG } }),
@@ -1281,9 +1338,10 @@ export const useStore = create<EvalConfigState>()(
           env: config.env,
           extensions: config.extensions,
           prompts: config.prompts,
-          providers: config.providers,
+          providers: normalizeLocalProviders(config.providers, { forRuntime: true }),
           scenarios: config.scenarios,
           tests: config.tests || [], // This is what was 'testCases' before
+          tracing: config.tracing,
           evaluateOptions: config.evaluateOptions,
           defaultTest: config.defaultTest,
           derivedMetrics: config.derivedMetrics,
@@ -1294,7 +1352,7 @@ export const useStore = create<EvalConfigState>()(
       name: 'promptfoo',
       skipHydration: true,
       partialize: (state) => ({
-        config: omitPersistedSensitiveValues(state.config),
+        config: normalizeLocalConfig(omitPersistedSensitiveValues(state.config)),
       }),
       merge: (persistedState, currentState) => {
         const persistedConfig = (persistedState as Partial<EvalConfigState> | undefined)?.config;
@@ -1302,10 +1360,12 @@ export const useStore = create<EvalConfigState>()(
         return {
           ...currentState,
           ...(persistedState as Partial<EvalConfigState> | undefined),
-          config: omitPersistedSensitiveValues({
-            ...DEFAULT_CONFIG,
-            ...persistedConfig,
-          }),
+          config: normalizeLocalConfig(
+            omitPersistedSensitiveValues({
+              ...DEFAULT_CONFIG,
+              ...persistedConfig,
+            }),
+          ),
         };
       },
       onRehydrateStorage: () => (state) => {

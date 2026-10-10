@@ -1,3 +1,4 @@
+import { parse as parseBrowserCsv } from 'csv-parse/browser/esm/sync';
 import { parse as parseCsv } from 'csv-parse/sync';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { parseCommaSeparatedValues } from '../src/assertions/contains';
@@ -12,6 +13,36 @@ vi.mock('../src/logger', () => ({
 }));
 
 import type { Assertion, CsvRow, TestCase } from '../src/types/index';
+
+describe.each([
+  ['Node.js', parseCsv],
+  ['browser', parseBrowserCsv],
+] as const)('%s CSV parsing', (_name, parse) => {
+  it('preserves special column names as own properties', () => {
+    const [record] = parse<Record<string, string>>(
+      '__proto__,constructor,toString\nproto-value,constructor-value,toString-value',
+      { columns: true },
+    );
+
+    expect(Object.getPrototypeOf(record)).toBe(Object.prototype);
+    expect(Object.hasOwn(record, '__proto__')).toBe(true);
+    expect(record.__proto__).toBe('proto-value');
+    expect(record.constructor).toBe('constructor-value');
+    expect(record.toString).toBe('toString-value');
+  });
+
+  it('groups duplicate __proto__ headers without replacing the record prototype', () => {
+    const [record] = parse<Record<string, string[]>>(
+      '__proto__,__proto__,value,value\nfirst,second,one,two',
+      { columns: true, group_columns_by_name: true },
+    );
+
+    expect(Object.getPrototypeOf(record)).toBe(Object.prototype);
+    expect(Object.hasOwn(record, '__proto__')).toBe(true);
+    expect(record.__proto__).toEqual(['first', 'second']);
+    expect(record.value).toEqual(['one', 'two']);
+  });
+});
 
 describe('testCaseFromCsvRow', () => {
   const INVALID_THRESHOLD_VALUES = [
@@ -374,20 +405,21 @@ describe('testCaseFromCsvRow', () => {
       );
     });
 
-    it.each(
-      INVALID_THRESHOLD_VALUES.slice(0, 3),
-    )('throws on invalid threshold value %s', (thresholdValue) => {
-      const key = '__config:__expected1:threshold';
-      const row: CsvRow = {
-        __expected1: 'similar:foo',
-        [key]: thresholdValue,
-      } as any;
+    it.each(INVALID_THRESHOLD_VALUES.slice(0, 3))(
+      'throws on invalid threshold value %s',
+      (thresholdValue) => {
+        const key = '__config:__expected1:threshold';
+        const row: CsvRow = {
+          __expected1: 'similar:foo',
+          [key]: thresholdValue,
+        } as any;
 
-      expect(() => testCaseFromCsvRow(row)).toThrow('Invalid numeric value for threshold');
-      expect(logger.error).toHaveBeenCalledWith(
-        `Invalid numeric value "${thresholdValue}" for config key "threshold" in column "__config:__expected1:threshold"`,
-      );
-    });
+        expect(() => testCaseFromCsvRow(row)).toThrow('Invalid numeric value for threshold');
+        expect(logger.error).toHaveBeenCalledWith(
+          `Invalid numeric value "${thresholdValue}" for config key "threshold" in column "__config:__expected1:threshold"`,
+        );
+      },
+    );
   });
   it('should preserve zero __threshold in the test case', () => {
     const row: CsvRow = {
@@ -502,22 +534,26 @@ describe('assertionFromString', () => {
     expect(result.type).toBe('contains-json');
   });
 
-  it('should create a function assertion', () => {
+  const verifyFunctionAssertion = () => {
     const expected = 'fn:output === "Expected output"';
 
     const result: Assertion = assertionFromString(expected);
     expect(result.type).toBe('javascript');
     expect(result.value).toBe('output === "Expected output"');
-  });
+  };
 
-  it('should create a similarity assertion', () => {
+  it('should create a function assertion', verifyFunctionAssertion);
+
+  const verifySimilarityAssertion = () => {
     const expected = 'similar(0.9):Expected output';
 
     const result: Assertion = assertionFromString(expected);
     expect(result.type).toBe('similar');
     expect(result.value).toBe('Expected output');
     expect(result.threshold).toBe(0.9);
-  });
+  };
+
+  it('should create a similarity assertion', verifySimilarityAssertion);
 
   it('should create a contains assertion', () => {
     const expected = 'contains:substring';
@@ -574,11 +610,8 @@ describe('assertionFromString', () => {
     expect(result.value).toEqual(['alpha', 'beta']);
   });
 
-  // csv.ts intentionally keeps a private copy of the contains-assertion value
-  // parser (it cannot import the assertion handlers without bundling backend code
-  // into the frontend; see the comment in src/csv.ts). This drift guard covers
-  // representative valid and malformed inputs so changes to either implementation
-  // have to preserve the same behavior.
+  // Keep the CSV integration and exported assertion parser aligned for valid
+  // and malformed values, including their error messages.
   it.each([
     '"hello, world",foo',
     String.raw`"say \"hi\"",b`,
@@ -850,13 +883,7 @@ describe('assertionFromString', () => {
     expect(result.value).toBe('output === "Expected output"');
   });
 
-  it('should handle legacy fn option', () => {
-    const expected = 'fn:output === "Expected output"';
-
-    const result: Assertion = assertionFromString(expected);
-    expect(result.type).toBe('javascript');
-    expect(result.value).toBe('output === "Expected output"');
-  });
+  it('should handle legacy fn option', verifyFunctionAssertion);
 
   it('should use DEFAULT_SEMANTIC_SIMILARITY_THRESHOLD for similar assertion without threshold', () => {
     const expected = 'similar:Expected output';
@@ -879,7 +906,9 @@ describe('assertionFromString', () => {
       'levenshtein',
       'perplexity-score',
       'perplexity',
+      'rouge-l',
       'rouge-n',
+      'rouge-s',
       'starts-with',
     ];
 
@@ -910,13 +939,42 @@ describe('assertionFromString', () => {
     }
   });
 
-  it('should use provided threshold when specified', () => {
-    const expected = 'similar(0.9):Expected output';
+  it('should use provided threshold when specified', verifySimilarityAssertion);
 
-    const result: Assertion = assertionFromString(expected);
-    expect(result.type).toBe('similar');
-    expect(result.value).toBe('Expected output');
-    expect(result.threshold).toBe(0.9);
+  it('should keep an explicit threshold for types without a CSV default threshold', () => {
+    for (const type of [
+      'bleu',
+      'gleu',
+      'meteor',
+      'tool-call-f1',
+      'g-eval',
+      'llm-rubric',
+      'factuality',
+      'javascript',
+    ]) {
+      const result: Assertion = assertionFromString(`${type}(0.3):Expected output`);
+      expect(result).toEqual({ type, value: 'Expected output', threshold: 0.3 });
+    }
+    expect(assertionFromString('not-bleu(0.9):Expected output')).toEqual({
+      type: 'not-bleu',
+      value: 'Expected output',
+      threshold: 0.9,
+    });
+  });
+
+  it('should not add a threshold for types without a CSV default when none is specified', () => {
+    expect(assertionFromString('bleu:Expected output')).toStrictEqual({
+      type: 'bleu',
+      value: 'Expected output',
+    });
+  });
+
+  it('should preserve an explicit zero threshold for types without a CSV default', () => {
+    expect(assertionFromString('bleu(0):Expected output')).toEqual({
+      type: 'bleu',
+      value: 'Expected output',
+      threshold: 0,
+    });
   });
 
   it('should preserve zero threshold when explicitly specified', () => {
@@ -928,6 +986,41 @@ describe('assertionFromString', () => {
     expect(result.threshold).toBe(0);
     // This is especially important to test with the nullish coalescing operator (??),
     // since it behaves differently than logical OR (||) for the value 0
+  });
+
+  it('should keep colon-qualified assertion types instead of folding them into the shorter type', () => {
+    // `similar` is a prefix of `similar:cosine`, `similar:dot`, and `similar:euclidean`.
+    // A left-to-right alternation lets `similar` consume the metric as the expected value.
+    expect(assertionFromString('similar:cosine:The expected output')).toEqual({
+      type: 'similar:cosine',
+      value: 'The expected output',
+    });
+    expect(assertionFromString('similar:dot(0.8):The expected output')).toEqual({
+      type: 'similar:dot',
+      value: 'The expected output',
+      threshold: 0.8,
+    });
+    expect(assertionFromString('similar:euclidean(0.5):The expected output')).toEqual({
+      type: 'similar:euclidean',
+      value: 'The expected output',
+      threshold: 0.5,
+    });
+    expect(assertionFromString('not-similar:euclidean:The expected output')).toEqual({
+      type: 'not-similar:euclidean',
+      value: 'The expected output',
+    });
+    expect(assertionFromString('trajectory:tool-used:search')).toEqual({
+      type: 'trajectory:tool-used',
+      value: 'search',
+    });
+  });
+
+  it('should not treat a similar value that starts with a metric name as a metric type', () => {
+    expect(assertionFromString('similar:cosine similarity text')).toEqual({
+      type: 'similar',
+      value: 'cosine similarity text',
+      threshold: 0.8,
+    });
   });
 });
 
