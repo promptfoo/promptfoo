@@ -1,6 +1,6 @@
 ---
 title: Agent Skills for Evals and Red Teaming
-description: Install Promptfoo agent skills for eval writing, provider setup, and red-team workflows in Claude Code and OpenAI Codex, with security configs and scan triage.
+description: Install Promptfoo agent skills in Claude Code, OpenAI Codex, and GitHub Copilot to assess red-team eligibility, connect targets, write evals, and triage scans.
 sidebar_label: Agent Skills
 sidebar_position: 99
 ---
@@ -9,7 +9,7 @@ sidebar_position: 99
 
 AI coding agents can write promptfoo configs, but can miss details that make the results useful: correct environment-variable syntax, source evidence for graders, assertions that reject wrong answers, and red-team inputs that preserve the app's trust boundaries.
 
-Promptfoo ships one agent-skill bundle with four focused skills — `promptfoo-evals` for eval authoring, `promptfoo-provider-setup` for connecting targets, and `promptfoo-redteam-setup` plus `promptfoo-redteam-run` for red-team setup and scan triage. The same bundle is published to both the [Claude Code](https://code.claude.com) and [OpenAI Codex](https://openai.com/index/codex) marketplaces.
+Promptfoo ships one agent-skill bundle with five focused skills for red-team eligibility, eval authoring, connecting targets, red-team setup, and scan triage. The same bundle is published to the [Claude Code](https://code.claude.com) and [OpenAI Codex](https://openai.com/index/codex) marketplaces and can be installed in GitHub Copilot.
 
 It follows the open [Agent Skills](https://agentskills.io) standard, so the skills should also work with other compatible tools.
 
@@ -38,14 +38,14 @@ produce new attacks; retain their transcripts when comparing results.
 /plugin install promptfoo@promptfoo
 ```
 
-This installs all four skills. Ask the agent to create an eval, connect a
+This installs all five skills. Ask the agent to assess eligibility, create an eval, connect a
 target, or run a red team and it routes to the right skill, or invoke one
 directly with a namespaced slash command such as `/promptfoo:promptfoo-evals`.
 
 :::note
 This plugin was previously published as `promptfoo-evals` (eval skill only). If
 you installed it under that name, reinstall with
-`/plugin install promptfoo@promptfoo` to get the full four-skill bundle and
+`/plugin install promptfoo@promptfoo` to get the full bundle and
 future updates.
 :::
 
@@ -53,20 +53,41 @@ future updates.
 
 For Codex, the same `plugins/promptfoo` bundle is exposed by
 `.agents/plugins/marketplace.json`. Add it to a Codex workspace to install the
-same four skills.
+same five skills.
 
-### The four skills
+### Via GitHub Copilot
+
+In Copilot CLI, register the marketplace and install the bundle:
+
+```bash
+copilot plugin marketplace add promptfoo/promptfoo
+copilot plugin install promptfoo@promptfoo
+copilot skill list
+```
+
+Copilot reads the existing `.claude-plugin` manifests and discovers all five
+skills from `skills/`; no Copilot-specific copy is needed. See the
+[Copilot plugin reference](https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-plugin-reference).
+
+In VS Code, enable `chat.plugins.enabled`, add `promptfoo/promptfoo` to
+`chat.plugins.marketplaces`, then install **promptfoo** from the Agent Plugins
+view. See [VS Code agent plugins](https://code.visualstudio.com/docs/agent-customization/agent-plugins).
+For repository-level skills, including Copilot cloud agent, use the manual
+install below.
+
+### The five skills {#the-four-skills}
 
 Both marketplaces install the same bundle at `plugins/promptfoo`, exposed by
 `.claude-plugin/marketplace.json` for Claude Code and
 `.agents/plugins/marketplace.json` for Codex:
 
-| Skill                      | Use it for                                                                 |
-| -------------------------- | -------------------------------------------------------------------------- |
-| `promptfoo-evals`          | Non-redteam eval suites, assertions, test cases, and result inspection     |
-| `promptfoo-provider-setup` | HTTP targets plus JavaScript or Python `file://` providers and wrappers    |
-| `promptfoo-redteam-setup`  | Focused redteam configs from live endpoints, OpenAPI specs, or static code |
-| `promptfoo-redteam-run`    | Running generated scans, triaging failures, and filtered reruns            |
+| Skill                           | Use it for                                                                                |
+| ------------------------------- | ----------------------------------------------------------------------------------------- |
+| `promptfoo-evals`               | Non-redteam eval suites, assertions, test cases, and result inspection                    |
+| `promptfoo-provider-setup`      | HTTP targets plus JavaScript or Python `file://` providers and wrappers                   |
+| `promptfoo-redteam-eligibility` | Repository assessment with source evidence, suitability verdicts, and scan readiness gaps |
+| `promptfoo-redteam-setup`       | Focused redteam configs from live endpoints, OpenAPI specs, or static code                |
+| `promptfoo-redteam-run`         | Running generated scans, triaging failures, and filtered reruns                           |
 
 There is intentionally no meta selector skill. The agent routes from each skill's
 description and default prompt.
@@ -81,7 +102,9 @@ To reuse the bundle in another workspace, copy `plugins/promptfoo` together with
 its marketplace entry — `.claude-plugin/marketplace.json` for Claude Code or
 `.agents/plugins/marketplace.json` for Codex.
 
-For red teaming, `promptfoo-provider-setup` connects the system under test,
+For red teaming, `promptfoo-redteam-eligibility` assesses whether an application
+is a candidate and reports what is still needed to test it.
+`promptfoo-provider-setup` connects the system under test,
 `promptfoo-redteam-setup` turns live endpoints, OpenAPI specs, or static code
 into a scan plan, and `promptfoo-redteam-run` executes and triages the
 generated probes.
@@ -110,23 +133,36 @@ cp -r promptfoo-evals ~/.claude/skills/
 cp -r promptfoo-evals your-project/.agents/skills/
 ```
 
+**GitHub Copilot** (project-level, from a Promptfoo checkout):
+
+```bash
+mkdir -p your-project/.github/skills
+cp -R plugins/promptfoo/skills/. your-project/.github/skills/
+```
+
+Copy the whole skills tree, including references and scripts: redteam setup's
+helper imports files from the sibling provider-setup skill. Copilot supports
+these [repository skills](https://docs.github.com/en/copilot/concepts/agents/about-agent-skills)
+in its CLI, cloud agent, and VS Code agent mode. `agents/openai.yaml` provides
+Codex UI metadata; the shared workflow is in `SKILL.md`.
+
 To add provider setup or red teaming as well, install the full bundle from the
 marketplace (above) so the skills can hand off to each other, or copy the whole
 [`plugins/promptfoo/skills`](https://github.com/promptfoo/promptfoo/tree/main/plugins/promptfoo/skills)
 directory so the referenced sibling skills resolve.
 
 :::note
-Commit skills to `.claude/skills/` or `.agents/skills/` so every developer's
+Commit skills to `.claude/skills/`, `.agents/skills/`, or `.github/skills/` for Copilot so every developer's
 agent picks them up automatically, with no per-person install needed.
 :::
 
-Each skill consists of a `SKILL.md` with workflow instructions plus a
-`references/` directory of assertion types, provider patterns, and config
-examples (provider and redteam setup also include a `scripts/` directory).
+Each skill has a `SKILL.md` with workflow instructions. Skills that need longer
+examples include a `references/` directory; provider and redteam setup also
+include helper scripts in `scripts/`.
 
 ## Usage
 
-Once installed, the agent selects a skill when you ask for eval coverage, a
+Once installed, the agent selects a skill when you ask for eligibility, eval coverage, a
 target connection, or a redteam workflow. In Claude Code, you can also invoke a skill directly with
 a slash command (namespaced when installed from the marketplace):
 
@@ -136,6 +172,19 @@ a slash command (namespaced when installed from the marketplace):
 
 In Codex and other Agent Skills tools, ask the agent to create an eval. The
 skill activates from the task context.
+
+To assess a repository before connecting a target:
+
+```text
+Is this repository a good candidate for Promptfoo red teaming? Assess each application, cite the input-to-AI-to-output path, and separate suitability from missing deployment details. Do not run a scan.
+```
+
+The eligibility skill reports `candidate`, `no_candidate_found`, or
+`inconclusive` per application. It inspects source without running the app or
+making target calls. Missing credentials or a local system prompt do not rule
+out a candidate; ambiguous off-repo AI behavior remains an explicit unknown.
+These are workflow instructions, not a sandbox: configure read-only and network
+restrictions in your agent client when you need enforced isolation.
 
 For red-team work, ask for the task directly:
 

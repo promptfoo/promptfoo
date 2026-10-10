@@ -1,7 +1,7 @@
 {
   "name": "promptfoo",
-  "version": "0.1.5",
-  "description": "Agent skills for connecting, evaluating, and red teaming LLM applications with Promptfoo.",
+  "version": "0.1.6",
+  "description": "Agent skills for assessing, connecting, evaluating, and red teaming LLM applications with Promptfoo.",
   "author": {
     "name": "Promptfoo",
     "email": "support@promptfoo.dev",
@@ -15,7 +15,7 @@
   "interface": {
     "displayName": "Promptfoo",
     "shortDescription": "Create evals, connect targets, and red team LLM apps",
-    "longDescription": "Promptfoo skills for configuring providers and targets, writing eval suites, and setting up or running red team workflows against LLM apps.",
+    "longDescription": "Assess redteam eligibility, configure providers and targets, write eval suites, and set up or run red team workflows against LLM apps.",
     "developerName": "Promptfoo",
     "category": "Developer Tools",
     "capabilities": ["Read", "Write"],
@@ -23,6 +23,7 @@
     "privacyPolicyURL": "https://www.promptfoo.dev/privacy/",
     "termsOfServiceURL": "https://www.promptfoo.dev/terms-of-service/",
     "defaultPrompt": [
+      "Assess this repository's suitability for Promptfoo red teaming.",
       "Write a Promptfoo eval for this behavior.",
       "Use Promptfoo to connect my HTTP endpoint to an eval.",
       "Set up or run Promptfoo red teaming for this API."
