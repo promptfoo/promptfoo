@@ -77,6 +77,55 @@ describe('OpenAiResponsesProvider response formats', () => {
       expect(body.text.format.strict).toBe(true);
     });
 
+    it.each([
+      { description: 'nested false', nested: false, topLevel: undefined, expected: false },
+      { description: 'top-level false', nested: undefined, topLevel: false, expected: false },
+      {
+        description: 'omitted defaults to true',
+        nested: undefined,
+        topLevel: undefined,
+        expected: true,
+      },
+      {
+        description: 'nested false overrides true',
+        nested: false,
+        topLevel: true,
+        expected: false,
+      },
+      { description: 'nested true overrides false', nested: true, topLevel: false, expected: true },
+    ])('preserves schema strict mode: $description', async ({ nested, topLevel, expected }) => {
+      vi.mocked(cache.fetchWithCache).mockResolvedValue(
+        createMockFetchResponse(createCompletedResponse('{"result": "success"}', 15, 25)),
+      );
+      const schema = {
+        type: 'object' as const,
+        properties: createResultSchemaProperties(),
+        required: ['result'],
+        additionalProperties: false,
+      };
+      const provider = new OpenAiResponsesProvider('gpt-4o', {
+        config: {
+          apiKey: 'test-key',
+          response_format: {
+            type: 'json_schema',
+            strict: topLevel,
+            json_schema: { name: 'result_schema', strict: nested, schema },
+          } as any,
+        },
+      });
+
+      await provider.callApi('Test prompt');
+
+      const [, request] = vi.mocked(cache.fetchWithCache).mock.calls[0];
+      const body = JSON.parse((request as { body: string }).body);
+      expect(body.text.format).toEqual({
+        type: 'json_schema',
+        name: 'result_schema',
+        schema,
+        strict: expected,
+      });
+    });
+
     it('should handle json_schema format with default name when not provided', async () => {
       const mockApiResponse = {
         id: 'resp_def456',

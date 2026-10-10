@@ -516,7 +516,7 @@ config:
   response_format: file://./response-format.json
 ```
 
-Use the nested `json_schema` shape above for Chat Completions or a shared configuration. Responses also accepts the flattened shape below and always sends JSON schemas with `strict: true`:
+Use the nested `json_schema` shape above for Chat Completions or a shared configuration. Responses also accepts the flattened shape below:
 
 ```json title="response-format.json"
 {
@@ -529,9 +529,12 @@ Use the nested `json_schema` shape above for Chat Completions or a shared config
     },
     "required": ["category"],
     "additionalProperties": false
-  }
+  },
+  "strict": true
 }
 ```
+
+For `openai:responses`, `azure:responses`, and `xai:responses`, `strict` defaults to `true`. Set it to `false` to opt out of strict schema enforcement. A nested `json_schema.strict` takes precedence over a top-level `strict`, including an explicit `false`. Supported schemas depend on the API and model; see [OpenAI’s schema requirements](https://developers.openai.com/api/docs/guides/structured-outputs#supported-schemas).
 
 The schema itself can be a nested `file://` reference. File paths support Nunjucks variables, such as `file://./schemas/{{ schema_name }}.json`.
 
