@@ -57,7 +57,9 @@ describe('run_assertion metric-only input', () => {
       const response = await handler(args);
       expect(response.isError).toBe(true);
       expect(JSON.parse(response.content[0].text).error).toContain(
-        `'metricOnly' is not supported on ${type}`,
+        type === 'assert-set'
+          ? 'metricOnly is only supported on its child assertions'
+          : `'metricOnly' is not supported on ${type}`,
       );
     },
   );

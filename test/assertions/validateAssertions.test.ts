@@ -215,7 +215,11 @@ describe('validateAssertions', () => {
       (type) => {
         const assertion =
           type === 'assert-set'
-            ? { type, metricOnly: false, assert: [{ type: 'equals' as const, value: 'ok' }] }
+            ? {
+                type,
+                metricOnly: false as const,
+                assert: [{ type: 'equals' as const, value: 'ok' }],
+              }
             : { type, metricOnly: false, value: 'best criteria' };
         expect(() => validateAssertions([{ assert: [assertion] }])).not.toThrow();
       },

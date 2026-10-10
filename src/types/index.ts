@@ -765,6 +765,8 @@ export type AssertionType = z.infer<typeof AssertionTypeSchema>;
 
 export const AssertionSetSchema = z.object({
   type: z.literal('assert-set'),
+  // Metric-only behavior belongs on child assertions; an explicitly disabled flag is allowed.
+  metricOnly: z.literal(false).optional(),
   // Sub assertions to be run for this assertion set
   assert: z.array(z.lazy(() => AssertionSchema)),
   // The weight of this assertion compared to other assertions in the test case. Defaults to 1.
@@ -784,7 +786,11 @@ export type AssertionSet = z.infer<typeof AssertionSetSchema>;
 // TODO(ian): maybe Assertion should support {type: config} to make the yaml cleaner
 export const AssertionSchema = z.object({
   // Type of assertion
-  type: AssertionTypeSchema,
+  // Keep invalid sets from falling through this branch and losing their nested fields.
+  type: AssertionTypeSchema.refine((type: string) => type !== 'assert-set', {
+    message:
+      'assert-set must use the assertion set schema; metricOnly is only supported on its child assertions',
+  }),
 
   // The expected value, if applicable
   value: z.custom<AssertionValue>().optional(),
@@ -1072,6 +1078,8 @@ export type AtomicTestCase = z.infer<typeof AtomicTestCaseSchema>;
 export const TestGeneratorConfigSchema = z.object({
   /** Path to the test generator function (e.g., file://path/to/tests.py:function_name) */
   path: z.string(),
+  // Invalid inline assertions must not fall through this union branch and get discarded.
+  assert: z.never().optional(),
   /**
    * Configuration object passed to the generator function
    * Common configuration options include:
