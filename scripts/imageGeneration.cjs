@@ -1,7 +1,7 @@
 const fs = require('fs/promises');
 const https = require('https');
 
-function requestImage(data, apiKey, contentLength) {
+function requestImage(data, apiKey) {
   const options = {
     hostname: 'api.openai.com',
     port: 443,
@@ -10,7 +10,7 @@ function requestImage(data, apiKey, contentLength) {
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${apiKey}`,
-      'Content-Length': contentLength,
+      'Content-Length': Buffer.byteLength(data),
     },
   };
   return new Promise((resolve, reject) => {
