@@ -496,6 +496,55 @@ describe('RedteamIterativeMetaProvider', () => {
       expect(result.metadata.stopReason).toBe('Grader failed');
     });
 
+    it('should keep attacking after a grader error, which is not a verdict', async () => {
+      // A grading provider outage is tagged with `metadata.graderError`. Treating
+      // it as a demonstrated vulnerability would report a jailbreak that never
+      // happened, so the attack has to continue.
+      const mockGrader = {
+        getResult: vi
+          .fn<any>()
+          .mockResolvedValueOnce({
+            grade: {
+              pass: false,
+              score: 0,
+              reason: 'Grading provider returned 503',
+              metadata: { graderError: true },
+            },
+          })
+          .mockResolvedValueOnce({
+            grade: { pass: true, score: 0, reason: 'Target defended' },
+          }),
+      };
+
+      mockGetGraderById.mockReturnValue(mockGrader);
+
+      const result = await runMetaAgentRedteam({
+        context: {
+          vars: { query: 'test' },
+          prompt: { raw: 'test', label: 'test' },
+          originalProvider: mockTargetProvider,
+        },
+        filters: undefined,
+        injectVar: 'query',
+        numIterations: 2,
+        options: undefined,
+        prompt: { raw: 'test', label: 'test' },
+        agentProvider: mockAgentProvider,
+        gradingProvider: mockGradingProvider,
+        targetProvider: mockTargetProvider,
+        test: {
+          vars: { query: 'test' },
+          assert: [{ type: 'promptfoo:redteam:harmful', metric: 'Harmful' }],
+        } as AtomicTestCase,
+        vars: { query: 'test' },
+      });
+
+      expect(result.metadata.vulnerabilityAchieved).toBeFalsy();
+      expect(result.metadata.stopReason).not.toBe('Grader failed');
+      expect(result.metadata.finalIteration).toBe(2);
+      expect(mockGrader.getResult).toHaveBeenCalledTimes(2);
+    });
+
     it('passes target provider raw response into the grader', async () => {
       const mockGrader = {
         getResult: vi.fn<any>().mockResolvedValue({

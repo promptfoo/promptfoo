@@ -51,7 +51,7 @@ This provides broader coverage of potential vulnerabilities at the cost of more 
 | **Cost**     | Higher (more diverse attempts)              | Lower (focused refinement)            |
 | **Best For** | Finding any vulnerability in robust systems | Testing specific attack patterns      |
 
-The meta-agent stops when the grader reports a failure or the maximum number of iterations is reached. It also stops with an error if remote multi-input generation returns an invalid prompt format.
+The meta-agent stops when the grader confirms a vulnerability or the maximum number of iterations is reached. A grader transport or parsing error is not a vulnerability verdict, so the strategy continues to the next iteration. It also stops with an error if remote multi-input generation returns an invalid prompt format.
 
 If Cloud explicitly reports that the upstream provider rejected a coordination request as invalid JSON (`invalid_json`), the strategy stops and reports the error while retaining completed attempts. Other coordination errors continue through the existing retry and iteration behavior.
 
