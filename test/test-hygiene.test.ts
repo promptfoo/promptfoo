@@ -98,6 +98,12 @@ const allowedSkippedTests: AllowedSkip[] = [
     reason: 'E2E coverage requires an API key and optional Codex SDK dependency',
   },
   {
+    file: 'providers/opencode-sdk.spawn-env.test.ts',
+    kind: 'skip',
+    linePattern: /hasSdk && canSpawnStub \? describe : describe\.skip/,
+    reason: 'Real-SDK spawn contract needs the optional OpenCode SDK and a POSIX stub CLI on PATH',
+  },
+  {
     file: 'commands/mcp/lib/security.test.ts',
     kind: 'skipIf',
     linePattern:
@@ -208,11 +214,8 @@ const legacyModuleScopePersistentMockFiles = new Set<string>([
   'providers/huggingface.test.ts',
   'providers/index.test.ts',
   'providers/openai-codex-sdk.test.ts',
-  'providers/openai/chatkit-pool.test.ts',
-  'providers/openai/chatkit.test.ts',
   'providers/pythonCompletion.cliState.test.ts',
   'providers/registry.test.ts',
-  'providers/responses/processor.test.ts',
   'providers/sagemaker.test.ts',
   'providers/simulatedUser.test.ts',
   'providers/watsonx.test.ts',
@@ -241,7 +244,6 @@ const legacyModuleScopePersistentMockFiles = new Set<string>([
   'redteam/strategies/simpleAudio.test.ts',
   'redteam/strategies/simpleVideo.test.ts',
   'sagemaker.test.ts',
-  'server/findStaticDir.test.ts',
   'server/server.test.ts',
   'telemetry.test.ts',
   'tracing/integration.test.ts',

@@ -7,6 +7,7 @@ import tempfile
 import types
 import unittest
 from pathlib import Path
+from unittest.mock import call as mock_call
 from unittest.mock import patch
 
 from examples import (
@@ -15,6 +16,7 @@ from examples import (
     changed_paths,
     check_gate,
     minimum_constraints,
+    pull_docker_image,
     run_example,
     select_examples,
     validate_registry,
@@ -26,15 +28,52 @@ SCRIPT = Path(__file__).with_name("examples.py")
 class SelectionTests(unittest.TestCase):
     def test_full_run_preserves_every_registered_runtime(self):
         rows = select_examples(None)
-        self.assertEqual(len(rows), 4)
+        self.assertEqual(len(rows), 22)
         self.assertEqual(
             [(row["example"], row["python"]) for row in rows],
             [
                 ("docker-sandbox", "3.10"),
                 ("docker-sandbox", "3.14"),
+                ("e2b", "3.10"),
+                ("e2b", "3.14"),
                 ("python-provider-upgrade", "3.10"),
                 ("python-provider-minimums", "3.14"),
+                ("redteam-langchain", "3.10"),
+                ("redteam-langchain", "3.14"),
+                ("openai-agents", "3.12"),
+                ("openai-agents", "3.14"),
+                ("openai-agents-minimums", "3.10"),
+                ("openai-agents-otel", "3.12"),
+                ("langgraph", "3.10"),
+                ("langgraph", "3.14"),
+                ("rag-pdf", "3.10"),
+                ("rag-pdf-cli", "3.14"),
+                ("f-score", "3.10"),
+                ("f-score", "3.14"),
+                ("google-adk", "3.12"),
+                ("google-adk", "3.14"),
+                ("google-adk-minimums", "3.10"),
+                ("google-adk-litellm", "3.12"),
             ],
+        )
+
+    def test_e2b_changes_select_its_offline_sdk_tests(self):
+        for filename in (
+            "validate_and_run_code_e2b.py",
+            "validate_and_run_code_e2b_test.py",
+            "requirements.txt",
+        ):
+            with self.subTest(filename=filename):
+                self.assertEqual(
+                    select_examples([f"examples/integration-e2b/{filename}"]),
+                    [
+                        {"example": "e2b", "python": "3.10", "node": False},
+                        {"example": "e2b", "python": "3.14", "node": False},
+                    ],
+                )
+        self.assertEqual(EXAMPLES["e2b"].suites, ((".", "*_test.py"),))
+        self.assertEqual(
+            select_examples(["examples/integration-e2b-other/file.py"]), []
         )
 
     def test_example_changes_select_only_its_profiles(self):
@@ -45,12 +84,112 @@ class SelectionTests(unittest.TestCase):
         )
         self.assertTrue(all(not row["node"] for row in rows))
 
+    def test_adk_changes_select_default_minimum_and_optional_profiles(self):
+        rows = select_examples(["examples/integration-google-adk/agent.py"])
+        self.assertEqual(
+            [(row["example"], row["python"]) for row in rows],
+            [
+                ("google-adk", "3.12"),
+                ("google-adk", "3.14"),
+                ("google-adk-minimums", "3.10"),
+                ("google-adk-litellm", "3.12"),
+            ],
+        )
+        self.assertTrue(all(row["node"] for row in rows))
+
+    def test_langchain_changes_select_only_its_supported_runtimes(self):
+        for filename in (
+            "langchain_provider.py",
+            "langchain_provider_test.py",
+            "requirements.txt",
+        ):
+            with self.subTest(filename=filename):
+                rows = select_examples([f"examples/redteam-langchain/{filename}"])
+                self.assertEqual(
+                    rows,
+                    [
+                        {
+                            "example": "redteam-langchain",
+                            "python": version,
+                            "node": False,
+                        }
+                        for version in ("3.10", "3.14")
+                    ],
+                )
+        self.assertEqual(EXAMPLES["redteam-langchain"].suites, ((".", "*_test.py"),))
+
+    def test_agents_changes_select_all_isolated_profiles(self):
+        rows = select_examples(["examples/openai-agents/requirements.txt"])
+        self.assertEqual(
+            [(row["example"], row["python"]) for row in rows],
+            [
+                ("openai-agents", "3.12"),
+                ("openai-agents", "3.14"),
+                ("openai-agents-minimums", "3.10"),
+                ("openai-agents-otel", "3.12"),
+            ],
+        )
+        self.assertTrue(all(row["node"] for row in rows))
+        for name in ("openai-agents", "openai-agents-minimums", "openai-agents-otel"):
+            example = EXAMPLES[name]
+            self.assertEqual(example.suites[0], ("tests", "test_sdk.py"))
+            self.assertEqual(example.suites[1], (".", "*_test.py"))
+            self.assertEqual(
+                (ROOT / example.directory / example.suites[2][0]).resolve(),
+                ROOT / ".github/scripts/tests/openai_agents",
+            )
+
+    def test_fscore_changes_select_its_python_only_dependency_suite(self):
+        for filename in ("prepare_data.py", "dependencies_test.py", "requirements.txt"):
+            with self.subTest(filename=filename):
+                self.assertEqual(
+                    select_examples([f"examples/eval-f-score/{filename}"]),
+                    [
+                        {"example": "f-score", "python": "3.10", "node": False},
+                        {"example": "f-score", "python": "3.14", "node": False},
+                    ],
+                )
+        self.assertEqual(EXAMPLES["f-score"].suites, ((".", "dependencies_test.py"),))
+        self.assertEqual(select_examples(["examples/eval-f-score-other/file.py"]), [])
+
+    def test_rag_changes_preserve_pdf_and_cli_runtime_coverage(self):
+        for path in (
+            "examples/eval-rag-full/requirements.txt",
+            "examples/eval-rag-full/ingest.py",
+            "examples/eval-rag-full/tests/smoke_cli.py",
+        ):
+            with self.subTest(path=path):
+                rows = select_examples([path])
+                self.assertEqual(
+                    [(row["example"], row["python"], row["node"]) for row in rows],
+                    [("rag-pdf", "3.10", False), ("rag-pdf-cli", "3.14", True)],
+                )
+        self.assertEqual(EXAMPLES["rag-pdf"].suites, (("tests", "test_*.py"),))
+        self.assertEqual(
+            EXAMPLES["rag-pdf-cli"].suites,
+            (("tests", "test_*.py"), ("tests", "smoke_cli.py")),
+        )
+        self.assertEqual(select_examples(["examples/eval-rag-full-other/file.py"]), [])
+
+    def test_langgraph_changes_select_its_python_only_suite(self):
+        for filename in ("agent.py", "agent_test.py", "requirements.txt"):
+            with self.subTest(filename=filename):
+                self.assertEqual(
+                    select_examples([f"examples/integration-langgraph/{filename}"]),
+                    [
+                        {"example": "langgraph", "python": "3.10", "node": False},
+                        {"example": "langgraph", "python": "3.14", "node": False},
+                    ],
+                )
+        self.assertEqual(EXAMPLES["langgraph"].suites, ((".", "agent_test.py"),))
+
     def test_shared_changes_run_all_profiles(self):
         for path in (
             "src/python/wrapper.py",
             "src/evaluator.ts",
             "src/tracing/store.ts",
             ".github/scripts/examples.py",
+            ".github/scripts/tests/openai_agents/fixture.py",
             ".github/workflows/examples.yml",
             "package-lock.json",
             ".nvmrc",
@@ -177,7 +316,10 @@ class GitSelectionTests(unittest.TestCase):
                 removed,
             },
         )
-        self.assertEqual(select_examples(paths), select_examples(None))
+        self.assertEqual(
+            {row["example"] for row in select_examples(paths)},
+            {"docker-sandbox", "python-provider-upgrade", "python-provider-minimums"},
+        )
         self.assertEqual(changed_paths(head, head, self.root), [])
 
     def test_invalid_or_missing_revisions_fail_closed(self):
@@ -187,7 +329,257 @@ class GitSelectionTests(unittest.TestCase):
             changed_paths("0" * 40, self.base, self.root)
 
 
+class DockerPullTests(unittest.TestCase):
+    def test_throttled_pull_recovers_with_bounded_backoff(self):
+        command = ("docker", "pull", "registry/image@sha256:fixture")
+        throttled = subprocess.CalledProcessError(
+            1, command, stderr="toomanyrequests: Rate exceeded\n"
+        )
+        environment = {"EXAMPLE_SETTING": "retained"}
+        with (
+            patch(
+                "examples.subprocess.run",
+                side_effect=[
+                    throttled,
+                    throttled,
+                    subprocess.CompletedProcess(command, 0, stderr=""),
+                ],
+            ) as run,
+            patch("examples.time.sleep") as sleep,
+        ):
+            pull_docker_image(command[2], environment)
+        self.assertEqual(sleep.call_args_list, [mock_call(10), mock_call(30)])
+        self.assertEqual(run.call_count, 3)
+        for invocation in run.call_args_list:
+            self.assertEqual(invocation.args[0], command)
+            self.assertEqual(invocation.kwargs["env"], environment)
+            self.assertEqual(invocation.kwargs["cwd"], ROOT)
+            self.assertTrue(invocation.kwargs["check"])
+
+    def test_exhausted_throttling_preserves_the_failure(self):
+        command = ("docker", "pull", "registry/image@sha256:fixture")
+        throttled = subprocess.CalledProcessError(
+            1, command, stderr="toomanyrequests: Rate exceeded\n"
+        )
+        with (
+            patch("examples.subprocess.run", side_effect=throttled) as run,
+            patch("examples.time.sleep") as sleep,
+            self.assertRaises(subprocess.CalledProcessError) as raised,
+        ):
+            pull_docker_image(command[2], {})
+        self.assertIs(raised.exception, throttled)
+        self.assertEqual(run.call_count, 4)
+        self.assertEqual(
+            sleep.call_args_list, [mock_call(10), mock_call(30), mock_call(60)]
+        )
+
+    def test_other_pull_failures_are_not_retried(self):
+        for stderr in (
+            None,
+            "manifest unknown",
+            "unauthorized: authentication required",
+        ):
+            failure = subprocess.CalledProcessError(
+                1, ("docker", "pull"), stderr=stderr
+            )
+            with (
+                self.subTest(stderr=stderr),
+                patch("examples.subprocess.run", side_effect=failure) as run,
+                patch("examples.time.sleep") as sleep,
+                self.assertRaises(subprocess.CalledProcessError) as raised,
+            ):
+                pull_docker_image("registry/image@sha256:fixture", {})
+            self.assertIs(raised.exception, failure)
+            self.assertEqual(run.call_count, 1)
+            sleep.assert_not_called()
+
+
 class RunnerTests(unittest.TestCase):
+    def test_example_failure_is_never_retried(self):
+        def fail_example(command, **_kwargs):
+            if command[1:3] == (str(SCRIPT), "test"):
+                raise subprocess.CalledProcessError(
+                    1, command, stderr="toomanyrequests in an example assertion"
+                )
+            return subprocess.CompletedProcess(command, 0, stderr="")
+
+        with (
+            patch(
+                "examples.sys.version_info", types.SimpleNamespace(major=3, minor=10)
+            ),
+            patch("examples.Path.is_file", return_value=True),
+            patch("examples.venv.EnvBuilder.create"),
+            patch("examples.subprocess.run", side_effect=fail_example) as run,
+            patch("examples.time.sleep") as sleep,
+            self.assertRaises(subprocess.CalledProcessError),
+        ):
+            run_example("docker-sandbox")
+        commands = [invocation.args[0] for invocation in run.call_args_list]
+        self.assertEqual(
+            sum(command[:2] == ("docker", "pull") for command in commands), 1
+        )
+        self.assertEqual(
+            sum(command[1:3] == (str(SCRIPT), "test") for command in commands), 1
+        )
+        sleep.assert_not_called()
+
+    def test_docker_mirror_retains_the_example_tag_and_runs_both_suites(self):
+        for minor in (10, 14):
+            with (
+                self.subTest(python=minor),
+                patch(
+                    "examples.sys.version_info",
+                    types.SimpleNamespace(major=3, minor=minor),
+                ),
+                patch("examples.Path.is_file", return_value=True),
+                patch("examples.venv.EnvBuilder.create"),
+                patch("examples.subprocess.run") as run,
+            ):
+                run_example("docker-sandbox")
+            commands = [call.args[0] for call in run.call_args_list]
+            self.assertEqual(len(commands), 6)
+            self.assertEqual(commands[2][:2], ("docker", "pull"))
+            source = commands[2][2]
+            self.assertRegex(
+                source,
+                r"^public\.ecr\.aws/docker/library/python@sha256:[a-f0-9]{64}$",
+            )
+            self.assertEqual(
+                commands[3], ("docker", "tag", source, "python:3.9-alpine")
+            )
+            for command, relative in zip(commands[4:], (".", "tests")):
+                self.assertEqual(command[1:3], (str(SCRIPT), "test"))
+                self.assertEqual(
+                    Path(command[3]),
+                    ROOT / EXAMPLES["docker-sandbox"].directory / relative,
+                )
+                self.assertEqual(command[4], "test_*.py")
+            self.assertTrue(all(call.kwargs["check"] for call in run.call_args_list))
+
+    def test_docker_pull_or_tag_failure_stops_before_example_tests(self):
+        for operation in ("pull", "tag"):
+
+            def fail_docker(command, operation=operation, **_kwargs):
+                if command[:2] == ("docker", operation):
+                    raise subprocess.CalledProcessError(1, command)
+                return subprocess.CompletedProcess(command, 0, stderr="")
+
+            with (
+                self.subTest(operation=operation),
+                patch(
+                    "examples.sys.version_info",
+                    types.SimpleNamespace(major=3, minor=10),
+                ),
+                patch("examples.Path.is_file", return_value=True),
+                patch("examples.venv.EnvBuilder.create"),
+                patch("examples.subprocess.run", side_effect=fail_docker) as run,
+                self.assertRaises(subprocess.CalledProcessError),
+            ):
+                run_example("docker-sandbox")
+            commands = [call.args[0] for call in run.call_args_list]
+            self.assertEqual(commands[-1][:2], ("docker", operation))
+            self.assertFalse(
+                any(command[1:3] == (str(SCRIPT), "test") for command in commands)
+            )
+
+    def test_adk_optional_adapter_is_isolated_and_runs_its_own_suite(self):
+        with (
+            patch(
+                "examples.sys.version_info", types.SimpleNamespace(major=3, minor=12)
+            ),
+            patch("examples.Path.is_file", return_value=True),
+            patch("examples.venv.EnvBuilder.create") as create,
+            patch("examples.subprocess.run") as run,
+        ):
+            run_example("google-adk-litellm")
+        calls = run.call_args_list
+        self.assertIn("litellm>=1.101,<2", calls[0].args[0])
+        self.assertIn("-r", calls[0].args[0])
+        self.assertEqual(calls[1].args[0][1:], ("-m", "pip", "check"))
+        self.assertEqual(calls[2].args[0][-1], "*_test.py")
+        self.assertEqual(calls[3].args[0][-1], "test_litellm.py")
+        self.assertEqual(
+            Path(calls[3].args[0][-2]).resolve(),
+            SCRIPT.parent / "tests/google_adk",
+        )
+        self.assertEqual(len(calls), 4)
+        environment = create.call_args.args[0]
+        for call in calls:
+            self.assertTrue(str(call.args[0][0]).startswith(str(environment)))
+            self.assertEqual(call.kwargs["env"]["PROMPTFOO_PYTHON"], call.args[0][0])
+            self.assertTrue(call.kwargs["check"])
+        self.assertEqual(EXAMPLES["google-adk"].extra_requirements, ())
+        self.assertEqual(EXAMPLES["google-adk-minimums"].extra_requirements, ())
+        self.assertFalse(environment.exists())
+
+    def test_langchain_runs_its_existing_provider_suite_in_isolation(self):
+        with (
+            patch(
+                "examples.sys.version_info", types.SimpleNamespace(major=3, minor=10)
+            ),
+            patch("examples.venv.EnvBuilder.create") as create,
+            patch("examples.subprocess.run") as run,
+        ):
+            run_example("redteam-langchain")
+        environment = create.call_args.args[0]
+        commands = [call.args[0] for call in run.call_args_list]
+        self.assertEqual(len(commands), 3)
+        self.assertEqual(
+            commands[0][1:],
+            (
+                "-m",
+                "pip",
+                "install",
+                "--disable-pip-version-check",
+                "-r",
+                str(ROOT / "examples/redteam-langchain/requirements.txt"),
+            ),
+        )
+        self.assertEqual(commands[1][1:], ("-m", "pip", "check"))
+        self.assertEqual(
+            commands[2][1:],
+            (
+                str(SCRIPT),
+                "test",
+                str(ROOT / "examples/redteam-langchain"),
+                "*_test.py",
+            ),
+        )
+        for call in run.call_args_list:
+            self.assertTrue(str(call.args[0][0]).startswith(str(environment)))
+            self.assertEqual(call.kwargs["env"]["PROMPTFOO_PYTHON"], call.args[0][0])
+            self.assertEqual(call.kwargs["cwd"], ROOT)
+            self.assertTrue(call.kwargs["check"])
+        self.assertFalse(environment.exists())
+
+    def test_agents_optional_requirements_do_not_leak_into_default(self):
+        for name in ("openai-agents", "openai-agents-minimums", "openai-agents-otel"):
+            with (
+                self.subTest(name=name),
+                patch(
+                    "examples.sys.version_info",
+                    types.SimpleNamespace(
+                        major=3, minor=10 if name.endswith("minimums") else 12
+                    ),
+                ),
+                patch("examples.venv.EnvBuilder.create"),
+                patch("examples.subprocess.run") as run,
+                patch("examples.Path.is_file", return_value=True),
+            ):
+                run_example(name)
+            commands = [call.args[0] for call in run.call_args_list]
+            self.assertEqual(len(commands), 5)
+            self.assertEqual(commands[1][1:], ("-m", "pip", "check"))
+            self.assertEqual(
+                [command[-1] for command in commands[2:]],
+                ["test_sdk.py", "*_test.py", "test_cli.py"],
+            )
+            self.assertEqual(
+                any("opentelemetry-sdk" in arg for arg in commands[0]),
+                name.endswith("otel"),
+            )
+            self.assertEqual("-c" in commands[0], name != "openai-agents")
+
     def test_minimums_retain_original_bounds(self):
         self.assertEqual(
             minimum_constraints("# comment\nanyio>=4.14.2,<5\nopenai>=3.19.2,<4\n"),

@@ -28,7 +28,10 @@ export interface AzureCompletionOptions {
   /** @deprecated Use isReasoningModel instead. Indicates if the model should be treated as a reasoning model */
   o1?: boolean;
   isReasoningModel?: boolean; // Indicates if the model should be treated as a reasoning model (o1, o3-mini, etc.)
-  /** Treat a custom-named deployment as Claude Opus 4.7 or 4.8 for sampling compatibility. */
+  /**
+   * Treat a custom-named deployment as Claude Opus 4.7 or later for sampling compatibility
+   * (Opus 4.7/4.8/5, Sonnet 5, and Fable/Mythos 5 all reject temperature/top_p/top_k).
+   */
   isClaudeOpus47OrLater?: boolean;
   max_completion_tokens?: number; // Maximum number of tokens to generate for reasoning models
 
@@ -123,6 +126,16 @@ export interface AzureChatResponsesOptions extends AzureCompletionOptions {
    * Only values explicitly set via config or environment variables will be sent.
    */
   omitDefaults?: boolean;
+}
+
+/**
+ * Options specific to the Azure Responses provider.
+ */
+export interface AzureResponsesOptions extends AzureChatResponsesOptions {
+  /**
+   * Specifies the latency tier used to process the request.
+   */
+  service_tier?: 'auto' | 'default' | 'flex' | 'priority' | null;
 }
 
 export interface AzureModelCost {
