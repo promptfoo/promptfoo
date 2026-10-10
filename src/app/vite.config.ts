@@ -26,6 +26,38 @@ const showTestConsoleOutput =
   process.env.PROMPTFOO_TEST_SHOW_OUTPUT === 'true' ||
   process.env.PROMPTFOO_APP_TEST_SHOW_OUTPUT === 'true';
 
+const ignoredStderrPatterns = [
+  /^Warning: .*not wrapped in act/,
+  /^An update to .*not wrapped in act/,
+  /^(Warning: )?The current testing environment is not configured to support act/,
+  /^Warning: Received NaN for the `children` attribute/,
+  /^Error checking ModelAudit installation:/,
+  /^Error loading eval:/,
+  /^Failed to fetch datasets:/,
+  /^Error parsing file:/,
+  /^deeply nested key "metrics\.score" returned undefined/,
+  /^Logout failed/,
+  /^Error during logout:/,
+  /^Error fetching user email:/,
+  /^Failed to parse YAML:/,
+  /^Invalid JSON configuration:/,
+  /^Error fetching eval data:/,
+  /^Error fetching metadata keys:/,
+  /^Error parsing CSV:/,
+  /^No worst strategy found for plugin/,
+  /^Failed to delete eval:/,
+  /^EnterpriseBanner: No evalId provided/,
+  /^Error checking cloud status:/,
+  /^Error setting email:/,
+  /^Error checking email status:/,
+  /^Error clearing email:/,
+  /^Error fetching cloud config:/,
+  /^Failed to copy text:/,
+  /^Failed to check share domain:/,
+  /^Failed to generate share URL/,
+  /^Error during target purpose discovery:/,
+];
+
 // These environment variables are inherited from the parent process (main promptfoo server)
 // We set VITE_ prefixed variables here so Vite can expose them to the client code
 const remoteApiBaseUrl =
@@ -112,37 +144,7 @@ export default {
       if (
         !showTestConsoleOutput &&
         type === 'stderr' &&
-        [
-          /^Warning: .*not wrapped in act/,
-          /^An update to .*not wrapped in act/,
-          /^(Warning: )?The current testing environment is not configured to support act/,
-          /^Warning: Received NaN for the `children` attribute/,
-          /^Error checking ModelAudit installation:/,
-          /^Error loading eval:/,
-          /^Failed to fetch datasets:/,
-          /^Error parsing file:/,
-          /^deeply nested key "metrics\.score" returned undefined/,
-          /^Logout failed/,
-          /^Error during logout:/,
-          /^Error fetching user email:/,
-          /^Failed to parse YAML:/,
-          /^Invalid JSON configuration:/,
-          /^Error fetching eval data:/,
-          /^Error fetching metadata keys:/,
-          /^Error parsing CSV:/,
-          /^No worst strategy found for plugin/,
-          /^Failed to delete eval:/,
-          /^EnterpriseBanner: No evalId provided/,
-          /^Error checking cloud status:/,
-          /^Error setting email:/,
-          /^Error checking email status:/,
-          /^Error clearing email:/,
-          /^Error fetching cloud config:/,
-          /^Failed to copy text:/,
-          /^Failed to check share domain:/,
-          /^Failed to generate share URL/,
-          /^Error during target purpose discovery:/,
-        ].some((pattern) => pattern.test(log.trimStart()))
+        ignoredStderrPatterns.some((pattern) => pattern.test(log.trimStart()))
       ) {
         return false;
       }
