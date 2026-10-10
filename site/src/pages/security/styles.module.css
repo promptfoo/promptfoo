@@ -63,17 +63,6 @@
   background-color: #004494;
 }
 
-.buttonPrimary {
-  background-color: var(--primary-color);
-  color: #fff;
-}
-
-.buttonPrimary:hover {
-  background-color: #004494;
-  color: #fff;
-  text-decoration: none;
-}
-
 .buttonSecondary {
   background-color: var(--secondary-color);
 }
@@ -147,12 +136,6 @@
   height: 100%;
 }
 
-.featureGrid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 2rem;
-}
-
 .featureItem {
   background-color: #fff;
   padding: 1.5rem;
@@ -163,19 +146,6 @@
 .featureItem h3 {
   color: var(--primary-color);
   margin-bottom: 1rem;
-}
-
-.reasonsList {
-  list-style-type: none;
-  padding: 0;
-}
-
-.reasonItem {
-  background-color: #fff;
-  padding: 1rem;
-  margin-bottom: 1rem;
-  border-radius: 4px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .testimonialGrid {
@@ -230,7 +200,6 @@
     font-size: 1.25rem;
   }
 
-  .featureGrid,
   .testimonialGrid {
     grid-template-columns: 1fr;
   }
@@ -257,14 +226,6 @@
 .statsSection {
   background-color: #f0f4f8;
   padding: 6rem 0;
-}
-
-.statsSummary {
-  text-align: center;
-  font-size: 1.2rem;
-  max-width: 800px;
-  margin: 0 auto 3rem;
-  color: var(--text-color);
 }
 
 .statsGrid {
@@ -308,10 +269,6 @@
 .statDescription {
   font-size: 1rem;
   color: #666;
-}
-
-.statInfoIcon {
-  font-size: 0.25rem;
 }
 
 @media (max-width: 768px) {
@@ -555,12 +512,6 @@
   color: var(--text-color);
 }
 
-[data-theme='dark'] .reasonItem {
-  background-color: var(--card-background);
-  border: 1px solid var(--border-color);
-  box-shadow: 0 2px 4px var(--card-shadow);
-}
-
 [data-theme='dark'] .testimonialItem {
   background-color: var(--card-background);
   border: 1px solid var(--border-color);
@@ -576,14 +527,6 @@
   background-color: transparent;
   border: none;
   box-shadow: none;
-  color: var(--text-color);
-}
-
-[data-theme='dark'] .featureContent h3 {
-  color: var(--primary-color);
-}
-
-[data-theme='dark'] .featureContent p {
   color: var(--text-color);
 }
 
