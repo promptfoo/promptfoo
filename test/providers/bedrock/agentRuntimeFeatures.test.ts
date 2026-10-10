@@ -5,11 +5,16 @@ import {
   RetrieveCommand,
 } from '@aws-sdk/client-bedrock-agent-runtime';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { toSerializableProviderRef } from '../../../src/models/evalResult';
 import { AwsBedrockAgentsProvider } from '../../../src/providers/bedrock/agents';
 import { AwsBedrockKnowledgeBaseProvider } from '../../../src/providers/bedrock/knowledgeBase';
+import { loadApiProvider } from '../../../src/providers/index';
 import { createProviderRateLimitOptions } from '../../../src/scheduler/providerWrapper';
 import { RateLimitRegistry } from '../../../src/scheduler/rateLimitRegistry';
+import { buildConfiguredProviderMap } from '../../../src/util/gradingProvider';
 import { mockProcessEnv } from '../../util/utils';
+
+import type { ProviderOptions } from '../../../src/types/providers';
 
 const cache = vi.hoisted(() => ({ enabled: false, get: vi.fn(), set: vi.fn() }));
 vi.mock('../../../src/cache', async (importOriginal) => ({
@@ -87,14 +92,20 @@ describe('Knowledge Base runtime features', () => {
   });
 
   it.each(['retrieve', 'retrieveAndGenerate', 'streaming'] as const)(
-    'serializes user access context and managed-search restrictions for %s',
+    'serializes user access context and supported search restrictions for %s',
     async (operation) => {
       const filter = { equals: { key: 'tenant', value: 'fixture' } };
+      const retrievalConfiguration = {
+        [operation === 'retrieve' ? 'managedSearchConfiguration' : 'vectorSearchConfiguration']: {
+          filter,
+          numberOfResults: 3,
+        },
+      };
       const { provider } = kb({
         operation: operation === 'retrieve' ? 'retrieve' : 'retrieveAndGenerate',
         streaming: operation === 'streaming',
         userContext: { userId: 'fixture-user' },
-        retrievalConfiguration: { managedSearchConfiguration: { filter, numberOfResults: 3 } },
+        retrievalConfiguration,
       });
       const handle = vi.fn(async (_request: { body?: unknown }) => ({
         response: {
@@ -125,41 +136,32 @@ describe('Knowledge Base runtime features', () => {
             ? body.retrievalConfiguration
             : body.retrieveAndGenerateConfiguration.knowledgeBaseConfiguration
                 .retrievalConfiguration;
-        expect(retrieval).toEqual({ managedSearchConfiguration: { filter, numberOfResults: 3 } });
+        expect(retrieval).toEqual(retrievalConfiguration);
       } finally {
         client.destroy();
       }
     },
   );
 
-  it.each(['retrieve', 'retrieveAndGenerate'] as const)(
-    'overrides result counts in managed search for %s',
-    async (operation) => {
-      const { provider, send } = kb({
-        operation,
-        numberOfResults: 7,
-        retrievalConfiguration: {
-          managedSearchConfiguration: {
-            numberOfResults: 3,
-            filter: { equals: { key: 'tenant', value: 'fixture' } },
-          },
-        },
-      });
-      await provider.callApi('question');
-      const input = send.mock.calls[0][0].input;
-      const retrieval =
-        operation === 'retrieve'
-          ? input.retrievalConfiguration
-          : input.retrieveAndGenerateConfiguration.knowledgeBaseConfiguration
-              .retrievalConfiguration;
-      expect(retrieval).toEqual({
+  it('overrides result counts in managed retrieval', async () => {
+    const { provider, send } = kb({
+      operation: 'retrieve',
+      numberOfResults: 7,
+      retrievalConfiguration: {
         managedSearchConfiguration: {
-          numberOfResults: 7,
+          numberOfResults: 3,
           filter: { equals: { key: 'tenant', value: 'fixture' } },
         },
-      });
-    },
-  );
+      },
+    });
+    await provider.callApi('question');
+    expect(send.mock.calls[0][0].input.retrievalConfiguration).toEqual({
+      managedSearchConfiguration: {
+        numberOfResults: 7,
+        filter: { equals: { key: 'tenant', value: 'fixture' } },
+      },
+    });
+  });
   it.each(['retrieve', 'retrieveAndGenerate', 'native'] as const)(
     'rejects malformed %s filters before reaching AWS',
     async (operation) => {
@@ -186,6 +188,94 @@ describe('Knowledge Base runtime features', () => {
       expect(send).not.toHaveBeenCalled();
     },
   );
+
+  it.each(
+    [false, true].flatMap((streaming) => ['root', 'native'].map((scope) => ({ streaming, scope }))),
+  )(
+    'rejects managed generation before client resolution (streaming=$streaming, scope=$scope)',
+    async ({ streaming, scope }) => {
+      const retrievalConfiguration = { managedSearchConfiguration: {} };
+      const { provider, send } = kb({
+        streaming,
+        ...(scope === 'root'
+          ? { retrievalConfiguration }
+          : {
+              retrieveAndGenerateConfiguration: {
+                type: 'KNOWLEDGE_BASE',
+                knowledgeBaseConfiguration: {
+                  knowledgeBaseId: 'KB12345678',
+                  modelArn: 'model',
+                  retrievalConfiguration,
+                },
+              },
+            }),
+      });
+      expect((await provider.callApi('question')).error).toContain('Use operation: retrieve');
+      expect(provider.getKnowledgeBaseClient).not.toHaveBeenCalled();
+      expect(send).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['retrieve', 'retrieveAndGenerate'] as const)(
+    'checks only the effective search configuration for %s',
+    async (operation) => {
+      const managed = { managedSearchConfiguration: {} };
+      const vector = { vectorSearchConfiguration: { numberOfResults: 3 } };
+      const { provider, send } = kb({
+        operation,
+        retrievalConfiguration: operation === 'retrieve' ? vector : managed,
+        retrieveAndGenerateConfiguration: {
+          type: 'KNOWLEDGE_BASE',
+          knowledgeBaseConfiguration: {
+            knowledgeBaseId: 'KB12345678',
+            modelArn: 'model',
+            retrievalConfiguration: operation === 'retrieve' ? managed : vector,
+          },
+        },
+      });
+      expect((await provider.callApi('question')).error).toBeUndefined();
+      const input = send.mock.calls[0][0].input;
+      expect(
+        operation === 'retrieve'
+          ? input.retrievalConfiguration
+          : input.retrieveAndGenerateConfiguration.knowledgeBaseConfiguration
+              .retrievalConfiguration,
+      ).toEqual(vector);
+    },
+  );
+
+  it('keeps derived Retrieve IDs distinct and reloadable without changing explicit IDs', async () => {
+    const config = { knowledgeBaseId: 'KB12345678', modelArn: 'us.amazon.nova-2-lite-v1:0' };
+    const retrieval = await loadApiProvider('bedrock:kb', {
+      options: { config: { ...config, operation: 'retrieve' } },
+    });
+    const generation = await loadApiProvider('bedrock:kb', { options: { config } });
+    expect(retrieval.id()).toBe('bedrock:kb:retrieve:KB12345678');
+    expect(generation.id()).toBe('bedrock:kb:KB12345678');
+    const providers = [retrieval, generation];
+    const map = buildConfiguredProviderMap(providers);
+    for (const original of providers) {
+      expect(map[original.id()]).toBe(original);
+      expect(providers.find((provider) => provider.id() === original.id())).toBe(original);
+      const reference = toSerializableProviderRef(original) as ProviderOptions;
+      const replay = await loadApiProvider(reference.id!, { options: reference });
+      expect(replay.id()).toBe(original.id());
+      const send = vi.fn().mockResolvedValue({ output: { text: 'answer' }, retrievalResults: [] });
+      for (const provider of [original, replay]) {
+        vi.spyOn(
+          provider as AwsBedrockKnowledgeBaseProvider,
+          'getKnowledgeBaseClient',
+        ).mockResolvedValue({ send } as unknown as BedrockAgentRuntimeClient);
+        expect((await provider.callApi('question')).error).toBeUndefined();
+      }
+      expect(send.mock.calls[0][0].constructor).toBe(send.mock.calls[1][0].constructor);
+      expect(send.mock.calls[0][0].input).toEqual(send.mock.calls[1][0].input);
+    }
+    const explicit = await loadApiProvider('bedrock:kb', {
+      options: { id: 'custom-retrieve', config: { ...config, operation: 'retrieve' } },
+    });
+    expect(explicit.id()).toBe('custom-retrieve');
+  });
 
   it('does not expose resumable session handles from cache', async () => {
     cache.enabled = true;

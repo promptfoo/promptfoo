@@ -523,6 +523,13 @@ describeEvaluator('evaluator metadata', () => {
       ],
       files: [{ bytes: Buffer.from(text).toString('base64') }],
       retrievalResults: [{ content: { text } }],
+      trace: [
+        {
+          trace: {
+            orchestrationTrace: { modelInvocationOutput: { rawResponse: { content: text } } },
+          },
+        },
+      ],
     });
     const nativeMetadata = outputMetadata('provider-output-secret');
     const ownedMetadata = {
@@ -530,6 +537,7 @@ describeEvaluator('evaluator metadata', () => {
       returnControl: 'owned control',
       files: 'owned files',
       retrievalResults: 'owned retrieval results',
+      trace: 'owned trace',
     };
     const responseMetadata = mode === 'test-owned' ? ownedMetadata : nativeMetadata;
     const provider: ApiProvider = {

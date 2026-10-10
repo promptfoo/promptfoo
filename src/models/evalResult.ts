@@ -72,6 +72,7 @@ function stripMediaReferences(value: unknown): unknown {
 const RESPONSE_OUTPUT_METADATA_KEYS: readonly string[] = [
   'audio',
   'blobUris',
+  'trace',
   'citations',
   'returnControl',
   'files',

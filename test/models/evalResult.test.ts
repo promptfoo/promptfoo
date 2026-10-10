@@ -1546,6 +1546,15 @@ describe('EvalResult', () => {
           ],
           files: [{ bytes: Buffer.from('private-generated-file').toString('base64') }],
           retrievalResults: [{ content: { text: 'private-retrieved-document' } }],
+          trace: [
+            {
+              trace: {
+                orchestrationTrace: {
+                  modelInvocationOutput: { rawResponse: { content: 'private-agent-trace' } },
+                },
+              },
+            },
+          ],
         };
         const metadata = { ...payloads, sessionId: 'session-fixture', note: 'retain diagnostics' };
         const testMetadata = Object.fromEntries(

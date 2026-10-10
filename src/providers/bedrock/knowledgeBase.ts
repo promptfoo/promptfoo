@@ -119,7 +119,7 @@ export class AwsBedrockKnowledgeBaseProvider
       this.kbConfig.knowledgeBaseId ??
       this.kbConfig.retrieveAndGenerateConfiguration?.knowledgeBaseConfiguration?.knowledgeBaseId;
     if (id) {
-      return `bedrock:kb:${id}`;
+      return `bedrock:kb:${this.kbConfig.operation === 'retrieve' ? 'retrieve:' : ''}${id}`;
     }
     return `bedrock:kb:external:${hashBedrockConfig(this.getNativeConfiguration())}`;
   }
@@ -308,6 +308,12 @@ export class AwsBedrockKnowledgeBaseProvider
           return { error: 'Retrieve requires config.knowledgeBaseId.' };
         }
         return await this.retrieve(prompt);
+      }
+      if (retrieval?.managedSearchConfiguration) {
+        return {
+          error:
+            'Managed Knowledge Bases do not support RetrieveAndGenerate or RetrieveAndGenerateStream. Use operation: retrieve with managedSearchConfiguration.',
+        };
       }
       if (
         !this.kbConfig.retrieveAndGenerateConfiguration &&
