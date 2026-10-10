@@ -3,6 +3,7 @@ import { MULTI_INPUT_VAR } from '../constants/plugins';
 import { TEXT_MUTATION_STRATEGIES } from '../constants/strategies';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { getAttackProviderFullId, isAttackProvider } from '../shared/attackProviders';
+import { appendMetricSuffix } from './assertions';
 import { resolveBijectionOptions } from './bijection';
 import { mutateText } from './textMutation';
 import { withPersistableGenerationProvider } from './types';
@@ -205,10 +206,7 @@ export async function addLayerTestCases(
               ...(perTurnLayers.length > 0 && { _perTurnLayers: perTurnLayers }),
             },
           },
-          assert: testCase.assert?.map((assertion) => ({
-            ...assertion,
-            metric: assertion.metric ? `${assertion.metric}/${metricSuffix}` : assertion.metric,
-          })),
+          assert: appendMetricSuffix(testCase, metricSuffix),
           metadata: {
             ...testCase.metadata,
             strategyId,

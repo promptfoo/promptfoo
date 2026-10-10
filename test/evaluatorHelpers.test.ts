@@ -13,7 +13,7 @@ import {
 } from '../src/evaluatorHelpers';
 import logger from '../src/logger';
 import { AIStudioChatProvider } from '../src/providers/google/ai.studio';
-import { VertexChatProvider } from '../src/providers/google/vertex';
+import { runPython } from '../src/python/pythonUtils';
 import { transform } from '../src/util/transform';
 import { createMockProvider } from './factories/provider';
 import { mockProcessEnv } from './util/utils';
@@ -122,6 +122,10 @@ vi.mock('../src/util/transform', () => ({
   transform: vi.fn(),
 }));
 
+vi.mock('../src/python/pythonUtils', () => ({
+  runPython: vi.fn(),
+}));
+
 const mockApiProvider = createMockProvider();
 
 function toPrompt(text: string): Prompt {
@@ -140,6 +144,7 @@ describe('evaluatorHelpers', () => {
    */
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(runPython).mockReset();
     dynamicModuleMocks.clear();
     mockPathResolve.mockReset();
     mockPathResolve.mockImplementation((...paths: string[]) => actualPathResolve(...paths));
@@ -196,6 +201,15 @@ describe('evaluatorHelpers', () => {
         {},
       );
       expect(renderedPrompt).toBe('Test value1');
+    });
+
+    it('should not corrupt dollar-sign sequences when pre-resolving nested variables', async () => {
+      const renderedPrompt = await renderPrompt(
+        toPrompt('Say {{greeting}}'),
+        { greeting: 'Cost is {{price}}', price: 'only $`5' },
+        {},
+      );
+      expect(renderedPrompt).toBe('Say Cost is only $`5');
     });
 
     it('should handle complex variable substitutions in non-JSON prompts', async () => {
@@ -319,6 +333,15 @@ describe('evaluatorHelpers', () => {
       expect(renderedPrompt).toBe('Test prompt with Dynamic value for var1 and var2 and var3');
     });
 
+    it('should accept an empty string from an external JavaScript variable', async () => {
+      const prompt = toPrompt('before{{ var1 }}after');
+      const vars = { var1: 'file:///path/to/empty.js' };
+
+      mockDynamicModule('/path/to/empty.js', () => ({ output: '' }));
+
+      await expect(renderPrompt(prompt, vars, {})).resolves.toBe('beforeafter');
+    });
+
     it('should load external js package in renderPrompt and execute the exported function', async () => {
       const prompt = toPrompt('Test prompt with {{ var1 }}');
       const vars = {
@@ -339,6 +362,63 @@ describe('evaluatorHelpers', () => {
       const renderedPrompt = await renderPrompt(prompt, vars, evaluateOptions);
       expect(renderedPrompt).toBe('Test prompt with Dynamic value for var1');
     });
+
+    it('should accept an empty string from a package variable', async () => {
+      const prompt = toPrompt('before{{ var1 }}after');
+      const vars = { var1: 'package:@promptfoo/fake:emptyVariable' };
+
+      const require = createRequire('');
+      vi.mocked(require.resolve).mockReturnValueOnce('/node_modules/@promptfoo/fake/index.js');
+      mockDynamicModule('/node_modules/@promptfoo/fake/index.js', {
+        emptyVariable: () => ({ output: '' }),
+      });
+
+      await expect(renderPrompt(prompt, vars, {})).resolves.toBe('beforeafter');
+    });
+
+    it('should accept an empty string from an external Python variable', async () => {
+      const prompt = toPrompt('before{{ var1 }}after');
+      const vars = { var1: 'file:///path/to/empty.py' };
+
+      vi.mocked(runPython).mockResolvedValueOnce({ output: '' });
+
+      await expect(renderPrompt(prompt, vars, {})).resolves.toBe('beforeafter');
+    });
+
+    it.each([undefined, null, false, 0, 1, [], {}])(
+      'rejects non-string JavaScript variable output %j',
+      async (output) => {
+        mockDynamicModule('/path/to/variable.js', () => ({ output }));
+
+        await expect(
+          renderPrompt(toPrompt('{{ var1 }}'), { var1: 'file:///path/to/variable.js' }, {}),
+        ).rejects.toThrow('to return { output: string }');
+      },
+    );
+
+    it.each([undefined, null, false, 0, 1, [], {}])(
+      'rejects non-string package variable output %j',
+      async (output) => {
+        mockDynamicModule('/node_modules/@promptfoo/fake/index.js', {
+          variable: () => ({ output }),
+        });
+
+        await expect(
+          renderPrompt(toPrompt('{{ var1 }}'), { var1: 'package:@promptfoo/fake:variable' }, {}),
+        ).rejects.toThrow('to return { output: string }');
+      },
+    );
+
+    it.each([undefined, null, false, 0, 1, [], {}])(
+      'rejects non-string Python variable output %j',
+      async (output) => {
+        vi.mocked(runPython).mockResolvedValueOnce({ output });
+
+        await expect(
+          renderPrompt(toPrompt('{{ var1 }}'), { var1: 'file:///path/to/variable.py' }, {}),
+        ).rejects.toThrow(output == null ? 'did not return any output' : 'must be a string');
+      },
+    );
 
     it('should throw a clear error when a package variable does not export a function', async () => {
       const prompt = toPrompt('Test prompt with {{ var1 }}');
@@ -635,6 +715,17 @@ describe('evaluatorHelpers', () => {
       };
       expect(resolveVariables(variables)).toEqual(expected);
     });
+
+    it.each(['ordinary text', '$$', '$&', '$`', "$'"])(
+      'should insert %s literally into repeated placeholders',
+      (price) => {
+        const variables = { greeting: 'Say {{price}} then {{price}}!', price };
+        expect(resolveVariables(variables)).toEqual({
+          greeting: `Say ${price} then ${price}!`,
+          price,
+        });
+      },
+    );
   });
 
   describe('runExtensionHook', () => {
@@ -1604,6 +1695,7 @@ describe('evaluatorHelpers', () => {
         video1: 'file://path/to/video.mp4',
         video2: 'file://path/to/video.webm',
         video3: 'file://path/to/video.mkv',
+        video4: 'file://path/to/video.ogg',
         text: 'This is not a file',
       };
 
@@ -1624,6 +1716,11 @@ describe('evaluatorHelpers', () => {
           path: 'file://path/to/video.mkv',
           type: 'video',
           format: 'mkv',
+        },
+        video4: {
+          path: 'file://path/to/video.ogg',
+          type: 'video',
+          format: 'ogg',
         },
       });
     });
@@ -1785,6 +1882,9 @@ describe('evaluatorHelpers', () => {
     it.each([
       ['heic', 'image/heic'],
       ['heif', 'image/heif'],
+      ['avif', 'image/avif'],
+      ['tif', 'image/tiff'],
+      ['tiff', 'image/tiff'],
     ])('should generate a data URL for %s images', async (extension, mimeType) => {
       const prompt = toPrompt('Test prompt with image: {{image}}');
       const renderedPrompt = await renderPrompt(prompt, {
@@ -1857,24 +1957,23 @@ describe('evaluatorHelpers', () => {
     );
 
     it.each(['m4a', 'M4A', 'M4a'])(
-      'preserves M4A MIME type for Google providers with .%s inputs',
+      'should preserve raw audio data in native templates for .%s',
       async (extension) => {
-        vi.spyOn(fs, 'readFileSync').mockReturnValue(Buffer.from('test-audio-content'));
-        for (const provider of [
-          new AIStudioChatProvider('gemini-3.8-flash'),
-          new VertexChatProvider('gemini-3.8-flash'),
-          new AIStudioChatProvider('gemini-3.8-flash', { id: 'custom-google-id' }),
-          new VertexChatProvider('gemini-3.8-flash', { id: 'custom-vertex-id' }),
-          new AIStudioChatProvider('gemini-3.8-flash', { id: 'palm:gemini-3.8-flash' }),
-        ]) {
-          const rendered = await renderPrompt(
-            toPrompt('{{audio}}'),
-            { audio: `file://test-audio.${extension}` },
-            undefined,
-            provider,
-          );
-          expect(rendered).toBe('data:audio/mp4;base64,dGVzdC1hdWRpby1jb250ZW50');
-        }
+        vi.spyOn(fs, 'readFileSync').mockImplementation(() => {
+          return Buffer.from('test-audio-content');
+        });
+
+        const prompt = toPrompt(
+          '[{"role":"user","parts":[{"inlineData":{"mimeType":"audio/mp4","data":"{{audio}}"}}]}]',
+        );
+        const renderedPrompt = await renderPrompt(prompt, {
+          audio: `file://test-audio.${extension}`,
+        });
+
+        expect(JSON.parse(renderedPrompt)[0].parts[0].inlineData).toEqual({
+          mimeType: 'audio/mp4',
+          data: 'dGVzdC1hdWRpby1jb250ZW50',
+        });
       },
     );
 

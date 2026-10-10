@@ -1,11 +1,12 @@
 ---
+title: Hyperbolic
 sidebar_position: 42
 description: Configure Hyperbolic's OpenAI-compatible API to access DeepSeek, Qwen, and other specialized LLMs for text, image, and audio generation through a unified endpoint
 ---
 
 # Hyperbolic
 
-The `hyperbolic` provider supports [Hyperbolic's API](https://docs.hyperbolic.xyz), which provides access to various LLM, image generation, audio generation, and vision-language models through an [OpenAI-compatible API format](/docs/providers/openai). This makes it easy to integrate into existing applications that use the OpenAI SDK.
+The `hyperbolic` provider calls [Hyperbolic](https://docs.hyperbolic.xyz) text and vision models through its [OpenAI-compatible chat API](/docs/providers/openai). It uses Hyperbolic's native endpoints for image and audio generation.
 
 ## Setup
 
@@ -41,52 +42,35 @@ This calls Hyperbolic's fixed Melo TTS endpoint. The local provider identity def
 
 ## Available Models
 
+Hyperbolic changes its hosted catalog over time. Check the current
+[text model catalog](https://docs.hyperbolic.ai/inference/text-apis) and the model list available
+to your account before copying an ID. The text example on this page uses an ID in that catalog.
+
 ### Text Models (LLMs)
 
 #### DeepSeek Models
 
-- `hyperbolic:deepseek-ai/DeepSeek-R1` - Best open-source reasoning model
-- `hyperbolic:deepseek-ai/DeepSeek-R1-Zero` - Zero-shot variant of DeepSeek-R1
-- `hyperbolic:deepseek-ai/DeepSeek-V3` - Latest DeepSeek model
-- `hyperbolic:deepseek/DeepSeek-V2.5` - Previous generation model
+- `hyperbolic:deepseek-ai/DeepSeek-R1` - Reasoning and text generation
 
 #### Qwen Models
 
-- `hyperbolic:qwen/Qwen3-235B-A22B` - MoE model with strong reasoning ability
-- `hyperbolic:qwen/QwQ-32B` - Latest Qwen reasoning model
-- `hyperbolic:qwen/QwQ-32B-Preview` - Preview version of QwQ
-- `hyperbolic:qwen/Qwen2.5-72B-Instruct` - Latest Qwen LLM with coding and math
-- `hyperbolic:qwen/Qwen2.5-Coder-32B` - Best coder from Qwen Team
+Use the text model catalog and your account's model list to choose a current Qwen ID.
 
 #### Meta Llama Models
 
-- `hyperbolic:meta-llama/Llama-3.3-70B-Instruct` - Performance comparable to Llama 3.1 405B
-- `hyperbolic:meta-llama/Llama-3.2-3B` - Latest small Llama model
-- `hyperbolic:meta-llama/Llama-3.1-405B` - Biggest and best open-source model
-- `hyperbolic:meta-llama/Llama-3.1-405B-BASE` - Base completion model (BF16)
-- `hyperbolic:meta-llama/Llama-3.1-70B` - Best LLM at its size
-- `hyperbolic:meta-llama/Llama-3.1-8B` - Smallest and fastest Llama 3.1
-- `hyperbolic:meta-llama/Llama-3-70B` - Highly efficient and powerful
+- `hyperbolic:meta-llama/Llama-3.3-70B-Instruct` - General text generation
 
 #### Other Models
 
-- `hyperbolic:hermes/Hermes-3-70B` - Latest flagship Hermes model
+Use the text model catalog to find other currently hosted IDs.
 
 ### Vision-Language Models (VLMs)
 
-- `hyperbolic:qwen/Qwen2.5-VL-72B-Instruct` - Latest and biggest vision model from Qwen
-- `hyperbolic:qwen/Qwen2.5-VL-7B-Instruct` - Smaller vision model from Qwen
-- `hyperbolic:mistralai/Pixtral-12B` - Vision model from MistralAI
+Confirm a current multimodal ID in your account's model list before configuring a VLM.
 
 ### Image Generation Models
 
-- `hyperbolic:image:SDXL1.0-base` - High-resolution master (recommended)
-- `hyperbolic:image:SD1.5` - Reliable classic Stable Diffusion
-- `hyperbolic:image:SD2` - Enhanced Stable Diffusion v2
-- `hyperbolic:image:SSD` - Segmind SD-1B for domain-specific tasks
-- `hyperbolic:image:SDXL-turbo` - Speedy high-resolution outputs
-- `hyperbolic:image:SDXL-ControlNet` - SDXL with ControlNet
-- `hyperbolic:image:SD1.5-ControlNet` - SD1.5 with ControlNet
+Choose a current model ID from Hyperbolic's [image API documentation](https://docs.hyperbolic.ai/inference/image-apis).
 
 ### Audio Generation Models
 
@@ -96,11 +80,11 @@ Hyperbolic has announced an [upcoming Melo TTS sunset](https://www.hyperbolic.ai
 
 ## Configuration
 
-Configure the provider in your promptfoo configuration file:
+Configure the provider in your Promptfoo configuration file:
 
 ```yaml
 providers:
-  - id: hyperbolic:deepseek-ai/DeepSeek-R1
+  - id: hyperbolic:meta-llama/Llama-3.3-70B-Instruct
     config:
       temperature: 0.1
       top_p: 0.9
@@ -114,7 +98,7 @@ providers:
 | Parameter                         | Description                                                                                                                          |
 | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
 | `apiKey`                          | Your Hyperbolic API key                                                                                                              |
-| `cost`, `inputCost`, `outputCost` | Override promptfoo's pricing estimates. Use `inputCost` and `outputCost` for asymmetric pricing; `cost` remains the shared fallback. |
+| `cost`, `inputCost`, `outputCost` | Override Promptfoo's pricing estimates. Use `inputCost` and `outputCost` for asymmetric pricing; `cost` remains the shared fallback. |
 | `temperature`                     | Controls the randomness of the output (0.0 to 2.0)                                                                                   |
 | `max_tokens`                      | The maximum number of tokens to generate                                                                                             |
 | `top_p`                           | Controls nucleus sampling (0.0 to 1.0)                                                                                               |
@@ -162,11 +146,12 @@ For a custom audio endpoint, set `apiBaseUrl` to its base URL, including any ver
 
 ### Text Generation Example
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - file://prompts/coding_assistant.json
 providers:
-  - id: hyperbolic:qwen/Qwen2.5-Coder-32B
+  - id: hyperbolic:meta-llama/Llama-3.3-70B-Instruct
     config:
       temperature: 0.1
       max_tokens: 4096
@@ -185,24 +170,8 @@ tests:
 
 ### Image Generation Example
 
-```yaml
-prompts:
-  - 'A futuristic city skyline at sunset with flying cars'
-providers:
-  - id: hyperbolic:image:SDXL1.0-base
-    config:
-      width: 1024
-      height: 1024
-      cfg_scale: 7.0
-      steps: 30
-      negative_prompt: 'blurry, low quality'
-
-tests:
-  - assert:
-      - type: is-valid-image
-      - type: image-width
-        value: 1920
-```
+Choose an ID and its input parameters from Hyperbolic's image API documentation, then use the
+`hyperbolic:image:<model_name>` provider format.
 
 ### Audio Generation Example
 
@@ -219,31 +188,13 @@ providers:
 tests:
   - assert:
       - type: javascript
-        value: "typeof output === 'string' && output.length > 0"
+        value: typeof output === 'string' && output.length > 0
 ```
 
 ### Vision-Language Model Example
 
-```yaml
-prompts:
-  - role: user
-    content:
-      - type: text
-        text: "What's in this image?"
-      - type: image_url
-        image_url:
-          url: 'https://example.com/image.jpg'
-providers:
-  - id: hyperbolic:qwen/Qwen2.5-VL-72B-Instruct
-    config:
-      temperature: 0.1
-      max_tokens: 1024
-
-tests:
-  - assert:
-      - type: contains
-        value: 'image shows'
-```
+Choose a current multimodal ID from your account's model list and use it with the
+`hyperbolic:<model_name>` provider format.
 
 Example prompt template (`prompts/coding_assistant.json`):
 
@@ -262,41 +213,38 @@ Example prompt template (`prompts/coding_assistant.json`):
 
 ## Cost Information
 
-Hyperbolic offers competitive pricing across all model types (rates as of January 2025):
+Promptfoo estimates costs from token usage for text, per request for images, and per input character for Melo TTS. Confirm current inference rates with [Hyperbolic](https://docs.hyperbolic.ai/docs/general/support). You can override the text rates:
+
+```yaml
+providers:
+  - id: hyperbolic:deepseek-ai/DeepSeek-R1
+    config:
+      inputCost: 0.0000005 # Example: $0.50 per million input tokens
+      outputCost: 0.00000218 # Example: $2.18 per million output tokens
+```
+
+`inputCost` and `outputCost` are in USD per token and take precedence over the shared `cost`
+fallback.
 
 ### Text Models
 
-- **DeepSeek-R1**: $2.00/M tokens
-- **DeepSeek-V3**: $0.25/M tokens
-- **Qwen3-235B**: $0.40/M tokens
-- **Llama-3.1-405B**: $4.00/M tokens (BF16)
-- **Llama-3.1-70B**: $0.40/M tokens
-- **Llama-3.1-8B**: $0.10/M tokens
+Text estimates use separate input and output token rates.
 
 ### Image Models
 
-- **Flux.1-dev**: $0.01 per 1024x1024 image with 25 steps (scales with size/steps)
-- **SDXL models**: Similar pricing formula
-- **SD1.5/SD2**: Lower cost options
+Promptfoo uses a fixed estimate for each image model. It does not adjust for resolution or step count, and `config.cost` does not override it.
 
 ### Audio Models
 
-- **Melo TTS**: promptfoo estimates $5.00 per 1M characters for Hyperbolic's native endpoint, following its [audio pricing documentation](https://www.hyperbolic.ai/docs/inference/audio-apis#pricing).
+Promptfoo estimates costs per character of input text for the native Melo TTS endpoint. Hyperbolic's [audio documentation](https://www.hyperbolic.ai/docs/inference/audio-apis#pricing) lists pricing and says that Melo TTS will be discontinued.
 
 ## Getting Started
 
-Test your setup with working examples:
-
-```bash
-npx promptfoo@latest init --example provider-hyperbolic
-```
-
-This includes tested configurations for text generation, image creation, audio synthesis, and vision tasks.
+Start with the complete text config and companion prompt template above. Before running it, confirm
+that the model ID appears in your account's model list and set `HYPERBOLIC_API_KEY`.
 
 ## Notes
 
-- **Model availability varies** - Some models require Pro tier access ($5+ deposit)
-- **Rate limits**: Basic tier: 60 requests/minute (free), Pro tier: 600 requests/minute
-- **Recommended models**: Use `meta-llama/Llama-3.3-70B-Instruct` for text, `SDXL1.0-base` for images
-- All endpoints use OpenAI-compatible format for easy integration
-- VLM models support multimodal inputs (text + images)
+- Check [Hyperbolic's documentation](https://docs.hyperbolic.xyz) for model availability and rate limits for your account tier.
+- Chat uses the OpenAI format; image and audio use Hyperbolic's native endpoints.
+- Vision models accept text and images.

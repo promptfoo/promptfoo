@@ -1,7 +1,7 @@
 import crypto from 'crypto';
 import fs from 'fs/promises';
 
-import { BLOB_MAX_SIZE, recordBlobReference, storeBlob } from '../blobs';
+import { BLOB_MAX_SIZE, isSafeInlineBlobMimeType, recordBlobReference, storeBlob } from '../blobs';
 import { BLOB_HASH_REGEX, collectBlobHashes } from '../blobs/blobRefs';
 import { getDb } from '../database/index';
 import { evalsTable } from '../database/tables';
@@ -99,17 +99,6 @@ function extractDurations(evalData: any) {
 const MAX_EXPORTED_BLOB_BASE64_LENGTH = Math.ceil(BLOB_MAX_SIZE / 3) * 4 + 4;
 // Portable exports are untrusted input; imported blobs must not become active same-origin content.
 const IMPORTED_BLOB_MIME_TYPE_FALLBACK = 'application/octet-stream';
-const SAFE_IMPORTED_BLOB_MIME_TYPES = new Set([
-  'image/avif',
-  'image/gif',
-  'image/jpeg',
-  'image/png',
-  'image/webp',
-  'video/mp4',
-  'video/ogg',
-  'video/webm',
-]);
-const SAFE_IMPORTED_AUDIO_MIME_TYPE_REGEX = /^audio\/[a-z0-9_+-]+$/i;
 
 function isImportableV3Results(results: unknown): results is EvaluateSummaryV3 {
   const candidate = results as Partial<EvaluateSummaryV3>;
@@ -152,10 +141,7 @@ function isImportableBlobAsset(asset: unknown): asset is ExportedBlobAsset {
 
 function sanitizeImportedBlobMimeType(mimeType: string): string {
   const normalizedMimeType = mimeType.trim().toLowerCase();
-  if (
-    SAFE_IMPORTED_BLOB_MIME_TYPES.has(normalizedMimeType) ||
-    SAFE_IMPORTED_AUDIO_MIME_TYPE_REGEX.test(normalizedMimeType)
-  ) {
+  if (isSafeInlineBlobMimeType(normalizedMimeType)) {
     return normalizedMimeType;
   }
 
@@ -464,28 +450,18 @@ export function importCommand(program: Command) {
         const importAuthor = extractAuthor(evalData);
         let existingEval: Eval | undefined;
 
-        let formatChecked = false;
         let importV3 = false;
-        let importLegacy = false;
-        let artifactsPrepared = false;
-        let traces: TraceData[] = [];
-        let blobAssets: PreparedBlobAsset[] = [];
-        const validateImportFormat = () => {
-          if (!formatChecked) {
+        let artifacts: ReturnType<typeof prepareImportArtifacts> | undefined;
+        const prepareArtifacts = () => {
+          if (!artifacts) {
             importV3 = isImportableV3Results(evalData.results);
-            importLegacy = isImportableLegacyResults(evalData.results);
+            const importLegacy = isImportableLegacyResults(evalData.results);
             if (!importV3 && !importLegacy) {
               throw new Error('Unsupported eval export results format');
             }
-            formatChecked = true;
+            artifacts = prepareImportArtifacts(evalData, importV3);
           }
-        };
-        const prepareArtifacts = () => {
-          if (!artifactsPrepared) {
-            validateImportFormat();
-            ({ traces, blobAssets } = prepareImportArtifacts(evalData, importV3));
-            artifactsPrepared = true;
-          }
+          return artifacts;
         };
 
         // Validate replacement artifacts before consulting the database. A
@@ -510,7 +486,7 @@ export function importCommand(program: Command) {
           }
         }
 
-        prepareArtifacts();
+        const { traces, blobAssets } = prepareArtifacts();
 
         // Restore embedded media before the destructive replace so a corrupt
         // artifact cannot delete the existing eval. blobAssets is empty for v2.

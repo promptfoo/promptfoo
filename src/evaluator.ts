@@ -6,6 +6,7 @@ import chalk from 'chalk';
 import cliProgress from 'cli-progress';
 import { globSync } from 'glob';
 import { LRUCache } from 'lru-cache';
+import Clone from 'rfdc';
 import {
   getAssertionBaseType,
   hasTraceAwareAssertions,
@@ -14,17 +15,22 @@ import {
   runCompareAssertion,
 } from './assertions/index';
 import { extractAndStoreBinaryData } from './blobs/extractor';
-import { getCache, withCacheNamespace } from './cache';
+import { getCache, isCacheEnabled, withCacheEnabled, withCacheNamespace } from './cache';
 import cliState from './cliState';
 import { DEFAULT_MAX_CONCURRENCY, FILE_METADATA_KEY } from './constants';
 import { getEnvBool, getEnvInt, getEvalTimeoutMs, getMaxEvalTimeMs, isCI } from './envars';
 import { collectFileMetadata, renderPrompt, runExtensionHook } from './evaluatorHelpers';
-import logger, { globalLogCallback, setLogCallback } from './logger';
+import logger, { globalLogCallback, isDebugEnabled, setLogCallback } from './logger';
 import { selectMaxScore } from './matchers/comparison';
-import { getResultIndexKey, sanitizeResultForJsonlArtifact } from './models/evalResult';
+import {
+  getResultIndexKey,
+  PROMPTFOO_METADATA_KEY,
+  sanitizeResultForJsonlArtifact,
+} from './models/evalResult';
 import { generateIdFromPrompt } from './models/prompt';
 import { nodeEvaluatorRuntime } from './node/evaluatorRuntime';
 import { CIProgressReporter } from './progress/ciProgressReporter';
+import { type AgentWorkspace, createAgentWorkspaceForConfig } from './providers/agentWorkspace';
 import { maybeEmitAzureOpenAiWarning } from './providers/azure/warnings';
 import { providerRegistry } from './providers/providerRegistry';
 import { isPromptfooSampleTarget } from './providers/shared';
@@ -32,11 +38,7 @@ import { maybeWrapMcpProviderForRedteam } from './redteam/mcpTargetProvider';
 import { redteamProviderManager } from './redteam/providers/shared';
 import { throwIfTargetPromptExceedsMaxChars } from './redteam/shared/promptLength';
 import { getSessionId } from './redteam/util';
-import {
-  createProviderRateLimitOptions,
-  createRateLimitRegistry,
-  type RateLimitRegistry,
-} from './scheduler';
+import { createProviderRateLimitOptions, RateLimitRegistry, sleepWithAbort } from './scheduler';
 import {
   withProviderCallExecutionContext,
   withProviderCallTracingContext,
@@ -66,6 +68,7 @@ import {
   type EnvOverrides,
   type EvaluateResult,
   type EvaluateStats,
+  type GradingConfig,
   type GradingResult,
   MAX_SUGGESTIONS_COUNT,
   type Prompt,
@@ -73,30 +76,42 @@ import {
   ResultFailureReason,
   type RunEvalOptions,
   type TestSuite,
+  TestSuiteConfigSchema,
 } from './types/index';
 import { type ApiProvider, isApiProvider } from './types/providers';
 import { isAbortError, isNonTransientHttpStatus } from './util/fetch/errors';
+import { isCallerAbortError } from './util/fetch/requestSignal';
 import { filterByRange } from './util/filterRange';
 import { warnEmptyFilterRange } from './util/filterRangeWarn';
 import { loadFunction, parseFileUrl } from './util/functions/loadFunction';
 import {
   buildConfiguredProviderMap,
+  isProviderTypeMap,
   resolveConfiguredProviderReference,
 } from './util/gradingProvider';
 import invariant from './util/invariant';
 import { safeJsonStringify, summarizeEvaluateResultForLogging } from './util/json';
 import { accumulateNamedMetric, backfillNamedScoreWeights } from './util/namedMetrics';
 import { filterFiniteScores } from './util/numeric';
-import { isPromptAllowed } from './util/promptMatching';
+import { getProviderPromptOverride, isPromptAllowed } from './util/promptMatching';
 import {
   getProviderIdentifier,
   isAnthropicProvider,
   isGoogleProvider,
   isOpenAiProvider,
   isProviderAllowed,
+  providerToIdentifier,
   sanitizeProviderIdForLog,
 } from './util/provider';
 import { promptYesNo } from './util/readline';
+import {
+  isNonCredentialHeader,
+  isSecretEnvVarName,
+  isSecretField,
+  REDACTED,
+  sanitizeObject,
+  sanitizeUrl,
+} from './util/sanitizer';
 import { analyzeTemplateReference, extractVariablesFromTemplate } from './util/templates';
 import { sleep } from './util/time';
 import { TokenUsageTracker } from './util/tokenUsage';
@@ -132,7 +147,7 @@ import type {
   VarValue,
 } from './types/index';
 import type { InternalEvaluateOptions } from './types/internal';
-import type { CallApiContextParams } from './types/providers';
+import type { CallApiContextParams, CallApiOptionsParams } from './types/providers';
 
 export class PromptSuggestionsRejectedError extends Error {
   constructor(message = 'No prompts selected. Aborting.') {
@@ -625,14 +640,23 @@ function applyGradingResult(row: EvaluateResult, checkResult: GradingResult) {
 
 const ABORTED_GRADING_PREFIX = 'Aborted: ';
 
-function applyGradingError(row: EvaluateResult, error: unknown, abortSignal?: AbortSignal) {
-  const errorAsError = error instanceof Error ? error : undefined;
-  // Require both signals: a third-party SDK that throws `AbortError` during a
-  // non-aborted run is a real bug, and a real SyntaxError caught microseconds
-  // after an unrelated abort is also a real bug.
-  const aborted = Boolean(abortSignal?.aborted) && isAbortError(error);
+// Require both: an AbortError during a run that was not cancelled is a real bug, and so is an
+// unrelated error that surfaces just after cancellation.
+function isGradingAbort(error: unknown, abortSignal?: AbortSignal): boolean {
+  return Boolean(abortSignal?.aborted && (isAbortError(error) || error === abortSignal.reason));
+}
 
-  if (aborted) {
+function applyGradingError(
+  row: Pick<
+    EvaluateResult,
+    'error' | 'failureReason' | 'success' | 'score' | 'namedScores' | 'promptIdx' | 'testIdx'
+  >,
+  error: unknown,
+  abortSignal?: AbortSignal,
+) {
+  const errorAsError = error instanceof Error ? error : undefined;
+
+  if (isGradingAbort(error, abortSignal)) {
     // Skip stack serialization on the abort path — debug logs usually go
     // unread and a noisy shutdown can fire this per row.
     const shortMessage = errorAsError?.message ?? String(error);
@@ -742,7 +766,6 @@ function createRunEvalState({
  * producer in lockstep.
  */
 const EVAL_RUNTIME_VAR_KEYS = ['__evalId', '__evalStepId', '__repeatIndex'] as const;
-const EVAL_RUNTIME_VAR_KEY_SET: ReadonlySet<string> = new Set(EVAL_RUNTIME_VAR_KEYS);
 type EvalRuntimeVars = Partial<Record<(typeof EVAL_RUNTIME_VAR_KEYS)[number], Vars[string]>>;
 
 function getEvalRuntimeVars({
@@ -773,11 +796,10 @@ function getEvalRuntimeVars({
  * with the provider call context.
  */
 function omitEvalRuntimeVars(vars: Vars): Vars {
-  const result: Vars = {};
-  for (const [key, value] of Object.entries(vars)) {
-    if (!EVAL_RUNTIME_VAR_KEY_SET.has(key)) {
-      result[key] = value;
-    }
+  // Keep non-serialized metadata needed by assertion and grader providers.
+  const result: Vars = { ...vars };
+  for (const key of EVAL_RUNTIME_VAR_KEYS) {
+    delete result[key];
   }
   return result;
 }
@@ -879,8 +901,22 @@ function tryParseJson(value: string): unknown {
   }
 }
 
+function isCliPauseCancellation(
+  error: unknown,
+  abortSignal?: AbortSignal,
+  pauseSignal?: AbortSignal,
+): boolean {
+  return Boolean(
+    pauseSignal?.aborted &&
+      abortSignal?.aborted &&
+      abortSignal.reason === pauseSignal.reason &&
+      isCallerAbortError(error, pauseSignal, { requireReasonMatch: true }),
+  );
+}
+
 async function callProviderForRunEval({
   abortSignal,
+  pauseSignal,
   evalId,
   filters,
   promptForRender,
@@ -905,6 +941,7 @@ async function callProviderForRunEval({
   | 'testSuite'
 > & {
   filters: RunEvalOptions['nunjucksFilters'];
+  pauseSignal?: AbortSignal;
   promptForRender: Prompt;
   renderedPrompt: string;
   testIndex: number;
@@ -927,6 +964,7 @@ async function callProviderForRunEval({
     } else {
       response = await callActiveProvider({
         abortSignal,
+        pauseSignal,
         evalId,
         filters,
         onProviderInvoked: () => {
@@ -957,14 +995,26 @@ async function callProviderForRunEval({
     throw error;
   } finally {
     if (providerInvoked && isExternalTraceProvider(testSuite?.tracing?.provider)) {
-      await collectExternalTraceAfterProviderCall({
-        abortSignal,
-        providerFailed,
-        response,
-        test,
-        testSuite,
-        traceContext,
-      });
+      try {
+        await collectExternalTraceAfterProviderCall({
+          abortSignal,
+          providerFailed,
+          response,
+          test,
+          testSuite,
+          traceContext,
+        });
+      } catch (error) {
+        // Trace collection must not discard a target response that completed
+        // before CLI pause. Real caller/deadline cancellation still propagates.
+        if (
+          providerFailed ||
+          !response ||
+          !isCliPauseCancellation(error, abortSignal, pauseSignal)
+        ) {
+          throw error;
+        }
+      }
     }
   }
 }
@@ -1039,6 +1089,7 @@ async function collectExternalTraceAfterProviderCall({
 
 async function callActiveProvider({
   abortSignal,
+  pauseSignal,
   evalId,
   filters,
   onProviderInvoked,
@@ -1057,6 +1108,7 @@ async function callActiveProvider({
   'abortSignal' | 'evalId' | 'provider' | 'rateLimitRegistry' | 'repeatIndex' | 'test' | 'testSuite'
 > & {
   filters: RunEvalOptions['nunjucksFilters'];
+  pauseSignal?: AbortSignal;
   onProviderInvoked: () => void;
   promptForRender: Prompt;
   renderedPrompt: string;
@@ -1065,10 +1117,11 @@ async function callActiveProvider({
   vars: Vars;
 }): Promise<ProviderResponse> {
   const originalProvider = maybeWrapMcpProviderForRedteam(provider, test);
-  const activeProvider = maybeWrapMcpProviderForRedteam(
-    isApiProvider(test.provider) ? test.provider : originalProvider,
-    test,
-  );
+  const cleanupOwner = isApiProvider(test.provider) ? test.provider : provider;
+  const activeProvider =
+    cleanupOwner === provider
+      ? originalProvider
+      : maybeWrapMcpProviderForRedteam(cleanupOwner, test);
   logger.debug(`Provider type: ${sanitizeProviderIdForLog(activeProvider.id())}`);
 
   const callApiContext = buildCallApiContext({
@@ -1082,30 +1135,102 @@ async function callActiveProvider({
     traceContext,
     vars,
   });
-  const callApiOptions = abortSignal ? { abortSignal } : undefined;
-
-  const callApi = () => {
-    onProviderInvoked();
+  let completedResponse: ProviderResponse | undefined;
+  const completedTargets: { prompt: string; response: ProviderResponse }[] = [];
+  const callApi = (onResponseHeaders?: CallApiOptionsParams['onResponseHeaders']) => {
+    // A previous response belongs only to backoff until the next attempt starts.
+    completedResponse = undefined;
+    const callApiOptions =
+      abortSignal || onResponseHeaders ? { abortSignal, onResponseHeaders } : undefined;
     const invoke = () =>
-      traceContext?.traceparent
-        ? withTracedProviderCall(
-            {
-              provider: activeProvider,
-              callContext: callApiContext,
-              promptLabel: promptForRender.label,
-              evalId: callApiContext.evaluationId,
-              testIndex,
-            },
-            async (context) => activeProvider.callApi(renderedPrompt, context, callApiOptions),
-          )
-        : activeProvider.callApi(renderedPrompt, callApiContext, callApiOptions);
-    return testSuite?.tracing
-      ? cliState.withRequestTracingConfig(testSuite.tracing, invoke)
-      : invoke();
+      providerRegistry.withProvider(
+        cleanupOwner,
+        async () => {
+          onProviderInvoked();
+          const result = traceContext?.traceparent
+            ? await withTracedProviderCall(
+                {
+                  provider: activeProvider,
+                  callContext: callApiContext,
+                  promptLabel: promptForRender.label,
+                  evalId: callApiContext.evaluationId,
+                  testIndex,
+                },
+                async (context) => activeProvider.callApi(renderedPrompt, context, callApiOptions),
+              )
+            : await activeProvider.callApi(renderedPrompt, callApiContext, callApiOptions);
+          completedResponse = result;
+          return result;
+        },
+        abortSignal,
+      );
+    return withProviderCallExecutionContext(
+      {
+        abortSignal,
+        rateLimitRegistry,
+        rateLimitProvider: activeProvider,
+        onTargetResponse: (prompt, response) => {
+          completedTargets.push({ prompt, response });
+        },
+      },
+      () =>
+        testSuite?.tracing
+          ? cliState.withRequestTracingConfig(testSuite.tracing, invoke)
+          : invoke(),
+    );
   };
-  const response = rateLimitRegistry
-    ? await rateLimitRegistry.execute(activeProvider, callApi, createProviderRateLimitOptions())
-    : await callApi();
+  let response: ProviderResponse;
+  try {
+    response = rateLimitRegistry
+      ? await rateLimitRegistry.execute(
+          activeProvider,
+          callApi,
+          createProviderRateLimitOptions(abortSignal),
+        )
+      : await callApi();
+  } catch (error) {
+    if (!isCliPauseCancellation(error, abortSignal, pauseSignal)) {
+      throw error;
+    }
+    if (completedResponse) {
+      response = completedResponse;
+    } else if (completedTargets.length > 0) {
+      // A strategy may still be tracing/grading after a billable or stateful
+      // target call completes. Persist its partial work as an error, so resume
+      // cannot silently replay it. Explicit retry-errors remains available.
+      const last = completedTargets[completedTargets.length - 1].response;
+      const tokenUsage = createEmptyTokenUsage();
+      let cost: number | undefined;
+      let incurredCost: number | undefined;
+      for (const { response: target } of completedTargets) {
+        accumulateResponseTokenUsage(tokenUsage, target);
+        if (target.cost !== undefined) {
+          cost = (cost ?? 0) + target.cost;
+        }
+        const targetIncurredCost = target.incurredCost ?? (target.cached ? 0 : target.cost);
+        if (targetIncurredCost !== undefined) {
+          incurredCost = (incurredCost ?? 0) + targetIncurredCost;
+        }
+      }
+      response = {
+        ...last,
+        error:
+          last.error ??
+          'Evaluation paused before the strategy completed. Completed target responses were retained; use --retry-errors to run this case again.',
+        tokenUsage,
+        cost,
+        incurredCost,
+        cached: completedTargets.every(({ response: target }) => target.cached === true),
+        metadata: {
+          ...last.metadata,
+          interruptedStrategy: true,
+          completedTargetResponses: completedTargets,
+        },
+      };
+    } else {
+      throw error;
+    }
+  }
 
   logger.debug(`Provider response properties: ${Object.keys(response).join(', ')}`);
   logger.debug(`Provider response cached property explicitly: ${response.cached}`);
@@ -1144,6 +1269,12 @@ function buildCallApiContext({
     repeatIndex,
     testIdx: testIndex,
   };
+
+  if (!isCacheEnabled()) {
+    // Preserve the context hint for custom providers and older package copies.
+    // The shared async cache policy also disables writes in built-in providers.
+    callApiContext.bustCache = true;
+  }
 
   if (evalId) {
     callApiContext.evaluationId = evalId;
@@ -1200,10 +1331,24 @@ function getConversationLastInput(renderedJson: unknown) {
   return lastElt?.content || lastElt;
 }
 
-async function applyProviderDelayIfNeeded(provider: ApiProvider, response: ProviderResponse) {
-  if (!response.cached && provider.delay && provider.delay > 0) {
+async function applyProviderDelayIfNeeded(
+  provider: ApiProvider,
+  response: ProviderResponse,
+  abortSignal?: AbortSignal,
+) {
+  if (abortSignal?.aborted) {
+    return;
+  }
+  if (!response.cached && !provider.handlesOwnDelay && provider.delay && provider.delay > 0) {
     logger.debug(`Sleeping for ${provider.delay}ms`);
-    await sleep(provider.delay);
+    try {
+      await sleepWithAbort(provider.delay, abortSignal);
+    } catch (error) {
+      // Cancellation ends the delay without discarding the completed response.
+      if (!isCallerAbortError(error, abortSignal, { requireReasonMatch: true })) {
+        throw error;
+      }
+    }
   } else if (response.cached) {
     logger.debug(`Skipping delay because response is cached`);
   }
@@ -1214,6 +1359,8 @@ function createEvaluateResult({
   latencyMs,
   prompt,
   promptIdx,
+  repeatGroupId,
+  repeatIndex,
   rendered,
   response,
   setup,
@@ -1227,6 +1374,8 @@ function createEvaluateResult({
   latencyMs: number;
   prompt: Prompt;
   promptIdx: number;
+  repeatGroupId?: string;
+  repeatIndex: number;
   rendered: RenderedRunEvalPrompt;
   response: ProviderResponse;
   setup: RunEvalSetup;
@@ -1256,6 +1405,7 @@ function createEvaluateResult({
       [FILE_METADATA_KEY]: fileMetadata,
     },
     promptIdx,
+    ...(repeatGroupId !== undefined && { repeatGroupId, repeatIndex }),
     testIdx,
     testCase: test,
     promptId: prompt.id || '',
@@ -1303,8 +1453,8 @@ function trackProviderUsage(provider: ApiProvider, response: ProviderResponse) {
 async function applyRunEvalResponseOutcome({
   abortSignal,
   deferGrading,
+  deferredGradingAbortSignal,
   evalId,
-  isRedteam,
   latencyMs,
   prompt,
   promptIdx,
@@ -1322,8 +1472,8 @@ async function applyRunEvalResponseOutcome({
 }: {
   abortSignal?: AbortSignal;
   deferGrading?: boolean;
+  deferredGradingAbortSignal?: AbortSignal;
   evalId?: string;
-  isRedteam: boolean;
   latencyMs: number;
   prompt: Prompt;
   promptIdx: number;
@@ -1347,13 +1497,19 @@ async function applyRunEvalResponseOutcome({
   }
 
   if (response.output === null || response.output === undefined) {
-    applyEmptyResponseOutcome(ret, isRedteam);
+    // An absent provider result is an integration error, including in redteam
+    // scans. An intentional empty string still proceeds to the assertions.
+    ret.success = false;
+    ret.score = 0;
+    ret.error = 'No output';
+    ret.failureReason = ResultFailureReason.ERROR;
     return;
   }
 
   await gradeRunEvalResponse({
     abortSignal,
     deferGrading,
+    deferredGradingAbortSignal,
     evalId,
     latencyMs,
     prompt,
@@ -1372,19 +1528,10 @@ async function applyRunEvalResponseOutcome({
   });
 }
 
-function applyEmptyResponseOutcome(ret: EvaluateResult, isRedteam: boolean) {
-  if (isRedteam) {
-    ret.success = true;
-  } else {
-    ret.success = false;
-    ret.score = 0;
-    ret.error = 'No output';
-  }
-}
-
 async function gradeRunEvalResponse({
   abortSignal,
   deferGrading,
+  deferredGradingAbortSignal,
   evalId,
   latencyMs,
   prompt,
@@ -1403,6 +1550,7 @@ async function gradeRunEvalResponse({
 }: {
   abortSignal?: AbortSignal;
   deferGrading?: boolean;
+  deferredGradingAbortSignal?: AbortSignal;
   evalId?: string;
   latencyMs: number;
   prompt: Prompt;
@@ -1446,12 +1594,11 @@ async function gradeRunEvalResponse({
     providerTransformedOutput,
   };
 
-  // Finish audio grading per row instead of retaining every inline clip in the queue.
-  if (deferGrading && !response.audio?.data) {
+  if (deferGrading) {
     invariant(providerCallQueue, 'providerCallQueue is required when deferGrading is enabled');
     ret.response = processedResponse;
     const gradingPromise = withProviderCallExecutionContext(
-      { abortSignal, providerCallQueue, rateLimitRegistry },
+      { abortSignal: deferredGradingAbortSignal, providerCallQueue, rateLimitRegistry },
       () =>
         runAssertions({
           prompt: renderedPrompt,
@@ -1464,27 +1611,34 @@ async function gradeRunEvalResponse({
           traceId,
         }).then((checkResult) => applyGradingResult(ret, checkResult)),
     ).catch((error) => {
-      applyGradingError(ret, error, abortSignal);
+      applyGradingError(ret, error, deferredGradingAbortSignal);
     });
     deferredGradingPromises.set(ret, gradingPromise);
     return;
   }
 
-  const checkResult = await withProviderCallExecutionContext(
-    { abortSignal, rateLimitRegistry },
-    () =>
-      runAssertions({
-        prompt: renderedPrompt,
-        provider,
-        providerResponse: assertionProviderResponse,
-        test,
-        vars,
-        latencyMs: response.latencyMs ?? latencyMs,
-        assertScoringFunction: test.assertScoringFunction as ScoringFunction,
-        traceId,
-      }),
-  );
-  applyGradingResult(ret, checkResult);
+  try {
+    const checkResult = await withProviderCallExecutionContext(
+      { abortSignal, rateLimitRegistry },
+      () =>
+        runAssertions({
+          prompt: renderedPrompt,
+          provider,
+          providerResponse: assertionProviderResponse,
+          test,
+          vars,
+          latencyMs: response.latencyMs ?? latencyMs,
+          assertScoringFunction: test.assertScoringFunction as ScoringFunction,
+          traceId,
+        }),
+    );
+    applyGradingResult(ret, checkResult);
+  } catch (error) {
+    if (!isGradingAbort(error, abortSignal)) {
+      throw error;
+    }
+    applyGradingError(ret, error, abortSignal);
+  }
   ret.response = processedResponse;
 }
 
@@ -1602,33 +1756,40 @@ export function getTraceLinkage(
  * @returns The result of the test case.
  */
 export async function runEval(options: RunEvalOptions): Promise<EvaluateResult[]> {
-  return withCacheNamespace(
-    getRepeatCacheNamespace(options.repeatIndex, options.evaluateOptions),
-    () => runEvalInternal(options),
+  return withCacheEnabled(options.evaluateOptions?.cache === false ? false : isCacheEnabled(), () =>
+    withCacheNamespace(getRepeatCacheNamespace(options.repeatIndex, options.evaluateOptions), () =>
+      runEvalInternal(options),
+    ),
   );
 }
 
-async function runEvalInternal({
-  provider,
-  prompt, // raw prompt
-  test,
-  testSuite,
-  delay,
-  nunjucksFilters: filters,
-  evaluateOptions,
-  // TODO(ian): Rename these public `Idx` fields to `Index` with compatibility handling.
-  testIdx: testIndex,
-  promptIdx: promptIndex,
-  repeatIndex,
-  conversations,
-  registers,
-  isRedteam,
-  abortSignal,
-  deferGrading,
-  evalId,
-  providerCallQueue,
-  rateLimitRegistry,
-}: RunEvalOptions): Promise<EvaluateResult[]> {
+async function runEvalInternal(
+  {
+    provider,
+    prompt, // raw prompt
+    test,
+    testSuite,
+    delay,
+    nunjucksFilters: filters,
+    evaluateOptions,
+    // TODO(ian): Rename these public `Idx` fields to `Index` with compatibility handling.
+    testIdx: testIndex,
+    promptIdx: promptIndex,
+    repeatGroupId,
+    repeatIndex,
+    conversations,
+    registers,
+    isRedteam,
+    abortSignal,
+    deferGrading,
+    evalId,
+    providerCallQueue,
+    rateLimitRegistry,
+  }: RunEvalOptions,
+  orchestrationOptions: Pick<InternalEvaluateOptions, 'abortSignal' | 'pauseSignal'> = {
+    abortSignal,
+  },
+): Promise<EvaluateResult[]> {
   provider.delay ??= delay ?? getEnvInt('PROMPTFOO_DELAY_MS', 0);
   invariant(
     typeof provider.delay === 'number',
@@ -1656,7 +1817,10 @@ async function runEvalInternal({
 
   let setup = state.setup;
   let latencyMs = 0;
+  let providerCallCompleted = false;
   let traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>> | undefined;
+  // The step's copy_working_dir workspace, removed once its assertions have run.
+  let workspace: AgentWorkspace | undefined;
 
   try {
     const rendered = await renderRunEvalPrompt({
@@ -1669,6 +1833,15 @@ async function runEvalInternal({
       vars: state.vars,
     });
     setup = rendered.setup;
+    if (!test.providerOutput) {
+      const activeProvider = isApiProvider(test.provider) ? test.provider : provider;
+      workspace = await createAgentWorkspaceForConfig(
+        { ...activeProvider.config, ...rendered.setup.prompt.config },
+        state.vars,
+        abortSignal,
+      );
+    }
+    const stepWorkspace = workspace;
 
     traceContext = test.providerOutput
       ? null
@@ -1691,11 +1864,14 @@ async function runEvalInternal({
         async () => {
           const providerCall = await callProviderForRunEval({
             abortSignal,
+            pauseSignal: orchestrationOptions.pauseSignal,
             evalId,
             filters,
             promptForRender: {
               ...state.promptForRender,
-              config: rendered.setup.prompt.config,
+              config: stepWorkspace
+                ? { ...rendered.setup.prompt.config, working_dir: stepWorkspace.dir }
+                : rendered.setup.prompt.config,
             },
             provider,
             rateLimitRegistry,
@@ -1707,8 +1883,12 @@ async function runEvalInternal({
             traceContext: executionTraceContext,
             vars: state.vars,
           });
+          providerCallCompleted = true;
           const response = normalizeCachedTargetResponse(providerCall.response);
           latencyMs = providerCall.latencyMs;
+          if (stepWorkspace) {
+            response.metadata = { ...response.metadata, ...(await stepWorkspace.metadata()) };
+          }
 
           updateConversationHistory({
             conversationKey: state.conversationKey,
@@ -1725,7 +1905,7 @@ async function runEvalInternal({
             `Evaluator checking cached flag: response.cached = ${Boolean(response.cached)}, provider.delay = ${provider.delay}`,
           );
 
-          await applyProviderDelayIfNeeded(provider, response);
+          await applyProviderDelayIfNeeded(provider, response, abortSignal);
 
           // The __eval* runtime vars were exposed to prompt/provider rendering above.
           // Build a copy without them for the persisted result, assertions, and
@@ -1738,6 +1918,8 @@ async function runEvalInternal({
             latencyMs,
             prompt,
             promptIdx: promptIndex,
+            repeatGroupId,
+            repeatIndex,
             rendered,
             response,
             setup,
@@ -1753,9 +1935,9 @@ async function runEvalInternal({
           trackProviderUsage(provider, response);
           await applyRunEvalResponseOutcome({
             abortSignal,
+            deferredGradingAbortSignal: orchestrationOptions.abortSignal,
             deferGrading,
             evalId,
-            isRedteam,
             latencyMs,
             prompt,
             promptIdx: promptIndex,
@@ -1786,7 +1968,7 @@ async function runEvalInternal({
         },
         (rows) => deferredGradingPromises.get(rows[0]),
       );
-    return executionTraceContext
+    const rows = executionTraceContext
       ? await withProviderCallTracingContext(
           {
             getActiveTraceparent,
@@ -1797,7 +1979,21 @@ async function runEvalInternal({
           runExecution,
         )
       : await runExecution();
+    // Deferred assertions still need the workspace, so they remove it when they finish.
+    const deferredGrading = deferredGradingPromises.get(rows[0]);
+    if (workspace && deferredGrading) {
+      deferredGradingPromises.set(rows[0], deferredGrading.finally(workspace.remove));
+      workspace = undefined;
+    }
+    return rows;
   } catch (err) {
+    if (
+      !providerCallCompleted &&
+      isCliPauseCancellation(err, abortSignal, orchestrationOptions.pauseSignal)
+    ) {
+      // Leave incomplete CLI-paused work eligible for resume instead of persisting an ERROR.
+      return [];
+    }
     const { errorWithStack, metadata, logContext } = buildProviderErrorContext({
       error: err,
       provider,
@@ -1806,9 +2002,9 @@ async function runEvalInternal({
       testIdx: testIndex,
     });
 
-    // Don't log AbortError - these are expected when scan is aborted (e.g., target unavailable)
-    const isAbortError = err instanceof Error && err.name === 'AbortError';
-    if (!isAbortError) {
+    // Caller cancellation is expected; independent provider failures remain actionable.
+    const cancelled = Boolean(abortSignal?.aborted) && isAbortError(err);
+    if (!cancelled) {
       logger.error('Provider call failed during eval', logContext);
     }
 
@@ -1824,6 +2020,7 @@ async function runEvalInternal({
         namedScores: {},
         latencyMs,
         promptIdx: promptIndex,
+        ...(repeatGroupId !== undefined && { repeatGroupId, repeatIndex }),
         testIdx: testIndex,
         testCase: test,
         promptId: prompt.id || '',
@@ -1831,6 +2028,8 @@ async function runEvalInternal({
         ...getTraceLinkage(traceContext, evalId),
       },
     ];
+  } finally {
+    await workspace?.remove();
   }
 }
 
@@ -2188,9 +2387,9 @@ function mergeMaxScoreGradingResult(result: EvaluationStoreResult, gradingResult
   }
 }
 
-function ensureDefaultTestForExtensions(testSuite: TestSuite) {
+async function runBeforeAllExtensions(testSuite: TestSuite): Promise<TestSuite> {
   if (!testSuite.extensions?.length) {
-    return;
+    return testSuite;
   }
   if (!testSuite.defaultTest) {
     testSuite.defaultTest = {};
@@ -2198,9 +2397,53 @@ function ensureDefaultTestForExtensions(testSuite: TestSuite) {
   if (typeof testSuite.defaultTest !== 'string' && !testSuite.defaultTest.assert) {
     testSuite.defaultTest.assert = [];
   }
+
+  let seededMap: TestSuite['providerPromptMap'];
+  let seededEntries: [string, string[], string[]][] = [];
+  if (!testSuite.providerPromptMap) {
+    const map: NonNullable<TestSuite['providerPromptMap']> = Object.create(null);
+    for (const provider of testSuite.providers) {
+      const selectors = [...(provider.prompts ?? testSuite.prompts.map((prompt) => prompt.label))];
+      map[provider.id()] = selectors;
+      if (provider.label) {
+        map[provider.label] = selectors;
+      }
+    }
+    seededMap = map;
+    seededEntries = Object.entries(map).map(([key, selectors]) => [key, selectors, [...selectors]]);
+    testSuite = { ...testSuite, providerPromptMap: map };
+  }
+
+  const { suite } = await runExtensionHook(testSuite.extensions, 'beforeAll', { suite: testSuite });
+  if (seededMap) {
+    // Hooks may mutate legacy map arrays. Only changed entries override instance filters;
+    // untouched seeds must not merge duplicate providers or exclude newly added prompts.
+    const overrides: NonNullable<TestSuite['providerPromptMap']> = Object.assign(
+      Object.create(null),
+      suite.providerPromptMap,
+    );
+    for (const [key, reference, selectors] of seededEntries) {
+      if (!Object.hasOwn(overrides, key)) {
+        overrides[key] = ['*'];
+      } else if (
+        // Same-map entry replacements are explicit, even with equal values. An
+        // unchanged serialized roundtrip cannot retain map or array identity.
+        (suite.providerPromptMap !== seededMap || overrides[key] === reference) &&
+        isDeepStrictEqual(overrides[key], selectors)
+      ) {
+        delete overrides[key];
+      }
+    }
+    suite.providerPromptMap = overrides;
+  }
+  return suite;
 }
 
-async function maybeAddGeneratedPrompts(testSuite: TestSuite, options: InternalEvaluateOptions) {
+async function maybeAddGeneratedPrompts(
+  testSuite: TestSuite,
+  options: InternalEvaluateOptions,
+  abortSignal?: AbortSignal,
+) {
   if (!options.generateSuggestions) {
     return true;
   }
@@ -2218,7 +2461,9 @@ async function maybeAddGeneratedPrompts(testSuite: TestSuite, options: InternalE
   const { prompts: newPrompts, error } = await generatePrompts(
     testSuite.prompts[0].raw,
     requestedCount,
+    abortSignal,
   );
+  abortSignal?.throwIfAborted();
   if (error || !newPrompts) {
     throw new Error(`Failed to generate prompts: ${error}`);
   }
@@ -2233,11 +2478,14 @@ async function maybeAddGeneratedPrompts(testSuite: TestSuite, options: InternalE
   logger.info(chalk.blue('Generated prompts:'));
   let numAdded = 0;
   for (const prompt of newPrompts) {
+    abortSignal?.throwIfAborted();
     logger.info('--------------------------------------------------------');
     logger.info(`${prompt}`);
     logger.info('--------------------------------------------------------');
 
-    if (await promptYesNo('Do you want to test this prompt?', false)) {
+    const selected = await promptYesNo('Do you want to test this prompt?', false);
+    abortSignal?.throwIfAborted();
+    if (selected) {
       testSuite.prompts.push({ raw: prompt, label: prompt });
       numAdded++;
     } else {
@@ -2273,17 +2521,6 @@ function createDefaultPromptMetrics(): PromptMetrics {
   };
 }
 
-function buildExistingPromptsMap(store: EvaluationStore) {
-  const existingPromptsMap = new Map<string, CompletedPrompt>();
-  if (cliState.resume && store.persisted && store.prompts.length > 0) {
-    logger.debug('Resuming evaluation: preserving metrics from previous run');
-    for (const existingPrompt of store.prompts) {
-      existingPromptsMap.set(`${existingPrompt.provider}:${existingPrompt.id}`, existingPrompt);
-    }
-  }
-  return existingPromptsMap;
-}
-
 /**
  * The results-table columns owned by one provider, in table order. `promptIdx` is the
  * column's position in the table, which is how results are addressed everywhere else.
@@ -2303,42 +2540,32 @@ type ProviderColumns = {
  * `generateIdFromPrompt` hashes. Resolving by identity collapses duplicates into a
  * single column and silently drops the other columns' results.
  */
-function buildCompletedPrompts(
-  testSuite: TestSuite,
-  store: EvaluationStore,
-): { prompts: CompletedPrompt[]; columnsByProvider: ProviderColumns[] } {
+function buildLivePromptColumns(testSuite: TestSuite): {
+  prompts: CompletedPrompt[];
+  columnsByProvider: ProviderColumns[];
+} {
   const prompts: CompletedPrompt[] = [];
   const columnsByProvider: ProviderColumns[] = [];
-  const existingPromptsMap = buildExistingPromptsMap(store);
 
   for (const provider of testSuite.providers) {
     const providerKey = getProviderIdentifier(provider);
+    const allowedPrompts =
+      getProviderPromptOverride(provider, testSuite.providerPromptMap) ?? provider.prompts;
     const columns: ProviderColumns['columns'] = [];
 
     for (const prompt of testSuite.prompts) {
-      if (!isAllowedPrompt(prompt, testSuite.providerPromptMap?.[providerKey])) {
+      if (!isAllowedPrompt(prompt, allowedPrompts)) {
         continue;
       }
 
       const promptId = generateIdFromPrompt(prompt);
-      const existingPrompt = existingPromptsMap.get(`${providerKey}:${promptId}`);
-      if (existingPrompt?.metrics) {
-        backfillNamedScoreWeights(existingPrompt.metrics);
-      }
-
       columns.push({ promptIdx: prompts.length, prompt });
       prompts.push({
         ...prompt,
         id: promptId,
         provider: providerKey,
         label: prompt.label,
-        // `existingPromptsMap` is still keyed by identity, so duplicate providers resolve
-        // to the same stored prompt. Clone its metrics so the columns do not accumulate
-        // into one shared object. (Resume has deeper duplicate-provider problems; see
-        // `doEval`, which rebuilds `testSuite.prompts` from the previous run's columns.)
-        metrics: existingPrompt?.metrics
-          ? structuredClone(existingPrompt.metrics)
-          : createDefaultPromptMetrics(),
+        metrics: createDefaultPromptMetrics(),
       });
     }
 
@@ -2348,14 +2575,294 @@ function buildCompletedPrompts(
   return { prompts, columnsByProvider };
 }
 
+function matchesSavedPromptLayout(
+  prompts: CompletedPrompt[],
+  savedPrompts: CompletedPrompt[],
+  allowTemplateDifference: boolean,
+): boolean {
+  return (
+    prompts.length === savedPrompts.length &&
+    prompts.every((prompt, index) => {
+      const saved = savedPrompts[index];
+      return (
+        prompt.provider === saved.provider &&
+        prompt.label === saved.label &&
+        prompt.raw === saved.raw &&
+        (prompt.template === saved.template || allowTemplateDifference) &&
+        isDeepStrictEqual(prompt.config, saved.config)
+      );
+    })
+  );
+}
+
+function canRestoreSavedText(prompts: Prompt[], savedPrompts: CompletedPrompt[]): boolean {
+  if (!prompts.some((prompt) => prompt.function)) {
+    return true;
+  }
+  // An excluded callable must not prevent replaying proven text snapshots. Unknown
+  // snapshots or anything overlapping a callable require the exact live layout.
+  const textRaw = new Set<string>();
+  const callableRaw = new Set<string>();
+  const callableLabels = new Set<string>();
+  for (const prompt of prompts) {
+    if (prompt.function) {
+      callableRaw.add(prompt.raw);
+      callableLabels.add(prompt.label);
+    } else {
+      textRaw.add(prompt.raw);
+    }
+  }
+  return savedPrompts.every(
+    (saved) =>
+      !callableRaw.has(saved.raw) && !callableLabels.has(saved.label) && textRaw.has(saved.raw),
+  );
+}
+
+function promptIdentityCandidates(prompts: Prompt[]): Map<string, Set<string | undefined>> {
+  const identities = new Map<string, Set<string | undefined>>();
+  for (const prompt of prompts) {
+    const key = JSON.stringify([generateIdFromPrompt(prompt), prompt.raw, prompt.label]);
+    const ids = identities.get(key) ?? new Set<string | undefined>();
+    ids.add(prompt.id);
+    identities.set(key, ids);
+  }
+  return identities;
+}
+
+type PreparedPromptRecovery = {
+  mode: 'live' | 'snapshot';
+  hookPrompts: Prompt[];
+  definitions: Prompt[];
+  identities: Map<string, Set<string | undefined>>;
+  canRestoreText: boolean;
+  // Only needed when an exact live slot has different saved definitions per provider.
+  exactProviders?: ApiProvider[];
+  providerOrdinals?: number[];
+};
+
+const clonePromptConfig = Clone({ circles: true });
+
+function copyPromptDefinition(prompt: Prompt): Prompt {
+  return {
+    id: prompt.id,
+    raw: prompt.raw,
+    label: prompt.label,
+    display: prompt.display,
+    template: prompt.template,
+    config: clonePromptConfig(prompt.config),
+    ...(prompt.function && { function: prompt.function }),
+  };
+}
+
+/** Prepares hook-visible definitions without committing columns or checking hook-owned filters. */
+function preparePromptRecovery(
+  testSuite: TestSuite,
+  store: EvaluationStore,
+): PreparedPromptRecovery {
+  const canRestoreText = canRestoreSavedText(testSuite.prompts, store.prompts);
+  const identities = promptIdentityCandidates(testSuite.prompts);
+  const live = buildLivePromptColumns(testSuite);
+  const exact = matchesSavedPromptLayout(live.prompts, store.prompts, canRestoreText);
+  let mode: PreparedPromptRecovery['mode'] = canRestoreText ? 'snapshot' : 'live';
+  let hookPrompts = testSuite.prompts;
+
+  if (exact) {
+    const templates = new Map<Prompt, string | undefined>();
+    let consistent = true;
+    for (const { columns } of live.columnsByProvider) {
+      for (const { prompt, promptIdx } of columns) {
+        const template = store.prompts[promptIdx].template;
+        if (templates.has(prompt) && templates.get(prompt) !== template) {
+          consistent = false;
+        }
+        templates.set(prompt, template);
+      }
+    }
+    if (consistent) {
+      mode = 'live';
+      hookPrompts = testSuite.prompts.map((prompt) =>
+        templates.has(prompt) ? { ...prompt, template: templates.get(prompt) } : prompt,
+      );
+    }
+  }
+  if (mode === 'snapshot') {
+    hookPrompts = store.prompts.map((saved) => {
+      const ids = identities.get(JSON.stringify([saved.id, saved.raw, saved.label]));
+      return { ...saved, id: ids?.size === 1 ? ids.values().next().value : undefined };
+    });
+  }
+  hookPrompts = hookPrompts.map(copyPromptDefinition);
+  return {
+    mode,
+    hookPrompts,
+    definitions: hookPrompts.map(copyPromptDefinition),
+    identities,
+    canRestoreText,
+    ...(mode === 'snapshot' &&
+      exact && {
+        exactProviders: [...testSuite.providers],
+        providerOrdinals: live.columnsByProvider.flatMap(({ columns }, providerIndex) =>
+          columns.map(() => providerIndex),
+        ),
+      }),
+  };
+}
+
+function buildCompletedPrompts(
+  testSuite: TestSuite,
+  store: EvaluationStore,
+  restorePromptColumns: boolean,
+  tests: AtomicTestCase[],
+  recovery?: PreparedPromptRecovery,
+): { prompts: CompletedPrompt[]; columnsByProvider: ProviderColumns[] } {
+  const providerIndices = new Map(
+    testSuite.providers.map((provider, index) => [getProviderIdentifier(provider), index]),
+  );
+  if (recovery) {
+    invariant(
+      testSuite.prompts.length === recovery.definitions.length &&
+        testSuite.prompts.every((prompt, index) =>
+          isDeepStrictEqual(copyPromptDefinition(prompt), recovery.definitions[index]),
+        ),
+      'Cannot resume evaluation because beforeAll changed saved prompt definitions. Start a new evaluation instead.',
+    );
+  }
+  const canRestoreText =
+    recovery?.canRestoreText ??
+    (!restorePromptColumns || canRestoreSavedText(testSuite.prompts, store.prompts));
+  const { prompts, columnsByProvider } =
+    recovery?.mode === 'snapshot'
+      ? { prompts: [], columnsByProvider: [] }
+      : buildLivePromptColumns(testSuite);
+  const matchesSavedLayout = matchesSavedPromptLayout(
+    prompts,
+    store.prompts,
+    restorePromptColumns && canRestoreText,
+  );
+
+  const restoredPrompts = restorePromptColumns
+    ? store.prompts.map((saved) => {
+        const metrics = saved.metrics
+          ? structuredClone(saved.metrics)
+          : createDefaultPromptMetrics();
+        backfillNamedScoreWeights(metrics);
+        return { ...saved, metrics };
+      })
+    : [];
+  if (restorePromptColumns && matchesSavedLayout) {
+    // Preserve positional authored IDs and each saved column's own metrics, even when
+    // provider or prompt identifiers are duplicated.
+    for (const { columns } of columnsByProvider) {
+      for (const column of columns) {
+        column.prompt = { ...column.prompt, template: store.prompts[column.promptIdx].template };
+      }
+    }
+    return { prompts: restoredPrompts, columnsByProvider };
+  }
+
+  if (
+    restorePromptColumns &&
+    canRestoreText &&
+    (providerIndices.size === testSuite.providers.length || recovery?.exactProviders)
+  ) {
+    // Otherwise, recover only identities with an unambiguous saved snapshot match.
+    const identities = recovery?.identities ?? promptIdentityCandidates(testSuite.prompts);
+    const allIds = new Set([...identities.values()].flatMap((ids) => [...ids]));
+    const defaultTest = getDefaultTest(testSuite);
+    const filters = tests.map((test) => ({
+      prompts: test.prompts ?? defaultTest?.prompts,
+      providers: test.providers ?? defaultTest?.providers,
+    }));
+    // Use the ID in both matching fields to isolate identity-based matches. Resolve
+    // this once per bucket, not once per saved column.
+    const identityFilters = (ids: Set<string | undefined>) =>
+      filters.filter((filter) =>
+        [...ids].some((id) => id && isAllowedPrompt({ raw: '', label: id, id }, filter.prompts)),
+      );
+    const ambiguousFilters = new Map(
+      [...identities].map(([key, ids]) => [key, ids.size > 1 ? identityFilters(ids) : []]),
+    );
+    const unknownFilters = identityFilters(allIds);
+    const restoredColumns: ProviderColumns[] = testSuite.providers.map((provider) => ({
+      provider,
+      columns: [],
+    }));
+    if (recovery?.exactProviders) {
+      invariant(
+        recovery.exactProviders.length === testSuite.providers.length &&
+          recovery.exactProviders.every(
+            (provider, index) => provider === testSuite.providers[index],
+          ),
+        'Cannot resume evaluation because saved providers are missing or reordered. Start a new evaluation instead.',
+      );
+    }
+    let previousProviderIndex = -1;
+    restoredPrompts.forEach((prompt, promptIdx) => {
+      const providerIndex =
+        recovery?.providerOrdinals?.[promptIdx] ?? providerIndices.get(prompt.provider) ?? -1;
+      invariant(
+        providerIndex >= 0 &&
+          providerIndex >= previousProviderIndex &&
+          getProviderIdentifier(testSuite.providers[providerIndex]) === prompt.provider,
+        'Cannot resume evaluation because saved providers are missing or reordered. Start a new evaluation instead.',
+      );
+      previousProviderIndex = providerIndex;
+      const key = JSON.stringify([prompt.id, prompt.raw, prompt.label]);
+      const ids = identities.get(key);
+      const runtimePrompt =
+        recovery?.mode === 'snapshot'
+          ? testSuite.prompts[promptIdx]
+          : { ...prompt, id: ids?.size === 1 ? ids.values().next().value : undefined };
+      invariant(
+        isAllowedPrompt(
+          runtimePrompt,
+          getProviderPromptOverride(
+            testSuite.providers[providerIndex],
+            testSuite.providerPromptMap,
+          ) ?? testSuite.providers[providerIndex].prompts,
+        ),
+        'Cannot resume evaluation because provider prompt selectors exclude saved columns. Start a new evaluation instead.',
+      );
+      invariant(
+        (ambiguousFilters.get(key) ?? unknownFilters).every(
+          (filter) =>
+            !isProviderAllowed(testSuite.providers[providerIndex], filter.providers) ||
+            isAllowedPrompt(runtimePrompt, filter.prompts),
+        ),
+        'Cannot resume evaluation because saved prompt IDs cannot be matched to test filters. Start a new evaluation instead.',
+      );
+      restoredColumns[providerIndex].columns.push({ promptIdx, prompt: runtimePrompt });
+    });
+    return { prompts: restoredPrompts, columnsByProvider: restoredColumns };
+  }
+
+  if (cliState.resume && store.persisted && store.prompts.length > 0) {
+    // Resume completion uses column indices. Compare definitions, not generated IDs.
+    invariant(
+      matchesSavedLayout,
+      'Cannot resume evaluation because the saved provider/prompt columns differ. Start a new evaluation instead.',
+    );
+    // Explicit retry configs retain their current definitions, but metrics belong to
+    // saved column positions, not potentially duplicated provider/prompt identities.
+    prompts.forEach((prompt, index) => {
+      const metrics = store.prompts[index].metrics;
+      if (metrics) {
+        prompt.metrics = structuredClone(metrics);
+        backfillNamedScoreWeights(prompt.metrics);
+      }
+    });
+  }
+
+  return { prompts, columnsByProvider };
+}
+
 function resolveAssertionProviderReferences(
   assertion: AssertionOrSet,
   providerMap: Record<string, ApiProvider>,
-  env?: EnvOverrides,
 ): AssertionOrSet {
   if (assertion.type === 'assert-set') {
     const resolvedAssertions = assertion.assert.map(
-      (child) => resolveAssertionProviderReferences(child, providerMap, env) as Assertion,
+      (child) => resolveAssertionProviderReferences(child, providerMap) as Assertion,
     );
     if (resolvedAssertions.every((child, index) => child === assertion.assert[index])) {
       return assertion;
@@ -2363,21 +2870,16 @@ function resolveAssertionProviderReferences(
     return { ...assertion, assert: resolvedAssertions };
   }
 
-  const provider = resolveConfiguredProviderReference(assertion.provider, providerMap, env);
+  const provider = resolveConfiguredProviderReference(assertion.provider, providerMap);
   return provider === assertion.provider ? assertion : { ...assertion, provider };
 }
 
 function resolveRuntimeGradingProviderReferences(
   testCase: AtomicTestCase,
   providerMap: Record<string, ApiProvider>,
-  env?: EnvOverrides,
 ): void {
   if (testCase.options?.provider) {
-    const provider = resolveConfiguredProviderReference(
-      testCase.options.provider,
-      providerMap,
-      env,
-    );
+    const provider = resolveConfiguredProviderReference(testCase.options.provider, providerMap);
     if (provider !== testCase.options.provider) {
       testCase.options = { ...testCase.options, provider };
     }
@@ -2385,7 +2887,7 @@ function resolveRuntimeGradingProviderReferences(
 
   if (testCase.assert) {
     const assertions = testCase.assert.map((assertion) =>
-      resolveAssertionProviderReferences(assertion, providerMap, env),
+      resolveAssertionProviderReferences(assertion, providerMap),
     );
     if (assertions.some((assertion, index) => assertion !== testCase.assert?.[index])) {
       testCase.assert = assertions;
@@ -2545,7 +3047,7 @@ async function buildRunEvalOptions({
   for (let index = 0; index < tests.length; index++) {
     const testCase = tests[index];
     await prepareTestCaseForEval(testSuite, testCase, index);
-    resolveRuntimeGradingProviderReferences(testCase, configuredProviderMap, testSuite.env);
+    resolveRuntimeGradingProviderReferences(testCase, configuredProviderMap);
     testIdx = appendRunEvalOptionsForTestCase({
       concurrency,
       conversations,
@@ -2558,6 +3060,7 @@ async function buildRunEvalOptions({
       registers,
       runEvalOptions,
       testCase,
+      testCaseIndex: index,
       testSuite,
     });
   }
@@ -2644,6 +3147,7 @@ function appendRunEvalOptionsForTestCase({
   registers,
   runEvalOptions,
   testCase,
+  testCaseIndex,
   testSuite,
 }: {
   concurrency: number;
@@ -2657,6 +3161,7 @@ function appendRunEvalOptionsForTestCase({
   registers: EvalRegisters;
   runEvalOptions: RunEvalOptions[];
   testCase: AtomicTestCase;
+  testCaseIndex: number;
   testSuite: TestSuite;
 }) {
   const promptPrefix = testCase.options?.prefix || getDefaultTest(testSuite)?.options?.prefix || '';
@@ -2673,7 +3178,7 @@ function appendRunEvalOptionsForTestCase({
     repeat: testRepeat,
   };
   for (let repeatIndex = 0; repeatIndex < testRepeat; repeatIndex++) {
-    for (const vars of varCombinations) {
+    for (const [varCombinationIndex, vars] of varCombinations.entries()) {
       appendRunEvalOptionsForVars({
         concurrency,
         conversations,
@@ -2685,6 +3190,8 @@ function appendRunEvalOptionsForTestCase({
         providerAbortSignal,
         rateLimitRegistry,
         registers,
+        repeatGroupId:
+          testRepeat > 1 ? `test-${testCaseIndex}-vars-${varCombinationIndex}` : undefined,
         repeatIndex,
         runEvalOptions,
         testCase,
@@ -2710,6 +3217,7 @@ function appendRunEvalOptionsForVars({
   providerAbortSignal,
   rateLimitRegistry,
   registers,
+  repeatGroupId,
   repeatIndex,
   runEvalOptions,
   testCase,
@@ -2727,6 +3235,7 @@ function appendRunEvalOptionsForVars({
   providerAbortSignal?: AbortSignal;
   rateLimitRegistry?: RateLimitRegistryRef;
   registers: EvalRegisters;
+  repeatGroupId?: string;
   repeatIndex: number;
   runEvalOptions: RunEvalOptions[];
   testCase: AtomicTestCase;
@@ -2750,6 +3259,7 @@ function appendRunEvalOptionsForVars({
       providerAbortSignal,
       rateLimitRegistry,
       registers,
+      repeatGroupId,
       repeatIndex,
       runEvalOptions,
       testCase,
@@ -2772,6 +3282,7 @@ function appendRunEvalOptionsForProvider({
   providerAbortSignal,
   rateLimitRegistry,
   registers,
+  repeatGroupId,
   repeatIndex,
   runEvalOptions,
   testCase,
@@ -2790,6 +3301,7 @@ function appendRunEvalOptionsForProvider({
   providerAbortSignal?: AbortSignal;
   rateLimitRegistry?: RateLimitRegistryRef;
   registers: EvalRegisters;
+  repeatGroupId?: string;
   repeatIndex: number;
   runEvalOptions: RunEvalOptions[];
   testCase: AtomicTestCase;
@@ -2816,6 +3328,7 @@ function appendRunEvalOptionsForProvider({
         providerAbortSignal,
         rateLimitRegistry,
         registers,
+        repeatGroupId,
         repeatIndex,
         testCase,
         testIdx,
@@ -2839,6 +3352,7 @@ function createRunEvalOption({
   providerAbortSignal,
   rateLimitRegistry,
   registers,
+  repeatGroupId,
   repeatIndex,
   testCase,
   testIdx,
@@ -2857,6 +3371,7 @@ function createRunEvalOption({
   providerAbortSignal?: AbortSignal;
   rateLimitRegistry?: RateLimitRegistryRef;
   registers: EvalRegisters;
+  repeatGroupId?: string;
   repeatIndex: number;
   testCase: AtomicTestCase;
   testIdx: number;
@@ -2876,6 +3391,7 @@ function createRunEvalOption({
     nunjucksFilters: testSuite.nunjucksFilters,
     testIdx,
     promptIdx,
+    repeatGroupId,
     repeatIndex,
     evaluateOptions: options,
     conversations,
@@ -2945,6 +3461,221 @@ function markComparisonRows(
     }
   }
 }
+
+function hasCompletedComparison(
+  result: EvaluationStoreResult,
+  type: 'select-best' | 'max-score',
+): boolean {
+  // Target failures have no comparison component and cannot be regraded by resume.
+  if (result.failureReason === ResultFailureReason.ERROR && !getComparisonError(result)) {
+    return true;
+  }
+  return (
+    result.gradingResult?.assertion?.type === type ||
+    result.gradingResult?.componentResults?.some(
+      (component) => component.assertion?.type === type,
+    ) === true
+  );
+}
+
+type ComparisonErrorState = Pick<
+  EvaluationStoreResult,
+  'success' | 'score' | 'failureReason' | 'error'
+>;
+
+function getComparisonError(result: EvaluationStoreResult): ComparisonErrorState | undefined {
+  const state = result.metadata?.[PROMPTFOO_METADATA_KEY]?.comparisonError;
+  return typeof state?.success === 'boolean' &&
+    typeof state.score === 'number' &&
+    (state.failureReason === ResultFailureReason.NONE ||
+      state.failureReason === ResultFailureReason.ASSERT)
+    ? state
+    : undefined;
+}
+
+function setComparisonError(result: EvaluationStoreResult, state?: ComparisonErrorState) {
+  const internal = result.metadata?.[PROMPTFOO_METADATA_KEY];
+  if (!state && !internal?.comparisonError) {
+    return;
+  }
+  const fields =
+    internal && typeof internal === 'object' && !Array.isArray(internal) ? { ...internal } : {};
+  if (state) {
+    fields.comparisonError = state;
+  } else {
+    delete fields.comparisonError;
+  }
+  result.metadata = { ...result.metadata, [PROMPTFOO_METADATA_KEY]: fields };
+  if (Object.keys(fields).length === 0) {
+    delete result.metadata[PROMPTFOO_METADATA_KEY];
+  }
+}
+
+const COMPARISON_ERROR_PREFIX = 'Error grading select-best';
+const COMPARISON_RESUME_ERROR =
+  'Cannot resume select-best with this grader configuration. Supply a grader configuration matching the saved result, or rerun the evaluation.';
+
+function hasComparisonRedactions(
+  value: unknown,
+  field?: string,
+  parentField?: string,
+  seen = new WeakSet<object>(),
+): boolean {
+  if (typeof value === 'string') {
+    const masked =
+      value.includes(REDACTED) ||
+      /%(?:25)*5BREDACTED%(?:25)*5D/i.test(value) ||
+      value.includes('***:***@');
+    return (
+      masked &&
+      ((field === undefined && /^(?:[a-z][a-z0-9+.-]*:\/\/|\/[^?#]*[?#])/i.test(value)) ||
+        field === 'id' ||
+        (field !== undefined &&
+          (isSecretField(field) ||
+            /(?:url|uri|host|endpoint|proxy)$/i.test(field) ||
+            (parentField === 'env' && isSecretEnvVarName(field)) ||
+            (parentField?.toLowerCase() === 'headers' && !isNonCredentialHeader(field)))))
+    );
+  }
+  if (!value || typeof value !== 'object' || seen.has(value)) {
+    return false;
+  }
+  seen.add(value);
+  return Object.entries(value).some(
+    ([key, entry]) =>
+      hasComparisonRedactions(key, undefined, undefined, seen) ||
+      hasComparisonRedactions(entry, key, field, seen),
+  );
+}
+
+function comparisonProviderOptions(provider: GradingConfig['provider']) {
+  if (isApiProvider(provider)) {
+    return {
+      id: provider.id(),
+      label: provider.label,
+      config: provider.config,
+      env: (provider as ApiProvider & { env?: EnvOverrides }).env,
+    };
+  }
+  return provider;
+}
+
+function comparisonProviderId(provider: GradingConfig['provider']): string | undefined {
+  const id =
+    typeof provider === 'string'
+      ? provider
+      : isApiProvider(provider)
+        ? provider.id()
+        : provider?.id;
+  if (typeof id !== 'string') {
+    return undefined;
+  }
+  const canonicalId = providerToIdentifier(id) ?? id;
+  return canonicalId.includes('://') || canonicalId.startsWith('/')
+    ? sanitizeUrl(canonicalId)
+    : canonicalId;
+}
+
+function comparisonProviderSettings(provider: GradingConfig['provider']) {
+  const persisted = persistComparisonProvider(provider);
+  const options = typeof persisted === 'string' ? { id: persisted } : persisted;
+  // Compare every nonsecret option, including endpoint/account settings and env overrides.
+  // Strip functions and undefined fields exactly as persistence does.
+  return JSON.parse(
+    safeJsonStringify({ ...options, id: comparisonProviderId(provider), label: undefined })!,
+  );
+}
+
+function restoreComparisonProvider(
+  saved: GradingConfig['provider'],
+  configured: GradingConfig['provider'],
+  currentResult: boolean,
+): GradingConfig['provider'] {
+  if (!saved || isApiProvider(saved)) {
+    return saved;
+  }
+  const configuredText = isProviderTypeMap(configured) ? configured.text : configured;
+  if (isProviderTypeMap(saved)) {
+    return { ...saved, text: restoreComparisonProvider(saved.text, configuredText, currentResult) };
+  }
+  const savedId = comparisonProviderId(saved);
+  invariant(
+    savedId &&
+      savedId !== REDACTED &&
+      !savedId.startsWith('[Function] ') &&
+      !/^\[.+ Instance\]$/.test(savedId),
+    'Cannot resume select-best because the saved runtime grader has no provider ID. Rerun the evaluation.',
+  );
+  const sameId = savedId === comparisonProviderId(configuredText);
+  const canRestore =
+    sameId &&
+    (currentResult ||
+      isDeepStrictEqual(
+        comparisonProviderSettings(saved),
+        comparisonProviderSettings(configuredText),
+      ));
+  if (canRestore) {
+    invariant(
+      !hasComparisonRedactions(comparisonProviderOptions(configuredText)),
+      COMPARISON_RESUME_ERROR,
+    );
+    // Use the actual descriptor or handle, including credentials embedded in URLs.
+    return configuredText;
+  }
+  invariant(
+    !hasComparisonRedactions(saved) && !(sameId && isApiProvider(configuredText)),
+    COMPARISON_RESUME_ERROR,
+  );
+  return saved;
+}
+
+function snapshotComparisonProvider(
+  provider: GradingConfig['provider'],
+  seen = new WeakMap<object, GradingConfig['provider']>(),
+): GradingConfig['provider'] {
+  if (!provider || typeof provider !== 'object' || isApiProvider(provider)) {
+    return provider;
+  }
+  const prototype = Object.getPrototypeOf(provider);
+  if (!Array.isArray(provider) && prototype !== Object.prototype && prototype !== null) {
+    return provider;
+  }
+  if (seen.has(provider)) {
+    return seen.get(provider);
+  }
+  const snapshot = Array.isArray(provider) ? new Array(provider.length) : {};
+  seen.set(provider, snapshot);
+  for (const [key, value] of Object.entries(provider)) {
+    Object.defineProperty(snapshot, key, {
+      value: snapshotComparisonProvider(value, seen),
+      enumerable: true,
+      writable: true,
+      configurable: true,
+    });
+  }
+  return snapshot;
+}
+
+function persistComparisonProvider(provider: GradingConfig['provider']): GradingConfig['provider'] {
+  const options = isProviderTypeMap(provider)
+    ? { ...provider, text: persistComparisonProvider(provider.text) }
+    : comparisonProviderOptions(provider);
+  return sanitizeObject(options, {
+    sanitizeUrls: true,
+    maxDepth: Number.POSITIVE_INFINITY,
+    throwOnError: true,
+  });
+}
+
+function getComparisonProviders(test: AtomicTestCase, currentResult = false) {
+  const assertion = test.assert?.find((a): a is Assertion => a.type === 'select-best');
+  return {
+    provider: snapshotComparisonProvider(assertion?.provider || test.options?.provider),
+    currentResult,
+  };
+}
+
+type ComparisonProviders = ReturnType<typeof getComparisonProviders>;
 
 type RepeatCacheContext = Pick<RunEvalOptions, 'evaluateOptions' | 'repeatIndex'>;
 
@@ -3043,6 +3774,7 @@ interface GroupedRows {
 interface EvalProcessingContext {
   assertionTypes: Set<string>;
   concurrency: number;
+  deferredGradingAbortSignal?: AbortSignal;
   mathjsModule: typeof import('mathjs') | null;
   numComplete: number;
   options: InternalEvaluateOptions;
@@ -3063,13 +3795,16 @@ async function runGroupedGradingForRows(
   providerCallQueue: ProviderGroupedCallQueue,
   onRowsGraded: (entry: GroupedRows) => Promise<void>,
 ) {
-  const rowsWithDeferredGrading = getRowsWithDeferredGrading(entries);
+  const rowsWithDeferredGrading = entries
+    .flatMap((entry) => entry.rows)
+    .flatMap((row) => {
+      const gradingPromise = deferredGradingPromises.get(row);
+      return gradingPromise === undefined ? [] : [{ row, gradingPromise }];
+    });
   if (rowsWithDeferredGrading.length === 0) {
     return;
   }
 
-  const deferredRows = new Set(rowsWithDeferredGrading.map(({ row }) => row));
-  const completedRows = new Set<EvaluateResult>();
   const processedEntries = new Set<GroupedRows>();
   let pendingCount = rowsWithDeferredGrading.length;
   let resolveAllDone: () => void = () => {};
@@ -3080,7 +3815,6 @@ async function runGroupedGradingForRows(
   const gradingPromises = rowsWithDeferredGrading.map(({ row, gradingPromise }) =>
     gradingPromise.finally(() => {
       deferredGradingPromises.delete(row);
-      completedRows.add(row);
       pendingCount--;
       if (pendingCount === 0) {
         resolveAllDone();
@@ -3093,7 +3827,7 @@ async function runGroupedGradingForRows(
       if (processedEntries.has(entry)) {
         continue;
       }
-      if (!entry.rows.every((row) => !deferredRows.has(row) || completedRows.has(row))) {
+      if (!entry.rows.every((row) => !deferredGradingPromises.has(row))) {
         break;
       }
       processedEntries.add(entry);
@@ -3123,21 +3857,6 @@ async function runGroupedGradingForRows(
 
   await Promise.all(gradingPromises);
   await processReadyEntries();
-}
-
-function getRowsWithDeferredGrading(entries: GroupedRows[]) {
-  return entries
-    .flatMap((entry) => entry.rows.map((row) => ({ entry, row })))
-    .map(({ entry, row }) => ({ entry, row, gradingPromise: deferredGradingPromises.get(row) }))
-    .filter(
-      (
-        item,
-      ): item is {
-        entry: GroupedRows;
-        row: EvaluateResult;
-        gradingPromise: Promise<void>;
-      } => item.gradingPromise !== undefined,
-    );
 }
 
 function trackComparisonRowsForEvalStep(
@@ -3191,6 +3910,10 @@ function createEvalStepTimeoutResult(
     namedScores: {},
     latencyMs: timeoutMs,
     promptIdx: evalStep.promptIdx,
+    ...(evalStep.repeatGroupId !== undefined && {
+      repeatGroupId: evalStep.repeatGroupId,
+      repeatIndex: evalStep.repeatIndex,
+    }),
     testIdx: evalStep.testIdx,
     testCase: sanitizedTestCase,
     promptId: evalStep.prompt.id || '',
@@ -3286,6 +4009,10 @@ function createMaxDurationTimeoutResult(
     namedScores: {},
     latencyMs: Date.now() - startTime,
     promptIdx: evalStep.promptIdx,
+    ...(evalStep.repeatGroupId !== undefined && {
+      repeatGroupId: evalStep.repeatGroupId,
+      repeatIndex: evalStep.repeatIndex,
+    }),
     testIdx: evalStep.testIdx,
     testCase: evalStep.test,
     promptId: evalStep.prompt.id || '',
@@ -3341,6 +4068,15 @@ function usesExampleProvider(testSuite: TestSuite) {
   });
 }
 
+interface EvaluationDeadline {
+  startTime: number;
+  maxEvalTimeMs: number;
+  providerAbortSignal?: AbortSignal;
+  deferredGradingAbortSignal?: AbortSignal;
+  globalTimeout?: NodeJS.Timeout;
+  isTimedOut: () => boolean;
+}
+
 class Evaluator<TEvaluation extends EvaluationRecord, TResult extends EvaluationStoreResult> {
   store: EvaluationStore<TEvaluation, TResult>;
   testSuite: TestSuite;
@@ -3350,6 +4086,11 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
   registers: EvalRegisters;
   fileWriters: EvaluatorResultWriter[];
   rateLimitRegistry: RateLimitRegistry | undefined;
+  private readonly comparisonProviders = new Map<string, ComparisonProviders>();
+  private readonly currentResultKeys = new Set<string>();
+  private readonly retryErrorResultIds = new Set(
+    cliState.retryMode ? cliState._retryErrorResultIds : [],
+  );
   constructor(
     testSuite: TestSuite,
     store: EvaluationStore<TEvaluation, TResult>,
@@ -3373,7 +4114,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     });
 
     // Create rate limit registry for adaptive concurrency control
-    this.rateLimitRegistry = createRateLimitRegistry({
+    this.rateLimitRegistry = new RateLimitRegistry({
       maxConcurrency: options.maxConcurrency || DEFAULT_MAX_CONCURRENCY,
     });
 
@@ -3439,8 +4180,43 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         metrics.testPassCount -= 1;
         metrics.testFailCount += 1;
       }
-      this.stats.successes -= 1;
-      this.stats.failures += 1;
+      if (this.currentResultKeys.has(getResultIndexKey(result))) {
+        this.stats.successes -= 1;
+        this.stats.failures += 1;
+      }
+    }
+  }
+
+  private updateComparisonResultCounts(
+    result: TResult,
+    previous: Pick<TResult, 'success' | 'score' | 'failureReason'>,
+    metrics: CompletedPrompt['metrics'] | undefined,
+  ) {
+    const outcome = (row: typeof previous) =>
+      row.success
+        ? 'successes'
+        : row.failureReason === ResultFailureReason.ERROR
+          ? 'errors'
+          : 'failures';
+    const before = outcome(previous);
+    const after = outcome(result);
+    if (before !== after) {
+      if (this.currentResultKeys.has(getResultIndexKey(result))) {
+        this.stats[before]--;
+        this.stats[after]++;
+      }
+      if (metrics) {
+        const counts = {
+          successes: 'testPassCount',
+          failures: 'testFailCount',
+          errors: 'testErrorCount',
+        } as const;
+        metrics[counts[before]]--;
+        metrics[counts[after]]++;
+      }
+    }
+    if (metrics) {
+      metrics.score += result.score - previous.score;
     }
   }
 
@@ -3470,6 +4246,32 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
   }
 
   private async persistEvalRow(row: EvaluateResult): Promise<void> {
+    this.currentResultKeys.add(getResultIndexKey(row));
+    setComparisonError(row);
+    if (row.testCase.assert?.some((assertion) => assertion.type === 'select-best')) {
+      // Capture grader references before a later hook can replace shared nested test fields.
+      this.comparisonProviders.set(
+        getResultIndexKey(row),
+        getComparisonProviders(row.testCase, true),
+      );
+      row.testCase = {
+        ...row.testCase,
+        ...(row.testCase.options && {
+          options: {
+            ...row.testCase.options,
+            provider: persistComparisonProvider(row.testCase.options.provider),
+          },
+        }),
+        assert: row.testCase.assert?.map((assertion) =>
+          assertion.type === 'select-best'
+            ? {
+                ...assertion,
+                provider: persistComparisonProvider((assertion as Assertion).provider),
+              }
+            : assertion,
+        ),
+      };
+    }
     try {
       await this.store.appendResult(row);
     } catch (error) {
@@ -3558,6 +4360,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
           precomputedRows ||
           (await this.runEvalStepAfterBeforeEach(evalStep, {
             deferGrading,
+            deferredGradingAbortSignal: context.deferredGradingAbortSignal,
             onRowsReady,
             providerCallQueue,
             testSuite: context.testSuite,
@@ -3575,11 +4378,13 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     evalStep: RunEvalOptions,
     {
       deferGrading,
+      deferredGradingAbortSignal,
       onRowsReady,
       providerCallQueue,
       testSuite,
     }: {
       deferGrading: boolean;
+      deferredGradingAbortSignal?: AbortSignal;
       onRowsReady?: () => void;
       providerCallQueue?: ProviderCallQueue;
       testSuite: TestSuite;
@@ -3590,11 +4395,14 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     });
     evalStep.test = beforeEachOut.test;
 
-    const rows = await runEvalInternal({
-      ...evalStep,
-      deferGrading,
-      providerCallQueue: deferGrading ? providerCallQueue : undefined,
-    });
+    const rows = await runEvalInternal(
+      {
+        ...evalStep,
+        deferGrading,
+        providerCallQueue: deferGrading ? providerCallQueue : undefined,
+      },
+      { abortSignal: deferredGradingAbortSignal, pauseSignal: this.options.pauseSignal },
+    );
     onRowsReady?.();
     return rows;
   }
@@ -3659,10 +4467,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
 
       await this.persistEvalRow(row);
 
-      if (this.abortIfTargetUnavailable(row, context)) {
-        break;
-      }
-
       const metrics = context.prompts[row.promptIdx].metrics;
       invariant(metrics, 'Expected prompt.metrics to be set');
       this.updatePromptMetricsForRow({
@@ -3673,6 +4477,12 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         promptEvalCount: reservePromptEvalCount(context, row.promptIdx),
         row,
       });
+
+      // The row that stops the eval is counted first, like any other error. Otherwise the
+      // summary and the exit code would report only the rows that passed before it.
+      if (this.abortIfTargetUnavailable(row, context)) {
+        break;
+      }
 
       context.options.progressCallback?.(
         context.numComplete,
@@ -3783,6 +4593,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       }
       await this.addEvalStepTimeoutResult(evalStep, index, timeoutMs, error, context);
     } finally {
+      evalStep.test = evalStepWithSignal.test;
       clearEvalStepTimeout();
     }
   }
@@ -3888,6 +4699,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
           prompts,
         });
       }
+      checkAbort();
     } catch (err) {
       if (!combinedAbortSignal.aborted) {
         cleanupProgressAfterError(progressBarManager, ciProgressReporter, err);
@@ -3950,8 +4762,10 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       processedIndices.add(index);
       await flushPromptMetrics();
     };
-    const flushGroupedRows = () =>
-      runGroupedGradingForRows(groupedRows, providerCallQueue, processGroupedRows);
+    const flushGroupedRows = async () => {
+      await runGroupedGradingForRows(groupedRows, providerCallQueue, processGroupedRows);
+      groupedRows.length = 0;
+    };
 
     try {
       for (const evalStep of groupedRunEvalOptions) {
@@ -3984,6 +4798,17 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
           })
         ) {
           break;
+        }
+
+        // Release clips and workspaces before collecting another target response.
+        if (
+          rows.some(
+            (row) =>
+              (row.response?.audio || row.response?.metadata?.workingDir) &&
+              deferredGradingPromises.has(row),
+          )
+        ) {
+          await flushGroupedRows();
         }
       }
     } catch (error) {
@@ -4163,6 +4988,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
 
   private async processComparisonAssertions({
     ciProgressReporter,
+    isEvalTimedOut,
     isWebUI,
     progressBarManager,
     prompts,
@@ -4173,6 +4999,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     runEvalOptions,
   }: {
     ciProgressReporter: CIProgressReporter | null;
+    isEvalTimedOut: () => boolean;
     isWebUI: boolean;
     progressBarManager: ProgressBarManager | null;
     prompts: CompletedPrompt[];
@@ -4190,27 +5017,81 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       runEvalOptions,
     });
 
-    const compareCount = await this.processSelectBestAssertions({
-      ciProgressReporter,
-      compareRowsCount,
-      isWebUI,
-      progressBarManager,
-      prompts,
-      providerAbortSignal,
-      repeatCacheContextByTestIdx,
-      rowsWithSelectBestAssertion,
-      runEvalOptions,
-    });
+    const pendingSelectBest = new Set(rowsWithSelectBestAssertion);
+    const pendingMaxScore = new Set(rowsWithMaxScoreAssertion);
+    try {
+      const compareCount = await this.processSelectBestAssertions({
+        ciProgressReporter,
+        compareRowsCount,
+        isWebUI,
+        progressBarManager,
+        prompts,
+        providerAbortSignal,
+        repeatCacheContextByTestIdx,
+        rowsWithSelectBestAssertion: pendingSelectBest,
+        runEvalOptions,
+      });
 
-    await this.processMaxScoreAssertions({
-      ciProgressReporter,
-      compareCount,
-      isWebUI,
-      progressBarManager,
-      prompts,
-      rowsWithMaxScoreAssertion,
-      runEvalOptions,
-    });
+      await this.processMaxScoreAssertions({
+        ciProgressReporter,
+        compareCount,
+        isWebUI,
+        progressBarManager,
+        prompts,
+        providerAbortSignal,
+        rowsWithMaxScoreAssertion: pendingMaxScore,
+        runEvalOptions,
+      });
+      providerAbortSignal?.throwIfAborted();
+    } catch (error) {
+      if (!isGradingAbort(error, providerAbortSignal)) {
+        throw error;
+      }
+      await this.markComparisonRowsAborted(
+        new Set([...pendingSelectBest, ...pendingMaxScore]),
+        prompts,
+        error,
+        providerAbortSignal,
+      );
+      if (!isEvalTimedOut()) {
+        return false;
+      }
+      logger.debug('Comparison grading stopped at the evaluation deadline');
+    }
+    return true;
+  }
+
+  private async markComparisonRowsAborted(
+    testIndexes: Set<number>,
+    prompts: CompletedPrompt[],
+    error: unknown,
+    abortSignal?: AbortSignal,
+  ) {
+    for (const testIdx of testIndexes) {
+      const results = await this.getResultsToCompare(testIdx);
+      for (const result of results) {
+        if (result.failureReason === ResultFailureReason.ERROR) {
+          continue;
+        }
+        const metrics = prompts[result.promptIdx]?.metrics;
+        const previous = {
+          success: result.success,
+          score: result.score,
+          failureReason: result.failureReason,
+          error: result.error,
+        };
+        setComparisonError(result, previous);
+        const completedNamedScores = result.namedScores;
+        applyGradingError(result, error, abortSignal);
+        // Earlier per-row assertions finished before the comparison was interrupted.
+        result.namedScores = completedNamedScores;
+        this.updateComparisonResultCounts(result, previous, metrics);
+        this.trackFinalJsonlResult(result);
+        if (this.store.persisted && !this.store.hasResultPersistenceFailure(result)) {
+          await this.store.saveResult(result);
+        }
+      }
+    }
   }
 
   private async processSelectBestAssertions({
@@ -4236,6 +5117,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
   }) {
     let compareCount = 0;
     for (const testIdx of rowsWithSelectBestAssertion) {
+      providerAbortSignal?.throwIfAborted();
       compareCount++;
       await this.processSelectBestAssertionForTest({
         ciProgressReporter,
@@ -4249,6 +5131,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         runEvalOptions,
         testIdx,
       });
+      rowsWithSelectBestAssertion.delete(testIdx);
     }
     return compareCount;
   }
@@ -4286,36 +5169,106 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       return;
     }
 
-    const compareAssertion = resultsToCompare[0].testCase.assert?.find(
-      (a) => a.type === 'select-best',
-    ) as Assertion;
-    if (!compareAssertion) {
+    if (
+      cliState.resume &&
+      resultsToCompare.every((result) => hasCompletedComparison(result, 'select-best'))
+    ) {
       return;
     }
 
-    const repeatCacheContext = repeatCacheContextByTestIdx.get(testIdx);
-    const outputs = resultsToCompare.map((r) => r.response?.output || '');
-    const gradingResults = await withCacheNamespace(
-      repeatCacheContext
-        ? getRepeatCacheNamespace(
-            repeatCacheContext.repeatIndex,
-            repeatCacheContext.evaluateOptions,
-          )
-        : undefined,
-      () =>
-        withProviderCallExecutionContext(
-          { abortSignal: providerAbortSignal, rateLimitRegistry: this.rateLimitRegistry },
-          () =>
-            runCompareAssertion(
-              resultsToCompare[0].testCase,
-              compareAssertion,
-              outputs,
-              this.getComparisonCallApiContext(resultsToCompare[0], repeatCacheContext),
-            ),
+    const firstResult = resultsToCompare[0];
+    const savedTest = firstResult.testCase;
+    const assertion = savedTest.assert?.find((a): a is Assertion => a.type === 'select-best');
+    if (!assertion) {
+      return;
+    }
+    let gradingResults: GradingResult[];
+    try {
+      const providers = this.comparisonProviders.get(getResultIndexKey(firstResult));
+      // Persisted rows retain each column's hook-adjusted criteria and vars. Only grader
+      // references and redacted credentials need to come from the current configuration.
+      const comparisonTestCase = {
+        ...savedTest,
+        options: {
+          ...savedTest.options,
+          provider: undefined,
+        },
+      };
+      const compareAssertion = {
+        ...assertion,
+        provider: restoreComparisonProvider(
+          assertion.provider || savedTest.options?.provider,
+          providers?.provider,
+          providers?.currentResult ?? false,
         ),
-    );
+      };
 
-    for (let index = 0; index < resultsToCompare.length; index++) {
+      const repeatCacheContext = repeatCacheContextByTestIdx.get(testIdx);
+      const outputs = resultsToCompare.map((r) => r.response?.output || '');
+      gradingResults = await withCacheNamespace(
+        repeatCacheContext
+          ? getRepeatCacheNamespace(
+              repeatCacheContext.repeatIndex,
+              repeatCacheContext.evaluateOptions,
+            )
+          : undefined,
+        () =>
+          withProviderCallExecutionContext(
+            { abortSignal: providerAbortSignal, rateLimitRegistry: this.rateLimitRegistry },
+            () =>
+              runCompareAssertion(
+                comparisonTestCase,
+                compareAssertion,
+                outputs,
+                this.getComparisonCallApiContext(resultsToCompare[0], repeatCacheContext),
+              ),
+          ),
+      );
+    } catch (error) {
+      if (isGradingAbort(error, providerAbortSignal)) {
+        throw error;
+      }
+      const graderId = comparisonProviderId(assertion.provider ?? savedTest.options?.provider);
+      // Provider errors can contain credentials or config source snippets, so saved results get
+      // a generic reason. The run's log file records debug messages even without --verbose, so
+      // the cause is logged only when debug output was asked for.
+      if (isDebugEnabled()) {
+        logger.debug('[Evaluator] select-best grading failed', {
+          error: error instanceof Error ? (error.stack ?? error.message) : String(error),
+          graderId,
+          testIdx,
+        });
+      }
+      const message =
+        'Check the grader configuration and credentials. Supply a grader configuration matching the saved result to resume, or rerun the evaluation. Run with --verbose to log the underlying error.';
+      const reason = `${COMPARISON_ERROR_PREFIX}${graderId ? ` (${graderId})` : ''}: ${message}`;
+      gradingResults = [];
+      for (const result of resultsToCompare) {
+        if (result.failureReason === ResultFailureReason.ERROR && !getComparisonError(result)) {
+          continue;
+        }
+        const previous = {
+          success: result.success,
+          score: result.score,
+          failureReason: result.failureReason,
+        };
+        // Keep the existing assertion verdict and outcome for a successful retry.
+        if (!getComparisonError(result)) {
+          setComparisonError(result, { ...previous, error: result.error });
+        }
+        result.error = reason;
+        result.failureReason = ResultFailureReason.ERROR;
+        result.success = false;
+        result.score = 0;
+        this.updateComparisonResultCounts(result, previous, prompts[result.promptIdx]?.metrics);
+        this.trackFinalJsonlResult(result);
+        if (this.store.persisted && !this.store.hasResultPersistenceFailure(result)) {
+          await this.store.saveResult(result);
+        }
+      }
+    }
+
+    for (let index = 0; index < gradingResults.length; index++) {
       await this.applySelectBestGradingResult({
         gradingResult: gradingResults[index],
         metrics: prompts[resultsToCompare[index].promptIdx]?.metrics,
@@ -4340,6 +5293,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     isWebUI,
     progressBarManager,
     prompts,
+    providerAbortSignal,
     rowsWithMaxScoreAssertion,
     runEvalOptions,
   }: {
@@ -4348,6 +5302,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     isWebUI: boolean;
     progressBarManager: ProgressBarManager | null;
     prompts: CompletedPrompt[];
+    providerAbortSignal?: AbortSignal;
     rowsWithMaxScoreAssertion: Set<number>;
     runEvalOptions: RunEvalOptions[];
   }) {
@@ -4357,6 +5312,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
 
     let currentCompareCount = compareCount;
     for (const testIdx of rowsWithMaxScoreAssertion) {
+      providerAbortSignal?.throwIfAborted();
       currentCompareCount++;
       await this.processMaxScoreAssertionForTest({
         ciProgressReporter,
@@ -4367,6 +5323,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         runEvalOptions,
         testIdx,
       });
+      rowsWithMaxScoreAssertion.delete(testIdx);
     }
   }
 
@@ -4393,6 +5350,13 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       return;
     }
 
+    if (
+      cliState.resume &&
+      resultsToCompare.every((result) => hasCompletedComparison(result, 'max-score'))
+    ) {
+      return;
+    }
+
     const maxScoreAssertion = resultsToCompare[0].testCase.assert?.find(
       (a) => a.type === 'max-score',
     ) as Assertion;
@@ -4403,7 +5367,11 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     const outputs = resultsToCompare.map((r) => r.response?.output || '');
     const maxScoreGradingResults = await selectMaxScore(
       outputs,
-      resultsToCompare,
+      resultsToCompare.map((result) => ({
+        gradingResult: result.gradingResult,
+        unavailable:
+          result.failureReason === ResultFailureReason.ERROR && !getComparisonError(result),
+      })),
       maxScoreAssertion,
     );
 
@@ -4430,9 +5398,20 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
   }
 
   private async getResultsToCompare(testIdx: number): Promise<TResult[]> {
-    const base = this.store.persisted
+    let base = this.store.persisted
       ? await this.store.readResultsByTestIdx(testIdx)
       : this.store.results.filter((r) => r.testIdx === testIdx);
+    // Retry keeps old errors until new results are saved. Compare only their replacements.
+    if (this.retryErrorResultIds.size > 0) {
+      base = base.filter(
+        (result) =>
+          !(
+            'id' in result &&
+            typeof result.id === 'string' &&
+            this.retryErrorResultIds.has(result.id)
+          ),
+      );
+    }
     if (!this.store.resultPersistenceFailed) {
       return base;
     }
@@ -4468,8 +5447,8 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
 
   // Shared tail for the comparison graders: record the pass/score transition, capture the
   // canonical row for JSONL finalization, and persist (unless this row already failed to
-  // persist, in which case re-saving would just re-throw). `wasSuccess`/`wasScore` must be
-  // captured by the caller before its merge mutates `result`.
+  // persist, in which case re-saving would just re-throw). Capture the previous outcome
+  // before merging so retries can update error counts in both directions.
   private async finalizeComparisonGrading({
     gradingResult,
     metrics,
@@ -4524,6 +5503,30 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     }
   }
 
+  private restoreComparisonResult(
+    result: TResult,
+    metrics: CompletedPrompt['metrics'] | undefined,
+  ) {
+    if (result.failureReason === ResultFailureReason.ERROR) {
+      const saved = getComparisonError(result);
+      if (!saved) {
+        return false;
+      }
+      const previous = {
+        success: result.success,
+        score: result.score,
+        failureReason: result.failureReason,
+      };
+      result.success = saved.success;
+      result.score = saved.score;
+      result.failureReason = saved.failureReason;
+      result.error = saved.error;
+      setComparisonError(result);
+      this.updateComparisonResultCounts(result, previous, metrics);
+    }
+    return true;
+  }
+
   private async applySelectBestGradingResult({
     gradingResult,
     metrics,
@@ -4533,6 +5536,9 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     metrics: CompletedPrompt['metrics'] | undefined;
     result: TResult;
   }) {
+    if (!this.restoreComparisonResult(result, metrics)) {
+      return;
+    }
     const wasSuccess = result.success;
     const wasScore = result.score;
     mergeSelectBestGradingResult(result, gradingResult, this.stats.tokenUsage);
@@ -4548,6 +5554,16 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     metrics: CompletedPrompt['metrics'] | undefined;
     result: TResult;
   }) {
+    // A failed select-best grader must remain an error until that grader succeeds.
+    if (
+      result.failureReason === ResultFailureReason.ERROR &&
+      !result.error?.startsWith(ABORTED_GRADING_PREFIX)
+    ) {
+      return;
+    }
+    if (!this.restoreComparisonResult(result, metrics)) {
+      return;
+    }
     const wasSuccess = result.success;
     const wasScore = result.score;
     mergeMaxScoreGradingResult(result, gradingResult);
@@ -4747,15 +5763,17 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     });
   }
 
-  private async _runEvaluation(): Promise<TEvaluation> {
+  private async _runEvaluation({
+    startTime,
+    maxEvalTimeMs,
+    providerAbortSignal,
+    deferredGradingAbortSignal,
+    globalTimeout,
+    isTimedOut,
+  }: EvaluationDeadline): Promise<TEvaluation> {
     const { options } = this;
     let { testSuite } = this;
 
-    const startTime = Date.now();
-    const maxEvalTimeMs = options.maxEvalTimeMs ?? getMaxEvalTimeMs();
-    let evalTimedOut = false;
-    let globalTimeout: NodeJS.Timeout | undefined;
-    let globalAbortController: AbortController | undefined;
     const processedIndices = new Set<number>();
 
     const targetErrorAbortController = new AbortController();
@@ -4764,29 +5782,10 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     let ciProgressReporter: CIProgressReporter | null = null;
     let progressBarManager: ProgressBarManager | null = null;
 
-    // Create abort signals:
-    // - providerAbortSignal: passed to providers (user signal + timeout, but NOT target error)
-    // - combinedAbortSignal: used internally for checkAbort (includes target error signal)
-    // Target error signal is not passed to providers because by the time we detect a 403 etc,
-    // the provider call has already completed - it's only used to stop the evaluator loop.
-    let providerAbortSignal: AbortSignal | undefined = options.abortSignal;
-    let combinedAbortSignal: AbortSignal = options.abortSignal
-      ? AbortSignal.any([options.abortSignal, targetErrorAbortController.signal])
+    // Target errors stop the evaluator loop; only caller cancellation and the timeout reach providers.
+    const combinedAbortSignal = providerAbortSignal
+      ? AbortSignal.any([providerAbortSignal, targetErrorAbortController.signal])
       : targetErrorAbortController.signal;
-
-    if (maxEvalTimeMs > 0) {
-      globalAbortController = new AbortController();
-      // Providers need timeout signal to cancel long-running requests
-      providerAbortSignal = providerAbortSignal
-        ? AbortSignal.any([providerAbortSignal, globalAbortController.signal])
-        : globalAbortController.signal;
-      // Internal signal includes all abort sources
-      combinedAbortSignal = AbortSignal.any([combinedAbortSignal, globalAbortController.signal]);
-      globalTimeout = setTimeout(() => {
-        evalTimedOut = true;
-        globalAbortController?.abort();
-      }, maxEvalTimeMs);
-    }
 
     const vars = new Set<string>();
     const checkAbort = () => {
@@ -4806,22 +5805,37 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     const rowsWithSelectBestAssertion = new Set<number>();
     const rowsWithMaxScoreAssertion = new Set<number>();
 
-    ensureDefaultTestForExtensions(testSuite);
-    const beforeAllOut = await runExtensionHook(testSuite.extensions, 'beforeAll', {
-      suite: testSuite,
-    });
-    testSuite = beforeAllOut.suite;
-
-    if (!(await maybeAddGeneratedPrompts(testSuite, options))) {
+    const restorePromptColumns = Boolean(
+      options.restorePromptColumns &&
+        cliState.resume &&
+        this.store.persisted &&
+        this.store.prompts.length > 0,
+    );
+    const recovery =
+      restorePromptColumns && testSuite.extensions?.length
+        ? preparePromptRecovery(testSuite, this.store)
+        : undefined;
+    if (recovery) {
+      testSuite = { ...testSuite, prompts: recovery.hookPrompts };
+    }
+    testSuite = await runBeforeAllExtensions(testSuite);
+    if (
+      !restorePromptColumns &&
+      !(await maybeAddGeneratedPrompts(testSuite, options, providerAbortSignal))
+    ) {
       return this.store.evaluation;
     }
 
-    const { prompts, columnsByProvider } = buildCompletedPrompts(testSuite, this.store);
-
-    await this.store.appendPrompts(prompts);
-
     let tests = buildTestsFromSuite(testSuite);
     tests = filterByRange(tests, options.filterRange, warnEmptyFilterRange);
+    const { prompts, columnsByProvider } = buildCompletedPrompts(
+      testSuite,
+      this.store,
+      restorePromptColumns,
+      tests,
+      recovery,
+    );
+    await this.store.appendPrompts(prompts);
     maybeEmitAzureOpenAiWarning(testSuite, tests);
 
     const varNames = await prepareTestVariables(tests, testSuite);
@@ -4844,6 +5858,13 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       tests,
     });
     markComparisonRows(runEvalOptions, rowsWithSelectBestAssertion, rowsWithMaxScoreAssertion);
+    if (cliState.resume && this.store.persisted) {
+      for (const step of runEvalOptions) {
+        if (rowsWithSelectBestAssertion.has(step.testIdx)) {
+          this.comparisonProviders.set(getResultIndexKey(step), getComparisonProviders(step.test));
+        }
+      }
+    }
     const repeatCacheContextByTestIdx = buildRepeatCacheContextByTestIdx(runEvalOptions);
     await filterCompletedResumeSteps(runEvalOptions, this.store);
 
@@ -4863,6 +5884,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     const processingContext: EvalProcessingContext = {
       assertionTypes,
       concurrency,
+      deferredGradingAbortSignal,
       mathjsModule,
       numComplete: 0,
       options,
@@ -4974,7 +5996,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       evalStepIndexMap,
       globalTimeout,
       groupedRunEvalOptions: [...serialRunEvalOptions, ...concurrentRunEvalOptions],
-      isEvalTimedOut: () => evalTimedOut,
+      isEvalTimedOut: isTimedOut,
       isWebUI,
       maxEvalTimeMs,
       processingContext,
@@ -4988,23 +6010,34 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       return interruptedEval;
     }
 
-    await this.processComparisonAssertions({
-      ciProgressReporter,
-      isWebUI,
-      progressBarManager,
-      prompts,
-      providerAbortSignal,
-      repeatCacheContextByTestIdx,
-      rowsWithMaxScoreAssertion,
-      rowsWithSelectBestAssertion,
-      runEvalOptions,
-    });
+    if (
+      !(await this.processComparisonAssertions({
+        ciProgressReporter,
+        isEvalTimedOut: isTimedOut,
+        isWebUI,
+        progressBarManager,
+        prompts,
+        providerAbortSignal,
+        repeatCacheContextByTestIdx,
+        rowsWithMaxScoreAssertion,
+        rowsWithSelectBestAssertion,
+        runEvalOptions,
+      }))
+    ) {
+      return this.saveInterruptedEval({
+        ciProgressReporter,
+        globalTimeout,
+        processingContext,
+        progressBarManager,
+        prompts,
+      });
+    }
 
     await this.finalizeEvaluation({
       assertionTypes,
       ciProgressReporter,
       concurrency,
-      evalTimedOut,
+      evalTimedOut: isTimedOut(),
       globalTimeout,
       maxEvalTimeMs,
       options,
@@ -5023,6 +6056,83 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
   }
 
   async evaluate(): Promise<TEvaluation> {
+    return providerRegistry.withEvaluation(async () => {
+      const startTime = Date.now();
+      const maxEvalTimeMs = this.options.maxEvalTimeMs ?? getMaxEvalTimeMs();
+      const timeoutController = maxEvalTimeMs > 0 ? new AbortController() : undefined;
+      let providerAbortSignal = this.options.abortSignal;
+      if (timeoutController) {
+        providerAbortSignal = providerAbortSignal
+          ? AbortSignal.any([providerAbortSignal, timeoutController.signal])
+          : timeoutController.signal;
+      }
+      // Completed targets can finish grading during a CLI pause. The deadline still
+      // bounds preparation and resource acquisition before any provider runs.
+      const deferredGradingAbortSignal = providerAbortSignal;
+      if (this.options.pauseSignal) {
+        providerAbortSignal = providerAbortSignal
+          ? AbortSignal.any([providerAbortSignal, this.options.pauseSignal])
+          : this.options.pauseSignal;
+      }
+      let timedOut = false;
+      const globalTimeout = timeoutController
+        ? setTimeout(() => {
+            // Preserve the first cause if the caller cancelled while rows were being saved.
+            timedOut = !providerAbortSignal?.aborted;
+            timeoutController.abort();
+          }, maxEvalTimeMs)
+        : undefined;
+      try {
+        return await this.evaluateWithResources({
+          startTime,
+          maxEvalTimeMs,
+          providerAbortSignal,
+          deferredGradingAbortSignal,
+          globalTimeout,
+          isTimedOut: () => timedOut,
+        });
+      } finally {
+        if (globalTimeout) {
+          clearTimeout(globalTimeout);
+        }
+      }
+    });
+  }
+
+  private async acquireOtlpReceiver(signal?: AbortSignal): Promise<boolean> {
+    signal?.throwIfAborted();
+    const startup = startOtlpReceiverIfNeeded(this.testSuite, this.store.id);
+    if (!signal) {
+      return startup;
+    }
+    return new Promise<boolean>((resolve, reject) => {
+      const onAbort = () => reject(signal.reason);
+      signal.addEventListener('abort', onAbort, { once: true });
+      startup.then(
+        (acquired) => {
+          signal.removeEventListener('abort', onAbort);
+          if (signal.aborted) {
+            // The shared startup can finish after this evaluation has returned. Release only
+            // its reservation without delaying cancellation or closing another evaluation's receiver.
+            void stopOtlpReceiverIfNeeded(acquired, this.store.id).catch((error) => {
+              logger.warn('Failed to release tracing receiver after evaluation cancellation', {
+                error,
+              });
+            });
+            reject(signal.reason);
+          } else {
+            resolve(acquired);
+          }
+        },
+        (error) => {
+          signal.removeEventListener('abort', onAbort);
+          reject(error);
+        },
+      );
+    });
+  }
+
+  private async evaluateWithResources(deadline: EvaluationDeadline): Promise<TEvaluation> {
     // Initialize OTEL SDK if tracing is enabled
     // Check env flag, test suite level, and default test metadata
     const tracingEnabled =
@@ -5036,7 +6146,13 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
 
     let evaluationError: unknown;
     try {
-      otlpReceiverAcquired = await startOtlpReceiverIfNeeded(this.testSuite, this.store.id);
+      await Promise.all(
+        this.testSuite.providers.map((provider) =>
+          providerRegistry.useProvider(provider, deadline.providerAbortSignal),
+        ),
+      );
+      otlpReceiverAcquired = await this.acquireOtlpReceiver(deadline.providerAbortSignal);
+      deadline.providerAbortSignal?.throwIfAborted();
       if (tracingEnabled) {
         logger.debug('[Evaluator] Initializing OTEL SDK for tracing');
         const otelConfig = getDefaultOtelConfig();
@@ -5044,7 +6160,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         otelInitialized = true;
       }
 
-      return await this._runEvaluation();
+      return await this._runEvaluation(deadline);
     } catch (error) {
       evaluationError = error;
       throw error;
@@ -5075,9 +6191,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
           await sleep(3000);
         }
         await stopOtlpReceiverIfNeeded(otlpReceiverAcquired, this.store.id);
-
-        // Clean up Python worker pools to prevent resource leaks
-        await providerRegistry.shutdownAll();
 
         // Log rate limit metrics for debugging before cleanup
         if (this.rateLimitRegistry) {
@@ -5140,6 +6253,24 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
 
 type DefaultEvaluation = Parameters<typeof nodeEvaluatorRuntime.createEvaluationStore>[0];
 
+function withTracingInputDefaults(testSuite: TestSuite): TestSuite {
+  const tracing = testSuite.tracing;
+  if (!tracing) {
+    return testSuite;
+  }
+  const parsed = TestSuiteConfigSchema.shape.tracing.safeParse(tracing);
+  if (!parsed.success || !parsed.data) {
+    return testSuite;
+  }
+  const normalized = {
+    ...tracing,
+    ...parsed.data,
+    // Keep runtime provider identity and its private credential-reference metadata.
+    ...(tracing.provider && { provider: tracing.provider }),
+  };
+  return isDeepStrictEqual(tracing, normalized) ? testSuite : { ...testSuite, tracing: normalized };
+}
+
 export function evaluate<TEvaluation extends DefaultEvaluation>(
   testSuite: TestSuite,
   evalRecord: TEvaluation,
@@ -5163,13 +6294,36 @@ export function evaluate<
   options: InternalEvaluateOptions,
   runtime?: EvaluatorRuntime<TEvaluation, TResult>,
 ): Promise<TEvaluation> {
-  const resolvedRuntime =
-    runtime ?? (nodeEvaluatorRuntime as unknown as EvaluatorRuntime<TEvaluation, TResult>);
-  const runtimeTestSuite =
-    resolvedRuntime.resolveRuntimeTestSuite?.(testSuite) ??
-    nodeEvaluatorRuntime.resolveRuntimeTestSuite?.(testSuite) ??
-    testSuite;
-  const store = resolvedRuntime.createEvaluationStore(evalRecord);
-  const ev = new Evaluator(runtimeTestSuite, store, options, resolvedRuntime);
-  return ev.evaluate();
+  return cliState.withBasePath(testSuite.basePath ?? cliState.basePath, () =>
+    cliState.withEnv(testSuite.env ?? cliState.env, () =>
+      cliState.withConfig(
+        {
+          ...evalRecord.config,
+          defaultTest: testSuite.defaultTest ?? evalRecord.config.defaultTest,
+          redteam: testSuite.redteam ?? evalRecord.config.redteam,
+        },
+        () => {
+          const resolvedRuntime =
+            runtime ?? (nodeEvaluatorRuntime as unknown as EvaluatorRuntime<TEvaluation, TResult>);
+          const runtimeTestSuite =
+            resolvedRuntime.resolveRuntimeTestSuite?.(testSuite) ??
+            nodeEvaluatorRuntime.resolveRuntimeTestSuite?.(testSuite) ??
+            testSuite;
+          const store = resolvedRuntime.createEvaluationStore(evalRecord);
+          const ev = new Evaluator(
+            withTracingInputDefaults(runtimeTestSuite),
+            store,
+            options,
+            resolvedRuntime,
+          );
+          // Capture this entry point's policy for providers and graders loaded
+          // through another package copy, including extension-hook imports.
+          return withCacheEnabled(options.cache === false ? false : isCacheEnabled(), () =>
+            ev.evaluate(),
+          );
+        },
+        testSuite.providers.map((provider) => ({ id: provider.id(), config: provider.config })),
+      ),
+    ),
+  );
 }

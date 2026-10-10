@@ -1,3 +1,4 @@
+import { mapEncodingTestCases } from './encoding';
 import { transformStrategyInput } from './textMutation';
 
 import type { TestCase } from '../../types/index';
@@ -82,23 +83,10 @@ export function toHomoglyphs(text: string): string {
  * Add homoglyph encoding to test cases
  */
 export function addHomoglyphs(testCases: TestCase[], injectVar: string): TestCase[] {
-  return testCases.map((testCase) => {
-    const originalText = String(testCase.vars![injectVar]);
-    return {
-      ...testCase,
-      assert: testCase.assert?.map((assertion) => ({
-        ...assertion,
-        metric: assertion.metric ? `${assertion.metric}/Homoglyph` : assertion.metric,
-      })),
-      vars: {
-        ...testCase.vars,
-        [injectVar]: transformStrategyInput(testCase, injectVar, 'homoglyph', toHomoglyphs),
-      },
-      metadata: {
-        ...testCase.metadata,
-        strategyId: 'homoglyph',
-        originalText,
-      },
-    };
+  return mapEncodingTestCases(testCases, injectVar, {
+    transform: (_text, testCase) =>
+      transformStrategyInput(testCase, injectVar, 'homoglyph', toHomoglyphs),
+    metricSuffix: 'Homoglyph',
+    metadata: { strategyId: 'homoglyph' },
   });
 }

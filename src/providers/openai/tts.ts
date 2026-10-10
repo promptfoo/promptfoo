@@ -3,6 +3,7 @@ import logger from '../../logger';
 import { sha256 } from '../../util/createHash';
 import {
   formatRateLimitErrorMessage,
+  getAbortError,
   HttpRateLimitError,
   isAbortError,
 } from '../../util/fetch/errors';
@@ -10,6 +11,7 @@ import { fetchWithRetries } from '../../util/fetch/index';
 import { isSecretField, sanitizeUrl } from '../../util/sanitizer';
 import { getRequestTimeoutMs } from '../shared';
 import { OpenAiGenericProvider } from './';
+import { convertPcm16ToWav } from './audio';
 import {
   appendOpenAiApiPath,
   assertOpenAiApiModel,
@@ -69,16 +71,6 @@ function canonicalizeCacheValue(value: unknown): unknown {
     );
   }
   return value;
-}
-
-function getAbortError(signal: AbortSignal): Error {
-  const reason = signal.reason;
-  if (reason instanceof Error && reason.name === 'AbortError') {
-    return reason;
-  }
-  const error = new Error(reason instanceof Error ? reason.message : 'Request was aborted');
-  error.name = 'AbortError';
-  return error;
 }
 
 export type OpenAiTtsOptions = OpenAiSharedOptions & {
@@ -145,24 +137,6 @@ async function cacheResponse(cacheKey: string, response: ProviderResponse): Prom
   } catch (error) {
     logger.debug('[OpenAI TTS] Failed to cache response', { error });
   }
-}
-
-function convertPcm16ToWav(pcmData: Buffer, sampleRate = 24_000): Buffer {
-  const header = Buffer.alloc(44);
-  header.write('RIFF', 0);
-  header.writeUInt32LE(36 + pcmData.length, 4);
-  header.write('WAVE', 8);
-  header.write('fmt ', 12);
-  header.writeUInt32LE(16, 16);
-  header.writeUInt16LE(1, 20);
-  header.writeUInt16LE(1, 22);
-  header.writeUInt32LE(sampleRate, 24);
-  header.writeUInt32LE(sampleRate * 2, 28);
-  header.writeUInt16LE(2, 32);
-  header.writeUInt16LE(16, 34);
-  header.write('data', 36);
-  header.writeUInt32LE(pcmData.length, 40);
-  return Buffer.concat([header, pcmData]);
 }
 
 async function coalesceRequest(

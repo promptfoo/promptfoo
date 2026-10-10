@@ -1,28 +1,152 @@
 import { afterEach, beforeEach, describe, expect, it, Mock, Mocked, vi } from 'vitest';
+
+const { createEsLoggerModule } = await vi.hoisted(() => import('../../factories/logger'));
+
 import WebSocket from 'ws';
 import { disableCache, enableCache } from '../../../src/cache';
 import logger from '../../../src/logger';
 import { OpenAiRealtimeProvider } from '../../../src/providers/openai/realtime';
 import * as util from '../../../src/util/index';
+import { createLocationProperties } from '../../factories/literalFixtures';
 import { mockProcessEnv } from '../../util/utils';
 import { getOpenAiMissingApiKeyMessage, restoreEnvVar } from './shared';
 
 import type { OpenAiRealtimeOptions } from '../../../src/providers/openai/realtime';
 
+const createResponseDoneUsage = (
+  totalTokens: number,
+  inputTokens: number,
+  outputTokens: number,
+) => ({
+  type: 'response.done' as const,
+  response: {
+    usage: { total_tokens: totalTokens, input_tokens: inputTokens, output_tokens: outputTokens },
+  },
+});
+
+const createLoanConversationContext = () => ({
+  test: {
+    metadata: { conversationId: 'loan-application-flow' },
+  },
+});
+
+const createToolAddedEvent = (callId: string = 'call_1', name: string = 'end_of_dialog_tool') => ({
+  type: 'response.output_item.added' as const,
+  item: {
+    type: 'function_call' as const,
+    call_id: callId,
+    name,
+    arguments: '{}',
+  },
+});
+
+const createEndDialogProviderOptions = () => ({
+  config: {
+    modalities: ['text'],
+    maintainContext: true,
+    websocketTimeout: 1000,
+    tools: [createRealtimeTool('end_of_dialog_tool')],
+  },
+});
+
+const createUserItemCreated = () => ({
+  type: 'conversation.item.created' as const,
+  item: { id: 'msg_1', role: 'user' },
+});
+
+const createAudioResponseDone = () => ({
+  type: 'response.done' as const,
+  response: {
+    usage: {
+      total_tokens: 2,
+      input_tokens: 1,
+      output_tokens: 1,
+      output_token_details: { audio_tokens: 1 },
+    },
+  },
+});
+
+const createCallStatusSchema = () => ({
+  type: 'object' as const,
+  properties: {
+    call_status: { type: 'string' as const },
+  },
+});
+
+const createPersistentTextOptions = () => ({
+  config: { modalities: ['text'], maintainContext: true },
+});
+
+const createCallbackTextDone = () => ({
+  type: 'response.text.done' as const,
+  text: 'We will call you back later.',
+});
+
+const createCallbackArgumentsDone = () => ({
+  type: 'response.function_call_arguments.done' as const,
+  call_id: 'call_1',
+  arguments: '{"call_status":"callback"}',
+});
+
+const createWeatherChatTool = () => ({
+  type: 'function' as const,
+  function: {
+    name: 'get_weather',
+    description: 'Get the weather',
+    parameters: { type: 'object' as const, properties: {} },
+  },
+});
+
+const createUserItemAdded = () => ({
+  type: 'conversation.item.added' as const,
+  item: { id: 'u1', role: 'user' },
+});
+
+const createLocationSchema = () => ({
+  type: 'object' as const,
+  properties: createLocationProperties(),
+});
+
+const createPersistentTextConfig = () => ({
+  modalities: ['text'],
+  instructions: 'Test instructions',
+  maintainContext: true,
+});
+
+const createHelloProviderResponse = () => ({
+  output: 'hello',
+  tokenUsage: { prompt: 1, completion: 1, total: 2 },
+  metadata: { usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 } },
+});
+
+const createRealtimeTool = (name: string) => ({
+  type: 'function' as const,
+  name,
+  parameters: { type: 'object' as const, properties: {} },
+});
+
+const createMinimalWeatherChatTool = () => ({
+  type: 'function' as const,
+  function: { name: 'get_weather' },
+});
+
+const createTextModalityOptions = () => ({
+  config: { modalities: ['text'] },
+});
+
 // Mock WebSocket
 vi.mock('ws');
 const MockWebSocket = WebSocket as Mocked<typeof WebSocket>;
 
-// Mock logger
-vi.mock('../../../src/logger', () => ({
-  __esModule: true,
-  default: {
-    debug: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
+it.each(['gpt-live-transcribe', 'gpt-live-transcribe-2026-09-01'])(
+  'direct Realtime callers get transcription guidance for %s',
+  (model) => {
+    expect(() => new OpenAiRealtimeProvider(model)).toThrow(/Realtime.*session/);
   },
-}));
+);
+
+// Mock logger
+vi.mock('../../../src/logger', () => createEsLoggerModule());
 
 /**
  * Flush enough microtasks to advance past the persistent-path serialization
@@ -43,6 +167,25 @@ describe('OpenAI Realtime Provider', () => {
   let mockWs: any;
   let mockHandlers: { [key: string]: Function[] };
   const originalOpenAiApiKey = process.env.OPENAI_API_KEY;
+
+  it('rejects a Codex-only model before a direct Realtime request', () => {
+    expect(
+      () =>
+        new OpenAiRealtimeProvider('gpt-5.3-codex-spark', {
+          config: { apiKey: 'test-key' },
+        }),
+    ).toThrow('only available through openai:codex-sdk');
+  });
+
+  it('rejects a retired model before a direct Realtime request', () => {
+    expect(
+      () =>
+        new OpenAiRealtimeProvider('gpt-realtime-mini-2025-10-06', {
+          config: { apiKey: 'test-key' },
+        }),
+    ).toThrow('has been retired');
+  });
+
   const originalCustomRealtimeApiKey = process.env.CUSTOM_REALTIME_API_KEY;
   const originalOpenAiApiBaseUrl = process.env.OPENAI_API_BASE_URL;
   const originalOpenAiBaseUrl = process.env.OPENAI_BASE_URL;
@@ -174,7 +317,7 @@ describe('OpenAI Realtime Provider', () => {
 
   describe('Basic Functionality', () => {
     it('sends one user item after session readiness on the client-secret socket', async () => {
-      const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview');
+      const provider = new OpenAiRealtimeProvider('gpt-realtime-1.5');
       const promise = provider.webSocketRequest('test-secret', 'hello');
 
       mockHandlers.open.forEach((handler) => handler());
@@ -198,51 +341,23 @@ describe('OpenAI Realtime Provider', () => {
     });
 
     it('does not expose audio when usage reports tokens without audio bytes', async () => {
-      const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview');
+      const provider = new OpenAiRealtimeProvider('gpt-realtime-1.5');
       const promise = provider.webSocketRequest('test-secret', 'hello');
       mockHandlers.open.forEach((handler) => handler());
 
       const handler = mockHandlers.message[0];
-      handler(
-        Buffer.from(
-          JSON.stringify({
-            type: 'response.done',
-            response: {
-              usage: {
-                total_tokens: 2,
-                input_tokens: 1,
-                output_tokens: 1,
-                output_token_details: { audio_tokens: 1 },
-              },
-            },
-          }),
-        ),
-      );
+      handler(Buffer.from(JSON.stringify(createAudioResponseDone())));
       const result = await promise;
       expect(result.metadata).not.toHaveProperty('audio');
       expect(result.output).toBe('');
     });
 
     it('does not expose missing audio on a direct socket response', async () => {
-      const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview');
+      const provider = new OpenAiRealtimeProvider('gpt-realtime-1.5');
       const promise = provider.directWebSocketRequest('hello');
       const handler = mockHandlers.message[0];
 
-      handler(
-        Buffer.from(
-          JSON.stringify({
-            type: 'response.done',
-            response: {
-              usage: {
-                total_tokens: 2,
-                input_tokens: 1,
-                output_tokens: 1,
-                output_token_details: { audio_tokens: 1 },
-              },
-            },
-          }),
-        ),
-      );
+      handler(Buffer.from(JSON.stringify(createAudioResponseDone())));
       const result = await promise;
       expect(result.metadata).not.toHaveProperty('audio');
     });
@@ -254,9 +369,9 @@ describe('OpenAI Realtime Provider', () => {
         voice: 'alloy' as const,
       };
 
-      const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', { config });
+      const provider = new OpenAiRealtimeProvider('gpt-realtime-1.5', { config });
 
-      expect(provider.modelName).toBe('gpt-4o-realtime-preview');
+      expect(provider.modelName).toBe('gpt-realtime-1.5');
       expect(provider.config).toEqual(expect.objectContaining(config));
       expect(provider.config.maintainContext).toBe(true); // Default value
     });
@@ -307,8 +422,29 @@ describe('OpenAI Realtime Provider', () => {
       );
     });
 
+    it.each(['gpt-transcribe', 'gpt-live-transcribe'])(
+      'rejects %s through the conversational realtime provider',
+      (modelName) => {
+        expect(() => new OpenAiRealtimeProvider(modelName)).toThrow(
+          /separate Realtime session endpoint/,
+        );
+      },
+    );
+
+    it.each(['gpt-transcribe', 'gpt-live-transcribe'])(
+      'allows custom Realtime gateways to define their own %s model',
+      (modelName) => {
+        expect(
+          () =>
+            new OpenAiRealtimeProvider(modelName, {
+              config: { apiBaseUrl: 'https://gateway.example/v1' },
+            }),
+        ).not.toThrow();
+      },
+    );
+
     it('returns ProviderResponse.error instead of a placeholder when the API yields nothing', async () => {
-      const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', {
+      const provider = new OpenAiRealtimeProvider('gpt-realtime-1.5', {
         config: { modalities: ['text'], maintainContext: false },
       });
 
@@ -328,14 +464,7 @@ describe('OpenAI Realtime Provider', () => {
         ),
       );
       // No deltas, no audio, no function call — just response.done.
-      handler(
-        Buffer.from(
-          JSON.stringify({
-            type: 'response.done',
-            response: { usage: { total_tokens: 1, input_tokens: 1, output_tokens: 0 } },
-          }),
-        ),
-      );
+      handler(Buffer.from(JSON.stringify(createResponseDoneUsage(1, 1, 0))));
 
       const inner = await responsePromise;
       expect(inner.output).toBe('');
@@ -358,14 +487,7 @@ describe('OpenAI Realtime Provider', () => {
           }),
         ),
       );
-      handler2(
-        Buffer.from(
-          JSON.stringify({
-            type: 'response.done',
-            response: { usage: { total_tokens: 1, input_tokens: 1, output_tokens: 0 } },
-          }),
-        ),
-      );
+      handler2(Buffer.from(JSON.stringify(createResponseDoneUsage(1, 1, 0))));
 
       const outer = await callApiPromise;
       expect(outer.error).toMatch(/empty response/i);
@@ -374,7 +496,7 @@ describe('OpenAI Realtime Provider', () => {
 
     it('should use default missing API key error message', async () => {
       mockProcessEnv({ OPENAI_API_KEY: undefined });
-      const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', {
+      const provider = new OpenAiRealtimeProvider('gpt-realtime-1.5', {
         env: {
           OPENAI_API_KEY: undefined,
         },
@@ -386,7 +508,7 @@ describe('OpenAI Realtime Provider', () => {
     it('should use custom apiKeyEnvar in missing API key errors', async () => {
       mockProcessEnv({ OPENAI_API_KEY: undefined });
       mockProcessEnv({ CUSTOM_REALTIME_API_KEY: undefined });
-      const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', {
+      const provider = new OpenAiRealtimeProvider('gpt-realtime-1.5', {
         config: {
           apiKeyEnvar: 'CUSTOM_REALTIME_API_KEY',
         },
@@ -410,12 +532,12 @@ describe('OpenAI Realtime Provider', () => {
         max_response_output_tokens: 100,
       };
 
-      const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', { config });
+      const provider = new OpenAiRealtimeProvider('gpt-realtime-1.5', { config });
       const body = await provider.getRealtimeSessionBody();
 
       expect(body).toEqual({
         type: 'realtime',
-        model: 'gpt-4o-realtime-preview',
+        model: 'gpt-realtime-1.5',
         output_modalities: ['text'],
         instructions: 'Test instructions',
         audio: {
@@ -453,12 +575,12 @@ describe('OpenAI Realtime Provider', () => {
         max_response_output_tokens: 'inf' as const,
       };
 
-      const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', { config });
+      const provider = new OpenAiRealtimeProvider('gpt-realtime-1.5', { config });
       const body = await provider.getRealtimeSessionBody();
 
       expect(body).toEqual({
         type: 'realtime',
-        model: 'gpt-4o-realtime-preview',
+        model: 'gpt-realtime-1.5',
         output_modalities: ['audio'],
         instructions: 'Test instructions',
         audio: {
@@ -557,12 +679,7 @@ describe('OpenAI Realtime Provider', () => {
               type: 'function',
               name: 'get_weather',
               description: 'Get the weather',
-              parameters: {
-                type: 'object',
-                properties: {
-                  location: { type: 'string' },
-                },
-              },
+              parameters: createLocationSchema(),
             },
           ],
           tool_choice: {
@@ -602,12 +719,7 @@ describe('OpenAI Realtime Provider', () => {
               function: {
                 name: 'get_weather',
                 description: 'Get the weather',
-                parameters: {
-                  type: 'object',
-                  properties: {
-                    location: { type: 'string' },
-                  },
-                },
+                parameters: createLocationSchema(),
               },
             },
           ],
@@ -637,14 +749,7 @@ describe('OpenAI Realtime Provider', () => {
       const provider = new OpenAiRealtimeProvider('gpt-realtime', {
         config: {
           tools: [
-            {
-              type: 'function',
-              function: {
-                name: 'get_weather',
-                description: 'Get the weather',
-                parameters: { type: 'object', properties: {} },
-              },
-            },
+            createWeatherChatTool(),
             {
               type: 'function',
               function: {
@@ -654,10 +759,7 @@ describe('OpenAI Realtime Provider', () => {
               },
             },
           ],
-          tool_choice: {
-            type: 'function',
-            function: { name: 'get_weather' },
-          },
+          tool_choice: createMinimalWeatherChatTool(),
         },
       });
 
@@ -696,7 +798,7 @@ describe('OpenAI Realtime Provider', () => {
     ] as const)(
       'normalizes max_response_output_tokens=%s to %s in the session body',
       async (maxResponseOutputTokens, expected) => {
-        const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', {
+        const provider = new OpenAiRealtimeProvider('gpt-realtime-1.5', {
           config: {
             modalities: ['text'],
             max_response_output_tokens: maxResponseOutputTokens as any,
@@ -710,13 +812,9 @@ describe('OpenAI Realtime Provider', () => {
     );
 
     it('should handle basic text response with persistent connection', async () => {
-      const config = {
-        modalities: ['text'],
-        instructions: 'Test instructions',
-        maintainContext: true,
-      };
+      const config = createPersistentTextConfig();
 
-      const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', { config });
+      const provider = new OpenAiRealtimeProvider('gpt-realtime-1.5', { config });
 
       // Create mock WebSocket connection with proper type
       provider.persistentConnection = {
@@ -824,11 +922,7 @@ describe('OpenAI Realtime Provider', () => {
       const provider = new OpenAiRealtimeProvider('gpt-realtime', {
         config: { apiKey: 'test-key', modalities: ['text'], maintainContext: true },
       });
-      const response = {
-        output: 'hello',
-        tokenUsage: { prompt: 1, completion: 1, total: 2 },
-        metadata: { usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 } },
-      };
+      const response = createHelloProviderResponse();
       const persistentRequest = vi
         .spyOn(provider as any, 'persistentWebSocketRequest')
         .mockResolvedValue(response);
@@ -845,11 +939,7 @@ describe('OpenAI Realtime Provider', () => {
       const provider = new OpenAiRealtimeProvider('gpt-realtime', {
         config: { apiKey: 'test-key', modalities: ['text'], maintainContext: true },
       });
-      const response = {
-        output: 'hello',
-        tokenUsage: { prompt: 1, completion: 1, total: 2 },
-        metadata: { usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 } },
-      };
+      const response = createHelloProviderResponse();
       const persistentRequest = vi.spyOn(provider as any, 'persistentWebSocketRequest');
       const directRequest = vi
         .spyOn(provider as any, 'directWebSocketRequest')
@@ -863,13 +953,9 @@ describe('OpenAI Realtime Provider', () => {
     });
 
     it('should maintain conversation context across multiple messages', async () => {
-      const config = {
-        modalities: ['text'],
-        instructions: 'Test instructions',
-        maintainContext: true,
-      };
+      const config = createPersistentTextConfig();
 
-      const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', { config });
+      const provider = new OpenAiRealtimeProvider('gpt-realtime-1.5', { config });
 
       // Create mock WebSocket connection with proper type
       provider.persistentConnection = {
@@ -1028,7 +1114,7 @@ describe('OpenAI Realtime Provider', () => {
         maintainContext: true,
       };
 
-      const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', { config });
+      const provider = new OpenAiRealtimeProvider('gpt-realtime-1.5', { config });
 
       // Create mock WebSocket connection with proper type
       provider.persistentConnection = {
@@ -1081,7 +1167,7 @@ describe('OpenAI Realtime Provider', () => {
           voice: 'alloy' as const,
         };
 
-        const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', { config });
+        const provider = new OpenAiRealtimeProvider('gpt-realtime-1.5', { config });
 
         // Create mock WebSocket connection with proper type
         provider.persistentConnection = {
@@ -1115,14 +1201,7 @@ describe('OpenAI Realtime Provider', () => {
         const lastHandler = messageHandlers[messageHandlers.length - 1];
 
         // Simulate conversation item created
-        lastHandler(
-          Buffer.from(
-            JSON.stringify({
-              type: 'conversation.item.created',
-              item: { id: 'msg_1', role: 'user' },
-            }),
-          ),
-        );
+        lastHandler(Buffer.from(JSON.stringify(createUserItemCreated())));
 
         // Simulate response created
         lastHandler(
@@ -1236,12 +1315,7 @@ describe('OpenAI Realtime Provider', () => {
               function: {
                 name: 'end_of_dialog_tool',
                 description: 'End the dialog',
-                parameters: {
-                  type: 'object',
-                  properties: {
-                    call_status: { type: 'string' },
-                  },
-                },
+                parameters: createCallStatusSchema(),
               },
             },
           ],
@@ -1264,11 +1338,10 @@ describe('OpenAI Realtime Provider', () => {
         removeListener: vi.fn(),
       } as unknown as WebSocket;
 
-      const responsePromise = provider.callApi('Can you call me back later?', {
-        test: {
-          metadata: { conversationId: 'loan-application-flow' },
-        },
-      } as any);
+      const responsePromise = provider.callApi(
+        'Can you call me back later?',
+        createLoanConversationContext() as any,
+      );
 
       await vi.waitFor(() => {
         expect(provider.persistentConnection?.send).toHaveBeenCalled();
@@ -1292,16 +1365,7 @@ describe('OpenAI Realtime Provider', () => {
       });
 
       const lastHandler = mockHandlers.message[mockHandlers.message.length - 1];
-      await Promise.resolve(
-        lastHandler(
-          Buffer.from(
-            JSON.stringify({
-              type: 'conversation.item.created',
-              item: { id: 'msg_1', role: 'user' },
-            }),
-          ),
-        ),
-      );
+      await Promise.resolve(lastHandler(Buffer.from(JSON.stringify(createUserItemCreated()))));
 
       const responseCreate = vi
         .mocked(provider.persistentConnection.send as Mock)
@@ -1328,31 +1392,9 @@ describe('OpenAI Realtime Provider', () => {
           ),
         ),
       );
+      await Promise.resolve(lastHandler(Buffer.from(JSON.stringify(createToolAddedEvent()))));
       await Promise.resolve(
-        lastHandler(
-          Buffer.from(
-            JSON.stringify({
-              type: 'response.output_item.added',
-              item: {
-                type: 'function_call',
-                call_id: 'call_1',
-                name: 'end_of_dialog_tool',
-                arguments: '{}',
-              },
-            }),
-          ),
-        ),
-      );
-      await Promise.resolve(
-        lastHandler(
-          Buffer.from(
-            JSON.stringify({
-              type: 'response.function_call_arguments.done',
-              call_id: 'call_1',
-              arguments: '{"call_status":"callback"}',
-            }),
-          ),
-        ),
+        lastHandler(Buffer.from(JSON.stringify(createCallbackArgumentsDone()))),
       );
       await Promise.resolve(
         lastHandler(
@@ -1395,31 +1437,9 @@ describe('OpenAI Realtime Provider', () => {
         ]),
       );
 
+      await Promise.resolve(lastHandler(Buffer.from(JSON.stringify(createCallbackTextDone()))));
       await Promise.resolve(
-        lastHandler(
-          Buffer.from(
-            JSON.stringify({
-              type: 'response.text.done',
-              text: 'We will call you back later.',
-            }),
-          ),
-        ),
-      );
-      await Promise.resolve(
-        lastHandler(
-          Buffer.from(
-            JSON.stringify({
-              type: 'response.done',
-              response: {
-                usage: {
-                  total_tokens: 11,
-                  input_tokens: 7,
-                  output_tokens: 4,
-                },
-              },
-            }),
-          ),
-        ),
+        lastHandler(Buffer.from(JSON.stringify(createResponseDoneUsage(11, 7, 4)))),
       );
 
       const response = await responsePromise;
@@ -1448,13 +1468,7 @@ describe('OpenAI Realtime Provider', () => {
         config: {
           modalities: ['text'],
           maintainContext: true,
-          tools: [
-            {
-              type: 'function',
-              name: 'lookup',
-              parameters: { type: 'object', properties: {} },
-            },
-          ],
+          tools: [createRealtimeTool('lookup')],
           tool_choice: 'auto',
           functionCallHandler,
         },
@@ -1481,14 +1495,7 @@ describe('OpenAI Realtime Provider', () => {
       await flushMicrotasks();
       const handler = mockHandlers.message[mockHandlers.message.length - 1];
 
-      handler(
-        Buffer.from(
-          JSON.stringify({
-            type: 'conversation.item.added',
-            item: { id: 'u1', role: 'user' },
-          }),
-        ),
-      );
+      handler(Buffer.from(JSON.stringify(createUserItemAdded())));
       handler(
         Buffer.from(
           JSON.stringify({
@@ -1506,14 +1513,7 @@ describe('OpenAI Realtime Provider', () => {
           }),
         ),
       );
-      handler(
-        Buffer.from(
-          JSON.stringify({
-            type: 'response.done',
-            response: { usage: { total_tokens: 1, input_tokens: 1, output_tokens: 0 } },
-          }),
-        ),
-      );
+      handler(Buffer.from(JSON.stringify(createResponseDoneUsage(1, 1, 0))));
 
       // Let the for-await-loop in response.done resolve.
       await flushMicrotasks();
@@ -1547,9 +1547,7 @@ describe('OpenAI Realtime Provider', () => {
     });
 
     it('keeps lifecycle listeners on idle persistent sockets', async () => {
-      const provider = new OpenAiRealtimeProvider('gpt-realtime', {
-        config: { modalities: ['text'], maintainContext: true },
-      });
+      const provider = new OpenAiRealtimeProvider('gpt-realtime', createPersistentTextOptions());
 
       const persistentConnection = {
         on: vi.fn((event: string, h: Function) => mockHandlers[event].push(h)),
@@ -1644,14 +1642,7 @@ describe('OpenAI Realtime Provider', () => {
         await Promise.resolve();
         const handler = mockHandlers.message[mockHandlers.message.length - 1];
 
-        handler(
-          Buffer.from(
-            JSON.stringify({
-              type: 'conversation.item.added',
-              item: { id: 'u1', role: 'user' },
-            }),
-          ),
-        );
+        handler(Buffer.from(JSON.stringify(createUserItemAdded())));
         handler(
           Buffer.from(
             JSON.stringify({
@@ -1661,12 +1652,7 @@ describe('OpenAI Realtime Provider', () => {
           ),
         );
         const responseDoneFire = handler(
-          Buffer.from(
-            JSON.stringify({
-              type: 'response.done',
-              response: { usage: { total_tokens: 1, input_tokens: 1, output_tokens: 0 } },
-            }),
-          ),
+          Buffer.from(JSON.stringify(createResponseDoneUsage(1, 1, 0))),
         );
 
         // Fire the timeout.
@@ -1727,32 +1713,11 @@ describe('OpenAI Realtime Provider', () => {
       await flushMicrotasks();
       const handler = mockHandlers.message[mockHandlers.message.length - 1];
 
-      handler(
-        Buffer.from(
-          JSON.stringify({
-            type: 'conversation.item.added',
-            item: { id: 'u1', role: 'user' },
-          }),
-        ),
-      );
+      handler(Buffer.from(JSON.stringify(createUserItemAdded())));
 
       const fireToolRound = async () => {
-        handler(
-          Buffer.from(
-            JSON.stringify({
-              type: 'response.output_item.added',
-              item: { type: 'function_call', call_id: 'c', name: 'loop', arguments: '{}' },
-            }),
-          ),
-        );
-        handler(
-          Buffer.from(
-            JSON.stringify({
-              type: 'response.done',
-              response: { usage: { total_tokens: 1, input_tokens: 1, output_tokens: 0 } },
-            }),
-          ),
-        );
+        handler(Buffer.from(JSON.stringify(createToolAddedEvent('c', 'loop'))));
+        handler(Buffer.from(JSON.stringify(createResponseDoneUsage(1, 1, 0))));
         await flushMicrotasks();
       };
 
@@ -1822,22 +1787,8 @@ describe('OpenAI Realtime Provider', () => {
       );
 
       const fireToolRound = async () => {
-        handler(
-          Buffer.from(
-            JSON.stringify({
-              type: 'response.output_item.added',
-              item: { type: 'function_call', call_id: 'c', name: 'loop', arguments: '{}' },
-            }),
-          ),
-        );
-        handler(
-          Buffer.from(
-            JSON.stringify({
-              type: 'response.done',
-              response: { usage: { total_tokens: 1, input_tokens: 1, output_tokens: 0 } },
-            }),
-          ),
-        );
+        handler(Buffer.from(JSON.stringify(createToolAddedEvent('c', 'loop'))));
+        handler(Buffer.from(JSON.stringify(createResponseDoneUsage(1, 1, 0))));
         await flushMicrotasks();
       };
 
@@ -1881,12 +1832,7 @@ describe('OpenAI Realtime Provider', () => {
               {
                 type: 'function',
                 name: 'end_of_dialog_tool',
-                parameters: {
-                  type: 'object',
-                  properties: {
-                    call_status: { type: 'string' },
-                  },
-                },
+                parameters: createCallStatusSchema(),
               },
             ],
             functionCallHandler,
@@ -1907,100 +1853,33 @@ describe('OpenAI Realtime Provider', () => {
           removeListener: vi.fn(),
         } as unknown as WebSocket;
 
-        const responsePromise = provider.callApi('Can you call me back later?', {
-          test: {
-            metadata: { conversationId: 'loan-application-flow' },
-          },
-        } as any);
+        const responsePromise = provider.callApi(
+          'Can you call me back later?',
+          createLoanConversationContext() as any,
+        );
 
         await vi.waitFor(() => {
           expect(mockHandlers.message.length).toBeGreaterThan(0);
         });
         const lastHandler = mockHandlers.message[mockHandlers.message.length - 1];
 
-        await Promise.resolve(
-          lastHandler(
-            Buffer.from(
-              JSON.stringify({
-                type: 'conversation.item.created',
-                item: { id: 'msg_1', role: 'user' },
-              }),
-            ),
-          ),
-        );
+        await Promise.resolve(lastHandler(Buffer.from(JSON.stringify(createUserItemCreated()))));
 
         await vi.advanceTimersByTimeAsync(900);
 
+        await Promise.resolve(lastHandler(Buffer.from(JSON.stringify(createToolAddedEvent()))));
         await Promise.resolve(
-          lastHandler(
-            Buffer.from(
-              JSON.stringify({
-                type: 'response.output_item.added',
-                item: {
-                  type: 'function_call',
-                  call_id: 'call_1',
-                  name: 'end_of_dialog_tool',
-                  arguments: '{}',
-                },
-              }),
-            ),
-          ),
+          lastHandler(Buffer.from(JSON.stringify(createCallbackArgumentsDone()))),
         );
         await Promise.resolve(
-          lastHandler(
-            Buffer.from(
-              JSON.stringify({
-                type: 'response.function_call_arguments.done',
-                call_id: 'call_1',
-                arguments: '{"call_status":"callback"}',
-              }),
-            ),
-          ),
-        );
-        await Promise.resolve(
-          lastHandler(
-            Buffer.from(
-              JSON.stringify({
-                type: 'response.done',
-                response: {
-                  usage: {
-                    total_tokens: 8,
-                    input_tokens: 5,
-                    output_tokens: 3,
-                  },
-                },
-              }),
-            ),
-          ),
+          lastHandler(Buffer.from(JSON.stringify(createResponseDoneUsage(8, 5, 3)))),
         );
 
         await vi.advanceTimersByTimeAsync(200);
 
+        await Promise.resolve(lastHandler(Buffer.from(JSON.stringify(createCallbackTextDone()))));
         await Promise.resolve(
-          lastHandler(
-            Buffer.from(
-              JSON.stringify({
-                type: 'response.text.done',
-                text: 'We will call you back later.',
-              }),
-            ),
-          ),
-        );
-        await Promise.resolve(
-          lastHandler(
-            Buffer.from(
-              JSON.stringify({
-                type: 'response.done',
-                response: {
-                  usage: {
-                    total_tokens: 11,
-                    input_tokens: 7,
-                    output_tokens: 4,
-                  },
-                },
-              }),
-            ),
-          ),
+          lastHandler(Buffer.from(JSON.stringify(createResponseDoneUsage(11, 7, 4)))),
         );
 
         await expect(responsePromise).resolves.toMatchObject({
@@ -2035,12 +1914,7 @@ describe('OpenAI Realtime Provider', () => {
               {
                 type: 'function',
                 name: 'end_of_dialog_tool',
-                parameters: {
-                  type: 'object',
-                  properties: {
-                    call_status: { type: 'string' },
-                  },
-                },
+                parameters: createCallStatusSchema(),
               },
             ],
             functionCallHandler,
@@ -2063,11 +1937,7 @@ describe('OpenAI Realtime Provider', () => {
 
         let responseSettled = false;
         const responsePromise = provider
-          .callApi('Can you call me back later?', {
-            test: {
-              metadata: { conversationId: 'loan-application-flow' },
-            },
-          } as any)
+          .callApi('Can you call me back later?', createLoanConversationContext() as any)
           .finally(() => {
             responseSettled = true;
           });
@@ -2077,58 +1947,14 @@ describe('OpenAI Realtime Provider', () => {
         });
         const lastHandler = mockHandlers.message[mockHandlers.message.length - 1];
 
+        await Promise.resolve(lastHandler(Buffer.from(JSON.stringify(createUserItemCreated()))));
+        await Promise.resolve(lastHandler(Buffer.from(JSON.stringify(createToolAddedEvent()))));
         await Promise.resolve(
-          lastHandler(
-            Buffer.from(
-              JSON.stringify({
-                type: 'conversation.item.created',
-                item: { id: 'msg_1', role: 'user' },
-              }),
-            ),
-          ),
-        );
-        await Promise.resolve(
-          lastHandler(
-            Buffer.from(
-              JSON.stringify({
-                type: 'response.output_item.added',
-                item: {
-                  type: 'function_call',
-                  call_id: 'call_1',
-                  name: 'end_of_dialog_tool',
-                  arguments: '{}',
-                },
-              }),
-            ),
-          ),
-        );
-        await Promise.resolve(
-          lastHandler(
-            Buffer.from(
-              JSON.stringify({
-                type: 'response.function_call_arguments.done',
-                call_id: 'call_1',
-                arguments: '{"call_status":"callback"}',
-              }),
-            ),
-          ),
+          lastHandler(Buffer.from(JSON.stringify(createCallbackArgumentsDone()))),
         );
 
         const toolTurnPromise = Promise.resolve(
-          lastHandler(
-            Buffer.from(
-              JSON.stringify({
-                type: 'response.done',
-                response: {
-                  usage: {
-                    total_tokens: 8,
-                    input_tokens: 5,
-                    output_tokens: 3,
-                  },
-                },
-              }),
-            ),
-          ),
+          lastHandler(Buffer.from(JSON.stringify(createResponseDoneUsage(8, 5, 3)))),
         );
 
         await vi.waitFor(() => {
@@ -2144,31 +1970,9 @@ describe('OpenAI Realtime Provider', () => {
         resolveFunctionCall?.('{"call_status":"callback"}');
         await toolTurnPromise;
 
+        await Promise.resolve(lastHandler(Buffer.from(JSON.stringify(createCallbackTextDone()))));
         await Promise.resolve(
-          lastHandler(
-            Buffer.from(
-              JSON.stringify({
-                type: 'response.text.done',
-                text: 'We will call you back later.',
-              }),
-            ),
-          ),
-        );
-        await Promise.resolve(
-          lastHandler(
-            Buffer.from(
-              JSON.stringify({
-                type: 'response.done',
-                response: {
-                  usage: {
-                    total_tokens: 11,
-                    input_tokens: 7,
-                    output_tokens: 4,
-                  },
-                },
-              }),
-            ),
-          ),
+          lastHandler(Buffer.from(JSON.stringify(createResponseDoneUsage(11, 7, 4)))),
         );
 
         await expect(responsePromise).resolves.toMatchObject({
@@ -2222,11 +2026,10 @@ describe('OpenAI Realtime Provider', () => {
           removeListener: vi.fn(),
         } as unknown as WebSocket;
 
-        const responsePromise = provider.callApi('Can you call me back later?', {
-          test: {
-            metadata: { conversationId: 'loan-application-flow' },
-          },
-        } as any);
+        const responsePromise = provider.callApi(
+          'Can you call me back later?',
+          createLoanConversationContext() as any,
+        );
         let settled = false;
         void responsePromise.finally(() => {
           settled = true;
@@ -2243,41 +2046,10 @@ describe('OpenAI Realtime Provider', () => {
         });
 
         const lastHandler = mockHandlers.message[mockHandlers.message.length - 1];
+        await Promise.resolve(lastHandler(Buffer.from(JSON.stringify(createUserItemCreated()))));
+        await Promise.resolve(lastHandler(Buffer.from(JSON.stringify(createCallbackTextDone()))));
         await Promise.resolve(
-          lastHandler(
-            Buffer.from(
-              JSON.stringify({
-                type: 'conversation.item.created',
-                item: { id: 'msg_1', role: 'user' },
-              }),
-            ),
-          ),
-        );
-        await Promise.resolve(
-          lastHandler(
-            Buffer.from(
-              JSON.stringify({
-                type: 'response.text.done',
-                text: 'We will call you back later.',
-              }),
-            ),
-          ),
-        );
-        await Promise.resolve(
-          lastHandler(
-            Buffer.from(
-              JSON.stringify({
-                type: 'response.done',
-                response: {
-                  usage: {
-                    total_tokens: 11,
-                    input_tokens: 7,
-                    output_tokens: 4,
-                  },
-                },
-              }),
-            ),
-          ),
+          lastHandler(Buffer.from(JSON.stringify(createResponseDoneUsage(11, 7, 4)))),
         );
 
         await expect(responsePromise).resolves.toMatchObject({
@@ -2296,20 +2068,10 @@ describe('OpenAI Realtime Provider', () => {
         const loadToolsSpy = vi
           .spyOn(util, 'maybeLoadToolsFromExternalFile')
           .mockRejectedValue(new Error('tools failed'));
-        const provider = new OpenAiRealtimeProvider('gpt-realtime', {
-          config: {
-            modalities: ['text'],
-            maintainContext: true,
-            websocketTimeout: 1000,
-            tools: [
-              {
-                type: 'function',
-                name: 'end_of_dialog_tool',
-                parameters: { type: 'object', properties: {} },
-              },
-            ],
-          },
-        });
+        const provider = new OpenAiRealtimeProvider(
+          'gpt-realtime',
+          createEndDialogProviderOptions(),
+        );
 
         provider.persistentConnection = {
           on: vi.fn((event: string, handler: Function) => {
@@ -2325,11 +2087,10 @@ describe('OpenAI Realtime Provider', () => {
           removeListener: vi.fn(),
         } as unknown as WebSocket;
 
-        const responsePromise = provider.callApi('Can you call me back later?', {
-          test: {
-            metadata: { conversationId: 'loan-application-flow' },
-          },
-        } as any);
+        const responsePromise = provider.callApi(
+          'Can you call me back later?',
+          createLoanConversationContext() as any,
+        );
 
         await expect(responsePromise).resolves.toMatchObject({
           error: expect.stringContaining('tools failed'),
@@ -2350,20 +2111,10 @@ describe('OpenAI Realtime Provider', () => {
         const loadToolsSpy = vi
           .spyOn(util, 'maybeLoadToolsFromExternalFile')
           .mockReturnValue(new Promise<unknown[]>(() => undefined) as any);
-        const provider = new OpenAiRealtimeProvider('gpt-realtime', {
-          config: {
-            modalities: ['text'],
-            maintainContext: true,
-            websocketTimeout: 1000,
-            tools: [
-              {
-                type: 'function',
-                name: 'end_of_dialog_tool',
-                parameters: { type: 'object', properties: {} },
-              },
-            ],
-          },
-        });
+        const provider = new OpenAiRealtimeProvider(
+          'gpt-realtime',
+          createEndDialogProviderOptions(),
+        );
 
         provider.persistentConnection = {
           on: vi.fn((event: string, handler: Function) => {
@@ -2379,11 +2130,10 @@ describe('OpenAI Realtime Provider', () => {
           removeListener: vi.fn(),
         } as unknown as WebSocket;
 
-        const responsePromise = provider.callApi('Can you call me back later?', {
-          test: {
-            metadata: { conversationId: 'loan-application-flow' },
-          },
-        } as any);
+        const responsePromise = provider.callApi(
+          'Can you call me back later?',
+          createLoanConversationContext() as any,
+        );
 
         await vi.advanceTimersByTimeAsync(1000);
 
@@ -2399,9 +2149,10 @@ describe('OpenAI Realtime Provider', () => {
     });
 
     it('should reuse existing connection for subsequent requests', async () => {
-      const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', {
-        config: { modalities: ['text'], maintainContext: true },
-      });
+      const provider = new OpenAiRealtimeProvider(
+        'gpt-realtime-1.5',
+        createPersistentTextOptions(),
+      );
       const persistentConnection = createPersistentMockWebSocket(provider);
       provider.persistentConnection = persistentConnection;
       const context = { test: { metadata: { conversationId: 'reuse-connection' } } } as any;
@@ -2439,9 +2190,10 @@ describe('OpenAI Realtime Provider', () => {
       // Regression test for the concurrency race that caused the shipped
       // promptfooconfig-conversation.yaml example to fail 100% at default
       // concurrency=4 with "WebSocket is not open: readyState 0 (CONNECTING)".
-      const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', {
-        config: { modalities: ['text'], maintainContext: true },
-      });
+      const provider = new OpenAiRealtimeProvider(
+        'gpt-realtime-1.5',
+        createPersistentTextOptions(),
+      );
 
       // Pre-set persistentConnection so openPersistentConnection() takes the
       // pre-existing-connection fast path and returns Promise.resolve().
@@ -2477,16 +2229,7 @@ describe('OpenAI Realtime Provider', () => {
         handler(Buffer.from(JSON.stringify({ type: 'response.created', response: { id: text } })));
         handler(Buffer.from(JSON.stringify({ type: 'response.output_text.delta', delta: text })));
         handler(Buffer.from(JSON.stringify({ type: 'response.output_text.done', text })));
-        handler(
-          Buffer.from(
-            JSON.stringify({
-              type: 'response.done',
-              response: {
-                usage: { total_tokens: 1, input_tokens: 1, output_tokens: 0 },
-              },
-            }),
-          ),
-        );
+        handler(Buffer.from(JSON.stringify(createResponseDoneUsage(1, 1, 0))));
       };
 
       // Kick off two concurrent turns. Without serialization, both would
@@ -2512,9 +2255,7 @@ describe('OpenAI Realtime Provider', () => {
       // turns then took the openPersistentConnection() fast path and failed in
       // sendEvent with "persistent WebSocket is not set", making the provider
       // permanently unusable for maintain-context flows after the first drop.
-      const provider = new OpenAiRealtimeProvider('gpt-realtime', {
-        config: { modalities: ['text'], maintainContext: true },
-      });
+      const provider = new OpenAiRealtimeProvider('gpt-realtime', createPersistentTextOptions());
 
       // Pre-set persistentConnection so the first openPersistentConnection()
       // takes the pre-existing-connection branch and caches connectionReady.
@@ -2534,14 +2275,7 @@ describe('OpenAI Realtime Provider', () => {
       lastHandler()(
         Buffer.from(JSON.stringify({ type: 'response.output_text.done', text: 'first' })),
       );
-      lastHandler()(
-        Buffer.from(
-          JSON.stringify({
-            type: 'response.done',
-            response: { usage: { total_tokens: 1, input_tokens: 1, output_tokens: 0 } },
-          }),
-        ),
-      );
+      lastHandler()(Buffer.from(JSON.stringify(createResponseDoneUsage(1, 1, 0))));
       const r1 = await p1;
       expect(r1.output).toBe('first');
 
@@ -2576,14 +2310,7 @@ describe('OpenAI Realtime Provider', () => {
         ),
       );
       h2(Buffer.from(JSON.stringify({ type: 'response.output_text.done', text: 'second' })));
-      h2(
-        Buffer.from(
-          JSON.stringify({
-            type: 'response.done',
-            response: { usage: { total_tokens: 1, input_tokens: 1, output_tokens: 0 } },
-          }),
-        ),
-      );
+      h2(Buffer.from(JSON.stringify(createResponseDoneUsage(1, 1, 0))));
       const r2 = await p2;
       expect(r2.output).toBe('second');
 
@@ -2595,9 +2322,7 @@ describe('OpenAI Realtime Provider', () => {
       // unexpected disconnect during a turn would let the caller's promise
       // dangle until the request timeout fired and would also leave
       // connectionReady cached so subsequent turns skipped reconnection.
-      const provider = new OpenAiRealtimeProvider('gpt-realtime', {
-        config: { modalities: ['text'], maintainContext: true },
-      });
+      const provider = new OpenAiRealtimeProvider('gpt-realtime', createPersistentTextOptions());
 
       const firstWs = {
         on: vi.fn((event: string, h: Function) => mockHandlers[event].push(h)),
@@ -2729,9 +2454,7 @@ describe('OpenAI Realtime Provider', () => {
       // a handshake rejection that surfaces as 'close' (without a preceding
       // 'error') would leave connectionReady pending forever and freeze every
       // concurrent caller awaiting OPEN.
-      const provider = new OpenAiRealtimeProvider('gpt-realtime', {
-        config: { modalities: ['text'], maintainContext: true },
-      });
+      const provider = new OpenAiRealtimeProvider('gpt-realtime', createPersistentTextOptions());
 
       const ctx = { test: { metadata: { conversationId: 'close-before-open' } } } as any;
       const responsePromise = provider.callApi('hi', ctx);
@@ -2763,13 +2486,7 @@ describe('OpenAI Realtime Provider', () => {
         config: {
           modalities: ['text'],
           maintainContext: true,
-          tools: [
-            {
-              type: 'function',
-              name: 'lookup',
-              parameters: { type: 'object', properties: {} },
-            },
-          ],
+          tools: [createRealtimeTool('lookup')],
           tool_choice: 'auto',
           functionCallHandler,
         },
@@ -2836,13 +2553,7 @@ describe('OpenAI Realtime Provider', () => {
             maintainContext: false,
             websocketTimeout: 50,
             toolCallTimeout: 5000,
-            tools: [
-              {
-                type: 'function',
-                name: 'slow',
-                parameters: { type: 'object', properties: {} },
-              },
-            ],
+            tools: [createRealtimeTool('slow')],
             tool_choice: 'auto',
             functionCallHandler,
           },
@@ -2898,13 +2609,7 @@ describe('OpenAI Realtime Provider', () => {
             modalities: ['text'],
             websocketTimeout: 50,
             toolCallTimeout: 5000,
-            tools: [
-              {
-                type: 'function',
-                name: 'slow',
-                parameters: { type: 'object', properties: {} },
-              },
-            ],
+            tools: [createRealtimeTool('slow')],
             tool_choice: 'auto',
             functionCallHandler,
           },
@@ -2950,7 +2655,7 @@ describe('OpenAI Realtime Provider', () => {
 
   describe('Cleanup', () => {
     it('should properly clean up resources', () => {
-      const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview');
+      const provider = new OpenAiRealtimeProvider('gpt-realtime-1.5');
 
       // Create a properly typed mock
       const cleanupMockWs = {
@@ -2993,14 +2698,7 @@ describe('OpenAI Realtime Provider', () => {
       );
       lastHandler(Buffer.from(JSON.stringify({ type: 'response.text.delta', delta: 'ok' })));
       lastHandler(Buffer.from(JSON.stringify({ type: 'response.text.done', text: 'ok' })));
-      lastHandler(
-        Buffer.from(
-          JSON.stringify({
-            type: 'response.done',
-            response: { usage: { total_tokens: 1, input_tokens: 1, output_tokens: 0 } },
-          }),
-        ),
-      );
+      lastHandler(Buffer.from(JSON.stringify(createResponseDoneUsage(1, 1, 0))));
     };
 
     const simulateGaFlow = () => {
@@ -3020,18 +2718,191 @@ describe('OpenAI Realtime Provider', () => {
       );
       lastHandler(Buffer.from(JSON.stringify({ type: 'response.output_text.delta', delta: 'ok' })));
       lastHandler(Buffer.from(JSON.stringify({ type: 'response.output_text.done', text: 'ok' })));
-      lastHandler(
-        Buffer.from(
-          JSON.stringify({
-            type: 'response.done',
-            response: { usage: { total_tokens: 1, input_tokens: 1, output_tokens: 0 } },
-          }),
-        ),
-      );
+      lastHandler(Buffer.from(JSON.stringify(createResponseDoneUsage(1, 1, 0))));
     };
 
+    const safetyIdentifiers = () =>
+      (MockWebSocket as any).mock.calls.map(([, options]: any[]) =>
+        new Headers(options.headers).get('OpenAI-Safety-Identifier'),
+      );
+
+    describe.each(['direct', 'client-secret'])('%s safety identifier', (mode) => {
+      it.each([
+        { name: 'configured', config: { safety_identifier: 'user-123' }, expected: 'user-123' },
+        { name: 'unset', config: {}, expected: undefined },
+        {
+          name: 'custom header override',
+          config: {
+            safety_identifier: 'provider-user',
+            headers: { 'openai-safety-identifier': 'header-user' },
+          },
+          expected: 'header-user',
+        },
+      ])('sends the $name header', async ({ config, expected }) => {
+        const provider = new OpenAiRealtimeProvider('gpt-realtime', { config });
+        try {
+          const pending =
+            mode === 'direct'
+              ? provider.directWebSocketRequest('hi')
+              : provider.webSocketRequest('secret123', 'hi');
+          mockHandlers.open.forEach((handler) => handler());
+          simulateGaFlow();
+          await pending;
+
+          expect(safetyIdentifiers()).toEqual([expected ?? null]);
+          expect(await provider.getRealtimeSessionBody()).not.toHaveProperty('safety_identifier');
+        } finally {
+          provider.cleanup();
+        }
+      });
+    });
+
+    it.each(['config', 'header'])(
+      'keeps concurrent prompt safety identifiers separate via %s',
+      async (source) => {
+        const provider = new OpenAiRealtimeProvider('gpt-realtime', {
+          config: {
+            safety_identifier: 'provider-user',
+            headers:
+              source === 'header'
+                ? { 'OPENAI-SAFETY-IDENTIFIER': 'provider-user', 'api-key': 'gateway-key' }
+                : undefined,
+          },
+        });
+        const context = (safety_identifier: string) => ({
+          vars: {},
+          prompt: {
+            raw: 'hi',
+            label: 'hi',
+            config:
+              source === 'header'
+                ? { headers: { 'openai-safety-identifier': safety_identifier } }
+                : { safety_identifier },
+          },
+        });
+        const first = provider.callApi('hi', context('first-user'));
+        const firstHandler = lastMessageHandler();
+        const second = provider.callApi('hi', context('second-user'));
+        const secondHandler = lastMessageHandler();
+        mockHandlers.open.forEach((handler) => handler());
+        for (const handler of [firstHandler, secondHandler]) {
+          emitUserItem(handler);
+          emitOutputTextDone(handler, 'ok');
+          emitResponseDone(handler);
+        }
+
+        const results = await Promise.all([first, second]);
+        expect(results.map((result) => result.output)).toEqual(['ok', 'ok']);
+        expect(safetyIdentifiers()).toEqual(['first-user', 'second-user']);
+        if (source === 'header') {
+          for (const [, options] of (MockWebSocket as any).mock.calls) {
+            expect(options.headers['api-key']).toBe('gateway-key');
+          }
+        }
+        expect(provider.config.safety_identifier).toBe('provider-user');
+      },
+    );
+
+    it.each([
+      ['prompt', undefined],
+      ['provider', undefined],
+      ['provider', 'header-user'],
+    ] as const)(
+      'uses the effective persistent safety identifier from %s with header %s',
+      async (source, header) => {
+        const provider = new OpenAiRealtimeProvider('gpt-realtime', {
+          config: {
+            maintainContext: true,
+            headers: header ? { 'openai-safety-identifier': header } : undefined,
+          },
+        });
+        try {
+          for (const safety_identifier of ['first-user', 'first-user', 'second-user', undefined]) {
+            if (source === 'provider') {
+              provider.config.safety_identifier = safety_identifier;
+            }
+            const pending = provider.callApi('hi', {
+              vars: {},
+              prompt: {
+                raw: 'hi',
+                label: 'hi',
+                config: source === 'prompt' ? { safety_identifier } : {},
+              },
+              test: { metadata: { conversationId: 'conversation-1' } },
+            });
+            await flushMicrotasks();
+            mockHandlers.open.forEach((handler) => handler());
+            await flushMicrotasks();
+            simulateGaFlow();
+            expect(await pending).toMatchObject({ output: 'ok' });
+          }
+          expect(safetyIdentifiers()).toEqual(
+            header ? [header] : ['first-user', 'second-user', null],
+          );
+          expect(mockWs.close).toHaveBeenCalledTimes(header ? 0 : 2);
+          expect(provider.config.safety_identifier).toBeUndefined();
+        } finally {
+          provider.cleanup();
+        }
+      },
+    );
+
+    it.each([
+      ['Authorization', false],
+      ['api-key', false],
+      ['X-Tenant', false],
+      ['Authorization', true],
+    ] as const)(
+      'reuses persistent connections only with the same effective %s header (Azure: %s)',
+      async (name, azureApiKeyAuth) => {
+        const provider = new OpenAiRealtimeProvider('gpt-realtime', {
+          config: {
+            apiKey: 'fixture-key',
+            maintainContext: true,
+            safety_identifier: 'same-user',
+            azureApiKeyAuth,
+            headers: azureApiKeyAuth ? { 'api-key': 'gateway-key' } : undefined,
+          },
+        });
+        try {
+          for (const headers of [
+            { [name]: 'first-value', 'X-Static': 'same' },
+            { 'x-static': 'same', [name.toLowerCase()]: 'first-value' },
+            { [name]: 'second-value', 'X-Static': 'same' },
+            { 'X-Static': 'same' },
+          ]) {
+            const pending = provider.callApi('hi', {
+              vars: {},
+              prompt: { raw: 'hi', label: 'hi', config: { headers } },
+              test: { metadata: { conversationId: 'same-conversation' } },
+            });
+            await flushMicrotasks();
+            mockHandlers.open.forEach((handler) => handler());
+            await flushMicrotasks();
+            simulateGaFlow();
+            expect(await pending).toMatchObject({ output: 'ok' });
+          }
+          const sentHeaders = (MockWebSocket as any).mock.calls.map(([, options]: any[]) =>
+            new Headers(options.headers).get(name),
+          );
+          expect(sentHeaders).toEqual(
+            azureApiKeyAuth
+              ? [null]
+              : [
+                  'first-value',
+                  'second-value',
+                  name === 'Authorization' ? 'Bearer fixture-key' : null,
+                ],
+          );
+          expect(mockWs.close).toHaveBeenCalledTimes(azureApiKeyAuth ? 0 : 2);
+        } finally {
+          provider.cleanup();
+        }
+      },
+    );
+
     it('uses default OpenAI base for direct WebSocket', async () => {
-      const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview');
+      const provider = new OpenAiRealtimeProvider('gpt-realtime-1.5');
       const promise = provider.directWebSocketRequest('hi');
 
       // Trigger open to allow client to send
@@ -3043,7 +2914,7 @@ describe('OpenAI Realtime Provider', () => {
       const constructedUrl = (MockWebSocket as any).mock.calls[0][0];
       const wsOptions = (MockWebSocket as any).mock.calls[0][1];
       expect(constructedUrl).toBe(
-        'wss://api.openai.com/v1/realtime?model=' + encodeURIComponent('gpt-4o-realtime-preview'),
+        'wss://api.openai.com/v1/realtime?model=' + encodeURIComponent('gpt-realtime-1.5'),
       );
       expect(wsOptions.headers['X-OpenAI-Originator']).toBe('promptfoo');
     });
@@ -3095,9 +2966,7 @@ describe('OpenAI Realtime Provider', () => {
     it.each(['gpt-realtime-2.1', 'gpt-realtime-2.1-mini'])(
       'uses the GA Realtime wire shape and endpoint for %s',
       async (model) => {
-        const provider = new OpenAiRealtimeProvider(model, {
-          config: { modalities: ['text'] },
-        });
+        const provider = new OpenAiRealtimeProvider(model, createTextModalityOptions());
         const promise = provider.directWebSocketRequest('hi');
 
         mockHandlers.open.forEach((handler) => handler());
@@ -3259,14 +3128,7 @@ describe('OpenAI Realtime Provider', () => {
         ),
       );
       await Promise.resolve(
-        lastMessageHandler(
-          Buffer.from(
-            JSON.stringify({
-              type: 'response.done',
-              response: { usage: { total_tokens: 1, input_tokens: 1, output_tokens: 0 } },
-            }),
-          ),
-        ),
+        lastMessageHandler(Buffer.from(JSON.stringify(createResponseDoneUsage(1, 1, 0)))),
       );
 
       mockHandlers.close[mockHandlers.close.length - 1](1006, Buffer.from('aborted'));
@@ -3275,11 +3137,7 @@ describe('OpenAI Realtime Provider', () => {
     });
 
     it('preserves structured multimodal user content for direct WebSocket requests', async () => {
-      const provider = new OpenAiRealtimeProvider('gpt-realtime-2', {
-        config: {
-          modalities: ['text'],
-        },
-      });
+      const provider = new OpenAiRealtimeProvider('gpt-realtime-2', createTextModalityOptions());
       const promise = provider.directWebSocketRequest(
         JSON.stringify([
           {
@@ -3321,7 +3179,7 @@ describe('OpenAI Realtime Provider', () => {
     });
 
     it('normalizes invalid max_response_output_tokens in session.update', async () => {
-      const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', {
+      const provider = new OpenAiRealtimeProvider('gpt-realtime-1.5', {
         config: { max_response_output_tokens: -1 },
       });
       const promise = provider.directWebSocketRequest('hi');
@@ -3349,20 +3207,13 @@ describe('OpenAI Realtime Provider', () => {
         Buffer.from(JSON.stringify({ type: 'response.created', response: { id: 'resp_zero' } })),
       );
       lastHandler(Buffer.from(JSON.stringify({ type: 'response.text.done', text: 'ok' })));
-      lastHandler(
-        Buffer.from(
-          JSON.stringify({
-            type: 'response.done',
-            response: { usage: { total_tokens: 1, input_tokens: 1, output_tokens: 0 } },
-          }),
-        ),
-      );
+      lastHandler(Buffer.from(JSON.stringify(createResponseDoneUsage(1, 1, 0))));
 
       await promise;
     });
 
     it('rejects direct WebSocket requests when loading tools fails during open', async () => {
-      const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', {
+      const provider = new OpenAiRealtimeProvider('gpt-realtime-1.5', {
         config: { tools: 'file://missing-tools.yaml' as any },
       });
       const promise = provider.directWebSocketRequest('hi');
@@ -3389,7 +3240,7 @@ describe('OpenAI Realtime Provider', () => {
       });
 
       it('handles direct WebSocket tool config preload rejections before open', async () => {
-        const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', {
+        const provider = new OpenAiRealtimeProvider('gpt-realtime-1.5', {
           config: { tools: 'file://missing-tools.yaml' as any },
         });
         const promise = provider.directWebSocketRequest('hi');
@@ -3404,7 +3255,7 @@ describe('OpenAI Realtime Provider', () => {
     });
 
     it('converts custom https apiBaseUrl to wss for direct WebSocket', async () => {
-      const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', {
+      const provider = new OpenAiRealtimeProvider('gpt-realtime-1.5', {
         config: { apiBaseUrl: 'https://my-custom-api.com/v1' },
       });
       const promise = provider.directWebSocketRequest('hi');
@@ -3417,14 +3268,13 @@ describe('OpenAI Realtime Provider', () => {
       const constructedUrl = (MockWebSocket as any).mock.calls[0][0];
       const wsOptions = (MockWebSocket as any).mock.calls[0][1];
       expect(constructedUrl).toBe(
-        'wss://my-custom-api.com/v1/realtime?model=' +
-          encodeURIComponent('gpt-4o-realtime-preview'),
+        'wss://my-custom-api.com/v1/realtime?model=' + encodeURIComponent('gpt-realtime-1.5'),
       );
       expect(wsOptions.headers.Origin).toBe('https://my-custom-api.com');
     });
 
     it('converts custom http apiBaseUrl to ws for direct WebSocket', async () => {
-      const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', {
+      const provider = new OpenAiRealtimeProvider('gpt-realtime-1.5', {
         config: { apiBaseUrl: 'http://localhost:8080/v1' },
       });
       const promise = provider.directWebSocketRequest('hi');
@@ -3437,7 +3287,7 @@ describe('OpenAI Realtime Provider', () => {
       const constructedUrl = (MockWebSocket as any).mock.calls[0][0];
       const wsOptions = (MockWebSocket as any).mock.calls[0][1];
       expect(constructedUrl).toBe(
-        'ws://localhost:8080/v1/realtime?model=' + encodeURIComponent('gpt-4o-realtime-preview'),
+        'ws://localhost:8080/v1/realtime?model=' + encodeURIComponent('gpt-realtime-1.5'),
       );
       expect(wsOptions.headers.Origin).toBe('http://localhost:8080');
     });
@@ -3458,7 +3308,7 @@ describe('OpenAI Realtime Provider', () => {
     });
 
     it('uses apiBaseUrl for client-secret socket URL', async () => {
-      const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', {
+      const provider = new OpenAiRealtimeProvider('gpt-realtime-1.5', {
         config: { apiBaseUrl: 'https://my-custom-api.com/v1' },
       });
       const promise = provider.webSocketRequest('secret123', 'hi');
@@ -3493,22 +3343,10 @@ describe('OpenAI Realtime Provider', () => {
     });
 
     it('normalizes response-level tools for client-secret requests', async () => {
-      const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', {
+      const provider = new OpenAiRealtimeProvider('gpt-realtime-1.5', {
         config: {
-          tools: [
-            {
-              type: 'function',
-              function: {
-                name: 'get_weather',
-                description: 'Get the weather',
-                parameters: { type: 'object', properties: {} },
-              },
-            },
-          ],
-          tool_choice: {
-            type: 'function',
-            function: { name: 'get_weather' },
-          },
+          tools: [createWeatherChatTool()],
+          tool_choice: createMinimalWeatherChatTool(),
         },
       });
       const promise = provider.webSocketRequest('secret123', 'hi');

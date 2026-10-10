@@ -347,6 +347,8 @@ transformRequest: 'file://transforms/request.js:transformRequest'
 
 ## Response Transform
 
+Compressed responses are decoded automatically. A request fails if a decompression stage produces more than 64 MiB of data.
+
 The `transformResponse` option allows you to extract and transform the API response. If no `transformResponse` is specified, the provider will attempt to parse the response as JSON. If JSON parsing fails, it will return the raw text response.
 
 You can override this behavior by specifying a `transformResponse` in the provider config. The `transformResponse` can be one of the following:
@@ -683,7 +685,7 @@ tests:
 
 The HTTP provider supports tool calling through the `tools`, `tool_choice`, and `transformToolsFormat` config options. Define your tools and tool choice in OpenAI format, then set `transformToolsFormat` to the target provider's format (`openai`, `anthropic`, `bedrock`, or `google`). Promptfoo converts `tools` and `tool_choice` before injecting them into your request body via `{{tools}}` and `{{tool_choice}}`.
 
-Setting `transformToolsFormat` is especially important when the HTTP provider is used as a guardrails provider, so that managed tool calls are formatted correctly for the target API.
+Setting `transformToolsFormat` is important when the HTTP provider is used as a guardrails provider, so that managed tool calls are formatted correctly for the target API.
 
 ### Basic Configuration
 
