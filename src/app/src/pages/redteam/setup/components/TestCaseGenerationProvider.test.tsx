@@ -17,6 +17,16 @@ import { useRedTeamTargetConfigValidation } from '../hooks/useRedTeamTargetConfi
 import { TestCaseGenerationProvider, useTestCaseGeneration } from './TestCaseGenerationProvider';
 import type { PluginConfig } from '@promptfoo/redteam/types';
 
+const createHttpGenerationProvider = () => ({
+  id: 'http',
+  config: { url: 'http://localhost:7979', method: 'POST' },
+});
+
+const createUnsafeCodingProvider = () => ({
+  id: 'openinterpreter',
+  config: { sandbox_mode: 'danger-full-access' },
+});
+
 // ===================================================================
 // Mocks
 // ===================================================================
@@ -132,12 +142,14 @@ const TestConsumer = ({
   testStrategy,
   isPluginStatic = false,
   isStrategyStatic = false,
+  onError,
 }: {
   testPlugin: Plugin;
   pluginConfig?: PluginConfig;
   testStrategy: Strategy;
   isPluginStatic?: boolean;
   isStrategyStatic?: boolean;
+  onError?: (error: Error) => void;
 }) => {
   const { isGenerating, plugin, strategy, generateTestCase } = useTestCaseGeneration();
 
@@ -145,6 +157,8 @@ const TestConsumer = ({
     await generateTestCase(
       { id: testPlugin, config: pluginConfig, isStatic: isPluginStatic },
       { id: testStrategy, config: {}, isStatic: isStrategyStatic },
+      undefined,
+      onError,
     );
   }
 
@@ -168,6 +182,106 @@ describe('TestCaseGenerationProvider', () => {
     callApiMock.mockImplementation(defaultCallApiImplementation);
     useRedTeamTargetConfigValidation.getState().clearTargetConfigValidation();
   });
+
+  describe.each(['basic', 'goat'] as const)(
+    '%s generation request and failures',
+    (testStrategy) => {
+      it('sends plugin configuration with a 60-second deadline and cancels on unmount', async () => {
+        const timeout = vi.spyOn(AbortSignal, 'timeout');
+        callApiMock.mockImplementation(() => new Promise<Response>(() => {}));
+        const pluginConfig = {
+          language: 'Japanese',
+          applicationDefinition: { purpose: 'Plugin purpose' },
+          additionalConfig: { key: 'value' },
+        };
+        const view = render(
+          <ToastProvider>
+            <TestCaseGenerationProvider
+              redTeamConfig={{ ...MOCK_CONFIG, target: createHttpGenerationProvider() }}
+            >
+              <TestConsumer
+                testPlugin="harmful:hate"
+                pluginConfig={pluginConfig}
+                testStrategy={testStrategy}
+              />
+            </TestCaseGenerationProvider>
+          </ToastProvider>,
+        );
+        await userEvent.setup().click(screen.getByTestId('test-case-generation-btn'));
+        expect(timeout).toHaveBeenCalledWith(60000);
+        expect(callApiMock).toHaveBeenCalledWith(
+          '/redteam/generate-test',
+          expect.objectContaining({
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Cache-Control': 'no-cache, no-store, must-revalidate',
+              Pragma: 'no-cache',
+            },
+          }),
+        );
+        const options = callApiMock.mock.calls[0][1]!;
+        expect(JSON.parse(options.body as string)).toMatchObject({
+          plugin: { id: 'harmful:hate', config: pluginConfig },
+          strategy: { id: testStrategy, config: {} },
+          config: { applicationDefinition: { purpose: 'Test purpose' } },
+        });
+        expect(options.signal?.aborted).toBe(false);
+        view.unmount();
+        expect(options.signal?.aborted).toBe(true);
+      });
+
+      it.each([
+        [
+          'Request timed out after 10000ms',
+          'Test generation timed out. Please try again or check your connection.',
+        ],
+        [
+          'The operation timed out',
+          'Test generation timed out. Please try again or check your connection.',
+        ],
+        [
+          'Connection timed out while waiting',
+          'Test generation timed out. Please try again or check your connection.',
+        ],
+        ['Internal server error', 'Internal server error'],
+        [null, 'Failed to generate test case'],
+        ['api-error', 'Invalid configuration provided'],
+      ])('reports %s through the real context and toast', async (message, expected) => {
+        const error = message === null ? 'non-Error rejection' : new Error(message);
+        if (message === 'api-error') {
+          callApiMock.mockResolvedValue(
+            createJsonResponse({ error: 'Invalid configuration provided' }),
+          );
+        } else {
+          callApiMock.mockRejectedValue(error);
+        }
+        const onError = vi.fn();
+        render(
+          <ToastProvider>
+            <TestCaseGenerationProvider
+              redTeamConfig={{ ...MOCK_CONFIG, target: createHttpGenerationProvider() }}
+            >
+              <TestConsumer testPlugin="bola" testStrategy={testStrategy} onError={onError} />
+            </TestCaseGenerationProvider>
+          </ToastProvider>,
+        );
+        await userEvent.setup().click(screen.getByTestId('test-case-generation-btn'));
+        await waitFor(() => expect(screen.getByTestId('isGenerating')).toHaveTextContent('false'));
+        expect(screen.getByTestId('plugin')).toHaveTextContent('null');
+        expect(screen.getByTestId('strategy')).toHaveTextContent('null');
+        expect(screen.queryByTestId('test-case-dialog')).not.toBeInTheDocument();
+        expect(screen.getByText(expected)).toBeInTheDocument();
+        expect(screen.getByText(expected).parentElement).toHaveClass('bg-red-50');
+        expect(onError).toHaveBeenCalledTimes(1);
+        if (message === 'api-error') {
+          expect(onError.mock.calls[0][0]).toEqual(new Error('Invalid configuration provided'));
+        } else {
+          expect(onError.mock.calls[0][0]).toBe(error);
+        }
+      });
+    },
+  );
 
   it.each(['llamafile', 'vllm', 'text-generation-webui'] as const)(
     'normalizes %s local generation and target requests separately',
@@ -584,10 +698,7 @@ describe('TestCaseGenerationProvider', () => {
             <TestCaseGenerationProvider
               redTeamConfig={{
                 ...MOCK_CONFIG,
-                target: {
-                  id: 'openinterpreter',
-                  config: { sandbox_mode: 'danger-full-access' },
-                },
+                target: createUnsafeCodingProvider(),
               }}
             >
               <TestConsumer testPlugin="harmful:hate" testStrategy={strategy} />
@@ -627,10 +738,7 @@ describe('TestCaseGenerationProvider', () => {
           <TestCaseGenerationProvider
             redTeamConfig={{
               ...MOCK_CONFIG,
-              target: {
-                id: 'openinterpreter',
-                config: { sandbox_mode: 'danger-full-access' },
-              },
+              target: createUnsafeCodingProvider(),
             }}
           >
             <Start />
@@ -669,10 +777,7 @@ describe('TestCaseGenerationProvider', () => {
           <TestCaseGenerationProvider
             redTeamConfig={{
               ...MOCK_CONFIG,
-              target: {
-                id: 'http',
-                config: { url: 'http://localhost:7979', method: 'POST' },
-              },
+              target: createHttpGenerationProvider(),
             }}
           >
             <TestConsumer testPlugin={testPlugin} testStrategy={testStrategy} />
@@ -724,10 +829,7 @@ describe('TestCaseGenerationProvider', () => {
           <TestCaseGenerationProvider
             redTeamConfig={{
               ...MOCK_CONFIG,
-              target: {
-                id: 'http',
-                config: { url: 'http://localhost:7979', method: 'POST' },
-              },
+              target: createHttpGenerationProvider(),
             }}
           >
             <TestConsumer testPlugin={testPlugin} testStrategy={testStrategy} />
@@ -939,10 +1041,7 @@ describe('TestCaseGenerationProvider', () => {
           <TestCaseGenerationProvider
             redTeamConfig={{
               ...MOCK_CONFIG,
-              target: {
-                id: 'http',
-                config: { url: 'http://localhost:7979', method: 'POST' },
-              },
+              target: createHttpGenerationProvider(),
             }}
           >
             <TestConsumer testPlugin={testPlugin} testStrategy={testStrategy} />
