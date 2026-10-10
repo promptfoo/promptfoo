@@ -1,6 +1,6 @@
 import { TooltipProvider } from '@app/components/ui/tooltip';
 import ProviderConfigEditor from '@app/pages/redteam/setup/components/Targets/ProviderConfigEditor';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import AddProviderDialog from './AddProviderDialog';
@@ -27,6 +27,9 @@ vi.mock('@app/pages/redteam/setup/components/Targets/ProviderTypeSelector', () =
         }
       >
         Choose Open Interpreter
+      </button>
+      <button type="button" onClick={() => setProvider({ id: '', config: {} }, 'custom')}>
+        Choose Custom Target
       </button>
       <button
         type="button"
@@ -94,6 +97,58 @@ const renderDialog = (url: string, body = '{{prompt}}') => {
 };
 
 describe('AddProviderDialog provider validation', () => {
+  it('configures Custom Target before requiring an ID to save', async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+    const onClose = vi.fn();
+    render(
+      <TooltipProvider>
+        <AddProviderDialog open onClose={onClose} onSave={onSave} />
+      </TooltipProvider>,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Choose Custom Target' }));
+    expect(screen.getByRole('heading', { name: 'Configure Provider' })).toBeInTheDocument();
+    const save = screen.getByRole('button', { name: 'Add Provider' });
+    await user.click(save);
+    expect(onSave).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+    expect(save).toBeDisabled();
+
+    await user.type(screen.getByLabelText(/Target ID/), 'echo');
+    const config = screen.getByTestId('code-editor');
+    await user.clear(config);
+    await user.paste('{"prefix":"custom QA"}');
+    await waitFor(() => expect(save).toBeEnabled());
+    await user.click(save);
+    expect(onSave).toHaveBeenCalledWith({
+      id: 'echo',
+      label: 'echo',
+      config: { prefix: 'custom QA' },
+    });
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it('clears stale Custom Target validation when selected again after Back', async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+    render(
+      <TooltipProvider>
+        <AddProviderDialog open onClose={vi.fn()} onSave={onSave} />
+      </TooltipProvider>,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Choose Custom Target' }));
+    expect(screen.getByRole('heading', { name: 'Configure Provider' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Add Provider' }));
+    expect(screen.getByRole('button', { name: 'Add Provider' })).toBeDisabled();
+    await user.click(screen.getByRole('button', { name: 'Back' }));
+    await user.click(screen.getByRole('button', { name: 'Choose Custom Target' }));
+    expect(screen.getByLabelText(/Target ID/)).toHaveValue('');
+    expect(screen.getByRole('button', { name: 'Add Provider' })).toBeEnabled();
+    expect(onSave).not.toHaveBeenCalled();
+  });
+
   it('validates and saves Codex Security through the real provider configuration editor', async () => {
     const user = userEvent.setup();
     const onSave = vi.fn();
