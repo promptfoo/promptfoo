@@ -9,7 +9,7 @@ description: Use Google Vertex AI models including Gemini, Claude, Llama, and sp
 The `vertex` provider connects to Google's [Vertex AI](https://cloud.google.com/vertex-ai). It supports Gemini, Llama, Claude, and other models for text, code, and embeddings.
 
 :::info Provider Selection
-Use `vertex:` for all Vertex AI models (Gemini, Claude, Llama, etc.). Use `google:` for Google AI Studio (API key authentication).
+Use `vertex:` for the supported Vertex inference paths listed below (Gemini, Claude, and Llama). Use `google:` for Google AI Studio (API key authentication).
 :::
 
 ## Available Models
@@ -69,7 +69,15 @@ before selecting a non-global endpoint. For current GA Gemini 3 models, see Goog
 - `vertex:gemini-2.5-flash-lite` - Cost-efficient model optimized for high-volume, latency-sensitive tasks
 
 :::warning Vertex model retirement
-Check the [Vertex AI release notes](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/release-notes) for current Gemini 2.5 retirement dates. Test a supported replacement for each affected target and any explicitly configured grading provider.
+Google's [Vertex model lifecycle](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/model-versions) lists these retirement dates:
+
+| Vertex model                          | Announced retirement |
+| ------------------------------------- | -------------------- |
+| Gemini 2.5 Pro, Flash, and Flash-Lite | October 20, 2026     |
+| Gemini 3.6 Flash                      | November 19, 2026    |
+| Gemini 3.7 Flash                      | January 28, 2027     |
+
+Use Gemini 3.8 Flash or a supported Flash-Lite model for new configurations. Migrate both targets and explicitly configured graders, and re-run your evals before switching. These dates apply to Vertex; the [Gemini API lifecycle](https://ai.google.dev/gemini-api/docs/deprecations) is separate. Check the linked schedule when changing a deployment because Google can extend retirement dates.
 :::
 
 ### Claude Models
@@ -208,9 +216,9 @@ By default, supported Llama 3 models use Llama Guard for content safety. You can
 
 ### Gemma Models (Open Models)
 
-- `vertex:gemma` - Lightweight open text model for generation, summarization, and extraction
-- `vertex:codegemma` - Lightweight code generation and completion model
-- `vertex:paligemma` - Lightweight vision-language model for image tasks
+Model Garden availability does not make `vertex:gemma`, `vertex:codegemma`, or `vertex:paligemma` valid hosted inference IDs. These names fall through to the legacy PaLM request format in the current adapter.
+
+For [Gemma deployed from Model Garden](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/model-garden/deploy-and-inference-tutorial), use a [custom provider](/docs/providers/custom-api) that calls your deployed endpoint with its required request format and Google Cloud authentication. For Google's hosted Gemini API Gemma models, use the documented [`google:gemma-4-31b-it` or `google:gemma-4-26b-a4b-it` routes](/docs/providers/google#chat-and-multimodal-models).
 
 ### Embedding Models
 
@@ -1402,11 +1410,11 @@ See the [Vertex Live example](https://github.com/promptfoo/promptfoo/tree/main/e
 
 ## Supported Features
 
-The Vertex AI provider supports core functionality for LLM evaluation:
+The table describes provider features, not a promise that every model supports every feature. Gemini uses `generateContent` / `streamGenerateContent`, Claude uses its Vertex Anthropic transport, and Llama uses its OpenAI-compatible chat endpoint:
 
 | Feature                  | Supported | Notes                                                                                     |
 | ------------------------ | --------- | ----------------------------------------------------------------------------------------- |
-| Chat completions         | ✅        | Full support for Gemini, Claude, Llama                                                    |
+| Chat completions         | ✅        | Gemini, Claude, and Llama; model-specific request formats                                 |
 | Embeddings               | ✅        | Text embeddings via `vertex:embedding:`                                                   |
 | Function calling / Tools | ✅        | Including MCP tools                                                                       |
 | Search grounding         | ✅        | Google Search integration                                                                 |
@@ -1421,6 +1429,8 @@ The Vertex AI provider supports core functionality for LLM evaluation:
 | Image generation         | ⚠️        | [Gemini image and Imagen adapters](#image-generation-models) with `config.projectId`      |
 
 These are promptfoo provider capabilities. [Live API](#live-api) model availability varies by project and location. Embedding support here covers the [text embedding request format](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/embeddings/get-text-embeddings), not every model or modality in the cloud catalog. See [image generation models](#image-generation-models) for the Imagen adapter and native Gemini image routes.
+
+Batch prediction jobs, `countTokens`, cache management, tuning, voice management, and managed-agent lifecycle operations are not implemented as Vertex provider operations. `passthrough` adds fields to the selected inference request; it does not invoke another endpoint. Use a [custom provider](/docs/providers/custom-api) for these workflows.
 
 ## See Also
 
