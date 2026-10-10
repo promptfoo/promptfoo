@@ -271,6 +271,9 @@ interface TableState {
   table: EvaluateTable | null;
   setTable: (table: EvaluateTable | null) => void;
   setTableFromResultsFile: (resultsFile: ResultsFile) => Promise<void>;
+  /** Increments when a background fetch replaces the displayed table. */
+  tableRefreshVersion: number;
+  tableResultSetKey: string | null;
 
   config: Partial<UnifiedConfig> | null;
   setConfig: (config: Partial<UnifiedConfig> | null) => void;
@@ -543,6 +546,8 @@ export const useTableStore = create<TableState>()(
     setVersion: (version: number) => set(() => ({ version })),
 
     table: null,
+    tableRefreshVersion: 0,
+    tableResultSetKey: null,
 
     /**
      * Note: This method is only used when ratings are updated; therefore filters
@@ -551,6 +556,7 @@ export const useTableStore = create<TableState>()(
     setTable: (table: EvaluateTable | null) => {
       set((prevState) => ({
         table,
+        tableResultSetKey: table ? prevState.tableResultSetKey : null,
         highlightedResultsCount: computeHighlightCount(table),
         userRatedResultsCount: computeUserRatedCount(table),
         filters: prevState.filters,
@@ -569,6 +575,7 @@ export const useTableStore = create<TableState>()(
 
         set((prevState) => ({
           table,
+          tableResultSetKey: null,
           version: resultsFile.version,
           highlightedResultsCount: computeHighlightCount(table),
           userRatedResultsCount: computeUserRatedCount(table),
@@ -593,6 +600,7 @@ export const useTableStore = create<TableState>()(
 
         set((prevState) => ({
           table: results.table,
+          tableResultSetKey: null,
           version: resultsFile.version,
           highlightedResultsCount: computeHighlightCount(results.table),
           userRatedResultsCount: computeUserRatedCount(results.table),
@@ -711,8 +719,15 @@ export const useTableStore = create<TableState>()(
             extractPolicyIdToNameMap(data.config?.redteam?.plugins ?? []),
           ]);
 
+          // Pages share widths, but overlapping requests must retain their own result-set identity.
+          url.searchParams.delete('offset');
+
           set((prevState) => ({
             table: data.table,
+            tableResultSetKey: url.pathname + url.search,
+            tableRefreshVersion: skipLoadingState
+              ? prevState.tableRefreshVersion + 1
+              : prevState.tableRefreshVersion,
             filteredResultsCount: data.filteredCount,
             totalResultsCount: data.totalCount,
             highlightedResultsCount: computeHighlightCount(data.table),
