@@ -192,6 +192,61 @@ describe('AssertionsResult', () => {
       expect(usage.numRequests).toBe(0);
     });
 
+    it('propagates graderError when a failing component is a grader failure', async () => {
+      const assertionsResult = new AssertionsResult({});
+      assertionsResult.addResult({
+        index: 0,
+        result: {
+          pass: false,
+          score: 0,
+          reason: 'Grader provider unavailable',
+          tokensUsed: DEFAULT_TOKENS_USED,
+          metadata: { graderError: true },
+        },
+      });
+
+      const result = await assertionsResult.testResult();
+
+      expect(result.pass).toBe(false);
+      expect(result.metadata?.graderError).toBe(true);
+    });
+
+    it('does not mark ordinary assertion failures as grader errors', async () => {
+      const assertionsResult = new AssertionsResult({});
+      assertionsResult.addResult({
+        index: 0,
+        result: {
+          pass: false,
+          score: 0,
+          reason: 'The submission does not meet the criterion',
+          tokensUsed: DEFAULT_TOKENS_USED,
+        },
+      });
+
+      const result = await assertionsResult.testResult();
+
+      expect(result.pass).toBe(false);
+      expect(result.metadata?.graderError).toBeUndefined();
+    });
+
+    it('does not mark passing results as grader errors', async () => {
+      const assertionsResult = new AssertionsResult({});
+      assertionsResult.addResult({
+        index: 0,
+        result: {
+          pass: true,
+          score: 1,
+          reason: 'All assertions passed',
+          tokensUsed: DEFAULT_TOKENS_USED,
+        },
+      });
+
+      const result = await assertionsResult.testResult();
+
+      expect(result.pass).toBe(true);
+      expect(result.metadata?.graderError).toBeUndefined();
+    });
+
     it('does not mark mixed fresh and cached grading responses as fully cached', async () => {
       const assertionsResult = new AssertionsResult({});
       assertionsResult.addResult({

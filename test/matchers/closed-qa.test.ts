@@ -129,6 +129,33 @@ describe('matchesClosedQa', () => {
     );
   });
 
+  it('should tag a malformed grading provider response as a grader failure', async () => {
+    // The judge answered but gave no Y/N verdict: that is a grader failure, not
+    // evidence that the criterion was or was not met.
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValueOnce({
+      output: 'The submission looks reasonable, hard to say for sure.',
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+
+    const result = await matchesClosedQa('Input text', 'Expected output', 'Sample output', {});
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        pass: false,
+        score: 0,
+        reason: expect.stringContaining('malformed response'),
+        metadata: { graderError: true },
+      }),
+    );
+    expect(result.tokensUsed).toEqual(
+      expect.objectContaining({
+        total: expect.any(Number),
+        prompt: expect.any(Number),
+        completion: expect.any(Number),
+      }),
+    );
+  });
+
   it('should handle input, criteria, and completion that need escaping', async () => {
     const input = 'Input "text" with \\ escape characters and \\"nested\\" escapes';
     const expected = 'Expected "output" with \\\\ escape characters and \\"nested\\" escapes';

@@ -366,6 +366,13 @@ export class AssertionsResult {
       this.componentResults.length > 0 &&
       this.componentResults.every((result) => result.metadata?.cachedResponse === true);
 
+    // A grader execution failure (provider/transport/no-output/malformed judge
+    // output, tagged `metadata.graderError` by the matcher) is not evidence that
+    // the criterion was or was not met. Propagate the marker so the evaluator
+    // can surface the row as ERROR rather than an ordinary assertion failure.
+    const hasGraderError =
+      !pass && flattenedComponentResults.some((result) => result.metadata?.graderError === true);
+
     this.result = {
       pass,
       score,
@@ -374,12 +381,13 @@ export class AssertionsResult {
       ...(hasNamedScoreWeights && { namedScoreWeights: { ...this.namedScoreWeights } }),
       tokensUsed: this.tokensUsed,
       componentResults: flattenedComponentResults,
-      ...((this._parentAssertionSet || cachedResponse) && {
+      ...((this._parentAssertionSet || cachedResponse || hasGraderError) && {
         metadata: {
           ...(this._parentAssertionSet && {
             assertionSet: buildAssertionSetMetadata(this._parentAssertionSet.assertionSet),
           }),
           ...(cachedResponse && { cachedResponse: true }),
+          ...(hasGraderError && { graderError: true as const }),
         },
       }),
     };

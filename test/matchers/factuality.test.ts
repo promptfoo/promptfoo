@@ -284,6 +284,25 @@ describe('matchesFactuality', () => {
     });
   });
 
+  it('should tag an empty grading provider response as a grader failure', async () => {
+    const mockCallApi = vi.fn().mockResolvedValue({ output: undefined });
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
+
+    await expect(
+      matchesFactuality('Input text', 'Expected output', 'Sample output', {}),
+    ).resolves.toEqual({
+      pass: false,
+      score: 0,
+      reason: 'No output',
+      tokensUsed: expect.objectContaining({
+        total: expect.any(Number),
+        prompt: expect.any(Number),
+        completion: expect.any(Number),
+      }),
+      metadata: { graderError: true },
+    });
+  });
+
   it('should use custom prompt override when provided', async () => {
     const input = 'Input text';
     const expected = 'Expected output';
