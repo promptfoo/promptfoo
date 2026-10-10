@@ -2,43 +2,6 @@
 export type EventStatus = 'upcoming' | 'past';
 export type EventType = 'conference' | 'webinar' | 'workshop' | 'party';
 
-export interface EventSpeaker {
-  name: string;
-  title: string;
-  photo?: string;
-  linkedin?: string;
-}
-
-export interface EventSession {
-  title: string;
-  description: string;
-  date?: string;
-  time?: string;
-  location?: string;
-  speakers: EventSpeaker[];
-  recording?: string;
-  slides?: string;
-}
-
-export interface EventDemo {
-  title: string;
-  description: string;
-  schedule?: string;
-}
-
-export interface EventResource {
-  title: string;
-  description: string;
-  type: 'pdf' | 'video' | 'link' | 'report';
-  url: string;
-}
-
-export interface EventHighlight {
-  icon: string;
-  title: string;
-  description: string;
-}
-
 export interface EventLocation {
   venue: string;
   city: string;
@@ -61,15 +24,8 @@ export interface Event {
   fullDescription?: string;
   heroImage?: string;
   cardImage?: string;
-  highlights?: EventHighlight[];
-  demos?: EventDemo[];
-  sessions?: EventSession[];
-  teamMembers?: EventSpeaker[];
   registrationUrl?: string;
   meetingUrl?: string;
-  photos?: string[];
-  resources?: EventResource[];
-  externalLinks?: { label: string; url: string }[];
   customPageUrl?: string; // Custom dedicated page URL for special events
 }
 
@@ -134,23 +90,6 @@ export const events: Event[] = [
       'Promptfoo joined BSides Seattle for live demos of AI red teaming: prompt injection, jailbreaks, and data exfiltration against real-world LLM apps. People brought their own use cases and left with a testing plan they could run in CI.',
     cardImage: '/img/events/bsides-seattle-2026.jpg',
     heroImage: '/img/events/bsides-seattle-2026.jpg',
-    highlights: [
-      {
-        icon: '🌲',
-        title: 'PNW Community',
-        description: 'Connected with Seattle security pros',
-      },
-      {
-        icon: '🛠️',
-        title: 'Workshops',
-        description: 'Hands-on AI security training',
-      },
-      {
-        icon: '🤝',
-        title: 'Networking',
-        description: 'Met security researchers',
-      },
-    ],
     customPageUrl: '/events/bsides-seattle-2026',
   },
   {
@@ -174,23 +113,6 @@ export const events: Event[] = [
       'Promptfoo was at RSA Conference 2026 showing how security teams build an AI security program that scales: continuous red teaming, runtime guardrails, and reporting that tracks risk reduction over time.',
     cardImage: '/img/events/rsa-2026.jpg',
     heroImage: '/img/events/rsa-2026.jpg',
-    highlights: [
-      {
-        icon: '🎯',
-        title: 'Live Demos',
-        description: 'AI red teaming attacks, run on the floor',
-      },
-      {
-        icon: '🔒',
-        title: 'Risk Reviews',
-        description: 'Walked through AI vulnerability findings',
-      },
-      {
-        icon: '🎁',
-        title: 'Swag',
-        description: 'Limited edition Promptfoo gear',
-      },
-    ],
     customPageUrl: '/events/rsa-2026',
   },
   {
@@ -214,23 +136,6 @@ export const events: Event[] = [
       'We compared notes on prompt injection, agent abuse, and the testing workflows security teams actually run. Quick demos first, then the long version: how to reproduce an issue and keep it from coming back.',
     cardImage: '/img/events/bsides-sf-2026.jpg',
     heroImage: '/img/events/bsides-sf-2026.jpg',
-    highlights: [
-      {
-        icon: '🛠️',
-        title: 'Workshops',
-        description: 'Hands-on AI security training',
-      },
-      {
-        icon: '🤝',
-        title: 'Community',
-        description: 'Connected with security researchers',
-      },
-      {
-        icon: '🏆',
-        title: 'Challenges',
-        description: 'AI red teaming CTF challenges',
-      },
-    ],
     customPageUrl: '/events/bsides-sf-2026',
   },
   {
@@ -254,23 +159,6 @@ export const events: Event[] = [
       'AI is moving fast. Security and evaluation have to keep up. Promptfoo ran live demos on testing and securing LLM features across copilots, RAG, and agents, before launch and continuously in production.',
     cardImage: '/img/events/humanx-2026.jpg',
     heroImage: '/img/events/humanx-2026.jpg',
-    highlights: [
-      {
-        icon: '🧠',
-        title: 'AI Leadership',
-        description: 'Connected with AI executives and innovators',
-      },
-      {
-        icon: '🎯',
-        title: 'Live Demos',
-        description: 'AI security testing, in action',
-      },
-      {
-        icon: '🤝',
-        title: 'Networking',
-        description: 'Met enterprise AI teams',
-      },
-    ],
     customPageUrl: '/events/humanx-2026',
   },
   {
@@ -294,23 +182,6 @@ export const events: Event[] = [
       'We met with teams building AI security programs and mapped the move from ad hoc testing to continuous coverage: automated red teaming, runtime guardrails, and reporting security leadership can track.',
     cardImage: '/img/events/gartner-security-2026.jpg',
     heroImage: '/img/events/gartner-security-2026.jpg',
-    highlights: [
-      {
-        icon: '📊',
-        title: 'Analyst Briefings',
-        description: 'Met with Gartner analysts',
-      },
-      {
-        icon: '🏢',
-        title: 'Enterprise Focus',
-        description: 'Solutions for large organizations',
-      },
-      {
-        icon: '🔒',
-        title: 'Risk Management',
-        description: 'AI governance and compliance',
-      },
-    ],
     customPageUrl: '/events/gartner-security-2026',
   },
   {
@@ -384,30 +255,7 @@ export const events: Event[] = [
       "Ian Webster, CEO and co-founder of Promptfoo, was featured in Insight Partners' ScaleUp:AI 2025 Partner Series, discussing how Promptfoo is defining the standard for enterprise AI security. The feature explores the company's journey from open-source tool to serving 200,000+ developers and 80+ Fortune 500 companies.",
     cardImage: '/img/events/scaleup-ai-2025.jpg',
     heroImage: '/img/events/scaleup-ai-2025.jpg',
-    highlights: [
-      {
-        icon: '🔐',
-        title: 'AI Security',
-        description: 'Closing the gap in AI defenses',
-      },
-      {
-        icon: '📈',
-        title: 'Growth Story',
-        description: 'From open source to enterprise',
-      },
-      {
-        icon: '🔮',
-        title: 'Future Vision',
-        description: 'Multi-agent security landscape',
-      },
-    ],
     customPageUrl: '/events/scaleup-ai-2025',
-    externalLinks: [
-      {
-        label: 'Read Full Article',
-        url: 'https://www.insightpartners.com/ideas/promptfoo-scale-up-ai/',
-      },
-    ],
   },
   {
     id: 'blackhat-2025',
@@ -430,41 +278,6 @@ export const events: Event[] = [
       'Promptfoo was at Black Hat USA 2025 with live AI red teaming demos, security consultations, and the latest in LLM vulnerability research. We showed how Fortune 500 companies protect their AI applications.',
     cardImage: '/img/events/blackhat-2025.jpg',
     heroImage: '/img/events/blackhat-2025.jpg',
-    highlights: [
-      {
-        icon: '🎯',
-        title: 'Live Demos',
-        description: 'AI red teaming attacks, run on the floor',
-      },
-      {
-        icon: '🔒',
-        title: 'Risk Reviews',
-        description: 'Walked through AI vulnerability findings',
-      },
-      {
-        icon: '🎁',
-        title: 'Swag',
-        description: 'Limited edition Promptfoo gear',
-      },
-    ],
-    demos: [
-      {
-        title: 'LLM Red Teaming Demo',
-        description:
-          'Our team jailbroke and exploited a live AI application using prompt injection, data exfiltration, and other OWASP Top 10 attacks.',
-        schedule: 'Ran every 30 minutes at the booth',
-      },
-    ],
-    externalLinks: [
-      {
-        label: 'Arsenal Labs - Aug 6',
-        url: 'https://www.blackhat.com/us-25/arsenal/schedule/index.html#promptfoo-44648',
-      },
-      {
-        label: 'Arsenal Labs - Aug 7',
-        url: 'https://www.blackhat.com/us-25/arsenal/schedule/#promptfoo-47875',
-      },
-    ],
     customPageUrl: '/events/blackhat-2025',
   },
   {
@@ -488,23 +301,6 @@ export const events: Event[] = [
       "Hackers, security researchers, and the open source community joined us for the AI security event of DEF CON at the galaxy's most iconic cantina. Drinks were on us, and the war stories were free.",
     cardImage: '/img/events/defcon-2025.jpg',
     heroImage: '/img/events/defcon-2025.jpg',
-    highlights: [
-      {
-        icon: '🍺',
-        title: 'Open Bar',
-        description: 'Drinks were on us',
-      },
-      {
-        icon: '⚔️',
-        title: 'Mos Eisley Vibes',
-        description: 'A party in a wretched hive of scum and villainy',
-      },
-      {
-        icon: '🤖',
-        title: 'Community',
-        description: 'Networked with security researchers',
-      },
-    ],
     registrationUrl: 'https://lu.ma/ljm23pj6?tk=qGE9ez&utm_source=pf-web',
     customPageUrl: '/events/defcon-2025',
   },
@@ -530,23 +326,6 @@ export const events: Event[] = [
       'Promptfoo was at RSA Conference 2025 on the Expo Floor. We demonstrated our AI red teaming platform and connected with security professionals about protecting LLM applications.',
     cardImage: '/img/events/rsa-2025.jpg',
     heroImage: '/img/events/rsa-2025.jpg',
-    highlights: [
-      {
-        icon: '🎯',
-        title: 'Live Demos',
-        description: 'AI red teaming demonstrations',
-      },
-      {
-        icon: '🤝',
-        title: 'Networking',
-        description: 'Connected with security leaders',
-      },
-      {
-        icon: '📊',
-        title: 'Research',
-        description: 'Shared latest security findings',
-      },
-    ],
     customPageUrl: '/events/rsa-2025',
   },
   {
@@ -569,18 +348,6 @@ export const events: Event[] = [
       'Promptfoo joined the BSides SF 2025 community event during RSA week. We participated in security discussions and connected with researchers working on AI security challenges.',
     cardImage: '/img/events/bsides-sf-2025.jpg',
     heroImage: '/img/events/bsides-sf-2025.jpg',
-    highlights: [
-      {
-        icon: '🤝',
-        title: 'Community',
-        description: 'Connected with security researchers',
-      },
-      {
-        icon: '💬',
-        title: 'Discussions',
-        description: 'AI security conversations',
-      },
-    ],
     customPageUrl: '/events/bsides-sf-2025',
   },
   {
@@ -603,18 +370,6 @@ export const events: Event[] = [
       'Promptfoo participated in BSides Seattle 2025 at Building 92, engaging with the Pacific Northwest security community and discussing the latest in AI security threats and mitigations.',
     cardImage: '/img/events/bsides-seattle-2025.jpg',
     heroImage: '/img/events/bsides-seattle-2025.jpg',
-    highlights: [
-      {
-        icon: '🌲',
-        title: 'PNW Community',
-        description: 'Connected with Seattle security pros',
-      },
-      {
-        icon: '🔐',
-        title: 'AI Security',
-        description: 'Shared LLM security insights',
-      },
-    ],
     customPageUrl: '/events/bsides-seattle-2025',
   },
   {
@@ -638,18 +393,6 @@ export const events: Event[] = [
       'Promptfoo CEO Ian Webster joined Swisscom Outpost on stage at Telecom Talks 2025 to discuss the unique challenges of securing AI systems in telecommunications infrastructure.',
     cardImage: '/img/events/telecom-talks-2025.jpg',
     heroImage: '/img/events/telecom-talks-2025.jpg',
-    highlights: [
-      {
-        icon: '📡',
-        title: 'Joint Session',
-        description: 'On stage with Swisscom Outpost',
-      },
-      {
-        icon: '🌐',
-        title: 'Telecom Focus',
-        description: 'Carrier-grade AI security',
-      },
-    ],
     customPageUrl: '/events/telecom-talks-2025',
   },
   {
@@ -673,18 +416,6 @@ export const events: Event[] = [
       "Promptfoo was selected for the SecTor Arsenal, showcasing open-source AI security tools to Canada's enterprise security community at Canada's largest IT security conference.",
     cardImage: '/img/events/sector-2025.jpg',
     heroImage: '/img/events/sector-2025.jpg',
-    highlights: [
-      {
-        icon: '🍁',
-        title: 'Arsenal Listing',
-        description: 'Selected for SecTor Arsenal',
-      },
-      {
-        icon: '🇨🇦',
-        title: 'Canadian Enterprise',
-        description: 'Major banks and government',
-      },
-    ],
     customPageUrl: '/events/sector-2025',
   },
   {
@@ -708,18 +439,6 @@ export const events: Event[] = [
       'Ian Webster joined industry leaders as a panel speaker at AI Security Summit 2025 to discuss the evolving landscape of LLM vulnerabilities and practical defense strategies.',
     cardImage: '/img/events/ai-security-summit-2025.jpg',
     heroImage: '/img/events/ai-security-summit-2025.jpg',
-    highlights: [
-      {
-        icon: '🧠',
-        title: 'Panel Speaker',
-        description: 'Ian Webster on expert panel',
-      },
-      {
-        icon: '🔬',
-        title: 'Research',
-        description: 'Latest AI security findings',
-      },
-    ],
     customPageUrl: '/events/ai-security-summit-2025',
   },
 ];
