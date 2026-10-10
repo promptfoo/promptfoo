@@ -666,6 +666,13 @@ to select text, vectors, ranking scores, images, or other fields. AWS request me
 is available in `metadata.aws`. Token usage records the request count; automatic model
 cost and normalized token counts are not available on this raw route.
 
+Native responses retain large integers and precise decimals. For request numeric literals
+that need exact precision, use an inline string prompt (such as a YAML block) or a `.txt`
+prompt, and set `PROMPTFOO_DISABLE_JSON_AUTOESCAPE=true`. The shared prompt renderer's
+default JSON escaping, JSON prompt files, and object-valued prompts can round numbers
+before they reach this provider. With JSON auto-escaping disabled, use
+`{{ value | dump }}` to insert JSON-escaped string variables.
+
 Calls are never cached. Event streams are collected before returning, and service
 exception events produce provider errors. Agent and Flow invocations, `RetrieveAndGenerate`,
 `RetrieveAndGenerateStream`, and `AgenticRetrieveStream` use one attempt because they can
