@@ -6,7 +6,7 @@ import fs from 'fs/promises';
 
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearCache } from '../../src/cache';
-import { runEval } from '../../src/evaluator';
+import { buildConversationKey, runEval } from '../../src/evaluator';
 import logger from '../../src/logger';
 import { geminiFormatAndSystemInstructions } from '../../src/providers/google/util';
 import { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
@@ -407,18 +407,20 @@ describe('runEval', () => {
 
   it('should handle conversation history', async () => {
     const conversations = {} as Record<string, any>;
+    const prompt = { raw: 'Hello {{_conversation[0].output}}', label: 'test-label' };
+    const test = {};
 
     const results = await runEval({
       ...defaultOptions,
       provider: mockProvider,
-      prompt: { raw: 'Hello {{_conversation[0].output}}', label: 'test-label' },
-      test: {},
+      prompt,
+      test,
       conversations,
       registers: {},
     });
     const result = results[0];
+    const conversationKey = buildConversationKey(mockProvider, prompt, test);
     expect(result.success).toBe(true);
-    const conversationKey = JSON.stringify(['test-provider', null, 0, null]);
     expect(conversations).toHaveProperty([conversationKey]);
     expect(conversations[conversationKey]).toHaveLength(1);
     expect(conversations[conversationKey][0]).toEqual({
@@ -451,20 +453,24 @@ describe('runEval', () => {
 
   it('should handle conversation with custom ID', async () => {
     const conversations = {};
+    const prompt = {
+      raw: 'Hello {{_conversation[0].output}}',
+      label: 'test-label',
+      id: 'custom-id',
+    };
+    const test = { metadata: { conversationId: 'conv1' } };
 
     const results = await runEval({
       ...defaultOptions,
       provider: mockProvider,
-      prompt: { raw: 'Hello {{_conversation[0].output}}', label: 'test-label', id: 'custom-id' },
-      test: { metadata: { conversationId: 'conv1' } },
+      prompt,
+      test,
       conversations,
       registers: {},
     });
     const result = results[0];
     expect(result.success).toBe(true);
-    expect(conversations).toHaveProperty([
-      JSON.stringify(['test-provider', 'custom-id', 0, 'conv1']),
-    ]);
+    expect(conversations).toHaveProperty([buildConversationKey(mockProvider, prompt, test)]);
   });
 
   it.each([
