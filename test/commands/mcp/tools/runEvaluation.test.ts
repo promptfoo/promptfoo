@@ -109,7 +109,7 @@ describe('runEvaluation tool', () => {
           configPath,
           JSON.stringify({
             prompts: ['{{topic}}'],
-            providers: ['anthropic:messages:claude-sonnet-4-6', 'echo'],
+            providers: ['anthropic:messages:claude-sonnet-5', 'echo'],
             tests: [
               {
                 vars: { topic: 'offline fixture' },
@@ -128,8 +128,8 @@ describe('runEvaluation tool', () => {
         });
         const response = JSON.parse(result.content[0].text);
         const expectedProviders = mixed
-          ? ['anthropic:claude-sonnet-4-6', 'echo']
-          : ['anthropic:claude-sonnet-4-6'];
+          ? ['anthropic:claude-sonnet-5', 'echo']
+          : ['anthropic:claude-sonnet-5'];
 
         expect(result.isError).toBe(false);
         expect(response.success).toBe(true);
@@ -142,8 +142,8 @@ describe('runEvaluation tool', () => {
         expect(callApi).toHaveBeenCalledTimes(1);
         const actualProvider = callApi.mock.contexts[0] as AnthropicMessagesProvider;
         expect(actualProvider).toBeInstanceOf(AnthropicMessagesProvider);
-        expect(actualProvider.id()).toBe('anthropic:claude-sonnet-4-6');
-        expect(actualProvider.modelName).toBe('claude-sonnet-4-6');
+        expect(actualProvider.id()).toBe('anthropic:claude-sonnet-5');
+        expect(actualProvider.modelName).toBe('claude-sonnet-5');
       } finally {
         Object.assign(cliState, originalState);
         await rm(tempDir, { recursive: true, force: true });

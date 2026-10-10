@@ -13,17 +13,16 @@ import path from 'path';
 
 import async from 'async';
 import binaryExtensions from 'binary-extensions';
-import { execa } from 'execa';
 import { isText } from 'istextorbinary';
 import textExtensions from 'text-extensions';
 import logger from '../../logger';
 import { DiffProcessorError } from '../../types/codeScan';
+import { runCommand } from '../../util/runCommand';
 import { isInDenylist, MAX_BLOB_SIZE_BYTES, MAX_PATCH_SIZE_BYTES } from '../constants/filtering';
 import { annotateDiffWithLineRanges } from './diffAnnotator';
 import { parseRawDiff } from './rawDiffParser';
 
-import type { FileRecord } from '../../types/codeScan';
-import type { LineRange } from '../util/diffLineRanges';
+import type { FileRecord, LineRange } from '../../types/codeScan';
 
 interface NumstatEntry {
   linesAdded: number;
@@ -39,27 +38,38 @@ const PATCH_CONCURRENCY = 8;
 const TEXT_DETECTION_CONCURRENCY = 16;
 
 /**
- * Parse git diff --numstat output
- * Format: added\tremoved\tpath
+ * Parse git diff --numstat -z output.
+ * Normal entries: added\tremoved\tpath\0
+ * Renames/copies: added\tremoved\t\0oldpath\0newpath\0
  */
 function parseNumstat(numstatOutput: string): Map<string, NumstatEntry> {
   const map = new Map<string, NumstatEntry>();
+  const records = numstatOutput.split('\0');
 
-  for (const line of numstatOutput.split('\n')) {
-    if (!line.trim()) {
+  for (let i = 0; i < records.length; i++) {
+    const record = records[i];
+    const firstTab = record.indexOf('\t');
+    const secondTab = record.indexOf('\t', firstTab + 1);
+    if (firstTab === -1 || secondTab === -1) {
       continue;
     }
 
-    const parts = line.split('\t');
-    if (parts.length < 3) {
+    const added = record.slice(0, firstTab);
+    const removed = record.slice(firstTab + 1, secondTab);
+    let filePath = record.slice(secondTab + 1);
+    if (!filePath) {
+      // Rename/copy records carry both paths separately; raw diff uses the destination.
+      i += 2;
+      filePath = records[i];
+    }
+    if (!filePath) {
       continue;
     }
 
-    const added = parts[0] === '-' ? 0 : Number.parseInt(parts[0], 10);
-    const removed = parts[1] === '-' ? 0 : Number.parseInt(parts[1], 10);
-    const path = parts[2];
-
-    map.set(path, { linesAdded: added, linesRemoved: removed });
+    map.set(filePath, {
+      linesAdded: added === '-' ? 0 : Number.parseInt(added, 10),
+      linesRemoved: removed === '-' ? 0 : Number.parseInt(removed, 10),
+    });
   }
 
   return map;
@@ -72,14 +82,14 @@ async function discoverChangedFiles(
 ): Promise<FileRecord[]> {
   // Run git diff --raw and --numstat in parallel
   const [rawResult, numstatResult] = await Promise.all([
-    execa(
+    runCommand(
       'git',
       ['diff', '--raw', '-z', '--no-color', '--no-ext-diff', '--no-abbrev', `${base}...${compare}`],
       {
         cwd: repoPath,
       },
     ),
-    execa('git', ['diff', '--numstat', `${base}...${compare}`], {
+    runCommand('git', ['diff', '--numstat', '-z', `${base}...${compare}`], {
       cwd: repoPath,
     }),
   ]);
@@ -135,7 +145,7 @@ async function collectBlobSizes(
 
   // Use git cat-file --batch-check
   const shaList = Array.from(shas).join('\n');
-  const result = await execa(
+  const result = await runCommand(
     'git',
     ['cat-file', '--batch-check=%(objectname) %(objecttype) %(objectsize)'],
     {
@@ -197,10 +207,9 @@ function attachBlobSizesAndFilter(files: FileRecord[], sizeMap: Map<string, numb
 
 async function isBlobText(repoPath: string, sha: string): Promise<boolean> {
   try {
-    const result = await execa('git', ['cat-file', 'blob', sha], {
+    const result = await runCommand('git', ['cat-file', 'blob', sha], {
       cwd: repoPath,
       encoding: 'buffer',
-      maxBuffer: 4096,
     });
 
     // Convert Uint8Array to Buffer and check if text
@@ -298,7 +307,7 @@ async function generatePatchForFile(
   filePath: string,
 ): Promise<PatchResult> {
   try {
-    const result = await execa(
+    const result = await runCommand(
       'git',
       [
         'diff',

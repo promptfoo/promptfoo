@@ -6,8 +6,25 @@ import cliState from '../../src/cliState';
 import { importModule } from '../../src/esm';
 import * as llmGradingMatchers from '../../src/matchers/llmGrading';
 import { runRuby } from '../../src/ruby/rubyUtils.js';
+import { createStringAssertion } from '../factories/literalFixtures';
 
 import type { ProviderResponse } from '../../src/types/index';
+
+const { createRequireModuleFactory } = await vi.hoisted(() => import('../factories/moduleMocks'));
+
+const createNamespacedRubyParams = () => ({
+  assertion: createStringAssertion('ruby', 'file://some_ruby_file.rb:MyModule::Nested.method'),
+  test: { vars: {} },
+  providerResponse: {
+    output: 'namespaced result',
+    tokenUsage: { total: 0, prompt: 0, completion: 0 },
+  },
+});
+
+const createUnexpectedProviderOutput = () => ({
+  output: 'wrong output',
+  tokenUsage: { total: 0, prompt: 0, completion: 0 },
+});
 
 // Mock dependencies
 vi.mock('../../src/redteam/remoteGeneration', () => ({
@@ -20,14 +37,7 @@ vi.mock('proxy-agent', () => ({
   ProxyAgent: vi.fn().mockImplementation(() => ({})),
 }));
 
-vi.mock('node:module', () => {
-  const mockRequire: NodeJS.Require = {
-    resolve: vi.fn() as unknown as NodeJS.RequireResolve,
-  } as unknown as NodeJS.Require;
-  return {
-    createRequire: vi.fn().mockReturnValue(mockRequire),
-  };
-});
+vi.mock('node:module', createRequireModuleFactory());
 
 vi.mock('glob', () => ({
   globSync: vi.fn(),
@@ -168,10 +178,7 @@ describe('Script value resolution', () => {
   describe('contains with file:// script', () => {
     it('should use script output for contains assertion', async () => {
       const result = await runAssertion({
-        assertion: {
-          type: 'contains',
-          value: 'file://rubric-generator.cjs:knownValue',
-        },
+        assertion: createStringAssertion('contains', 'file://rubric-generator.cjs:knownValue'),
         test: { vars: {} },
         providerResponse: {
           output: 'The answer is SCRIPT_OUTPUT_12345 here',
@@ -184,15 +191,9 @@ describe('Script value resolution', () => {
 
     it('should fail when output does not contain script value', async () => {
       const result = await runAssertion({
-        assertion: {
-          type: 'contains',
-          value: 'file://rubric-generator.cjs:knownValue',
-        },
+        assertion: createStringAssertion('contains', 'file://rubric-generator.cjs:knownValue'),
         test: { vars: {} },
-        providerResponse: {
-          output: 'wrong output',
-          tokenUsage: { total: 0, prompt: 0, completion: 0 },
-        },
+        providerResponse: createUnexpectedProviderOutput(),
       });
 
       expect(result.pass).toBe(false);
@@ -237,10 +238,7 @@ describe('Script value resolution', () => {
   describe('equals with file:// script', () => {
     it('should use script output for equals assertion', async () => {
       const result = await runAssertion({
-        assertion: {
-          type: 'equals',
-          value: 'file://rubric-generator.cjs:knownValue',
-        },
+        assertion: createStringAssertion('equals', 'file://rubric-generator.cjs:knownValue'),
         test: { vars: {} },
         providerResponse: {
           output: 'SCRIPT_OUTPUT_12345',
@@ -253,15 +251,9 @@ describe('Script value resolution', () => {
 
     it('should fail when output does not equal script value', async () => {
       const result = await runAssertion({
-        assertion: {
-          type: 'equals',
-          value: 'file://rubric-generator.cjs:knownValue',
-        },
+        assertion: createStringAssertion('equals', 'file://rubric-generator.cjs:knownValue'),
         test: { vars: {} },
-        providerResponse: {
-          output: 'wrong output',
-          tokenUsage: { total: 0, prompt: 0, completion: 0 },
-        },
+        providerResponse: createUnexpectedProviderOutput(),
       });
 
       expect(result.pass).toBe(false);
@@ -353,10 +345,10 @@ describe('Script value resolution', () => {
     it('should use script return value as assertion result (NOT as comparison)', async () => {
       // The gradingFunction returns { pass: true, score: 1, reason: '...' } when output contains 'expected'
       const result = await runAssertion({
-        assertion: {
-          type: 'javascript',
-          value: 'file://rubric-generator.cjs:gradingFunction',
-        },
+        assertion: createStringAssertion(
+          'javascript',
+          'file://rubric-generator.cjs:gradingFunction',
+        ),
         test: { vars: {} },
         providerResponse: {
           output: 'this contains expected word',
@@ -370,10 +362,10 @@ describe('Script value resolution', () => {
 
     it('should fail when javascript grading function returns false', async () => {
       const result = await runAssertion({
-        assertion: {
-          type: 'javascript',
-          value: 'file://rubric-generator.cjs:gradingFunction',
-        },
+        assertion: createStringAssertion(
+          'javascript',
+          'file://rubric-generator.cjs:gradingFunction',
+        ),
         test: { vars: {} },
         providerResponse: {
           output: 'does not contain the magic word',
@@ -438,17 +430,7 @@ describe('Script value resolution', () => {
       const mockRunRuby = vi.mocked(runRuby);
       mockRunRuby.mockResolvedValue(true);
 
-      const result = await runAssertion({
-        assertion: {
-          type: 'ruby',
-          value: 'file://some_ruby_file.rb:MyModule::Nested.method',
-        },
-        test: { vars: {} },
-        providerResponse: {
-          output: 'namespaced result',
-          tokenUsage: { total: 0, prompt: 0, completion: 0 },
-        },
-      });
+      const result = await runAssertion(createNamespacedRubyParams());
 
       expect(mockRunRuby).toHaveBeenCalledWith(
         expect.stringContaining('some_ruby_file.rb'),
@@ -462,17 +444,7 @@ describe('Script value resolution', () => {
       const mockRunRuby = vi.mocked(runRuby);
       mockRunRuby.mockRejectedValue(new Error('Ruby execution error'));
 
-      const result = await runAssertion({
-        assertion: {
-          type: 'ruby',
-          value: 'file://some_ruby_file.rb:MyModule::Nested.method',
-        },
-        test: { vars: {} },
-        providerResponse: {
-          output: 'namespaced result',
-          tokenUsage: { total: 0, prompt: 0, completion: 0 },
-        },
-      });
+      const result = await runAssertion(createNamespacedRubyParams());
 
       expect(mockRunRuby).toHaveBeenCalledWith(
         expect.stringContaining('some_ruby_file.rb'),
