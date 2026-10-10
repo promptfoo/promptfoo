@@ -308,6 +308,19 @@ function createTaskOutputTranscriptRedactionHook(): HookCallbackMatcher {
   };
 }
 
+/** Reads the task id from the `<task-notification>` text the CLI hands to a running turn. */
+function taskNotificationTaskId(content: unknown): string | undefined {
+  const text =
+    typeof content === 'string'
+      ? content
+      : Array.isArray(content)
+        ? content.map((block) => (block?.type === 'text' ? block.text : '')).join('\n')
+        : '';
+  const start = text.indexOf('<task-id>');
+  const end = start < 0 ? -1 : text.indexOf('</task-id>', start);
+  return end < 0 ? undefined : text.slice(start + '<task-id>'.length, end).trim();
+}
+
 function deriveSkillCalls(toolCalls: ToolCallEntry[]): SkillCallEntry[] {
   return toolCalls
     .filter((toolCall) => toolCall.name === 'Skill')
@@ -1763,7 +1776,12 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       permissionPromptToolName: config.permission_prompt_tool_name,
       executable: config.executable,
       executableArgs: config.executable_args,
-      extraArgs: config.extra_args,
+      // A workflow completion that a running turn reads is only visible as a replayed
+      // user message, which result selection needs to tell it from one still queued.
+      extraArgs:
+        Array.isArray(tools) && !tools.includes('Workflow')
+          ? config.extra_args
+          : { 'replay-user-messages': null, ...config.extra_args },
       pathToClaudeCodeExecutable: config.path_to_claude_code_executable
         ? safeResolve(basePath, config.path_to_claude_code_executable)
         : undefined,
@@ -2182,10 +2200,13 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
           let resultMsgCount = 0;
           const workflowTasks = new Map<string, { sessionId: string; status: string }>();
           const pendingWorkflowResults = new Map<string, number>();
-          // True while a workflow completion has arrived that no main-agent result has
-          // followed. A completion delivered inside a running turn is answered by that
-          // turn's own result, so the SDK emits no separate continuation for it.
-          let workflowAnswerOwed = false;
+          // Workflow completions the main agent has not answered yet. A completion that
+          // a running turn reads is answered by that turn's own result, and the SDK emits
+          // no continuation for it. One that arrives too late for the turn to read stays
+          // unanswered until its continuation does.
+          let unansweredWorkflows = 0;
+          let workflowsReadByTurn = 0;
+          let replaysUserMessages = false;
 
           for await (const msg of res) {
             if (msg.type === 'assistant') {
@@ -2218,6 +2239,16 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
             } else if (msg.type === 'user') {
               // Extract tool_result content blocks and match to tool calls
               const content = msg.message?.content;
+              if ('isReplay' in msg && msg.isReplay) {
+                replaysUserMessages = true;
+                const taskId =
+                  msg.origin?.kind === 'task-notification'
+                    ? taskNotificationTaskId(content)
+                    : undefined;
+                if (taskId && workflowTasks.get(taskId)?.sessionId === msg.session_id) {
+                  workflowsReadByTurn++;
+                }
+              }
               if (Array.isArray(content)) {
                 for (const block of content) {
                   if (block.type === 'tool_result') {
@@ -2257,7 +2288,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
               const task = workflowTasks.get(msg.task_id);
               if (task?.sessionId === msg.session_id && task.status === 'running') {
                 task.status = msg.status;
-                workflowAnswerOwed = true;
+                unansweredWorkflows++;
                 pendingWorkflowResults.set(
                   msg.session_id,
                   (pendingWorkflowResults.get(msg.session_id) ?? 0) + 1,
@@ -2289,7 +2320,15 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
                 msg.origin.producer === 'session-task';
               if (!isBackgroundTaskResult || isWorkflowContinuation) {
                 lastMainResultMsg = msg;
-                workflowAnswerOwed = false;
+                // Without replayed user messages nothing records what a turn read, so a
+                // later main-agent result is taken to answer the completions before it.
+                unansweredWorkflows = replaysUserMessages
+                  ? Math.max(
+                      0,
+                      unansweredWorkflows - workflowsReadByTurn - (isWorkflowContinuation ? 1 : 0),
+                    )
+                  : 0;
+                workflowsReadByTurn = 0;
               }
               if (isWorkflowContinuation) {
                 const pending = pendingWorkflowResults.get(msg.session_id) ?? 0;
@@ -2490,7 +2529,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
                 unfinished[1].status === 'running'
                   ? `workflow task ${unfinished[0]} never reported completion`
                   : `workflow task ${unfinished[0]} ended as ${unfinished[1].status}`;
-            } else if (workflowAnswerOwed) {
+            } else if (unansweredWorkflows > 0) {
               incompleteReason = 'the stream ended before the main agent answered the workflow';
             } else if (!finalMsg.result && finalMsg.structured_output === undefined) {
               incompleteReason = 'the final main-agent response was empty';

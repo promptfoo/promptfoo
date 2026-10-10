@@ -1887,6 +1887,7 @@ describe('ClaudeCodeSDKProvider', () => {
           expect(mockQuery.mock.calls[0][0].options).toMatchObject({
             allowedTools: ['Workflow'],
             tools: ['Workflow'],
+            extraArgs: { 'replay-user-messages': null },
           });
           expect(result.error).toBeUndefined();
           expect(result.output).toBe('Verified: 42');
@@ -1983,9 +1984,9 @@ describe('ClaudeCodeSDKProvider', () => {
         expect(result.output).toBeUndefined();
       });
 
-      // Shapes below mirror the stream SDK 0.3.285 emits: the prompted turn's result
-      // carries no `origin`, and a completion the running turn reads itself is not
-      // followed by a continuation result.
+      // Shapes below mirror the stream SDK 0.3.285 emits. The prompted turn's result
+      // carries no `origin`. A completion that the running turn reads is echoed as a
+      // replayed user message and is not followed by a continuation result.
       describe('workflow completions delivered inside a running turn', () => {
         const turnResult = (
           result: string,
@@ -2043,6 +2044,23 @@ describe('ClaudeCodeSDKProvider', () => {
           summary: 'Done',
           output_file: '/tmp/workflow.output',
         });
+        const echo = (content: string | { type: 'text'; text: string }[]) =>
+          ({
+            type: 'user',
+            isReplay: true,
+            session_id: 'main-session',
+            parent_tool_use_id: null,
+            message: { role: 'user', content },
+          }) as Partial<SDKMessage>;
+        const promptEcho = echo('Verify');
+        // What the CLI echoes when it hands a completion to the turn that is running.
+        const readByTurn = (index: number, asBlocks = false): Partial<SDKMessage> => {
+          const text = `<task-notification>\n<task-id>task-${index}</task-id>\n<status>completed</status>\n</task-notification>`;
+          return {
+            ...echo(asBlocks ? [{ type: 'text', text }] : text),
+            origin: continuation,
+          } as Partial<SDKMessage>;
+        };
         const run = (messages: Partial<SDKMessage>[]) => {
           mockQuery.mockReturnValue(createMockQuery(messages));
           return new ClaudeCodeSDKProvider({
@@ -2050,18 +2068,49 @@ describe('ClaudeCodeSDKProvider', () => {
           }).callApi('Verify');
         };
 
-        it.each([1, 2])('grades the turn that read %i completions itself', async (count) => {
+        it.each([false, true])(
+          'grades the turn that was handed the completion (text blocks: %s)',
+          async (asBlocks) => {
+            const result = await run([
+              promptEcho,
+              ...launch(1),
+              completed(1),
+              readByTurn(1, asBlocks),
+              turnResult('VERIFIED'),
+            ]);
+            expect(result.error).toBeUndefined();
+            expect(result.output).toBe('VERIFIED');
+          },
+        );
+
+        it('grades one turn that was handed two completions', async () => {
           const result = await run([
-            ...launch(count),
-            ...Array.from({ length: count }, (_, i) => completed(i + 1)),
+            promptEcho,
+            ...launch(2),
+            completed(1),
+            completed(2),
+            readByTurn(1),
+            readByTurn(2),
             turnResult('VERIFIED'),
           ]);
           expect(result.error).toBeUndefined();
           expect(result.output).toBe('VERIFIED');
         });
 
-        it('still prefers a continuation for a completion that arrived too late to read', async () => {
+        it('rejects a launch result when the completion came too late to read and nothing followed', async () => {
           const result = await run([
+            promptEcho,
+            ...launch(1),
+            completed(1),
+            turnResult('Workflow launched'),
+          ]);
+          expect(result.error).toContain('stream ended before the main agent answered');
+          expect(result.output).toBeUndefined();
+        });
+
+        it('grades the continuation of a completion that came too late to read', async () => {
+          const result = await run([
+            promptEcho,
             ...launch(1),
             completed(1),
             turnResult('Workflow launched'),
@@ -2071,27 +2120,75 @@ describe('ClaudeCodeSDKProvider', () => {
           expect(result.output).toBe('VERIFIED');
         });
 
-        it('grades the continuation for a workflow that finishes after an earlier one was read', async () => {
+        it('does not count a completion echoed for another task', async () => {
           const result = await run([
-            ...launch(2),
+            promptEcho,
+            ...launch(1),
             completed(1),
-            turnResult('First check passed; waiting for the second'),
-            completed(2),
-            turnResult('VERIFIED', continuation),
-          ]);
-          expect(result.error).toBeUndefined();
-          expect(result.output).toBe('VERIFIED');
-        });
-
-        it('rejects a later completion that no main-agent turn answered', async () => {
-          const result = await run([
-            ...launch(2),
-            completed(1),
-            turnResult('First check passed; waiting for the second'),
-            completed(2),
+            readByTurn(9),
+            turnResult('Workflow launched'),
           ]);
           expect(result.error).toContain('stream ended before the main agent answered');
-          expect(result.output).toBeUndefined();
+        });
+
+        it.each([
+          [true, undefined],
+          [false, 'stream ended before the main agent answered'],
+        ])(
+          'requires an answer for a workflow that finishes after an earlier one was read (continued: %s)',
+          async (continued, error) => {
+            const result = await run([
+              promptEcho,
+              ...launch(2),
+              completed(1),
+              readByTurn(1),
+              turnResult('First check passed; waiting for the second'),
+              completed(2),
+              ...(continued ? [turnResult('VERIFIED', continuation)] : []),
+            ]);
+            expect(result.output).toBe(continued ? 'VERIFIED' : undefined);
+            if (error) {
+              expect(result.error).toContain(error);
+            } else {
+              expect(result.error).toBeUndefined();
+            }
+          },
+        );
+
+        // A stream with no replayed user messages cannot show what a turn read, so
+        // a main-agent result after a completion is taken to answer it.
+        describe('without replayed user messages', () => {
+          it.each([1, 2])('grades the turn that read %i completions itself', async (count) => {
+            const result = await run([
+              ...launch(count),
+              ...Array.from({ length: count }, (_, i) => completed(i + 1)),
+              turnResult('VERIFIED'),
+            ]);
+            expect(result.error).toBeUndefined();
+            expect(result.output).toBe('VERIFIED');
+          });
+
+          it('still prefers a continuation for a completion that arrived too late to read', async () => {
+            const result = await run([
+              ...launch(1),
+              completed(1),
+              turnResult('Workflow launched'),
+              turnResult('VERIFIED', continuation),
+            ]);
+            expect(result.error).toBeUndefined();
+            expect(result.output).toBe('VERIFIED');
+          });
+
+          it('rejects a later completion that no main-agent turn answered', async () => {
+            const result = await run([
+              ...launch(2),
+              completed(1),
+              turnResult('First check passed; waiting for the second'),
+              completed(2),
+            ]);
+            expect(result.error).toContain('stream ended before the main agent answered');
+            expect(result.output).toBeUndefined();
+          });
         });
       });
 
@@ -5162,6 +5259,28 @@ describe('ClaudeCodeSDKProvider', () => {
             }),
           });
         });
+
+        it.each([
+          [{ custom_allowed_tools: ['Workflow'] }, { 'replay-user-messages': null }],
+          [{ allow_all_tools: true }, { 'replay-user-messages': null }],
+          [
+            { custom_allowed_tools: ['Workflow'], extra_args: { verbose: null } },
+            { 'replay-user-messages': null, verbose: null },
+          ],
+          [{ custom_allowed_tools: ['Read'] }, undefined],
+          [{}, undefined],
+        ])(
+          'asks the CLI to replay user messages only when a workflow can run %#',
+          async (config, extraArgs) => {
+            mockQuery.mockReturnValue(createMockResponse('Response'));
+            const provider = new ClaudeCodeSDKProvider({
+              config,
+              env: { ANTHROPIC_API_KEY: 'test-api-key' },
+            });
+            await provider.callApi('Test prompt');
+            expect(mockQuery.mock.calls[0][0].options.extraArgs).toEqual(extraArgs);
+          },
+        );
 
         it.each([
           'allowedTools',
