@@ -872,9 +872,12 @@ export const providerMap: ProviderFactory[] = [
       providerOptions: ProviderOptions,
       _context: LoadApiProviderContext,
     ) => {
-      const [_, modelType, modelName] = providerPath.split(':');
+      const modelType = providerPath.split(':')[1];
       if (modelType === 'image') {
-        return new FalImageGenerationProvider(modelName, providerOptions);
+        return new FalImageGenerationProvider(
+          modelNameFromProviderPath(providerPath, 2),
+          providerOptions,
+        );
       }
       throw new Error(
         `Invalid fal provider path: ${providerPath}. Use one of the following providers: fal:image:<model name>`,

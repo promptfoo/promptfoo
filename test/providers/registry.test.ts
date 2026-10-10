@@ -1203,6 +1203,7 @@ describe('Provider Registry', () => {
         'claude-sonnet-4-6:custom',
       ],
       ['anthropic:claude-2.1:custom', 'AnthropicCompletionProvider', 'claude-2.1:custom'],
+      ['fal:image:fal-ai/flux:v2', 'FalImageGenerationProvider', 'fal-ai/flux:v2'],
     ])('preserves the model suffix and provider type for %s', async (path, type, modelName) => {
       const provider = await loadApiProvider(path, { options: { config: { apiKey: 'test-key' } } });
       expect(provider.constructor.name).toBe(type);
