@@ -1164,7 +1164,15 @@ async function callActiveProvider({
         },
         abortSignal,
       );
-    return withProviderCallExecutionContext(
+    return testSuite?.tracing
+      ? cliState.withRequestTracingConfig(testSuite.tracing, invoke)
+      : invoke();
+  };
+  let response: ProviderResponse;
+  try {
+    // Establish the evaluator scope before acquisition so the registry can attach
+    // retry ownership that nested provider calls retain throughout this attempt.
+    response = await withProviderCallExecutionContext(
       {
         abortSignal,
         rateLimitRegistry,
@@ -1174,20 +1182,14 @@ async function callActiveProvider({
         },
       },
       () =>
-        testSuite?.tracing
-          ? cliState.withRequestTracingConfig(testSuite.tracing, invoke)
-          : invoke(),
+        rateLimitRegistry
+          ? rateLimitRegistry.execute(
+              activeProvider,
+              callApi,
+              createProviderRateLimitOptions(abortSignal),
+            )
+          : callApi(),
     );
-  };
-  let response: ProviderResponse;
-  try {
-    response = rateLimitRegistry
-      ? await rateLimitRegistry.execute(
-          activeProvider,
-          callApi,
-          createProviderRateLimitOptions(abortSignal),
-        )
-      : await callApi();
   } catch (error) {
     if (!isCliPauseCancellation(error, abortSignal, pauseSignal)) {
       throw error;
