@@ -69,9 +69,6 @@ function BlogListPageContent(props: Props): React.ReactElement {
     );
   }, [items, isFirstPage]);
 
-  // Dynamic title based on page (use • to match BlogPostGrid parsing)
-  const gridTitle = isFirstPage ? 'Latest Posts' : `Older Posts • Page ${metadata.page}`;
-
   return (
     <BlogLayout sidebar={sidebar}>
       <div className={styles.blogListPage}>
@@ -84,8 +81,8 @@ function BlogListPageContent(props: Props): React.ReactElement {
         )}
         <BlogPostGrid
           posts={displayPosts.map((item) => item.content)}
-          title={gridTitle}
-          isPaginated={!isFirstPage}
+          title={isFirstPage ? 'Latest Posts' : 'Older Posts'}
+          pageNumber={isFirstPage ? undefined : metadata.page}
         />
       </div>
       <BlogListPaginator metadata={metadata} />
