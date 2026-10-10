@@ -1,8 +1,8 @@
 import { DEFAULT_CONFIG, useStore } from '@app/stores/evalConfig';
 import { callApi } from '@app/utils/api';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import EvaluateTestSuiteCreator from './EvaluateTestSuiteCreator';
 import type {
   DerivedMetric,
@@ -56,14 +56,6 @@ vi.mock('./TestCasesSection', () => ({
     </div>
   )),
 }));
-vi.mock('./YamlEditor', () => ({
-  // YamlEditor expects initialConfig prop.
-  default: vi.fn(() => (
-    <div data-testid="mock-yaml-editor">
-      <pre>YAML Editor</pre>
-    </div>
-  )),
-}));
 vi.mock('./StepSection', () => ({
   StepSection: vi.fn(({ children }) => <div data-testid="mock-step-section">{children}</div>),
 }));
@@ -85,6 +77,11 @@ describe('EvaluateTestSuiteCreator', () => {
     vi.clearAllMocks();
     // Reset store to its default state before each test
     useStore.getState().reset();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    act(() => useStore.getState().reset());
   });
 
   it('should open the reset confirmation dialog when the Reset button is clicked', async () => {
@@ -319,7 +316,7 @@ describe('EvaluateTestSuiteCreator', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Prompts: Missing' }));
     await userEvent.click(screen.getByRole('button', { name: 'Mock Edit Prompt YAML' }));
 
-    expect(screen.getByTestId('mock-yaml-editor')).toBeInTheDocument();
+    expect(screen.getByLabelText('YAML configuration editor')).toBeInTheDocument();
   });
 
   it('should show a ready state and jump to run options once required setup is complete', async () => {
@@ -349,9 +346,8 @@ describe('EvaluateTestSuiteCreator', () => {
     const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
     await user.upload(fileInput, mockFile);
 
-    await waitFor(() => {
-      expect(showToastMock).toHaveBeenCalledWith('Configuration loaded successfully', 'success');
-    });
+    await user.click(await screen.findByRole('button', { name: 'Replace configuration' }));
+    expect(showToastMock).toHaveBeenCalledWith('Configuration loaded successfully', 'success');
 
     expect(useStore.getState().config.description).toBe('Test Config');
   });
@@ -364,9 +360,8 @@ describe('EvaluateTestSuiteCreator', () => {
     const input = screen.getByLabelText('Upload YAML configuration');
     await user.upload(input, file);
 
-    await waitFor(() => {
-      expect(showToastMock).toHaveBeenCalledWith('Configuration loaded successfully', 'success');
-    });
+    await user.click(await screen.findByRole('button', { name: 'Replace configuration' }));
+    expect(showToastMock).toHaveBeenCalledWith('Configuration loaded successfully', 'success');
     expect(useStore.getState().getTestSuite().providers).toEqual(['echo']);
     expect(useStore.getState().config.targets).toBeUndefined();
   });
@@ -485,9 +480,8 @@ describe('EvaluateTestSuiteCreator', () => {
     const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
     await user.upload(fileInput, mockFile);
 
-    await waitFor(() => {
-      expect(showToastMock).toHaveBeenCalledWith('Configuration loaded successfully', 'success');
-    });
+    await user.click(await screen.findByRole('button', { name: 'Replace configuration' }));
+    expect(showToastMock).toHaveBeenCalledWith('Configuration loaded successfully', 'success');
 
     // File input should be reset to allow re-uploading
     expect(fileInput.value).toBe('');
@@ -570,5 +564,168 @@ describe('EvaluateTestSuiteCreator', () => {
     expect(configureEnvButton).toBeInTheDocument();
   });
 
-  // Future test scenarios will be added here
+  it('keeps a YAML draft when switching tabs is cancelled and discards it only on confirmation', async () => {
+    const user = userEvent.setup();
+    render(<EvaluateTestSuiteCreator />);
+    await user.click(screen.getByRole('tab', { name: 'YAML Editor' }));
+    const editor = screen.getByLabelText('YAML configuration editor');
+    const original = (editor as HTMLTextAreaElement).value;
+    await user.clear(editor);
+    await user.type(editor, 'description: Unsaved draft');
+
+    await user.click(screen.getByRole('tab', { name: 'UI Editor' }));
+    await user.click(screen.getByRole('button', { name: 'Keep editing' }));
+    expect(editor).toHaveValue('description: Unsaved draft');
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'YAML Editor' })).toHaveFocus());
+    expect(useStore.getState().config.description).toBe('');
+
+    await user.click(screen.getByRole('tab', { name: 'UI Editor' }));
+    const dialog = screen.getByRole('dialog', { name: 'Discard unsaved YAML changes?' });
+    expect(dialog).toHaveAccessibleDescription(
+      'Save your changes in the YAML editor before switching to the UI editor, or discard them to continue.',
+    );
+    await user.click(within(dialog).getByRole('button', { name: 'Discard changes' }));
+    expect(screen.getByRole('tab', { name: 'UI Editor' })).toHaveAttribute('aria-selected', 'true');
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'UI Editor' })).toHaveFocus());
+    await user.click(screen.getByRole('tab', { name: 'YAML Editor' }));
+    expect(screen.getByLabelText('YAML configuration editor')).toHaveValue(original);
+  });
+
+  it('allows switching tabs after saving a partial draft and preserves existing fields', async () => {
+    const user = userEvent.setup();
+    const initial = { description: 'Before', futureSetting: { enabled: true } };
+    useStore.getState().setConfig(initial);
+    render(<EvaluateTestSuiteCreator />);
+    await user.click(screen.getByRole('tab', { name: 'YAML Editor' }));
+    const editor = screen.getByLabelText('YAML configuration editor');
+    await user.clear(editor);
+    await user.type(editor, 'description: Saved draft');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    await user.click(screen.getByRole('tab', { name: 'UI Editor' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(useStore.getState().config).toMatchObject({ ...initial, description: 'Saved draft' });
+  });
+
+  it('preserves unsaved YAML on import cancellation and clears omitted fields on replacement', async () => {
+    const user = userEvent.setup();
+    useStore.getState().updateConfig({
+      env: { OPENAI_API_KEY: 'test-only' },
+      extensions: ['file://old-extension.js'],
+      evaluateOptions: { maxConcurrency: 3 },
+    });
+    render(<EvaluateTestSuiteCreator />);
+    const previous = useStore.getState().config;
+    await user.click(screen.getByRole('tab', { name: 'YAML Editor' }));
+    const editor = screen.getByLabelText('YAML configuration editor');
+    await user.clear(editor);
+    await user.type(editor, 'description: Unsaved draft');
+    const file = new File(['description: Imported draft'], 'config.yaml', {
+      type: 'application/yaml',
+    });
+    await user.upload(screen.getByLabelText('Upload YAML configuration'), file);
+    const dialog = await screen.findByRole('dialog', { name: 'Replace evaluation configuration?' });
+    expect(dialog).toHaveAccessibleDescription(
+      'This replaces the current configuration and any unsaved YAML changes with the uploaded file. Fields missing from the file will be cleared.',
+    );
+    expect(useStore.getState().config).toBe(previous);
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    expect(editor).toHaveValue('description: Unsaved draft');
+    expect(useStore.getState().config).toBe(previous);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Upload YAML' })).toHaveFocus());
+
+    await user.upload(screen.getByLabelText('Upload YAML configuration'), file);
+    await user.click(await screen.findByRole('button', { name: 'Replace configuration' }));
+    expect(useStore.getState().config).toEqual({ description: 'Imported draft' });
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Upload YAML' })).toHaveFocus());
+    expect(
+      (screen.getByLabelText('YAML configuration editor') as HTMLTextAreaElement).value,
+    ).toContain('description: Imported draft');
+    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+    await user.upload(screen.getByLabelText('Upload YAML configuration'), file);
+    await screen.findByRole('dialog', { name: 'Replace evaluation configuration?' });
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Upload YAML' })).toHaveFocus());
+  });
+
+  it('asks before replacing edits made while an upload is still reading', async () => {
+    const user = userEvent.setup();
+    let reader: FileReader;
+    vi.spyOn(FileReader.prototype, 'readAsText').mockImplementation(function (this: FileReader) {
+      reader = this;
+    });
+    render(<EvaluateTestSuiteCreator />);
+    await user.upload(
+      screen.getByLabelText('Upload YAML configuration'),
+      new File([''], 'config.yaml'),
+    );
+    act(() => useStore.getState().updateConfig({ prompts: ['A new prompt'] }));
+    act(() => {
+      Object.defineProperty(reader, 'result', { value: 'description: Imported' });
+      reader.dispatchEvent(new ProgressEvent('load'));
+    });
+    expect(useStore.getState().config.prompts).toEqual(['A new prompt']);
+    const dialog = screen.getByRole('dialog', { name: 'Replace evaluation configuration?' });
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    expect(useStore.getState().config.prompts).toEqual(['A new prompt']);
+  });
+
+  it('ignores an older upload when file reads finish out of order', async () => {
+    const user = userEvent.setup();
+    const readers: FileReader[] = [];
+    vi.spyOn(FileReader.prototype, 'readAsText').mockImplementation(function (this: FileReader) {
+      readers.push(this);
+    });
+    render(<EvaluateTestSuiteCreator />);
+    const input = screen.getByLabelText('Upload YAML configuration');
+    await user.upload(input, new File([''], 'first.yaml'));
+    await user.upload(input, new File([''], 'second.yaml'));
+    act(() => {
+      Object.defineProperty(readers[1], 'result', { value: 'description: Second upload' });
+      readers[1].dispatchEvent(new ProgressEvent('load'));
+      Object.defineProperty(readers[0], 'result', { value: 'description: First upload' });
+      readers[0].dispatchEvent(new ProgressEvent('load'));
+    });
+    await user.click(screen.getByRole('button', { name: 'Replace configuration' }));
+    expect(useStore.getState().config).toEqual({ description: 'Second upload' });
+  });
+
+  it('cancels an in-flight upload when resetting the form', async () => {
+    const user = userEvent.setup();
+    let reader: FileReader;
+    vi.spyOn(FileReader.prototype, 'readAsText').mockImplementation(function (this: FileReader) {
+      reader = this;
+    });
+    render(<EvaluateTestSuiteCreator />);
+    await user.upload(
+      screen.getByLabelText('Upload YAML configuration'),
+      new File([''], 'config.yaml'),
+    );
+    await user.click(screen.getByRole('button', { name: 'Reset' }));
+    const dialog = screen.getByRole('dialog', { name: 'Reset evaluation setup?' });
+    await user.click(within(dialog).getByRole('button', { name: 'Reset' }));
+    act(() => {
+      Object.defineProperty(reader, 'result', { value: 'description: Outdated upload' });
+      reader.dispatchEvent(new ProgressEvent('load'));
+    });
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(useStore.getState().config).toEqual(DEFAULT_CONFIG);
+  });
+
+  it('keeps the current configuration when reading an upload fails', async () => {
+    const user = userEvent.setup();
+    let reader: FileReader;
+    vi.spyOn(FileReader.prototype, 'readAsText').mockImplementation(function (this: FileReader) {
+      reader = this;
+    });
+    render(<EvaluateTestSuiteCreator />);
+    const previous = useStore.getState().config;
+    await user.upload(
+      screen.getByLabelText('Upload YAML configuration'),
+      new File([''], 'config.yaml'),
+    );
+    act(() => reader.dispatchEvent(new ProgressEvent('error')));
+    expect(showToastMock).toHaveBeenCalledWith('Failed to read file', 'error');
+    expect(useStore.getState().config).toBe(previous);
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
 });

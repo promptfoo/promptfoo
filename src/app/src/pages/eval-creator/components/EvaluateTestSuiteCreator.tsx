@@ -29,6 +29,7 @@ import { countTests, normalizePrompts, normalizeProviders } from './setupReadine
 import TestCasesSection from './TestCasesSection';
 import YamlEditor from './YamlEditor';
 import { validateYamlConfigDraft } from './yamlConfigValidation';
+import type { EvalConfigState } from '@app/stores/evalConfig';
 
 type SetupStepId = 1 | 2 | 3 | 4;
 type EditorTab = 'ui' | 'yaml';
@@ -84,15 +85,28 @@ const EvaluateTestSuiteCreator = () => {
   const [activeStep, setActiveStep] = useState<SetupStepId>(1);
   const [editorTab, setEditorTab] = useState<EditorTab>('ui');
   const [resetKey, setResetKey] = useState(0);
+  const [hasUnsavedYaml, setHasUnsavedYaml] = useState(false);
+  const uiTabRef = React.useRef<HTMLButtonElement>(null);
+  const yamlTabRef = React.useRef<HTMLButtonElement>(null);
+  const [discardYamlDialogOpen, setDiscardYamlDialogOpen] = useState(false);
+  const discardYamlDescriptionId = React.useId();
+  const importDescriptionId = React.useId();
+  const [pendingImport, setPendingImport] = useState<EvalConfigState['config'] | null>(null);
+  const fileReaderRef = React.useRef<FileReader | null>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const uploadButtonRef = React.useRef<HTMLButtonElement>(null);
 
-  const { config, updateConfig, reset } = useStore();
+  const { config, setConfig, updateConfig, reset } = useStore();
   const { providers = [], prompts = [] } = config;
 
   const normalizedProviders = React.useMemo(() => normalizeProviders(providers), [providers]);
 
   useEffect(() => {
     useStore.persist.rehydrate();
+    return () => {
+      fileReaderRef.current?.abort();
+      fileReaderRef.current = null;
+    };
   }, []);
 
   // Fetch config status to determine if ConfigureEnvButton should be shown
@@ -179,7 +193,11 @@ const EvaluateTestSuiteCreator = () => {
   const shouldShowSummaryAction = activeStep !== nextRecommendedStep.id;
 
   const handleReset = () => {
+    fileReaderRef.current?.abort();
+    fileReaderRef.current = null;
+    setPendingImport(null);
     reset();
+    setHasUnsavedYaml(false);
     setResetKey((k) => k + 1);
     setResetDialogOpen(false);
   };
@@ -187,8 +205,15 @@ const EvaluateTestSuiteCreator = () => {
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
+      fileReaderRef.current?.abort();
       const reader = new FileReader();
+      fileReaderRef.current = reader;
+      setPendingImport(null);
       reader.onload = (e) => {
+        if (fileReaderRef.current !== reader) {
+          return;
+        }
+        fileReaderRef.current = null;
         const content = e.target?.result as string;
         if (content.trim() === '') {
           showToast(
@@ -199,9 +224,7 @@ const EvaluateTestSuiteCreator = () => {
           try {
             const validation = validateYamlConfigDraft(loadYaml(content));
             if (validation.success) {
-              updateConfig(validation.config);
-              setResetKey((k) => k + 1);
-              showToast('Configuration loaded successfully', 'success');
+              setPendingImport(validation.config);
             } else {
               showToast(validation.error, 'error');
             }
@@ -214,7 +237,10 @@ const EvaluateTestSuiteCreator = () => {
         }
       };
       reader.onerror = () => {
-        showToast('Failed to read file', 'error');
+        if (fileReaderRef.current === reader) {
+          fileReaderRef.current = null;
+          showToast('Failed to read file', 'error');
+        }
       };
       reader.readAsText(file);
     }
@@ -226,7 +252,13 @@ const EvaluateTestSuiteCreator = () => {
     <PageContainer>
       <Tabs
         value={editorTab}
-        onValueChange={(value) => setEditorTab(value as EditorTab)}
+        onValueChange={(value) => {
+          if (value === 'ui' && hasUnsavedYaml) {
+            setDiscardYamlDialogOpen(true);
+          } else {
+            setEditorTab(value as EditorTab);
+          }
+        }}
         className="w-full"
       >
         {/* Header */}
@@ -242,7 +274,11 @@ const EvaluateTestSuiteCreator = () => {
 
               <div className="flex flex-wrap items-center gap-2">
                 {!hasCustomConfig && <ConfigureEnvButton />}
-                <Button variant="outline" onClick={() => fileInputRef.current?.click()}>
+                <Button
+                  ref={uploadButtonRef}
+                  variant="outline"
+                  onClick={() => fileInputRef.current?.click()}
+                >
                   <Upload className="size-4 mr-2" />
                   Upload YAML
                 </Button>
@@ -263,10 +299,10 @@ const EvaluateTestSuiteCreator = () => {
             {/* Tabs Toggle */}
             <div className="mt-4 lg:mt-6">
               <TabsList aria-label="Editor mode">
-                <TabsTrigger value="ui" className="dark:text-foreground/80">
+                <TabsTrigger ref={uiTabRef} value="ui" className="dark:text-foreground/80">
                   UI Editor
                 </TabsTrigger>
-                <TabsTrigger value="yaml" className="dark:text-foreground/80">
+                <TabsTrigger ref={yamlTabRef} value="yaml" className="dark:text-foreground/80">
                   YAML Editor
                 </TabsTrigger>
               </TabsList>
@@ -674,10 +710,84 @@ const EvaluateTestSuiteCreator = () => {
         {/* YAML Editor Tab */}
         <TabsContent value="yaml">
           <div className="container max-w-7xl mx-auto px-4 py-8">
-            <YamlEditor key={resetKey} />
+            <YamlEditor key={resetKey} onDirtyChange={setHasUnsavedYaml} />
           </div>
         </TabsContent>
       </Tabs>
+
+      <Dialog open={discardYamlDialogOpen} onOpenChange={setDiscardYamlDialogOpen}>
+        <DialogContent
+          hideDescription={false}
+          aria-describedby={discardYamlDescriptionId}
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            (editorTab === 'yaml' ? yamlTabRef : uiTabRef).current?.focus();
+          }}
+        >
+          <DialogHeader>
+            <DialogTitle>Discard unsaved YAML changes?</DialogTitle>
+            <DialogDescription id={discardYamlDescriptionId}>
+              Save your changes in the YAML editor before switching to the UI editor, or discard
+              them to continue.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDiscardYamlDialogOpen(false)}>
+              Keep editing
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                setDiscardYamlDialogOpen(false);
+                setHasUnsavedYaml(false);
+                setEditorTab('ui');
+              }}
+            >
+              Discard changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={pendingImport !== null}
+        onOpenChange={(open) => !open && setPendingImport(null)}
+      >
+        <DialogContent
+          hideDescription={false}
+          aria-describedby={importDescriptionId}
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            uploadButtonRef.current?.focus();
+          }}
+        >
+          <DialogHeader>
+            <DialogTitle>Replace evaluation configuration?</DialogTitle>
+            <DialogDescription id={importDescriptionId}>
+              This replaces the current configuration and any unsaved YAML changes with the uploaded
+              file. Fields missing from the file will be cleared.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPendingImport(null)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (pendingImport) {
+                  setConfig(pendingImport);
+                  setPendingImport(null);
+                  setHasUnsavedYaml(false);
+                  setResetKey((k) => k + 1);
+                  showToast('Configuration loaded successfully', 'success');
+                }
+              }}
+            >
+              Replace configuration
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Reset Confirmation Dialog */}
       <Dialog open={resetDialogOpen} onOpenChange={setResetDialogOpen}>
