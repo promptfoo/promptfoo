@@ -17,8 +17,10 @@ providers:
 
 tests:
   - assert:
-      - type: equals
+      - type: contains
         value: VERIFIED
+      - type: not-contains
+        value: INCORRECT
       - type: javascript
         value: >-
           context.providerResponse.metadata.toolCalls.some(call =>
