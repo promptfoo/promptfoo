@@ -208,7 +208,7 @@ The provider forwards `streamingConfigurations` (`streamFinalResponse` and
 [InvokeAgent request shapes](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_agent-runtime_InvokeAgent.html).
 The full `sessionState` is supported, including conversation history, input files,
 Knowledge Base overrides, and return-control results. Encode input-file
-`source.byteContent.data` as base64 in JSON/YAML.
+`source.byteContent.data` as canonical padded or unpadded base64 in JSON/YAML. Malformed base64 is rejected before invocation.
 
 Response metadata preserves the session and memory IDs, citations, traces,
 `returnControl` events, and generated `files`. Returned file `bytes` are base64
@@ -216,7 +216,7 @@ strings. If the agent returns control without text, the eval output contains the
 return-control events as JSON; Promptfoo does not execute those requested actions.
 To resume, supply the same `sessionId` and the returned `invocationId` and
 `returnControlInvocationResults` in `sessionState`. Explicit session/memory calls,
-session-ending requests, and return-control results bypass the response cache. Cached
+session-ending requests, tracing, and return-control results bypass the response cache. Cached
 outputs omit resumable session/memory IDs; use `--no-cache` to start a conversation
 you intend to continue. Responses that request return control are not cached.
 
