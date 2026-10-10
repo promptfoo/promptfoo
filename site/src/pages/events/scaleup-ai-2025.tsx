@@ -2,6 +2,7 @@ import React from 'react';
 
 import Head from '@docusaurus/Head';
 import Link from '@docusaurus/Link';
+import { CalendarIcon } from '@site/src/components/Events/EventIcons';
 import { useForcedTheme } from '@site/src/hooks/useForcedTheme';
 import Layout from '@theme/Layout';
 import { SITE_CONSTANTS } from '../../constants';
@@ -80,14 +81,7 @@ export default function ScaleUpAI2025(): React.ReactElement {
 
             <div className={styles.eventDetails}>
               <div className={styles.detail}>
-                <svg className={styles.icon} viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-                  />
-                </svg>
+                <CalendarIcon className={styles.icon} />
                 <span>December 3, 2025</span>
               </div>
               <div className={styles.detail}>
