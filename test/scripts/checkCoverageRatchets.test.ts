@@ -1,17 +1,20 @@
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   COVERAGE_RATCHET_REPORTS,
   DEFAULT_COVERAGE_THRESHOLDS,
   evaluateCoverageRatchets,
+  getChangedFiles,
   parseChangedFileList,
   readGithubPullRequestBaseSha,
   runCoverageRatchetCli,
   summarizeFileCoverage,
 } from '../../scripts/checkCoverageRatchets';
+import { mockProcessEnv } from '../util/utils';
 
 type MetricCounts = {
   covered: number;
@@ -164,6 +167,29 @@ describe('coverage ratchets', () => {
     expect(result.checkedFiles[0].file).toBe(file);
   });
 
+  it('excludes browser tests without excluding production browser helpers', () => {
+    const helper = 'src/app/src/components/model.browserHelpers.tsx';
+    const result = evaluateCoverageRatchets({
+      changedFiles: [
+        { path: 'src/app/src/components/model.browser.ts', status: 'A' },
+        { path: 'src/app/src/components/model.browser.tsx', status: 'A' },
+        { path: helper, status: 'A' },
+      ],
+      coverageMap: {},
+      repoRoot,
+      report: frontendReport,
+    });
+
+    expect(result.failures).toEqual([
+      {
+        file: helper,
+        reason: 'new source file',
+        message: `No coverage entry found for ${helper}`,
+      },
+    ]);
+    expect(result.checkedFiles).toEqual([]);
+  });
+
   it('parses added, modified, and renamed files from git name-status output', () => {
     expect(
       parseChangedFileList(
@@ -230,5 +256,120 @@ describe('coverage ratchets', () => {
     } finally {
       fs.rmSync(tempDir, { force: true, recursive: true });
     }
+  });
+});
+
+describe('explicit coverage bases', () => {
+  let repo: string;
+  let baseSha: string;
+  let restoreEnv: () => void;
+
+  function git(...args: string[]): string {
+    return execFileSync(
+      'git',
+      [
+        '-c',
+        'core.hooksPath=/dev/null',
+        '-c',
+        'commit.gpgsign=false',
+        '-c',
+        'user.name=Coverage test',
+        '-c',
+        'user.email=coverage@example.invalid',
+        ...args,
+      ],
+      { cwd: repo, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
+    ).trim();
+  }
+
+  beforeAll(() => {
+    repo = fs.mkdtempSync(path.join(os.tmpdir(), 'coverage-ratchet-git-'));
+    git('init', '--initial-branch=main');
+    fs.mkdirSync(path.join(repo, 'src/assertions'), { recursive: true });
+    fs.writeFileSync(path.join(repo, 'src/assertions/legacy.ts'), 'export const value = 1;\n');
+    git('add', 'src');
+    git('commit', '-m', 'initial');
+
+    git('checkout', '-b', 'feature');
+    fs.writeFileSync(path.join(repo, 'src/assertions/legacy.ts'), 'export const value = 2;\n');
+    fs.writeFileSync(path.join(repo, 'src/feature.ts'), 'export const feature = true;\n');
+    git('add', 'src');
+    git('commit', '-m', 'original broad feature');
+
+    git('checkout', '-b', 'foundation', 'main');
+    fs.writeFileSync(path.join(repo, 'foundation.txt'), 'shared fixtures\n');
+    git('add', 'foundation.txt');
+    git('commit', '-m', 'foundation');
+    baseSha = git('rev-parse', 'HEAD');
+
+    git('checkout', 'feature');
+    git('merge', '--no-commit', '--no-ff', 'foundation');
+    git('restore', '--source=foundation', '--staged', '--worktree', 'src/assertions/legacy.ts');
+    git('commit', '-m', 'restack and keep only the owned feature');
+    const remote = path.join(repo, 'remote.git');
+    git('clone', '--bare', repo, remote);
+    git('--git-dir', remote, 'update-ref', 'refs/heads/remote-foundation', baseSha);
+    git('--git-dir', remote, 'update-ref', 'refs/heads/fetch-only-foundation', baseSha);
+    git('remote', 'add', 'origin', remote);
+    git('update-ref', 'refs/remotes/origin/remote-foundation', baseSha);
+  });
+
+  beforeEach(() => {
+    restoreEnv = mockProcessEnv({
+      GITHUB_ACTIONS: 'true',
+      GITHUB_EVENT_PATH: undefined,
+      GITHUB_BASE_REF: undefined,
+    });
+  });
+
+  afterEach(() => restoreEnv());
+  afterAll(() => fs.rmSync(repo, { recursive: true, force: true }));
+
+  it('checks the stacked PR diff instead of changes from the merge first parent', () => {
+    expect(getChangedFiles(repo).map((file) => file.path)).toContain('src/assertions/legacy.ts');
+    expect(getChangedFiles(repo, baseSha)).toEqual([{ path: 'src/feature.ts', status: 'A' }]);
+    expect(getChangedFiles(repo, 'foundation')).toEqual([{ path: 'src/feature.ts', status: 'A' }]);
+  });
+
+  it('fails instead of falling back when the explicit ref does not exist', () => {
+    expect(() => getChangedFiles(repo, 'missing-coverage-base')).toThrow(
+      'Unable to determine changed files from explicit coverage base missing-coverage-base',
+    );
+  });
+
+  it('resolves a base branch that exists only as a remote-tracking ref', () => {
+    expect(getChangedFiles(repo, 'remote-foundation')).toEqual([
+      { path: 'src/feature.ts', status: 'A' },
+    ]);
+  });
+
+  it('uses a fetched base without reusing FETCH_HEAD after a later failed fetch', () => {
+    expect(getChangedFiles(repo, 'fetch-only-foundation')).toEqual([
+      { path: 'src/feature.ts', status: 'A' },
+    ]);
+    expect(() => getChangedFiles(repo, 'missing-after-successful-fetch')).toThrow(
+      'Unable to determine changed files from explicit coverage base',
+    );
+  });
+
+  it('rejects fetch refspecs without rewriting the checked out branch', () => {
+    const head = git('rev-parse', 'HEAD');
+    expect(() => getChangedFiles(repo, 'foundation:refs/heads/feature')).toThrow(
+      'Unable to determine changed files from explicit coverage base',
+    );
+    expect(git('rev-parse', 'HEAD')).toBe(head);
+  });
+
+  it('fails instead of falling back when the explicit base has unrelated history', () => {
+    const unrelated = git('commit-tree', 'HEAD^{tree}', '-m', 'unrelated history');
+    expect(() => getChangedFiles(repo, unrelated)).toThrow(
+      'Unable to determine changed files from explicit coverage base',
+    );
+  });
+
+  it.each(['--output=coverage.txt', '-h'])('rejects git options as explicit bases: %s', (base) => {
+    expect(() => getChangedFiles(repo, base)).toThrow(
+      'Coverage base must be a commit or ref, not a git option',
+    );
   });
 });

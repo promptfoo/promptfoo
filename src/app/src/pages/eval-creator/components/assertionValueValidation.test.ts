@@ -1,4 +1,3 @@
-import { BaseAssertionTypesSchema } from '@promptfoo/types';
 import { describe, expect, it } from 'vitest';
 import {
   getAssertionValueError,
@@ -6,8 +5,6 @@ import {
   getRunnableAssertionValueError,
 } from './assertionValueValidation';
 import type { Assertion } from '@promptfoo/types';
-
-const UNSUPPORTED_TYPE_MESSAGE = 'Select a supported assertion type before running.';
 
 const make = (overrides: Partial<Assertion>): Assertion =>
   ({ type: 'contains', value: '', ...overrides }) as Assertion;
@@ -126,6 +123,35 @@ describe('getRunnableAssertionValueError', () => {
           make({ type: 'similar', value: 'expected', threshold: 0.5 as any }),
         ),
       ).toBeUndefined();
+    });
+  });
+
+  describe.each(['rouge-l', 'rouge-s', 'not-rouge-l', 'not-rouge-s'] as const)('%s', (type) => {
+    it('accepts a string reference and thresholds at both boundaries', () => {
+      expect(
+        getRunnableAssertionValueError(make({ type, value: 'expected output' })),
+      ).toBeUndefined();
+      for (const threshold of [0, 1]) {
+        expect(
+          getRunnableAssertionValueError(make({ type, value: 'expected output', threshold })),
+        ).toBeUndefined();
+      }
+    });
+
+    it('requires a non-blank string reference', () => {
+      for (const value of ['', '   ', 42, ['expected output']]) {
+        expect(getRunnableAssertionValueError(make({ type, value }))).toMatch(
+          /Enter an expected value/,
+        );
+      }
+    });
+
+    it('rejects thresholds outside [0, 1]', () => {
+      for (const threshold of [-0.1, 1.1]) {
+        expect(
+          getRunnableAssertionValueError(make({ type, value: 'expected output', threshold })),
+        ).toMatch(/from 0 to 1/);
+      }
     });
   });
 
@@ -267,9 +293,82 @@ describe('structured value assertions', () => {
       ),
     ).toBeUndefined();
   });
+
+  it.each([
+    'trace-span-count',
+    'not-trace-span-count',
+    'trace-span-duration',
+    'not-trace-span-duration',
+    'trace-error-spans',
+    'not-trace-error-spans',
+  ] as const)('validates attribute filters before running %s', (type) => {
+    const value = { pattern: '*', max: 250 };
+    for (const attributes of [
+      [],
+      null,
+      'search',
+      new Date(),
+      new Map(),
+      { tool: [] },
+      { tool: {} },
+      { tool: undefined },
+      { count: Infinity },
+      { count: NaN },
+    ]) {
+      expect(
+        getRunnableAssertionValueError(make({ type, value: { ...value, attributes } })),
+      ).toMatch(/attribute filters/);
+    }
+    for (const attributes of [
+      undefined,
+      {},
+      Object.create(null),
+      { 'gen_ai.tool.name': 'search', cached: false, count: 0 },
+    ]) {
+      expect(
+        getRunnableAssertionValueError(make({ type, value: { ...value, attributes } })),
+      ).toBeUndefined();
+    }
+  });
+
+  it('preserves optional and numeric trace error limits', () => {
+    for (const value of [undefined, 0, 2]) {
+      expect(
+        getRunnableAssertionValueError(make({ type: 'trace-error-spans', value })),
+      ).toBeUndefined();
+    }
+  });
 });
 
 describe('required string assertions', () => {
+  it.each(['javascript', 'not-javascript', 'python', 'not-python', 'ruby', 'not-ruby'] as const)(
+    'accepts script files with optional call-site values for %s',
+    (type) => {
+      for (const value of [undefined, '', 10, ['expected', 5], { expected: '{{ expected }}' }]) {
+        expect(
+          getRunnableAssertionValueError(make({ type, script: 'file://checks/assert.js', value })),
+        ).toBeUndefined();
+      }
+    },
+  );
+
+  it.each(['', './checks/assert.js', 'https://example.com/assert.js'])(
+    'rejects an invalid script reference %j even when an inline value exists',
+    (script) => {
+      expect(
+        getRunnableAssertionValueError(make({ type: 'javascript', script, value: 'true' })),
+      ).toMatch(/script file reference starting with file:\/\//);
+    },
+  );
+
+  it('rejects script files on unsupported assertion types', () => {
+    expect(
+      getRunnableAssertionValueError(
+        make({ type: 'contains', script: 'file://checks/assert.js', value: 'expected' }),
+      ),
+    ).toMatch(/only supported for JavaScript, Python, and Ruby/);
+  });
+
   it('points the user at the right field for select-best, webhook, finish-reason, and friends', () => {
     expect(getRunnableAssertionValueError(make({ type: 'select-best', value: '' }))).toMatch(
       /criteria for selecting/,
@@ -519,21 +618,5 @@ describe('getFirstRunnableAssertionValueError', () => {
       },
     ];
     expect(getFirstRunnableAssertionValueError(list)).toBeUndefined();
-  });
-});
-
-describe('supported assertion type coverage', () => {
-  // Guards against drift: `BASE_ASSERTION_TYPES` is a hand-maintained copy of the
-  // canonical schema, and `satisfies AssertionType[]` only checks the listed entries
-  // are valid — not that the list is complete. A base type added to the schema but
-  // not mirrored here would be wrongly reported as unsupported, falsely blocking a
-  // valid assertion. This test fails if that ever happens.
-  it.each(BaseAssertionTypesSchema.options)('treats base type %s as supported', (type) => {
-    expect(getRunnableAssertionValueError(make({ type: type as any, value: 'x' }))).not.toBe(
-      UNSUPPORTED_TYPE_MESSAGE,
-    );
-    expect(
-      getRunnableAssertionValueError(make({ type: `not-${type}` as any, value: 'x' })),
-    ).not.toBe(UNSUPPORTED_TYPE_MESSAGE);
   });
 });

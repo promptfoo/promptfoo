@@ -29,6 +29,13 @@ describe('external test script fields', () => {
           script: 'file://assertions/check.rb:Checks::check_value',
           value: 'call-site value',
         },
+        {
+          type: 'assert-set',
+          assert: [
+            { type: 'javascript', script: 'file://assertions/check.js', value: 10 },
+            { type: 'not-python', script: 'file://assertions/check.py' },
+          ],
+        },
       ],
     };
     const testFile = path.join(testDirectory, `tests.${extension}`);

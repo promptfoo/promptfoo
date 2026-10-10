@@ -6,6 +6,7 @@ import * as yaml from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
 import {
+  getNunjucksEngineForFilePath,
   getResolvedRelativePath,
   maybeLoadConfigFromExternalFile,
   maybeLoadFromExternalFile,
@@ -24,10 +25,6 @@ import {
   isVideoFile,
 } from '../../src/util/fileExtensions';
 import { mockProcessEnv } from './utils';
-
-const hasGlobMagic = (candidatePath: string) => {
-  return /[*?[\]{}()!+@]/.test(candidatePath) || candidatePath.includes('\\');
-};
 
 vi.mock('proxy-agent', () => ({
   ProxyAgent: vi.fn().mockImplementation(() => ({
@@ -58,9 +55,9 @@ vi.mock('fs/promises', async () => {
   };
 });
 
-vi.mock('glob', () => ({
+vi.mock('glob', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('glob')>()),
   globSync: vi.fn(),
-  hasMagic: vi.fn((candidatePath: string) => hasGlobMagic(candidatePath)),
 }));
 
 vi.mock('../../src/esm', () => ({
@@ -156,12 +153,10 @@ describe('file utilities', () => {
 
     beforeEach(() => {
       vi.resetAllMocks();
-      vi.mocked(fs.existsSync).mockReturnValue(true);
+      vi.mocked(fs.existsSync).mockImplementation(
+        (file) => !hasMagic(String(file), { windowsPathsNoEscape: true }),
+      );
       vi.mocked(fs.readFileSync).mockReturnValue(mockFileContent);
-      vi.mocked(hasMagic).mockImplementation((pattern: string | string[]) => {
-        const p = Array.isArray(pattern) ? pattern.join('') : pattern;
-        return hasGlobMagic(p);
-      });
       cliState.basePath = '/mock/base/path';
     });
 
@@ -239,6 +234,15 @@ describe('file utilities', () => {
 
       const result = maybeLoadFromExternalFile('file://data*.json');
       expect(result).toEqual([mockData1, mockData2]);
+    });
+
+    it('expands Windows glob paths using real glob detection', () => {
+      vi.mocked(globSync).mockReturnValue(['C:/suite/scenario.yaml']);
+      vi.mocked(fs.readFileSync).mockReturnValue('description: scenario');
+
+      expect(maybeLoadFromExternalFile(String.raw`file://C:\suite\*.yaml`)).toEqual([
+        { description: 'scenario' },
+      ]);
     });
 
     it('should handle glob patterns with arrays in files', () => {
@@ -366,6 +370,34 @@ describe('file utilities', () => {
 
       mockProcessEnv({ TEST_ROOT_PATH: undefined });
     });
+
+    it.each([
+      { disabled: false, suiteValue: undefined, expected: 'file' },
+      { disabled: false, suiteValue: '', expected: '' },
+      { disabled: false, suiteValue: 'suite', expected: 'suite' },
+      { disabled: true, suiteValue: undefined, expected: '' },
+    ])(
+      'uses scoped env-file paths with restriction $disabled and suite value $suiteValue',
+      ({ disabled, suiteValue, expected }) => {
+        const restoreEnv = mockProcessEnv({
+          TEST_ROOT_PATH: 'host',
+          PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS: String(disabled),
+        });
+        try {
+          const rendered = cliState.withEnvFileOverrides(
+            { TEST_ROOT_PATH: 'file', PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS: 'false' },
+            () =>
+              cliState.withEnv({ TEST_ROOT_PATH: suiteValue }, () =>
+                getNunjucksEngineForFilePath().renderString('{{ env.TEST_ROOT_PATH }}', {}),
+              ),
+          );
+          expect(rendered).toBe(expected);
+          expect(process.env.TEST_ROOT_PATH).toBe('host');
+        } finally {
+          restoreEnv();
+        }
+      },
+    );
 
     it('should ignore basePath when file path is absolute', () => {
       const basePath = '/base/path';
@@ -774,10 +806,6 @@ describe('file utilities', () => {
       vi.resetAllMocks();
       (fs.existsSync as ReturnType<typeof vi.fn>).mockReturnValue(true);
       (fs.readFileSync as ReturnType<typeof vi.fn>).mockReturnValue('file content');
-      vi.mocked(hasMagic).mockImplementation((pattern: string | string[]) => {
-        const p = Array.isArray(pattern) ? pattern.join('') : pattern;
-        return p.includes('*') || p.includes('?') || p.includes('[') || p.includes('{');
-      });
       cliState.basePath = '/test';
     });
 
@@ -860,6 +888,48 @@ describe('file utilities', () => {
     });
 
     describe('maybeLoadConfigFromExternalFile with assertion detection', () => {
+      it.each(['javascript', 'python', 'ruby', 'not-javascript'])(
+        'loads file contents in generic %s payloads',
+        (type) => {
+          vi.mocked(fs.readFileSync).mockReturnValue('script contents');
+          const payload = { type, script: 'file://snippet.js', value: 'file://input.py' };
+
+          expect(maybeLoadConfigFromExternalFile({ body: payload })).toEqual({
+            body: { type, script: 'script contents', value: 'script contents' },
+          });
+          expect(fs.readFileSync).toHaveBeenCalledTimes(2);
+        },
+      );
+
+      it('preserves nested assertion scripts without leaking context into their config', () => {
+        vi.mocked(fs.readFileSync).mockReturnValue('script contents');
+        const nestedAssertion = {
+          type: 'not-javascript',
+          script: 'file://check.js',
+          value: 10,
+          config: { payload: { type: 'javascript', script: 'file://snippet.js' } },
+        };
+
+        expect(
+          maybeLoadConfigFromExternalFile({
+            assert: [{ type: 'assert-set', assert: [nestedAssertion] }],
+          }),
+        ).toEqual({
+          assert: [
+            {
+              type: 'assert-set',
+              assert: [
+                {
+                  ...nestedAssertion,
+                  config: { payload: { type: 'javascript', script: 'script contents' } },
+                },
+              ],
+            },
+          ],
+        });
+        expect(fs.readFileSync).toHaveBeenCalledTimes(1);
+      });
+
       it('should preserve Python assertion file references', () => {
         const config = {
           assert: [

@@ -1,33 +1,9 @@
 import { runPythonCode } from '../python/wrapper';
 import invariant from '../util/invariant';
+import { buildScriptBody } from './scriptBody';
 import { normalizeScriptResult, type ScriptAssertionResult } from './scriptResultNormalization';
 
 import type { AssertionParams, GradingResult } from '../types/index';
-
-function buildPythonScript(renderedValue: string): string {
-  const isMultiline = renderedValue.includes('\n');
-  let indentStyle = '    ';
-  if (isMultiline) {
-    // Detect the indentation style of the first indented line.
-    const match = renderedValue.match(/^(?!\s*$)\s+/m);
-    if (match) {
-      indentStyle = match[0];
-    }
-  }
-
-  return `import json
-
-def main(output, context):
-${
-  isMultiline
-    ? renderedValue
-        .split('\n')
-        .map((line) => `${indentStyle}${line}`)
-        .join('\n')
-    : `    return ${renderedValue}`
-}
-`;
-}
 
 export const handlePython = async ({
   assertion,
@@ -45,10 +21,15 @@ export const handlePython = async ({
       invariant(typeof renderedValue === 'string', 'python assertion must have a string value');
       result =
         typeof valueFromScript === 'undefined'
-          ? await runPythonCode(buildPythonScript(renderedValue), 'main', [
-              output,
-              assertionValueContext,
-            ])
+          ? await runPythonCode(
+              `import json
+
+def main(output, context):
+${buildScriptBody(renderedValue, '    ')}
+`,
+              'main',
+              [output, assertionValueContext],
+            )
           : valueFromScript;
     }
 

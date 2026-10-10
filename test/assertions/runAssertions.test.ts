@@ -2,11 +2,16 @@ import * as path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderMetricName, runAssertions } from '../../src/assertions/index';
+import cliState from '../../src/cliState';
 import { importModule } from '../../src/esm';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { DefaultGradingJsonProvider } from '../../src/providers/openai/defaults';
 import { ReplicateModerationProvider } from '../../src/providers/replicate';
-import { TestGrader } from '../util/utils';
+import {
+  getGradingAssertionHash,
+  getGradingInputHash,
+} from '../../src/redteam/grading/storedResult';
+import { mockProcessEnv, TestGrader } from '../util/utils';
 
 import type {
   ApiProvider,
@@ -14,6 +19,26 @@ import type {
   GradingResult,
   ProviderResponse,
 } from '../../src/types/index';
+
+const createAssertion = <TType extends 'equals' | 'contains'>(
+  type: TType,
+  value: string = 'Hello world',
+  weight: number = 2,
+) => ({
+  type,
+  value,
+  weight,
+});
+
+const createExpectedOutputAssertion = () => ({
+  type: 'equals' as const,
+  value: 'Expected output',
+});
+
+const createCrescendoMedicalMetadata = () => ({
+  pluginId: 'medical:prioritization-error',
+  strategyId: 'crescendo',
+});
 
 vi.mock('../../src/redteam/remoteGeneration', () => ({
   shouldGenerateRemote: vi.fn().mockReturnValue(false),
@@ -78,12 +103,11 @@ vi.mock('path', async () => {
   };
 });
 
-vi.mock('../../src/cliState', () => ({
-  default: {
-    basePath: '/base/path',
-  },
-  basePath: '/base/path',
-}));
+vi.mock('../../src/cliState', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/cliState')>();
+  actual.default.basePath = '/base/path';
+  return actual;
+});
 vi.mock('../../src/matchers/rag', async () => {
   const actual =
     await vi.importActual<typeof import('../../src/matchers/rag')>('../../src/matchers/rag');
@@ -102,12 +126,7 @@ const _Grader = new TestGrader();
 
 describe('runAssertions', () => {
   const test: AtomicTestCase = {
-    assert: [
-      {
-        type: 'equals',
-        value: 'Expected output',
-      },
-    ],
+    assert: [createExpectedOutputAssertion()],
   };
 
   beforeEach(() => {
@@ -130,6 +149,52 @@ describe('runAssertions', () => {
     expect(result).toMatchObject({
       pass: true,
       reason: 'All assertions passed',
+    });
+  });
+
+  it('records a zero-weight cost metric without changing quality scoring', async () => {
+    const result = await runAssertions({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      test: {
+        assert: [
+          { type: 'equals', value: 'Expected output' },
+          { type: 'cost', metric: 'inference_cost', weight: 0 },
+        ],
+      },
+      providerResponse: { output: 'Expected output', cost: 0.005 },
+    });
+
+    expect(result).toMatchObject({
+      pass: true,
+      score: 1,
+      namedScores: { inference_cost: 0.005 },
+      namedScoreWeights: { inference_cost: 1 },
+    });
+  });
+
+  it('retains measurement metrics inside a zero-weight assertion set', async () => {
+    const result = await runAssertions({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      test: {
+        assert: [
+          { type: 'equals', value: 'Expected output' },
+          {
+            type: 'assert-set',
+            weight: 0,
+            assert: [{ type: 'cost', metric: 'inference_cost', weight: 0 }],
+          },
+        ],
+      },
+      providerResponse: { output: 'Expected output', cost: 0.005 },
+    });
+
+    expect(result).toMatchObject({
+      pass: true,
+      score: 1,
+      namedScores: { inference_cost: 0.005 },
+      namedScoreWeights: { inference_cost: 1 },
     });
   });
 
@@ -172,6 +237,23 @@ describe('runAssertions', () => {
       reason: 'All assertions passed',
     });
   });
+  it.each([false, true])(
+    'preserves empty-reason failures in assertion sets: %s',
+    async (nested) => {
+      const assertion = {
+        type: 'javascript' as const,
+        value: '({ pass: false, score: 0, reason: "" })',
+      };
+      const result = await runAssertions({
+        prompt: 'Some prompt',
+        test: { assert: nested ? [{ type: 'assert-set', assert: [assertion] }] : [assertion] },
+        providerResponse: { output: 'Test output' },
+      });
+
+      expect(result).toMatchObject({ pass: false, score: 0, reason: '' });
+      expect(result.componentResults?.every((component) => component.pass === false)).toBe(true);
+    },
+  );
 
   it('should handle output as an object', async () => {
     const output = { key: 'value' };
@@ -194,18 +276,7 @@ describe('runAssertions', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
       test: {
         threshold: 0.5,
-        assert: [
-          {
-            type: 'equals',
-            value: 'Hello world',
-            weight: 2,
-          },
-          {
-            type: 'contains',
-            value: 'world',
-            weight: 1,
-          },
-        ],
+        assert: [createAssertion('equals'), createAssertion('contains', 'world', 1)],
       },
       providerResponse: { output: 'Hi there world' },
     });
@@ -221,18 +292,7 @@ describe('runAssertions', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
       test: {
         threshold: 0.25,
-        assert: [
-          {
-            type: 'equals',
-            value: 'Hello world',
-            weight: 2,
-          },
-          {
-            type: 'contains',
-            value: 'world',
-            weight: 1,
-          },
-        ],
+        assert: [createAssertion('equals'), createAssertion('contains', 'world', 1)],
       },
       providerResponse: { output: 'Hi there world' },
     });
@@ -280,12 +340,7 @@ describe('runAssertions', () => {
         assert: [
           {
             type: 'assert-set',
-            assert: [
-              {
-                type: 'equals',
-                value: 'Expected output',
-              },
-            ],
+            assert: [createExpectedOutputAssertion()],
           },
         ],
       };
@@ -309,18 +364,7 @@ describe('runAssertions', () => {
           {
             type: 'assert-set',
             threshold: 0.25,
-            assert: [
-              {
-                type: 'equals',
-                value: 'Hello world',
-                weight: 2,
-              },
-              {
-                type: 'contains',
-                value: 'Expected',
-                weight: 1,
-              },
-            ],
+            assert: [createAssertion('equals'), createAssertion('contains', 'Expected', 1)],
           },
         ],
       };
@@ -344,18 +388,7 @@ describe('runAssertions', () => {
           {
             type: 'assert-set',
             threshold: 0.5,
-            assert: [
-              {
-                type: 'equals',
-                value: 'Hello world',
-                weight: 2,
-              },
-              {
-                type: 'contains',
-                value: 'Expected',
-                weight: 1,
-              },
-            ],
+            assert: [createAssertion('equals'), createAssertion('contains', 'Expected', 1)],
           },
         ],
       };
@@ -513,7 +546,7 @@ describe('runAssertions', () => {
   });
 
   it('should use stored grader result from crescendo strategy', async () => {
-    const storedResult = {
+    const storedResult: GradingResult = {
       pass: false,
       score: 0,
       reason: 'Detected jailbreak via crescendo strategy',
@@ -521,22 +554,33 @@ describe('runAssertions', () => {
     };
 
     const test: AtomicTestCase = {
+      provider: 'promptfoo:redteam:crescendo',
       assert: [
         {
           type: 'promptfoo:redteam:medical:prioritization-error' as const,
           value: 'test assertion',
         },
       ],
-      metadata: {
-        pluginId: 'medical:prioritization-error',
-        strategyId: 'crescendo',
-      },
+      metadata: createCrescendoMedicalMetadata(),
     };
 
     const providerResponse: ProviderResponse = {
       output: 'Some target response',
       metadata: {
-        storedGraderResult: storedResult,
+        storedGraderResult: {
+          ...storedResult,
+          assertion: test.assert![0],
+          metadata: {
+            ...storedResult.metadata,
+            redteamGradingAssertionHash: getGradingAssertionHash(test.assert![0]),
+            redteamGradingInputHash: getGradingInputHash(
+              'test prompt',
+              'Some target response',
+              undefined,
+              'medical:prioritization-error',
+            ),
+          },
+        },
       },
     };
 
@@ -561,7 +605,7 @@ describe('runAssertions', () => {
   });
 
   it('should construct proper return shape for stored grader result', async () => {
-    const storedResult = {
+    const storedResult: GradingResult = {
       pass: false,
       score: 0,
       reason: 'Internal evaluator detected successful attack',
@@ -573,17 +617,28 @@ describe('runAssertions', () => {
     };
 
     const test: AtomicTestCase = {
+      provider: 'promptfoo:redteam:crescendo',
       assert: [assertion],
-      metadata: {
-        pluginId: 'medical:prioritization-error',
-        strategyId: 'crescendo',
-      },
+      metadata: createCrescendoMedicalMetadata(),
     };
 
     const providerResponse: ProviderResponse = {
       output: 'Some target response',
       metadata: {
-        storedGraderResult: storedResult,
+        storedGraderResult: {
+          ...storedResult,
+          assertion: test.assert![0],
+          metadata: {
+            ...storedResult.metadata,
+            redteamGradingAssertionHash: getGradingAssertionHash(test.assert![0]),
+            redteamGradingInputHash: getGradingInputHash(
+              'test prompt',
+              'Some target response',
+              undefined,
+              'medical:prioritization-error',
+            ),
+          },
+        },
       },
     };
 
@@ -654,10 +709,7 @@ describe('runAssertions', () => {
           type: 'assert-set',
           metric: '{{metricGroup}}',
           assert: [
-            {
-              type: 'equals',
-              value: 'Expected output',
-            },
+            createExpectedOutputAssertion(),
             {
               type: 'contains',
               value: 'output',
@@ -884,6 +936,164 @@ describe('runAssertions', () => {
     expect(result.namedScores).toEqual({
       StaticMetric: 1,
     });
+  });
+});
+
+// Uses the real getEnvInt and cliState. The CLI populates both sources after this module is
+// imported: `--env-file` into process.env, `env:` into cliState.config.
+describe('runAssertions with PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY', () => {
+  let originalConfig: typeof cliState.config;
+  let restoreEnv: () => void;
+
+  beforeEach(() => {
+    originalConfig = cliState.config;
+    cliState.config = undefined;
+    restoreEnv = mockProcessEnv({ PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY: undefined });
+  });
+
+  afterEach(() => {
+    cliState.config = originalConfig;
+    restoreEnv();
+  });
+
+  const peakConcurrency = async () => {
+    let inFlight = 0;
+    let peak = 0;
+    const value = async () => {
+      inFlight += 1;
+      peak = Math.max(peak, inFlight);
+      // Yield a full event-loop turn so every assertion the limit allows has started.
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      inFlight -= 1;
+      return true;
+    };
+
+    const result = await runAssertions({
+      test: { assert: Array.from({ length: 4 }, () => ({ type: 'javascript' as const, value })) },
+      providerResponse: { output: 'output' },
+    });
+
+    expect(result.pass).toBe(true);
+    return peak;
+  };
+
+  it('drains active assertions after a failure without starting queued assertions', async () => {
+    mockProcessEnv({
+      PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY: '2',
+      PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES: 'true',
+    });
+    let signalStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      signalStarted = resolve;
+    });
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const queued = vi.fn().mockReturnValue(true);
+    let settled = false;
+    const result = runAssertions({
+      test: {
+        assert: [
+          {
+            type: 'javascript',
+            value: async () => {
+              await started;
+              return { pass: false, score: 0, reason: 'first failure' };
+            },
+          },
+          {
+            type: 'javascript',
+            value: async () => {
+              signalStarted();
+              await held;
+              return { pass: false, score: 0, reason: 'later failure' };
+            },
+          },
+          { type: 'javascript', value: queued },
+        ],
+      },
+      providerResponse: { output: 'output' },
+    }).then(
+      () => {
+        settled = true;
+        return undefined;
+      },
+      (error: Error) => {
+        settled = true;
+        return error;
+      },
+    );
+
+    try {
+      await started;
+      // Let the first failure propagate while the second assertion remains held.
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(settled).toBe(false);
+      expect(queued).not.toHaveBeenCalled();
+    } finally {
+      release();
+      await result;
+    }
+
+    expect(await result).toEqual(new Error('first failure'));
+    expect(queued).not.toHaveBeenCalled();
+  });
+
+  it('runs three assertions at a time by default', async () => {
+    await expect(peakConcurrency()).resolves.toBe(3);
+  });
+
+  it('uses a limit set after the module is imported', async () => {
+    mockProcessEnv({ PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY: '1' });
+
+    await expect(peakConcurrency()).resolves.toBe(1);
+  });
+
+  it('uses a limit from the config env block', async () => {
+    cliState.config = { env: { PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY: '1' } };
+
+    await expect(peakConcurrency()).resolves.toBe(1);
+  });
+
+  it('prefers suite env over invocation file env over process env and restores outer limits', async () => {
+    mockProcessEnv({ PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY: '4' });
+
+    await cliState.withEnvFileOverrides({ PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY: '2' }, async () => {
+      await expect(peakConcurrency()).resolves.toBe(2);
+      await expect(
+        cliState.withEnv({ PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY: '1' }, peakConcurrency),
+      ).resolves.toBe(1);
+      await expect(peakConcurrency()).resolves.toBe(2);
+    });
+
+    await expect(peakConcurrency()).resolves.toBe(4);
+  });
+
+  it('keeps concurrent invocation file and suite limits isolated across async work', async () => {
+    const runAfterYield = async () => {
+      // Establish all invocation scopes before any assertion batch reads its limit.
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      return peakConcurrency();
+    };
+
+    await expect(
+      Promise.all([
+        cliState.withEnvFileOverrides({ PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY: '2' }, () =>
+          cliState.withEnv({ PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY: '1' }, runAfterYield),
+        ),
+        cliState.withEnvFileOverrides({ PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY: '4' }, runAfterYield),
+        cliState.withEnvFileOverrides({ PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY: '2' }, runAfterYield),
+      ]),
+    ).resolves.toEqual([1, 4, 2]);
+
+    await expect(peakConcurrency()).resolves.toBe(3);
+  });
+
+  it.each(['0', '-2'])('runs assertions one at a time for a limit of %s', async (limit) => {
+    mockProcessEnv({ PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY: limit });
+
+    await expect(peakConcurrency()).resolves.toBe(1);
   });
 });
 

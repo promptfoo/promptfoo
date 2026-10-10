@@ -3,10 +3,15 @@ import { access } from 'fs/promises';
 import * as path from 'path';
 
 import { type Options as CsvOptions, parse as csvParse } from 'csv-parse/sync';
-import { globSync, hasMagic } from 'glob';
+import { escape as escapeGlob, globSync, hasMagic } from 'glob';
 import nunjucks from 'nunjucks';
 import cliState from '../cliState';
-import { getEnvBool } from '../envars';
+import {
+  getEnvBool,
+  getEnvOverrides,
+  getProcessEnv,
+  isTemplateProcessEnvDisabled,
+} from '../envars';
 import { importModule } from '../esm';
 import logger from '../logger';
 import { runPython } from '../python/pythonUtils';
@@ -17,6 +22,49 @@ import { renderVarsInObject } from './render';
 import { loadYaml } from './yamlLoad';
 
 import type { NunjucksFilterMap, OutputFile, VarValue } from '../types';
+
+const loadedFileMimeTypes = Symbol('loadedFileMimeTypes');
+type VarsWithFileMimeTypes = Record<string, unknown> & {
+  [loadedFileMimeTypes]?: ReadonlyMap<string, string>;
+};
+
+/** Preserve loaded-file provenance through object copies, outside serialized vars. */
+export function setLoadedFileMimeTypes(
+  vars: Record<string, unknown>,
+  mimeTypes?: ReadonlyMap<string, string>,
+): Map<string, string> {
+  const current = (vars as VarsWithFileMimeTypes)[loadedFileMimeTypes];
+  const next = new Map(mimeTypes);
+  if (!mimeTypes) {
+    // Rerenders keep only unchanged loaded values. Each render owns a fresh map so
+    // pruning or loading another file cannot mutate a sibling copy of vars.
+    for (const value of Object.values(vars)) {
+      if (typeof value === 'string') {
+        const mimeType = current?.get(value);
+        if (mimeType) {
+          next.set(value, mimeType);
+        }
+      }
+    }
+  }
+  if (next.size > 0) {
+    Object.defineProperty(vars, loadedFileMimeTypes, {
+      value: next,
+      enumerable: true,
+      configurable: true,
+    });
+  } else {
+    delete (vars as VarsWithFileMimeTypes)[loadedFileMimeTypes];
+  }
+  return next;
+}
+
+export function getLoadedFileMimeType(
+  vars: Record<string, unknown>,
+  value: string,
+): string | undefined {
+  return (vars as VarsWithFileMimeTypes)[loadedFileMimeTypes]?.get(value);
+}
 
 type CsvParseOptionsWithColumns<T> = Omit<CsvOptions<T>, 'columns'> & {
   columns: Exclude<CsvOptions['columns'], undefined | false>;
@@ -55,8 +103,10 @@ export function getNunjucksEngineForFilePath(): nunjucks.Environment {
 
   // Add environment variables as template globals
   env.addGlobal('env', {
-    ...process.env,
-    ...cliState.config?.env,
+    ...(isTemplateProcessEnvDisabled() ? {} : getProcessEnv()),
+    ...Object.fromEntries(
+      Object.entries(getEnvOverrides() ?? {}).filter(([, value]) => value !== undefined),
+    ),
   });
 
   return env;
@@ -95,7 +145,9 @@ export function maybeLoadFromExternalFile(
   }
 
   // Render the file path using Nunjucks
-  const renderedFilePath = getNunjucksEngineForFilePath().renderString(filePath, {});
+  const renderedFilePath = getEnvBool('PROMPTFOO_DISABLE_TEMPLATING')
+    ? filePath
+    : getNunjucksEngineForFilePath().renderString(filePath, {});
 
   // Parse the file URL to extract file path and function name using existing utility
   // This handles colon splitting correctly, including Windows drive letters (C:\path)
@@ -134,9 +186,14 @@ export function maybeLoadFromExternalFile(
   const resolvedPath = path.resolve(cliState.basePath || '', pathToUse);
 
   // Check if the path contains glob patterns
-  if (hasMagic(pathToUse)) {
+  if (!fs.existsSync(resolvedPath) && hasMagic(pathToUse, { windowsPathsNoEscape: true })) {
     // Use globSync to expand the pattern
-    const matchedFiles = globSync(resolvedPath, {
+    const basePath = path.resolve(cliState.basePath || '');
+    const pattern = path.resolve(
+      escapeGlob(basePath, { windowsPathsNoEscape: true }),
+      path.relative(basePath, resolvedPath),
+    );
+    const matchedFiles = globSync(pattern, {
       windowsPathsNoEscape: true,
     });
 
@@ -257,21 +314,27 @@ export function getResolvedRelativePath(filePath: string, isCloudConfig?: boolea
  *
  * @param config - The configuration object to process
  * @param context - Optional context to control file loading behavior
+ * @param basePath - Optional file resolution scope; inherits the caller scope when omitted
  * @returns The configuration with external file references resolved
  */
 export function maybeLoadConfigFromExternalFile(
   config: any,
-  context?: 'assertion' | 'general' | 'vars',
+  context?: 'assertion' | 'assertions' | 'general' | 'vars',
+  basePath?: string,
 ): any {
+  if (basePath !== undefined) {
+    return cliState.withBasePath(basePath, () => maybeLoadConfigFromExternalFile(config, context));
+  }
   if (Array.isArray(config)) {
     return config.map((item) => maybeLoadConfigFromExternalFile(item, context));
   }
   if (typeof config === 'object' && config !== null) {
     const result: Record<string, any> = {};
     for (const key of Object.keys(config)) {
-      // Script assertion values and script URLs must remain available to the
-      // assertion runtime instead of being dereferenced by the config loader.
+      // Only entries in an assert array describe assertions. Provider bodies and
+      // structured prompts may also contain ordinary type/script/value fields.
       const isScriptAssertionField =
+        context === 'assertions' &&
         (key === 'value' || key === 'script') &&
         'type' in config &&
         typeof config.type === 'string' &&
@@ -280,8 +343,21 @@ export function maybeLoadConfigFromExternalFile(
       // Detect vars contexts: if we're processing a 'vars' key, switch to vars context
       // This preserves file:// glob patterns for test case expansion
       const isVarsField = key === 'vars';
+      const isAssertionArray =
+        context !== 'vars' &&
+        context !== 'assertion' &&
+        key === 'assert' &&
+        Array.isArray(config[key]);
 
-      const childContext = isScriptAssertionField ? 'assertion' : isVarsField ? 'vars' : context;
+      const childContext = isScriptAssertionField
+        ? 'assertion'
+        : isAssertionArray
+          ? 'assertions'
+          : isVarsField
+            ? 'vars'
+            : context === 'assertions'
+              ? 'general'
+              : context;
       const value = maybeLoadConfigFromExternalFile(config[key], childContext);
 
       if (key === '__proto__') {
@@ -297,7 +373,7 @@ export function maybeLoadConfigFromExternalFile(
     }
     return result;
   }
-  return maybeLoadFromExternalFile(config, context);
+  return maybeLoadFromExternalFile(config, context === 'assertions' ? 'general' : context);
 }
 
 /**
@@ -485,13 +561,16 @@ export function maybeLoadResponseFormatFromExternalFile(
  *
  * @param tools - The tools configuration object or array to process.
  * @param vars - Variables to use for rendering.
+ * @param abortSignal - Prevents starting executable tool functions after cancellation.
  * @returns The processed tools configuration with variables rendered and content loaded from files if needed.
  * @throws {Error} If the loaded tools are in an invalid format
  */
 export async function maybeLoadToolsFromExternalFile(
   tools: any,
   vars?: Record<string, VarValue>,
+  abortSignal?: AbortSignal,
 ): Promise<any> {
+  abortSignal?.throwIfAborted();
   const rendered = renderVarsInObject(tools, vars);
 
   // Check if this is a Python/JS file reference with function name
@@ -513,13 +592,14 @@ export async function maybeLoadToolsFromExternalFile(
           // Resolve Python path relative to config base directory (same as JavaScript)
           const absPath = safeResolve(cliState.basePath || process.cwd(), filePath);
           logger.debug(`[maybeLoadToolsFromExternalFile] Resolved Python path: ${absPath}`);
-          toolDefinitions = await runPython(absPath, functionName, []);
+          toolDefinitions = await runPython(absPath, functionName, [], { abortSignal });
         } else {
           // Use safeResolve for security (prevents path traversal)
           const absPath = safeResolve(cliState.basePath || process.cwd(), filePath);
           logger.debug(`[maybeLoadToolsFromExternalFile] Resolved JavaScript path: ${absPath}`);
 
           const module = await importModule(absPath);
+          abortSignal?.throwIfAborted();
           const fn = module[functionName] || module.default?.[functionName];
 
           if (typeof fn !== 'function') {
@@ -554,6 +634,9 @@ export async function maybeLoadToolsFromExternalFile(
         );
         return toolDefinitions;
       } catch (err) {
+        if (abortSignal?.aborted && err === abortSignal.reason) {
+          throw err;
+        }
         const errorMessage = err instanceof Error ? err.message : String(err);
         const basePath = cliState.basePath || process.cwd();
         throw new Error(
@@ -584,7 +667,7 @@ export async function maybeLoadToolsFromExternalFile(
   // Handle arrays by recursively processing each item
   if (Array.isArray(rendered)) {
     const results = await Promise.all(
-      rendered.map((item) => maybeLoadToolsFromExternalFile(item, vars)),
+      rendered.map((item) => maybeLoadToolsFromExternalFile(item, vars, abortSignal)),
     );
     // Flatten if all items are arrays (common case: multiple file:// references)
     if (results.every((r) => Array.isArray(r))) {
