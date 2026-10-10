@@ -667,7 +667,10 @@ is available in `metadata.aws`. Token usage records the request count; automatic
 cost and normalized token counts are not available on this raw route.
 
 Calls are never cached. Event streams are collected before returning, and service
-exception events produce provider errors. Inspect native completion events when an
+exception events produce provider errors. Agent and Flow invocations are never
+automatically retried, because repeating them can duplicate actions. Other operations
+use SDK retries; set `config.maxRetries: 0` to disable them. The scheduler does not
+replay native calls after the SDK finishes. Inspect native completion events when an
 operation has model-specific finish states. Async jobs are submitted once and are not
 polled automatically; use `GetAsyncInvoke` to check status and an existing S3 output
 bucket. Pagination, agent return-control actions, and Flow continuation requests remain
