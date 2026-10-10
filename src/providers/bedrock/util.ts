@@ -19,7 +19,12 @@ export function decodeBedrockBytes(data: unknown): Uint8Array | undefined {
     return undefined;
   }
   if (typeof data === 'string') {
-    return Buffer.from(data, 'base64');
+    const bytes = Buffer.from(data, 'base64');
+    const canonical = bytes.toString('base64');
+    if (data !== canonical && data !== canonical.replace(/=+$/, '')) {
+      throw new Error('Invalid Bedrock byte content: expected canonical base64.');
+    }
+    return bytes;
   }
   if (ArrayBuffer.isView(data)) {
     return Buffer.from(data.buffer, data.byteOffset, data.byteLength);

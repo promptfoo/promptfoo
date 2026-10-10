@@ -522,6 +522,7 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
     const cache = await getCache();
     const useCache =
       isCacheEnabled() &&
+      !this.config.enableTrace &&
       !this.config.sessionId &&
       !this.config.memoryId &&
       !this.config.endSession &&

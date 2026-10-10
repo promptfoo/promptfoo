@@ -135,3 +135,73 @@ it.each([
 ])('rejects malformed serialized Bedrock byte content %j', (data) => {
   expect(() => decodeBedrockBytes(data)).toThrow('Invalid Bedrock byte content');
 });
+
+it.each(['', 'AA==', 'AA', 'AAA=', 'AAA', 'AAAA'])(
+  'accepts canonical padded or unpadded base64 %j',
+  (data) => {
+    expect(decodeBedrockBytes(data)).toEqual(Buffer.from(data, 'base64'));
+  },
+);
+
+it.each(['%%%', 'not-base64!', 'A', 'AB', 'AA=A', 'AA===', ' YQ==', 'YQ==\n', '-_=='])(
+  'rejects malformed base64 %j',
+  (data) => {
+    expect(() => decodeBedrockBytes(data)).toThrow('Invalid Bedrock byte content');
+  },
+);
+
+it('validates large base64 documents without recursive regular expressions', () => {
+  const bytes = Buffer.alloc(4 * 1024 * 1024, 65);
+  const base64 = bytes.toString('base64');
+  expect(Buffer.compare(decodeBedrockBytes(base64)!, bytes)).toBe(0);
+  expect(() => decodeBedrockBytes(base64 + '%')).toThrow('Invalid Bedrock byte content');
+});
+
+it.each(['agent', 'knowledge-base'])(
+  'rejects malformed %s file bytes through the public loader before SDK dispatch',
+  async (kind) => {
+    const config =
+      kind === 'agent'
+        ? {
+            agentAliasId: 'ALIAS12345',
+            sessionState: {
+              files: [
+                {
+                  name: 'file.txt',
+                  useCase: 'CHAT',
+                  source: {
+                    sourceType: 'BYTE_CONTENT',
+                    byteContent: { mediaType: 'text/plain', data: '%%%' },
+                  },
+                },
+              ],
+            },
+          }
+        : {
+            retrieveAndGenerateConfiguration: {
+              type: 'EXTERNAL_SOURCES',
+              externalSourcesConfiguration: {
+                modelArn: 'model',
+                sources: [
+                  {
+                    sourceType: 'BYTE_CONTENT',
+                    byteContent: { identifier: 'file.txt', contentType: 'text/plain', data: '%%%' },
+                  },
+                ],
+              },
+            },
+          };
+    const send = vi.spyOn(BedrockAgentRuntimeClient.prototype, 'send');
+    await expect(async () => {
+      const provider = await loadApiProvider(
+        kind === 'agent' ? 'bedrock-agent:AGENT12345' : 'bedrock:kb:default',
+        { options: { config } },
+      );
+      const result = await provider.callApi('hello');
+      if (result.error) {
+        throw new Error(result.error);
+      }
+    }).rejects.toThrow('Invalid Bedrock byte content');
+    expect(send).not.toHaveBeenCalled();
+  },
+);

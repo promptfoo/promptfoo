@@ -265,6 +265,41 @@ describe('AwsBedrockAgentsProvider', () => {
     mockIsCacheEnabled.mockReturnValue(false);
   });
 
+  it('bypasses cache for traces containing resumable session handles', async () => {
+    mockIsCacheEnabled.mockReturnValue(true);
+    mockGet.mockResolvedValue(
+      JSON.stringify({
+        output: 'cached response',
+        metadata: { trace: [{ sessionId: 'cached-session-handle' }] },
+      }),
+    );
+    let invocation = 0;
+    mockSend.mockImplementation(async () => {
+      const sessionId = 'fresh-session-' + ++invocation;
+      return {
+        sessionId,
+        completion: (async function* () {
+          yield { chunk: { bytes: Buffer.from('fresh response') } };
+          yield { trace: { sessionId, trace: { orchestrationTrace: {} } } };
+        })(),
+      };
+    });
+    const provider = new AwsBedrockAgentsProvider('agent-123', {
+      config: { ...createAgentConfig().config, enableTrace: true },
+    });
+    for (let invocation = 1; invocation <= 2; invocation++) {
+      const result = await provider.callApi('same prompt');
+      expect(result.output).toBe('fresh response');
+      expect(result.cached).not.toBe(true);
+      expect(result.metadata?.trace).toEqual([
+        { sessionId: 'fresh-session-' + invocation, trace: { orchestrationTrace: {} } },
+      ]);
+    }
+    expect(mockSend).toHaveBeenCalledTimes(2);
+    expect(mockGet).not.toHaveBeenCalled();
+    expect(mockSet).not.toHaveBeenCalled();
+  });
+
   it('should separate cache keys for response-shaping agent configuration', async () => {
     mockIsCacheEnabled.mockReturnValue(true);
 
