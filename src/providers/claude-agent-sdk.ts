@@ -2182,6 +2182,10 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
           let resultMsgCount = 0;
           const workflowTasks = new Map<string, { sessionId: string; status: string }>();
           const pendingWorkflowResults = new Map<string, number>();
+          // True while a workflow completion has arrived that no main-agent result has
+          // followed. A completion delivered inside a running turn is answered by that
+          // turn's own result, so the SDK emits no separate continuation for it.
+          let workflowAnswerOwed = false;
 
           for await (const msg of res) {
             if (msg.type === 'assistant') {
@@ -2253,6 +2257,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
               const task = workflowTasks.get(msg.task_id);
               if (task?.sessionId === msg.session_id && task.status === 'running') {
                 task.status = msg.status;
+                workflowAnswerOwed = true;
                 pendingWorkflowResults.set(
                   msg.session_id,
                   (pendingWorkflowResults.get(msg.session_id) ?? 0) + 1,
@@ -2284,13 +2289,15 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
                 msg.origin.producer === 'session-task';
               if (!isBackgroundTaskResult || isWorkflowContinuation) {
                 lastMainResultMsg = msg;
+                workflowAnswerOwed = false;
               }
               if (isWorkflowContinuation) {
                 const pending = pendingWorkflowResults.get(msg.session_id) ?? 0;
                 // Batched notifications still emit one result per task. Earlier
                 // results can be empty; only the last carries the shared answer.
-                // An initial human result must not consume notifications that
-                // arrived while the launch turn was still running.
+                // The launch turn's own result does not consume a notification that
+                // arrived while it was running: one too late for that turn to read
+                // still wakes the session, and its continuation must stay recognizable.
                 if (pending > 1) {
                   pendingWorkflowResults.set(msg.session_id, pending - 1);
                 } else {
@@ -2475,24 +2482,31 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
           const toolCallsArray = Array.from(toolCallsMap.values());
           const skillCalls = deriveSkillCalls(toolCallsArray);
 
-          if (
-            finalMsg.subtype === 'success' &&
-            (pendingWorkflowResults.size > 0 ||
-              [...workflowTasks.values()].some((task) => task.status !== 'completed') ||
-              (workflowTasks.size > 0 &&
-                !finalMsg.result &&
-                finalMsg.structured_output === undefined))
-          ) {
-            return {
-              error: 'Claude Agent SDK workflow did not complete with a final main-agent response',
-              tokenUsage,
-              cost,
-              sessionId,
-              metadata: {
-                toolCalls: toolCallsArray,
-                workflowTasks: Object.fromEntries(workflowTasks),
-              },
-            };
+          if (finalMsg.subtype === 'success' && workflowTasks.size > 0) {
+            const unfinished = [...workflowTasks].find(([, task]) => task.status !== 'completed');
+            let incompleteReason: string | undefined;
+            if (unfinished) {
+              incompleteReason =
+                unfinished[1].status === 'running'
+                  ? `workflow task ${unfinished[0]} never reported completion`
+                  : `workflow task ${unfinished[0]} ended as ${unfinished[1].status}`;
+            } else if (workflowAnswerOwed) {
+              incompleteReason = 'the stream ended before the main agent answered the workflow';
+            } else if (!finalMsg.result && finalMsg.structured_output === undefined) {
+              incompleteReason = 'the final main-agent response was empty';
+            }
+            if (incompleteReason) {
+              return {
+                error: `Claude Agent SDK workflow did not complete with a final main-agent response: ${incompleteReason}`,
+                tokenUsage,
+                cost,
+                sessionId,
+                metadata: {
+                  toolCalls: toolCallsArray,
+                  workflowTasks: Object.fromEntries(workflowTasks),
+                },
+              };
+            }
           }
 
           // Aborted terminal reasons mean the agent stopped unexpectedly mid-run.

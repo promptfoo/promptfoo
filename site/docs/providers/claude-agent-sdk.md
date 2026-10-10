@@ -68,7 +68,7 @@ prompts:
   - Use a dynamic workflow to verify each calculation independently, wait for the results, and report the final verdict.
 ```
 
-The provider grades the main agent's final answer and records the `Workflow` call in `metadata.toolCalls`. The [dynamic workflows example](https://github.com/promptfoo/promptfoo/tree/main/examples/claude-agent-sdk/dynamic-workflows) checks that the tool was used as well as checking the answer. Workflows can spawn multiple agents, increasing token usage.
+The provider grades the main agent's final answer and records the `Workflow` call in `metadata.toolCalls`. A workflow runs in the background, so the provider waits for the answer the main agent gives once the workflow has finished instead of grading an interim "workflow launched" message. If a workflow fails, is stopped, or the session ends before the main agent answers it, the call returns an error. The [dynamic workflows example](https://github.com/promptfoo/promptfoo/tree/main/examples/claude-agent-sdk/dynamic-workflows) checks that the tool was used as well as checking the answer. Workflows can spawn multiple agents, increasing token usage.
 
 For Anthropic-hosted sessions created with `client.beta.agents.create`, use [Claude Managed Agents](./claude-managed-agents.md).
 

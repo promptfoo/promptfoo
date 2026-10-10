@@ -1905,14 +1905,14 @@ describe('ClaudeCodeSDKProvider', () => {
       );
 
       it.each([
-        'missing-notification',
-        'missing-answer',
-        'failed',
-        'stopped',
-        'peer',
-        'wrong-session',
-        'empty-answer',
-      ])('does not grade workflow progress when continuation is %s', async (scenario) => {
+        ['missing-notification', 'never reported completion'],
+        ['missing-answer', 'stream ended before the main agent answered'],
+        ['failed', 'ended as failed'],
+        ['stopped', 'ended as stopped'],
+        ['peer', 'stream ended before the main agent answered'],
+        ['wrong-session', 'stream ended before the main agent answered'],
+        ['empty-answer', 'final main-agent response was empty'],
+      ])('does not grade workflow progress when continuation is %s', async (scenario, reason) => {
         const main: Partial<SDKResultMessage> = {
           type: 'result',
           subtype: 'success',
@@ -1979,7 +1979,120 @@ describe('ClaudeCodeSDKProvider', () => {
           config: { apiKey: 'test-key', custom_allowed_tools: ['Workflow'] },
         }).callApi('Verify');
         expect(result.error).toContain('workflow did not complete');
+        expect(result.error).toContain(reason);
         expect(result.output).toBeUndefined();
+      });
+
+      // Shapes below mirror the stream SDK 0.3.285 emits: the prompted turn's result
+      // carries no `origin`, and a completion the running turn reads itself is not
+      // followed by a continuation result.
+      describe('workflow completions delivered inside a running turn', () => {
+        const turnResult = (
+          result: string,
+          origin?: SDKResultMessage['origin'],
+        ): Partial<SDKResultMessage> => ({
+          type: 'result',
+          subtype: 'success',
+          session_id: 'main-session',
+          result,
+          usage: createMockUsage(1, 1),
+          total_cost_usd: 0.001,
+          is_error: false,
+          num_turns: 1,
+          permission_denials: [],
+          terminal_reason: 'completed',
+          ...(origin ? { origin } : {}),
+        });
+        const continuation = {
+          kind: 'task-notification',
+          producer: 'session-task',
+        } as SDKResultMessage['origin'];
+        const launch = (count: number): Partial<SDKMessage>[] => [
+          {
+            type: 'assistant',
+            session_id: 'main-session',
+            parent_tool_use_id: null,
+            message: createMockBetaMessage(
+              Array.from({ length: count }, (_, i) => ({
+                type: 'tool_use' as const,
+                id: `workflow-${i + 1}`,
+                name: 'Workflow',
+                input: {},
+              })),
+            ),
+          },
+          ...Array.from(
+            { length: count },
+            (_, i): Partial<SDKMessage> => ({
+              type: 'system',
+              subtype: 'task_started',
+              task_id: `task-${i + 1}`,
+              tool_use_id: `workflow-${i + 1}`,
+              task_type: 'local_workflow',
+              description: 'Verify',
+              session_id: 'main-session',
+            }),
+          ),
+        ];
+        const completed = (index: number): Partial<SDKMessage> => ({
+          type: 'system',
+          subtype: 'task_notification',
+          task_id: `task-${index}`,
+          status: 'completed',
+          session_id: 'main-session',
+          summary: 'Done',
+          output_file: '/tmp/workflow.output',
+        });
+        const run = (messages: Partial<SDKMessage>[]) => {
+          mockQuery.mockReturnValue(createMockQuery(messages));
+          return new ClaudeCodeSDKProvider({
+            config: { apiKey: 'test-key', custom_allowed_tools: ['Workflow'] },
+          }).callApi('Verify');
+        };
+
+        it.each([1, 2])('grades the turn that read %i completions itself', async (count) => {
+          const result = await run([
+            ...launch(count),
+            ...Array.from({ length: count }, (_, i) => completed(i + 1)),
+            turnResult('VERIFIED'),
+          ]);
+          expect(result.error).toBeUndefined();
+          expect(result.output).toBe('VERIFIED');
+        });
+
+        it('still prefers a continuation for a completion that arrived too late to read', async () => {
+          const result = await run([
+            ...launch(1),
+            completed(1),
+            turnResult('Workflow launched'),
+            turnResult('VERIFIED', continuation),
+          ]);
+          expect(result.error).toBeUndefined();
+          expect(result.output).toBe('VERIFIED');
+        });
+
+        it('grades the continuation for a workflow that finishes after an earlier one was read', async () => {
+          const result = await run([
+            ...launch(2),
+            completed(1),
+            turnResult('First check passed; waiting for the second'),
+            completed(2),
+            turnResult('VERIFIED', continuation),
+          ]);
+          expect(result.error).toBeUndefined();
+          expect(result.output).toBe('VERIFIED');
+        });
+
+        it('rejects a later completion that no main-agent turn answered', async () => {
+          const result = await run([
+            ...launch(2),
+            completed(1),
+            turnResult('First check passed; waiting for the second'),
+            completed(2),
+          ]);
+          expect(result.error).toContain('stream ended before the main agent answered');
+          expect(result.output).toBeUndefined();
+        });
       });
 
       it('should select the human-origin result regardless of position when SDK reports origin', async () => {
