@@ -83,6 +83,7 @@ type EvalBarSource = {
   extensions?: unknown;
   nunjucksFilters?: unknown;
   providers?: unknown;
+  providerPromptMap?: unknown;
   redteam?: unknown;
 };
 
@@ -100,6 +101,7 @@ export type EvalBar = {
     repeat: number;
     filterRange: string | null;
     disableTemplating: boolean;
+    disableVarExpansion: boolean;
   };
 };
 
@@ -166,6 +168,85 @@ function isRuntimeApiProvider(value: unknown): value is {
 
 type ConfiguredProviderMap = ReturnType<typeof buildConfiguredProviderMap>;
 
+// Only schema envelopes contain optional loader fields. User data inside vars,
+// values, metadata, and configs must retain its exact semantics.
+function omitUndefinedFields(value: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(value).filter(([, entry]) => entry !== undefined));
+}
+
+function snapshotAssertionEnvelope(value: unknown): unknown {
+  const assertion = asRecord(value);
+  if (!assertion) {
+    return value;
+  }
+  assertPlainDataObject(assertion);
+  // An explicitly undefined value is acceptance data, not an absent option.
+  if (Object.hasOwn(assertion, 'value') && assertion.value === undefined) {
+    throw new Error('Evaluation locks cannot include undefined assertion values');
+  }
+  return {
+    ...omitUndefinedFields(assertion),
+    ...(Array.isArray(assertion.assert) && {
+      assert: assertion.assert.map(snapshotAssertionEnvelope),
+    }),
+  };
+}
+
+function snapshotTestEnvelope(value: unknown): unknown {
+  const test = asRecord(value);
+  if (!test) {
+    return value;
+  }
+  assertPlainDataObject(test);
+  const snapshot = omitUndefinedFields(test);
+  const options = asRecord(test.options);
+  if (options) {
+    assertPlainDataObject(options);
+    snapshot.options = omitUndefinedFields(options);
+  }
+  const metadata = asRecord(test.metadata);
+  const internalMetadata = asRecord(metadata?.__promptfoo);
+  if (metadata && internalMetadata) {
+    assertPlainDataObject(metadata);
+    assertPlainDataObject(internalMetadata);
+    const { providerBasePath: _loaderBasePath, ...portableMetadata } = internalMetadata;
+    snapshot.metadata = { ...metadata, __promptfoo: portableMetadata };
+  }
+  if (Array.isArray(test.assert)) {
+    snapshot.assert = test.assert.map(snapshotAssertionEnvelope);
+  }
+  return snapshot;
+}
+
+function assertPlainDataObject(value: object): void {
+  if (
+    Object.getPrototypeOf(value) !== (Array.isArray(value) ? Array.prototype : Object.prototype)
+  ) {
+    throw new Error(
+      'Evaluation locks require plain JSON data with standard object and array prototypes',
+    );
+  }
+  if (
+    Array.isArray(value) &&
+    Object.keys(value).some((key) => {
+      const index = Number(key);
+      return (
+        !Number.isInteger(index) || index < 0 || index >= value.length || String(index) !== key
+      );
+    })
+  ) {
+    throw new Error('Evaluation locks cannot include non-index array properties');
+  }
+  if (
+    Object.getOwnPropertySymbols(value).length > 0 ||
+    Object.values(Object.getOwnPropertyDescriptors(value)).some(
+      (descriptor) => descriptor.get || descriptor.set,
+    )
+  ) {
+    throw new Error('Evaluation locks require plain JSON data without symbols or accessors');
+  }
+}
+
 function snapshotGradingProviderReferences(
   value: unknown,
   providerMap: ConfiguredProviderMap,
@@ -176,12 +257,11 @@ function snapshotGradingProviderReferences(
     value === null ||
     value === undefined ||
     typeof value !== 'object' ||
-    isRuntimeApiProvider(value) ||
-    Buffer.isBuffer(value) ||
-    value instanceof Date
+    isRuntimeApiProvider(value)
   ) {
     return value;
   }
+  assertPlainDataObject(value);
   if (ancestors.has(value)) {
     throw new Error('Evaluation locks cannot include circular test data');
   }
@@ -197,35 +277,15 @@ function snapshotGradingProviderReferences(
     const record = value as Record<string, unknown>;
     const isAssertion = typeof record.type === 'string';
     return Object.fromEntries(
-      Object.entries(record).flatMap(([key, entry]) => {
-        // Resolved default-test and options objects contain absent optional fields as
-        // explicit `undefined`. They have the same runtime meaning as an omitted field.
-        // Assertion values are traversed with providerOption=false and remain strict.
-        if (providerOption && entry === undefined) {
-          return [];
-        }
-        if (key === '__promptfoo' && entry && typeof entry === 'object' && !Array.isArray(entry)) {
-          const { providerBasePath: _providerBasePath, ...portableMetadata } = entry as Record<
-            string,
-            unknown
-          >;
-          return [
-            [
-              key,
-              snapshotGradingProviderReferences(portableMetadata, providerMap, ancestors, false),
-            ] as [string, unknown],
-          ];
-        }
+      Object.entries(record).map(([key, entry]) => {
         const resolved =
           key === 'provider' && (providerOption || isAssertion)
             ? resolveConfiguredProviderReference(entry, providerMap)
             : entry;
         return [
-          [
-            key,
-            snapshotGradingProviderReferences(resolved, providerMap, ancestors, key === 'options'),
-          ] as [string, unknown],
-        ];
+          key,
+          snapshotGradingProviderReferences(resolved, providerMap, ancestors, key === 'options'),
+        ] as [string, unknown];
       }),
     );
   } finally {
@@ -292,6 +352,11 @@ function validateDataOnlyAssertions(assertions: unknown): void {
 }
 
 function validateDataOnlyTest(test: Record<string, unknown>): void {
+  if (test.prompts !== undefined || test.providers !== undefined) {
+    throw new Error(
+      'Evaluation locks do not support prompt or provider selectors: every locked test must run for each selected target and prompt',
+    );
+  }
   if (test.assertScoringFunction != null) {
     throw new Error(
       'Evaluation locks do not support assertScoringFunction because scoring callbacks can depend on mutable runtime state',
@@ -444,6 +509,9 @@ function canonicalize(value: unknown, ancestors: Set<object>, location: string):
     if (typeof value === 'number' && !Number.isFinite(value)) {
       throw new Error('Evaluation locks cannot include non-finite numbers');
     }
+    if (Object.is(value, -0)) {
+      throw new Error('Evaluation locks cannot include negative zero');
+    }
     return value;
   }
 
@@ -476,13 +544,7 @@ function canonicalize(value: unknown, ancestors: Set<object>, location: string):
     return canonicalize(portableProviderRef(value), ancestors, location);
   }
 
-  if (Buffer.isBuffer(value)) {
-    return { $binary: value.toString('base64') };
-  }
-
-  if (value instanceof Date) {
-    return value.toISOString();
-  }
+  assertPlainDataObject(value);
 
   if (ancestors.has(value)) {
     throw new Error('Evaluation locks cannot include circular test data');
@@ -491,7 +553,9 @@ function canonicalize(value: unknown, ancestors: Set<object>, location: string):
 
   try {
     if (Array.isArray(value)) {
-      return value.map((entry, index) => canonicalize(entry, ancestors, `${location}[${index}]`));
+      return Array.from({ length: value.length }, (_, index) =>
+        canonicalize(value[index], ancestors, `${location}[${index}]`),
+      );
     }
 
     const record = value as Record<string, unknown>;
@@ -513,7 +577,12 @@ export function canonicalJson(value: unknown): string {
 
 export function createEvalBar(
   testSuite: EvalBarSource,
-  execution: { repeat: number; filterRange?: string; disableTemplating?: boolean },
+  execution: {
+    repeat: number;
+    filterRange?: string;
+    disableTemplating?: boolean;
+    disableVarExpansion?: boolean;
+  },
 ): EvalBar {
   if (Array.isArray(testSuite.extensions) && testSuite.extensions.length > 0) {
     throw new Error(
@@ -527,6 +596,16 @@ export function createEvalBar(
     );
   }
   validateDataOnlyCriteria(testSuite);
+
+  if (
+    testSuite.providerPromptMap != null ||
+    (Array.isArray(testSuite.providers) &&
+      testSuite.providers.some((provider) => asRecord(provider)?.prompts !== undefined))
+  ) {
+    throw new Error(
+      'Evaluation locks do not support provider prompt selectors: every locked test must run for each selected target and prompt',
+    );
+  }
 
   const runtimeProviders = Array.isArray(testSuite.providers)
     ? testSuite.providers.filter(isRuntimeApiProvider)
@@ -542,14 +621,39 @@ export function createEvalBar(
   return {
     version: 1,
     implementation: { id: 'promptfoo', version: IMPLEMENTATION_VERSION },
-    defaultTest: snapshotProviderContainer(testSuite.defaultTest ?? null),
-    tests: snapshot(testSuite.tests ?? []),
-    scenarios: snapshot(testSuite.scenarios ?? null),
+    defaultTest: snapshotProviderContainer(snapshotTestEnvelope(testSuite.defaultTest ?? null)),
+    tests: snapshot(
+      Array.isArray(testSuite.tests)
+        ? testSuite.tests.map(snapshotTestEnvelope)
+        : (testSuite.tests ?? []),
+    ),
+    scenarios: snapshot(
+      Array.isArray(testSuite.scenarios)
+        ? testSuite.scenarios.map((scenario) => {
+            const record = asRecord(scenario);
+            if (record) {
+              assertPlainDataObject(record);
+            }
+            return record
+              ? {
+                  ...omitUndefinedFields(record),
+                  ...(Array.isArray(record.config) && {
+                    config: record.config.map(snapshotTestEnvelope),
+                  }),
+                  ...(Array.isArray(record.tests) && {
+                    tests: record.tests.map(snapshotTestEnvelope),
+                  }),
+                }
+              : scenario;
+          })
+        : (testSuite.scenarios ?? null),
+    ),
     redteam: snapshotProviderContainer(testSuite.redteam ?? null),
     execution: {
       repeat: execution.repeat,
       filterRange: execution.filterRange ?? null,
       disableTemplating: execution.disableTemplating ?? false,
+      disableVarExpansion: execution.disableVarExpansion ?? false,
     },
   };
 }

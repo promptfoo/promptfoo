@@ -1698,7 +1698,12 @@ describe('evalCommand', () => {
         tests: [],
         scenarios: null,
         redteam: null,
-        execution: { repeat: 1, filterRange: null, disableTemplating: true },
+        execution: {
+          repeat: 1,
+          filterRange: null,
+          disableTemplating: true,
+          disableVarExpansion: false,
+        },
       },
       80,
     );
@@ -1720,7 +1725,9 @@ describe('evalCommand', () => {
       expect(evaluate).toHaveBeenCalledWith(
         expect.anything(),
         expect.anything(),
-        expect.objectContaining({ lockIntegrity: { disableTemplating: true } }),
+        expect.objectContaining({
+          lockIntegrity: { disableTemplating: true, disableVarExpansion: false },
+        }),
       );
     } finally {
       writeLockSpy.mockRestore();

@@ -275,6 +275,7 @@ export interface RunEvalOptions {
   /** @internal Protects locked acceptance criteria from target-provider mutation. */
   lockIntegrity?: {
     disableTemplating: boolean;
+    disableVarExpansion: boolean;
   };
 }
 

@@ -16,7 +16,10 @@ export type InternalEvaluateOptions = EvaluateOptions & {
   /** Enforces the runtime interpretation committed by an evaluation lock. */
   lockIntegrity?: {
     disableTemplating: boolean;
+    disableVarExpansion: boolean;
   };
+  /** Locked evaluations keep provider context separate from authoritative grading inputs. */
+  isolateProviderContext?: boolean;
   generationEventId?: string;
   generationTokenUsage?: TokenUsage;
 };

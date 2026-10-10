@@ -879,6 +879,12 @@ async function doEvalWithEnv(
     }
 
     if (evalLockPath || verifyLockPath) {
+      const lockExecution = {
+        repeat,
+        filterRange,
+        disableTemplating: getEnvBool('PROMPTFOO_DISABLE_TEMPLATING'),
+        disableVarExpansion: getEnvBool('PROMPTFOO_DISABLE_VAR_EXPANSION'),
+      };
       if (evaluateOptions.progressCallback) {
         return failEvalRun(
           'Evaluation locks do not support progress callbacks because callbacks can mutate live result metrics',
@@ -887,7 +893,6 @@ async function doEvalWithEnv(
       }
 
       const activeLockPath = path.resolve(process.cwd(), evalLockPath ?? verifyLockPath!);
-      const disableTemplating = getEnvBool('PROMPTFOO_DISABLE_TEMPLATING', false);
       const configuredOutputPaths = (
         Array.isArray(config.outputPath) ? config.outputPath : [config.outputPath]
       ).filter((outputPath): outputPath is string => typeof outputPath === 'string');
@@ -911,9 +916,12 @@ async function doEvalWithEnv(
           );
         }
         try {
-          const bar = createEvalBar(testSuite, { repeat, filterRange, disableTemplating });
+          const bar = createEvalBar(testSuite, lockExecution);
           activeEvalLock = await writeEvalLock(evalLockPath, bar, threshold);
-          lockIntegrity = { disableTemplating };
+          lockIntegrity = {
+            disableTemplating: lockExecution.disableTemplating,
+            disableVarExpansion: lockExecution.disableVarExpansion,
+          };
           logger.info(
             chalk.green(
               `Locked resolved eval bar at ${path.resolve(process.cwd(), evalLockPath)} (sha256 ${activeEvalLock.manifest.dataset.hash})`,
@@ -927,9 +935,12 @@ async function doEvalWithEnv(
         }
       } else if (verifyLockPath) {
         try {
-          const bar = createEvalBar(testSuite, { repeat, filterRange, disableTemplating });
+          const bar = createEvalBar(testSuite, lockExecution);
           activeEvalLock = await verifyEvalLock(verifyLockPath, bar);
-          lockIntegrity = { disableTemplating };
+          lockIntegrity = {
+            disableTemplating: lockExecution.disableTemplating,
+            disableVarExpansion: lockExecution.disableVarExpansion,
+          };
           logger.info(
             chalk.green(
               `Verified eval bar against ${path.resolve(process.cwd(), verifyLockPath)} before running`,
@@ -1037,6 +1048,7 @@ async function doEvalWithEnv(
       ret = await evaluate(testSuite, evalRecord, {
         ...options,
         restorePromptColumns: Boolean(resumeEval),
+        isolateProviderContext: Boolean(activeEvalLock),
         filterRange: hasScenarios || resumeEval ? filterRange : undefined,
         abortSignal: evaluateOptions.abortSignal,
         pauseSignal: isCliInvocation && cmdObj.write !== false ? abortController.signal : undefined,

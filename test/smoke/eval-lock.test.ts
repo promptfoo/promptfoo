@@ -28,7 +28,12 @@ describe('eval lock CLI', () => {
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
 
-  function runEval(args: string[], threshold = '75', selectedConfigPath = configPath) {
+  function runEval(
+    args: string[],
+    threshold = '75',
+    selectedConfigPath = configPath,
+    env: NodeJS.ProcessEnv = {},
+  ) {
     return spawnSync(
       process.execPath,
       [
@@ -53,10 +58,111 @@ describe('eval lock CLI', () => {
           PROMPTFOO_DISABLE_TELEMETRY: 'true',
           PROMPTFOO_DISABLE_UPDATE: 'true',
           PROMPTFOO_PASS_RATE_THRESHOLD: threshold,
+          ...env,
         },
       },
     );
   }
+
+  it('keeps provider context mutations from satisfying a locked assertion', () => {
+    const providerPath = path.join(tempDir, 'mutating-provider.cjs');
+    const selectedConfig = path.join(tempDir, 'mutating.yaml');
+    const selectedLock = path.join(tempDir, 'mutating.lock.json');
+    const outputPath = path.join(tempDir, 'mutating-output.json');
+    fs.writeFileSync(
+      providerPath,
+      `module.exports = class {
+  id() { return 'mutating-lock-target'; }
+  async callApi(prompt, context) {
+    context.test.assert = [];
+    context.test.threshold = 0;
+    context.vars.expected = 'wrong';
+    return { output: 'wrong' };
+  }
+};`,
+    );
+    fs.writeFileSync(
+      selectedConfig,
+      `providers: [${JSON.stringify(`file://${providerPath}`)}]
+prompts: ['test']
+tests:
+  - vars: { expected: expected }
+    assert:
+      - type: equals
+        value: '{{expected}}'
+`,
+    );
+    const locked = runEval(['--lock', selectedLock], '100', selectedConfig);
+    expect(locked.status, locked.stderr || locked.stdout).toBe(100);
+    const verified = runEval(['--verify', selectedLock, '-o', outputPath], '100', selectedConfig);
+    expect(verified.status, verified.stderr || verified.stdout).toBe(100);
+    const row = JSON.parse(fs.readFileSync(outputPath, 'utf8')).results.results[0];
+    expect(row).toMatchObject({ success: false, score: 0, response: { output: 'wrong' } });
+    expect(row.gradingResult.componentResults).toHaveLength(1);
+  });
+
+  it('rejects selective routing before registering a bar whose failing case can be omitted', () => {
+    const selectedConfig = path.join(tempDir, 'selective.yaml');
+    const selectedLock = path.join(tempDir, 'selective.lock.json');
+    fs.writeFileSync(
+      selectedConfig,
+      `providers:
+  - id: echo
+    prompts: [easy]
+prompts:
+  - { id: easy, label: easy, raw: wrong }
+  - { id: hard, label: hard, raw: wrong }
+tests:
+  - prompts: [easy]
+    assert: [{ type: equals, value: wrong }]
+  - prompts: [hard]
+    assert: [{ type: equals, value: expected }]
+`,
+    );
+    const result = runEval(['--lock', selectedLock], '100', selectedConfig);
+    expect(result.status, result.stderr || result.stdout).toBe(1);
+    expect(result.stdout + result.stderr).toContain('selectors');
+    expect(fs.existsSync(selectedLock)).toBe(false);
+  });
+
+  it('rejects changing template interpretation after registration', () => {
+    const selectedConfig = path.join(tempDir, 'template.yaml');
+    const selectedLock = path.join(tempDir, 'template.lock.json');
+    fs.writeFileSync(
+      selectedConfig,
+      `providers: [echo]
+prompts: [expected]
+tests:
+  - vars: { expected: expected }
+    assert: [{ type: equals, value: '{{expected}}' }]
+`,
+    );
+    const locked = runEval(['--lock', selectedLock], '100', selectedConfig, {
+      PROMPTFOO_DISABLE_TEMPLATING: 'true',
+    });
+    expect(locked.status, locked.stderr || locked.stdout).toBe(100);
+    const verified = runEval(['--verify', selectedLock], '100', selectedConfig, {
+      PROMPTFOO_DISABLE_TEMPLATING: 'false',
+    });
+    expect(verified.status, verified.stderr || verified.stdout).toBe(3);
+    expect(verified.stdout + verified.stderr).toContain('do not match');
+  });
+
+  it('rejects undefined object criteria instead of hashing them as an empty object', () => {
+    const selectedConfig = path.join(tempDir, 'undefined.cjs');
+    const selectedLock = path.join(tempDir, 'undefined.lock.json');
+    fs.writeFileSync(
+      selectedConfig,
+      `module.exports = {
+  providers: ['echo'], prompts: ['{}'],
+  tests: [{ assert: [{ type: 'equals', value: { required: undefined } }] }]
+};`,
+    );
+    const result = runEval(['--lock', selectedLock], '100', selectedConfig);
+    expect(result.status, result.stderr || result.stdout).toBe(1);
+    expect(result.stdout + result.stderr).toContain('undefined');
+    expect(fs.existsSync(selectedLock)).toBe(false);
+  });
 
   it('locks the resolved bar, verifies it, and rejects a doctored config before running', () => {
     const scriptConfigPath = path.join(tempDir, 'script-config.yaml');
@@ -77,39 +183,6 @@ tests:
       'only support data-only assertion criteria',
     );
     expect(fs.existsSync(scriptLockPath)).toBe(false);
-
-    const mutatingProviderPath = path.join(tempDir, 'mutating-provider.cjs');
-    const mutatingConfigPath = path.join(tempDir, 'mutating-config.yaml');
-    const mutatingLockPath = path.join(tempDir, 'mutating.lock.json');
-    fs.writeFileSync(
-      mutatingProviderPath,
-      `class MutatingProvider {
-  id() { return 'mutating-provider'; }
-  async callApi(_prompt, context) {
-    context.test.assert = [];
-    context.vars.expected = 'attacker-controlled';
-    return { output: 'attacker-controlled' };
-  }
-}
-module.exports = MutatingProvider;
-`,
-    );
-    fs.writeFileSync(
-      mutatingConfigPath,
-      `providers:
-  - file://./mutating-provider.cjs
-prompts: ['actual']
-tests:
-  - vars:
-      expected: trusted
-    assert:
-      - type: equals
-        value: '{{expected}}'
-`,
-    );
-    const mutating = runEval(['--lock', mutatingLockPath], '100', mutatingConfigPath);
-    expect(mutating.status, mutating.stderr || mutating.stdout).toBe(100);
-    expect(mutating.stdout + mutating.stderr).toContain('below the locked threshold');
 
     const collidingLockPath = path.join(tempDir, 'colliding.lock.json');
     const colliding = runEval(['--output', collidingLockPath, '--lock', collidingLockPath]);

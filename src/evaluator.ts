@@ -715,13 +715,19 @@ interface ProviderCallResult {
 const cloneProviderContextValue = Clone({ circles: true });
 
 function assertLockRuntimeIntegrity(lockIntegrity: RunEvalOptions['lockIntegrity']): void {
-  if (
-    lockIntegrity &&
-    getEnvBool('PROMPTFOO_DISABLE_TEMPLATING', false) !== lockIntegrity.disableTemplating
-  ) {
-    throw new Error(
-      'Evaluation lock runtime integrity check failed: PROMPTFOO_DISABLE_TEMPLATING changed after verification',
-    );
+  if (!lockIntegrity) {
+    return;
+  }
+  const settings = [
+    ['PROMPTFOO_DISABLE_TEMPLATING', lockIntegrity.disableTemplating],
+    ['PROMPTFOO_DISABLE_VAR_EXPANSION', lockIntegrity.disableVarExpansion],
+  ] as const;
+  for (const [name, lockedValue] of settings) {
+    if (getEnvBool(name, false) !== lockedValue) {
+      throw new Error(
+        `Evaluation lock runtime integrity check failed: ${name} changed after verification`,
+      );
+    }
   }
 }
 
@@ -739,6 +745,25 @@ function isolateLockedProviderContext(
     prompt: cloneProviderContextValue(prompt),
     vars: isolatedVars,
   };
+}
+
+function isolateCallApiContext(
+  context: CallApiContextParams,
+  test: AtomicTestCase,
+  prompt: Prompt,
+  vars: Vars,
+  isolateProviderContext: boolean | undefined,
+  lockIntegrity: RunEvalOptions['lockIntegrity'],
+): void {
+  if (!isolateProviderContext && !lockIntegrity) {
+    return;
+  }
+  // Provider instances inside the context become data-only copies so their
+  // mutable config cannot reach the authoritative grading state either.
+  const isolated = isolateLockedProviderContext(test, prompt, vars);
+  context.test = isolated.test;
+  context.vars = isolated.vars;
+  context.prompt = isolated.prompt;
 }
 
 function mergeProviderPromptConfig(
@@ -946,6 +971,7 @@ function isCliPauseCancellation(
 async function callProviderForRunEval({
   abortSignal,
   pauseSignal,
+  isolateProviderContext,
   evalId,
   filters,
   promptForRender,
@@ -973,6 +999,7 @@ async function callProviderForRunEval({
 > & {
   filters: RunEvalOptions['nunjucksFilters'];
   pauseSignal?: AbortSignal;
+  isolateProviderContext?: boolean;
   promptForRender: Prompt;
   renderedPrompt: string;
   testIndex: number;
@@ -996,6 +1023,7 @@ async function callProviderForRunEval({
       response = await callActiveProvider({
         abortSignal,
         pauseSignal,
+        isolateProviderContext,
         evalId,
         filters,
         onProviderInvoked: () => {
@@ -1123,6 +1151,7 @@ async function collectExternalTraceAfterProviderCall({
 async function callActiveProvider({
   abortSignal,
   pauseSignal,
+  isolateProviderContext,
   evalId,
   filters,
   onProviderInvoked,
@@ -1150,6 +1179,7 @@ async function callActiveProvider({
 > & {
   filters: RunEvalOptions['nunjucksFilters'];
   pauseSignal?: AbortSignal;
+  isolateProviderContext?: boolean;
   onProviderInvoked: () => void;
   promptForRender: Prompt;
   renderedPrompt: string;
@@ -1175,8 +1205,15 @@ async function callActiveProvider({
     testIndex,
     traceContext,
     vars,
-    lockIntegrity,
   });
+  isolateCallApiContext(
+    callApiContext,
+    test,
+    promptForRender,
+    vars,
+    isolateProviderContext,
+    lockIntegrity,
+  );
   let completedResponse: ProviderResponse | undefined;
   const completedTargets: { prompt: string; response: ProviderResponse }[] = [];
   const callApi = (onResponseHeaders?: CallApiOptionsParams['onResponseHeaders']) => {
@@ -1289,7 +1326,6 @@ function buildCallApiContext({
   testIndex,
   traceContext,
   vars,
-  lockIntegrity,
 }: {
   evalId?: string;
   filters: RunEvalOptions['nunjucksFilters'];
@@ -1300,17 +1336,13 @@ function buildCallApiContext({
   testIndex: number;
   traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>>;
   vars: Vars;
-  lockIntegrity?: RunEvalOptions['lockIntegrity'];
 }): CallApiContextParams {
-  const isolated = lockIntegrity
-    ? isolateLockedProviderContext(test, promptForRender, vars)
-    : undefined;
   const callApiContext: CallApiContextParams = {
-    vars: isolated?.vars ?? vars,
-    prompt: isolated?.prompt ?? promptForRender,
+    vars,
+    prompt: promptForRender,
     filters,
     originalProvider,
-    test: isolated?.test ?? test,
+    test,
     logger: logger as unknown as winston.Logger,
     getCache,
     repeatIndex,
@@ -1841,7 +1873,10 @@ async function runEvalInternal(
     rateLimitRegistry,
     lockIntegrity,
   }: RunEvalOptions,
-  orchestrationOptions: Pick<InternalEvaluateOptions, 'abortSignal' | 'pauseSignal'> = {
+  orchestrationOptions: Pick<
+    InternalEvaluateOptions,
+    'abortSignal' | 'pauseSignal' | 'isolateProviderContext'
+  > = {
     abortSignal,
   },
 ): Promise<EvaluateResult[]> {
@@ -1921,6 +1956,7 @@ async function runEvalInternal(
           const providerCall = await callProviderForRunEval({
             abortSignal,
             pauseSignal: orchestrationOptions.pauseSignal,
+            isolateProviderContext: orchestrationOptions.isolateProviderContext,
             evalId,
             filters,
             promptForRender: {
@@ -4460,7 +4496,11 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         deferGrading,
         providerCallQueue: deferGrading ? providerCallQueue : undefined,
       },
-      { abortSignal: deferredGradingAbortSignal, pauseSignal: this.options.pauseSignal },
+      {
+        abortSignal: deferredGradingAbortSignal,
+        pauseSignal: this.options.pauseSignal,
+        isolateProviderContext: this.options.isolateProviderContext,
+      },
     );
     onRowsReady?.();
     return rows;

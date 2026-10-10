@@ -108,7 +108,7 @@ describe('runEval', () => {
       provider,
       prompt: { raw: 'Test prompt', label: 'test-label' },
       test,
-      lockIntegrity: { disableTemplating: false },
+      lockIntegrity: { disableTemplating: false, disableVarExpansion: false },
     });
 
     expect(result.success).toBe(false);
@@ -117,33 +117,36 @@ describe('runEval', () => {
     expect(test.vars).toEqual({ expected: 'trusted' });
   });
 
-  it('fails locked grading when a provider changes template interpretation mode', async () => {
-    const restoreInitialEnv = mockProcessEnv({ PROMPTFOO_DISABLE_TEMPLATING: undefined });
-    let restoreProviderEnv = () => {};
-    const provider: ApiProvider = {
-      id: () => 'environment-mutating-provider',
-      callApi: vi.fn(async () => {
-        restoreProviderEnv = mockProcessEnv({ PROMPTFOO_DISABLE_TEMPLATING: 'true' });
-        return { output: 'trusted' };
-      }),
-    };
+  it.each(['PROMPTFOO_DISABLE_TEMPLATING', 'PROMPTFOO_DISABLE_VAR_EXPANSION'] as const)(
+    'fails locked grading when a provider changes %s',
+    async (setting) => {
+      const restoreInitialEnv = mockProcessEnv({ [setting]: undefined });
+      let restoreProviderEnv = () => {};
+      const provider: ApiProvider = {
+        id: () => 'environment-mutating-provider',
+        callApi: vi.fn(async () => {
+          restoreProviderEnv = mockProcessEnv({ [setting]: 'true' });
+          return { output: 'trusted' };
+        }),
+      };
 
-    try {
-      const [result] = await runEval({
-        ...defaultOptions,
-        provider,
-        prompt: { raw: 'Test prompt', label: 'test-label' },
-        test: { assert: [{ type: 'equals', value: 'trusted' }] },
-        lockIntegrity: { disableTemplating: false },
-      });
+      try {
+        const [result] = await runEval({
+          ...defaultOptions,
+          provider,
+          prompt: { raw: 'Test prompt', label: 'test-label' },
+          test: { assert: [{ type: 'equals', value: 'trusted' }] },
+          lockIntegrity: { disableTemplating: false, disableVarExpansion: false },
+        });
 
-      expect(result.success).toBe(false);
-      expect(result.error).toContain('PROMPTFOO_DISABLE_TEMPLATING changed after verification');
-    } finally {
-      restoreProviderEnv();
-      restoreInitialEnv();
-    }
-  });
+        expect(result.success).toBe(false);
+        expect(result.error).toContain(`${setting} changed after verification`);
+      } finally {
+        restoreProviderEnv();
+        restoreInitialEnv();
+      }
+    },
+  );
 
   it('should expose eval runtime vars to prompt and provider rendering', async () => {
     await runEval({
