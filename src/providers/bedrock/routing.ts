@@ -9,6 +9,22 @@ export type BedrockApiMode =
   | 'runtime-chat'
   | 'runtime-responses';
 
+export function getBedrockRuntimeModelError(
+  mode: 'runtime-chat' | 'runtime-responses',
+  modelName: string,
+): string | undefined {
+  if (modelName.includes(':application-inference-profile/')) {
+    return 'Bedrock Runtime Chat and Responses do not support application inference profiles. Use a foundation model or system inference profile.';
+  }
+  if (
+    mode === 'runtime-responses' &&
+    /(?:^|[/.])openai\.gpt-oss-(?:20b|120b)(?:-1:0)?$/.test(modelName)
+  ) {
+    return 'GPT OSS does not support Bedrock Runtime Responses. Use Runtime Chat or Mantle Responses.';
+  }
+  return undefined;
+}
+
 export function isRejectedPrefixedMythosId(modelName: string): boolean {
   return /^[^.]+\.(anthropic\.claude-mythos-(?:5|preview))$/.test(modelName);
 }

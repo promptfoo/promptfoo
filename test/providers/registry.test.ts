@@ -22,15 +22,34 @@ import type { ProviderOptions } from '../../src/types/providers';
 
 describe('Bedrock Runtime OpenAI API routing', () => {
   it.each([
-    ['chat', 'BedrockRuntimeChatProvider'],
-    ['responses', 'BedrockRuntimeResponsesProvider'],
-  ])('routes runtime:%s with versioned model IDs', async (api, name) => {
-    const provider = await loadApiProvider(`bedrock:runtime:${api}:openai.gpt-oss-120b-1:0`, {
+    ['chat', 'BedrockRuntimeChatProvider', 'openai.gpt-oss-120b-1:0'],
+    ['responses', 'BedrockRuntimeResponsesProvider', 'us.openai.gpt-5.6-sol'],
+  ])('routes runtime:%s with supported model IDs', async (api, name, model) => {
+    const provider = await loadApiProvider(`bedrock:runtime:${api}:${model}`, {
       options: { config: { region: 'us-east-1', apiKey: 'fixture' } },
     });
     expect(provider.constructor.name).toBe(name);
-    expect(provider.id()).toBe(`bedrock:runtime:${api}:openai.gpt-oss-120b-1:0`);
+    expect(provider.id()).toBe(`bedrock:runtime:${api}:${model}`);
   });
+
+  it('rejects GPT OSS Runtime Responses while retaining Runtime Chat', async () => {
+    await expect(
+      loadApiProvider('bedrock:runtime:responses:openai.gpt-oss-120b-1:0'),
+    ).rejects.toThrow('GPT OSS');
+  });
+
+  it.each(['chat', 'responses'])(
+    'preserves scoped region alias precedence for Runtime %s',
+    async (api) => {
+      const provider = await loadApiProvider(`bedrock:runtime:${api}:us.openai.gpt-5.6-sol`, {
+        env: { AWS_BEDROCK_REGION: 'us-east-1' },
+        options: { env: { AWS_REGION: 'us-west-2' }, config: { apiKey: 'fixture' } },
+      });
+      expect(provider).toMatchObject({
+        config: { apiBaseUrl: 'https://bedrock-runtime.us-west-2.amazonaws.com/openai/v1' },
+      });
+    },
+  );
 
   it.each(['bedrock:runtime', 'bedrock:runtime:chat', 'bedrock:runtime:invalid:model'])(
     'rejects incomplete or unknown Runtime route %s',

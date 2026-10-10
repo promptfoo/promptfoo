@@ -1,6 +1,7 @@
 import { AwsBedrockConverseProvider } from '../bedrock/converse';
 import { AwsBedrockCompletionProvider, AwsBedrockEmbeddingProvider } from '../bedrock/index';
 import {
+  getBedrockRuntimeModelError,
   getBedrockTextRoute,
   isBedrockAnthropicMessagesModel,
   isRejectedPrefixedGrokId,
@@ -32,6 +33,14 @@ export const awsProviderFactories: ProviderFactory[] = [
           throw new Error(
             'Use bedrock:runtime:chat:<model-id> or bedrock:runtime:responses:<model-id>.',
           );
+        }
+        const effectiveModel = providerOptions.config?.passthrough?.model ?? runtimeModel;
+        const modelError = getBedrockRuntimeModelError(
+          api === 'chat' ? 'runtime-chat' : 'runtime-responses',
+          effectiveModel,
+        );
+        if (modelError) {
+          throw new Error(modelError);
         }
         const { BedrockRuntimeChatProvider, BedrockRuntimeResponsesProvider } = await import(
           '../bedrock/runtimeOpenai'

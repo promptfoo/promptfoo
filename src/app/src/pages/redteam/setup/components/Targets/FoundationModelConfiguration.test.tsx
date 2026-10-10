@@ -1091,4 +1091,54 @@ describe('FoundationModelConfiguration', () => {
     await user.selectOptions(screen.getByLabelText(/Bedrock API/), 'runtime-chat');
     expect(mockUpdateCustomTarget).toHaveBeenCalledWith('config', { max_completion_tokens: 256 });
   });
+  it('restores the Runtime GPT OSS suffix when switching from Mantle Responses', async () => {
+    const user = userEvent.setup();
+    render(
+      <FoundationModelConfiguration
+        selectedTarget={{ id: 'bedrock:responses:openai.gpt-oss-120b', config: {} }}
+        updateCustomTarget={mockUpdateCustomTarget}
+        providerType="bedrock"
+      />,
+    );
+    await user.selectOptions(screen.getByLabelText(/Bedrock API/), 'runtime-chat');
+    expect(mockUpdateCustomTarget).toHaveBeenCalledWith(
+      'id',
+      'bedrock:runtime:chat:openai.gpt-oss-120b-1:0',
+    );
+  });
+
+  it.each([
+    [
+      'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/fixture',
+      'application inference profiles',
+    ],
+    ['openai.gpt-oss-120b-1:0', 'GPT OSS'],
+  ])('shows a Runtime Responses model error for %s', (model, message) => {
+    render(
+      <FoundationModelConfiguration
+        selectedTarget={{ id: `bedrock:runtime:responses:${model}`, config: {} }}
+        updateCustomTarget={mockUpdateCustomTarget}
+        providerType="bedrock"
+      />,
+    );
+    expect(screen.getByRole('alert')).toHaveTextContent(message);
+    expect(screen.getByRole('textbox', { name: /Model ID/ })).toHaveAttribute(
+      'aria-invalid',
+      'true',
+    );
+  });
+
+  it('accepts account-scoped system inference profiles in Runtime Responses', () => {
+    render(
+      <FoundationModelConfiguration
+        selectedTarget={{
+          id: 'bedrock:runtime:responses:arn:aws:bedrock:us-east-1:123456789012:inference-profile/us.openai.gpt-5.6-sol',
+          config: {},
+        }}
+        updateCustomTarget={mockUpdateCustomTarget}
+        providerType="bedrock"
+      />,
+    );
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
 });

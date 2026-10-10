@@ -132,6 +132,40 @@ describe.each([
     expect(us.cost).toBeCloseTo(global.cost! * 1.1, 10);
   });
 
+  it.each([
+    ['global', { inputCost: 0.01 }, 1.0004],
+    ['us', { inputCost: 0.01 }, 1.00044],
+    ['global', { outputCost: 0.02 }, 0.400256],
+    ['us', { outputCost: 0.02 }, 0.4002816],
+    ['global', { inputCost: 0 }, 0.0004],
+    ['global', { outputCost: 0 }, 0.000256],
+  ] as const)(
+    'preserves catalog rates with partial overrides for %s %j',
+    async (profile, costs, expected) => {
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: reply,
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      });
+      const provider = new Provider(`${profile}.openai.gpt-5.6-sol`, {
+        config: { region: 'us-east-1', apiKey: 'fixture', ...costs },
+      });
+      expect((await provider.callApi('hello')).cost).toBeCloseTo(expected, 10);
+    },
+  );
+
+  it.each(['priority', 'flex', 'reserved'])('omits unpublished GPT %s prices', async (tier) => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: { ...reply, service_tier: tier },
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    });
+    const provider = new Provider('us.openai.gpt-5.6-sol', { config: { apiKey: 'fixture' } });
+    expect((await provider.callApi('hello')).cost).toBeUndefined();
+  });
+
   it('does not invent prices for unknown Runtime models and honors manual rates', async () => {
     vi.mocked(fetchWithCache).mockResolvedValue({
       data: reply,
@@ -187,6 +221,8 @@ describe('Runtime Responses restrictions and state', () => {
       'application inference profiles',
     ],
     [{ tools: [{ type: 'web_search' }] }, 'server-side tools'],
+    [{ tools: [{ type: 'web_search_preview_2025_03_11' }] }, 'server-side tools'],
+    [{ model: 'openai.gpt-oss-120b-1:0' }, 'GPT OSS'],
     [{ tools: [{ type: 'code_interpreter', container: { type: 'auto' } }] }, 'server-side tools'],
   ] as const)('rejects unavailable Runtime features %j', async (passthrough, error) => {
     const provider = new BedrockRuntimeResponsesProvider('us.openai.gpt-5.6-sol', {
@@ -445,4 +481,43 @@ it('joins legacy function-call deltas before parsing the completed response', as
   const result = await provider.callApi('hello');
   expect(result.error).toBeUndefined();
   expect(result.output).toEqual({ name: 'lookup', arguments: '{"x":1}' });
+});
+
+it.each(['chat', 'responses'] as const)(
+  'allows account-scoped system profiles for Runtime %s',
+  async (mode) => {
+    const Provider = mode === 'chat' ? BedrockRuntimeChatProvider : BedrockRuntimeResponsesProvider;
+    const model = 'arn:aws:bedrock:us-east-1:123456789012:inference-profile/us.openai.gpt-5.6-sol';
+    const provider = new Provider(model, { config: { apiKey: 'fixture' } });
+    expect((await provider.getOpenAiBody('hello')).body.model).toBe(model);
+  },
+);
+
+it('rejects application profiles in Runtime Chat before transport', async () => {
+  const provider = new BedrockRuntimeChatProvider('openai.gpt-oss-120b-1:0', {
+    config: {
+      apiKey: 'fixture',
+      passthrough: {
+        model: 'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/fixture',
+      },
+    },
+  });
+  await expect(provider.getOpenAiBody('hello')).rejects.toThrow('application inference profiles');
+  expect(fetchWithCache).not.toHaveBeenCalled();
+});
+
+it.each([
+  [{ inputCost: 0.01 }, 1.000012],
+  [{ outputCost: 0.02 }, 0.400009],
+])('preserves GPT OSS catalog rates with a partial override %j', async (costs, expected) => {
+  vi.mocked(fetchWithCache).mockResolvedValue({
+    data: chatReply,
+    status: 200,
+    statusText: 'OK',
+    cached: false,
+  });
+  const provider = new BedrockRuntimeChatProvider('openai.gpt-oss-120b-1:0', {
+    config: { apiKey: 'fixture', region: 'us-east-1', ...costs },
+  });
+  expect((await provider.callApi('hello')).cost).toBeCloseTo(expected, 10);
 });

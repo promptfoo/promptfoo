@@ -6,6 +6,7 @@ import { Label } from '@app/components/ui/label';
 import { NumberInput } from '@app/components/ui/number-input';
 import {
   type BedrockApiMode,
+  getBedrockRuntimeModelError,
   getBedrockTextRoute,
   isBedrockAnthropicMessagesModel,
   isBedrockGptOssResponsesModel,
@@ -84,6 +85,7 @@ const buildBedrockProviderId = (apiMode: BedrockApiMode, modelId: string): strin
     modelId = `openai.${modelId}`;
   }
   if (apiMode === 'runtime-chat' || apiMode === 'runtime-responses') {
+    modelId = modelId.replace(/^(openai\.gpt-oss-(?:20b|120b))$/, '$1-1:0');
     return `bedrock:runtime:${apiMode === 'runtime-chat' ? 'chat' : 'responses'}:${modelId}`;
   }
   if (apiMode === 'responses' || apiMode === 'chat') {
@@ -101,6 +103,12 @@ const buildBedrockProviderId = (apiMode: BedrockApiMode, modelId: string): strin
 const getBedrockApiError = (apiMode: BedrockApiMode, modelId: string): string | undefined => {
   if (!modelId) {
     return 'Enter a model ID.';
+  }
+  if (apiMode === 'runtime-chat' || apiMode === 'runtime-responses') {
+    const error = getBedrockRuntimeModelError(apiMode, modelId);
+    if (error) {
+      return error;
+    }
   }
   if (apiMode !== 'chat' && isRejectedPrefixedMythosId(modelId)) {
     return 'Mythos 5 requires the bare anthropic.claude-mythos-5 ID and Anthropic Messages API.';

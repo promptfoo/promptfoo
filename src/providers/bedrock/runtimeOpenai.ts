@@ -4,6 +4,7 @@ import { resolveBedrockMantleRegion } from './mantle';
 import { BedrockMantleChatProvider } from './mantleChat';
 import { BedrockOpenAiResponsesProvider } from './openaiResponses';
 import { calculateBedrockCost } from './pricing';
+import { getBedrockRuntimeModelError } from './routing';
 
 import type { ProviderResponse } from '../../types/providers';
 import type { OpenAiChatCompletionCostData } from '../openai/chat';
@@ -54,9 +55,12 @@ function runtimeCost(
     config.inputCost !== undefined ||
     config.outputCost !== undefined
   ) {
-    return calculateOpenAIUsageCost('bedrock-runtime-custom', config, usage, {
+    const manualCost = calculateOpenAIUsageCost('bedrock-runtime-custom', config, usage, {
       cachedResponse: cached,
     });
+    if (manualCost !== undefined) {
+      return manualCost;
+    }
   }
   const input = usage?.input_tokens ?? usage?.prompt_tokens;
   const output = usage?.output_tokens ?? usage?.completion_tokens;
@@ -66,29 +70,18 @@ function runtimeCost(
     return undefined;
   }
   if (/^gpt-5\.6-(?:sol|terra|luna)$/.test(capabilityName(modelName))) {
-    if (serviceTier === 'reserved') {
+    if (serviceTier && serviceTier !== 'default') {
       return undefined;
     }
-    const standardCost = calculateOpenAIUsageCost(
-      `bedrock:${capabilityName(modelName)}`,
-      config,
-      usage,
-      {
-        cachedResponse: cached,
-        provider: 'bedrock',
-        region,
-        regionalProcessing: !/(^|\/)global\.openai\./.test(modelName),
-        serviceTier: 'default',
-      },
-    );
-    // The shared Bedrock GPT-5.6 table contains regional endpoint rates. Global
-    // Runtime profiles omit the 10% regional-processing premium.
-    return standardCost === undefined
-      ? undefined
-      : (standardCost / (/(^|\/)global\.openai\./.test(modelName) ? 1.1 : 1)) *
-          (serviceTier === 'priority' ? 1.75 : serviceTier === 'flex' ? 0.5 : 1);
+    return calculateOpenAIUsageCost(`bedrock:${capabilityName(modelName)}`, config, usage, {
+      cachedResponse: cached,
+      provider: 'bedrock',
+      region,
+      regionalProcessing: !/(^|\/)global\.openai\./.test(modelName),
+      serviceTier: serviceTier ?? 'default',
+    });
   }
-  const cost = calculateBedrockCost(
+  let cost = calculateBedrockCost(
     modelName,
     typeof input === 'number' ? Math.max(0, input - cacheRead) : undefined,
     output,
@@ -97,6 +90,23 @@ function runtimeCost(
     region,
     { type: (serviceTier ?? 'default') as 'default' | 'priority' | 'flex' | 'reserved' },
   );
+  if (cost !== undefined && (config.inputCost !== undefined || config.outputCost !== undefined)) {
+    const catalogInputCost = calculateBedrockCost(
+      modelName,
+      Math.max(0, input - cacheRead),
+      0,
+      cacheRead,
+      0,
+      region,
+      { type: (serviceTier ?? 'default') as 'default' | 'priority' | 'flex' | 'reserved' },
+    );
+    if (catalogInputCost === undefined) {
+      return undefined;
+    }
+    cost =
+      (config.inputCost === undefined ? catalogInputCost : input * config.inputCost) +
+      (config.outputCost === undefined ? cost - catalogInputCost : output * config.outputCost);
+  }
   return cost === undefined ? undefined : cached ? 0 : cost;
 }
 
@@ -128,6 +138,10 @@ export class BedrockRuntimeChatProvider extends BedrockMantleChatProvider {
 
   async getOpenAiBody(...args: Parameters<BedrockMantleChatProvider['getOpenAiBody']>) {
     const result = await super.getOpenAiBody(...args);
+    const modelError = getBedrockRuntimeModelError('runtime-chat', result.body.model);
+    if (modelError) {
+      throw new Error(modelError);
+    }
     // Runtime accepts the OpenAI completion cap even when a new model is not in the
     // shared reasoning catalog. Preserve an explicit cap rather than silently omit it.
     if (
@@ -209,10 +223,9 @@ export class BedrockRuntimeResponsesProvider extends BedrockOpenAiResponsesProvi
         'Bedrock Runtime Responses does not support background=true. Use a Mantle Responses provider for background inference.',
       );
     }
-    if (typeof body.model === 'string' && body.model.includes(':application-inference-profile/')) {
-      throw new Error(
-        'Bedrock Runtime Responses does not support application inference profiles. Use a foundation model or system inference profile.',
-      );
+    const modelError = getBedrockRuntimeModelError('runtime-responses', body.model);
+    if (modelError) {
+      throw new Error(modelError);
     }
     const serverTools = new Set([
       'web_search',
@@ -224,7 +237,10 @@ export class BedrockRuntimeResponsesProvider extends BedrockOpenAiResponsesProvi
     ]);
     if (
       Array.isArray(body.tools) &&
-      body.tools.some((tool: { type?: string }) => serverTools.has(tool.type ?? ''))
+      body.tools.some(
+        (tool: { type?: string }) =>
+          serverTools.has(tool.type ?? '') || tool.type?.startsWith('web_search_'),
+      )
     ) {
       throw new Error(
         'Bedrock Runtime Responses does not support server-side tools. Use client-side functions or a Mantle Responses provider.',
