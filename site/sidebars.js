@@ -539,6 +539,7 @@ const sidebars = {
       collapsed: true,
       items: [
         { type: 'doc', id: 'enterprise/index' },
+        { type: 'doc', id: 'enterprise/on-prem' },
         { type: 'doc', id: 'enterprise/authentication' },
         { type: 'doc', id: 'enterprise/sso' },
         { type: 'doc', id: 'enterprise/service-accounts' },
