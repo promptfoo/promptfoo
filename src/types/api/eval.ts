@@ -263,11 +263,23 @@ export const SubmitRatingParamsSchema = z.object({
   id: z.string().min(1),
 });
 
-/** Permissive grading result schema. */
+// Validate the fields used for counting while preserving legacy and SDK grading data.
+const RatingMetricOnlyMarkerSchema = z.object({ metricOnly: z.boolean().nullish() }).passthrough();
+
+const RatingComponentSchema = z
+  .object({
+    pass: z.boolean(),
+    assertion: RatingMetricOnlyMarkerSchema.nullish(),
+    metadata: RatingMetricOnlyMarkerSchema.nullish(),
+  })
+  .passthrough();
+
+/** Permissive grading result schema with validated assertion contributions. */
 export const SubmitRatingRequestSchema = z
   .object({
     pass: z.boolean(),
     score: z.number(),
+    componentResults: z.array(RatingComponentSchema.nullable()).nullish(),
   })
   .passthrough();
 

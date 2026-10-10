@@ -219,7 +219,7 @@ describe('persisted manual rating metrics', () => {
     await submitAndReload(fixture, commentEdit, 1, 0);
   });
 
-  it.each([undefined, [], null])(
+  it.each([[undefined], [[]], [null]])(
     'handles absent or empty legacy components: %j',
     async (components) => {
       const original = {
@@ -249,4 +249,107 @@ describe('persisted manual rating metrics', () => {
     await submitAndReload(fixture, scalarRating, 0, 0);
     await submitAndReload(fixture, scalarRating, 0, 0);
   });
+
+  it.each([
+    ['object instead of array', {}],
+    ['string instead of array', 'invalid'],
+    ['numeric entry', [1]],
+    ['missing pass', [{}]],
+    ['string pass', [{ pass: 'true' }]],
+    ['null pass', [{ pass: null }]],
+    ['string assertion flag', [{ pass: true, assertion: { metricOnly: 'false' } }]],
+    ['numeric metadata flag', [{ pass: true, metadata: { metricOnly: 1 } }]],
+    ['string assertion', [{ pass: true, assertion: 'invalid' }]],
+    ['array assertion', [{ pass: true, assertion: [] }]],
+    ['string metadata', [{ pass: true, metadata: 'invalid' }]],
+    ['array metadata', [{ pass: true, metadata: [] }]],
+  ])('rejects malformed rating components before writing: %s', async (_, componentResults) => {
+    const original: GradingResult = {
+      pass: true,
+      score: 0.5,
+      reason: 'Original grading result',
+      componentResults: [passingAssertion],
+    };
+    const fixture = await createFixture(original, 1);
+    const metricsBefore = fixture.eval_.prompts[0].metrics;
+    const response = await api
+      .post(`/api/eval/${fixture.eval_.id}/results/${fixture.result.id}/rating`)
+      .send({ pass: false, score: 0, componentResults });
+    expect(response.status).toBe(400);
+    expect(response.body.error).toEqual(expect.any(String));
+    expect(response.body.details.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ path: expect.arrayContaining(['componentResults']) }),
+      ]),
+    );
+    const savedResult = await EvalResult.findById(fixture.result.id);
+    expect(savedResult?.gradingResult).toEqual(original);
+    expect(savedResult?.success).toBe(true);
+    expect(savedResult?.score).toBe(0.5);
+    const savedEval = await Eval.findById(fixture.eval_.id);
+    invariant(savedEval, 'Expected the unchanged eval');
+    expect(savedEval.prompts[0].metrics).toEqual(metricsBefore);
+    const table = await api.get(`/api/eval/${fixture.eval_.id}/table`);
+    expect(table.status).toBe(200);
+    for (const metrics of [
+      table.body.table.head.prompts[0].metrics,
+      (await savedEval.getFilteredMetrics({}))[0],
+    ]) {
+      expect(metrics).toMatchObject({
+        assertPassCount: 1,
+        assertFailCount: 0,
+        testPassCount: 1,
+        testFailCount: 0,
+        score: 0.5,
+      });
+    }
+  });
+
+  it.each([
+    ['partial component', [{ pass: true }], 1],
+    ['null containers and entry', [null, { pass: true, assertion: null, metadata: null }], 1],
+    [
+      'null flags',
+      [{ pass: true, assertion: { metricOnly: null }, metadata: { metricOnly: null } }],
+      1,
+    ],
+    [
+      'false flags',
+      [{ pass: true, assertion: { metricOnly: false }, metadata: { metricOnly: false } }],
+      1,
+    ],
+    [
+      'legacy set assertion',
+      [{ pass: false, assertion: { type: 'assert-set', metricOnly: true } }],
+      0,
+    ],
+    [
+      'set metadata',
+      [{ pass: false, metadata: { metricOnly: true, custom: { retained: true } } }],
+      0,
+    ],
+    [
+      'opaque assertion fields',
+      [
+        {
+          pass: true,
+          assertion: { type: 'custom', provider: { id: 'custom' }, config: { retained: true } },
+          custom: ['retained'],
+        },
+      ],
+      1,
+    ],
+  ] as const)(
+    'preserves supported rating components: %s',
+    async (_, componentResults, passCount) => {
+      const fixture = await createFixture({ pass: true, score: 0.5, reason: 'Original' });
+      const rating = {
+        pass: true,
+        score: 0.75,
+        reason: 'SDK grading result',
+        componentResults,
+      } as unknown as GradingResult;
+      await submitAndReload(fixture, rating, passCount, 0);
+    },
+  );
 });

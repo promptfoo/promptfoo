@@ -871,6 +871,51 @@ function averageComponentResultScore(
   return scores.reduce((sum, resultScore) => sum + resultScore, 0) / scores.length;
 }
 
+function readOriginalGradingResult(
+  value: unknown,
+): Pick<GradingResult, 'pass' | 'score' | 'reason'> | undefined {
+  if (
+    !value ||
+    typeof value !== 'object' ||
+    Array.isArray(value) ||
+    !('pass' in value) ||
+    typeof value.pass !== 'boolean' ||
+    !('score' in value) ||
+    typeof value.score !== 'number' ||
+    !Number.isFinite(value.score) ||
+    !('reason' in value) ||
+    typeof value.reason !== 'string'
+  ) {
+    return undefined;
+  }
+  return { pass: value.pass, score: value.score, reason: value.reason };
+}
+
+function restoreMetricOnlyAggregate(
+  existingOutput: EvaluateTableOutput,
+  humanResult: GradingResult | undefined,
+): Pick<GradingResult, 'pass' | 'score' | 'reason'> {
+  const originalResult = readOriginalGradingResult(
+    humanResult ? humanResult.metadata?.originalGradingResult : existingOutput.gradingResult,
+  );
+  if (originalResult) {
+    return originalResult;
+  }
+
+  // Legacy votes have no original aggregate. Preserve the default
+  // metric-only threshold fallback rather than infer a custom score.
+  const threshold = existingOutput.testCase?.threshold;
+  const hasThreshold = typeof threshold === 'number' && !Number.isNaN(threshold);
+  const pass = hasThreshold ? threshold <= 0 : true;
+  return {
+    pass,
+    score: 0,
+    reason: hasThreshold
+      ? `Aggregate score 0.00 ${pass ? '≥' : '<'} ${threshold} threshold`
+      : 'All assertions passed',
+  };
+}
+
 export function getManualRatingUpdate({
   existingOutput,
   isPass,
@@ -901,8 +946,9 @@ export function getManualRatingUpdate({
 
   const componentResults = [...(existingOutput.gradingResult?.componentResults || [])];
   const humanResultIndex = componentResults.findIndex(
-    (result) => result.assertion?.type === HUMAN_ASSERTION_TYPE,
+    (result) => result?.assertion?.type === HUMAN_ASSERTION_TYPE,
   );
+  const existingHumanResult = componentResults[humanResultIndex];
 
   if (isPass === null) {
     let reason: GradingResult['reason'] | undefined;
@@ -914,17 +960,11 @@ export function getManualRatingUpdate({
     if (countedResults.length > 0) {
       finalPass = countedResults.filter((result) => result.pass).length === countedResults.length;
       finalScore = averageComponentResultScore(countedResults, finalScore);
-    } else if (componentResults.length > 0) {
-      // Every remaining assertion is metric-only: mirror the server-side
-      // aggregate (score 0; pass unless a numeric test-level threshold demands
-      // more — same gate as AssertionsResult, honoring threshold 0).
-      const threshold = existingOutput.testCase?.threshold;
-      finalScore = 0;
-      finalPass = typeof threshold === 'number' && !Number.isNaN(threshold) ? threshold <= 0 : true;
-      reason =
-        typeof threshold === 'number' && !Number.isNaN(threshold)
-          ? `Aggregate score 0.00 ${finalPass ? '≥' : '<'} ${threshold} threshold`
-          : 'All assertions passed';
+    } else if (componentResults.some(Boolean)) {
+      const originalResult = restoreMetricOnlyAggregate(existingOutput, existingHumanResult);
+      finalPass = originalResult.pass;
+      finalScore = originalResult.score;
+      reason = originalResult.reason;
     }
 
     return {
@@ -938,12 +978,27 @@ export function getManualRatingUpdate({
 
   finalPass = isPass;
 
-  const humanResult = {
+  const originalResult =
+    humanResultIndex === -1 &&
+    componentResults.some(Boolean) &&
+    countedComponentResults(componentResults).length === 0
+      ? readOriginalGradingResult(existingOutput.gradingResult)
+      : undefined;
+
+  const humanResult: GradingResult = {
     pass: finalPass,
     score: finalScore,
     reason: 'Manual result (overrides all other grading results)',
     comment,
     assertion: { type: HUMAN_ASSERTION_TYPE },
+    ...(existingHumanResult?.metadata || originalResult
+      ? {
+          metadata: {
+            ...existingHumanResult?.metadata,
+            ...(originalResult && { originalGradingResult: originalResult }),
+          },
+        }
+      : {}),
   };
 
   if (humanResultIndex === -1) {
