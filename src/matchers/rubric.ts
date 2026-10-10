@@ -840,24 +840,25 @@ function deriveVerdictFromGrader(
 ): { pass: boolean; score: number } | undefined {
   const hasThreshold = typeof threshold === 'number' && Number.isFinite(threshold);
 
-  // A grader response that omits the verdict must not default to passing.
-  // With a configured threshold, derive the verdict from score >= threshold
-  // (so a score-only result exactly at its threshold passes, matching the
-  // threshold semantics asserted elsewhere). Without one, fall back to the
-  // pre-#2999 score > 0 derivation, and fail closed (undefined) when the
-  // response carries neither a verdict nor a score.
-  let pass: boolean;
+  // Without an explicit verdict, only a finite numeric score can be graded.
+  // Reject malformed values as grader errors so negation cannot make them pass.
   if (parsed.pass === undefined || parsed.pass === null) {
-    if (parsed.score === undefined || parsed.score === null) {
+    const score =
+      typeof parsed.score === 'number'
+        ? parsed.score
+        : typeof parsed.score === 'string' && parsed.score.trim() !== ''
+          ? Number(parsed.score)
+          : NaN;
+    if (!Number.isFinite(score)) {
       return undefined;
     }
-    pass = hasThreshold ? Number(parsed.score) >= threshold : Number(parsed.score) > 0;
-  } else if (typeof parsed.pass === 'boolean') {
-    pass = parsed.pass;
-  } else {
-    pass = /^(true|yes|pass|y)$/i.test(String(parsed.pass));
+    return { pass: hasThreshold ? score >= threshold : score > 0, score };
   }
 
+  let pass =
+    typeof parsed.pass === 'boolean'
+      ? parsed.pass
+      : /^(true|yes|pass|y)$/i.test(String(parsed.pass));
   const numericScore = Number(parsed.score);
   const score =
     typeof parsed.score === 'number'
@@ -940,7 +941,7 @@ export async function runJsonGradingPrompt({
   const verdict = deriveVerdictFromGrader(parsed, threshold);
   if (!verdict) {
     return graderFailureFromResponse(
-      'Grader response contained neither a pass verdict nor a score',
+      'Grader response contained neither a pass verdict nor a finite numeric score',
       resp,
     );
   }

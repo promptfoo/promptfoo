@@ -2811,6 +2811,30 @@ describe('matchesLlmRubric missing-verdict fail-closed semantics', () => {
     vi.restoreAllMocks();
   });
 
+  it.each([true, false, '', ' ', [], [1], {}, 'invalid', 'Infinity', '1e309', NaN, Infinity])(
+    'rejects an invalid score-only verdict: %j',
+    async (score) => {
+      const provider = createMockProvider({
+        response: createProviderResponse({
+          output: { score },
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        }),
+      });
+
+      const result = await matchesLlmRubric('Expected output', 'Sample output', {
+        rubricPrompt: 'Grading prompt',
+        provider,
+      });
+
+      expect(result).toMatchObject({
+        pass: false,
+        score: 0,
+        metadata: { graderError: true },
+        tokensUsed: { total: 10, prompt: 5, completion: 5 },
+      });
+    },
+  );
+
   it('fails when the grader response omits both pass and score', async () => {
     vi.spyOn(Grader, 'callApi').mockResolvedValue({
       output: JSON.stringify({ reason: 'Looked fine to me' }),
@@ -2823,7 +2847,7 @@ describe('matchesLlmRubric missing-verdict fail-closed semantics', () => {
     });
 
     expect(result.pass).toBe(false);
-    expect(result.reason).toContain('neither a pass verdict nor a score');
+    expect(result.reason).toContain('neither a pass verdict nor a finite numeric score');
   });
 
   it('derives pass from a positive score when pass is omitted', async () => {
