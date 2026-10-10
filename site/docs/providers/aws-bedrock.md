@@ -1470,19 +1470,22 @@ providers:
 
 The adapters inherit [OpenAI provider options](./openai.md), including streaming,
 client-side functions, structured output, multimodal input, and request fields through
-`passthrough`. Support depends on the chosen model and API. Use `config.headers` for
-Bedrock guardrail headers and `passthrough` for additional body fields; do not put SDK
-`extra_headers` or `extra_body` wrappers inside the request body.
+`passthrough`. Support depends on the chosen model and API. For Runtime Chat models
+that support Bedrock Guardrails, such as GPT OSS, use `config.headers` for guardrail
+headers and `passthrough` for additional body fields. Guardrails do not apply to
+Runtime Responses; use Converse with a supported model when guardrails are required.
+Do not put SDK `extra_headers` or `extra_body` wrappers inside the request body.
 
 Runtime Responses supports stored conversations (`previous_response_id`) and streaming,
-but does not support `background: true`, server-side tools, or application inference
-profiles. Only the account's default project is supported. Set `passthrough.store: false`
+but does not support `background: true`, server-side tools, or GPT OSS models. Use
+Mantle Responses for GPT OSS. Neither Runtime Chat nor Responses supports application
+inference profiles. Only the account's default project is supported. Set `passthrough.store: false`
 when conversation storage is unnecessary. Keep a model ID on continuation requests.
 Automatic cost reporting requires known Bedrock rates and sufficient token usage details;
 use `inputCost` and `outputCost` for models whose rates are not yet in promptfoo.
 
 Check AWS's [Chat Completions](https://docs.aws.amazon.com/bedrock/latest/userguide/inference-chat-completions.html)
-and [Responses](https://docs.aws.amazon.com/bedrock/latest/userguide/bedrock-mantle.html)
+and [Responses](https://docs.aws.amazon.com/bedrock/latest/userguide/inference-responses-api.html)
 references for current endpoint and model support. Runtime does not expose `GET /models`;
 use `aws bedrock list-foundation-models` and `aws bedrock list-inference-profiles`.
 Existing `bedrock:mantle:<id>` and bare frontier-model selectors continue to use Mantle.
