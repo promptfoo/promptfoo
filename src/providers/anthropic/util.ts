@@ -1,5 +1,9 @@
 import { parseDataUrl } from '../../util/dataUrl';
-import { calculateCost as calculateCostBase } from '../shared';
+import {
+  calculateCost as calculateCostBase,
+  hasOpenAIToolMessages,
+  openaiChatToAnthropic,
+} from '../shared';
 import type Anthropic from '@anthropic-ai/sdk';
 
 import type { TokenUsage } from '../../types/index';
@@ -740,6 +744,24 @@ export function parseMessages(messages: string): {
   try {
     const parsed = JSON.parse(messages);
     if (Array.isArray(parsed)) {
+      // OpenAI-style history with tool calls: map to native
+      // tool_use/tool_result blocks so completed tool turns are preserved.
+      if (hasOpenAIToolMessages(parsed)) {
+        const systemMessage = parsed.find((msg) => msg.role === 'system');
+        const thinking = parsed.find((msg) => msg.thinking)?.thinking;
+        return {
+          extractedMessages: openaiChatToAnthropic(
+            parsed,
+            processAnthropicImageContent,
+          ) as Anthropic.MessageParam[],
+          system: systemMessage
+            ? Array.isArray(systemMessage.content)
+              ? systemMessage.content
+              : [{ type: 'text', text: systemMessage.content }]
+            : undefined,
+          thinking,
+        };
+      }
       const systemMessage = parsed.find((msg) => msg.role === 'system');
       const thinking = parsed.find((msg) => msg.thinking)?.thinking;
       return {
