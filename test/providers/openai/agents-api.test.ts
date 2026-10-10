@@ -4,7 +4,24 @@ import { OpenAiAgentsApiProvider } from '../../../src/providers/openai/agents-ap
 import { withGenAISpan } from '../../../src/providers/tracing';
 import { fetchWithRetries } from '../../../src/util/fetch/index';
 import { checkProviderApiKeys } from '../../../src/util/provider';
-import { mockProcessEnv } from '../../util/utils';
+import { createDeferred, mockProcessEnv } from '../../util/utils';
+
+const createGatewayKeyEnvironment = () => ({
+  OPENAI_API_KEY: 'ambient-openai-key',
+  GATEWAY_OPENAI_KEY: 'explicit-gateway-key',
+});
+
+const createGatewayHeaderConfig = () => ({
+  config: {
+    apiBaseUrl: 'https://gateway.example/v1',
+    headers: { 'api-key': 'gateway-credential' },
+  },
+});
+
+const createAgentModelContext = () => ({
+  vars: {},
+  prompt: { raw: 'hi', label: 'test', config: { agent: { model: 'gpt-5.6' } } },
+});
 
 vi.mock('../../../src/util/fetch/index', async (importOriginal) => ({
   ...(await importOriginal()),
@@ -20,9 +37,29 @@ const usage = {
   input_tokens: 100,
   output_tokens: 20,
   total_tokens: 120,
-  input_tokens_details: { cached_tokens: 40 },
+  input_tokens_details: { cached_tokens: 40, cache_write_tokens: 0 },
   output_tokens_details: { reasoning_tokens: 5 },
 };
+const usageCountFields = [
+  'input_tokens',
+  'output_tokens',
+  'total_tokens',
+  'cached_tokens',
+  'reasoning_tokens',
+] as const;
+/** Replace one count, including the cached and reasoning counts nested in usage details. */
+const usageWith = (
+  field: (typeof usageCountFields)[number],
+  count: unknown,
+  base: object = usage,
+) => ({
+  ...base,
+  ...(field === 'cached_tokens'
+    ? { input_tokens_details: { cached_tokens: count } }
+    : field === 'reasoning_tokens'
+      ? { output_tokens_details: { reasoning_tokens: count } }
+      : { [field]: count }),
+});
 const session = { id: 'sess_test', status: 'idle', agent: { model: 'gpt-6-astra' }, usage };
 const turn = { id: 'turn_test', status: 'completed', subagent_id: null, usage };
 const message = {
@@ -211,12 +248,7 @@ describe('OpenAiAgentsApiProvider', () => {
   });
 
   it('accepts a credential header for compatible gateways without an API key', async () => {
-    const result = await new OpenAiAgentsApiProvider('', {
-      config: {
-        apiBaseUrl: 'https://gateway.example/v1',
-        headers: { 'api-key': 'gateway-credential' },
-      },
-    }).callApi('hi');
+    const result = await new OpenAiAgentsApiProvider('', createGatewayHeaderConfig()).callApi('hi');
     expect(result.output).toBe('42');
     const headers = new Headers(vi.mocked(fetchWithRetries).mock.calls[0][1]!.headers);
     expect(headers.get('api-key')).toBe('gateway-credential');
@@ -264,10 +296,7 @@ describe('OpenAiAgentsApiProvider', () => {
     };
 
     beforeEach(() => {
-      mockProcessEnv({
-        OPENAI_API_KEY: 'ambient-openai-key',
-        GATEWAY_OPENAI_KEY: 'explicit-gateway-key',
-      });
+      mockProcessEnv(createGatewayKeyEnvironment());
     });
 
     // X-Gateway-Auth does not look like a credential name; any custom header may still authenticate.
@@ -495,10 +524,7 @@ describe('OpenAiAgentsApiProvider', () => {
         expected: 'Bearer ambient-openai-key',
       },
     ])('sends $description despite URL credentials', async ({ config, expected }) => {
-      mockProcessEnv({
-        OPENAI_API_KEY: 'ambient-openai-key',
-        GATEWAY_OPENAI_KEY: 'explicit-gateway-key',
-      });
+      mockProcessEnv(createGatewayKeyEnvironment());
       await new OpenAiAgentsApiProvider('', { config }).callApi('hi');
       const values = authorizations();
       expect(values.length).toBeGreaterThan(0);
@@ -508,10 +534,7 @@ describe('OpenAiAgentsApiProvider', () => {
     });
 
     it('lets a configured Authorization header win over keys and URL userinfo', async () => {
-      mockProcessEnv({
-        OPENAI_API_KEY: 'ambient-openai-key',
-        GATEWAY_OPENAI_KEY: 'explicit-gateway-key',
-      });
+      mockProcessEnv(createGatewayKeyEnvironment());
       const result = await new OpenAiAgentsApiProvider('', {
         config: {
           apiBaseUrl: 'https://gateway-user:p%40ss@gateway.example/v1',
@@ -617,20 +640,14 @@ describe('OpenAiAgentsApiProvider', () => {
 
   it.each(['', 'gpt-6-astra'])('preserves model suffix precedence (%s)', async (suffix) => {
     const agentProvider = new OpenAiAgentsApiProvider(suffix, { config: { apiKey: 'test-key' } });
-    await agentProvider.callApi('hi', {
-      vars: {},
-      prompt: { raw: 'hi', label: 'test', config: { agent: { model: 'gpt-5.6' } } },
-    });
+    await agentProvider.callApi('hi', createAgentModelContext());
     expect(
       JSON.parse(vi.mocked(fetchWithRetries).mock.calls[0][1]!.body as string).agent.model,
     ).toBe(suffix || 'gpt-5.6');
   });
 
   it('allows prompt config to override a configured model without a suffix', async () => {
-    await provider({ model: 'gpt-6-astra' }).callApi('hi', {
-      vars: {},
-      prompt: { raw: 'hi', label: 'test', config: { agent: { model: 'gpt-5.6' } } },
-    });
+    await provider({ model: 'gpt-6-astra' }).callApi('hi', createAgentModelContext());
 
     expect(
       JSON.parse(vi.mocked(fetchWithRetries).mock.calls[0][1]!.body as string).agent.model,
@@ -690,12 +707,7 @@ describe('OpenAiAgentsApiProvider', () => {
           .mock.calls.map(([, request]) => new Headers(request!.headers).get('Authorization')),
       );
     };
-    const headerGateway = new OpenAiAgentsApiProvider('', {
-      config: {
-        apiBaseUrl: 'https://gateway.example/v1',
-        headers: { 'api-key': 'gateway-credential' },
-      },
-    });
+    const headerGateway = new OpenAiAgentsApiProvider('', createGatewayHeaderConfig());
     expect(await authorizationsFor(headerGateway, {})).toEqual(new Set([null]));
     expect(await authorizationsFor(headerGateway, { apiKeyEnvar: 'PROMPT_OPENAI_KEY' })).toEqual(
       new Set(['Bearer prompt-envar-key']),
@@ -800,6 +812,28 @@ describe('OpenAiAgentsApiProvider', () => {
     describe.each([{ apiBaseUrl: 'https://prompt.example/v1' }, { apiHost: 'prompt.example' }])(
       'endpoint header isolation with %j',
       (endpointConfig) => {
+        const createCredentialFailureHandler =
+          (phase: string, credential: string) => (pathname: string, method: string) => {
+            if (method === 'DELETE') {
+              return apiError(400, `Cleanup failed: ${credential}`);
+            }
+            if (phase === 'creation' && method === 'POST') {
+              return apiError(400, `Invalid instructions: ${credential}`);
+            }
+            if (pathname.endsWith('/turns')) {
+              return json(
+                page([
+                  {
+                    ...turn,
+                    status: 'failed',
+                    error: { message: `Invalid instructions: ${credential}` },
+                  },
+                ]),
+              );
+            }
+            return undefined;
+          };
+
         const fakeJwt = 'eyJhbGciOiJub25lIn0.eyJzdWIiOiJvZmZsaW5lIn0.offline';
         const inheritedHeaders = {
           'X-Goog-Iap-Jwt-Assertion': fakeJwt,
@@ -917,26 +951,7 @@ describe('OpenAiAgentsApiProvider', () => {
           it.each(['creation', 'turn'])('redacts %s and cleanup errors', async (phase) => {
             const credential = 'offline-discarded-opaque-credential';
             mockProcessEnv({ REPLACEMENT_KEY: 'offline-replacement-key' });
-            mockApi((pathname, method) => {
-              if (method === 'DELETE') {
-                return apiError(400, `Cleanup failed: ${credential}`);
-              }
-              if (phase === 'creation' && method === 'POST') {
-                return apiError(400, `Invalid instructions: ${credential}`);
-              }
-              if (pathname.endsWith('/turns')) {
-                return json(
-                  page([
-                    {
-                      ...turn,
-                      status: 'failed',
-                      error: { message: `Invalid instructions: ${credential}` },
-                    },
-                  ]),
-                );
-              }
-              return undefined;
-            });
+            mockApi(createCredentialFailureHandler(phase, credential));
             const result = await provider({
               apiBaseUrl: 'https://gateway.example/v1',
               apiKey,
@@ -977,26 +992,7 @@ describe('OpenAiAgentsApiProvider', () => {
             'redacts credential components from %s and cleanup errors',
             async (phase) => {
               const credential = 'offline-url-credential';
-              mockApi((pathname, method) => {
-                if (method === 'DELETE') {
-                  return apiError(400, `Cleanup failed: ${credential}`);
-                }
-                if (phase === 'creation' && method === 'POST') {
-                  return apiError(400, `Invalid instructions: ${credential}`);
-                }
-                if (pathname.endsWith('/turns')) {
-                  return json(
-                    page([
-                      {
-                        ...turn,
-                        status: 'failed',
-                        error: { message: `Invalid instructions: ${credential}` },
-                      },
-                    ]),
-                  );
-                }
-                return undefined;
-              });
+              mockApi(createCredentialFailureHandler(phase, credential));
               const result = await provider({
                 apiBaseUrl: 'https://gateway.example/v1',
                 headers: { 'X-Gateway-Url': '{{ gatewayUrl }}' },
@@ -2186,18 +2182,20 @@ describe('OpenAiAgentsApiProvider', () => {
 
   it('honors eval cancellation that arrives while cleanup retries deletion', async () => {
     vi.useFakeTimers();
+    const deletionStarted = createDeferred<void>();
     let deletions = 0;
     mockApi((_pathname, method) => {
       if (method !== 'DELETE') {
         return undefined;
       }
       deletions++;
+      deletionStarted.resolve();
       return deletions < 3 ? apiError(409, 'session must be durably idle') : undefined;
     });
     const controller = new AbortController();
     const pending = provider().callApi('hi', undefined, { abortSignal: controller.signal });
     const rejected = expect(pending).rejects.toThrow('cancel eval');
-    await vi.waitFor(() => expect(deletions).toBeGreaterThan(0));
+    await deletionStarted.promise;
     controller.abort(new Error('cancel eval'));
     await vi.advanceTimersByTimeAsync(5_000);
     await rejected;
@@ -2243,6 +2241,34 @@ describe('OpenAiAgentsApiProvider', () => {
     );
   });
 
+  it.each([undefined, 0, 7])(
+    'prices Astra only with an explicit cache-write count (%s)',
+    async (cacheWriteTokens) => {
+      const sessionUsage = {
+        ...usage,
+        input_tokens_details: { cached_tokens: 40, cache_write_tokens: cacheWriteTokens },
+      };
+      mockApi((pathname) =>
+        pathname.endsWith('/sessions') || pathname.endsWith('/sess_test')
+          ? json({ ...session, usage: sessionUsage })
+          : undefined,
+      );
+
+      const result = await provider().callApi('hi');
+      expect(result.output).toBe('42');
+      expect(result.error).toBeUndefined();
+      expect(result.tokenUsage).toMatchObject({ prompt: 100, completion: 20, cached: 40 });
+      if (cacheWriteTokens === undefined) {
+        expect(result.cost).toBeUndefined();
+      } else {
+        expect(result.cost).toBeCloseTo(
+          ((60 - cacheWriteTokens) * 10 + 40 + cacheWriteTokens * 12.5 + 20 * 50) / 1e6,
+          10,
+        );
+      }
+    },
+  );
+
   it('uses the configured service tier when the final session omits it', async () => {
     const standard = await provider().callApi('hi');
     const priority = await provider({
@@ -2279,6 +2305,68 @@ describe('OpenAiAgentsApiProvider', () => {
     const result = await provider({ usageTimeoutMs: 0 }).callApi('hi');
 
     expect(result.tokenUsage).toMatchObject({ prompt: 100, completion: 20, total: 120 });
+    expect(result.metadata).not.toHaveProperty('usageUnavailable');
+  });
+
+  it.each(
+    usageCountFields.flatMap((field) =>
+      [-1, 0.5, Number.MAX_SAFE_INTEGER + 1, '20'].map((count) => ({ field, count })),
+    ),
+  )('rejects $field $count and falls back to valid root-turn usage', async ({ field, count }) => {
+    const invalid = usageWith(field, count);
+    let rootUsage: object = usage;
+    mockApi((pathname, method) => {
+      if (method === 'DELETE') {
+        return undefined;
+      }
+      if (pathname.endsWith('/turns')) {
+        return json(page([{ ...turn, usage: rootUsage }]));
+      }
+      return pathname.endsWith('/sessions') || pathname.endsWith('/sess_test')
+        ? json({ ...session, usage: invalid })
+        : undefined;
+    });
+
+    const fallback = await provider({ usageTimeoutMs: 0 }).callApi('hi');
+    expect(fallback.tokenUsage).toEqual({
+      prompt: 100,
+      completion: 20,
+      total: 120,
+      cached: 40,
+      completionDetails: { reasoning: 5 },
+    });
+    expect(fallback.cost).toBeGreaterThan(0);
+
+    rootUsage = invalid;
+    const unavailable = await provider({ usageTimeoutMs: 0 }).callApi('hi');
+    expect(unavailable).toMatchObject({ output: '42', metadata: { usageUnavailable: true } });
+    expect(unavailable.tokenUsage).toBeUndefined();
+    expect(unavailable.cost).toBeUndefined();
+  });
+
+  it('accepts zero, the largest safe count, and null optional counts', async () => {
+    mockApi((pathname, method) =>
+      method !== 'DELETE' && (pathname.endsWith('/sessions') || pathname.endsWith('/sess_test'))
+        ? json({
+            ...session,
+            usage: {
+              input_tokens: 0,
+              output_tokens: Number.MAX_SAFE_INTEGER,
+              total_tokens: Number.MAX_SAFE_INTEGER,
+              input_tokens_details: { cached_tokens: null },
+              output_tokens_details: { reasoning_tokens: null },
+            },
+          })
+        : undefined,
+    );
+    const result = await provider({ usageTimeoutMs: 0 }).callApi('hi');
+    // Null optional counts are reported as absent, never as null.
+    expect(result.tokenUsage).toEqual({
+      prompt: 0,
+      completion: Number.MAX_SAFE_INTEGER,
+      total: Number.MAX_SAFE_INTEGER,
+      completionDetails: {},
+    });
     expect(result.metadata).not.toHaveProperty('usageUnavailable');
   });
 
@@ -2458,11 +2546,33 @@ describe('OpenAiAgentsApiProvider', () => {
       expect(result.metadata).not.toHaveProperty('usageFromRootTurn');
     });
 
+    it.each(usageCountFields)(
+      'omits subagent usage when the sum of %s is not a safe integer',
+      async (field) => {
+        const zero = { input_tokens: 0, output_tokens: 0, total_tokens: 0 };
+        mockSubagentTurns((id) => {
+          const count = id === 'subagent_a' ? Number.MAX_SAFE_INTEGER : 1;
+          return json(page([{ ...subagentTurn(id, 0, 0), usage: usageWith(field, count, zero) }]));
+        });
+        const result = await provider().callApi('hi');
+        expect(result.tokenUsage).toMatchObject({ prompt: 100, completion: 20, total: 120 });
+        expect(result.metadata).toMatchObject({ usageMayExcludeSubagents: true });
+        expect(result.metadata).not.toHaveProperty('subagentUsage');
+      },
+    );
+
     it.each([
       { reason: 'a failed turns read', respond: () => apiError(403, 'missing api.agents.read') },
       {
+        // The valid turn would otherwise be reported as a partial sum.
         reason: 'a turn without usage',
-        respond: () => json(page([{ ...subagentTurn('turn_a1', 1, 1), usage: null }])),
+        respond: () =>
+          json(
+            page([
+              subagentTurn('turn_a1', 1, 1),
+              { ...subagentTurn('turn_a2', 1, 1), usage: null },
+            ]),
+          ),
       },
     ])(
       'keeps marked session totals and omits subagent usage after $reason',

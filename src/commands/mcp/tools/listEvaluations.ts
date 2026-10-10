@@ -60,7 +60,10 @@ export function registerListEvaluationsTool(server: McpServer) {
             return createdAt > dayAgo;
           }).length,
           datasetId: datasetId || 'all',
-          cacheStats: evaluationCache.getStats(),
+          cacheStats: {
+            size: evaluationCache.size,
+            calculatedSize: evaluationCache.calculatedSize,
+          },
         };
 
         return createToolResponse('list_evaluations', true, {

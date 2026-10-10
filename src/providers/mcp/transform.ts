@@ -4,9 +4,8 @@ import {
   applyQueryParams,
   getAuthHeaders,
   getAuthQueryParams,
-  getOAuthToken,
+  getOAuthTokenWithExpiry,
   renderAuthVars,
-  requiresAsyncAuth,
 } from './util';
 import type { McpServerConfig as ClaudeCodeMcpServerConfig } from '@anthropic-ai/claude-agent-sdk';
 import type Anthropic from '@anthropic-ai/sdk';
@@ -28,6 +27,9 @@ import type {
 export function transformMCPToolsToOpenAi(tools: MCPTool[]): OpenAiTool[] {
   return tools.map((tool) => {
     const schema: MCPToolInputSchema = tool.inputSchema;
+    // Default to empty properties for missing or invalid schemas.
+    // Also handle schemas that don't have a properties field.
+    // This shouldn't normally happen with MCP SDK, but handle it gracefully.
     let properties: Record<string, any> = {};
     let required: string[] | undefined = undefined;
     let additionalProperties: boolean | Record<string, any> | undefined = undefined;
@@ -41,13 +43,6 @@ export function transformMCPToolsToOpenAi(tools: MCPTool[]): OpenAiTool[] {
       if ('additionalProperties' in schema) {
         additionalProperties = schema.additionalProperties;
       }
-    } else if (schema && typeof schema === 'object') {
-      // Schema exists but doesn't have properties field
-      // This shouldn't normally happen with MCP SDK, but handle it gracefully
-      properties = {};
-    } else {
-      // No schema or invalid schema
-      properties = {};
     }
 
     return {
@@ -124,16 +119,22 @@ export async function transformMCPConfigToClaudeCode(
     return {};
   }
 
-  const serverConfigs = [...(config.servers ?? [])];
-  if (config.server) {
-    serverConfigs.push(config.server);
-  }
-
+  const serverConfigs = getServerConfigs(config);
   const servers = await Promise.all(
     serverConfigs.map((server) => transformMCPServerConfigToClaudeCode(server)),
   );
+  return Object.fromEntries(
+    servers.map((server, index) => [getClaudeCodeServerName(serverConfigs[index]), server]),
+  );
+}
 
-  return Object.fromEntries(servers);
+function getServerConfigs(config: McpConfigParsed): MCPServerConfig[] {
+  return [...(config.servers ?? []), ...(config.server ? [config.server] : [])];
+}
+
+// Preserve legacy names so existing tool allow and deny rules keep matching.
+function getClaudeCodeServerName({ name, url, command }: MCPServerConfig): string {
+  return name ?? url ?? command ?? 'default';
 }
 
 export function validateMCPConfigForClaudeCode(input: unknown): McpConfigParsed {
@@ -146,34 +147,51 @@ export function validateMCPConfigForClaudeCode(input: unknown): McpConfigParsed 
     return config;
   }
 
-  const hasUnsupportedExclusions =
-    config.exclude_tools !== undefined &&
-    (!Array.isArray(config.exclude_tools) || config.exclude_tools.length > 0);
-  if (config.tools !== undefined || hasUnsupportedExclusions) {
+  if (config.tools !== undefined || config.exclude_tools?.length) {
     throw new Error(
       'Claude Agent SDK MCP integration does not support MCP tool allowlists or non-empty exclusions; remove `tools`/`exclude_tools` or disable MCP for this provider.',
     );
+  }
+
+  const namespaces = new Map<string, number>();
+  for (const [index, server] of getServerConfigs(config).entries()) {
+    const name = getClaudeCodeServerName(server);
+    // Match the SDK's tool-name normalization without renaming the configured servers.
+    let namespace = name.replace(/[^a-zA-Z0-9_-]/g, '_');
+    if (name.startsWith('claude.ai ')) {
+      namespace = namespace.replace(/_+/g, '_').replace(/^_|_$/g, '');
+    }
+    const previous = namespaces.get(namespace);
+    if (previous !== undefined) {
+      // Names can be credential-bearing URLs; identify the entries without echoing them.
+      throw new Error(
+        `Claude Agent SDK MCP servers ${previous + 1} and ${index + 1} have colliding tool names; give each server a unique \`name\` using letters, numbers, hyphens, or underscores.`,
+      );
+    }
+    namespaces.set(namespace, index);
   }
   return config;
 }
 
 async function transformMCPServerConfigToClaudeCode(
   config: MCPServerConfig,
-): Promise<[string, ClaudeCodeMcpServerConfig]> {
-  const key = config.name ?? config.url ?? config.command ?? 'default';
-  let out: ClaudeCodeMcpServerConfig | undefined;
+): Promise<ClaudeCodeMcpServerConfig> {
+  let out: ClaudeCodeMcpServerConfig;
 
   if (config.url) {
     // Render environment variables in auth config
     const renderedConfig = renderAuthVars(config);
 
-    // Handle OAuth token fetching if needed
-    let oauthToken: string | undefined;
-    if (requiresAsyncAuth(renderedConfig) && renderedConfig.auth?.type === 'oauth') {
-      oauthToken = await getOAuthToken(
-        renderedConfig.auth as MCPOAuthClientCredentialsAuth | MCPOAuthPasswordAuth,
-      );
-    }
+    // The Claude Agent SDK takes static headers, so fetch one OAuth token up front
+    const oauthToken =
+      renderedConfig.auth?.type === 'oauth'
+        ? (
+            await getOAuthTokenWithExpiry(
+              renderedConfig.auth as MCPOAuthClientCredentialsAuth | MCPOAuthPasswordAuth,
+              config.url,
+            )
+          ).accessToken
+        : undefined;
 
     // Apply query params for api_key with query placement
     const queryParams = getAuthQueryParams(renderedConfig);
@@ -204,5 +222,5 @@ async function transformMCPServerConfigToClaudeCode(
     throw new Error('MCP configuration cannot be converted to Claude Agent SDK MCP server config');
   }
 
-  return [key, out];
+  return out;
 }

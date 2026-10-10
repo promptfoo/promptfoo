@@ -11,13 +11,15 @@
  * - Provider inheritance
  */
 
-import { SpanKind, SpanStatusCode } from '@opentelemetry/api';
-import { InMemorySpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
-import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
+import { SpanKind, SpanStatusCode, trace } from '@opentelemetry/api';
+import {
+  InMemorySpanExporter,
+  NodeTracerProvider,
+  SimpleSpanProcessor,
+} from '@opentelemetry/sdk-trace-node';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   GenAIAttributes,
-  getCurrentTraceId,
   getTraceparent,
   PromptfooAttributes,
   withGenAISpan,
@@ -303,7 +305,7 @@ describe('Phase 5: Provider Instrumentation Validation', () => {
       await withGenAISpan(
         { system: 'openai', operationName: 'chat', model: 'gpt-4', providerId: 'openai:gpt-4' },
         async () => {
-          capturedTraceId = getCurrentTraceId();
+          capturedTraceId = trace.getActiveSpan()?.spanContext().traceId;
           return { output: 'test' };
         },
       );

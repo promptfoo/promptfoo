@@ -382,6 +382,10 @@ async function readJsonTestCases(resolvedVarsPath: string): Promise<TestCase[]> 
   return parseJsonTestCases(fileContent, resolvedVarsPath);
 }
 
+function withDefaultDescription(testCase: TestCase, index: number): TestCase {
+  return { ...testCase, description: testCase.description || `Row #${index + 1}` };
+}
+
 function parseJsonTestCases(fileContent: string, filePath: string): TestCase[] {
   let jsonData: any;
   try {
@@ -392,10 +396,7 @@ function parseJsonTestCases(fileContent: string, filePath: string): TestCase[] {
     );
   }
   const testCases: TestCase[] = Array.isArray(jsonData) ? jsonData : [jsonData];
-  return testCases.map((item, idx) => ({
-    ...item,
-    description: item.description || `Row #${idx + 1}`,
-  }));
+  return testCases.map(withDefaultDescription);
 }
 
 async function readJsonlTestCases(resolvedVarsPath: string): Promise<TestCase[]> {
@@ -433,10 +434,7 @@ function parseJsonlLines(fileContent: string, filePath: string): TestCase[] {
 }
 
 function parseJsonlTestCases(fileContent: string, filePath: string): TestCase[] {
-  return parseJsonlLines(fileContent, filePath).map((testCase, idx) => ({
-    ...testCase,
-    description: testCase.description || `Row #${idx + 1}`,
-  }));
+  return parseJsonlLines(fileContent, filePath).map(withDefaultDescription);
 }
 
 function parseYamlTestCases(fileContent: string): TestCase[] {
@@ -444,10 +442,7 @@ function parseYamlTestCases(fileContent: string): TestCase[] {
   const testCases: TestCase[] = Array.isArray(rawContent)
     ? (rawContent as TestCase[])
     : [rawContent as TestCase];
-  return testCases.map((item, idx) => ({
-    ...item,
-    description: item.description || `Row #${idx + 1}`,
-  }));
+  return testCases.map(withDefaultDescription);
 }
 
 async function loadTestWithVars(
@@ -511,21 +506,44 @@ async function readTestWithEnv(
   isDefaultTest: boolean,
   env: EnvOverrides | undefined,
   loadProviders = true,
+  // Bare vars-file references and providers in imported rows use the tests file's directory.
+  sourceBasePath = basePath,
 ): Promise<TestCase> {
   if (typeof test === 'object' && isRemoteTestCase(test)) {
     return test as TestCase;
   }
   let testCase: TestCase;
-  let effectiveBasePath = basePath;
+  let effectiveBasePath = sourceBasePath;
 
   if (typeof test === 'string') {
-    const testFilePath = path.resolve(basePath, test);
+    const testFilePath = path.resolve(sourceBasePath, test);
     effectiveBasePath = path.dirname(testFilePath);
     const rawContent = loadYaml(await fsPromises.readFile(testFilePath, 'utf-8'));
     const rawTestCase = maybeLoadConfigFromExternalFile(rawContent) as TestCaseWithVarsFile;
     testCase = await loadTestWithVars(rawTestCase, effectiveBasePath);
   } else {
-    testCase = await loadTestWithVars(test, basePath);
+    testCase = await loadTestWithVars(test, sourceBasePath);
+  }
+
+  const providerId =
+    typeof testCase.provider === 'string' ? testCase.provider : testCase.provider?.id;
+  // Provider construction is deferred until after parsing. Keep the source directory
+  // in replayable rows without rewriting bare provider IDs.
+  if (
+    effectiveBasePath !== basePath &&
+    typeof providerId === 'string' &&
+    !isApiProvider(testCase.provider)
+  ) {
+    testCase.metadata = {
+      ...testCase.metadata,
+      __promptfoo: {
+        ...testCase.metadata?.__promptfoo,
+        providerBasePath: path.resolve(effectiveBasePath),
+      },
+    };
+  }
+  if (typeof testCase.metadata?.__promptfoo?.providerBasePath === 'string') {
+    effectiveBasePath = testCase.metadata.__promptfoo.providerBasePath;
   }
 
   if (!loadProviders) {
@@ -545,18 +563,21 @@ async function readTestWithEnv(
   }
 
   if (loadProviders && testCase.provider && typeof testCase.provider !== 'function') {
-    // Load provider - resolve paths relative to the test case's location
-    if (typeof testCase.provider === 'string') {
-      testCase.provider = await loadApiProvider(testCase.provider, {
-        basePath: effectiveBasePath,
-        env,
-      });
-    } else if (typeof testCase.provider.id === 'string') {
-      testCase.provider = await loadApiProvider(testCase.provider.id, {
-        options: testCase.provider as ProviderOptions,
-        basePath: effectiveBasePath,
-        env,
-      });
+    // Inherit the suite environment without turning it into an explicit override
+    // of defaults in a provider file. Resolve paths relative to the test case.
+    const provider = testCase.provider;
+    if (typeof provider === 'string') {
+      testCase.provider = await cliState.withEnv(env, () =>
+        loadApiProvider(provider, { basePath: effectiveBasePath }),
+      );
+    } else if (typeof provider.id === 'string') {
+      const providerPath = provider.id;
+      testCase.provider = await cliState.withEnv(env, () =>
+        loadApiProvider(providerPath, {
+          options: provider as ProviderOptions,
+          basePath: effectiveBasePath,
+        }),
+      );
     }
   }
 
@@ -709,7 +730,16 @@ async function loadTestsFromGlobWithEnv(
         testCases = [testCases];
       }
       for (const testCase of testCases) {
-        ret.push(await readTestWithEnv(testCase, basePath, false, env, loadProviders));
+        ret.push(
+          await readTestWithEnv(
+            testCase,
+            basePath,
+            false,
+            env,
+            loadProviders,
+            path.dirname(testFile),
+          ),
+        );
       }
     }
   }
@@ -756,16 +786,21 @@ async function readTestsWithEnv(
   };
 
   if (typeof tests === 'string') {
-    tests = renderEnvOnlyInObject(tests);
-    if (tests.startsWith('az://')) {
-      return loadStandalone(tests);
+    const source = renderEnvOnlyInObject(tests);
+    if (source.startsWith('az://')) {
+      return loadStandalone(source);
     }
     // Points to a tests file with multiple test cases
-    if (tests.endsWith('yaml') || tests.endsWith('yml')) {
-      return loadTestsFromGlobWithEnv(tests, basePath, env, loadProviders);
+    if (source.endsWith('yaml') || source.endsWith('yml')) {
+      return loadTestsFromGlobWithEnv(source, basePath, env, loadProviders);
     }
-    // Points to a tests.{csv,json,yaml,yml,py,js,ts,mjs} or Google Sheet
-    return loadStandalone(tests);
+    const withoutScheme = source.replace(/^file:\/\//, '');
+    if (!hasGlobMagic(withoutScheme) || fs.existsSync(path.resolve(basePath, withoutScheme))) {
+      // Preserve standalone parsing for literal files, including names with glob characters.
+      return loadStandalone(source);
+    }
+    // Use the original reference so the array loader renders env templates consistently.
+    tests = [tests];
   } else if (
     typeof tests === 'object' &&
     tests !== null &&
@@ -941,7 +976,11 @@ function resolveTestsFileReference(reference: string, basePath: string): string[
  * unreadable file is left to the loader to report, since this runs only to decide what
  * to watch.
  */
-function collectNestedFileReferences(testsFile: string, basePath: string): string[] {
+function collectNestedFileReferences(
+  testsFile: string,
+  basePath: string,
+  varsBasePath: string,
+): string[] {
   const ext = parsePath(testsFile).ext.slice(1).toLowerCase();
   if (!['yaml', 'yml', 'json', 'jsonl'].includes(ext)) {
     return [];
@@ -954,7 +993,31 @@ function collectNestedFileReferences(testsFile: string, basePath: string): strin
         : ext === 'jsonl'
           ? parseJsonlLines(raw, testsFile)
           : loadYaml(raw);
-    return collectConfigFileReferences(parsed, basePath);
+    const rows = Array.isArray(parsed) ? parsed : [parsed];
+    const varsFiles = rows.flatMap((row) =>
+      row && (typeof row.vars === 'string' || Array.isArray(row.vars))
+        ? resolveTestsWatchPaths([{ vars: row.vars }], varsBasePath)
+        : [],
+    );
+    // Script providers use the row's directory; provider config files and inline
+    // vars still use the config directory. Rewrite only the script ID for collection.
+    const scopedRows = rows.map((row) => {
+      const provider = row?.provider;
+      const id = typeof provider === 'string' ? provider : provider?.id;
+      if (typeof id !== 'string' || !id.startsWith('file://')) {
+        return row;
+      }
+      const script = stripFunctionSuffix(renderEnvOnlyInObject(id).slice('file://'.length));
+      if (!script.endsWith('.py') && !isJavascriptFile(script)) {
+        return row;
+      }
+      const resolvedId = resolveVarsFileReferences(id, varsBasePath);
+      return {
+        ...row,
+        provider: typeof provider === 'string' ? resolvedId : { ...provider, id: resolvedId },
+      };
+    });
+    return [...collectConfigFileReferences(scopedRows, basePath), ...varsFiles];
   } catch {
     return [];
   }
@@ -1012,9 +1075,19 @@ export function resolveTestsWatchPaths(
       // A tests file may itself point at more files, e.g. a case with
       // `vars: {data: file://vars.yaml}`. The loader reads those before the resolved
       // config is built, so collect them here as well.
+      const source = renderEnvOnlyInObject(entry).replace(/^file:\/\//, '');
+      const useSourceDirectory =
+        Array.isArray(tests) ||
+        source.endsWith('yaml') ||
+        source.endsWith('yml') ||
+        (hasGlobMagic(source) && !fs.existsSync(path.resolve(basePath, source)));
       return resolveTestsFileReference(entry, basePath).flatMap((file) => [
         file,
-        ...collectNestedFileReferences(file, basePath),
+        ...collectNestedFileReferences(
+          file,
+          basePath,
+          useSourceDirectory ? path.dirname(file) : basePath,
+        ),
       ]);
     }
     if (!entry || typeof entry !== 'object') {

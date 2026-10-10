@@ -1,4 +1,5 @@
 import logger from '../../logger';
+import { normalizeFinishReason } from '../../util/finishReason';
 import { formatOpenAiError, getOpenAICompletionTokenDetails } from '../openai/util';
 
 import type { ProviderResponse, TokenUsage } from '../../types/index';
@@ -14,7 +15,7 @@ import type {
  * Extract user-facing metadata from response data.
  * Only includes fields that are useful for users viewing eval results.
  */
-function extractMetadata(data: any, processedOutput: ProcessedOutput): Record<string, any> {
+function extractMetadata(data: any, processedOutput?: ProcessedOutput): Record<string, any> {
   const metadata: Record<string, any> = {};
 
   // Response ID - for linking to OpenAI dashboard
@@ -27,9 +28,17 @@ function extractMetadata(data: any, processedOutput: ProcessedOutput): Record<st
     metadata.model = data.model;
   }
 
+  if (typeof data.status === 'string' && data.status) {
+    metadata.responseStatus = data.status;
+  }
+  if (typeof data.incomplete_details?.reason === 'string' && data.incomplete_details.reason) {
+    metadata.incompleteReason = data.incomplete_details.reason;
+  }
+
   // Deep research annotations (citations)
-  if (Array.isArray(processedOutput.annotations) && processedOutput.annotations.length > 0) {
-    metadata.annotations = processedOutput.annotations;
+  const annotations = processedOutput?.annotations;
+  if (Array.isArray(annotations) && annotations.length > 0) {
+    metadata.annotations = annotations;
   }
 
   return metadata;
@@ -39,7 +48,7 @@ function extractMetadata(data: any, processedOutput: ProcessedOutput): Record<st
  * Extract token usage from response data, handling both OpenAI Chat Completions format
  * (prompt_tokens, completion_tokens) and Azure Responses format (input_tokens, output_tokens)
  */
-function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
+export function getResponsesTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
   if (data.usage) {
     if (cached) {
       const totalTokens =
@@ -89,6 +98,12 @@ export class ResponsesProcessor {
       };
     }
 
+    // Keep usable partial output while exposing why generation stopped.
+    const finishReason =
+      data.status === 'incomplete'
+        ? normalizeFinishReason(data.incomplete_details?.reason)
+        : undefined;
+
     try {
       const context: ProcessorContext = {
         config: requestConfig,
@@ -108,12 +123,13 @@ export class ResponsesProcessor {
       if (processedOutput.isRefusal) {
         return {
           output: processedOutput.refusal,
-          tokenUsage: getTokenUsage(data, cached),
+          tokenUsage: getResponsesTokenUsage(data, cached),
           isRefusal: true,
           cached,
           ...(cost === undefined ? {} : { cost }),
           raw: data,
           metadata: extractMetadata(data, processedOutput),
+          ...(finishReason && { finishReason }),
         };
       }
 
@@ -133,11 +149,12 @@ export class ResponsesProcessor {
 
       const result: ProviderResponse = {
         output: finalOutput,
-        tokenUsage: getTokenUsage(data, cached),
+        tokenUsage: getResponsesTokenUsage(data, cached),
         cached,
         ...(cost === undefined ? {} : { cost }),
         raw: data,
         metadata: extractMetadata(data, processedOutput),
+        ...(finishReason && { finishReason }),
       };
 
       // Add annotations if present (for deep research citations)
@@ -150,6 +167,13 @@ export class ResponsesProcessor {
     } catch (err) {
       return {
         error: `Error parsing response: ${String(err)}\nResponse: ${JSON.stringify(data)}`,
+        ...(data.status === 'incomplete' && {
+          tokenUsage: getResponsesTokenUsage(data, cached),
+          cached,
+          raw: data,
+          metadata: extractMetadata(data),
+          ...(finishReason && { finishReason }),
+        }),
       };
     }
   }
@@ -219,25 +243,79 @@ export class ResponsesProcessor {
         return await this.processMessage(item, context);
 
       case 'tool_result':
-        return this.processToolResult(item);
+        return Promise.resolve({
+          content: JSON.stringify(item),
+        });
 
-      case 'reasoning':
-        return this.processReasoning(item, context);
+      case 'reasoning': {
+        if (context.suppressReasoningOutput) {
+          return Promise.resolve({});
+        }
 
-      case 'web_search_call':
-        return this.processWebSearch(item);
+        if (!item.summary || !item.summary.length) {
+          return Promise.resolve({});
+        }
 
-      case 'code_interpreter_call':
-        return this.processCodeInterpreter(item);
+        const reasoningText = `Reasoning: ${item.summary.map((s: { text: string }) => s.text).join('\n')}`;
+        return Promise.resolve({ content: reasoningText });
+      }
 
-      case 'mcp_list_tools':
-        return this.processMcpListTools(item);
+      case 'web_search_call': {
+        let content = '';
+        const action = item.action;
 
-      case 'mcp_call':
-        return this.processMcpCall(item);
+        if (action) {
+          if (action.type === 'search') {
+            content = `Web Search: "${action.query}"`;
+          } else if (action.type === 'open_page') {
+            content = `Opening page: ${action.url}`;
+          } else if (action.type === 'find_in_page') {
+            content = `Finding in page: "${action.query}"`;
+          } else {
+            content = `Web action: ${action.type}`;
+          }
+        } else {
+          content = `Web Search Call (status: ${item.status || 'unknown'})`;
+        }
 
-      case 'mcp_approval_request':
-        return this.processMcpApprovalRequest(item);
+        if (item.status === 'failed' && item.error) {
+          content += ` (Error: ${item.error})`;
+        }
+
+        return Promise.resolve({ content });
+      }
+
+      case 'code_interpreter_call': {
+        let content = `Code Interpreter: ${item.code || 'Running code...'}`;
+
+        if (item.status === 'failed' && item.error) {
+          content += ` (Error: ${item.error})`;
+        }
+
+        return Promise.resolve({ content });
+      }
+
+      case 'mcp_list_tools': {
+        const content = `MCP Tools from ${item.server_label}: ${JSON.stringify(item.tools, null, 2)}`;
+        return Promise.resolve({ content });
+      }
+
+      case 'mcp_call': {
+        let content: string;
+
+        if (item.error) {
+          content = `MCP Tool Error (${item.name}): ${item.error}`;
+        } else {
+          content = `MCP Tool Result (${item.name}): ${item.output}`;
+        }
+
+        return Promise.resolve({ content });
+      }
+
+      case 'mcp_approval_request': {
+        const content = `MCP Approval Required for ${item.server_label}.${item.name}: ${item.arguments}`;
+        return Promise.resolve({ content });
+      }
 
       default:
         logger.debug(`Unknown output item type: ${item.type}`);
@@ -327,81 +405,5 @@ export class ResponsesProcessor {
       isRefusal,
       annotations: annotations.length > 0 ? annotations : undefined,
     };
-  }
-
-  private processToolResult(item: any): Promise<{ content?: string }> {
-    return Promise.resolve({
-      content: JSON.stringify(item),
-    });
-  }
-
-  private processReasoning(item: any, context: ProcessorContext): Promise<{ content?: string }> {
-    if (context.suppressReasoningOutput) {
-      return Promise.resolve({});
-    }
-
-    if (!item.summary || !item.summary.length) {
-      return Promise.resolve({});
-    }
-
-    const reasoningText = `Reasoning: ${item.summary.map((s: { text: string }) => s.text).join('\n')}`;
-    return Promise.resolve({ content: reasoningText });
-  }
-
-  private processWebSearch(item: any): Promise<{ content?: string }> {
-    let content = '';
-    const action = item.action;
-
-    if (action) {
-      if (action.type === 'search') {
-        content = `Web Search: "${action.query}"`;
-      } else if (action.type === 'open_page') {
-        content = `Opening page: ${action.url}`;
-      } else if (action.type === 'find_in_page') {
-        content = `Finding in page: "${action.query}"`;
-      } else {
-        content = `Web action: ${action.type}`;
-      }
-    } else {
-      content = `Web Search Call (status: ${item.status || 'unknown'})`;
-    }
-
-    if (item.status === 'failed' && item.error) {
-      content += ` (Error: ${item.error})`;
-    }
-
-    return Promise.resolve({ content });
-  }
-
-  private processCodeInterpreter(item: any): Promise<{ content?: string }> {
-    let content = `Code Interpreter: ${item.code || 'Running code...'}`;
-
-    if (item.status === 'failed' && item.error) {
-      content += ` (Error: ${item.error})`;
-    }
-
-    return Promise.resolve({ content });
-  }
-
-  private processMcpListTools(item: any): Promise<{ content?: string }> {
-    const content = `MCP Tools from ${item.server_label}: ${JSON.stringify(item.tools, null, 2)}`;
-    return Promise.resolve({ content });
-  }
-
-  private processMcpCall(item: any): Promise<{ content?: string }> {
-    let content: string;
-
-    if (item.error) {
-      content = `MCP Tool Error (${item.name}): ${item.error}`;
-    } else {
-      content = `MCP Tool Result (${item.name}): ${item.output}`;
-    }
-
-    return Promise.resolve({ content });
-  }
-
-  private processMcpApprovalRequest(item: any): Promise<{ content?: string }> {
-    const content = `MCP Approval Required for ${item.server_label}.${item.name}: ${item.arguments}`;
-    return Promise.resolve({ content });
   }
 }
