@@ -18,7 +18,6 @@ import { cn } from '@app/lib/utils';
 import { callApi } from '@app/utils/api';
 import { formatDuration } from '@app/utils/date';
 import { normalizeMediaText, resolveAudioSource, resolveImageSource } from '@app/utils/media';
-import { getActualPrompt } from '@app/utils/providerResponse';
 import {
   getIncurredTokenAccounting,
   getPrimaryTokenUsageLabel,
@@ -28,6 +27,7 @@ import { FILE_METADATA_KEY, HUMAN_ASSERTION_TYPE } from '@promptfoo/providers/co
 import { EVAL_TABLE_MAX_PAGE_SIZE } from '@promptfoo/types/evalConstants';
 import { countedComponentResults } from '@promptfoo/types/results';
 import invariant from '@promptfoo/util/invariant';
+import { getActualPrompt } from '@promptfoo/util/providerResponse';
 import {
   createColumnHelper,
   flexRender,
