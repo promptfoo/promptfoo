@@ -2462,71 +2462,77 @@ describe('ResultsTable fetchEvalData pagination filters', () => {
     vi.clearAllMocks();
   });
 
-  it('should call fetchEvalData with only applied filters when pagination changes', async () => {
-    const user = userEvent.setup();
-    const mockUseTableStore = vi.mocked(useTableStore);
-    const mockFetchEvalData = vi.fn();
-    mockUseTableStore.mockImplementation(() =>
-      createTableStore({
-        table: {
-          head: { prompts: [], vars: [] },
-          body: [],
-        },
-        fetchEvalData: mockFetchEvalData,
-        isFetching: false,
-        filteredResultsCount: 100,
-        totalResultsCount: 100,
-        filters: {
-          values: {
-            filter1: {
-              id: 'filter1',
-              type: 'metric',
-              operator: 'equals',
-              value: 'metric1',
-              field: 'metric1',
-              logicOperator: 'or',
-            },
-            filter2: {
-              id: 'filter2',
-              type: 'metric',
-              operator: 'equals',
-              value: '',
-              logicOperator: 'or',
-            },
+  it.each([undefined, 'metric1'])(
+    'should call fetchEvalData with only applied filters when pagination changes (field=%s)',
+    async (field) => {
+      const user = userEvent.setup();
+      const mockUseTableStore = vi.mocked(useTableStore);
+      const mockFetchEvalData = vi.fn();
+      mockUseTableStore.mockImplementation(() =>
+        createTableStore({
+          table: {
+            head: { prompts: [], vars: [] },
+            body: [],
           },
-          appliedCount: 1,
-          options: createMetricOptions(),
-        },
-      }),
-    );
+          fetchEvalData: mockFetchEvalData,
+          isFetching: false,
+          filteredResultsCount: 100,
+          totalResultsCount: 100,
+          filters: {
+            values: {
+              filter1: {
+                id: 'filter1',
+                type: 'metric',
+                operator: 'equals',
+                value: 'metric1',
+                ...(field === undefined ? {} : { field }),
+                logicOperator: 'or',
+              },
+              filter2: {
+                id: 'filter2',
+                type: 'metric',
+                operator: 'equals',
+                value: '',
+                logicOperator: 'or',
+              },
+            },
+            appliedCount: 1,
+            options: createMetricOptions(),
+          },
+        }),
+      );
 
-    renderWithProviders(<ResultsTable {...defaultProps} debouncedSearchText="" />);
+      renderWithProviders(<ResultsTable {...defaultProps} debouncedSearchText="" />);
 
-    const newPageIndex = 1;
+      const newPageIndex = 1;
 
-    mockFetchEvalData.mockClear();
+      mockFetchEvalData.mockClear();
 
-    await user.click(screen.getByRole('button', { name: 'Next page' }));
+      await user.click(screen.getByRole('button', { name: 'Next page' }));
 
-    expect(mockFetchEvalData).toHaveBeenCalledTimes(1);
-    expect(mockFetchEvalData).toHaveBeenCalledWith('123', {
-      pageIndex: newPageIndex,
-      pageSize: 50,
-      filterMode: 'all',
-      searchText: '',
-      filters: [
-        {
-          id: 'filter1',
-          type: 'metric',
-          operator: 'equals',
-          value: 'metric1',
-          field: 'metric1',
-          logicOperator: 'or',
-        },
-      ],
-      skipSettingEvalId: true,
-    });
-  });
+      expect(mockFetchEvalData).toHaveBeenCalledTimes(1);
+      expect(mockFetchEvalData).toHaveBeenCalledWith('123', {
+        pageIndex: newPageIndex,
+        pageSize: 50,
+        filterMode: 'all',
+        searchText: '',
+        filters:
+          field === undefined
+            ? []
+            : [
+                {
+                  id: 'filter1',
+                  type: 'metric',
+                  operator: 'equals',
+                  value: 'metric1',
+                  ...(field === undefined ? {} : { field }),
+                  logicOperator: 'or',
+                },
+              ],
+        skipSettingEvalId: true,
+      });
+    },
+  );
 });
 
 describe('ResultsTable Pagination', () => {
