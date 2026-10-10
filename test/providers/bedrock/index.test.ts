@@ -4036,6 +4036,42 @@ describe('AwsBedrockCompletionProvider', () => {
     expect(response.cost).toBeCloseTo((800 * input + 200 * cacheRead + 500 * output) / 1e6, 12);
   });
 
+  it.each(['us.xai.grok-4.7', 'global.zai.glm-5.3', 'us.moonshotai.kimi-k3'])(
+    'preserves reported cache and reasoning usage for %s',
+    async (modelId) => {
+      const json = JSON.stringify({
+        choices: [{ message: { content: 'READY' } }],
+        usage: {
+          prompt_tokens: 1000,
+          completion_tokens: 250,
+          total_tokens: 1250,
+          prompt_tokens_details: { cached_tokens: 800, cache_write_tokens: 100 },
+          completion_tokens_details: { reasoning_tokens: 150 },
+        },
+      });
+      mockInvokeModel.mockResolvedValueOnce({
+        body: Object.assign(new TextEncoder().encode(json), { transformToString: () => json }),
+      });
+      const provider = new AwsBedrockCompletionProvider(modelId, {
+        config: { region: 'us-east-1' },
+      });
+      const response = await provider.callApi('hello');
+      expect(response.output).toBe('READY');
+      expect(response.tokenUsage).toEqual({
+        prompt: 1000,
+        completion: 250,
+        total: 1250,
+        numRequests: 1,
+        completionDetails: {
+          reasoning: 150,
+          cacheReadInputTokens: 800,
+          cacheCreationInputTokens: 100,
+        },
+      });
+      expect(response.cost).toBeUndefined();
+    },
+  );
+
   it('leaves Grok 4.7 Invoke cost unknown when AWS reports unpriced cache writes', async () => {
     const json = JSON.stringify({
       choices: [{ message: { content: 'ok' } }],

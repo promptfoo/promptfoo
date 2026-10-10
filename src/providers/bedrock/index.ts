@@ -714,11 +714,25 @@ export function addConfigParam(
 
 function getOpenAiCompatibleTokenUsage(responseJson: any, _promptText: string): TokenUsage {
   const usage = responseJson?.usage;
+  const reasoning = coerceStrToNum(usage?.completion_tokens_details?.reasoning_tokens);
+  const cacheReadInputTokens = coerceStrToNum(usage?.prompt_tokens_details?.cached_tokens);
+  const cacheCreationInputTokens = coerceStrToNum(usage?.prompt_tokens_details?.cache_write_tokens);
+  const completionDetails: NonNullable<TokenUsage['completionDetails']> = {};
+  if (reasoning !== undefined) {
+    completionDetails.reasoning = reasoning;
+  }
+  if ((cacheReadInputTokens ?? 0) > 0) {
+    completionDetails.cacheReadInputTokens = cacheReadInputTokens;
+  }
+  if ((cacheCreationInputTokens ?? 0) > 0) {
+    completionDetails.cacheCreationInputTokens = cacheCreationInputTokens;
+  }
   return {
     prompt: coerceStrToNum(usage?.prompt_tokens),
     completion: coerceStrToNum(usage?.completion_tokens),
     total: coerceStrToNum(usage?.total_tokens),
     numRequests: 1,
+    ...(Object.keys(completionDetails).length > 0 ? { completionDetails } : {}),
   };
 }
 
@@ -2067,33 +2081,7 @@ ${prompt}
       // block, fall back to the original content so the whole response is never silently dropped.
       return answer.trim() === '' ? content : answer;
     },
-    tokenUsage: (responseJson: any, _promptText: string): TokenUsage => {
-      if (responseJson?.usage) {
-        const usage = responseJson.usage;
-        // gpt-oss reports usage the same way OpenAI's Chat Completions API does; surface
-        // reasoning and cached-input token counts (when present) under completionDetails for
-        // parity with the openai: provider.
-        const reasoningTokens = coerceStrToNum(usage.completion_tokens_details?.reasoning_tokens);
-        const cachedInputTokens = coerceStrToNum(usage.prompt_tokens_details?.cached_tokens);
-        const completionDetails: { reasoning?: number; cacheReadInputTokens?: number } = {};
-        if (reasoningTokens !== undefined) {
-          completionDetails.reasoning = reasoningTokens;
-        }
-        if ((cachedInputTokens ?? 0) > 0) {
-          completionDetails.cacheReadInputTokens = cachedInputTokens;
-        }
-        return {
-          prompt: coerceStrToNum(usage.prompt_tokens),
-          completion: coerceStrToNum(usage.completion_tokens),
-          total: coerceStrToNum(usage.total_tokens),
-          numRequests: 1,
-          ...(Object.keys(completionDetails).length > 0 ? { completionDetails } : {}),
-        };
-      }
-
-      // Return undefined values when token counts aren't provided by the API
-      return missingBedrockTokenUsage();
-    },
+    tokenUsage: getOpenAiCompatibleTokenUsage,
   },
   QWEN: {
     params: async (
