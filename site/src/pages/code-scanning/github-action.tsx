@@ -7,6 +7,7 @@ import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
 import BiotechIcon from '@mui/icons-material/Biotech';
 import GitHubIcon from '@mui/icons-material/GitHub';
 import VolumeOffIcon from '@mui/icons-material/VolumeOff';
+import { BenefitItem } from '@site/src/components/BenefitItem';
 import Layout from '@theme/Layout';
 import clsx from 'clsx';
 import LogoContainer from '../../components/LogoContainer';
@@ -152,38 +153,32 @@ function BenefitsSection() {
         <h2 className={styles.sectionTitle}>Real security that fits your workflow</h2>
         <p className={styles.sectionSubtitle}>Flag dangerous code without adding friction.</p>
         <div className={styles.benefitsList}>
-          <div className={styles.benefitItem}>
-            <BiotechIcon className={styles.benefitIcon} />
-            <div className={styles.benefitContent}>
-              <h3>Deep tracing</h3>
-              <p>
-                Beyond the PR itself, the scanner agentically traces LLM inputs, outputs, and
-                capability changes deep into the larger repository to identify subtle yet critical
-                issues that human reviewers can struggle to catch.
-              </p>
-            </div>
-          </div>
-          <div className={styles.benefitItem}>
-            <VolumeOffIcon className={styles.benefitIcon} />
-            <div className={styles.benefitContent}>
-              <h3>No noise</h3>
-              <p>
-                Despite the comprehensive approach, it has a high bar for reporting, avoiding false
-                positives and alert fatigue. Maintainers can configure severity levels and provide
-                custom instructions to tailor sensitivity to their needs.
-              </p>
-            </div>
-          </div>
-          <div className={styles.benefitItem}>
-            <AutoFixHighIcon className={styles.benefitIcon} />
-            <div className={styles.benefitContent}>
-              <h3>Fix suggestions</h3>
-              <p>
-                Every finding includes a suggested remediation, as well as a prompt that can be
-                passed straight to an AI coding agent to further investigate and address the issue.
-              </p>
-            </div>
-          </div>
+          <BenefitItem
+            styles={styles}
+            icon={<BiotechIcon className={styles.benefitIcon} />}
+            title="Deep tracing"
+          >
+            Beyond the PR itself, the scanner agentically traces LLM inputs, outputs, and capability
+            changes deep into the larger repository to identify subtle yet critical issues that
+            human reviewers can struggle to catch.
+          </BenefitItem>
+          <BenefitItem
+            styles={styles}
+            icon={<VolumeOffIcon className={styles.benefitIcon} />}
+            title="No noise"
+          >
+            Despite the comprehensive approach, it has a high bar for reporting, avoiding false
+            positives and alert fatigue. Maintainers can configure severity levels and provide
+            custom instructions to tailor sensitivity to their needs.
+          </BenefitItem>
+          <BenefitItem
+            styles={styles}
+            icon={<AutoFixHighIcon className={styles.benefitIcon} />}
+            title="Fix suggestions"
+          >
+            Every finding includes a suggested remediation, as well as a prompt that can be passed
+            straight to an AI coding agent to further investigate and address the issue.
+          </BenefitItem>
         </div>
       </div>
     </section>

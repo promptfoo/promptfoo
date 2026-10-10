@@ -9,6 +9,7 @@ import IntegrationInstructionsIcon from '@mui/icons-material/IntegrationInstruct
 import SearchIcon from '@mui/icons-material/Search';
 import SecurityIcon from '@mui/icons-material/Security';
 import TerminalIcon from '@mui/icons-material/Terminal';
+import { BenefitItem } from '@site/src/components/BenefitItem';
 import Layout from '@theme/Layout';
 import clsx from 'clsx';
 import LogoContainer from '../components/LogoContainer';
@@ -280,47 +281,39 @@ function BenefitsSection() {
           development
         </p>
         <div className={styles.benefitsList}>
-          <div className={styles.benefitItem}>
-            <SearchIcon className={styles.benefitIcon} />
-            <div className={styles.benefitContent}>
-              <h3>Deep data flow analysis</h3>
-              <p>
-                AI agents trace how user inputs flow through your code to LLM prompts, catching
-                subtle vulnerabilities that span multiple files and modules—not just surface-level
-                pattern matching.
-              </p>
-            </div>
-          </div>
-          <div className={styles.benefitItem}>
-            <SecurityIcon className={styles.benefitIcon} />
-            <div className={styles.benefitContent}>
-              <h3>LLM-specific detection</h3>
-              <p>
-                Purpose-built for AI security risks that general SAST tools miss. High signal, low
-                noise—no alert fatigue from irrelevant findings.
-              </p>
-            </div>
-          </div>
-          <div className={styles.benefitItem}>
-            <IntegrationInstructionsIcon className={styles.benefitIcon} />
-            <div className={styles.benefitContent}>
-              <h3>Embedded in developer workflow</h3>
-              <p>
-                Security feedback in the IDE and PR comments with actionable remediation. Developers
-                fix issues without context switching or separate dashboards.
-              </p>
-            </div>
-          </div>
-          <div className={styles.benefitItem}>
-            <CodeIcon className={styles.benefitIcon} />
-            <div className={styles.benefitContent}>
-              <h3>Complete development coverage</h3>
-              <p>
-                From the first line of code to deployment. IDE catches issues immediately, PR review
-                prevents merges, CI/CD ensures nothing slips through.
-              </p>
-            </div>
-          </div>
+          <BenefitItem
+            styles={styles}
+            icon={<SearchIcon className={styles.benefitIcon} />}
+            title="Deep data flow analysis"
+          >
+            AI agents trace how user inputs flow through your code to LLM prompts, catching subtle
+            vulnerabilities that span multiple files and modules—not just surface-level pattern
+            matching.
+          </BenefitItem>
+          <BenefitItem
+            styles={styles}
+            icon={<SecurityIcon className={styles.benefitIcon} />}
+            title="LLM-specific detection"
+          >
+            Purpose-built for AI security risks that general SAST tools miss. High signal, low
+            noise—no alert fatigue from irrelevant findings.
+          </BenefitItem>
+          <BenefitItem
+            styles={styles}
+            icon={<IntegrationInstructionsIcon className={styles.benefitIcon} />}
+            title="Embedded in developer workflow"
+          >
+            Security feedback in the IDE and PR comments with actionable remediation. Developers fix
+            issues without context switching or separate dashboards.
+          </BenefitItem>
+          <BenefitItem
+            styles={styles}
+            icon={<CodeIcon className={styles.benefitIcon} />}
+            title="Complete development coverage"
+          >
+            From the first line of code to deployment. IDE catches issues immediately, PR review
+            prevents merges, CI/CD ensures nothing slips through.
+          </BenefitItem>
         </div>
       </div>
     </section>

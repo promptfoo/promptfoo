@@ -15,6 +15,8 @@ import SmartToyIcon from '@mui/icons-material/SmartToy';
 import SpeedIcon from '@mui/icons-material/Speed';
 import SupportAgentIcon from '@mui/icons-material/SupportAgent';
 import VerifiedUserIcon from '@mui/icons-material/VerifiedUser';
+import { ApplicationCard } from '@site/src/components/ApplicationCard';
+import { BenefitItem } from '@site/src/components/BenefitItem';
 import Layout from '@theme/Layout';
 import clsx from 'clsx';
 import styles from '../landing-page.module.css';
@@ -220,66 +222,54 @@ export default function Telecom() {
             <h2 className={styles.sectionTitle}>Every AI touchpoint, voice and text</h2>
 
             <div className={styles.solutionGrid}>
-              <div className={styles.solutionCard}>
-                <div className={styles.solutionTitle}>
-                  <PhoneInTalkIcon className={styles.solutionIcon} />
-                  IVR Systems
-                </div>
-                <p>
-                  Test automated phone trees for CPNI disclosure, authentication bypass, and social
-                  engineering vulnerabilities.
-                </p>
-              </div>
-              <div className={styles.solutionCard}>
-                <div className={styles.solutionTitle}>
-                  <RecordVoiceOverIcon className={styles.solutionIcon} />
-                  Voice Assistants
-                </div>
-                <p>
-                  Red team voice AI for account takeover, unauthorized changes, and fraud enablement
-                  scenarios.
-                </p>
-              </div>
-              <div className={styles.solutionCard}>
-                <div className={styles.solutionTitle}>
-                  <HeadsetMicIcon className={styles.solutionIcon} />
-                  Agent Assist
-                </div>
-                <p>
-                  Validate real-time AI recommendations don&apos;t expose customer data or provide
-                  incorrect guidance to human agents.
-                </p>
-              </div>
-              <div className={styles.solutionCard}>
-                <div className={styles.solutionTitle}>
-                  <SupportAgentIcon className={styles.solutionIcon} />
-                  Customer Service Chatbots
-                </div>
-                <p>
-                  Test text-based AI for the same attack scenarios: account security, CPNI
-                  protection, and compliance.
-                </p>
-              </div>
-              <div className={styles.solutionCard}>
-                <div className={styles.solutionTitle}>
-                  <SmartToyIcon className={styles.solutionIcon} />
-                  Self-Service Portals
-                </div>
-                <p>
-                  Validate AI-powered account management, billing inquiries, and service changes
-                  across web and mobile.
-                </p>
-              </div>
-              <div className={styles.solutionCard}>
-                <div className={styles.solutionTitle}>
-                  <CellTowerIcon className={styles.solutionIcon} />
-                  Network Operations
-                </div>
-                <p>
-                  Test coverage tools, service activation assistants, and troubleshooting bots for
-                  accuracy and security.
-                </p>
-              </div>
+              <ApplicationCard
+                styles={styles}
+                icon={<PhoneInTalkIcon className={styles.solutionIcon} />}
+                title="IVR Systems"
+              >
+                Test automated phone trees for CPNI disclosure, authentication bypass, and social
+                engineering vulnerabilities.
+              </ApplicationCard>
+              <ApplicationCard
+                styles={styles}
+                icon={<RecordVoiceOverIcon className={styles.solutionIcon} />}
+                title="Voice Assistants"
+              >
+                Red team voice AI for account takeover, unauthorized changes, and fraud enablement
+                scenarios.
+              </ApplicationCard>
+              <ApplicationCard
+                styles={styles}
+                icon={<HeadsetMicIcon className={styles.solutionIcon} />}
+                title="Agent Assist"
+              >
+                Validate real-time AI recommendations don&apos;t expose customer data or provide
+                incorrect guidance to human agents.
+              </ApplicationCard>
+              <ApplicationCard
+                styles={styles}
+                icon={<SupportAgentIcon className={styles.solutionIcon} />}
+                title="Customer Service Chatbots"
+              >
+                Test text-based AI for the same attack scenarios: account security, CPNI protection,
+                and compliance.
+              </ApplicationCard>
+              <ApplicationCard
+                styles={styles}
+                icon={<SmartToyIcon className={styles.solutionIcon} />}
+                title="Self-Service Portals"
+              >
+                Validate AI-powered account management, billing inquiries, and service changes
+                across web and mobile.
+              </ApplicationCard>
+              <ApplicationCard
+                styles={styles}
+                icon={<CellTowerIcon className={styles.solutionIcon} />}
+                title="Network Operations"
+              >
+                Test coverage tools, service activation assistants, and troubleshooting bots for
+                accuracy and security.
+              </ApplicationCard>
             </div>
           </div>
         </section>
@@ -391,36 +381,30 @@ export default function Telecom() {
             <h2 className={styles.sectionTitle}>Built for carrier scale</h2>
 
             <div className={styles.benefitsList}>
-              <div className={styles.benefitItem}>
-                <SpeedIcon className={styles.benefitIcon} />
-                <div className={styles.benefitContent}>
-                  <h3>Test at the scale you operate</h3>
-                  <p>
-                    Run thousands of attack scenarios in parallel. Integrate with CI/CD pipelines
-                    for continuous security validation across every model update and prompt change.
-                  </p>
-                </div>
-              </div>
-              <div className={styles.benefitItem}>
-                <SecurityIcon className={styles.benefitIcon} />
-                <div className={styles.benefitContent}>
-                  <h3>Your data never leaves</h3>
-                  <p>
-                    Deploy entirely on-premises. No customer data, voice or text, sent to external
-                    systems. Meet the strictest CPNI requirements and data residency policies.
-                  </p>
-                </div>
-              </div>
-              <div className={styles.benefitItem}>
-                <VerifiedUserIcon className={styles.benefitIcon} />
-                <div className={styles.benefitContent}>
-                  <h3>Audit-ready from day one</h3>
-                  <p>
-                    Generate structured reports mapping directly to FCC, TCPA, and state PUC
-                    requirements. Prove due diligence with reproducible, timestamped test results.
-                  </p>
-                </div>
-              </div>
+              <BenefitItem
+                styles={styles}
+                icon={<SpeedIcon className={styles.benefitIcon} />}
+                title="Test at the scale you operate"
+              >
+                Run thousands of attack scenarios in parallel. Integrate with CI/CD pipelines for
+                continuous security validation across every model update and prompt change.
+              </BenefitItem>
+              <BenefitItem
+                styles={styles}
+                icon={<SecurityIcon className={styles.benefitIcon} />}
+                title="Your data never leaves"
+              >
+                Deploy entirely on-premises. No customer data, voice or text, sent to external
+                systems. Meet the strictest CPNI requirements and data residency policies.
+              </BenefitItem>
+              <BenefitItem
+                styles={styles}
+                icon={<VerifiedUserIcon className={styles.benefitIcon} />}
+                title="Audit-ready from day one"
+              >
+                Generate structured reports mapping directly to FCC, TCPA, and state PUC
+                requirements. Prove due diligence with reproducible, timestamped test results.
+              </BenefitItem>
             </div>
           </div>
         </section>
