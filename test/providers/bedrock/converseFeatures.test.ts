@@ -99,6 +99,42 @@ describe('Converse native request features', () => {
     });
   });
 
+  it.each(
+    ['malformed_tool_use', 'malformed_model_output', 'tool_use'].flatMap((stopReason) =>
+      [false, true].map((hasText) => ({ stopReason, hasText })),
+    ),
+  )('rejects $stopReason without tool blocks (text: $hasText)', async ({ stopReason, hasText }) => {
+    cache.enabled = true;
+    const callback = vi.fn();
+    const mcpCall = vi.fn();
+    const { provider, send } = fixture({
+      streaming: true,
+      functionToolCallbacks: { lookup: callback },
+    });
+    Object.assign(provider, {
+      mcpClient: { getAllTools: () => [{ name: 'remote' }], callTool: mcpCall },
+    });
+    send.mockResolvedValueOnce(
+      stream([
+        ...(hasText
+          ? [
+              { contentBlockDelta: { contentBlockIndex: 0, delta: { text: 'Partial answer' } } },
+              { contentBlockStop: { contentBlockIndex: 0 } },
+            ]
+          : []),
+        { messageStop: { stopReason } },
+        { metadata: { usage: reply.usage } },
+      ]),
+    );
+    const response = await provider.callApi('hello');
+    expect(response.error).toBeDefined();
+    expect(response.tokenUsage).toMatchObject({ prompt: 3, completion: 2, total: 5 });
+    expect(response.cost).toBeGreaterThan(0);
+    expect(callback).not.toHaveBeenCalled();
+    expect(mcpCall).not.toHaveBeenCalled();
+    expect(cache.set).not.toHaveBeenCalled();
+  });
+
   it.each([
     'max_tokens',
     'malformed_tool_use',
@@ -146,45 +182,52 @@ describe('Converse native request features', () => {
     expect(cache.set).not.toHaveBeenCalled();
   });
 
-  it('preserves completed server tool streams without executing matching local callbacks', async () => {
-    const callback = vi.fn();
-    const { provider, send } = fixture({
-      streaming: true,
-      functionToolCallbacks: { search: callback },
-    });
-    send.mockResolvedValueOnce(
-      stream([
+  it.each(['end_turn', 'tool_use'])(
+    'preserves completed server tool streams ending in %s without executing matching local callbacks',
+    async (stopReason) => {
+      cache.enabled = true;
+      const callback = vi.fn();
+      const { provider, send } = fixture({
+        streaming: true,
+        functionToolCallbacks: { search: callback },
+      });
+      send.mockResolvedValueOnce(
+        stream([
+          {
+            contentBlockStart: {
+              contentBlockIndex: 0,
+              start: {
+                toolUse: { type: 'server_tool_use', toolUseId: 'search-1', name: 'search' },
+              },
+            },
+          },
+          {
+            contentBlockDelta: {
+              contentBlockIndex: 0,
+              delta: { toolUse: { input: '{"query":"hello"}' } },
+            },
+          },
+          { contentBlockStop: { contentBlockIndex: 0 } },
+          { messageStop: { stopReason } },
+          { metadata: { usage: reply.usage } },
+        ]),
+      );
+      const response = await provider.callApi('hello');
+      expect(response.error).toBeUndefined();
+      expect(response.metadata?.content).toEqual([
         {
-          contentBlockStart: {
-            contentBlockIndex: 0,
-            start: { toolUse: { type: 'server_tool_use', toolUseId: 'search-1', name: 'search' } },
+          toolUse: {
+            type: 'server_tool_use',
+            toolUseId: 'search-1',
+            name: 'search',
+            input: { query: 'hello' },
           },
         },
-        {
-          contentBlockDelta: {
-            contentBlockIndex: 0,
-            delta: { toolUse: { input: '{"query":"hello"}' } },
-          },
-        },
-        { contentBlockStop: { contentBlockIndex: 0 } },
-        { messageStop: { stopReason: 'end_turn' } },
-        { metadata: { usage: reply.usage } },
-      ]),
-    );
-    const response = await provider.callApi('hello');
-    expect(response.error).toBeUndefined();
-    expect(response.metadata?.content).toEqual([
-      {
-        toolUse: {
-          type: 'server_tool_use',
-          toolUseId: 'search-1',
-          name: 'search',
-          input: { query: 'hello' },
-        },
-      },
-    ]);
-    expect(callback).not.toHaveBeenCalled();
-  });
+      ]);
+      expect(callback).not.toHaveBeenCalled();
+      expect(cache.set).toHaveBeenCalledOnce();
+    },
+  );
 
   it.each([false, true])('accounts for all cached input with streaming=%s', async (streaming) => {
     const { provider, send } = fixture({ streaming }, 'global.anthropic.claude-opus-5-5');

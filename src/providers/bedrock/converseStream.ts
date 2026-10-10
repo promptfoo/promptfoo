@@ -171,6 +171,21 @@ export async function collectConverseStream(
     throw new Error('Bedrock response stream ended before terminal metadata or contentBlockStop');
   }
   if (
+    result.stopReason === 'malformed_tool_use' ||
+    result.stopReason === 'malformed_model_output'
+  ) {
+    throw new ConverseStreamValidationError(
+      `Bedrock response stream stopped with ${result.stopReason}`,
+      result,
+    );
+  }
+  if (result.stopReason === 'tool_use' && toolInputs.size === 0) {
+    throw new ConverseStreamValidationError(
+      'Bedrock response stream stopped with tool_use without a tool request',
+      result,
+    );
+  }
+  if (
     result.stopReason !== 'tool_use' &&
     [...blocks.values()].some((block) => block.toolUse && block.toolUse.type !== 'server_tool_use')
   ) {
