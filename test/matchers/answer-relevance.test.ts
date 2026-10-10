@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { clearCache, disableCache, enableCache, getCache, isCacheEnabled } from '../../src/cache';
 import { matchesAnswerRelevance } from '../../src/matchers/rag';
 import { ANSWER_RELEVANCY_GENERATE } from '../../src/prompts/index';
 import {
@@ -302,5 +303,54 @@ describe('matchesAnswerRelevance', () => {
     expect(result.metadata?.averageSimilarity).toBeCloseTo(0.99, 2);
     expect(result.metadata?.threshold).toBe(0.7);
     expect(result.pass).toBe(true);
+  });
+
+  describe('with the response cache enabled', () => {
+    let cacheWasEnabled: boolean;
+
+    beforeEach(async () => {
+      cacheWasEnabled = isCacheEnabled();
+      enableCache();
+      await clearCache();
+    });
+
+    afterEach(async () => {
+      await clearCache();
+      if (!cacheWasEnabled) {
+        disableCache();
+      }
+    });
+
+    it('generates each question with a separate grader call', async () => {
+      const questions = [
+        'How long do refunds take?',
+        'What is the capital of France?',
+        'Which planet is the largest?',
+      ];
+      let generated = 0;
+      // Behave like a real provider: identical prompts in the same cache scope are served
+      // from the cache instead of calling the model again.
+      vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(async (prompt) => {
+        const cache = await getCache();
+        const cached = await cache.get<string>(`question:${prompt}`);
+        if (cached) {
+          return { output: cached, cached: true };
+        }
+        const question = questions[generated++];
+        await cache.set(`question:${prompt}`, question);
+        return { output: question };
+      });
+
+      const result = await matchesAnswerRelevance(
+        'How long do refunds take?',
+        'Refunds are processed within 5 business days.',
+        0.5,
+      );
+
+      expect(generated).toBe(3);
+      expect(
+        result.metadata?.generatedQuestions.map(({ question }: { question: string }) => question),
+      ).toEqual(questions);
+    });
   });
 });
