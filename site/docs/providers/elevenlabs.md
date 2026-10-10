@@ -215,6 +215,8 @@ All providers support these common parameters:
 
 ### Agent-Specific Parameters
 
+Without `agentId`, the provider creates a temporary agent and deletes it after its last evaluation finishes. Reusing the provider after cleanup creates a new agent. Temporary agent IDs are not cached. If you set `agentId`, cleanup leaves that agent in place.
+
 | Parameter            | Description                               |
 | -------------------- | ----------------------------------------- |
 | `agentId`            | Use existing agent ID                     |

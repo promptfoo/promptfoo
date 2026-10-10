@@ -18,6 +18,7 @@ To use the MCP provider, you need to have an MCP server running. This can be a l
 
 1. An MCP server (local or remote)
 2. Node.js dependencies for MCP SDK (automatically handled by promptfoo)
+3. For a `.py` script in `server.path`, Python 3 and the script's dependencies must be installed. The provider runs `python3` on macOS/Linux and `python` on Windows, so that command must be available on `PATH` and meet the server's Python version requirements.
 
 ## Basic Configuration
 
@@ -68,6 +69,8 @@ rather than collapsing to an empty string, so a missing credential fails visibly
 A stdio server can also be started from a script with `path`, which accepts `.js` and `.py` files
 and is resolved relative to the config file. Use it in place of `command`/`args`: `args` is not
 applied to a `path` server, and `command` takes precedence when both are set.
+To select a virtual environment or a different Python executable, use `command` with the
+interpreter path and pass the script path in `args`.
 
 ```yaml
 providers:
@@ -240,16 +243,16 @@ If `tokenUrl` is not specified, the provider automatically discovers the token e
 2. RFC 8414 path-aware: `{origin}/.well-known/oauth-authorization-server{path}`
 3. Root level: `{origin}/.well-known/oauth-authorization-server`
 
-For maximum compatibility, explicitly configure `tokenUrl` when possible.
+Discovered token endpoints must use the same origin (scheme, host, and port) as the configured server URL. Discovery and discovered token requests reject redirects to keep OAuth credentials at that origin. If your identity provider uses a different origin or a redirecting endpoint, configure its final `tokenUrl` explicitly.
 
 **Token Refresh Behavior:**
 
 When using OAuth authentication:
 
 1. The provider requests an access token from `tokenUrl` (or discovered endpoint) before connecting
-2. Tokens are proactively refreshed 60 seconds before expiration
+2. Each HTTP request carries the current token. Tokens refresh before expiry without reconnecting, using a margin of 60 seconds or half the remaining lifetime when issued, whichever is shorter
 3. Concurrent requests share the same refresh operation (no duplicate token fetches)
-4. If a token expires during an evaluation, the provider automatically reconnects with a fresh token
+4. If the server rejects a token with HTTP 401, the provider fetches a new token and resends that request once. Other failures, including tool errors, are returned without a retry
 
 #### Authentication Options Reference
 

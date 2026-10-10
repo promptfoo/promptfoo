@@ -16,6 +16,7 @@ import { getProviderFactories, mergeProviderEnv, providerMap } from '../../src/p
 import { ScriptCompletionProvider } from '../../src/providers/scriptCompletion';
 
 import type { CometApiImageProvider } from '../../src/providers/cometapi';
+import type { OpenAiDecisionsProvider } from '../../src/providers/openai/decisions';
 import type { LoadApiProviderContext } from '../../src/types/index';
 import type { ProviderOptions } from '../../src/types/providers';
 
@@ -69,6 +70,148 @@ vi.mock('../../src/redteam/remoteGeneration', async (importOriginal) => {
 });
 
 describe('Provider Registry', () => {
+  describe('OpenAI Decisions', () => {
+    it.each([
+      ['openai:decisions:gpt-6-luna', undefined, 'gpt-6-luna'],
+      ['openai:decisions', 'configured-decision-model', 'configured-decision-model'],
+      ['openai:decisions:gpt-6-luna', 'configured-decision-model', 'gpt-6-luna'],
+    ])('routes %s to the Decisions endpoint', async (providerPath, configuredModel, model) => {
+      const factories = await getProviderFactories(providerPath);
+      const factory = factories.find((entry) => entry.test(providerPath))!;
+      const provider = await factory.create(
+        providerPath,
+        {
+          id: 'decision-fixture',
+          config: { model: configuredModel },
+          env: { OPENAI_API_KEY: 'provider-key' },
+        },
+        {
+          options: {},
+          env: { OPENAI_API_KEY: 'suite-key', OPENAI_API_BASE_URL: 'https://suite.example/v1' },
+        },
+      );
+
+      expect(provider.constructor.name).toBe('OpenAiDecisionsProvider');
+      expect(provider.id()).toBe('decision-fixture');
+      expect(provider).toHaveProperty('modelName', model);
+      expect(provider).toHaveProperty('env', {
+        OPENAI_API_KEY: 'provider-key',
+        OPENAI_API_BASE_URL: 'https://suite.example/v1',
+      });
+    });
+
+    it('loads Decisions with suite-scoped credentials', async () => {
+      const provider = await loadApiProvider('openai:decisions:gpt-6-luna', {
+        env: { OPENAI_API_KEY: 'suite-key' },
+      });
+
+      expect(provider.constructor.name).toBe('OpenAiDecisionsProvider');
+      expect(provider).toHaveProperty('env.OPENAI_API_KEY', 'suite-key');
+    });
+
+    describe.each(['factory', 'loader'] as const)('%s environment precedence', (route) => {
+      it.each(
+        [
+          { model: 'o1-preview', error: 'has been retired' },
+          { model: 'gpt-5.3-codex-spark', error: 'only available through openai:codex-sdk' },
+        ].flatMap((modelCase) =>
+          [
+            {
+              name: 'suite gateway',
+              suiteUrl: 'https://suite.example/v1',
+              providerEnv: undefined,
+              expectedUrl: 'https://suite.example/v1',
+              expectedKey: 'suite-key',
+              rejected: false,
+            },
+            {
+              name: 'provider first-party override',
+              suiteUrl: 'https://suite.example/v1',
+              providerEnv: { OPENAI_API_BASE_URL: 'https://api.openai.com/v1' },
+              expectedUrl: 'https://api.openai.com/v1',
+              expectedKey: 'suite-key',
+              rejected: true,
+            },
+            {
+              name: 'provider gateway override',
+              suiteUrl: 'https://api.openai.com/v1',
+              providerEnv: {
+                OPENAI_API_BASE_URL: 'https://provider.example/v1',
+                OPENAI_API_KEY: 'provider-key',
+              },
+              expectedUrl: 'https://provider.example/v1',
+              expectedKey: 'provider-key',
+              rejected: false,
+            },
+            {
+              name: 'undefined provider overrides',
+              suiteUrl: 'https://suite.example/v1',
+              providerEnv: { OPENAI_API_BASE_URL: undefined, OPENAI_API_KEY: undefined },
+              expectedUrl: 'https://suite.example/v1',
+              expectedKey: 'suite-key',
+              rejected: false,
+            },
+          ].map((envCase) => ({ ...modelCase, ...envCase })),
+        ),
+      )(
+        'uses $name consistently for $model',
+        async ({ model, error, suiteUrl, providerEnv, expectedUrl, expectedKey, rejected }) => {
+          const providerPath = `openai:decisions:${model}`;
+          const options: ProviderOptions = { env: providerEnv };
+          const context: LoadApiProviderContext = {
+            options,
+            env: { OPENAI_API_BASE_URL: suiteUrl, OPENAI_API_KEY: 'suite-key' },
+          };
+          const factories = await getProviderFactories(providerPath);
+          const factory = factories.find((entry) => entry.test(providerPath))!;
+          const pending =
+            route === 'factory'
+              ? factory.create(providerPath, options, context)
+              : loadApiProvider(providerPath, context);
+
+          if (rejected) {
+            await expect(pending).rejects.toThrow(error);
+            return;
+          }
+
+          const provider = (await pending) as OpenAiDecisionsProvider;
+          expect(provider.constructor.name).toBe('OpenAiDecisionsProvider');
+          expect(provider.getApiUrl()).toBe(expectedUrl);
+          expect(provider.env).toEqual({
+            OPENAI_API_BASE_URL: expectedUrl,
+            OPENAI_API_KEY: expectedKey,
+          });
+        },
+      );
+    });
+
+    it('requires an explicit Decisions model', async () => {
+      await expect(loadApiProvider('openai:decisions')).rejects.toThrow(/model/i);
+    });
+
+    it.each(['azure:decisions:gpt-6-luna', 'azureopenai:decisions:gpt-6-luna'])(
+      'rejects unsupported endpoint %s',
+      async (providerPath) => {
+        await expect(loadApiProvider(providerPath)).rejects.toThrow('openai:decisions:');
+      },
+    );
+  });
+
+  it.each([
+    'openai:chatkit',
+    'openai:chatkit:',
+    'openai:chatkit:wf_test',
+    'openai:chatkit:wf_test:3',
+  ])('rejects removed ChatKit route %s instead of falling back to chat', async (providerPath) => {
+    const factories = await getProviderFactories(providerPath);
+    const factory = factories.find((entry) => entry.test(providerPath));
+
+    expect(factory).toBeDefined();
+    await expect(factory!.create(providerPath, {}, { options: {} })).rejects.toThrow(
+      'The openai:chatkit provider has been removed',
+    );
+  });
+
   it.each(['openai:agents-api', 'openai:agents-api:gpt-6-astra'])(
     'routes %s to the hosted Agents API with scoped credentials',
     async (providerPath) => {
@@ -388,6 +531,34 @@ describe('Provider Registry', () => {
       vi.clearAllMocks();
     });
 
+    it.each([
+      ['cerebras:model', 'CEREBRAS_API_KEY'],
+      ['deepseek:deepseek-chat', 'DEEPSEEK_API_KEY'],
+      ['perplexity:sonar', 'PERPLEXITY_API_KEY'],
+      ['togetherai:model', 'TOGETHER_API_KEY'],
+      ['truefoundry:model', 'TRUEFOUNDRY_API_KEY'],
+      ['llamaapi:chat:model', 'LLAMA_API_KEY'],
+    ] as const)('forwards %s provider-scoped %s through the loader', async (id, key) => {
+      const provider = await loadApiProvider(id, {
+        options: { env: { [key]: 'scoped-key' } },
+        env: { [key]: 'suite-key' },
+      });
+      expect((provider as unknown as { env?: Record<string, string> }).env?.[key]).toBe(
+        'scoped-key',
+      );
+    });
+
+    it('forwards a provider-scoped Perplexity key through the Cloudflare Gateway loader', async () => {
+      const provider = await loadApiProvider('cloudflare-gateway:perplexity-ai:sonar', {
+        options: {
+          config: { accountId: 'fixture-account', gatewayId: 'fixture-gateway' },
+          env: { PERPLEXITY_API_KEY: 'provider-key' },
+        },
+        env: { PERPLEXITY_API_KEY: 'suite-key' },
+      });
+      expect((provider as OpenAiChatCompletionProvider).getApiKey()).toBe('provider-key');
+    });
+
     it('keeps a provider-scoped Comet API key for image requests', async () => {
       const provider = await registry.create('cometapi:image:test-model', {
         ...mockContext,
@@ -421,6 +592,16 @@ describe('Provider Registry', () => {
     });
 
     describe('getProviderFactories boundary contract', () => {
+      const createDetachedRegistryCheck = () => async (path: string) => {
+        const before = providerMap.length;
+        const factories = await getProviderFactories(path);
+
+        expect(factories).not.toBe(providerMap);
+        expect(providerMap.length).toBe(before);
+        expect(providerMap.some((factory) => factory.test(path))).toBe(false);
+        expect(factories.some((factory) => factory.test(path))).toBe(true);
+      };
+
       it('returns the providerMap reference itself for the no-family fast path', async () => {
         // Pin identity (toBe, not toEqual) so an accidental `return [...providerMap]`
         // on the hot path regresses loudly instead of silently doubling the
@@ -477,15 +658,7 @@ describe('Provider Registry', () => {
         'bedrock:completion:anthropic.claude-v2',
         'bedrock-agent:agent-id',
         'sagemaker:endpoint-name',
-      ])('loads AWS factories without mutating providerMap for %s', async (path) => {
-        const before = providerMap.length;
-        const factories = await getProviderFactories(path);
-
-        expect(factories).not.toBe(providerMap);
-        expect(providerMap.length).toBe(before);
-        expect(providerMap.some((factory) => factory.test(path))).toBe(false);
-        expect(factories.some((factory) => factory.test(path))).toBe(true);
-      });
+      ])('loads AWS factories without mutating providerMap for %s', createDetachedRegistryCheck());
 
       it('resolves the same AWS factory under concurrent lookups', async () => {
         // All lookups should reuse the factory exported by the cached AWS
@@ -508,15 +681,7 @@ describe('Provider Registry', () => {
 
       it.each(['vertex:chat:gemini-2.5-flash', 'google:gemini-2.5-flash', 'palm:chat-bison'])(
         'loads Google factories without mutating providerMap for %s',
-        async (path) => {
-          const before = providerMap.length;
-          const factories = await getProviderFactories(path);
-
-          expect(factories).not.toBe(providerMap);
-          expect(providerMap.length).toBe(before);
-          expect(providerMap.some((factory) => factory.test(path))).toBe(false);
-          expect(factories.some((factory) => factory.test(path))).toBe(true);
-        },
+        createDetachedRegistryCheck(),
       );
 
       it('resolves the same Google factory under concurrent lookups', async () => {
@@ -894,6 +1059,30 @@ describe('Provider Registry', () => {
       expect(config.apiKey).toBe('moonshot-test-key');
       expect(config.apiBaseUrl).toBe('https://api.moonshot.ai/v1');
       expect(config.apiKeyEnvar).toBe('MOONSHOT_API_KEY');
+    });
+
+    it('should pass Snowflake provider options without nesting the config', async () => {
+      const factory = providerMap.find((factory) => factory.test('snowflake:mistral-large2'));
+      expect(factory).toBeDefined();
+
+      const provider = await factory!.create(
+        'snowflake:mistral-large2',
+        {
+          config: {
+            accountIdentifier: 'myorg-myaccount',
+            apiBaseUrl: 'https://custom.snowflakecomputing.com',
+            apiKey: 'snowflake-test-key',
+          },
+        },
+        mockContext,
+      );
+
+      expect(provider.id()).toBe('snowflake:mistral-large2');
+      expect(provider.config).toMatchObject({
+        accountIdentifier: 'myorg-myaccount',
+        apiBaseUrl: 'https://custom.snowflakecomputing.com',
+        apiKey: 'snowflake-test-key',
+      });
     });
 
     it('should route Moonshot chat prefixes and Kimi defaults correctly', async () => {
@@ -2260,7 +2449,9 @@ describe('Provider Registry', () => {
     });
 
     it('should route novita sub-types and reject unknown ones', async () => {
-      const factory = providerMap.find((f) => f.test('novita:meta/llama-3.1-8b-instruct'));
+      const factory = (await getProviderFactories('novita:meta/llama-3.1-8b-instruct')).find((f) =>
+        f.test('novita:meta/llama-3.1-8b-instruct'),
+      );
       expect(factory).toBeDefined();
 
       const novitaOptions = { ...mockProviderOptions, id: undefined };
@@ -2331,6 +2522,17 @@ describe('Provider Registry', () => {
   });
 
   describe('google: prefix routing', () => {
+    const createProviderDispatchCheck =
+      () => async (providerPath: string, loadExpectedProvider: () => Promise<Function>) => {
+        const factory = (await getProviderFactories(providerPath)).find((f) =>
+          f.test(providerPath),
+        );
+        expect(factory).toBeDefined();
+        const provider = await factory!.create(providerPath, bareOptions, bareContext);
+        const ExpectedProvider = await loadExpectedProvider();
+        expect(provider).toBeInstanceOf(ExpectedProvider);
+      };
+
     // Empty options so the provider computes its own id() rather than using
     // a caller-supplied override.
     const bareOptions: ProviderOptions = { config: {} };
@@ -2545,18 +2747,7 @@ describe('Provider Registry', () => {
         'vertex:video:veo-3.1-generate-001',
         async () => (await import('../../src/providers/google/video')).GoogleVideoProvider,
       ],
-    ] as const)(
-      'routes %s to the expected provider class',
-      async (providerPath, loadExpectedProvider) => {
-        const factory = (await getProviderFactories(providerPath)).find((f) =>
-          f.test(providerPath),
-        );
-        expect(factory).toBeDefined();
-        const provider = await factory!.create(providerPath, bareOptions, bareContext);
-        const ExpectedProvider = await loadExpectedProvider();
-        expect(provider).toBeInstanceOf(ExpectedProvider);
-      },
-    );
+    ] as const)('routes %s to the expected provider class', createProviderDispatchCheck());
 
     it.each(['google:gemini-omni-1.1-flash', 'palm:gemini-omni-1.1-flash'])(
       'preserves explicit provider options for %s',
@@ -2934,15 +3125,7 @@ describe('Provider Registry', () => {
       ],
     ] as const)(
       'routes script-like id %s to the expected provider class',
-      async (providerPath, loadExpectedProvider) => {
-        const factory = (await getProviderFactories(providerPath)).find((f) =>
-          f.test(providerPath),
-        );
-        expect(factory).toBeDefined();
-        const provider = await factory!.create(providerPath, bareOptions, bareContext);
-        const ExpectedProvider = await loadExpectedProvider();
-        expect(provider).toBeInstanceOf(ExpectedProvider);
-      },
+      createProviderDispatchCheck(),
     );
 
     it.each([

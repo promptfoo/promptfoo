@@ -4,21 +4,8 @@ export interface AttributeSanitizationOptions {
   truncateValues?: boolean;
 }
 
-const SENSITIVE_ATTRIBUTE_KEYS = [
-  'authorization',
-  'cookie',
-  'set-cookie',
-  'token',
-  'api_key',
-  'apikey',
-  'secret',
-  'password',
-  'passphrase',
-];
-
-const NORMALIZED_SENSITIVE_ATTRIBUTE_KEYS = SENSITIVE_ATTRIBUTE_KEYS.map((key) =>
-  key.replace(/[^a-z0-9]/g, ''),
-);
+// Match normalized names; the cookie pattern also covers set-cookie.
+const SENSITIVE_ATTRIBUTE_PATTERN = /authorization|cookie|token|apikey|secret|password|passphrase/;
 
 const SAFE_TOKEN_ATTRIBUTE_KEYS = new Set([
   'gen_ai.request.max_tokens',
@@ -44,22 +31,6 @@ const SAFE_TOKEN_ATTRIBUTE_KEYS = new Set([
   'gen_ai.usage.cache_read_input_tokens',
   'gen_ai.usage.cache_creation_input_tokens',
 ]);
-
-function isSensitiveAttributeKey(key: string): boolean {
-  const lowerKey = key.toLowerCase();
-  if (SAFE_TOKEN_ATTRIBUTE_KEYS.has(lowerKey)) {
-    return false;
-  }
-
-  const normalizedKey = lowerKey.replace(/[^a-z0-9]/g, '');
-
-  return SENSITIVE_ATTRIBUTE_KEYS.some((sensitiveKey, index) => {
-    return (
-      lowerKey.includes(sensitiveKey) ||
-      normalizedKey.includes(NORMALIZED_SENSITIVE_ATTRIBUTE_KEYS[index])
-    );
-  });
-}
 
 export function sanitizeTraceAttributes(
   attributes: Record<string, any> | null | undefined,
@@ -101,9 +72,15 @@ export function sanitizeTraceAttributes(
       sanitized[key] = '[REDACTED]';
       continue;
     }
-    if (sanitizeSensitiveAttributes && isSensitiveAttributeKey(key)) {
-      sanitized[key] = '<redacted>';
-      continue;
+    if (sanitizeSensitiveAttributes) {
+      const lowerKey = key.toLowerCase();
+      if (
+        !SAFE_TOKEN_ATTRIBUTE_KEYS.has(lowerKey) &&
+        SENSITIVE_ATTRIBUTE_PATTERN.test(lowerKey.replace(/[^a-z0-9]/g, ''))
+      ) {
+        sanitized[key] = '<redacted>';
+        continue;
+      }
     }
     sanitized[key] = sanitizeValue(value);
   }
