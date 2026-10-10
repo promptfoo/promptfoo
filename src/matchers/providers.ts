@@ -266,6 +266,8 @@ export async function getGradingProvider(
     const defaultTestObj = typeof defaultTest === 'object' ? (defaultTest as TestCase) : null;
     const fallbackProviders = [
       defaultTestObj?.provider || undefined,
+      // Preserve the existing bare-provider precedence for the special text fallback.
+      type === 'text' ? defaultTestObj?.options?.provider?.text || undefined : undefined,
       defaultTestObj?.options?.provider || undefined,
     ].map((candidate) => {
       // Implicit modality maps do not override the default for an absent modality.
@@ -277,7 +279,8 @@ export async function getGradingProvider(
         !('id' in candidate) &&
         ['text', 'embedding', 'classification', 'moderation'].some((key) => key in candidate)
       ) {
-        return (candidate as ProviderTypeMap)[type];
+        // Keep selected maps intact so the typed loader receives evaluation env overrides.
+        return (candidate as ProviderTypeMap)[type] ? candidate : undefined;
       }
       return candidate;
     });
