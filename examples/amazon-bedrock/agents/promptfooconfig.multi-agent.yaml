@@ -33,8 +33,8 @@ providers:
 
 defaultTest:
   assert:
-    - type: javascript
-      value: typeof output === 'string' && output.trim().length > 0
+    - type: regex
+      value: '\S'
 
 tests:
   - description: Technical agent handles uploads

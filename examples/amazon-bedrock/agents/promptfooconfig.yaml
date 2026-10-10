@@ -17,11 +17,12 @@ providers:
 
 evaluateOptions:
   maxConcurrency: 1
+  cache: false
 
 defaultTest:
   assert:
-    - type: javascript
-      value: typeof output === 'string' && output.trim().length > 0
+    - type: regex
+      value: '\S'
 
 tests:
   - vars:

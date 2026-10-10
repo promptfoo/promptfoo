@@ -34,8 +34,8 @@ tests:
   - vars:
       query: How do I reset my password?
     assert:
-      - type: javascript
-        value: typeof output === 'string' && output.trim().length > 0
+      - type: regex
+        value: '\S'
 ```
 
 Replace both placeholders with IDs from the deployed agent. An alias name is not an alias ID.
@@ -94,6 +94,7 @@ prompts:
   - '{{query}}'
 evaluateOptions:
   maxConcurrency: 1
+  cache: false
 tests:
   - vars:
       query: My order number is 12345. Please remember it.
@@ -176,7 +177,7 @@ The assertion fails if the expected trace is absent. Match the action-group name
 
 ## Authentication
 
-The provider uses the AWS SDK default credential chain, including standard credential environment variables, IAM roles, and shared AWS CLI profiles. To choose a profile:
+The provider uses the AWS SDK default credential chain, including `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, optional `AWS_SESSION_TOKEN`, IAM roles, and shared AWS CLI profiles. To choose a profile:
 
 ```bash
 AWS_PROFILE=my-bedrock-profile promptfoo eval --no-cache -o results.json
@@ -223,7 +224,7 @@ Inspect exported results for provider errors as well as assertion failures. Comm
 
 ## Performance Optimization
 
-Keep caching disabled for conversation, memory, latency, and trace verification. For independent deterministic queries, caching is available by default. Limit retrieval with `knowledgeBaseConfigurations[].retrievalConfiguration.vectorSearchConfiguration.numberOfResults`; configure generation limits on the deployed agent.
+Keep caching disabled for conversation, memory, latency, and trace verification using `evaluateOptions.cache: false`, `--no-cache`, or `PROMPTFOO_CACHE_ENABLED=false`. For independent deterministic queries, caching is available by default. Limit retrieval with `knowledgeBaseConfigurations[].retrievalConfiguration.vectorSearchConfiguration.numberOfResults`; configure generation limits on the deployed agent.
 
 ## Troubleshooting
 
@@ -269,3 +270,6 @@ Use the deployed version instead of `DRAFT` when inspecting an active alias.
 - [AWS Bedrock provider](./aws-bedrock.md)
 - [AWS Agents Classic documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/agents.html)
 - [AWS InvokeAgent API](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_agent-runtime_InvokeAgent.html)
+- [AWS Knowledge Base setup](https://docs.aws.amazon.com/bedrock/latest/userguide/knowledge-base.html)
+- [AWS Guardrails configuration](https://docs.aws.amazon.com/bedrock/latest/userguide/guardrails.html)
+- [Configuration reference](../configuration/reference.md)

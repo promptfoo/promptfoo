@@ -1,6 +1,7 @@
 import path from 'node:path';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { getCache, withCacheEnabled } from '../../src/cache';
 import cliState from '../../src/cliState';
 import { evaluate } from '../../src/evaluator';
 import Eval from '../../src/models/eval';
@@ -19,6 +20,7 @@ afterEach(() => {
   cliState.config = undefined;
   cliState.selectedProviderConfigs = undefined;
   cliState.basePath = undefined;
+  cliState.safeMode = undefined;
 });
 
 describe('Bedrock Agents examples', () => {
@@ -68,8 +70,15 @@ describe('Bedrock Agents examples', () => {
       send,
     } as unknown as BedrockAgentRuntimeClient);
 
+    cliState.safeMode = true;
+    const cacheGet = vi.spyOn(await getCache(), 'get');
+    if (filename === 'promptfooconfig.yaml') {
+      cacheGet.mockResolvedValue(JSON.stringify({ output: 'Stale cached response' }));
+    }
     const evaluation = new Eval(config);
-    await evaluate(testSuite, evaluation, { ...config.evaluateOptions, cache: false });
+    await withCacheEnabled(true, () =>
+      evaluate(testSuite, evaluation, config.evaluateOptions ?? {}),
+    );
     const summary = await evaluation.toEvaluateSummary();
     expect(summary.results).toHaveLength(count);
     expect(summary.results.map((result) => result.error)).toEqual(Array(count).fill(undefined));
@@ -77,6 +86,7 @@ describe('Bedrock Agents examples', () => {
     expect(calls).toHaveLength(count);
     if (filename === 'promptfooconfig.yaml') {
       expect(config.evaluateOptions?.maxConcurrency).toBe(1);
+      expect(cacheGet).not.toHaveBeenCalled();
       expect(new Set(calls.map((call) => call.sessionId)).size).toBe(1);
       expect(calls.map((call) => call.inputText)).toEqual([
         'Tell me about your capabilities.',

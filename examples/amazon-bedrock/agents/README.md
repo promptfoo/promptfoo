@@ -23,7 +23,7 @@ With `AWS_PROFILE`, omit `config.profile`. The native provider's `config.profile
 
 ## Single Agent Example
 
-Replace `YOUR_AGENT_ID` and `YOUR_ALIAS_ID` in `promptfooconfig.yaml`. Use a fresh `sessionId` for each run. The four tests form one conversation, with `maxConcurrency: 1` preserving turn order. The final test checks recall of the color supplied in the previous turn.
+Replace `YOUR_AGENT_ID` and `YOUR_ALIAS_ID` in `promptfooconfig.yaml`. Use a fresh `sessionId` for each run. The four tests form one conversation, with `maxConcurrency: 1` preserving turn order and `cache: false` ensuring every turn reaches the agent. The final test checks recall of the color supplied in the previous turn.
 
 ```bash
 npx promptfoo@latest eval -c promptfooconfig.yaml --no-cache -o results.json
