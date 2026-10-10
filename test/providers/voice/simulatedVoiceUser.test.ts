@@ -217,6 +217,40 @@ describe('SimulatedVoiceUser', () => {
     ).toBe(true);
   });
 
+  it.each([false, true])(
+    'preserves listener text with non-monotonic timestamps (caller arrives first: %s)',
+    async (callerFirst) => {
+      const result = provider().callApi('Cafe');
+      const [target, caller] = await connect();
+      acknowledgeOpening();
+      const hearQuestion = () => {
+        transcript(target, 'Are you ', 100, 'input');
+        transcript(target, 'open?', 90, 'input');
+      };
+      const hearAnswer = () => {
+        transcript(caller, 'We are ', 200, 'input');
+        transcript(caller, 'closed.', 180, 'input');
+      };
+      for (const hear of callerFirst ? [hearAnswer, hearQuestion] : [hearQuestion, hearAnswer]) {
+        hear();
+      }
+      audio(target, 100);
+      audio(caller, 200);
+      await vi.advanceTimersByTimeAsync(1000);
+      finalize();
+      const response = await result;
+      expect(response.error).toBeUndefined();
+      expect(response.output).toBe('User: Are you open?\n---\nAssistant: We are closed.');
+      expect(response.metadata?.messages).toEqual([
+        { role: 'user', content: 'Are you open?' },
+        { role: 'assistant', content: 'We are closed.' },
+      ]);
+      expect(response.audio?.transcript).toBe(response.output);
+      expect(response.metadata?.voice.participants.target.heard).toBe('Are you open?');
+      expect(response.metadata?.voice.participants.caller.heard).toBe('We are closed.');
+    },
+  );
+
   it('does not substitute generated text for missing listener transcripts', async () => {
     const result = provider().callApi('Cafe');
     const [target, caller] = await connect();
@@ -556,6 +590,37 @@ describe('SimulatedVoiceUser', () => {
       expect(response.guardrails?.flagged).toBe(true);
       expect(response.metadata?.voice.stopReason).toBe('safety');
       expect(response.metadata?.voice.participants.caller.error).toBeUndefined();
+      expect(vi.getTimerCount()).toBe(0);
+    },
+  );
+
+  it.each(['instruction', 'commentary'])(
+    'retains confirmed cost when target safety closure cancels a speech %s',
+    async (phase) => {
+      const result = provider({ targetSpeaksFirst: true }).callApi('Cafe');
+      const [target, caller] = await connect();
+      if (phase === 'commentary') {
+        const opening = target.sent.find((event) => event.type === 'session.instructions.append')!;
+        emit(target, {
+          type: 'session.instructions.appended',
+          client_event_id: opening.event_id,
+        });
+        expect(target.sent.at(-1)?.type).toBe('session.commentary.append');
+      }
+      emit(target, { type: 'session.closed', reason: 'content', usage: { seconds: 1 } });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(caller.sent.at(-1)?.type).toBe('session.close');
+      emit(caller, { type: 'session.closed', reason: 'close_requested', usage: { seconds: 1 } });
+      const response = await result;
+      expect(response.error).toBeUndefined();
+      expect(response.isRefusal).toBe(true);
+      expect(response.metadata?.voice.stopReason).toBe('safety');
+      expect(response.metadata?.voice.participants.target).toMatchObject({
+        finalUsageConfirmed: true,
+        cancelledSpeechRequests: 1,
+      });
+      expect(response.metadata?.voice.participants.caller.finalUsageConfirmed).toBe(true);
+      expect(response.cost).toBeCloseTo((2 * 0.05) / 60);
       expect(vi.getTimerCount()).toBe(0);
     },
   );

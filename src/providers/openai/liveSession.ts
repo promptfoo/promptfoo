@@ -361,16 +361,7 @@ export class LiveSession {
   /** Stop accepting media and request final billable usage before closing the socket. */
   close({ cancelPendingSpeech = false }: { cancelPendingSpeech?: boolean } = {}): void {
     if (cancelPendingSpeech) {
-      for (const [id, timer] of this.speechRequests) {
-        clearTimeout(timer);
-        this.timers.delete(timer);
-        const command = this.commands.get(id);
-        if (command) {
-          command.cancelled = true;
-        }
-        this.cancelledSpeechRequests++;
-      }
-      this.speechRequests.clear();
+      this.cancelSpeechRequests();
     }
     if (this.done) {
       return;
@@ -380,6 +371,20 @@ export class LiveSession {
       return;
     }
     this.closeSession();
+  }
+
+  /** Speech requests cancelled by a safety termination are not unfinished backend work. */
+  private cancelSpeechRequests(): void {
+    for (const [id, timer] of this.speechRequests) {
+      clearTimeout(timer);
+      this.timers.delete(timer);
+      const command = this.commands.get(id);
+      if (command) {
+        command.cancelled = true;
+      }
+      this.cancelledSpeechRequests++;
+    }
+    this.speechRequests.clear();
   }
 
   private onAbort = () => this.fail('GPT-Live request aborted.');
@@ -1270,7 +1275,9 @@ export class LiveSession {
       return;
     }
     const safetyEnded = this.reason === 'content' && this.finalized;
-    if (!safetyEnded && this.speechRequests.size > 0) {
+    if (safetyEnded) {
+      this.cancelSpeechRequests();
+    } else if (this.speechRequests.size > 0) {
       this.setError('GPT-Live session ended before speech requests were acknowledged.');
     }
     this.done = true;
