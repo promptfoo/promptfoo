@@ -195,7 +195,9 @@ Microsoft's [model lifecycle table](https://learn.microsoft.com/azure/foundry/op
 
 Azure does not document the bare `gpt-5.6` alias. Deploy a concrete tier, then use your customer-defined deployment name with `azure:chat:` or `azure:responses:`. Promptfoo accepts arbitrary deployment names and auto-detects GPT-5 reasoning behavior when the name includes a recognizable GPT-5 model ID. Built-in standard and long-context cost estimates are available when the deployment name exactly matches `gpt-5.6`, `gpt-5.6-sol`, `gpt-5.6-terra`, or `gpt-5.6-luna`; an opaque alias cannot be matched automatically, so no cost is reported for it. Separately, set `isReasoningModel: true` on an opaque alias to keep GPT-5 reasoning request behavior (this does not affect cost matching).
 
-The Azure pricing table also recognizes `gpt-audio` and `gpt-realtime` aliases (including mini and 1.5 variants). Promptfoo does not provide built-in cost estimates for `gpt-5.5-pro`, `gpt-5.2-pro`, or their dated snapshots; check Azure billing for those deployments. For models with published priority rates, including GPT-5.6 and several GPT-5.1 to GPT-5.5 snapshots, set `passthrough.service_tier: priority` on `azure:chat`, `azure:completion`, or `azure:responses`. Promptfoo then applies the priority rate to its estimate. It also tracks text and audio tokens separately and uses discounted cached-input rates where available.
+The Azure pricing table also recognizes `gpt-audio` and `gpt-realtime` aliases (including mini and 1.5 variants). Promptfoo does not provide built-in cost estimates for `gpt-5.5-pro`, `gpt-5.2-pro`, or their dated snapshots; check Azure billing for those deployments. For models with published priority rates, including GPT-5.6 and several GPT-5.1 to GPT-5.5 snapshots, set `passthrough.service_tier: priority` on `azure:chat`, `azure:completion`, or `azure:responses`. Promptfoo tracks text and audio tokens separately and uses discounted cached-input rates where available.
+
+`azure:responses` also accepts a top-level `service_tier`; `passthrough.service_tier` takes precedence when both are configured. Its cost estimate uses the tier Azure returned, falling back to the effective requested tier only when the response omits it. Azure can [serve a different tier than requested](https://learn.microsoft.com/azure/foundry/openai/concepts/priority-processing#limitations), so requesting priority does not always imply priority pricing.
 
 ### Azure Realtime API
 
@@ -215,6 +217,8 @@ Realtime prompts can include `input_image` parts in the user message. The previe
 ## Azure Responses API
 
 The Azure OpenAI Responses API supports stateful conversations, MCP servers, code interpreter, and background tasks.
+
+Incomplete responses preserve partial text and expose `metadata.responseStatus` and `metadata.incompleteReason`. When the reason is `max_output_tokens`, `finishReason` is `length`, so a `finish-reason` assertion can detect the output limit. Promptfoo does not automatically retry or continue incomplete output.
 
 ### Using the Responses API
 

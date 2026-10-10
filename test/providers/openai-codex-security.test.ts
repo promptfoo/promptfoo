@@ -5,6 +5,7 @@ import { satisfies, validRange } from 'semver';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
 import { getDirectory, importModule, resolvePackageEntryPoint } from '../../src/esm';
+import logger from '../../src/logger';
 import {
   CODEX_SECURITY_OPERATIONS,
   OpenAICodexSecurityProvider,
@@ -17,6 +18,10 @@ import {
 import { createDeferred } from '../util/utils';
 
 import type { CallApiContextParams } from '../../src/types/index';
+
+const createDeepScanConfig = () => ({
+  config: { operation: 'deep-security-scan' as const },
+});
 
 vi.mock('../../src/esm', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../src/esm')>()),
@@ -37,10 +42,10 @@ const mockModule = {
     refs: mockRefs,
     workingTree: mockWorkingTree,
   },
-  VERSION: '0.1.31',
+  VERSION: '0.2.0',
   BUNDLED_PLUGIN_VERSION: '0.1.22',
 };
-const incompatibleSdkVersions = ['0.1.18', '0.1.30'] as const;
+const incompatibleSdkVersions = ['0.1.18', '0.1.30', '0.1.31'] as const;
 
 function createScanResult(overrides: Record<string, unknown> = {}) {
   const findings = {
@@ -311,7 +316,7 @@ describe('OpenAICodexSecurityProvider', () => {
       expect(mockRun).not.toHaveBeenCalled();
     });
 
-    it.each([...incompatibleSdkVersions, '0.2.0', '1.0.0'])(
+    it.each([...incompatibleSdkVersions, '0.3.0', '1.0.0'])(
       'rejects incompatible security SDK %s',
       async (version) => {
         vi.mocked(importModule).mockResolvedValue({
@@ -354,7 +359,7 @@ describe('OpenAICodexSecurityProvider', () => {
       const response = await provider.callApi('Scan');
 
       expect(response.error).toContain(
-        `package is incompatible (${incompatibleSdkVersions.join(', ')})`,
+        `package is incompatible (${incompatibleSdkVersions.slice(0, 2).join(', ')})`,
       );
       expect(response.error).toContain('npm install promptfoo @openai/codex-security@');
       expect(mockRun).not.toHaveBeenCalled();
@@ -498,9 +503,7 @@ describe('OpenAICodexSecurityProvider', () => {
           },
         }),
       );
-      const provider = new OpenAICodexSecurityProvider({
-        config: { operation: 'deep-security-scan' },
-      });
+      const provider = new OpenAICodexSecurityProvider(createDeepScanConfig());
 
       const response = await provider.callApi('Run a complete deep scan');
 
@@ -518,9 +521,7 @@ describe('OpenAICodexSecurityProvider', () => {
     });
 
     it('distinguishes SDK prompt-cache tokens from cached Promptfoo scan responses', async () => {
-      const provider = new OpenAICodexSecurityProvider({
-        config: { operation: 'deep-security-scan' },
-      });
+      const provider = new OpenAICodexSecurityProvider(createDeepScanConfig());
 
       const freshResponse = await provider.callApi('Run a complete deep scan');
       const tokenUsage = createEmptyTokenUsage();
@@ -761,6 +762,57 @@ describe('OpenAICodexSecurityProvider', () => {
       expect(mockRun).toHaveBeenCalledTimes(1);
     });
 
+    it.each([
+      'Request rejected with Bearer synthetic-credential',
+      'Could not save scan session: api_key=synthetic-credential',
+      'Transport returned sk-proj-synthetic-credential',
+      'Request to https://synthetic:credential@example.test failed',
+      'Diagnostic: -----BEGIN PRIVATE KEY----- synthetic',
+    ])('omits credential-bearing SDK diagnostics: %s', async (diagnostic) => {
+      mockRun.mockImplementationOnce(async (_repository, options) => {
+        options.onWarning(diagnostic);
+        options.onWarning('Could not save scan session: disk is full');
+        return createScanResult();
+      });
+      const provider = new OpenAICodexSecurityProvider();
+      const successful = await provider.callApi('Scan');
+      expect(successful.metadata?.warnings).toEqual([
+        '[redacted]',
+        'Could not save scan session: disk is full',
+      ]);
+      mockRun.mockRejectedValueOnce(new Error(diagnostic));
+      expect(await provider.callApi('Scan')).toEqual({
+        error: 'Codex Security operation failed: [redacted]',
+      });
+    });
+
+    it('does not log SDK error stacks or causes during import and cleanup failures', async () => {
+      const error = new Error('SDK failed', { cause: new Error('token=synthetic-cause') });
+      error.stack = 'Error: SDK failed\n    token=synthetic-stack';
+      const debug = vi.spyOn(logger, 'debug').mockImplementation(() => logger);
+      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
+      vi.mocked(importModule).mockRejectedValueOnce(error);
+      const provider = new OpenAICodexSecurityProvider();
+      await provider.callApi('Scan');
+      expect(debug).toHaveBeenCalledWith('[CodexSecurity] Failed to load SDK', {
+        error: 'SDK failed',
+      });
+      vi.mocked(importModule).mockResolvedValue(mockModule);
+      mockClose.mockRejectedValueOnce(error);
+      await provider.callApi('Scan');
+      expect(warn).toHaveBeenCalledWith('[CodexSecurity] Error while closing SDK client', {
+        error: 'SDK failed',
+      });
+      expect(JSON.stringify([...debug.mock.calls, ...warn.mock.calls])).not.toContain('synthetic');
+    });
+
+    it('preserves finding content independently of diagnostic masking', async () => {
+      const findings = { findings: [{ description: 'Found token=synthetic-source in a fixture' }] };
+      mockRun.mockResolvedValueOnce(createScanResult({ findings }));
+      const response = await new OpenAICodexSecurityProvider().callApi('Scan');
+      expect(response.output).toContain('token=synthetic-source');
+    });
+
     it('closes SDK clients when scans fail', async () => {
       mockRun.mockRejectedValue(new Error('Trusted Access is required'));
       const provider = new OpenAICodexSecurityProvider();
@@ -822,9 +874,7 @@ describe('OpenAICodexSecurityProvider', () => {
         });
         throw new Error('Deep scan worker was interrupted');
       });
-      const provider = new OpenAICodexSecurityProvider({
-        config: { operation: 'deep-security-scan' },
-      });
+      const provider = new OpenAICodexSecurityProvider(createDeepScanConfig());
 
       expect(await provider.callApi('Scan')).toMatchObject({
         error: 'Codex Security operation failed: Deep scan worker was interrupted',
@@ -1042,6 +1092,65 @@ describe('OpenAICodexSecurityProvider', () => {
   });
 
   describe('lifecycle', () => {
+    it.each(
+      (['security-scan', 'validation'] as const).flatMap((operation) =>
+        [false, true].flatMap((operationFails) =>
+          [false, true].map((closeFails) => ({ operation, operationFails, closeFails })),
+        ),
+      ),
+    )(
+      'closes a $operation client once when cleanup overlaps (operationFails=$operationFails, closeFails=$closeFails)',
+      async ({ operation, operationFails, closeFails }) => {
+        const operationResult = createDeferred<unknown>();
+        const closing = createDeferred<void>();
+        const operationMock = operation === 'validation' ? mockValidate : mockRun;
+        operationMock.mockReturnValueOnce(operationResult.promise);
+        mockClose.mockReturnValueOnce(closing.promise);
+        const warn = vi.spyOn(logger, 'warn');
+        const provider = new OpenAICodexSecurityProvider({ config: { operation } });
+        const call = provider.callApi('Check this repository');
+        await vi.waitFor(() => expect(operationMock).toHaveBeenCalledTimes(1));
+
+        const cleanup = provider.cleanup();
+        expect(mockClose).toHaveBeenCalledTimes(1);
+        try {
+          if (operationFails) {
+            operationResult.reject(new Error('Operation interrupted'));
+          } else {
+            operationResult.resolve(
+              operation === 'validation'
+                ? { disposition: 'reportable', report: 'Validated finding' }
+                : createScanResult(),
+            );
+          }
+          const response = await call;
+          expect(response.error).toBe(
+            operationFails ? 'Codex Security operation failed: Operation interrupted' : undefined,
+          );
+          expect(mockClose).toHaveBeenCalledTimes(1);
+
+          if (closeFails) {
+            closing.reject(new Error('Client close failed'));
+          } else {
+            closing.resolve();
+          }
+          await cleanup;
+          await provider.cleanup();
+          expect(mockClose).toHaveBeenCalledTimes(1);
+          expect(warn).toHaveBeenCalledTimes(closeFails ? 1 : 0);
+          if (closeFails) {
+            expect(warn).toHaveBeenCalledWith('[CodexSecurity] Error while closing SDK client', {
+              error: 'Client close failed',
+            });
+          }
+        } finally {
+          operationResult.resolve(createScanResult());
+          closing.resolve();
+          await Promise.all([call, cleanup]);
+        }
+      },
+    );
+
     it.each(['cleanup', 'shutdown', 'shutdownAll'] as const)(
       'registers reused resources after %s',
       async (method) => {

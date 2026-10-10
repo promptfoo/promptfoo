@@ -3,6 +3,7 @@ import logger from './logger';
 import { BaseAssertionTypesSchema } from './types/index';
 import { isJavascriptFile, parsePythonFileReference } from './util/fileExtensions';
 import invariant from './util/invariant';
+import { parseCommaSeparatedValues } from './validation/parseCommaSeparatedValues';
 
 import type { Assertion, AssertionType, BaseAssertionTypes, CsvRow, TestCase } from './types/index';
 
@@ -15,100 +16,15 @@ function isPythonFileReference(value: string): boolean {
   return parsePythonFileReference(value.slice('file://'.length)) !== undefined;
 }
 
-// Keep this parser local rather than importing it from src/assertions/contains.ts:
-// this module is bundled into the frontend (see the app layer's allowedImportPaths
-// in architecture/layers.json), so importing the assertion handlers would pull the
-// backend-only assertion code into the browser bundle and widen the
-// legacy-runtime -> core edge past its baseline. A drift-guard test in
-// test/csv.test.ts keeps this copy in sync with the canonical implementation.
-interface ParsedAssertionField {
-  field: string;
-  nextIndex: number;
-}
-
-function skipAssertionWhitespace(value: string, startIndex: number): number {
-  let i = startIndex;
-  while (i < value.length && /\s/.test(value[i])) {
-    i++;
-  }
-  return i;
-}
-
-function skipAssertionSeparators(value: string, startIndex: number): number {
-  let i = startIndex;
-  while (i < value.length) {
-    i = skipAssertionWhitespace(value, i);
-    if (value[i] !== ',') {
-      break;
-    }
-    i++;
-  }
-  return i;
-}
-
-function parseQuotedAssertionField(value: string, startIndex: number): ParsedAssertionField {
-  let i = startIndex + 1;
-  let field = '';
-  let terminated = false;
-
-  while (i < value.length) {
-    if (value[i] === '\\' && i + 1 < value.length && ['"', '\\'].includes(value[i + 1])) {
-      field += value[i + 1];
-      i += 2;
-    } else if (value[i] === '"' && i + 1 < value.length && value[i + 1] === '"') {
-      field += '"';
-      i += 2;
-    } else if (value[i] === '"') {
-      i++;
-      terminated = true;
-      break;
-    } else {
-      field += value[i];
-      i++;
-    }
-  }
-
-  invariant(terminated, 'Unterminated quoted field in contains assertion value');
-  return { field, nextIndex: i };
-}
-
-function parseUnquotedAssertionField(value: string, startIndex: number): ParsedAssertionField {
-  let i = startIndex;
-  while (i < value.length && value[i] !== ',') {
-    i++;
-  }
-  return { field: value.substring(startIndex, i).trim(), nextIndex: i };
-}
-
-function parseCommaSeparatedAssertionValues(value: string): string[] {
-  const results: string[] = [];
-  let i = 0;
-
-  while (i < value.length) {
-    i = skipAssertionSeparators(value, i);
-    if (i >= value.length) {
-      break;
-    }
-
-    const isQuotedField = value[i] === '"';
-    const parsed = isQuotedField
-      ? parseQuotedAssertionField(value, i)
-      : parseUnquotedAssertionField(value, i);
-    results.push(parsed.field);
-    i = isQuotedField ? skipAssertionWhitespace(value, parsed.nextIndex) : parsed.nextIndex;
-    invariant(
-      !isQuotedField || i >= value.length || value[i] === ',',
-      'Expected comma after quoted field in contains assertion value',
-    );
-  }
-
-  return results;
-}
-
 let _assertionRegex: RegExp | null = null;
 function getAssertionRegex(): RegExp {
   if (!_assertionRegex) {
-    const assertionTypesRegex = BaseAssertionTypesSchema.options.join('|');
+    // Longer names must be tried first. `similar` is a prefix of `similar:cosine`,
+    // `similar:dot`, and `similar:euclidean`, and the value is also introduced by `:`.
+    // Left-to-right alternation would accept the shorter type and swallow the metric.
+    const assertionTypesRegex = [...BaseAssertionTypesSchema.options]
+      .sort((a, b) => b.length - a.length)
+      .join('|');
     _assertionRegex = new RegExp(
       `^(not-)?(${assertionTypesRegex})(?:\\((\\d+(?:\\.\\d+)?)\\))?(?::([\\s\\S]*))?$`,
     );
@@ -195,7 +111,7 @@ export function assertionFromString(expected: string): Assertion {
     ) {
       return {
         type: fullType as AssertionType,
-        value: value ? parseCommaSeparatedAssertionValues(value) : value,
+        value: value ? parseCommaSeparatedValues(value) : value,
       };
     } else if (type === 'contains-json' || type === 'is-json') {
       return {
@@ -213,7 +129,9 @@ export function assertionFromString(expected: string): Assertion {
       type === 'levenshtein' ||
       type === 'perplexity-score' ||
       type === 'perplexity' ||
+      type === 'rouge-l' ||
       type === 'rouge-n' ||
+      type === 'rouge-s' ||
       type === 'similar' ||
       type === 'starts-with'
     ) {

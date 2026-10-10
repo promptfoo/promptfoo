@@ -4,9 +4,9 @@ import path from 'path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getCache, isCacheEnabled } from '../../src/cache';
 import { RubyProvider } from '../../src/providers/rubyCompletion';
-import * as rubyUtils from '../../src/ruby/rubyUtils';
 import { runRuby } from '../../src/ruby/rubyUtils';
 import * as fileReference from '../../src/util/fileReference';
+import { createBasePathOptions } from '../factories/literalFixtures';
 
 const fsMocks = vi.hoisted(() => ({
   readFileSync: vi.fn(),
@@ -101,10 +101,7 @@ describe('RubyProvider', () => {
     vi.clearAllMocks();
     // Reset mocked implementations to avoid test interference
     mockRunRuby.mockReset();
-    // Reset Ruby state to avoid test interference
-    rubyUtils.state.cachedRubyPath = null;
-    rubyUtils.state.validationPromise = null;
-    rubyUtils.state.validatingPath = null;
+
     mockGetCache.mockResolvedValue({
       get: vi.fn(),
       set: vi.fn(),
@@ -120,34 +117,22 @@ describe('RubyProvider', () => {
 
   describe('constructor', () => {
     it('should initialize with correct properties', () => {
-      const provider = new RubyProvider('script.rb', {
-        id: 'testId',
-        config: { basePath: '/base' },
-      });
+      const provider = new RubyProvider('script.rb', createBasePathOptions());
       expect(provider.id()).toBe('testId');
     });
 
     it('should initialize with ruby: syntax', () => {
-      const provider = new RubyProvider('ruby:script.rb', {
-        id: 'testId',
-        config: { basePath: '/base' },
-      });
+      const provider = new RubyProvider('ruby:script.rb', createBasePathOptions());
       expect(provider.id()).toBe('testId');
     });
 
     it('should initialize with file:// prefix', () => {
-      const provider = new RubyProvider('file://script.rb', {
-        id: 'testId',
-        config: { basePath: '/base' },
-      });
+      const provider = new RubyProvider('file://script.rb', createBasePathOptions());
       expect(provider.id()).toBe('testId');
     });
 
     it('should initialize with file:// prefix and function name', () => {
-      const provider = new RubyProvider('file://script.rb:function_name', {
-        id: 'testId',
-        config: { basePath: '/base' },
-      });
+      const provider = new RubyProvider('file://script.rb:function_name', createBasePathOptions());
       expect(provider.id()).toBe('testId');
     });
   });
@@ -267,6 +252,31 @@ describe('RubyProvider', () => {
         { rubyExecutable: undefined },
       );
       expect(result).toEqual({ embedding: [0.1, 0.2, 0.3] });
+    });
+
+    it('cancels an embedding invocation without changing its script arguments', async () => {
+      const provider = new RubyProvider('script.rb');
+      const controller = new AbortController();
+      mockRunRuby.mockImplementation(async (_script, _method, args, options) => {
+        expect(args).toEqual(['test prompt', { config: {} }]);
+        expect(options?.abortSignal).toBe(controller.signal);
+        controller.abort(new Error('embedding cancelled'));
+        options?.abortSignal?.throwIfAborted();
+        return { embedding: [1] };
+      });
+      await expect(
+        provider.callEmbeddingApi('test prompt', undefined, { abortSignal: controller.signal }),
+      ).rejects.toThrow('embedding cancelled');
+      expect(provider.supportsEmbeddingCancellation).toBe(true);
+    });
+
+    it('does not invoke a Ruby embedding after cancellation', async () => {
+      const provider = new RubyProvider('script.rb');
+      const signal = AbortSignal.abort(new Error('already cancelled'));
+      await expect(
+        provider.callEmbeddingApi('test', undefined, { abortSignal: signal }),
+      ).rejects.toThrow('already cancelled');
+      expect(mockRunRuby).not.toHaveBeenCalled();
     });
 
     it('should throw an error if Ruby script returns invalid result', async () => {
