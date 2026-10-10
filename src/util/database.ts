@@ -38,7 +38,7 @@ import {
   setCachedStandaloneEvals,
 } from './standaloneEvalCache';
 
-import type { StandaloneEval } from './standaloneEvalCache';
+import type { StandaloneEval } from '../types/standaloneEval';
 
 export { clearStandaloneEvalCache } from './standaloneEvalCache';
 
@@ -213,7 +213,7 @@ export async function updateResult(
 }
 
 async function getPromptsWithPredicate(
-  predicate: (result: ResultsFile) => boolean,
+  predicate: (eval_: Eval) => boolean,
   limit: number,
 ): Promise<PromptWithMetadata[]> {
   // TODO(ian): Make this use a proper database query
@@ -223,13 +223,10 @@ async function getPromptsWithPredicate(
 
   for (const eval_ of evals_) {
     const createdAt = new Date(eval_.createdAt).toISOString();
-    const resultWrapper: ResultsFile = await eval_.toResultsFile();
-    if (predicate(resultWrapper)) {
+    if (predicate(eval_)) {
+      const datasetId = sha256(JSON.stringify(eval_.config.tests || []));
       for (const prompt of eval_.getPrompts()) {
         const promptId = sha256(prompt.raw);
-        const datasetId = resultWrapper.config.tests
-          ? sha256(JSON.stringify(resultWrapper.config.tests))
-          : '-';
         if (promptId in groupedPrompts) {
           groupedPrompts[promptId].recentEvalDate = new Date(
             Math.max(
@@ -270,17 +267,14 @@ export function getPromptsForTestCasesHash(
   testCasesSha256: string,
   limit: number = DEFAULT_QUERY_LIMIT,
 ) {
-  return getPromptsWithPredicate((result) => {
-    const testsJson = JSON.stringify(result.config.tests);
+  return getPromptsWithPredicate((eval_) => {
+    const testsJson = JSON.stringify(eval_.config.tests || []);
     const hash = sha256(testsJson);
     return hash === testCasesSha256;
   }, limit);
 }
 
-async function getTestCasesWithPredicate(
-  predicate: (result: ResultsFile) => boolean,
-  limit: number,
-): Promise<TestCasesWithMetadata[]> {
+async function readTestCases(limit: number): Promise<TestCasesWithMetadata[]> {
   const evals_ = await Eval.getMany(limit);
 
   const groupedTestCases: { [hash: string]: TestCasesWithMetadata } = {};
@@ -289,7 +283,7 @@ async function getTestCasesWithPredicate(
     const createdAt = new Date(eval_.createdAt).toISOString();
     const resultWrapper: ResultsFile = await eval_.toResultsFile();
     const testCases = resultWrapper.config.tests;
-    if (testCases && predicate(resultWrapper)) {
+    if (testCases) {
       const evalId = eval_.id;
       // For database storage, we need to handle the union type properly
       // Only store actual test case arrays, not generator configs
@@ -304,46 +298,35 @@ async function getTestCasesWithPredicate(
         logger.warn('Skipping TestGeneratorConfig object in database storage');
         continue;
       }
-      const datasetId = sha256(JSON.stringify(storableTestCases));
+      const datasetId = sha256(JSON.stringify(eval_.config.tests || []));
 
       if (datasetId in groupedTestCases) {
         groupedTestCases[datasetId].recentEvalDate = new Date(
           Math.max(groupedTestCases[datasetId].recentEvalDate.getTime(), eval_.createdAt),
         );
         groupedTestCases[datasetId].count += 1;
-        const newPrompts = eval_.getPrompts().map((prompt) => ({
-          id: sha256(prompt.raw),
-          prompt,
-          evalId,
-        }));
-        const promptsById: Record<string, TestCasesWithMetadataPrompt> = {};
-        for (const prompt of groupedTestCases[datasetId].prompts.concat(newPrompts)) {
-          if (!(prompt.id in promptsById)) {
-            promptsById[prompt.id] = prompt;
-          }
-        }
-        groupedTestCases[datasetId].prompts = Object.values(promptsById);
       } else {
-        const newPrompts = eval_.getPrompts().map((prompt) => ({
-          id: sha256(prompt.raw),
-          prompt,
-          evalId,
-        }));
-        const promptsById: Record<string, TestCasesWithMetadataPrompt> = {};
-        for (const prompt of newPrompts) {
-          if (!(prompt.id in promptsById)) {
-            promptsById[prompt.id] = prompt;
-          }
-        }
         groupedTestCases[datasetId] = {
           id: datasetId,
           count: 1,
           testCases: storableTestCases,
           recentEvalDate: new Date(createdAt),
           recentEvalId: evalId,
-          prompts: Object.values(promptsById),
+          prompts: [],
         };
       }
+      const newPrompts = eval_.getPrompts().map((prompt) => ({
+        id: sha256(prompt.raw),
+        prompt,
+        evalId,
+      }));
+      const promptsById: Record<string, TestCasesWithMetadataPrompt> = {};
+      for (const prompt of groupedTestCases[datasetId].prompts.concat(newPrompts)) {
+        if (!(prompt.id in promptsById)) {
+          promptsById[prompt.id] = prompt;
+        }
+      }
+      groupedTestCases[datasetId].prompts = Object.values(promptsById);
     }
   }
 
@@ -355,7 +338,7 @@ export function getPrompts(limit: number = DEFAULT_QUERY_LIMIT) {
 }
 
 export async function getTestCases(limit: number = DEFAULT_QUERY_LIMIT) {
-  return getTestCasesWithPredicate(() => true, limit);
+  return readTestCases(limit);
 }
 
 export async function getPromptFromHash(hash: string) {
@@ -526,8 +509,6 @@ export async function getStandaloneEvals({
       createdAt: evalsTable.createdAt,
       promptId: evalsToPromptsTable.promptId,
       datasetId: evalsToDatasetsTable.datasetId,
-      tagName: tagsTable.name,
-      tagValue: tagsTable.value,
       isRedteam: evalsTable.isRedteam,
     })
     .from(evalsTable)
@@ -553,11 +534,10 @@ export async function getStandaloneEvals({
     const eval_ = await Eval.findById(evalId);
     invariant(eval_, `Eval with ID ${evalId} not found`);
     const table = (await eval_.getTable()) || { body: [] };
-    return { evalId, eval_, table };
+    return [evalId, { eval_, table }] as const;
   });
 
-  const evalData = await Promise.all(evalPromises);
-  const evalMap = new Map(evalData.map(({ evalId, eval_, table }) => [evalId, { eval_, table }]));
+  const evalMap = new Map(await Promise.all(evalPromises));
 
   const standaloneEvals = results.flatMap((result) => {
     const { description, createdAt, evalId, promptId, datasetId, isRedteam } = result;

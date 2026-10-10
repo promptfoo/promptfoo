@@ -1,17 +1,16 @@
 import { fetchWithCache } from '../cache';
-import { getEnvFloat, getEnvString } from '../envars';
+import { getEnvFloat, parseEnvFloat } from '../envars';
+import { resolveProviderEnv } from './env';
 import { getRequestTimeoutMs, parseChatPrompt } from './shared';
 
 import type { EnvOverrides } from '../types/env';
-import type { ApiProvider, ProviderEmbeddingResponse, ProviderResponse } from '../types/index';
-
-function parseEnvFloat(value: string | undefined): number | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
-  const parsed = Number.parseFloat(value);
-  return Number.isNaN(parsed) ? undefined : parsed;
-}
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  CallApiOptionsParams,
+  ProviderEmbeddingResponse,
+  ProviderResponse,
+} from '../types/index';
 
 interface LocalAiCompletionOptions {
   apiBaseUrl?: string;
@@ -33,8 +32,7 @@ class LocalAiGenericProvider implements ApiProvider {
     this.env = env;
     this.apiBaseUrl =
       config?.apiBaseUrl ||
-      env?.LOCALAI_BASE_URL ||
-      getEnvString('LOCALAI_BASE_URL') ||
+      resolveProviderEnv(env, ['LOCALAI_BASE_URL'])?.value ||
       'http://localhost:8080/v1';
     this.config = config || {};
     this.id = id ? () => id : this.id;
@@ -55,7 +53,7 @@ class LocalAiGenericProvider implements ApiProvider {
 }
 
 export class LocalAiChatProvider extends LocalAiGenericProvider {
-  async callApi(prompt: string): Promise<ProviderResponse> {
+  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
     const body = {
       model: this.modelName,
@@ -79,10 +77,18 @@ export class LocalAiChatProvider extends LocalAiGenericProvider {
           body: JSON.stringify(body),
         },
         getRequestTimeoutMs(),
+        'json',
+        context?.bustCache ?? context?.debug,
       )) as unknown as any);
     } catch (err) {
       return {
         error: `API call error: ${String(err)}`,
+      };
+    }
+
+    if (!data?.choices?.[0]?.message) {
+      return {
+        error: `Malformed response data: ${JSON.stringify(data)}`,
       };
     }
 
@@ -99,7 +105,13 @@ export class LocalAiChatProvider extends LocalAiGenericProvider {
 }
 
 export class LocalAiEmbeddingProvider extends LocalAiGenericProvider {
-  async callEmbeddingApi(text: string): Promise<ProviderEmbeddingResponse> {
+  readonly supportsEmbeddingCancellation = true;
+
+  async callEmbeddingApi(
+    text: string,
+    _context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderEmbeddingResponse> {
     const body = {
       input: text,
       model: this.modelName,
@@ -114,10 +126,12 @@ export class LocalAiEmbeddingProvider extends LocalAiGenericProvider {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify(body),
+          ...(options?.abortSignal && { signal: options.abortSignal }),
         },
         getRequestTimeoutMs(),
       )) as unknown as any);
     } catch (err) {
+      options?.abortSignal?.throwIfAborted();
       return {
         error: `API call error: ${String(err)}`,
       };
@@ -140,7 +154,7 @@ export class LocalAiEmbeddingProvider extends LocalAiGenericProvider {
 }
 
 export class LocalAiCompletionProvider extends LocalAiGenericProvider {
-  async callApi(prompt: string): Promise<ProviderResponse> {
+  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     const body = {
       model: this.modelName,
       prompt,
@@ -163,10 +177,18 @@ export class LocalAiCompletionProvider extends LocalAiGenericProvider {
           body: JSON.stringify(body),
         },
         getRequestTimeoutMs(),
+        'json',
+        context?.bustCache ?? context?.debug,
       )) as unknown as any);
     } catch (err) {
       return {
         error: `API call error: ${String(err)}`,
+      };
+    }
+
+    if (!data?.choices?.[0]) {
+      return {
+        error: `Malformed response data: ${JSON.stringify(data)}`,
       };
     }
 

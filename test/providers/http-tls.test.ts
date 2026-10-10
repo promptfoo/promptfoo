@@ -405,24 +405,42 @@ describe('HttpProvider with TLS Configuration', () => {
       );
     });
 
-    it('composes the decompress interceptor onto the TLS dispatcher', async () => {
+    it('composes the decompress interceptor onto the TLS dispatcher without a warning', async () => {
       // Regression: createHttpsAgent returned a bare Agent with no decompress
       // interceptor, so on Node 26 (where undici no longer auto-decompresses)
       // a gzip/br response over an mTLS dispatcher came back as raw bytes.
       const undici = await import('undici');
-
-      const provider = new HttpProvider('https://api.example.com', {
-        config: {
-          method: 'GET',
-          tls: { rejectUnauthorized: false },
-        },
+      const emitWarning = vi.spyOn(process, 'emitWarning').mockImplementation(() => {});
+      const decompressionInterceptor = vi.fn();
+      vi.mocked(undici.interceptors.decompress).mockImplementationOnce(() => {
+        process.emitWarning(
+          'DecompressInterceptor is experimental and subject to change',
+          'ExperimentalWarning',
+        );
+        return decompressionInterceptor;
       });
 
-      await provider.callApi('test prompt');
+      try {
+        const provider = new HttpProvider('https://api.example.com', {
+          config: {
+            method: 'GET',
+            tls: { rejectUnauthorized: false },
+          },
+        });
 
-      expect(undici.interceptors.decompress).toHaveBeenCalledWith({ skipErrorResponses: false });
-      const agentInstance = vi.mocked(undici.Agent).mock.results[0].value as any;
-      expect(agentInstance.compose).toHaveBeenCalledWith({ name: 'decompress' });
+        await provider.callApi('test prompt');
+
+        expect(undici.interceptors.decompress).toHaveBeenCalledExactlyOnceWith({
+          skipErrorResponses: false,
+        });
+        const agentInstance = vi.mocked(undici.Agent).mock.results[0].value as any;
+        expect(agentInstance.compose).toHaveBeenCalledWith(decompressionInterceptor);
+        expect(emitWarning).not.toHaveBeenCalled();
+        expect(process.emitWarning).toBe(emitWarning);
+      } finally {
+        emitWarning.mockRestore();
+        vi.mocked(undici.interceptors.decompress).mockReset();
+      }
     });
   });
 
