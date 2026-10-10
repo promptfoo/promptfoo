@@ -1,4 +1,5 @@
 import asyncio
+import importlib.machinery
 import importlib.util
 import inspect
 import json
@@ -6,7 +7,35 @@ import os
 import sys
 
 
+class UncachedSourceFileLoader(importlib.machinery.SourceFileLoader):
+    """Loads mixed-case Python extensions without sharing a .py bytecode cache."""
+
+    def get_code(self, fullname):
+        source_path = self.get_filename(fullname)
+        source = self.get_data(source_path)
+        return self.source_to_code(source, source_path)
+
+
+def normalize_module_path(script_path):
+    root, extension = os.path.splitext(script_path)
+    normalized_extension = extension.lower()
+    if extension == normalized_extension or normalized_extension != ".py":
+        return script_path
+
+    normalized_path = f"{root}{normalized_extension}"
+    try:
+        os.lstat(script_path)
+        return script_path
+    except FileNotFoundError:
+        try:
+            os.lstat(normalized_path)
+            return normalized_path
+        except FileNotFoundError:
+            return script_path
+
+
 def call_method(script_path, method_name, *args):
+    script_path = normalize_module_path(script_path)
     script_dir = os.path.dirname(os.path.abspath(script_path))
     module_name = os.path.basename(script_path).rsplit(".", 1)[0]
     if script_dir not in sys.path:
@@ -14,7 +43,20 @@ def call_method(script_path, method_name, *args):
 
     print(f"Importing module {module_name} from {script_dir} ...")
 
-    spec = importlib.util.spec_from_file_location(module_name, script_path)
+    extension = os.path.splitext(script_path)[1]
+    if extension.lower() != ".py":
+        raise ImportError(f"Cannot load non-Python source file {script_path}")
+    loader_class = (
+        importlib.machinery.SourceFileLoader
+        if extension == ".py"
+        else UncachedSourceFileLoader
+    )
+    loader = loader_class(module_name, script_path)
+    spec = importlib.util.spec_from_file_location(
+        module_name, script_path, loader=loader
+    )
+    if spec is None or spec.loader is None:
+        raise ImportError(f"Cannot load module from {script_path}")
     script_module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(script_module)
 
