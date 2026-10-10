@@ -140,8 +140,7 @@ Compare Gemini and Gemma models:
 providers:
   - google:gemma-4-31b-it
   - google:gemini-3.8-flash
-  - google:gemini-2.5-pro
-  - google:gemini-3.7-flash
+  - google:gemini-3.1-pro-preview
   - google:gemini-3.5-flash-lite
 
 prompts:
@@ -932,21 +931,16 @@ System instructions support Nunjucks templates and can be loaded from a file.
 
 ### Role Mapping Configuration
 
-Gemini models require specific role names in chat messages. By default, Promptfoo uses the `model` role for compatibility with newer Gemini versions (2.5+). For older Gemini versions that expect the `assistant` role, you can disable this:
+The Gemini API uses the `model` role for assistant messages. Promptfoo maps `assistant` to `model` automatically:
 
 ```yaml
 providers:
-  # Default behavior - maps 'assistant' to 'model' (for Gemini 2.5+)
-  - id: google:gemini-2.5-flash
+  - id: google:gemini-3.8-flash
     config:
-      temperature: 0.7
-
-  # For older Gemini versions - preserve 'assistant' role
-  - id: google:gemini-2.5-pro
-    config:
-      useAssistantRole: true # Preserves 'assistant' role without mapping
-      temperature: 0.7
+      useAssistantRole: false # Default: maps 'assistant' to 'model'
 ```
+
+Set `useAssistantRole: true` only for a custom endpoint that explicitly accepts the `assistant` role; it does not match the Gemini API role contract.
 
 For more details on capabilities and configuration options, see the [Gemini API documentation](https://ai.google.dev/docs).
 
@@ -966,7 +960,7 @@ providers:
           thinkingLevel: MEDIUM
 ```
 
-Gemini 3.7 Flash remains supported with the same thinking levels and token pricing.
+The Gemini API redirects `gemini-3.7-flash` to this model. Use `gemini-3.8-flash` directly for new configurations.
 
 ### Gemini 3.6 Flash
 
@@ -1038,11 +1032,11 @@ providers:
 
 ### Gemini 3.5 Flash
 
-Gemini 3.5 Flash remains available for agentic and coding workloads:
+The Gemini API redirects `gemini-3.5-flash` to `gemini-3.6-flash`. Use the replacement ID directly:
 
 ```yaml
 providers:
-  - id: google:gemini-3.5-flash
+  - id: google:gemini-3.6-flash
     config:
       maxOutputTokens: 4096
       generationConfig:
