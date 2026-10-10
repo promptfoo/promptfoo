@@ -309,6 +309,24 @@ describe('EvalResult', () => {
       });
     });
 
+    it('preserves repeat linkage across single-row persistence', async () => {
+      const result = await EvalResult.createFromEvaluateResult('test-eval-repeat-linkage', {
+        ...mockEvaluateResult,
+        repeatIndex: 2,
+        repeatGroupId: 'test-0-vars-1',
+        metadata: { source: 'repeat' },
+      });
+
+      const retrieved = await EvalResult.findById(result.id);
+
+      expect(retrieved?.toEvaluateResult()).toMatchObject({
+        repeatIndex: 2,
+        repeatGroupId: 'test-0-vars-1',
+        metadata: { source: 'repeat' },
+      });
+      expect(retrieved?.metadata).not.toHaveProperty('__promptfoo');
+    });
+
     it('warns and overwrites when user metadata.__promptfoo is non-object', async () => {
       const warnSpy = vi.spyOn(logger, 'warn');
 

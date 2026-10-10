@@ -8,6 +8,7 @@ import * as evaluatorModule from '../../../src/evaluator';
 import logger from '../../../src/logger';
 import Eval from '../../../src/models/eval';
 import { doEval } from '../../../src/node/doEval';
+import * as retryModule from '../../../src/node/retry';
 import { isSafeMode } from '../../../src/util/safeMode';
 import { mockProcessEnv } from '../../util/utils';
 import type { Command } from 'commander';
@@ -115,9 +116,12 @@ describe('evaluateOptions behavior', () => {
   let noRepeatConfigPath: string;
 
   const originalExit = process.exit;
+  let repeatSummarySpy: ReturnType<typeof vi.spyOn>;
 
   beforeAll(() => {
     process.exit = vi.fn() as any;
+    // These option-routing tests mock evaluation and migrations, so no result table exists.
+    repeatSummarySpy = vi.spyOn(Eval.prototype, 'getRepeatStability').mockResolvedValue(undefined);
 
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-test-'));
 
@@ -140,7 +144,45 @@ describe('evaluateOptions behavior', () => {
 
   afterAll(() => {
     process.exit = originalExit;
+    repeatSummarySpy.mockRestore();
     fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('restores saved repeat options when retrying errors despite conflicting CLI overrides', async () => {
+    const saved = new Eval(
+      {
+        providers: ['echo'],
+        prompts: ['Hello'],
+        tests: [{ vars: {} }],
+      },
+      {
+        id: 'eval-retry-repeat-options',
+        persisted: true,
+        runtimeOptions: { repeat: 3, cache: false, maxConcurrency: 2, delay: 0 },
+      },
+    );
+    const latest = vi.spyOn(Eval, 'latest').mockResolvedValue(saved);
+    const errors = vi.spyOn(retryModule, 'getErrorResultIds').mockResolvedValue(['failed-row']);
+    const remove = vi.spyOn(retryModule, 'deleteErrorResults').mockResolvedValue(undefined);
+    const metrics = vi.spyOn(retryModule, 'recalculatePromptMetrics').mockResolvedValue(undefined);
+    try {
+      await doEval(
+        { table: false, retryErrors: true, repeat: 1, maxConcurrency: 7 },
+        {},
+        undefined,
+        {},
+      );
+      expect(evaluateMock.mock.calls.at(-1)?.[2]).toMatchObject({
+        repeat: 3,
+        cache: false,
+        maxConcurrency: 2,
+      });
+    } finally {
+      latest.mockRestore();
+      errors.mockRestore();
+      remove.mockRestore();
+      metrics.mockRestore();
+    }
   });
 
   it('honors safe mode from an explicit config and restores it after evaluation', async () => {

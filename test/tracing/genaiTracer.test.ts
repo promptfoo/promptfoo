@@ -99,7 +99,7 @@ describe('genaiTracer', () => {
   });
 
   it.each([false, true])(
-    'projects only supported legacy response fields (finishReason=%s)',
+    'preserves response usage details for tracing (finishReason=%s)',
     (finishReason) => {
       const response = {
         output: 'body',
@@ -109,7 +109,7 @@ describe('genaiTracer', () => {
       };
       const result = extractGenAIResponse(response, finishReason);
       expect(result).toEqual({
-        tokenUsage: { prompt: 2, completion: 3, total: 5 },
+        tokenUsage: response.tokenUsage,
         ...(finishReason ? { finishReasons: ['stop'] } : {}),
       });
       expect(result.tokenUsage).not.toBe(response.tokenUsage);

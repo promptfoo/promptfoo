@@ -1359,6 +1359,8 @@ function createEvaluateResult({
   latencyMs,
   prompt,
   promptIdx,
+  repeatGroupId,
+  repeatIndex,
   rendered,
   response,
   setup,
@@ -1372,6 +1374,8 @@ function createEvaluateResult({
   latencyMs: number;
   prompt: Prompt;
   promptIdx: number;
+  repeatGroupId?: string;
+  repeatIndex: number;
   rendered: RenderedRunEvalPrompt;
   response: ProviderResponse;
   setup: RunEvalSetup;
@@ -1401,6 +1405,7 @@ function createEvaluateResult({
       [FILE_METADATA_KEY]: fileMetadata,
     },
     promptIdx,
+    ...(repeatGroupId !== undefined && { repeatGroupId, repeatIndex }),
     testIdx,
     testCase: test,
     promptId: prompt.id || '',
@@ -1770,6 +1775,7 @@ async function runEvalInternal(
     // TODO(ian): Rename these public `Idx` fields to `Index` with compatibility handling.
     testIdx: testIndex,
     promptIdx: promptIndex,
+    repeatGroupId,
     repeatIndex,
     conversations,
     registers,
@@ -1912,6 +1918,8 @@ async function runEvalInternal(
             latencyMs,
             prompt,
             promptIdx: promptIndex,
+            repeatGroupId,
+            repeatIndex,
             rendered,
             response,
             setup,
@@ -2012,6 +2020,7 @@ async function runEvalInternal(
         namedScores: {},
         latencyMs,
         promptIdx: promptIndex,
+        ...(repeatGroupId !== undefined && { repeatGroupId, repeatIndex }),
         testIdx: testIndex,
         testCase: test,
         promptId: prompt.id || '',
@@ -3051,6 +3060,7 @@ async function buildRunEvalOptions({
       registers,
       runEvalOptions,
       testCase,
+      testCaseIndex: index,
       testSuite,
     });
   }
@@ -3137,6 +3147,7 @@ function appendRunEvalOptionsForTestCase({
   registers,
   runEvalOptions,
   testCase,
+  testCaseIndex,
   testSuite,
 }: {
   concurrency: number;
@@ -3150,6 +3161,7 @@ function appendRunEvalOptionsForTestCase({
   registers: EvalRegisters;
   runEvalOptions: RunEvalOptions[];
   testCase: AtomicTestCase;
+  testCaseIndex: number;
   testSuite: TestSuite;
 }) {
   const promptPrefix = testCase.options?.prefix || getDefaultTest(testSuite)?.options?.prefix || '';
@@ -3166,7 +3178,7 @@ function appendRunEvalOptionsForTestCase({
     repeat: testRepeat,
   };
   for (let repeatIndex = 0; repeatIndex < testRepeat; repeatIndex++) {
-    for (const vars of varCombinations) {
+    for (const [varCombinationIndex, vars] of varCombinations.entries()) {
       appendRunEvalOptionsForVars({
         concurrency,
         conversations,
@@ -3178,6 +3190,8 @@ function appendRunEvalOptionsForTestCase({
         providerAbortSignal,
         rateLimitRegistry,
         registers,
+        repeatGroupId:
+          testRepeat > 1 ? `test-${testCaseIndex}-vars-${varCombinationIndex}` : undefined,
         repeatIndex,
         runEvalOptions,
         testCase,
@@ -3203,6 +3217,7 @@ function appendRunEvalOptionsForVars({
   providerAbortSignal,
   rateLimitRegistry,
   registers,
+  repeatGroupId,
   repeatIndex,
   runEvalOptions,
   testCase,
@@ -3220,6 +3235,7 @@ function appendRunEvalOptionsForVars({
   providerAbortSignal?: AbortSignal;
   rateLimitRegistry?: RateLimitRegistryRef;
   registers: EvalRegisters;
+  repeatGroupId?: string;
   repeatIndex: number;
   runEvalOptions: RunEvalOptions[];
   testCase: AtomicTestCase;
@@ -3243,6 +3259,7 @@ function appendRunEvalOptionsForVars({
       providerAbortSignal,
       rateLimitRegistry,
       registers,
+      repeatGroupId,
       repeatIndex,
       runEvalOptions,
       testCase,
@@ -3265,6 +3282,7 @@ function appendRunEvalOptionsForProvider({
   providerAbortSignal,
   rateLimitRegistry,
   registers,
+  repeatGroupId,
   repeatIndex,
   runEvalOptions,
   testCase,
@@ -3283,6 +3301,7 @@ function appendRunEvalOptionsForProvider({
   providerAbortSignal?: AbortSignal;
   rateLimitRegistry?: RateLimitRegistryRef;
   registers: EvalRegisters;
+  repeatGroupId?: string;
   repeatIndex: number;
   runEvalOptions: RunEvalOptions[];
   testCase: AtomicTestCase;
@@ -3309,6 +3328,7 @@ function appendRunEvalOptionsForProvider({
         providerAbortSignal,
         rateLimitRegistry,
         registers,
+        repeatGroupId,
         repeatIndex,
         testCase,
         testIdx,
@@ -3332,6 +3352,7 @@ function createRunEvalOption({
   providerAbortSignal,
   rateLimitRegistry,
   registers,
+  repeatGroupId,
   repeatIndex,
   testCase,
   testIdx,
@@ -3350,6 +3371,7 @@ function createRunEvalOption({
   providerAbortSignal?: AbortSignal;
   rateLimitRegistry?: RateLimitRegistryRef;
   registers: EvalRegisters;
+  repeatGroupId?: string;
   repeatIndex: number;
   testCase: AtomicTestCase;
   testIdx: number;
@@ -3369,6 +3391,7 @@ function createRunEvalOption({
     nunjucksFilters: testSuite.nunjucksFilters,
     testIdx,
     promptIdx,
+    repeatGroupId,
     repeatIndex,
     evaluateOptions: options,
     conversations,
@@ -3887,6 +3910,10 @@ function createEvalStepTimeoutResult(
     namedScores: {},
     latencyMs: timeoutMs,
     promptIdx: evalStep.promptIdx,
+    ...(evalStep.repeatGroupId !== undefined && {
+      repeatGroupId: evalStep.repeatGroupId,
+      repeatIndex: evalStep.repeatIndex,
+    }),
     testIdx: evalStep.testIdx,
     testCase: sanitizedTestCase,
     promptId: evalStep.prompt.id || '',
@@ -3982,6 +4009,10 @@ function createMaxDurationTimeoutResult(
     namedScores: {},
     latencyMs: Date.now() - startTime,
     promptIdx: evalStep.promptIdx,
+    ...(evalStep.repeatGroupId !== undefined && {
+      repeatGroupId: evalStep.repeatGroupId,
+      repeatIndex: evalStep.repeatIndex,
+    }),
     testIdx: evalStep.testIdx,
     testCase: evalStep.test,
     promptId: evalStep.prompt.id || '',

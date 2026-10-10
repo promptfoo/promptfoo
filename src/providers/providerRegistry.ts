@@ -49,6 +49,7 @@ export class ProviderRegistry {
   private readonly releasingResource = new AsyncLocalStorage<{
     state: ResourceState;
     registration: number;
+    forced: boolean;
   }>();
   private readonly providers = new WeakMap<IdleCleanupProvider, ProviderState>();
   private readonly ownedProviders = new Set<ProviderState>();
@@ -259,6 +260,14 @@ export class ProviderRegistry {
       this.claimResource(scope, state);
     }
     this.ensureShutdownHandlers();
+  }
+
+  /** Keep an unsuccessful idle cleanup eligible for one final process-shutdown attempt. */
+  retainForProcessShutdown(resource: CleanupProvider): void {
+    // Forced cleanup (including beforeExit) must not re-register a permanent failure.
+    if (!this.processShuttingDown && !this.releasingResource.getStore()?.forced) {
+      this.register(resource);
+    }
   }
 
   unregister(resource: CleanupProvider): void {
@@ -589,8 +598,9 @@ export class ProviderRegistry {
           actual = promise;
           let shutdown: Promise<void>;
           try {
-            shutdown = this.releasingResource.run({ state, registration }, () =>
-              state.resource.shutdown(),
+            shutdown = this.releasingResource.run(
+              { state, registration, forced: force || forceShutdown },
+              () => state.resource.shutdown(),
             );
           } catch (error) {
             shutdown = Promise.reject(error);

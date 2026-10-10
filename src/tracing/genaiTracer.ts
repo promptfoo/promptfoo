@@ -332,11 +332,7 @@ export function extractGenAIResponse(
 ): GenAISpanResult {
   const result: GenAISpanResult = {};
   if (response.tokenUsage) {
-    result.tokenUsage = {
-      prompt: response.tokenUsage.prompt,
-      completion: response.tokenUsage.completion,
-      total: response.tokenUsage.total,
-    };
+    result.tokenUsage = { ...response.tokenUsage };
   }
   if (includeFinishReason && response.finishReason) {
     result.finishReasons = [response.finishReason];

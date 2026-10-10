@@ -6,7 +6,7 @@ import fs from 'fs';
 import { expect, it, vi } from 'vitest';
 import { evaluate } from '../../src/evaluator';
 import Eval from '../../src/models/eval';
-import { type TestSuite } from '../../src/types/index';
+import { type EvaluateSummaryV3, type TestSuite } from '../../src/types/index';
 import { processConfigFileReferences } from '../../src/util/fileReference';
 import { mockApiProvider, mockReasoningApiProvider, toPrompt } from './helpers';
 import { describeEvaluator } from './lifecycle';
@@ -15,6 +15,32 @@ const createVariableTest = () => ({
   vars: { var1: 'value1', var2: 'value2' },
 });
 describeEvaluator('evaluator basic flows', () => {
+  it('reports final comparison verdicts for repeated tests', async () => {
+    const provider = {
+      id: () => 'repeated-comparison',
+      callApi: async (prompt: string, context: { repeatIndex?: number } | undefined) => ({
+        output: (prompt === 'first') === (context?.repeatIndex === 0) ? 'hello' : 'no match',
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('first'), toPrompt('second')],
+      tests: [
+        {
+          assert: [
+            { type: 'javascript', value: 'output === "hello" ? 0.9 : 0.8' },
+            { type: 'max-score' },
+          ],
+        },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, { repeat: 2 });
+    const summary = (await evalRecord.toEvaluateSummary()) as EvaluateSummaryV3;
+    expect(summary.repeatStability?.unstableGroups).toBe(2);
+    expect(await evalRecord.getObservedRepeatStability()).toEqual(summary.repeatStability);
+  });
+
   it('evaluate with vars', async () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
@@ -521,13 +547,50 @@ describeEvaluator('evaluator basic flows', () => {
 
     await evaluate(testSuite, evalRecord, { repeat: 2 });
 
-    const summary = await evalRecord.toEvaluateSummary();
+    const summary = (await evalRecord.toEvaluateSummary()) as EvaluateSummaryV3;
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(3);
     expect(
       vi.mocked(mockApiProvider.callApi).mock.calls.map(([, context]) => context?.repeatIndex),
     ).toEqual([0, 1, 2]);
     expect(summary.results).toHaveLength(3);
+    expect(summary.results.map(({ repeatIndex }) => repeatIndex)).toEqual([0, 1, 2]);
+    expect(new Set(summary.results.map(({ repeatGroupId }) => repeatGroupId))).toEqual(
+      new Set(['test-0-vars-0']),
+    );
+    expect(summary.repeatStability).toMatchObject({
+      totalGroups: 1,
+      unstableGroups: 0,
+      groups: [{ repetitions: 3, passed: 3, failed: 0, errors: 0 }],
+    });
+    expect(await evalRecord.getObservedRepeatStability()).toEqual(summary.repeatStability);
+  });
+
+  it('keeps expanded variable combinations in separate repeat groups', async () => {
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt {{ value }}')],
+      tests: [{ vars: { value: ['first', 'second'] } }],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await evaluate(testSuite, evalRecord, { repeat: 2 });
+
+    const summary = (await evalRecord.toEvaluateSummary()) as EvaluateSummaryV3;
+    const groups = new Map<string | undefined, EvaluateSummaryV3['results']>();
+    for (const result of summary.results) {
+      groups.set(result.repeatGroupId, [...(groups.get(result.repeatGroupId) ?? []), result]);
+    }
+
+    expect(groups.size).toBe(2);
+    for (const results of groups.values()) {
+      expect(results).toHaveLength(2);
+      expect(results.map(({ repeatIndex }) => repeatIndex).sort()).toEqual([0, 1]);
+    }
+    expect(summary.repeatStability).toMatchObject({
+      totalGroups: 2,
+      groups: [{ repetitions: 2 }, { repetitions: 2 }],
+    });
   });
 
   it.each([

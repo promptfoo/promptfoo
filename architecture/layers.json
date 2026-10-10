@@ -132,6 +132,7 @@
         "src/util"
       ],
       "allowedDependencies": [
+        "contracts",
         "core",
         "legacy-contracts",
         "legacy-runtime",
