@@ -69,6 +69,45 @@ function stripMediaReferences(value: unknown): unknown {
   return value;
 }
 
+const RESPONSE_OUTPUT_METADATA_KEYS: readonly string[] = [
+  'audio',
+  'blobUris',
+  'citations',
+  'returnControl',
+  'files',
+  'retrievalResults',
+];
+
+// Keep provider-derived copies aligned when hooks or blob extraction change response metadata.
+// Preserve distinct values supplied by tests or hooks.
+export function synchronizeResponseMetadata(
+  originalMetadata: Record<string, unknown> | undefined,
+  originalResponseMetadata: Record<string, unknown> | undefined,
+  updatedMetadata: Record<string, unknown> | undefined,
+  updatedResponseMetadata: Record<string, unknown> | undefined,
+  testMetadata: Record<string, unknown> | undefined,
+) {
+  let metadata = updatedMetadata;
+  for (const key of ['headers', ...RESPONSE_OUTPUT_METADATA_KEYS]) {
+    const originalValue = originalMetadata?.[key];
+    if (
+      originalValue === undefined ||
+      !isDeepStrictEqual(originalValue, originalResponseMetadata?.[key]) ||
+      !isDeepStrictEqual(updatedMetadata?.[key], originalValue) ||
+      (key !== 'headers' && testMetadata && isDeepStrictEqual(originalValue, testMetadata[key]))
+    ) {
+      continue;
+    }
+
+    const { [key]: _staleValue, ...metadataWithoutKey } = metadata ?? {};
+    metadata =
+      updatedResponseMetadata?.[key] === undefined
+        ? metadataWithoutKey
+        : { ...metadataWithoutKey, [key]: updatedResponseMetadata[key] };
+  }
+  return metadata;
+}
+
 function projectOutputMetadata<T>(
   metadata: T,
   stripOutput: boolean,
@@ -86,16 +125,14 @@ function projectOutputMetadata<T>(
       ) {
         return [[key, value]];
       }
-      return [
-        'audio',
-        'blobUris',
-        'citations',
-        'returnControl',
-        'files',
-        'retrievalResults',
-      ].includes(key)
-        ? []
-        : [[key, stripMediaReferences(sanitizeForDb(value))]];
+      if (RESPONSE_OUTPUT_METADATA_KEYS.includes(key)) {
+        return key === 'audio' ||
+          key === 'blobUris' ||
+          isDeepStrictEqual(value, responseMetadata[key])
+          ? []
+          : [[key, value]];
+      }
+      return [[key, stripMediaReferences(sanitizeForDb(value))]];
     }),
   ) as T;
 }
@@ -1021,19 +1058,29 @@ export default class EvalResult {
       repeatGroupId,
     } = serializeResultProviderRefs(result);
 
-    // Persist trace and repeat linkage inside a private metadata namespace so they
-    // survive EvalResult round-trips without a Drizzle schema migration.
-    const persistedMetadata = persistTraceMetadata(
-      persistRepeatMetadata(metadata, repeatIndex, repeatGroupId),
-      traceId,
-      evaluationId,
-    );
-
     const processedResponse = await extractAndStoreBinaryData(result.response, {
       evalId,
       testIdx: result.testIdx,
       promptIdx: result.promptIdx,
     });
+
+    // Persist trace and repeat linkage inside a private metadata namespace so they
+    // survive EvalResult round-trips without a Drizzle schema migration.
+    const persistedMetadata = persistTraceMetadata(
+      persistRepeatMetadata(
+        synchronizeResponseMetadata(
+          metadata,
+          result.response?.metadata,
+          metadata,
+          processedResponse?.metadata,
+          testCase.metadata,
+        ),
+        repeatIndex,
+        repeatGroupId,
+      ),
+      traceId,
+      evaluationId,
+    );
 
     // Sanitize all JSON fields to remove circular references and non-serializable values.
     // `testCase` and `prompt` can contain a resolved runtime provider under
@@ -1095,6 +1142,13 @@ export default class EvalResult {
       processedResults.push({
         ...serializeResultProviderRefs(result),
         response: processedResponse ?? undefined,
+        metadata: synchronizeResponseMetadata(
+          result.metadata,
+          result.response?.metadata,
+          result.metadata,
+          processedResponse?.metadata,
+          result.testCase.metadata,
+        ),
       });
     }
 

@@ -503,6 +503,108 @@ describeEvaluator('evaluator metadata', () => {
     expect(summary.stats.successes).toBe(1);
   });
 
+  it.each([
+    'replace',
+    'delete',
+    'delete-key',
+    'update',
+    'hook-owned',
+    'hook-owned-replace',
+    'test-owned',
+    'failure',
+  ])('preserves metadata ownership after an in-place afterEach %s', async (mode) => {
+    const outputPath = path.join(os.tmpdir(), `promptfoo-hook-metadata-${randomUUID()}.jsonl`);
+    const outputMetadata = (text: string) => ({
+      citations: [{ generatedResponsePart: { textResponsePart: { text } } }],
+      returnControl: [
+        { invocationInputs: [{ functionInvocationInput: { parameters: [{ value: text }] } }] },
+      ],
+      files: [{ bytes: Buffer.from(text).toString('base64') }],
+      retrievalResults: [{ content: { text } }],
+    });
+    const nativeMetadata = outputMetadata('provider-output-secret');
+    const ownedMetadata = {
+      citations: 'owned citations',
+      returnControl: 'owned control',
+      files: 'owned files',
+      retrievalResults: 'owned retrieval results',
+    };
+    const responseMetadata = mode === 'test-owned' ? ownedMetadata : nativeMetadata;
+    const provider: ApiProvider = {
+      id: () => 'metadata-provider',
+      callApi: vi.fn().mockResolvedValue({ output: 'Test output', metadata: responseMetadata }),
+    };
+    vi.mocked(runExtensionHook).mockImplementation(async (_extensions, hookName, context) => {
+      if (hookName !== 'afterEach') {
+        return context;
+      }
+      const ctx = context as { test: any; result: any };
+      if (mode.startsWith('hook-owned')) {
+        Object.assign(ctx.result.metadata, ownedMetadata);
+      }
+      if (mode === 'delete') {
+        delete ctx.result.response.metadata;
+      } else if (mode === 'delete-key') {
+        delete ctx.result.response.metadata.citations;
+      } else if (mode === 'update') {
+        ctx.result.response.metadata = outputMetadata('updated-output-secret');
+      } else if (mode !== 'hook-owned') {
+        ctx.result.response.metadata = { note: 'done' };
+      }
+      if (mode === 'failure') {
+        throw new Error('Hook failed after replacing metadata');
+      }
+      return ctx;
+    });
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [
+        { ...createEqualityTest(), ...(mode === 'test-owned' && { metadata: ownedMetadata }) },
+      ],
+      extensions: ['file://test-extension.js:afterEach'],
+    };
+    vi.stubEnv('PROMPTFOO_STRIP_RESPONSE_OUTPUT', 'true');
+    try {
+      const evalRecord = await Eval.create({ outputPath }, testSuite.prompts, { id: randomUUID() });
+      await evaluate(testSuite, evalRecord, {});
+      const summary = (await evalRecord.toEvaluateSummary()) as EvaluateSummaryV3;
+      const [result] = summary.results;
+      const artifact = JSON.parse(fs.readFileSync(outputPath, 'utf8').trim());
+      expect(result.success).toBe(true);
+      for (const row of [result, artifact]) {
+        expect(row.response.output).toBe('[output stripped]');
+        for (const key of Object.keys(nativeMetadata)) {
+          expect(row.response.metadata ?? {}).not.toHaveProperty(key);
+          if (mode.startsWith('hook-owned') || mode === 'test-owned') {
+            expect(row.metadata[key]).toEqual(ownedMetadata[key as keyof typeof ownedMetadata]);
+          } else {
+            expect(row.metadata).not.toHaveProperty(key);
+          }
+        }
+        expect(JSON.stringify(row)).not.toContain('provider-output-secret');
+        expect(JSON.stringify(row)).not.toContain('updated-output-secret');
+        expect(JSON.stringify(row)).not.toContain(
+          Buffer.from('provider-output-secret').toString('base64'),
+        );
+        expect(JSON.stringify(row)).not.toContain(
+          Buffer.from('updated-output-secret').toString('base64'),
+        );
+      }
+      const [saved] = await evalRecord.getResults();
+      if (mode === 'update') {
+        expect(saved.metadata?.citations).toEqual(
+          outputMetadata('updated-output-secret').citations,
+        );
+      } else if (mode === 'failure') {
+        expect(saved.response?.metadata).toEqual(nativeMetadata);
+      }
+    } finally {
+      vi.unstubAllEnvs();
+      fs.rmSync(outputPath, { force: true });
+    }
+  });
+
   it('drops stale provider headers when afterEach replaces response metadata', async () => {
     const outputPath = path.join(os.tmpdir(), `promptfoo-evaluator-${randomUUID()}.jsonl`);
     const mockExtension = 'file://test-extension.js:afterEach';
