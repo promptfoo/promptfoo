@@ -102,10 +102,15 @@ export class AwsBedrockKnowledgeBaseProvider
     return `[Amazon Bedrock Knowledge Base Provider ${this.kbConfig.knowledgeBaseId ?? this.id()}]`;
   }
 
-  async getKnowledgeBaseClient() {
-    const singleAttempt =
+  get handlesOwnRetries(): boolean {
+    return (
       this.kbConfig.operation !== 'retrieve' &&
-      Boolean(this.kbConfig.sessionId || this.kbConfig.streaming);
+      Boolean(this.kbConfig.sessionId || this.kbConfig.streaming)
+    );
+  }
+
+  async getKnowledgeBaseClient() {
+    const singleAttempt = this.handlesOwnRetries;
     const clientProperty = singleAttempt
       ? 'singleAttemptKnowledgeBaseClient'
       : 'knowledgeBaseClient';

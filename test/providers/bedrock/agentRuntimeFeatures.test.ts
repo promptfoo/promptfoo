@@ -7,6 +7,8 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AwsBedrockAgentsProvider } from '../../../src/providers/bedrock/agents';
 import { AwsBedrockKnowledgeBaseProvider } from '../../../src/providers/bedrock/knowledgeBase';
+import { createProviderRateLimitOptions } from '../../../src/scheduler/providerWrapper';
+import { RateLimitRegistry } from '../../../src/scheduler/rateLimitRegistry';
 import { mockProcessEnv } from '../../util/utils';
 
 const cache = vi.hoisted(() => ({ enabled: false, get: vi.fn(), set: vi.fn() }));
@@ -62,6 +64,7 @@ beforeEach(() => {
 afterEach(() => {
   restoreEnv?.();
   vi.restoreAllMocks();
+  vi.useRealTimers();
 });
 
 describe('Knowledge Base runtime features', () => {
@@ -826,6 +829,53 @@ it.each([
         client.destroy();
       }
       restoreRetries();
+    }
+  },
+);
+
+it.each([
+  { sessionId: 'existing-session', streaming: false },
+  { sessionId: 'existing-session', streaming: true },
+  { sessionId: undefined, streaming: true },
+])(
+  'does not replay generation through the scheduler (session: $sessionId, stream: $streaming)',
+  async ({ sessionId, streaming }) => {
+    vi.useFakeTimers();
+    const restoreScheduler = mockProcessEnv({ PROMPTFOO_DISABLE_ADAPTIVE_SCHEDULER: 'false' });
+    const registry = new RateLimitRegistry({ maxConcurrency: 4, queueTimeoutMs: 0 });
+    const { provider, send } = kb({ sessionId, streaming });
+    send.mockImplementation(async () => {
+      if (!streaming) {
+        throw new Error('429 rate limit after accepted session turn');
+      }
+      return {
+        stream: events([
+          { output: { text: 'partial answer' } },
+          { throttlingException: { message: '429 rate limit after partial answer' } },
+        ]),
+      };
+    });
+    try {
+      const pending = registry.execute(
+        provider,
+        () => provider.callApi('continue'),
+        createProviderRateLimitOptions(),
+      );
+      await vi.runAllTimersAsync();
+      const result = await pending;
+      expect(result.error).toContain('429 rate limit');
+      expect(result.output).toBeUndefined();
+      expect(send).toHaveBeenCalledOnce();
+      expect(Object.values(registry.getMetrics())[0]).toMatchObject({
+        rateLimitHits: 1,
+        retriedRequests: 0,
+        failedRequests: 1,
+        completedRequests: 0,
+        maxConcurrency: 2,
+      });
+    } finally {
+      registry.dispose();
+      restoreScheduler();
     }
   },
 );
