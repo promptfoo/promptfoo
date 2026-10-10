@@ -256,6 +256,53 @@ describe('Claude Managed Agents', () => {
     expect(result.metadata).toMatchObject({ sessionArchived: false });
   });
 
+  it('keeps waiting when the status check itself fails for now', async () => {
+    vi.useFakeTimers();
+    const f = setup({}, [idle('budget_reached')]);
+    f.archive.mockRejectedValueOnce(stillRunning()).mockResolvedValue({} as never);
+    f.retrieve.mockRejectedValueOnce(apiError(429, 'Slow down.', 'rate_limit_error'));
+    const pending = f.provider.callApi('test');
+    await vi.advanceTimersByTimeAsync(250);
+    const result = await pending;
+    expect(f.archive).toHaveBeenCalledTimes(2);
+    expect(result.metadata).toMatchObject({ sessionArchived: true });
+    expect(result.metadata).not.toHaveProperty('cleanupErrors');
+  });
+
+  it.each(['agent', 'environment', 'session'] as const)(
+    'archives the %s whose creation was in flight when the call was aborted',
+    async (kind) => {
+      const f = setup({
+        config: {
+          apiKey: 'key',
+          agent: { name: 'QA', model: 'claude-sonnet-5' },
+          environment: { name: 'QA' },
+        },
+      });
+      const caller = new AbortController();
+      const spy = { agent: f.agentCreate, environment: f.environmentCreate, session: f.create }[
+        kind
+      ];
+      // The server finishes a create even if the client stops waiting for it.
+      spy.mockImplementation((async () => {
+        caller.abort();
+        return { id: `${kind}-created` };
+      }) as never);
+      const result = await f.provider.callApi('test', undefined, { abortSignal: caller.signal });
+      expect(result.error).toBe('Claude Managed Agents invocation aborted');
+      // An abortable create would discard the id that cleanup needs.
+      expect(spy.mock.calls[0][1]).not.toHaveProperty('signal');
+      expect(f.agentArchive).toHaveBeenCalledOnce();
+      expect(f.environmentArchive).toHaveBeenCalledTimes(kind === 'agent' ? 0 : 1);
+      expect(f.archive).toHaveBeenCalledTimes(kind === 'session' ? 1 : 0);
+      expect(f.send).not.toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ events: [expect.objectContaining({ type: 'user.message' })] }),
+        expect.anything(),
+      );
+    },
+  );
+
   it('accepts a refusal for a session that is already archived', async () => {
     const f = setup({}, [idle('budget_reached')]);
     f.archive.mockRejectedValue(apiError(400, 'Session sesn-test is already archived.'));
@@ -339,6 +386,19 @@ describe('Claude Managed Agents', () => {
     // A 404 aborts the eval before rows are shown, so the reason is also logged, once.
     expect(errorLog).toHaveBeenCalledOnce();
     expect(errorLog).toHaveBeenCalledWith(results[0].error);
+  });
+
+  it('scrubs credentials from errors that do not come from the API', async () => {
+    const apiKey = 'sk-ant-config-credential\nsecond-line-secret';
+    const f = setup({ config: { ...config, apiKey, headers: { 'x-gateway': 'gateway-secret' } } });
+    // What the runtime throws for a header value it rejects, before any request is sent.
+    f.create.mockRejectedValue(
+      new TypeError(`Headers.append: "${apiKey}" is an invalid header value (gateway-secret).`),
+    );
+    const result = await f.provider.callApi('test');
+    expect(result.error).toBe(
+      'Headers.append: "[REDACTED]" is an invalid header value ([REDACTED]).',
+    );
   });
 
   it('subscribes before sending, returns the final answer and full session usage, then archives only its session', async () => {
@@ -591,6 +651,22 @@ describe('Claude Managed Agents', () => {
       idle(),
     ]);
     expect((await f.provider.callApi('test')).output).toBe('recovered');
+  });
+
+  it('does not return progress written before a workflow ended as the answer', async () => {
+    const f = setup({}, [
+      { type: 'workflow_run.created', workflow_run_id: 'run' },
+      message('I started the workflow and will report back.'),
+      {
+        type: 'workflow_run.status_ended',
+        workflow_run_id: 'run',
+        result: { type: 'completed' },
+      },
+      idle(),
+    ]);
+    const result = await f.provider.callApi('test');
+    expect(result.error).toContain('without a text response');
+    expect(result.output).toBeUndefined();
   });
 
   it('does not return earlier progress when the final message is redacted', async () => {

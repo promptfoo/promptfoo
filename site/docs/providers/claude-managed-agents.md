@@ -89,7 +89,7 @@ Enabling workflows gives the agent access to them; your prompt should ask it to 
 
 ## Results and lifecycle
 
-Each call sends the rendered prompt as one text user message in a fresh session. Sessions are isolated across concurrent tests, and hosted responses are not cached. The provider returns the last main-agent text message as `output` and includes `sessionId`, `agentId`, `environmentId`, `workflowRuns`, and primary-thread `toolCalls` in response metadata. A workflow's child messages and tool calls stay in its own hosted thread and are not included in `toolCalls`.
+Each call sends the rendered prompt as one text user message in a fresh session. Sessions are isolated across concurrent tests, and hosted responses are not cached. The provider returns the last main-agent text message as `output`, which must come after any workflow run has ended, and includes `sessionId`, `agentId`, `environmentId`, `workflowRuns`, and primary-thread `toolCalls` in response metadata. A workflow's child messages and tool calls stay in its own hosted thread and are not included in `toolCalls`.
 
 Usage comes from the session totals, including workflow threads. Prompt-token totals include uncached input, cache reads, and cache creation. `cost` is the session's reported USD list cost, including hosted runtime, converted from cents. Anthropic rounds list cost to the nearest cent, so a session that costs less than half a cent reports `0`. If the final usage read fails, the completed answer is preserved, `metadata.usageError` records the failure, and any streamed usage snapshot is used instead. Missing cost is left unknown.
 

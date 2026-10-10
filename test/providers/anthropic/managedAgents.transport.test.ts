@@ -148,6 +148,22 @@ describe('Claude Managed Agents SDK transport', () => {
     expect(result.output).toBeUndefined();
   });
 
+  it('does not echo a credential the runtime rejects as a header value', async () => {
+    const { apiBaseUrl, requests } = await serve('');
+    const result = await new AnthropicManagedAgentsProvider({
+      config: {
+        apiKey: 'local-test-key\nsecond-line-secret',
+        apiBaseUrl,
+        agent_id: 'agent-test',
+        environment_id: 'env-test',
+      },
+    }).callApi('test');
+    expect(result.error).toContain('invalid header value');
+    expect(result.error).not.toContain('local-test-key');
+    expect(result.error).not.toContain('second-line-secret');
+    expect(requests).toHaveLength(0);
+  });
+
   it('does not retry a failed creation or echo API error bodies', async () => {
     const { apiBaseUrl, requests } = await serve('', 401);
     const result = await new AnthropicManagedAgentsProvider({

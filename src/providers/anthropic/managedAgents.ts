@@ -88,6 +88,8 @@ class SessionState {
       this.openRuns.delete(id);
       run.status = 'ended';
       run.result = event.result;
+      // The answer is what the agent says once it has been told how the run ended.
+      this.output = undefined;
     }
     this.runs.set(id, run);
   }
@@ -239,14 +241,25 @@ function archiveFailureKind(error: unknown): 'conflict' | 'transient' | undefine
   return status === undefined || status === 429 || status >= 500 ? 'transient' : undefined;
 }
 
+/** Removes the credentials this call sent, then anything else shaped like one. */
+function scrub(text: string, secrets: Iterable<string>): string {
+  let scrubbed = text;
+  for (const secret of secrets) {
+    scrubbed = scrubbed.split(secret).join('[REDACTED]');
+  }
+  return sanitizeBody(scrubbed).slice(0, 500);
+}
+
 /**
  * Reports the API's own reason, which is what makes a rejected agent, environment,
- * or session definition fixable. That text can echo request values, so the
- * credentials this call sent are removed from it first.
+ * or session definition fixable. Error text can echo request values, such as a
+ * header value the runtime rejects, so it is scrubbed of credentials first.
  */
 function describeError(error: unknown, secrets: Iterable<string>): string {
   if (!(error instanceof Anthropic.APIError)) {
-    return error instanceof Error ? error.message : 'Claude Managed Agents request failed';
+    return error instanceof Error
+      ? scrub(error.message, secrets)
+      : 'Claude Managed Agents request failed';
   }
   if (error.status === undefined) {
     const cause =
@@ -259,13 +272,10 @@ function describeError(error: unknown, secrets: Iterable<string>): string {
   }
   const detail = (error.error as { error?: { type?: unknown; message?: unknown } } | undefined)
     ?.error;
-  let reason = [detail?.type, detail?.message]
-    .filter((part) => typeof part === 'string')
-    .join(': ');
-  for (const secret of secrets) {
-    reason = reason.split(secret).join('[REDACTED]');
-  }
-  reason = sanitizeBody(reason).slice(0, 500);
+  const reason = scrub(
+    [detail?.type, detail?.message].filter((part) => typeof part === 'string').join(': '),
+    secrets,
+  );
   return `Claude Managed Agents API request failed (HTTP ${error.status})${reason ? `: ${reason}` : ''}`;
 }
 
@@ -464,6 +474,13 @@ export class AnthropicManagedAgentsProvider extends AnthropicGenericProvider {
     const params = { workspace_id: config.workspace_id };
     // Mutations must not be retried: a lost response can otherwise start duplicate paid runs.
     const request = { signal, maxRetries: 0, headers: config.headers };
+    // Aborting a create in flight would discard the id of a resource the server still
+    // makes, leaving nothing to archive. Creates finish, then the abort is honoured.
+    const createRequest = {
+      maxRetries: 0,
+      headers: config.headers,
+      timeout: Math.min(timeoutMs, 60_000),
+    };
     let agentId = config.agent_id;
     let environmentId = config.environment_id;
     let sessionId: string | undefined;
@@ -477,20 +494,21 @@ export class AnthropicManagedAgentsProvider extends AnthropicGenericProvider {
       if (config.agent) {
         const agent = await this.anthropic.beta.agents.create(
           { ...config.agent, ...params } as AgentCreateParams,
-          request,
+          createRequest,
         );
         agentId = agent.id;
         metadata.createdAgentId = agentId;
+        signal.throwIfAborted();
       }
       if (config.environment) {
         const environment = await this.anthropic.beta.environments.create(
           { ...config.environment, ...params },
-          request,
+          createRequest,
         );
         environmentId = environment.id;
         metadata.createdEnvironmentId = environmentId;
+        signal.throwIfAborted();
       }
-      signal.throwIfAborted();
       const session = await this.anthropic.beta.sessions.create(
         {
           title: config.session?.title,
@@ -504,12 +522,13 @@ export class AnthropicManagedAgentsProvider extends AnthropicGenericProvider {
             : agentId!,
           environment_id: environmentId!,
         },
-        request,
+        createRequest,
       );
       sessionId = session.id;
       metadata.sessionId = sessionId;
       metadata.agentId = agentId;
       metadata.environmentId = environmentId;
+      signal.throwIfAborted();
 
       // Streams do not replay history. Subscribe before sending the user's message.
       stream = await this.anthropic.beta.sessions.events
@@ -677,6 +696,28 @@ export class AnthropicManagedAgentsProvider extends AnthropicGenericProvider {
     }
   }
 
+  /** Where the session stands for archival; `unknown` when the check itself fails for now. */
+  private async archivalState(
+    sessionId: string,
+    params: { workspace_id?: string },
+    request: Anthropic.RequestOptions & { signal: AbortSignal },
+  ): Promise<'archived' | 'running' | 'settled' | 'unknown'> {
+    try {
+      const session = await this.anthropic.beta.sessions.retrieve(sessionId, params, request);
+      if (session.archived_at) {
+        return 'archived';
+      }
+      return session.status === 'running' || session.status === 'rescheduling'
+        ? 'running'
+        : 'settled';
+    } catch (error) {
+      if (request.signal.aborted || archiveFailureKind(error) !== 'transient') {
+        throw error;
+      }
+      return 'unknown';
+    }
+  }
+
   /**
    * Archival is refused while a session is `running`. An interrupt only takes effect
    * at the session's next safe boundary, and the stream reports idle slightly before
@@ -709,12 +750,12 @@ export class AnthropicManagedAgentsProvider extends AnthropicGenericProvider {
             return refusal;
           }
         }
-        const session = await this.anthropic.beta.sessions.retrieve(sessionId, params, request);
-        if (session.archived_at) {
+        const state = await this.archivalState(sessionId, params, request);
+        if (state === 'archived') {
           return undefined;
         }
-        running = session.status === 'running' || session.status === 'rescheduling';
-        const wait = running || failure === 'transient';
+        running = state === 'running';
+        const wait = state !== 'settled' || failure === 'transient';
         // Refused while settled both before and after the attempt: waiting will not
         // help a session that, for example, still has an open workflow run.
         if (!wait && settled) {
