@@ -26,7 +26,7 @@ Use the [AWS model cards](https://docs.aws.amazon.com/bedrock/latest/userguide/m
 | Nova Sonic speech                            | `bedrock:<sonic-model-id>`                                   | InvokeModelWithBidirectionalStream                                 |
 | Luma / historical Nova Reel video generation | `bedrock:video:<id>`                                         | StartAsyncInvoke and GetAsyncInvoke                                |
 
-Some bare model IDs select a specialized provider automatically. Use the explicit selectors above when choosing an API, and consult the model-specific sections below for supported IDs. API support, modalities, and parameters depend on the selected model and AWS service. Use a [custom provider](./custom-api.md) when your workflow needs additional AWS operations or response handling.
+Some bare model IDs select a specialized provider automatically. Legacy `completion:` and `converse:` aliases for bare OpenAI frontier and Grok model IDs also use Mantle Responses. To select native Runtime Converse, supply a supported Runtime inference-profile ID to `bedrock:converse:<id>`. Consult the model-specific sections below for supported IDs, APIs, modalities, and parameters. Use a [custom provider](./custom-api.md) when your workflow needs additional AWS operations or response handling.
 
 ### Discover current IDs and lifecycle state
 
