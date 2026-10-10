@@ -82,6 +82,13 @@ function describeInvalidProvider(provider: unknown): string {
   }
 }
 
+const providerLoadPaths = new WeakMap<ApiProvider, string>();
+
+/** Factory identity stays distinct from an optional display/custom provider ID. */
+export function getProviderLoadPath(provider: ApiProvider): string | undefined {
+  return providerLoadPaths.get(provider);
+}
+
 // NOTE: loadApiProvider only accepts string paths. Callers use normalizeProviderRef
 // (src/util/providerRef.ts) to classify provider shapes before calling this function.
 export async function loadApiProvider(
@@ -119,7 +126,13 @@ async function createApiProvider(
   // Render ONLY environment variable templates at load time (e.g., {{ env.AZURE_ENDPOINT }})
   // This allows constructors to access real env values while preserving runtime templates
   // like {{ vars.* }} for per-test customization at callApi() time
-  const renderedConfig = options.config ? renderTemplate(options.config) : undefined;
+  const renderedConfig = options.config
+    ? context.configTransform &&
+      !isCloudProvider(renderedProviderPath) &&
+      !isProviderConfigFileReference(renderedProviderPath)
+      ? cliState.withEnv(templateEnv, () => context.configTransform!(options.config, templateEnv))
+      : renderTemplate(options.config)
+    : undefined;
   const renderedId = options.id ? renderTemplate(options.id) : undefined;
   const mergedEnv = mergeProviderEnv(
     { id: renderedProviderPath, config: renderedConfig },
@@ -259,6 +272,7 @@ async function createApiProvider(
       createApiProvider(
         fileProviderId,
         {
+          configTransform: context.configTransform,
           basePath,
           env: mergedFileEnv,
           options: {
@@ -277,6 +291,7 @@ async function createApiProvider(
       const ret = await cliState.withEnv(mergedEnv, () =>
         factory.create(renderedProviderPath, providerOptions, { ...context, env: mergedEnv }),
       );
+      providerLoadPaths.set(ret, renderedProviderPath);
       ret.transform = options.transform;
       ret.delay = options.delay;
       ret.inputs = options.inputs;

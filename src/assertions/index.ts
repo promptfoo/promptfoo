@@ -110,6 +110,7 @@ import type {
   AssertionParams,
   AssertionValueFunctionContext,
   BaseAssertionTypes,
+  NunjucksFilterMap,
   ProviderResponse,
   ScoringFunction,
 } from '../types/index';
@@ -415,6 +416,7 @@ async function runAssertionInternal({
   assertion,
   test,
   vars,
+  filters,
   latencyMs,
   providerResponse,
   traceId,
@@ -426,6 +428,7 @@ async function runAssertionInternal({
   assertion: Assertion;
   test: AtomicTestCase;
   vars?: Record<string, VarValue>;
+  filters?: NunjucksFilterMap;
   providerResponse: ProviderResponse;
   latencyMs?: number;
   assertIndex?: number;
@@ -618,14 +621,16 @@ async function runAssertionInternal({
       ? activeTraceparent
       : generateTraceparent(traceId, generateSpanId())
     : undefined;
-  const providerCallContext: CallApiContextParams | undefined = provider
-    ? {
-        originalProvider: provider,
-        prompt: { raw: prompt || '', label: '' },
-        vars: resolvedVars,
-        ...(graderTraceparent && { traceparent: graderTraceparent }),
-      }
-    : undefined;
+  const providerCallContext: CallApiContextParams | undefined =
+    provider || filters
+      ? {
+          originalProvider: provider,
+          prompt: { raw: prompt || '', label: '' },
+          vars: resolvedVars,
+          ...(filters && { filters }),
+          ...(graderTraceparent && { traceparent: graderTraceparent }),
+        }
+      : undefined;
 
   const finalTest = getFinalTest(
     vars === undefined ? test : { ...test, vars: resolvedVars },
@@ -762,6 +767,7 @@ export async function runAssertions({
   providerResponse,
   test,
   vars,
+  filters,
   traceId,
 }: {
   assertScoringFunction?: ScoringFunction;
@@ -771,6 +777,7 @@ export async function runAssertions({
   providerResponse: ProviderResponse;
   test: AtomicTestCase;
   vars?: Record<string, VarValue>;
+  filters?: NunjucksFilterMap;
   traceId?: string;
 }): Promise<GradingResult> {
   if (!test.assert || test.assert.length < 1) {
@@ -859,6 +866,7 @@ export async function runAssertions({
       prompt,
       provider,
       providerResponse,
+      ...(filters && { filters }),
       assertion,
       test,
       vars,

@@ -1,7 +1,9 @@
 import { DEFAULT_AGENT_GRADING_PROMPT } from '../prompts/grading';
 import { isAgenticGradingProvider } from '../providers/agentic-utils';
 import { isAgentWorkspace } from '../providers/agentWorkspace';
+import { getProviderLoadPath } from '../providers/index';
 import { getCodexDefaultProviders } from '../providers/openai/codexDefaults';
+import { renderGradingProviderConfig } from '../util/gradingProviderConfig';
 import { getGradingProvider } from './providers';
 import { runJsonGradingPrompt } from './rubric';
 import { tryParse } from './shared';
@@ -29,12 +31,22 @@ export async function matchesAgentRubric(
     );
   }
 
+  const gradingVars = { ...vars, output: tryParse(llmOutput), rubric };
   const configuredProvider = grading.provider
-    ? await getGradingProvider('text', grading.provider, null)
+    ? await getGradingProvider('text', grading.provider, null, (config, env) =>
+        renderGradingProviderConfig(config, gradingVars, env, providerCallContext?.filters),
+      )
     : null;
   const agentProvider = configuredProvider || getCodexDefaultProviders().llmRubricProvider;
 
-  if (!agentProvider || !isAgenticGradingProvider(agentProvider)) {
+  const providerPath = agentProvider && getProviderLoadPath(agentProvider);
+  // Factory identity recognizes custom IDs, while custom file providers retain
+  // their existing ability to identify themselves as an agentic runtime.
+  const runtimeProvider =
+    providerPath && !isAgenticGradingProvider(agentProvider)
+      ? { ...agentProvider, id: () => providerPath }
+      : agentProvider;
+  if (!agentProvider || !isAgenticGradingProvider(runtimeProvider)) {
     throw new Error(
       'agent-rubric assertion requires an agentic grading provider. ' +
         'Use openai:codex-sdk, openai:codex-app-server, anthropic:claude-agent-sdk, openinterpreter, or opencode:sdk.',
@@ -58,11 +70,7 @@ export async function matchesAgentRubric(
       isAgentWorkspace(targetWorkingDir) && {
         providerPromptConfig: { working_dir: targetWorkingDir },
       }),
-    vars: {
-      ...(vars || {}),
-      output: tryParse(llmOutput),
-      rubric,
-    },
+    vars: gradingVars,
   });
 
   return {
