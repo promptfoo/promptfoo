@@ -465,7 +465,7 @@ function normalizeInteractionServiceTier(
 
 type InteractionStructuredOutputLayer = {
   generationConfigs: unknown[];
-  responseSchema?: string;
+  responseSchema?: CompletionOptions['responseSchema'];
 };
 
 function resolveInteractionStructuredOutput(layers: InteractionStructuredOutputLayer[]): {

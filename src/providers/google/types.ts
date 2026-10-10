@@ -325,7 +325,7 @@ export interface CompletionOptions {
     };
   };
 
-  responseSchema?: string;
+  responseSchema?: string | Record<string, unknown>;
 
   toolConfig?: {
     functionCallingConfig?: {
