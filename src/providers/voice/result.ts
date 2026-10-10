@@ -16,6 +16,7 @@ interface VoiceResultInput {
   recordings: Buffer[];
   responses: Array<ProviderResponse | undefined>;
   queues: PcmAudioQueue[];
+  deliveredAudioBytes: number[];
   frameCount: number;
   maximumClockLagMs: number;
   elapsedMs: number;
@@ -30,6 +31,7 @@ export function formatVoiceResult({
   recordings,
   responses,
   queues,
+  deliveredAudioBytes,
   frameCount,
   maximumClockLagMs,
   elapsedMs,
@@ -47,7 +49,7 @@ export function formatVoiceResult({
     error ??=
       'The simulated caller encountered a safety intervention; target behavior could not be fully tested.';
   }
-  if (!error && !responses[0]?.isRefusal && queues.some((queue) => queue.deliveredBytes === 0)) {
+  if (!error && !responses[0]?.isRefusal && deliveredAudioBytes.some((bytes) => bytes === 0)) {
     error = 'Both voice participants must deliver audio; the conversation was incomplete.';
   }
   if (
@@ -108,10 +110,11 @@ export function formatVoiceResult({
           voiceCost: finalUsageConfirmed ? metadata?.voiceCost : undefined,
           backendCost: finalUsageConfirmed ? metadata?.backendCost : undefined,
           closeReason: metadata?.closeReason,
+          cancelledSpeechRequests: metadata?.cancelledSpeechRequests,
           error: response?.error,
           isRefusal: response?.isRefusal,
           guardrails: response?.guardrails,
-          deliveredAudioBytes: queues[index]?.deliveredBytes ?? 0,
+          deliveredAudioBytes: deliveredAudioBytes[index] ?? 0,
           queuedAudioBytes: queues[index]?.bytes ?? 0,
           maximumQueueMs: ((queues[index]?.peakBytes ?? 0) / BYTES_PER_SECOND) * 1000,
           delegations: metadata?.delegations,

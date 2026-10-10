@@ -266,9 +266,21 @@ export async function getGradingProvider(
     const defaultTestObj = typeof defaultTest === 'object' ? (defaultTest as TestCase) : null;
     const fallbackProviders = [
       defaultTestObj?.provider || undefined,
-      defaultTestObj?.options?.provider?.[type] || undefined,
       defaultTestObj?.options?.provider || undefined,
-    ];
+    ].map((candidate) => {
+      // Implicit modality maps do not override the default for an absent modality.
+      // Explicit provider maps still pass through the strict validation above.
+      if (
+        candidate &&
+        typeof candidate === 'object' &&
+        !Array.isArray(candidate) &&
+        !('id' in candidate) &&
+        ['text', 'embedding', 'classification', 'moderation'].some((key) => key in candidate)
+      ) {
+        return (candidate as ProviderTypeMap)[type];
+      }
+      return candidate;
+    });
 
     const cfg = fallbackProviders.find((candidateProvider) => {
       if (!candidateProvider) {

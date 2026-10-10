@@ -51,6 +51,21 @@ describe('getGradingProvider', () => {
     },
   );
 
+  it.each(['promptfoo:simulated-user', 'promptfoo:simulated-voice-user', 'openai:gpt-4.1'])(
+    'preserves the embedding default when an implicit map only sets %s for text',
+    async (id) => {
+      cliState.config = { defaultTest: { options: { provider: { text: id } } } };
+      expect(await getGradingProvider('embedding', undefined, mockProvider)).toBe(mockProvider);
+      expect(loadApiProvider).not.toHaveBeenCalled();
+    },
+  );
+
+  it('continues rejecting an explicitly selected map without the requested modality', async () => {
+    await expect(
+      getGradingProvider('embedding', { text: 'promptfoo:simulated-voice-user' }, mockProvider),
+    ).rejects.toThrow('Invalid provider definition');
+  });
+
   describe('explicit provider parameter', () => {
     it('should use provider when specified as string', async () => {
       vi.mocked(loadApiProvider).mockResolvedValue(mockProvider);

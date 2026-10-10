@@ -328,7 +328,7 @@ describe('SimulatedVoiceUser', () => {
       type: 'error',
       error: {
         code: 'invalid_request_error',
-        message: 'Instruction rejected',
+        message: 'Instruction rejected for caller-key',
         client_event_id: instruction.event_id,
       },
     });
@@ -338,6 +338,7 @@ describe('SimulatedVoiceUser', () => {
     emit(target, { type: 'session.closed', reason: 'close_requested', usage: { seconds: 1 } });
     const response = await result;
     expect(response.error).toContain('Instruction rejected');
+    expect(JSON.stringify(response)).not.toContain('caller-key');
     expect(vi.getTimerCount()).toBe(0);
   });
 
@@ -494,20 +495,158 @@ describe('SimulatedVoiceUser', () => {
     expect(response.metadata?.voice.stopReason).toBe('safety');
   });
 
-  it('does not record a frame rejected by transport backpressure', async () => {
+  it.each([0, 1])('counts only accepted audio when peer %i rejects a frame', async (failedPeer) => {
     const result = provider().callApi('Cafe');
     const [target, caller] = await connect();
     acknowledgeOpening();
     audio(target, 100);
     audio(caller, 200);
-    target.bufferedAmount = 144001;
+    sockets[failedPeer].bufferedAmount = 144001;
     await vi.advanceTimersByTimeAsync(20);
-    emit(caller, { type: 'session.closed', reason: 'close_requested', usage: { seconds: 1 } });
+    emit(sockets[1 - failedPeer], {
+      type: 'session.closed',
+      reason: 'close_requested',
+      usage: { seconds: 1 },
+    });
     const response = await result;
     expect(response.error).toContain('backpressure');
-    // Only the initial silence frame was sent successfully before the rejected frame.
+    expect(response.metadata?.voice.participants.target.deliveredAudioBytes).toBe(0);
+    expect(response.metadata?.voice.participants.caller.deliveredAudioBytes).toBe(
+      failedPeer === 0 ? 0 : 960,
+    );
+    expect(response.metadata?.voice.durationMs).toBe(failedPeer === 0 ? 20 : 40);
+    const wav = Buffer.from(response.audio!.data!, 'base64');
+    expect(wav.length).toBe(44 + 1920 * (failedPeer === 0 ? 1 : 2));
+    if (failedPeer === 1) {
+      expect(wav.readInt16LE(44 + 1920)).toBe(0);
+      expect(wav.readInt16LE(44 + 1922)).toBe(200);
+    }
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it.each(['content', 'opening_moderation'])(
+    'grades a target %s refusal while the caller remains silent',
+    async (mode) => {
+      const result = provider({ targetSpeaksFirst: true }).callApi('Cafe');
+      const [target, caller] = await connect();
+      if (mode === 'content') {
+        emit(target, { type: 'session.closed', reason: 'content', usage: { seconds: 1 } });
+      } else {
+        const opening = target.sent.find((event) => event.type === 'session.instructions.append')!;
+        emit(target, {
+          type: 'error',
+          error: {
+            code: 'moderation_blocked',
+            message: 'Safety intervention',
+            client_event_id: opening.event_id,
+          },
+        });
+      }
+      await vi.advanceTimersByTimeAsync(0);
+      expect(caller.sent.at(-1)?.type).toBe('session.close');
+      if (mode === 'opening_moderation') {
+        // Leave a gap where the old media pump attempted writes to the closing session.
+        await vi.advanceTimersByTimeAsync(40);
+        emit(target, { type: 'session.closed', reason: 'close_requested', usage: { seconds: 1 } });
+      }
+      emit(caller, { type: 'session.closed', reason: 'close_requested', usage: { seconds: 1 } });
+      const response = await result;
+      expect(response.error).toBeUndefined();
+      expect(response.isRefusal).toBe(true);
+      expect(response.guardrails?.flagged).toBe(true);
+      expect(response.metadata?.voice.stopReason).toBe('safety');
+      expect(response.metadata?.voice.participants.caller.error).toBeUndefined();
+      expect(vi.getTimerCount()).toBe(0);
+    },
+  );
+
+  it.each(['instruction', 'commentary'])(
+    'rejects a remote hangup with an unacknowledged speech %s',
+    async (phase) => {
+      const result = provider({
+        callerInterventions: [{ atMs: 40, instructions: 'Ask a follow-up.' }],
+      }).callApi('Cafe');
+      const [target, caller] = await connect();
+      acknowledgeOpening();
+      audio(target, 100);
+      audio(caller, 200);
+      transcript(target, 'Question', 0, 'input');
+      transcript(caller, 'Answer', 20, 'input');
+      await vi.advanceTimersByTimeAsync(40);
+      if (phase === 'commentary') {
+        const requests = caller.sent.filter(
+          (event) => event.type === 'session.instructions.append',
+        );
+        emit(caller, {
+          type: 'session.instructions.appended',
+          client_event_id: requests[requests.length - 1].event_id,
+        });
+      }
+      emit(caller, { type: 'session.closed', reason: 'remote_hangup', usage: { seconds: 1 } });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(target.sent.at(-1)?.type).toBe('session.close');
+      emit(target, { type: 'session.closed', reason: 'close_requested', usage: { seconds: 1 } });
+      const response = await result;
+      expect(response.error).toMatch(/speech requests.*acknowledged/);
+      expect(response.metadata?.voice.stopReason).toBe('error');
+      expect(response.metadata?.voice.participants.caller.finalUsageConfirmed).toBe(true);
+      expect(vi.getTimerCount()).toBe(0);
+    },
+  );
+
+  it('does not count audio as accepted when the socket is closing before its close event', async () => {
+    const result = provider().callApi('Cafe');
+    const [target, caller] = await connect();
+    acknowledgeOpening();
+    audio(target, 100);
+    audio(caller, 200);
+    target.readyState = 2;
+    await vi.advanceTimersByTimeAsync(20);
+    target.emit('close');
+    emit(caller, { type: 'session.closed', reason: 'close_requested', usage: { seconds: 1 } });
+    const response = await result;
+    expect(response.error).toBeDefined();
+    expect(response.metadata?.voice.participants.target.deliveredAudioBytes).toBe(0);
+    expect(response.metadata?.voice.participants.caller.deliveredAudioBytes).toBe(0);
     expect(response.metadata?.voice.durationMs).toBe(20);
-    expect(Buffer.from(response.audio!.data!, 'base64').length).toBe(44 + 1920);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('stops the peer before final usage arrives and preserves the actionable delegation failure', async () => {
+    const result = provider().callApi('Cafe');
+    const [target, caller] = await connect();
+    acknowledgeOpening();
+    audio(target, 100);
+    audio(caller, 200);
+    transcript(target, 'Question', 0, 'input');
+    transcript(caller, 'Partial answer', 20, 'input');
+    await vi.advanceTimersByTimeAsync(20);
+    emit(target, {
+      type: 'session.delegation.created',
+      offset_ms: 20,
+      delegation: { id: 'requires_backend', target: 'client' },
+    });
+    expect(target.sent.at(-1)?.type).toBe('session.close');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(caller.sent.at(-1)?.type).toBe('session.close');
+    const frameCounts = sockets.map(
+      (socket) => socket.sent.filter((event) => event.type === 'session.input_audio.append').length,
+    );
+    await vi.advanceTimersByTimeAsync(40);
+    expect(
+      sockets.map(
+        (socket) =>
+          socket.sent.filter((event) => event.type === 'session.input_audio.append').length,
+      ),
+    ).toEqual(frameCounts);
+    finalize();
+    const response = await result;
+    expect(response.error).toContain('no delegationHandler is configured');
+    expect(response.error).not.toContain('not accepting streamed audio');
+    expect(response.metadata?.voice.participants.target.finalUsageConfirmed).toBe(true);
+    expect(response.metadata?.voice.participants.caller.finalUsageConfirmed).toBe(true);
+    expect(response.output).toContain('Partial answer');
+    expect(response.audio).toBeDefined();
     expect(vi.getTimerCount()).toBe(0);
   });
 

@@ -3,7 +3,6 @@ export class PcmAudioQueue {
   private chunks: Buffer[] = [];
   private offset = 0;
   bytes = 0;
-  deliveredBytes = 0;
   peakBytes = 0;
 
   constructor(private readonly maxBytes: number) {}
@@ -22,8 +21,8 @@ export class PcmAudioQueue {
     }
   }
 
-  /** Return exactly one frame, consuming each source sample once. */
-  read(size: number): Buffer {
+  /** Return a padded frame and its source-byte count; transport acceptance is tracked by the caller. */
+  read(size: number): { frame: Buffer; audioBytes: number } {
     const frame = Buffer.alloc(size);
     let written = 0;
     while (written < size && this.chunks.length > 0) {
@@ -33,12 +32,11 @@ export class PcmAudioQueue {
       this.offset += length;
       written += length;
       this.bytes -= length;
-      this.deliveredBytes += length;
       if (this.offset === chunk.length) {
         this.chunks.shift();
         this.offset = 0;
       }
     }
-    return frame;
+    return { frame, audioBytes: written };
   }
 }

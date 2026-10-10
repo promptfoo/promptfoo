@@ -48,6 +48,8 @@ interface LiveDelegation {
 /** Internal transport hooks for a caller-owned, continuously paced audio connection. */
 export interface LiveSessionStream {
   onReady: () => void;
+  /** Media has stopped; final usage may still be pending. Errors are already redacted. */
+  onClosing?: (event: { error?: string; isRefusal: boolean }) => void;
   onAudio: (audio: Buffer) => void;
   onTranscript: (delta: LiveTranscriptDelta) => void;
 }
@@ -161,6 +163,7 @@ export class LiveSession {
   private startupTimer?: ReturnType<typeof setTimeout>;
   private resolve!: (response: ProviderResponse) => void;
   private done = false;
+  private closingNotified = false;
   private started = false;
   private closing = false;
   private finalized = false;
@@ -179,9 +182,10 @@ export class LiveSession {
   private transcript: LiveTranscriptDelta[] = [];
   private transcriptBytes = 0;
   private apiErrors: LiveApiError[] = [];
-  private commands = new Map<string, { name: string; pending: boolean }>();
+  private commands = new Map<string, { name: string; pending: boolean; cancelled?: boolean }>();
   private speechRequests = new Map<string, ReturnType<typeof setTimeout>>();
   private commandCount = 0;
+  private cancelledSpeechRequests = 0;
   private readonly credentials: string[];
   private readonly inputTextBytes: number;
   private pendingSnapshotTextBytes = 0;
@@ -295,7 +299,13 @@ export class LiveSession {
 
   /** Send one externally paced frame. This does not commit or create a voice turn. */
   appendAudio(audio: Buffer): void {
-    if (!this.options.stream || !this.started || this.closing || this.done) {
+    if (
+      !this.options.stream ||
+      !this.started ||
+      this.closing ||
+      this.done ||
+      this.ws.readyState !== WebSocket.OPEN
+    ) {
       throw new Error('GPT-Live session is not accepting streamed audio.');
     }
     const frameBytes =
@@ -318,7 +328,13 @@ export class LiveSession {
 
   /** Append a speech instruction; commentary follows only its matching acknowledgment. */
   requestSpeech(instructions: string): string {
-    if (!this.options.stream || !this.started || this.closing || this.done) {
+    if (
+      !this.options.stream ||
+      !this.started ||
+      this.closing ||
+      this.done ||
+      this.ws.readyState !== WebSocket.OPEN
+    ) {
       throw new Error('GPT-Live session is not ready to request speech.');
     }
     if (!instructions.trim() || Buffer.byteLength(instructions) > MAX_COMMENTARY_BYTES) {
@@ -336,11 +352,26 @@ export class LiveSession {
       delegation_id: null,
       content: instructions,
     });
+    if (this.done) {
+      throw new Error('GPT-Live speech transport stopped.');
+    }
     return id;
   }
 
   /** Stop accepting media and request final billable usage before closing the socket. */
-  close(): void {
+  close({ cancelPendingSpeech = false }: { cancelPendingSpeech?: boolean } = {}): void {
+    if (cancelPendingSpeech) {
+      for (const [id, timer] of this.speechRequests) {
+        clearTimeout(timer);
+        this.timers.delete(timer);
+        const command = this.commands.get(id);
+        if (command) {
+          command.cancelled = true;
+        }
+        this.cancelledSpeechRequests++;
+      }
+      this.speechRequests.clear();
+    }
     if (this.done) {
       return;
     }
@@ -1183,9 +1214,26 @@ export class LiveSession {
         ([id, command]) =>
           id !== OPENING_COMMENTARY_ID &&
           command.pending &&
+          !command.cancelled &&
           command.name === 'session.commentary.append',
       )
     );
+  }
+
+  /** Stop the owner's media clock before waiting for final session usage. */
+  private notifyClosing(): void {
+    if (this.closingNotified) {
+      return;
+    }
+    this.closingNotified = true;
+    try {
+      this.options.stream?.onClosing?.({
+        error: this.error === undefined ? undefined : this.redact(this.error),
+        isRefusal: Boolean(this.guardrailReason),
+      });
+    } catch {
+      this.setError('GPT-Live media lifecycle callback failed.');
+    }
   }
 
   private closeSession(): void {
@@ -1201,6 +1249,7 @@ export class LiveSession {
       this.setError(PENDING_WORK_ERROR);
     }
     this.handlerController.abort();
+    this.notifyClosing();
     this.send({ type: 'session.close' });
     if (this.done) {
       return;
@@ -1220,7 +1269,12 @@ export class LiveSession {
     if (this.done) {
       return;
     }
+    const safetyEnded = this.reason === 'content' && this.finalized;
+    if (!safetyEnded && this.speechRequests.size > 0) {
+      this.setError('GPT-Live session ended before speech requests were acknowledged.');
+    }
     this.done = true;
+    this.notifyClosing();
     for (const timer of this.timers) {
       clearTimeout(timer);
     }
@@ -1231,7 +1285,6 @@ export class LiveSession {
     this.handlerController.abort();
     this.ws?.terminate();
     this.proxyAgent?.destroy();
-    const safetyEnded = this.reason === 'content' && this.finalized;
     if (!safetyEnded && this.hasPendingWork()) {
       this.setError('GPT-Live session ended with backend work pending. Increase responseWindowMs.');
     }
@@ -1253,7 +1306,13 @@ export class LiveSession {
     if (pcm && rawAudio.length % 2) {
       this.setError('GPT-Live returned incomplete PCM16 samples.');
     }
-    if (!this.guardrailReason && !this.error && !output && !this.audioBytes) {
+    if (
+      !this.options.stream &&
+      !this.guardrailReason &&
+      !this.error &&
+      !output &&
+      !this.audioBytes
+    ) {
       this.setError(
         'GPT-Live returned no transcript or audio. Increase responseWindowMs or check the prompt and input audio.',
       );
@@ -1330,6 +1389,9 @@ export class LiveSession {
         voiceCost,
         backendCost: this.backendCost,
         finalUsageConfirmed: this.finalized,
+        ...(this.cancelledSpeechRequests > 0 && {
+          cancelledSpeechRequests: this.cancelledSpeechRequests,
+        }),
         closeReason: this.reason === undefined ? undefined : this.redact(this.reason),
         backendResponses: this.backendResponses.map((response) => ({
           ...response,

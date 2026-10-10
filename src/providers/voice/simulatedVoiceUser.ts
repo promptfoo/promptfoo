@@ -168,6 +168,7 @@ export class SimulatedVoiceUser implements ApiProvider {
     let stopReason = 'duration_limit';
     let error: string | undefined;
     let timedOut = false;
+    let targetRefused = false;
     let stopped = false;
     let endMedia: (() => void) | undefined;
     const startedAt = performance.now();
@@ -179,6 +180,7 @@ export class SimulatedVoiceUser implements ApiProvider {
     const sessions: LiveSession[] = [];
     const runs: Promise<void>[] = [];
     const queues: PcmAudioQueue[] = [];
+    const deliveredAudioBytes = [0, 0];
     let frameCount = 0;
     let maximumClockLagMs = 0;
     const stop = () => {
@@ -187,6 +189,13 @@ export class SimulatedVoiceUser implements ApiProvider {
         clearTimeout(mediaTimer);
       }
       endMedia?.();
+    };
+    const fail = (cause: unknown, fallback: string) => {
+      if (!controller.signal.aborted) {
+        error ??= cause instanceof Error ? cause.message : fallback;
+      }
+      stopReason = timedOut ? 'timeout' : 'error';
+      stop();
     };
     controller.signal.addEventListener('abort', stop, { once: true });
     try {
@@ -234,13 +243,13 @@ export class SimulatedVoiceUser implements ApiProvider {
           durationMs,
         ),
       ];
-      let rejectAborted!: (reason: unknown) => void;
-      const interrupted = new Promise<never>((_resolve, reject) => {
-        rejectAborted = reject;
+      let rejectSetup!: (reason: unknown) => void;
+      const setupInterrupted = new Promise<never>((_resolve, reject) => {
+        rejectSetup = reject;
       });
-      const onInterrupted = () => rejectAborted(controller.signal.reason);
+      const onInterrupted = () => rejectSetup(controller.signal.reason);
       controller.signal.addEventListener('abort', onInterrupted, { once: true });
-      void interrupted.catch(() => {});
+      void setupInterrupted.catch(() => {});
       const readiness: Promise<void>[] = [];
       const rejects: Array<(reason: Error) => void> = [];
       for (const [index, provider] of providers.entries()) {
@@ -259,6 +268,25 @@ export class SimulatedVoiceUser implements ApiProvider {
           await Promise.race([
             provider.createSession('', undefined, controller.signal, {
               onReady: ready,
+              onClosing: ({ error: failure, isRefusal }) => {
+                if (!controller.signal.aborted) {
+                  error ??= failure;
+                }
+                const expectedTargetRefusal = index === 0 && isRefusal && !failure;
+                if (expectedTargetRefusal) {
+                  targetRefused = true;
+                } else {
+                  rejectSetup(
+                    new Error(
+                      failure ?? 'Voice participant ended before both sessions were ready.',
+                    ),
+                  );
+                }
+                if (!stopped) {
+                  stopReason = failure ? 'error' : isRefusal ? 'safety' : 'remote_hangup';
+                  stop();
+                }
+              },
               onAudio: (audio) => {
                 if (!stopped) {
                   queue.append(audio);
@@ -278,7 +306,7 @@ export class SimulatedVoiceUser implements ApiProvider {
                 });
               },
             }),
-            interrupted,
+            setupInterrupted,
           ]),
         );
       }
@@ -290,7 +318,9 @@ export class SimulatedVoiceUser implements ApiProvider {
             .run()
             .then((response) => {
               responses[index] = response;
-              error ??= response.error;
+              if (!controller.signal.aborted) {
+                error ??= response.error;
+              }
               rejects[index](
                 new Error(
                   response.error ?? 'Voice participant ended before both sessions were ready.',
@@ -316,7 +346,13 @@ export class SimulatedVoiceUser implements ApiProvider {
       }
       await Promise.race([
         Promise.all(readiness),
+        setupInterrupted,
         Promise.race(runs).then(() => {
+          // A valid early target refusal can precede the caller's session.started. Let its
+          // bounded startup settle so it can close normally and report final usage.
+          if (targetRefused && !error) {
+            return Promise.all(readiness);
+          }
           throw new Error(error ?? 'Voice participant ended before both sessions were ready.');
         }),
       ]);
@@ -347,17 +383,30 @@ export class SimulatedVoiceUser implements ApiProvider {
           };
           const sendFrame = () => {
             const frames = queues.map((queue) => queue.read(FRAME_BYTES));
-            sessions[0].appendAudio(frames[1]);
-            sessions[1].appendAudio(frames[0]);
-            if (this.config.recordConversation !== false) {
-              const stereo = Buffer.alloc(FRAME_BYTES * 2);
-              for (let byte = 0; byte < FRAME_BYTES; byte += 2) {
-                frames[0].copy(stereo, byte * 2, byte, byte + 2);
-                frames[1].copy(stereo, byte * 2 + 2, byte, byte + 2);
+            const forwarded: Buffer[] = [Buffer.alloc(FRAME_BYTES), Buffer.alloc(FRAME_BYTES)];
+            let accepted = false;
+            try {
+              sessions[0].appendAudio(frames[1].frame);
+              deliveredAudioBytes[1] += frames[1].audioBytes;
+              forwarded[1] = frames[1].frame;
+              accepted = true;
+              sessions[1].appendAudio(frames[0].frame);
+              deliveredAudioBytes[0] += frames[0].audioBytes;
+              forwarded[0] = frames[0].frame;
+            } finally {
+              // A second-side failure still leaves real audio accepted by the first peer.
+              if (accepted) {
+                if (this.config.recordConversation !== false) {
+                  const stereo = Buffer.alloc(FRAME_BYTES * 2);
+                  for (let byte = 0; byte < FRAME_BYTES; byte += 2) {
+                    forwarded[0].copy(stereo, byte * 2, byte, byte + 2);
+                    forwarded[1].copy(stereo, byte * 2 + 2, byte, byte + 2);
+                  }
+                  recordings.push(stereo);
+                }
+                frameCount++;
               }
-              recordings.push(stereo);
             }
-            frameCount++;
           };
           const tick = () => {
             if (stopped) {
@@ -392,22 +441,19 @@ export class SimulatedVoiceUser implements ApiProvider {
                 ),
               );
             } catch (cause) {
-              error = cause instanceof Error ? cause.message : 'Voice audio bridge failed.';
-              stopReason = 'error';
-              stop();
+              fail(cause, 'Voice audio bridge failed.');
             }
           };
           tick();
         });
       }
     } catch (cause) {
-      error = cause instanceof Error ? cause.message : 'Simulated voice conversation failed.';
-      stopReason = timedOut ? 'timeout' : 'error';
+      fail(cause, 'Simulated voice conversation failed.');
     } finally {
       stop();
       // Prepared sessions have no resources until run() is called.
-      for (const session of sessions.slice(0, runs.length)) {
-        session.close();
+      for (const [index, session] of sessions.slice(0, runs.length).entries()) {
+        session.close({ cancelPendingSpeech: targetRefused && index === 1 });
       }
       await Promise.allSettled(runs);
       if (deadline) {
@@ -422,7 +468,7 @@ export class SimulatedVoiceUser implements ApiProvider {
     }
     options?.abortSignal?.throwIfAborted();
     if (controller.signal.aborted) {
-      error = timedOut
+      error ??= timedOut
         ? 'Simulated voice conversation exceeded timeoutMs.'
         : 'Simulated voice conversation was stopped.';
       stopReason = timedOut ? 'timeout' : 'error';
@@ -433,6 +479,7 @@ export class SimulatedVoiceUser implements ApiProvider {
       recordings,
       responses,
       queues,
+      deliveredAudioBytes,
       frameCount,
       maximumClockLagMs,
       elapsedMs: performance.now() - startedAt,
