@@ -960,6 +960,124 @@ describe('ConverseStream response parity', () => {
     expect(result.output).toContain('part two');
   });
 
+  it.each(['end_turn', 'tool_use'])(
+    'retains terminal usage and partial text after a streamed image error ending in %s',
+    async (stopReason) => {
+      cache.enabled = true;
+      const callback = vi.fn();
+      const { provider, send } = fixture({
+        streaming: true,
+        functionToolCallbacks: { lookup: callback },
+      });
+      send.mockResolvedValueOnce(
+        stream([
+          { contentBlockDelta: { contentBlockIndex: 0, delta: { text: 'Partial answer' } } },
+          { contentBlockStop: { contentBlockIndex: 0 } },
+          { contentBlockStart: { contentBlockIndex: 1, start: { image: { format: 'png' } } } },
+          {
+            contentBlockDelta: {
+              contentBlockIndex: 1,
+              delta: { image: { error: { message: 'Generation failed' } } },
+            },
+          },
+          { contentBlockStop: { contentBlockIndex: 1 } },
+          {
+            contentBlockStart: {
+              contentBlockIndex: 2,
+              start: { toolUse: { name: 'lookup', toolUseId: 'call-1' } },
+            },
+          },
+          {
+            contentBlockDelta: {
+              contentBlockIndex: 2,
+              delta: { toolUse: { input: '{"value":"retained"}' } },
+            },
+          },
+          { contentBlockStop: { contentBlockIndex: 2 } },
+          { messageStop: { stopReason } },
+          { metadata: { usage: reply.usage } },
+        ]),
+      );
+      const response = await provider.callApi('hello');
+      expect(response.error).toContain('image generation failed: Generation failed');
+      expect(response.output).toContain('Partial answer');
+      expect(response.output).not.toContain('[Image output]');
+      expect(response.metadata?.content).toContainEqual({
+        image: { format: 'png', source: undefined, error: { message: 'Generation failed' } },
+      });
+      expect(response.metadata?.content).toContainEqual({
+        toolUse: { name: 'lookup', toolUseId: 'call-1', input: { value: 'retained' } },
+      });
+      expect(response.tokenUsage).toMatchObject({ prompt: 3, completion: 2, total: 5 });
+      expect(response.cost).toBeGreaterThan(0);
+      expect(callback).not.toHaveBeenCalled();
+      expect(cache.set).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['image', 'audio', 'tool-result-image'])(
+    'rejects and retries %s response errors without caching or executing tools',
+    async (kind) => {
+      cache.enabled = true;
+      const callback = vi.fn();
+      const { provider, send } = fixture({ functionToolCallbacks: { lookup: callback } });
+      const media = {
+        [kind === 'audio' ? 'audio' : 'image']: { error: { message: 'Generation failed' } },
+      };
+      const content = [
+        { text: 'Partial answer' },
+        kind === 'tool-result-image'
+          ? { toolResult: { toolUseId: 'server-1', content: [media] } }
+          : media,
+        { toolUse: { name: 'lookup', toolUseId: 'call-1', input: { value: 'retained' } } },
+      ];
+      const failed = {
+        ...reply,
+        stopReason: 'tool_use',
+        output: { message: { role: 'assistant', content } },
+      };
+      cache.get.mockResolvedValue(JSON.stringify(failed));
+      send.mockResolvedValueOnce(failed);
+      const response = await provider.callApi('hello');
+      expect(response.error).toContain('generation failed: Generation failed');
+      expect(response.output).toContain('Partial answer');
+      expect(response.output).not.toContain('[Image output]');
+      expect(response.output).not.toContain('[Audio output]');
+      expect(response.cached).not.toBe(true);
+      expect(response.metadata?.isModelError).toBe(true);
+      expect(response.tokenUsage).toMatchObject({
+        prompt: 3,
+        completion: 2,
+        total: 5,
+        numRequests: 1,
+      });
+      expect(response.cost).toBeGreaterThan(0);
+      expect(send).toHaveBeenCalledOnce();
+      expect(callback).not.toHaveBeenCalled();
+      expect(cache.set).not.toHaveBeenCalled();
+    },
+  );
+
+  it('does not classify error-shaped tool JSON as a media failure', async () => {
+    const { provider, send } = fixture();
+    const json = {
+      image: { error: { message: 'application data' } },
+      audio: { error: { message: 'application data' } },
+    };
+    send.mockResolvedValueOnce({
+      ...reply,
+      output: {
+        message: {
+          role: 'assistant',
+          content: [{ toolResult: { toolUseId: 'call-1', content: [{ json }] } }],
+        },
+      },
+    });
+    const response = await provider.callApi('hello');
+    expect(response.error).toBeUndefined();
+    expect(response.output).toContain(JSON.stringify(json));
+  });
+
   it.each(['malformed_tool_use', 'service_unavailable', 'max_tokens'])(
     'retains valid and invalid tool arguments after %s without dispatch or caching',
     async (stopReason) => {

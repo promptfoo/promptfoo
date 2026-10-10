@@ -49,7 +49,7 @@ import { AwsBedrockGenericProvider, type BedrockOptions, createBedrockCacheKeyHa
 import {
   ConverseStreamValidationError,
   collectConverseStream,
-  getConverseStopReasonError,
+  getConverseResponseError,
 } from './converseStream';
 import { calculateBedrockCost } from './pricing';
 import type {
@@ -818,9 +818,9 @@ function extractTextFromContentBlocks(
       parts.push(block.text);
     } else if (block.citationsContent) {
       parts.push((block.citationsContent.content ?? []).map((part) => part.text ?? '').join(''));
-    } else if (block.image) {
+    } else if (block.image && !block.image.error) {
       parts.push('[Image output]');
-    } else if (block.audio) {
+    } else if (block.audio && !block.audio.error) {
       parts.push('[Audio output]');
     } else if (block.video) {
       parts.push('[Video output]');
@@ -832,7 +832,7 @@ function extractTextFromContentBlocks(
             ...block.toolResult,
             content: block.toolResult.content?.map((part) =>
               part.image
-                ? { text: '[Image output]' }
+                ? { text: part.image.error ? '[Image generation failed]' : '[Image output]' }
                 : part.video
                   ? { text: '[Video output]' }
                   : part.document?.source?.bytes
@@ -1496,7 +1496,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       const cachedResponse = await cache.get(cacheKey);
       if (cachedResponse) {
         const parsed = JSON.parse(cachedResponse as string) as ConverseCommandOutput;
-        if (!getConverseStopReasonError(parsed.stopReason)) {
+        if (!getConverseResponseError(parsed)) {
           logger.debug('Returning cached response');
           const result = await this.parseResponse(
             parsed,
@@ -1555,7 +1555,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     }
 
     // Failed model responses must be retried, not replayed as cached results.
-    if (useCache && !getConverseStopReasonError(response.stopReason)) {
+    if (useCache && !getConverseResponseError(response)) {
       try {
         await cache.set(
           cacheKey,
@@ -1778,9 +1778,10 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
         ? { flagged: true, reason: 'guardrail_intervened' }
         : undefined;
 
-    const modelError = getConverseStopReasonError(response.stopReason);
+    const modelError = getConverseResponseError(response);
     if (modelError) {
       metadata.isModelError = true;
+      toolsDisabled = true;
     }
 
     const toolUseBlocks = content.filter(

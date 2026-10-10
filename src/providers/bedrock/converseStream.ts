@@ -5,7 +5,7 @@ import type {
 } from '@aws-sdk/client-bedrock-runtime';
 
 /** Model-level failures can still carry partial output and billable usage. */
-export function getConverseStopReasonError(stopReason: string | undefined): string | undefined {
+function getConverseStopReasonError(stopReason: string | undefined): string | undefined {
   switch (stopReason) {
     case 'malformed_model_output':
       return 'Model produced invalid output. The response could not be parsed correctly.';
@@ -21,6 +21,23 @@ export function getConverseStopReasonError(stopReason: string | undefined): stri
     default:
       return undefined;
   }
+}
+
+export function getConverseResponseError(response: ConverseCommandOutput): string | undefined {
+  const stopError = getConverseStopReasonError(response.stopReason);
+  if (stopError) {
+    return stopError;
+  }
+  const content = response.output?.message?.content ?? [];
+  for (const block of content.flatMap((part) => [part, ...(part.toolResult?.content ?? [])])) {
+    const imageError = block.image?.error;
+    const audioError = 'audio' in block ? block.audio?.error : undefined;
+    const error = imageError ?? audioError;
+    if (error) {
+      return `Bedrock ${imageError ? 'image' : 'audio'} generation failed: ${error.message ?? 'Unknown media error'}`;
+    }
+  }
+  return undefined;
 }
 
 /** A completed stream can fail validation while still reporting billable usage. */
@@ -137,11 +154,12 @@ export async function collectConverseStream(
           },
         });
       } else if (delta.image) {
-        if (delta.image.error) {
-          throw new Error(`Bedrock image generation failed: ${JSON.stringify(delta.image.error)}`);
-        }
         if (!block?.image) {
           throw new Error('Bedrock streamed image data without an image start');
+        }
+        if (delta.image.error) {
+          // A failed image can still be followed by billable terminal metadata.
+          block.image.error = delta.image.error;
         }
         const source = delta.image.source;
         if (source?.bytes) {
@@ -223,9 +241,12 @@ export async function collectConverseStream(
       content: [...blocks.entries()].sort(([a], [b]) => a - b).map(([, block]) => block),
     },
   };
-  if (getConverseStopReasonError(result.stopReason)) {
+  const responseError = getConverseResponseError(result);
+  if (responseError) {
     throw new ConverseStreamValidationError(
-      `Bedrock response stream stopped with ${result.stopReason}`,
+      getConverseStopReasonError(result.stopReason)
+        ? `Bedrock response stream stopped with ${result.stopReason}`
+        : responseError,
       result,
     );
   }
