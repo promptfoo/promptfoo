@@ -43,7 +43,7 @@ tests:
         value: The assistant correctly answered both questions without inventing facts.
 ```
 
-Assertions grade the chronological conversation transcript. Select an explicit grader if required by your environment. The simulator is excluded from implicit grader selection. The runnable [example](https://github.com/promptfoo/promptfoo/tree/main/examples/simulated-voice-user) uses deterministic assertions and needs no separate grading model.
+Assertions grade the listener transcript described below. Select an explicit grader if required by your environment. The simulator is excluded from implicit grader selection. The runnable [example](https://github.com/promptfoo/promptfoo/tree/main/examples/simulated-voice-user) uses deterministic assertions and needs no separate grading model.
 
 ## Configuration
 
@@ -58,9 +58,9 @@ Assertions grade the chronological conversation transcript. Select an explicit g
 | `recordConversation` | `true`             | Include a stereo WAV through the normal audio/blob result path.                                                |
 | `targetSpeaksFirst`  | `false`            | Ask the target to greet the caller first; otherwise the caller starts.                                         |
 
-Participants accept [OpenAI Live options](./openai-live.md), including `apiKey`, `apiKeyEnvar`, `apiBaseUrl`, `headers`, `audio.output.voice`, delegation, and callback handlers. `target.model` and `caller.model` default to `gpt-live-1`. Credentials and endpoints remain separate. Environment overrides apply through the normal provider configuration. Prefer `apiKeyEnvar` over putting secrets in YAML.
+When provided, `target` and `caller` must be objects containing [OpenAI Live options](./openai-live.md), including `apiKey`, `apiKeyEnvar`, `apiBaseUrl`, `headers`, `audio.output.voice`, delegation, and callback handlers. `target.model` and `caller.model` default to `gpt-live-1`. Credentials and endpoints remain separate. Environment overrides apply through the normal provider configuration. Prefer `apiKeyEnvar` over putting secrets in YAML.
 
-Both connections use mono PCM16 at 24 kHz, with 20 ms input frames. Other formats are rejected. Top-level instructions and capture duration take precedence over participant `instructions` and `responseWindowMs`. The inherited `REQUEST_TIMEOUT_MS` also bounds each Live session: startup, capture, and finalization must fit within it. Increase both the overall timeout and `REQUEST_TIMEOUT_MS` for long captures.
+Both connections use mono PCM16 at 24 kHz, with 20 ms input frames. Other formats are rejected. Top-level instructions and capture duration take precedence over participant `instructions` and `responseWindowMs`. The inherited `REQUEST_TIMEOUT_MS` also bounds each Live session: the slower participant's startup, capture rounded to whole frames, and each participant's finalization must fit within it. Invalid budgets are rejected before either connection opens. Increase both the overall timeout and `REQUEST_TIMEOUT_MS` for long captures.
 
 This provider uses the Live API, not the Realtime API. Legacy Realtime-only fields such as `maxTurns`, `turnDetectionMode`, `audioFormat`, `targetModel`, and `simulatedUserModel` are rejected with migration guidance. Set each model inside `target` or `caller`; bound conversations by duration. Live has no authoritative turn-completed event.
 
