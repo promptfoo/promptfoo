@@ -1,13 +1,20 @@
 import { STATUS_CODES } from 'http';
 
-import { JsonCodec2 } from '@aws-sdk/core/protocols';
-import { NumericValue } from '@smithy/core/serde';
+import { parseJsonBody } from '@aws-sdk/core/protocols';
+import {
+  fromBase64,
+  fromUtf8,
+  NumericValue,
+  streamCollector,
+  toBase64,
+  toUtf8,
+} from '@smithy/core/serde';
 import { throwIfAborted } from '../shared';
 import { AwsBedrockGenericProvider, type BedrockOptions } from './base';
 import { isValidBedrockRetrievalFilter } from './retrievalFilter';
 import { createBedrockRequestHandler } from './util';
 import type { BedrockAgentRuntime } from '@aws-sdk/client-bedrock-agent-runtime';
-import type { DocumentSchema, ResponseMetadata } from '@smithy/types';
+import type { DocumentSchema, ResponseMetadata, SerdeFunctions } from '@smithy/types';
 
 import type {
   CallApiContextParams,
@@ -68,18 +75,25 @@ interface NativeApiConfig extends BedrockOptions {
 }
 
 const nativeDocumentSchema: DocumentSchema = 15;
-const nativeJsonDeserializer = new JsonCodec2({
-  jsonName: false,
-  timestampFormat: { useTrait: true, default: 7 },
-}).createDeserializer();
+const nativeSerdeContext: SerdeFunctions = {
+  base64Encoder: toBase64,
+  base64Decoder: fromBase64,
+  utf8Encoder: toUtf8,
+  utf8Decoder: fromUtf8,
+  streamCollector,
+};
 
 async function parseNativeJson(value: string | Uint8Array): Promise<any> {
   // The SDK treats an empty body as {}, but native JSON requires a complete value.
   if (value.length === 0) {
     throw new SyntaxError('Unexpected end of JSON input');
   }
-  const text = typeof value === 'string' ? value : new TextDecoder().decode(value);
-  return nativeJsonDeserializer.read(nativeDocumentSchema, text);
+  // Use the SDK numeric reviver without its shape normalization, which discards own __proto__ values.
+  return parseJsonBody(
+    typeof value === 'string' ? fromUtf8(value) : value,
+    nativeSerdeContext,
+    nativeDocumentSchema,
+  );
 }
 
 /** JSON cannot represent SDK blobs. Decode only an explicit, single-key blob wrapper. */
@@ -135,6 +149,11 @@ function encodeBlobs(value: any): any {
     return value.toISOString();
   }
   if (value && typeof value === 'object') {
+    if (Object.prototype.hasOwnProperty.call(value, '__proto__') && value.__proto__ === undefined) {
+      throw new Error(
+        'The AWS SDK discarded an own __proto__ field in a native document response; refusing to return altered JSON',
+      );
+    }
     return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, encodeBlobs(item)]));
   }
   return value;
@@ -144,6 +163,7 @@ function encodeBlobs(value: any): any {
 export class AwsBedrockNativeApiProvider extends AwsBedrockGenericProvider {
   declare config: NativeApiConfig;
   private readonly operation: NativeOperation;
+  private runtime?: ReturnType<AwsBedrockGenericProvider['getBedrockInstance']>;
   private agentRuntime?: Promise<BedrockAgentRuntime>;
 
   constructor(
@@ -188,6 +208,16 @@ export class AwsBedrockNativeApiProvider extends AwsBedrockGenericProvider {
     return OPERATIONS[this.operation].service === 'runtime' ? super.getApiKey() : undefined;
   }
 
+  getBedrockInstance() {
+    if (!this.runtime) {
+      this.runtime = super.getBedrockInstance().catch((error) => {
+        this.runtime = undefined;
+        throw error;
+      });
+    }
+    return this.runtime;
+  }
+
   async getAgentRuntimeClient() {
     if (!this.agentRuntime) {
       this.agentRuntime = (async () => {
@@ -210,10 +240,15 @@ export class AwsBedrockNativeApiProvider extends AwsBedrockGenericProvider {
   }
 
   async cleanup(): Promise<void> {
-    this.bedrock?.destroy();
-    (await this.agentRuntime)?.destroy();
+    const clients = await Promise.allSettled([this.runtime ?? this.bedrock, this.agentRuntime]);
     this.bedrock = undefined;
+    this.runtime = undefined;
     this.agentRuntime = undefined;
+    for (const client of clients) {
+      if (client.status === 'fulfilled') {
+        client.value?.destroy();
+      }
+    }
   }
 
   async callApi(

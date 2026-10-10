@@ -676,7 +676,9 @@ before they reach this provider. With JSON auto-escaping disabled, use
 For SDK Document inputs, ordinary objects with `type: bigDecimal` and a numeric `string`
 field are rejected before dispatch: the SDK would turn them into numbers and discard
 other fields. This restriction does not apply to model-native `InvokeModel.body` JSON
-or response objects.
+or response objects. Own `__proto__` fields are preserved in requests and model-native
+`InvokeModel` responses. If the SDK discards such a field while decoding a structured
+response, the provider returns an error instead of altered JSON.
 
 Calls are never cached. Event streams are collected before returning, and service
 exception events produce provider errors. Agent and Flow invocations, `RetrieveAndGenerate`,

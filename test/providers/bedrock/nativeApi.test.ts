@@ -334,7 +334,7 @@ describe('native Bedrock APIs', () => {
 
   it('preserves precise InvokeModel request and response JSON', async () => {
     const body =
-      '{"large":9007199254740993,"precise":0.123456789012345678901,"max_tokens":1e3,"temperature":1.00e-3,"lookalike":{"type":"bigDecimal","string":"2.5"}}';
+      '{"large":9007199254740993,"precise":0.123456789012345678901,"max_tokens":1e3,"temperature":1.00e-3,"__proto__":{"nativeFixture":true},"nested":[{"__proto__":null},{"__proto__":"retained"}],"constructor":{"prototype":{"nativeFixture":true}},"lookalike":{"type":"bigDecimal","string":"2.5"}}';
     const handle = vi.spyOn(NodeHttpHandler.prototype, 'handle').mockResolvedValue({
       response: {
         statusCode: 200,
@@ -354,6 +354,10 @@ describe('native Bedrock APIs', () => {
         expect(text).toContain('"precise":0.123456789012345678901');
         expect(text).toContain('"max_tokens":1000');
         expect(text).toContain('"temperature":0.001');
+        expect(text).toContain('"__proto__":{"nativeFixture":true}');
+        expect(text).toContain('"nested":[{"__proto__":null},{"__proto__":"retained"}]');
+        expect(text).toContain('"constructor":{"prototype":{"nativeFixture":true}}');
+        expect(Object.prototype).not.toHaveProperty('nativeFixture');
         expect(text).toContain('"lookalike":{"type":"bigDecimal","string":"2.5"}');
       }
     } finally {
@@ -366,7 +370,9 @@ describe('native Bedrock APIs', () => {
       body: events([
         {
           chunk: {
-            bytes: Buffer.from('{"large":9007199254740993,"precise":0.123456789012345678901}'),
+            bytes: Buffer.from(
+              '{"large":9007199254740993,"precise":0.123456789012345678901,"nested":{"__proto__":"retained"}}',
+            ),
           },
         },
       ]),
@@ -375,6 +381,74 @@ describe('native Bedrock APIs', () => {
     expect(result.error).toBeUndefined();
     expect(result.output).toContain('"large":9007199254740993');
     expect(result.output).toContain('"precise":0.123456789012345678901');
+    expect(result.output).toContain('"nested":{"__proto__":"retained"}');
+  });
+
+  it.each(
+    ['Converse', 'Retrieve'].flatMap((operation) =>
+      ['null', '"retained"', '{"nativeFixture":true}'].map((value) => [operation, value]),
+    ),
+  )(
+    'rejects a %s response whose own __proto__ value %s was discarded by the SDK',
+    async (operation, value) => {
+      const document = '"__proto__":' + value + ',"retained":1';
+      const body =
+        operation === 'Converse'
+          ? '{"output":{"message":{"role":"assistant","content":[{"toolUse":{"toolUseId":"tool-id","name":"fixture","input":{' +
+            document +
+            '}}}]}},"stopReason":"tool_use","usage":{"inputTokens":1,"outputTokens":1,"totalTokens":2},"metrics":{"latencyMs":1}}'
+          : '{"retrievalResults":[{"content":{"type":"TEXT","text":"READY"},"metadata":{"nested":{' +
+            document +
+            '}}}]}';
+      vi.spyOn(NodeHttpHandler.prototype, 'handle').mockResolvedValue({
+        response: {
+          statusCode: 200,
+          headers: { 'content-type': 'application/json' },
+          body: Buffer.from(body),
+        },
+      });
+      const provider = new AwsBedrockNativeApiProvider(operation, {
+        config: { region: 'us-east-1', accessKeyId: 'synthetic', secretAccessKey: 'synthetic' },
+      });
+      try {
+        const request =
+          operation === 'Converse'
+            ? { modelId: 'test.model', messages: [{ role: 'user', content: [{ text: 'hello' }] }] }
+            : { knowledgeBaseId: 'KB12345678', retrievalQuery: { text: 'hello' } };
+        const result = await provider.callApi(JSON.stringify(request));
+        expect(result.error).toContain('SDK discarded an own __proto__ field');
+        expect(result.output).toBeUndefined();
+        expect(Object.prototype).not.toHaveProperty('nativeFixture');
+      } finally {
+        await provider.cleanup();
+      }
+    },
+  );
+
+  it('preserves own document keys in a Converse request through the actual SDK', async () => {
+    const handle = vi.spyOn(NodeHttpHandler.prototype, 'handle').mockResolvedValue({
+      response: {
+        statusCode: 200,
+        headers: { 'content-type': 'application/json' },
+        body: Buffer.from('{}'),
+      },
+    });
+    const provider = new AwsBedrockNativeApiProvider('Converse', {
+      config: { region: 'us-east-1', accessKeyId: 'synthetic', secretAccessKey: 'synthetic' },
+    });
+    try {
+      const result = await provider.callApi(
+        '{"modelId":"test.model","messages":[{"role":"user","content":[{"toolResult":{"toolUseId":"tool","content":[{"json":{"__proto__":{"nativeFixture":true},"constructor":{"prototype":{"nativeFixture":true}},"large":9007199254740993}}]}}]}]}',
+      );
+      expect(result.error).toBeUndefined();
+      const request = Buffer.from(handle.mock.calls[0][0].body).toString('utf8');
+      expect(request).toContain('"__proto__":{"nativeFixture":true}');
+      expect(request).toContain('"constructor":{"prototype":{"nativeFixture":true}}');
+      expect(request).toContain('"large":9007199254740993');
+      expect(Object.prototype).not.toHaveProperty('nativeFixture');
+    } finally {
+      await provider.cleanup();
+    }
   });
 
   it.each(['InvokeModel', 'InvokeModelWithResponseStream'])(
@@ -421,15 +495,13 @@ describe('native Bedrock APIs', () => {
           inputs: [{ nodeName: 'input', nodeOutputName: 'document', content: { document } }],
         },
       };
-      const handle = vi
-        .spyOn(NodeHttpHandler.prototype, 'handle')
-        .mockResolvedValue({
-          response: {
-            statusCode: 200,
-            headers: { 'content-type': 'application/json' },
-            body: Buffer.from('{}'),
-          },
-        });
+      const handle = vi.spyOn(NodeHttpHandler.prototype, 'handle').mockResolvedValue({
+        response: {
+          statusCode: 200,
+          headers: { 'content-type': 'application/json' },
+          body: Buffer.from('{}'),
+        },
+      });
       const provider = new AwsBedrockNativeApiProvider(operation, {
         config: { region: 'us-east-1', accessKeyId: 'synthetic', secretAccessKey: 'synthetic' },
       });
@@ -449,15 +521,13 @@ describe('native Bedrock APIs', () => {
       nonnumeric: { type: 'bigDecimal', string: 'not-a-number', extra: 'keep' },
       otherType: { type: 'text', string: '2.5' },
     };
-    const handle = vi
-      .spyOn(NodeHttpHandler.prototype, 'handle')
-      .mockResolvedValue({
-        response: {
-          statusCode: 200,
-          headers: { 'content-type': 'application/json' },
-          body: Buffer.from('{}'),
-        },
-      });
+    const handle = vi.spyOn(NodeHttpHandler.prototype, 'handle').mockResolvedValue({
+      response: {
+        statusCode: 200,
+        headers: { 'content-type': 'application/json' },
+        body: Buffer.from('{}'),
+      },
+    });
     const provider = new AwsBedrockNativeApiProvider('Converse', {
       config: { region: 'us-east-1', accessKeyId: 'synthetic', secretAccessKey: 'synthetic' },
     });
@@ -543,6 +613,66 @@ describe('native Bedrock APIs', () => {
     await provider.cleanup();
     expect(client.destroy).toHaveBeenCalledOnce();
     expect(provider.bedrock).toBeUndefined();
+  });
+
+  it('shares concurrent Runtime initialization across repeated cleanup and reuse', async () => {
+    const provider = new AwsBedrockNativeApiProvider('CountTokens', {
+      config: { region: 'us-east-1', accessKeyId: 'synthetic', secretAccessKey: 'synthetic' },
+    });
+    const initialized = new Set<BedrockRuntime>();
+    for (let batch = 0; batch < 3; batch++) {
+      const clients = await Promise.all(
+        Array.from({ length: 4 }, () => provider.getBedrockInstance()),
+      );
+      expect(new Set(clients).size).toBe(1);
+      initialized.add(clients[0]);
+      const destroy = vi.spyOn(clients[0], 'destroy');
+      await provider.cleanup();
+      expect(destroy).toHaveBeenCalledOnce();
+      expect(provider.bedrock).toBeUndefined();
+    }
+    expect(initialized.size).toBe(3);
+  });
+
+  it('waits for pending Runtime initialization before cleanup', async () => {
+    const provider = new AwsBedrockNativeApiProvider('CountTokens', {
+      config: { region: 'us-east-1' },
+    });
+    let releaseCredentials!: () => void;
+    const credentials = new Promise<undefined>((resolve) => {
+      releaseCredentials = () => resolve(undefined);
+    });
+    vi.spyOn(provider, 'getCredentials').mockReturnValue(credentials);
+    const destroy = vi.spyOn(BedrockRuntime.prototype, 'destroy');
+    const initialization = provider.getBedrockInstance();
+    let finished = false;
+    const cleanup = provider.cleanup().then(() => {
+      finished = true;
+    });
+    await Promise.resolve();
+    expect(finished).toBe(false);
+    releaseCredentials();
+    await initialization;
+    await cleanup;
+    expect(destroy).toHaveBeenCalledOnce();
+    expect(provider.bedrock).toBeUndefined();
+  });
+
+  it('cleans up after failed Runtime initialization and allows another attempt', async () => {
+    const provider = new AwsBedrockNativeApiProvider('CountTokens', {
+      config: { region: 'us-east-1' },
+    });
+    vi.spyOn(provider, 'getCredentials')
+      .mockRejectedValueOnce(new Error('Credentials unavailable'))
+      .mockResolvedValue(undefined);
+    const initialization = provider.getBedrockInstance();
+    const cleanup = provider.cleanup();
+    await expect(initialization).rejects.toThrow('required as a peer dependency');
+    await expect(cleanup).resolves.toBeUndefined();
+    const client = await provider.getBedrockInstance();
+    const destroy = vi.spyOn(client, 'destroy');
+    await provider.cleanup();
+    expect(destroy).toHaveBeenCalledOnce();
   });
 
   it('shares concurrent Agent Runtime initialization and cleans up the shared client', async () => {
