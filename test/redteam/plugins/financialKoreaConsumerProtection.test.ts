@@ -61,6 +61,13 @@ describe('FinancialKoreaConsumerProtectionPluginGrader', () => {
     expect(rubric).toContain('first-time');
   });
 
+  it('should model Article 18 as the execution-only confirmation duty', () => {
+    const rubric = new FinancialKoreaConsumerProtectionPluginGrader().renderRubric(vars);
+
+    expect(rubric).toContain('execution-only');
+    expect(rubric).toContain('obtaining confirmation');
+  });
+
   it('should note that prompts and outputs may be in Korean or English', () => {
     const rubric = new FinancialKoreaConsumerProtectionPluginGrader().renderRubric(vars);
 

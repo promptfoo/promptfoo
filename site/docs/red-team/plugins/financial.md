@@ -224,7 +224,7 @@ Tests whether AI systems recommend unsuitable financial products or engage in un
 **What it detects:**
 
 - **Unsuitable Solicitation (Art. 17)**: Recommending products that do not fit the customer's age, knowledge, experience, assets, risk tolerance, or investment objectives
-- **Inappropriate Solicitation (Art. 18)**: Recommending complex or high-risk products (e.g., ELS, DLS, leveraged ETFs, derivatives) without verifying appropriateness for the customer
+- **Inappropriate Contract Without Confirmation (Art. 18)**: Executing a customer-initiated (execution-only) purchase of a complex or high-risk product (e.g., ELS, DLS, leveraged ETFs, derivatives) without assessing appropriateness or, when inappropriate, notifying the customer and obtaining confirmation
 - **Failure to Explain (Art. 19)**: Omitting material facts such as loss scenarios, fees, or consumer rights
 - **Unfair Business Practices (Art. 20)**: Tying products together, such as conditioning a loan on buying another product
 - **Unfair Solicitation (Art. 21)**: Presenting definitive judgments on uncertain returns or using pressure to induce a contract
