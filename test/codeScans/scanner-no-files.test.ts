@@ -74,93 +74,98 @@ describe('Scanner - No Files to Scan', () => {
   });
 });
 
+function mockScanner({
+  initialLogLevel = 'info',
+  loadConfigError,
+  processDiffError,
+  processDiffFiles,
+  dirtyFiles,
+  configApiHost,
+}: {
+  initialLogLevel?: string;
+  loadConfigError?: Error;
+  processDiffError?: Error;
+  processDiffFiles?: FileRecord[];
+  dirtyFiles?: Array<{ path: string }>;
+  configApiHost?: string;
+} = {}) {
+  let currentLogLevel = initialLogLevel;
+
+  const disconnect = vi.fn();
+  const socketEmit = vi.fn();
+  const socket = { emit: socketEmit, on: vi.fn(), off: vi.fn(), disconnect: vi.fn() };
+
+  vi.doMock('../../src/codeScan/git/diffProcessor', () => ({
+    processDiff: processDiffError
+      ? vi.fn().mockRejectedValue(processDiffError)
+      : vi.fn().mockResolvedValue(processDiffFiles ?? []),
+  }));
+  vi.doMock('../../src/codeScan/git/diff', () => ({
+    validateOnBranch: vi.fn().mockResolvedValue('main'),
+  }));
+  vi.doMock('../../src/codeScan/config/loader', async () => {
+    const actual = await vi.importActual<typeof import('../../src/codeScan/config/loader')>(
+      '../../src/codeScan/config/loader',
+    );
+    return {
+      ...actual,
+      loadConfigOrDefault: loadConfigError
+        ? vi.fn().mockImplementation(() => {
+            throw loadConfigError;
+          })
+        : vi.fn().mockReturnValue({
+            minimumSeverity: 'medium',
+            diffsOnly: true,
+            apiHost: configApiHost,
+          }),
+      resolveGuidance: vi.fn().mockReturnValue(undefined),
+    };
+  });
+  vi.doMock('simple-git', () => ({
+    simpleGit: vi.fn(() => ({
+      branch: vi.fn().mockResolvedValue({ current: 'main', all: ['main'] }),
+      revparse: vi.fn().mockResolvedValue('abc123'),
+      status: vi.fn().mockResolvedValue({ files: dirtyFiles ?? [] }),
+    })),
+  }));
+  vi.doMock('../../src/util/agent/agentClient', () => ({
+    createAgentClient: vi.fn().mockResolvedValue({
+      sessionId: 'test-session-id',
+      start: vi.fn(),
+      cancel: vi.fn(),
+      onComplete: vi.fn(),
+      onError: vi.fn(),
+      on: vi.fn(),
+      emit: vi.fn(),
+      disconnect,
+      socket,
+    }),
+  }));
+  vi.doMock('../../src/codeScan/util/auth', () => ({
+    resolveAuthCredentials: vi.fn().mockResolvedValue({ apiKey: 'test-key' }),
+  }));
+  vi.doMock('../../src/cliState', () => ({
+    default: { postActionCallback: null },
+  }));
+  vi.doMock('../../src/logger', () => ({
+    default: { info: vi.fn(), debug: vi.fn(), error: vi.fn(), warn: vi.fn() },
+    getLogLevel: vi.fn().mockImplementation(() => currentLogLevel),
+    setLogLevel: vi.fn().mockImplementation((level: string) => {
+      currentLogLevel = level;
+    }),
+  }));
+  vi.doMock('../../src/codeScan/scanner/cleanup', () => ({
+    registerCleanupHandlers: vi.fn(),
+  }));
+  vi.doMock('../../src/codeScan/scanner/output', () => ({
+    createSpinner: vi.fn().mockReturnValue(undefined),
+    displayScanResults: vi.fn(),
+  }));
+
+  return { disconnect, socket, socketEmit };
+}
+
 describe('Scanner machine-readable output', () => {
-  function mockScanner({
-    initialLogLevel = 'info',
-    loadConfigError,
-    processDiffError,
-    configApiHost,
-  }: {
-    initialLogLevel?: string;
-    loadConfigError?: Error;
-    processDiffError?: Error;
-    configApiHost?: string;
-  } = {}) {
-    let currentLogLevel = initialLogLevel;
-
-    const disconnect = vi.fn();
-    const socketEmit = vi.fn();
-    const socket = { emit: socketEmit, on: vi.fn(), off: vi.fn(), disconnect: vi.fn() };
-
-    vi.doMock('../../src/codeScan/git/diffProcessor', () => ({
-      processDiff: processDiffError
-        ? vi.fn().mockRejectedValue(processDiffError)
-        : vi.fn().mockResolvedValue([]),
-    }));
-    vi.doMock('../../src/codeScan/git/diff', () => ({
-      validateOnBranch: vi.fn().mockResolvedValue('main'),
-    }));
-    vi.doMock('../../src/codeScan/config/loader', async () => {
-      const actual = await vi.importActual<typeof import('../../src/codeScan/config/loader')>(
-        '../../src/codeScan/config/loader',
-      );
-      return {
-        ...actual,
-        loadConfigOrDefault: loadConfigError
-          ? vi.fn().mockImplementation(() => {
-              throw loadConfigError;
-            })
-          : vi.fn().mockReturnValue({
-              minimumSeverity: 'medium',
-              diffsOnly: true,
-              apiHost: configApiHost,
-            }),
-        resolveGuidance: vi.fn().mockReturnValue(undefined),
-      };
-    });
-    vi.doMock('simple-git', () => ({
-      simpleGit: vi.fn(() => ({
-        branch: vi.fn().mockResolvedValue({ current: 'main', all: ['main'] }),
-        revparse: vi.fn().mockResolvedValue('abc123'),
-      })),
-    }));
-    vi.doMock('../../src/util/agent/agentClient', () => ({
-      createAgentClient: vi.fn().mockResolvedValue({
-        sessionId: 'test-session-id',
-        start: vi.fn(),
-        cancel: vi.fn(),
-        onComplete: vi.fn(),
-        onError: vi.fn(),
-        on: vi.fn(),
-        emit: vi.fn(),
-        disconnect,
-        socket,
-      }),
-    }));
-    vi.doMock('../../src/codeScan/util/auth', () => ({
-      resolveAuthCredentials: vi.fn().mockResolvedValue({ apiKey: 'test-key' }),
-    }));
-    vi.doMock('../../src/cliState', () => ({
-      default: { postActionCallback: null },
-    }));
-    vi.doMock('../../src/logger', () => ({
-      default: { info: vi.fn(), debug: vi.fn(), error: vi.fn(), warn: vi.fn() },
-      getLogLevel: vi.fn().mockImplementation(() => currentLogLevel),
-      setLogLevel: vi.fn().mockImplementation((level: string) => {
-        currentLogLevel = level;
-      }),
-    }));
-    vi.doMock('../../src/codeScan/scanner/cleanup', () => ({
-      registerCleanupHandlers: vi.fn(),
-    }));
-    vi.doMock('../../src/codeScan/scanner/output', () => ({
-      createSpinner: vi.fn().mockReturnValue(undefined),
-      displayScanResults: vi.fn(),
-    }));
-
-    return { disconnect, socket, socketEmit };
-  }
-
   function mockMcpLifecycle(connectError?: Error) {
     const events: string[] = [];
     const mcpProcess = { pid: 1234 };
@@ -379,5 +384,62 @@ describe('Scanner machine-readable output', () => {
     expect(mcp.bridgeDisconnect).not.toHaveBeenCalled();
     expect(socketEmit).not.toHaveBeenCalled();
     expect(consoleErrorSpy).toHaveBeenCalledWith('Scan failed: bridge failed');
+  });
+});
+
+describe('Scanner empty-scan messaging', () => {
+  beforeEach(() => {
+    vi.resetModules();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('explains the compared range when the diff is empty and the tree is clean', async () => {
+    mockScanner();
+
+    const { executeScan } = await import('../../src/codeScan/scanner/index');
+    const logger = (await import('../../src/logger')).default;
+
+    await executeScan('/test/repo', { diffsOnly: true });
+
+    expect(logger.info).toHaveBeenCalledWith(
+      expect.stringContaining('No committed changes in main...HEAD'),
+    );
+  });
+
+  it('calls out uncommitted files when the diff is empty but the tree is dirty', async () => {
+    mockScanner({ dirtyFiles: [{ path: 'index.js' }, { path: 'lib/util.js' }] });
+
+    const { executeScan } = await import('../../src/codeScan/scanner/index');
+    const logger = (await import('../../src/logger')).default;
+
+    await executeScan('/test/repo', { diffsOnly: true });
+
+    expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('2 uncommitted file(s)'));
+  });
+
+  it('names skip reasons when every changed file is filtered out', async () => {
+    mockScanner({
+      processDiffFiles: [
+        {
+          path: 'package-lock.json',
+          status: 'M',
+          skipReason: 'denylist',
+          shaA: 'abc123',
+          shaB: 'def456',
+          linesAdded: 10,
+          linesRemoved: 5,
+        },
+      ],
+    });
+
+    const { executeScan } = await import('../../src/codeScan/scanner/index');
+    const logger = (await import('../../src/logger')).default;
+
+    await executeScan('/test/repo', { diffsOnly: true });
+
+    expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('skipped: denylist'));
   });
 });

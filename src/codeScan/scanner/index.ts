@@ -12,6 +12,7 @@ import logger, { getLogLevel, setLogLevel } from '../../logger';
 import {
   CodeScanOutputFormat,
   CodeScanOutputFormatSchema,
+  type FileRecord,
   type PullRequestContext,
   type ScanResponse,
 } from '../../types/codeScan';
@@ -31,6 +32,37 @@ import { parseGitHubPr } from '../util/github';
 import { registerCleanupHandlers } from './cleanup';
 import { createSpinner, displayScanResults } from './output';
 import { buildScanRequest, executeScanRequestWithRetry } from './request';
+import type { SimpleGit } from 'simple-git';
+
+/**
+ * The scanner reviews commit diffs, so an empty included set on a clean
+ * checkout of the base branch reads like a broken scan. Say what range was
+ * compared and what to run instead. Uncommitted edits are invisible to the
+ * diff and get an explicit callout; a fully skipped set names the reasons.
+ */
+async function describeEmptyScan(
+  git: SimpleGit,
+  files: FileRecord[],
+  skippedFiles: FileRecord[],
+  baseBranch: string,
+  compareRef: string,
+): Promise<string> {
+  if (files.length > 0) {
+    const reasons = [...new Set(skippedFiles.map((f) => f.skipReason))].filter(Boolean).join(', ');
+    return `No files to scan (${skippedFiles.length} changed file(s) skipped: ${reasons})`;
+  }
+  const range = `${baseBranch}...${compareRef}`;
+  let dirtyCount = 0;
+  try {
+    dirtyCount = (await git.status()).files.length;
+  } catch {
+    // Status is best-effort context for the message; the range line stands alone.
+  }
+  if (dirtyCount > 0) {
+    return `No committed changes in ${range}, and ${dirtyCount} uncommitted file(s) are not part of the scan. Commit them first, or pass --base/--compare to scan a different range.`;
+  }
+  return `No committed changes in ${range} to scan. Run the scan on a branch with commits ahead of ${baseBranch}, or pass --base/--compare to pick a range.`;
+}
 
 /**
  * Options for executing a scan
@@ -246,15 +278,18 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
 
     // Check if there are no files to scan
     if (includedFiles.length === 0) {
-      const msg = 'No files to scan';
-
-      // For non-text formats (JSON, SARIF), emit a structured empty response for programmatic consumption
-      if (outputFormat !== CodeScanOutputFormat.TEXT) {
-        displayResults({ success: true, comments: [], review: msg }, outputFormat);
-      } else if (spinner) {
-        spinner.succeed(msg);
+      // For non-text formats (JSON, SARIF), keep the stable machine-readable
+      // review string for programmatic consumption
+      if (outputFormat === CodeScanOutputFormat.TEXT) {
+        const skippedFiles = files.filter((f) => f.skipReason);
+        const msg = await describeEmptyScan(git, files, skippedFiles, baseBranch, compareRef);
+        if (spinner) {
+          spinner.succeed(msg);
+        } else {
+          logger.info(msg);
+        }
       } else {
-        logger.info(msg);
+        displayResults({ success: true, comments: [], review: 'No files to scan' }, outputFormat);
       }
 
       // Exit with code 0 (success) when no files to scan
