@@ -15,7 +15,7 @@ Use the **Policy Library**, **Grading Guidelines**, and **Severity Overrides** p
 | Review failures against a policy document | **Grading Guidelines** | Saved FAIL results that may be revised to PASS            |
 | Adjust the risk assigned to a plugin      | **Severity Overrides** | Plugin severity levels used during future test generation |
 
-Select the intended team before creating these resources. Your role needs permission to view or manage the relevant resource. Applying guidelines to results also requires permission to update evals; attaching a severity set requires permission to update the target and severity overrides.
+Select the intended team before creating policies or severity sets. Your role needs permission to view or manage the relevant resource. Applying guidelines to results also requires permission to update evals; attaching a severity set requires permission to update the target and severity overrides.
 
 ## Reusable policies
 
@@ -36,6 +36,8 @@ For policy-writing advice, inline policies, CSV import, and YAML examples, see t
 
 Guidelines are documents belonging to a team. Use them when the default grader needs additional context, such as your refund rules or approved support procedures.
 
+In release 125, the guideline upload and list pages use your default team: the oldest team you belong to. Changing the active team does not change this behavior. The review dialog does not scope documents to the eval's team, so check each selected document before applying it.
+
 ### Upload a document
 
 1. Open **Red Team → Grading Guidelines** and select **Upload Grading Guideline**.
@@ -46,11 +48,11 @@ Use a PDF with extractable text. If the preview is empty or incomplete, paste th
 
 ### Apply guidelines to results
 
-On-prem review requires a configured **Agent Provider**. Ask an administrator to configure it on the **Agent Provider** settings page (`/server/edit/agentProvider`).
+On-prem review requires a configured **Agent Provider**. Ask an administrator to open **Red Team Providers** from the profile menu, then select **Agent Provider** in the settings sidebar (`/server/edit/agentProvider`).
 
 1. Open the red team eval's results.
 2. Select **Apply Grading Guidelines**.
-3. Review the selected documents. All guidelines shown in the dialog are selected initially; clear any that should not apply. If an expected guideline is missing, check the active team before opening the dialog.
+3. Review the selected documents. All guidelines shown in the dialog are selected initially; clear any that should not apply. If an expected guideline is missing, check that it belongs to your default team.
 4. Confirm the selected guidelines and follow the progress in the results view.
 
 This reviews saved responses, without sending new probes to the target. It reviews all FAIL results in the eval, rather than only the rows currently visible through a filter. A failure can be confirmed or revised to PASS; a revised result receives a passing score and a review reason.
