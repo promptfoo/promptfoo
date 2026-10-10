@@ -9,7 +9,7 @@ description: Use Google Vertex AI models including Gemini, Claude, Llama, and sp
 The `vertex` provider connects to Google's [Vertex AI](https://cloud.google.com/vertex-ai). It supports Gemini, Llama, Claude, and other models for text, code, and embeddings.
 
 :::info Provider Selection
-Use `vertex:` for all Vertex AI models (Gemini, Claude, Llama, etc.). Use `google:` for Google AI Studio (API key authentication).
+Use `vertex:` for the supported Vertex inference paths listed below (Gemini, Claude, and Llama). Use `google:` for Google AI Studio (API key authentication).
 :::
 
 ## Available Models
@@ -216,9 +216,9 @@ By default, supported Llama 3 models use Llama Guard for content safety. You can
 
 ### Gemma Models (Open Models)
 
-- `vertex:gemma` - Lightweight open text model for generation, summarization, and extraction
-- `vertex:codegemma` - Lightweight code generation and completion model
-- `vertex:paligemma` - Lightweight vision-language model for image tasks
+Model Garden availability does not make `vertex:gemma`, `vertex:codegemma`, or `vertex:paligemma` valid hosted inference IDs. These names fall through to the legacy PaLM request format in the current adapter.
+
+For [Gemma deployed from Model Garden](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/model-garden/deploy-and-inference-tutorial), use a [custom provider](/docs/providers/custom-api) that calls your deployed endpoint with its required request format and Google Cloud authentication. For Google's hosted Gemini API Gemma models, use the documented [`google:gemma-4-31b-it` or `google:gemma-4-26b-a4b-it` routes](/docs/providers/google#chat-and-multimodal-models).
 
 ### Embedding Models
 

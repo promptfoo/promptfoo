@@ -586,6 +586,10 @@ for capability details and safety guidance.
 
 Google's Veo models enable AI-powered video generation from text prompts. Use the `google:video:` prefix with `GOOGLE_API_KEY` / `GEMINI_API_KEY` for Google AI Studio. For explicit Vertex AI routing, use the `vertex:video:` prefix instead.
 
+:::warning Gemini API video previews
+Google lists October 22, 2026 as the earliest shutdown date for the native Veo 3.1 previews and `gemini-omni-flash-preview`, with `gemini-omni-1.1-flash` as the replacement. Omni uses the Interactions route rather than the `google:video:` Veo protocol. Check the [Gemini API lifecycle](https://ai.google.dev/gemini-api/docs/deprecations) before running these previews. Vertex video IDs follow a separate lifecycle.
+:::
+
 #### Available Models
 
 | Model                                        | Description                                                                                               |
