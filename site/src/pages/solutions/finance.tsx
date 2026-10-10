@@ -230,6 +230,7 @@ export default function Finance() {
 
             <div className={styles.solutionGrid}>
               <ApplicationCard
+                styles={styles}
                 icon={<TrendingUpIcon className={styles.solutionIcon} />}
                 title="Wealth & Advisory"
               >
@@ -237,12 +238,14 @@ export default function Finance() {
                 planning copilots.
               </ApplicationCard>
               <ApplicationCard
+                styles={styles}
                 icon={<InsightsIcon className={styles.solutionIcon} />}
                 title="Capital Markets"
               >
                 Trading support, research synthesis, market analysis, and deal execution assistance.
               </ApplicationCard>
               <ApplicationCard
+                styles={styles}
                 icon={<AccountBalanceIcon className={styles.solutionIcon} />}
                 title="Banking Services"
               >
@@ -313,6 +316,7 @@ export default function Finance() {
 
             <div className={styles.benefitsList}>
               <BenefitItem
+                styles={styles}
                 icon={<LockIcon className={styles.benefitIcon} />}
                 title="Self-hosted deployment"
               >
@@ -320,6 +324,7 @@ export default function Finance() {
                 the strictest data residency and security requirements.
               </BenefitItem>
               <BenefitItem
+                styles={styles}
                 icon={<MonitorHeartIcon className={styles.benefitIcon} />}
                 title="Continuous monitoring"
               >
@@ -327,6 +332,7 @@ export default function Finance() {
                 security posture across model updates and prompt changes.
               </BenefitItem>
               <BenefitItem
+                styles={styles}
                 icon={<VerifiedUserIcon className={styles.benefitIcon} />}
                 title="Audit-ready documentation"
               >

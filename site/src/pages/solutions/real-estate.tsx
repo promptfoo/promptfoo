@@ -219,6 +219,7 @@ export default function RealEstate() {
 
             <div className={styles.solutionGrid}>
               <ApplicationCard
+                styles={styles}
                 icon={<HomeIcon className={styles.solutionIcon} />}
                 title="Property Search & Recommendations"
               >
@@ -226,6 +227,7 @@ export default function RealEstate() {
                 tools, and school district comparison features.
               </ApplicationCard>
               <ApplicationCard
+                styles={styles}
                 icon={<AccountBalanceIcon className={styles.solutionIcon} />}
                 title="Mortgage & Lending"
               >
@@ -233,6 +235,7 @@ export default function RealEstate() {
                 automated underwriting support systems.
               </ApplicationCard>
               <ApplicationCard
+                styles={styles}
                 icon={<ApartmentIcon className={styles.solutionIcon} />}
                 title="Property Management"
               >
@@ -335,6 +338,7 @@ export default function RealEstate() {
 
             <div className={styles.benefitsList}>
               <BenefitItem
+                styles={styles}
                 icon={<LockIcon className={styles.benefitIcon} />}
                 title="Self-hosted deployment"
               >
@@ -342,6 +346,7 @@ export default function RealEstate() {
                 your environment, meeting the strictest data residency and security requirements.
               </BenefitItem>
               <BenefitItem
+                styles={styles}
                 icon={<MonitorHeartIcon className={styles.benefitIcon} />}
                 title="Continuous compliance monitoring"
               >
@@ -349,6 +354,7 @@ export default function RealEstate() {
                 Track compliance posture across model updates and listing changes.
               </BenefitItem>
               <BenefitItem
+                styles={styles}
                 icon={<VerifiedUserIcon className={styles.benefitIcon} />}
                 title="Audit-ready documentation"
               >

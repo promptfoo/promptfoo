@@ -223,6 +223,7 @@ export default function Telecom() {
 
             <div className={styles.solutionGrid}>
               <ApplicationCard
+                styles={styles}
                 icon={<PhoneInTalkIcon className={styles.solutionIcon} />}
                 title="IVR Systems"
               >
@@ -230,6 +231,7 @@ export default function Telecom() {
                 engineering vulnerabilities.
               </ApplicationCard>
               <ApplicationCard
+                styles={styles}
                 icon={<RecordVoiceOverIcon className={styles.solutionIcon} />}
                 title="Voice Assistants"
               >
@@ -237,6 +239,7 @@ export default function Telecom() {
                 scenarios.
               </ApplicationCard>
               <ApplicationCard
+                styles={styles}
                 icon={<HeadsetMicIcon className={styles.solutionIcon} />}
                 title="Agent Assist"
               >
@@ -244,6 +247,7 @@ export default function Telecom() {
                 incorrect guidance to human agents.
               </ApplicationCard>
               <ApplicationCard
+                styles={styles}
                 icon={<SupportAgentIcon className={styles.solutionIcon} />}
                 title="Customer Service Chatbots"
               >
@@ -251,6 +255,7 @@ export default function Telecom() {
                 and compliance.
               </ApplicationCard>
               <ApplicationCard
+                styles={styles}
                 icon={<SmartToyIcon className={styles.solutionIcon} />}
                 title="Self-Service Portals"
               >
@@ -258,6 +263,7 @@ export default function Telecom() {
                 across web and mobile.
               </ApplicationCard>
               <ApplicationCard
+                styles={styles}
                 icon={<CellTowerIcon className={styles.solutionIcon} />}
                 title="Network Operations"
               >
@@ -376,6 +382,7 @@ export default function Telecom() {
 
             <div className={styles.benefitsList}>
               <BenefitItem
+                styles={styles}
                 icon={<SpeedIcon className={styles.benefitIcon} />}
                 title="Test at the scale you operate"
               >
@@ -383,6 +390,7 @@ export default function Telecom() {
                 continuous security validation across every model update and prompt change.
               </BenefitItem>
               <BenefitItem
+                styles={styles}
                 icon={<SecurityIcon className={styles.benefitIcon} />}
                 title="Your data never leaves"
               >
@@ -390,6 +398,7 @@ export default function Telecom() {
                 systems. Meet the strictest CPNI requirements and data residency policies.
               </BenefitItem>
               <BenefitItem
+                styles={styles}
                 icon={<VerifiedUserIcon className={styles.benefitIcon} />}
                 title="Audit-ready from day one"
               >

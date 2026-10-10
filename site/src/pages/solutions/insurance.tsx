@@ -237,6 +237,7 @@ export default function Insurance() {
 
             <div className={styles.solutionGrid}>
               <ApplicationCard
+                styles={styles}
                 icon={<SupportAgentIcon className={styles.solutionIcon} />}
                 title="Policyholder Service"
               >
@@ -244,6 +245,7 @@ export default function Insurance() {
                 copilots, and portal support.
               </ApplicationCard>
               <ApplicationCard
+                styles={styles}
                 icon={<AssignmentIcon className={styles.solutionIcon} />}
                 title="Claims & Underwriting"
               >
@@ -251,6 +253,7 @@ export default function Insurance() {
                 underwriting assistants.
               </ApplicationCard>
               <ApplicationCard
+                styles={styles}
                 icon={<HomeRepairServiceIcon className={styles.solutionIcon} />}
                 title="Provider & Vendor Networks"
               >
@@ -258,6 +261,7 @@ export default function Insurance() {
                 partners, and network status tools.
               </ApplicationCard>
               <ApplicationCard
+                styles={styles}
                 icon={<ShieldIcon className={styles.solutionIcon} />}
                 title="Sensitive Data Workflows"
               >
@@ -360,6 +364,7 @@ export default function Insurance() {
 
             <div className={styles.benefitsList}>
               <BenefitItem
+                styles={styles}
                 icon={<LockIcon className={styles.benefitIcon} />}
                 title="Private deployment options"
               >
@@ -368,6 +373,7 @@ export default function Insurance() {
                 residency policies.
               </BenefitItem>
               <BenefitItem
+                styles={styles}
                 icon={<MonitorHeartIcon className={styles.benefitIcon} />}
                 title="Continuous compliance monitoring"
               >
@@ -375,6 +381,7 @@ export default function Insurance() {
                 Track security and discrimination metrics across model updates.
               </BenefitItem>
               <BenefitItem
+                styles={styles}
                 icon={<VerifiedUserIcon className={styles.benefitIcon} />}
                 title="Audit-ready documentation"
               >
@@ -398,6 +405,7 @@ export default function Insurance() {
 
             <div className={styles.solutionGrid}>
               <ApplicationCard
+                styles={styles}
                 icon={<ShieldIcon className={styles.solutionIcon} />}
                 title="Provider Status Accuracy"
               >
@@ -405,6 +413,7 @@ export default function Insurance() {
                 facility status, tiering, and appointment or intake availability.
               </ApplicationCard>
               <ApplicationCard
+                styles={styles}
                 icon={<HomeRepairServiceIcon className={styles.solutionIcon} />}
                 title="Preferred Vendor Verification"
               >
@@ -412,6 +421,7 @@ export default function Insurance() {
                 provider agreements that could expose policyholders to unexpected costs.
               </ApplicationCard>
               <ApplicationCard
+                styles={styles}
                 icon={<VerifiedUserIcon className={styles.solutionIcon} />}
                 title="Capacity & Credentialing"
               >

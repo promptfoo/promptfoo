@@ -282,6 +282,7 @@ function BenefitsSection() {
         </p>
         <div className={styles.benefitsList}>
           <BenefitItem
+            styles={styles}
             icon={<SearchIcon className={styles.benefitIcon} />}
             title="Deep data flow analysis"
           >
@@ -290,6 +291,7 @@ function BenefitsSection() {
             matching.
           </BenefitItem>
           <BenefitItem
+            styles={styles}
             icon={<SecurityIcon className={styles.benefitIcon} />}
             title="LLM-specific detection"
           >
@@ -297,6 +299,7 @@ function BenefitsSection() {
             noise—no alert fatigue from irrelevant findings.
           </BenefitItem>
           <BenefitItem
+            styles={styles}
             icon={<IntegrationInstructionsIcon className={styles.benefitIcon} />}
             title="Embedded in developer workflow"
           >
@@ -304,6 +307,7 @@ function BenefitsSection() {
             issues without context switching or separate dashboards.
           </BenefitItem>
           <BenefitItem
+            styles={styles}
             icon={<CodeIcon className={styles.benefitIcon} />}
             title="Complete development coverage"
           >

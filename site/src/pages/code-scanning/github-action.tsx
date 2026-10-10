@@ -153,17 +153,26 @@ function BenefitsSection() {
         <h2 className={styles.sectionTitle}>Real security that fits your workflow</h2>
         <p className={styles.sectionSubtitle}>Flag dangerous code without adding friction.</p>
         <div className={styles.benefitsList}>
-          <BenefitItem icon={<BiotechIcon className={styles.benefitIcon} />} title="Deep tracing">
+          <BenefitItem
+            styles={styles}
+            icon={<BiotechIcon className={styles.benefitIcon} />}
+            title="Deep tracing"
+          >
             Beyond the PR itself, the scanner agentically traces LLM inputs, outputs, and capability
             changes deep into the larger repository to identify subtle yet critical issues that
             human reviewers can struggle to catch.
           </BenefitItem>
-          <BenefitItem icon={<VolumeOffIcon className={styles.benefitIcon} />} title="No noise">
+          <BenefitItem
+            styles={styles}
+            icon={<VolumeOffIcon className={styles.benefitIcon} />}
+            title="No noise"
+          >
             Despite the comprehensive approach, it has a high bar for reporting, avoiding false
             positives and alert fatigue. Maintainers can configure severity levels and provide
             custom instructions to tailor sensitivity to their needs.
           </BenefitItem>
           <BenefitItem
+            styles={styles}
             icon={<AutoFixHighIcon className={styles.benefitIcon} />}
             title="Fix suggestions"
           >

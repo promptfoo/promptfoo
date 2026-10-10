@@ -2,6 +2,7 @@ import React from 'react';
 
 import { render, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
+import styles from '../pages/landing-page.module.css';
 import FinancePage from '../pages/solutions/finance';
 import { ApplicationCard } from './ApplicationCard';
 import { BenefitItem } from './BenefitItem';
@@ -10,10 +11,18 @@ describe('application cards and benefit rows', () => {
   it('keeps each application description with its title and direct icon', () => {
     render(
       <>
-        <ApplicationCard title="Wealth & Advisory" icon={<svg aria-label="Markets" role="img" />}>
+        <ApplicationCard
+          styles={styles}
+          title="Wealth & Advisory"
+          icon={<svg aria-label="Markets" role="img" />}
+        >
           Test investment assistants and <strong>portfolio analysis</strong>.
         </ApplicationCard>
-        <ApplicationCard title="Operations" icon={<svg aria-label="Operations" role="img" />}>
+        <ApplicationCard
+          styles={styles}
+          title="Operations"
+          icon={<svg aria-label="Operations" role="img" />}
+        >
           Test internal workflows.
         </ApplicationCard>
       </>,
@@ -31,7 +40,11 @@ describe('application cards and benefit rows', () => {
 
   it('keeps benefit icons beside their heading and paragraph without an extra wrapper', () => {
     render(
-      <BenefitItem title="Private deployment" icon={<svg role="img" aria-label="Privacy" />}>
+      <BenefitItem
+        styles={styles}
+        title="Private deployment"
+        icon={<svg role="img" aria-label="Privacy" />}
+      >
         Keep sensitive data in your environment.
       </BenefitItem>,
     );
