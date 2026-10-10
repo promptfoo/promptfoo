@@ -35,7 +35,7 @@ You can also put the agent ID in the provider ID: `anthropic:managed-agents:agen
 
 ## Create an agent with dynamic workflows
 
-Use `agent` instead of `agent_id` to create a temporary agent, and `environment` instead of `environment_id` to create a cloud environment. These objects use the Anthropic API's field names. Config values support Promptfoo templates.
+Use `agent` instead of `agent_id` to create a temporary agent, and `environment` instead of `environment_id` to create a cloud environment. These objects use the Anthropic API's field names. Values in `agent`, `environment`, `session`, and `headers` support Promptfoo templates; `apiKey` and `apiBaseUrl` are read once, when the provider is created.
 
 ```yaml
 providers:
@@ -81,7 +81,7 @@ Enabling workflows gives the agent access to them; your prompt should ask it to 
 | `session`                        | Session `title`, `metadata`, `resources`, `vault_ids`, and `budget`.                                                              |
 | `apiKey`                         | Overrides `ANTHROPIC_API_KEY`. Claude Code subscription OAuth is not supported by this hosted API.                                |
 | `apiBaseUrl`                     | Overrides `ANTHROPIC_BASE_URL`; defaults to the Anthropic API.                                                                    |
-| `headers`                        | Additional request headers.                                                                                                       |
+| `headers`                        | Additional request headers. `anthropic-beta` values are added to the beta that Managed Agents requires.                           |
 | `workspace_id`                   | Optional Anthropic workspace selector.                                                                                            |
 | `timeoutMs`                      | Deadline for the whole invocation, including setup; default `600000` (10 minutes).                                                |
 | `cleanupTimeoutMs`               | Separate deadline for stopping the session and archiving owned resources; default `10000`.                                        |

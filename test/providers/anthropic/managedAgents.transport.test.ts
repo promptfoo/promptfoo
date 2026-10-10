@@ -148,6 +148,28 @@ describe('Claude Managed Agents SDK transport', () => {
     expect(result.output).toBeUndefined();
   });
 
+  it('keeps the required beta when the config adds its own anthropic-beta header', async () => {
+    const { apiBaseUrl, requests } = await serve(
+      event('agent.message', { content: [{ type: 'text', text: 'ok' }] }) +
+        event('session.status_idle', { stop_reason: { type: 'end_turn' } }),
+    );
+    const result = await new AnthropicManagedAgentsProvider({
+      config: {
+        apiKey: 'local-test-key',
+        apiBaseUrl,
+        agent_id: 'agent-test',
+        environment_id: 'env-test',
+        headers: { 'anthropic-beta': 'extra-beta-2026-01-01' },
+      },
+    }).callApi('test');
+    expect(result.error).toBeUndefined();
+    expect(requests.length).toBeGreaterThan(3);
+    for (const request of requests) {
+      expect(request.beta).toContain('managed-agents-2026-04-01');
+      expect(request.beta).toContain('extra-beta-2026-01-01');
+    }
+  });
+
   it('does not echo a credential the runtime rejects as a header value', async () => {
     const { apiBaseUrl, requests } = await serve('');
     const result = await new AnthropicManagedAgentsProvider({

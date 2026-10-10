@@ -78,6 +78,10 @@ function setup(
   const archive = vi.spyOn(beta.sessions, 'archive').mockResolvedValue({} as never);
   const agentArchive = vi.spyOn(beta.agents, 'archive').mockResolvedValue({} as never);
   const environmentArchive = vi.spyOn(beta.environments, 'archive').mockResolvedValue({} as never);
+  const agentRetrieve = vi.spyOn(beta.agents, 'retrieve').mockResolvedValue({} as never);
+  const environmentRetrieve = vi
+    .spyOn(beta.environments, 'retrieve')
+    .mockResolvedValue({} as never);
   return {
     provider,
     agentCreate,
@@ -90,6 +94,8 @@ function setup(
     archive,
     agentArchive,
     environmentArchive,
+    agentRetrieve,
+    environmentRetrieve,
   };
 }
 
@@ -277,6 +283,7 @@ describe('Claude Managed Agents', () => {
           apiKey: 'key',
           agent: { name: 'QA', model: 'claude-sonnet-5' },
           environment: { name: 'QA' },
+          timeoutMs: 1_000,
         },
       });
       const caller = new AbortController();
@@ -290,8 +297,10 @@ describe('Claude Managed Agents', () => {
       }) as never);
       const result = await f.provider.callApi('test', undefined, { abortSignal: caller.signal });
       expect(result.error).toBe('Claude Managed Agents invocation aborted');
-      // An abortable create would discard the id that cleanup needs.
+      // A create that could be aborted, or cut short by the call's own deadline,
+      // would discard the id that cleanup needs.
       expect(spy.mock.calls[0][1]).not.toHaveProperty('signal');
+      expect(spy.mock.calls[0][1]).toMatchObject({ timeout: 60_000 });
       expect(f.agentArchive).toHaveBeenCalledOnce();
       expect(f.environmentArchive).toHaveBeenCalledTimes(kind === 'agent' ? 0 : 1);
       expect(f.archive).toHaveBeenCalledTimes(kind === 'session' ? 1 : 0);
@@ -302,6 +311,46 @@ describe('Claude Managed Agents', () => {
       );
     },
   );
+
+  it.each(['agent', 'environment'] as const)(
+    'retries archiving the %s it created after a transient failure',
+    async (kind) => {
+      vi.useFakeTimers();
+      const f = setup({
+        config: {
+          apiKey: 'key',
+          agent: { name: 'QA', model: 'claude-sonnet-5' },
+          environment: { name: 'QA' },
+        },
+      });
+      const spy = kind === 'agent' ? f.agentArchive : f.environmentArchive;
+      spy
+        .mockRejectedValueOnce(new Anthropic.APIConnectionError({ message: 'socket hang up' }))
+        .mockResolvedValue({} as never);
+      const pending = f.provider.callApi('test');
+      await vi.advanceTimersByTimeAsync(250);
+      const result = await pending;
+      expect(spy).toHaveBeenCalledTimes(2);
+      expect(result.error).toBeUndefined();
+      expect(result.metadata).not.toHaveProperty('cleanupErrors');
+    },
+  );
+
+  it('accepts a lost response for a definition that was archived anyway', async () => {
+    const f = setup({
+      config: {
+        apiKey: 'key',
+        agent: { name: 'QA', model: 'claude-sonnet-5' },
+        environment: { name: 'QA' },
+      },
+    });
+    f.agentArchive.mockRejectedValue(new Anthropic.APIConnectionError({ message: 'reset' }));
+    f.agentRetrieve.mockResolvedValue({ archived_at: '2026-10-09' } as never);
+    const result = await f.provider.callApi('test');
+    expect(f.agentArchive).toHaveBeenCalledOnce();
+    expect(result.error).toBeUndefined();
+    expect(f.environmentArchive).toHaveBeenCalledOnce();
+  });
 
   it('accepts a refusal for a session that is already archived', async () => {
     const f = setup({}, [idle('budget_reached')]);
@@ -386,6 +435,27 @@ describe('Claude Managed Agents', () => {
     // A 404 aborts the eval before rows are shown, so the reason is also logged, once.
     expect(errorLog).toHaveBeenCalledOnce();
     expect(errorLog).toHaveBeenCalledWith(results[0].error);
+  });
+
+  it('adds a configured anthropic-beta to the one Managed Agents requires', async () => {
+    const f = setup({
+      config: {
+        ...config,
+        headers: { 'Anthropic-Beta': 'extra-beta-2026-01-01, other-beta', 'x-trace': 'trace-1' },
+      },
+    });
+    const result = await f.provider.callApi('test');
+    expect(result.error).toBeUndefined();
+    // As a header it would replace the SDK's own value; as `betas` the SDK merges it.
+    for (const [params, request] of [
+      f.create.mock.calls[0],
+      [f.stream.mock.calls[0][1], f.stream.mock.calls[0][2]],
+      [f.send.mock.calls[0][1], f.send.mock.calls[0][2]],
+      [f.archive.mock.calls[0][1], f.archive.mock.calls[0][2]],
+    ]) {
+      expect(params).toMatchObject({ betas: ['extra-beta-2026-01-01', 'other-beta'] });
+      expect(request).toMatchObject({ headers: { 'x-trace': 'trace-1' } });
+    }
   });
 
   it('scrubs credentials that ANTHROPIC_CUSTOM_HEADERS adds to requests', async () => {

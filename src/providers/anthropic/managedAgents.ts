@@ -229,6 +229,11 @@ function validateConfig(config: ManagedAgentsOptions): void {
 }
 
 const SECRET_KEY_PATTERN = /token|secret|passw|credential|authorization|api_?key/i;
+const CREATE_TIMEOUT_MS = 60_000;
+
+type ArchivableKind = 'session' | 'agent' | 'environment';
+type CallParams = { workspace_id?: string; betas?: string[] };
+type CleanupRequest = Anthropic.RequestOptions & { signal: AbortSignal };
 
 /** Collects credential values from a rendered config so error text can be scrubbed of them. */
 function collectSecrets(value: unknown, key: string, found: Set<string>, depth = 0): Set<string> {
@@ -244,6 +249,31 @@ function collectSecrets(value: unknown, key: string, found: Set<string>, depth =
   return found;
 }
 
+/**
+ * A caller's own `anthropic-beta` header would replace the one every Managed Agents
+ * request sets. Its values are passed as `betas` instead, which the SDK adds to its own.
+ */
+function splitBetaHeader(headers: Record<string, string> = {}): {
+  headers: Record<string, string>;
+  betas: string[];
+} {
+  const rest: Record<string, string> = {};
+  const betas: string[] = [];
+  for (const [name, value] of Object.entries(headers)) {
+    if (name.toLowerCase() === 'anthropic-beta') {
+      betas.push(
+        ...String(value)
+          .split(',')
+          .map((beta) => beta.trim())
+          .filter(Boolean),
+      );
+    } else {
+      rest[name] = value;
+    }
+  }
+  return { headers: rest, betas };
+}
+
 /** Every credential one call sends: the API key, header values, and config secrets. */
 function callSecrets(
   config: ManagedAgentsOptions,
@@ -257,7 +287,7 @@ function callSecrets(
     ...Object.entries(config.headers ?? {}),
   ];
   for (const [name, value] of headers) {
-    if (typeof value !== 'string') {
+    if (typeof value !== 'string' || name.toLowerCase() === 'anthropic-beta') {
       continue;
     }
     // A server that echoes a credential leaves out a scheme such as "Bearer".
@@ -491,16 +521,14 @@ export class AnthropicManagedAgentsProvider extends AnthropicGenericProvider {
     const signal = options?.abortSignal
       ? AbortSignal.any([controller.signal, options.abortSignal])
       : controller.signal;
-    const params = { workspace_id: config.workspace_id };
+    const { headers, betas } = splitBetaHeader(config.headers);
+    const params = { workspace_id: config.workspace_id, ...(betas.length > 0 && { betas }) };
     // Mutations must not be retried: a lost response can otherwise start duplicate paid runs.
-    const request = { signal, maxRetries: 0, headers: config.headers };
-    // Aborting a create in flight would discard the id of a resource the server still
-    // makes, leaving nothing to archive. Creates finish, then the abort is honoured.
-    const createRequest = {
-      maxRetries: 0,
-      headers: config.headers,
-      timeout: Math.min(timeoutMs, 60_000),
-    };
+    const request = { signal, maxRetries: 0, headers };
+    // Giving up on a create in flight would discard the id of a resource the server
+    // still makes, leaving nothing to archive. Creates finish, bounded only by their
+    // own timeout, and then an abort or the call's deadline is honoured.
+    const createRequest = { maxRetries: 0, headers, timeout: CREATE_TIMEOUT_MS };
     let agentId = config.agent_id;
     let environmentId = config.environment_id;
     let sessionId: string | undefined;
@@ -618,20 +646,25 @@ export class AnthropicManagedAgentsProvider extends AnthropicGenericProvider {
       }
       metadata.stopReason = state.stopReason;
       applyUsage(response, state.usage);
-      await this.cleanupResources(config, { agentId, environmentId, sessionId }, response, secrets);
+      await this.cleanupResources(
+        config,
+        { params, headers, secrets },
+        { agentId, environmentId, sessionId },
+        response,
+      );
     }
     return response;
   }
 
   private async cleanupResources(
     config: ManagedAgentsOptions,
+    call: { params: CallParams; headers: Record<string, string>; secrets: Set<string> },
     ids: { agentId?: string; environmentId?: string; sessionId?: string },
     response: ProviderResponse,
-    secrets: Set<string>,
   ): Promise<void> {
     const { agentId, environmentId, sessionId } = ids;
+    const { params, secrets } = call;
     const metadata = response.metadata!;
-    const params = { workspace_id: config.workspace_id };
     if (config.retainSession && !response.error) {
       metadata.sessionArchived = false;
       return;
@@ -644,42 +677,30 @@ export class AnthropicManagedAgentsProvider extends AnthropicGenericProvider {
       signal: cleanupController.signal,
       timeout: cleanupTimeoutMs,
       maxRetries: 0,
-      headers: config.headers,
+      headers: call.headers,
     };
     const cleanupErrors: string[] = [];
+    const archive = async (kind: ArchivableKind, id: string) => {
+      const error = await this.archive(kind, id, params, cleanupRequest, cleanupTimeoutMs, secrets);
+      if (error !== undefined) {
+        cleanupErrors.push(`${kind === 'session' ? 'Session' : kind} ${id}: ${error}`);
+      }
+      return error === undefined;
+    };
     try {
       if (sessionId) {
         if (response.error) {
           await this.interruptSession(sessionId, params, cleanupRequest, metadata, secrets);
         }
-        const archiveError = await this.archiveSession(
-          sessionId,
-          params,
-          cleanupRequest,
-          cleanupTimeoutMs,
-          secrets,
-        );
-        metadata.sessionArchived = archiveError === undefined;
-        if (archiveError !== undefined) {
-          cleanupErrors.push(`Session ${sessionId}: ${archiveError}`);
-        }
+        metadata.sessionArchived = await archive('session', sessionId);
       }
       // Leave definitions available for recovery when session archival failed.
       if (!sessionId || metadata.sessionArchived) {
-        for (const [kind, id] of [
-          ['agent', config.agent ? agentId : undefined],
-          ['environment', config.environment ? environmentId : undefined],
-        ] as const) {
-          if (!id) {
-            continue;
-          }
-          try {
-            const resource =
-              kind === 'agent' ? this.anthropic.beta.agents : this.anthropic.beta.environments;
-            await resource.archive(id, params, cleanupRequest);
-          } catch (error) {
-            cleanupErrors.push(`${kind} ${id}: ${describeError(error, secrets)}`);
-          }
+        if (config.agent && agentId) {
+          await archive('agent', agentId);
+        }
+        if (config.environment && environmentId) {
+          await archive('environment', environmentId);
         }
       }
     } finally {
@@ -699,7 +720,7 @@ export class AnthropicManagedAgentsProvider extends AnthropicGenericProvider {
 
   private async interruptSession(
     sessionId: string,
-    params: { workspace_id?: string },
+    params: CallParams,
     request: Anthropic.RequestOptions,
     metadata: NonNullable<ProviderResponse['metadata']>,
     secrets: Set<string>,
@@ -718,14 +739,37 @@ export class AnthropicManagedAgentsProvider extends AnthropicGenericProvider {
     }
   }
 
-  /** Where the session stands for archival; `unknown` when the check itself fails for now. */
+  private archiveRequest(
+    kind: ArchivableKind,
+    id: string,
+    params: CallParams,
+    request: CleanupRequest,
+  ): Promise<unknown> {
+    const { sessions, agents, environments } = this.anthropic.beta;
+    if (kind === 'session') {
+      return sessions.archive(id, params, request);
+    }
+    return kind === 'agent'
+      ? agents.archive(id, params, request)
+      : environments.archive(id, params, request);
+  }
+
+  /** Where a resource stands for archival; `unknown` when the check itself fails for now. */
   private async archivalState(
-    sessionId: string,
-    params: { workspace_id?: string },
-    request: Anthropic.RequestOptions & { signal: AbortSignal },
+    kind: ArchivableKind,
+    id: string,
+    params: CallParams,
+    request: CleanupRequest,
   ): Promise<'archived' | 'running' | 'settled' | 'unknown'> {
+    const { sessions, agents, environments } = this.anthropic.beta;
     try {
-      const session = await this.anthropic.beta.sessions.retrieve(sessionId, params, request);
+      if (kind !== 'session') {
+        const definition = await (kind === 'agent'
+          ? agents.retrieve(id, params, request)
+          : environments.retrieve(id, params, request));
+        return definition.archived_at ? 'archived' : 'settled';
+      }
+      const session = await sessions.retrieve(id, params, request);
       if (session.archived_at) {
         return 'archived';
       }
@@ -744,12 +788,13 @@ export class AnthropicManagedAgentsProvider extends AnthropicGenericProvider {
    * Archival is refused while a session is `running`. An interrupt only takes effect
    * at the session's next safe boundary, and the stream reports idle slightly before
    * the stored status does, so wait for the session to settle before giving up.
-   * Returns the failure reason, or undefined once the session is archived.
+   * Returns the failure reason, or undefined once the resource is archived.
    */
-  private async archiveSession(
-    sessionId: string,
-    params: { workspace_id?: string },
-    request: Anthropic.RequestOptions & { signal: AbortSignal },
+  private async archive(
+    kind: ArchivableKind,
+    id: string,
+    params: CallParams,
+    request: CleanupRequest,
     cleanupTimeoutMs: number,
     secrets: Set<string>,
   ): Promise<string | undefined> {
@@ -760,7 +805,7 @@ export class AnthropicManagedAgentsProvider extends AnthropicGenericProvider {
       for (let delayMs = 250; ; delayMs = Math.min(delayMs * 2, 2_000)) {
         let failure: ReturnType<typeof archiveFailureKind>;
         try {
-          await this.anthropic.beta.sessions.archive(sessionId, params, request);
+          await this.archiveRequest(kind, id, params, request);
           return undefined;
         } catch (error) {
           if (request.signal.aborted) {
@@ -772,7 +817,7 @@ export class AnthropicManagedAgentsProvider extends AnthropicGenericProvider {
             return refusal;
           }
         }
-        const state = await this.archivalState(sessionId, params, request);
+        const state = await this.archivalState(kind, id, params, request);
         if (state === 'archived') {
           return undefined;
         }
@@ -784,7 +829,7 @@ export class AnthropicManagedAgentsProvider extends AnthropicGenericProvider {
           return refusal;
         }
         settled = !wait;
-        // A session that settled since the refusal is retried at once. Archiving
+        // A resource that settled since the refusal is retried at once. Archiving
         // again repeats no hosted work.
         if (wait) {
           await sleepWithAbort(delayMs, request.signal);
