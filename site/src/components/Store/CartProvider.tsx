@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 
+import { useHistory } from '@docusaurus/router';
 import { useCart } from './useFourthwall';
 
 import type { FourthwallCart, FourthwallCartItem, FourthwallCatalogItem } from './types';
@@ -41,6 +42,7 @@ interface CartContextValue {
 const CartContext = createContext<CartContextValue | null>(null);
 
 export function CartProvider({ children }: { children: React.ReactNode }) {
+  const history = useHistory();
   const {
     cart,
     isLoading,
@@ -57,68 +59,42 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const [selectedProduct, setSelectedProduct] = useState<FourthwallCatalogItem | null>(null);
   const [couponCode, setCouponCode] = useState<string | null>(null);
 
-  const ingestCouponFromUrl = useCallback(() => {
-    const params = new URLSearchParams(window.location.search);
-    const urlCoupon = params.get('coupon');
-    if (urlCoupon) {
+  // Load stored coupons only on mount; URL coupons take precedence below.
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(COUPON_STORAGE_KEY);
+      if (stored) {
+        setCouponCode(stored);
+      }
+    } catch {
+      // Private browsing
+    }
+  }, []);
+
+  useEffect(() => {
+    const applyCoupon = (location: typeof history.location) => {
+      const params = new URLSearchParams(location.search);
+      const urlCoupon = params.get('coupon');
+      if (!urlCoupon) {
+        return;
+      }
       const code = urlCoupon.trim().toUpperCase();
       setCouponCode(code);
       try {
         localStorage.setItem(COUPON_STORAGE_KEY, code);
       } catch {
-        // Private browsing
+        // Storage may be unavailable.
       }
-      // Clean the URL without triggering a navigation
       params.delete('coupon');
-      const newUrl = params.toString()
-        ? `${window.location.pathname}?${params.toString()}`
-        : window.location.pathname;
-      window.history.replaceState(window.history.state, '', newUrl);
-      return true;
-    }
-    return false;
-  }, []);
-
-  // Read coupon from URL or localStorage on mount
-  useEffect(() => {
-    if (!ingestCouponFromUrl()) {
-      // Fall back to localStorage
-      try {
-        const stored = localStorage.getItem(COUPON_STORAGE_KEY);
-        if (stored) {
-          setCouponCode(stored);
-        }
-      } catch {
-        // Private browsing
-      }
-    }
-  }, [ingestCouponFromUrl]);
-
-  // Re-check URL on client-side navigations (Docusaurus SPA route changes)
-  useEffect(() => {
-    const handleRouteChange = () => ingestCouponFromUrl();
-
-    // Docusaurus uses pushState/replaceState for navigation
-    window.addEventListener('popstate', handleRouteChange);
-
-    // Patch pushState/replaceState to detect Docusaurus client-side navigation
-    const originalPushState = window.history.pushState;
-    const originalReplaceState = window.history.replaceState;
-    window.history.pushState = function (...args) {
-      originalPushState.apply(this, args);
-      handleRouteChange();
-    };
-    window.history.replaceState = function (...args) {
-      originalReplaceState.apply(this, args);
-      handleRouteChange();
+      const search = params.toString();
+      history.replace({ ...location, search: search ? `?${search}` : '' });
     };
 
-    return () => {
-      window.removeEventListener('popstate', handleRouteChange);
-      window.history.pushState = originalPushState;
-      window.history.replaceState = originalReplaceState;
-    };
-  }, [ingestCouponFromUrl]);
+    // Observe each transition, including destinations React batches out of the render.
+    const unlisten = history.listen(applyCoupon);
+    applyCoupon(history.location);
+    return unlisten;
+  }, [history]);
 
   const clearCoupon = useCallback(() => {
     setCouponCode(null);
