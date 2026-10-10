@@ -97,6 +97,11 @@ export function evalCommand(
       defaultConfig?.commandLineOptions?.cache ?? defaultConfig?.evaluateOptions?.cache,
     )
     .option('--remote', 'Force remote inference wherever possible (used for red teams)', false)
+    .option(
+      '--safe-mode',
+      'Disable dynamic inline JavaScript execution for transforms and assertions',
+      defaultConfig?.commandLineOptions?.safeMode,
+    )
 
     // Filtering and subset selection
     .option('-n, --filter-first-n <number>', 'Only run the first N tests')

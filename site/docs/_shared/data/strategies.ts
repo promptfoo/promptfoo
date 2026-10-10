@@ -269,6 +269,17 @@ export const strategies: Strategy[] = [
   },
   {
     category: 'Static (Single-Turn)',
+    strategy: 'arabic-presentation-forms',
+    displayName: 'Arabic Presentation Forms',
+    description: 'Unicode compatibility characters',
+    longDescription:
+      'Tests detection and handling of Arabic text encoded with isolated Unicode presentation forms',
+    cost: 'Low',
+    asrIncrease: 'Variable',
+    link: '/docs/red-team/strategies/arabic-presentation-forms/',
+  },
+  {
+    category: 'Static (Single-Turn)',
     strategy: 'homoglyph',
     displayName: 'Homoglyph',
     description: 'Unicode confusable characters',

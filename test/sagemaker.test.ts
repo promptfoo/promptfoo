@@ -328,7 +328,7 @@ describe('SageMakerCompletionProvider', () => {
     expect(result.output).toBe('This is a response from HuggingFace-compatible endpoint');
   });
 
-  it('should call SageMaker endpoint with proper request for custom format', async () => {
+  const verifySagemakerCustomRequest = async () => {
     const provider = new SageMakerCompletionProvider('custom-endpoint', {
       id: 'sagemaker:custom-endpoint',
       config: {
@@ -339,7 +339,12 @@ describe('SageMakerCompletionProvider', () => {
     const result = await provider.callApi('test prompt');
 
     expect(result.output).toBe('This is a response from custom endpoint');
-  });
+  };
+
+  it(
+    'should call SageMaker endpoint with proper request for custom format',
+    verifySagemakerCustomRequest,
+  );
 
   it('should handle JSON formatted prompts', async () => {
     const provider = new SageMakerCompletionProvider('openai-endpoint', {
@@ -589,17 +594,7 @@ describe('SageMakerCompletionProvider', () => {
     expect(result.raw).toContain('Nested data value');
   });
 
-  it('should use response caching when enabled', async () => {
-    const provider = new SageMakerCompletionProvider('custom-endpoint', {
-      id: 'sagemaker:custom-endpoint',
-      config: {
-        modelType: 'custom',
-      },
-    });
-    const result = await provider.callApi('test prompt');
-
-    expect(result.output).toBe('This is a response from custom endpoint');
-  });
+  it('should use response caching when enabled', verifySagemakerCustomRequest);
 
   it('should include model type in the response metadata', async () => {
     const provider = new SageMakerCompletionProvider('openai-endpoint', {

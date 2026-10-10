@@ -9,6 +9,7 @@ import {
 import invariant from '../../util/invariant';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { applyGpt6RequestRules, getGpt6ResponsesReasoning, isGpt6Model } from '../openai/gpt6';
+import { flattenResponseTool } from '../openai/util';
 import { ResponsesProcessor } from '../responses/index';
 import { getRequestTimeoutMs, LONG_RUNNING_MODEL_TIMEOUT_MS } from '../shared';
 import { AzureGenericProvider } from './generic';
@@ -20,21 +21,18 @@ import type {
   ProviderResponse,
 } from '../../types/index';
 import type { ReasoningEffort } from '../openai/types';
-import type { AzureChatResponsesOptions, AzureProviderOptions } from './types';
+import type { AzureProviderOptions, AzureResponsesOptions } from './types';
 
 // Azure Responses API uses the v1 preview API version
 const AZURE_RESPONSES_API_VERSION = 'preview';
 
-export class AzureResponsesProvider extends AzureGenericProvider {
-  declare config: AzureChatResponsesOptions;
+export class AzureResponsesProvider extends AzureGenericProvider<AzureResponsesOptions> {
+  declare config: AzureResponsesOptions;
 
   private functionCallbackHandler = new FunctionCallbackHandler();
   private processor: ResponsesProcessor;
 
-  constructor(
-    deploymentName: string,
-    options: AzureProviderOptions<AzureChatResponsesOptions> = {},
-  ) {
+  constructor(deploymentName: string, options: AzureProviderOptions<AzureResponsesOptions> = {}) {
     super(deploymentName, options);
 
     // Initialize the shared response processor
@@ -42,17 +40,21 @@ export class AzureResponsesProvider extends AzureGenericProvider {
       modelName: this.deploymentName,
       providerType: 'azure',
       functionCallbackHandler: this.functionCallbackHandler,
-      // The processor invokes costCalculator(modelName, data.usage, requestConfig). calculateAzureCost
-      // expects (modelName, config, promptTokens, completionTokens) — extract the token counts from
-      // the Responses-shaped usage object (input_tokens/output_tokens) so cost is non-zero.
-      costCalculator: (modelName: string, usage: any, config?: any) =>
-        calculateAzureCost(
+      // calculateAzureCost expects (modelName, config, promptTokens, completionTokens). Extract
+      // token counts from Responses usage and map the tier Azure actually served into its
+      // passthrough-based cost contract, falling back to the effective requested tier.
+      costCalculator: (modelName: string, usage: any, config?: any, responseData?: any) => {
+        const { service_tier: requestedServiceTier, ...costConfig } = config ?? {};
+        const serviceTier = responseData?.service_tier ?? requestedServiceTier;
+        return calculateAzureCost(
           typeof config?.model === 'string' ? config.model : modelName,
           {
-            ...config,
+            ...costConfig,
             passthrough: {
-              ...config?.passthrough,
-              ...(config?.service_tier === undefined ? {} : { service_tier: config.service_tier }),
+              ...costConfig.passthrough,
+              ...(serviceTier === undefined || serviceTier === null
+                ? {}
+                : { service_tier: serviceTier }),
             },
           },
           usage?.prompt_tokens ?? usage?.input_tokens,
@@ -68,16 +70,9 @@ export class AzureResponsesProvider extends AzureGenericProvider {
             usage?.input_tokens_details?.cached_tokens_details?.image_tokens,
           usage?.completion_tokens_details?.image_tokens ??
             usage?.output_tokens_details?.image_tokens,
-        ),
+        );
+      },
     });
-
-    if (this.config.mcp?.enabled) {
-      this.initializationPromise = this.initializeMCP();
-    }
-  }
-
-  private async initializeMCP(): Promise<void> {
-    // TODO: Initialize MCP if needed
   }
 
   /**
@@ -186,10 +181,21 @@ export class AzureResponsesProvider extends AzureGenericProvider {
     const instructions = config.instructions;
 
     // Load response_format from external file if needed (handles nested schema loading)
-    const responseFormat = maybeLoadResponseFormatFromExternalFile(
-      config.response_format,
-      context?.vars,
-    );
+    let responseFormat;
+    try {
+      responseFormat = maybeLoadResponseFormatFromExternalFile(
+        config.response_format,
+        context?.vars,
+      );
+    } catch (error) {
+      const file =
+        typeof config.response_format === 'string' ? ` file: ${config.response_format}` : '';
+      throw new Error(
+        `Failed to load response_format${file}\n` +
+          `Error: ${error instanceof Error ? error.message : String(error)}\n` +
+          'Make sure the file exists and contains valid JSON schema format.',
+      );
+    }
 
     let textFormat;
     if (responseFormat) {
@@ -228,15 +234,7 @@ export class AzureResponsesProvider extends AzureGenericProvider {
     const loadedTools = config.tools
       ? await maybeLoadToolsFromExternalFile(config.tools, context?.vars)
       : undefined;
-    const tools = Array.isArray(loadedTools)
-      ? loadedTools.map((tool) => {
-          if (tool?.type !== 'function' || !tool.function) {
-            return tool;
-          }
-          const { function: functionDefinition, ...rest } = tool;
-          return { ...rest, ...functionDefinition };
-        })
-      : loadedTools;
+    const tools = Array.isArray(loadedTools) ? loadedTools.map(flattenResponseTool) : loadedTools;
     const toolChoice =
       typeof config.tool_choice === 'object' &&
       config.tool_choice?.type === 'function' &&
@@ -268,6 +266,9 @@ export class AzureResponsesProvider extends AzureGenericProvider {
         : {}),
       ...(config.stream ? { stream: config.stream } : {}),
       ...('store' in config ? { store: Boolean(config.store) } : {}),
+      ...(config.service_tier === undefined || config.service_tier === null
+        ? {}
+        : { service_tier: config.service_tier }),
       ...(config.passthrough || {}),
     };
 
@@ -299,9 +300,6 @@ export class AzureResponsesProvider extends AzureGenericProvider {
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    if (this.initializationPromise != null) {
-      await this.initializationPromise;
-    }
     await this.ensureInitialized();
     invariant(this.authHeaders, 'auth headers are not initialized');
 
@@ -317,24 +315,6 @@ export class AzureResponsesProvider extends AzureGenericProvider {
         'Azure API authentication failed. Set AZURE_API_KEY environment variable or configure apiKey in provider config.\n' +
           'You can also use Microsoft Entra ID authentication.',
       );
-    }
-
-    // Validate response_format for better UX
-    if (
-      this.config.response_format &&
-      typeof this.config.response_format === 'string' &&
-      (this.config.response_format as string).startsWith('file://')
-    ) {
-      try {
-        // Validate that the file can be loaded (will throw if file doesn't exist)
-        maybeLoadResponseFormatFromExternalFile(this.config.response_format, {});
-      } catch (error) {
-        throw new Error(
-          `Failed to load response_format file: ${this.config.response_format}\n` +
-            `Error: ${error instanceof Error ? error.message : String(error)}\n` +
-            `Make sure the file exists and contains valid JSON schema format.`,
-        );
-      }
     }
 
     const body = await this.getAzureResponsesBody(prompt, context, callApiOptions);
