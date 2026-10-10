@@ -1567,6 +1567,8 @@ METEOR evaluates text by:
    - Unigram recall (coverage of reference words)
    - Word order/fragmentation (how well the word order matches)
 
+METEOR ignores leading and trailing whitespace and treats runs of whitespace as word separators, so `"  hello world\n"` scores the same as `"hello world"`.
+
 #### Basic Usage
 
 ```yaml

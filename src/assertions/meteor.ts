@@ -22,7 +22,8 @@ async function ensureNaturalPackage(): Promise<void> {
 
   try {
     // Dynamic import for ESM compatibility
-    const natural = await import('natural');
+    const naturalModule = await import('natural');
+    const natural = 'default' in naturalModule ? naturalModule.default : naturalModule;
     PorterStemmer = natural.PorterStemmer;
     WordNet = natural.WordNet;
   } catch (_err) {
@@ -210,6 +211,12 @@ async function calculateSingleMeteorScore(
   return (1 - penalty) * fmean;
 }
 
+function tokenize(text: string): string[] {
+  const trimmed = text.trim();
+  // Splitting '' yields [''], and an empty token on both sides would match itself.
+  return trimmed === '' ? [] : trimmed.split(/\s+/).map((word) => word.replace(/\.+$/, ''));
+}
+
 async function calculateMeteorScore(
   candidate: string,
   references: string[],
@@ -223,13 +230,7 @@ async function calculateMeteorScore(
 
   const scores = await Promise.all(
     references.map((reference) =>
-      calculateSingleMeteorScore(
-        reference.split(/\s+/).map((word) => word.replace(/\.+$/, '')),
-        candidate.split(/\s+/).map((word) => word.replace(/\.+$/, '')),
-        alpha,
-        beta,
-        gamma,
-      ),
+      calculateSingleMeteorScore(tokenize(reference), tokenize(candidate), alpha, beta, gamma),
     ),
   );
 
