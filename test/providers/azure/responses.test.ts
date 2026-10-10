@@ -8,6 +8,7 @@ import { mockProcessEnv } from '../../util/utils';
 import { createMockFetchResponse } from '../mockProviderResponses';
 import type { MockedFunction } from 'vitest';
 
+import type { AzureChatCompletionProvider } from '../../../src/providers/azure/chat';
 import type { AzureResponsesOptions } from '../../../src/providers/azure/types';
 
 const createCachedTokenResponse = () => ({
@@ -82,6 +83,32 @@ describe('AzureResponsesProvider', () => {
       expectTypeOf<AzureResponsesOptions['service_tier']>().toEqualTypeOf<
         'auto' | 'default' | 'flex' | 'priority' | null | undefined
       >();
+    });
+
+    it('restricts flattened schemas to the Responses constructor', () => {
+      type ChatConfig = NonNullable<
+        NonNullable<ConstructorParameters<typeof AzureChatCompletionProvider>[1]>['config']
+      >;
+      type ResponsesConfig = NonNullable<
+        NonNullable<ConstructorParameters<typeof AzureResponsesProvider>[1]>['config']
+      >;
+      type FlattenedSchemaConfig = {
+        response_format: {
+          type: 'json_schema';
+          name: 'response_schema';
+          schema: {
+            type: 'object';
+            properties: Record<string, unknown>;
+            additionalProperties: false;
+          };
+        };
+      };
+      type FileConfig = { response_format: 'file://schema.json' };
+
+      expectTypeOf<FlattenedSchemaConfig>().toExtend<ResponsesConfig>();
+      expectTypeOf<FlattenedSchemaConfig>().not.toExtend<ChatConfig>();
+      expectTypeOf<FileConfig>().toExtend<ResponsesConfig>();
+      expectTypeOf<FileConfig>().toExtend<ChatConfig>();
     });
   });
 

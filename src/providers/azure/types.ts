@@ -99,12 +99,6 @@ export interface AzureCompletionOptions {
           strict: boolean;
           schema: AzureResponseFormatSchema;
         };
-      }
-    | {
-        /** Flattened schema format accepted by Azure Responses. */
-        type: 'json_schema';
-        name?: string;
-        schema: AzureResponseFormatSchema;
       };
   stop?: string[];
   seed?: number;
@@ -142,7 +136,15 @@ export interface AzureChatResponsesOptions extends AzureCompletionOptions {
 /**
  * Options specific to the Azure Responses provider.
  */
-export interface AzureResponsesOptions extends AzureChatResponsesOptions {
+export interface AzureResponsesOptions extends Omit<AzureChatResponsesOptions, 'response_format'> {
+  response_format?:
+    | AzureCompletionOptions['response_format']
+    | {
+        /** Flattened schema format accepted by Azure Responses. */
+        type: 'json_schema';
+        name?: string;
+        schema: AzureResponseFormatSchema;
+      };
   /**
    * Specifies the latency tier used to process the request.
    */
@@ -225,7 +227,7 @@ export type AzureAssistantOptions = AzureCompletionOptions & {
 };
 
 export interface AzureProviderOptions<
-  TConfig extends AzureCompletionOptions = AzureCompletionOptions,
+  TConfig extends AzureCompletionOptions | AzureResponsesOptions = AzureCompletionOptions,
 > {
   config?: TConfig;
   id?: string;

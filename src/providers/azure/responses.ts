@@ -26,7 +26,7 @@ import type { AzureProviderOptions, AzureResponsesOptions } from './types';
 // Azure Responses API uses the v1 preview API version
 const AZURE_RESPONSES_API_VERSION = 'preview';
 
-export class AzureResponsesProvider extends AzureGenericProvider {
+export class AzureResponsesProvider extends AzureGenericProvider<AzureResponsesOptions> {
   declare config: AzureResponsesOptions;
 
   private functionCallbackHandler = new FunctionCallbackHandler();
