@@ -89,6 +89,8 @@ export interface CallApiContextParams {
   debug?: boolean;
   /** True for assertion-grader calls, independent of the prompt label. */
   isGrading?: boolean;
+  /** Evidence selected for this grading call, before provider-specific formatting. */
+  gradingMedia?: { hasImages: boolean; hasAudio: boolean };
   // This was added so we have access to the grader inside the provider.
   // Vars and prompts should be access using the arguments above.
   test?: AtomicTestCase;
