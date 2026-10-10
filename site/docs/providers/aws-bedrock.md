@@ -1600,6 +1600,20 @@ Standard, Priority, and Flex. InvokeModel cost remains unavailable for both mode
 and multi-turn history containing reasoning blocks; remove earlier reasoning blocks
 before sending a subsequent Converse turn.
 
+For Kimi K3 Priority or Flex, use Runtime Chat Completions through the generic OpenAI provider:
+
+```yaml
+providers:
+  - id: openai:chat:global.moonshotai.kimi-k3
+    config:
+      apiBaseUrl: https://bedrock-runtime.us-east-1.amazonaws.com/openai/v1
+      apiKeyEnvar: AWS_BEARER_TOKEN_BEDROCK
+      omitDefaults: true
+      service_tier: priority # Or flex
+```
+
+Kimi K3 is available on Bedrock Runtime, not Mantle.
+
 | Family          | Example model IDs                                                                                                         |
 | --------------- | ------------------------------------------------------------------------------------------------------------------------- |
 | Z.AI GLM        | `zai.glm-5`, `zai.glm-4.7`, `zai.glm-4.7-flash`                                                                           |
