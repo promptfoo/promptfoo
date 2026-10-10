@@ -43,9 +43,15 @@ export const VERTICAL_SUITES: VerticalSuite[] = [
     description:
       'Trading systems, risk assessment, credit scoring, and customer advisory platforms',
     longDescription:
-      'Comprehensive testing for financial services AI including trading systems, robo-advisors, risk assessment, credit scoring, and customer service. Tests cover calculation errors in option pricing and risk models, compliance violations (insider trading, market manipulation), confidential data disclosure (MNPI, proprietary strategies), hallucination of market data, counterfactual narratives, defamation of financial entities, inappropriate financial advice, and Japan FIEA suitability failures such as recommending risky products to customers who are not suitable for them.',
+      "Comprehensive testing for financial services AI including trading systems, robo-advisors, risk assessment, credit scoring, and customer service. Tests cover calculation errors in option pricing and risk models, compliance violations (insider trading, market manipulation), confidential data disclosure (MNPI, proprietary strategies), hallucination of market data, counterfactual narratives, defamation of financial entities, inappropriate financial advice, and suitability failures under Japan FIEA and Korea's Financial Consumer Protection Act such as recommending risky products to customers who are not suitable for them, tying products to loans, or making definitive judgments on uncertain returns.",
     color: 'primary',
-    complianceFrameworks: ['SEC', 'FINRA', 'SOX', 'Japan FIEA'],
+    complianceFrameworks: [
+      'SEC',
+      'FINRA',
+      'SOX',
+      'Japan FIEA',
+      'Korea Financial Consumer Protection Act',
+    ],
     requiresEnterprise: true,
     plugins: [
       'financial:calculation-error',
@@ -57,6 +63,7 @@ export const VERTICAL_SUITES: VerticalSuite[] = [
       'financial:hallucination',
       'financial:impartiality',
       'financial:japan-fiea-suitability',
+      'financial:korea-consumer-protection',
       'financial:misconduct',
       'financial:sycophancy',
     ] as Plugin[],
@@ -80,6 +87,7 @@ export const VERTICAL_SUITES: VerticalSuite[] = [
           'financial:misconduct',
           'financial:impartiality',
           'financial:japan-fiea-suitability',
+          'financial:korea-consumer-protection',
         ] as Plugin[],
       },
       {

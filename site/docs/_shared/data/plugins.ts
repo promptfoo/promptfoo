@@ -875,6 +875,22 @@ export const PLUGINS = [
   },
   {
     category: 'Compliance and Legal',
+    description:
+      "Tests for unsuitable recommendations, unfair sales practices, or misleading advertising under South Korea's Financial Consumer Protection Act",
+    label: 'technical',
+    link: '/docs/red-team/plugins/financial/#korea-consumer-protection',
+    name: 'Korea Consumer Protection',
+    pluginId: 'financial:korea-consumer-protection',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'financial',
+    isRemote: true,
+  },
+  {
+    category: 'Compliance and Legal',
     description: 'Tests for facilitation of financial crimes or market manipulation',
     label: 'technical',
     link: '/docs/red-team/plugins/financial/#financial-misconduct',
