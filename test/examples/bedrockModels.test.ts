@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { BedrockRuntime } from '@aws-sdk/client-bedrock-runtime';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { parse } from 'yaml';
 import { runAssertions } from '../../src/assertions';
 import cliState from '../../src/cliState';
@@ -11,12 +11,20 @@ import Eval from '../../src/models/eval';
 import { AwsBedrockGenericProvider } from '../../src/providers/bedrock/base';
 import { UnifiedConfigSchema } from '../../src/types';
 import { resolveConfigs } from '../../src/util/config/load';
+import { mockProcessEnv } from '../util/utils';
 
 import type { AtomicTestCase } from '../../src/types';
 
 vi.mock('../../src/telemetry');
 
+let restoreEnv: () => void;
+
+beforeEach(() => {
+  restoreEnv = mockProcessEnv({}, { clearPrefixes: ['AWS_BEDROCK_'] });
+});
+
 afterEach(() => {
+  restoreEnv();
   vi.restoreAllMocks();
   cliState.config = undefined;
   cliState.selectedProviderConfigs = undefined;
