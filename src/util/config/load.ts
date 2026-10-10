@@ -783,6 +783,14 @@ async function prepareCombinedConfig(
     prompts.push(...Array.from(seenPrompts));
   }
 
+  const defaultColumnVisibility = configs.reduce<UnifiedConfig['defaultColumnVisibility']>(
+    (prev, curr) =>
+      curr.defaultColumnVisibility === undefined
+        ? prev
+        : { ...(prev ?? {}), ...curr.defaultColumnVisibility },
+    undefined,
+  );
+
   let scenarios: UnifiedConfig['scenarios'];
   for (const { config, basePath } of configSources) {
     if (config.scenarios === undefined) {
@@ -879,6 +887,7 @@ async function prepareCombinedConfig(
       return sharingConfig ? sharingConfig.sharing : undefined;
     })(),
     tracing: configs.find((config) => config.tracing)?.tracing,
+    defaultColumnVisibility,
   };
 
   return {
@@ -1066,6 +1075,8 @@ async function resolveLoadedConfig(
     redteam: fileConfig.redteam || defaultConfig.redteam,
     tracing,
     evaluateOptions: fileConfig.evaluateOptions || defaultConfig.evaluateOptions,
+    defaultColumnVisibility:
+      fileConfig.defaultColumnVisibility || defaultConfig.defaultColumnVisibility,
   };
 
   cliState.config = config;
