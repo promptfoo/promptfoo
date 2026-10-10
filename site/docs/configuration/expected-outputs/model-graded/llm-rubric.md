@@ -329,28 +329,25 @@ The threshold is applied to the score returned by the LLM (which ranges from 0.0
 ## Pass vs. Score Semantics
 
 - PASS is determined by the LLM's boolean `pass` field unless you set a `threshold`.
-- If the model omits `pass`, promptfoo assumes `pass: true` by default.
-- `score` is a numeric metric that does not affect PASS/FAIL unless you set `threshold`.
+- If the model omits `pass`, a finite numeric `score` determines the verdict: it must be greater than zero, or greater than or equal to your configured `threshold`. Numeric strings are also accepted.
+- If the model omits both fields, or supplies only an invalid score, grading fails. Negating the assertion does not turn a grader error into a pass.
+- With an explicit `pass`, `score` is a numeric metric that does not affect PASS/FAIL unless you set `threshold`.
 - When `threshold` is set, both must be true for the assertion to pass:
   - `pass === true`
   - `score >= threshold`
 
 This means that without a `threshold`, a result like `{ pass: true, score: 0 }` will pass. If you want the numeric score (e.g., 0/1 rubric) to drive PASS/FAIL, set a `threshold` accordingly or have the model return explicit `pass`.
 
-:::caution
-If the model omits `pass` and you don't set `threshold`, the assertion passes even with `score: 0`.
-:::
-
 ### Common misconfiguration
 
 ```yaml
-# ❌ Problem: Returns 0/1 scores but no threshold set
+# Problem: Partial credit passes without a threshold
 assert:
   - type: llm-rubric
     value: |
-      Return 0 if the response is incorrect
-      Return 1 if the response is correct
-    # Missing threshold - always passes due to pass defaulting to true
+      Return a JSON object with a score between 0 and 1.
+      Award partial credit for a partly correct response.
+    # Any positive score passes when pass and threshold are omitted.
 ```
 
 **Fixes:**
@@ -360,8 +357,8 @@ assert:
 assert:
   - type: llm-rubric
     value: |
-      Return 0 if the response is incorrect
-      Return 1 if the response is correct
+      Return a JSON object with a score between 0 and 1.
+      Award partial credit for a partly correct response.
     threshold: 1
 
 # ✅ Option B: Control pass explicitly
