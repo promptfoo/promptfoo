@@ -14,6 +14,7 @@ import { io as SocketIOClient } from 'socket.io-client';
 import EmptyState from './EmptyState';
 import ResultsView from './ResultsView';
 import { ResultsFilter, useResultsViewSettingsStore, useTableStore } from './store';
+import { SUPERSEDED_TABLE_REQUEST } from './tableRequest';
 import './Eval.css';
 
 import { useToast } from '@app/hooks/useToast';
@@ -77,6 +78,11 @@ export default function Eval({ fetchId }: EvalOptions) {
   } = useTableStore();
 
   const { filterMode } = useFilterMode();
+  // The results table refetches itself when the display mode changes. Eval-level loads
+  // (first load, socket updates) read the mode through a ref so they use the current value
+  // without re-running on every mode change, which raced the table's own request.
+  const filterModeRef = useRef(filterMode);
+  filterModeRef.current = filterMode;
 
   const { setInComparisonMode, setComparisonEvalIds } = useResultsViewSettingsStore();
 
@@ -91,6 +97,13 @@ export default function Eval({ fetchId }: EvalOptions) {
   const isHydratingFiltersRef = useRef(false);
   const currentEvalIdRef = useRef(evalId);
   currentEvalIdRef.current = evalId;
+  // The route and the API endpoint as of the latest render. A handler that waits compares
+  // them with the ones it started under before it acts on what it waited for.
+  const lifecycleKey = JSON.stringify([apiBaseUrl ?? null, fetchId]);
+  const lifecycleKeyRef = useRef(lifecycleKey);
+  lifecycleKeyRef.current = lifecycleKey;
+  const apiBaseUrlRef = useRef(apiBaseUrl);
+  apiBaseUrlRef.current = apiBaseUrl;
 
   // ================================
   // Handlers
@@ -101,7 +114,14 @@ export default function Eval({ fetchId }: EvalOptions) {
   }: {
     reportFailure?: boolean;
   } = {}) => {
+    // The list is the one of the API endpoint that was asked. An answer that arrives after
+    // the endpoint changed says nothing about the new one, and leaves the page as it is.
+    const endpoint = apiBaseUrlRef.current;
+    const isOtherEndpoint = () => apiBaseUrlRef.current !== endpoint;
     const resp = await callApi(`/results`, { cache: 'no-store' });
+    if (isOtherEndpoint()) {
+      return;
+    }
     if (!resp.ok) {
       if (reportFailure) {
         setFailed(true);
@@ -109,6 +129,9 @@ export default function Eval({ fetchId }: EvalOptions) {
       return;
     }
     const body = (await resp.json()) as { data: ResultLightweightWithLabel[] };
+    if (isOtherEndpoint()) {
+      return;
+    }
     setRecentEvals(body.data);
     return body.data;
   };
@@ -131,7 +154,9 @@ export default function Eval({ fetchId }: EvalOptions) {
         const data = await fetchEvalData(id, {
           skipSettingEvalId: true,
           skipLoadingState: isBackgroundUpdate,
-          filterMode,
+          filterMode: filterModeRef.current,
+          // The table owns the search box, but this load must not drop an active search.
+          searchText: new URLSearchParams(window.location.search).get('search') ?? '',
           filters: Object.values(filters.values).filter((filter) =>
             filter.type === 'metadata'
               ? Boolean(filter.value && filter.field)
@@ -139,6 +164,11 @@ export default function Eval({ fetchId }: EvalOptions) {
           ),
         });
 
+        if (data === SUPERSEDED_TABLE_REQUEST) {
+          // A newer request replaced this one and decides what the page shows. Whether this
+          // one would have failed no longer matters.
+          return true;
+        }
         if (!data) {
           setFailed(true);
           return false;
@@ -150,7 +180,7 @@ export default function Eval({ fetchId }: EvalOptions) {
         return false;
       }
     },
-    [fetchEvalData, setFailed, setEvalId, filterMode],
+    [fetchEvalData, setFailed, setEvalId],
   );
 
   const clearEvalState = useCallback(() => {
@@ -194,11 +224,18 @@ export default function Eval({ fetchId }: EvalOptions) {
     // Pinned /eval/:id route + a scoped update for THIS eval: reload it directly via
     // /eval/:id/table. The recent-evals list is only needed for the dropdown, so fetch it
     // concurrently and don't let a transient /api/results failure drop the pinned eval's refresh.
+    // Whether the route or the API endpoint changed while this handler was waiting. What it
+    // waited for was then answered for another page, and must not be applied to this one.
+    const isStale = () => lifecycleKeyRef.current !== lifecycleKey;
+
     if (fetchId && deletedEvalIds === undefined && scopedEvalId === fetchId) {
       const [recents] = await Promise.all([
         fetchRecentFileEvals({ reportFailure: false }),
         reloadInBackground(fetchId),
       ]);
+      if (isStale()) {
+        return;
+      }
       if (recents && recents.length > 0) {
         setDefaultEvalId(recents[0].evalId);
       }
@@ -206,6 +243,11 @@ export default function Eval({ fetchId }: EvalOptions) {
     }
 
     const newRecentEvals = await fetchRecentFileEvals({ reportFailure: false });
+    if (isStale()) {
+      // What follows was decided for the old page, and a reload from here would replace the
+      // table of the new one.
+      return;
+    }
     if (!newRecentEvals) {
       // Recents are unavailable. If the socket told us the pinned eval was deleted, don't strand
       // the user on a now-gone /eval/:id — fall back to the root route, which reconciles on load.
@@ -371,11 +413,14 @@ export default function Eval({ fetchId }: EvalOptions) {
       return;
     }
 
+    // Loads are asynchronous, and the route can change before one finishes. What follows a
+    // load only applies to the route that started it.
+    let isCurrentRoute = true;
     if (fetchId) {
       logger.debug('[Eval] Fetching eval by id', { fetchId });
       const run = async () => {
         const success = await loadEvalById(fetchId);
-        if (success) {
+        if (success && isCurrentRoute) {
           setDefaultEvalId(fetchId);
           // Load other recent eval runs
           fetchRecentFileEvals({ reportFailure: false });
@@ -387,11 +432,19 @@ export default function Eval({ fetchId }: EvalOptions) {
       logger.debug('[Eval] Fetching eval via recent', {});
       // Fetch from server
       const run = async () => {
-        const evals = await fetchRecentFileEvals();
+        // The route can change while the recent evals are fetched. Nothing may then fail or
+        // clear the page, or start a load that would replace the new route's.
+        const evals = await fetchRecentFileEvals({ reportFailure: false });
+        if (!isCurrentRoute) {
+          return;
+        }
+        if (!evals) {
+          setFailed(true);
+        }
         if (evals && evals.length > 0) {
           const defaultEvalId = evals[0].evalId;
           const success = await loadEvalById(defaultEvalId);
-          if (success) {
+          if (success && isCurrentRoute) {
             setDefaultEvalId(defaultEvalId);
             // Note: setLoaded(true) is handled by the useEffect that watches for table updates
           }
@@ -405,6 +458,9 @@ export default function Eval({ fetchId }: EvalOptions) {
     logger.debug('[Eval] Resetting comparison mode', {});
     setInComparisonMode(false);
     setComparisonEvalIds([]);
+    return () => {
+      isCurrentRoute = false;
+    };
   }, [
     apiBaseUrl,
     clearEvalState,
@@ -462,10 +518,15 @@ export default function Eval({ fetchId }: EvalOptions) {
     // would otherwise run their async table reloads concurrently — and whichever DB response
     // landed last, possibly an OLDER eval's, would win the table. Serialize the handler runs so
     // events apply in arrival order. The returned promise lets tests await the queued work.
+    //
+    // An event can still be queued when this connection is replaced. The handler in the ref
+    // is by then the one of the new endpoint's page, which would take the event for one of
+    // its own, so what the old connection queued is dropped instead.
+    let isCurrentConnection = true;
     let pending: Promise<void> = Promise.resolve();
     const enqueue = (data: EvalRefreshSignal): Promise<void> => {
       pending = pending
-        .then(() => handleResultsFileRef.current(data))
+        .then(() => (isCurrentConnection ? handleResultsFileRef.current(data) : undefined))
         .catch((error) => {
           logger.error('[Eval] Error handling socket update', { error });
         });
@@ -487,6 +548,7 @@ export default function Eval({ fetchId }: EvalOptions) {
       });
 
     return () => {
+      isCurrentConnection = false;
       socket.disconnect();
       setIsStreaming(false);
     };
@@ -509,6 +571,16 @@ export default function Eval({ fetchId }: EvalOptions) {
       setLoaded(true);
     }
   }, [table, loaded]);
+
+  /**
+   * A failed load is not the last word while a request issued after it is still in flight.
+   * When that one puts a table in the store, the page shows it instead of the error.
+   */
+  useEffect(() => {
+    if (table) {
+      setFailed(false);
+    }
+  }, [table]);
 
   // ================================
   // Rendering

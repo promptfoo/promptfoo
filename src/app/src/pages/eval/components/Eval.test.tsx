@@ -7,6 +7,7 @@ import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Eval from './Eval';
 import { useResultsViewSettingsStore, useTableStore } from './store';
+import { SUPERSEDED_TABLE_REQUEST } from './tableRequest';
 import type { EvaluateTable } from '@promptfoo/types';
 
 const {
@@ -47,14 +48,21 @@ vi.mock('./FilterModeProvider', () => ({
 vi.mock('./ResultsView', () => ({
   default: ({
     defaultEvalId,
+    recentEvals,
     onRecentEvalSelected,
   }: {
     defaultEvalId: string;
+    recentEvals: { evalId: string }[];
     onRecentEvalSelected: (evalId: string) => void;
   }) => {
     const [mountId] = React.useState(() => Math.random().toString(36).slice(2));
     return (
-      <div data-testid="results-view" data-default-eval-id={defaultEvalId} data-mount-id={mountId}>
+      <div
+        data-testid="results-view"
+        data-default-eval-id={defaultEvalId}
+        data-recent-eval-ids={recentEvals.map((recent) => recent.evalId).join(',')}
+        data-mount-id={mountId}
+      >
         <button
           type="button"
           data-testid="select-recent-eval"
@@ -363,6 +371,104 @@ describe('Eval', () => {
     expect(queryByText('Waiting for eval data')).not.toBeInTheDocument();
   });
 
+  it('should not show the error state when a newer table request replaced its load', async () => {
+    // The store reports a request that another one replaced. Had it failed, that would say
+    // nothing about the table the newer request produced.
+    const fetchEvalDataMock = vi.fn().mockResolvedValue(SUPERSEDED_TABLE_REQUEST);
+    vi.mocked(useTableStore).mockReturnValue({
+      ...baseMockTableStore,
+      fetchEvalData: fetchEvalDataMock,
+    });
+
+    const { queryByText, getByTestId } = render(
+      <MemoryRouter>
+        <Eval fetchId="test-eval" />
+      </MemoryRouter>,
+    );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    expect(fetchEvalDataMock).toHaveBeenCalledTimes(1);
+    expect(queryByText('404 Eval not found')).not.toBeInTheDocument();
+    // The route did not change, so what follows its load still applies.
+    expect(getByTestId('results-view').getAttribute('data-default-eval-id')).toBe('test-eval');
+  });
+
+  it('should ignore a load that finishes after the route moved on', async () => {
+    const loads = new Map<string, (data: unknown) => void>();
+    const fetchEvalDataMock = vi.fn(
+      (id: string) => new Promise((resolve) => loads.set(id, resolve)),
+    );
+    vi.mocked(useTableStore).mockReturnValue({
+      ...baseMockTableStore,
+      fetchEvalData: fetchEvalDataMock,
+    });
+    const evalData = { table: mockTable, config: {}, totalCount: 0, filteredCount: 0 };
+
+    const { container } = render(
+      <MemoryRouter>
+        <Eval fetchId="eval-1" />
+      </MemoryRouter>,
+    );
+    await act(async () => {
+      render(
+        <MemoryRouter>
+          <Eval fetchId="eval-2" />
+        </MemoryRouter>,
+        { container },
+      );
+    });
+
+    // The current route's load finishes first, then the one it replaced.
+    await act(async () => {
+      loads.get('eval-2')?.(evalData);
+      await vi.advanceTimersByTimeAsync(0);
+      loads.get('eval-1')?.(evalData);
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    const resultsView = container.querySelector('[data-testid="results-view"]');
+    expect(resultsView?.getAttribute('data-default-eval-id')).toBe('eval-2');
+  });
+
+  it('should show the table that a later request delivers after its own load failed', async () => {
+    const fetchEvalDataMock = vi.fn().mockResolvedValue(null);
+    vi.mocked(useTableStore).mockReturnValue({
+      ...baseMockTableStore,
+      fetchEvalData: fetchEvalDataMock,
+    });
+
+    const { container, queryByText } = render(
+      <MemoryRouter>
+        <Eval fetchId="test-eval" />
+      </MemoryRouter>,
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(queryByText('404 Eval not found')).toBeInTheDocument();
+
+    // A search or display request that was still in flight fills the store afterwards.
+    vi.mocked(useTableStore).mockReturnValue({
+      ...baseMockTableStore,
+      table: { ...mockTable },
+      fetchEvalData: fetchEvalDataMock,
+    });
+    await act(async () => {
+      render(
+        <MemoryRouter>
+          <Eval fetchId="test-eval" />
+        </MemoryRouter>,
+        { container },
+      );
+    });
+
+    expect(queryByText('404 Eval not found')).not.toBeInTheDocument();
+    expect(container.querySelector('[data-testid="results-view"]')).toBeInTheDocument();
+  });
+
   it('should correctly display the most recent eval data when rapidly switching between fetchIds', async () => {
     const fetchEvalDataMock = vi.fn();
     vi.mocked(useTableStore).mockReturnValue({
@@ -442,6 +548,187 @@ describe('Eval', () => {
       expect.objectContaining({ skipLoadingState: true }),
     );
     expect(baseMockTableStore.setEvalId).toHaveBeenCalledWith('retried-eval');
+  });
+
+  it('drops a socket update that was still waiting when the route changed', async () => {
+    vi.mocked(useTableStore).mockReturnValue(baseMockTableStore);
+    // The root route follows the latest eval, and asks which one that is first.
+    let answerRecents!: (response: Response) => void;
+    const recents = new Promise<Response>((resolve) => {
+      answerRecents = resolve;
+    });
+    const { container } = render(
+      <MemoryRouter>
+        <Eval fetchId={null} />
+      </MemoryRouter>,
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    vi.mocked(callApi).mockReturnValueOnce(recents);
+    let update!: Promise<void> | undefined;
+    await act(async () => {
+      update = mockSocketHandlers.get('update')?.({});
+      // The user opens a specific eval while that request is pending.
+      render(
+        <MemoryRouter>
+          <Eval fetchId="pinned-eval" />
+        </MemoryRouter>,
+        { container },
+      );
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    baseMockTableStore.fetchEvalData.mockClear();
+
+    await act(async () => {
+      answerRecents({
+        ok: true,
+        json: async () => ({ data: [{ evalId: 'latest-eval' }] }),
+      } as Response);
+      await update;
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    // Reloading the latest eval now would put its table under the pinned route.
+    expect(baseMockTableStore.fetchEvalData).not.toHaveBeenCalled();
+  });
+
+  it('drops a socket update that was still waiting when the API endpoint changed', async () => {
+    vi.mocked(useTableStore).mockReturnValue(baseMockTableStore);
+    let answerRecents!: (response: Response) => void;
+    const recents = new Promise<Response>((resolve) => {
+      answerRecents = resolve;
+    });
+    const { container, getByTestId } = render(
+      <MemoryRouter>
+        <Eval fetchId="pinned-eval" />
+      </MemoryRouter>,
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    vi.mocked(callApi).mockReturnValueOnce(recents);
+    let update!: Promise<void> | undefined;
+    await act(async () => {
+      // An update for the pinned eval reloads it and asks the old endpoint for its evals.
+      update = mockSocketHandlers.get('update')?.({ evalId: 'pinned-eval' });
+      // The same route is then pointed at another endpoint.
+      mockApiConfig.apiBaseUrl = 'http://other-host';
+      render(
+        <MemoryRouter>
+          <Eval fetchId="pinned-eval" />
+        </MemoryRouter>,
+        { container },
+      );
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    await act(async () => {
+      answerRecents({
+        ok: true,
+        json: async () => ({ data: [{ evalId: 'eval-of-the-old-endpoint' }] }),
+      } as Response);
+      await update;
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    // The old endpoint's list says nothing about the evals of the new one.
+    expect(getByTestId('results-view').getAttribute('data-default-eval-id')).toBe('pinned-eval');
+    // It is not offered in the eval selector either.
+    expect(getByTestId('results-view').getAttribute('data-recent-eval-ids')).toBe('');
+  });
+
+  it('drops a socket update that was still queued when the API endpoint changed', async () => {
+    vi.mocked(useTableStore).mockReturnValue(baseMockTableStore);
+    let answerRecents!: (response: Response) => void;
+    const recents = new Promise<Response>((resolve) => {
+      answerRecents = resolve;
+    });
+    const { container } = render(
+      <MemoryRouter>
+        <Eval fetchId="pinned-eval" />
+      </MemoryRouter>,
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    vi.mocked(callApi).mockReturnValueOnce(recents);
+    // The new endpoint has an eval of the same id, and others.
+    vi.mocked(callApi).mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: [{ evalId: 'latest-of-the-new-endpoint' }] }),
+    } as Response);
+    const updateOnOldConnection = mockSocketHandlers.get('update');
+    let queued!: Promise<void> | undefined;
+    await act(async () => {
+      // The first update holds the queue while it waits for the old endpoint's evals.
+      updateOnOldConnection?.({ evalId: 'pinned-eval' });
+      // Behind it, the old endpoint says that its eval of that id was deleted.
+      queued = updateOnOldConnection?.({ deletedEvalIds: ['pinned-eval'] });
+      mockApiConfig.apiBaseUrl = 'http://other-host';
+      render(
+        <MemoryRouter>
+          <Eval fetchId="pinned-eval" />
+        </MemoryRouter>,
+        { container },
+      );
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    mockNavigate.mockClear();
+
+    await act(async () => {
+      answerRecents({ ok: true, json: async () => ({ data: [] }) } as Response);
+      await queued;
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    // The deletion was the old endpoint's, so the page of the new one stays on its eval.
+    expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
+  it('keeps the recent evals of the endpoint when only the route changed', async () => {
+    vi.mocked(useTableStore).mockReturnValue(baseMockTableStore);
+    let answerRecents!: (response: Response) => void;
+    const recents = new Promise<Response>((resolve) => {
+      answerRecents = resolve;
+    });
+    const { container, getByTestId } = render(
+      <MemoryRouter>
+        <Eval fetchId="pinned-eval" />
+      </MemoryRouter>,
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    vi.mocked(callApi).mockReturnValueOnce(recents);
+    let update!: Promise<void> | undefined;
+    await act(async () => {
+      update = mockSocketHandlers.get('update')?.({ evalId: 'pinned-eval' });
+      // The user opens another eval of the same endpoint before the list arrives.
+      render(
+        <MemoryRouter>
+          <Eval fetchId="other-eval" />
+        </MemoryRouter>,
+        { container },
+      );
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    await act(async () => {
+      answerRecents({
+        ok: true,
+        json: async () => ({ data: [{ evalId: 'eval-of-this-endpoint' }] }),
+      } as Response);
+      await update;
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    // The list is still that of the endpoint, so the selector gets it. The update itself
+    // was for the other route and changes nothing else.
+    expect(getByTestId('results-view').getAttribute('data-recent-eval-ids')).toBe(
+      'eval-of-this-endpoint',
+    );
+    expect(getByTestId('results-view').getAttribute('data-default-eval-id')).toBe('other-eval');
   });
 
   it('does not navigate away for a scoped background socket update', async () => {
@@ -959,6 +1246,83 @@ describe('Eval', () => {
 
     expect(mockIo.mock.calls.length).toBe(ioCallsAfterMount);
     expect(mockSocketDisconnect.mock.calls.length).toBe(disconnectsAfterMount);
+  });
+
+  it('leaves display-mode changes to the results table instead of reloading the eval', async () => {
+    vi.mocked(useTableStore).mockReturnValue({
+      ...baseMockTableStore,
+      evalId: 'selected-eval',
+    });
+    vi.mocked(callApi).mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: [{ evalId: 'selected-eval' }] }),
+    } as Response);
+
+    const { rerender } = render(
+      <MemoryRouter>
+        <Eval fetchId="selected-eval" />
+      </MemoryRouter>,
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    const fetchCallsAfterMount = baseMockTableStore.fetchEvalData.mock.calls.length;
+    const comparisonResetsAfterMount =
+      baseMockResultsViewSettings.setInComparisonMode.mock.calls.length;
+
+    mockFilterMode.current = 'failures';
+    await act(async () => {
+      rerender(
+        <MemoryRouter>
+          <Eval fetchId="selected-eval" />
+        </MemoryRouter>,
+      );
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    // A second, search-less request here used to race the table's own filtered request.
+    expect(baseMockTableStore.fetchEvalData.mock.calls.length).toBe(fetchCallsAfterMount);
+    expect(baseMockResultsViewSettings.setInComparisonMode.mock.calls.length).toBe(
+      comparisonResetsAfterMount,
+    );
+
+    // Background updates still use the mode that is selected now.
+    await act(async () => {
+      await mockSocketHandlers.get('update')?.({ evalId: 'selected-eval' });
+    });
+    expect(baseMockTableStore.fetchEvalData).toHaveBeenLastCalledWith(
+      'selected-eval',
+      expect.objectContaining({ filterMode: 'failures', skipLoadingState: true }),
+    );
+  });
+
+  it('keeps an active search when loading the eval', async () => {
+    // Tests run in random order, and another one may have left its own store behind.
+    vi.mocked(useTableStore).mockReturnValue(baseMockTableStore);
+    const originalUrl = window.location.href;
+    window.history.replaceState({}, '', '/eval/selected-eval?search=four&mode=failures');
+    try {
+      vi.mocked(callApi).mockResolvedValue({
+        ok: true,
+        json: async () => ({ data: [{ evalId: 'selected-eval' }] }),
+      } as Response);
+
+      render(
+        <MemoryRouter>
+          <Eval fetchId="selected-eval" />
+        </MemoryRouter>,
+      );
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+
+      expect(baseMockTableStore.fetchEvalData).toHaveBeenCalledWith(
+        'selected-eval',
+        expect.objectContaining({ searchText: 'four' }),
+      );
+    } finally {
+      window.history.replaceState({}, '', originalUrl);
+    }
   });
 
   it('refetches the pinned eval when the API base URL changes', async () => {

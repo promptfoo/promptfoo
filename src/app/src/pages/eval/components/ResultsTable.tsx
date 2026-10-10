@@ -51,7 +51,7 @@ import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import { useFilterMode } from './FilterModeProvider';
 import { ProviderDisplay } from './ProviderDisplay';
 import { type ProviderDef } from './providerConfig';
-import { useResultsViewSettingsStore, useTableStore } from './store';
+import { type ResultsFilter, useResultsViewSettingsStore, useTableStore } from './store';
 import TruncatedText from './TruncatedText';
 import { useHeaderCollapse } from './useHeaderCollapse';
 import VariableMarkdownCell from './VariableMarkdownCell';
@@ -1254,6 +1254,22 @@ function PromptColumnHeader({
   );
 }
 
+/** A stable text for a list of filters, by which two lists can be told apart. */
+function serializeFilters(filters: ResultsFilter[]): string {
+  return JSON.stringify(
+    [...filters]
+      .sort((a, b) => a.sortIndex - b.sortIndex)
+      .map((f) => ({
+        type: f.type,
+        operator: f.operator,
+        value: f.value,
+        field: f.field,
+        logicOperator: f.logicOperator,
+        sortIndex: f.sortIndex,
+      })),
+  );
+}
+
 function isMetadataColumn(columnId: string): boolean {
   return (
     columnId.startsWith('Variable') ||
@@ -1678,6 +1694,7 @@ function ResultsTable({
     fetchEvalData,
     isFetching,
     filters,
+    lastTableView,
   } = useTableStore();
   const { inComparisonMode, comparisonEvalIds } = useResultsViewSettingsStore();
   const { setFilterMode } = useFilterMode();
@@ -1895,39 +1912,28 @@ function ResultsTable({
 
   // Create a stable reference for applied filters to avoid unnecessary re-renders
   const appliedFiltersString = React.useMemo(() => {
-    const appliedFilters = Object.values(filters.values)
-      .filter((filter) => {
-        // For metadata filters with exists operator, only field is required
-        if (filter.type === 'metadata' && filter.operator === 'exists') {
-          return Boolean(filter.field);
-        }
-        // For other metadata operators, both field and value are required
-        if (filter.type === 'metadata') {
-          return Boolean(filter.value && filter.field);
-        }
-        // For metric filters with is_defined operator, only field is required
-        if (filter.type === 'metric' && filter.operator === 'is_defined') {
-          return Boolean(filter.field);
-        }
-        // For metric filters with comparison operators, both field and value are required
-        if (filter.type === 'metric') {
-          return Boolean(filter.value && filter.field);
-        }
-        // For non-metadata/non-metric filters, value is required
-        return Boolean(filter.value);
-      })
-      .sort((a, b) => a.sortIndex - b.sortIndex); // Sort by sortIndex for stability
+    const appliedFilters = Object.values(filters.values).filter((filter) => {
+      // For metadata filters with exists operator, only field is required
+      if (filter.type === 'metadata' && filter.operator === 'exists') {
+        return Boolean(filter.field);
+      }
+      // For other metadata operators, both field and value are required
+      if (filter.type === 'metadata') {
+        return Boolean(filter.value && filter.field);
+      }
+      // For metric filters with is_defined operator, only field is required
+      if (filter.type === 'metric' && filter.operator === 'is_defined') {
+        return Boolean(filter.field);
+      }
+      // For metric filters with comparison operators, both field and value are required
+      if (filter.type === 'metric') {
+        return Boolean(filter.value && filter.field);
+      }
+      // For non-metadata/non-metric filters, value is required
+      return Boolean(filter.value);
+    });
     // Create a stable string representation of applied filters
-    return JSON.stringify(
-      appliedFilters.map((f) => ({
-        type: f.type,
-        operator: f.operator,
-        value: f.value,
-        field: f.field,
-        logicOperator: f.logicOperator,
-        sortIndex: f.sortIndex, // Include sortIndex for complete representation
-      })),
-    );
+    return serializeFilters(appliedFilters);
   }, [filters.values]);
 
   const isFilteringActive =
@@ -1990,7 +1996,19 @@ function ResultsTable({
     // Data should already be loaded by Eval.tsx
     if (pagination.pageIndex === 0 && evalId !== previousEvalIdRef.current) {
       previousEvalIdRef.current = evalId;
-      return;
+      // ...unless that load asked for something other than what the table now shows. This
+      // table did not exist yet to fetch for a change made while the load was in flight: the
+      // display mode, or the search text or filters after a step back or forward in the
+      // browser history.
+      const loadedView = lastTableView?.evalId === evalId ? lastTableView : undefined;
+      if (
+        !loadedView ||
+        (loadedView.filterMode === filterMode &&
+          loadedView.searchText === (debouncedSearchText ?? '') &&
+          serializeFilters(loadedView.filters) === appliedFiltersString)
+      ) {
+        return;
+      }
     }
 
     fetchEvalData(evalId, {
