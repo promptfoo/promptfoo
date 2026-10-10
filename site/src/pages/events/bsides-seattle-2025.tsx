@@ -4,6 +4,7 @@ import Head from '@docusaurus/Head';
 import Link from '@docusaurus/Link';
 import { useForcedTheme } from '@site/src/hooks/useForcedTheme';
 import Layout from '@theme/Layout';
+import { scrollToEventSection as handleSmoothScroll } from '../../utils/eventScroll';
 import styles from './bsides-seattle-2025.module.css';
 
 export default function BSidesSeattle2025(): React.ReactElement {
@@ -19,17 +20,6 @@ export default function BSidesSeattle2025(): React.ReactElement {
     [],
   );
   useForcedTheme('dark');
-
-  const handleSmoothScroll = (e: React.MouseEvent<HTMLAnchorElement>, targetId: string) => {
-    e.preventDefault();
-    const element = document.querySelector(targetId);
-    if (element) {
-      const offset = 80;
-      const elementPosition = element.getBoundingClientRect().top;
-      const offsetPosition = elementPosition + window.pageYOffset - offset;
-      window.scrollTo({ top: offsetPosition, behavior: 'smooth' });
-    }
-  };
 
   return (
     <Layout
