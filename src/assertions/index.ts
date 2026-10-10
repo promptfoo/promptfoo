@@ -331,18 +331,31 @@ const nunjucks = getNunjucksEngine();
 function renderAssertionValue(
   value: AssertionValue | undefined,
   vars: Record<string, VarValue>,
+  loadFileReferences = true,
 ): AssertionValue | undefined {
   if (typeof value === 'string') {
+    if (loadFileReferences && value.startsWith('file://')) {
+      // Resolve configured data references once. Executable references remain
+      // literal parameters; file contents must not trigger further file reads.
+      const fileReference = nunjucks.renderString(value, vars);
+      const { filePath } = parseFileUrl(fileReference);
+      if (isJavascriptFile(filePath) || filePath.endsWith('.py') || filePath.endsWith('.rb')) {
+        return fileReference;
+      }
+      return renderAssertionValue(processFileReference(fileReference), vars, false);
+    }
     return nunjucks.renderString(value, vars);
   }
   if (Array.isArray(value)) {
-    return value.map((item) => renderAssertionValue(item as AssertionValue, vars));
+    return value.map((item) =>
+      renderAssertionValue(item as AssertionValue, vars, loadFileReferences),
+    );
   }
   if (value !== null && typeof value === 'object') {
     return Object.fromEntries(
       Object.entries(value).map(([key, item]) => [
         key,
-        renderAssertionValue(item as AssertionValue, vars),
+        renderAssertionValue(item as AssertionValue, vars, loadFileReferences),
       ]),
     );
   }

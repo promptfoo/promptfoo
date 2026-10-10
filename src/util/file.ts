@@ -358,7 +358,13 @@ export function maybeLoadConfigFromExternalFile(
             : context === 'assertions'
               ? 'general'
               : context;
-      const value = maybeLoadConfigFromExternalFile(config[key], childContext);
+      // Script parameters are resolved with test variables at runtime, just as
+      // for inline tests and direct runAssertion calls. Loading them here would
+      // give file-backed test cases an extra round of file dereferencing.
+      const value =
+        isScriptAssertionField && key === 'value' && config.script !== undefined
+          ? config[key]
+          : maybeLoadConfigFromExternalFile(config[key], childContext);
 
       if (key === '__proto__') {
         Object.defineProperty(result, key, {

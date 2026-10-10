@@ -491,6 +491,8 @@ In this example, the `containsMentalHealth` assertion template is defined at the
 
 Assertion templates reuse a named assertion definition. For script assertions that need a different parameter at each use, set `script` directly on the assertion and use `value` for the call-site parameter. Promptfoo renders that value with the test vars and exposes it to the script as `context.value`.
 
+Script parameters also support `.txt`, `.json`, `.yaml`, and `.yml` data-file references such as `value: file://expected.json`, in both inline and external test cases. JavaScript, Python, and Ruby file references in `value` remain literal parameters; only `script` selects the code to execute.
+
 ## Defining named metrics
 
 Each assertion supports a `metric` field that allows you to tag the result however you like. Use this feature to combine related assertions into aggregate metrics.
