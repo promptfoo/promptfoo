@@ -3889,11 +3889,11 @@ describe('ResultsTable minimal scroll room detection', () => {
 
     scrollHeightValue = 800;
     // Change an unrelated callback to render past React.memo with the mocked store.
-    view.rerender(<ResultsTable {...defaultProps} onSearchTextChange={vi.fn()} />);
+    view.rerender(<ResultsTable {...defaultProps} onFailureFilterToggle={vi.fn()} />);
     expect(stickyContainer).not.toHaveClass('minimal-scroll-room');
 
     filteredResultsCount = 2;
-    view.rerender(<ResultsTable {...defaultProps} onSearchTextChange={vi.fn()} />);
+    view.rerender(<ResultsTable {...defaultProps} onFailureFilterToggle={vi.fn()} />);
     expect(stickyContainer).toHaveClass('minimal-scroll-room');
   });
 
