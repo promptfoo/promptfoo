@@ -299,6 +299,8 @@ Use a [custom provider](/docs/providers/custom-api) when you need an operation o
 
 Lyria music generation is not currently supported by promptfoo's Google providers.
 
+For reproducible comparisons, use the replacement model IDs directly. Since [October 8, 2026](https://ai.google.dev/gemini-api/docs/changelog#october-8-2026), the Gemini API redirects `gemini-3.7-flash` to `gemini-3.8-flash` and `gemini-3.5-flash` to `gemini-3.6-flash`. Comparing an old ID with its replacement no longer compares distinct models. These redirects do not describe Vertex availability.
+
 ### Chat and Multimodal Models
 
 - `google:gemma-4-31b-it` - Gemma 4 31B instruction-tuned open model with strong reasoning, coding, and agentic capabilities
@@ -373,9 +375,7 @@ Google recommends `gemini-3.8-flash-tts` or `gemini-3.8-flash-lite-tts` for new 
 The 2.5 and 3.1 TTS previews have no announced shutdown dates; check the
 [model lifecycle page](https://ai.google.dev/gemini-api/docs/deprecations) before selecting one.
 
-For reproducible comparisons, use the replacement model IDs directly. Since [October 8, 2026](https://ai.google.dev/gemini-api/docs/changelog#october-8-2026), the Gemini API redirects `gemini-3.7-flash` to `gemini-3.8-flash` and `gemini-3.5-flash` to `gemini-3.6-flash`. Comparing an old ID with its replacement no longer compares distinct models. These redirects do not describe Vertex availability.
-
-This list includes legacy and preview endpoints. Promptfoo may retain pricing for retired model IDs so saved
+This list describes current endpoints. Promptfoo may retain pricing for retired model IDs so saved
 evaluations can still be scored; historical pricing data does not mean that Google still serves an
 endpoint. Check Google's [model lifecycle page](https://ai.google.dev/gemini-api/docs/deprecations)
 before starting new work with an older ID.
