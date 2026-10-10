@@ -673,6 +673,11 @@ default JSON escaping, JSON prompt files, and object-valued prompts can round nu
 before they reach this provider. With JSON auto-escaping disabled, use
 `{{ value | dump }}` to insert JSON-escaped string variables.
 
+For SDK Document inputs, ordinary objects with `type: bigDecimal` and a numeric `string`
+field are rejected before dispatch: the SDK would turn them into numbers and discard
+other fields. This restriction does not apply to model-native `InvokeModel.body` JSON
+or response objects.
+
 Calls are never cached. Event streams are collected before returning, and service
 exception events produce provider errors. Agent and Flow invocations, `RetrieveAndGenerate`,
 `RetrieveAndGenerateStream`, and `AgenticRetrieveStream` use one attempt because they can
