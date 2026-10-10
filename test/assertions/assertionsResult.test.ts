@@ -429,6 +429,61 @@ describe('AssertionsResult', () => {
       expect(result.metadata?.graderError).toBe(true);
     });
 
+    it('lets custom scoring propagate a grader error it observes', async () => {
+      // A metric-only (weight-0) grader failure is force-passed and does not
+      // mark the aggregate by itself. A scorer that fails because the metric
+      // was unavailable can say so explicitly via its own metadata.
+      const assertionsResult = new AssertionsResult({});
+      assertionsResult.addResult({
+        index: 0,
+        result: {
+          pass: true,
+          score: 0,
+          reason: 'Grader provider unavailable',
+          tokensUsed: DEFAULT_TOKENS_USED,
+          metadata: { graderError: true },
+        },
+        weight: 0,
+      });
+
+      const result = await assertionsResult.testResult(() => ({
+        pass: false,
+        score: 0,
+        reason: 'Quality gate failed without judge signal',
+        metadata: { graderError: true },
+      }));
+
+      expect(result.pass).toBe(false);
+      expect(result.metadata?.graderError).toBe(true);
+    });
+
+    it('does not second-guess a custom scorer that stays silent on grader errors', async () => {
+      // The scorer saw the same metric-only grader failure and failed the run
+      // for its own reasons. That intent is preserved as an ordinary failure.
+      const assertionsResult = new AssertionsResult({});
+      assertionsResult.addResult({
+        index: 0,
+        result: {
+          pass: true,
+          score: 0,
+          reason: 'Grader provider unavailable',
+          tokensUsed: DEFAULT_TOKENS_USED,
+          metadata: { graderError: true },
+        },
+        weight: 0,
+      });
+
+      const result = await assertionsResult.testResult(() => ({
+        pass: false,
+        score: 0,
+        reason: 'Custom quality gate failed',
+      }));
+
+      expect(result.pass).toBe(false);
+      expect(result.reason).toBe('Custom quality gate failed');
+      expect(result.metadata?.graderError).toBeUndefined();
+    });
+
     it('does not mark mixed fresh and cached grading responses as fully cached', async () => {
       const assertionsResult = new AssertionsResult({});
       assertionsResult.addResult({
