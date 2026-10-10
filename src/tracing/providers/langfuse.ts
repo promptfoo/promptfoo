@@ -502,14 +502,6 @@ export class LangfuseProvider implements TraceProvider {
       return null;
     }
 
-    const services = new Set<string>();
-    for (const span of spans) {
-      const service = span.attributes?.['service.name'];
-      if (typeof service === 'string') {
-        services.add(service);
-      }
-    }
-
-    return { traceId: normalizedTraceId, spans, services: [...services], fetchedAt: Date.now() };
+    return { spans, fetchedAt: Date.now() };
   }
 }

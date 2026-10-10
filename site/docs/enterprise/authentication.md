@@ -8,6 +8,8 @@ keywords: [authentication, login, logout, promptfoo enterprise, promptfoo app, s
 
 # Authentication
 
+For customer-hosted deployments, see [On-Prem SSO](./sso.md) for identity-provider setup and team/role mapping.
+
 ## Setting Up SSO
 
 [Promptfoo Enterprise](/docs/enterprise/) supports both basic authentication and SSO through SAML 2.0 and OIDC. To configure SSO with Promptfoo Enterprise, reach out to the support team with your IdP information and the Promptfoo team will configure it. The authentication endpoint is `auth.promptfoo.app`.

@@ -79,7 +79,12 @@ const tempRoot = path.resolve(values['temp-root'] ?? process.env.RUNNER_TEMP ?? 
 const tooling = fs.mkdtempSync(path.join(tempRoot, 'promptfoo-artifact-tools-'));
 fs.mkdirSync(path.join(tooling, 'scripts'));
 fs.mkdirSync(path.join(tooling, 'test', 'fixtures'), { recursive: true });
-for (const filename of ['testPackageArtifact.ts', 'packPackageArtifact.ts', 'postbuild.ts']) {
+for (const filename of [
+  'testPackageArtifact.ts',
+  'packPackageArtifact.ts',
+  'packedConsumerSbom.ts',
+  'postbuild.ts',
+]) {
   fs.copyFileSync(
     path.join(repository, 'scripts', filename),
     path.join(tooling, 'scripts', filename),

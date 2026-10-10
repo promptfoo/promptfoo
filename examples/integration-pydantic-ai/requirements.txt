@@ -1,2 +1,2 @@
-pydantic-ai-slim[openai]>=2.46.0,<3
+pydantic-ai-slim[openai]>=2.52.0,<3
 pydantic>=2.13.5,<3
