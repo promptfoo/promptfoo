@@ -2,6 +2,13 @@
 
 All notable changes to this package will be documented in this file.
 
+## [0.2.3](https://github.com/promptfoo/promptfoo/compare/code-scan-action-0.2.2...code-scan-action-0.2.3) (2026-10-10)
+
+
+### Bug Fixes
+
+* **ci:** secure code-scan action releases ([#10108](https://github.com/promptfoo/promptfoo/issues/10108)) ([b5d6b20](https://github.com/promptfoo/promptfoo/commit/b5d6b20382fcfb6a48c23d05de98c39bc6437fad))
+
 ## [0.2.2](https://github.com/promptfoo/promptfoo/compare/code-scan-action-0.2.1...code-scan-action-0.2.2) (2026-10-08)
 
 ### Bug Fixes
