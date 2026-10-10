@@ -311,10 +311,15 @@ Cloning requires Git 2.41 or newer. With older Git, `true` copies the directory 
 
 A clone is fast and doesn't write to your repository. It has no remote, so a push from the agent has nowhere to go. Automatic mode copies files whose materialized line endings would change during cloning. Repositories with tracked Git filter attributes, such as Git LFS, use a copy with `true` and are rejected by `'git'` mode.
 
-Assertions can read two fields from the response metadata:
+Assertions can read these fields from the response metadata:
 
 - `workingDir`: the workspace directory. It exists until the call's assertions have run.
-- `workspaceDiff`: for a clone, the agent's changes as a unified diff against the cloned commit, including any commits the agent made. Diffs longer than 100,000 characters are truncated.
+- `workspaceDiff`: for a clone, the agent's changes as a unified diff against the cloned commit, including any commits the agent made. Diffs longer than 100,000 characters are truncated. If the diff can't show some changes, it covers the rest and ends with a `[diff incomplete: ...]` line that names them. That applies to a file or directory the agent made unreadable, a FIFO or socket, a new directory without files, anything below a path called `.git`, a repository the agent created (its files are not in the diff), new or changed binary content (Git shows that it changed, not how), changed content that is not valid UTF-8 (it is shown with replacement characters), and a Git index that can't be read.
+  Whole-file deletions (including binary and non-UTF-8 files), exact renames, and mode-only changes are complete because the diff describes the operation without new content to inspect.
+- `workspaceDiffIncomplete`: `true` when `workspaceDiff` doesn't show every change, because it was truncated or for one of those reasons.
+- `workspaceDiffError`: for a clone, why the diff couldn't be computed. It replaces `workspaceDiff`.
+
+An assertion that relies on the diff should fail when `workspaceDiffError` or `workspaceDiffIncomplete` is set, rather than treat a missing or partial diff as no changes.
 
 ```yaml
 tests:
@@ -328,7 +333,12 @@ const fs = require('fs');
 const path = require('path');
 
 module.exports = (output, context) => {
-  const { workingDir, workspaceDiff } = context.providerResponse.metadata;
+  const { workingDir, workspaceDiff, workspaceDiffError, workspaceDiffIncomplete } =
+    context.providerResponse.metadata;
+  if (workspaceDiffError || workspaceDiffIncomplete) {
+    const reason = workspaceDiffError ?? 'The workspace diff does not show every change.';
+    return { pass: false, score: 0, reason };
+  }
   const source = fs.readFileSync(path.join(workingDir, 'user_service.py'), 'utf8');
   const pass = source.includes('bcrypt') && !source.includes('md5');
   return {
@@ -345,7 +355,7 @@ Workspaces have these limits:
 
 - Responses are never cached, because a cached response would come without the agent's changes.
 - Only eval steps get a workspace. When anything else calls the provider, such as a multi-turn red team strategy, the call fails instead of running in `working_dir` itself.
-- Repositories with submodules aren't supported yet. Workspaces reject unresolved links and links that point outside the workspace. Copies also reject Git metadata that points outside the copy (such as a linked worktree's `.git` file, `.git/worktrees` records, or an absolute `core.worktree`). Commit the changes so the directory can be cloned instead.
+- Repositories with submodules aren't supported yet. Workspaces reject unresolved links and links that point outside the workspace. Copies also reject Git metadata that points outside the copy (such as a linked worktree's `.git` file, `.git/worktrees` records, or an absolute `core.worktree`) and special files such as sockets and named pipes, apart from Git's own sockets under `.git`, which are left out. Commit the changes so the directory can be cloned instead.
 - A workspace keeps calls from affecting each other, but it isn't a sandbox. An agent with shell access can still reach the rest of the file system, so run untrusted agents in a container.
 
 ## Evaluation techniques
