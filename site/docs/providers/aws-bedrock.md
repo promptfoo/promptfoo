@@ -1452,7 +1452,7 @@ select the OpenAI-compatible APIs on `bedrock-runtime`. These routes preserve Ru
 model IDs, including supported geographic/global inference profiles and model ARNs.
 They use `https://bedrock-runtime.<region>.amazonaws.com/openai/v1` and accept the
 same Bedrock API key or AWS credential configuration as the Mantle adapters.
-Closed OpenAI GPT models on Runtime Responses require a system inference profile,
+Closed OpenAI GPT models on Runtime Chat and Responses require a system inference profile,
 such as `us.openai.gpt-5.6-sol` or `global.openai.gpt-5.6-sol`, instead of a bare
 model ID or foundation-model ARN.
 
@@ -1479,11 +1479,18 @@ supports Priority and Flex through these HTTP APIs; its Converse and Invoke APIs
 
 The adapters inherit [OpenAI provider options](./openai.md), including streaming,
 client-side functions, structured output, multimodal input, and request fields through
-`passthrough`. Support depends on the chosen model and API. For Runtime Chat models
-that support Bedrock Guardrails, such as GPT OSS, use `config.headers` for guardrail
-headers and `passthrough` for additional body fields. Guardrails do not apply to
-Runtime Responses; use Converse with a supported model when guardrails are required.
-Do not put SDK `extra_headers` or `extra_body` wrappers inside the request body.
+`passthrough`. Support depends on the chosen model and API. Runtime Responses and
+supported Runtime Chat models accept Bedrock Guardrails through request headers:
+
+```yaml
+config:
+  headers:
+    X-Amzn-Bedrock-GuardrailIdentifier: your-guardrail-id
+    X-Amzn-Bedrock-GuardrailVersion: '1'
+```
+
+Use `passthrough` for additional body fields. Do not put SDK `extra_headers` or
+`extra_body` wrappers inside the request body.
 
 Runtime Responses supports stored conversations (`previous_response_id`) and streaming,
 but does not support `background: true`, server-side tools, or GPT OSS models. Use
