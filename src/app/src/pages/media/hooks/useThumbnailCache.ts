@@ -89,12 +89,19 @@ export async function getThumbnail(hash: string): Promise<string | null> {
 export async function setThumbnail(hash: string, dataUrl: string): Promise<void> {
   try {
     const db = await openDatabase();
-    const store = db.transaction(STORE_NAME, 'readwrite').objectStore(STORE_NAME);
-    store.put({
-      hash,
-      dataUrl,
-      createdAt: Date.now(),
-    } satisfies ThumbnailEntry);
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(STORE_NAME, 'readwrite');
+      const store = transaction.objectStore(STORE_NAME);
+      const entry: ThumbnailEntry = {
+        hash,
+        dataUrl,
+        createdAt: Date.now(),
+      };
+      const request = store.put(entry);
+
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+    });
   } catch {
     // Silently fail - caching is optional
   }
@@ -106,7 +113,14 @@ export async function setThumbnail(hash: string, dataUrl: string): Promise<void>
 export async function deleteThumbnail(hash: string): Promise<void> {
   try {
     const db = await openDatabase();
-    db.transaction(STORE_NAME, 'readwrite').objectStore(STORE_NAME).delete(hash);
+    return new Promise((resolve) => {
+      const transaction = db.transaction(STORE_NAME, 'readwrite');
+      const store = transaction.objectStore(STORE_NAME);
+      const request = store.delete(hash);
+
+      request.onsuccess = () => resolve();
+      request.onerror = () => resolve();
+    });
   } catch {
     // Silently fail
   }
@@ -121,15 +135,25 @@ export async function clearExpiredThumbnails(): Promise<void> {
     const db = await openDatabase();
     const cutoff = Date.now() - MAX_AGE_MS;
 
-    const store = db.transaction(STORE_NAME, 'readwrite').objectStore(STORE_NAME);
-    const index = store.index('createdAt');
-    index.openCursor(IDBKeyRange.upperBound(cutoff)).onsuccess = (event) => {
-      const cursor = (event.target as IDBRequest<IDBCursorWithValue>).result;
-      if (cursor) {
-        cursor.delete();
-        cursor.continue();
-      }
-    };
+    return new Promise((resolve) => {
+      const transaction = db.transaction(STORE_NAME, 'readwrite');
+      const store = transaction.objectStore(STORE_NAME);
+      const index = store.index('createdAt');
+      const range = IDBKeyRange.upperBound(cutoff);
+      const request = index.openCursor(range);
+
+      request.onsuccess = (event) => {
+        const cursor = (event.target as IDBRequest<IDBCursorWithValue>).result;
+        if (cursor) {
+          cursor.delete();
+          cursor.continue();
+        } else {
+          resolve();
+        }
+      };
+
+      request.onerror = () => resolve();
+    });
   } catch {
     // Silently fail
   }
