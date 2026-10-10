@@ -114,23 +114,24 @@ function projectOutputMetadata<T>(
   responseMetadata: ProviderResponse['metadata'],
   testMetadata?: AtomicTestCase['metadata'],
 ): T {
-  if (!stripOutput || !metadata || !responseMetadata || typeof metadata !== 'object') {
+  if (!stripOutput || !metadata || typeof metadata !== 'object') {
     return metadata;
   }
   return Object.fromEntries(
     Object.entries(metadata).flatMap(([key, value]) => {
       if (
-        !Object.prototype.hasOwnProperty.call(responseMetadata, key) ||
-        (testMetadata && isDeepStrictEqual(value, testMetadata[key]))
+        testMetadata &&
+        Object.prototype.hasOwnProperty.call(testMetadata, key) &&
+        isDeepStrictEqual(sanitizeForDb(value), sanitizeForDb(testMetadata[key]))
       ) {
         return [[key, value]];
       }
+      // These keys contain response output even when hooks annotate or replace their copies.
       if (RESPONSE_OUTPUT_METADATA_KEYS.includes(key)) {
-        return key === 'audio' ||
-          key === 'blobUris' ||
-          isDeepStrictEqual(value, responseMetadata[key])
-          ? []
-          : [[key, value]];
+        return [];
+      }
+      if (!responseMetadata || !Object.prototype.hasOwnProperty.call(responseMetadata, key)) {
+        return [[key, value]];
       }
       return [[key, stripMediaReferences(sanitizeForDb(value))]];
     }),

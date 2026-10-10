@@ -510,6 +510,8 @@ describeEvaluator('evaluator metadata', () => {
     'update',
     'hook-owned',
     'hook-owned-replace',
+    'annotate',
+    'annotate-delete',
     'test-owned',
     'failure',
   ])('preserves metadata ownership after an in-place afterEach %s', async (mode) => {
@@ -542,13 +544,22 @@ describeEvaluator('evaluator metadata', () => {
       if (mode.startsWith('hook-owned')) {
         Object.assign(ctx.result.metadata, ownedMetadata);
       }
-      if (mode === 'delete') {
+      ctx.result.metadata.annotation = 'keep separate annotation';
+      if (mode.startsWith('annotate')) {
+        for (const key of Object.keys(nativeMetadata)) {
+          ctx.result.metadata[key] = [
+            ...ctx.result.metadata[key],
+            { annotation: 'hook annotation' },
+          ];
+        }
+      }
+      if (mode === 'delete' || mode === 'annotate-delete') {
         delete ctx.result.response.metadata;
       } else if (mode === 'delete-key') {
         delete ctx.result.response.metadata.citations;
       } else if (mode === 'update') {
         ctx.result.response.metadata = outputMetadata('updated-output-secret');
-      } else if (mode !== 'hook-owned') {
+      } else if (mode !== 'hook-owned' && mode !== 'annotate') {
         ctx.result.response.metadata = { note: 'done' };
       }
       if (mode === 'failure') {
@@ -574,9 +585,12 @@ describeEvaluator('evaluator metadata', () => {
       expect(result.success).toBe(true);
       for (const row of [result, artifact]) {
         expect(row.response.output).toBe('[output stripped]');
+        expect(row.metadata.annotation).toBe(
+          mode === 'failure' ? undefined : 'keep separate annotation',
+        );
         for (const key of Object.keys(nativeMetadata)) {
           expect(row.response.metadata ?? {}).not.toHaveProperty(key);
-          if (mode.startsWith('hook-owned') || mode === 'test-owned') {
+          if (mode === 'test-owned') {
             expect(row.metadata[key]).toEqual(ownedMetadata[key as keyof typeof ownedMetadata]);
           } else {
             expect(row.metadata).not.toHaveProperty(key);
