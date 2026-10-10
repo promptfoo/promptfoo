@@ -1,3 +1,25 @@
+export const createConfigItem = (id: string) => ({
+  id,
+  config: {},
+});
+
+export const createPassFailOptions = (numResults: number) => ({
+  numResults,
+  resultTypes: ['success' as const, 'failure' as const],
+});
+
+export const createMixedResultOptions = (numResults: number) => ({
+  numResults,
+  resultTypes: ['success' as const, 'error' as const, 'failure' as const],
+});
+
+export const createAccuracyFilter = () => ({
+  logicOperator: 'and',
+  type: 'metric',
+  operator: 'equals',
+  value: 'accuracy',
+});
+
 export const createApiKeyOptions = (apiKey = 'test-key') => ({
   config: { apiKey },
 });
@@ -30,6 +52,16 @@ export const createMcpServerOptions = (command = 'npm', args = 'start') => ({
 export const createBasePathOptions = () => ({
   id: 'testId',
   config: { basePath: '/base' },
+});
+
+export const createTokenOutput = (
+  output = 'Test output',
+  total = 10,
+  prompt = 5,
+  completion = 5,
+) => ({
+  output,
+  tokenUsage: { total, prompt, completion, cached: 0, numRequests: 1 },
 });
 
 export const createChatCompletion = (
@@ -104,7 +136,7 @@ export const createTestOutput = (output = 'Test output') => ({
   output,
 });
 
-const createStringAssertion = <TType extends string>(type: TType, value: string) => ({
+export const createStringAssertion = <TType extends string>(type: TType, value: string) => ({
   type,
   value,
 });
@@ -196,6 +228,13 @@ export const createEmbeddingResult = (embedding: number, embedding2: number) => 
 export const createStatusResponse = (status = 500, statusText = 'Internal Server Error') => ({
   status,
   statusText,
+});
+
+export const createScriptAssertionParams = <TType extends string>(type: TType) => ({
+  prompt: 'Test',
+  assertion: { type, value: 'unused' },
+  test: {},
+  providerResponse: { output: 'Test output' },
 });
 
 export const createImageUsageCounts = (candidatesTokenCount: number, totalTokenCount: number) => ({

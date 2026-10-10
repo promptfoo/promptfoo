@@ -2,12 +2,11 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import type { Server } from 'node:http';
 
-import request from 'supertest';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../../../src/server/server';
 import { promptCacheService } from '../../../src/server/services/promptCacheService';
+import { setupTestServer } from '../../util/testServer';
 
 vi.mock('../../../src/globalConfig/cloud', () => ({
   cloudConfig: {
@@ -103,26 +102,7 @@ const mockedGetTestCases = vi.mocked(getTestCases);
 const mockedReadResult = vi.mocked(readResult);
 
 describe('inline server API DTO validation', () => {
-  let api: ReturnType<typeof request.agent>;
-  let server: Server;
-
-  beforeAll(async () => {
-    await new Promise<void>((resolve, reject) => {
-      server = createApp().listen(0, '127.0.0.1', (error?: Error) =>
-        error ? reject(error) : resolve(),
-      );
-    });
-    api = request.agent(server);
-  });
-
-  afterAll(async () => {
-    if (!server.listening) {
-      return;
-    }
-    await new Promise<void>((resolve, reject) => {
-      server.close((error) => (error ? reject(error) : resolve()));
-    });
-  });
+  const api = setupTestServer(createApp);
 
   beforeEach(() => {
     vi.resetAllMocks();
