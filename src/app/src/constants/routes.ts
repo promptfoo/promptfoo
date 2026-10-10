@@ -20,8 +20,9 @@ export const MODEL_AUDIT_ROUTES = {
 export const EVAL_ROUTES = {
   ROOT: '/eval',
   LIST: '/evals',
-  DETAIL: (id: string) => `/eval/${id}`,
-  RESULT_RATING: (evalId: string, resultId: string) => `/eval/${evalId}/results/${resultId}/rating`,
+  DETAIL: (id: string) => `/eval/${encodeURIComponent(id)}`,
+  RESULT_RATING: (evalId: string, resultId: string) =>
+    `/eval/${encodeURIComponent(evalId)}/results/${encodeURIComponent(resultId)}/rating`,
 } as const;
 
 // Red Team routes
@@ -29,7 +30,7 @@ export const REDTEAM_ROUTES = {
   ROOT: '/redteam',
   SETUP: '/redteam/setup',
   REPORTS: '/reports',
-  REPORT_DETAIL: (evalId: string) => `/reports?evalId=${evalId}`,
+  REPORT_DETAIL: (evalId: string) => `/reports?evalId=${encodeURIComponent(evalId)}`,
 } as const;
 
 // Other routes

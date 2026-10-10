@@ -10,6 +10,13 @@ export function getApiBaseUrl(apiBaseUrl = useApiConfig.getState().apiBaseUrl): 
   return import.meta.env.VITE_PUBLIC_BASENAME || '';
 }
 
+export function getEvalApiPath(evalId: string | null, suffix = ''): string {
+  if (evalId === null) {
+    throw new Error('Eval ID must be set before constructing an API path');
+  }
+  return `/eval/${encodeURIComponent(evalId)}${suffix}`;
+}
+
 export async function callApi(
   path: string,
   options: RequestInit = {},
@@ -58,7 +65,7 @@ export async function updateEvalAuthor(
   evalId: string,
   author: string,
 ): Promise<UpdateEvalAuthorResponse> {
-  const response = await callApi(`/eval/${evalId}/author`, {
+  const response = await callApi(getEvalApiPath(evalId, '/author'), {
     method: 'PATCH',
     headers: {
       'Content-Type': 'application/json',
