@@ -819,6 +819,9 @@ export const AssertionSchema = z.object({
 
   // Extract context from the output using a transform
   contextTransform: StringOrFunctionSchema.optional(),
+
+  // Opt-in string normalization for equals/contains; true selects NFC.
+  normalizeUnicode: z.union([z.boolean(), z.enum(['NFC', 'NFD', 'NFKC', 'NFKD'])]).optional(),
 });
 
 export type Assertion = z.infer<typeof AssertionSchema>;

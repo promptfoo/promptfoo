@@ -97,7 +97,7 @@ describe('runEval', () => {
     const provider: ApiProvider = {
       id: () => 'mutating-provider',
       callApi: vi.fn(async (_prompt, context) => {
-        context!.test!.assert = [];
+        (context!.test as AtomicTestCase).assert = [];
         context!.vars.expected = 'attacker-controlled';
         return { output: 'attacker-controlled' };
       }),
