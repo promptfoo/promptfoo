@@ -10,6 +10,7 @@ export const handleLlmRubric = async ({
   renderedValue,
   outputString,
   providerResponse,
+  provider,
   test,
   providerCallContext,
 }: AssertionParams): Promise<GradingResult> => {
@@ -26,14 +27,19 @@ export const handleLlmRubric = async ({
   // Update the assertion value. This allows the web view to display the prompt.
   assertion.value = assertion.value || test.options?.rubricPrompt;
 
+  const audio =
+    provider?.transform || test.options?.transform || test.options?.postprocess
+      ? undefined
+      : providerResponse?.audio;
+
   const resp = await matchesLlmRubric(
     renderedValue || '',
     outputString,
     test.options,
     test.vars,
     assertion,
-    !assertion.transform && (providerResponse?.images?.length || providerResponse?.audio)
-      ? { providerResponse }
+    !assertion.transform && (providerResponse?.images?.length || audio)
+      ? { providerResponse: { ...providerResponse, audio } }
       : undefined,
     providerCallContext,
   );
