@@ -1,6 +1,7 @@
 import { getEnvString } from '../../envars';
 import { resolveProviderApiKey } from '../credentials';
-import { isGpt6AstraModel } from './gpt6';
+import { resolveProviderEnv } from '../env';
+import { isGpt6Model } from './gpt6';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -28,6 +29,29 @@ export function hasHeaderOverride(
 ): boolean {
   const target = headerName.toLowerCase();
   return Object.keys(customHeaders ?? {}).some((key) => key.toLowerCase() === target);
+}
+
+export function resolveOpenAiApiUrl(
+  config: OpenAiSharedOptions = {},
+  env?: EnvOverrides,
+  defaultUrl = 'https://api.openai.com/v1',
+): string {
+  if (config.apiHost) {
+    return `https://${config.apiHost}/v1`;
+  }
+  if (config.apiBaseUrl) {
+    return config.apiBaseUrl;
+  }
+  const endpoint = resolveProviderEnv(env, [
+    'OPENAI_API_HOST',
+    'OPENAI_API_BASE_URL',
+    'OPENAI_BASE_URL',
+  ]);
+  return endpoint
+    ? endpoint.name === 'OPENAI_API_HOST'
+      ? `https://${endpoint.value}/v1`
+      : endpoint.value
+    : defaultUrl;
 }
 
 export class OpenAiGenericProvider implements ApiProvider {
@@ -108,25 +132,8 @@ export class OpenAiGenericProvider implements ApiProvider {
     return 'https://api.openai.com/v1';
   }
 
-  /** Pass a prompt-merged config to resolve that call's endpoint. */
   getApiUrl(config: OpenAiSharedOptions = this.config): string {
-    if (config.apiHost) {
-      return `https://${config.apiHost}/v1`;
-    }
-    if (config.apiBaseUrl) {
-      return config.apiBaseUrl;
-    }
-    const envApiHost = this.env?.OPENAI_API_HOST || getEnvString('OPENAI_API_HOST');
-    if (envApiHost) {
-      return `https://${envApiHost}/v1`;
-    }
-    return (
-      this.env?.OPENAI_API_BASE_URL ||
-      this.env?.OPENAI_BASE_URL ||
-      getEnvString('OPENAI_API_BASE_URL') ||
-      getEnvString('OPENAI_BASE_URL') ||
-      this.getApiUrlDefault()
-    );
+    return resolveOpenAiApiUrl(config, this.env, this.getApiUrlDefault());
   }
 
   /** Pass a prompt-merged config to resolve that call's credential. */
@@ -159,6 +166,11 @@ export class OpenAiGenericProvider implements ApiProvider {
     return this.modelName;
   }
 
+  /** Normalize capability checks without rewriting the request model. */
+  protected normalizeCapabilityModelName(modelName: string): string {
+    return modelName;
+  }
+
   protected isGPT5Model(modelName = this.getCapabilityModelName()): boolean {
     const model = modelName.replace(/(^|\/)ft:/, '$1');
     return model.startsWith('gpt-5') || model.includes('/gpt-5');
@@ -175,7 +187,7 @@ export class OpenAiGenericProvider implements ApiProvider {
       model.includes('/o4') ||
       /(^|\/)gpt-daybreak-(?:blue|red)-latest$/.test(model) ||
       this.isGPT5Model(model) ||
-      isGpt6AstraModel(model)
+      isGpt6Model(model)
     );
   }
 

@@ -7,12 +7,19 @@ import {
   type TokenUsage,
   type VarValue,
 } from '../contracts/shared';
-import { TRACE_CREDENTIAL_PATH_SEGMENT } from '../contracts/traceProviderEndpoint';
+import { hasTraceCredentialPath } from '../contracts/traceProviderEndpoint';
 import { PromptConfigSchema, PromptSchema } from '../contracts/validators/prompts';
 import { NunjucksFilterMapSchema, StringOrFunctionSchema } from '../contracts/validators/shared';
-import { isJavascriptFile, JAVASCRIPT_EXTENSIONS } from '../util/fileExtensions';
-import { parseFilterRange } from '../util/filterRange';
+import { isJavascriptFile, JAVASCRIPT_EXTENSIONS } from '../validation/fileExtensions';
+import { parseFilterRange } from '../validation/filterRange';
 import { ApiProviderSchema, ProviderOptionsSchema, ProvidersSchema } from '../validators/providers';
+import {
+  CONFIG_PROVIDER_INPUT_ERROR,
+  hasValidConfigProviders,
+  normalizeConfigProviderAlias,
+} from './configAliases';
+
+import type { ResultFailureReason } from './results';
 
 export { ProvidersSchema };
 
@@ -25,7 +32,6 @@ export {
   isCliEventSource,
 } from './eventSource';
 
-import type { BlobRef } from '../blobs/types';
 import type { EnvOverrides } from '../contracts/env';
 import type { Prompt, PromptFunction } from '../contracts/prompts';
 import type {
@@ -37,6 +43,7 @@ import type {
 import type {
   ApiProvider,
   CallApiContextParams,
+  CallApiOptionsParams,
   ImageOutput,
   ProviderOptions,
   ProviderResponse,
@@ -51,8 +58,9 @@ import type { TraceData } from './tracing';
 export interface RateLimitRegistryRef {
   execute: <T>(
     provider: ApiProvider,
-    callFn: () => Promise<T>,
+    callFn: (onResponseHeaders?: CallApiOptionsParams['onResponseHeaders']) => Promise<T>,
     options?: {
+      abortSignal?: AbortSignal;
       getHeaders?: (result: T) => Record<string, string> | undefined;
       isRateLimited?: (result: T | undefined, error?: Error) => boolean;
       getRetryAfter?: (result: T | undefined, error?: Error) => number | undefined;
@@ -65,7 +73,7 @@ export interface RateLimitRegistryRef {
  * Minimal interface for deferred provider-call queues used by serial grading orchestration.
  */
 export interface ProviderCallQueueRef {
-  enqueue: <T>(providerId: string, call: () => Promise<T>) => Promise<T>;
+  enqueue: <T>(providerId: string, call: () => Promise<T>, abortSignal?: AbortSignal) => Promise<T>;
 }
 
 export * from '../redteam/types';
@@ -124,6 +132,7 @@ export const CommandLineOptionsSchema = z.object({
   noShare: z.boolean().optional(),
   progressBar: z.boolean().optional(),
   watch: z.boolean().optional(),
+  safeMode: z.boolean().optional(),
   filterErrorsOnly: z.string().optional(),
   filterFailing: z.string().optional(),
   filterFailingOnly: z.string().optional(),
@@ -225,6 +234,8 @@ export interface RunEvalOptions {
   testIdx: number;
   promptIdx: number;
   repeatIndex: number;
+  /** Stable identifier shared by repeated executions of the same expanded test case. */
+  repeatGroupId?: string;
 
   conversations?: EvalConversations;
   registers?: EvalRegisters;
@@ -373,21 +384,8 @@ export type ServerPromptWithMetadata = Omit<PromptWithMetadata, 'recentEvalDate'
   recentEvalDate: string;
 };
 
-export const ResultFailureReason = {
-  // The test passed, or we don't know exactly why the test case failed.
-  NONE: 0,
-  // The test case failed because an assertion rejected it.
-  ASSERT: 1,
-  // Test case failed due to some other error.
-  ERROR: 2,
-} as const;
-export type ResultFailureReason = (typeof ResultFailureReason)[keyof typeof ResultFailureReason];
-
-const validResultFailureReasons = new Set<number>(Object.values(ResultFailureReason));
-
-export function isResultFailureReason(value: number): value is ResultFailureReason {
-  return validResultFailureReasons.has(value);
-}
+// Compatibility exports for existing public and source consumers.
+export { isResultFailureReason, ResultFailureReason } from './results';
 
 export interface EvaluateResult {
   id?: string; // on the new version 2, this is stored per-result
@@ -419,6 +417,10 @@ export interface EvaluateResult {
   evaluationId?: string;
   /** W3C trace ID generated for this row when tracing is enabled. */
   traceId?: string;
+  /** Zero-based execution index when this row is part of a repeated test. */
+  repeatIndex?: number;
+  /** Stable identifier shared by repeated executions of the same expanded test case. */
+  repeatGroupId?: string;
 }
 
 export interface EvaluateTableOutput {
@@ -438,31 +440,8 @@ export interface EvaluateTableOutput {
   text: string;
   tokenUsage?: Partial<TokenUsage>;
   error?: string | null;
-  audio?: {
-    id?: string;
-    expiresAt?: number;
-    data?: string; // base64 encoded audio data
-    blobRef?: BlobRef;
-    transcript?: string;
-    format?: string;
-    sampleRate?: number;
-    channels?: number;
-    duration?: number;
-  };
-  video?: {
-    id?: string; // Provider video ID (e.g., Sora job ID, Veo operation name)
-    blobRef?: BlobRef; // Blob storage reference for video data (Veo)
-    storageRef?: { key?: string }; // Storage reference for video file (Sora)
-    url?: string; // Storage ref URL (e.g., storageRef:video/abc123.mp4) or blob URI
-    format?: string; // 'mp4'
-    size?: string; // '1280x720', '720x1280', '1792x1024', or '1024x1792'
-    duration?: number; // Seconds
-    thumbnail?: string; // Storage ref URL for thumbnail (Sora)
-    spritesheet?: string; // Storage ref URL for spritesheet (Sora)
-    model?: string; // Model used (e.g., 'sora-2', 'veo-3.1-generate-preview')
-    aspectRatio?: string; // '16:9' or '9:16' (Veo)
-    resolution?: string; // '720p' or '1080p' (Veo)
-  };
+  audio?: ProviderResponse['audio'];
+  video?: ProviderResponse['video'];
   images?: ImageOutput[];
 }
 
@@ -492,12 +471,44 @@ export interface EvaluateStats {
   evaluationDurationMs?: number;
 }
 
+export interface RepeatStabilityConfidenceInterval {
+  /** Confidence level used for this interval. */
+  confidenceLevel: 0.95;
+  lower: number;
+  upper: number;
+}
+
+export interface RepeatStabilityGroup {
+  repeatGroupId: string;
+  promptIdx: number;
+  provider: Pick<ProviderOptions, 'id' | 'label'>;
+  description?: string;
+  promptLabel?: string;
+  repetitions: number;
+  passed: number;
+  failed: number;
+  errors: number;
+  cached: number;
+  passRate?: number;
+  passRateConfidenceInterval?: RepeatStabilityConfidenceInterval;
+  unstable: boolean;
+}
+
+export interface RepeatStabilitySummary {
+  totalGroups: number;
+  unstableGroups: number;
+  groupsWithErrors: number;
+  cachedResults: number;
+  groups: RepeatStabilityGroup[];
+}
+
 export interface EvaluateSummaryV3 {
   version: 3;
   timestamp: string;
   results: EvaluateResult[];
   prompts: CompletedPrompt[];
   stats: EvaluateStats;
+  repeatStability?: RepeatStabilitySummary;
 }
 
 export interface EvaluateSummaryV2 {
@@ -537,16 +548,16 @@ export interface GradingResult {
   reason: string;
 
   // Map of labeled metrics to values
-  namedScores?: Record<string, number>;
+  namedScores?: Record<string, number> | null;
 
   // Total weight contributing to each named score
-  namedScoreWeights?: Record<string, number>;
+  namedScoreWeights?: Record<string, number> | null;
 
   // Record of tokens usage for this assertion
   tokensUsed?: TokenUsage;
 
   // List of results for each component of the assertion
-  componentResults?: GradingResult[];
+  componentResults?: GradingResult[] | null;
 
   // The assertion that was evaluated
   // TODO(Will): Can we move to this being required?
@@ -583,23 +594,76 @@ export interface GradingResult {
   };
 }
 
-export function isGradingResult(result: any): result is GradingResult {
+function isFiniteNumberRecord(value: unknown): value is Record<string, number> {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    !Array.isArray(value) &&
+    // Custom tags can disguise built-in containers as ordinary records.
+    !(Symbol.toStringTag in value) &&
+    Object.prototype.toString.call(value) === '[object Object]' &&
+    Object.values(value).every((entry) => Number.isFinite(entry))
+  );
+}
+
+function hasValidGradingResultFields(result: any): boolean {
   return (
     typeof result === 'object' &&
     result !== null &&
     typeof result.pass === 'boolean' &&
-    typeof result.score === 'number' &&
+    Number.isFinite(result.score) &&
     typeof result.reason === 'string' &&
-    (typeof result.namedScores === 'undefined' || typeof result.namedScores === 'object') &&
-    (typeof result.namedScoreWeights === 'undefined' ||
-      typeof result.namedScoreWeights === 'object') &&
+    (result.namedScores == null || isFiniteNumberRecord(result.namedScores)) &&
+    (result.namedScoreWeights == null || isFiniteNumberRecord(result.namedScoreWeights)) &&
     (typeof result.tokensUsed === 'undefined' || typeof result.tokensUsed === 'object') &&
-    (typeof result.componentResults === 'undefined' || Array.isArray(result.componentResults)) &&
+    (result.componentResults == null || Array.isArray(result.componentResults)) &&
     (typeof result.assertion === 'undefined' ||
       result.assertion === null ||
       typeof result.assertion === 'object') &&
     (typeof result.comment === 'undefined' || typeof result.comment === 'string')
   );
+}
+
+export function isGradingResult(result: any): result is GradingResult {
+  try {
+    const ancestors = new WeakSet<object>();
+    const validated = new WeakSet<object>();
+    const frames = [{ result, nextChild: -1 }];
+
+    // Traverse one indexed child at a time without consuming the JavaScript call stack.
+    while (frames.length > 0) {
+      const frame = frames[frames.length - 1];
+      const current = frame.result;
+      if (frame.nextChild === -1) {
+        if (validated.has(current)) {
+          frames.pop();
+          continue;
+        }
+        if (!hasValidGradingResultFields(current) || ancestors.has(current)) {
+          return false;
+        }
+        ancestors.add(current);
+        frame.nextChild = 0;
+      }
+
+      const components = current.componentResults;
+      if (components != null && frame.nextChild < components.length) {
+        // Ignore custom iterators and reject a sparse entry as soon as it is visited.
+        const index = frame.nextChild++;
+        if (!Object.prototype.hasOwnProperty.call(components, index)) {
+          return false;
+        }
+        frames.push({ result: components[index], nextChild: -1 });
+      } else {
+        ancestors.delete(current);
+        validated.add(current);
+        frames.pop();
+      }
+    }
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export const BaseAssertionTypesSchema = z.enum([
@@ -650,7 +714,9 @@ export const BaseAssertionTypesSchema = z.enum([
   'perplexity-score',
   'python',
   'regex',
+  'rouge-l',
   'rouge-n',
+  'rouge-s',
   'ruby',
   'similar',
   'similar:cosine',
@@ -748,6 +814,9 @@ export const AssertionSchema = z.object({
 
   // Extract context from the output using a transform
   contextTransform: StringOrFunctionSchema.optional(),
+
+  // Opt-in string normalization for equals/contains; true selects NFC.
+  normalizeUnicode: z.union([z.boolean(), z.enum(['NFC', 'NFD', 'NFKC', 'NFKD'])]).optional(),
 });
 
 export type Assertion = z.infer<typeof AssertionSchema>;
@@ -1047,13 +1116,7 @@ export type DerivedMetric = z.infer<typeof DerivedMetricSchema>;
 
 const TraceProviderEndpointSchema = z.url().refine((endpoint) => {
   const url = new URL(endpoint);
-  const hasCredentialPath = url.pathname.split('/').some((segment) => {
-    try {
-      return TRACE_CREDENTIAL_PATH_SEGMENT.test(decodeURIComponent(segment));
-    } catch {
-      return true;
-    }
-  });
+  const hasCredentialPath = hasTraceCredentialPath(url.pathname);
   return (
     (url.protocol === 'http:' || url.protocol === 'https:') &&
     !url.username &&
@@ -1123,8 +1186,8 @@ export const TestSuiteSchema = z.object({
   // One or more prompt strings
   prompts: z.array(PromptSchema),
 
-  // Optional mapping of provider to prompt display strings.  If not provided,
-  // all prompts are used for all providers.
+  // Optional prompt-filter overrides keyed by provider label or ID.
+  // Otherwise each provider uses its own prompts filter, or all prompts when absent.
   providerPromptMap: ProviderPromptMapSchema.optional(),
   // Test cases
   tests: z.array(TestCaseSchema).optional(),
@@ -1234,6 +1297,8 @@ export const TestSuiteSchema = z.object({
       queryDelay: TraceQueryDelaySchema.optional(),
     })
     .optional(),
+  /** Directory for local references, retained when replaying a saved evaluation. */
+  basePath: z.string().optional(),
 });
 
 export type TestSuite = z.infer<typeof TestSuiteSchema>;
@@ -1394,43 +1459,37 @@ export const TestSuiteConfigSchema = z.object({
       queryDelay: TraceQueryDelaySchema.optional(),
     })
     .optional(),
+  /** Directory for local references, retained when replaying a saved evaluation. */
+  basePath: z.string().optional(),
 });
 
 export type TestSuiteConfig = z.infer<typeof TestSuiteConfigSchema>;
 
-export const UnifiedConfigSchema = TestSuiteConfigSchema.extend({
+/** Input fields shared by complete runtime configs and incomplete editor drafts. */
+const UnifiedConfigInputSchema = TestSuiteConfigSchema.extend({
   evaluateOptions: EvaluateOptionsSchema.optional(),
   commandLineOptions: CommandLineOptionsSchema.partial().optional(),
   providers: ProvidersSchema.optional(),
   targets: ProvidersSchema.optional(),
-})
-  .refine(
-    (data) => {
-      const hasTargets = data.targets !== undefined;
-      const hasProviders = data.providers !== undefined;
-      return (hasTargets && !hasProviders) || (!hasTargets && hasProviders);
-    },
-    {
-      message: "Exactly one of 'targets' or 'providers' must be provided, but not both",
-    },
-  )
-  .transform((data) => {
-    if (data.targets && !data.providers) {
-      data.providers = data.targets;
-      delete data.targets;
-    }
+});
 
-    // Handle null extensions, undefined extensions, or empty arrays by deleting the field
-    if (
-      data.extensions === null ||
-      data.extensions === undefined ||
-      (Array.isArray(data.extensions) && data.extensions.length === 0)
-    ) {
-      delete data.extensions;
-    }
+export const UnifiedConfigSchema = UnifiedConfigInputSchema.refine(
+  (data) => hasValidConfigProviders(data),
+  { message: CONFIG_PROVIDER_INPUT_ERROR },
+).transform((data) => {
+  const config = normalizeConfigProviderAlias(data);
 
-    return data;
-  });
+  // Handle null extensions, undefined extensions, or empty arrays by deleting the field
+  if (
+    config.extensions === null ||
+    config.extensions === undefined ||
+    (Array.isArray(config.extensions) && config.extensions.length === 0)
+  ) {
+    delete config.extensions;
+  }
+
+  return config;
+});
 
 export type UnifiedConfig = z.infer<typeof UnifiedConfigSchema>;
 

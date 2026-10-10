@@ -1,6 +1,6 @@
 # mistral (Mistral AI Chat Models)
 
-This example demonstrates Mistral AI's chat models, including Magistral reasoning models, current multimodal models, and shows how to use Mistral models for evaluation grading and embeddings.
+Compare Mistral chat and reasoning models, then grade their responses with Mistral models and embeddings.
 
 You can run this example with:
 
@@ -17,9 +17,9 @@ This example requires:
 
 ## What This Example Shows
 
-- **Mathematical Reasoning**: AIME2024 competition problems with Magistral Medium
+- **Mathematical Reasoning**: AIME2024 competition problems with Mistral Medium 3.5
 - **Model Comparison**: Compare Mistral's different model capabilities
-- **Reasoning Models**: Showcase Magistral Medium (native reasoning) vs. Mistral Small 4
+- **Reasoning Models**: Compare Mistral Medium 3.5 and Mistral Small 4 with reasoning enabled
 - **Chat Capabilities**: General conversation and task completion
 - **Mistral-powered Evaluation**: Use Mistral models for grading instead of OpenAI
 - **Mistral Embeddings**: Use Mistral's embedding model for similarity checks
@@ -28,28 +28,20 @@ This example requires:
 
 ### Reasoning Models
 
-- **Magistral Medium** (`magistral-medium-latest` → `magistral-medium-2509`): Native reasoning model ($2/$5 per 1M tokens, 128k context) — the reasoning showcase in these examples.
+- **Mistral Medium 3.5** (`mistral-medium-3-5`): Multimodal model with adjustable reasoning. The reasoning configs set `reasoning_effort: high`.
 
-> Mistral folded Magistral Small into **Mistral Small 4**: the `magistral-small-latest` alias now resolves to `mistral-small-2603` (a hybrid model, $0.15/$0.60 per 1M), so these examples use the canonical `mistral-small-latest` id. Enable Small 4's reasoning mode with `reasoning_effort: high`. The standalone `magistral-small-2509` snapshot is deprecated (retires 2026-07-31).
+> `magistral-small-latest` still resolves to the deprecated `magistral-small-2509` native-reasoning snapshot. These examples use the **Mistral Small 4** alias, `mistral-small-latest`. Enable Small 4's reasoning mode with `reasoning_effort: high`.
 
 ### Chat Models
 
-- **Mistral Medium 3.5** (`mistral-medium-latest` → `mistral-medium-2604`): Frontier agentic/coding multimodal model ($1.50/$7.50 per 1M, 256k context)
-- **Mistral Large 3** (`mistral-large-latest` → `mistral-large-2512`): General-purpose multimodal model ($0.50/$1.50 per 1M, 256k context)
-- **Mistral Small 4** (`mistral-small-latest` → `mistral-small-2603`): Hybrid instruct/reasoning/coding model ($0.15/$0.60 per 1M, 256k context)
+- **Mistral Medium 3.5** (`mistral-medium-latest` / `mistral-medium-3-5`): Text, vision, and reasoning model
+- **Mistral Large 3** (`mistral-large-latest` → `mistral-large-2512`): Text and vision model
+- **Mistral Small 4** (`mistral-small-latest` → `mistral-small-2603`): Text, vision, and reasoning model
 
 ### Evaluation Models
 
 - **Grading**: Uses `mistral-large-latest` for LLM-as-a-judge evaluation
 - **Embeddings**: Uses `mistral-embed` for semantic similarity checks
-
-## Key Features Demonstrated
-
-- **Multi-model comparison**: Compare performance across different Mistral models
-- **Reasoning capabilities**: Step-by-step problem solving with Magistral models
-- **Cost optimization**: Balance performance vs. cost across model tiers
-- **Self-evaluation**: Use Mistral models to grade their own outputs
-- **Semantic similarity**: Mistral embeddings for content comparison
 
 ## Running the Example
 
@@ -64,17 +56,6 @@ promptfoo eval
 promptfoo view
 ```
 
-## Configuration Highlights
-
-This example showcases several advanced promptfoo features:
-
-- **Provider overrides** for grading and embeddings
-- **Multiple assertion types** including llm-rubric and similarity
-- **Cost tracking** across different model tiers
-- **Mixed scenarios** from simple chat to complex reasoning
-
-The evaluation uses Mistral models end-to-end, providing a comprehensive view of their ecosystem capabilities.
-
 ## Available Configurations
 
 This example includes multiple configuration files for different use cases:
@@ -86,9 +67,9 @@ This example includes multiple configuration files for different use cases:
 
 ### Model Capabilities
 
-- **`promptfooconfig.comparison.yaml`** - Compare reasoning across all Mistral models
+- **`promptfooconfig.comparison.yaml`** - Compare the configured Mistral reasoning and chat models
 - **`promptfooconfig.code-generation.yaml`** - Multi-language programming with Codestral
-- **`promptfooconfig.multimodal.yaml`** - Vision and text processing with current Mistral multimodal models
+- **`promptfooconfig.multimodal.yaml`** - Vision and text processing
 
 ### Advanced Features
 
@@ -106,5 +87,5 @@ npx promptfoo@latest eval -c promptfooconfig.comparison.yaml  # Model comparison
 
 ## Additional Resources
 
-- **[Mistral Provider Documentation](/docs/providers/mistral)** - Complete API reference and configuration options
-- **[Mistral Magistral Announcement](https://mistral.ai/news/magistral/)** - Official announcement and technical details
+- **[Mistral Provider Documentation](https://www.promptfoo.dev/docs/providers/mistral/)** - Configuration options
+- **[Mistral model catalog](https://docs.mistral.ai/models/overview)** - Availability and pricing

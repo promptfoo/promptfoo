@@ -8,7 +8,7 @@ vi.mock('../../src/assertions/contextUtils');
 
 describe('handleCitationFaithfulness', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
   });
 
   const baseParams = (overrides: Record<string, unknown> = {}) =>

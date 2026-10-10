@@ -12,7 +12,7 @@ Checks whether every `[N]` citation marker in the answer points to a passage tha
 
 **How it works**: An LLM judge reads the question, the numbered passages, and the answer. It returns a binary verdict. An answer is `faithful` only if every claim is supported and every citation marker points to a passage that supports the claim it is attached to. It is `unfaithful` if any claim is unsupported or misattributed.
 
-This is stricter than [`context-faithfulness`](/docs/configuration/expected-outputs/model-graded/context-faithfulness). Context-faithfulness asks whether a claim is supported by the context _anywhere_. Citation-faithfulness additionally checks that the cited passage is the one that supports the claim. It catches misattribution: a claim cited to passage `[1]` that does not support it, even when another passage `[2]` in the context would.
+This is stricter than [`context-faithfulness`](/docs/configuration/expected-outputs/model-graded/context-faithfulness). Context-faithfulness asks whether a claim is supported by the context _anywhere_. Citation-faithfulness additionally checks that the cited passage is the one that supports the claim. It is intended to detect misattribution: a claim cited to passage `[1]` that does not support it, even when another passage `[2]` in the context would.
 
 **Example**:
 
@@ -24,7 +24,7 @@ Answer: "The Eiffel Tower was completed in 1889 [1]."
 Verdict: unfaithful (the completion-year claim is cited to [1], which only covers height)
 ```
 
-`context-faithfulness` would pass this answer because the claim is supported by passage `[2]`. `citation-faithfulness` fails it because the citation points to the wrong passage.
+The expected `context-faithfulness` result is a pass because passage `[2]` supports the claim. The expected `citation-faithfulness` result is a failure because the citation points to the wrong passage. Both results depend on the judge following its rubric.
 
 ## Configuration
 
@@ -33,13 +33,13 @@ assert:
   - type: citation-faithfulness
 ```
 
-### Required fields
+### Inputs
 
 - `query` - User's question (in test vars)
 - `context` - Reference passages, provided as an array so each entry is numbered `[1]`, `[2]`, ... (in vars or via `contextTransform`)
-- `threshold` - Minimum score 0-1 (default: 1). The score is `1.0` for a faithful answer and `0.0` for an unfaithful one, so the default requires a faithful verdict to pass.
+- `threshold` - Optional minimum score 0-1 (default: 1). The score is `1.0` for a faithful answer and `0.0` for an unfaithful one, so the default requires a faithful verdict to pass.
 
-The answer under test should contain `[N]` citation markers that refer to the passage numbers.
+The answer under test should contain `[N]` citation markers that refer to the passage numbers. Answers without numeric citation markers fail before a grader is called. This check does not require every supported claim to have a citation; it checks the markers that are present and the factual support of the answer.
 
 ### Full example
 
@@ -82,14 +82,14 @@ Override the default grader:
 ```yaml
 assert:
   - type: citation-faithfulness
-    provider: gpt-5 # Use a different model for grading
+    provider: openai:gpt-6-luna # Use a different model for grading
 ```
 
 ## Limitations
 
 - Depends on judge LLM quality
 - Best results when context is supplied as an array of passages that match the `[N]` markers in the answer
-- Performance degrades with very long contexts
+- Long contexts and instructions embedded in answers or passages can affect judge reliability; validate the grader on representative examples
 
 ## Related metrics
 
