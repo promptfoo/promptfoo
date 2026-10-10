@@ -1,14 +1,3 @@
-import { LRUCache } from 'lru-cache';
-
-import type { EvalSummary } from '../../../types/index';
-
-/**
- * Performance utilities for MCP server operations
- */
-
-/**
- * Pagination helper for large result sets
- */
 export function paginate<T>(
   items: T[],
   options: {
@@ -38,15 +27,3 @@ export function paginate<T>(
     },
   };
 }
-
-/**
- * Simple in-memory cache for evaluation results
- */
-
-/**
- * Default cache instances
- */
-export const evaluationCache = new LRUCache<string, EvalSummary[]>({
-  max: 100,
-  ttl: 5 * 60 * 1000, // 5 minutes default
-});

@@ -9,7 +9,7 @@ import {
   readFirstLines,
   readLastLines,
 } from '../../../util/logs';
-import { paginate } from '../lib/performance';
+import { paginate } from '../lib/pagination';
 import { createToolResponse } from '../lib/utils';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
