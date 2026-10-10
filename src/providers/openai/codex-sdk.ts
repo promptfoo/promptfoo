@@ -706,6 +706,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
   private ignoredProviderEnvWarningShown = false;
   private omittedProcessEnvWarningShown = false;
   private compatibilitySkipWarningShown = false;
+  private compatibilityChecks = new Map<AbortController, Promise<void>>();
 
   constructor(
     options: {
@@ -763,6 +764,10 @@ export class OpenAICodexSDKProvider implements ApiProvider {
   async cleanup(): Promise<void> {
     this.cleanupGeneration++;
     providerRegistry.unregister(this);
+    const compatibilityChecks = [...this.compatibilityChecks.entries()];
+    for (const [controller] of compatibilityChecks) {
+      controller.abort(createAbortError('Codex compatibility check interrupted by cleanup'));
+    }
     const instances = [...this.codexInstances.values()];
     this.codexInstances.clear();
     this.threads.clear();
@@ -774,6 +779,9 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       } catch (error) {
         logger.warn('[CodexSDK] Error during cleanup', { error });
       }
+    }
+    if (compatibilityChecks.length > 0) {
+      await Promise.allSettled(compatibilityChecks.map(([, pending]) => pending));
     }
   }
 
@@ -2268,6 +2276,9 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     }
     const codexSdk = this.codexSdk;
 
+    if (cleanupGeneration !== this.cleanupGeneration) {
+      throw new Error('Codex SDK call was interrupted by cleanup');
+    }
     await this.ensureCodexCompatibility(env, resolvedConfig, codexSdk.entryPoint, abortSignal);
 
     if (cleanupGeneration !== this.cleanupGeneration) {
@@ -2340,26 +2351,25 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       throw createAbortError('Codex compatibility check aborted');
     }
 
-    const compatibilityCheck = checkCodexCliCompatibility({
-      sdkEntryPoint,
-      codexPathOverride,
-      env: preflightEnv,
-    });
-    if (!abortSignal) {
-      await compatibilityCheck;
-      return;
-    }
-    let onAbort: (() => void) | undefined;
-    const abortPromise = new Promise<void>((_, reject) => {
-      onAbort = () => reject(createAbortError('Codex compatibility check aborted'));
-      abortSignal.addEventListener('abort', onAbort, { once: true });
-    });
+    const controller = new AbortController();
+    const signal = abortSignal
+      ? AbortSignal.any([abortSignal, controller.signal])
+      : controller.signal;
+    // Register ownership before the helper can spawn a process, including when
+    // cleanup or caller cancellation happens before this microtask starts.
+    const compatibilityCheck = Promise.resolve().then(() =>
+      checkCodexCliCompatibility({
+        sdkEntryPoint,
+        codexPathOverride,
+        env: preflightEnv,
+        signal,
+      }),
+    );
+    this.compatibilityChecks.set(controller, compatibilityCheck);
     try {
-      await Promise.race([compatibilityCheck, abortPromise]);
+      await compatibilityCheck;
     } finally {
-      if (onAbort) {
-        abortSignal.removeEventListener('abort', onAbort);
-      }
+      this.compatibilityChecks.delete(controller);
     }
   }
 

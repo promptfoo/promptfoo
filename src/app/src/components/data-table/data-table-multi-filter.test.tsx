@@ -10,6 +10,7 @@ import {
 } from '@tanstack/react-table';
 import { renderHook } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
+import { operatorFilterFn } from './data-table-filter';
 
 interface TestRow {
   id: string;
@@ -17,60 +18,6 @@ interface TestRow {
   severity: string;
   description: string;
 }
-
-// Import the filter function from data-table.tsx
-// Since it's not exported, we'll recreate it here
-const operatorFilterFn = (
-  row: { getValue: (columnId: string) => unknown },
-  columnId: string,
-  filterValue: unknown,
-): boolean => {
-  if (!filterValue || typeof filterValue !== 'object') {
-    return true;
-  }
-
-  const { operator, value } = filterValue as { operator: string; value: string | string[] };
-
-  const hasValue = Array.isArray(value) ? value.length > 0 : Boolean(value);
-  if (!hasValue) {
-    return true;
-  }
-
-  const cellValue = row.getValue(columnId);
-  const cellString = String(cellValue ?? '').toLowerCase();
-
-  switch (operator) {
-    case 'contains': {
-      const filterString = String(value).toLowerCase();
-      return cellString.includes(filterString);
-    }
-    case 'equals': {
-      const filterString = String(value).toLowerCase();
-      return cellString === filterString;
-    }
-    case 'startsWith': {
-      const filterString = String(value).toLowerCase();
-      return cellString.startsWith(filterString);
-    }
-    case 'endsWith': {
-      const filterString = String(value).toLowerCase();
-      return cellString.endsWith(filterString);
-    }
-    case 'notEquals': {
-      const filterString = String(value).toLowerCase();
-      return cellString !== filterString;
-    }
-    case 'isAny': {
-      if (!Array.isArray(value)) {
-        return false;
-      }
-      const filterValues = value.map((v) => String(v).toLowerCase());
-      return filterValues.includes(cellString);
-    }
-    default:
-      return cellString.includes(String(value).toLowerCase());
-  }
-};
 
 describe('DataTable - Multiple Filters Logic', () => {
   const testData: TestRow[] = [
