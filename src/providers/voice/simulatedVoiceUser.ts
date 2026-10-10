@@ -1,6 +1,6 @@
 import { getNunjucksEngine } from '../../util/templates';
 import { OpenAiLiveProvider } from '../openai/live';
-import { LIVE_FRAME_MS, LiveSession } from '../openai/liveSession';
+import { LIVE_FRAME_MS, LiveSession, MAX_LIVE_APPEND_BYTES } from '../openai/liveSession';
 import { providerRegistry } from '../providerRegistry';
 import { PcmAudioPlayout } from './audioPlayout';
 import { VoiceInterventionPlayback } from './interventionPlayback';
@@ -263,12 +263,14 @@ export class SimulatedVoiceUser implements ApiProvider {
       if (
         scheduled.some((intervention) =>
           [intervention.text, intervention.instructions].some(
-            (value) => value !== undefined && (!value.trim() || Buffer.byteLength(value) > 2000),
+            (value) =>
+              value !== undefined &&
+              (!value.trim() || Buffer.byteLength(value) > MAX_LIVE_APPEND_BYTES),
           ),
         )
       ) {
         throw new Error(
-          'Rendered caller intervention text and instructions must contain 1–2000 UTF-8 bytes.',
+          `Rendered caller intervention text and instructions must contain 1–${MAX_LIVE_APPEND_BYTES} UTF-8 bytes. This conservative local append budget is not an exact token count.`,
         );
       }
       let nextIntervention = 0;

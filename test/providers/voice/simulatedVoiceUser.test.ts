@@ -348,6 +348,110 @@ describe('SimulatedVoiceUser', () => {
     },
   );
 
+  it.each(
+    (['text', 'instructions'] as const).flatMap((field) =>
+      [
+        { kind: 'dense ASCII', template: Array(600).fill('!').join(' '), vars: { utterance: '' } },
+        { kind: 'UTF-8', template: 'é'.repeat(251), vars: { utterance: '' } },
+        {
+          kind: 'expanded template',
+          template: '{{utterance}}',
+          vars: { utterance: 'x'.repeat(501) },
+        },
+      ].map((testCase) => ({ field, ...testCase })),
+    ),
+  )(
+    'rejects oversized rendered $field ($kind) before preparation or connection',
+    async ({ field, template, vars }) => {
+      loadCallback.mockResolvedValue(async () => 'Unused backend result');
+      const response = await provider({
+        target: { ...participant('target-key'), delegationHandler: 'file://unused.js' },
+        callerInterventions: [
+          { atMs: 10, text: 'A valid earlier intervention.' },
+          { atMs: 200, [field]: template },
+        ],
+      }).callApi('Cafe', { prompt: { raw: 'Cafe', label: 'Cafe' }, vars });
+      expect(response.error).toContain(
+        'Rendered caller intervention text and instructions must contain 1–500 UTF-8 bytes',
+      );
+      expect(OpenAiTtsProvider.prototype.callApi).not.toHaveBeenCalled();
+      expect(loadCallback).not.toHaveBeenCalled();
+      expect(sockets).toHaveLength(0);
+      expect(vi.getTimerCount()).toBe(0);
+    },
+  );
+
+  it.each(['text', 'instructions'] as const)(
+    'accepts a 2000-byte raw %s template that renders within the streaming budget',
+    async (field) => {
+      const rendered = 'Decaf please.';
+      const template = `{#${'x'.repeat(1983)}#}${rendered}`;
+      vi.mocked(OpenAiTtsProvider.prototype.callApi).mockResolvedValue({
+        audio: { data: convertPcm16ToWav(Buffer.alloc(960, 10)).toString('base64'), format: 'wav' },
+      });
+      const result = provider({
+        callerInterventions: [{ atMs: 20, [field]: template }],
+      }).callApi('Cafe');
+      const [target, caller] = await connect();
+      acknowledgeOpening();
+      audio(target, 100);
+      audio(caller, 200);
+      transcript(target, rendered, 20, 'input');
+      transcript(caller, 'Of course.', 40, 'input');
+      await vi.advanceTimersByTimeAsync(20);
+      const type = field === 'text' ? 'session.thinking.append' : 'session.instructions.append';
+      expect(caller.sent.filter((event) => event.type === type).at(-1)?.content).toBe(rendered);
+      if (field === 'text') {
+        expect(OpenAiTtsProvider.prototype.callApi).toHaveBeenCalledWith(
+          rendered,
+          expect.anything(),
+          expect.anything(),
+        );
+        for (const event of caller.sent.filter((event) => event.type === type)) {
+          emit(caller, { type: 'session.thinking.appended', client_event_id: event.event_id });
+        }
+      } else {
+        expect(OpenAiTtsProvider.prototype.callApi).not.toHaveBeenCalled();
+        acknowledgeSpeech(caller);
+      }
+      await vi.advanceTimersByTimeAsync(980);
+      finalize();
+      expect((await result).error).toBeUndefined();
+      expect(vi.getTimerCount()).toBe(0);
+    },
+  );
+
+  it('accepts 500-byte rendered text and instructions independently', async () => {
+    const text = '🙂'.repeat(125);
+    const instructions = 'é'.repeat(250);
+    vi.mocked(OpenAiTtsProvider.prototype.callApi).mockResolvedValue({
+      audio: { data: convertPcm16ToWav(Buffer.alloc(960, 10)).toString('base64'), format: 'wav' },
+    });
+    const result = provider({
+      callerInterventions: [{ atMs: 20, text: '{{utterance}}', instructions: '{{steering}}' }],
+    }).callApi('Cafe', {
+      prompt: { raw: 'Cafe', label: 'Cafe' },
+      vars: { utterance: text, steering: instructions },
+    });
+    const [target, caller] = await connect();
+    acknowledgeOpening();
+    audio(target, 100);
+    audio(caller, 200);
+    transcript(target, 'A question', 20, 'input');
+    transcript(caller, 'An answer', 40, 'input');
+    await vi.advanceTimersByTimeAsync(20);
+    const contexts = caller.sent.filter((event) => event.type === 'session.thinking.append');
+    expect(contexts.slice(1).map((event) => event.content)).toEqual([text, instructions]);
+    expect(vi.mocked(OpenAiTtsProvider.prototype.callApi).mock.calls[0][0]).toBe(text);
+    for (const event of contexts) {
+      emit(caller, { type: 'session.thinking.appended', client_event_id: event.event_id });
+    }
+    await vi.advanceTimersByTimeAsync(980);
+    finalize();
+    expect((await result).error).toBeUndefined();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it('does not send scheduled interventions after cancellation', async () => {
     const controller = new AbortController();
     const result = provider({

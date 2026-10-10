@@ -78,6 +78,12 @@ interface SessionOptions {
 
 export const LIVE_FRAME_MS = 20;
 
+/**
+ * Conservative local budget for Live's 500-token append limit. UTF-8 bytes are
+ * deliberately not an exact token count; no GPT-Live tokenizer is assumed.
+ */
+export const MAX_LIVE_APPEND_BYTES = 500;
+
 const OPENING_INSTRUCTION_ID = 'promptfoo_start';
 const OPENING_COMMENTARY_ID = 'promptfoo_opening';
 const MAX_API_ERRORS = 20;
@@ -89,7 +95,6 @@ const MAX_PROTOCOL_ID_BYTES = 256;
 const MAX_FUNCTION_CALL_BYTES = 1024 * 1024;
 const MAX_FUNCTION_RESULT_BYTES = 1024 * 1024;
 const MAX_COMMENTARY_BYTES = 64 * 1024;
-const MAX_STREAM_CONTEXT_BYTES = 2000;
 const MAX_PENDING_SNAPSHOT_TEXT_BYTES = 8 * 1024 * 1024;
 const MAX_PENDING_SNAPSHOT_ENTRIES = 50_000;
 const MAX_HANDSHAKE_BODY_BYTES = 8 * 1024;
@@ -338,8 +343,10 @@ export class LiveSession {
     ) {
       throw new Error('GPT-Live session is not ready to request speech.');
     }
-    if (!instructions.trim() || Buffer.byteLength(instructions) > MAX_COMMENTARY_BYTES) {
-      throw new Error('GPT-Live speech instructions must be nonempty and at most 64 KiB.');
+    if (!instructions.trim() || Buffer.byteLength(instructions) > MAX_LIVE_APPEND_BYTES) {
+      throw new Error(
+        `GPT-Live speech instructions must be nonempty and at most ${MAX_LIVE_APPEND_BYTES} UTF-8 bytes.`,
+      );
     }
     const id = this.registerCommand('session.instructions.append');
     const timer = this.later(
@@ -373,8 +380,10 @@ export class LiveSession {
     ) {
       throw new Error('GPT-Live session is not ready to accept context.');
     }
-    if (!content.trim() || Buffer.byteLength(content) > MAX_STREAM_CONTEXT_BYTES) {
-      throw new Error('GPT-Live streamed context must be nonempty and at most 2000 UTF-8 bytes.');
+    if (!content.trim() || Buffer.byteLength(content) > MAX_LIVE_APPEND_BYTES) {
+      throw new Error(
+        `GPT-Live streamed context must be nonempty and at most ${MAX_LIVE_APPEND_BYTES} UTF-8 bytes.`,
+      );
     }
     const id = this.registerCommand('session.thinking.append');
     this.contextRequests.set(

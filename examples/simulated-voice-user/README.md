@@ -35,6 +35,8 @@ npx promptfoo@latest eval -c promptfooconfig.interruption.yaml --no-cache -o int
 
 This scenario adds one paid speech synthesis request before opening the voice sessions. It schedules the exact question `Sorry, when does decaf end on Saturday?` at media time 9 seconds using `callerInterventions.text`. Exact speech is prepared before the conversation and delivered on the shared media clock. An `instructions` intervention instead asks the live model to decide what to say; its dispatch time cannot establish when speech begins.
 
+Each rendered intervention `text` and `instructions` value must contain 1–500 UTF-8 bytes. This is a deliberately conservative local budget for GPT-Live's [500-token append limit](https://developers.openai.com/api/docs/guides/live-conversations#add-context-during-the-conversation), not an exact token count; some text the API could accept will exceed this local budget. Authored templates may contain up to 2000 UTF-8 bytes, but rendered values are checked before speech synthesis or Live session preparation.
+
 The `intervention_timing` assertion requires complete clip delivery, a first media frame within 20 ms of the scheduled offset, and actual dispatch within the explicitly configured 50 ms benchmark. This is an example acceptance threshold, not a protocol latency guarantee. The rubric separately checks that the caller heard the answer. Inspect intervention timing and the stereo recording separately to establish whether the scheduled question actually overlapped target speech and whether the target stopped its menu list.
 
 ## Calibrate the text graders without voice calls

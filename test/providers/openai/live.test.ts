@@ -3519,14 +3519,60 @@ describe('OpenAiLiveProvider', () => {
       );
     });
 
-    it('rejects empty or oversized context locally without sending or opening pending work', async () => {
+    it.each([
+      ['requestSpeech', 'speech instructions'],
+      ['appendContext', 'streamed context'],
+    ] as const)(
+      'rejects invalid %s content before sending or registering pending work',
+      async (method, label) => {
+        const { session, socket, result } = await prepareContextSession();
+        const timerCount = vi.getTimerCount();
+        const denseAscii = Array(600).fill('!').join(' ');
+        for (const content of [denseAscii, 'x'.repeat(501), 'é'.repeat(251), '', '  ']) {
+          expect(() => session[method](content)).toThrow(
+            `GPT-Live ${label} must be nonempty and at most 500 UTF-8 bytes.`,
+          );
+          expect(sentTypes(socket)).toEqual(['session.start']);
+          expect(vi.getTimerCount()).toBe(timerCount);
+        }
+        const id = session.appendContext('Still ready after invalid appends.');
+        expect(id).toBe('promptfoo_1');
+        emit(socket, { type: 'session.thinking.appended', client_event_id: id });
+        session.close();
+        closed(socket, 1);
+        expect((await result).error).toBeUndefined();
+        expect(vi.getTimerCount()).toBe(0);
+      },
+    );
+
+    it.each(
+      (['requestSpeech', 'appendContext'] as const).flatMap((method) =>
+        [
+          { encoding: 'ASCII', content: 'x'.repeat(500) },
+          { encoding: 'two-byte characters', content: 'é'.repeat(250) },
+          { encoding: 'four-byte characters', content: '🙂'.repeat(125) },
+        ].map((testCase) => ({
+          method,
+          ...testCase,
+        })),
+      ),
+    )('accepts exactly 500 UTF-8 bytes in $method ($encoding)', async ({ method, content }) => {
       const { session, socket, result } = await prepareContextSession();
-      for (const content of ['', '  ', 'é'.repeat(1001)]) {
-        expect(() => session.appendContext(content)).toThrow(
-          'GPT-Live streamed context must be nonempty and at most 2000 UTF-8 bytes.',
-        );
+      const id = session[method](content);
+      const command = method === 'requestSpeech' ? 'instructions' : 'thinking';
+      expect(socket.sent.at(-1)).toEqual({
+        type: `session.${command}.append`,
+        event_id: id,
+        delegation_id: null,
+        content,
+      });
+      emit(socket, { type: `session.${command}.appended`, client_event_id: id });
+      if (method === 'requestSpeech') {
+        emit(socket, {
+          type: 'session.commentary.appended',
+          client_event_id: socket.sent.at(-1).event_id,
+        });
       }
-      expect(sentTypes(socket)).toEqual(['session.start']);
       session.close();
       closed(socket, 1);
       expect((await result).error).toBeUndefined();
