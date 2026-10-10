@@ -174,17 +174,10 @@ describe('checkForUpdates', () => {
     );
   });
 
-  it('should log an update message if a newer version is available - minor ver', async () => {
-    vi.mocked(fetchWithTimeout).mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ latestVersion: '1.1.0' }),
-    } as never);
-
-    const result = await checkForUpdates();
-    expect(result).toBeTruthy();
-  });
-
-  it('should log an update message if a newer version is available - major ver', async () => {
+  it.each([
+    'should log an update message if a newer version is available - minor ver',
+    'should log an update message if a newer version is available - major ver',
+  ])('%s', async () => {
     vi.mocked(fetchWithTimeout).mockResolvedValueOnce({
       ok: true,
       json: async () => ({ latestVersion: '1.1.0' }),
