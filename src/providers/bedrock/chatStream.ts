@@ -121,6 +121,12 @@ export function collectBedrockChatStream(body: string): Record<string, any> {
     if (!done || !choices.size || [...choices.values()].some((choice) => !choice.finish_reason)) {
       throw new Error('Bedrock chat stream ended before a complete response');
     }
+    for (const choice of choices.values()) {
+      const toolCalls = choice.message.tool_calls;
+      if (toolCalls && Object.keys(toolCalls).length !== toolCalls.length) {
+        throw new Error('Bedrock chat stream contains non-contiguous tool indexes');
+      }
+    }
   } catch (error) {
     throw new BedrockChatStreamError(error, result);
   }

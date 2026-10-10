@@ -453,6 +453,8 @@ describe('Runtime Chat streaming', () => {
     'missing-done',
     'missing-finish',
     'invalid-tool',
+    'sparse-tool',
+    'large-tool',
     'invalid-json',
     'service-error',
     'no-usage',
@@ -485,11 +487,29 @@ describe('Runtime Chat streaming', () => {
       }
       if (failure === 'invalid-tool') {
         chunks.push({ choices: [{ index: 0, delta: { tool_calls: [{ index: -1 }] } }] });
+      } else if (failure === 'sparse-tool' || failure === 'large-tool') {
+        chunks.push({
+          choices: [
+            {
+              index: 0,
+              delta: {
+                tool_calls: [
+                  {
+                    index: failure === 'sparse-tool' ? 2 : 10000,
+                    id: 'call-2',
+                    type: 'function',
+                    function: { name: 'lookup', arguments: '{}' },
+                  },
+                ],
+              },
+            },
+          ],
+        });
       } else if (failure === 'service-error') {
         chunks.push({ error: { message: 'Service failed' } });
       }
       const data =
-        sse(chunks, failure === 'missing-finish') +
+        sse(chunks, ['missing-finish', 'sparse-tool', 'large-tool'].includes(failure)) +
         (failure === 'invalid-json' ? 'data: {broken}\n\n' : '');
       const published = vi.fn();
       vi.mocked(fetchWithCache).mockImplementation(async (...args) => {
@@ -510,6 +530,7 @@ describe('Runtime Chat streaming', () => {
       for (let attempt = 0; attempt < 2; attempt++) {
         const result = await provider.callApi('hello');
         expect(result.error).toBeTruthy();
+        expect(result.error!.length).toBeLessThan(500);
         expect(result.output).toBeUndefined();
         expect(result.cached).not.toBe(true);
         if (failure === 'no-usage') {
@@ -530,6 +551,43 @@ describe('Runtime Chat streaming', () => {
       expect(published).not.toHaveBeenCalled();
     },
   );
+
+  it.each([
+    [0, 1],
+    [1, 0],
+  ])('accepts contiguous tool indexes received as %j', async (...indexes) => {
+    const callback = vi.fn(async (args) => JSON.parse(args).index);
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: sse([
+        {
+          choices: [
+            {
+              index: 0,
+              delta: {
+                tool_calls: indexes.map((index) => ({
+                  index,
+                  id: 'call-' + index,
+                  type: 'function',
+                  function: { name: 'lookup', arguments: JSON.stringify({ index }) },
+                })),
+              },
+              finish_reason: 'tool_calls',
+            },
+          ],
+        },
+      ]),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    });
+    const provider = new BedrockRuntimeChatProvider('us.xai.grok-4.6', {
+      config: { apiKey: 'fixture', stream: true, functionToolCallbacks: { lookup: callback } },
+    });
+    const result = await provider.callApi('hello');
+    expect(result.error).toBeUndefined();
+    expect(callback).toHaveBeenCalledTimes(2);
+    expect(callback.mock.calls.map(([args]) => JSON.parse(args).index)).toEqual([0, 1]);
+  });
 
   it('joins fragmented client tool arguments', async () => {
     vi.mocked(fetchWithCache).mockResolvedValue({
