@@ -1249,6 +1249,12 @@ export class LiveSession {
     this.clearStartupTimer();
     if (this.speechRequests.size > 0) {
       this.setError('GPT-Live capture ended before speech requests were acknowledged.');
+      // The close deadline now owns finalization. Preserve pending commands, but do not
+      // let their earlier ACK deadlines terminate the socket before final usage arrives.
+      for (const timer of this.speechRequests.values()) {
+        clearTimeout(timer);
+        this.timers.delete(timer);
+      }
     }
     if (this.hasPendingWork()) {
       this.setError(PENDING_WORK_ERROR);

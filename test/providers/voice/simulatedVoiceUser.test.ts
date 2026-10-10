@@ -626,6 +626,48 @@ describe('SimulatedVoiceUser', () => {
   );
 
   it.each(['instruction', 'commentary'])(
+    'waits for final usage when a pending speech %s deadline falls inside the close window',
+    async (phase) => {
+      const result = provider({
+        callerInterventions: [{ atMs: 850, instructions: 'Ask a follow-up.' }],
+      }).callApi('Cafe');
+      const [target, caller] = await connect();
+      acknowledgeOpening();
+      audio(target, 100);
+      audio(caller, 200);
+      transcript(target, 'Question', 0, 'input');
+      transcript(caller, 'Answer', 20, 'input');
+      await vi.advanceTimersByTimeAsync(850);
+      if (phase === 'commentary') {
+        const requests = caller.sent.filter(
+          (event) => event.type === 'session.instructions.append',
+        );
+        emit(caller, {
+          type: 'session.instructions.appended',
+          client_event_id: requests[requests.length - 1].event_id,
+        });
+      }
+      await vi.advanceTimersByTimeAsync(150);
+      expect(sockets.every((socket) => socket.sent.at(-1)?.type === 'session.close')).toBe(true);
+      // The speech ACK deadline was 1050ms; final usage is allowed until 1100ms.
+      await vi.advanceTimersByTimeAsync(90);
+      expect(caller.terminate).not.toHaveBeenCalled();
+      finalize();
+      const response = await result;
+      expect(response.error).toBe(
+        'GPT-Live capture ended before speech requests were acknowledged.',
+      );
+      expect(response.metadata?.voice.stopReason).toBe('error');
+      for (const participant of ['target', 'caller']) {
+        expect(response.metadata?.voice.participants[participant].finalUsageConfirmed).toBe(true);
+        expect(response.metadata?.voice.participants[participant].voiceSeconds).toBe(1);
+      }
+      expect(response.metadata?.voice.participants.caller.cancelledSpeechRequests).toBeUndefined();
+      expect(vi.getTimerCount()).toBe(0);
+    },
+  );
+
+  it.each(['instruction', 'commentary'])(
     'rejects a remote hangup with an unacknowledged speech %s',
     async (phase) => {
       const result = provider({
