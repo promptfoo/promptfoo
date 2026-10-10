@@ -141,6 +141,14 @@ export class SsrfGrader extends RedteamGraderBase {
     let detectedSeverity: SsrfSeverity = 'none';
     const grade = result.grade;
 
+    // A grader that never returned a verdict (transport error, empty or unparseable
+    // response) carries no severity. Propagate it verbatim instead of inventing a
+    // `low` finding below, which would report a vulnerability the judge never
+    // identified — the same rule `captureFlaggedTurn` applies to iterative strategies.
+    if (grade.metadata?.graderError === true) {
+      return { grade, rubric: result.rubric };
+    }
+
     // Try to extract severity from reason (the LLM should include it in the JSON response)
     if (grade.reason) {
       const reasonLower = grade.reason.toLowerCase();
