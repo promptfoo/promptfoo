@@ -39,7 +39,11 @@ describe('generation token usage', () => {
 
       try {
         expect(await provider.callApi('Say hello.')).toBe(response);
-        expect(callApi).toHaveBeenCalledExactlyOnceWith('Say hello.', undefined, undefined);
+        expect(callApi).toHaveBeenCalledExactlyOnceWith(
+          'Say hello.',
+          undefined,
+          expect.objectContaining({ onResponseHeaders: expect.any(Function) }),
+        );
         expect(execute).toHaveBeenCalledOnce();
         expect(usage).toMatchObject({ total: 23, prompt: 14, completion: 9, numRequests: 1 });
         expect(usage.cached ?? 0).toBe(cached ? 23 : 0);
