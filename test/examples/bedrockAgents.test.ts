@@ -85,6 +85,10 @@ describe('Bedrock Agents examples', () => {
         'What is my favorite color?',
       ]);
     } else {
+      expect(
+        calls.every((call) => typeof call.sessionId === 'string' && call.sessionId.length > 0),
+      ).toBe(true);
+      expect(new Set(calls.map((call) => call.sessionId)).size).toBe(count);
       expect(calls.map((call) => call.agentId).sort()).toEqual([
         'BILLING_AGENT_ID',
         'BILLING_AGENT_ID',
