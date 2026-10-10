@@ -49,6 +49,8 @@ Most providers need authentication. For OpenAI:
 export OPENAI_API_KEY=sk-abc123
 ```
 
+This sets the key for the current shell session. In a new terminal, export it again or [load it from a `.env` file](/docs/usage/command-line/#multiple-environment-files). Keep API keys and `.env` files out of version control.
+
 Then navigate to the example directory, run the eval, and view results:
 
 <Tabs groupId="promptfoo-command">
@@ -121,7 +123,7 @@ If you prefer a visual interface, run `promptfoo eval setup` to configure your f
 
 This opens a browser-based setup flow that walks you through creating prompts, choosing providers, and adding test cases.
 
-<div style={{ textAlign: 'center' }}>   
+<div style={{ textAlign: 'center' }}>
   <img src="/img/docs/eval-setup.png" alt="Promptfoo eval setup Web UI" style={{ width: '80%' }} />
 </div>
 
