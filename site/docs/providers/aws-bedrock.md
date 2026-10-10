@@ -2070,7 +2070,9 @@ without generation, use `bedrock:kb` with `operation: retrieve` and `knowledgeBa
 No generation model is required. `retrievalConfiguration`, `guardrailConfiguration`,
 `userContext`, and `nextToken` are supported. The output is a JSON array of retrieval
 results; `metadata.nextToken` exposes the next page when present. Pagination is
-explicit, so one eval call retrieves one page.
+explicit, so one eval call retrieves one page. Managed Knowledge Bases support
+`managedSearchConfiguration` with `operation: retrieve`; AWS does not support managed
+Knowledge Bases with either generation API, including streaming.
 
 To query supplied documents instead of a Knowledge Base, provide the complete
 `retrieveAndGenerateConfiguration` with `type: EXTERNAL_SOURCES`. This native object
