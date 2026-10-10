@@ -22,7 +22,8 @@ async function ensureNaturalPackage(): Promise<void> {
 
   try {
     // Dynamic import for ESM compatibility
-    const natural = await import('natural');
+    const naturalModule = await import('natural');
+    const natural = 'default' in naturalModule ? naturalModule.default : naturalModule;
     PorterStemmer = natural.PorterStemmer;
     WordNet = natural.WordNet;
   } catch (_err) {
@@ -216,7 +217,7 @@ function tokenize(text: string): string[] {
   return trimmed === '' ? [] : trimmed.split(/\s+/).map((word) => word.replace(/\.+$/, ''));
 }
 
-export async function calculateMeteorScore(
+async function calculateMeteorScore(
   candidate: string,
   references: string[],
   alpha: number = 0.9,
