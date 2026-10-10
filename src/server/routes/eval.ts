@@ -1,12 +1,12 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { HUMAN_ASSERTION_TYPE } from '../../constants';
 import { getUserEmail, setUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import Eval, { EvalQueries } from '../../models/eval';
 import EvalResult from '../../models/evalResult';
 import { evaluateWithSource } from '../../node';
 import { EvalSchemas } from '../../types/api/eval';
+import { countedComponentResults } from '../../types/results';
 import { deleteEval, deleteEvals, updateResult, writeResultsToDatabase } from '../../util/database';
 import {
   ComparisonEvalNotFoundError,
@@ -738,11 +738,8 @@ evalRouter.post(
       }
 
       // Capture the current state before we change it
-      const hasExistingManualOverride = Boolean(
-        result.gradingResult?.componentResults?.some(
-          (r) => r.assertion?.type === HUMAN_ASSERTION_TYPE,
-        ),
-      );
+      const oldCountedResults = countedComponentResults(result.gradingResult?.componentResults);
+      const newCountedResults = countedComponentResults(gradingResult.componentResults);
       const successChanged = result.success !== gradingResult.pass;
       const scoreChange = gradingResult.score - result.score;
 
@@ -768,30 +765,18 @@ evalRouter.post(
           // Result changed from fail to pass
           prompt.metrics.testPassCount += 1;
           prompt.metrics.testFailCount -= 1;
-          prompt.metrics.assertPassCount += 1;
-          prompt.metrics.score += scoreChange;
-          if (hasExistingManualOverride) {
-            // If there was an existing manual override, we need to decrement the assertFailCount because it changed from fail to pass
-            prompt.metrics.assertFailCount -= 1;
-          }
         } else {
           prompt.metrics.testPassCount -= 1;
           prompt.metrics.testFailCount += 1;
-          prompt.metrics.assertFailCount += 1;
-          prompt.metrics.score += scoreChange;
-          if (hasExistingManualOverride) {
-            // If there was an existing manual override, we need to decrement the assertPassCount because it changed from pass to fail
-            prompt.metrics.assertPassCount -= 1;
-          }
-        }
-      } else if (!hasExistingManualOverride) {
-        // Nothing changed, so the user just added an assertion
-        if (result.success) {
-          prompt.metrics.assertPassCount += 1;
-        } else {
-          prompt.metrics.assertFailCount += 1;
         }
       }
+      prompt.metrics.score += scoreChange;
+      prompt.metrics.assertPassCount +=
+        newCountedResults.filter((r) => r.pass).length -
+        oldCountedResults.filter((r) => r.pass).length;
+      prompt.metrics.assertFailCount +=
+        newCountedResults.filter((r) => !r.pass).length -
+        oldCountedResults.filter((r) => !r.pass).length;
 
       await result.save();
       await eval_.save();

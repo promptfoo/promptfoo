@@ -16,7 +16,7 @@ import { calculateFilteredMetrics } from '../../src/util/calculateFilteredMetric
 import { createEvaluateResult } from '../factories/eval';
 import EvalFactory from '../factories/evalFactory';
 
-import type { TokenUsage } from '../../src/types/index';
+import type { Assertion, GradingResult, TokenUsage } from '../../src/types/index';
 
 describe('calculateFilteredMetrics', () => {
   beforeAll(async () => {
@@ -30,6 +30,52 @@ describe('calculateFilteredMetrics', () => {
   });
 
   describe('basic metrics aggregation', () => {
+    it.each(['assertion', 'metadata'] as const)(
+      'excludes only JSON boolean true in stored %s markers',
+      async (marker) => {
+        const eval_ = await EvalFactory.create({ numResults: 0 });
+        const components = [
+          undefined,
+          null,
+          false,
+          0,
+          1,
+          'false',
+          'true',
+          '1',
+          [],
+          {},
+          true,
+        ].flatMap((metricOnly) =>
+          [true, false].map(
+            (pass) =>
+              ({
+                pass,
+                score: pass ? 1 : 0,
+                reason: 'Legacy stored result',
+                [marker]: { metricOnly },
+              }) as unknown as GradingResult,
+          ),
+        );
+        await eval_.addResult(
+          createEvaluateResult({
+            gradingResult: {
+              pass: false,
+              score: 0.5,
+              reason: 'Legacy aggregate',
+              componentResults: components,
+            },
+          }),
+        );
+        const metrics = await calculateFilteredMetrics({
+          evalId: eval_.id,
+          numPrompts: 1,
+          whereSql: sql`eval_id = ${eval_.id}`,
+        });
+        expect(metrics[0]).toMatchObject({ assertPassCount: 10, assertFailCount: 10 });
+      },
+    );
+
     it('should aggregate basic metrics for all results', async () => {
       const eval_ = await EvalFactory.create({
         numResults: 10,
@@ -684,6 +730,89 @@ describe('calculateFilteredMetrics', () => {
       });
 
       expect(metrics[0].assertPassCount).toBe(0);
+      expect(metrics[0].assertFailCount).toBe(0);
+    });
+
+    it('should exclude metricOnly assertions from assertion counts', async () => {
+      const eval_ = await EvalFactory.create({
+        numResults: 0,
+      });
+
+      await eval_.addResult({
+        promptIdx: 0,
+        testIdx: 0,
+        testCase: { vars: {} },
+        promptId: 'test',
+        provider: { id: 'test', label: 'test' },
+        prompt: { raw: 'test', label: 'test' },
+        vars: {},
+        response: {
+          output: 'test',
+          tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
+        },
+        error: null,
+        failureReason: ResultFailureReason.NONE,
+        success: true,
+        score: 1,
+        latencyMs: 100,
+        namedScores: { tp: 1, fp: 0 },
+        cost: 0.001,
+        metadata: {},
+        gradingResult: {
+          pass: true,
+          score: 1,
+          reason: 'All assertions passed',
+          componentResults: [
+            {
+              pass: true,
+              score: 1,
+              reason: 'ok',
+              assertion: { type: 'contains', value: 'test' },
+            },
+            {
+              pass: true,
+              score: 1,
+              reason: 'counter',
+              assertion: { type: 'javascript', metric: 'tp', metricOnly: true },
+            },
+            {
+              pass: false,
+              score: 0,
+              reason: 'counter',
+              assertion: { type: 'javascript', metric: 'fp', metricOnly: true },
+            },
+            {
+              // Legacy stored set marker remains excluded after migration.
+              pass: false,
+              score: 0,
+              reason: 'Aggregate score 0.00 < 0.5 threshold',
+              assertion: { type: 'assert-set', metricOnly: true } as unknown as Assertion,
+            },
+            {
+              pass: false,
+              score: 0,
+              reason: 'Metric-only set aggregate',
+              metadata: { metricOnly: true },
+            },
+            {
+              pass: true,
+              score: 0,
+              reason: 'Metric-only grader result',
+              metadata: { metricOnly: true },
+            },
+          ],
+        },
+      });
+
+      const metrics = await calculateFilteredMetrics({
+        evalId: eval_.id,
+        numPrompts: 1,
+        whereSql: sql`eval_id = ${eval_.id}`,
+      });
+
+      // Metric-only assertions don't participate in pass/fail, so filtered
+      // metrics must not count their outcomes.
+      expect(metrics[0].assertPassCount).toBe(1);
       expect(metrics[0].assertFailCount).toBe(0);
     });
   });

@@ -515,6 +515,94 @@ describe('App component target selector rendering', () => {
 });
 
 describe('App component categoryStats calculation with moderation', () => {
+  const metricOnlyModerationFailures = [
+    { marker: 'assertion', assertion: { type: 'moderation', metricOnly: true } },
+    { marker: 'metadata', assertion: { type: 'moderation' }, metadata: { metricOnly: true } },
+  ] satisfies {
+    marker: string;
+    assertion: GradingResult['assertion'];
+    metadata?: GradingResult['metadata'];
+  }[];
+
+  const countedFailure: GradingResult = {
+    pass: false,
+    score: 0,
+    reason: 'Counted assertion failed',
+    assertion: { type: 'equals' },
+  };
+  const countedModerationFailure: GradingResult = {
+    ...countedFailure,
+    assertion: { type: 'moderation' },
+  };
+
+  async function renderModerationStats(componentResults: GradingResult[], pass = false) {
+    mockCallApiResponse({
+      data: createComponentMockEvalData(1, [
+        createComponentMockResult(0, 'testPlugin', pass, componentResults),
+      ]),
+    });
+    renderWithProviders(<App />);
+    const stats = await screen.findByTestId('overview-category-stats');
+    return JSON.parse(stats.textContent!).testPlugin;
+  }
+
+  it.each(metricOnlyModerationFailures)(
+    'excludes $marker metric-only moderation when a counted assertion fails',
+    async ({ marker: _marker, ...flag }) => {
+      const metricOnlyFailure: GradingResult = { ...countedModerationFailure, ...flag };
+      expect(await renderModerationStats([metricOnlyFailure, countedFailure])).toEqual({
+        pass: 0,
+        total: 1,
+        passWithFilter: 0,
+        failCount: 1,
+      });
+    },
+  );
+
+  it.each(metricOnlyModerationFailures)(
+    'preserves passing rows with $marker metric-only moderation failures',
+    async ({ marker: _marker, ...flag }) => {
+      const metricOnlyFailure: GradingResult = { ...countedModerationFailure, ...flag };
+      const countedPass = { ...countedFailure, pass: true, score: 1 };
+      expect(await renderModerationStats([metricOnlyFailure, countedPass], true)).toEqual({
+        pass: 1,
+        total: 1,
+        passWithFilter: 1,
+        failCount: 0,
+      });
+    },
+  );
+
+  it.each(metricOnlyModerationFailures)(
+    'retains counted moderation failures alongside a $marker metric-only result',
+    async ({ marker: _marker, ...flag }) => {
+      const metricOnlyFailure: GradingResult = { ...countedModerationFailure, ...flag };
+      expect(await renderModerationStats([metricOnlyFailure, countedModerationFailure])).toEqual({
+        pass: 0,
+        total: 1,
+        passWithFilter: 1,
+        failCount: 1,
+      });
+    },
+  );
+
+  it.each(['assertion', 'metadata'] as const)(
+    'keeps an explicit false %s metricOnly flag counted',
+    async (marker) => {
+      const countedResult: GradingResult = {
+        ...countedModerationFailure,
+        assertion: { type: 'moderation', ...(marker === 'assertion' && { metricOnly: false }) },
+        ...(marker === 'metadata' && { metadata: { metricOnly: false } }),
+      };
+      expect(await renderModerationStats([countedResult])).toEqual({
+        pass: 0,
+        total: 1,
+        passWithFilter: 1,
+        failCount: 1,
+      });
+    },
+  );
+
   it('should correctly increment passWithFilter but not pass when moderation tests fail but other tests pass', async () => {
     const pluginId = 'testPlugin';
     const moderationFailure: GradingResult = {

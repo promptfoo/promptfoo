@@ -97,6 +97,7 @@ describe('index.ts exports', () => {
     'assertions',
     'buildInputPromptDescription',
     'cache',
+    'countedComponentResults',
     'evaluate',
     'generateTable',
     'getInputDescription',
@@ -275,6 +276,39 @@ describe('evaluate function', () => {
         eventSource: 'library',
       }),
     );
+  });
+
+  it('rejects metricOnly on comparison assertions for library callers', async () => {
+    // The library path bypasses config-file loading, so createRuntimeTestSuite
+    // must enforce the same assertion contract as resolveConfigs.
+    await expect(
+      index.evaluate({
+        prompts: ['test prompt'],
+        providers: [],
+        tests: [{ assert: [{ type: 'max-score', metricOnly: true }] }],
+      }),
+    ).rejects.toThrow(/'metricOnly' is not supported on max-score/);
+  });
+
+  it.each([
+    ['config', 'max-score'],
+    ['config', 'select-best'],
+    ['tests', 'max-score'],
+    ['tests', 'select-best'],
+  ] as const)('rejects metricOnly on scenario %s %s assertions', async (location, type) => {
+    await expect(
+      index.evaluate({
+        prompts: ['test prompt'],
+        providers: [],
+        scenarios: [
+          {
+            config: location === 'config' ? [{ assert: [{ type, metricOnly: true }] }] : [{}],
+            tests: location === 'tests' ? [{ assert: [{ type, metricOnly: true }] }] : [{}],
+          },
+        ],
+      }),
+    ).rejects.toThrow(`'metricOnly' is not supported on ${type}`);
+    expect(doEvaluate).not.toHaveBeenCalled();
   });
 
   it('should pin package callers to library semantics', async () => {

@@ -1297,6 +1297,7 @@ async function resolveLoadedConfig(
   validateAssertions(
     testSuite.tests || [],
     typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest : undefined,
+    testSuite.scenarios,
   );
 
   // Validate provider references in tests and scenarios

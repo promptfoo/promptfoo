@@ -9,8 +9,9 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as ProviderDisplayModule from './ProviderDisplay';
-import ResultsTable from './ResultsTable';
+import ResultsTable, { getManualRatingUpdate } from './ResultsTable';
 import { useResultsViewSettingsStore, useTableStore } from './store';
+import type { EvaluateTableOutput, GradingResult } from '@promptfoo/types';
 
 function mockHeaderTable(mockTable: ReturnType<typeof createTableStore>['table']) {
   vi.mocked(useResultsViewSettingsStore).mockImplementation(() => createViewSettings());
@@ -1586,6 +1587,379 @@ describe('ResultsTable Row Navigation', () => {
         (target) => typeof target === 'object' && target?.search === '',
       );
       expect(cleared).toBe(true);
+    });
+  });
+});
+
+describe('getManualRatingUpdate - clearing a rating on all-metricOnly rows', () => {
+  const buildOutput = (threshold?: number) =>
+    ({
+      id: 'test-output-1',
+      pass: false,
+      score: 0.4,
+      text: 'test output',
+      latencyMs: 100,
+      cost: 0.01,
+      failureReason: 0,
+      namedScores: { tp: 1 },
+      testCase: {
+        threshold,
+        assert: [{ type: 'javascript', metric: 'tp', metricOnly: true }],
+      },
+      gradingResult: {
+        // The manual override being cleared.
+        pass: false,
+        score: 0.4,
+        reason: 'Manual result (overrides all other grading results)',
+        componentResults: [
+          {
+            pass: true,
+            score: 1,
+            reason: 'counter',
+            assertion: { type: 'javascript', metric: 'tp', metricOnly: true },
+          },
+          {
+            pass: false,
+            score: 0.4,
+            reason: 'Manual result (overrides all other grading results)',
+            assertion: { type: 'human' },
+          },
+        ],
+      },
+    }) as any;
+
+  it('fails a thresholded all-metricOnly row when the rating is cleared (score 0 < threshold)', () => {
+    const update = getManualRatingUpdate({
+      existingOutput: buildOutput(0.5),
+      isPass: null,
+    });
+
+    // Mirrors the server-side aggregate for an all-metricOnly test: score 0,
+    // which fails a positive threshold on a re-run.
+    expect(update.score).toBe(0);
+    expect(update.pass).toBe(false);
+  });
+
+  it('passes an all-metricOnly row without a threshold when the rating is cleared', () => {
+    const update = getManualRatingUpdate({
+      existingOutput: buildOutput(),
+      isPass: null,
+    });
+
+    expect(update.score).toBe(0);
+    expect(update.pass).toBe(true);
+  });
+
+  it('honors a threshold of 0 when the rating is cleared (0 >= 0 passes)', () => {
+    const update = getManualRatingUpdate({
+      existingOutput: buildOutput(0),
+      isPass: null,
+    });
+
+    expect(update.score).toBe(0);
+    expect(update.pass).toBe(true);
+  });
+});
+
+describe('getManualRatingUpdate - restoring metric-only aggregates', () => {
+  const createOutput = (
+    pass = false,
+    score = 0.25,
+    threshold?: number,
+    marker: 'assertion' | 'metadata' | 'legacy' = 'assertion',
+  ): EvaluateTableOutput => ({
+    id: 'custom-score-output',
+    prompt: 'Offline prompt',
+    pass,
+    score,
+    text: 'Offline output',
+    latencyMs: 1,
+    cost: 0,
+    failureReason: 0,
+    namedScores: { observed: 1 },
+    testCase: { threshold },
+    gradingResult: {
+      pass,
+      score,
+      reason: 'Custom scoring result',
+      metadata: { retained: { source: 'custom scorer' } },
+      componentResults: [
+        {
+          pass: false,
+          score: 0,
+          reason: 'Observed metric',
+          ...(marker === 'metadata'
+            ? { metadata: { metricOnly: true } }
+            : {
+                assertion: {
+                  type: marker === 'legacy' ? 'assert-set' : 'javascript',
+                  metricOnly: true,
+                },
+              }),
+        } as GradingResult,
+      ],
+    },
+  });
+
+  function serializeVote(output: EvaluateTableOutput, pass: boolean): EvaluateTableOutput {
+    const update = getManualRatingUpdate({ existingOutput: output, isPass: pass });
+    return JSON.parse(
+      JSON.stringify({
+        ...output,
+        pass: update.pass,
+        score: update.score,
+        gradingResult: {
+          ...output.gradingResult,
+          pass: update.pass,
+          score: update.score,
+          reason: 'Manual result (overrides all other grading results)',
+          componentResults: update.componentResults,
+        },
+      }),
+    );
+  }
+
+  it.each([
+    [false, 0.25, undefined, 'assertion'],
+    [true, 0.75, 0.9, 'metadata'],
+    [false, 0.25, undefined, 'legacy'],
+    [true, 0.75, 0.9, 'assertion'],
+    [true, 0, undefined, 'metadata'],
+    [false, 0, 0.5, 'assertion'],
+    [true, 2, undefined, 'metadata'],
+  ] as const)(
+    'restores the original grade after replacement and JSON reload: %s/%s/%s/%s',
+    (pass, score, threshold, marker) => {
+      const original = createOutput(pass, score, threshold, marker);
+      const expected = { pass, score, reason: original.gradingResult?.reason };
+      const first = serializeVote(original, !pass);
+      expect(first.gradingResult?.componentResults?.[1].metadata?.originalGradingResult).toEqual(
+        expected,
+      );
+      const replacement = serializeVote(first, pass);
+      expect(replacement.gradingResult?.componentResults).toHaveLength(2);
+      expect(
+        replacement.gradingResult?.componentResults?.[1].metadata?.originalGradingResult,
+      ).toEqual(expected);
+      expect(replacement.gradingResult?.metadata).toEqual(original.gradingResult?.metadata);
+      expect(replacement.gradingResult?.componentResults?.[0]).toEqual(
+        original.gradingResult?.componentResults?.[0],
+      );
+      const cleared = getManualRatingUpdate({ existingOutput: replacement, isPass: null });
+      expect(cleared).toMatchObject(expected);
+      expect(cleared.componentResults).toEqual(original.gradingResult?.componentResults);
+      const reloaded = {
+        ...original,
+        pass: cleared.pass,
+        score: cleared.score,
+        gradingResult: {
+          ...original.gradingResult!,
+          pass: cleared.pass,
+          score: cleared.score,
+          reason: cleared.reason!,
+          componentResults: cleared.componentResults,
+        },
+      };
+      expect(getManualRatingUpdate({ existingOutput: reloaded, isPass: null })).toMatchObject(
+        expected,
+      );
+    },
+  );
+
+  it('preserves an unrated custom aggregate and an empty original reason', () => {
+    const original = createOutput();
+    original.gradingResult!.reason = '';
+    expect(getManualRatingUpdate({ existingOutput: original, isPass: null })).toMatchObject({
+      pass: false,
+      score: 0.25,
+      reason: '',
+    });
+    const rated = serializeVote(original, true);
+    expect(getManualRatingUpdate({ existingOutput: rated, isPass: null })).toMatchObject({
+      pass: false,
+      score: 0.25,
+      reason: '',
+    });
+  });
+
+  it('retains the original snapshot and other human metadata on replacement', () => {
+    const rated = serializeVote(createOutput(), true);
+    const human = rated.gradingResult!.componentResults![1];
+    human.metadata = { ...human.metadata, reviewer: { id: 'retained' } };
+    const replaced = serializeVote(rated, false);
+    expect(replaced.gradingResult?.componentResults?.[1].metadata).toEqual(human.metadata);
+  });
+
+  it.each([
+    [undefined],
+    [null],
+    [[]],
+    [{ pass: 'false', score: 0.25, reason: 'Invalid' }],
+    [{ pass: false, score: '0.25', reason: 'Invalid' }],
+    [{ pass: false, score: Number.NaN, reason: 'Invalid' }],
+    [{ pass: false, score: Number.POSITIVE_INFINITY, reason: 'Invalid' }],
+    [{ pass: false, score: 0.25, reason: null }],
+  ])('uses the legacy threshold fallback for an invalid snapshot: %j', (snapshot) => {
+    const original = createOutput(true, 0.75, 0.9);
+    const rated = serializeVote(original, false);
+    rated.gradingResult!.componentResults![1].metadata = { originalGradingResult: snapshot };
+    const replacement = serializeVote(rated, true);
+    const restored =
+      replacement.gradingResult?.componentResults?.[1].metadata?.originalGradingResult;
+    expect(restored).not.toEqual({
+      pass: false,
+      score: 0,
+      reason: 'Manual result (overrides all other grading results)',
+    });
+    expect(getManualRatingUpdate({ existingOutput: replacement, isPass: null })).toMatchObject({
+      pass: false,
+      score: 0,
+      reason: 'Aggregate score 0.00 < 0.9 threshold',
+    });
+  });
+
+  it.each(['assertion', 'metadata'] as const)(
+    'restores mixed custom aggregates with a %s metric-only marker',
+    (marker) => {
+      const original = createOutput(false, 0.25, undefined, marker);
+      original.gradingResult!.componentResults!.push({
+        pass: true,
+        score: 1,
+        reason: 'Ordinary assertion',
+        assertion: { type: 'javascript' },
+        metadata: { originalGradingResult: { pass: true, score: 0.1, reason: 'Unrelated' } },
+      });
+      const expected = { pass: false, score: 0.25, reason: 'Custom scoring result' };
+      const first = serializeVote(original, true);
+      expect(first.gradingResult?.componentResults?.[2].metadata?.originalGradingResult).toEqual(
+        expected,
+      );
+      const replaced = serializeVote(first, false);
+      const clear = getManualRatingUpdate({ existingOutput: replaced, isPass: null });
+      expect(clear).toMatchObject(expected);
+      expect(clear.componentResults).toEqual(original.gradingResult?.componentResults);
+      expect(getManualRatingUpdate({ existingOutput: original, isPass: null })).toMatchObject(
+        expected,
+      );
+    },
+  );
+
+  it('ignores snapshots on ordinary-only rows and retains their existing clear calculation', () => {
+    const original = createOutput();
+    original.gradingResult!.componentResults = [
+      {
+        pass: true,
+        score: 0.8,
+        reason: 'Ordinary assertion',
+        assertion: { type: 'javascript' },
+        metadata: { originalGradingResult: { pass: false, score: 0.1, reason: 'Unrelated' } },
+      },
+    ];
+    const rated = serializeVote(original, false);
+    expect(
+      rated.gradingResult?.componentResults?.[1].metadata?.originalGradingResult,
+    ).toBeUndefined();
+    rated.gradingResult!.componentResults![1].metadata = {
+      originalGradingResult: { pass: false, score: 0.1, reason: 'Unrelated' },
+    };
+    expect(getManualRatingUpdate({ existingOutput: rated, isPass: null })).toMatchObject({
+      pass: true,
+      score: 0.8,
+    });
+  });
+
+  it('uses the existing counted-result fallback for a mixed legacy vote with no valid snapshot', () => {
+    const original = createOutput();
+    original.gradingResult!.componentResults!.push({
+      pass: true,
+      score: 0.8,
+      reason: 'Ordinary assertion',
+      assertion: { type: 'javascript' },
+    });
+    const rated = serializeVote(original, false);
+    rated.gradingResult!.componentResults![2].metadata = {
+      originalGradingResult: { pass: false, score: 'invalid', reason: 'Invalid' },
+    };
+    expect(getManualRatingUpdate({ existingOutput: rated, isPass: null })).toMatchObject({
+      pass: true,
+      score: 0.8,
+    });
+  });
+
+  it('does not treat additional human components as automated metric-only evidence', () => {
+    const original = createOutput();
+    original.gradingResult!.componentResults = [
+      {
+        pass: true,
+        score: 0.8,
+        reason: 'Ordinary assertion',
+        assertion: { type: 'javascript' },
+      },
+      {
+        pass: false,
+        score: 0,
+        reason: 'Manual rating',
+        assertion: { type: 'human' },
+        metadata: { originalGradingResult: { pass: false, score: 0.1, reason: 'Unrelated' } },
+      },
+      {
+        pass: true,
+        score: 1,
+        reason: 'Additional manual rating',
+        assertion: { type: 'human' },
+        metadata: { metricOnly: true },
+      },
+    ];
+    expect(getManualRatingUpdate({ existingOutput: original, isPass: null })).toMatchObject({
+      pass: true,
+      score: 0.8,
+    });
+  });
+
+  it('handles legacy null components without using them as metric-only evidence', () => {
+    const original = createOutput();
+    original.gradingResult!.componentResults = [null] as unknown as GradingResult[];
+    const rated = serializeVote(original, true);
+    expect(
+      rated.gradingResult?.componentResults?.[1].metadata?.originalGradingResult,
+    ).toBeUndefined();
+    const mixedNull = createOutput();
+    mixedNull.gradingResult!.componentResults!.unshift(null as unknown as GradingResult);
+    const replaced = serializeVote(serializeVote(mixedNull, true), false);
+    expect(getManualRatingUpdate({ existingOutput: replaced, isPass: null })).toMatchObject({
+      pass: false,
+      score: 0.25,
+      reason: 'Custom scoring result',
+    });
+  });
+
+  it('does not create a snapshot when there are no automated components', () => {
+    const original = createOutput();
+    original.gradingResult!.componentResults = [];
+    const rated = serializeVote(original, true);
+    expect(
+      rated.gradingResult?.componentResults?.[0].metadata?.originalGradingResult,
+    ).toBeUndefined();
+  });
+
+  it('keeps the snapshot through comment and score edits after a vote', () => {
+    const rated = serializeVote(createOutput(), true);
+    const snapshot = rated.gradingResult?.componentResults?.[1].metadata?.originalGradingResult;
+    const edit = getManualRatingUpdate({
+      existingOutput: rated,
+      score: 0.6,
+      comment: 'Reviewed',
+    });
+    expect(edit.modifiedComponentResults).toBe(false);
+    rated.score = edit.score;
+    rated.gradingResult!.score = edit.score;
+    expect(rated.gradingResult?.componentResults?.[1].metadata?.originalGradingResult).toEqual(
+      snapshot,
+    );
+    expect(getManualRatingUpdate({ existingOutput: rated, isPass: null })).toMatchObject({
+      pass: false,
+      score: 0.25,
+      reason: 'Custom scoring result',
     });
   });
 });
@@ -3467,42 +3841,135 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
     expect(finalScore).toBe(0.5);
   });
 
-  it('persists a cleared human rating without manual override fields', async () => {
-    const user = userEvent.setup();
-    const mockTable = createMockTableWithHumanAssertion();
+  it.each([
+    [false, false],
+    [true, false],
+    [true, true],
+  ])(
+    'persists a cleared human rating with metric-only=%s and quality pass=%s',
+    async (metricOnly, qualityPass) => {
+      const user = userEvent.setup();
+      const mockTable = createMockTableWithHumanAssertion();
+      if (metricOnly) {
+        const output = mockTable.body[0].outputs[0];
+        Object.assign(output, {
+          testCase: {
+            assert: [
+              { type: 'contains', value: 'test' },
+              { type: 'javascript', metricOnly: true },
+            ],
+          },
+        });
+        output.gradingResult.componentResults[0].pass = qualityPass;
+        const componentResults: GradingResult[] = output.gradingResult.componentResults;
+        componentResults.push({
+          pass: false,
+          score: 0,
+          reason: 'Counter scored 0',
+          assertion: { type: 'javascript', metricOnly: true },
+        });
+      }
 
-    vi.mocked(useTableStore).mockImplementation(() =>
-      createTableStore({
+      vi.mocked(useTableStore).mockImplementation(() =>
+        createTableStore({
+          inComparisonMode: false,
+          setTable: mockSetTable,
+          table: mockTable,
+          renderMarkdown: true,
+          isFetching: false,
+          filteredResultsCount: 1,
+        }),
+      );
+
+      renderWithProviders(<ResultsTable {...defaultProps} />);
+
+      await user.click(screen.getByRole('button', { name: 'Clear rating' }));
+
+      await waitFor(() => {
+        expect(mockCallApi).toHaveBeenCalledWith(
+          '/eval/123/results/test-output-1/rating',
+          expect.objectContaining({ method: 'POST' }),
+        );
+      });
+
+      const [, request] = mockCallApi.mock.calls[0];
+      const payload = JSON.parse(request.body);
+
+      expect(payload.pass).toBe(qualityPass);
+      expect(payload.score).toBe(0.5);
+      expect(payload.reason).toBe('Automated assertion');
+      expect(payload.assertion?.type).not.toBe('human');
+      expect(payload.componentResults).toHaveLength(metricOnly ? 2 : 1);
+      expect(payload.componentResults[0].assertion.type).toBe('contains');
+      if (metricOnly) {
+        expect(payload.componentResults[1].assertion.metricOnly).toBe(true);
+        expect(payload.componentResults[1].pass).toBe(false);
+        expect(payload.componentResults[1].score).toBe(0);
+      }
+    },
+  );
+
+  it.each([
+    [0.5, false, 'Aggregate score 0.00 < 0.5 threshold'],
+    [0, true, 'Aggregate score 0.00 ≥ 0 threshold'],
+    [undefined, true, 'All assertions passed'],
+  ])(
+    'preserves the aggregate reason when clearing an all-metric-only row: %s',
+    async (threshold, pass, reason) => {
+      const user = userEvent.setup();
+      const mockTable = createMockTableWithHumanAssertion();
+      const output = mockTable.body[0].outputs[0];
+      const human = output.gradingResult.componentResults[1];
+      Object.assign(output, {
+        testCase: {
+          threshold,
+          assert: [{ type: 'javascript', metric: 'counter', metricOnly: true }],
+        },
+      });
+      Object.assign(output.gradingResult, {
+        componentResults: [
+          {
+            pass: false,
+            score: 0.25,
+            reason: 'Excluded counter failed',
+            assertion: { type: 'javascript', metric: 'counter', metricOnly: true },
+          },
+          human,
+        ],
+      });
+      vi.mocked(useTableStore).mockImplementation(() => ({
+        config: {},
+        evalId: '123',
         inComparisonMode: false,
         setTable: mockSetTable,
         table: mockTable,
+        version: 4,
         renderMarkdown: true,
+        fetchEvalData: vi.fn(),
         isFetching: false,
         filteredResultsCount: 1,
-      }),
-    );
-
-    renderWithProviders(<ResultsTable {...defaultProps} />);
-
-    await user.click(screen.getByRole('button', { name: 'Clear rating' }));
-
-    await waitFor(() => {
-      expect(mockCallApi).toHaveBeenCalledWith(
-        '/eval/123/results/test-output-1/rating',
-        expect.objectContaining({ method: 'POST' }),
+        filters: { values: {}, appliedCount: 0, options: { metric: [] } },
+      }));
+      renderWithProviders(<ResultsTable {...defaultProps} />);
+      await user.click(screen.getByRole('button', { name: 'Clear rating' }));
+      await waitFor(() =>
+        expect(mockCallApi).toHaveBeenCalledWith(
+          '/eval/123/results/test-output-1/rating',
+          expect.objectContaining({ method: 'POST' }),
+        ),
       );
-    });
-
-    const [, request] = mockCallApi.mock.calls[0];
-    const payload = JSON.parse(request.body);
-
-    expect(payload.pass).toBe(false);
-    expect(payload.score).toBe(0.5);
-    expect(payload.reason).toBe('Automated assertion');
-    expect(payload.assertion?.type).not.toBe('human');
-    expect(payload.componentResults).toHaveLength(1);
-    expect(payload.componentResults[0].assertion.type).toBe('contains');
-  });
+      const payload = JSON.parse(mockCallApi.mock.calls[0][1].body);
+      expect(payload).toMatchObject({ pass, score: 0, reason });
+      expect(payload.componentResults).toEqual([
+        {
+          pass: false,
+          score: 0.25,
+          reason: 'Excluded counter failed',
+          assertion: { type: 'javascript', metric: 'counter', metricOnly: true },
+        },
+      ]);
+    },
+  );
 
   it('should recalculate pass as true when all remaining assertions pass', () => {
     const mockTable = {
