@@ -1,3 +1,4 @@
+import * as fs from 'fs';
 import * as path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -44,15 +45,18 @@ vi.mock('glob', () => ({
   globSync: vi.fn(),
 }));
 
-vi.mock('fs', () => ({
-  readFileSync: vi.fn(),
-  existsSync: vi.fn(),
-  writeFileSync: vi.fn(),
-  mkdirSync: vi.fn(),
-  promises: {
-    readFile: vi.fn(),
-  },
-}));
+vi.mock('fs', () => {
+  const mockedFs = {
+    readFileSync: vi.fn(),
+    existsSync: vi.fn(),
+    writeFileSync: vi.fn(),
+    mkdirSync: vi.fn(),
+    promises: {
+      readFile: vi.fn(),
+    },
+  };
+  return { ...mockedFs, default: mockedFs };
+});
 
 vi.mock('../../src/esm', () => ({
   importModule: vi.fn().mockImplementation((_path, _functionName) => {
@@ -752,6 +756,35 @@ describe('JavaScript file references', () => {
     );
     expect(result.pass).toBe(true);
     expect(result.metadata?.renderedAssertionValue).toBeUndefined();
+  });
+
+  it('loads canonical Windows data-file URLs through their normalized drive path', async () => {
+    const platformDescriptor = Object.getOwnPropertyDescriptor(process, 'platform')!;
+    Object.defineProperty(process, 'platform', { configurable: true, value: 'win32' });
+    try {
+      vi.mocked(path.resolve).mockImplementation(path.win32.resolve);
+      vi.mocked(path.extname).mockImplementation(path.win32.extname);
+      vi.mocked(fs.readFileSync).mockReturnValue('{"expected":"Windows"}');
+      vi.mocked(importModule).mockResolvedValue(
+        (_output: string, context: { value: { expected: string } }) =>
+          context.value.expected === 'Windows',
+      );
+
+      const result = await runAssertion({
+        assertion: {
+          type: 'javascript',
+          script: 'file://C:/checks/assert.cjs',
+          value: 'file:///C:/fixtures/expected.json',
+        },
+        test: {},
+        providerResponse: { output: 'Expected output' },
+      });
+
+      expect(fs.readFileSync).toHaveBeenCalledWith('C:\\fixtures\\expected.json', 'utf8');
+      expect(result).toMatchObject({ pass: true, score: 1 });
+    } finally {
+      Object.defineProperty(process, 'platform', platformDescriptor);
+    }
   });
 
   it('should keep rendered script parameters out of failure reasons', async () => {

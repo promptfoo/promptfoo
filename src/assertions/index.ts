@@ -342,7 +342,7 @@ function renderAssertionValue(
       if (isJavascriptFile(filePath) || filePath.endsWith('.py') || filePath.endsWith('.rb')) {
         return fileReference;
       }
-      return renderAssertionValue(processFileReference(fileReference), vars, false);
+      return renderAssertionValue(processFileReference(`file://${filePath}`), vars, false);
     }
     return nunjucks.renderString(value, vars);
   }

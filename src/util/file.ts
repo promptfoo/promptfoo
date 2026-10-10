@@ -313,13 +313,14 @@ export function getResolvedRelativePath(filePath: string, isCloudConfig?: boolea
  * Recursively loads external file references from a configuration object.
  *
  * @param config - The configuration object to process
- * @param context - Optional context to control file loading behavior
+ * @param context - Test loaders must pass 'test' for test-case rows; generic data
+ * never gains test/assertion semantics from property names alone.
  * @param basePath - Optional file resolution scope; inherits the caller scope when omitted
  * @returns The configuration with external file references resolved
  */
 export function maybeLoadConfigFromExternalFile(
   config: any,
-  context?: 'assertion' | 'assertions' | 'general' | 'vars',
+  context?: 'assertion' | 'assertions' | 'general' | 'test' | 'vars',
   basePath?: string,
 ): any {
   if (basePath !== undefined) {
@@ -330,22 +331,19 @@ export function maybeLoadConfigFromExternalFile(
   }
   if (typeof config === 'object' && config !== null) {
     const result: Record<string, any> = {};
+    const isScriptAssertion =
+      context === 'assertions' &&
+      typeof config.type === 'string' &&
+      ['javascript', 'python', 'ruby'].includes(config.type.replace(/^not-/, ''));
     for (const key of Object.keys(config)) {
-      // Only entries in an assert array describe assertions. Provider bodies and
-      // structured prompts may also contain ordinary type/script/value fields.
-      const isScriptAssertionField =
-        context === 'assertions' &&
-        (key === 'value' || key === 'script') &&
-        'type' in config &&
-        typeof config.type === 'string' &&
-        ['javascript', 'python', 'ruby'].includes(config.type.replace(/^not-/, ''));
+      // Only explicit test rows and assert-set entries own assertion arrays.
+      // Provider bodies, metadata, values, and configs remain ordinary data.
+      const isScriptAssertionField = isScriptAssertion && (key === 'value' || key === 'script');
 
-      // Detect vars contexts: if we're processing a 'vars' key, switch to vars context
-      // This preserves file:// glob patterns for test case expansion
-      const isVarsField = key === 'vars';
+      // Test vars retain their file references for runtime expansion.
+      const isVarsField = context === 'test' && key === 'vars';
       const isAssertionArray =
-        context !== 'vars' &&
-        context !== 'assertion' &&
+        (context === 'test' || (context === 'assertions' && config.type === 'assert-set')) &&
         key === 'assert' &&
         Array.isArray(config[key]);
 
@@ -355,9 +353,9 @@ export function maybeLoadConfigFromExternalFile(
           ? 'assertions'
           : isVarsField
             ? 'vars'
-            : context === 'assertions'
-              ? 'general'
-              : context;
+            : context === 'assertion' || context === 'vars'
+              ? context
+              : 'general';
       // Script parameters are resolved with test variables at runtime, just as
       // for inline tests and direct runAssertion calls. Loading them here would
       // give file-backed test cases an extra round of file dereferencing.
@@ -379,7 +377,10 @@ export function maybeLoadConfigFromExternalFile(
     }
     return result;
   }
-  return maybeLoadFromExternalFile(config, context === 'assertions' ? 'general' : context);
+  return maybeLoadFromExternalFile(
+    config,
+    context === 'assertion' || context === 'vars' ? context : 'general',
+  );
 }
 
 /**
