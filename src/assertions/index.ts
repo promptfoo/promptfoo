@@ -34,6 +34,7 @@ import {
   type AtomicTestCase,
   type CallApiContextParams,
   type GradingResult,
+  isApiProvider,
   type TraceData,
   type VarValue,
 } from '../types/index';
@@ -439,7 +440,13 @@ async function runAssertionInternal({
   const { cost, logProbs, output: originalOutput } = providerResponse;
   let output = originalOutput;
 
-  invariant(assertion.type, `Assertion must have a type: ${JSON.stringify(assertion)}`);
+  // Preserve assertion getter ordering without serializing live SDK clients.
+  invariant(
+    assertion.type,
+    `Assertion must have a type: ${JSON.stringify(assertion, (key, value) =>
+      key === 'provider' && isApiProvider(value) ? '[ApiProvider]' : value,
+    )}`,
+  );
 
   if (assertion.transform) {
     output = await transform(assertion.transform, output, {
