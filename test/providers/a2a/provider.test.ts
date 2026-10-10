@@ -1,4 +1,52 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { createOAuthToken } from '../../factories/literalFixtures';
+
+const createWorkingTaskEvent = () => ({
+  task: {
+    id: 'task-1',
+    status: { state: 'TASK_STATE_WORKING' },
+  },
+});
+
+const createAgentCardOptions = () => ({
+  config: {
+    agentCardUrl: 'https://agent.example.com/.well-known/agent-card.json',
+  },
+});
+
+const createCompletedArtifactTaskEvent = () => ({
+  task: {
+    id: 'task-1',
+    status: { state: 'TASK_STATE_COMPLETED' },
+    artifacts: [{ parts: [{ text: 'artifact text' }] }],
+  },
+});
+
+const createAgentMessageEvent = () => ({
+  message: {
+    role: 'ROLE_AGENT',
+    parts: [{ text: 'ok' }],
+  },
+});
+
+const createCompletedStatusEvent = () => ({
+  statusUpdate: {
+    taskId: 'task-1',
+    status: { state: 'TASK_STATE_COMPLETED' },
+  },
+});
+
+const createJsonTransportCard = () => ({
+  preferredTransport: 'HTTP+JSON',
+  protocolVersion: '0.3.0',
+  url: 'https://agent.example.com/a2a/main',
+});
+
+const createImageStrategyContext = () => ({
+  metadata: {
+    strategyId: 'image',
+  },
+});
 
 vi.mock('../../../src/util/fetch/index', async () => {
   const actual = await vi.importActual<typeof import('../../../src/util/fetch/index')>(
@@ -58,6 +106,25 @@ function provider(config: Record<string, unknown> = {}) {
 }
 
 describe('A2AProvider', () => {
+  const createTaskStateFailureCheck = () => async (state: string, expected: string) => {
+    vi.mocked(fetchWithTimeout).mockResolvedValueOnce(
+      jsonResponse({
+        task: {
+          id: 'task-1',
+          status: {
+            state,
+            message: { parts: [{ text: 'state detail' }] },
+          },
+        },
+      }),
+    );
+
+    const result = await provider().callApi('hi');
+
+    expect(result.error).toContain(expected);
+    expect(result.error).toContain('state detail');
+  };
+
   beforeEach(() => {
     vi.resetAllMocks();
     vi.mocked(sleep).mockResolvedValue(undefined);
@@ -162,14 +229,7 @@ describe('A2AProvider', () => {
   });
 
   it('sends standards-compliant default A2A messages', async () => {
-    vi.mocked(fetchWithTimeout).mockResolvedValueOnce(
-      jsonResponse({
-        message: {
-          role: 'ROLE_AGENT',
-          parts: [{ text: 'ok' }],
-        },
-      }),
-    );
+    vi.mocked(fetchWithTimeout).mockResolvedValueOnce(jsonResponse(createAgentMessageEvent()));
 
     const result = await provider().callApi('hello');
 
@@ -281,13 +341,7 @@ describe('A2AProvider', () => {
 
   it('uses legacy A2A file parts for multimodal default messages on 0.3 agent cards', async () => {
     vi.mocked(fetchWithTimeout)
-      .mockResolvedValueOnce(
-        jsonResponse({
-          preferredTransport: 'HTTP+JSON',
-          protocolVersion: '0.3.0',
-          url: 'https://agent.example.com/a2a/main',
-        }),
-      )
+      .mockResolvedValueOnce(jsonResponse(createJsonTransportCard()))
       .mockResolvedValueOnce(
         jsonResponse({
           message: {
@@ -297,22 +351,17 @@ describe('A2AProvider', () => {
         }),
       );
 
-    const result = await new A2AProvider('a2a', {
-      config: {
-        agentCardUrl: 'https://agent.example.com/.well-known/agent-card.json',
-      },
-    }).callApi('Please answer the question in the image.', {
-      prompt: { raw: '{{prompt}}', label: 'prompt' },
-      test: {
-        metadata: {
-          strategyId: 'image',
+    const result = await new A2AProvider('a2a', createAgentCardOptions()).callApi(
+      'Please answer the question in the image.',
+      {
+        prompt: { raw: '{{prompt}}', label: 'prompt' },
+        test: createImageStrategyContext(),
+        vars: {
+          image: 'data:image/jpeg;base64,base64-image',
+          question: 'Please answer the question in the image.',
         },
       },
-      vars: {
-        image: 'data:image/jpeg;base64,base64-image',
-        question: 'Please answer the question in the image.',
-      },
-    });
+    );
 
     expect(result.output).toBe('legacy image ok');
     const requestBody = JSON.parse(vi.mocked(fetchWithTimeout).mock.calls[1]?.[1]?.body as string);
@@ -349,11 +398,7 @@ describe('A2AProvider', () => {
       },
     }).callApi('Please answer the question in the image.', {
       prompt: { raw: '{{prompt}}', label: 'prompt' },
-      test: {
-        metadata: {
-          strategyId: 'image',
-        },
-      },
+      test: createImageStrategyContext(),
       vars: {
         image: 'base64-image',
         question: 'question text',
@@ -393,11 +438,7 @@ describe('A2AProvider', () => {
         }),
       );
 
-    const result = await new A2AProvider('a2a', {
-      config: {
-        agentCardUrl: 'https://agent.example.com/.well-known/agent-card.json',
-      },
-    }).callApi('hello');
+    const result = await new A2AProvider('a2a', createAgentCardOptions()).callApi('hello');
 
     expect(result.output).toBe('card response');
     expect(fetchWithTimeout).toHaveBeenNthCalledWith(
@@ -436,11 +477,7 @@ describe('A2AProvider', () => {
         }),
       );
 
-    const result = await new A2AProvider('a2a', {
-      config: {
-        agentCardUrl: 'https://agent.example.com/.well-known/agent-card.json',
-      },
-    }).callApi('hello');
+    const result = await new A2AProvider('a2a', createAgentCardOptions()).callApi('hello');
 
     expect(result.output).toBe('legacy card response');
     expect(fetchWithTimeout).toHaveBeenNthCalledWith(
@@ -461,11 +498,7 @@ describe('A2AProvider', () => {
       }),
     );
 
-    const result = await new A2AProvider('a2a', {
-      config: {
-        agentCardUrl: 'https://agent.example.com/.well-known/agent-card.json',
-      },
-    }).callApi('hello');
+    const result = await new A2AProvider('a2a', createAgentCardOptions()).callApi('hello');
 
     expect(result.error).toContain('does not advertise a supported HTTP+JSON interface');
     expect(fetchWithTimeout).toHaveBeenCalledTimes(1);
@@ -478,11 +511,7 @@ describe('A2AProvider', () => {
       }),
     );
 
-    const result = await new A2AProvider('a2a', {
-      config: {
-        agentCardUrl: 'https://agent.example.com/.well-known/agent-card.json',
-      },
-    }).callApi('hello');
+    const result = await new A2AProvider('a2a', createAgentCardOptions()).callApi('hello');
 
     expect(result.error).toContain('does not advertise a supported HTTP+JSON interface');
     expect(fetchWithTimeout).toHaveBeenCalledTimes(1);
@@ -490,13 +519,7 @@ describe('A2AProvider', () => {
 
   it('uses the Agent Card protocol version when the main URL is HTTP+JSON', async () => {
     vi.mocked(fetchWithTimeout)
-      .mockResolvedValueOnce(
-        jsonResponse({
-          preferredTransport: 'HTTP+JSON',
-          protocolVersion: '0.3.0',
-          url: 'https://agent.example.com/a2a/main',
-        }),
-      )
+      .mockResolvedValueOnce(jsonResponse(createJsonTransportCard()))
       .mockResolvedValueOnce(
         jsonResponse({
           message: {
@@ -506,11 +529,7 @@ describe('A2AProvider', () => {
         }),
       );
 
-    const result = await new A2AProvider('a2a', {
-      config: {
-        agentCardUrl: 'https://agent.example.com/.well-known/agent-card.json',
-      },
-    }).callApi('hello');
+    const result = await new A2AProvider('a2a', createAgentCardOptions()).callApi('hello');
 
     expect(result.output).toBe('main url response');
     expect(fetchWithTimeout).toHaveBeenNthCalledWith(
@@ -699,12 +718,7 @@ describe('A2AProvider', () => {
   });
 
   it('fetches OAuth client credentials tokens for operation requests', async () => {
-    vi.mocked(fetchWithProxy).mockResolvedValueOnce(
-      jsonResponse({
-        access_token: 'oauth-token',
-        expires_in: 3600,
-      }),
-    );
+    vi.mocked(fetchWithProxy).mockResolvedValueOnce(jsonResponse(createOAuthToken('oauth-token')));
     vi.mocked(fetchWithTimeout).mockResolvedValueOnce(
       jsonResponse({
         message: {
@@ -755,12 +769,7 @@ describe('A2AProvider', () => {
   });
 
   it('renders templated OAuth scope strings before splitting them', async () => {
-    vi.mocked(fetchWithProxy).mockResolvedValueOnce(
-      jsonResponse({
-        access_token: 'oauth-token',
-        expires_in: 3600,
-      }),
-    );
+    vi.mocked(fetchWithProxy).mockResolvedValueOnce(jsonResponse(createOAuthToken('oauth-token')));
     vi.mocked(fetchWithTimeout).mockResolvedValueOnce(
       jsonResponse({
         message: {
@@ -796,13 +805,7 @@ describe('A2AProvider', () => {
 
   it('extracts output from a completed task artifact', async () => {
     vi.mocked(fetchWithTimeout).mockResolvedValueOnce(
-      jsonResponse({
-        task: {
-          id: 'task-1',
-          status: { state: 'TASK_STATE_COMPLETED' },
-          artifacts: [{ parts: [{ text: 'artifact text' }] }],
-        },
-      }),
+      jsonResponse(createCompletedArtifactTaskEvent()),
     );
 
     const result = await provider().callApi('hi');
@@ -868,14 +871,7 @@ describe('A2AProvider', () => {
 
   it('polls non-terminal tasks until completion', async () => {
     vi.mocked(fetchWithTimeout)
-      .mockResolvedValueOnce(
-        jsonResponse({
-          task: {
-            id: 'task-1',
-            status: { state: 'TASK_STATE_WORKING' },
-          },
-        }),
-      )
+      .mockResolvedValueOnce(jsonResponse(createWorkingTaskEvent()))
       .mockResolvedValueOnce(
         jsonResponse({
           id: 'task-1',
@@ -899,14 +895,7 @@ describe('A2AProvider', () => {
 
   it('uses the final polled task as raw output for async send responses', async () => {
     vi.mocked(fetchWithTimeout)
-      .mockResolvedValueOnce(
-        jsonResponse({
-          task: {
-            id: 'task-1',
-            status: { state: 'TASK_STATE_WORKING' },
-          },
-        }),
-      )
+      .mockResolvedValueOnce(jsonResponse(createWorkingTaskEvent()))
       .mockResolvedValueOnce(
         jsonResponse({
           id: 'task-1',
@@ -927,14 +916,7 @@ describe('A2AProvider', () => {
 
   it('includes tenant query parameter when polling tasks', async () => {
     vi.mocked(fetchWithTimeout)
-      .mockResolvedValueOnce(
-        jsonResponse({
-          task: {
-            id: 'task-1',
-            status: { state: 'TASK_STATE_WORKING' },
-          },
-        }),
-      )
+      .mockResolvedValueOnce(jsonResponse(createWorkingTaskEvent()))
       .mockResolvedValueOnce(
         jsonResponse({
           id: 'task-1',
@@ -988,24 +970,7 @@ describe('A2AProvider', () => {
     ['TASK_STATE_REJECTED', 'rejected'],
     ['TASK_STATE_INPUT_REQUIRED', 'requires additional input'],
     ['TASK_STATE_AUTH_REQUIRED', 'requires additional authentication'],
-  ])('returns an error for %s tasks', async (state, expected) => {
-    vi.mocked(fetchWithTimeout).mockResolvedValueOnce(
-      jsonResponse({
-        task: {
-          id: 'task-1',
-          status: {
-            state,
-            message: { parts: [{ text: 'state detail' }] },
-          },
-        },
-      }),
-    );
-
-    const result = await provider().callApi('hi');
-
-    expect(result.error).toContain(expected);
-    expect(result.error).toContain('state detail');
-  });
+  ])('returns an error for %s tasks', createTaskStateFailureCheck());
 
   it.each([
     ['failed', 'failed'],
@@ -1013,24 +978,7 @@ describe('A2AProvider', () => {
     ['rejected', 'rejected'],
     ['input-required', 'requires additional input'],
     ['auth-required', 'requires additional authentication'],
-  ])('returns an error for standard %s tasks', async (state, expected) => {
-    vi.mocked(fetchWithTimeout).mockResolvedValueOnce(
-      jsonResponse({
-        task: {
-          id: 'task-1',
-          status: {
-            state,
-            message: { parts: [{ text: 'state detail' }] },
-          },
-        },
-      }),
-    );
-
-    const result = await provider().callApi('hi');
-
-    expect(result.error).toContain(expected);
-    expect(result.error).toContain('state detail');
-  });
+  ])('returns an error for standard %s tasks', createTaskStateFailureCheck());
 
   it('filters user messages from history fallback output', async () => {
     vi.mocked(fetchWithTimeout).mockResolvedValueOnce(
@@ -1095,12 +1043,7 @@ describe('A2AProvider', () => {
   it('accumulates task lifecycle SSE events', async () => {
     vi.mocked(fetchWithTimeout).mockResolvedValueOnce(
       sseResponse([
-        {
-          task: {
-            id: 'task-1',
-            status: { state: 'TASK_STATE_WORKING' },
-          },
-        },
+        createWorkingTaskEvent(),
         {
           artifactUpdate: {
             taskId: 'task-1',
@@ -1132,12 +1075,7 @@ describe('A2AProvider', () => {
   it('merges appended streaming artifact chunks for the same artifact', async () => {
     vi.mocked(fetchWithTimeout).mockResolvedValueOnce(
       sseResponse([
-        {
-          task: {
-            id: 'task-1',
-            status: { state: 'TASK_STATE_WORKING' },
-          },
-        },
+        createWorkingTaskEvent(),
         {
           artifactUpdate: {
             append: false,
@@ -1152,12 +1090,7 @@ describe('A2AProvider', () => {
             artifact: { artifactId: 'artifact-1', parts: [{ text: 'lo' }] },
           },
         },
-        {
-          statusUpdate: {
-            taskId: 'task-1',
-            status: { state: 'TASK_STATE_COMPLETED' },
-          },
-        },
+        createCompletedStatusEvent(),
       ]),
     );
 
@@ -1170,12 +1103,7 @@ describe('A2AProvider', () => {
   it('preserves streamed artifacts when a terminal task frame omits artifacts', async () => {
     vi.mocked(fetchWithTimeout).mockResolvedValueOnce(
       sseResponse([
-        {
-          task: {
-            id: 'task-1',
-            status: { state: 'TASK_STATE_WORKING' },
-          },
-        },
+        createWorkingTaskEvent(),
         {
           artifactUpdate: {
             taskId: 'task-1',
@@ -1203,12 +1131,7 @@ describe('A2AProvider', () => {
   it('replaces existing streaming artifacts when append is false', async () => {
     vi.mocked(fetchWithTimeout).mockResolvedValueOnce(
       sseResponse([
-        {
-          task: {
-            id: 'task-1',
-            status: { state: 'TASK_STATE_WORKING' },
-          },
-        },
+        createWorkingTaskEvent(),
         {
           artifactUpdate: {
             append: false,
@@ -1223,12 +1146,7 @@ describe('A2AProvider', () => {
             artifact: { artifactId: 'artifact-1', parts: [{ text: 'final answer' }] },
           },
         },
-        {
-          statusUpdate: {
-            taskId: 'task-1',
-            status: { state: 'TASK_STATE_COMPLETED' },
-          },
-        },
+        createCompletedStatusEvent(),
       ]),
     );
 
@@ -1283,14 +1201,7 @@ describe('A2AProvider', () => {
 
   it('forwards abort signals to requests', async () => {
     const controller = new AbortController();
-    vi.mocked(fetchWithTimeout).mockResolvedValueOnce(
-      jsonResponse({
-        message: {
-          role: 'ROLE_AGENT',
-          parts: [{ text: 'ok' }],
-        },
-      }),
-    );
+    vi.mocked(fetchWithTimeout).mockResolvedValueOnce(jsonResponse(createAgentMessageEvent()));
 
     await provider().callApi('hi', undefined, { abortSignal: controller.signal });
 
@@ -1320,13 +1231,7 @@ describe('A2AProvider', () => {
 
   it('supports HTTP-style json variable in string transformResponse', async () => {
     vi.mocked(fetchWithTimeout).mockResolvedValueOnce(
-      jsonResponse({
-        task: {
-          id: 'task-1',
-          status: { state: 'TASK_STATE_COMPLETED' },
-          artifacts: [{ parts: [{ text: 'artifact text' }] }],
-        },
-      }),
+      jsonResponse(createCompletedArtifactTaskEvent()),
     );
 
     const result = await provider({
@@ -1338,13 +1243,7 @@ describe('A2AProvider', () => {
 
   it('keeps result as an alias in string transformResponse', async () => {
     vi.mocked(fetchWithTimeout).mockResolvedValueOnce(
-      jsonResponse({
-        task: {
-          id: 'task-1',
-          status: { state: 'TASK_STATE_COMPLETED' },
-          artifacts: [{ parts: [{ text: 'artifact text' }] }],
-        },
-      }),
+      jsonResponse(createCompletedArtifactTaskEvent()),
     );
 
     const result = await provider({
