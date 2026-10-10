@@ -57,9 +57,7 @@ describe('Share Command', () => {
 
   describe('createAndDisplayShareableUrl', () => {
     it('should return a URL and log it when successful', async () => {
-      vi.mocked(isSharingEnabled).mockImplementation(function () {
-        return true;
-      });
+      vi.mocked(isSharingEnabled).mockReturnValue(true);
       const mockEval = { id: 'test-eval-id' } as Eval;
       const mockUrl = 'https://app.promptfoo.dev/eval/test-eval-id';
 
@@ -86,9 +84,7 @@ describe('Share Command', () => {
     it('should return null when createShareableUrl returns null', async () => {
       const mockEval = { id: 'test-eval-id' } as Eval;
 
-      vi.mocked(isSharingEnabled).mockImplementation(function () {
-        return true;
-      });
+      vi.mocked(isSharingEnabled).mockReturnValue(true);
       vi.mocked(createShareableUrl).mockResolvedValue(null);
 
       const result = await createAndDisplayShareableUrl(mockEval, false);
@@ -185,9 +181,7 @@ describe('Share Command', () => {
       } as ModelAudit;
 
       vi.spyOn(ModelAudit, 'findById').mockResolvedValue(mockAudit);
-      vi.mocked(isModelAuditSharingEnabled).mockImplementation(function () {
-        return true;
-      });
+      vi.mocked(isModelAuditSharingEnabled).mockReturnValue(true);
       vi.mocked(createShareableModelAuditUrl).mockResolvedValue(
         'https://example.com/model-audit/scan-test-123',
       );
@@ -211,9 +205,7 @@ describe('Share Command', () => {
       } as unknown as Eval;
 
       vi.spyOn(Eval, 'findById').mockResolvedValue(mockEval);
-      vi.mocked(isSharingEnabled).mockImplementation(function () {
-        return true;
-      });
+      vi.mocked(isSharingEnabled).mockReturnValue(true);
       vi.mocked(createShareableUrl).mockResolvedValue('https://example.com/eval/eval-test-123');
 
       const shareCmd = program.commands.find((c) => c.name() === 'share');
@@ -241,9 +233,7 @@ describe('Share Command', () => {
 
       vi.spyOn(Eval, 'latest').mockResolvedValue(mockEval);
       vi.spyOn(ModelAudit, 'latest').mockResolvedValue(mockAudit);
-      vi.mocked(isModelAuditSharingEnabled).mockImplementation(function () {
-        return true;
-      });
+      vi.mocked(isModelAuditSharingEnabled).mockReturnValue(true);
       vi.mocked(createShareableModelAuditUrl).mockResolvedValue(
         'https://example.com/model-audit/scan-new',
       );
@@ -274,9 +264,7 @@ describe('Share Command', () => {
 
       vi.spyOn(Eval, 'latest').mockResolvedValue(mockEval);
       vi.spyOn(ModelAudit, 'latest').mockResolvedValue(mockAudit);
-      vi.mocked(isSharingEnabled).mockImplementation(function () {
-        return true;
-      });
+      vi.mocked(isSharingEnabled).mockReturnValue(true);
       vi.mocked(createShareableUrl).mockResolvedValue('https://example.com/eval/eval-new');
 
       const shareCmd = program.commands.find((c) => c.name() === 'share');
@@ -364,9 +352,7 @@ describe('Share Command', () => {
 
       vi.spyOn(Eval, 'latest').mockResolvedValue(mockEval);
       vi.spyOn(ModelAudit, 'latest').mockResolvedValue(mockAudit);
-      vi.mocked(isSharingEnabled).mockImplementation(function () {
-        return true;
-      });
+      vi.mocked(isSharingEnabled).mockReturnValue(true);
       vi.mocked(createShareableUrl).mockResolvedValue('https://example.com/share');
 
       const shareCmd = program.commands.find((c) => c.name() === 'share');
@@ -379,9 +365,7 @@ describe('Share Command', () => {
     });
 
     it('should use promptfoo.app by default if no environment variables are set', () => {
-      vi.mocked(envars.getEnvString).mockImplementation(function () {
-        return '';
-      });
+      vi.mocked(envars.getEnvString).mockReturnValue('');
 
       const baseUrl =
         envars.getEnvString('PROMPTFOO_SHARING_APP_BASE_URL') ||
@@ -501,9 +485,7 @@ describe('Share Command', () => {
 
       vi.spyOn(Eval, 'latest').mockResolvedValue(mockEval);
       vi.spyOn(ModelAudit, 'latest').mockResolvedValue(mockAudit);
-      vi.mocked(isSharingEnabled).mockImplementation(function () {
-        return false;
-      });
+      vi.mocked(isSharingEnabled).mockReturnValue(false);
       vi.mocked(loadDefaultConfig).mockResolvedValue({
         defaultConfig: {},
         defaultConfigPath: 'promptfooconfig.yaml',
@@ -532,9 +514,7 @@ describe('Share Command', () => {
 
       vi.spyOn(Eval, 'latest').mockResolvedValue(mockEval);
       vi.spyOn(ModelAudit, 'latest').mockResolvedValue(mockAudit);
-      vi.mocked(isSharingEnabled).mockImplementation(function () {
-        return true;
-      });
+      vi.mocked(isSharingEnabled).mockReturnValue(true);
       vi.mocked(createShareableUrl).mockResolvedValue(
         'https://app.promptfoo.dev/eval/test-eval-id',
       );
@@ -555,9 +535,7 @@ describe('Share Command', () => {
       } as unknown as Eval;
 
       vi.spyOn(Eval, 'findById').mockResolvedValue(mockEval);
-      vi.mocked(isSharingEnabled).mockImplementation(function () {
-        return true;
-      });
+      vi.mocked(isSharingEnabled).mockReturnValue(true);
       vi.mocked(createShareableUrl).mockResolvedValue(
         'https://app.promptfoo.dev/eval/specific-eval-id',
       );
