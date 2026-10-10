@@ -15,27 +15,39 @@ LiteLLM provides a unified interface to 400+ LLMs. Instead of managing different
 
 ## Quick Start
 
-1. **Set your API keys**:
+1. **Set the API keys for the full example**:
+
+   The checked-in evaluation calls all three chat routes and uses OpenAI embeddings for similarity assertions, so running it unchanged requires all three keys:
 
    ```bash
    export OPENAI_API_KEY=your-openai-key
-   # Optional: Add other providers
    export ANTHROPIC_API_KEY=your-anthropic-key
    export GOOGLE_AI_API_KEY=your-google-key
    ```
 
-2. **Start the LiteLLM proxy**:
+   The proxy can start with any one of these keys. To evaluate a subset, remove unused chat providers from `promptfooconfig.yaml` and their routes from `litellm_config.yaml`, or use a promptfoo config that selects only routes with configured credentials.
+
+   Keep `OPENAI_API_KEY` for the default embedding route even if you omit GPT chat. To run without OpenAI, configure an embedding provider you can access in both configs, or remove the `similar` assertion and its `defaultTest.options.provider.embedding` setting.
+
+2. **Install the LiteLLM proxy with Python 3.10–3.14**:
+
+   ```bash
+   python -m venv .venv
+   source .venv/bin/activate # Windows: .venv\Scripts\activate
+   python -m pip install --upgrade 'litellm[proxy]>=1.101.0,<2'
+   ```
+
+3. **Start the LiteLLM proxy**:
 
    ```bash
    # Use the provided script
    ./start-proxy.sh
 
    # Or manually:
-   pip install litellm[proxy]
-   litellm --model gpt-4.1 --model claude-sonnet-4-6 --model gemini-2.5-pro --model text-embedding-3-large
+   litellm --config litellm_config.yaml --port 4000
    ```
 
-3. **Run the evaluation**:
+4. **Run the evaluation**:
    ```bash
    npx promptfoo@latest eval
    ```
@@ -43,7 +55,7 @@ LiteLLM provides a unified interface to 400+ LLMs. Instead of managing different
 ## Features
 
 - **Unified Interface**: Access OpenAI, Anthropic, Google, and 400+ other models through one API
-- **Chat Models**: GPT-4.1, Claude Sonnet 4.6, Gemini 2.5
+- **Chat Models**: GPT-4.1, Claude Sonnet 5, Gemini 2.5
 - **Embedding Models**: Support for similarity assertions via embedding models
 - **Simple Configuration**: One provider syntax for all models
 - **Cost Tracking**: LiteLLM proxy can track usage across providers
@@ -64,14 +76,19 @@ The LiteLLM provider in promptfoo connects to a LiteLLM proxy server (default po
 - `litellm_config.yaml` - LiteLLM proxy server configuration
 - `start-proxy.sh` - Helper script to start the proxy
 
+The proxy keeps client-facing `model_name` aliases separate from backend routes. For Google AI Studio, the [LiteLLM Gemini backend](https://docs.litellm.ai/docs/providers/gemini) uses `gemini/gemini-2.5-pro`; promptfoo continues to select `litellm:gemini-2.5-pro`. API keys in the proxy YAML use LiteLLM's `os.environ/VARIABLE_NAME` syntax.
+
 ## Example Configuration
 
 The example evaluates translation and creative writing tasks across three different providers:
 
+Each test supplies its own prompt so translation assertions apply to translations
+and the three-line assertion applies to the haiku. The evaluation runs six cases.
+
 ```yaml
 providers:
   - litellm:gpt-4.1
-  - litellm:claude-sonnet-4-6
+  - litellm:claude-sonnet-5
   - litellm:gemini-2.5-pro
 
 defaultTest:
@@ -93,12 +110,12 @@ defaultTest:
 1. **Check proxy is running**:
 
    ```bash
-   curl http://localhost:4000/health
+   curl http://localhost:4000/health/liveliness
    ```
 
-2. **Verify API keys**:
+2. **Verify a required key is set**:
    ```bash
-   echo $OPENAI_API_KEY
+   test -n "$OPENAI_API_KEY" && echo 'OpenAI key is set'
    ```
 
 ## Advanced Usage

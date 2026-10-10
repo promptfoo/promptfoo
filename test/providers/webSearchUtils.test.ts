@@ -1,9 +1,19 @@
+const { createLoggerModule } = await vi.hoisted(async () => import('../factories/logger'));
+
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { loadApiProvider } from '../../src/providers/index';
+import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
+import { OpenAiCompletionProvider } from '../../src/providers/openai/completion';
+import { OpenAiEmbeddingProvider } from '../../src/providers/openai/embedding';
 import { OpenAiResponsesProvider } from '../../src/providers/openai/responses';
+import { OpenAiTtsProvider } from '../../src/providers/openai/tts';
 import { hasWebSearchCapability, loadWebSearchProvider } from '../../src/providers/webSearchUtils';
 
 import type { ApiProvider } from '../../src/types/index';
+
+const createSearchConfig = <TType extends 'web_search_preview' | 'web_search'>(type: TType) => ({
+  tools: [{ type }],
+});
 
 vi.mock('../../src/providers', async (importOriginal) => {
   return {
@@ -12,14 +22,7 @@ vi.mock('../../src/providers', async (importOriginal) => {
   };
 });
 
-vi.mock('../../src/logger', () => ({
-  default: {
-    debug: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  },
-}));
+vi.mock('../../src/logger', () => createLoggerModule());
 
 describe('webSearchUtils', () => {
   beforeEach(() => {
@@ -36,10 +39,8 @@ describe('webSearchUtils', () => {
     });
 
     it('should return false for provider-like values without an id function', () => {
-      expect(hasWebSearchCapability('openai:responses:gpt-5.5-2026-04-23' as any)).toBe(false);
-      expect(hasWebSearchCapability({ id: 'openai:responses:gpt-5.5-2026-04-23' } as any)).toBe(
-        false,
-      );
+      expect(hasWebSearchCapability('openai:responses:gpt-6-sol' as any)).toBe(false);
+      expect(hasWebSearchCapability({ id: 'openai:responses:gpt-6-sol' } as any)).toBe(false);
     });
 
     it('should return false when a provider id function throws', () => {
@@ -47,9 +48,7 @@ describe('webSearchUtils', () => {
         id: () => {
           throw new Error('bad provider id');
         },
-        config: {
-          tools: [{ type: 'web_search_preview' }],
-        },
+        config: createSearchConfig('web_search_preview'),
       };
 
       expect(hasWebSearchCapability(provider as ApiProvider)).toBe(false);
@@ -112,9 +111,7 @@ describe('webSearchUtils', () => {
     it('should return true for xAI Responses provider with web_search tool', () => {
       const provider: Partial<ApiProvider> = {
         id: () => 'xai:responses:grok-4.3',
-        config: {
-          tools: [{ type: 'web_search' }],
-        },
+        config: createSearchConfig('web_search'),
       };
       expect(hasWebSearchCapability(provider as ApiProvider)).toBe(true);
     });
@@ -122,9 +119,7 @@ describe('webSearchUtils', () => {
     it('should return false for xAI chat provider with Responses-only web_search tool', () => {
       const provider: Partial<ApiProvider> = {
         id: () => 'xai:grok-4.3',
-        config: {
-          tools: [{ type: 'web_search' }],
-        },
+        config: createSearchConfig('web_search'),
       };
 
       expect(hasWebSearchCapability(provider as ApiProvider)).toBe(false);
@@ -150,31 +145,98 @@ describe('webSearchUtils', () => {
 
     it('should return true for OpenAI responses provider with web_search_preview tool', () => {
       const provider: Partial<ApiProvider> = {
-        id: () => 'openai:responses:gpt-5.5-2026-04-23',
-        config: {
-          tools: [{ type: 'web_search_preview' }],
-        },
+        id: () => 'openai:responses:gpt-6-sol',
+        config: createSearchConfig('web_search_preview'),
       };
       expect(hasWebSearchCapability(provider as ApiProvider)).toBe(true);
     });
 
-    it('should return true for a real OpenAI Responses provider whose id omits the responses prefix', () => {
-      const provider = new OpenAiResponsesProvider('gpt-5.5-2026-04-23', {
-        config: {
-          tools: [{ type: 'web_search_preview' }],
-        },
+    it('should return true for OpenAI responses provider with the current web_search tool', () => {
+      const provider: Partial<ApiProvider> = {
+        id: () => 'openai:responses:gpt-6-sol',
+        config: createSearchConfig('web_search'),
+      };
+      expect(hasWebSearchCapability(provider as ApiProvider)).toBe(true);
+    });
+
+    it.each([
+      'openai:chat:gpt-5-search-api',
+      'openai:chat:gpt-5-search-api-2025-10-14',
+      'openai:chat:gpt-4o-search-preview',
+      'openai:chat:gpt-4o-mini-search-preview-2025-03-11',
+    ])('should return true for built-in OpenAI Chat Completions search model %s', (id) => {
+      expect(hasWebSearchCapability({ id: () => id, config: {} } as ApiProvider)).toBe(true);
+    });
+
+    it('should detect a real OpenAI Chat search provider with a custom API base URL', () => {
+      const provider = new OpenAiChatCompletionProvider('gpt-5-search-api', {
+        config: { apiBaseUrl: 'https://gateway.example/v1' },
       });
 
-      expect(provider.id()).toBe('openai:gpt-5.5-2026-04-23');
+      expect(provider.id()).toBe('gpt-5-search-api');
       expect(hasWebSearchCapability(provider)).toBe(true);
+    });
+
+    it('should detect an OpenAI Chat search provider with a configured ID alias', () => {
+      const provider = new OpenAiChatCompletionProvider('gpt-5-search-api', {
+        id: 'search-grader',
+      });
+
+      expect(provider.id()).toBe('search-grader');
+      expect(hasWebSearchCapability(provider)).toBe(true);
+    });
+
+    it('should detect an OpenAI Chat search model supplied through passthrough', () => {
+      const provider = new OpenAiChatCompletionProvider('gpt-4.1', {
+        id: 'search-grader',
+        config: { passthrough: { model: 'gpt-5-search-api' } },
+      });
+
+      expect(hasWebSearchCapability(provider)).toBe(true);
+    });
+
+    it.each([
+      'openai/gpt-5-search-api',
+      'openai/gpt-5-search-api-2025-10-14',
+      'github/openai/gpt-4o-mini-search-preview-2025-03-11',
+    ])('should detect a vendor-prefixed OpenAI Chat search model %s', (model) => {
+      const provider = new OpenAiChatCompletionProvider(model, {
+        id: 'search-grader',
+        config: { apiBaseUrl: 'https://gateway.example/v1' },
+      });
+
+      expect(hasWebSearchCapability(provider)).toBe(true);
+    });
+
+    it('should return true for a real OpenAI Responses provider whose id omits the responses prefix', () => {
+      const provider = new OpenAiResponsesProvider('gpt-6-sol', {
+        config: createSearchConfig('web_search_preview'),
+      });
+
+      expect(provider.id()).toBe('openai:gpt-6-sol');
+      expect(hasWebSearchCapability(provider)).toBe(true);
+    });
+
+    it('should not treat a Responses provider using a Chat-only search model as search-capable', () => {
+      const provider = new OpenAiResponsesProvider('gpt-5-search-api', {
+        config: { apiKey: 'test-key' },
+      });
+
+      expect(hasWebSearchCapability(provider)).toBe(false);
+    });
+
+    it.each([
+      new OpenAiCompletionProvider('gpt-5-search-api'),
+      new OpenAiEmbeddingProvider('gpt-4o-search-preview'),
+      new OpenAiTtsProvider('gpt-4o-mini-search-preview-2025-03-11'),
+    ])('should not treat non-Chat OpenAI providers as built-in search models', (provider) => {
+      expect(hasWebSearchCapability(provider)).toBe(false);
     });
 
     it('should return false for a generic OpenAI provider whose id omits the responses prefix', () => {
       const provider: Partial<ApiProvider> = {
         id: () => 'openai:gpt-4.1',
-        config: {
-          tools: [{ type: 'web_search_preview' }],
-        },
+        config: createSearchConfig('web_search_preview'),
       };
 
       expect(hasWebSearchCapability(provider as ApiProvider)).toBe(false);
@@ -232,7 +294,7 @@ describe('webSearchUtils', () => {
 
     it('should return false for OpenAI responses provider without web_search_preview', () => {
       const provider: Partial<ApiProvider> = {
-        id: () => 'openai:responses:gpt-5.5-2026-04-23',
+        id: () => 'openai:responses:gpt-6-sol',
         config: {
           tools: [{ type: 'code_interpreter' }],
         },
@@ -243,21 +305,42 @@ describe('webSearchUtils', () => {
     it('should return false for OpenAI chat provider (not responses)', () => {
       const provider: Partial<ApiProvider> = {
         id: () => 'openai:chat:gpt-4',
-        config: {
-          tools: [{ type: 'web_search_preview' }],
-        },
+        config: createSearchConfig('web_search_preview'),
       };
       expect(hasWebSearchCapability(provider as ApiProvider)).toBe(false);
     });
 
-    it('should return true for Anthropic provider with web_search tool', () => {
+    it.each(['web_search_20250305', 'web_search_20260209', 'web_search_20260318'])(
+      'should return true for Anthropic provider with the %s tool',
+      (toolType) => {
+        const provider: Partial<ApiProvider> = {
+          id: () => 'anthropic:messages:claude-opus-5',
+          config: {
+            tools: [{ type: toolType, name: 'web_search', max_uses: 5 }],
+          },
+        };
+        expect(hasWebSearchCapability(provider as ApiProvider)).toBe(true);
+      },
+    );
+
+    it.each([
+      'web_search',
+      'web_search_',
+      'web_search_preview',
+      'web_search_2026020',
+      'web_search_202602099',
+      'web_search_20260209_extra',
+      undefined,
+      null,
+    ])('should reject invalid Anthropic web search tool type %s', (toolType) => {
       const provider: Partial<ApiProvider> = {
-        id: () => 'anthropic:messages:claude-opus-4-6',
+        id: () => 'anthropic:messages:claude-opus-5',
         config: {
-          tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 5 }],
+          tools: [{ type: toolType, name: 'web_search' }],
         },
       };
-      expect(hasWebSearchCapability(provider as ApiProvider)).toBe(true);
+
+      expect(hasWebSearchCapability(provider as ApiProvider)).toBe(false);
     });
 
     it('should return false for Anthropic provider without web_search tool', () => {
@@ -279,7 +362,7 @@ describe('webSearchUtils', () => {
 
     it('should return false for provider with no tools configured', () => {
       const provider: Partial<ApiProvider> = {
-        id: () => 'openai:responses:gpt-5.5-2026-04-23',
+        id: () => 'openai:responses:gpt-6-sol',
         config: {},
       };
       expect(hasWebSearchCapability(provider as ApiProvider)).toBe(false);
@@ -297,18 +380,16 @@ describe('webSearchUtils', () => {
   describe('loadWebSearchProvider', () => {
     const mockLoadApiProvider = vi.mocked(loadApiProvider);
     const mockAnthropicWebSearchProvider = (): Partial<ApiProvider> => ({
-      id: () => 'anthropic:messages:claude-opus-4-8',
+      id: () => 'anthropic:messages:claude-opus-5-5',
       config: {
-        tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 5 }],
+        tools: [{ type: 'web_search_20260209', name: 'web_search', max_uses: 5 }],
       },
     });
     const mockOpenAiWebSearchProvider = (): Partial<ApiProvider> =>
       ({
-        id: () => 'openai:gpt-5.5-2026-04-23',
+        id: () => 'openai:gpt-6-sol',
         constructor: { name: 'OpenAiResponsesProvider' },
-        config: {
-          tools: [{ type: 'web_search_preview' }],
-        },
+        config: createSearchConfig('web_search_preview'),
       }) as any;
 
     it('should return null when no providers can be loaded', async () => {
@@ -324,9 +405,7 @@ describe('webSearchUtils', () => {
         id: () => {
           throw new Error('bad provider id');
         },
-        config: {
-          tools: [{ type: 'web_search_preview' }],
-        },
+        config: createSearchConfig('web_search_preview'),
       };
       mockLoadApiProvider
         .mockResolvedValueOnce(malformedProvider as ApiProvider)
@@ -345,12 +424,12 @@ describe('webSearchUtils', () => {
 
       expect(result).toBe(mockProvider);
       expect(mockLoadApiProvider).toHaveBeenCalledWith(
-        'anthropic:messages:claude-opus-4-8',
+        'anthropic:messages:claude-opus-5-5',
         expect.objectContaining({
           options: expect.objectContaining({
             config: expect.objectContaining({
               tools: expect.arrayContaining([
-                expect.objectContaining({ type: 'web_search_20250305' }),
+                expect.objectContaining({ type: 'web_search_20260209' }),
               ]),
             }),
           }),
@@ -366,7 +445,7 @@ describe('webSearchUtils', () => {
 
       expect(result).toBe(mockProvider);
       expect(mockLoadApiProvider).toHaveBeenCalledWith(
-        'openai:responses:gpt-5.5-2026-04-23',
+        'openai:responses:gpt-6-sol',
         expect.objectContaining({
           options: expect.objectContaining({
             config: expect.objectContaining({
@@ -447,6 +526,7 @@ describe('webSearchUtils', () => {
     it('should configure xAI provider with Responses API web search', async () => {
       const mockProvider: Partial<ApiProvider> = {
         id: () => 'xai:responses:grok-4.3',
+        config: { tools: [{ type: 'web_search' }] },
       };
       mockLoadApiProvider
         .mockRejectedValueOnce(new Error('Anthropic failed'))
@@ -456,7 +536,7 @@ describe('webSearchUtils', () => {
         .mockRejectedValueOnce(new Error('Vertex failed'))
         .mockResolvedValueOnce(mockProvider as ApiProvider);
 
-      await loadWebSearchProvider(true);
+      const result = await loadWebSearchProvider(true);
 
       expect(mockLoadApiProvider).toHaveBeenCalledWith(
         'xai:responses:grok-4.3',
@@ -468,6 +548,7 @@ describe('webSearchUtils', () => {
           }),
         }),
       );
+      expect(result).toBe(mockProvider);
     });
 
     it('should use default value (false) for preferAnthropic parameter', async () => {
@@ -478,7 +559,7 @@ describe('webSearchUtils', () => {
 
       // Should try OpenAI first (since preferAnthropic defaults to false)
       expect(mockLoadApiProvider).toHaveBeenCalledWith(
-        'openai:responses:gpt-5.5-2026-04-23',
+        'openai:responses:gpt-6-sol',
         expect.anything(),
       );
     });

@@ -1,6 +1,6 @@
 ---
 sidebar_label: Custom Go (Golang)
-description: Configure custom Go providers to integrate your own Go-based LLM clients, models, and APIs with promptfoo's testing framework for seamless evaluation
+description: Configure custom Go providers to integrate your own Go-based LLM clients, models, and APIs with promptfoo's testing framework for evaluation
 ---
 
 # Custom Go Provider
@@ -8,7 +8,7 @@ description: Configure custom Go providers to integrate your own Go-based LLM cl
 The Go (`golang`) provider allows you to use Go code as an API provider for evaluating prompts. This is useful when you have custom logic, API clients, or models implemented in Go that you want to integrate with your test suite.
 
 :::info
-The golang provider currently experimental
+The golang provider is experimental
 :::
 
 ## Quick Start
@@ -50,8 +50,8 @@ providers:
 Here's a complete example using the OpenAI API:
 
 ```go
-// Package main implements a promptfoo provider that uses OpenAI's API.
-package main
+// Package provider implements a promptfoo provider that uses OpenAI's API.
+package provider
 
 import (
     "fmt"
@@ -94,6 +94,12 @@ func CallApi(prompt string, options map[string]interface{}, ctx map[string]inter
     }, nil
 }
 ```
+
+Use a named, importable package as shown above when the provider lives in a regular Go module.
+Promptfoo builds its generated entry point separately and imports the package through the module
+path from `go.mod`, so repository-wide commands such as `go build ./...` continue to work. The
+`CallApi` symbol must be exported. Existing `package main` providers remain supported, but a provider
+without its own `main` function cannot also be built as a standalone command.
 
 ## Using the Provider
 

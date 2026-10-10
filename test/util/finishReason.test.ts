@@ -13,6 +13,10 @@ describe('normalizeFinishReason', () => {
     it('should map function_call to tool_calls', () => {
       expect(normalizeFinishReason('function_call')).toBe('tool_calls');
     });
+
+    it('should map Responses max_output_tokens to length', () => {
+      expect(normalizeFinishReason('max_output_tokens')).toBe('length');
+    });
   });
 
   describe('Anthropic mappings', () => {
@@ -20,12 +24,20 @@ describe('normalizeFinishReason', () => {
       expect(normalizeFinishReason('end_turn')).toBe('stop');
       expect(normalizeFinishReason('stop_sequence')).toBe('stop');
       expect(normalizeFinishReason('max_tokens')).toBe('length');
+      expect(normalizeFinishReason('model_context_window_exceeded')).toBe('length');
       expect(normalizeFinishReason('tool_use')).toBe('tool_calls');
       expect(normalizeFinishReason('refusal')).toBe('content_filter');
     });
 
     it('should preserve pause_turn as-is', () => {
       expect(normalizeFinishReason('pause_turn')).toBe('pause_turn');
+    });
+  });
+
+  describe('Vercel AI SDK mappings', () => {
+    it('should map hyphenated AI SDK reasons to standard values', () => {
+      expect(normalizeFinishReason('tool-calls')).toBe('tool_calls');
+      expect(normalizeFinishReason('content-filter')).toBe('content_filter');
     });
   });
 
@@ -73,7 +85,7 @@ describe('normalizeFinishReason', () => {
       expect(normalizeFinishReason('custom_stop')).toBe('custom_stop');
     });
 
-    it('should preserve case for unknown reasons after normalization', () => {
+    it('should lowercase unknown reasons after normalization', () => {
       expect(normalizeFinishReason('CUSTOM_REASON')).toBe('custom_reason');
     });
   });

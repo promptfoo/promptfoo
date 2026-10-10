@@ -192,6 +192,18 @@ export const strategies: Strategy[] = [
   },
   {
     category: 'Multi-turn',
+    strategy: 'jailbreak:goblin',
+    displayName: 'Goblin Multi-turn',
+    description: 'Encoding, math, and logic attacks',
+    longDescription:
+      'Multi-turn jailbreak strategy focused on encoding techniques, math, and logic problems',
+    cost: 'High',
+    asrIncrease: '70-90%',
+    link: '/docs/red-team/strategies/goblin/',
+    isRemote: true,
+  },
+  {
+    category: 'Multi-turn',
     strategy: 'mischievous-user',
     displayName: 'Mischievous User',
     description: 'Mischievous user conversations',
@@ -255,6 +267,17 @@ export const strategies: Strategy[] = [
     cost: 'Low',
     asrIncrease: '20-30%',
     link: '/docs/red-team/strategies/hex/',
+  },
+  {
+    category: 'Static (Single-Turn)',
+    strategy: 'arabic-presentation-forms',
+    displayName: 'Arabic Presentation Forms',
+    description: 'Unicode compatibility characters',
+    longDescription:
+      'Tests detection and handling of Arabic text encoded with isolated Unicode presentation forms',
+    cost: 'Low',
+    asrIncrease: 'Variable',
+    link: '/docs/red-team/strategies/arabic-presentation-forms/',
   },
   {
     category: 'Static (Single-Turn)',

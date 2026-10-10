@@ -19,7 +19,6 @@ authors: [vanessa]
 tags: [research-analysis, red-teaming]
 ---
 
-import { Promise } from 'canvas-confetti';
 import CTAButton from './goat/components/CTAButton';
 import ChatInterface from './goat/components/ChatInterface';
 import RedTeamDemo from './goat/components/RedTeamDemo';

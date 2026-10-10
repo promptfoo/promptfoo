@@ -69,6 +69,8 @@ export interface CodexExecutionHealth {
 export interface ProviderResponse {
   cached?: boolean;
   cost?: number;
+  /** Actual target-provider cost incurred during this run, excluding response-cache replays. */
+  incurredCost?: number;
   error?: string;
   /**
    * Indicates that a remote Promptfoo server already materialized multi-input vars
@@ -160,7 +162,7 @@ export interface ProviderResponse {
     spritesheet?: string; // Storage ref URL for spritesheet (Sora)
     model?: string; // Model used (e.g., 'sora-2', 'veo-3.1-generate-preview')
     aspectRatio?: string; // '16:9' or '9:16' (Veo)
-    resolution?: string; // '720p' or '1080p' (Veo)
+    resolution?: string; // '720p', '1080p', or '4k' (Veo)
   };
   images?: ImageOutput[];
 }
@@ -186,8 +188,10 @@ export interface ProviderSimilarityResponse {
 }
 
 export interface ProviderClassificationResponse {
+  cached?: boolean;
   error?: string;
   classification?: Record<string, number>;
+  tokenUsage?: Partial<TokenUsage>;
 }
 
 export interface FunctionToolCallValidator {

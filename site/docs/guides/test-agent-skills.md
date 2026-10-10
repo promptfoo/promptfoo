@@ -71,7 +71,7 @@ providers:
   - id: anthropic:claude-agent-sdk
     label: review-standards-v1
     config:
-      model: claude-sonnet-4-6
+      model: claude-sonnet-5
       working_dir: ./fixtures/v1
       setting_sources: ['project']
       skills: ['review-standards']
@@ -81,7 +81,7 @@ providers:
   - id: anthropic:claude-agent-sdk
     label: review-standards-v2
     config:
-      model: claude-sonnet-4-6
+      model: claude-sonnet-5
       working_dir: ./fixtures/v2
       setting_sources: ['project']
       skills: ['review-standards']
@@ -248,6 +248,8 @@ providers:
 
 Codex discovers project skills from `.agents/skills/` under each `working_dir`. Its `skill-used` signal is inferred from successful reads of the matching `SKILL.md`; Promptfoo collects that evidence in both tracing modes. Keep `enable_streaming: true` if you also want item- and turn-level OpenTelemetry spans. The earlier JavaScript assertion should use `JSON.parse(output)` with Codex because `output_schema` keeps `output` as a JSON string rather than a parsed object.
 
+For managed security workflows rather than general local skills, use the [Codex Security SDK provider](/docs/providers/openai-codex-security). It runs native standard, deep, and diff scans plus finding validation, and returns structured findings, coverage, token usage, and estimated scan cost.
+
 The runnable [`skill-comparison` example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-codex-sdk/skill-comparison) uses the same approach, with a YAML anchor to share the schema between v1 and v2.
 
 There is a [matching Claude example](https://github.com/promptfoo/promptfoo/tree/main/examples/claude-agent-sdk/skill-comparison) that uses `output_format` and the `skills:` filter so you can run the same comparison against either provider.
@@ -280,7 +282,7 @@ providers:
     label: review-standards-v1
     config:
       provider_id: anthropic
-      model: claude-sonnet-4-20250514
+      model: claude-sonnet-5
       working_dir: ./fixtures/v1
       tools:
         read: true
@@ -298,7 +300,7 @@ providers:
     label: review-standards-v2
     config:
       provider_id: anthropic
-      model: claude-sonnet-4-20250514
+      model: claude-sonnet-5
       working_dir: ./fixtures/v2
       tools:
         read: true
