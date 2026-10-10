@@ -33,11 +33,14 @@ vi.mock('./PromptsSection', () => ({
   )),
 }));
 vi.mock('./ProvidersListSection', () => ({
-  ProvidersListSection: vi.fn(({ providers, onChange }) => (
+  ProvidersListSection: vi.fn(({ providers, onChange, availableProviders }) => (
     <div data-testid="mock-provider-selector">
       <button onClick={() => onChange([])}>Mock Clear Providers</button>
       {/* Render something based on providers if needed for other tests, or keep simple */}
       <span>{providers?.length || 0} providers</span>
+      <span data-testid="mock-available-providers">
+        {availableProviders ? `${availableProviders.length} catalog` : 'unrestricted'}
+      </span>
     </div>
   )),
 }));
@@ -544,8 +547,8 @@ describe('EvaluateTestSuiteCreator', () => {
     expect(testCasesSection).toHaveTextContent('Vars: nestedVar, complete, validVar');
   });
 
-  it('should gracefully handle a missing hasCustomConfig property in the /providers/config-status response', async () => {
-    vi.mocked(callApi).mockResolvedValue({
+  it('should gracefully handle a missing hasCustomConfig property in the /providers response', async () => {
+    vi.mocked(callApi).mockResolvedValueOnce({
       ok: true,
       json: async () => ({}),
     } as Response);
@@ -553,7 +556,7 @@ describe('EvaluateTestSuiteCreator', () => {
     render(<EvaluateTestSuiteCreator />);
 
     await waitFor(() => {
-      expect(callApi).toHaveBeenCalledWith('/providers/config-status');
+      expect(callApi).toHaveBeenCalledWith('/providers');
     });
 
     expect(showToastMock).not.toHaveBeenCalled();
@@ -568,6 +571,46 @@ describe('EvaluateTestSuiteCreator', () => {
     const configureEnvButton = await screen.findByTestId('mock-configure-env-button');
 
     expect(configureEnvButton).toBeInTheDocument();
+  });
+
+  it('should restrict the provider picker to the catalog and hide ConfigureEnvButton when a custom catalog exists', async () => {
+    vi.mocked(callApi).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        success: true,
+        data: {
+          providers: [{ id: 'openai:gpt-4o-mini' }],
+          hasCustomConfig: true,
+        },
+      }),
+    } as Response);
+
+    render(<EvaluateTestSuiteCreator />);
+
+    await waitFor(() => {
+      expect(callApi).toHaveBeenCalledWith('/providers');
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('mock-available-providers')).toHaveTextContent('1 catalog');
+    });
+    expect(screen.queryByTestId('mock-configure-env-button')).toBeNull();
+  });
+
+  it('should leave the provider picker unrestricted when the catalog fetch fails', async () => {
+    vi.mocked(callApi).mockRejectedValueOnce(new Error('offline'));
+
+    render(<EvaluateTestSuiteCreator />);
+
+    await waitFor(() => {
+      expect(showToastMock).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to load configuration status'),
+        'error',
+      );
+    });
+
+    expect(screen.getByTestId('mock-configure-env-button')).toBeInTheDocument();
+    expect(screen.getByTestId('mock-available-providers')).toHaveTextContent('unrestricted');
   });
 
   // Future test scenarios will be added here

@@ -143,13 +143,24 @@ export function getAvailableProviders(): ProviderOptions[] {
       continue;
     }
 
-    // Ensure id is present (required for providers even though schema makes it optional)
-    if (!result.data.id) {
+    // Ensure id is a non-empty string (required for providers even though the
+    // schema allows other shapes) so one bad entry cannot 500 the catalog route.
+    if (typeof result.data.id !== 'string' || !result.data.id) {
       logger.warn('Provider missing required "id" field in ui-providers.yaml, skipping', {
         providerIndex: i,
         provider: normalized,
       });
       continue;
+    }
+
+    // Labels render directly in the UI; drop non-string labels instead of
+    // serving a value React cannot render.
+    if (result.data.label !== undefined && typeof result.data.label !== 'string') {
+      logger.warn('Provider has non-string "label" in ui-providers.yaml, dropping label', {
+        providerIndex: i,
+        provider: normalized,
+      });
+      result.data.label = undefined;
     }
 
     validatedProviders.push(result.data);
