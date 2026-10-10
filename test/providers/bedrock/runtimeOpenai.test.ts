@@ -48,6 +48,7 @@ beforeEach(() => {
   });
 });
 afterEach(() => {
+  vi.useRealTimers();
   restoreEnv?.();
   vi.restoreAllMocks();
 });
@@ -56,6 +57,16 @@ describe.each([
   ['chat', BedrockRuntimeChatProvider, chatReply, 'chat/completions'],
   ['responses', BedrockRuntimeResponsesProvider, responsesReply, 'responses'],
 ] as const)('Bedrock Runtime %s', (mode, Provider, reply, path) => {
+  it('forwards the Kimi K3 profile and HTTP service tier', async () => {
+    const provider = new Provider('us.moonshotai.kimi-k3', {
+      config: { apiKey: 'fixture', service_tier: 'flex' },
+    });
+    expect((await provider.getOpenAiBody('hello')).body).toMatchObject({
+      model: 'us.moonshotai.kimi-k3',
+      service_tier: 'flex',
+    });
+  });
+
   it('pins the Runtime endpoint and preserves profile IDs and Bedrock authentication', async () => {
     vi.mocked(fetchWithCache).mockResolvedValue({
       data: reply,
@@ -520,4 +531,100 @@ it.each([
     config: { apiKey: 'fixture', region: 'us-east-1', ...costs },
   });
   expect((await provider.callApi('hello')).cost).toBeCloseTo(expected, 10);
+});
+
+describe('Runtime Chat streaming lifecycle', () => {
+  const completed =
+    'data: {"choices":[{"index":0,"delta":{"content":"READY"},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n';
+
+  it.each(['provider', 'prompt'] as const)(
+    'preserves an explicit false %s streaming override',
+    async (scope) => {
+      const provider = new BedrockRuntimeChatProvider('openai.gpt-oss-120b-1:0', {
+        config: {
+          apiKey: 'fixture',
+          stream: true,
+          ...(scope === 'provider' ? { passthrough: { stream: false } } : {}),
+        },
+      });
+      const context =
+        scope === 'prompt'
+          ? {
+              vars: {},
+              prompt: { raw: 'hello', label: 'hello', config: { passthrough: { stream: false } } },
+            }
+          : undefined;
+      const { body } = await provider.getOpenAiBody('hello', context);
+      expect(body.stream).toBe(false);
+      expect(body.stream_options).toBeUndefined();
+    },
+  );
+
+  it.each([true, false])('measures full body latency only for streaming=%s', async (stream) => {
+    vi.useFakeTimers();
+    vi.mocked(fetchWithCache).mockImplementation(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      return {
+        data: stream ? completed : chatReply,
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+        latencyMs: 1,
+      };
+    });
+    const provider = new BedrockRuntimeChatProvider('openai.gpt-oss-120b-1:0', {
+      config: { apiKey: 'fixture', stream },
+    });
+    const pending = provider.callApi('hello');
+    await vi.advanceTimersByTimeAsync(25);
+    expect((await pending).latencyMs).toBe(stream ? 25 : 1);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('keeps the stream deadline active until body collection ends', async () => {
+    vi.useFakeTimers();
+    const restore = mockProcessEnv({ REQUEST_TIMEOUT_MS: '50' });
+    let signal: AbortSignal | null | undefined;
+    vi.mocked(fetchWithCache).mockImplementation(async (_url, request) => {
+      signal = request?.signal;
+      return new Promise((_resolve, reject) =>
+        signal?.addEventListener('abort', () => reject(signal?.reason), { once: true }),
+      );
+    });
+    try {
+      const provider = new BedrockRuntimeChatProvider('openai.gpt-oss-120b-1:0', {
+        config: { apiKey: 'fixture', stream: true },
+      });
+      const pending = provider.callApi('hello');
+      await vi.advanceTimersByTimeAsync(50);
+      expect(signal?.aborted).toBe(true);
+      const result = await pending;
+      expect(result.error).toContain('stream timed out after 50ms');
+      expect(result.output).toBeUndefined();
+    } finally {
+      restore();
+    }
+  });
+
+  it('preserves caller cancellation while a stream is pending', async () => {
+    vi.useFakeTimers();
+    vi.mocked(fetchWithCache).mockImplementation(
+      async (_url, request) =>
+        new Promise((_resolve, reject) => {
+          request?.signal?.addEventListener('abort', () => reject(request?.signal?.reason), {
+            once: true,
+          });
+        }),
+    );
+    const controller = new AbortController();
+    const provider = new BedrockRuntimeChatProvider('openai.gpt-oss-120b-1:0', {
+      config: { apiKey: 'fixture', stream: true },
+    });
+    const pending = provider.callApi('hello', undefined, { abortSignal: controller.signal });
+    const rejected = expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+    await vi.advanceTimersByTimeAsync(0);
+    controller.abort();
+    await rejected;
+    expect(vi.getTimerCount()).toBe(0);
+  });
 });

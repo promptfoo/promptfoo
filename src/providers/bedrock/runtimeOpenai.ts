@@ -152,7 +152,7 @@ export class BedrockRuntimeChatProvider extends BedrockMantleChatProvider {
       result.body.max_completion_tokens = result.config.max_completion_tokens;
       delete result.body.max_tokens;
     }
-    if (result.config.stream || result.body.stream) {
+    if (result.body.stream === undefined ? result.config.stream : result.body.stream) {
       result.body.stream = true;
       result.body.stream_options = { include_usage: true, ...result.body.stream_options };
     }

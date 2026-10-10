@@ -904,46 +904,74 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       };
     };
     try {
-      ({
-        data,
-        cached,
-        status,
-        statusText,
-        latencyMs,
-        deleteFromCache,
-        headers: responseHeaders,
-      } = await fetchWithCache<OpenAIChatCompletionResponse>(
-        appendOpenAiApiPath(this.getApiUrl(), 'chat/completions'),
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(apiKey && !getAuthHeaders ? { Authorization: `Bearer ${apiKey}` } : {}),
-            ...this.getOpenAiRequestHeaders(config.headers),
+      // Streaming deadlines and latency include body consumption, not just headers.
+      const responseFormat = this.getChatResponseFormat(body);
+      const streamStartTime = responseFormat === 'text' ? Date.now() : undefined;
+      const streamController = responseFormat === 'text' ? new AbortController() : undefined;
+      const timeout = getRequestTimeoutMs();
+      const streamTimeout = streamController
+        ? setTimeout(
+            () =>
+              streamController.abort(new Error(`OpenAI chat stream timed out after ${timeout}ms`)),
+            timeout,
+          )
+        : undefined;
+      const requestSignal = streamController
+        ? callApiOptions?.abortSignal
+          ? AbortSignal.any([callApiOptions.abortSignal, streamController.signal])
+          : streamController.signal
+        : callApiOptions?.abortSignal;
+      try {
+        ({
+          data,
+          cached,
+          status,
+          statusText,
+          latencyMs,
+          deleteFromCache,
+          headers: responseHeaders,
+        } = await fetchWithCache<OpenAIChatCompletionResponse>(
+          appendOpenAiApiPath(this.getApiUrl(), 'chat/completions'),
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(apiKey && !getAuthHeaders ? { Authorization: `Bearer ${apiKey}` } : {}),
+              ...this.getOpenAiRequestHeaders(config.headers),
+            },
+            body: JSON.stringify(body),
+            ...(getAuthHeaders ? { getAuthHeaders } : {}),
+            ...(requestSignal ? { signal: requestSignal } : {}),
           },
-          body: JSON.stringify(body),
-          ...(getAuthHeaders ? { getAuthHeaders } : {}),
-          ...(callApiOptions?.abortSignal ? { signal: callApiOptions.abortSignal } : {}),
-        },
-        getRequestTimeoutMs(),
-        this.getChatResponseFormat(body),
-        this.shouldBustCache(context),
-        this.config.maxRetries,
-        (response) => {
-          if (response.status >= 200 && response.status < 300) {
-            if (response.headers && getOpenAiGatewayRateLimitKind(response.data) !== 'quota') {
-              callApiOptions?.onResponseHeaders?.(response.headers);
+          timeout,
+          responseFormat,
+          this.shouldBustCache(context),
+          this.config.maxRetries,
+          (response) => {
+            if (response.status >= 200 && response.status < 300) {
+              if (response.headers && getOpenAiGatewayRateLimitKind(response.data) !== 'quota') {
+                callApiOptions?.onResponseHeaders?.(response.headers);
+              }
+              completedRefusal = getRefusalResponse({
+                ...response,
+                data: this.parseChatResponse(response.data, body),
+                latencyMs:
+                  streamStartTime !== undefined && !response.cached
+                    ? Date.now() - streamStartTime
+                    : response.latencyMs,
+              });
             }
-            completedRefusal = getRefusalResponse({
-              ...response,
-              data: this.parseChatResponse(response.data, body),
-            });
-          }
-        },
-        callApiOptions?.onResponseHeaders
-          ? (backoff) => callApiOptions.onResponseHeaders?.(backoff.headers, backoff)
-          : undefined,
-      ));
+          },
+          callApiOptions?.onResponseHeaders
+            ? (backoff) => callApiOptions.onResponseHeaders?.(backoff.headers, backoff)
+            : undefined,
+        ));
+      } finally {
+        clearTimeout(streamTimeout);
+      }
+      if (streamStartTime !== undefined && !cached) {
+        latencyMs = Date.now() - streamStartTime;
+      }
 
       if (status >= 200 && status < 300) {
         data = this.parseChatResponse(data, body);
