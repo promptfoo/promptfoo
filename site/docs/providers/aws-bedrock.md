@@ -272,8 +272,9 @@ Promptfoo collects the stream into one eval response. Both modes preserve conten
 blocks in `response.metadata.content`, along with returned usage, cache counts,
 latency, guardrail traces, service tier, performance settings, and requested
 additional response fields. Streaming also executes configured MCP tools and local
-`functionToolCallbacks`. Missing, interrupted, or failed streams produce an error
-before any tool callback runs.
+`functionToolCallbacks` after a completed client tool request. Server-side tool
+blocks remain in the response and are not executed locally. Missing, interrupted,
+or failed tool streams produce an error before callbacks or cache writes.
 
 ```yaml
 providers:
