@@ -80,6 +80,12 @@ For restricted networks, account for the registry, database, identity provider, 
 2. Open **New Scan**, select that target and template, then choose **Run on Server → Run Red Team Scan**. If only **Run via CLI** is available, confirm server-side jobs are enabled and that the target supports server execution.
 3. Open the resulting scan in **Scan History**. Confirm it completes, inspect its logs and results, and check for generation, grading, and target-connection errors. A scan run on the operator's laptop and uploaded afterward does not verify the server worker.
 
+Example configuration in release 125 using synthetic customer-support data:
+
+[![New Red Team Scan with a customer-support target and baseline scan template selected](/img/enterprise-docs/on-prem-scan-target.png)](/img/enterprise-docs/on-prem-scan-target.png)
+
+[![Run on Server tab with the Run Red Team Scan button enabled](/img/enterprise-docs/on-prem-run-server.png)](/img/enterprise-docs/on-prem-run-server.png)
+
 ## Kubernetes and secrets
 
 Use the `promptfoo-enterprise-helm` chart from the release 125 bundle. It deploys the application and authentication services; provide PostgreSQL, a namespace named `promptfoo`, registry pull Secrets, and routing/TLS for both browser-facing hostnames.
