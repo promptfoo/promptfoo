@@ -53,6 +53,7 @@ tests:
 | ---------------- | ------------------ | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | type             | string             | Yes      | Type of assertion                                                                                                                                                                                                                                                                                                                                  |
 | value            | string             | No       | The expected value, if applicable                                                                                                                                                                                                                                                                                                                  |
+| script           | string             | No       | `file://` path for a `javascript`, `python`, or `ruby` assertion. When set, the assertion's `value` is available to the script as `context.value`                                                                                                                                                                                                  |
 | threshold        | number             | No       | The threshold value, applicable only to certain types such as `similar`, `cost`, `javascript`, `python`, `ruby`                                                                                                                                                                                                                                    |
 | weight           | number             | No       | How heavily to weigh the assertion. Defaults to 1.0                                                                                                                                                                                                                                                                                                |
 | provider         | string             | No       | Some assertions (similarity, llm-rubric, model-graded-\*) require an [LLM provider](/docs/providers)                                                                                                                                                                                                                                               |
@@ -487,6 +488,10 @@ tests:
 ```
 
 In this example, the `containsMentalHealth` assertion template is defined at the top of the configuration file and then reused in two test cases. This approach helps maintain consistency and reduces duplication in your configuration.
+
+Assertion templates reuse a named assertion definition. For script assertions that need a different parameter at each use, set `script` directly on the assertion and use `value` for the call-site parameter. Promptfoo renders that value with the test vars and exposes it to the script as `context.value`.
+
+Script parameters also support `.txt`, `.json`, `.yaml`, and `.yml` data-file references such as `value: file://expected.json`, in both inline and external test cases. JavaScript, Python, and Ruby file references in `value` remain literal parameters; only `script` selects the code to execute.
 
 ## Defining named metrics
 

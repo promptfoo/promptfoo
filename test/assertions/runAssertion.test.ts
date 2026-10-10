@@ -164,8 +164,36 @@ vi.mock('../../src/matchers/rag', async () => {
 const Grader = new TestGrader();
 
 describe('runAssertion', () => {
+  it('rejects an empty script before executing an inline value', async () => {
+    const inlineAssertion = vi.fn(() => true);
+
+    await expect(
+      runAssertion({
+        assertion: { type: 'javascript', script: '', value: inlineAssertion },
+        test: {},
+        providerResponse: { output: 'Expected output' },
+      }),
+    ).rejects.toThrow('script must start with file://');
+
+    expect(inlineAssertion).not.toHaveBeenCalled();
+  });
+
   afterEach(() => {
     vi.clearAllMocks();
+  });
+
+  it('should reject script on unsupported assertion types', async () => {
+    await expect(
+      runAssertion({
+        assertion: {
+          type: 'contains',
+          script: 'file://checks/assert.js',
+          value: 'Expected output',
+        },
+        test: {} as AtomicTestCase,
+        providerResponse: { output: 'Expected output' },
+      }),
+    ).rejects.toThrow('script is only supported for javascript, python, and ruby assertions');
   });
 
   const equalityAssertion: Assertion = {

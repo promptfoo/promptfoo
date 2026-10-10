@@ -87,6 +87,9 @@ A `context` object is available in the Ruby method. Here is its type definition:
   # Configuration passed to the assertion
   'config' => Hash | nil,
 
+  # Rendered value from an assertion that uses the script field
+  'value' => String | Array | Numeric | Hash | nil,
+
   # The provider that generated the response
   'provider' => Object | nil,  # ApiProvider type
 
@@ -115,14 +118,15 @@ tests:
 
 ## External .rb
 
-To reference an external file, use the `file://` prefix:
+To reference an external file while keeping `value` available for call-site data, use `script` with a `file://` path:
 
 ```yaml
 assert:
   - type: ruby
-    value: file://relative/path/to/script.rb
+    script: file://relative/path/to/script.rb
+    value: 10
     config:
-      outputLengthLimit: 10
+      inclusive: true
 ```
 
 You can specify a particular method to use by appending it after a colon:
@@ -130,7 +134,7 @@ You can specify a particular method to use by appending it after a colon:
 ```yaml
 assert:
   - type: ruby
-    value: file://relative/path/to/script.rb:custom_assert
+    script: file://relative/path/to/script.rb:custom_assert
 ```
 
 You can also specify a class method on some class or module in the file:
@@ -138,8 +142,10 @@ You can also specify a class method on some class or module in the file:
 ```yaml
 assert:
   - type: ruby
-    value: file://relative/path/to/script.rb:Validators::Format.check_length
+    script: file://relative/path/to/script.rb:Validators::Format.check_length
 ```
+
+Promptfoo renders `value` with the test vars and passes it as `context['value']`. The existing `value: file://relative/path/to/script.rb` form remains supported when no call-site value is needed.
 
 If no method is specified, it defaults to `get_assert`.
 
@@ -174,7 +180,12 @@ This is an example of an assertion that uses data from a configuration defined i
 
 ```ruby
 def get_assert(output, context)
-  output.length <= context.fetch('config', {}).fetch('outputLengthLimit', 0)
+  limit = context.fetch('value', 0)
+  if context.fetch('config', {}).fetch('inclusive', false)
+    output.length >= limit
+  else
+    output.length > limit
+  end
 end
 ```
 

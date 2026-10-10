@@ -70,6 +70,10 @@ type CsvParseOptionsWithColumns<T> = Omit<CsvOptions<T>, 'columns'> & {
   columns: Exclude<CsvOptions['columns'], undefined | false>;
 };
 
+function isExecutableScriptFile(filePath: string): boolean {
+  return isJavascriptFile(filePath) || filePath.endsWith('.py') || filePath.endsWith('.rb');
+}
+
 /**
  * Returns true if the path is accessible. ENOENT (and ENOTDIR, which Node
  * surfaces when a path component isn't a directory) yield false; other errors
@@ -149,11 +153,11 @@ export function maybeLoadFromExternalFile(
   // This handles colon splitting correctly, including Windows drive letters (C:\path)
   const { filePath: cleanPath, functionName } = parseFileUrl(renderedFilePath);
 
-  // In assertion contexts, always preserve Python/JS file references
+  // In assertion contexts, always preserve executable script file references
   // This prevents premature dereferencing of assertion files that should be
   // handled by the assertion system, not the generic config loader
-  if (context === 'assertion' && (cleanPath.endsWith('.py') || isJavascriptFile(cleanPath))) {
-    logger.debug(`Preserving Python/JS file reference in assertion context: ${renderedFilePath}`);
+  if (context === 'assertion' && isExecutableScriptFile(cleanPath)) {
+    logger.debug(`Preserving script file reference in assertion context: ${renderedFilePath}`);
     return renderedFilePath;
   }
 
@@ -166,16 +170,16 @@ export function maybeLoadFromExternalFile(
     return renderedFilePath;
   }
 
-  // For Python/JS files with function names, return the original string unchanged
+  // For executable script files with function names, return the original string unchanged
   // to allow the assertion system to handle function loading at execution time.
   // This prevents premature file existence checks that would fail for function references.
-  if (functionName && (cleanPath.endsWith('.py') || isJavascriptFile(cleanPath))) {
+  if (functionName && isExecutableScriptFile(cleanPath)) {
     return renderedFilePath;
   }
 
-  // For non-Python/JS files, use the original path (ignore potential function name)
+  // For non-script files, use the original path (ignore potential function name)
   const pathToUse =
-    functionName && !(cleanPath.endsWith('.py') || isJavascriptFile(cleanPath))
+    functionName && !isExecutableScriptFile(cleanPath)
       ? renderedFilePath.slice('file://'.length) // Use original path for non-script files
       : cleanPath;
 
@@ -309,13 +313,14 @@ export function getResolvedRelativePath(filePath: string, isCloudConfig?: boolea
  * Recursively loads external file references from a configuration object.
  *
  * @param config - The configuration object to process
- * @param context - Optional context to control file loading behavior
+ * @param context - Test loaders must pass 'test' for test-case rows; generic data
+ * never gains test/assertion semantics from property names alone.
  * @param basePath - Optional file resolution scope; inherits the caller scope when omitted
  * @returns The configuration with external file references resolved
  */
 export function maybeLoadConfigFromExternalFile(
   config: any,
-  context?: 'assertion' | 'general' | 'vars',
+  context?: 'assertion' | 'assertions' | 'general' | 'test' | 'vars',
   basePath?: string,
 ): any {
   if (basePath !== undefined) {
@@ -326,21 +331,38 @@ export function maybeLoadConfigFromExternalFile(
   }
   if (typeof config === 'object' && config !== null) {
     const result: Record<string, any> = {};
+    const isScriptAssertion =
+      context === 'assertions' &&
+      typeof config.type === 'string' &&
+      ['javascript', 'python', 'ruby'].includes(config.type.replace(/^not-/, ''));
     for (const key of Object.keys(config)) {
-      // Detect assertion contexts: if we have a sibling 'type' key with 'python' or 'javascript'
-      // and current key is 'value', switch to assertion context
-      const isAssertionValue =
-        key === 'value' &&
-        'type' in config &&
-        typeof config.type === 'string' &&
-        (config.type === 'python' || config.type === 'javascript');
+      // Only explicit test rows and assert-set entries own assertion arrays.
+      // Provider bodies, metadata, values, and configs remain ordinary data.
+      const isScriptAssertionField = isScriptAssertion && (key === 'value' || key === 'script');
 
-      // Detect vars contexts: if we're processing a 'vars' key, switch to vars context
-      // This preserves file:// glob patterns for test case expansion
-      const isVarsField = key === 'vars';
+      // Test vars retain their file references for runtime expansion.
+      const isVarsField = context === 'test' && key === 'vars';
+      const isAssertionArray =
+        (context === 'test' || (context === 'assertions' && config.type === 'assert-set')) &&
+        key === 'assert' &&
+        Array.isArray(config[key]);
 
-      const childContext = isAssertionValue ? 'assertion' : isVarsField ? 'vars' : context;
-      const value = maybeLoadConfigFromExternalFile(config[key], childContext);
+      const childContext = isScriptAssertionField
+        ? 'assertion'
+        : isAssertionArray
+          ? 'assertions'
+          : isVarsField
+            ? 'vars'
+            : context === 'assertion' || context === 'vars'
+              ? context
+              : 'general';
+      // Script parameters are resolved with test variables at runtime, just as
+      // for inline tests and direct runAssertion calls. Loading them here would
+      // give file-backed test cases an extra round of file dereferencing.
+      const value =
+        isScriptAssertionField && key === 'value' && config.script !== undefined
+          ? config[key]
+          : maybeLoadConfigFromExternalFile(config[key], childContext);
 
       if (key === '__proto__') {
         Object.defineProperty(result, key, {
@@ -355,7 +377,10 @@ export function maybeLoadConfigFromExternalFile(
     }
     return result;
   }
-  return maybeLoadFromExternalFile(config, context);
+  return maybeLoadFromExternalFile(
+    config,
+    context === 'assertion' || context === 'vars' ? context : 'general',
+  );
 }
 
 /**
