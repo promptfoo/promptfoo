@@ -18,17 +18,39 @@ const VERSION_PROBE_MAX_STATUS_BYTES = 8 * 1024;
 // Its private stdin/status pipes are never inherited by the requested CLI.
 const VERSION_PROBE_SUPERVISOR = `
 const { writeSync } = require('node:fs');
+let child;
 let stopping = false;
+let finalized = false;
 let commandExit;
-const finish = (result) => {
-  if (stopping) return;
-  stopping = true;
+const finalize = (result) => {
+  if (finalized) return;
+  finalized = true;
   try {
     writeSync(3, JSON.stringify(result));
   } catch {
     // The owning process may already have closed its end of the status pipe.
   } finally {
     process.kill(-process.pid, 'SIGKILL');
+  }
+};
+const finish = (result) => {
+  if (stopping) return;
+  stopping = true;
+  if (!child || child.pid === undefined || commandExit) return finalize(result);
+
+  // Keep the direct CLI's reaper alive until its exit has been collected. Do
+  // not wait for close: descendants can retain its output pipes until group cleanup.
+  child.once('exit', () => finalize(result));
+  const terminationFailed = (error) => {
+    if (error.code === 'ESRCH') return; // Its exit notification may still be pending.
+    finalize({ error: (result.error ?? 'Could not finish Codex CLI version command') +
+      '; could not terminate the direct CLI process' });
+  };
+  child.on('error', terminationFailed);
+  try {
+    child.kill('SIGKILL');
+  } catch (error) {
+    terminationFailed(error);
   }
 };
 const timeout = () => finish(commandExit ?? { error: 'Codex CLI version check timed out after ${VERSION_PROBE_TIMEOUT_MS}ms' });
@@ -42,6 +64,7 @@ const { spawn } = require('node:child_process');
 const { createInterface } = require('node:readline');
 let deadline = setTimeout(timeout, ${VERSION_PROBE_TIMEOUT_MS});
 createInterface({ input: process.stdin }).once('line', (line) => {
+  if (stopping) return;
   let options;
   try {
     options = JSON.parse(line);
@@ -59,7 +82,7 @@ createInterface({ input: process.stdin }).once('line', (line) => {
   deadline = setTimeout(timeout, options.deadlineAt - Date.now());
   try {
     const { NODE_CHANNEL_FD, NODE_CHANNEL_SERIALIZATION_MODE, ...env } = options.env;
-    const child = spawn(options.command, ['exec', '--experimental-json', '--version'], {
+    child = spawn(options.command, ['exec', '--experimental-json', '--version'], {
       env,
       stdio: ['ignore', 'pipe', 'pipe'],
     });

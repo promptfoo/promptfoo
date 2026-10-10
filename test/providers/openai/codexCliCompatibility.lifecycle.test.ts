@@ -70,12 +70,33 @@ if (mode.startsWith('drain-') && process.platform !== 'win32') {
 await new Promise(() => {});
 `;
 
-type OwnedPids = { wrapper: number; child: number; supervisor: number };
+const directPreload = `
+import fs from 'node:fs';
+import path from 'node:path';
+const directory = process.env.CODEX_PREFLIGHT_TEST_DIR;
+const mode = process.env.CODEX_PREFLIGHT_TEST_MODE;
+fs.writeFileSync(path.join(directory, 'pids.json'), JSON.stringify({ wrapper: process.pid, supervisor: process.ppid }));
+const timer = setInterval(() => {
+  fs.writeFileSync(path.join(directory, 'heartbeat'), String(Date.now()));
+  if (!fs.existsSync(path.join(directory, 'release'))) return;
+  clearInterval(timer);
+  if (mode.startsWith('direct-overflow-')) {
+    process[mode.slice('direct-overflow-'.length)].write('x'.repeat(2 * 1024 * 1024));
+    setInterval(() => {}, 1000);
+  } else {
+    process.stdout.write('codex-cli 0.130.0' + String.fromCharCode(10), () => process.exit(0));
+  }
+}, 20);
+await new Promise(() => {});
+`;
+
+type OwnedPids = { wrapper: number; child?: number; supervisor: number };
 
 describe('Codex compatibility probe process ownership', () => {
   let directory: string;
   let sdkEntryPoint: string;
   let preloadPath: string;
+  let directPreloadPath: string;
   const calls: Promise<unknown>[] = [];
   const cases: string[] = [];
   const owners: ChildProcess[] = [];
@@ -91,19 +112,23 @@ describe('Codex compatibility probe process ownership', () => {
     );
     preloadPath = path.join(directory, 'preload.mjs');
     fs.writeFileSync(preloadPath, preload);
+    directPreloadPath = path.join(directory, 'direct-preload.mjs');
+    fs.writeFileSync(directPreloadPath, directPreload);
   });
 
-  function isRunning(pid: number) {
+  function isPresent(pid: number | undefined) {
+    if (pid === undefined) {
+      return false;
+    }
     try {
       process.kill(pid, 0);
-      if (process.platform === 'linux') {
-        // A zombie has exited; container PID1 may not have reaped its PID yet.
-        const stat = fs.readFileSync(`/proc/${pid}/stat`, 'utf8');
-        return !/^\d+ \(.*\) Z /.test(stat);
-      }
+      // A zombie still has a PID. Only absence proves that it was reaped.
       return true;
-    } catch {
-      return false;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ESRCH') {
+        return false;
+      }
+      throw error;
     }
   }
 
@@ -129,7 +154,7 @@ describe('Codex compatibility probe process ownership', () => {
       Object.entries({
         PATH: process.env.PATH,
         SystemRoot: process.env.SystemRoot,
-        NODE_OPTIONS: `--import=${pathToFileURL(preloadPath).href}`,
+        NODE_OPTIONS: `--import=${pathToFileURL(mode.startsWith('direct-') ? directPreloadPath : preloadPath).href}`,
         CODEX_PREFLIGHT_TEST_DIR: caseDirectory,
         CODEX_PREFLIGHT_TEST_MODE: mode,
       }).filter((entry): entry is [string, string] => typeof entry[1] === 'string'),
@@ -168,7 +193,10 @@ describe('Codex compatibility probe process ownership', () => {
         continue;
       }
       const owned = pids(caseDirectory);
-      const processes = [owned.child, owned.wrapper];
+      const processes = [owned.wrapper];
+      if (owned.child !== undefined) {
+        processes.push(owned.child);
+      }
       if (
         owned.supervisor !== process.pid &&
         !owners.some((owner) => owner.pid === owned.supervisor)
@@ -176,7 +204,7 @@ describe('Codex compatibility probe process ownership', () => {
         processes.push(owned.supervisor);
       }
       for (const pid of processes) {
-        if (isRunning(pid)) {
+        if (isPresent(pid)) {
           try {
             process.kill(pid, 'SIGKILL');
           } catch {
@@ -198,19 +226,71 @@ describe('Codex compatibility probe process ownership', () => {
     fs.rmSync(directory, { recursive: true, force: true });
   });
 
+  it('reaps a successful direct CLI with no descendants', async () => {
+    const probe = start('direct-success', 'direct-success');
+    const owned = await ready(probe.caseDirectory);
+    expect(owned.child).toBeUndefined();
+    fs.writeFileSync(path.join(probe.caseDirectory, 'release'), 'release');
+    await expect(probe.result).resolves.toEqual({ success: true });
+    expect(isPresent(owned.wrapper)).toBe(false);
+  });
+
+  it('reaps a direct CLI before an aborted call settles without stopping another probe', async () => {
+    const controller = new AbortController();
+    const aborted = start('direct-abort', 'direct-stall', controller.signal);
+    const survivor = start('direct-survivor', 'direct-success');
+    const [abortedPids, survivorPids] = await Promise.all([
+      ready(aborted.caseDirectory),
+      ready(survivor.caseDirectory),
+    ]);
+    controller.abort();
+    expect(await aborted.result).toMatchObject({
+      error: expect.objectContaining({ name: 'AbortError' }),
+    });
+    expect(isPresent(abortedPids.wrapper)).toBe(false);
+    expect(isPresent(survivorPids.wrapper)).toBe(true);
+    fs.writeFileSync(path.join(survivor.caseDirectory, 'release'), 'release');
+    await expect(survivor.result).resolves.toEqual({ success: true });
+    expect(isPresent(survivorPids.wrapper)).toBe(false);
+  });
+
+  it('reaps a direct CLI before the ten-second deadline error settles', async () => {
+    const probe = start('direct-timeout', 'direct-stall');
+    const owned = await ready(probe.caseDirectory);
+    expect(await probe.result).toMatchObject({
+      error: expect.objectContaining({
+        message: expect.stringContaining('timed out after 10000ms'),
+      }),
+    });
+    expect(isPresent(owned.wrapper)).toBe(false);
+  });
+
+  it.each(['stdout', 'stderr'] as const)(
+    'reaps a direct CLI before the %s limit error settles',
+    async (stream) => {
+      const probe = start(`direct-overflow-${stream}`, `direct-overflow-${stream}`);
+      const owned = await ready(probe.caseDirectory);
+      fs.writeFileSync(path.join(probe.caseDirectory, 'release'), 'overflow');
+      expect(await probe.result).toMatchObject({
+        error: expect.objectContaining({ message: expect.stringContaining(`${stream} exceeded`) }),
+      });
+      expect(isPresent(owned.wrapper)).toBe(false);
+    },
+  );
+
   it('accepts a successful owned wrapper and descendant', async () => {
     const probe = start('successful');
     const owned = await ready(probe.caseDirectory);
     fs.writeFileSync(path.join(probe.caseDirectory, 'release'), 'release');
     await expect(probe.result).resolves.toEqual({ success: true });
-    await waitUntil(() => !isRunning(owned.wrapper) && !isRunning(owned.child));
+    await waitUntil(() => !isPresent(owned.wrapper) && !isPresent(owned.child));
   });
 
   it('closes inherited pipes when a successful Node wrapper exits before its child', async () => {
     const probe = start('early-exit', 'early-exit');
     const owned = await ready(probe.caseDirectory);
     await expect(probe.result).resolves.toEqual({ success: true });
-    await waitUntil(() => !isRunning(owned.wrapper) && !isRunning(owned.child));
+    await waitUntil(() => !isPresent(owned.wrapper) && !isPresent(owned.child));
   });
 
   it.each(['stdout', 'stderr'] as const)(
@@ -221,13 +301,13 @@ describe('Codex compatibility probe process ownership', () => {
       if (process.platform === 'win32') {
         // A Windows Node wrapper owns its child through a kill-on-close job.
         // Keep it alive while exercising the same complete-output EOF contract.
-        expect(isRunning(owned.wrapper)).toBe(true);
+        expect(isPresent(owned.wrapper)).toBe(true);
       } else {
         // The only version writer is released after the POSIX launcher exits.
         fs.writeFileSync(path.join(probe.caseDirectory, 'exit-release'), 'exit');
-        await waitUntil(() => !isRunning(owned.wrapper));
+        await waitUntil(() => !isPresent(owned.wrapper));
       }
-      expect(isRunning(owned.child)).toBe(true);
+      expect(isPresent(owned.child)).toBe(true);
       fs.writeFileSync(path.join(probe.caseDirectory, 'release'), 'write');
       let settled = false;
       void probe.result.then(() => {
@@ -239,7 +319,7 @@ describe('Codex compatibility probe process ownership', () => {
       expect(Number(fs.readFileSync(path.join(probe.caseDirectory, 'write-done'), 'utf8'))).toBe(
         256 * 1024 + Buffer.byteLength('\ncodex-cli 0.130.0\n'),
       );
-      await waitUntil(() => !isRunning(owned.wrapper) && !isRunning(owned.child));
+      await waitUntil(() => !isPresent(owned.wrapper) && !isPresent(owned.child));
     },
   );
 
@@ -273,7 +353,7 @@ describe('Codex compatibility probe process ownership', () => {
       process.kill(-owner.pid!, 'SIGKILL');
     }
     await exited;
-    await waitUntil(() => !isRunning(owned.wrapper) && !isRunning(owned.child));
+    await waitUntil(() => !isPresent(owned.wrapper) && !isPresent(owned.child));
     const stoppedAt = fs.readFileSync(path.join(caseDirectory, 'heartbeat'), 'utf8');
     await sleep(50);
     expect(fs.readFileSync(path.join(caseDirectory, 'heartbeat'), 'utf8')).toBe(stoppedAt);
@@ -288,7 +368,7 @@ describe('Codex compatibility probe process ownership', () => {
         message: expect.stringContaining('timed out after 10000ms'),
       }),
     });
-    await waitUntil(() => !isRunning(owned.wrapper) && !isRunning(owned.child));
+    await waitUntil(() => !isPresent(owned.wrapper) && !isPresent(owned.child));
   });
 
   it('aborts one probe without stopping a concurrent successful probe', async () => {
@@ -308,12 +388,12 @@ describe('Codex compatibility probe process ownership', () => {
     expect(await aborted.result).toMatchObject({
       error: expect.objectContaining({ name: 'AbortError' }),
     });
-    await waitUntil(() => !isRunning(abortedPids.wrapper) && !isRunning(abortedPids.child));
-    expect(isRunning(successfulPids.wrapper)).toBe(true);
-    expect(isRunning(successfulPids.child)).toBe(true);
+    await waitUntil(() => !isPresent(abortedPids.wrapper) && !isPresent(abortedPids.child));
+    expect(isPresent(successfulPids.wrapper)).toBe(true);
+    expect(isPresent(successfulPids.child)).toBe(true);
     fs.writeFileSync(path.join(successful.caseDirectory, 'release'), 'release');
     await expect(successful.result).resolves.toEqual({ success: true });
-    await waitUntil(() => !isRunning(successfulPids.wrapper) && !isRunning(successfulPids.child));
+    await waitUntil(() => !isPresent(successfulPids.wrapper) && !isPresent(successfulPids.child));
   });
 
   it('terminates the owned tree when captured output exceeds the limit', async () => {
@@ -322,6 +402,6 @@ describe('Codex compatibility probe process ownership', () => {
     expect(await probe.result).toMatchObject({
       error: expect.objectContaining({ message: expect.stringContaining('stdout exceeded') }),
     });
-    await waitUntil(() => !isRunning(owned.wrapper) && !isRunning(owned.child));
+    await waitUntil(() => !isPresent(owned.wrapper) && !isPresent(owned.child));
   });
 });

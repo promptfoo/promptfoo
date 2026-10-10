@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { PassThrough } from 'node:stream';
+import { runInNewContext } from 'node:vm';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { checkCodexCliCompatibility } from '../../../src/providers/openai/codexCliCompatibility';
@@ -321,6 +322,265 @@ describe('checkCodexCliCompatibility', () => {
           message: expect.stringContaining('timed out after 10000ms'),
         }),
       });
+    });
+  });
+
+  describe('POSIX guardian direct-child reaping', () => {
+    let program: string;
+    const streams: PassThrough[] = [];
+
+    beforeEach(async () => {
+      Object.defineProperty(process, 'platform', { value: 'linux', configurable: true });
+      mockVersion('codex-cli 0.130.0');
+      await checkCodexCliCompatibility({
+        sdkEntryPoint,
+        codexPathOverride: '/custom/codex',
+        env: {},
+      });
+      program = mockSpawn.mock.calls[0][1][2];
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.clearAllTimers();
+      for (const stream of streams.splice(0)) {
+        stream.destroy();
+      }
+    });
+
+    function createGuardian(
+      options: { noPid?: boolean; brokenStatus?: boolean; deferInit?: boolean } = {},
+    ) {
+      const pipe = () => {
+        const stream = new PassThrough();
+        streams.push(stream);
+        return stream;
+      };
+      const child = Object.assign(new EventEmitter(), {
+        pid: options.noPid ? undefined : 1234,
+        stdout: pipe(),
+        stderr: pipe(),
+        kill: vi.fn(() => true),
+      });
+      const guardian = Object.assign(new EventEmitter(), {
+        pid: 5678,
+        stdin: pipe(),
+        stdout: pipe(),
+        stderr: pipe(),
+        kill: vi.fn(),
+      });
+      guardian.stdout.resume();
+      guardian.stderr.resume();
+      const input = new EventEmitter();
+      const frames: unknown[] = [];
+      const writeStatus = vi.fn((fd: number, value: string) => {
+        expect(fd).toBe(3);
+        if (options.brokenStatus) {
+          throw new Error('SYNTHETIC_CLOSED_STATUS');
+        }
+        frames.push(JSON.parse(value));
+      });
+      const spawn = vi.fn(() => child);
+      runInNewContext(program, {
+        process: guardian,
+        Date,
+        setTimeout,
+        clearTimeout,
+        require(name: string) {
+          if (name === 'node:fs') {
+            return { writeSync: writeStatus };
+          }
+          if (name === 'node:child_process') {
+            return { spawn };
+          }
+          if (name === 'node:readline') {
+            return { createInterface: () => input };
+          }
+          throw new Error('Unexpected guardian dependency');
+        },
+      });
+      const initialize = () =>
+        input.emit(
+          'line',
+          JSON.stringify({
+            command: '/synthetic/codex',
+            env: {},
+            ownerPid: 42,
+            deadlineAt: Date.now() + 10_000,
+          }),
+        );
+      if (!options.deferInit) {
+        initialize();
+      }
+      return {
+        child,
+        guardian,
+        spawn,
+        initialize,
+        frames,
+        writeStatus,
+        groupKills: () => guardian.kill.mock.calls.filter(([, signal]) => signal === 'SIGKILL'),
+      };
+    }
+
+    it.each([
+      { event: 'deadline', reason: 'timed out after 10000ms' },
+      { event: 'parent deadline signal', reason: 'timed out after 10000ms' },
+      { event: 'owner EOF', reason: 'owner disconnected' },
+      { event: 'owner pipe error', reason: 'owner channel failed' },
+      { event: 'stdout error', reason: 'Could not capture Codex CLI version output' },
+      { event: 'stderr error', reason: 'Could not capture Codex CLI version output' },
+    ])('keeps the direct child reaper alive after $event', async ({ event, reason }) => {
+      const probe = createGuardian();
+      if (event === 'deadline') {
+        await vi.advanceTimersByTimeAsync(10_000);
+      } else if (event === 'parent deadline signal') {
+        probe.guardian.emit('SIGTERM');
+      } else if (event === 'owner EOF') {
+        probe.guardian.stdin.emit('end');
+      } else if (event === 'owner pipe error') {
+        probe.guardian.stdin.emit('error', new Error('SYNTHETIC_PIPE_ERROR'));
+      } else {
+        probe.guardian[event === 'stdout error' ? 'stdout' : 'stderr'].emit(
+          'error',
+          new Error('SYNTHETIC_OUTPUT_ERROR'),
+        );
+      }
+
+      expect(probe.child.kill).toHaveBeenCalledExactlyOnceWith('SIGKILL');
+      expect(probe.frames).toEqual([]);
+      expect(probe.groupKills()).toEqual([]);
+      // Direct exit means waitpid has completed. Captured pipes deliberately
+      // stay open; their close event is not a condition for forced cleanup.
+      probe.child.emit('exit', null, 'SIGKILL');
+      expect(probe.frames).toEqual([{ error: expect.stringContaining(reason) }]);
+      expect(probe.groupKills()).toEqual([[-5678, 'SIGKILL']]);
+    });
+
+    it.each(['returned false', 'ESRCH event', 'ESRCH throw'] as const)(
+      'waits for actual exit when termination %s reports an already-exiting process',
+      async (mode) => {
+        const probe = createGuardian();
+        probe.child.kill.mockImplementation(() => {
+          if (mode === 'ESRCH throw') {
+            throw Object.assign(new Error('already exiting'), { code: 'ESRCH' });
+          }
+          if (mode === 'ESRCH event') {
+            probe.child.emit(
+              'error',
+              Object.assign(new Error('already exiting'), { code: 'ESRCH' }),
+            );
+          }
+          return false;
+        });
+        await vi.advanceTimersByTimeAsync(10_000);
+        expect(probe.frames).toEqual([]);
+        expect(probe.groupKills()).toEqual([]);
+        probe.child.emit('exit', null, 'SIGKILL');
+        expect(probe.frames).toEqual([
+          { error: 'Codex CLI version check timed out after 10000ms' },
+        ]);
+        expect(probe.groupKills()).toEqual([[-5678, 'SIGKILL']]);
+      },
+    );
+
+    it.each(['throws', 'emits error'] as const)(
+      'reports bounded cleanup failure if the termination signal %s',
+      async (mode) => {
+        const probe = createGuardian();
+        probe.child.kill.mockImplementation(() => {
+          const error = Object.assign(new Error('SYNTHETIC_PRIVATE_KILL_ERROR'), { code: 'EPERM' });
+          if (mode === 'throws') {
+            throw error;
+          }
+          probe.child.emit('error', error);
+          return false;
+        });
+        await vi.advanceTimersByTimeAsync(10_000);
+        expect(probe.frames).toEqual([
+          {
+            error:
+              'Codex CLI version check timed out after 10000ms; could not terminate the direct CLI process',
+          },
+        ]);
+        expect(probe.groupKills()).toEqual([[-5678, 'SIGKILL']]);
+        expect(JSON.stringify(probe.frames)).not.toContain('SYNTHETIC_PRIVATE_KILL_ERROR');
+      },
+    );
+
+    it('observes a direct exit delivered synchronously by kill', () => {
+      const probe = createGuardian();
+      probe.child.kill.mockImplementation(() => {
+        probe.child.emit('exit', null, 'SIGKILL');
+        return true;
+      });
+      probe.guardian.stdin.emit('end');
+      expect(probe.frames).toEqual([{ error: 'Codex CLI version check owner disconnected' }]);
+      expect(probe.groupKills()).toEqual([[-5678, 'SIGKILL']]);
+    });
+
+    it('does not start queued initialization after owner EOF', () => {
+      const probe = createGuardian({ deferInit: true });
+      probe.guardian.stdin.emit('end');
+      probe.initialize();
+      expect(probe.spawn).not.toHaveBeenCalled();
+      expect(probe.frames).toEqual([{ error: 'Codex CLI version check owner disconnected' }]);
+      expect(probe.groupKills()).toEqual([[-5678, 'SIGKILL']]);
+    });
+
+    it('preserves the first terminal reason while direct reaping is pending', async () => {
+      const probe = createGuardian();
+      await vi.advanceTimersByTimeAsync(10_000);
+      probe.guardian.stdin.emit('end');
+      probe.guardian.emit('SIGTERM');
+      probe.guardian.stdout.emit('error', new Error('later failure'));
+      expect(probe.child.kill).toHaveBeenCalledTimes(1);
+      probe.child.emit('exit', null, 'SIGKILL');
+      probe.child.emit('close', null, 'SIGKILL');
+      await vi.advanceTimersByTimeAsync(0);
+      expect(probe.frames).toEqual([{ error: 'Codex CLI version check timed out after 10000ms' }]);
+      expect(probe.groupKills()).toEqual([[-5678, 'SIGKILL']]);
+    });
+
+    it('still reaps before group cleanup when the parent status pipe is closed', () => {
+      const probe = createGuardian({ brokenStatus: true });
+      probe.guardian.stdin.emit('end');
+      expect(probe.writeStatus).not.toHaveBeenCalled();
+      expect(probe.groupKills()).toEqual([]);
+      probe.child.emit('exit', null, 'SIGKILL');
+      expect(probe.writeStatus).toHaveBeenCalledTimes(1);
+      expect(probe.groupKills()).toEqual([[-5678, 'SIGKILL']]);
+    });
+
+    it('does not wait for a nonexistent process after spawn failure', () => {
+      const probe = createGuardian({ noPid: true });
+      probe.child.emit('error', Object.assign(new Error('spawn ENOENT'), { code: 'ENOENT' }));
+      expect(probe.child.kill).not.toHaveBeenCalled();
+      expect(probe.frames).toEqual([{ error: 'Could not start Codex CLI version command' }]);
+      expect(probe.groupKills()).toEqual([[-5678, 'SIGKILL']]);
+    });
+
+    it('retains a reaped successful exit while inherited pipes wait for the deadline', async () => {
+      const probe = createGuardian();
+      probe.child.emit('exit', 0, null);
+      await vi.advanceTimersByTimeAsync(9_999);
+      expect(probe.frames).toEqual([]);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(probe.child.kill).not.toHaveBeenCalled();
+      expect(probe.frames).toEqual([{ code: 0, signal: null }]);
+      expect(probe.groupKills()).toEqual([[-5678, 'SIGKILL']]);
+    });
+
+    it('publishes a reaped exit promptly after ordinary pipe drain', async () => {
+      const probe = createGuardian();
+      probe.child.emit('exit', 0, null);
+      probe.child.stdout.end('codex-cli 0.130.0\n');
+      probe.child.stderr.end();
+      probe.child.emit('close', 0, null);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(probe.child.kill).not.toHaveBeenCalled();
+      expect(probe.frames).toEqual([{ code: 0, signal: null }]);
+      expect(probe.groupKills()).toEqual([[-5678, 'SIGKILL']]);
     });
   });
 
