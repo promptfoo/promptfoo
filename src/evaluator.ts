@@ -25,6 +25,7 @@ import { selectMaxScore } from './matchers/comparison';
 import {
   getResultIndexKey,
   PROMPTFOO_METADATA_KEY,
+  RESPONSE_OUTPUT_METADATA_KEYS,
   sanitizeResultForJsonlArtifact,
 } from './models/evalResult';
 import { generateIdFromPrompt } from './models/prompt';
@@ -593,31 +594,34 @@ function logGroupedGradingStatus({
   }
 }
 
-// When an afterEach hook replaces response.metadata, a legacy top-level metadata.headers that
-// was copied from the OLD transport headers becomes stale — and would persist as stale (and
-// possibly sensitive) headers. Only re-sync when the original top-level headers provably came
-// from the original transport (deep-equal) and the hook left that top-level copy unchanged;
-// otherwise the hook owns metadata.headers and we leave it alone.
-function synchronizeLegacyTransportHeaders(
+// Keep copied response output and transport headers aligned when hooks replace metadata.
+// Only update a provider-derived copy that the hook left unchanged.
+function synchronizeResponseMetadata(
   originalMetadata: Record<string, unknown> | undefined,
   originalResponseMetadata: Record<string, unknown> | undefined,
   hookMetadata: Record<string, unknown> | undefined,
   hookResponseMetadata: Record<string, unknown> | undefined,
+  testMetadata: Record<string, unknown> | undefined,
 ) {
-  const originalHeaders = originalMetadata?.headers;
-  if (
-    originalHeaders === undefined ||
-    !isDeepStrictEqual(originalHeaders, originalResponseMetadata?.headers) ||
-    !isDeepStrictEqual(hookMetadata?.headers, originalHeaders)
-  ) {
-    return hookMetadata;
-  }
+  let metadata = hookMetadata;
+  for (const key of ['headers', ...RESPONSE_OUTPUT_METADATA_KEYS]) {
+    const originalValue = originalMetadata?.[key];
+    if (
+      originalValue === undefined ||
+      !isDeepStrictEqual(originalValue, originalResponseMetadata?.[key]) ||
+      !isDeepStrictEqual(hookMetadata?.[key], originalValue) ||
+      (key !== 'headers' && testMetadata && isDeepStrictEqual(originalValue, testMetadata[key]))
+    ) {
+      continue;
+    }
 
-  const { headers: _staleHeaders, ...metadataWithoutHeaders } = hookMetadata ?? {};
-  if (hookResponseMetadata?.headers === undefined) {
-    return metadataWithoutHeaders;
+    const { [key]: _staleValue, ...metadataWithoutKey } = metadata ?? {};
+    metadata =
+      hookResponseMetadata?.[key] === undefined
+        ? metadataWithoutKey
+        : { ...metadataWithoutKey, [key]: hookResponseMetadata[key] };
   }
-  return { ...metadataWithoutHeaders, headers: hookResponseMetadata.headers };
+  return metadata;
 }
 
 function applyGradingResult(row: EvaluateResult, checkResult: GradingResult) {
@@ -4446,13 +4450,13 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
           // runExtensionHook sanitizes namedScores via filterFiniteScores;
           // re-sanitize here to also catch in-place mutations that bypass the merge.
           row.namedScores = filterFiniteScores(afterEachOut.result.namedScores);
-          // If a hook replaced response.metadata, a legacy top-level metadata.headers copied
-          // from the old transport would otherwise persist as stale credentials. Re-sync it.
-          row.metadata = synchronizeLegacyTransportHeaders(
+          // Remove or update stale provider-derived copies before persistence and projection.
+          row.metadata = synchronizeResponseMetadata(
             originalMetadata,
             originalResponseMetadata,
             afterEachOut.result.metadata,
             afterEachOut.result.response?.metadata,
+            evalStep.test.metadata,
           );
           if (row.response && afterEachOut.result.response) {
             row.response.metadata = afterEachOut.result.response.metadata;

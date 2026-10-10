@@ -1377,12 +1377,12 @@ describe('EvalResult', () => {
     it.each(
       ['model', 'persisted', 'jsonl'].flatMap((boundary) =>
         [false, true].flatMap((strip) =>
-          [false, true].map((testOwned) => ({ boundary, strip, testOwned })),
+          ['provider', 'test', 'hook'].map((owner) => ({ boundary, strip, owner })),
         ),
       ),
     )(
-      'projects native response metadata at $boundary output (strip: $strip, test-owned: $testOwned)',
-      async ({ boundary, strip, testOwned }) => {
+      'projects native response metadata at $boundary output (strip: $strip, owner: $owner)',
+      async ({ boundary, strip, owner }) => {
         const nativeMetadata = {
           content: [
             { text: 'native-response-secret' },
@@ -1401,11 +1401,19 @@ describe('EvalResult', () => {
           trace: { note: 'test-owned trace' },
           additionalModelResponseFields: { note: 'test-owned fields' },
         };
+        const ownedMetadata =
+          owner === 'test'
+            ? testMetadata
+            : {
+                content: 'hook-owned note',
+                trace: { note: 'hook-owned trace' },
+                additionalModelResponseFields: { note: 'hook-owned fields' },
+              };
         const metadata = { ...nativeMetadata, latencyMs: 42, note: 'retain diagnostics' };
         const input = createEvaluateResult({
-          id: `native-content-${boundary}-${strip}-${testOwned}`,
+          id: `native-content-${boundary}-${strip}-${owner}`,
           response: { output: 'native-response-secret', metadata },
-          metadata: testOwned ? testMetadata : metadata,
+          metadata: owner === 'provider' ? metadata : ownedMetadata,
           testCase: createAtomicTestCase({ metadata: testMetadata }),
         });
         const flags = getStripFlags({ PROMPTFOO_STRIP_RESPONSE_OUTPUT: String(strip) });
@@ -1425,12 +1433,12 @@ describe('EvalResult', () => {
         for (const [key, value] of Object.entries(nativeMetadata)) {
           if (strip) {
             expect(projected.response?.metadata).not.toHaveProperty(key);
-            if (!testOwned) {
+            if (owner === 'provider') {
               expect(projected.metadata).not.toHaveProperty(key);
             }
           } else {
             expect(projected.response?.metadata?.[key]).toEqual(value);
-            if (!testOwned) {
+            if (owner === 'provider') {
               expect(projected.metadata?.[key]).toEqual(value);
             }
           }
@@ -1438,8 +1446,8 @@ describe('EvalResult', () => {
         if (strip) {
           expect(JSON.stringify(projected)).not.toContain('native-response-secret');
         }
-        if (testOwned) {
-          expect(projected.metadata).toEqual(testMetadata);
+        if (owner !== 'provider') {
+          expect(projected.metadata).toEqual(ownedMetadata);
         }
         expect(projected.response?.metadata?.latencyMs).toBe(42);
         expect(projected.testCase.metadata).toEqual(testMetadata);

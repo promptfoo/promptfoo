@@ -69,6 +69,14 @@ function stripMediaReferences(value: unknown): unknown {
   return value;
 }
 
+export const RESPONSE_OUTPUT_METADATA_KEYS: readonly string[] = [
+  'audio',
+  'blobUris',
+  'content',
+  'trace',
+  'additionalModelResponseFields',
+];
+
 function projectOutputMetadata<T>(
   metadata: T,
   stripOutput: boolean,
@@ -86,11 +94,10 @@ function projectOutputMetadata<T>(
       ) {
         return [[key, value]];
       }
-      return ['audio', 'blobUris', 'content', 'trace', 'additionalModelResponseFields'].includes(
-        key,
-      )
-        ? []
-        : [[key, stripMediaReferences(sanitizeForDb(value))]];
+      if (RESPONSE_OUTPUT_METADATA_KEYS.includes(key)) {
+        return isDeepStrictEqual(value, responseMetadata[key]) ? [] : [[key, value]];
+      }
+      return [[key, stripMediaReferences(sanitizeForDb(value))]];
     }),
   ) as T;
 }
