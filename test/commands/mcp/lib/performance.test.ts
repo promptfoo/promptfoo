@@ -1,15 +1,13 @@
-import { describe, expect, it } from 'vitest';
-import {
-  BatchProcessor,
-  EvaluationCache,
-  paginate,
-  streamProcess,
-} from '../../../../src/commands/mcp/lib/performance';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { evaluationCache as cache, paginate } from '../../../../src/commands/mcp/lib/performance';
 
 import type { EvalSummary } from '../../../../src/types';
 
 describe('MCP Performance', () => {
-  describe('EvaluationCache', () => {
+  describe('evaluationCache', () => {
+    beforeEach(() => cache.clear());
+    afterEach(() => cache.clear());
+
     const createMockEvalSummary = (id: string): EvalSummary => ({
       evalId: id,
       datasetId: null,
@@ -23,42 +21,19 @@ describe('MCP Performance', () => {
     });
 
     it('should store and retrieve values', () => {
-      const cache = new EvaluationCache();
       const mockEvalSummaries = [createMockEvalSummary('eval1')];
       cache.set('key1', mockEvalSummaries);
       expect(cache.get('key1')).toEqual(mockEvalSummaries);
     });
 
     it('should return undefined for missing keys', () => {
-      const cache = new EvaluationCache();
       expect(cache.get('nonexistent')).toBeUndefined();
     });
 
-    it('should check if key exists', () => {
-      const cache = new EvaluationCache();
-      const mockEvalSummaries = [createMockEvalSummary('eval1')];
-      cache.set('exists', mockEvalSummaries);
-      expect(cache.has('exists')).toBe(true);
-      expect(cache.has('missing')).toBe(false);
-    });
-
-    it('should clear all entries', () => {
-      const cache = new EvaluationCache();
-      const mockEvalSummaries1 = [createMockEvalSummary('eval1')];
-      const mockEvalSummaries2 = [createMockEvalSummary('eval2')];
-      cache.set('key1', mockEvalSummaries1);
-      cache.set('key2', mockEvalSummaries2);
-      cache.clear();
-      expect(cache.has('key1')).toBe(false);
-      expect(cache.has('key2')).toBe(false);
-    });
-
     it('should return stats', () => {
-      const cache = new EvaluationCache();
       const mockEvalSummaries = [createMockEvalSummary('eval1')];
       cache.set('key1', mockEvalSummaries);
-      const stats = cache.getStats();
-      expect(stats.size).toBe(1);
+      expect(cache.size).toBe(1);
     });
   });
 
@@ -95,8 +70,8 @@ describe('MCP Performance', () => {
     });
 
     it('should constrain page size to max', () => {
-      const result = paginate(items, { pageSize: 200, maxPageSize: 5 });
-      expect(result.pagination.pageSize).toBe(5);
+      const result = paginate(items, { pageSize: 200 });
+      expect(result.pagination.pageSize).toBe(100);
     });
 
     it('should handle empty arrays', () => {
@@ -104,153 +79,6 @@ describe('MCP Performance', () => {
       expect(result.data).toEqual([]);
       expect(result.pagination.totalItems).toBe(0);
       expect(result.pagination.totalPages).toBe(0);
-    });
-  });
-
-  describe('streamProcess', () => {
-    it('should process all items', async () => {
-      const items = [1, 2, 3, 4, 5];
-      const processor = async (x: number) => x * 2;
-
-      const results: number[] = [];
-      for await (const result of streamProcess(items, processor, 2)) {
-        results.push(result);
-      }
-
-      expect(results.sort((a, b) => a - b)).toEqual([2, 4, 6, 8, 10]);
-    });
-
-    it('should respect concurrency limit', async () => {
-      let concurrent = 0;
-      let maxConcurrent = 0;
-      // Hold each in-flight call until the SUT has filled the concurrency
-      // window, then release a wave together. This makes maxConcurrent
-      // observation independent of wall-clock pacing.
-      const limit = 2;
-      let releaseWave: (() => void) | undefined;
-      let waveBarrier = new Promise<void>((resolve) => {
-        releaseWave = resolve;
-      });
-
-      const items = [1, 2, 3, 4, 5, 6];
-      const processor = async (x: number) => {
-        concurrent++;
-        maxConcurrent = Math.max(maxConcurrent, concurrent);
-        if (concurrent >= limit) {
-          releaseWave?.();
-        }
-        let resolveFallback!: () => void;
-        const fallback = new Promise<void>((r) => {
-          resolveFallback = r;
-        });
-        const fallbackHandle = setTimeout(() => resolveFallback(), 100);
-        try {
-          await Promise.race([waveBarrier, fallback]);
-        } finally {
-          clearTimeout(fallbackHandle);
-        }
-        concurrent--;
-        if (concurrent === 0) {
-          waveBarrier = new Promise<void>((resolve) => {
-            releaseWave = resolve;
-          });
-        }
-        return x;
-      };
-
-      const results: number[] = [];
-      for await (const result of streamProcess(items, processor, 2)) {
-        results.push(result);
-      }
-
-      expect(maxConcurrent).toBeLessThanOrEqual(2);
-      expect(results.length).toBe(6);
-    });
-
-    it('should yield results as they complete', async () => {
-      const items = [1, 2, 3];
-      const processor = async (x: number) => {
-        await Promise.resolve();
-        return x;
-      };
-
-      const results: number[] = [];
-      for await (const result of streamProcess(items, processor, 3)) {
-        results.push(result);
-      }
-
-      // All items should be processed
-      expect(results.sort((a, b) => a - b)).toEqual([1, 2, 3]);
-    });
-
-    it('should handle empty input', async () => {
-      const results: number[] = [];
-      for await (const result of streamProcess([], async (x: number) => x)) {
-        results.push(result);
-      }
-      expect(results).toEqual([]);
-    });
-
-    it('should handle single item', async () => {
-      const results: number[] = [];
-      for await (const result of streamProcess([42], async (x) => x * 2)) {
-        results.push(result);
-      }
-      expect(results).toEqual([84]);
-    });
-
-    it('should properly track which promise completed', async () => {
-      // Verifies the fix for a bug where the wrong promise was removed when
-      // items completed in reverse arrival order. Use microtask-staggered
-      // resolution so deterministic completion order still differs from
-      // arrival order, without wall-clock pacing.
-      const items = [1, 2, 3, 4, 5];
-
-      const processor = async (x: number) => {
-        // x=5 yields 1 microtask, x=1 yields 5 microtasks → reverse order.
-        for (let i = 0; i < 6 - x; i++) {
-          await Promise.resolve();
-        }
-        return x;
-      };
-
-      const results: number[] = [];
-      for await (const result of streamProcess(items, processor, 3)) {
-        results.push(result);
-      }
-
-      // All items should be yielded exactly once
-      expect(results.length).toBe(5);
-      expect(results.sort((a, b) => a - b)).toEqual([1, 2, 3, 4, 5]);
-    });
-  });
-
-  describe('BatchProcessor', () => {
-    it('should process items in batches', async () => {
-      const processedBatches: number[][] = [];
-      const processor = async (batch: number[]) => {
-        processedBatches.push([...batch]);
-        return batch.map((x) => x * 2);
-      };
-
-      const batchProcessor = new BatchProcessor(processor, 2, 10);
-
-      const results = await Promise.all([
-        batchProcessor.add(1),
-        batchProcessor.add(2),
-        batchProcessor.add(3),
-      ]);
-
-      // Results should be correct regardless of batching
-      expect(results.sort((a, b) => a - b)).toEqual([2, 4, 6]);
-    });
-
-    it('should handle single item', async () => {
-      const processor = async (batch: number[]) => batch.map((x) => x * 2);
-      const batchProcessor = new BatchProcessor(processor, 10, 5);
-
-      const result = await batchProcessor.add(5);
-      expect(result).toBe(10);
     });
   });
 });
