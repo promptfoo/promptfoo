@@ -127,7 +127,10 @@ export async function prepareVoiceInterventions(
     env,
     useDefaultApiKey === false ? [] : ['OPENAI_API_KEY'],
   );
-  const headers = { ...caller?.headers };
+  // Match Live's HTTP conversion before validating or collecting YAML credentials.
+  const headers = Object.fromEntries(
+    Object.entries(caller?.headers ?? {}).map(([name, value]) => [name, String(value)]),
+  );
   if (
     !apiKey &&
     (url.username || url.password) &&
@@ -157,7 +160,7 @@ export async function prepareVoiceInterventions(
   });
   const redact = createOpenAiCredentialRedactor({
     ...provider.getOpenAiRequestHeaders(),
-    ...(apiKey ? { 'api-key': apiKey } : {}),
+    ...(apiKey ? { 'api-key': String(apiKey) } : {}),
   });
   const prepared: PreparedVoiceIntervention[] = [];
   for (const [index, entry] of entries.entries()) {

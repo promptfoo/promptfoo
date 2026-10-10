@@ -203,7 +203,12 @@ export class OpenAiTtsProvider extends OpenAiGenericProvider {
       throw getAbortError(abortSignal);
     }
     const config = { ...this.config, ...context?.prompt?.config } as OpenAiTtsOptions;
-    const customHeaders = this.getOpenAiRequestHeaders(config.headers);
+    const customHeaders = Object.fromEntries(
+      Object.entries(this.getOpenAiRequestHeaders(config.headers)).map(([name, value]) => [
+        name,
+        String(value),
+      ]),
+    );
     const apiKey = this.getApiKey();
     const hasHeaderCredential = Object.entries(customHeaders).some(
       ([key, value]) => isOpenAiCredentialHeader(key) && value.trim().length > 0,

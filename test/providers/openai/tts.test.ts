@@ -3,6 +3,7 @@ import { getCache, getScopedCacheKey, isCacheEnabled } from '../../../src/cache'
 import { OpenAiTtsProvider } from '../../../src/providers/openai/tts';
 import { HttpRateLimitError } from '../../../src/util/fetch/errors';
 import { fetchWithRetries } from '../../../src/util/fetch/index';
+import { loadYaml } from '../../../src/util/yamlLoad';
 import { createApiKeyOptions } from '../../factories/literalFixtures';
 import { mockProcessEnv } from '../../util/utils';
 
@@ -117,6 +118,35 @@ describe('OpenAiTtsProvider', () => {
     expect(headers.get('authorization')).toBe('Bearer gateway-key');
     expect(headers.get('content-type')).toBe('application/json');
   });
+
+  it.each([
+    ['"12345678"', 'string', '12345678'],
+    ['12345678', 'number', '12345678'],
+    ['0', 'number', '0'],
+    ['true', 'boolean', 'true'],
+    ['false', 'boolean', 'false'],
+  ])(
+    'normalizes YAML gateway header %s before credential checks',
+    async (scalar, type, expected) => {
+      const headers = loadYaml(`X-Gateway-Key: ${scalar}`) as Record<string, unknown>;
+      expect(typeof headers['X-Gateway-Key']).toBe(type);
+      mockedFetch.mockResolvedValue(audioResponse());
+      const provider = new OpenAiTtsProvider('gpt-4o-mini-tts', {
+        config: {
+          apiKey: 'explicit-test-key',
+          // YAML scalars reach this boundary before the HTTP client stringifies them.
+          headers: headers as Record<string, string>,
+        },
+      });
+
+      const result = await provider.callApi('Read this sentence.');
+
+      expect(result.error).toBeUndefined();
+      expect(mockedFetch).toHaveBeenCalledOnce();
+      expect(mockedFetch.mock.calls[0][1]?.headers).toMatchObject({ 'X-Gateway-Key': expected });
+      expect(typeof headers['X-Gateway-Key']).toBe(type);
+    },
+  );
 
   it('forwards passthrough speech options', async () => {
     mockedFetch.mockResolvedValue(audioResponse());

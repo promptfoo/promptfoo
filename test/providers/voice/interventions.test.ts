@@ -5,6 +5,7 @@ import { OpenAiTtsProvider } from '../../../src/providers/openai/tts';
 import { prepareVoiceInterventions } from '../../../src/providers/voice/interventions';
 import * as hashing from '../../../src/util/createHash';
 import { fetchWithRetries } from '../../../src/util/fetch/index';
+import { loadYaml } from '../../../src/util/yamlLoad';
 import { mockProcessEnv } from '../../util/utils';
 
 import type { ProviderResponse } from '../../../src/contracts/providers';
@@ -178,6 +179,96 @@ describe('prepareVoiceInterventions', () => {
     const headers = new Headers(mockedFetch.mock.calls[0][1]?.headers);
     expect(headers.get('x-api-key')).toBe('gateway-owned-key');
     expect(headers.has('authorization')).toBe(false);
+  });
+
+  it.each([
+    ['"12345678"', 'string', '12345678'],
+    ['12345678', 'number', '12345678'],
+    ['0', 'number', '0'],
+    ['true', 'boolean', 'true'],
+    ['false', 'boolean', 'false'],
+  ])('normalizes and protects the YAML caller header %s', async (scalar, type, expected) => {
+    const headers = loadYaml(`api-key: ${scalar}`) as Record<string, unknown>;
+    const caller: VoiceParticipantOptions = {
+      apiBaseUrl: 'wss://gateway.example.test/v1',
+      headers: headers as Record<string, string>,
+    };
+    const live = new OpenAiLiveProvider('gpt-live-1', { config: caller });
+    await expect(
+      live.createSession(
+        'Validate without opening a socket.',
+        undefined,
+        new AbortController().signal,
+      ),
+    ).resolves.toBeDefined();
+    const cache = { get: vi.fn(), set: vi.fn() };
+    vi.mocked(getCache).mockReturnValue(cache as unknown as ReturnType<typeof getCache>);
+    vi.mocked(isCacheEnabled).mockReturnValue(true);
+    const hash = vi.spyOn(hashing, 'sha256');
+
+    const [prepared] = await prepare(undefined, caller);
+
+    expect(prepared.audio).toEqual(tone());
+    expect(mockedFetch.mock.calls[0][1]?.headers).toMatchObject({ 'api-key': expected });
+    expect(typeof headers['api-key']).toBe(type);
+    const hashInputs = hash.mock.calls.flatMap(([input]) =>
+      typeof input === 'string' ? [input] : [],
+    );
+    expect(hashInputs.length).toBeGreaterThan(0);
+    for (const input of hashInputs) {
+      expect(JSON.parse(input).headers).not.toHaveProperty('api-key');
+    }
+    expect(cache.get).not.toHaveBeenCalled();
+    expect(cache.set).not.toHaveBeenCalled();
+  });
+
+  it.each(['"12345678"', '12345678', '0', 'true', 'false'])(
+    'redacts the normalized YAML caller header %s when a gateway echoes it',
+    async (scalar) => {
+      const headers = loadYaml(`api-key: ${scalar}`) as Record<string, unknown>;
+      mockedFetch.mockResolvedValue({
+        ok: false,
+        status: 401,
+        statusText: 'Unauthorized',
+        text: async () =>
+          JSON.stringify({
+            error: { message: `Rejected ${headers['api-key']}. Keep diagnostic marker.` },
+          }),
+      } as Response);
+      const onResponse = vi.fn();
+      const caller = {
+        apiBaseUrl: 'https://gateway.example.test/v1',
+        headers: headers as Record<string, string>,
+      };
+
+      await expect(prepare(undefined, caller, undefined, undefined, onResponse)).rejects.toThrow(
+        'Rejected [REDACTED]. Keep diagnostic marker.',
+      );
+
+      expect(onResponse.mock.calls[0][0].error).toBe(
+        'API error 401: Rejected [REDACTED]. Keep diagnostic marker.',
+      );
+    },
+  );
+
+  it('redacts a numeric YAML API key exactly as its rendered Authorization value', async () => {
+    const caller = loadYaml('apiKey: 12345678') as VoiceParticipantOptions;
+    mockedFetch.mockResolvedValue({
+      ok: false,
+      status: 401,
+      statusText: 'Unauthorized',
+      text: async () => JSON.stringify({ error: { message: 'Rejected 12345678.' } }),
+    } as Response);
+    const onResponse = vi.fn();
+
+    await expect(prepare(undefined, caller, undefined, undefined, onResponse)).rejects.toThrow(
+      'Rejected [REDACTED].',
+    );
+
+    expect(mockedFetch.mock.calls[0][1]?.headers).toMatchObject({
+      Authorization: 'Bearer 12345678',
+    });
+    expect(onResponse.mock.calls[0][0].error).toBe('API error 401: Rejected [REDACTED].');
   });
 
   it.each(['X-Gateway-Key', 'X-Gateway-Auth', 'X-Gateway-Authentication'])(
