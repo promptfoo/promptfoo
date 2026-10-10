@@ -374,14 +374,19 @@ export class AssertionsResult {
     // marker to their own top level when they fail, while an effectively-passed
     // set (e.g. `threshold: 0`) or a `weight: 0` metric-only assertion may still
     // carry a grader failure that must not reclassify an unrelated failure.
-    const hasGraderError =
-      !pass &&
-      this.componentResults.some((result) => !result.pass && result.metadata?.graderError === true);
+    // Keep the first failing grader component's reason: by this point `reason`
+    // may be an aggregate threshold summary or another component's failure.
+    const graderFailureReason = pass
+      ? undefined
+      : this.componentResults.find(
+          (result) => !result.pass && result.metadata?.graderError === true,
+        )?.reason;
+    const hasGraderError = graderFailureReason !== undefined;
 
     this.result = {
       pass,
       score,
-      reason,
+      reason: graderFailureReason || reason,
       namedScores: normalizedNamedScores,
       ...(hasNamedScoreWeights && { namedScoreWeights: { ...this.namedScoreWeights } }),
       tokensUsed: this.tokensUsed,

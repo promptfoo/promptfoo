@@ -195,6 +195,32 @@ describe('runAssertions', () => {
     });
   });
 
+  it('does not fail the test for grader errors inside a zero-weight assertion set', async () => {
+    const failingGrader: ApiProvider = {
+      id: () => 'failing-grading-provider',
+      callApi: vi.fn().mockResolvedValue({ error: 'Grader unavailable' }),
+    };
+    const result = await runAssertions({
+      prompt: 'The question',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      test: {
+        assert: [
+          { type: 'equals', value: 'Expected output' },
+          {
+            type: 'assert-set',
+            weight: 0,
+            assert: [{ type: 'model-graded-closedqa', value: 'The reference answer' }],
+          },
+        ],
+        options: { provider: failingGrader },
+      },
+      providerResponse: { output: 'Expected output' },
+    });
+
+    expect(result).toMatchObject({ pass: true, score: 1 });
+    expect(result.metadata?.graderError).toBeUndefined();
+  });
+
   it('should fail when any assertion fails', async () => {
     const output = 'Actual output';
 

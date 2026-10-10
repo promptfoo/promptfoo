@@ -336,6 +336,35 @@ describe('AssertionsResult', () => {
       expect(result.metadata?.graderError).toBe(true);
     });
 
+    it('keeps the grader failure reason when a threshold overrides the summary', async () => {
+      const assertionsResult = new AssertionsResult({ threshold: 0.6 });
+      assertionsResult.addResult({
+        index: 0,
+        result: {
+          pass: true,
+          score: 1,
+          reason: 'The submission meets the criterion',
+          tokensUsed: DEFAULT_TOKENS_USED,
+        },
+      });
+      assertionsResult.addResult({
+        index: 1,
+        result: {
+          pass: false,
+          score: 0,
+          reason: 'Grader provider unavailable',
+          tokensUsed: DEFAULT_TOKENS_USED,
+          metadata: { graderError: true },
+        },
+      });
+
+      const result = await assertionsResult.testResult();
+
+      expect(result.pass).toBe(false);
+      expect(result.reason).toBe('Grader provider unavailable');
+      expect(result.metadata?.graderError).toBe(true);
+    });
+
     it('does not mark mixed fresh and cached grading responses as fully cached', async () => {
       const assertionsResult = new AssertionsResult({});
       assertionsResult.addResult({
