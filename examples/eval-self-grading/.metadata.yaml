@@ -1,0 +1,4 @@
+title: 'LLM Self-Grading'
+description: 'Have an LLM grade its own output using llm-rubric assertions and JavaScript scoring'
+tags:
+  - Evaluation

@@ -1,0 +1,6 @@
+title: 'OpenCode SDK Coding Agent'
+description: 'Run agentic evals through OpenCode with filesystem access and structured output'
+tags:
+  - Agents
+  - Providers
+  - Structured Output

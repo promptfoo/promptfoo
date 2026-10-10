@@ -1,0 +1,5 @@
+title: 'Summarization Evaluation'
+description: 'Evaluate article summarization quality across models using content and length assertions'
+tags:
+  - Evaluation
+  - Model Comparison

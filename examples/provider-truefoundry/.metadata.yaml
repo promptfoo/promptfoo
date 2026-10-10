@@ -1,0 +1,5 @@
+title: 'TrueFoundry LLM Gateway'
+description: 'Route evaluations through TrueFoundry gateway with MCP server integration for web search and code execution'
+tags:
+  - Providers
+  - MCP

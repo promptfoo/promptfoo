@@ -1,0 +1,5 @@
+title: 'Errors vs Failures in Evaluations'
+description: 'Understand how promptfoo distinguishes between provider errors and assertion failures using a custom provider'
+tags:
+  - Evaluation
+  - Configuration
