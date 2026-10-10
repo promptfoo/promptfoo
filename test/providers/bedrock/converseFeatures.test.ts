@@ -231,6 +231,91 @@ describe('Converse native request features', () => {
     },
   );
 
+  it.each(
+    ['service_unavailable', 'invalid_query', 'max_tool_invocations'].flatMap((stopReason) =>
+      [false, true].map((streaming) => ({ stopReason, streaming })),
+    ),
+  )(
+    'rejects server tool failure $stopReason with streaming=$streaming',
+    async ({ stopReason, streaming }) => {
+      cache.enabled = true;
+      const callback = vi.fn();
+      const mcpCall = vi.fn();
+      const { provider, send } = fixture({
+        streaming,
+        functionToolCallbacks: { search: callback },
+      });
+      Object.assign(provider, {
+        mcpClient: { getAllTools: () => [{ name: 'search' }], callTool: mcpCall },
+      });
+      const toolUse = { type: 'server_tool_use', toolUseId: 'search-1', name: 'search', input: {} };
+      send.mockResolvedValueOnce(
+        streaming
+          ? stream([
+              { contentBlockDelta: { contentBlockIndex: 0, delta: { text: 'Partial answer' } } },
+              { contentBlockStop: { contentBlockIndex: 0 } },
+              { contentBlockStart: { contentBlockIndex: 1, start: { toolUse } } },
+              { contentBlockStop: { contentBlockIndex: 1 } },
+              { messageStop: { stopReason } },
+              { metadata: { usage: reply.usage } },
+            ])
+          : {
+              ...reply,
+              stopReason,
+              output: {
+                message: { role: 'assistant', content: [{ text: 'Partial answer' }, { toolUse }] },
+              },
+            },
+      );
+      const response = await provider.callApi('hello');
+      expect(response.error).toContain(stopReason);
+      expect(response.output).toContain('Partial answer');
+      expect(response.metadata).toMatchObject({
+        stopReason,
+        isModelError: true,
+        content: [{ text: 'Partial answer' }, { toolUse }],
+      });
+      expect(response.tokenUsage).toMatchObject({
+        prompt: 3,
+        completion: 2,
+        total: 5,
+        numRequests: 1,
+      });
+      expect(response.cost).toBeGreaterThan(0);
+      expect(callback).not.toHaveBeenCalled();
+      expect(mcpCall).not.toHaveBeenCalled();
+      expect(cache.set).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([false, true])(
+    'retries previously cached model failures with streaming=%s',
+    async (streaming) => {
+      cache.enabled = true;
+      cache.get.mockResolvedValueOnce(
+        JSON.stringify({ ...reply, stopReason: 'service_unavailable' }),
+      );
+      const { provider, send } = fixture({ streaming });
+      if (streaming) {
+        send.mockResolvedValueOnce(
+          stream([
+            { contentBlockDelta: { contentBlockIndex: 0, delta: { text: 'READY' } } },
+            { contentBlockStop: { contentBlockIndex: 0 } },
+            { messageStop: { stopReason: 'end_turn' } },
+            { metadata: { usage: reply.usage } },
+          ]),
+        );
+      }
+      const response = await provider.callApi('hello');
+      expect(response.error).toBeUndefined();
+      expect(response.cached).not.toBe(true);
+      expect(response.output).toBe('READY');
+      expect(response.tokenUsage?.numRequests).toBe(1);
+      expect(send).toHaveBeenCalledOnce();
+      expect(cache.set).toHaveBeenCalledOnce();
+    },
+  );
+
   it.each([false, true])('accounts for all cached input with streaming=%s', async (streaming) => {
     const { provider, send } = fixture({ streaming }, 'global.anthropic.claude-opus-5-5');
     const usage = {
@@ -705,6 +790,104 @@ describe('ConverseStream response parity', () => {
     expect(cache.get).not.toHaveBeenCalled();
     expect(cache.set).not.toHaveBeenCalled();
   });
+
+  it('assembles interleaved image chunks with linear copying and preserves source variants', async () => {
+    const { provider, send } = fixture({ streaming: true });
+    const chunk = Buffer.alloc(1024, 7);
+    const count = 128;
+    const location = { s3Location: { uri: 's3://example/generated.png' } };
+    const events: unknown[] = [0, 1, 2].map((contentBlockIndex) => ({
+      contentBlockStart: { contentBlockIndex, start: { image: { format: 'png' } } },
+    }));
+    for (let i = 0; i < count; i++) {
+      for (const contentBlockIndex of [1, 0]) {
+        events.push({
+          contentBlockDelta: { contentBlockIndex, delta: { image: { source: { bytes: chunk } } } },
+        });
+      }
+    }
+    events.push(
+      {
+        contentBlockDelta: { contentBlockIndex: 2, delta: { image: { source: { bytes: chunk } } } },
+      },
+      { contentBlockDelta: { contentBlockIndex: 2, delta: { image: { source: location } } } },
+      ...[2, 1, 0].map((contentBlockIndex) => ({ contentBlockStop: { contentBlockIndex } })),
+      { messageStop: { stopReason: 'end_turn' } },
+      { metadata: { usage: reply.usage } },
+    );
+    send.mockResolvedValueOnce(stream(events));
+    const concat = vi.spyOn(Buffer, 'concat');
+    const response = await provider.callApi('hello');
+    const copiedBytes = concat.mock.calls.reduce(
+      (total, [chunks]) => total + chunks.reduce((size, bytes) => size + bytes.length, 0),
+      0,
+    );
+    concat.mockRestore();
+    expect(response.error).toBeUndefined();
+    expect(copiedBytes).toBeLessThanOrEqual(2 * count * chunk.length);
+    expect(response.metadata?.content).toEqual([
+      { image: { format: 'png', source: { bytes: Buffer.alloc(count * chunk.length, 7) } } },
+      { image: { format: 'png', source: { bytes: Buffer.alloc(count * chunk.length, 7) } } },
+      { image: { format: 'png', source: location } },
+    ]);
+  });
+
+  it.each(['buffer', 'uint8array'])(
+    'keeps %s media out of text output and preserves native content on cache replay',
+    async (kind) => {
+      cache.enabled = true;
+      const { provider, send } = fixture();
+      const bytes =
+        kind === 'buffer' ? Buffer.alloc(64 * 1024, 7) : new Uint8Array(64 * 1024).fill(7);
+      const json = {
+        type: 'Buffer',
+        data: [7, 8],
+        bytes: { 0: 9 },
+        note: 'tool JSON remains intact',
+      };
+      const content = [
+        { text: 'Before media' },
+        { image: { format: 'png', source: { bytes } } },
+        { audio: { format: 'mp3', source: { bytes } } },
+        { video: { format: 'mp4', source: { bytes } } },
+        {
+          toolResult: {
+            toolUseId: 'lookup',
+            content: [
+              { text: 'Tool text' },
+              { json },
+              { image: { format: 'png', source: { bytes } } },
+              { video: { format: 'mp4', source: { bytes } } },
+              { document: { format: 'pdf', name: 'report', source: { bytes } } },
+              { document: { name: 'retrieval', source: { text: 'Document evidence' } } },
+              { document: { name: 'search', source: { content: [{ text: 'Document content' }] } } },
+            ],
+          },
+        },
+        { text: 'After media' },
+      ];
+      send.mockResolvedValueOnce({ ...reply, output: { message: { role: 'assistant', content } } });
+      const first = await provider.callApi('hello');
+      expect(first.error).toBeUndefined();
+      expect(first.output).toContain('Before media');
+      expect(first.output).toContain('After media');
+      expect(first.output).toContain('Tool text');
+      expect(first.output).toContain('Document evidence');
+      expect(first.output).toContain('Document content');
+      expect(first.output).toContain(JSON.stringify(json));
+      for (const type of ['Image', 'Audio', 'Video', 'Document']) {
+        expect(first.output).toContain(`[${type} output]`);
+      }
+      expect(first.output.length).toBeLessThan(1024);
+      expect(first.metadata?.content).toEqual(content);
+      cache.get.mockResolvedValueOnce(cache.set.mock.calls[0][1]);
+      const second = await provider.callApi('hello');
+      expect(second.cached).toBe(true);
+      expect(second.output).toBe(first.output);
+      expect(second.metadata?.content).toEqual(first.metadata?.content);
+      expect(send).toHaveBeenCalledOnce();
+    },
+  );
 
   it('collects generated image bytes and server tool results', async () => {
     const { provider, send } = fixture({ streaming: true });

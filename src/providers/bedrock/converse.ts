@@ -46,7 +46,11 @@ import {
   withResponseCacheMetadata,
 } from '../shared';
 import { AwsBedrockGenericProvider, type BedrockOptions, createBedrockCacheKeyHash } from './base';
-import { ConverseStreamValidationError, collectConverseStream } from './converseStream';
+import {
+  ConverseStreamValidationError,
+  collectConverseStream,
+  getConverseStopReasonError,
+} from './converseStream';
 import { calculateBedrockCost } from './pricing';
 import type {
   ContentBlock,
@@ -772,8 +776,30 @@ function extractTextFromContentBlocks(
       parts.push(block.text);
     } else if (block.citationsContent) {
       parts.push((block.citationsContent.content ?? []).map((part) => part.text ?? '').join(''));
-    } else if (block.toolResult || block.image || block.audio || block.video) {
-      parts.push(JSON.stringify(block));
+    } else if (block.image) {
+      parts.push('[Image output]');
+    } else if (block.audio) {
+      parts.push('[Audio output]');
+    } else if (block.video) {
+      parts.push('[Video output]');
+    } else if (block.toolResult) {
+      // Native media stays in metadata.content; text output must not expand its bytes to JSON.
+      parts.push(
+        JSON.stringify({
+          toolResult: {
+            ...block.toolResult,
+            content: block.toolResult.content?.map((part) =>
+              part.image
+                ? { text: '[Image output]' }
+                : part.video
+                  ? { text: '[Video output]' }
+                  : part.document?.source?.bytes
+                    ? { text: '[Document output]' }
+                    : part,
+            ),
+          },
+        }),
+      );
     } else if ('reasoningContent' in block && block.reasoningContent) {
       // Handle extended thinking content
       const reasoning = block.reasoningContent;
@@ -1427,15 +1453,17 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     if (useCache) {
       const cachedResponse = await cache.get(cacheKey);
       if (cachedResponse) {
-        logger.debug('Returning cached response');
         const parsed = JSON.parse(cachedResponse as string) as ConverseCommandOutput;
-        const result = await this.parseResponse(
-          parsed,
-          toolsDisabled,
-          betweenToolsThinking,
-          streaming,
-        );
-        return withResponseCacheMetadata(result, true);
+        if (!getConverseStopReasonError(parsed.stopReason)) {
+          logger.debug('Returning cached response');
+          const result = await this.parseResponse(
+            parsed,
+            toolsDisabled,
+            betweenToolsThinking,
+            streaming,
+          );
+          return withResponseCacheMetadata(result, true);
+        }
       }
     }
 
@@ -1484,8 +1512,8 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       };
     }
 
-    // Cache the response
-    if (useCache) {
+    // Failed model responses must be retried, not replayed as cached results.
+    if (useCache && !getConverseStopReasonError(response.stopReason)) {
       try {
         await cache.set(
           cacheKey,
@@ -1708,14 +1736,8 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
         ? { flagged: true, reason: 'guardrail_intervened' }
         : undefined;
 
-    // Check for malformed output stop reasons (added in AWS SDK 3.943.0)
-    let malformedError: string | undefined;
-    if (response.stopReason === 'malformed_model_output') {
-      malformedError = 'Model produced invalid output. The response could not be parsed correctly.';
-      metadata.isModelError = true;
-    } else if (response.stopReason === 'malformed_tool_use') {
-      malformedError =
-        'Model produced a malformed tool use request. Check tool configuration and input schema.';
+    const modelError = getConverseStopReasonError(response.stopReason);
+    if (modelError) {
       metadata.isModelError = true;
     }
 
@@ -1821,9 +1843,8 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       // Surface MCP failures via the response `error` field so downstream
       // consumers (assertions, exit codes, redteam grader) treat broken MCP
       // calls as failures rather than greenlighting them on the strength of an
-      // embedded "MCP Tool Error: ..." string. Malformed-output stop reasons
-      // take precedence since they're a model-level (not tool-level) failure.
-      const error = malformedError ?? joinMcpErrors(mcpErrors);
+      // embedded "MCP Tool Error: ..." string. Model-level failures take precedence.
+      const error = modelError ?? joinMcpErrors(mcpErrors);
       return {
         output: dispatchResults.join('\n'),
         tokenUsage,
@@ -1844,7 +1865,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       ...(cost === undefined ? {} : { cost }),
       ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
       ...(guardrails ? { guardrails } : {}),
-      ...(malformedError ? { error: malformedError } : {}),
+      ...(modelError ? { error: modelError } : {}),
     };
   }
 

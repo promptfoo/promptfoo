@@ -4,6 +4,25 @@ import type {
   ConverseStreamCommandOutput,
 } from '@aws-sdk/client-bedrock-runtime';
 
+/** Model-level failures can still carry partial output and billable usage. */
+export function getConverseStopReasonError(stopReason: string | undefined): string | undefined {
+  switch (stopReason) {
+    case 'malformed_model_output':
+      return 'Model produced invalid output. The response could not be parsed correctly.';
+    case 'malformed_tool_use':
+      return 'Model produced a malformed tool use request. Check tool configuration and input schema.';
+    // Nova's model-specific response contract also defines built-in tool failures.
+    case 'service_unavailable':
+      return 'Bedrock built-in tool failed (service_unavailable): the tool service could not be reached.';
+    case 'invalid_query':
+      return 'Bedrock built-in tool failed (invalid_query): the query was invalid.';
+    case 'max_tool_invocations':
+      return 'Bedrock built-in tool failed (max_tool_invocations): retries were exhausted.';
+    default:
+      return undefined;
+  }
+}
+
 /** A completed stream can fail validation while still reporting billable usage. */
 export class ConverseStreamValidationError extends Error {
   constructor(
@@ -24,6 +43,7 @@ export async function collectConverseStream(
   }
   const blocks = new Map<number, ContentBlock>();
   const toolInputs = new Map<number, string>();
+  const imageChunks = new Map<number, Uint8Array[]>();
   const openBlocks = new Set<number>();
   let receivedMetadata = false;
   const result: ConverseCommandOutput = {
@@ -124,9 +144,14 @@ export async function collectConverseStream(
           throw new Error('Bedrock streamed image data without an image start');
         }
         const source = delta.image.source;
-        block.image.source = source?.bytes
-          ? { bytes: Buffer.concat([block.image.source?.bytes ?? new Uint8Array(), source.bytes]) }
-          : (source ?? block.image.source);
+        if (source?.bytes) {
+          const chunks = imageChunks.get(index) ?? [];
+          chunks.push(source.bytes);
+          imageChunks.set(index, chunks);
+        } else if (source) {
+          imageChunks.delete(index);
+          block.image.source = source;
+        }
       } else if (delta.toolResult) {
         if (!block?.toolResult) {
           throw new Error('Bedrock streamed a tool result without a tool result start');
@@ -147,7 +172,14 @@ export async function collectConverseStream(
       }
     }
     if (event.contentBlockStop) {
-      openBlocks.delete(event.contentBlockStop.contentBlockIndex ?? 0);
+      const index = event.contentBlockStop.contentBlockIndex ?? 0;
+      const block = blocks.get(index);
+      const chunks = imageChunks.get(index);
+      if (block?.image && chunks) {
+        block.image.source = { bytes: Buffer.concat(chunks) };
+      }
+      imageChunks.delete(index);
+      openBlocks.delete(index);
     }
     if (event.messageStop) {
       if (openBlocks.size) {
@@ -176,10 +208,7 @@ export async function collectConverseStream(
       content: [...blocks.entries()].sort(([a], [b]) => a - b).map(([, block]) => block),
     },
   };
-  if (
-    result.stopReason === 'malformed_tool_use' ||
-    result.stopReason === 'malformed_model_output'
-  ) {
+  if (getConverseStopReasonError(result.stopReason)) {
     throw new ConverseStreamValidationError(
       `Bedrock response stream stopped with ${result.stopReason}`,
       result,

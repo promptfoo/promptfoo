@@ -271,8 +271,11 @@ Set `streaming: true` to use
 Promptfoo collects the stream into one eval response. Both modes preserve content
 blocks in `response.metadata.content`, along with returned usage, cache counts,
 latency, guardrail traces, service tier, performance settings, and requested
-additional response fields. Streaming also executes configured MCP tools and local
-`functionToolCallbacks` after a completed client tool request. Server-side tool
+additional response fields. Text output uses compact placeholders for generated
+media; the original bytes remain in `response.metadata.content`. Built-in tool
+failures such as `service_unavailable`, `invalid_query`, and `max_tool_invocations`
+produce eval errors and are not cached. Streaming also executes configured MCP
+tools and local `functionToolCallbacks` after a completed client tool request. Server-side tool
 blocks remain in the response and are not executed locally. Missing, interrupted,
 or failed tool streams produce an error before callbacks or cache writes.
 
