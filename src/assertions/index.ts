@@ -122,6 +122,33 @@ const MAX_TRACE_FETCH_MAX_ATTEMPTS = 30;
 const MAX_TRACE_FETCH_RETRY_DELAY_MS = 5000;
 const MAX_TRACE_FETCH_STABLE_POLLS = 10;
 
+function clearMetricOnlyMarkers(result: GradingResult): GradingResult {
+  const clones = new WeakMap<GradingResult, GradingResult>();
+  const pending: GradingResult[] = [];
+  const clone = (source: GradingResult): GradingResult => {
+    const existing = clones.get(source);
+    if (existing) {
+      return existing;
+    }
+    const { metricOnly: _metricOnly, ...assertion } = source.assertion ?? {};
+    const target = {
+      ...source,
+      ...(source.assertion && { assertion: assertion as Assertion }),
+    };
+    clones.set(source, target);
+    pending.push(source);
+    return target;
+  };
+  const normalized = clone(result);
+  while (pending.length > 0) {
+    const source = pending.pop()!;
+    if (source.componentResults) {
+      clones.get(source)!.componentResults = source.componentResults.map(clone);
+    }
+  }
+  return normalized;
+}
+
 export const MODEL_GRADED_ASSERTION_TYPES = new Set<AssertionType>([
   'agent-rubric',
   'answer-relevance',
@@ -671,8 +698,11 @@ async function runAssertionInternal({
       result.metadata.renderedAssertionValue = renderedValue;
     }
 
-    // If weight is 0, treat this as a metric-only assertion that can't fail
-    if (assertion.weight === 0) {
+    // If weight is 0, treat this as a metric-only assertion that can't fail.
+    // Explicit metricOnly assertions skip this: they're already excluded from
+    // pass/fail at aggregation, and force-passing would mask the real outcome
+    // in componentResults for migrated configs still carrying weight: 0.
+    if (assertion.weight === 0 && !assertion.metricOnly) {
       return {
         ...result,
         pass: true, // Force pass for weight=0 assertions
@@ -869,11 +899,15 @@ export async function runAssertions({
       claimStoredGradingUsage,
     });
 
+    // A script's returned assertion metadata cannot opt a configured scoring
+    // assertion out of downstream counts. Normalize individual results here,
+    // before set aggregation, to preserve genuine metric-only children.
     assertResult.addResult({
       index,
-      result,
+      result: assertion.metricOnly ? result : clearMetricOnlyMarkers(result),
       metric: renderMetricName(assertion.metric, vars || test.vars || {}),
       weight: assertion.weight,
+      metricOnly: assertion.metricOnly,
     });
   };
 
@@ -897,14 +931,24 @@ export async function runAssertions({
     const result = await subAssertResult.testResult();
     const {
       index,
-      assertionSet: { metric, weight },
+      assertionSet: { assert, metric, weight },
     } = subAssertResult.parentAssertionSet!;
+
+    // A set whose assertions are all metricOnly is metric-only in effect:
+    // its aggregate score is always 0 and must not dilute the test score.
+    const metricOnly = assert.length > 0 && assert.every((subAssert) => subAssert.metricOnly);
 
     mainAssertResult.addResult({
       index,
-      result,
+      // Give a metric-only set result a pseudo-assertion for addResult to
+      // stamp `metricOnly` onto, so stored stats filters can exclude it.
+      // 'assert-set' is not an AssertionType member, hence the cast.
+      result: metricOnly
+        ? { ...result, assertion: { type: 'assert-set' } as unknown as Assertion }
+        : result,
       metric: renderMetricName(metric, vars || test.vars || {}),
       weight,
+      metricOnly,
     });
   });
 

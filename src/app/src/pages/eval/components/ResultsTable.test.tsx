@@ -7,8 +7,9 @@ import { EVAL_TABLE_MAX_PAGE_SIZE } from '@promptfoo/types/evalConstants';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import ResultsTable from './ResultsTable';
+import ResultsTable, { getManualRatingUpdate } from './ResultsTable';
 import { useResultsViewSettingsStore, useTableStore } from './store';
+import type { GradingResult } from '@promptfoo/types';
 
 vi.mock('./store', () => ({
   useTableStore: vi.fn(() => ({
@@ -1598,6 +1599,76 @@ describe('ResultsTable Row Navigation', () => {
       );
       expect(cleared).toBe(true);
     });
+  });
+});
+
+describe('getManualRatingUpdate - clearing a rating on all-metricOnly rows', () => {
+  const buildOutput = (threshold?: number) =>
+    ({
+      id: 'test-output-1',
+      pass: false,
+      score: 0.4,
+      text: 'test output',
+      latencyMs: 100,
+      cost: 0.01,
+      failureReason: 0,
+      namedScores: { tp: 1 },
+      testCase: {
+        threshold,
+        assert: [{ type: 'javascript', metric: 'tp', metricOnly: true }],
+      },
+      gradingResult: {
+        // The manual override being cleared.
+        pass: false,
+        score: 0.4,
+        reason: 'Manual result (overrides all other grading results)',
+        componentResults: [
+          {
+            pass: true,
+            score: 1,
+            reason: 'counter',
+            assertion: { type: 'javascript', metric: 'tp', metricOnly: true },
+          },
+          {
+            pass: false,
+            score: 0.4,
+            reason: 'Manual result (overrides all other grading results)',
+            assertion: { type: 'human' },
+          },
+        ],
+      },
+    }) as any;
+
+  it('fails a thresholded all-metricOnly row when the rating is cleared (score 0 < threshold)', () => {
+    const update = getManualRatingUpdate({
+      existingOutput: buildOutput(0.5),
+      isPass: null,
+    });
+
+    // Mirrors the server-side aggregate for an all-metricOnly test: score 0,
+    // which fails a positive threshold on a re-run.
+    expect(update.score).toBe(0);
+    expect(update.pass).toBe(false);
+  });
+
+  it('passes an all-metricOnly row without a threshold when the rating is cleared', () => {
+    const update = getManualRatingUpdate({
+      existingOutput: buildOutput(),
+      isPass: null,
+    });
+
+    expect(update.score).toBe(0);
+    expect(update.pass).toBe(true);
+  });
+
+  it('honors a threshold of 0 when the rating is cleared (0 >= 0 passes)', () => {
+    const update = getManualRatingUpdate({
+      existingOutput: buildOutput(0),
+      isPass: null,
+    });
+
+    expect(update.score).toBe(0);
+    expect(update.pass).toBe(true);
   });
 });
 
@@ -4457,51 +4528,82 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
     expect(finalScore).toBe(0.5);
   });
 
-  it('persists a cleared human rating without manual override fields', async () => {
-    const user = userEvent.setup();
-    const mockTable = createMockTableWithHumanAssertion();
+  it.each([
+    [false, false],
+    [true, false],
+    [true, true],
+  ])(
+    'persists a cleared human rating with metric-only=%s and quality pass=%s',
+    async (metricOnly, qualityPass) => {
+      const user = userEvent.setup();
+      const mockTable = createMockTableWithHumanAssertion();
+      if (metricOnly) {
+        const output = mockTable.body[0].outputs[0];
+        Object.assign(output, {
+          testCase: {
+            assert: [
+              { type: 'contains', value: 'test' },
+              { type: 'javascript', metricOnly: true },
+            ],
+          },
+        });
+        output.gradingResult.componentResults[0].pass = qualityPass;
+        const componentResults: GradingResult[] = output.gradingResult.componentResults;
+        componentResults.push({
+          pass: false,
+          score: 0,
+          reason: 'Counter scored 0',
+          assertion: { type: 'javascript', metricOnly: true },
+        });
+      }
 
-    vi.mocked(useTableStore).mockImplementation(() => ({
-      config: {},
-      evalId: '123',
-      inComparisonMode: false,
-      setTable: mockSetTable,
-      table: mockTable,
-      version: 4,
-      renderMarkdown: true,
-      fetchEvalData: vi.fn(),
-      isFetching: false,
-      filteredResultsCount: 1,
-      filters: {
-        values: {},
-        appliedCount: 0,
-        options: {
-          metric: [],
+      vi.mocked(useTableStore).mockImplementation(() => ({
+        config: {},
+        evalId: '123',
+        inComparisonMode: false,
+        setTable: mockSetTable,
+        table: mockTable,
+        version: 4,
+        renderMarkdown: true,
+        fetchEvalData: vi.fn(),
+        isFetching: false,
+        filteredResultsCount: 1,
+        filters: {
+          values: {},
+          appliedCount: 0,
+          options: {
+            metric: [],
+          },
         },
-      },
-    }));
+      }));
 
-    renderWithProviders(<ResultsTable {...defaultProps} />);
+      renderWithProviders(<ResultsTable {...defaultProps} />);
 
-    await user.click(screen.getByRole('button', { name: 'Clear rating' }));
+      await user.click(screen.getByRole('button', { name: 'Clear rating' }));
 
-    await waitFor(() => {
-      expect(mockCallApi).toHaveBeenCalledWith(
-        '/eval/123/results/test-output-1/rating',
-        expect.objectContaining({ method: 'POST' }),
-      );
-    });
+      await waitFor(() => {
+        expect(mockCallApi).toHaveBeenCalledWith(
+          '/eval/123/results/test-output-1/rating',
+          expect.objectContaining({ method: 'POST' }),
+        );
+      });
 
-    const [, request] = mockCallApi.mock.calls[0];
-    const payload = JSON.parse(request.body);
+      const [, request] = mockCallApi.mock.calls[0];
+      const payload = JSON.parse(request.body);
 
-    expect(payload.pass).toBe(false);
-    expect(payload.score).toBe(0.5);
-    expect(payload.reason).toBe('Automated assertion');
-    expect(payload.assertion?.type).not.toBe('human');
-    expect(payload.componentResults).toHaveLength(1);
-    expect(payload.componentResults[0].assertion.type).toBe('contains');
-  });
+      expect(payload.pass).toBe(qualityPass);
+      expect(payload.score).toBe(0.5);
+      expect(payload.reason).toBe('Automated assertion');
+      expect(payload.assertion?.type).not.toBe('human');
+      expect(payload.componentResults).toHaveLength(metricOnly ? 2 : 1);
+      expect(payload.componentResults[0].assertion.type).toBe('contains');
+      if (metricOnly) {
+        expect(payload.componentResults[1].assertion.metricOnly).toBe(true);
+        expect(payload.componentResults[1].pass).toBe(false);
+        expect(payload.componentResults[1].score).toBe(0);
+      }
+    },
+  );
 
   it('should recalculate pass as true when all remaining assertions pass', () => {
     const mockTable = {

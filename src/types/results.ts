@@ -1,3 +1,5 @@
+import type { GradingResult } from './index';
+
 export const ResultFailureReason = {
   // The test passed, or we don't know exactly why the test case failed.
   NONE: 0,
@@ -12,4 +14,17 @@ const validResultFailureReasons = new Set<number>(Object.values(ResultFailureRea
 
 export function isResultFailureReason(value: number): value is ResultFailureReason {
   return validResultFailureReasons.has(value);
+}
+
+/**
+ * Component results that participate in pass/fail: everything except
+ * metric-only assertions, which only emit named scores. Use this wherever
+ * assertion outcomes are aggregated into pass/fail stats or reasons.
+ */
+export function countedComponentResults(
+  componentResults: (GradingResult | null | undefined)[] | null | undefined,
+): GradingResult[] {
+  return (componentResults ?? []).filter(
+    (result): result is GradingResult => result != null && !result.assertion?.metricOnly,
+  );
 }

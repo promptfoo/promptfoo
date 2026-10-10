@@ -34,6 +34,26 @@ function buildAssertionSetMetadata(assertionSet: AssertionSet) {
   };
 }
 
+/**
+ * Mark a metric-only result (and any nested component results a script
+ * assertion returned) so downstream assertion pass/fail stats can exclude
+ * them via their `assertion.metricOnly` filters. Results with no assertion
+ * object (e.g. a failed grader) still get a marker stub — downstream filters
+ * only read `assertion?.metricOnly` / `assertion?.type`, hence the cast.
+ */
+function withMetricOnlyMarkers(result: GradingResult): GradingResult {
+  return {
+    ...result,
+    assertion: { ...result.assertion, metricOnly: true } as GradingResult['assertion'],
+    ...(result.componentResults && {
+      componentResults: result.componentResults.map((child) => ({
+        ...child,
+        ...(child.assertion && { assertion: { ...child.assertion, metricOnly: true } }),
+      })),
+    }),
+  };
+}
+
 function mergeMetadata(
   baseMetadata: GradingResult['metadata'],
   incomingMetadata: GradingResult['metadata'],
@@ -254,25 +274,31 @@ export class AssertionsResult {
     result,
     metric,
     weight = 1,
+    metricOnly = false,
   }: {
     index: number;
     result: GradingResult;
     metric?: string;
     weight?: number;
+    metricOnly?: boolean;
   }) {
-    this.totalScore += result.score * weight;
-    this.totalWeight += weight;
-    this.componentResults[index] = result;
+    // Metric-only assertions emit named scores but are excluded from the
+    // test's pass/fail determination and its weighted score.
+    if (!metricOnly) {
+      this.totalScore += result.score * weight;
+      this.totalWeight += weight;
+    }
+    this.componentResults[index] = metricOnly ? withMetricOnlyMarkers(result) : result;
 
     const isRedteamGuardrail =
       result.assertion?.type === 'guardrails' && result.assertion?.config?.purpose === 'redteam';
 
-    if (isRedteamGuardrail && !result.pass) {
+    if (isRedteamGuardrail && !result.pass && !metricOnly) {
       this.failedContentSafetyChecks = true;
     }
 
-    // Zero-weight assertions collect measurements without affecting the aggregate score.
-    const metricWeight = weight === 0 ? 1 : weight;
+    // Metric-only and zero-weight assertions record measurements at unit weight.
+    const metricWeight = metricOnly || weight === 0 ? 1 : weight;
     if (metric) {
       this.namedScores[metric] = (this.namedScores[metric] ?? 0) + result.score * metricWeight;
       this.namedScoreWeights[metric] = (this.namedScoreWeights[metric] ?? 0) + metricWeight;
@@ -300,7 +326,7 @@ export class AssertionsResult {
       accumulateNormalizedAssertionTokenUsage(this.tokensUsed, tokensUsed);
     }
 
-    if (result.pass) {
+    if (result.pass || metricOnly) {
       return;
     }
 

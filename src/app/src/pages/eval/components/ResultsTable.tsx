@@ -25,16 +25,8 @@ import {
   getTokenUsageTotal,
 } from '@app/utils/tokenUsage';
 import { FILE_METADATA_KEY, HUMAN_ASSERTION_TYPE } from '@promptfoo/providers/constants';
-import {
-  type EvalResultsFilterMode,
-  type EvaluateTable,
-  type EvaluateTableOutput,
-  type EvaluateTableRow,
-  type GradingResult,
-  type ProviderOptions,
-  type Vars,
-} from '@promptfoo/types';
 import { EVAL_TABLE_MAX_PAGE_SIZE } from '@promptfoo/types/evalConstants';
+import { countedComponentResults } from '@promptfoo/types/results';
 import invariant from '@promptfoo/util/invariant';
 import {
   createColumnHelper,
@@ -55,6 +47,15 @@ import { useResultsViewSettingsStore, useTableStore } from './store';
 import TruncatedText from './TruncatedText';
 import { useHeaderCollapse } from './useHeaderCollapse';
 import VariableMarkdownCell from './VariableMarkdownCell';
+import type {
+  EvalResultsFilterMode,
+  EvaluateTable,
+  EvaluateTableOutput,
+  EvaluateTableRow,
+  GradingResult,
+  ProviderOptions,
+  Vars,
+} from '@promptfoo/types';
 import type {
   Cell,
   CellContext,
@@ -869,7 +870,7 @@ function averageComponentResultScore(
   return scores.reduce((sum, resultScore) => sum + resultScore, 0) / scores.length;
 }
 
-function getManualRatingUpdate({
+export function getManualRatingUpdate({
   existingOutput,
   isPass,
   score,
@@ -907,10 +908,17 @@ function getManualRatingUpdate({
       componentResults.splice(humanResultIndex, 1);
     }
 
-    if (componentResults.length > 0) {
-      finalPass =
-        componentResults.filter((result) => result.pass).length === componentResults.length;
-      finalScore = averageComponentResultScore(componentResults, finalScore);
+    const countedResults = countedComponentResults(componentResults);
+    if (countedResults.length > 0) {
+      finalPass = countedResults.filter((result) => result.pass).length === countedResults.length;
+      finalScore = averageComponentResultScore(countedResults, finalScore);
+    } else if (componentResults.length > 0) {
+      // Every remaining assertion is metric-only: mirror the server-side
+      // aggregate (score 0; pass unless a numeric test-level threshold demands
+      // more — same gate as AssertionsResult, honoring threshold 0).
+      const threshold = existingOutput.testCase?.threshold;
+      finalScore = 0;
+      finalPass = typeof threshold === 'number' && !Number.isNaN(threshold) ? threshold <= 0 : true;
     }
 
     return {

@@ -65,6 +65,7 @@ import {
   type AssertionType,
   type AtomicTestCase,
   type CompletedPrompt,
+  countedComponentResults,
   type EnvOverrides,
   type EvaluateResult,
   type EvaluateStats,
@@ -4332,10 +4333,9 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     }
 
     updatePromptResultCounts(metrics, row);
-    metrics.assertPassCount +=
-      row.gradingResult?.componentResults?.filter((r) => r.pass).length || 0;
-    metrics.assertFailCount +=
-      row.gradingResult?.componentResults?.filter((r) => !r.pass).length || 0;
+    const countedAssertResults = countedComponentResults(row.gradingResult?.componentResults);
+    metrics.assertPassCount += countedAssertResults.filter((r) => r.pass).length;
+    metrics.assertFailCount += countedAssertResults.filter((r) => !r.pass).length;
     metrics.totalLatencyMs += row.latencyMs || 0;
     accumulateResponseTokenUsage(metrics.tokenUsage, row.response, {
       countCachedAsRequest: (row.tokenUsage?.numRequests ?? 0) > 0,

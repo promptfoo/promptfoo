@@ -385,7 +385,7 @@ export type ServerPromptWithMetadata = Omit<PromptWithMetadata, 'recentEvalDate'
 };
 
 // Compatibility exports for existing public and source consumers.
-export { isResultFailureReason, ResultFailureReason } from './results';
+export { countedComponentResults, isResultFailureReason, ResultFailureReason } from './results';
 
 export interface EvaluateResult {
   id?: string; // on the new version 2, this is stored per-result
@@ -798,6 +798,10 @@ export const AssertionSchema = z.object({
 
   // The weight of this assertion compared to other assertions in the test case. Defaults to 1.
   weight: z.number().optional(),
+
+  // If true, the assertion only emits its score as a named metric (for namedScores and
+  // derivedMetrics) and is excluded from the test's pass/fail and weighted score. Defaults to false.
+  metricOnly: z.boolean().optional(),
 
   // Some assertions (similarity, llm-rubric, agent-rubric) require a grading provider
   provider: z.custom<GradingConfig['provider']>().optional(),

@@ -20,7 +20,7 @@ Use `max-score` when you want to:
 ## How it works
 
 1. All regular assertions run first on each output
-2. `max-score` collects the scores from these assertions
+2. `max-score` collects the scores from these assertions, skipping metric-only ones
 3. Calculates an aggregate score for each output (average by default)
 4. Selects the output with the highest aggregate score
 5. Returns pass=true for the highest scoring output, pass=false for others
@@ -224,6 +224,8 @@ tests:
 ## Edge cases
 
 - **No other assertions**: Error - max-score requires at least one assertion to aggregate
+- **Metric-only assertions**: [Metric-only assertions](/docs/configuration/expected-outputs/#metric-only-assertions) are skipped when ranking outputs, so they do not satisfy the "at least one other assertion" requirement. A test whose only companion assertions are `metricOnly: true` raises the same error as having no other assertions.
+- **`metricOnly` on max-score itself**: Rejected at validation time - comparison assertions decide pass/fail across outputs and cannot be metric-only
 - **Tie scores**: First output wins (by index)
 - **All outputs fail**: Still selects the highest scorer ("least bad")
 - **Below threshold**: No output selected if threshold is specified and not met
