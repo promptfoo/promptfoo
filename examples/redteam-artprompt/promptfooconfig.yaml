@@ -4,13 +4,13 @@ description: ArtPrompt ASCII art jailbreak strategy
 targets:
   # Red team target. Swap for your own application provider.
   # https://promptfoo.dev/docs/red-team/configuration/#providers
-  - id: openai:chat:gpt-4.1-mini
-    label: gpt-4.1-mini
+  - id: openai:chat:gpt-6-luna
+    label: gpt-6-luna
 
 redteam:
   # The `intent` plugin turns each line below into a test case directly, so this
   # example runs without remote generation. The `artprompt` strategy then masks
-  # the most sensitive word in each request as ASCII art.
+  # an ASCII content word in each request as ASCII art.
   plugins:
     - id: intent
       config:

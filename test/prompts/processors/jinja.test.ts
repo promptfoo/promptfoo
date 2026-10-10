@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { processJinjaFile } from '../../../src/prompts/processors/jinja';
+import { processTemplateFile as processJinjaFile } from '../../../src/prompts/processors/text';
 
 vi.mock('fs');
 

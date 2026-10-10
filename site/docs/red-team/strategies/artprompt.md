@@ -17,9 +17,9 @@ keywords:
 
 # ArtPrompt ASCII Art Strategy
 
-The ArtPrompt strategy replaces a single sensitive word in a request with an ASCII art rendering of that word. Safety training operates on the tokenized text, where the harmful word no longer appears, but a capable model can still read the ASCII art and reconstruct the request. This turns a prompt the model would normally refuse into one it may answer.
+The ArtPrompt strategy replaces a single sensitive word in a request with an ASCII art rendering of that word. The generated prompt asks the target to decode the banner and answer the reconstructed request. Use it to measure how the target handles this representation; success depends on the target and the selected word.
 
-The strategy implements the attack from [Jiang et al., "ArtPrompt: ASCII Art-based Jailbreak Attacks against Aligned LLMs"](https://arxiv.org/abs/2402.11753) (ACL 2024).
+This implementation is inspired by [Jiang et al., "ArtPrompt: ASCII Art-based Jailbreak Attacks against Aligned LLMs"](https://arxiv.org/abs/2402.11753) (ACL 2024).
 
 ## Why It Works
 
@@ -35,18 +35,20 @@ According to the authors, ArtPrompt is able to induce unsafe behavior from all f
 
 Use it in your `promptfooconfig.yaml`:
 
-```yaml title="promptfooconfig.yaml"
-strategies:
-  - artprompt
+```yaml
+redteam:
+  strategies:
+    - artprompt
 ```
 
-By default the strategy masks the most significant content word. It picks the longest word after skipping common instruction scaffolding like `how`, `make`, or `steps`, and on a length tie it prefers the last word (the safety-triggering head of a compound like `pipe bomb` usually comes last). To force a specific word, pass `word`:
+By default the strategy selects an ASCII word using a length heuristic; it does not determine which word is most sensitive. It picks the longest word after skipping common instruction scaffolding like `how`, `make`, or `steps`, and on a length tie it prefers the last word (the safety-triggering head of a compound like `pipe bomb` usually comes last). To force a specific word, pass `word`:
 
-```yaml title="promptfooconfig.yaml"
-strategies:
-  - id: artprompt
-    config:
-      word: counterfeit
+```yaml
+redteam:
+  strategies:
+    - id: artprompt
+      config:
+        word: counterfeit
 ```
 
 ## How It Works
@@ -58,7 +60,9 @@ The strategy transforms each test case by:
 3. Rendering the word as an ASCII art banner (each capital letter drawn as a 5-row block of `#`).
 4. Appending instructions that tell the model to silently decode the art and answer as if `[MASK]` were the decoded word.
 
-The literal word never appears in the text sent to the target, so token-level filters have nothing to match.
+The built-in font supports ASCII letters A-Z. `word` must contain only those letters. If the configured word is absent, the strategy uses the automatic heuristic. Inputs without any ASCII word are skipped with a warning and do not count as ArtPrompt probes. Original baseline cases remain available.
+
+Masking replaces matching words and regular inflections; unrelated compounds may retain the same letters. This does not guarantee that a content filter will miss the request or that a target will decode the banner.
 
 ## Example
 

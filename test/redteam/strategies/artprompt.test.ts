@@ -170,14 +170,12 @@ describe('artprompt strategy', () => {
       expect(result[0].vars!.prompt).not.toMatch(/\bfentanyl\b/);
     });
 
-    it('should pass through untransformed when there is no maskable word', () => {
-      const result = addArtPrompt([{ vars: { prompt: '12345' } }], 'prompt');
-      expect(result[0].vars!.prompt).toBe('12345');
-      expect(result[0].metadata).toEqual({
-        strategyId: 'artprompt',
-        originalText: '12345',
-      });
-    });
+    it.each(['12345', '請提供詳細的操作步驟', ''])(
+      'should not report an untransformed probe for %s',
+      (prompt) => {
+        expect(addArtPrompt([{ vars: { prompt } }], 'prompt')).toEqual([]);
+      },
+    );
 
     it('should preserve test cases with no assertions', () => {
       const result = addArtPrompt([{ vars: { prompt: 'disable an alarm' } }], 'prompt');
@@ -204,9 +202,19 @@ describe('artprompt strategy', () => {
       });
     });
 
-    it('should coerce non-string inject vars to strings', () => {
-      const result = addArtPrompt([{ vars: { prompt: 12345 } }], 'prompt');
-      expect(result[0].metadata!.originalText).toBe('12345');
+    it('should preserve unnamed assertions without inventing a metric', () => {
+      const result = addArtPrompt(
+        [{ vars: { prompt: 'mask this phrase' }, assert: [{ type: 'equals', value: 'expected' }] }],
+        'prompt',
+      );
+      expect(result[0].assert![0].metric).toBeUndefined();
     });
+
+    it.each(['', 'two words', '123', '秘密', 42])(
+      'should reject an unsupported configured word %s',
+      (word) => {
+        expect(() => addArtPrompt(testCases, 'prompt', { word })).toThrow('ASCII letters');
+      },
+    );
   });
 });

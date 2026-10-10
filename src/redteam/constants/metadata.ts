@@ -17,6 +17,8 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'ascii-smuggling': 'Tests vulnerability to Unicode tag-based instruction smuggling attacks',
   artprompt: 'Tests handling of harmful requests with a sensitive word masked as ASCII art',
   audio: 'Tests handling of audio content',
+  'arabic-presentation-forms':
+    'Tests handling of Arabic presentation-forms encoding and Unicode normalization in content filters',
   'authoritative-markup-injection': 'Tests vulnerability to authoritative markup injection attacks',
   layer: 'Applies multiple strategies in a defined order',
   base64: 'Tests handling of Base64-encoded malicious payloads',
@@ -273,6 +275,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'ascii-smuggling': 'ASCII Smuggling',
   artprompt: 'ArtPrompt ASCII Art',
   audio: 'Audio Content',
+  'arabic-presentation-forms': 'Arabic Presentation Forms',
   'authoritative-markup-injection': 'Authoritative Markup Injection',
   base64: 'Base64 Payload Encoding',
   basic: 'Baseline Testing',
@@ -1276,6 +1279,8 @@ export const pluginDescriptions: Record<Plugin, string> = {
 export const strategyDescriptions: Record<Strategy, string> = {
   artprompt: 'Masks a sensitive word as ASCII art to bypass token-level safety filters',
   audio: 'Tests detection and handling of audio-based malicious payloads',
+  'arabic-presentation-forms':
+    'Tests detection and handling of Arabic text using isolated Unicode presentation forms',
   'authoritative-markup-injection':
     'Tests detection and handling of authoritative markup injection attacks',
   base64: 'Tests detection and handling of Base64-encoded malicious payloads',
@@ -1328,6 +1333,7 @@ export const strategyDescriptions: Record<Strategy, string> = {
 export const strategyDisplayNames: Record<Strategy, string> = {
   artprompt: 'ArtPrompt (ASCII Art)',
   audio: 'Audio',
+  'arabic-presentation-forms': 'Arabic Presentation Forms',
   'authoritative-markup-injection': 'Authoritative Markup Injection',
   base64: 'Base64 Encoding',
   basic: 'Basic',

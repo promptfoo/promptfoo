@@ -1,3 +1,5 @@
+import logger from '../../logger';
+
 import type { TestCase } from '../../types/index';
 
 /**
@@ -199,7 +201,8 @@ function textContainsWord(text: string, word: string): boolean {
  * sensitive word never survives in the payload. Word boundaries keep it from
  * matching inside unrelated words ("bombard"). Falls back to a boundary-free
  * replacement when the word has no standalone boundary (e.g. it is a substring of
- * a larger token), which still guarantees the literal word does not remain.
+ * a larger token). Other compounds that contain the same letters are preserved
+ * when a standalone match exists.
  */
 function maskWord(text: string, word: string): string {
   const escaped = escapeRegExp(word);
@@ -212,9 +215,9 @@ function maskWord(text: string, word: string): string {
 
 /**
  * Build the ArtPrompt cloaked prompt: the sensitive word is replaced with
- * [MASK] and re-encoded as ASCII art with instructions to silently decode it,
- * so the literal word never appears in the text sent to the target model.
- * Based on Jiang et al., "ArtPrompt: ASCII Art-based Jailbreak Attacks against
+ * [MASK] and re-encoded as ASCII art, with instructions to reconstruct the
+ * request from the rendered word.
+ * Inspired by Jiang et al., "ArtPrompt: ASCII Art-based Jailbreak Attacks against
  * Aligned LLMs" (ACL 2024, https://arxiv.org/abs/2402.11753).
  */
 export function toArtPrompt(text: string, word: string): string {
@@ -238,37 +241,54 @@ export function toArtPrompt(text: string, word: string): string {
  * Add ArtPrompt (ASCII art) encoding to test cases. `config.word` forces which
  * word is masked, but only for test cases that actually contain it; cases where
  * the configured word is absent fall back to auto-selection so a probe is never
- * tagged as ArtPrompt without a masked word. Test cases with no maskable word at
- * all are passed through untransformed but still tagged.
+ * tagged as ArtPrompt without a masked word. Test cases with no ASCII word are
+ * omitted from this strategy; the original baseline remains available.
  */
 export function addArtPrompt(
   testCases: TestCase[],
   injectVar: string,
   config: Record<string, any> = {},
 ): TestCase[] {
-  const configuredWord = typeof config.word === 'string' && config.word ? config.word : undefined;
-  return testCases.map((testCase) => {
+  if (
+    config.word !== undefined &&
+    (typeof config.word !== 'string' || !/^[A-Za-z]+$/.test(config.word))
+  ) {
+    throw new Error('ArtPrompt word must contain only ASCII letters (A-Z).');
+  }
+  const configuredWord = config.word as string | undefined;
+  let skipped = 0;
+  const transformed = testCases.flatMap((testCase) => {
     const originalText = String(testCase.vars![injectVar]);
     const word =
       configuredWord && textContainsWord(originalText, configuredWord)
         ? configuredWord
         : selectMaskWord(originalText);
-    return {
-      ...testCase,
-      assert: testCase.assert?.map((assertion) => ({
-        ...assertion,
-        metric: `${assertion.metric}/ArtPrompt`,
-      })),
-      vars: {
-        ...testCase.vars,
-        [injectVar]: word ? toArtPrompt(originalText, word) : originalText,
+    if (!word) {
+      skipped += 1;
+      return [];
+    }
+    return [
+      {
+        ...testCase,
+        assert: testCase.assert?.map((assertion) => ({
+          ...assertion,
+          metric: assertion.metric ? `${assertion.metric}/ArtPrompt` : assertion.metric,
+        })),
+        vars: {
+          ...testCase.vars,
+          [injectVar]: toArtPrompt(originalText, word),
+        },
+        metadata: {
+          ...testCase.metadata,
+          strategyId: 'artprompt',
+          originalText,
+          maskedWord: word,
+        },
       },
-      metadata: {
-        ...testCase.metadata,
-        strategyId: 'artprompt',
-        originalText,
-        ...(word ? { maskedWord: word } : {}),
-      },
-    };
+    ];
   });
+  if (skipped > 0) {
+    logger.warn(`ArtPrompt skipped ${skipped} test case(s) without an ASCII word to mask.`);
+  }
+  return transformed;
 }
