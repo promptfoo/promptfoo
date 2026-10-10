@@ -620,6 +620,8 @@ This ensures that any JSON LLM output adheres to the schema specified in the `to
 - Fail if MCP tool calls fail (output contains "MCP Tool Error")
 - Continue to validate traditional function tools as before
 
+`not-is-valid-openai-tools-call` and `not-is-valid-function-call` invert the validation result. A configuration error, such as no tools configured, a tool schema that does not compile, or a provider that cannot validate function calls, still fails.
+
 Example with MCP tools:
 
 ```yaml
