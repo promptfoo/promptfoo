@@ -121,6 +121,8 @@ providers:
 | [WatsonX](./watsonx.md)                                 | IBM's WatsonX                                                    | `watsonx:ibm/granite-4-h-small`                                                                                       |
 | [X.AI](./xai.md)                                        | X.AI's models (text, image, video, voice)                        | `xai:grok-4.3`, `xai:image:grok-imagine-image`, `xai:video:grok-imagine-video`, `xai:voice:grok-voice-think-fast-2.0` |
 
+Cheaper Inference can be configured through the generic OpenAI-compatible provider; see the [integration guide](./cheaperinference.md).
+
 ## Provider Syntax
 
 Providers are specified using various syntax options:
