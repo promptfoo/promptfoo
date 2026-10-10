@@ -674,9 +674,18 @@ async function loadTestsFromGlobWithEnv(
     testFiles.push(loadTestsGlob);
   }
 
-  const _deref = async (testCases: TestCase[], file: string) => {
+  const loadExternalTestCases = async (testCases: TestCase[], file: string) => {
     logger.debug(`Dereferencing test file: ${file}`);
-    return (await $RefParser.dereference(testCases)) as TestCase[];
+    // Resolve inherited assertion types and scripts before deciding which fields
+    // belong to the assertion runtime. Keep recursive schemas symbolic while the
+    // file loader traverses the test rows.
+    const resolvedTests = await $RefParser.dereference(testCases, {
+      dereference: { circular: 'ignore' },
+    });
+    const loadedTests = maybeLoadConfigFromExternalFile(resolvedTests, 'test');
+    // Loaded data files may introduce their own references. Preserve the existing
+    // final dereference behavior, including recursive schemas.
+    return (await $RefParser.dereference(loadedTests)) as TestCase[];
   };
 
   const ret: TestCase[] = [];
@@ -706,21 +715,18 @@ async function loadTestsFromGlobWithEnv(
       testCases = await readStandaloneTestsFile(testFile, basePath);
     } else if (testFile.endsWith('.yaml') || testFile.endsWith('.yml')) {
       const rawContent = loadYaml(await fsPromises.readFile(testFile, 'utf-8'));
-      testCases = maybeLoadConfigFromExternalFile(rawContent, 'test') as TestCase[];
-      testCases = await _deref(testCases, testFile);
+      testCases = await loadExternalTestCases(rawContent as TestCase[], testFile);
     } else if (testFile.endsWith('.jsonl')) {
       const fileContent = await fsPromises.readFile(testFile, 'utf-8');
       const rawCases = parseJsonlLines(fileContent, testFile);
-      testCases = maybeLoadConfigFromExternalFile(rawCases, 'test') as TestCase[];
-      testCases = await _deref(testCases, testFile);
+      testCases = await loadExternalTestCases(rawCases, testFile);
     } else if (testFile.endsWith('.json')) {
       const fileContent = await fsPromises.readFile(testFile, 'utf8');
       const rawContent = parseJsonOrThrow(
         fileContent,
         `Failed to parse JSON test file ${testFile}`,
       );
-      testCases = maybeLoadConfigFromExternalFile(rawContent, 'test') as TestCase[];
-      testCases = await _deref(testCases, testFile);
+      testCases = await loadExternalTestCases(rawContent as TestCase[], testFile);
     } else {
       throw new Error(`Unsupported file type for test file: ${testFile}`);
     }
