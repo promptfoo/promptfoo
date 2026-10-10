@@ -352,6 +352,12 @@ function renderAssertionValue(
     );
   }
   if (value !== null && typeof value === 'object') {
+    const prototype = Object.getPrototypeOf(value);
+    // Render plain records across realms, preserving built-in containers for
+    // the structured clone that isolates the script's parameter value.
+    if (prototype !== null && Object.getPrototypeOf(prototype) !== null) {
+      return value;
+    }
     return Object.fromEntries(
       Object.entries(value).map(([key, item]) => [
         key,

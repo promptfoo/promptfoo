@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { runAssertion } from '../../src/assertions/index';
 import cliState from '../../src/cliState';
 import { loadTestsFromGlob } from '../../src/util/testCaseReader';
+import { loadYaml } from '../../src/util/yamlLoad';
 
 import type { Assertion, AssertionValue, AtomicTestCase } from '../../src/types/index';
 
@@ -49,6 +50,87 @@ describe('script assertion data-file parameters', () => {
       expect(result).toMatchObject({ pass: true, score: 1 });
     }
   }
+
+  it.each([
+    [
+      'Date',
+      new Date('2026-10-10'),
+      'value instanceof Date && value.toISOString() === "2026-10-10T00:00:00.000Z"',
+    ],
+    ['Map', new Map([['expected', 5]]), 'value instanceof Map && value.get("expected") === 5'],
+    ['Set', new Set(['expected']), 'value instanceof Set && value.has("expected")'],
+    [
+      'Uint8Array',
+      new Uint8Array([1, 2]),
+      'value instanceof Uint8Array && value[0] === 1 && value[1] === 2',
+    ],
+  ] as const)(
+    'preserves %s parameters passed through the public API',
+    async (_name, value, predicate) => {
+      await writeFile(
+        path.join(directory, 'check.cjs'),
+        `module.exports = (output, {value}) => ${predicate};`,
+      );
+
+      await expect(
+        runAssertion({
+          assertion: { type: 'javascript', script, value },
+          test: {},
+          providerResponse: { output: 'unused' },
+        }),
+      ).resolves.toMatchObject({ pass: true, score: 1 });
+    },
+  );
+
+  it('renders plain records and arrays while cloning nested non-plain parameters', async () => {
+    const date = new Date('2026-10-10');
+    const items = new Set(['expected']);
+    const record = Object.assign(Object.create(null), { label: '{{ label }}' });
+    await writeFile(
+      path.join(directory, 'check.cjs'),
+      `module.exports = (output, {value}) => {
+        value.nested[0].setUTCFullYear(2000);
+        value.items.add('changed');
+        return value.nested[1].label === 'rendered' && value.items.has('expected');
+      };`,
+    );
+
+    await expect(
+      runAssertion({
+        assertion: { type: 'javascript', script, value: { nested: [date, record], items } },
+        test: { vars: { label: 'rendered' } },
+        providerResponse: { output: 'unused' },
+      }),
+    ).resolves.toMatchObject({ pass: true, score: 1 });
+    expect(date.toISOString()).toBe('2026-10-10T00:00:00.000Z');
+    expect(items).toEqual(new Set(['expected']));
+    expect(record.label).toBe('{{ label }}');
+  });
+
+  it.each(['inline', 'external', 'data-file'])(
+    'preserves an unquoted YAML timestamp from %s parameters',
+    async (source) => {
+      const testYaml = `assert:\n  - type: javascript\n    script: ${script}\n    value: 2026-10-10\n`;
+      let test = loadYaml(testYaml) as AtomicTestCase;
+      if (source === 'external') {
+        const testFile = path.join(directory, 'timestamp-tests.yaml');
+        await writeFile(testFile, `- ${testYaml.replaceAll('\n', '\n  ')}`);
+        [test] = (await loadTestsFromGlob(testFile)) as AtomicTestCase[];
+      } else if (source === 'data-file') {
+        const dataFile = path.join(directory, 'timestamp.yaml');
+        await writeFile(dataFile, '2026-10-10\n');
+        test.assert![0] = { type: 'javascript', script, value: `file://${dataFile}` };
+      }
+
+      await expect(
+        runAssertion({
+          assertion: test.assert![0] as Assertion,
+          test,
+          providerResponse: { output: JSON.stringify('2026-10-10T00:00:00.000Z') },
+        }),
+      ).resolves.toMatchObject({ pass: true, score: 1 });
+    },
+  );
 
   it('loads text parameters with the same trimming as other assertion data files', async () => {
     const file = path.join(directory, 'expected.txt');
