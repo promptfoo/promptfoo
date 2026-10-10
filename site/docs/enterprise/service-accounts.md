@@ -60,6 +60,7 @@ Install your chosen Promptfoo CLI version in the runner and store the service ac
 For an on-prem deployment, use its API origin for `--host` and the assigned team's name, slug, or ID for `--team`:
 
 ```bash
+set +x
 set -euo pipefail
 
 export PROMPTFOO_CONFIG_DIR="$(mktemp -d)"
