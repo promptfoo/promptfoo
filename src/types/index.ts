@@ -1171,6 +1171,21 @@ const TraceProviderConfigSchema = z.discriminatedUnion('id', [
 
 const TraceQueryDelaySchema = z.number().int().nonnegative().max(300_000);
 
+/**
+ * Splits an extension reference such as `file://path/to/hooks.js:fn` into its file path and
+ * function name. Like the runtime loader, it splits on the last colon so Windows drive letters
+ * (`file://C:/path/hooks.js:fn`) are kept in the file path.
+ */
+function parseExtensionFileAndFunction(value: string): [string, string | undefined] {
+  const withoutPrefix = value.startsWith('file://') ? value.slice('file://'.length) : value;
+  const lastColonIndex = withoutPrefix.lastIndexOf(':');
+  // A colon at index 1 is only a Windows drive letter (e.g. `C:/...`), not a function separator.
+  if (lastColonIndex <= 1) {
+    return [withoutPrefix, undefined];
+  }
+  return [withoutPrefix.slice(0, lastColonIndex), withoutPrefix.slice(lastColonIndex + 1)];
+}
+
 // The test suite defines the "knobs" that we are tuning in prompt engineering: providers and prompts
 export const TestSuiteSchema = z.object({
   // Optional tags to describe the test suite
@@ -1223,8 +1238,8 @@ export const TestSuiteSchema = z.object({
         })
         .refine(
           (value) => {
-            const parts = value.split(':');
-            return parts.length === 3 && parts.every((part) => part.trim() !== '');
+            const [filePath, functionName] = parseExtensionFileAndFunction(value);
+            return filePath.trim() !== '' && !!functionName && functionName.trim() !== '';
           },
           {
             error: 'Extension must be of the form file://path/to/file.py:function_name',
@@ -1232,11 +1247,8 @@ export const TestSuiteSchema = z.object({
         )
         .refine(
           (value) => {
-            const parts = value.split(':');
-            return (
-              (parts[1].endsWith('.py') || isJavascriptFile(parts[1])) &&
-              (parts.length === 3 || parts.length === 2)
-            );
+            const [filePath] = parseExtensionFileAndFunction(value);
+            return filePath.endsWith('.py') || isJavascriptFile(filePath);
           },
           {
             error:
