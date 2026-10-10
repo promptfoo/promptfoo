@@ -19,7 +19,7 @@ describe('grading provider file environment precedence', () => {
   };
 
   beforeEach(() => {
-    restoreEnv = mockProcessEnv({}, { clear: true });
+    restoreEnv = mockProcessEnv({}, { clearPrefixes: ['OPENAI_'] });
     directory = createTempDir('promptfoo-grader-env-');
     fs.writeFileSync(
       path.join(directory, 'grader.yaml'),
