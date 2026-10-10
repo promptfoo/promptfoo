@@ -4,6 +4,7 @@ import Link from '@docusaurus/Link';
 import { HtmlClassNameProvider, PageMetadata, ThemeClassNames } from '@docusaurus/theme-common';
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 import BlogPostGrid from '@site/src/components/Blog/BlogPostGrid';
+import { formatTagLabel } from '@site/src/utils/formatTagLabel';
 import BlogLayout from '@theme/BlogLayout';
 import BlogListPageStructuredData from '@theme/BlogListPage/StructuredData';
 import BlogListPaginator from '@theme/BlogListPaginator';
@@ -12,20 +13,6 @@ import clsx from 'clsx';
 import styles from './styles.module.css';
 import type { PropBlogPostContent } from '@docusaurus/plugin-content-blog';
 import type { Props } from '@theme/BlogListPage';
-
-// Format tag label: "red-teaming" → "Red Teaming", "ai-security" → "AI Security"
-function formatTagLabel(label: string): string {
-  const acronyms = ['ai', 'llm', 'owasp', 'mcp', 'rag', 'agi', 'a2a', 'eu'];
-  return label
-    .split('-')
-    .map((word) => {
-      if (acronyms.includes(word.toLowerCase())) {
-        return word.toUpperCase();
-      }
-      return word.charAt(0).toUpperCase() + word.slice(1);
-    })
-    .join(' ');
-}
 
 function BlogListPageMetadata(props: Props): React.ReactElement {
   const { metadata } = props;
