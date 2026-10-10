@@ -937,7 +937,7 @@ describe('ResultsTable Metrics Display', () => {
 
     it.each([
       ['raw-audio', 'data:audio/mp3;base64,raw-audio'],
-      ['data:audio/wav;base64,abc', 'data:audio/wav;base64,abc'],
+      ['data:audio/mp3;base64,abc', 'data:audio/mp3;base64,abc'],
       ['storageRef:', null],
       ['promptfoo://blob/', null],
       ['storageRef:audio/test.mp3', '/api/media/audio/test.mp3'],
@@ -3796,8 +3796,6 @@ describe('ResultsTable minimal scroll room detection', () => {
 
   const verifyScrollRoom = async () => {
     // Mock scroll room >= 150px (1000 - 700 = 300px)
-    // When filteredResultsCount changes, checkScrollRoom should be called again
-    // This test verifies that the implementation includes filteredResultsCount as a dependency
     scrollHeightValue = 1000;
     innerHeightValue = 700;
 
@@ -3808,11 +3806,7 @@ describe('ResultsTable minimal scroll room detection', () => {
       timers.runAll();
     });
 
-    // Initially no minimal-scroll-room class
     const stickyContainer = screen.getByTestId('results-table-header');
-    // This ensures the detection updates as table content changes
-    // to trigger checkScrollRoom when the number of filtered results changes
-    // The implementation has a useEffect that depends on filteredResultsCount
     expect(stickyContainer).not.toHaveClass('minimal-scroll-room');
   };
 
@@ -3877,7 +3871,31 @@ describe('ResultsTable minimal scroll room detection', () => {
     expect(stickyContainer).toHaveClass('minimal-scroll-room');
   });
 
-  it('has useEffect that depends on filteredResultsCount to recheck scroll room', verifyScrollRoom);
+  it('rechecks scroll room when the filtered result count changes', async () => {
+    let filteredResultsCount = 1;
+    const store = createTableStore({
+      inComparisonMode: false,
+      table: mockTable,
+      renderMarkdown: true,
+      isFetching: false,
+    });
+    vi.mocked(useTableStore).mockImplementation(() => ({ ...store, filteredResultsCount }));
+    const view = renderWithProviders(<ResultsTable {...defaultProps} />);
+    await act(async () => {
+      timers.runAll();
+    });
+    const stickyContainer = screen.getByTestId('results-table-header');
+    expect(stickyContainer).not.toHaveClass('minimal-scroll-room');
+
+    scrollHeightValue = 800;
+    // Change an unrelated callback to render past React.memo with the mocked store.
+    view.rerender(<ResultsTable {...defaultProps} onSearchTextChange={vi.fn()} />);
+    expect(stickyContainer).not.toHaveClass('minimal-scroll-room');
+
+    filteredResultsCount = 2;
+    view.rerender(<ResultsTable {...defaultProps} onSearchTextChange={vi.fn()} />);
+    expect(stickyContainer).toHaveClass('minimal-scroll-room');
+  });
 
   it('cleans up resize listener on unmount', async () => {
     const removeEventListenerSpy = vi.spyOn(window, 'removeEventListener');
