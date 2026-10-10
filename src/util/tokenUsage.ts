@@ -1,12 +1,11 @@
 import logger from '../logger';
+import { BaseTokenUsageSchema, type TokenUsage } from '../types/shared';
 import { sanitizeProviderIdForLog } from './provider';
 import {
   accumulateResponseTokenUsage,
   accumulateTokenUsage,
   createEmptyTokenUsage,
 } from './tokenUsageUtils';
-
-import type { TokenUsage } from '../types/shared';
 
 /**
  * A utility class for tracking token usage across an evaluation.
@@ -60,17 +59,33 @@ export class TokenUsageTracker {
     providerId: string,
     response: { cached?: boolean; tokenUsage?: TokenUsage } | undefined,
   ): void {
+    if (!response) {
+      return;
+    }
+
+    let tokenUsage: TokenUsage | undefined;
+    try {
+      const rawTokenUsage = response.tokenUsage;
+      if (rawTokenUsage) {
+        const parsedTokenUsage = BaseTokenUsageSchema.safeParse(rawTokenUsage);
+        if (parsedTokenUsage.success) {
+          tokenUsage = parsedTokenUsage.data;
+        }
+      }
+    } catch {
+      tokenUsage = undefined;
+    }
     const current = this.providersMap.get(providerId) ?? createEmptyTokenUsage();
     const updated = { ...current };
     const accounting = createEmptyTokenUsage();
-    accumulateResponseTokenUsage(accounting, response);
+    accumulateResponseTokenUsage(accounting, { cached: response.cached, tokenUsage });
     accumulateTokenUsage(updated, {
       ...(accounting.incurredTokenUsage ?? accounting),
       cached: accounting.cached,
     });
     this.providersMap.set(providerId, updated);
     logger.debug(
-      `Tracked response usage for ${sanitizeProviderIdForLog(providerId)}: total=${response?.tokenUsage?.total ?? 0}, cached=${response?.tokenUsage?.cached ?? 0}`,
+      `Tracked response usage for ${sanitizeProviderIdForLog(providerId)}: total=${tokenUsage?.total ?? 0}, cached=${tokenUsage?.cached ?? 0}`,
     );
   }
 

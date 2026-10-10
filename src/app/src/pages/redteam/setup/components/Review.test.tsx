@@ -1,5 +1,4 @@
 import { TooltipProvider } from '@app/components/ui/tooltip';
-import { EvalHistoryProvider } from '@app/contexts/EvalHistoryContext';
 import { type ApiHealthResult, useApiHealth } from '@app/hooks/useApiHealth';
 import { useEmailVerification } from '@app/hooks/useEmailVerification';
 import { useRedteamJobStore } from '@app/stores/redteamJobStore';
@@ -14,17 +13,9 @@ import type { DefinedUseQueryResult } from '@tanstack/react-query';
 // Helper to render with required providers
 let rerenderWithProviders: (ui: React.ReactElement) => void;
 const renderWithProviders = (ui: React.ReactElement) => {
-  const result = render(
-    <EvalHistoryProvider>
-      <TooltipProvider delayDuration={0}>{ui}</TooltipProvider>
-    </EvalHistoryProvider>,
-  );
+  const result = render(<TooltipProvider delayDuration={0}>{ui}</TooltipProvider>);
   rerenderWithProviders = (newUi: React.ReactElement) => {
-    result.rerender(
-      <EvalHistoryProvider>
-        <TooltipProvider delayDuration={0}>{newUi}</TooltipProvider>
-      </EvalHistoryProvider>,
-    );
+    result.rerender(<TooltipProvider delayDuration={0}>{newUi}</TooltipProvider>);
   };
   return result;
 };
@@ -270,7 +261,7 @@ describe('Review Component', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockGetUnifiedConfig.mockReturnValue({
+    mockGetUnifiedConfig.mockReset().mockReturnValue({
       description: 'Test config',
       plugins: [],
       strategies: [],
@@ -1446,6 +1437,40 @@ Application Details:
         }
         return { json: async () => ({}) } as any;
       });
+    });
+
+    it('sends per-plugin settings through the real serializer when running', async () => {
+      const { getUnifiedConfig } = await vi.importActual<
+        typeof import('@promptfoo/presentation/redteamConfig')
+      >('@promptfoo/presentation/redteamConfig');
+      mockGetUnifiedConfig.mockImplementationOnce(getUnifiedConfig);
+      const config = {
+        ...defaultConfig,
+        prompts: ['{{prompt}}'],
+        plugins: [{ id: 'bola', numTests: 17, severity: 'critical', config: {} }],
+        strategies: ['basic'],
+      };
+      mockUseRedTeamConfig.mockReturnValue({ config, updateConfig: mockUpdateConfig });
+      vi.mocked(useEmailVerification).mockReturnValue({
+        checkEmailStatus: vi.fn().mockResolvedValue({ canProceed: true }),
+      } as any);
+      renderWithProviders(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+      await userEvent
+        .setup({ delay: null })
+        .click(screen.getByRole('button', { name: /run now/i }));
+      await waitFor(() => expect(callApi).toHaveBeenCalledWith('/redteam/run', expect.any(Object)));
+      const request = vi.mocked(callApi).mock.calls.find(([url]) => url === '/redteam/run')!;
+      const payload = JSON.parse(request[1]!.body as string);
+      expect(payload.config.redteam.plugins).toEqual([
+        { id: 'bola', numTests: 17, severity: 'critical' },
+      ]);
+      expect(payload.config.redteam.numTests).toBe(10);
     });
 
     it('should disable button when isRunning is true regardless of API status', async () => {

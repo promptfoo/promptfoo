@@ -34,8 +34,6 @@ import { createSpinner, displayScanResults } from './output';
 import { buildScanRequest, executeScanRequestWithRetry } from './request';
 import type { SimpleGit } from 'simple-git';
 
-import type { Config } from '../config/schema';
-
 /**
  * The scanner reviews commit diffs, so an empty included set on a clean
  * checkout of the base branch reads like a broken scan. Say what range was
@@ -99,6 +97,11 @@ export function resolveOutputFormat(options: ScanOptions): CodeScanOutputFormat 
   return options.json ? CodeScanOutputFormat.JSON : parsed.data;
 }
 
+const createFlushCallback = (exitCode: number) => async () => {
+  await new Promise((resolve) => setTimeout(resolve, 100)); // Wait for output to be flushed
+  process.exitCode = exitCode;
+};
+
 /**
  * Execute a complete security scan
  *
@@ -128,9 +131,14 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
   const absoluteRepoPath = path.resolve(repoPath);
   let outputFormat: CodeScanOutputFormat | null = null;
   let spinner: ReturnType<typeof createSpinner> | undefined;
-  let showSpinner = false;
 
   const startTime = Date.now();
+
+  const displayResults = (response: ScanResponse, format: CodeScanOutputFormat) =>
+    displayScanResults(response, Date.now() - startTime, {
+      format,
+      githubPr: options.githubPr,
+    });
 
   try {
     outputFormat = resolveOutputFormat(options);
@@ -143,8 +151,7 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
     }
 
     // Load and merge configuration
-    const baseConfig: Config = loadConfigOrDefault(options.config);
-    const config = mergeConfigWithOptions(baseConfig, options);
+    const config = mergeConfigWithOptions(loadConfigOrDefault(options.config), options);
 
     // Resolve guidance (CLI options take precedence)
     const guidance = resolveGuidance(options, config);
@@ -167,14 +174,11 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
     registerCleanupHandlers(abortController);
 
     // Initialize spinner (hidden for non-text formats so machine-readable output stays clean)
-    const isWebUI = Boolean(cliState.webUI);
     spinner = createSpinner({
       format: outputFormat,
-      isWebUI,
+      isWebUI: Boolean(cliState.webUI),
       logLevel: getLogLevel(),
     });
-
-    showSpinner = Boolean(spinner);
 
     // Parse PR context early for auth (if --github-pr provided)
     // This is needed for fork PR authentication where OIDC is unavailable
@@ -192,7 +196,7 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
     // Create agent client connection (uses shared Socket.IO layer)
     // Host and base auth are resolved automatically; code scanning overrides
     // with custom auth (OIDC + fork PR) and config-driven host.
-    if (!showSpinner) {
+    if (!spinner) {
       logger.debug('Connecting to server...');
     }
 
@@ -267,10 +271,9 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
     const files = await processDiff(absoluteRepoPath, baseBranch, compareRef);
 
     const includedFiles = files.filter((f) => !f.skipReason && f.patch);
-    const skippedFiles = files.filter((f) => f.skipReason);
 
     logger.debug(
-      `Files changed: ${files.length} (${includedFiles.length} included, ${skippedFiles.length} skipped)`,
+      `Files changed: ${files.length} (${includedFiles.length} included, ${files.filter((f) => f.skipReason).length} skipped)`,
     );
 
     // Check if there are no files to scan
@@ -278,25 +281,19 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
       // For non-text formats (JSON, SARIF), keep the stable machine-readable
       // review string for programmatic consumption
       if (outputFormat === CodeScanOutputFormat.TEXT) {
+        const skippedFiles = files.filter((f) => f.skipReason);
         const msg = await describeEmptyScan(git, files, skippedFiles, baseBranch, compareRef);
-        if (showSpinner && spinner) {
+        if (spinner) {
           spinner.succeed(msg);
         } else {
           logger.info(msg);
         }
       } else {
-        const response: ScanResponse = { success: true, comments: [], review: 'No files to scan' };
-        displayScanResults(response, Date.now() - startTime, {
-          format: outputFormat,
-          githubPr: options.githubPr,
-        });
+        displayResults({ success: true, comments: [], review: 'No files to scan' }, outputFormat);
       }
 
       // Exit with code 0 (success) when no files to scan
-      cliState.postActionCallback = async () => {
-        await new Promise((resolve) => setTimeout(resolve, 100)); // Wait for output to be flushed
-        process.exitCode = 0;
-      };
+      cliState.postActionCallback = createFlushCallback(0);
 
       return;
     }
@@ -326,31 +323,24 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
     }
 
     // Send scan request via agent client
-    if (!showSpinner) {
+    if (!spinner) {
       logger.debug('Scanning code...');
     }
 
     const scanRequest = buildScanRequest(files, metadata, config, sessionId, pullRequest, guidance);
 
     const scanResponse = await executeScanRequestWithRetry(client, scanRequest, {
-      showSpinner,
       spinner,
       abortController,
     });
 
     // Stop spinner silently
-    if (showSpinner && spinner) {
+    if (spinner) {
       spinner.stop();
     }
 
-    const endTime = Date.now();
-    const duration = endTime - startTime;
-
     // Display results
-    displayScanResults(scanResponse, duration, {
-      format: outputFormat,
-      githubPr: options.githubPr,
-    });
+    displayResults(scanResponse, outputFormat);
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
 
@@ -368,34 +358,25 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
           comments: [],
           skipReason: msg,
         };
-        displayScanResults(response, Date.now() - startTime, {
-          format: outputFormat,
-          githubPr: options.githubPr,
-        });
+        displayResults(response, outputFormat);
       } else if (outputFormat === CodeScanOutputFormat.SARIF) {
         console.error(
           `Scan skipped: ${msg} SARIF output was not generated because the scan did not complete.`,
         );
-        cliState.postActionCallback = async () => {
-          await new Promise((resolve) => setTimeout(resolve, 100));
-          process.exitCode = 1;
-        };
+        cliState.postActionCallback = createFlushCallback(1);
         return;
-      } else if (showSpinner && spinner) {
+      } else if (spinner) {
         spinner.succeed(msg);
       } else {
         logger.info(msg);
       }
 
-      cliState.postActionCallback = async () => {
-        await new Promise((resolve) => setTimeout(resolve, 100));
-        process.exitCode = 0; // Success - not an error condition
-      };
+      cliState.postActionCallback = createFlushCallback(0); // Success - not an error condition
       return;
     }
 
     const msg = `Scan failed: ${errorMessage}`;
-    if (showSpinner && spinner) {
+    if (spinner) {
       spinner.fail(msg);
     } else if (structuredOutputRequested) {
       // Structured modes reserve stdout for the payload, so errors go to stderr. This

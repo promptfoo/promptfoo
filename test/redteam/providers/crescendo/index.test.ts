@@ -1,14 +1,19 @@
+const { createErrorFirstLoggerModule } = await vi.hoisted(
+  async () => import('../../../factories/logger'),
+);
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { runAssertions } from '../../../../src/assertions/index';
 import * as evaluatorHelpers from '../../../../src/evaluatorHelpers';
 import logger from '../../../../src/logger';
-import { CrescendoProvider, MemorySystem } from '../../../../src/redteam/providers/crescendo/index';
+import { CrescendoProvider } from '../../../../src/redteam/providers/crescendo/index';
 import { redteamProviderManager, tryUnblocking } from '../../../../src/redteam/providers/shared';
 import { shouldGenerateRemote } from '../../../../src/redteam/remoteGeneration';
 import { isProviderResponseRateLimited } from '../../../../src/scheduler/types';
 import * as traceContext from '../../../../src/tracing/traceContext';
 import { isResponseHeadersObserverErrorResponse } from '../../../../src/util/fetch/responseHeadersObserver';
 import { checkServerFeatureSupport } from '../../../../src/util/server';
+import { createFailingGrader, createPassingGrader } from '../../../factories/mockGrader';
 import { createMockProvider, type MockApiProvider } from '../../../factories/provider';
 import { createSelectedObserverErrorResponse } from '../../../util/selectedObserverError';
 import {
@@ -16,7 +21,6 @@ import {
   createSelectedToolErrorTarget,
 } from '../../../util/selectedToolErrorTarget';
 
-import type { Message } from '../../../../src/redteam/providers/shared';
 import type { AtomicTestCase, GradingResult } from '../../../../src/types/index';
 import type { ProviderResponse } from '../../../../src/types/providers';
 
@@ -69,12 +73,7 @@ vi.mock('../../../../src/redteam/graders', () => ({
 
 vi.mock('../../../../src/logger', async (importOriginal) => ({
   ...(await importOriginal()),
-  default: {
-    debug: vi.fn(),
-    error: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-  },
+  ...createErrorFirstLoggerModule(),
 }));
 
 vi.mock('../../../../src/redteam/remoteGeneration', async (importOriginal) => {
@@ -103,49 +102,6 @@ beforeEach(() => {
     audio: undefined,
     image: undefined,
   }));
-});
-
-describe('MemorySystem', () => {
-  let memorySystem: MemorySystem;
-
-  beforeEach(() => {
-    memorySystem = new MemorySystem();
-  });
-
-  it('should add and retrieve messages for a conversation', () => {
-    const conversationId = 'test-convo';
-    const message: Message = { role: 'user', content: 'test message' };
-
-    memorySystem.addMessage(conversationId, message);
-    const conversation = memorySystem.getConversation(conversationId);
-
-    expect(conversation).toHaveLength(1);
-    expect(conversation[0]).toEqual(message);
-  });
-
-  it('should return empty array for non-existent conversation', () => {
-    const conversation = memorySystem.getConversation('non-existent');
-    expect(conversation).toEqual([]);
-  });
-
-  it('should duplicate conversation excluding last turn', () => {
-    const conversationId = 'test-convo';
-    const messages: Message[] = [
-      { role: 'system', content: 'system message' },
-      { role: 'user', content: 'user message 1' },
-      { role: 'assistant', content: 'assistant message 1' },
-      { role: 'user', content: 'user message 2' },
-      { role: 'assistant', content: 'assistant message 2' },
-    ];
-
-    messages.forEach((msg) => memorySystem.addMessage(conversationId, msg));
-
-    const newConversationId = memorySystem.duplicateConversationExcludingLastTurn(conversationId);
-    const newConversation = memorySystem.getConversation(newConversationId);
-
-    expect(newConversation).toHaveLength(3);
-    expect(newConversation).toEqual(messages.slice(0, 3));
-  });
 });
 
 describe('CrescendoProvider', () => {
@@ -193,15 +149,7 @@ describe('CrescendoProvider', () => {
 
     // Set up default getGraderById mock
     mockGetGraderById.mockReset();
-    mockGetGraderById.mockImplementation(function () {
-      return {
-        getResult: vi.fn(async () => ({
-          grade: {
-            pass: false,
-          },
-        })),
-      } as any;
-    });
+    mockGetGraderById.mockImplementation(createFailingGrader);
 
     // Set up default tryUnblocking mock
     vi.mocked(tryUnblocking).mockReset();
@@ -978,15 +926,9 @@ describe('CrescendoProvider', () => {
 
   it('should record internal evaluator success without exiting early', async () => {
     // Set up grader to pass (not detect jailbreak) so we don't fail via grader
-    mockGetGraderById.mockImplementation(function () {
-      return {
-        getResult: vi.fn(async () => ({
-          grade: {
-            pass: true, // Pass means no jailbreak detected
-          },
-        })),
-      } as any;
-    });
+    mockGetGraderById.mockImplementation(
+      /* Pass means no jailbreak detected */ createPassingGrader,
+    );
 
     // Create a new provider with smaller max turns for this test
     const testProvider = new CrescendoProvider({
@@ -1107,6 +1049,7 @@ describe('CrescendoProvider', () => {
       return {
         getResult: vi.fn(async () => ({
           grade: mockGraderResult,
+          rubric: 'rendered failure rubric',
         })),
       } as any;
     });
@@ -1126,7 +1069,7 @@ describe('CrescendoProvider', () => {
       vars: { objective: 'test objective' },
       prompt: { raw: prompt, label: 'test' },
       test: {
-        assert: [{ type: 'mock-grader' }],
+        assert: [{ type: 'mock-grader', metric: 'PolicyViolation:test/Crescendo' }],
         metadata: { pluginId: 'mock' },
       } as any,
     };
@@ -1173,7 +1116,11 @@ describe('CrescendoProvider', () => {
 
     // Should store the grader result for later use (includes assertion field)
     expect(result.metadata?.storedGraderResult).toMatchObject(mockGraderResult);
-    expect(result.metadata?.storedGraderResult?.assertion).toBeDefined();
+    expect(result.metadata?.storedGraderResult?.assertion).toEqual({
+      type: 'mock-grader',
+      metric: 'PolicyViolation:test/Crescendo',
+      value: 'rendered failure rubric',
+    });
   });
 
   it('should not create synthetic grader result when internal evaluator succeeds', async () => {
@@ -1183,7 +1130,13 @@ describe('CrescendoProvider', () => {
         getResult: vi.fn(async () => ({
           grade: {
             pass: true,
+            assertion: {
+              type: 'promptfoo:redteam:harmful',
+              metric: 'Harmful/Crescendo',
+              value: 'old rubric',
+            },
           },
+          rubric: 'rendered passing rubric',
         })),
       } as any;
     });
@@ -1231,7 +1184,11 @@ describe('CrescendoProvider', () => {
 
     expect(result.metadata?.stopReason).toBe('Max rounds reached');
     expect(result.metadata?.storedGraderResult).toMatchObject({ pass: true });
-    expect(result.metadata?.storedGraderResult?.assertion).toBeDefined();
+    expect(result.metadata?.storedGraderResult?.assertion).toEqual({
+      type: 'promptfoo:redteam:harmful',
+      metric: 'Harmful/Crescendo',
+      value: 'rendered passing rubric',
+    });
   });
 
   it.each(['grader error', 'conversation ended', 'backtracking'])(
@@ -1539,15 +1496,7 @@ describe('CrescendoProvider', () => {
 
   it('should stop when max backtracks reached', async () => {
     // Set up grader to pass (not detect jailbreak)
-    mockGetGraderById.mockImplementation(function () {
-      return {
-        getResult: vi.fn(async () => ({
-          grade: {
-            pass: true,
-          },
-        })),
-      } as any;
-    });
+    mockGetGraderById.mockImplementation(createPassingGrader);
 
     const testProvider = new CrescendoProvider({
       injectVar: 'objective',
@@ -1903,15 +1852,9 @@ describe('CrescendoProvider', () => {
 
     it('should record success but continue when continueAfterSuccess is false', async () => {
       // Ensure grader passes for this test
-      mockGetGraderById.mockImplementation(function () {
-        return {
-          getResult: vi.fn(async () => ({
-            grade: {
-              pass: true, // No jailbreak detected by grader
-            },
-          })),
-        } as any;
-      });
+      mockGetGraderById.mockImplementation(
+        /* No jailbreak detected by grader */ createPassingGrader,
+      );
 
       const provider = new CrescendoProvider({
         injectVar: 'objective',
@@ -2992,13 +2935,7 @@ describe('CrescendoProvider - Abort Signal Handling', () => {
       const rawPrompt = typeof prompt === 'object' && 'raw' in prompt ? prompt.raw : String(prompt);
       return rawPrompt;
     });
-    mockGetGraderById.mockImplementation(function () {
-      return {
-        getResult: vi.fn(async () => ({
-          grade: { pass: true },
-        })),
-      } as any;
-    });
+    mockGetGraderById.mockImplementation(createPassingGrader);
     vi.mocked(tryUnblocking).mockResolvedValue({ success: false });
   });
 
@@ -3260,13 +3197,7 @@ describe('CrescendoProvider - Chat Template Support', () => {
     });
 
     vi.mocked(checkServerFeatureSupport).mockResolvedValue(true);
-    mockGetGraderById.mockImplementation(function () {
-      return {
-        getResult: vi.fn(async () => ({
-          grade: { pass: true },
-        })),
-      } as any;
-    });
+    mockGetGraderById.mockImplementation(createPassingGrader);
     vi.mocked(tryUnblocking).mockResolvedValue({ success: false });
   });
 
@@ -3591,13 +3522,7 @@ describe('CrescendoProvider - perTurnLayers configuration', () => {
     });
 
     vi.mocked(checkServerFeatureSupport).mockResolvedValue(true);
-    mockGetGraderById.mockImplementation(function () {
-      return {
-        getResult: vi.fn(async () => ({
-          grade: { pass: true },
-        })),
-      } as any;
-    });
+    mockGetGraderById.mockImplementation(createPassingGrader);
     vi.mocked(tryUnblocking).mockResolvedValue({ success: false });
   });
 
