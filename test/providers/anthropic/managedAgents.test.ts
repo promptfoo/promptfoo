@@ -388,6 +388,24 @@ describe('Claude Managed Agents', () => {
     expect(errorLog).toHaveBeenCalledWith(results[0].error);
   });
 
+  it('scrubs credentials that ANTHROPIC_CUSTOM_HEADERS adds to requests', async () => {
+    const f = setup({
+      config,
+      env: {
+        ANTHROPIC_CUSTOM_HEADERS:
+          'Authorization: Bearer gateway-token-1\nx-team-key: ab12\nx-region: us',
+      },
+    });
+    // A gateway that rejects the request can echo the credential without its scheme.
+    f.create.mockRejectedValue(
+      apiError(403, 'token gateway-token-1 and key ab12 are not valid in us', 'permission_error'),
+    );
+    const result = await f.provider.callApi('test');
+    expect(result.error).toBe(
+      'Claude Managed Agents API request failed (HTTP 403): permission_error: token [REDACTED] and key [REDACTED] are not valid in us',
+    );
+  });
+
   it('scrubs credentials from errors that do not come from the API', async () => {
     const apiKey = 'sk-ant-config-credential\nsecond-line-secret';
     const f = setup({ config: { ...config, apiKey, headers: { 'x-gateway': 'gateway-secret' } } });
@@ -824,6 +842,25 @@ describe('Claude Managed Agents', () => {
     });
     expect(f.agentArchive).not.toHaveBeenCalled();
     expect(f.environmentArchive).not.toHaveBeenCalled();
+  });
+
+  it('validates the configuration again once its templates are rendered', async () => {
+    const f = setup({
+      config: {
+        apiKey: 'key',
+        agent: { name: 'QA', model: 'claude-sonnet-5' },
+        environment: { name: 'QA', config: { type: '{{environmentType}}' as 'cloud' } },
+      },
+    });
+    const result = await f.provider.callApi('test', {
+      vars: { environmentType: 'self_hosted' },
+      prompt: { raw: 'test', label: 'test' },
+    });
+    expect(result.error).toContain('requires a cloud environment');
+    // Nothing is allocated for a configuration the provider cannot run.
+    expect(f.agentCreate).not.toHaveBeenCalled();
+    expect(f.environmentCreate).not.toHaveBeenCalled();
+    expect(f.create).not.toHaveBeenCalled();
   });
 
   it('does no work for a pre-aborted call', async () => {

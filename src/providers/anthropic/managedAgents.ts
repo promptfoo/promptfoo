@@ -7,8 +7,9 @@ import {
   withGenAISpan,
 } from '../../tracing/genaiTracer';
 import { renderVarsInObject } from '../../util/render';
+import { isCredentialHeader } from '../../util/sanitizer';
 import { sleepWithAbort } from '../../util/time';
-import { AnthropicGenericProvider } from './generic';
+import { AnthropicGenericProvider, getAnthropicEnvHeaders } from './generic';
 import type { AgentCreateParams } from '@anthropic-ai/sdk/resources/beta/agents/agents';
 import type { EnvironmentCreateParams } from '@anthropic-ai/sdk/resources/beta/environments/environments';
 import type { BetaManagedAgentsSessionEvent } from '@anthropic-ai/sdk/resources/beta/sessions/events';
@@ -198,12 +199,41 @@ function validateDuration(name: string, value: number | undefined): void {
   }
 }
 
+/** Checked when the provider is built, and again once a call has rendered its templates. */
+function validateConfig(config: ManagedAgentsOptions): void {
+  if (Boolean(config.agent_id) === Boolean(config.agent)) {
+    throw new Error('Claude Managed Agents requires exactly one of agent_id or agent');
+  }
+  if (Boolean(config.environment_id) === Boolean(config.environment)) {
+    throw new Error('Claude Managed Agents requires exactly one of environment_id or environment');
+  }
+  if (config.agent && (!config.agent.name || !config.agent.model)) {
+    throw new Error('Claude Managed Agents agent requires name and model');
+  }
+  if (config.environment && !config.environment.name) {
+    throw new Error('Claude Managed Agents environment requires name');
+  }
+  if (config.environment?.config?.type === 'self_hosted') {
+    throw new Error(
+      'Claude Managed Agents requires a cloud environment; local tool execution is not supported',
+    );
+  }
+  if (
+    config.agent_version !== undefined &&
+    (!config.agent_id || !Number.isSafeInteger(config.agent_version) || config.agent_version < 1)
+  ) {
+    throw new Error('agent_version requires agent_id and must be a positive integer');
+  }
+  validateDuration('timeoutMs', config.timeoutMs);
+  validateDuration('cleanupTimeoutMs', config.cleanupTimeoutMs);
+}
+
 const SECRET_KEY_PATTERN = /token|secret|passw|credential|authorization|api_?key/i;
 
 /** Collects credential values from a rendered config so error text can be scrubbed of them. */
 function collectSecrets(value: unknown, key: string, found: Set<string>, depth = 0): Set<string> {
   if (typeof value === 'string') {
-    if (value.length >= 8 && SECRET_KEY_PATTERN.test(key)) {
+    if (value.length >= 4 && SECRET_KEY_PATTERN.test(key)) {
       found.add(value);
     }
   } else if (value && typeof value === 'object' && depth < 16) {
@@ -214,12 +244,29 @@ function collectSecrets(value: unknown, key: string, found: Set<string>, depth =
   return found;
 }
 
-/** Every credential one call sends: the API key, custom header values, and config secrets. */
-function callSecrets(config: ManagedAgentsOptions, apiKey?: string): Set<string> {
+/** Every credential one call sends: the API key, header values, and config secrets. */
+function callSecrets(
+  config: ManagedAgentsOptions,
+  apiKey: string | undefined,
+  envHeaders: Record<string, string>,
+): Set<string> {
   const secrets = collectSecrets(config, '', new Set<string>());
-  for (const value of [apiKey, ...Object.values(config.headers ?? {})]) {
-    if (typeof value === 'string' && value.length >= 8) {
-      secrets.add(value);
+  const headers: [string, unknown][] = [
+    ['x-api-key', apiKey],
+    ...Object.entries(envHeaders),
+    ...Object.entries(config.headers ?? {}),
+  ];
+  for (const [name, value] of headers) {
+    if (typeof value !== 'string') {
+      continue;
+    }
+    // A server that echoes a credential leaves out a scheme such as "Bearer".
+    for (const candidate of [value, value.replace(/^\S+\s+/, '')]) {
+      // Any header may authenticate a gateway. Short values are only worth
+      // removing, at the cost of garbling the text, when the name says they do.
+      if (candidate.length >= (isCredentialHeader(name, candidate) ? 4 : 8)) {
+        secrets.add(candidate);
+      }
     }
   }
   return secrets;
@@ -405,34 +452,7 @@ export class AnthropicManagedAgentsProvider extends AnthropicGenericProvider {
     } = {},
   ) {
     super('managed-agents', options);
-    const config = this.config;
-    if (Boolean(config.agent_id) === Boolean(config.agent)) {
-      throw new Error('Claude Managed Agents requires exactly one of agent_id or agent');
-    }
-    if (Boolean(config.environment_id) === Boolean(config.environment)) {
-      throw new Error(
-        'Claude Managed Agents requires exactly one of environment_id or environment',
-      );
-    }
-    if (config.agent && (!config.agent.name || !config.agent.model)) {
-      throw new Error('Claude Managed Agents agent requires name and model');
-    }
-    if (config.environment && !config.environment.name) {
-      throw new Error('Claude Managed Agents environment requires name');
-    }
-    if (config.environment?.config?.type === 'self_hosted') {
-      throw new Error(
-        'Claude Managed Agents requires a cloud environment; local tool execution is not supported',
-      );
-    }
-    if (
-      config.agent_version !== undefined &&
-      (!config.agent_id || !Number.isSafeInteger(config.agent_version) || config.agent_version < 1)
-    ) {
-      throw new Error('agent_version requires agent_id and must be a positive integer');
-    }
-    validateDuration('timeoutMs', config.timeoutMs);
-    validateDuration('cleanupTimeoutMs', config.cleanupTimeoutMs);
+    validateConfig(this.config);
   }
 
   id(): string {
@@ -464,7 +484,7 @@ export class AnthropicManagedAgentsProvider extends AnthropicGenericProvider {
   ): Promise<ProviderResponse> {
     const config = renderVarsInObject(this.config, context?.vars ?? {}) as ManagedAgentsOptions;
     // Reported API error text is scrubbed of the credentials this call sends.
-    const secrets = callSecrets(config, this.apiKey);
+    const secrets = callSecrets(config, this.apiKey, getAnthropicEnvHeaders(this.env));
     const controller = new AbortController();
     const timeoutMs = config.timeoutMs ?? 600_000;
     const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -491,6 +511,8 @@ export class AnthropicManagedAgentsProvider extends AnthropicGenericProvider {
 
     try {
       signal.throwIfAborted();
+      // A template can render to a value the constructor would have rejected.
+      validateConfig(config);
       if (config.agent) {
         const agent = await this.anthropic.beta.agents.create(
           { ...config.agent, ...params } as AgentCreateParams,
