@@ -2,7 +2,9 @@ import { getNunjucksEngine } from '../../util/templates';
 import { OpenAiLiveProvider } from '../openai/live';
 import { LIVE_FRAME_MS, LiveSession } from '../openai/liveSession';
 import { providerRegistry } from '../providerRegistry';
-import { PcmAudioQueue } from './audioQueue';
+import { PcmAudioPlayout } from './audioPlayout';
+import { VoiceInterventionPlayback } from './interventionPlayback';
+import { prepareVoiceInterventions } from './interventions';
 import { formatVoiceResult } from './result';
 
 import type { EnvOverrides } from '../../contracts/env';
@@ -13,6 +15,7 @@ import type {
   CallApiOptionsParams,
   ProviderOptions,
 } from '../../types/providers';
+import type { PreparedVoiceIntervention } from './interventions';
 import type {
   SimulatedVoiceUserConfig,
   VoiceIntervention,
@@ -32,6 +35,32 @@ function positiveInteger(value: number, name: string, maximum: number, minimum =
     throw new Error(`${name} must be an integer from ${minimum} to ${maximum}.`);
   }
   return value;
+}
+
+function validateSpeechOptions(tts: SimulatedVoiceUserConfig['interventionTts']): void {
+  if (tts !== undefined) {
+    if (!tts || typeof tts !== 'object' || Array.isArray(tts)) {
+      throw new Error('interventionTts must be an object.');
+    }
+    if (
+      (tts.model !== undefined && (typeof tts.model !== 'string' || !tts.model.trim())) ||
+      (tts.instructions !== undefined && typeof tts.instructions !== 'string') ||
+      (tts.speed !== undefined &&
+        (!Number.isFinite(tts.speed) || tts.speed < 0.25 || tts.speed > 4)) ||
+      (tts.voice !== undefined &&
+        !(typeof tts.voice === 'string' && tts.voice.trim()) &&
+        !(
+          tts.voice &&
+          typeof tts.voice === 'object' &&
+          typeof tts.voice.id === 'string' &&
+          tts.voice.id.trim()
+        ))
+    ) {
+      throw new Error(
+        'interventionTts requires a nonempty model/voice, string instructions, and speed between 0.25 and 4.',
+      );
+    }
+  }
 }
 
 /**
@@ -148,15 +177,19 @@ export class SimulatedVoiceUser implements ApiProvider {
         !Number.isSafeInteger(intervention.atMs) ||
         intervention.atMs < 0 ||
         intervention.atMs >= durationMs ||
-        typeof intervention.instructions !== 'string' ||
-        !intervention.instructions.trim() ||
-        Buffer.byteLength(intervention.instructions) > 2000
+        (!intervention.text && !intervention.instructions) ||
+        [intervention.text, intervention.instructions].some(
+          (value) =>
+            value !== undefined &&
+            (typeof value !== 'string' || !value.trim() || Buffer.byteLength(value) > 2000),
+        )
       ) {
         throw new Error(
-          'Caller interventions require atMs within the capture window and nonempty instructions of at most 2000 UTF-8 bytes.',
+          'Caller interventions require atMs within the capture window and text or instructions of 1–2000 UTF-8 bytes.',
         );
       }
     }
+    validateSpeechOptions(this.config.interventionTts);
     return { durationMs, timeoutMs, bufferMs, interventions };
   }
 
@@ -185,9 +218,11 @@ export class SimulatedVoiceUser implements ApiProvider {
     const interventionsSent: VoiceIntervention[] = [];
     const recordings: Buffer[] = [];
     const responses: Array<ProviderResponse | undefined> = [];
+    const preparationResponses: ProviderResponse[] = [];
     const sessions: LiveSession[] = [];
     const runs: Promise<void>[] = [];
-    const queues: PcmAudioQueue[] = [];
+    const queues: PcmAudioPlayout[] = [];
+    let clipPlayback: VoiceInterventionPlayback | undefined;
     const deliveredAudioBytes = [0, 0];
     let frameCount = 0;
     let maximumClockLagMs = 0;
@@ -215,21 +250,24 @@ export class SimulatedVoiceUser implements ApiProvider {
       const render = (value: string) =>
         getNunjucksEngine().renderString(value, context?.vars ?? {});
       const callerInstructions = render(this.config.instructions ?? '{{instructions}}');
-      const scheduled = interventions
+      let scheduled: PreparedVoiceIntervention[] = interventions
         .map((intervention) => ({
-          ...intervention,
-          instructions: render(intervention.instructions),
+          atMs: intervention.atMs,
+          ...(intervention.instructions === undefined
+            ? {}
+            : { instructions: render(intervention.instructions) }),
+          ...(intervention.text === undefined ? {} : { text: render(intervention.text) }),
         }))
         .sort((left, right) => left.atMs - right.atMs);
       if (
-        scheduled.some(
-          (intervention) =>
-            !intervention.instructions.trim() ||
-            Buffer.byteLength(intervention.instructions) > 2000,
+        scheduled.some((intervention) =>
+          [intervention.text, intervention.instructions].some(
+            (value) => value !== undefined && (!value.trim() || Buffer.byteLength(value) > 2000),
+          ),
         )
       ) {
         throw new Error(
-          'Rendered caller intervention instructions must contain 1–2000 UTF-8 bytes.',
+          'Rendered caller intervention text and instructions must contain 1–2000 UTF-8 bytes.',
         );
       }
       let nextIntervention = 0;
@@ -261,7 +299,7 @@ export class SimulatedVoiceUser implements ApiProvider {
       const readiness: Promise<void>[] = [];
       const rejects: Array<(reason: Error) => void> = [];
       for (const [index, provider] of providers.entries()) {
-        const queue = new PcmAudioQueue((BYTES_PER_SECOND * bufferMs) / 1000);
+        const queue = new PcmAudioPlayout((BYTES_PER_SECOND * bufferMs) / 1000);
         queues.push(queue);
         let ready!: () => void;
         readiness.push(
@@ -297,7 +335,13 @@ export class SimulatedVoiceUser implements ApiProvider {
               },
               onAudio: (audio) => {
                 if (!stopped) {
-                  queue.append(audio);
+                  const accepted =
+                    index === 1 && clipPlayback
+                      ? clipPlayback.filterCallerAudio(audio, performance.now() - mediaStartedAt)
+                      : audio;
+                  if (accepted) {
+                    queue.append(accepted);
+                  }
                 }
               },
               onTranscript: (fragment) => {
@@ -321,6 +365,17 @@ export class SimulatedVoiceUser implements ApiProvider {
       controller.signal.removeEventListener('abort', onInterrupted);
       controller.signal.throwIfAborted();
       LiveSession.validateSharedStartupBudget(sessions);
+      clipPlayback = new VoiceInterventionPlayback(queues[1]);
+      scheduled = await prepareVoiceInterventions(
+        scheduled,
+        this.config.caller,
+        this.config.interventionTts,
+        durationMs,
+        this.env,
+        controller.signal,
+        (response) => preparationResponses.push(response),
+      );
+      controller.signal.throwIfAborted();
       for (const [index, session] of sessions.entries()) {
         runs.push(
           session
@@ -381,17 +436,52 @@ export class SimulatedVoiceUser implements ApiProvider {
               scheduled[nextIntervention].atMs <= elapsed
             ) {
               const intervention = scheduled[nextIntervention++];
-              const eventId = sessions[1].requestSpeech(intervention.instructions);
-              interventionsSent.push({
+              if (intervention.audio && frameCount * LIVE_FRAME_MS < intervention.atMs) {
+                nextIntervention--;
+                break;
+              }
+              const record: VoiceIntervention = {
                 scheduledAtMs: intervention.atMs,
                 sentAtMs: elapsed,
                 instructions: intervention.instructions,
-                eventId,
-              });
+                eventId: '',
+              };
+              if (intervention.audio) {
+                if (clipPlayback!.active) {
+                  throw new Error(
+                    'Caller audio has not recovered before the next scheduled speech clip.',
+                  );
+                }
+                const contextEventIds = [
+                  sessions[1].appendContext(
+                    'The application is now speaking the next context entry aloud on your behalf, replacing your current speech. Treat it as your own utterance. Do not repeat it. Listen to the target reply before continuing your goal.',
+                  ),
+                  sessions[1].appendContext(intervention.text!),
+                ];
+                if (intervention.instructions) {
+                  contextEventIds.push(sessions[1].appendContext(intervention.instructions));
+                }
+                Object.assign(record, {
+                  mode: 'audio',
+                  text: intervention.text,
+                  eventId: contextEventIds[0],
+                  contextEventIds,
+                  clipDurationMs: (intervention.audio.length / BYTES_PER_SECOND) * 1000,
+                  clipSha256: intervention.clipSha256,
+                  trimmedLeadingSilenceMs: intervention.trimmedLeadingSilenceMs,
+                  deliveredAudioBytes: 0,
+                  discardedCallerAudioBytes: 0,
+                });
+                clipPlayback!.begin(intervention, record);
+              } else {
+                record.eventId = sessions[1].requestSpeech(intervention.instructions!);
+              }
+              interventionsSent.push(record);
             }
           };
           const sendFrame = () => {
-            const frames = queues.map((queue) => queue.read(FRAME_BYTES));
+            const clipFrame = clipPlayback?.readFrame();
+            const frames = [queues[0].read(FRAME_BYTES), clipFrame ?? queues[1].read(FRAME_BYTES)];
             const forwarded: Buffer[] = [Buffer.alloc(FRAME_BYTES), Buffer.alloc(FRAME_BYTES)];
             let accepted = false;
             try {
@@ -399,6 +489,13 @@ export class SimulatedVoiceUser implements ApiProvider {
               deliveredAudioBytes[1] += frames[1].audioBytes;
               forwarded[1] = frames[1].frame;
               accepted = true;
+              if (clipFrame) {
+                clipPlayback!.frameAccepted(
+                  frames[1].audioBytes,
+                  frameCount * LIVE_FRAME_MS,
+                  performance.now() - mediaStartedAt,
+                );
+              }
               sessions[1].appendAudio(frames[0].frame);
               deliveredAudioBytes[0] += frames[0].audioBytes;
               forwarded[0] = frames[0].frame;
@@ -432,6 +529,7 @@ export class SimulatedVoiceUser implements ApiProvider {
                 stop();
                 return;
               }
+              clipPlayback?.checkRecovery(elapsed);
               sendScheduled(elapsed);
               if (elapsed >= frameCount * LIVE_FRAME_MS) {
                 sendFrame();
@@ -443,7 +541,10 @@ export class SimulatedVoiceUser implements ApiProvider {
                   mediaStartedAt +
                     Math.min(
                       frameCount * LIVE_FRAME_MS,
-                      scheduled[nextIntervention]?.atMs ?? Infinity,
+                      scheduled[nextIntervention]?.audio
+                        ? Math.ceil(scheduled[nextIntervention].atMs / LIVE_FRAME_MS) *
+                            LIVE_FRAME_MS
+                        : (scheduled[nextIntervention]?.atMs ?? Infinity),
                       durationMs,
                     ) -
                     performance.now(),
@@ -487,6 +588,7 @@ export class SimulatedVoiceUser implements ApiProvider {
       interventions: interventionsSent,
       recordings,
       responses,
+      preparationResponses,
       queues,
       deliveredAudioBytes,
       frameCount,

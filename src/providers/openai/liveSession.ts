@@ -87,6 +87,7 @@ const MAX_PROTOCOL_ID_BYTES = 256;
 const MAX_FUNCTION_CALL_BYTES = 1024 * 1024;
 const MAX_FUNCTION_RESULT_BYTES = 1024 * 1024;
 const MAX_COMMENTARY_BYTES = 64 * 1024;
+const MAX_STREAM_CONTEXT_BYTES = 2000;
 const MAX_PENDING_SNAPSHOT_TEXT_BYTES = 8 * 1024 * 1024;
 const MAX_PENDING_SNAPSHOT_ENTRIES = 50_000;
 const MAX_HANDSHAKE_BODY_BYTES = 8 * 1024;
@@ -186,6 +187,7 @@ export class LiveSession {
   private apiErrors: LiveApiError[] = [];
   private commands = new Map<string, { name: string; pending: boolean; cancelled?: boolean }>();
   private speechRequests = new Map<string, ReturnType<typeof setTimeout>>();
+  private contextRequests = new Map<string, ReturnType<typeof setTimeout>>();
   private commandCount = 0;
   private cancelledSpeechRequests = 0;
   private readonly credentials: string[];
@@ -375,10 +377,43 @@ export class LiveSession {
     return id;
   }
 
+  /**
+   * Add silent context about application-owned playback without requesting speech.
+   * Acceptance does not prove that the peer heard the described audio.
+   */
+  appendContext(content: string): string {
+    if (
+      !this.options.stream ||
+      !this.started ||
+      this.closing ||
+      this.done ||
+      this.ws.readyState !== WebSocket.OPEN
+    ) {
+      throw new Error('GPT-Live session is not ready to accept context.');
+    }
+    if (!content.trim() || Buffer.byteLength(content) > MAX_STREAM_CONTEXT_BYTES) {
+      throw new Error('GPT-Live streamed context must be nonempty and at most 2000 UTF-8 bytes.');
+    }
+    const id = this.registerCommand('session.thinking.append');
+    this.contextRequests.set(
+      id,
+      this.later(
+        () => this.fail('GPT-Live timed out waiting for a context acknowledgment.'),
+        this.options.websocketTimeout,
+      ),
+    );
+    this.send({ type: 'session.thinking.append', event_id: id, delegation_id: null, content });
+    if (this.done) {
+      throw new Error('GPT-Live context transport stopped.');
+    }
+    return id;
+  }
+
   /** Stop accepting media and request final billable usage before closing the socket. */
   close({ cancelPendingSpeech = false }: { cancelPendingSpeech?: boolean } = {}): void {
     if (cancelPendingSpeech) {
       this.cancelSpeechRequests();
+      this.cancelContextRequests();
     }
     if (this.done) {
       return;
@@ -402,6 +437,32 @@ export class LiveSession {
       this.cancelledSpeechRequests++;
     }
     this.speechRequests.clear();
+  }
+
+  private cancelContextRequests(): void {
+    for (const [id, timer] of this.contextRequests) {
+      clearTimeout(timer);
+      this.timers.delete(timer);
+      const command = this.commands.get(id);
+      if (command) {
+        command.cancelled = true;
+      }
+    }
+    this.contextRequests.clear();
+  }
+
+  private clearAppendDeadline(
+    requests: Map<string, ReturnType<typeof setTimeout>>,
+    clientEventId: string | undefined,
+  ): boolean {
+    const timer = clientEventId ? requests.get(clientEventId) : undefined;
+    if (!timer) {
+      return false;
+    }
+    clearTimeout(timer);
+    this.timers.delete(timer);
+    requests.delete(clientEventId!);
+    return true;
   }
 
   private onAbort = () => this.fail('GPT-Live request aborted.');
@@ -637,6 +698,19 @@ export class LiveSession {
         }
         break;
       }
+      case 'session.thinking.appended': {
+        const acknowledged = this.acknowledgeCommand(
+          event.client_event_id,
+          'session.thinking.append',
+        );
+        const timer = this.contextRequests.get(event.client_event_id);
+        if (acknowledged && timer) {
+          clearTimeout(timer);
+          this.timers.delete(timer);
+          this.contextRequests.delete(event.client_event_id);
+        }
+        break;
+      }
       case 'session.input_transcript.delta':
       case 'session.output_transcript.delta':
         if (this.closing) {
@@ -791,12 +865,8 @@ export class LiveSession {
       return;
     }
     const command = clientEventId ? this.commands.get(clientEventId) : undefined;
-    const speechTimer = clientEventId ? this.speechRequests.get(clientEventId) : undefined;
-    if (speechTimer) {
-      clearTimeout(speechTimer);
-      this.timers.delete(speechTimer);
-      this.speechRequests.delete(clientEventId!);
-    }
+    const speechRequest = this.clearAppendDeadline(this.speechRequests, clientEventId);
+    const contextRequest = this.clearAppendDeadline(this.contextRequests, clientEventId);
     const rejected = clientEventId ? `rejected ${command?.name ?? 'a client event'}` : undefined;
     if ([code, type].some((label) => label && GUARDRAIL_ERROR_CODES.has(label))) {
       // Safety interventions are refusals, even when they reject one of promptfoo's commands.
@@ -808,8 +878,8 @@ export class LiveSession {
       // session.close cancels pending appends and queued work; those errors don't change the result.
       return;
     } else {
-      if (speechTimer && command) {
-        // An explicit rejection finishes this speech command; it is no longer pending work.
+      if ((speechRequest || contextRequest) && command) {
+        // An explicit rejection finishes this append; it is no longer pending work.
         command.pending = false;
       }
       this.setError(`GPT-Live ${rejected ?? 'API error'}${detail}`);
@@ -818,7 +888,8 @@ export class LiveSession {
     if (
       clientEventId === OPENING_INSTRUCTION_ID ||
       clientEventId === OPENING_COMMENTARY_ID ||
-      speechTimer
+      speechRequest ||
+      contextRequest
     ) {
       this.closeSession();
     }
@@ -1278,6 +1349,13 @@ export class LiveSession {
         this.timers.delete(timer);
       }
     }
+    if (this.contextRequests.size > 0) {
+      this.setError('GPT-Live capture ended before context requests were acknowledged.');
+      for (const timer of this.contextRequests.values()) {
+        clearTimeout(timer);
+        this.timers.delete(timer);
+      }
+    }
     if (this.hasPendingWork()) {
       this.setError(PENDING_WORK_ERROR);
     }
@@ -1305,8 +1383,12 @@ export class LiveSession {
     const safetyEnded = this.reason === 'content' && this.finalized;
     if (safetyEnded) {
       this.cancelSpeechRequests();
+      this.cancelContextRequests();
     } else if (this.speechRequests.size > 0) {
       this.setError('GPT-Live session ended before speech requests were acknowledged.');
+    }
+    if (this.contextRequests.size > 0) {
+      this.setError('GPT-Live session ended before context requests were acknowledged.');
     }
     this.done = true;
     this.notifyClosing();
@@ -1315,6 +1397,7 @@ export class LiveSession {
     }
     this.timers.clear();
     this.speechRequests.clear();
+    this.contextRequests.clear();
     this.startupTimer = undefined;
     this.options.signal.removeEventListener('abort', this.onAbort);
     this.handlerController.abort();

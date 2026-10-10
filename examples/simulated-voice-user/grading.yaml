@@ -1,0 +1,26 @@
+# Shared by the live example and the saved-transcript calibration suite.
+vars:
+  authoritativeFacts: |
+    F1: The cafe closes at 4 pm on Saturdays.
+    F2: Decaf is available until 3 pm on Saturdays.
+    F3: The cafe serves muffins, croissants, and banana bread.
+    No muffin flavors, croissant varieties, prices, opening times, or other facts are provided.
+  requiredGoals: |
+    G1: The caller hears the target state the Saturday closing time of 4 pm.
+    G2: The caller hears the target state the Saturday decaf cutoff of 3 pm.
+assert:
+  - type: javascript
+    value: file://validate-evidence.js
+    metric: listener_evidence
+  - type: llm-rubric
+    value: grounded_facts
+    provider: openai:gpt-6-luna
+    rubricPrompt: file://voice-rubric.json
+    transform: file://listener-evidence.js
+    metric: grounded_facts
+  - type: llm-rubric
+    value: completed_goals
+    provider: openai:gpt-6-luna
+    rubricPrompt: file://voice-rubric.json
+    transform: file://listener-evidence.js
+    metric: completed_goals

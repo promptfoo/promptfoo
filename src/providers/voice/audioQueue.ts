@@ -24,20 +24,46 @@ export class PcmAudioQueue {
 
   /** Return a padded frame and its source-byte count; transport acceptance is tracked by the caller. */
   read(size: number): { frame: Buffer; audioBytes: number } {
+    return this.copyFrame(size, true);
+  }
+
+  /** Inspect the next source samples without consuming them or counting padding as source audio. */
+  peek(size: number): { frame: Buffer; audioBytes: number } {
+    return this.copyFrame(size, false);
+  }
+
+  /** Discard buffered audio explicitly, retaining the lifetime high-water mark. */
+  clear(): number {
+    const discarded = this.bytes;
+    this.chunks = [];
+    this.head = 0;
+    this.offset = 0;
+    this.bytes = 0;
+    return discarded;
+  }
+
+  private copyFrame(size: number, consume: boolean): { frame: Buffer; audioBytes: number } {
     const frame = Buffer.alloc(size);
     let written = 0;
-    while (written < size && this.head < this.chunks.length) {
-      const chunk = this.chunks[this.head];
-      const length = Math.min(chunk.length - this.offset, size - written);
-      chunk.copy(frame, written, this.offset, this.offset + length);
-      this.offset += length;
+    let head = this.head;
+    let offset = this.offset;
+    while (written < size && head < this.chunks.length) {
+      const chunk = this.chunks[head];
+      const length = Math.min(chunk.length - offset, size - written);
+      chunk.copy(frame, written, offset, offset + length);
+      offset += length;
       written += length;
-      this.bytes -= length;
-      if (this.offset === chunk.length) {
-        this.head++;
-        this.offset = 0;
+      if (offset === chunk.length) {
+        head++;
+        offset = 0;
       }
     }
+    if (!consume) {
+      return { frame, audioBytes: written };
+    }
+    this.head = head;
+    this.offset = offset;
+    this.bytes -= written;
     // Release consumed buffers in batches without shifting the array for every tiny chunk.
     if (this.head === this.chunks.length) {
       this.chunks = [];

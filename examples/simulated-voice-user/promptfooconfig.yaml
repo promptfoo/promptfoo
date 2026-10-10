@@ -2,9 +2,10 @@
 description: Bidirectional GPT-Live cafe conversation
 prompts:
   - |
-    Answer calls for a fictional cafe. Saturday closing time is 4 pm.
-    Decaf is available until 3 pm on Saturday. Answer briefly, then listen.
-    Only use these facts. No backend delegation is needed.
+    Answer calls for a fictional cafe. Answer briefly, then listen.
+    Only use the following facts. If a detail is not provided, say you do not know.
+    No backend delegation is needed.
+    {{authoritativeFacts}}
 providers:
   - id: promptfoo:simulated-voice-user
     config:
@@ -17,6 +18,7 @@ providers:
         audio:
           output:
             voice: cedar
+defaultTest: file://grading.yaml
 tests:
   - vars:
       instructions: |
@@ -25,11 +27,10 @@ tests:
         Never invent cafe facts. Do not delegate; only speak to the cafe.
     assert:
       - type: javascript
-        value: |
-          const heard = context.providerResponse.metadata.voice.participants.caller.heard;
-          return /(?:4|four)\s*(?:p\.?m\.?|in the afternoon)/i.test(heard)
-            && /(?:3|three)\s*(?:p\.?m\.?|in the afternoon)/i.test(heard);
+        value: file://playout-health.js
+        metric: voice_playout
       - type: javascript
+        metric: final_usage
         value: |
           const participants = context.providerResponse.metadata.voice.participants;
           return Object.values(participants).every(p => p.finalUsageConfirmed && p.heard.trim());

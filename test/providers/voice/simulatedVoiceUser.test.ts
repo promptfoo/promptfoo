@@ -1,6 +1,8 @@
 import type { EventEmitter } from 'node:events';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { convertPcm16ToWav } from '../../../src/providers/openai/audio';
+import { OpenAiTtsProvider } from '../../../src/providers/openai/tts';
 import { providerRegistry } from '../../../src/providers/providerRegistry';
 import { SimulatedVoiceUser } from '../../../src/providers/voice/simulatedVoiceUser';
 import { mockProcessEnv } from '../../util/utils';
@@ -122,6 +124,9 @@ describe('SimulatedVoiceUser', () => {
     vi.spyOn(performance, 'now').mockImplementation(() => Date.now());
     sockets.length = 0;
     loadCallback.mockReset();
+    vi.spyOn(OpenAiTtsProvider.prototype, 'callApi').mockRejectedValue(
+      new Error('Unexpected speech synthesis in unit test'),
+    );
   });
   afterEach(() => {
     restoreEnv();
@@ -157,12 +162,12 @@ describe('SimulatedVoiceUser', () => {
     // Both output streams are present during the same input clock tick.
     audio(target, 1000);
     audio(caller, -2000);
-    await vi.advanceTimersByTimeAsync(20);
-    const targetInput = target.sent.filter((e) => e.type === 'session.input_audio.append')[1];
-    const callerInput = caller.sent.filter((e) => e.type === 'session.input_audio.append')[1];
+    await vi.advanceTimersByTimeAsync(120);
+    const targetInput = target.sent.filter((e) => e.type === 'session.input_audio.append')[6];
+    const callerInput = caller.sent.filter((e) => e.type === 'session.input_audio.append')[6];
     expect(Buffer.from(targetInput.audio, 'base64').readInt16LE()).toBe(-2000);
     expect(Buffer.from(callerInput.audio, 'base64').readInt16LE()).toBe(1000);
-    await vi.advanceTimersByTimeAsync(980);
+    await vi.advanceTimersByTimeAsync(880);
     expect(sockets.every((s) => s.sent.at(-1)?.type === 'session.close')).toBe(true);
     finalize();
     const response = await result;
@@ -184,8 +189,9 @@ describe('SimulatedVoiceUser', () => {
     expect(response.cost).toBeCloseTo((2 * 0.05) / 60);
     const wav = Buffer.from(response.audio!.data!, 'base64');
     expect(wav.readUInt16LE(22)).toBe(2);
-    expect(wav.readInt16LE(44 + 1920)).toBe(1000);
-    expect(wav.readInt16LE(44 + 1922)).toBe(-2000);
+    expect(wav.readInt16LE(44 + 6 * 1920)).toBe(1000);
+    expect(wav.readInt16LE(44 + 6 * 1920 + 2)).toBe(-2000);
+    expect(response.metadata?.voice.participants.caller.playout.startupBufferingMs).toBe(100);
     expect(wav.length).toBe(44 + 24000 * 2 * 2);
     expect(sockets.every((s) => s.terminate.mock.calls.length === 1)).toBe(true);
     expect(vi.getTimerCount()).toBe(0);
@@ -276,67 +282,71 @@ describe('SimulatedVoiceUser', () => {
     expect(response.metadata?.voice.participants.target.spoken).toBe('An unconfirmed answer');
   });
 
-  it('sends timed caller interventions while both media streams remain active and matches acknowledgments', async () => {
-    const p = provider({
-      callerInterventions: [{ atMs: 55, instructions: 'Ask about {{topic}} now.' }],
-    });
-    const result = p.callApi('Cafe', {
-      prompt: { raw: 'Cafe', label: 'Cafe' },
-      vars: { topic: 'decaf' },
-    });
-    const [target, caller] = await connect();
-    acknowledgeOpening();
-    audio(target, 100, 4800);
-    audio(caller, 200, 4800);
-    transcript(target, 'Question', 0, 'input');
-    transcript(caller, 'Answer', 20, 'input');
-    await vi.advanceTimersByTimeAsync(54);
-    expect(
-      caller.sent.filter((event) => event.type === 'session.instructions.append'),
-    ).toHaveLength(1);
-    await vi.advanceTimersByTimeAsync(1);
-    const instruction = caller.sent
-      .slice()
-      .reverse()
-      .find((event) => event.type === 'session.instructions.append')!;
-    expect(instruction.content).toBe('Ask about decaf now.');
-    expect(caller.sent.filter((event) => event.type === 'session.commentary.append')).toHaveLength(
-      1,
-    );
-    emit(caller, { type: 'session.instructions.appended', client_event_id: 'unrelated' });
-    expect(caller.sent.filter((event) => event.type === 'session.commentary.append')).toHaveLength(
-      1,
-    );
-    acknowledgeSpeech(caller, instruction.event_id);
-    expect(caller.sent.filter((event) => event.type === 'session.commentary.append')).toHaveLength(
-      2,
-    );
-    expect(target.sent.filter((event) => event.type === 'session.input_audio.append')).toHaveLength(
-      3,
-    );
-    expect(caller.sent.filter((event) => event.type === 'session.input_audio.append')).toHaveLength(
-      3,
-    );
-    await vi.advanceTimersByTimeAsync(945);
-    finalize();
-    const response = await result;
-    expect(response.error).toBeUndefined();
-    expect(response.metadata?.voice.interventions).toEqual([
-      {
-        scheduledAtMs: 55,
-        sentAtMs: 55,
-        instructions: 'Ask about decaf now.',
-        eventId: instruction.event_id,
-      },
-    ]);
-    expect(
-      sockets.every(
-        (socket) =>
-          socket.sent.filter((event) => event.type === 'session.input_audio.append').length === 50,
-      ),
-    ).toBe(true);
-    expect(vi.getTimerCount()).toBe(0);
-  });
+  it.each([{}, { audio: 'untrusted internal field', clipSha256: 'untrusted' }])(
+    'sends advisory interventions without importing private playback fields: %j',
+    async (extra) => {
+      const p = provider({
+        callerInterventions: [{ ...extra, atMs: 55, instructions: 'Ask about {{topic}} now.' }],
+      });
+      const result = p.callApi('Cafe', {
+        prompt: { raw: 'Cafe', label: 'Cafe' },
+        vars: { topic: 'decaf' },
+      });
+      const [target, caller] = await connect();
+      acknowledgeOpening();
+      audio(target, 100, 4800);
+      audio(caller, 200, 4800);
+      transcript(target, 'Question', 0, 'input');
+      transcript(caller, 'Answer', 20, 'input');
+      await vi.advanceTimersByTimeAsync(54);
+      expect(
+        caller.sent.filter((event) => event.type === 'session.instructions.append'),
+      ).toHaveLength(1);
+      await vi.advanceTimersByTimeAsync(1);
+      const instruction = caller.sent
+        .slice()
+        .reverse()
+        .find((event) => event.type === 'session.instructions.append')!;
+      expect(instruction.content).toBe('Ask about decaf now.');
+      expect(
+        caller.sent.filter((event) => event.type === 'session.commentary.append'),
+      ).toHaveLength(1);
+      emit(caller, { type: 'session.instructions.appended', client_event_id: 'unrelated' });
+      expect(
+        caller.sent.filter((event) => event.type === 'session.commentary.append'),
+      ).toHaveLength(1);
+      acknowledgeSpeech(caller, instruction.event_id);
+      expect(
+        caller.sent.filter((event) => event.type === 'session.commentary.append'),
+      ).toHaveLength(2);
+      expect(
+        target.sent.filter((event) => event.type === 'session.input_audio.append'),
+      ).toHaveLength(3);
+      expect(
+        caller.sent.filter((event) => event.type === 'session.input_audio.append'),
+      ).toHaveLength(3);
+      await vi.advanceTimersByTimeAsync(945);
+      finalize();
+      const response = await result;
+      expect(response.error).toBeUndefined();
+      expect(response.metadata?.voice.interventions).toEqual([
+        {
+          scheduledAtMs: 55,
+          sentAtMs: 55,
+          instructions: 'Ask about decaf now.',
+          eventId: instruction.event_id,
+        },
+      ]);
+      expect(
+        sockets.every(
+          (socket) =>
+            socket.sent.filter((event) => event.type === 'session.input_audio.append').length ===
+            50,
+        ),
+      ).toBe(true);
+      expect(vi.getTimerCount()).toBe(0);
+    },
+  );
 
   it('does not send scheduled interventions after cancellation', async () => {
     const controller = new AbortController();
@@ -354,6 +364,92 @@ describe('SimulatedVoiceUser', () => {
       sockets[1].sent.filter((event) => event.type === 'session.instructions.append'),
     ).toHaveLength(1);
     expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('prepares exact speech before connecting and plays it on the shared clock without waiting for the caller model', async () => {
+    const clip = Buffer.alloc(55 * 48);
+    for (let offset = 0; offset < clip.length; offset += 2) {
+      clip.writeInt16LE(3000, offset);
+    }
+    vi.mocked(OpenAiTtsProvider.prototype.callApi).mockImplementation(async (text) => {
+      expect(text).toBe('What time is decaf served?');
+      expect(sockets).toHaveLength(0);
+      return {
+        audio: { data: convertPcm16ToWav(clip).toString('base64'), format: 'wav' },
+        cost: 0.01,
+      };
+    });
+    const result = provider({
+      callerInterventions: [{ atMs: 55, text: 'What time is {{topic}} served?' }],
+    }).callApi('Cafe', {
+      prompt: { raw: 'Cafe', label: 'Cafe' },
+      vars: { topic: 'decaf' },
+    });
+    const [target, caller] = await connect();
+    acknowledgeOpening();
+    audio(target, 1000, 24000);
+    audio(caller, 2000, 4800);
+    transcript(target, 'Original question', 0, 'input');
+    transcript(caller, 'A real answer', 0, 'input');
+    await vi.advanceTimersByTimeAsync(60);
+    const contexts = caller.sent.filter((event) => event.type === 'session.thinking.append');
+    expect(contexts).toHaveLength(2);
+    for (const context of contexts) {
+      emit(caller, { type: 'session.thinking.appended', client_event_id: context.event_id });
+    }
+    expect(
+      caller.sent.filter((event) => event.type === 'session.instructions.append'),
+    ).toHaveLength(1);
+    audio(caller, 0, 4800); // Real source silence, not a gap in received packets.
+    await vi.advanceTimersByTimeAsync(940);
+    finalize();
+    const response = await result;
+    expect(response.error).toBeUndefined();
+    expect(response.metadata?.voice.interventions[0]).toMatchObject({
+      mode: 'audio',
+      scheduledAtMs: 55,
+      sentAtMs: 60,
+      firstFrameAtMs: 60,
+      firstFrameSentAtMs: 60,
+      completedAtMs: 115,
+      clipDurationMs: 55,
+      deliveredAudioBytes: clip.length,
+      callerResumedAtMs: 100,
+    });
+    const targetFrames = target.sent.filter((event) => event.type === 'session.input_audio.append');
+    const injected = Buffer.concat(
+      targetFrames.slice(3, 6).map((event) => Buffer.from(event.audio, 'base64')),
+    );
+    expect(injected.subarray(0, clip.length)).toEqual(clip);
+    expect(injected.subarray(clip.length).every((byte) => byte === 0)).toBe(true);
+    const callerFrames = caller.sent.filter((event) => event.type === 'session.input_audio.append');
+    expect(
+      callerFrames
+        .slice(3, 6)
+        .every((event) => Buffer.from(event.audio, 'base64').readInt16LE() === 1000),
+    ).toBe(true);
+    expect(response.output).not.toContain('decaf'); // No manufactured listener evidence.
+    expect(response.cost).toBeCloseTo(0.01 + (2 * 0.05) / 60);
+    expect(response.tokenUsage?.numRequests).toBe(3);
+  });
+
+  it('does not open Live sockets when speech preparation fails and preserves known preparation cost', async () => {
+    vi.mocked(OpenAiTtsProvider.prototype.callApi).mockResolvedValue({
+      error: 'Synthesis rejected',
+      cost: 0.01,
+    });
+    const response = await provider({
+      callerInterventions: [{ atMs: 100, text: 'Hello' }],
+    }).callApi('Cafe');
+    expect(sockets).toHaveLength(0);
+    expect(response.error).toBe('Synthesis rejected');
+    expect(response.cost).toBeUndefined();
+    expect(response.metadata?.voice.interventionPreparation).toMatchObject({
+      requests: 1,
+      costKnown: true,
+      knownCost: 0.01,
+    });
+    expect(response.tokenUsage?.numRequests).toBe(1);
   });
 
   it('reports a rejected intervention and stops both sessions', async () => {
@@ -552,7 +648,7 @@ describe('SimulatedVoiceUser', () => {
   });
 
   it.each([0, 1])('counts only accepted audio when peer %i rejects a frame', async (failedPeer) => {
-    const result = provider().callApi('Cafe');
+    const result = provider({ maxBufferedAudioMs: 20 }).callApi('Cafe');
     const [target, caller] = await connect();
     acknowledgeOpening();
     audio(target, 100);

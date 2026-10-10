@@ -3,6 +3,7 @@ import { convertPcm16ToWav } from '../openai/audio';
 import { LIVE_FRAME_MS } from '../openai/liveSession';
 
 import type { ProviderResponse } from '../../contracts/providers';
+import type { PcmAudioPlayout } from './audioPlayout';
 import type { PcmAudioQueue } from './audioQueue';
 import type { VoiceIntervention, VoiceSpeaker, VoiceTranscriptFragment } from './types';
 
@@ -15,7 +16,8 @@ interface VoiceResultInput {
   interventions: VoiceIntervention[];
   recordings: Buffer[];
   responses: Array<ProviderResponse | undefined>;
-  queues: PcmAudioQueue[];
+  preparationResponses?: ProviderResponse[];
+  queues: Array<PcmAudioQueue & { metrics?: PcmAudioPlayout['metrics'] }>;
   deliveredAudioBytes: number[];
   frameCount: number;
   maximumClockLagMs: number;
@@ -30,6 +32,7 @@ export function formatVoiceResult({
   interventions,
   recordings,
   responses,
+  preparationResponses = [],
   queues,
   deliveredAudioBytes,
   frameCount,
@@ -39,12 +42,19 @@ export function formatVoiceResult({
   stopReason,
 }: VoiceResultInput): ProviderResponse {
   const tokenUsage = createEmptyTokenUsage();
-  for (const response of responses) {
+  for (const response of [...responses, ...preparationResponses]) {
     if (response) {
       accumulateResponseTokenUsage(tokenUsage, response);
     }
   }
   error ??= responses.find((response) => response?.error)?.error;
+  if (
+    !error &&
+    !responses[0]?.isRefusal &&
+    interventions.some((entry) => entry.mode === 'audio' && entry.completedAtMs === undefined)
+  ) {
+    error = 'Scheduled caller speech ended before the complete clip was delivered.';
+  }
   if (responses[1]?.isRefusal) {
     error ??=
       'The simulated caller encountered a safety intervention; target behavior could not be fully tested.';
@@ -118,14 +128,18 @@ export function formatVoiceResult({
           deliveredAudioBytes: deliveredAudioBytes[index] ?? 0,
           queuedAudioBytes: queues[index]?.bytes ?? 0,
           maximumQueueMs: ((queues[index]?.peakBytes ?? 0) / BYTES_PER_SECOND) * 1000,
+          playout: queues[index]?.metrics,
           delegations: metadata?.delegations,
           backendResponses: metadata?.backendResponses,
         },
       ];
     }),
   );
-  const cost = SPEAKERS.every((_speaker, index) => typeof responses[index]?.cost === 'number')
-    ? responses.reduce((sum, response) => sum + response!.cost!, 0)
+  const allCostsKnown =
+    SPEAKERS.every((_speaker, index) => typeof responses[index]?.cost === 'number') &&
+    preparationResponses.every((response) => typeof response.cost === 'number');
+  const cost = allCostsKnown
+    ? [...responses, ...preparationResponses].reduce((sum, response) => sum + response!.cost!, 0)
     : undefined;
   const pcm = Buffer.concat(recordings);
   return {
@@ -161,6 +175,26 @@ export function formatVoiceResult({
         gradingTranscriptSource: 'listener_input',
         gradingTranscriptOrder: 'listener_event_arrival',
         interventions,
+        ...(preparationResponses.length
+          ? {
+              interventionPreparation: {
+                requests: preparationResponses.length,
+                costKnown: preparationResponses.every(
+                  (response) => typeof response.cost === 'number',
+                ),
+                knownCost: preparationResponses.reduce(
+                  (sum, response) => sum + (response.cost ?? 0),
+                  0,
+                ),
+                responses: preparationResponses.map((response) => ({
+                  cached: response.cached ?? false,
+                  cost: response.cost,
+                  latencyMs: response.latencyMs,
+                  error: response.error,
+                })),
+              },
+            }
+          : {}),
         transcript,
         participants,
         maximumClockLagMs,

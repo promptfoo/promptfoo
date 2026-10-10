@@ -52,4 +52,21 @@ describe('PcmAudioQueue', () => {
     expect(queue.bytes).toBe(0);
     expect(queue.peakBytes).toBe(source.length);
   });
+
+  it('peeks across partial chunks without consuming samples and clears only queued data', () => {
+    const queue = new PcmAudioQueue(16);
+    queue.append(Buffer.from([1, 0, 2, 0]));
+    queue.append(Buffer.from([3, 0, 4, 0]));
+    queue.read(2);
+    const expected = { frame: Buffer.from([2, 0, 3, 0, 4, 0, 0, 0]), audioBytes: 6 };
+    expect(queue.peek(8)).toEqual(expected);
+    expect(queue.peek(8)).toEqual(expected);
+    expect(queue.bytes).toBe(6);
+    expect(queue.clear()).toBe(6);
+    expect(queue.bytes).toBe(0);
+    expect(queue.peakBytes).toBe(8);
+    expect(queue.read(4)).toEqual({ frame: Buffer.alloc(4), audioBytes: 0 });
+    queue.append(Buffer.from([5, 0]));
+    expect(queue.read(2)).toEqual({ frame: Buffer.from([5, 0]), audioBytes: 2 });
+  });
 });

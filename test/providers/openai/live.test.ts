@@ -3346,6 +3346,146 @@ describe('OpenAiLiveProvider', () => {
     expect(JSON.stringify(output)).not.toContain('secret-api-key');
   });
 
+  describe('silent context for application-owned speech', () => {
+    async function prepareContextSession(controller = new AbortController()) {
+      const onReady = vi.fn();
+      const session = await provider().createSession('', undefined, controller.signal, {
+        onReady,
+        onAudio: vi.fn(),
+        onTranscript: vi.fn(),
+      });
+      const result = session.run();
+      const socket = await connect();
+      start(socket, { ack: false });
+      expect(onReady).toHaveBeenCalledOnce();
+      return { session, socket, result, controller };
+    }
+
+    it('correlates silent context without requesting speech or treating it as a transcript', async () => {
+      const { session, socket, result } = await prepareContextSession();
+      const id = session.appendContext('The application just played my question about decaf.');
+      expect(socket.sent.at(-1)).toEqual({
+        type: 'session.thinking.append',
+        event_id: id,
+        delegation_id: null,
+        content: 'The application just played my question about decaf.',
+      });
+      emit(socket, { type: 'session.thinking.appended', client_event_id: id });
+      emit(socket, { type: 'session.thinking.appended', client_event_id: id });
+      await vi.advanceTimersByTimeAsync(201);
+      session.appendAudio(Buffer.alloc(960));
+      expect(sentTypes(socket)).toEqual([
+        'session.start',
+        'session.thinking.append',
+        'session.input_audio.append',
+      ]);
+      session.close();
+      closed(socket, 1);
+      const response = await result;
+      expect(response.error).toBeUndefined();
+      expect(response.output).toBe('');
+      expect(response.metadata?.transcript).toEqual([]);
+      expect(response.metadata?.finalUsageConfirmed).toBe(true);
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it('requires the matching context acknowledgment before its deadline', async () => {
+      const { session, socket, result } = await prepareContextSession();
+      session.appendContext('My requested date is now Friday.');
+      emit(socket, { type: 'session.thinking.appended', client_event_id: 'another_request' });
+      await vi.advanceTimersByTimeAsync(200);
+      expect((await result).error).toBe('GPT-Live timed out waiting for a context acknowledgment.');
+      expect(socket.terminate).toHaveBeenCalledOnce();
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it('rejects an acknowledgment for a different command type', async () => {
+      const { session, socket, result } = await prepareContextSession();
+      const id = session.appendContext('My requested date is now Friday.');
+      emit(socket, { type: 'session.instructions.appended', client_event_id: id });
+      expect((await result).error).toBe(
+        'GPT-Live acknowledgment does not match the pending command.',
+      );
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it('reports rejected context and still collects confirmed usage after graceful close', async () => {
+      const { session, socket, result } = await prepareContextSession();
+      const id = session.appendContext('My requested date is now Friday.');
+      apiError(socket, {
+        code: 'invalid_context',
+        message: 'The context is invalid.',
+        client_event_id: id,
+      });
+      expect(socket.sent.at(-1)?.type).toBe('session.close');
+      closed(socket, 1);
+      const response = await result;
+      expect(response.error).toBe(
+        'GPT-Live rejected session.thinking.append (invalid_context): The context is invalid.',
+      );
+      expect(response.metadata?.finalUsageConfirmed).toBe(true);
+      expect(response.cost).toBeCloseTo(0.05 / 60);
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it('keeps final usage readable when capture ends before a context acknowledgment', async () => {
+      const { session, socket, result } = await prepareContextSession();
+      session.appendContext('My requested date is now Friday.');
+      await vi.advanceTimersByTimeAsync(150);
+      session.close();
+      // The append deadline would have expired at 200 ms; the close deadline now owns cleanup.
+      await vi.advanceTimersByTimeAsync(60);
+      expect(socket.terminate).not.toHaveBeenCalled();
+      closed(socket, 1);
+      const response = await result;
+      expect(response.error).toBe(
+        'GPT-Live capture ended before context requests were acknowledged.',
+      );
+      expect(response.metadata?.finalUsageConfirmed).toBe(true);
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it('cancels pending context together with speech when a peer safety response ends capture', async () => {
+      const { session, socket, result } = await prepareContextSession();
+      const id = session.appendContext('My requested date is now Friday.');
+      session.close({ cancelPendingSpeech: true });
+      apiError(socket, {
+        code: 'append_cancelled',
+        message: 'Pending append cancelled.',
+        client_event_id: id,
+      });
+      closed(socket, 1);
+      expect((await result).error).toBeUndefined();
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it('cleans up pending context on abort without replacing the original cause', async () => {
+      const { session, socket, result, controller } = await prepareContextSession();
+      session.appendContext('My requested date is now Friday.');
+      controller.abort();
+      expect((await result).error).toBe('GPT-Live request aborted.');
+      expect(socket.terminate).toHaveBeenCalledOnce();
+      expect(vi.getTimerCount()).toBe(0);
+      expect(() => session.appendContext('After abort')).toThrow(
+        'GPT-Live session is not ready to accept context.',
+      );
+    });
+
+    it('rejects empty or oversized context locally without sending or opening pending work', async () => {
+      const { session, socket, result } = await prepareContextSession();
+      for (const content of ['', '  ', 'é'.repeat(1001)]) {
+        expect(() => session.appendContext(content)).toThrow(
+          'GPT-Live streamed context must be nonempty and at most 2000 UTF-8 bytes.',
+        );
+      }
+      expect(sentTypes(socket)).toEqual(['session.start']);
+      session.close();
+      closed(socket, 1);
+      expect((await result).error).toBeUndefined();
+      expect(vi.getTimerCount()).toBe(0);
+    });
+  });
+
   it.each([
     ['audio/pcmu', 255, [-31100, -30076, -29052]],
     ['audio/pcma', 213, [-5248, -6016, -5760]],
