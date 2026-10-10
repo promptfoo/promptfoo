@@ -615,6 +615,16 @@ describe('Provider Registry', () => {
     });
 
     describe('getProviderFactories boundary contract', () => {
+      const createDetachedRegistryCheck = () => async (path: string) => {
+        const before = providerMap.length;
+        const factories = await getProviderFactories(path);
+
+        expect(factories).not.toBe(providerMap);
+        expect(providerMap.length).toBe(before);
+        expect(providerMap.some((factory) => factory.test(path))).toBe(false);
+        expect(factories.some((factory) => factory.test(path))).toBe(true);
+      };
+
       it('returns the providerMap reference itself for the no-family fast path', async () => {
         // Pin identity (toBe, not toEqual) so an accidental `return [...providerMap]`
         // on the hot path regresses loudly instead of silently doubling the
@@ -671,15 +681,7 @@ describe('Provider Registry', () => {
         'bedrock:completion:anthropic.claude-v2',
         'bedrock-agent:agent-id',
         'sagemaker:endpoint-name',
-      ])('loads AWS factories without mutating providerMap for %s', async (path) => {
-        const before = providerMap.length;
-        const factories = await getProviderFactories(path);
-
-        expect(factories).not.toBe(providerMap);
-        expect(providerMap.length).toBe(before);
-        expect(providerMap.some((factory) => factory.test(path))).toBe(false);
-        expect(factories.some((factory) => factory.test(path))).toBe(true);
-      });
+      ])('loads AWS factories without mutating providerMap for %s', createDetachedRegistryCheck());
 
       it('resolves the same AWS factory under concurrent lookups', async () => {
         // All lookups should reuse the factory exported by the cached AWS
@@ -702,15 +704,7 @@ describe('Provider Registry', () => {
 
       it.each(['vertex:chat:gemini-2.5-flash', 'google:gemini-2.5-flash', 'palm:chat-bison'])(
         'loads Google factories without mutating providerMap for %s',
-        async (path) => {
-          const before = providerMap.length;
-          const factories = await getProviderFactories(path);
-
-          expect(factories).not.toBe(providerMap);
-          expect(providerMap.length).toBe(before);
-          expect(providerMap.some((factory) => factory.test(path))).toBe(false);
-          expect(factories.some((factory) => factory.test(path))).toBe(true);
-        },
+        createDetachedRegistryCheck(),
       );
 
       it('resolves the same Google factory under concurrent lookups', async () => {
@@ -1088,6 +1082,30 @@ describe('Provider Registry', () => {
       expect(config.apiKey).toBe('moonshot-test-key');
       expect(config.apiBaseUrl).toBe('https://api.moonshot.ai/v1');
       expect(config.apiKeyEnvar).toBe('MOONSHOT_API_KEY');
+    });
+
+    it('should pass Snowflake provider options without nesting the config', async () => {
+      const factory = providerMap.find((factory) => factory.test('snowflake:mistral-large2'));
+      expect(factory).toBeDefined();
+
+      const provider = await factory!.create(
+        'snowflake:mistral-large2',
+        {
+          config: {
+            accountIdentifier: 'myorg-myaccount',
+            apiBaseUrl: 'https://custom.snowflakecomputing.com',
+            apiKey: 'snowflake-test-key',
+          },
+        },
+        mockContext,
+      );
+
+      expect(provider.id()).toBe('snowflake:mistral-large2');
+      expect(provider.config).toMatchObject({
+        accountIdentifier: 'myorg-myaccount',
+        apiBaseUrl: 'https://custom.snowflakecomputing.com',
+        apiKey: 'snowflake-test-key',
+      });
     });
 
     it('should route Moonshot chat prefixes and Kimi defaults correctly', async () => {
@@ -2527,6 +2545,17 @@ describe('Provider Registry', () => {
   });
 
   describe('google: prefix routing', () => {
+    const createProviderDispatchCheck =
+      () => async (providerPath: string, loadExpectedProvider: () => Promise<Function>) => {
+        const factory = (await getProviderFactories(providerPath)).find((f) =>
+          f.test(providerPath),
+        );
+        expect(factory).toBeDefined();
+        const provider = await factory!.create(providerPath, bareOptions, bareContext);
+        const ExpectedProvider = await loadExpectedProvider();
+        expect(provider).toBeInstanceOf(ExpectedProvider);
+      };
+
     // Empty options so the provider computes its own id() rather than using
     // a caller-supplied override.
     const bareOptions: ProviderOptions = { config: {} };
@@ -2741,18 +2770,7 @@ describe('Provider Registry', () => {
         'vertex:video:veo-3.1-generate-001',
         async () => (await import('../../src/providers/google/video')).GoogleVideoProvider,
       ],
-    ] as const)(
-      'routes %s to the expected provider class',
-      async (providerPath, loadExpectedProvider) => {
-        const factory = (await getProviderFactories(providerPath)).find((f) =>
-          f.test(providerPath),
-        );
-        expect(factory).toBeDefined();
-        const provider = await factory!.create(providerPath, bareOptions, bareContext);
-        const ExpectedProvider = await loadExpectedProvider();
-        expect(provider).toBeInstanceOf(ExpectedProvider);
-      },
-    );
+    ] as const)('routes %s to the expected provider class', createProviderDispatchCheck());
 
     it.each(['google:gemini-omni-1.1-flash', 'palm:gemini-omni-1.1-flash'])(
       'preserves explicit provider options for %s',
@@ -3130,15 +3148,7 @@ describe('Provider Registry', () => {
       ],
     ] as const)(
       'routes script-like id %s to the expected provider class',
-      async (providerPath, loadExpectedProvider) => {
-        const factory = (await getProviderFactories(providerPath)).find((f) =>
-          f.test(providerPath),
-        );
-        expect(factory).toBeDefined();
-        const provider = await factory!.create(providerPath, bareOptions, bareContext);
-        const ExpectedProvider = await loadExpectedProvider();
-        expect(provider).toBeInstanceOf(ExpectedProvider);
-      },
+      createProviderDispatchCheck(),
     );
 
     it.each([

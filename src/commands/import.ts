@@ -450,28 +450,18 @@ export function importCommand(program: Command) {
         const importAuthor = extractAuthor(evalData);
         let existingEval: Eval | undefined;
 
-        let formatChecked = false;
         let importV3 = false;
-        let importLegacy = false;
-        let artifactsPrepared = false;
-        let traces: TraceData[] = [];
-        let blobAssets: PreparedBlobAsset[] = [];
-        const validateImportFormat = () => {
-          if (!formatChecked) {
+        let artifacts: ReturnType<typeof prepareImportArtifacts> | undefined;
+        const prepareArtifacts = () => {
+          if (!artifacts) {
             importV3 = isImportableV3Results(evalData.results);
-            importLegacy = isImportableLegacyResults(evalData.results);
+            const importLegacy = isImportableLegacyResults(evalData.results);
             if (!importV3 && !importLegacy) {
               throw new Error('Unsupported eval export results format');
             }
-            formatChecked = true;
+            artifacts = prepareImportArtifacts(evalData, importV3);
           }
-        };
-        const prepareArtifacts = () => {
-          if (!artifactsPrepared) {
-            validateImportFormat();
-            ({ traces, blobAssets } = prepareImportArtifacts(evalData, importV3));
-            artifactsPrepared = true;
-          }
+          return artifacts;
         };
 
         // Validate replacement artifacts before consulting the database. A
@@ -496,7 +486,7 @@ export function importCommand(program: Command) {
           }
         }
 
-        prepareArtifacts();
+        const { traces, blobAssets } = prepareArtifacts();
 
         // Restore embedded media before the destructive replace so a corrupt
         // artifact cannot delete the existing eval. blobAssets is empty for v2.
