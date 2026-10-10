@@ -66,13 +66,7 @@ export const homoglyphMap: { [key: string]: string } = {
   '7': '𝟽', // Mathematical monospace 7
   '8': '𝟾', // Mathematical monospace 8
   '9': '𝟿', // Mathematical monospace 9
-  // Turkish letters. Without these, Turkish-language prompts keep their
-  // language-specific letters as-is while the ASCII characters around them are
-  // substituted, leaving an obvious untouched signal. Each maps to a precomposed
-  // cross-script confusable with a different code point. (ü, Ü and İ
-  // are omitted: the only visually-identical alternatives are their NFD
-  // decompositions, which recompose to the original character under NFC and so
-  // have no effect.)
+  // Additional lookalikes for Turkish letters; each remains distinct under NFC.
   ç: 'ҫ', // Cyrillic small es with descender (U+04AB)
   Ç: 'Ҫ', // Cyrillic capital es with descender (U+04AA)
   ş: 'ș', // Latin small s with comma below (U+0219)
@@ -81,9 +75,8 @@ export const homoglyphMap: { [key: string]: string } = {
   Ğ: 'Ǧ', // Latin capital g with caron (U+01E6)
   ö: 'ӧ', // Cyrillic small o with diaeresis (U+04E7)
   Ö: 'Ӧ', // Cyrillic capital o with diaeresis (U+04E6)
-  // Turkish dotless i (U+0131) has no close single-code-point cross-script twin;
-  // the mathematical italic dotless i is the nearest match, but it renders in a
-  // math style, so the visual similarity is weaker than the other entries.
+  ü: 'ϋ', // Greek small upsilon with dialytika (U+03CB)
+  // This mathematical variant can look different depending on the font.
   ı: '𝚤', // Mathematical italic small dotless i (U+1D6A4)
 };
 
