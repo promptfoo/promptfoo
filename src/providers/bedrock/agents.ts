@@ -4,7 +4,12 @@ import logger from '../../logger';
 import telemetry from '../../telemetry';
 import { AwsBedrockGenericProvider } from './base';
 import { isValidBedrockRetrievalFilter } from './retrievalFilter';
-import { createBedrockRequestHandler, hashBedrockConfig, hasProxyEnv } from './util';
+import {
+  createBedrockRequestHandler,
+  decodeBedrockBytes,
+  hashBedrockConfig,
+  hasProxyEnv,
+} from './util';
 import type {
   BedrockAgentRuntimeClient,
   InferenceConfig,
@@ -263,10 +268,7 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
                       ...file.source,
                       byteContent: {
                         ...file.source.byteContent,
-                        data:
-                          typeof file.source.byteContent.data === 'string'
-                            ? Buffer.from(file.source.byteContent.data, 'base64')
-                            : file.source.byteContent.data,
+                        data: decodeBedrockBytes(file.source.byteContent.data),
                       },
                     },
                   }
@@ -455,6 +457,13 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
       }
     }
 
+    let sessionState: SessionState | undefined;
+    try {
+      sessionState = this.buildSessionState();
+    } catch (error) {
+      return { error: String(error) };
+    }
+
     const client = await this.getAgentRuntimeClient();
 
     // Generate session ID if not provided
@@ -477,7 +486,7 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
       // Optional features
       enableTrace: this.config.enableTrace,
       endSession: this.config.endSession,
-      sessionState: this.buildSessionState(),
+      sessionState,
       memoryId: this.config.memoryId,
       ...(this.config.bedrockModelConfigurations
         ? { bedrockModelConfigurations: this.config.bedrockModelConfigurations }
@@ -533,7 +542,7 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
             memoryId: this.config.memoryId,
             promptOverrideConfiguration: this.config.promptOverrideConfiguration,
             sessionId: this.config.sessionId,
-            sessionState: this.config.sessionState,
+            sessionState: input.sessionState,
             bedrockModelConfigurations: this.config.bedrockModelConfigurations,
             streamingConfigurations: this.config.streamingConfigurations,
             promptCreationConfigurations: this.config.promptCreationConfigurations,

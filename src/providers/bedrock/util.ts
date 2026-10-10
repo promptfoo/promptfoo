@@ -13,6 +13,42 @@ const REQUEST_TIMEOUT_MS = 300_000; // 5 minutes
  */
 export const INFERENCE_PROFILE_PREFIX = /^(?:us|us-gov|eu|apac|global|jp|au|ca|in)\./;
 
+/** Decode declared AWS blob fields, including the byte forms stored in eval JSON. */
+export function decodeBedrockBytes(data: unknown): Uint8Array | undefined {
+  if (data === undefined) {
+    return undefined;
+  }
+  if (typeof data === 'string') {
+    return Buffer.from(data, 'base64');
+  }
+  if (ArrayBuffer.isView(data)) {
+    return Buffer.from(data.buffer, data.byteOffset, data.byteLength);
+  }
+  const invalid =
+    'Invalid Bedrock byte content: expected base64 or a native/serialized byte array.';
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    throw new Error(invalid);
+  }
+  const record = data as Record<string, unknown>;
+  const keys = Object.keys(record);
+  const bufferData =
+    keys.length === 2 && record.type === 'Buffer' && Array.isArray(record.data)
+      ? record.data
+      : undefined;
+  const bytes = new Uint8Array(bufferData?.length ?? keys.length);
+  for (let index = 0; index < bytes.length; index++) {
+    if (!bufferData && keys[index] !== String(index)) {
+      throw new Error(invalid);
+    }
+    const value = bufferData ? bufferData[index] : record[String(index)];
+    if (typeof value !== 'number' || !Number.isInteger(value) || value < 0 || value > 255) {
+      throw new Error(invalid);
+    }
+    bytes[index] = value;
+  }
+  return bytes;
+}
+
 /** Hash binary inputs without expanding their bytes into JSON cache-key entries. */
 export function hashBedrockConfig(value: unknown): string {
   const replaceBinary = (item: unknown) =>

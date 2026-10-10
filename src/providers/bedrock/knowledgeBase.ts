@@ -9,6 +9,7 @@ import { assertBedrockModelIsAvailable } from './index';
 import { isValidBedrockRetrievalFilter } from './retrievalFilter';
 import {
   createBedrockRequestHandler,
+  decodeBedrockBytes,
   hashBedrockConfig,
   hasProxyEnv,
   INFERENCE_PROFILE_PREFIX,
@@ -88,6 +89,31 @@ export class AwsBedrockKnowledgeBaseProvider
     });
   }
 
+  private getNativeConfiguration() {
+    let nativeConfig = this.kbConfig.retrieveAndGenerateConfiguration;
+    if (nativeConfig?.externalSourcesConfiguration) {
+      const external = nativeConfig.externalSourcesConfiguration;
+      nativeConfig = {
+        ...nativeConfig,
+        externalSourcesConfiguration: {
+          ...external,
+          sources: external.sources?.map((source) => ({
+            ...source,
+            ...(source.byteContent
+              ? {
+                  byteContent: {
+                    ...source.byteContent,
+                    data: decodeBedrockBytes(source.byteContent.data),
+                  },
+                }
+              : {}),
+          })),
+        },
+      };
+    }
+    return nativeConfig;
+  }
+
   id(): string {
     const id =
       this.kbConfig.knowledgeBaseId ??
@@ -95,7 +121,7 @@ export class AwsBedrockKnowledgeBaseProvider
     if (id) {
       return `bedrock:kb:${id}`;
     }
-    return `bedrock:kb:external:${hashBedrockConfig(this.kbConfig.retrieveAndGenerateConfiguration)}`;
+    return `bedrock:kb:external:${hashBedrockConfig(this.getNativeConfiguration())}`;
   }
 
   toString(): string {
@@ -318,30 +344,7 @@ export class AwsBedrockKnowledgeBaseProvider
           ? { orchestrationConfiguration: this.kbConfig.orchestrationConfiguration }
           : {}),
       };
-      let nativeConfig = this.kbConfig.retrieveAndGenerateConfiguration;
-      if (nativeConfig?.externalSourcesConfiguration) {
-        const external = nativeConfig.externalSourcesConfiguration;
-        nativeConfig = {
-          ...nativeConfig,
-          externalSourcesConfiguration: {
-            ...external,
-            sources: external.sources?.map((source) => ({
-              ...source,
-              ...(source.byteContent
-                ? {
-                    byteContent: {
-                      ...source.byteContent,
-                      data:
-                        typeof source.byteContent.data === 'string'
-                          ? Buffer.from(source.byteContent.data, 'base64')
-                          : source.byteContent.data,
-                    },
-                  }
-                : {}),
-            })),
-          },
-        };
-      }
+      const nativeConfig = this.getNativeConfiguration();
       const params: RetrieveAndGenerateCommandInput = {
         input: { text: prompt },
         retrieveAndGenerateConfiguration: nativeConfig ?? {
@@ -373,6 +376,7 @@ export class AwsBedrockKnowledgeBaseProvider
                 ...Object.fromEntries(
                   Object.entries(this.kbConfig).filter(([key]) => !sensitiveKeys.includes(key)),
                 ),
+                retrieveAndGenerateConfiguration: nativeConfig,
               },
               prompt,
             },

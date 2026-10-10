@@ -662,6 +662,8 @@ describe.each(['agent', 'knowledge-base'] as const)('%s binary cache inputs', (k
     for (const [index, data] of [
       new Uint8Array([0, 97, 98, 99, 0]).subarray(1, 4),
       Buffer.from('abc'),
+      { type: 'Buffer', data: [97, 98, 99] } as unknown as Uint8Array,
+      { 0: 97, 1: 98, 2: 99 } as unknown as Uint8Array,
       Buffer.from('abd'),
     ].entries()) {
       const { provider, send } =
@@ -708,15 +710,15 @@ describe.each(['agent', 'knowledge-base'] as const)('%s binary cache inputs', (k
       const result = await provider.callApi('question');
       expect(result.error).toBeUndefined();
       expect(result.output).toBe('answer');
-      expect(send).toHaveBeenCalledTimes(index === 1 ? 0 : 1);
-      expect(result.cached === true).toBe(index === 1);
+      expect(send).toHaveBeenCalledTimes(index > 0 && index < 4 ? 0 : 1);
+      expect(result.cached === true).toBe(index > 0 && index < 4);
     }
     const keys = cache.get.mock.calls.map(([key]) => key);
-    expect(keys[0]).toBe(keys[1]);
-    expect(keys[0]).not.toBe(keys[2]);
+    expect(new Set(keys.slice(0, 4)).size).toBe(1);
+    expect(keys[0]).not.toBe(keys[4]);
     if (kind === 'knowledge-base') {
-      expect(ids[0]).toBe(ids[1]);
-      expect(ids[0]).not.toBe(ids[2]);
+      expect(new Set(ids.slice(0, 4)).size).toBe(1);
+      expect(ids[0]).not.toBe(ids[4]);
     }
   });
 
