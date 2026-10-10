@@ -5,6 +5,7 @@ import {
   fetchHuggingFaceDataset,
   parseDatasetPath,
 } from '../../src/integrations/huggingfaceDatasets';
+import { createMockFetchResponse } from '../providers/mockProviderResponses';
 
 vi.mock('../../src/cache', () => ({
   fetchWithCache: vi.fn(),
@@ -62,8 +63,8 @@ describe('huggingfaceDatasets', () => {
   });
 
   it('should fetch and parse dataset with default parameters', async () => {
-    vi.mocked(fetchWithCache).mockResolvedValueOnce({
-      data: {
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(
+      createMockFetchResponse({
         num_rows_total: 2,
         features: [
           { name: 'act', type: { dtype: 'string', _type: 'Value' } },
@@ -73,11 +74,8 @@ describe('huggingfaceDatasets', () => {
           { row: { act: 'Linux Terminal', prompt: 'List all files' } },
           { row: { act: 'Math Tutor', prompt: 'Solve 2+2' } },
         ],
-      },
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    } as any);
+      }) as any,
+    );
 
     const tests = await fetchHuggingFaceDataset('huggingface://datasets/test/dataset');
 
@@ -114,19 +112,16 @@ describe('huggingfaceDatasets', () => {
       return '';
     });
 
-    vi.mocked(fetchWithCache).mockResolvedValueOnce({
-      data: {
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(
+      createMockFetchResponse({
         num_rows_total: 1,
         features: [
           { name: 'question', type: { dtype: 'string', _type: 'Value' } },
           { name: 'answer', type: { dtype: 'string', _type: 'Value' } },
         ],
         rows: [{ row: { question: 'What is 2+2?', answer: '4' } }],
-      },
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    } as any);
+      }) as any,
+    );
 
     await fetchHuggingFaceDataset('huggingface://datasets/test/dataset');
 
@@ -151,16 +146,13 @@ describe('huggingfaceDatasets', () => {
       return '';
     });
 
-    vi.mocked(fetchWithCache).mockResolvedValueOnce({
-      data: {
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(
+      createMockFetchResponse({
         num_rows_total: 1,
         features: [{ name: 'text', type: { dtype: 'string', _type: 'Value' } }],
         rows: [{ row: { text: 'test' } }],
-      },
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    } as any);
+      }) as any,
+    );
 
     await fetchHuggingFaceDataset('huggingface://datasets/test/dataset', 1);
 
@@ -188,16 +180,13 @@ describe('huggingfaceDatasets', () => {
       return '';
     });
 
-    vi.mocked(fetchWithCache).mockResolvedValueOnce({
-      data: {
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(
+      createMockFetchResponse({
         num_rows_total: 1,
         features: [{ name: 'text', type: { dtype: 'string', _type: 'Value' } }],
         rows: [{ row: { text: 'test' } }],
-      },
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    } as any);
+      }) as any,
+    );
 
     await fetchHuggingFaceDataset('huggingface://datasets/test/dataset', 1);
 
@@ -212,19 +201,16 @@ describe('huggingfaceDatasets', () => {
   });
 
   it('should handle custom query parameters', async () => {
-    vi.mocked(fetchWithCache).mockResolvedValueOnce({
-      data: {
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(
+      createMockFetchResponse({
         num_rows_total: 1,
         features: [
           { name: 'question', type: { dtype: 'string', _type: 'Value' } },
           { name: 'answer', type: { dtype: 'string', _type: 'Value' } },
         ],
         rows: [{ row: { question: 'What is 2+2?', answer: '4' } }],
-      },
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    } as any);
+      }) as any,
+    );
 
     await fetchHuggingFaceDataset('huggingface://datasets/test/dataset?split=train&config=custom');
 
@@ -237,27 +223,21 @@ describe('huggingfaceDatasets', () => {
   });
 
   it('should handle pagination', async () => {
-    vi.mocked(fetchWithCache).mockResolvedValueOnce({
-      data: {
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(
+      createMockFetchResponse({
         num_rows_total: 3,
         features: [{ name: 'text', type: { dtype: 'string', _type: 'Value' } }],
         rows: [{ row: { text: 'First' } }, { row: { text: 'Second' } }],
-      },
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    } as any);
+      }) as any,
+    );
 
-    vi.mocked(fetchWithCache).mockResolvedValueOnce({
-      data: {
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(
+      createMockFetchResponse({
         num_rows_total: 3,
         features: [{ name: 'text', type: { dtype: 'string', _type: 'Value' } }],
         rows: [{ row: { text: 'Third' } }],
-      },
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    } as any);
+      }) as any,
+    );
 
     const tests = await fetchHuggingFaceDataset('huggingface://datasets/test/dataset');
 
@@ -291,16 +271,13 @@ describe('huggingfaceDatasets', () => {
 
   it('should reject an empty non-final page instead of retrying the same offset', async () => {
     vi.mocked(fetchWithCache)
-      .mockResolvedValueOnce({
-        data: {
+      .mockResolvedValueOnce(
+        createMockFetchResponse({
           num_rows_total: 2,
           features: [{ name: 'text', type: { dtype: 'string', _type: 'Value' } }],
           rows: [],
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      } as any)
+        }) as any,
+      )
       .mockRejectedValueOnce(new Error('Paginator retried the empty page'));
 
     await expect(
@@ -313,12 +290,9 @@ describe('huggingfaceDatasets', () => {
   });
 
   it('should handle API errors by throwing', async () => {
-    vi.mocked(fetchWithCache).mockResolvedValueOnce({
-      data: null,
-      cached: false,
-      status: 404,
-      statusText: 'Not Found',
-    } as any);
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(
+      createMockFetchResponse(null, { status: 404, statusText: 'Not Found' }) as any,
+    );
 
     await expect(
       fetchHuggingFaceDataset('huggingface://datasets/nonexistent/dataset'),
@@ -331,17 +305,81 @@ describe('huggingfaceDatasets', () => {
     expect(tests).toEqual([]);
   });
 
+  it.each(['foo', '2foo', '-1', '1.5', 'NaN', 'Infinity', '1e309', '', ' '])(
+    'should reject invalid query limit %j before fetching',
+    async (limit) => {
+      await expect(
+        fetchHuggingFaceDataset(
+          `huggingface://datasets/test/dataset?limit=${encodeURIComponent(limit)}`,
+        ),
+      ).rejects.toThrow('[HF Dataset] Invalid limit: expected a finite non-negative integer');
+
+      expect(fetchWithCache).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([-1, 1.5, Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY])(
+    'should reject invalid explicit limit %s before fetching even with a valid query limit',
+    async (limit) => {
+      await expect(
+        fetchHuggingFaceDataset('huggingface://datasets/test/dataset?limit=2', limit),
+      ).rejects.toThrow('[HF Dataset] Invalid limit: expected a finite non-negative integer');
+
+      expect(fetchWithCache).not.toHaveBeenCalled();
+    },
+  );
+
+  it('should short-circuit and return [] when the query limit is 0', async () => {
+    await expect(
+      fetchHuggingFaceDataset('huggingface://datasets/test/dataset?limit=0'),
+    ).resolves.toEqual([]);
+
+    expect(fetchWithCache).not.toHaveBeenCalled();
+  });
+
+  it('should use an explicit zero limit instead of an invalid query limit', async () => {
+    await expect(
+      fetchHuggingFaceDataset('huggingface://datasets/test/dataset?limit=foo', 0),
+    ).resolves.toEqual([]);
+
+    expect(fetchWithCache).not.toHaveBeenCalled();
+  });
+
+  it.each(['0', '5', 'foo'])(
+    'should prefer an explicit limit to the query limit %j',
+    async (queryLimit) => {
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: {
+          num_rows_total: 5,
+          features: [],
+          rows: [{ row: { text: 'First' } }, { row: { text: 'Second' } }],
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const tests = await fetchHuggingFaceDataset(
+        `huggingface://datasets/test/dataset?limit=${queryLimit}`,
+        2,
+      );
+
+      expect(fetchWithCache).toHaveBeenCalledExactlyOnceWith(
+        expect.stringContaining('&offset=0&length=2'),
+        expect.objectContaining({ headers: {} }),
+      );
+      expect(tests.map((test) => test.vars?.text)).toEqual(['First', 'Second']);
+    },
+  );
+
   it('should respect user-specified limit parameter (single request optimization)', async () => {
-    vi.mocked(fetchWithCache).mockResolvedValueOnce({
-      data: {
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(
+      createMockFetchResponse({
         num_rows_total: 5,
         features: [{ name: 'text', type: { dtype: 'string', _type: 'Value' } }],
         rows: [{ row: { text: 'First' } }, { row: { text: 'Second' } }],
-      },
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    } as any);
+      }) as any,
+    );
 
     const tests = await fetchHuggingFaceDataset('huggingface://datasets/test/dataset?limit=2');
 
@@ -364,31 +402,25 @@ describe('huggingfaceDatasets', () => {
   });
 
   it('should handle limit larger than page size', async () => {
-    vi.mocked(fetchWithCache).mockResolvedValueOnce({
-      data: {
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(
+      createMockFetchResponse({
         num_rows_total: 150,
         features: [{ name: 'text', type: { dtype: 'string', _type: 'Value' } }],
         rows: Array(100)
           .fill(null)
           .map((_, i) => ({ row: { text: `Item ${i + 1}` } })),
-      },
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    } as any);
+      }) as any,
+    );
 
-    vi.mocked(fetchWithCache).mockResolvedValueOnce({
-      data: {
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(
+      createMockFetchResponse({
         num_rows_total: 150,
         features: [{ name: 'text', type: { dtype: 'string', _type: 'Value' } }],
         rows: Array(20)
           .fill(null)
           .map((_, i) => ({ row: { text: `Item ${i + 101}` } })),
-      },
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    } as any);
+      }) as any,
+    );
 
     const tests = await fetchHuggingFaceDataset('huggingface://datasets/test/dataset?limit=120');
 
@@ -421,18 +453,18 @@ describe('huggingfaceDatasets', () => {
 
   describe('performance optimizations', () => {
     it('should use single request optimization for small limits', async () => {
-      vi.mocked(fetchWithCache).mockResolvedValueOnce({
-        data: {
-          num_rows_total: 1000,
-          features: [{ name: 'text', type: { dtype: 'string', _type: 'Value' } }],
-          rows: Array(50)
-            .fill(null)
-            .map((_, i) => ({ row: { text: `Item ${i + 1}` } })),
-        },
-        cached: true,
-        status: 200,
-        statusText: 'OK',
-      } as any);
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(
+        createMockFetchResponse(
+          {
+            num_rows_total: 1000,
+            features: [{ name: 'text', type: { dtype: 'string', _type: 'Value' } }],
+            rows: Array(50)
+              .fill(null)
+              .map((_, i) => ({ row: { text: `Item ${i + 1}` } })),
+          },
+          { cached: true },
+        ) as any,
+      );
 
       const tests = await fetchHuggingFaceDataset('huggingface://datasets/test/dataset', 50);
 
@@ -443,26 +475,20 @@ describe('huggingfaceDatasets', () => {
 
     it('should throw error on page fetch failure', async () => {
       // First page succeeds
-      vi.mocked(fetchWithCache).mockResolvedValueOnce({
-        data: {
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(
+        createMockFetchResponse({
           num_rows_total: 300,
           features: [{ name: 'text', type: { dtype: 'string', _type: 'Value' } }],
           rows: Array(100)
             .fill(null)
             .map((_, i) => ({ row: { text: `Item ${i + 1}` } })),
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      } as any);
+        }) as any,
+      );
 
       // Second page fails
-      vi.mocked(fetchWithCache).mockResolvedValueOnce({
-        data: null,
-        cached: false,
-        status: 500,
-        statusText: 'Internal Server Error',
-      } as any);
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(
+        createMockFetchResponse(null, { status: 500, statusText: 'Internal Server Error' }) as any,
+      );
 
       // Should throw error instead of returning partial results
       await expect(
@@ -479,18 +505,13 @@ describe('huggingfaceDatasets', () => {
         const offset = Number.parseInt(searchParams.get('offset') ?? '0', 10);
         const length = Number.parseInt(searchParams.get('length') ?? '100', 10);
 
-        return {
-          data: {
-            num_rows_total: totalRows,
-            features: [{ name: 'text', type: { dtype: 'string', _type: 'Value' } }],
-            rows: Array.from({ length }, (_, i) => ({
-              row: { text: `${rowPrefix}${offset + i + 1}` },
-            })),
-          },
-          cached: false,
-          status: 200,
-          statusText: 'OK',
-        } as any;
+        return createMockFetchResponse({
+          num_rows_total: totalRows,
+          features: [{ name: 'text', type: { dtype: 'string', _type: 'Value' } }],
+          rows: Array.from({ length }, (_, i) => ({
+            row: { text: `${rowPrefix}${offset + i + 1}` },
+          })),
+        }) as any;
       });
 
       const tests = await fetchHuggingFaceDataset('huggingface://datasets/test/dataset');
@@ -505,36 +526,100 @@ describe('huggingfaceDatasets', () => {
       expect(new Set(texts).size).toBe(totalRows);
     });
 
+    describe('when a prefetched page is unusable', () => {
+      const totalRows = 400;
+      // ~300-byte rows keep the page size at 100, so offsets 100 and 200 are prefetched together
+      const rowPrefix = 'x'.repeat(300);
+      const unavailable = {
+        data: null,
+        cached: false,
+        status: 503,
+        statusText: 'Service Unavailable',
+      };
+      const emptyPage = {
+        data: {
+          num_rows_total: totalRows,
+          features: [{ name: 'text', type: { dtype: 'string', _type: 'Value' } }],
+          rows: [],
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+
+      function servePages(unusablePage: object, unusableRequests: number) {
+        let served = 0;
+        vi.mocked(fetchWithCache).mockImplementation(async (url) => {
+          const searchParams = new URL(String(url)).searchParams;
+          const offset = Number.parseInt(searchParams.get('offset') ?? '0', 10);
+          const length = Number.parseInt(searchParams.get('length') ?? '100', 10);
+
+          if (offset === 100 && served < unusableRequests) {
+            served++;
+            return unusablePage as any;
+          }
+
+          return {
+            data: {
+              num_rows_total: totalRows,
+              features: [{ name: 'text', type: { dtype: 'string', _type: 'Value' } }],
+              rows: Array.from({ length }, (_, i) => ({
+                row: { text: `${rowPrefix}${offset + i + 1}` },
+              })),
+            },
+            cached: false,
+            status: 200,
+            statusText: 'OK',
+          } as any;
+        });
+      }
+
+      it.each([
+        ['fails once', unavailable],
+        ['comes back empty once', emptyPage],
+      ])('should load the rows in order without gaps or duplicates when it %s', async (_, page) => {
+        servePages(page, 1);
+
+        const tests = await fetchHuggingFaceDataset('huggingface://datasets/test/dataset');
+
+        expect(tests.map((test) => test.vars?.text)).toEqual(
+          Array.from({ length: totalRows }, (_, i) => `${rowPrefix}${i + 1}`),
+        );
+      });
+
+      it('should throw instead of leaving a gap when it keeps failing', async () => {
+        servePages(unavailable, Infinity);
+
+        await expect(
+          fetchHuggingFaceDataset('huggingface://datasets/test/dataset'),
+        ).rejects.toThrow('[HF Dataset] Failed to fetch dataset: Service Unavailable');
+      });
+    });
+
     it('should adapt page size based on row size', async () => {
       // Mock a dataset with large rows (>2KB each)
       const largeRow = { text: 'x'.repeat(3000) }; // ~3KB row
 
-      vi.mocked(fetchWithCache).mockResolvedValueOnce({
-        data: {
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(
+        createMockFetchResponse({
           num_rows_total: 200,
           features: [{ name: 'text', type: { dtype: 'string', _type: 'Value' } }],
           rows: Array(100)
             .fill(null)
             .map(() => ({ row: largeRow })),
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      } as any);
+        }) as any,
+      );
 
       // Mock all subsequent potential concurrent requests to avoid undefined errors
-      vi.mocked(fetchWithCache).mockResolvedValue({
-        data: {
+      vi.mocked(fetchWithCache).mockResolvedValue(
+        createMockFetchResponse({
           num_rows_total: 200,
           features: [{ name: 'text', type: { dtype: 'string', _type: 'Value' } }],
           rows: Array(25)
             .fill(null)
             .map((_, i) => ({ row: { text: `Item ${i + 101}` } })),
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      } as any);
+        }) as any,
+      );
 
       const tests = await fetchHuggingFaceDataset('huggingface://datasets/test/dataset', 125);
 
@@ -552,6 +637,45 @@ describe('huggingfaceDatasets', () => {
       expect(tests[0].vars?.text).toBe(largeRow.text);
     });
 
+    it('should keep small-row pages at the 100-row maximum the datasets server allows', async () => {
+      const rows = Array.from({ length: 546 }, (_, i) => ({ row: { text: `Item ${i + 1}` } }));
+
+      vi.mocked(fetchWithCache).mockImplementation(async (url) => {
+        const searchParams = new URL(String(url)).searchParams;
+        const offset = Number.parseInt(searchParams.get('offset') ?? '0', 10);
+        const length = Number.parseInt(searchParams.get('length') ?? '100', 10);
+
+        // Like the real server, reject a page longer than 100 rows
+        if (length > 100) {
+          return {
+            data: { error: "Parameter 'length' must not be greater than 100" },
+            cached: false,
+            status: 422,
+            statusText: 'Unprocessable Entity',
+          } as any;
+        }
+
+        return {
+          data: {
+            num_rows_total: rows.length,
+            features: [{ name: 'text', type: { dtype: 'string', _type: 'Value' } }],
+            rows: rows.slice(offset, offset + length),
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        } as any;
+      });
+
+      const tests = await fetchHuggingFaceDataset('huggingface://datasets/test/dataset');
+      const requestedLengths = vi
+        .mocked(fetchWithCache)
+        .mock.calls.map(([url]) => new URL(String(url)).searchParams.get('length'));
+
+      expect(requestedLengths).toEqual(['100', '100', '100', '100', '100', '46']);
+      expect(tests.map((test) => test.vars)).toEqual(rows.map(({ row }) => row));
+    });
+
     it('should handle authentication tokens correctly', async () => {
       vi.mocked(getEnvString).mockImplementation((key) => {
         if (key === 'HF_TOKEN') {
@@ -560,16 +684,13 @@ describe('huggingfaceDatasets', () => {
         return '';
       });
 
-      vi.mocked(fetchWithCache).mockResolvedValueOnce({
-        data: {
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(
+        createMockFetchResponse({
           num_rows_total: 10,
           features: [{ name: 'text', type: { dtype: 'string', _type: 'Value' } }],
           rows: [{ row: { text: 'Test' } }],
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      } as any);
+        }) as any,
+      );
 
       await fetchHuggingFaceDataset('huggingface://datasets/test/dataset', 5);
 

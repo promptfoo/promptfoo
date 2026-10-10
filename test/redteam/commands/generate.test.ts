@@ -1,3 +1,7 @@
+const { createLoggerModuleWithLevel } = await vi.hoisted(
+  async () => import('../../factories/logger'),
+);
+
 import fs from 'node:fs';
 
 import { Command } from 'commander';
@@ -47,6 +51,27 @@ import type {
 import type { ApiProvider, TestCaseWithPlugin, UnifiedConfig } from '../../../src/types/index';
 import type { TokenUsage } from '../../../src/types/shared';
 
+const { createLocalGenerationFactory, createUuidModuleFactory } = await vi.hoisted(
+  () => import('../../factories/moduleMocks'),
+);
+
+const createSynthesisResult = (
+  entities = ['Test entity'],
+  pluginId = 'redteam',
+): SynthesizeMockResult => ({
+  testCases: [
+    {
+      vars: { input: 'Test input' },
+      assert: [{ type: 'equals', value: 'Test output' }],
+      metadata: { pluginId },
+    },
+  ],
+  purpose: 'Test purpose',
+  entities,
+  injectVar: 'input',
+  failedPlugins: [],
+});
+
 // Type for synthesize mock return value to avoid type inference issues in CI
 type SynthesizeMockResult = {
   testCases: TestCaseWithPlugin[];
@@ -59,7 +84,24 @@ type SynthesizeMockResult = {
 
 const { TEST_PROBE_LIMIT } = vi.hoisted(() => ({ TEST_PROBE_LIMIT: 100_000 }));
 
+// Simulate a crypto provider that rejects MD5 without changing process-wide crypto settings.
+vi.mock('crypto', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('crypto')>();
+  return {
+    ...actual,
+    createHash: (...args: Parameters<typeof actual.createHash>) => {
+      if (args[0].toLowerCase() === 'md5') {
+        throw new Error('MD5 is unavailable in FIPS mode');
+      }
+      return actual.createHash(...args);
+    },
+  };
+});
+
 function resetCommonMocks() {
+  fsMocks.readFileSync.mockReset();
+  fsMocks.existsSync.mockReset();
+  vi.mocked(checkCloudPermissions).mockReset().mockResolvedValue(undefined);
   vi.mocked(extractA2AAgentCardInfo).mockReset().mockResolvedValue('');
   vi.mocked(extractMcpToolsInfo).mockReset().mockResolvedValue('');
   vi.mocked(getCloudDatabaseId).mockReset();
@@ -129,22 +171,8 @@ vi.mock('../../../src/redteam', () => ({
   } satisfies SynthesizeMockResult),
 }));
 vi.mock('../../../src/telemetry');
-vi.mock('../../../src/logger', () => ({
-  default: {
-    debug: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  },
-  getLogLevel: vi.fn().mockReturnValue('info'),
-}));
-vi.mock('../../../src/util/uuid', () => ({
-  isUuid: vi.fn((str: string) => {
-    // Simple UUID validation for testing
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    return uuidRegex.test(str);
-  }),
-}));
+vi.mock('../../../src/logger', () => createLoggerModuleWithLevel());
+vi.mock('../../../src/util/uuid', createUuidModuleFactory());
 vi.mock('../../../src/util', async (importOriginal) => {
   return {
     ...(await importOriginal()),
@@ -261,14 +289,7 @@ vi.mock('../../../src/redteam/commands/discover', async (importOriginal) => {
   };
 });
 
-vi.mock('../../../src/redteam/remoteGeneration', async (importOriginal) => {
-  return {
-    ...(await importOriginal()),
-    shouldGenerateRemote: vi.fn().mockReturnValue(false),
-    neverGenerateRemote: vi.fn().mockReturnValue(false),
-    getRemoteGenerationUrl: vi.fn().mockReturnValue('http://test-url'),
-  };
-});
+vi.mock('../../../src/redteam/remoteGeneration', createLocalGenerationFactory());
 
 vi.mock('../../../src/util/config/manage', () => ({
   getConfigDirectoryPath: vi.fn().mockReturnValue('/tmp/test-config'),
@@ -349,19 +370,7 @@ describe('doGenerateRedteam', () => {
       tests: [],
     });
 
-    vi.mocked(synthesize).mockResolvedValue({
-      testCases: [
-        {
-          vars: { input: 'Test input' },
-          assert: [{ type: 'equals', value: 'Test output' }],
-          metadata: { pluginId: 'redteam' },
-        },
-      ],
-      purpose: 'Test purpose',
-      entities: ['Test entity'],
-      injectVar: 'input',
-      failedPlugins: [],
-    });
+    vi.mocked(synthesize).mockResolvedValue(createSynthesisResult());
 
     await doGenerateRedteam(options);
 
@@ -399,6 +408,7 @@ describe('doGenerateRedteam', () => {
   });
 
   it.each([
+    ['adding a filter', {}, { filterProviders: 'team-a' }],
     ['filterProviders value', { filterProviders: 'team-a' }, { filterProviders: 'team-b' }],
     ['filterTargets value', { filterTargets: 'team-a' }, { filterTargets: 'team-b' }],
     ['filter option', { filterProviders: 'team-a' }, { filterTargets: 'team-a' }],
@@ -420,19 +430,7 @@ describe('doGenerateRedteam', () => {
       vi.mocked(fs.readFileSync).mockImplementation((filePath) => {
         return String(filePath) === outputPath ? yaml.dump(generatedOutput) : configContent;
       });
-      vi.mocked(synthesize).mockResolvedValue({
-        testCases: [
-          {
-            vars: { input: 'Test input' },
-            assert: [{ type: 'equals', value: 'Test output' }],
-            metadata: { pluginId: 'redteam' },
-          },
-        ],
-        purpose: 'Test purpose',
-        entities: [],
-        injectVar: 'input',
-        failedPlugins: [],
-      });
+      vi.mocked(synthesize).mockResolvedValue(createSynthesisResult([]));
 
       const options: RedteamCliGenerateOptions = {
         output: outputPath,
@@ -446,7 +444,7 @@ describe('doGenerateRedteam', () => {
       await doGenerateRedteam(options);
       generatedOutput = vi.mocked(writePromptfooConfig).mock.calls[0][0];
       const firstHash = generatedOutput.metadata?.configHash;
-      expect(firstHash).toEqual(expect.any(String));
+      expect(firstHash).toMatch(/^[a-f0-9]{64}$/);
 
       vi.clearAllMocks();
       await doGenerateRedteam(options);
@@ -575,19 +573,7 @@ describe('doGenerateRedteam', () => {
     };
 
     mockReadFileSync({});
-    vi.mocked(synthesize).mockResolvedValue({
-      testCases: [
-        {
-          vars: { input: 'Test input' },
-          assert: [{ type: 'equals', value: 'Test output' }],
-          metadata: { pluginId: 'redteam' },
-        },
-      ],
-      purpose: 'Test purpose',
-      entities: [],
-      injectVar: 'input',
-      failedPlugins: [],
-    });
+    vi.mocked(synthesize).mockResolvedValue(createSynthesisResult([]));
 
     await doGenerateRedteam(options);
 
@@ -665,19 +651,7 @@ describe('doGenerateRedteam', () => {
       tests: [],
     });
 
-    vi.mocked(synthesize).mockResolvedValue({
-      testCases: [
-        {
-          vars: { input: 'Test input' },
-          assert: [{ type: 'equals', value: 'Test output' }],
-          metadata: { pluginId: 'redteam' },
-        },
-      ],
-      purpose: 'Test purpose',
-      entities: [],
-      injectVar: 'input',
-      failedPlugins: [],
-    });
+    vi.mocked(synthesize).mockResolvedValue(createSynthesisResult([]));
 
     await doGenerateRedteam(options);
 
@@ -701,19 +675,7 @@ describe('doGenerateRedteam', () => {
     };
 
     mockReadFileSync({});
-    vi.mocked(synthesize).mockResolvedValue({
-      testCases: [
-        {
-          vars: { input: 'Test input' },
-          assert: [{ type: 'equals', value: 'Test output' }],
-          metadata: { pluginId: 'redteam' },
-        },
-      ],
-      purpose: 'Test purpose',
-      entities: [],
-      injectVar: 'input',
-      failedPlugins: [],
-    });
+    vi.mocked(synthesize).mockResolvedValue(createSynthesisResult([]));
 
     await doGenerateRedteam(options);
 
@@ -753,19 +715,7 @@ describe('doGenerateRedteam', () => {
       output: 'redteam.yaml',
     };
 
-    vi.mocked(synthesize).mockResolvedValue({
-      testCases: [
-        {
-          vars: { input: 'Test input' },
-          assert: [{ type: 'equals', value: 'Test output' }],
-          metadata: { pluginId: 'redteam' },
-        },
-      ],
-      purpose: 'Test purpose',
-      entities: ['Test entity'],
-      injectVar: 'input',
-      failedPlugins: [],
-    });
+    vi.mocked(synthesize).mockResolvedValue(createSynthesisResult());
 
     await doGenerateRedteam(options);
 
@@ -809,19 +759,7 @@ describe('doGenerateRedteam', () => {
       tests: [],
     });
 
-    vi.mocked(synthesize).mockResolvedValue({
-      testCases: [
-        {
-          vars: { input: 'Test input' },
-          assert: [{ type: 'equals', value: 'Test output' }],
-          metadata: { pluginId: 'redteam' },
-        },
-      ],
-      purpose: 'Test purpose',
-      entities: ['Test entity'],
-      injectVar: 'input',
-      failedPlugins: [],
-    });
+    vi.mocked(synthesize).mockResolvedValue(createSynthesisResult());
 
     const options: RedteamCliGenerateOptions = {
       output: 'output.yaml',
@@ -876,19 +814,7 @@ describe('doGenerateRedteam', () => {
       tests: [],
     });
 
-    vi.mocked(synthesize).mockResolvedValue({
-      testCases: [
-        {
-          vars: { input: 'Test input' },
-          assert: [{ type: 'equals', value: 'Test output' }],
-          metadata: { pluginId: 'redteam' },
-        },
-      ],
-      purpose: 'Test purpose',
-      entities: ['Test entity'],
-      injectVar: 'input',
-      failedPlugins: [],
-    });
+    vi.mocked(synthesize).mockResolvedValue(createSynthesisResult());
 
     const options: RedteamCliGenerateOptions = {
       output: 'output.yaml',
@@ -1000,19 +926,7 @@ describe('doGenerateRedteam', () => {
       tests: [],
     });
 
-    vi.mocked(synthesize).mockResolvedValue({
-      testCases: [
-        {
-          vars: { input: 'Test input' },
-          assert: [{ type: 'equals', value: 'Test output' }],
-          metadata: { pluginId: 'redteam' },
-        },
-      ],
-      purpose: 'Test purpose',
-      entities: [],
-      injectVar: 'input',
-      failedPlugins: [],
-    });
+    vi.mocked(synthesize).mockResolvedValue(createSynthesisResult([]));
 
     const options: RedteamCliGenerateOptions = {
       output: 'output.yaml',
@@ -1102,19 +1016,7 @@ describe('doGenerateRedteam', () => {
   });
 
   it('should cleanup provider after generation', async () => {
-    vi.mocked(synthesize).mockResolvedValue({
-      testCases: [
-        {
-          vars: { input: 'Test input' },
-          assert: [{ type: 'equals', value: 'Test output' }],
-          metadata: { pluginId: 'redteam' },
-        },
-      ],
-      purpose: 'Test purpose',
-      entities: ['Test entity'],
-      injectVar: 'input',
-      failedPlugins: [],
-    });
+    vi.mocked(synthesize).mockResolvedValue(createSynthesisResult());
 
     const options: RedteamCliGenerateOptions = {
       output: 'test-output.json',
@@ -1131,19 +1033,7 @@ describe('doGenerateRedteam', () => {
   });
 
   it('should handle provider cleanup errors gracefully', async () => {
-    vi.mocked(synthesize).mockResolvedValue({
-      testCases: [
-        {
-          vars: { input: 'Test input' },
-          assert: [{ type: 'equals', value: 'Test output' }],
-          metadata: { pluginId: 'redteam' },
-        },
-      ],
-      purpose: 'Test purpose',
-      entities: ['Test entity'],
-      injectVar: 'input',
-      failedPlugins: [],
-    });
+    vi.mocked(synthesize).mockResolvedValue(createSynthesisResult());
 
     const options: RedteamCliGenerateOptions = {
       output: 'test-output.json',
@@ -1686,29 +1576,11 @@ describe('doGenerateRedteam', () => {
     });
 
     it('should include header comments with author and cloud host when available', async () => {
-      vi.mocked(getAuthor).mockImplementation(function () {
-        return 'test@example.com';
-      });
-      vi.mocked(getUserEmail).mockImplementation(function () {
-        return 'test@example.com';
-      });
-      vi.mocked(cloudConfig.getApiHost).mockImplementation(function () {
-        return 'https://api.promptfoo.app';
-      });
+      vi.mocked(getAuthor).mockReturnValue('test@example.com');
+      vi.mocked(getUserEmail).mockReturnValue('test@example.com');
+      vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.promptfoo.app');
 
-      vi.mocked(synthesize).mockResolvedValue({
-        testCases: [
-          {
-            vars: { input: 'Test input' },
-            assert: [{ type: 'equals', value: 'Test output' }],
-            metadata: { pluginId: 'redteam' },
-          },
-        ],
-        purpose: 'Test purpose',
-        entities: [],
-        injectVar: 'input',
-        failedPlugins: [],
-      });
+      vi.mocked(synthesize).mockResolvedValue(createSynthesisResult([]));
 
       const options: RedteamCliGenerateOptions = {
         output: 'output.yaml',
@@ -1734,26 +1606,10 @@ describe('doGenerateRedteam', () => {
     });
 
     it('should show "Not logged in" when no user email', async () => {
-      vi.mocked(getAuthor).mockImplementation(function () {
-        return null;
-      });
-      vi.mocked(getUserEmail).mockImplementation(function () {
-        return null;
-      });
+      vi.mocked(getAuthor).mockReturnValue(null);
+      vi.mocked(getUserEmail).mockReturnValue(null);
 
-      vi.mocked(synthesize).mockResolvedValue({
-        testCases: [
-          {
-            vars: { input: 'Test input' },
-            assert: [{ type: 'equals', value: 'Test output' }],
-            metadata: { pluginId: 'redteam' },
-          },
-        ],
-        purpose: 'Test purpose',
-        entities: [],
-        injectVar: 'input',
-        failedPlugins: [],
-      });
+      vi.mocked(synthesize).mockResolvedValue(createSynthesisResult([]));
 
       const options: RedteamCliGenerateOptions = {
         output: 'output.yaml',
@@ -1773,27 +1629,11 @@ describe('doGenerateRedteam', () => {
     });
 
     it('should include different headers for updates vs new configs', async () => {
-      vi.mocked(getAuthor).mockImplementation(function () {
-        return 'test@example.com';
-      });
-      vi.mocked(getUserEmail).mockImplementation(function () {
-        return 'test@example.com';
-      });
+      vi.mocked(getAuthor).mockReturnValue('test@example.com');
+      vi.mocked(getUserEmail).mockReturnValue('test@example.com');
       mockReadFileSync({});
 
-      vi.mocked(synthesize).mockResolvedValue({
-        testCases: [
-          {
-            vars: { input: 'Test input' },
-            assert: [{ type: 'equals', value: 'Test output' }],
-            metadata: { pluginId: 'redteam' },
-          },
-        ],
-        purpose: 'Test purpose',
-        entities: [],
-        injectVar: 'input',
-        failedPlugins: [],
-      });
+      vi.mocked(synthesize).mockResolvedValue(createSynthesisResult([]));
 
       const options: RedteamCliGenerateOptions = {
         config: 'config.yaml',
@@ -1817,12 +1657,8 @@ describe('doGenerateRedteam', () => {
     });
 
     it('should include plugin and strategy information in headers', async () => {
-      vi.mocked(getAuthor).mockImplementation(function () {
-        return 'test@example.com';
-      });
-      vi.mocked(getUserEmail).mockImplementation(function () {
-        return 'test@example.com';
-      });
+      vi.mocked(getAuthor).mockReturnValue('test@example.com');
+      vi.mocked(getUserEmail).mockReturnValue('test@example.com');
 
       vi.mocked(configModule.resolveConfigs).mockResolvedValue({
         basePath: '/mock/path',
@@ -1839,19 +1675,7 @@ describe('doGenerateRedteam', () => {
         },
       });
 
-      vi.mocked(synthesize).mockResolvedValue({
-        testCases: [
-          {
-            vars: { input: 'Test input' },
-            assert: [{ type: 'equals', value: 'Test output' }],
-            metadata: { pluginId: 'redteam' },
-          },
-        ],
-        purpose: 'Test purpose',
-        entities: [],
-        injectVar: 'input',
-        failedPlugins: [],
-      });
+      vi.mocked(synthesize).mockResolvedValue(createSynthesisResult([]));
 
       const options: RedteamCliGenerateOptions = {
         output: 'output.yaml',
@@ -1874,29 +1698,11 @@ describe('doGenerateRedteam', () => {
     });
 
     it('should handle missing author gracefully', async () => {
-      vi.mocked(getAuthor).mockImplementation(function () {
-        return null;
-      });
-      vi.mocked(getUserEmail).mockImplementation(function () {
-        return 'test@example.com';
-      });
-      vi.mocked(cloudConfig.getApiHost).mockImplementation(function () {
-        return 'https://api.promptfoo.app';
-      });
+      vi.mocked(getAuthor).mockReturnValue(null);
+      vi.mocked(getUserEmail).mockReturnValue('test@example.com');
+      vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.promptfoo.app');
 
-      vi.mocked(synthesize).mockResolvedValue({
-        testCases: [
-          {
-            vars: { input: 'Test input' },
-            assert: [{ type: 'equals', value: 'Test output' }],
-            metadata: { pluginId: 'redteam' },
-          },
-        ],
-        purpose: 'Test purpose',
-        entities: [],
-        injectVar: 'input',
-        failedPlugins: [],
-      });
+      vi.mocked(synthesize).mockResolvedValue(createSynthesisResult([]));
 
       const options: RedteamCliGenerateOptions = {
         output: 'output.yaml',
@@ -1991,19 +1797,7 @@ describe('doGenerateRedteam', () => {
         },
       });
 
-      vi.mocked(synthesize).mockResolvedValue({
-        testCases: [
-          {
-            vars: { input: 'Test input' },
-            assert: [{ type: 'equals', value: 'Test output' }],
-            metadata: { pluginId: 'redteam' },
-          },
-        ],
-        purpose: 'Test purpose',
-        entities: ['Test entity'],
-        injectVar: 'input',
-        failedPlugins: [],
-      });
+      vi.mocked(synthesize).mockResolvedValue(createSynthesisResult());
 
       const options: RedteamCliGenerateOptions = {
         output: 'output.yaml',
@@ -2323,9 +2117,7 @@ describe('doGenerateRedteam', () => {
         failedPlugins: [],
       } satisfies SynthesizeMockResult);
 
-      vi.mocked(fs.existsSync).mockImplementation(function () {
-        return false;
-      });
+      vi.mocked(fs.existsSync).mockReturnValue(false);
       cliState.maxConcurrency = undefined;
     });
 
@@ -3094,19 +2886,9 @@ describe('doGenerateRedteam', () => {
         },
       });
 
-      vi.mocked(synthesize).mockResolvedValue({
-        testCases: [
-          {
-            vars: { input: 'Test input' },
-            assert: [{ type: 'equals', value: 'Test output' }],
-            metadata: { pluginId: 'harmful:hate' },
-          },
-        ],
-        purpose: 'Test purpose',
-        entities: ['Test entity'],
-        injectVar: 'input',
-        failedPlugins: [],
-      });
+      vi.mocked(synthesize).mockResolvedValue(
+        createSynthesisResult(['Test entity'], 'harmful:hate'),
+      );
 
       const options: RedteamCliGenerateOptions = {
         output: 'output.yaml',
@@ -3298,19 +3080,9 @@ describe('doGenerateRedteam', () => {
         },
       });
 
-      vi.mocked(synthesize).mockResolvedValue({
-        testCases: [
-          {
-            vars: { input: 'Test input' },
-            assert: [{ type: 'equals', value: 'Test output' }],
-            metadata: { pluginId: 'harmful:hate' },
-          },
-        ],
-        purpose: 'Test purpose',
-        entities: ['Test entity'],
-        injectVar: 'input',
-        failedPlugins: [],
-      });
+      vi.mocked(synthesize).mockResolvedValue(
+        createSynthesisResult(['Test entity'], 'harmful:hate'),
+      );
 
       const options: RedteamCliGenerateOptions = {
         output: 'output.yaml',
@@ -3480,19 +3252,9 @@ describe('doGenerateRedteam', () => {
         },
       });
 
-      vi.mocked(synthesize).mockResolvedValue({
-        testCases: [
-          {
-            vars: { input: 'Test input' },
-            assert: [{ type: 'equals', value: 'Test output' }],
-            metadata: { pluginId: 'harmful:hate' },
-          },
-        ],
-        purpose: 'Test purpose',
-        entities: ['Test entity'],
-        injectVar: 'input',
-        failedPlugins: [],
-      });
+      vi.mocked(synthesize).mockResolvedValue(
+        createSynthesisResult(['Test entity'], 'harmful:hate'),
+      );
 
       const options: RedteamCliGenerateOptions = {
         output: 'output.yaml',
@@ -3595,9 +3357,7 @@ describe('doGenerateRedteam with external defaultTest', () => {
       },
     });
 
-    vi.mocked(fs.existsSync).mockImplementation(function () {
-      return false;
-    });
+    vi.mocked(fs.existsSync).mockReturnValue(false);
     mockReadFileSync('');
   });
 
@@ -3617,26 +3377,12 @@ describe('doGenerateRedteam with external defaultTest', () => {
       defaultTest: 'file://external/defaultTest.yaml', // String defaultTest
     };
 
-    vi.mocked(fs.existsSync).mockImplementation(function () {
-      return true;
-    });
+    vi.mocked(fs.existsSync).mockReturnValue(true);
     mockReadFileSync(yaml.dump(existingConfig));
     vi.mocked(readConfig).mockResolvedValue(existingConfig);
 
     // Mock synthesize to return test cases
-    vi.mocked(synthesize).mockResolvedValue({
-      testCases: [
-        {
-          vars: { input: 'Test input' },
-          assert: [{ type: 'equals', value: 'Test output' }],
-          metadata: { pluginId: 'redteam' },
-        },
-      ],
-      purpose: 'Test purpose',
-      entities: ['entity1', 'entity2'],
-      injectVar: 'input',
-      failedPlugins: [],
-    });
+    vi.mocked(synthesize).mockResolvedValue(createSynthesisResult(['entity1', 'entity2']));
 
     await doGenerateRedteam(options);
 
@@ -3674,26 +3420,12 @@ describe('doGenerateRedteam with external defaultTest', () => {
       },
     };
 
-    vi.mocked(fs.existsSync).mockImplementation(function () {
-      return true;
-    });
+    vi.mocked(fs.existsSync).mockReturnValue(true);
     mockReadFileSync(yaml.dump(existingConfig));
     vi.mocked(readConfig).mockResolvedValue(existingConfig);
 
     // Mock synthesize to return test cases
-    vi.mocked(synthesize).mockResolvedValue({
-      testCases: [
-        {
-          vars: { input: 'Test input' },
-          assert: [{ type: 'equals', value: 'Test output' }],
-          metadata: { pluginId: 'redteam' },
-        },
-      ],
-      purpose: 'Test purpose',
-      entities: ['entity1', 'entity2'],
-      injectVar: 'input',
-      failedPlugins: [],
-    });
+    vi.mocked(synthesize).mockResolvedValue(createSynthesisResult(['entity1', 'entity2']));
 
     await doGenerateRedteam(options);
 
@@ -3729,26 +3461,12 @@ describe('doGenerateRedteam with external defaultTest', () => {
       // No defaultTest
     };
 
-    vi.mocked(fs.existsSync).mockImplementation(function () {
-      return true;
-    });
+    vi.mocked(fs.existsSync).mockReturnValue(true);
     mockReadFileSync(yaml.dump(existingConfig));
     vi.mocked(readConfig).mockResolvedValue(existingConfig);
 
     // Mock synthesize to return test cases
-    vi.mocked(synthesize).mockResolvedValue({
-      testCases: [
-        {
-          vars: { input: 'Test input' },
-          assert: [{ type: 'equals', value: 'Test output' }],
-          metadata: { pluginId: 'redteam' },
-        },
-      ],
-      purpose: 'Test purpose',
-      entities: ['entity1', 'entity2'],
-      injectVar: 'input',
-      failedPlugins: [],
-    });
+    vi.mocked(synthesize).mockResolvedValue(createSynthesisResult(['entity1', 'entity2']));
 
     await doGenerateRedteam(options);
 
@@ -3823,9 +3541,7 @@ describe('redteam generate command with target option', () => {
     vi.mocked(getConfigFromCloud).mockResolvedValue(mockConfig);
 
     // Mock fs to handle the temp file write
-    vi.mocked(fs.existsSync).mockImplementation(function () {
-      return false;
-    });
+    vi.mocked(fs.existsSync).mockReturnValue(false);
     vi.mocked(fs.writeFileSync).mockImplementation(function () {});
 
     vi.mocked(synthesize).mockResolvedValue({
@@ -3875,9 +3591,7 @@ describe('redteam generate command with target option', () => {
     vi.mocked(getConfigFromCloud).mockResolvedValue(mockConfig);
 
     // Mock fs to handle the temp file write
-    vi.mocked(fs.existsSync).mockImplementation(function () {
-      return false;
-    });
+    vi.mocked(fs.existsSync).mockReturnValue(false);
     vi.mocked(fs.writeFileSync).mockImplementation(function () {});
 
     vi.mocked(synthesize).mockResolvedValue({
@@ -3930,9 +3644,7 @@ describe('redteam generate command with target option', () => {
     };
     vi.mocked(getConfigFromCloud).mockResolvedValue(mockConfig as any);
 
-    vi.mocked(fs.existsSync).mockImplementation(function () {
-      return false;
-    });
+    vi.mocked(fs.existsSync).mockReturnValue(false);
     vi.mocked(fs.writeFileSync).mockImplementation(function () {});
 
     vi.mocked(synthesize).mockResolvedValue({
@@ -3997,9 +3709,7 @@ describe('redteam generate command with target option', () => {
     const targetUUID = '87654321-4321-4321-4321-210987654321';
 
     // Mock fs.existsSync to return true for the config file
-    vi.mocked(fs.existsSync).mockImplementation(function () {
-      return true;
-    });
+    vi.mocked(fs.existsSync).mockReturnValue(true);
     mockReadFileSync(
       yaml.dump({
         prompts: ['Test prompt'],
@@ -4129,9 +3839,7 @@ describe('redteam generate command with target option', () => {
     vi.mocked(getConfigFromCloud).mockResolvedValue(mockConfig);
 
     // Mock fs to handle the temp file write
-    vi.mocked(fs.existsSync).mockImplementation(function () {
-      return false;
-    });
+    vi.mocked(fs.existsSync).mockReturnValue(false);
     vi.mocked(fs.writeFileSync).mockImplementation(function () {});
 
     vi.mocked(synthesize).mockResolvedValue({

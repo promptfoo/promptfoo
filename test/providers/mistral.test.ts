@@ -1,3 +1,7 @@
+const { createErrorFirstLoggerModule } = await vi.hoisted(
+  async () => import('../factories/logger'),
+);
+
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache, getCache, isCacheEnabled, withCacheNamespace } from '../../src/cache';
 import logger from '../../src/logger';
@@ -6,15 +10,16 @@ import {
   MistralEmbeddingProvider,
 } from '../../src/providers/mistral';
 import { maybeLoadToolsFromExternalFile } from '../../src/util';
+import { createChatCompletion } from '../factories/literalFixtures';
+import { createMockChatResponse, createMockFetchResponse } from './mockProviderResponses';
 
-vi.mock('../../src/logger', () => ({
-  default: {
-    debug: vi.fn(),
-    error: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-  },
-}));
+const createMistralEmbeddingResponse = () => ({
+  model: 'mistral-embed',
+  data: [{ embedding: [0.1, 0.2, 0.3] }],
+  usage: { total_tokens: 5, prompt_tokens: 5 },
+});
+
+vi.mock('../../src/logger', () => createErrorFirstLoggerModule());
 
 vi.mock('../../src/cache', async () => ({
   ...(await vi.importActual('../../src/cache')),
@@ -77,7 +82,7 @@ describe('Mistral', () => {
       expect(customProvider.config).toEqual({ temperature: 0.7 });
     });
 
-    it('should support current Mistral model families', () => {
+    it('should accept current and historical Mistral model IDs', () => {
       const smallProvider = new MistralChatCompletionProvider('magistral-small-2509');
       expect(smallProvider.modelName).toBe('magistral-small-2509');
       expect(smallProvider.config).toEqual({});
@@ -91,12 +96,13 @@ describe('Mistral', () => {
       expect(new MistralChatCompletionProvider('mistral-large-2512').modelName).toBe(
         'mistral-large-2512',
       );
-      expect(new MistralChatCompletionProvider('mistral-medium-3.5').modelName).toBe(
-        'mistral-medium-3.5',
+      expect(new MistralChatCompletionProvider('mistral-medium-3-5').modelName).toBe(
+        'mistral-medium-3-5',
       );
       expect(new MistralChatCompletionProvider('ministral-14b-latest').modelName).toBe(
         'ministral-14b-latest',
       );
+      expect(logger.warn).not.toHaveBeenCalled();
     });
 
     it('should support Pixtral multimodal model', () => {
@@ -115,12 +121,7 @@ describe('Mistral', () => {
         choices: [{ message: { content: 'Image analysis response' } }],
         usage: { total_tokens: 2000, prompt_tokens: 800, completion_tokens: 1200 },
       };
-      vi.mocked(fetchWithCache).mockResolvedValueOnce({
-        data: mockResponse,
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(createMockFetchResponse(mockResponse));
 
       const result = await pixtralProvider.callApi('Analyze this image: <image_url>');
 
@@ -130,16 +131,8 @@ describe('Mistral', () => {
     });
 
     it('should call Mistral API and return output with correct structure', async () => {
-      const mockResponse = {
-        choices: [{ message: { content: 'Test output' } }],
-        usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-      };
-      vi.mocked(fetchWithCache).mockResolvedValueOnce({
-        data: mockResponse,
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+      const mockResponse = createChatCompletion();
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(createMockFetchResponse(mockResponse));
 
       const result = await provider.callApi('Test prompt');
 
@@ -178,16 +171,8 @@ describe('Mistral', () => {
       });
       vi.spyOn(zeroProvider, 'getApiKey').mockReturnValue('fake-api-key');
 
-      const mockResponse = {
-        choices: [{ message: { content: 'Test output' } }],
-        usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-      };
-      vi.mocked(fetchWithCache).mockResolvedValueOnce({
-        data: mockResponse,
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+      const mockResponse = createChatCompletion();
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(createMockFetchResponse(mockResponse));
 
       await zeroProvider.callApi('Test prompt');
 
@@ -199,7 +184,7 @@ describe('Mistral', () => {
     });
 
     it('should pass through current chat completion options', async () => {
-      const advancedProvider = new MistralChatCompletionProvider('mistral-medium-3.5', {
+      const advancedProvider = new MistralChatCompletionProvider('mistral-medium-3-5', {
         config: {
           frequency_penalty: 0.25,
           presence_penalty: 0.5,
@@ -227,15 +212,7 @@ describe('Mistral', () => {
         },
       });
       vi.spyOn(advancedProvider, 'getApiKey').mockReturnValue('fake-api-key');
-      vi.mocked(fetchWithCache).mockResolvedValueOnce({
-        data: {
-          choices: [{ message: { content: '{"answer":"ok"}' } }],
-          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(createMockChatResponse('{"answer":"ok"}'));
 
       await advancedProvider.callApi('Test prompt');
 
@@ -288,15 +265,12 @@ describe('Mistral', () => {
         },
       });
       vi.spyOn(customProvider, 'getApiKey').mockReturnValue('fake-api-key');
-      vi.mocked(fetchWithCache).mockResolvedValueOnce({
-        data: {
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(
+        createMockFetchResponse({
           choices: [{ message: { content: null, tool_calls: tools } }],
           usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+        }),
+      );
 
       await customProvider.callApi('Test prompt');
 
@@ -319,12 +293,7 @@ describe('Mistral', () => {
         choices: [{ message: { content: 'Reasoning response' } }],
         usage: { total_tokens: 1000, prompt_tokens: 100, completion_tokens: 900 },
       };
-      vi.mocked(fetchWithCache).mockResolvedValueOnce({
-        data: mockResponse,
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(createMockFetchResponse(mockResponse));
 
       const result = await magistralSmallProvider.callApi('Test reasoning prompt');
 
@@ -337,15 +306,12 @@ describe('Mistral', () => {
       const latestProvider = new MistralChatCompletionProvider('mistral-large-latest');
       vi.spyOn(latestProvider, 'getApiKey').mockReturnValue('fake-api-key');
 
-      vi.mocked(fetchWithCache).mockResolvedValueOnce({
-        data: {
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(
+        createMockFetchResponse({
           choices: [{ message: { content: 'Current latest response' } }],
           usage: { total_tokens: 1000, prompt_tokens: 400, completion_tokens: 600 },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+        }),
+      );
 
       const result = await latestProvider.callApi('Test latest alias pricing');
 
@@ -353,40 +319,105 @@ describe('Mistral', () => {
       expect(result.cost).toBeCloseTo(0.0011, 6);
     });
 
-    // Regression coverage: Mistral silently repoints `*-latest`/bare aliases to newer
-    // models. These lock the hardcoded pricing to whatever the alias resolves to today.
+    it.each([
+      { seconds: 60, expected: 0.00426 },
+      { seconds: 0, expected: 0.00026 },
+      { seconds: undefined, expected: 0.00026 },
+      { seconds: null, expected: 0.00026 },
+    ])('includes reported Voxtral audio duration: $seconds', async ({ seconds, expected }) => {
+      const voxtral = new MistralChatCompletionProvider('voxtral-small-2507', {
+        config: { apiKey: 'test-key' },
+      });
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: {
+          choices: [{ message: { content: 'Audio summary' } }],
+          usage: { prompt_tokens: 1000, completion_tokens: 400, prompt_audio_seconds: seconds },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+      expect((await voxtral.callApi('Summarize the input')).cost).toBeCloseTo(expected, 8);
+    });
+
+    it('keeps Voxtral audio charges alongside explicit zero token prices and cached usage', async () => {
+      const voxtral = new MistralChatCompletionProvider('voxtral-small-2507', {
+        config: { apiKey: 'test-key', cost: 0 },
+      });
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: {
+          choices: [{ message: { content: 'Audio summary' } }],
+          usage: {
+            total_tokens: 1400,
+            prompt_tokens: 1000,
+            completion_tokens: 400,
+            prompt_audio_seconds: 60,
+          },
+        },
+        cached: true,
+        status: 200,
+        statusText: 'OK',
+      });
+      expect(await voxtral.callApi('Summarize the input')).toMatchObject({
+        cached: true,
+        cost: 0.004,
+      });
+    });
+
+    it.each([-1, Number.NaN, '60'])(
+      'leaves Voxtral cost unknown for invalid reported audio duration %s',
+      async (seconds) => {
+        const voxtral = new MistralChatCompletionProvider('voxtral-small-2507', {
+          config: { apiKey: 'test-key' },
+        });
+        vi.mocked(fetchWithCache).mockResolvedValueOnce({
+          data: {
+            choices: [{ message: { content: 'Audio summary' } }],
+            usage: { prompt_tokens: 1000, completion_tokens: 400, prompt_audio_seconds: seconds },
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        });
+        expect((await voxtral.callApi('Summarize the input')).cost).toBeUndefined();
+      },
+    );
+
+    // Regression coverage for active aliases and retained historical pricing.
     it.each([
       // [model, input price/M, output price/M, expected cost for 400 in / 600 out]
       // mistral-small-latest -> Mistral Small 4 (mistral-small-2603): $0.15/$0.60
       ['mistral-small-latest', 0.00042],
-      // magistral-small-latest folded into Mistral Small 4: $0.15/$0.60
-      ['magistral-small-latest', 0.00042],
-      // mistral-medium-latest + bare mistral-medium -> Mistral Medium 3.5: $1.50/$7.50
+      // magistral-small-latest -> deprecated Magistral Small 1.2 (2509): $0.50/$1.50
+      ['magistral-small-latest', 0.0011],
+      // mistral-medium-latest -> Mistral Medium 3.5: $1.50/$7.50
       ['mistral-medium-latest', 0.0051],
+      // bare mistral-medium was verified live as a Mistral Medium 3.5 alias: $1.50/$7.50
       ['mistral-medium', 0.0051],
-      // mistral-medium-2604 is the canonical dated ID for Mistral Medium 3.5
-      ['mistral-medium-2604', 0.0051],
       // version aliases that also resolve to Mistral Medium 3.5
       ['mistral-medium-3-5', 0.0051],
+      ['mistral-medium-3.5', 0.0051],
+      ['mistral-medium-2604', 0.0051],
+      // Leanstral 1.5 is free during its public preview.
+      ['labs-leanstral-1-5', 0],
+      // Voxtral Small token pricing excludes its separate per-audio-minute charge.
+      ['voxtral-small-2507', 0.00028],
       // Mistral Code product aliases resolve to Codestral: $0.30/$0.90
       ['mistral-code-latest', 0.00066],
       // Devstral 2 agent alias: $0.40/$2.00
       ['mistral-code-agent-latest', 0.00136],
       // Z.ai GLM 5.3 hosted by Mistral: $1.40/$4.40
       ['zai-glm-5-3', 0.0032],
-    ])('tracks current pricing for %s', async (model, expectedCost) => {
+    ])('tracks catalog pricing for %s', async (model, expectedCost) => {
       const provider = new MistralChatCompletionProvider(model);
       vi.spyOn(provider, 'getApiKey').mockReturnValue('fake-api-key');
 
-      vi.mocked(fetchWithCache).mockResolvedValueOnce({
-        data: {
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(
+        createMockFetchResponse({
           choices: [{ message: { content: 'ok' } }],
           usage: { total_tokens: 1000, prompt_tokens: 400, completion_tokens: 600 },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+        }),
+      );
 
       const result = await provider.callApi('Test alias pricing');
       expect(logger.warn).not.toHaveBeenCalled();
@@ -402,15 +433,7 @@ describe('Mistral', () => {
       });
       vi.spyOn(provider, 'getApiKey').mockReturnValue('fake-api-key');
 
-      vi.mocked(fetchWithCache).mockResolvedValueOnce({
-        data: {
-          choices: [{ message: { content: 'ok' } }],
-          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(createMockChatResponse('ok'));
 
       await provider.callApi('Test prompt cache key');
 
@@ -486,15 +509,7 @@ describe('Mistral', () => {
         on: vi.fn(),
         removeAllListeners: vi.fn(),
       } as any);
-      vi.mocked(fetchWithCache).mockResolvedValueOnce({
-        data: {
-          choices: [{ message: { content: 'Fresh output' } }],
-          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(createMockChatResponse('Fresh output'));
 
       await provider.callApi('Sensitive prompt sk-mistral-secret');
 
@@ -541,24 +556,8 @@ describe('Mistral', () => {
       vi.spyOn(providerA, 'getApiUrl').mockReturnValue('https://shared.mistral.example/v1');
       vi.spyOn(providerB, 'getApiUrl').mockReturnValue('https://shared.mistral.example/v1');
       vi.mocked(fetchWithCache)
-        .mockResolvedValueOnce({
-          data: {
-            choices: [{ message: { content: 'Tenant A output' } }],
-            usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-          },
-          cached: false,
-          status: 200,
-          statusText: 'OK',
-        })
-        .mockResolvedValueOnce({
-          data: {
-            choices: [{ message: { content: 'Tenant B output' } }],
-            usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-          },
-          cached: false,
-          status: 200,
-          statusText: 'OK',
-        });
+        .mockResolvedValueOnce(createMockChatResponse('Tenant A output'))
+        .mockResolvedValueOnce(createMockChatResponse('Tenant B output'));
 
       await providerA.callApi('Shared sensitive prompt');
       await providerB.callApi('Shared sensitive prompt');
@@ -638,12 +637,7 @@ describe('Mistral', () => {
       await Promise.resolve();
       expect(fetchWithCache).toHaveBeenCalledTimes(1);
 
-      resolveFetch!({
-        data: mockResponse,
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+      resolveFetch!(createMockFetchResponse(mockResponse));
 
       await expect(Promise.all([first, second])).resolves.toEqual([
         expect.objectContaining({ output: 'Shared output' }),
@@ -675,24 +669,8 @@ describe('Mistral', () => {
       await Promise.resolve();
       expect(fetchWithCache).toHaveBeenCalledTimes(2);
 
-      resolveFetches[0]({
-        data: {
-          choices: [{ message: { content: 'Scoped output A' } }],
-          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
-      resolveFetches[1]({
-        data: {
-          choices: [{ message: { content: 'Scoped output B' } }],
-          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+      resolveFetches[0](createMockChatResponse('Scoped output A'));
+      resolveFetches[1](createMockChatResponse('Scoped output B'));
 
       await expect(Promise.all([first, second])).resolves.toEqual([
         expect.objectContaining({ output: 'Scoped output A' }),
@@ -701,15 +679,9 @@ describe('Mistral', () => {
     });
 
     it('should avoid logging prompts and generated outputs in debug metadata', async () => {
-      vi.mocked(fetchWithCache).mockResolvedValueOnce({
-        data: {
-          choices: [{ message: { content: 'Generated secret response' } }],
-          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(
+        createMockChatResponse('Generated secret response'),
+      );
 
       await provider.callApi('Sensitive prompt with sk-mistral-secret');
 
@@ -735,15 +707,8 @@ describe('Mistral', () => {
         choices: [{ message: { content: 'Fresh output' } }],
         usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
       };
-      vi.mocked(isCacheEnabled).mockImplementation(function () {
-        return false;
-      });
-      vi.mocked(fetchWithCache).mockResolvedValueOnce({
-        data: mockResponse,
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+      vi.mocked(isCacheEnabled).mockReturnValue(false);
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(createMockFetchResponse(mockResponse));
 
       const result = await provider.callApi('Test prompt');
 
@@ -768,9 +733,7 @@ describe('Mistral', () => {
     });
 
     it('should handle API errors', async () => {
-      vi.mocked(isCacheEnabled).mockImplementation(function () {
-        return false;
-      });
+      vi.mocked(isCacheEnabled).mockReturnValue(false);
       const mockError = new Error('API Error');
       vi.mocked(fetchWithCache).mockRejectedValueOnce(mockError);
 
@@ -786,16 +749,8 @@ describe('Mistral', () => {
         config: { apiBaseUrl: 'https://custom.mistral.ai/v1' },
       });
       vi.spyOn(customProvider, 'getApiKey').mockReturnValue('fake-api-key');
-      const mockResponse = {
-        choices: [{ message: { content: 'Custom API response' } }],
-        usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-      };
-      vi.mocked(fetchWithCache).mockResolvedValueOnce({
-        data: mockResponse,
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+      const mockResponse = createChatCompletion('Custom API response');
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(createMockFetchResponse(mockResponse));
 
       await customProvider.callApi('Test prompt');
 
@@ -813,16 +768,8 @@ describe('Mistral', () => {
         config: { apiHost: 'custom.mistral.ai' },
       });
       vi.spyOn(customProvider, 'getApiKey').mockReturnValue('fake-api-key');
-      const mockResponse = {
-        choices: [{ message: { content: 'Custom API response' } }],
-        usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-      };
-      vi.mocked(fetchWithCache).mockResolvedValueOnce({
-        data: mockResponse,
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+      const mockResponse = createChatCompletion('Custom API response');
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(createMockFetchResponse(mockResponse));
 
       await customProvider.callApi('Test prompt');
 
@@ -847,12 +794,7 @@ describe('Mistral', () => {
         choices: [{ message: { content: null, tool_calls: mockToolCalls } }],
         usage: { total_tokens: 20, prompt_tokens: 10, completion_tokens: 10 },
       };
-      vi.mocked(fetchWithCache).mockResolvedValueOnce({
-        data: mockResponse,
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(createMockFetchResponse(mockResponse));
 
       const result = await provider.callApi('Test prompt');
 
@@ -861,8 +803,8 @@ describe('Mistral', () => {
     });
 
     it('should return final text from chunked reasoning content', async () => {
-      vi.mocked(fetchWithCache).mockResolvedValueOnce({
-        data: {
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(
+        createMockFetchResponse({
           choices: [
             {
               message: {
@@ -877,11 +819,8 @@ describe('Mistral', () => {
             },
           ],
           usage: { total_tokens: 20, prompt_tokens: 10, completion_tokens: 10 },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+        }),
+      );
 
       const result = await provider.callApi('Test prompt');
 
@@ -894,15 +833,12 @@ describe('Mistral', () => {
         { type: 'text', text: 'Final answer' },
         { type: 'citation', url: 'https://example.com' },
       ];
-      vi.mocked(fetchWithCache).mockResolvedValueOnce({
-        data: {
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(
+        createMockFetchResponse({
           choices: [{ message: { content } }],
           usage: { total_tokens: 20, prompt_tokens: 10, completion_tokens: 10 },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+        }),
+      );
 
       const result = await provider.callApi('Test prompt');
 
@@ -914,15 +850,12 @@ describe('Mistral', () => {
         { index: 0, message: { content: 'First response' } },
         { index: 1, message: { content: 'Second response' } },
       ];
-      vi.mocked(fetchWithCache).mockResolvedValueOnce({
-        data: {
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(
+        createMockFetchResponse({
           choices,
           usage: { total_tokens: 30, prompt_tokens: 10, completion_tokens: 20 },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+        }),
+      );
 
       const result = await provider.callApi('Test prompt');
 
@@ -946,12 +879,7 @@ describe('Mistral', () => {
         choices: [{ message: mockMessage }],
         usage: { total_tokens: 20, prompt_tokens: 10, completion_tokens: 10 },
       };
-      vi.mocked(fetchWithCache).mockResolvedValueOnce({
-        data: mockResponse,
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(createMockFetchResponse(mockResponse));
 
       const result = await provider.callApi('Test prompt');
 
@@ -964,12 +892,7 @@ describe('Mistral', () => {
         choices: [{ message: { content: 'Test output', tool_calls: [] } }],
         usage: { total_tokens: 20, prompt_tokens: 10, completion_tokens: 10 },
       };
-      vi.mocked(fetchWithCache).mockResolvedValueOnce({
-        data: mockResponse,
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(createMockFetchResponse(mockResponse));
 
       const result = await provider.callApi('Test prompt');
 
@@ -1008,16 +931,13 @@ describe('Mistral', () => {
       expect(codestralProvider.modelName).toBe('codestral-embed');
       expect(codestralProvider.id()).toBe('mistral:embedding:codestral-embed');
 
-      vi.mocked(fetchWithCache).mockResolvedValue({
-        data: {
+      vi.mocked(fetchWithCache).mockResolvedValue(
+        createMockFetchResponse({
           model: 'codestral-embed',
           data: [{ embedding: [0.1, 0.2, 0.3] }],
           usage: { total_tokens: 1000, prompt_tokens: 1000 },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+        }),
+      );
 
       const result = await codestralProvider.callEmbeddingApi('Test code');
 
@@ -1038,17 +958,8 @@ describe('Mistral', () => {
     });
 
     it('should call Mistral Embedding API and return embedding with correct structure', async () => {
-      const mockResponse = {
-        model: 'mistral-embed',
-        data: [{ embedding: [0.1, 0.2, 0.3] }],
-        usage: { total_tokens: 5, prompt_tokens: 5 },
-      };
-      vi.mocked(fetchWithCache).mockResolvedValue({
-        data: mockResponse,
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+      const mockResponse = createMistralEmbeddingResponse();
+      vi.mocked(fetchWithCache).mockResolvedValue(createMockFetchResponse(mockResponse));
 
       const result = await provider.callEmbeddingApi('Test text');
 
@@ -1081,20 +992,11 @@ describe('Mistral', () => {
     });
 
     it('should use cache for embedding when enabled', async () => {
-      const mockResponse = {
-        model: 'mistral-embed',
-        data: [{ embedding: [0.1, 0.2, 0.3] }],
-        usage: { total_tokens: 5, prompt_tokens: 5 },
-      };
-      vi.mocked(isCacheEnabled).mockImplementation(function () {
-        return true;
-      });
-      vi.mocked(fetchWithCache).mockResolvedValue({
-        data: mockResponse,
-        cached: true,
-        status: 200,
-        statusText: 'OK',
-      });
+      const mockResponse = createMistralEmbeddingResponse();
+      vi.mocked(isCacheEnabled).mockReturnValue(true);
+      vi.mocked(fetchWithCache).mockResolvedValue(
+        createMockFetchResponse(mockResponse, { cached: true }),
+      );
 
       const result = await provider.callEmbeddingApi('Test text');
 
@@ -1119,20 +1021,9 @@ describe('Mistral', () => {
     });
 
     it('should not use cache for embedding when disabled', async () => {
-      const mockResponse = {
-        model: 'mistral-embed',
-        data: [{ embedding: [0.1, 0.2, 0.3] }],
-        usage: { total_tokens: 5, prompt_tokens: 5 },
-      };
-      vi.mocked(isCacheEnabled).mockImplementation(function () {
-        return false;
-      });
-      vi.mocked(fetchWithCache).mockResolvedValue({
-        data: mockResponse,
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+      const mockResponse = createMistralEmbeddingResponse();
+      vi.mocked(isCacheEnabled).mockReturnValue(false);
+      vi.mocked(fetchWithCache).mockResolvedValue(createMockFetchResponse(mockResponse));
 
       const result = await provider.callEmbeddingApi('Test text');
 
@@ -1179,17 +1070,8 @@ describe('Mistral', () => {
         on: vi.fn(),
         removeAllListeners: vi.fn(),
       } as any);
-      const mockResponse = {
-        model: 'mistral-embed',
-        data: [{ embedding: [0.1, 0.2, 0.3] }],
-        usage: { total_tokens: 5, prompt_tokens: 5 },
-      };
-      vi.mocked(fetchWithCache).mockResolvedValue({
-        data: mockResponse,
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+      const mockResponse = createMistralEmbeddingResponse();
+      vi.mocked(fetchWithCache).mockResolvedValue(createMockFetchResponse(mockResponse));
 
       await provider.callEmbeddingApi('Sensitive embedding input sk-mistral-secret');
 
@@ -1215,11 +1097,7 @@ describe('Mistral', () => {
     });
 
     it('should return cached embeddings from hashed provider cache keys', async () => {
-      const cacheGet = vi.fn().mockResolvedValue({
-        model: 'mistral-embed',
-        data: [{ embedding: [0.1, 0.2, 0.3] }],
-        usage: { total_tokens: 5, prompt_tokens: 5 },
-      });
+      const cacheGet = vi.fn().mockResolvedValue(createMistralEmbeddingResponse());
       vi.mocked(isCacheEnabled).mockReturnValue(true);
       vi.mocked(getCache).mockReturnValue({
         get: cacheGet,
@@ -1263,11 +1141,7 @@ describe('Mistral', () => {
     it('should propagate cached embeddings through callApi', async () => {
       vi.mocked(isCacheEnabled).mockReturnValue(true);
       vi.mocked(getCache).mockReturnValue({
-        get: vi.fn().mockResolvedValue({
-          model: 'mistral-embed',
-          data: [{ embedding: [0.1, 0.2, 0.3] }],
-          usage: { total_tokens: 5, prompt_tokens: 5 },
-        }),
+        get: vi.fn().mockResolvedValue(createMistralEmbeddingResponse()),
         set: vi.fn(),
         wrap: vi.fn(),
         del: vi.fn(),
@@ -1320,17 +1194,8 @@ describe('Mistral', () => {
         config: { apiBaseUrl: 'https://custom.mistral.ai/v1' },
       });
       vi.spyOn(customProvider, 'getApiKey').mockReturnValue('fake-api-key');
-      const mockResponse = {
-        model: 'mistral-embed',
-        data: [{ embedding: [0.1, 0.2, 0.3] }],
-        usage: { total_tokens: 5, prompt_tokens: 5 },
-      };
-      vi.mocked(fetchWithCache).mockResolvedValue({
-        data: mockResponse,
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+      const mockResponse = createMistralEmbeddingResponse();
+      vi.mocked(fetchWithCache).mockResolvedValue(createMockFetchResponse(mockResponse));
 
       await customProvider.callEmbeddingApi('Test text');
 
@@ -1343,4 +1208,9 @@ describe('Mistral', () => {
       );
     });
   });
+});
+
+it('keeps mutable prices independent across model aliases', () => {
+  const costs = MistralChatCompletionProvider.MISTRAL_CHAT_MODELS.map(({ cost }) => cost);
+  expect(new Set(costs).size).toBe(costs.length);
 });
