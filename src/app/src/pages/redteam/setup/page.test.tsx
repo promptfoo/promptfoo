@@ -51,7 +51,6 @@ vi.mock('@app/utils/api', () => ({
 const reviewRunGates = vi.hoisted(() => ({
   setJob: vi.fn(),
   clearJob: vi.fn(),
-  signalEvalCompleted: vi.fn(),
   checkEmailStatus: vi.fn(),
 }));
 vi.mock('@app/hooks/useApiHealth', () => ({
@@ -61,9 +60,6 @@ vi.mock('@app/utils/emailVerification', () => ({
   checkEmailStatus: reviewRunGates.checkEmailStatus,
   saveEmail: vi.fn(),
   clearEmail: vi.fn(),
-}));
-vi.mock('@app/hooks/useEvalHistoryRefresh', () => ({
-  useEvalHistoryRefresh: () => ({ signalEvalCompleted: reviewRunGates.signalEvalCompleted }),
 }));
 vi.mock('@app/stores/redteamJobStore', () => ({
   useRedteamJobStore: () => ({
@@ -755,7 +751,6 @@ redteam:
       reviewRunGates.checkEmailStatus.mockResolvedValue({ canProceed: true });
       reviewRunGates.setJob.mockReset();
       reviewRunGates.clearJob.mockReset();
-      reviewRunGates.signalEvalCompleted.mockReset();
       mockedCallApi.mockReset();
       mockedCallApi.mockImplementation(async (url) => {
         if (url === '/redteam/status') {

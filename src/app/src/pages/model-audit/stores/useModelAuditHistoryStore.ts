@@ -19,7 +19,6 @@ interface ModelAuditHistoryState {
   historyError: string | null;
   totalCount: number;
 
-  // Virtualized history page size and sorting
   pageSize: number;
   sortModel: SortModel[];
 
@@ -168,7 +167,5 @@ export const useModelAuditHistoryStore = create<ModelAuditHistoryState>()((set, 
     }
   },
 
-  setSortModel: (sortModel) => {
-    set({ sortModel });
-  },
+  setSortModel: (sortModel) => set({ sortModel }),
 }));
