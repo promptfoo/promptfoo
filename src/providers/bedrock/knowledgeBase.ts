@@ -63,6 +63,7 @@ export class AwsBedrockKnowledgeBaseProvider
   implements ApiProvider
 {
   knowledgeBaseClient?: BedrockAgentRuntimeClient;
+  private singleAttemptKnowledgeBaseClient?: BedrockAgentRuntimeClient;
   kbConfig: BedrockKnowledgeBaseOptions;
 
   constructor(
@@ -102,7 +103,13 @@ export class AwsBedrockKnowledgeBaseProvider
   }
 
   async getKnowledgeBaseClient() {
-    if (!this.knowledgeBaseClient) {
+    const singleAttempt =
+      this.kbConfig.operation !== 'retrieve' &&
+      Boolean(this.kbConfig.sessionId || this.kbConfig.streaming);
+    const clientProperty = singleAttempt
+      ? 'singleAttemptKnowledgeBaseClient'
+      : 'knowledgeBaseClient';
+    if (!this[clientProperty]) {
       // Use a custom handler when a proxy is configured. Agent Runtime requires SigV4.
       const handler = hasProxyEnv() ? await createBedrockRequestHandler() : undefined;
 
@@ -111,12 +118,13 @@ export class AwsBedrockKnowledgeBaseProvider
         const credentials = await this.getCredentials(false);
         const client = new BedrockAgentRuntimeClient({
           region: this.getRegion(),
-          maxAttempts: getEnvInt('AWS_BEDROCK_MAX_RETRIES', 10),
+          // The SDK caches retry strategies; session continuations need a separate client.
+          maxAttempts: singleAttempt ? 1 : getEnvInt('AWS_BEDROCK_MAX_RETRIES', 10),
           retryMode: 'adaptive',
           ...(handler ? { requestHandler: handler } : {}),
           ...(credentials ? { credentials } : {}),
         });
-        this.knowledgeBaseClient = client;
+        this[clientProperty] = client;
       } catch (err) {
         throw new Error(
           `The @aws-sdk/client-bedrock-agent-runtime package is required as a peer dependency. Please install it in your project or globally. Error: ${err}`,
@@ -124,7 +132,7 @@ export class AwsBedrockKnowledgeBaseProvider
       }
     }
 
-    return this.knowledgeBaseClient;
+    return this[clientProperty];
   }
 
   private buildGenerationConfiguration(modelArn: string): GenerationConfiguration | undefined {

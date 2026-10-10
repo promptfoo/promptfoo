@@ -159,8 +159,7 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
 
     await provider.getKnowledgeBaseClient();
 
-    // client-bedrock-agent-runtime already defaults to HTTP/1.1,
-    // so no custom handler is needed without a proxy
+    // Agent Runtime needs a custom handler only when a proxy is configured.
     expect(NodeHttpHandlerMock).not.toHaveBeenCalled();
     expect(BedrockAgentRuntimeClient).toHaveBeenCalledWith({
       region: 'us-east-1',

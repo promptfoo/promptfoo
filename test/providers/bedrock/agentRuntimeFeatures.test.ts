@@ -755,3 +755,77 @@ describe.each(['agent', 'knowledge-base'] as const)('%s binary cache inputs', (k
     },
   );
 });
+
+it.each([
+  {
+    operation: 'retrieveAndGenerate',
+    sessionId: 'existing-session',
+    streaming: false,
+    attempts: 1,
+  },
+  { operation: 'retrieveAndGenerate', sessionId: 'existing-session', streaming: true, attempts: 1 },
+  { operation: 'retrieveAndGenerate', sessionId: undefined, streaming: true, attempts: 1 },
+  { operation: 'retrieve', sessionId: undefined, streaming: false, attempts: 2 },
+] as const)(
+  'bounds SDK retries for $operation (session: $sessionId, stream: $streaming)',
+  async ({ operation, sessionId, streaming, attempts }) => {
+    const restoreRetries = mockProcessEnv({ AWS_BEDROCK_MAX_RETRIES: '2' });
+    const provider = new AwsBedrockKnowledgeBaseProvider('us.amazon.nova-2-lite-v1:0', {
+      config: {
+        region: 'us-east-1',
+        knowledgeBaseId: 'KB12345678',
+        accessKeyId: 'LOCAL_FIXTURE',
+        secretAccessKey: 'LOCAL_FIXTURE',
+      },
+    });
+    const initialClient = await provider.getKnowledgeBaseClient();
+    vi.spyOn(initialClient.config.requestHandler, 'handle').mockResolvedValue({
+      response: {
+        statusCode: 200,
+        headers: { 'content-type': 'application/json' },
+        body: Buffer.from('{"output":{"text":"first answer"},"sessionId":"existing-session"}'),
+      },
+    });
+    // Initialize the SDK's cached retry strategy before continuing a returned session.
+    const first = await provider.callApi('start the conversation');
+    expect(first.output).toBe('first answer');
+    Object.assign(provider.kbConfig, {
+      operation,
+      sessionId: sessionId ? first.metadata?.sessionId : undefined,
+      streaming,
+    });
+    const client = await provider.getKnowledgeBaseClient();
+    const requests: Record<string, unknown>[] = [];
+    vi.spyOn(client.config.requestHandler, 'handle').mockImplementation(async (request) => {
+      requests.push(JSON.parse(String(request.body)));
+      if (requests.length === 1) {
+        throw Object.assign(new Error('connection reset after acceptance'), { code: 'ECONNRESET' });
+      }
+      return {
+        response: {
+          statusCode: 200,
+          headers: { 'content-type': 'application/json' },
+          body: Buffer.from('{"retrievalResults":[]}'),
+        },
+      };
+    });
+    try {
+      const result = await provider.callApi('continue the conversation');
+      expect(requests).toHaveLength(attempts);
+      if (attempts === 1) {
+        expect(result.error).toContain('connection reset after acceptance');
+        expect(result.output).toBeUndefined();
+        expect(requests[0].sessionId).toBe(sessionId);
+      } else {
+        expect(result.error).toBeUndefined();
+        expect(result.output).toBe('[]');
+      }
+    } finally {
+      initialClient.destroy();
+      if (client !== initialClient) {
+        client.destroy();
+      }
+      restoreRetries();
+    }
+  },
+);
