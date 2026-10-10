@@ -12,14 +12,17 @@ import type {
   CallApiOptionsParams,
   ProviderResponse,
 } from '../../types/index';
-import type { AzureCompletionOptions, AzureProviderOptions } from './types';
+import type { AzureCompletionOptions, AzureProviderOptions, AzureResponsesOptions } from './types';
 
-export class AzureGenericProvider implements ApiProvider {
+export class AzureGenericProvider<
+  TConfig extends AzureCompletionOptions | AzureResponsesOptions = AzureCompletionOptions,
+> implements ApiProvider
+{
   deploymentName: string;
   apiHost?: string;
   apiBaseUrl?: string;
 
-  config: AzureCompletionOptions;
+  config: Partial<TConfig>;
   env?: EnvOverrides;
 
   authHeaders?: Record<string, string>;
@@ -39,7 +42,7 @@ export class AzureGenericProvider implements ApiProvider {
   /** Refresh the bearer token when it is within this window of expiring. */
   private static readonly TOKEN_REFRESH_WINDOW_MS = 5 * 60 * 1000;
 
-  constructor(deploymentName: string, options: AzureProviderOptions = {}) {
+  constructor(deploymentName: string, options: AzureProviderOptions<TConfig> = {}) {
     const { config, id, env } = options;
     this.env = env;
 
