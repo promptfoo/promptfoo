@@ -455,7 +455,7 @@ const BEDROCK_INVOKE_PRICING_MODEL_PREFIXES = [
 
 /** The documented US and global Grok 4.6/4.7 Runtime inference profiles. */
 export function isBedrockGrokRuntimeProfile(modelId: string): boolean {
-  return /(?:^|inference-profile\/)(?:us|global)\.xai\.grok-4\.[67]$/.test(modelId.toLowerCase());
+  return /(?:^|:inference-profile\/)(?:us|global)\.xai\.grok-4\.[67]$/.test(modelId.toLowerCase());
 }
 
 /**
@@ -483,11 +483,11 @@ export function calculateBedrockCost(
   const normalizedModelId = modelId.toLowerCase();
   // AWS model cards publish separate geo/global cache rates for these Runtime
   // profiles. Converse inputTokens excludes the separately reported cache tokens.
-  const grok47 = /(?:^|inference-profile\/)(us|global)\.xai\.grok-4\.7$/.exec(normalizedModelId);
-  const kimi3 = /(?:^|inference-profile\/)(us|in|global)\.moonshotai\.kimi-k3$/.exec(
+  const grok47 = /(?:^|:inference-profile\/)(us|global)\.xai\.grok-4\.7$/.exec(normalizedModelId);
+  const kimi3 = /(?:^|:inference-profile\/)(us|in|global)\.moonshotai\.kimi-k3$/.exec(
     normalizedModelId,
   );
-  const glm53 = /(?:^|inference-profile\/)(us|global)\.zai\.glm-5\.3$/.exec(normalizedModelId);
+  const glm53 = /(?:^|:inference-profile\/)(us|global)\.zai\.glm-5\.3$/.exec(normalizedModelId);
   if (grok47 || kimi3 || glm53) {
     // Kimi Priority/Flex are supported only on Responses and Chat Completions,
     // not the native Converse/Invoke paths priced here.

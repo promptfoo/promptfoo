@@ -2,10 +2,15 @@ import { describe, expect, it } from 'vitest';
 import { AwsBedrockConverseProvider } from '../../../src/providers/bedrock/converse';
 import {
   AwsBedrockCompletionProvider,
+  assertBedrockModelIsAvailable,
   BEDROCK_MODEL,
   getHandlerForModel,
 } from '../../../src/providers/bedrock/index';
-import { calculateBedrockCost, getBedrockPricing } from '../../../src/providers/bedrock/pricing';
+import {
+  calculateBedrockCost,
+  calculateBedrockInvokeModelCost,
+  getBedrockPricing,
+} from '../../../src/providers/bedrock/pricing';
 import { isRejectedPrefixedGrokId } from '../../../src/providers/bedrock/routing';
 import { awsProviderFactories } from '../../../src/providers/families/aws';
 
@@ -17,6 +22,19 @@ describe('Bedrock Runtime model compatibility', () => {
     async (model) => {
       await expect(factory.create(`bedrock:converse:${model}`, {}, {} as never)).rejects.toThrow(
         `bedrock:us.${model}`,
+      );
+    },
+  );
+
+  it.each(['zai.glm-5.3', 'moonshotai.kimi-k3'])(
+    'keeps application profile resources opaque for %s',
+    (model) => {
+      const prefix = 'arn:aws:bedrock:us-east-1:123456789012:';
+      expect(() =>
+        assertBedrockModelIsAvailable(`${prefix}application-inference-profile/${model}`),
+      ).not.toThrow();
+      expect(() => assertBedrockModelIsAvailable(`${prefix}inference-profile/${model}`)).toThrow(
+        'requires a cross-region inference profile',
       );
     },
   );
@@ -176,6 +194,27 @@ describe('Bedrock Runtime pricing', () => {
     expect(
       calculateBedrockCost(model, 800, 500, 200, 0, 'us-east-1', { type: 'reserved' }),
     ).toBeUndefined();
+  });
+
+  it.each([
+    'us.xai.grok-4.6',
+    'global.xai.grok-4.6',
+    'us.xai.grok-4.7',
+    'global.xai.grok-4.7',
+    'us.zai.glm-5.3',
+    'global.zai.glm-5.3',
+    'us.moonshotai.kimi-k3',
+    'global.moonshotai.kimi-k3',
+    'a1b2c3d4e5',
+  ])('does not infer catalog pricing from application profile resource %s', async (resource) => {
+    const arn = `arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/${resource}`;
+    expect(calculateBedrockCost(arn, 800, 500, 200, 0, 'us-east-1')).toBeUndefined();
+    expect(calculateBedrockInvokeModelCost(arn, 800, 500, 200)).toBeUndefined();
+    const config = { inferenceModelType: 'xai' as const, region: 'us-east-1' };
+    expect(getHandlerForModel(arn, config)).toBe(BEDROCK_MODEL.OPENAI_COMPAT);
+    const provider = await factory.create(`bedrock:converse:${arn}`, { config }, {} as never);
+    expect(provider).toBeInstanceOf(AwsBedrockConverseProvider);
+    expect(provider.id()).toBe(`bedrock:converse:${arn}`);
   });
 
   it('does not reuse GLM 5 pricing for a bare GLM 5.3 ID', () => {
