@@ -220,6 +220,12 @@ session-ending requests, tracing, and return-control results bypass the response
 outputs omit resumable session/memory IDs; use `--no-cache` to start a conversation
 you intend to continue. Responses that request return control are not cached.
 
+With `PROMPTFOO_STRIP_RESPONSE_OUTPUT=true`, `citations`, `returnControl`,
+`files`, and `retrievalResults` are reserved output metadata keys and are
+removed from exports and shares even if a hook changes their values. Use a separate
+metadata key for hook annotations. Matching metadata explicitly supplied by a test
+case is preserved.
+
 All agent stream exception events become provider errors. With tracing enabled,
 a returned guardrail trace with action `INTERVENED` also sets
 `response.guardrails.flagged`.
