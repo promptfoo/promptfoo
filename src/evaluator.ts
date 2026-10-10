@@ -14,6 +14,7 @@ import {
   runAssertions,
   runCompareAssertion,
 } from './assertions/index';
+import { validateAssertions } from './assertions/validateAssertions';
 import { extractAndStoreBinaryData } from './blobs/extractor';
 import { getCache, isCacheEnabled, withCacheEnabled, withCacheNamespace } from './cache';
 import cliState from './cliState';
@@ -2416,6 +2417,8 @@ async function runBeforeAllExtensions(testSuite: TestSuite): Promise<TestSuite> 
   }
 
   const { suite } = await runExtensionHook(testSuite.extensions, 'beforeAll', { suite: testSuite });
+  // Hooks can replace assertions after config validation; check the final suite before execution.
+  validateAssertions(suite.tests ?? [], getDefaultTest(suite), suite.scenarios);
   if (seededMap) {
     // Hooks may mutate legacy map arrays. Only changed entries override instance filters;
     // untouched seeds must not merge duplicate providers or exclude newly added prompts.
@@ -4390,10 +4393,14 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       testSuite: TestSuite;
     },
   ) {
+    const hasExtensions = Boolean(testSuite.extensions?.length);
     const beforeEachOut = await runExtensionHook(testSuite.extensions, 'beforeEach', {
       test: evalStep.test,
     });
     evalStep.test = beforeEachOut.test;
+    if (hasExtensions) {
+      validateAssertions([evalStep.test]);
+    }
 
     const rows = await runEvalInternal(
       {
