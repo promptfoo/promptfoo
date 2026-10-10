@@ -1,6 +1,7 @@
 import logger from '../../logger';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { getAttackProviderFullId, isAttackProvider } from '../shared/attackProviders';
+import { appendMetricSuffix } from './assertions';
 import { withPersistableGenerationProvider } from './types';
 import { pluginMatchesStrategyTargets } from './util';
 
@@ -121,10 +122,7 @@ export async function addLayerTestCases(
               ...(perTurnLayers.length > 0 && { _perTurnLayers: perTurnLayers }),
             },
           },
-          assert: testCase.assert?.map((assertion) => ({
-            ...assertion,
-            metric: assertion.metric ? `${assertion.metric}/${metricSuffix}` : assertion.metric,
-          })),
+          assert: appendMetricSuffix(testCase, metricSuffix),
           metadata: {
             ...testCase.metadata,
             strategyId,

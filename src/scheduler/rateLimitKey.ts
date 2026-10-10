@@ -35,16 +35,12 @@ export function getRateLimitKey(provider: ApiProvider): string {
 
   if (configParts) {
     // Use 12 hex chars (48 bits) for low collision probability
-    return `${providerId}[${hashString(configParts)}]`;
+    /**
+     * Hash a string using SHA-256.
+     * Returns first 12 chars of hex digest (48 bits).
+     */
+    return `${providerId}[${createHash('sha256').update(configParts).digest('hex').slice(0, 12)}]`;
   }
 
   return providerId;
-}
-
-/**
- * Hash a string using SHA-256.
- * Returns first 12 chars of hex digest (48 bits).
- */
-function hashString(value: string): string {
-  return createHash('sha256').update(value).digest('hex').slice(0, 12);
 }
