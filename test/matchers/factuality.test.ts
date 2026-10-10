@@ -258,6 +258,24 @@ describe('matchesFactuality', () => {
     });
   });
 
+  it('should bound an oversized category embedded in an invalid-category reason', async () => {
+    // A judge can echo prompt/reference data in `category`; only a preview is
+    // retained so the promoted row error stays bounded.
+    const longCategory = `Z${'x'.repeat(599)}`;
+    const mockCallApi = vi.fn().mockResolvedValue({
+      output: JSON.stringify({ category: longCategory, reason: 'Invalid category' }),
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
+
+    const result = await matchesFactuality('Input text', 'Expected output', 'Sample output', {});
+
+    expect(result).toMatchObject({ pass: false, score: 0, metadata: { graderError: true } });
+    expect(result.reason.startsWith('Invalid category value:')).toBe(true);
+    expect(result.reason.endsWith('...')).toBe(true);
+    expect(result.reason).not.toContain(longCategory.toUpperCase());
+  });
+
   it('should tag an uninterpretable grader response as a grader failure', async () => {
     // Neither the JSON format nor the legacy "(A) ..." pattern: the grader
     // answered in prose. That is a grader failure, and inverse-aware callers

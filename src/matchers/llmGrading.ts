@@ -94,7 +94,7 @@ function parseFactualityJsonResponse(
 
     const option = jsonData.category.trim().toUpperCase();
     if (!/^[A-E]$/.test(option)) {
-      throw new Error(`Invalid category value: ${option}`);
+      throw new Error(`Invalid category value: ${previewMalformedGraderOutput(option)}`);
     }
 
     return {

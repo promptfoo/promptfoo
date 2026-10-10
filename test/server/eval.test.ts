@@ -3,6 +3,7 @@ import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import EvalResult from '../../src/models/evalResult';
 import { createApp } from '../../src/server/server';
+import { ResultFailureReason } from '../../src/types/index';
 import { STRIPPED_TABLE_CELL_PROMPT } from '../../src/util/eval/evalTableUtils';
 import invariant from '../../src/util/invariant';
 import EvalFactory from '../factories/evalFactory';
@@ -217,6 +218,41 @@ describe('eval routes', () => {
       expect(resultSaveSpy.mock.invocationCallOrder[0]).toBeLessThan(
         evalSaveSpy.mock.invocationCallOrder[0],
       );
+    });
+
+    it('moves manually approved grader-error rows out of the error bucket', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+      const results = await eval_.getResults();
+      const result = results[1];
+      invariant(result.id, 'Result ID is required');
+      expect(result.success).toBe(false);
+
+      // Simulate a grader-error row as produced by the ERROR classification.
+      result.failureReason = ResultFailureReason.ERROR;
+      await result.save();
+      const promptMetrics = eval_.prompts[result.promptIdx].metrics;
+      invariant(promptMetrics, 'Prompt metrics are required');
+      promptMetrics.testFailCount -= 1;
+      promptMetrics.testErrorCount += 1;
+      await eval_.save();
+
+      const res = await api
+        .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+        .send(createManualRatingPayload(result, true));
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+
+      const updatedResult = await EvalResult.findById(result.id);
+      expect(updatedResult?.success).toBe(true);
+      expect(updatedResult?.failureReason).toBe(ResultFailureReason.NONE);
+
+      const updatedEval = await Eval.findById(eval_.id);
+      const updatedMetrics = updatedEval?.prompts[result.promptIdx].metrics;
+      expect(updatedMetrics?.testPassCount).toBe(promptMetrics.testPassCount + 1);
+      expect(updatedMetrics?.testErrorCount).toBe(promptMetrics.testErrorCount - 1);
+      expect(updatedMetrics?.testFailCount).toBe(promptMetrics.testFailCount);
     });
 
     it('Passing test and the user marked it as passing (no change)', async () => {
