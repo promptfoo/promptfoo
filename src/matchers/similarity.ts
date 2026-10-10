@@ -176,12 +176,18 @@ async function calculateProviderSimilarity(
     return fail('Embedding not found', tokensUsed);
   }
 
-  return calculateSimilarityScore(
+  const similarity = calculateSimilarityScore(
     expectedEmbedding.embedding,
     outputEmbedding.embedding,
     metric,
     tokensUsed,
   );
+  // Very large embedding values can overflow to Infinity or NaN, which must not reach
+  // the clamp and turn into a passing score.
+  if (typeof similarity === 'number' && !Number.isFinite(similarity)) {
+    return fail(`Invalid similarity score: ${similarity}`, tokensUsed);
+  }
+  return similarity;
 }
 
 export async function matchesSimilarity(

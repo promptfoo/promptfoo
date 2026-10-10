@@ -400,6 +400,7 @@ describe('matchesSimilarity', () => {
           small: [3, 4],
           large: [6, 8],
           opposite: [-3, -4],
+          huge: [1e200, 1e200],
         };
         const vector = vectors[text];
         return vector
@@ -424,6 +425,16 @@ describe('matchesSimilarity', () => {
       await expect(
         matchesSimilarity('small', 'opposite', 0.75, true, undefined, 'cosine'),
       ).resolves.toMatchObject({ pass: true, score: 1 });
+    });
+
+    it('fails instead of passing when the dot product overflows', async () => {
+      await expect(
+        matchesSimilarity('huge', 'huge', 0.75, false, undefined, 'dot_product'),
+      ).resolves.toMatchObject({
+        pass: false,
+        score: 0,
+        reason: 'Invalid similarity score: Infinity',
+      });
     });
   });
 
