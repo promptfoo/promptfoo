@@ -1,5 +1,6 @@
 import { act, StrictMode } from 'react';
 
+import useApiConfig from '@app/stores/apiConfig';
 import { restoreTestTimers, type TestTimers, useTestTimers } from '@app/tests/timers';
 import { renderWithProviders } from '@app/utils/testutils';
 import { FILE_METADATA_KEY } from '@promptfoo/providers/constants';
@@ -942,6 +943,10 @@ describe('ResultsTable Metrics Display', () => {
       ['storageRef:audio/test.mp3', '/api/media/audio/test.mp3'],
       ['promptfoo://blob/abc', '/api/blobs/abc'],
     ])('renders encoded audio input %s through the real player', async (value, expected) => {
+      vi.spyOn(useApiConfig, 'getState').mockReturnValue({
+        ...useApiConfig.getState(),
+        apiBaseUrl: '',
+      });
       vi.mocked(useTableStore).mockImplementation(() =>
         createTableStore({
           config: createRedteamConfig(),
