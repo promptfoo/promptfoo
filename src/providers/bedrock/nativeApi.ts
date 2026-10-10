@@ -1,9 +1,13 @@
+import { STATUS_CODES } from 'http';
+
 import { throwIfAborted } from '../shared';
-import { AwsBedrockGenericProvider } from './base';
+import { AwsBedrockGenericProvider, type BedrockOptions } from './base';
 import { isValidBedrockRetrievalFilter } from './retrievalFilter';
 import { createBedrockRequestHandler } from './util';
 import type { BedrockAgentRuntime } from '@aws-sdk/client-bedrock-agent-runtime';
+import type { ResponseMetadata } from '@smithy/types';
 
+import type { EnvOverrides } from '../../types/env';
 import type {
   CallApiContextParams,
   CallApiOptionsParams,
@@ -30,8 +34,13 @@ const OPERATIONS = {
   GenerateQuery: { service: 'agent', method: 'generateQuery' },
   AgenticRetrieveStream: { service: 'agent', method: 'agenticRetrieveStream', stream: 'stream' },
   OptimizePrompt: { service: 'agent', method: 'optimizePrompt', stream: 'optimizedPrompt' },
-  InvokeInlineAgent: { service: 'agent', method: 'invokeInlineAgent', stream: 'completion' },
-  StartFlowExecution: { service: 'agent', method: 'startFlowExecution' },
+  InvokeInlineAgent: {
+    service: 'agent',
+    method: 'invokeInlineAgent',
+    stream: 'completion',
+    maxAttempts: 1,
+  },
+  StartFlowExecution: { service: 'agent', method: 'startFlowExecution', maxAttempts: 1 },
   GetFlowExecution: { service: 'agent', method: 'getFlowExecution' },
   ListFlowExecutionEvents: { service: 'agent', method: 'listFlowExecutionEvents' },
   RetrieveAndGenerate: { service: 'agent', method: 'retrieveAndGenerate' },
@@ -40,12 +49,16 @@ const OPERATIONS = {
     method: 'retrieveAndGenerateStream',
     stream: 'stream',
   },
-  InvokeAgent: { service: 'agent', method: 'invokeAgent', stream: 'completion' },
+  InvokeAgent: { service: 'agent', method: 'invokeAgent', stream: 'completion', maxAttempts: 1 },
   Rerank: { service: 'agent', method: 'rerank' },
-  InvokeFlow: { service: 'agent', method: 'invokeFlow', stream: 'responseStream' },
+  InvokeFlow: { service: 'agent', method: 'invokeFlow', stream: 'responseStream', maxAttempts: 1 },
 } as const;
 
 type NativeOperation = keyof typeof OPERATIONS;
+
+interface NativeApiConfig extends BedrockOptions {
+  maxRetries?: number | string;
+}
 
 /** JSON cannot represent SDK blobs. Decode only an explicit, single-key blob wrapper. */
 function decodeBlobs(value: any): any {
@@ -85,12 +98,13 @@ function encodeBlobs(value: any): any {
 
 /** Native request/response access for model features that do not fit the text/embedding adapters. */
 export class AwsBedrockNativeApiProvider extends AwsBedrockGenericProvider {
+  declare config: NativeApiConfig;
   private readonly operation: NativeOperation;
   private agentRuntime?: Promise<BedrockAgentRuntime>;
 
   constructor(
     operation: string,
-    options: ConstructorParameters<typeof AwsBedrockGenericProvider>[1] = {},
+    options: { config?: NativeApiConfig; id?: string; env?: EnvOverrides } = {},
   ) {
     if (!Object.prototype.hasOwnProperty.call(OPERATIONS, operation)) {
       throw new Error(
@@ -103,6 +117,24 @@ export class AwsBedrockNativeApiProvider extends AwsBedrockGenericProvider {
 
   id(): string {
     return `bedrock:api:${this.operation}`;
+  }
+
+  get handlesOwnRetries(): boolean {
+    // The SDK owns retries; never replay a complete operation or a partially consumed stream.
+    return true;
+  }
+
+  protected getMaxAttempts(): number {
+    const operation = OPERATIONS[this.operation];
+    if ('maxAttempts' in operation) {
+      // Agent and Flow invocations have no request idempotency token.
+      return operation.maxAttempts;
+    }
+    const raw = this.config.maxRetries;
+    const retries = typeof raw === 'string' && /^\d+$/.test(raw.trim()) ? Number(raw.trim()) : raw;
+    return typeof retries === 'number' && Number.isSafeInteger(retries) && retries >= 0
+      ? retries + 1
+      : super.getMaxAttempts();
   }
 
   protected getApiKey(): string | undefined {
@@ -143,6 +175,7 @@ export class AwsBedrockNativeApiProvider extends AwsBedrockGenericProvider {
     _context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
+    let responseMetadata: ResponseMetadata | undefined;
     try {
       throwIfAborted(options?.abortSignal);
       const input = JSON.parse(prompt);
@@ -206,6 +239,7 @@ export class AwsBedrockNativeApiProvider extends AwsBedrockGenericProvider {
       }
       const response = await invoke.call(client, request, { abortSignal: options?.abortSignal });
       const { $metadata, ...native } = response;
+      responseMetadata = $metadata;
       if ('stream' in operation) {
         const stream = native[operation.stream];
         if (!stream?.[Symbol.asyncIterator]) {
@@ -216,7 +250,8 @@ export class AwsBedrockNativeApiProvider extends AwsBedrockGenericProvider {
           throwIfAborted(options?.abortSignal);
           const failure = Object.entries(event).find(([key]) => /exception$/i.test(key));
           if (failure) {
-            throw new Error(`${failure[0]}: ${JSON.stringify(failure[1])}`);
+            const prefix = failure[0].toLowerCase() === 'throttlingexception' ? 'Rate limit: ' : '';
+            throw new Error(`${prefix}${failure[0]}: ${JSON.stringify(failure[1])}`);
           }
           // InvokeModel's payload chunks contain model-native JSON. Preserve each event separately.
           if (this.operation === 'InvokeModelWithResponseStream' && event.chunk?.bytes) {
@@ -249,7 +284,34 @@ export class AwsBedrockNativeApiProvider extends AwsBedrockGenericProvider {
         metadata: { operation: this.operation, aws: $metadata },
       };
     } catch (error) {
-      return { error: `Bedrock ${this.operation} error: ${String(error)}` };
+      const errorMetadata =
+        error && typeof error === 'object' && '$metadata' in error
+          ? (error.$metadata as ResponseMetadata | undefined)
+          : undefined;
+      const aws = errorMetadata ?? responseMetadata;
+      const prefix =
+        error instanceof Error && error.name.toLowerCase() === 'throttlingexception'
+          ? 'Rate limit: '
+          : '';
+      return {
+        error: `Bedrock ${this.operation} error: ${prefix}${String(error)}`,
+        ...(aws
+          ? {
+              metadata: {
+                operation: this.operation,
+                aws,
+                ...(typeof aws.httpStatusCode === 'number'
+                  ? {
+                      http: {
+                        status: aws.httpStatusCode,
+                        statusText: STATUS_CODES[aws.httpStatusCode] ?? '',
+                      },
+                    }
+                  : {}),
+              },
+            }
+          : {}),
+      };
     }
   }
 }
