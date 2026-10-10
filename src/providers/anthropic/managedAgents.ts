@@ -189,9 +189,7 @@ class SessionState {
     if (!this.completed) {
       throw new Error('Claude Managed Agents event stream ended before the session completed');
     }
-    if (this.output === undefined) {
-      throw new Error('Claude Managed Agents completed without a text response');
-    }
+    // A failed run or a refused start explains a missing answer, so it is reported first.
     // The server writes this error text itself; it carries no content from a run.
     const failedRun = [...this.runs.values()].find((run) => run.result?.type !== 'completed');
     if (failedRun) {
@@ -205,6 +203,9 @@ class SessionState {
       throw new Error(
         `Claude Managed Agents could not start a workflow (${refused.type}: ${refused.message})`,
       );
+    }
+    if (this.output === undefined) {
+      throw new Error('Claude Managed Agents completed without a text response');
     }
     return this.output;
   }
@@ -470,6 +471,17 @@ function describeError(error: unknown, secrets: Iterable<string>): string {
 }
 
 /** What a call reports when it was cancelled or ran out of time. */
+/** The response headers the scheduler paces a retry by. No other header is kept with results. */
+function rateLimitHeaders(headers: Headers | undefined): Record<string, string> | undefined {
+  const kept: Record<string, string> = {};
+  headers?.forEach((value, name) => {
+    if (name.startsWith('retry-after') || name.includes('ratelimit')) {
+      kept[name] = value;
+    }
+  });
+  return Object.keys(kept).length > 0 ? kept : undefined;
+}
+
 function abortReason(cancelled: boolean, timeoutMs: number, state: SessionState): string {
   if (cancelled) {
     return 'Claude Managed Agents invocation aborted';
@@ -773,7 +785,8 @@ export class AnthropicManagedAgentsProvider extends AnthropicGenericProvider {
         metadata.rateLimitRetryable = false;
       }
       if (error instanceof Anthropic.APIError && error.status !== undefined) {
-        metadata.http = { status: error.status };
+        const headers = rateLimitHeaders(error.headers);
+        metadata.http = { status: error.status, ...(headers && { headers }) };
       }
       response.error = signal.aborted
         ? abortReason(options?.abortSignal?.aborted === true, timeoutMs, state)

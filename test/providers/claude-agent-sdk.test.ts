@@ -2200,6 +2200,81 @@ describe('ClaudeCodeSDKProvider', () => {
           },
         );
 
+        // Completions queued together share one model call. Each still gets a result,
+        // preceded by its own init; all but the last are empty with `num_turns: 0`.
+        const batchPlaceholder: Partial<SDKResultMessage> = {
+          ...turnResult('', continuation),
+          num_turns: 0,
+          terminal_reason: undefined,
+        };
+        const otherTaskCompleted: Partial<SDKMessage> = {
+          type: 'system',
+          subtype: 'task_notification',
+          task_id: 'shell-1',
+          status: 'completed',
+          session_id: 'main-session',
+          summary: 'Background command finished',
+          output_file: '/tmp/shell.output',
+        };
+
+        it('grades the answer shared with another background task that finished before the same turn', async () => {
+          const result = await run([
+            promptEcho,
+            ...launch(1),
+            completed(1),
+            otherTaskCompleted,
+            turnResult('Workflow launched'),
+            turnStart,
+            batchPlaceholder,
+            turnStart,
+            turnResult('VERIFIED', continuation),
+          ]);
+          expect(result.error).toBeUndefined();
+          expect(result.output).toBe('VERIFIED');
+        });
+
+        it('reports a batch that was cut off after its empty results', async () => {
+          const result = await run([
+            promptEcho,
+            ...launch(1),
+            completed(1),
+            otherTaskCompleted,
+            turnResult('Workflow launched'),
+            turnStart,
+            batchPlaceholder,
+          ]);
+          expect(result.error).toContain('stream ended before the main agent answered');
+          expect(result.output).toBeUndefined();
+        });
+
+        it.each([
+          [true, undefined],
+          [false, 'stream ended before the main agent answered'],
+        ])(
+          'does not take the answer to a batch that began before the workflow finished (continued: %s)',
+          async (continued, error) => {
+            const result = await run([
+              promptEcho,
+              ...launch(1),
+              turnResult('Workflow launched'),
+              // Two other background tasks wake the session together; the workflow
+              // finishes while their shared answer is still being written.
+              turnStart,
+              batchPlaceholder,
+              completed(1),
+              turnStart,
+              turnResult('Both commands finished.', continuation),
+              ...(continued ? [turnStart, turnResult('VERIFIED', continuation)] : []),
+            ]);
+            expect(result.output).toBe(continued ? 'VERIFIED' : undefined);
+            if (error) {
+              expect(result.error).toContain(error);
+            } else {
+              expect(result.error).toBeUndefined();
+            }
+          },
+        );
+
         it.each(['before', 'after'])(
           'grades a continuation whose completion is also echoed %s the turn starts',
           async (position) => {

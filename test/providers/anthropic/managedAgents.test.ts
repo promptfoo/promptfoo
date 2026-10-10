@@ -2,6 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import logger from '../../../src/logger';
 import { AnthropicManagedAgentsProvider } from '../../../src/providers/anthropic/managedAgents';
+import { createProviderRateLimitOptions } from '../../../src/scheduler/providerWrapper';
 
 const usage = {
   input_tokens: 10,
@@ -74,12 +75,17 @@ const feed = () => {
   };
 };
 const config = { apiKey: 'test-key', agent_id: 'agent-existing', environment_id: 'env-existing' };
-const apiError = (status: number, message: string, type = 'invalid_request_error') =>
+const apiError = (
+  status: number,
+  message: string,
+  type = 'invalid_request_error',
+  headers: Record<string, string> = {},
+) =>
   new Anthropic.APIError(
     status,
     { type: 'error', error: { type, message } },
     undefined,
-    new Headers(),
+    new Headers(headers),
   );
 // The refusal the API returns when archival races an interrupt or the idle status write.
 const stillRunning = () =>
@@ -969,6 +975,30 @@ describe('Claude Managed Agents', () => {
       const result = await f.provider.callApi('test');
       expect(result.metadata).toMatchObject({ http: { status: 429 }, rateLimitRetryable: false });
     });
+
+    it('gives the scheduler the wait the server asked for, and keeps no other response header', async () => {
+      const f = setup();
+      f.create.mockRejectedValue(
+        apiError(429, 'This request would exceed your rate limit.', 'rate_limit_error', {
+          'retry-after': '12',
+          'anthropic-ratelimit-requests-remaining': '0',
+          'anthropic-ratelimit-requests-reset': '2026-10-10T20:41:00Z',
+          'anthropic-organization-id': 'org-private',
+          'request-id': 'req_123',
+          'set-cookie': 'session=private',
+        }),
+      );
+      const result = await f.provider.callApi('test');
+      expect(result.metadata?.http).toEqual({
+        status: 429,
+        headers: {
+          'retry-after': '12',
+          'anthropic-ratelimit-requests-remaining': '0',
+          'anthropic-ratelimit-requests-reset': '2026-10-10T20:41:00Z',
+        },
+      });
+      expect(createProviderRateLimitOptions().getRetryAfter?.(result, undefined)).toBe(12_000);
+    });
   });
 
   it.each([
@@ -1271,6 +1301,43 @@ describe('Claude Managed Agents', () => {
       'workflow run ended with error (timeout_error: The run exceeded its lifetime.)',
     );
   });
+
+  it.each([
+    [
+      'a failed workflow',
+      [
+        { type: 'workflow_run.created', workflow_run_id: 'run' },
+        {
+          type: 'workflow_run.status_ended',
+          workflow_run_id: 'run',
+          result: {
+            type: 'error',
+            error: { type: 'timeout_error', message: 'The run exceeded its lifetime.' },
+          },
+        },
+      ],
+      'workflow run ended with error (timeout_error: The run exceeded its lifetime.)',
+    ],
+    [
+      'a refused workflow start',
+      [
+        {
+          type: 'workflow_run.error',
+          workflow_run_id: null,
+          error: { type: 'max_workflow_runs_error', message: 'Too many open workflow runs.' },
+        },
+      ],
+      'could not start a workflow (max_workflow_runs_error: Too many open workflow runs.)',
+    ],
+  ])(
+    'names %s when the agent then ends its turn without a reply',
+    async (_case, events, reason) => {
+      const f = setup({}, [...events, idle()]);
+      const result = await f.provider.callApi('test');
+      expect(result.error).toContain(reason);
+      expect(result.output).toBeUndefined();
+    },
+  );
 
   it.each(['requires_action', 'budget_reached', 'retries_exhausted', 'unknown'])(
     'does not treat %s as success',

@@ -2202,7 +2202,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
           // Which turn each workflow completion reached, per session that launched one.
           // A turn answers the completions it was given, and nothing else:
           //   queued: reported, and not yet given to any turn
-          //   waking: given to a turn as it started; the SDK emits one result for each
+          //   waking: given to a turn as it started, and answered by that turn's result
           //   read:   handed to the running turn part-way through, with no result of its own
           const workflowTurns = new Map<
             string,
@@ -2342,24 +2342,36 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
               // before this result starts the turn here.
               // `producer` is emitted by CLI 2.1.284, ahead of the SDK origin type.
               const turn = startWorkflowTurn(msg.session_id);
-              const isWorkflowContinuation =
-                Boolean(turn && (turn.waking > 0 || turn.read > 0)) &&
+              const isSessionTaskResult =
                 msg.origin?.kind === 'task-notification' &&
                 !msg.origin.subkind &&
                 'producer' in msg.origin &&
                 msg.origin.producer === 'session-task';
-              if (!isBackgroundTaskResult || isWorkflowContinuation) {
-                lastMainResultMsg = msg;
-                workflowAnswerOwed = false;
-                if (turn) {
-                  turn.read = 0;
-                  // Completions that wake a turn together each get a result. Earlier
-                  // results can be empty; only the last carries the shared answer.
-                  turn.waking = isWorkflowContinuation ? Math.max(0, turn.waking - 1) : 0;
+              // Completions that wake a turn together share one model call, whatever
+              // kind of background task each came from. Every one still gets a result:
+              // all but the last are empty with `num_turns: 0`, and are emitted before
+              // the call. Such a result answers nothing and does not end the turn.
+              const isBatchPlaceholder =
+                isSessionTaskResult &&
+                msg.subtype === 'success' &&
+                msg.num_turns === 0 &&
+                !msg.result &&
+                msg.structured_output === undefined;
+              if (!isBatchPlaceholder) {
+                const isWorkflowContinuation =
+                  isSessionTaskResult && Boolean(turn && (turn.waking > 0 || turn.read > 0));
+                if (!isBackgroundTaskResult || isWorkflowContinuation) {
+                  lastMainResultMsg = msg;
+                  workflowAnswerOwed = false;
+                  if (turn) {
+                    // One answer covers every completion the turn was given.
+                    turn.read = 0;
+                    turn.waking = 0;
+                  }
                 }
-              }
-              if (turn) {
-                turn.open = false;
+                if (turn) {
+                  turn.open = false;
+                }
               }
             }
           }
