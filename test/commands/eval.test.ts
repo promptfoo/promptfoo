@@ -1693,6 +1693,7 @@ describe('evalCommand', () => {
         defaultTest: null,
         tests: [],
         scenarios: null,
+        redteam: null,
         execution: { repeat: 1, filterRange: null },
       },
       80,
@@ -1716,6 +1717,67 @@ describe('evalCommand', () => {
       writeLockSpy.mockRestore();
       processOnSpy.mockRestore();
       removeListenerSpy.mockRestore();
+      restoreEnv();
+      process.exitCode = previousExitCode;
+    }
+  });
+
+  it.each([
+    ['lock', { lock: 'eval.lock.json' }],
+    ['verify', { verify: 'eval.lock.json' }],
+  ])('should reject progress callbacks during %s workflows', async (_name, lockOptions) => {
+    const previousExitCode = process.exitCode;
+    process.exitCode = undefined;
+    const restoreEnv = mockProcessEnv({ PROMPTFOO_PASS_RATE_THRESHOLD: '80' });
+    const writeLockSpy = vi.spyOn(evalLock, 'writeEvalLock');
+    const verifyLockSpy = vi.spyOn(evalLock, 'verifyEvalLock');
+
+    try {
+      await doEval(lockOptions as Parameters<typeof doEval>[0], defaultConfig, defaultConfigPath, {
+        eventSource: 'cli',
+        progressCallback: vi.fn(),
+      });
+
+      expect(process.exitCode).toBe(1);
+      expect(evaluate).not.toHaveBeenCalled();
+      expect(writeLockSpy).not.toHaveBeenCalled();
+      expect(verifyLockSpy).not.toHaveBeenCalled();
+    } finally {
+      writeLockSpy.mockRestore();
+      verifyLockSpy.mockRestore();
+      restoreEnv();
+      process.exitCode = previousExitCode;
+    }
+  });
+
+  it.each([
+    ['lock', { lock: 'eval.lock.json' }],
+    ['verify', { verify: 'eval.lock.json' }],
+  ])('should reject output paths that collide with the %s artifact', async (_name, lockOptions) => {
+    const previousExitCode = process.exitCode;
+    process.exitCode = undefined;
+    const restoreEnv = mockProcessEnv({ PROMPTFOO_PASS_RATE_THRESHOLD: '80' });
+    const config = { outputPath: 'eval.lock.json' } as UnifiedConfig;
+    vi.mocked(resolveConfigs).mockResolvedValue({
+      config,
+      testSuite: { prompts: [], providers: [] },
+      basePath: path.resolve('/'),
+    });
+    const writeLockSpy = vi.spyOn(evalLock, 'writeEvalLock');
+    const verifyLockSpy = vi.spyOn(evalLock, 'verifyEvalLock');
+
+    try {
+      await doEval(lockOptions as Parameters<typeof doEval>[0], config, defaultConfigPath, {
+        eventSource: 'cli',
+      });
+
+      expect(process.exitCode).toBe(1);
+      expect(evaluate).not.toHaveBeenCalled();
+      expect(writeLockSpy).not.toHaveBeenCalled();
+      expect(verifyLockSpy).not.toHaveBeenCalled();
+    } finally {
+      writeLockSpy.mockRestore();
+      verifyLockSpy.mockRestore();
       restoreEnv();
       process.exitCode = previousExitCode;
     }

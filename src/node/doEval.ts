@@ -878,6 +878,28 @@ async function doEvalWithEnv(
     }
 
     if (evalLockPath || verifyLockPath) {
+      if (evaluateOptions.progressCallback) {
+        return failEvalRun(
+          'Evaluation locks do not support progress callbacks because callbacks can mutate live result metrics',
+          isCliInvocation,
+        );
+      }
+
+      const activeLockPath = path.resolve(process.cwd(), evalLockPath ?? verifyLockPath!);
+      const configuredOutputPaths = (
+        Array.isArray(config.outputPath) ? config.outputPath : [config.outputPath]
+      ).filter((outputPath): outputPath is string => typeof outputPath === 'string');
+      if (
+        configuredOutputPaths.some(
+          (outputPath) => path.resolve(process.cwd(), outputPath) === activeLockPath,
+        )
+      ) {
+        return failEvalRun(
+          `Evaluation lock path ${activeLockPath} cannot also be used as an eval output path`,
+          isCliInvocation,
+        );
+      }
+
       if (evalLockPath) {
         const threshold = getEnvFloat('PROMPTFOO_PASS_RATE_THRESHOLD');
         if (threshold === undefined) {

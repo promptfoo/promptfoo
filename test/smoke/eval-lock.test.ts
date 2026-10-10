@@ -59,6 +59,14 @@ describe('eval lock CLI', () => {
   }
 
   it('locks the resolved bar, verifies it, and rejects a doctored config before running', () => {
+    const collidingLockPath = path.join(tempDir, 'colliding.lock.json');
+    const colliding = runEval(['--output', collidingLockPath, '--lock', collidingLockPath]);
+    expect(colliding.status, colliding.stderr || colliding.stdout).toBe(1);
+    expect(colliding.stdout + colliding.stderr).toContain(
+      'cannot also be used as an eval output path',
+    );
+    expect(fs.existsSync(collidingLockPath)).toBe(false);
+
     const unseededLockPath = path.join(tempDir, 'unseeded.lock.json');
     const unseeded = runEval(['--filter-sample', '2', '--lock', unseededLockPath]);
     expect(unseeded.status, unseeded.stderr || unseeded.stdout).toBe(1);

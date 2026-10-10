@@ -76,6 +76,7 @@ type EvalBarSource = {
   scenarios?: unknown;
   extensions?: unknown;
   providers?: unknown;
+  redteam?: unknown;
 };
 
 export type EvalBar = {
@@ -83,11 +84,33 @@ export type EvalBar = {
   defaultTest: unknown;
   tests: unknown;
   scenarios: unknown;
+  redteam: unknown;
   execution: {
     repeat: number;
     filterRange: string | null;
   };
 };
+
+const EXPLICIT_GRADER_ASSERTION_TYPES = new Set([
+  'agent-rubric',
+  'answer-relevance',
+  'context-faithfulness',
+  'context-recall',
+  'context-relevance',
+  'factuality',
+  'g-eval',
+  'llm-rubric',
+  'model-graded-closedqa',
+  'model-graded-factuality',
+  'moderation',
+  'search-rubric',
+  'select-best',
+  'similar',
+  'similar:cosine',
+  'similar:dot',
+  'similar:euclidean',
+  'trajectory:goal-success',
+]);
 
 function isRuntimeApiProvider(value: unknown): value is {
   id: () => string;
@@ -137,6 +160,16 @@ function snapshotGradingProviderReferences(
     const isAssertion = typeof record.type === 'string';
     return Object.fromEntries(
       Object.entries(record).map(([key, entry]) => {
+        if (key === '__promptfoo' && entry && typeof entry === 'object' && !Array.isArray(entry)) {
+          const { providerBasePath: _providerBasePath, ...portableMetadata } = entry as Record<
+            string,
+            unknown
+          >;
+          return [
+            key,
+            snapshotGradingProviderReferences(portableMetadata, providerMap, ancestors, false),
+          ];
+        }
         const resolved =
           key === 'provider' && (providerOption || isAssertion)
             ? resolveConfiguredProviderReference(entry, providerMap)
@@ -149,6 +182,113 @@ function snapshotGradingProviderReferences(
     );
   } finally {
     ancestors.delete(value);
+  }
+}
+
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+function getTestOption(record: Record<string, unknown> | undefined, key: string): unknown {
+  return asRecord(record?.options)?.[key];
+}
+
+function getDefaultGradingProvider(defaultTest: Record<string, unknown> | undefined): unknown {
+  return getTestOption(defaultTest, 'provider') ?? defaultTest?.provider;
+}
+
+function validateExplicitAssertionGraders(assertions: unknown, inheritedProvider: unknown): void {
+  if (!Array.isArray(assertions)) {
+    return;
+  }
+
+  for (const assertionValue of assertions) {
+    const assertion = asRecord(assertionValue);
+    if (!assertion || typeof assertion.type !== 'string') {
+      continue;
+    }
+    if (assertion.type === 'assert-set') {
+      validateExplicitAssertionGraders(assertion.assert, inheritedProvider);
+      continue;
+    }
+
+    const baseType = assertion.type.startsWith('not-')
+      ? assertion.type.slice('not-'.length)
+      : assertion.type;
+    if (
+      EXPLICIT_GRADER_ASSERTION_TYPES.has(baseType) &&
+      assertion.provider == null &&
+      inheritedProvider == null
+    ) {
+      throw new Error(
+        `Evaluation locks require an explicit grading provider for "${assertion.type}" assertions; set assertion.provider, test options.provider, or a default-test provider`,
+      );
+    }
+  }
+}
+
+function validateTestGraders(
+  test: Record<string, unknown>,
+  defaultTest?: Record<string, unknown>,
+  scenarioConfig?: Record<string, unknown>,
+): void {
+  const inheritedProvider =
+    getTestOption(test, 'provider') ??
+    getTestOption(scenarioConfig, 'provider') ??
+    getDefaultGradingProvider(defaultTest);
+  const disableDefaultAsserts =
+    getTestOption(test, 'disableDefaultAsserts') ??
+    getTestOption(scenarioConfig, 'disableDefaultAsserts') ??
+    getTestOption(defaultTest, 'disableDefaultAsserts');
+
+  if (disableDefaultAsserts !== true) {
+    validateExplicitAssertionGraders(defaultTest?.assert, inheritedProvider);
+  }
+  validateExplicitAssertionGraders(scenarioConfig?.assert, inheritedProvider);
+  validateExplicitAssertionGraders(test.assert, inheritedProvider);
+}
+
+function validateExplicitGraders(testSuite: EvalBarSource): void {
+  const defaultTest = asRecord(testSuite.defaultTest);
+  const tests = Array.isArray(testSuite.tests) ? testSuite.tests : [];
+  const scenarios = Array.isArray(testSuite.scenarios) ? testSuite.scenarios : [];
+  const redteam = asRecord(testSuite.redteam);
+
+  if (redteam && redteam.provider == null && getDefaultGradingProvider(defaultTest) == null) {
+    throw new Error(
+      'Evaluation locks require an explicit redteam grading provider; set redteam.provider or a default-test provider',
+    );
+  }
+
+  if (tests.length > 0) {
+    for (const testValue of tests) {
+      const test = asRecord(testValue);
+      if (test) {
+        validateTestGraders(test, defaultTest);
+      }
+    }
+  } else if (scenarios.length === 0) {
+    validateTestGraders({}, defaultTest);
+  }
+
+  for (const scenarioValue of scenarios) {
+    const scenario = asRecord(scenarioValue);
+    const scenarioConfigs = Array.isArray(scenario?.config) ? scenario.config : [];
+    const scenarioTests = Array.isArray(scenario?.tests) ? scenario.tests : [];
+    for (const configValue of scenarioConfigs) {
+      const scenarioConfig = asRecord(configValue);
+      if (!scenarioConfig) {
+        continue;
+      }
+      for (const testValue of scenarioTests) {
+        const test = asRecord(testValue);
+        if (test) {
+          validateTestGraders(test, defaultTest, scenarioConfig);
+        }
+      }
+    }
   }
 }
 
@@ -321,6 +461,7 @@ export function createEvalBar(
       'Evaluation locks do not support extension hooks because hooks can mutate tests after verification',
     );
   }
+  validateExplicitGraders(testSuite);
 
   const runtimeProviders = Array.isArray(testSuite.providers)
     ? testSuite.providers.filter(isRuntimeApiProvider)
@@ -330,12 +471,15 @@ export function createEvalBar(
   );
   const snapshot = (value: unknown) =>
     snapshotGradingProviderReferences(value, providerMap, new Set());
+  const snapshotProviderContainer = (value: unknown) =>
+    snapshotGradingProviderReferences(value, providerMap, new Set(), true);
 
   return {
     version: 1,
-    defaultTest: snapshot(testSuite.defaultTest ?? null),
+    defaultTest: snapshotProviderContainer(testSuite.defaultTest ?? null),
     tests: snapshot(testSuite.tests ?? []),
     scenarios: snapshot(testSuite.scenarios ?? null),
+    redteam: snapshotProviderContainer(testSuite.redteam ?? null),
     execution: {
       repeat: execution.repeat,
       filterRange: execution.filterRange ?? null,

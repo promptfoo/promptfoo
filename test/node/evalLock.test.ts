@@ -92,6 +92,80 @@ describe('evalLock', () => {
     expect(changed).not.toBe(first);
   });
 
+  it('rejects credential-dependent implicit grading providers', () => {
+    const suite = createSuite();
+    suite.tests![0].assert = [{ type: 'llm-rubric', value: 'Be correct' }];
+
+    expect(() => createEvalBar(suite, { repeat: 1 })).toThrow(
+      'require an explicit grading provider for "llm-rubric"',
+    );
+
+    suite.defaultTest = { options: { provider: 'grader' } };
+    expect(() => createEvalBar(suite, { repeat: 1 })).not.toThrow();
+  });
+
+  it('binds top-level redteam grading settings', () => {
+    const createRedteamSuite = (model: string, expectedOutput: string): TestSuite => {
+      const suite = createSuite();
+      suite.providers = [
+        {
+          id: () => 'grader-id',
+          label: 'redteam-grader',
+          config: { model },
+          callApi: async () => ({ output: 'ok' }),
+        } as ApiProvider,
+      ];
+      suite.redteam = {
+        provider: 'redteam-grader',
+        graderExamples: [{ output: expectedOutput, pass: true }],
+      } as TestSuite['redteam'];
+      return suite;
+    };
+
+    const original = hashEvalBar(
+      createEvalBar(createRedteamSuite('model-a', 'safe'), { repeat: 1 }),
+    );
+    const changedProvider = hashEvalBar(
+      createEvalBar(createRedteamSuite('model-b', 'safe'), { repeat: 1 }),
+    );
+    const changedExamples = hashEvalBar(
+      createEvalBar(createRedteamSuite('model-a', 'different'), { repeat: 1 }),
+    );
+
+    expect(changedProvider).not.toBe(original);
+    expect(changedExamples).not.toBe(original);
+  });
+
+  it('rejects redteam locks without an explicit grading provider', () => {
+    const suite = createSuite();
+    suite.redteam = { graderExamples: [] } as TestSuite['redteam'];
+
+    expect(() => createEvalBar(suite, { repeat: 1 })).toThrow(
+      'require an explicit redteam grading provider',
+    );
+  });
+
+  it('strips checkout-specific provider base paths from the bar', () => {
+    const createImportedSuite = (providerBasePath: string, note = 'stable'): TestSuite => {
+      const suite = createSuite();
+      suite.tests![0].metadata = {
+        note,
+        __promptfoo: { providerBasePath, remote: true },
+      };
+      return suite;
+    };
+
+    const first = createEvalBar(createImportedSuite('/checkout/one/tests'), { repeat: 1 });
+    const relocated = createEvalBar(createImportedSuite('/checkout/two/tests'), { repeat: 1 });
+    const changedMetadata = createEvalBar(createImportedSuite('/checkout/two/tests', 'changed'), {
+      repeat: 1,
+    });
+
+    expect(hashEvalBar(relocated)).toBe(hashEvalBar(first));
+    expect(hashEvalBar(changedMetadata)).not.toBe(hashEvalBar(first));
+    expect(canonicalJson(first)).not.toContain('providerBasePath');
+  });
+
   it('rejects closure-dependent function criteria', () => {
     const suite = createSuite();
     const expected = 'Paris';
