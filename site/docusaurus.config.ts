@@ -21,12 +21,6 @@ const darkCodeTheme = themes.duotoneDark;
  */
 const BUILD_TIMESTAMP = new Date().toISOString();
 
-function webpackProgressCompatibilityPlugin(): Plugin {
-  return {
-    name: 'webpack-progress-compatibility-plugin',
-  };
-}
-
 /**
  * Bakes `BUILD_TIMESTAMP` into both the server and the client bundle as the same string
  * literal, so modules that need a stable "now" (event statuses) cannot produce a different
@@ -463,7 +457,6 @@ const config: Config = {
 
   plugins: [
     browserInventoryPlugin,
-    webpackProgressCompatibilityPlugin,
     buildTimestampPlugin,
     require.resolve('docusaurus-plugin-image-zoom'),
     require.resolve('./src/plugins/docusaurus-plugin-og-image'),
