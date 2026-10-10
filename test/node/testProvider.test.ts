@@ -254,6 +254,10 @@ describe('testProviderConnectivity', () => {
         changes_needed: true,
         changes_needed_reason: 'Missing auth header',
         changes_needed_suggestions: ['Add Authorization header'],
+        configuration_change_suggestion: {
+          transformResponse: ' json.response ',
+          headers: '{"Authorization":"untrusted"}',
+        },
       }),
     } as any);
 
@@ -264,6 +268,32 @@ describe('testProviderConnectivity', () => {
     expect(result.analysis).toBeDefined();
     expect(result.analysis?.changes_needed).toBe(true);
     expect(result.analysis?.changes_needed_reason).toBe('Missing auth header');
+    expect(result.analysis?.configuration_change_suggestion).toEqual({
+      transformResponse: 'json.response',
+    });
+  });
+
+  it('omits executable configuration suggestions while preserving manual guidance', async () => {
+    mockFetchWithProxy.mockResolvedValueOnce({
+      ok: true,
+      json: vi.fn().mockResolvedValue({
+        message: 'Configuration needs changes',
+        error: null,
+        changes_needed: true,
+        changes_needed_suggestions: ['Review the response parser manually'],
+        configuration_change_suggestion: {
+          transformResponse: 'process.env.SECRET',
+          config: 'null',
+        },
+      }),
+    } as any);
+
+    const result = await testProviderConnectivity({ provider: createMockProvider() });
+
+    expect(result.analysis?.changes_needed_suggestions).toEqual([
+      'Review the response parser manually',
+    ]);
+    expect(result.analysis?.configuration_change_suggestion).toBeUndefined();
   });
 
   it('should not set sessionId var when provider has sessionParser config', async () => {

@@ -33,6 +33,7 @@ export interface TestResult {
   transformedRequest?: string | Record<string, unknown>;
   changes_needed?: boolean;
   changes_needed_suggestions?: string[];
+  configuration_change_suggestion?: { transformResponse: string };
 }
 
 interface TestSectionProps {
@@ -43,6 +44,7 @@ interface TestSectionProps {
   disabled: boolean;
   detailsExpanded: boolean;
   onDetailsExpandedChange: (expanded: boolean) => void;
+  onApplyTransformResponseSuggestion?: (value: string) => void;
 }
 
 interface CodeBlockProps {
@@ -73,8 +75,13 @@ const TestSection: React.FC<TestSectionProps> = ({
   disabled,
   detailsExpanded,
   onDetailsExpandedChange,
+  onApplyTransformResponseSuggestion,
 }) => {
   const responseHeaders = testResult?.providerResponse?.metadata?.http?.headers;
+  const responseTransformSuggestion =
+    typeof testResult?.configuration_change_suggestion?.transformResponse === 'string'
+      ? testResult.configuration_change_suggestion.transformResponse
+      : undefined;
   const targetUrl =
     (typeof selectedTarget.config.url === 'string' && selectedTarget.config.url.trim()) ||
     (/^https?:\/\//i.test(selectedTarget.id) ? selectedTarget.id : undefined);
@@ -166,6 +173,41 @@ const TestSection: React.FC<TestSectionProps> = ({
                           </ul>
                         </div>
                       )}
+
+                    {responseTransformSuggestion && (
+                      <div className="mt-2 rounded-md bg-background/50 p-2">
+                        <p className="mb-1.5 font-medium">Configuration Changes</p>
+                        <div
+                          data-testid="config-suggestion-transformResponse"
+                          className="flex flex-col gap-2 rounded-md border border-border/60 bg-background/80 p-2 sm:flex-row sm:items-start sm:justify-between"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <p className="text-xs font-semibold">
+                              Response parser (transformResponse)
+                            </p>
+                            <pre
+                              data-testid="config-suggestion-transformResponse-value"
+                              className="mt-1 max-h-32 overflow-auto whitespace-pre-wrap break-all font-mono text-xs leading-relaxed"
+                            >
+                              {responseTransformSuggestion}
+                            </pre>
+                          </div>
+                          {onApplyTransformResponseSuggestion && (
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              onClick={() =>
+                                onApplyTransformResponseSuggestion(responseTransformSuggestion)
+                              }
+                              aria-label="Apply response parser suggestion"
+                              className="shrink-0"
+                            >
+                              Apply
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </AlertDescription>
                 </AlertContent>
               </Alert>
@@ -265,12 +307,10 @@ const TestSection: React.FC<TestSectionProps> = ({
                               {(() => {
                                 const raw = testResult.providerResponse?.raw;
                                 if (typeof raw === 'string') {
-                                  // Try to parse and format as JSON
                                   try {
                                     const parsed = JSON.parse(raw);
                                     return JSON.stringify(parsed, null, 2);
                                   } catch {
-                                    // Not valid JSON, return as-is
                                     return raw;
                                   }
                                 }
