@@ -308,25 +308,26 @@ function createTaskOutputTranscriptRedactionHook(): HookCallbackMatcher {
   };
 }
 
-/** Reads the task ids from the `<task-notification>` text the CLI hands to a running turn. */
-function taskNotificationTaskIds(content: unknown): string[] {
+/**
+ * Reads the task id from the `<task-notification>` the CLI hands to a running turn.
+ * Only the id that opens the notification counts. Everything after it can include the
+ * task's own output, which is text the task wrote and may quote another task's id.
+ */
+function taskNotificationTaskId(content: unknown): string | undefined {
   const text =
     typeof content === 'string'
       ? content
       : Array.isArray(content)
         ? content.map((block) => (block?.type === 'text' ? block.text : '')).join('\n')
         : '';
-  const ids: string[] = [];
-  let start = text.indexOf('<task-id>');
-  while (start >= 0) {
-    const end = text.indexOf('</task-id>', start);
-    if (end < 0) {
-      break;
-    }
-    ids.push(text.slice(start + '<task-id>'.length, end).trim());
-    start = text.indexOf('<task-id>', end);
+  const [opening, idTag] = ['<task-notification>', '<task-id>'];
+  const notification = text.trimStart();
+  if (!notification.startsWith(opening)) {
+    return undefined;
   }
-  return ids;
+  const body = notification.slice(opening.length).trimStart();
+  const end = body.indexOf('</task-id>');
+  return body.startsWith(idTag) && end >= 0 ? body.slice(idTag.length, end).trim() : undefined;
 }
 
 interface WorkflowTurn {
@@ -358,6 +359,8 @@ interface WorkflowSession {
  */
 class WorkflowAnswers {
   private readonly tasks = new Map<string, { sessionId: string; status: string }>();
+  /** Workflow tasks whose completion has been handed to a running turn. */
+  private readonly handed = new Set<string>();
   private readonly sessions = new Map<string, WorkflowSession>();
   /** Only replayed user messages show a completion being handed to a running turn. */
   private replaysUserMessages = false;
@@ -411,16 +414,22 @@ class WorkflowAnswers {
     }
   }
 
-  /** A replayed user message. The CLI handed these completions to the turn that is running. */
-  replayed(sessionId: string, taskIds: string[]): void {
+  /** A replayed user message. With a task id, the CLI handed that completion to the running turn. */
+  replayed(sessionId: string, taskId: string | undefined): void {
     this.replaysUserMessages = true;
     const session = this.session(sessionId);
     const running = session.turns[session.turns.length - 1];
-    for (const taskId of taskIds) {
-      if (running && session.queued > 0 && this.tasks.get(taskId)?.sessionId === sessionId) {
-        session.queued--;
-        running.read++;
-      }
+    if (
+      running &&
+      taskId !== undefined &&
+      this.tasks.get(taskId)?.sessionId === sessionId &&
+      !this.handed.has(taskId) &&
+      session.queued > 0
+    ) {
+      // A completion is handed over once, however often its id is seen.
+      this.handed.add(taskId);
+      session.queued--;
+      running.read++;
     }
   }
 
@@ -2421,7 +2430,9 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
               if ('isReplay' in msg && msg.isReplay) {
                 workflows.replayed(
                   msg.session_id,
-                  msg.origin?.kind === 'task-notification' ? taskNotificationTaskIds(content) : [],
+                  msg.origin?.kind === 'task-notification'
+                    ? taskNotificationTaskId(content)
+                    : undefined,
                 );
               }
               if (Array.isArray(content)) {
