@@ -1310,7 +1310,7 @@ function updateConversationHistory({
   renderedPrompt: string;
   response: ProviderResponse;
 }) {
-  if (!conversations) {
+  if (!conversations || response.error) {
     return;
   }
 
@@ -3796,13 +3796,16 @@ async function runGroupedGradingForRows(
   providerCallQueue: ProviderGroupedCallQueue,
   onRowsGraded: (entry: GroupedRows) => Promise<void>,
 ) {
-  const rowsWithDeferredGrading = getRowsWithDeferredGrading(entries);
+  const rowsWithDeferredGrading = entries
+    .flatMap((entry) => entry.rows)
+    .flatMap((row) => {
+      const gradingPromise = deferredGradingPromises.get(row);
+      return gradingPromise === undefined ? [] : [{ row, gradingPromise }];
+    });
   if (rowsWithDeferredGrading.length === 0) {
     return;
   }
 
-  const deferredRows = new Set(rowsWithDeferredGrading.map(({ row }) => row));
-  const completedRows = new Set<EvaluateResult>();
   const processedEntries = new Set<GroupedRows>();
   let pendingCount = rowsWithDeferredGrading.length;
   let resolveAllDone: () => void = () => {};
@@ -3813,7 +3816,6 @@ async function runGroupedGradingForRows(
   const gradingPromises = rowsWithDeferredGrading.map(({ row, gradingPromise }) =>
     gradingPromise.finally(() => {
       deferredGradingPromises.delete(row);
-      completedRows.add(row);
       pendingCount--;
       if (pendingCount === 0) {
         resolveAllDone();
@@ -3826,7 +3828,7 @@ async function runGroupedGradingForRows(
       if (processedEntries.has(entry)) {
         continue;
       }
-      if (!entry.rows.every((row) => !deferredRows.has(row) || completedRows.has(row))) {
+      if (!entry.rows.every((row) => !deferredGradingPromises.has(row))) {
         break;
       }
       processedEntries.add(entry);
@@ -3856,21 +3858,6 @@ async function runGroupedGradingForRows(
 
   await Promise.all(gradingPromises);
   await processReadyEntries();
-}
-
-function getRowsWithDeferredGrading(entries: GroupedRows[]) {
-  return entries
-    .flatMap((entry) => entry.rows.map((row) => ({ entry, row })))
-    .map(({ entry, row }) => ({ entry, row, gradingPromise: deferredGradingPromises.get(row) }))
-    .filter(
-      (
-        item,
-      ): item is {
-        entry: GroupedRows;
-        row: EvaluateResult;
-        gradingPromise: Promise<void>;
-      } => item.gradingPromise !== undefined,
-    );
 }
 
 function trackComparisonRowsForEvalStep(

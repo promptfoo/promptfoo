@@ -1,3 +1,5 @@
+import { createTokenOutput } from '../factories/literalFixtures';
+
 import './setup';
 
 import { randomUUID } from 'crypto';
@@ -10,6 +12,17 @@ import { type ApiProvider, ResultFailureReason, type TestSuite } from '../../src
 import { createDeferred } from '../util/utils';
 import { mockApiProvider, toPrompt } from './helpers';
 import { describeEvaluator } from './lifecycle';
+
+const createErrorMetricTest = (errorValue: number) => ({
+  vars: { errorValue },
+  assert: [
+    {
+      type: 'javascript' as const,
+      value: 'context.vars.errorValue',
+      metric: 'APE',
+    },
+  ],
+});
 
 describeEvaluator('evaluator metrics and scoring', () => {
   it('evaluator should count named score assertions per metric', async () => {
@@ -195,38 +208,7 @@ describeEvaluator('evaluator metrics and scoring', () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
       prompts: [toPrompt('Test prompt for derived metrics')],
-      tests: [
-        {
-          vars: { errorValue: 0.1 },
-          assert: [
-            {
-              type: 'javascript',
-              value: 'context.vars.errorValue',
-              metric: 'APE',
-            },
-          ],
-        },
-        {
-          vars: { errorValue: 0.2 },
-          assert: [
-            {
-              type: 'javascript',
-              value: 'context.vars.errorValue',
-              metric: 'APE',
-            },
-          ],
-        },
-        {
-          vars: { errorValue: 0.3 },
-          assert: [
-            {
-              type: 'javascript',
-              value: 'context.vars.errorValue',
-              metric: 'APE',
-            },
-          ],
-        },
-      ],
+      tests: [createErrorMetricTest(0.1), createErrorMetricTest(0.2), createErrorMetricTest(0.3)],
       derivedMetrics: [
         {
           name: 'APE_sum',
@@ -295,20 +277,7 @@ describeEvaluator('evaluator metrics and scoring', () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
       prompts: [toPrompt('First prompt'), toPrompt('Second prompt')],
-      tests: [
-        {
-          vars: { errorValue: 0.1 },
-          assert: [{ type: 'javascript', value: 'context.vars.errorValue', metric: 'APE' }],
-        },
-        {
-          vars: { errorValue: 0.2 },
-          assert: [{ type: 'javascript', value: 'context.vars.errorValue', metric: 'APE' }],
-        },
-        {
-          vars: { errorValue: 0.3 },
-          assert: [{ type: 'javascript', value: 'context.vars.errorValue', metric: 'APE' }],
-        },
-      ],
+      tests: [createErrorMetricTest(0.1), createErrorMetricTest(0.2), createErrorMetricTest(0.3)],
       derivedMetrics: [
         {
           name: 'MAPE',
@@ -344,16 +313,7 @@ describeEvaluator('evaluator metrics and scoring', () => {
     const testSuite: TestSuite = {
       providers: [mockProvider1, mockProvider2],
       prompts: [toPrompt('Test prompt')],
-      tests: [
-        {
-          vars: { errorValue: 0.1 },
-          assert: [{ type: 'javascript', value: 'context.vars.errorValue', metric: 'APE' }],
-        },
-        {
-          vars: { errorValue: 0.2 },
-          assert: [{ type: 'javascript', value: 'context.vars.errorValue', metric: 'APE' }],
-        },
-      ],
+      tests: [createErrorMetricTest(0.1), createErrorMetricTest(0.2)],
       derivedMetrics: [
         {
           name: 'MAPE',
@@ -608,10 +568,7 @@ describeEvaluator('evaluator metrics and scoring', () => {
   it('should apply max-score to overall pass/fail and stats', async () => {
     const maxScoreProvider: ApiProvider = {
       id: vi.fn().mockReturnValue('max-score-provider'),
-      callApi: vi.fn().mockResolvedValue({
-        output: 'hello world',
-        tokenUsage: { total: 1, prompt: 1, completion: 0, cached: 0, numRequests: 1 },
-      }),
+      callApi: vi.fn().mockResolvedValue(createTokenOutput('hello world', 1, 1, 0)),
     };
 
     const testSuite: TestSuite = {
@@ -651,10 +608,7 @@ describeEvaluator('evaluator metrics and scoring', () => {
     try {
       const selectBestProvider: ApiProvider = {
         id: vi.fn().mockReturnValue('select-best-provider'),
-        callApi: vi.fn().mockResolvedValue({
-          output: 'hello world',
-          tokenUsage: { total: 1, prompt: 1, completion: 0, cached: 0, numRequests: 1 },
-        }),
+        callApi: vi.fn().mockResolvedValue(createTokenOutput('hello world', 1, 1, 0)),
       };
 
       const testSuite: TestSuite = {

@@ -18,6 +18,26 @@ import type {
   ProviderResponse,
 } from '../../src/types/index';
 
+const createAssertion = <TType extends 'equals' | 'contains'>(
+  type: TType,
+  value: string = 'Hello world',
+  weight: number = 2,
+) => ({
+  type,
+  value,
+  weight,
+});
+
+const createExpectedOutputAssertion = () => ({
+  type: 'equals' as const,
+  value: 'Expected output',
+});
+
+const createCrescendoMedicalMetadata = () => ({
+  pluginId: 'medical:prioritization-error',
+  strategyId: 'crescendo',
+});
+
 vi.mock('../../src/redteam/remoteGeneration', () => ({
   shouldGenerateRemote: vi.fn().mockReturnValue(false),
 }));
@@ -104,12 +124,7 @@ const _Grader = new TestGrader();
 
 describe('runAssertions', () => {
   const test: AtomicTestCase = {
-    assert: [
-      {
-        type: 'equals',
-        value: 'Expected output',
-      },
-    ],
+    assert: [createExpectedOutputAssertion()],
   };
 
   beforeEach(() => {
@@ -235,18 +250,7 @@ describe('runAssertions', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
       test: {
         threshold: 0.5,
-        assert: [
-          {
-            type: 'equals',
-            value: 'Hello world',
-            weight: 2,
-          },
-          {
-            type: 'contains',
-            value: 'world',
-            weight: 1,
-          },
-        ],
+        assert: [createAssertion('equals'), createAssertion('contains', 'world', 1)],
       },
       providerResponse: { output: 'Hi there world' },
     });
@@ -262,18 +266,7 @@ describe('runAssertions', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
       test: {
         threshold: 0.25,
-        assert: [
-          {
-            type: 'equals',
-            value: 'Hello world',
-            weight: 2,
-          },
-          {
-            type: 'contains',
-            value: 'world',
-            weight: 1,
-          },
-        ],
+        assert: [createAssertion('equals'), createAssertion('contains', 'world', 1)],
       },
       providerResponse: { output: 'Hi there world' },
     });
@@ -603,12 +596,7 @@ describe('runAssertions', () => {
         assert: [
           {
             type: 'assert-set',
-            assert: [
-              {
-                type: 'equals',
-                value: 'Expected output',
-              },
-            ],
+            assert: [createExpectedOutputAssertion()],
           },
         ],
       };
@@ -632,18 +620,7 @@ describe('runAssertions', () => {
           {
             type: 'assert-set',
             threshold: 0.25,
-            assert: [
-              {
-                type: 'equals',
-                value: 'Hello world',
-                weight: 2,
-              },
-              {
-                type: 'contains',
-                value: 'Expected',
-                weight: 1,
-              },
-            ],
+            assert: [createAssertion('equals'), createAssertion('contains', 'Expected', 1)],
           },
         ],
       };
@@ -667,18 +644,7 @@ describe('runAssertions', () => {
           {
             type: 'assert-set',
             threshold: 0.5,
-            assert: [
-              {
-                type: 'equals',
-                value: 'Hello world',
-                weight: 2,
-              },
-              {
-                type: 'contains',
-                value: 'Expected',
-                weight: 1,
-              },
-            ],
+            assert: [createAssertion('equals'), createAssertion('contains', 'Expected', 1)],
           },
         ],
       };
@@ -851,10 +817,7 @@ describe('runAssertions', () => {
           value: 'test assertion',
         },
       ],
-      metadata: {
-        pluginId: 'medical:prioritization-error',
-        strategyId: 'crescendo',
-      },
+      metadata: createCrescendoMedicalMetadata(),
     };
 
     const providerResponse: ProviderResponse = {
@@ -912,10 +875,7 @@ describe('runAssertions', () => {
     const test: AtomicTestCase = {
       provider: 'promptfoo:redteam:crescendo',
       assert: [assertion],
-      metadata: {
-        pluginId: 'medical:prioritization-error',
-        strategyId: 'crescendo',
-      },
+      metadata: createCrescendoMedicalMetadata(),
     };
 
     const providerResponse: ProviderResponse = {
@@ -1005,10 +965,7 @@ describe('runAssertions', () => {
           type: 'assert-set',
           metric: '{{metricGroup}}',
           assert: [
-            {
-              type: 'equals',
-              value: 'Expected output',
-            },
+            createExpectedOutputAssertion(),
             {
               type: 'contains',
               value: 'output',

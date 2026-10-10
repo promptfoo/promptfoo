@@ -7,7 +7,7 @@ import {
   type TokenUsage,
   type VarValue,
 } from '../contracts/shared';
-import { TRACE_CREDENTIAL_PATH_SEGMENT } from '../contracts/traceProviderEndpoint';
+import { hasTraceCredentialPath } from '../contracts/traceProviderEndpoint';
 import { PromptConfigSchema, PromptSchema } from '../contracts/validators/prompts';
 import { NunjucksFilterMapSchema, StringOrFunctionSchema } from '../contracts/validators/shared';
 import { isJavascriptFile, JAVASCRIPT_EXTENSIONS } from '../validation/fileExtensions';
@@ -817,6 +817,9 @@ export const AssertionSchema = z.object({
 
   // Extract context from the output using a transform
   contextTransform: StringOrFunctionSchema.optional(),
+
+  // Opt-in string normalization for equals/contains; true selects NFC.
+  normalizeUnicode: z.union([z.boolean(), z.enum(['NFC', 'NFD', 'NFKC', 'NFKD'])]).optional(),
 });
 
 export type Assertion = z.infer<typeof AssertionSchema>;
@@ -1116,13 +1119,7 @@ export type DerivedMetric = z.infer<typeof DerivedMetricSchema>;
 
 const TraceProviderEndpointSchema = z.url().refine((endpoint) => {
   const url = new URL(endpoint);
-  const hasCredentialPath = url.pathname.split('/').some((segment) => {
-    try {
-      return TRACE_CREDENTIAL_PATH_SEGMENT.test(decodeURIComponent(segment));
-    } catch {
-      return true;
-    }
-  });
+  const hasCredentialPath = hasTraceCredentialPath(url.pathname);
   return (
     (url.protocol === 'http:' || url.protocol === 'https:') &&
     !url.username &&

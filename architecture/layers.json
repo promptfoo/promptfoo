@@ -150,7 +150,8 @@
         "legacy-runtime",
         "node",
         "providers",
-        "redteam"
+        "redteam",
+        "validation"
       ]
     },
     {
@@ -214,7 +215,8 @@
         "legacy-contracts",
         "node",
         "providers",
-        "redteam"
+        "redteam",
+        "validation"
       ]
     },
     {

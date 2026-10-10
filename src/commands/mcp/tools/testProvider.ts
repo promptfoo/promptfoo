@@ -177,10 +177,7 @@ export function registerTestProviderTool(server: McpServer) {
           return createToolResponse(
             'test_provider',
             false,
-            {
-              providerId,
-              suggestion: 'Set the appropriate environment variables or update your config file.',
-            },
+            undefined,
             `Invalid credentials for provider "${providerId}". Check your API keys and configuration.`,
           );
         }
@@ -189,12 +186,7 @@ export function registerTestProviderTool(server: McpServer) {
           return createToolResponse(
             'test_provider',
             false,
-            {
-              providerId,
-              suggestion:
-                'Use format like "openai:gpt-5.6" or check available providers with "promptfoo providers"',
-              examples: ['openai:gpt-5.6', 'anthropic:claude-sonnet-5', 'azure:deployment-name'],
-            },
+            undefined,
             `Provider "${providerId}" not found. Check the provider ID format.`,
           );
         }
@@ -202,7 +194,7 @@ export function registerTestProviderTool(server: McpServer) {
         return createToolResponse(
           'test_provider',
           false,
-          { providerId, originalError: errorMessage },
+          undefined,
           `Failed to test provider: ${errorMessage}`,
         );
       }

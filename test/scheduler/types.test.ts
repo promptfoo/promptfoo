@@ -284,11 +284,13 @@ describe('isTransientConnectionError', () => {
     expect(isTransientConnectionError(new Error('bad record mac'))).toBe(true);
   });
 
-  it('should detect EPROTO errors', () => {
+  const verifyProtocolError = () => {
     expect(isTransientConnectionError(new Error('write EPROTO 00000000:error:0A000126'))).toBe(
       true,
     );
-  });
+  };
+
+  it('should detect EPROTO errors', verifyProtocolError);
 
   it('should detect ECONNRESET errors', () => {
     expect(isTransientConnectionError(new Error('ECONNRESET'))).toBe(true);
@@ -337,11 +339,7 @@ describe('isTransientConnectionError', () => {
     expect(isTransientConnectionError(new Error('write EPROTO: cert_untrusted'))).toBe(false);
   });
 
-  it('should still match plain EPROTO without permanent phrases', () => {
-    expect(isTransientConnectionError(new Error('write EPROTO 00000000:error:0A000126'))).toBe(
-      true,
-    );
-  });
+  it('should still match plain EPROTO without permanent phrases', verifyProtocolError);
 
   it('should detect ECONNRESET via error.code', () => {
     const error = new Error('read failed');
