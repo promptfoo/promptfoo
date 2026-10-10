@@ -186,50 +186,60 @@ describe('TestCaseGenerationProvider', () => {
   describe.each(['basic', 'goat'] as const)(
     '%s generation request and failures',
     (testStrategy) => {
-      it('sends plugin configuration with a 60-second deadline and cancels on unmount', async () => {
-        const timeout = vi.spyOn(AbortSignal, 'timeout');
-        callApiMock.mockImplementation(() => new Promise<Response>(() => {}));
-        const pluginConfig = {
-          language: 'Japanese',
-          applicationDefinition: { purpose: 'Plugin purpose' },
-          additionalConfig: { key: 'value' },
-        };
-        const view = render(
-          <ToastProvider>
-            <TestCaseGenerationProvider
-              redTeamConfig={{ ...MOCK_CONFIG, target: createHttpGenerationProvider() }}
-            >
-              <TestConsumer
-                testPlugin="harmful:hate"
-                pluginConfig={pluginConfig}
-                testStrategy={testStrategy}
-              />
-            </TestCaseGenerationProvider>
-          </ToastProvider>,
-        );
-        await userEvent.setup().click(screen.getByTestId('test-case-generation-btn'));
-        expect(timeout).toHaveBeenCalledWith(60000);
-        expect(callApiMock).toHaveBeenCalledWith(
-          '/redteam/generate-test',
-          expect.objectContaining({
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Cache-Control': 'no-cache, no-store, must-revalidate',
-              Pragma: 'no-cache',
-            },
-          }),
-        );
-        const options = callApiMock.mock.calls[0][1]!;
-        expect(JSON.parse(options.body as string)).toMatchObject({
-          plugin: { id: 'harmful:hate', config: pluginConfig },
-          strategy: { id: testStrategy, config: {} },
-          config: { applicationDefinition: { purpose: 'Test purpose' } },
-        });
-        expect(options.signal?.aborted).toBe(false);
-        view.unmount();
-        expect(options.signal?.aborted).toBe(true);
-      });
+      it.each(['deadline', 'unmount'] as const)(
+        'sends plugin configuration and propagates %s cancellation',
+        async (cancellation) => {
+          const deadline = new AbortController();
+          const timeout = vi.spyOn(AbortSignal, 'timeout').mockReturnValue(deadline.signal);
+          callApiMock.mockImplementation(() => new Promise<Response>(() => {}));
+          const pluginConfig = {
+            language: 'Japanese',
+            applicationDefinition: { purpose: 'Plugin purpose' },
+            additionalConfig: { key: 'value' },
+          };
+          const view = render(
+            <ToastProvider>
+              <TestCaseGenerationProvider
+                redTeamConfig={{ ...MOCK_CONFIG, target: createHttpGenerationProvider() }}
+              >
+                <TestConsumer
+                  testPlugin="harmful:hate"
+                  pluginConfig={pluginConfig}
+                  testStrategy={testStrategy}
+                />
+              </TestCaseGenerationProvider>
+            </ToastProvider>,
+          );
+          await userEvent.setup().click(screen.getByTestId('test-case-generation-btn'));
+          expect(timeout).toHaveBeenCalledWith(60000);
+          expect(callApiMock).toHaveBeenCalledWith(
+            '/redteam/generate-test',
+            expect.objectContaining({
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Cache-Control': 'no-cache, no-store, must-revalidate',
+                Pragma: 'no-cache',
+              },
+            }),
+          );
+          const options = callApiMock.mock.calls[0][1]!;
+          expect(JSON.parse(options.body as string)).toMatchObject({
+            plugin: { id: 'harmful:hate', config: pluginConfig },
+            strategy: { id: testStrategy, config: {} },
+            config: { applicationDefinition: { purpose: 'Test purpose' } },
+          });
+          expect(options.signal?.aborted).toBe(false);
+          if (cancellation === 'deadline') {
+            const reason = new DOMException('Generation deadline reached', 'TimeoutError');
+            deadline.abort(reason);
+            expect(options.signal?.reason).toBe(reason);
+          } else {
+            view.unmount();
+          }
+          expect(options.signal?.aborted).toBe(true);
+        },
+      );
 
       it.each([
         [
