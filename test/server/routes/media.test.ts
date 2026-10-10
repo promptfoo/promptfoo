@@ -1,8 +1,6 @@
-import type { Server } from 'node:http';
-
-import request from 'supertest';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../../../src/server/server';
+import { setupTestServer } from '../../util/testServer';
 
 import type { MediaStorageProvider } from '../../../src/storage/types';
 
@@ -17,26 +15,7 @@ const mockedMediaExists = vi.mocked(mediaExists);
 const mockedRetrieveMedia = vi.mocked(retrieveMedia);
 
 describe('Media Routes', () => {
-  let api: ReturnType<typeof request.agent>;
-  let server: Server;
-
-  beforeAll(async () => {
-    await new Promise<void>((resolve, reject) => {
-      server = createApp().listen(0, '127.0.0.1', (error?: Error) =>
-        error ? reject(error) : resolve(),
-      );
-    });
-    api = request.agent(server);
-  });
-
-  afterAll(async () => {
-    if (!server.listening) {
-      return;
-    }
-    await new Promise<void>((resolve, reject) => {
-      server.close((error) => (error ? reject(error) : resolve()));
-    });
-  });
+  const api = setupTestServer(createApp);
 
   afterEach(() => {
     vi.resetAllMocks();

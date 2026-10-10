@@ -3,6 +3,21 @@ import { handleContextFaithfulness } from '../../src/assertions/contextFaithfuln
 import * as contextUtils from '../../src/assertions/contextUtils';
 import { DEFAULT_RAG_ASSERTION_THRESHOLD } from '../../src/assertions/ragDefaults';
 import * as matchers from '../../src/matchers/rag';
+import { createQueryContext, createThresholdAssertion } from '../factories/literalFixtures';
+
+const createFaithfulnessContext = () => ({
+  prompt: 'test prompt',
+  vars: {
+    query: 'What is the capital of France?',
+    context: 'Paris is the capital of France.',
+  },
+  test: createQueryContext('What is the capital of France?', 'Paris is the capital of France.'),
+  logProbs: null,
+  tokenUsage: null,
+  cached: false,
+  provider: null,
+  providerResponse: null,
+});
 
 vi.mock('../../src/matchers/rag');
 vi.mock('../../src/assertions/contextUtils');
@@ -18,39 +33,12 @@ describe('handleContextFaithfulness', () => {
     vi.mocked(contextUtils.resolveContext).mockResolvedValue('test context');
 
     const result = await handleContextFaithfulness({
-      assertion: {
-        type: 'context-faithfulness',
-        threshold: 0.7,
-      },
-      test: {
-        vars: {
-          query: 'What is the capital of France?',
-          context: 'Paris is the capital of France.',
-        },
-        options: {},
-      },
+      assertion: createThresholdAssertion('context-faithfulness', 0.7),
+      test: createQueryContext('What is the capital of France?', 'Paris is the capital of France.'),
       output: 'The capital of France is Paris.',
       prompt: 'test prompt',
       baseType: 'context-faithfulness',
-      assertionValueContext: {
-        prompt: 'test prompt',
-        vars: {
-          query: 'What is the capital of France?',
-          context: 'Paris is the capital of France.',
-        },
-        test: {
-          vars: {
-            query: 'What is the capital of France?',
-            context: 'Paris is the capital of France.',
-          },
-          options: {},
-        },
-        logProbs: null,
-        tokenUsage: null,
-        cached: false,
-        provider: null,
-        providerResponse: null,
-      },
+      assertionValueContext: createFaithfulnessContext(),
       inverse: false,
       outputString: 'The capital of France is Paris.',
       providerResponse: null,
@@ -78,39 +66,12 @@ describe('handleContextFaithfulness', () => {
     vi.mocked(contextUtils.resolveContext).mockResolvedValue('test context');
 
     const result = await handleContextFaithfulness({
-      assertion: {
-        type: 'context-faithfulness',
-        threshold: 0.7,
-      },
-      test: {
-        vars: {
-          query: 'What is the capital of France?',
-          context: 'Paris is the capital of France.',
-        },
-        options: {},
-      },
+      assertion: createThresholdAssertion('context-faithfulness', 0.7),
+      test: createQueryContext('What is the capital of France?', 'Paris is the capital of France.'),
       output: 'The capital of France is Paris and it has a population of 50 million.',
       prompt: 'test prompt',
       baseType: 'context-faithfulness',
-      assertionValueContext: {
-        prompt: 'test prompt',
-        vars: {
-          query: 'What is the capital of France?',
-          context: 'Paris is the capital of France.',
-        },
-        test: {
-          vars: {
-            query: 'What is the capital of France?',
-            context: 'Paris is the capital of France.',
-          },
-          options: {},
-        },
-        logProbs: null,
-        tokenUsage: null,
-        cached: false,
-        provider: null,
-        providerResponse: null,
-      },
+      assertionValueContext: createFaithfulnessContext(),
       inverse: false,
       outputString: 'The capital of France is Paris and it has a population of 50 million.',
       providerResponse: null,
@@ -288,35 +249,11 @@ describe('handleContextFaithfulness', () => {
       assertion: {
         type: 'not-context-faithfulness',
       },
-      test: {
-        vars: {
-          query: 'What is the capital of France?',
-          context: 'Paris is the capital of France.',
-        },
-        options: {},
-      },
+      test: createQueryContext('What is the capital of France?', 'Paris is the capital of France.'),
       output: 'The capital of France is Paris.',
       prompt: 'test prompt',
       baseType: 'context-faithfulness',
-      assertionValueContext: {
-        prompt: 'test prompt',
-        vars: {
-          query: 'What is the capital of France?',
-          context: 'Paris is the capital of France.',
-        },
-        test: {
-          vars: {
-            query: 'What is the capital of France?',
-            context: 'Paris is the capital of France.',
-          },
-          options: {},
-        },
-        logProbs: null,
-        tokenUsage: null,
-        cached: false,
-        provider: null,
-        providerResponse: null,
-      },
+      assertionValueContext: createFaithfulnessContext(),
       inverse: true,
       outputString: 'The capital of France is Paris.',
       providerResponse: null,
@@ -349,13 +286,7 @@ describe('handleContextFaithfulness', () => {
       assertion: {
         type: 'not-context-faithfulness',
       },
-      test: {
-        vars: {
-          query: 'What is the capital of France?',
-          context: 'Paris is the capital of France.',
-        },
-        options: {},
-      },
+      test: createQueryContext('What is the capital of France?', 'Paris is the capital of France.'),
       output: 'The capital of France is Paris.',
       prompt: 'test prompt',
       baseType: 'context-faithfulness',

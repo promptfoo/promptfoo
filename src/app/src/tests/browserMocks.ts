@@ -270,3 +270,42 @@ export function mockWindowOpen() {
     vi.fn(() => null),
   );
 }
+
+export function createQuotaExceededSetItem(
+  originalSetItem: Storage['setItem'],
+  storageKey: string,
+) {
+  return function (this: Storage, key: string, value: string) {
+    if (this === window.localStorage && key === storageKey) {
+      throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
+    }
+    return originalSetItem.call(this, key, value);
+  };
+}
+
+export function mockLocalStorageQuotaExceeded(storageKey: string) {
+  const originalSetItem = Storage.prototype.setItem;
+  return vi
+    .spyOn(Storage.prototype, 'setItem')
+    .mockImplementation(createQuotaExceededSetItem(originalSetItem, storageKey));
+}
+
+export function createTargetOverwriteSetItem(
+  originalSetItem: Storage['setItem'],
+  staleTarget: unknown,
+) {
+  const state = { raced: false };
+  return {
+    state,
+    implementation: function (this: Storage, key: string, value: string) {
+      const result = originalSetItem.call(this, key, value);
+      if (!state.raced && this === window.localStorage && key === 'redTeamConfig') {
+        state.raced = true;
+        const overwrittenConfig = JSON.parse(value);
+        overwrittenConfig.state.config.target = staleTarget;
+        originalSetItem.call(this, key, JSON.stringify(overwrittenConfig));
+      }
+      return result;
+    },
+  };
+}
