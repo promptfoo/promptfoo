@@ -134,6 +134,9 @@ export class RateLimitRegistry extends EventEmitter {
           // retry budget. Replaying the parent repeats all earlier child work.
           getHeaders: (result) => (nestedCallStarted ? undefined : options?.getHeaders?.(result)),
           isRateLimited: options?.isRateLimited,
+          isRetryableResult: options?.isRetryableResult,
+          finalizeResult: options?.finalizeResult,
+          onRateLimitExhausted: options?.onRateLimitExhausted,
           canRetry: () => !nestedCallStarted,
           getRetryAfter: options?.getRetryAfter,
           maxRetriesOverride: provider.handlesOwnRetries ? 0 : providerMaxRetries,
