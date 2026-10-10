@@ -667,9 +667,10 @@ is available in `metadata.aws`. Token usage records the request count; automatic
 cost and normalized token counts are not available on this raw route.
 
 Calls are never cached. Event streams are collected before returning, and service
-exception events produce provider errors. Agent and Flow invocations are never
-automatically retried, because repeating them can duplicate actions. Other operations
-use SDK retries; set `config.maxRetries: 0` to disable them. The scheduler does not
+exception events produce provider errors. Agent and Flow invocations, `RetrieveAndGenerate`,
+`RetrieveAndGenerateStream`, and `AgenticRetrieveStream` use one attempt because they can
+change server-side state. This policy also applies when a request omits session or memory
+settings. Other operations use SDK retries; set `config.maxRetries: 0` to disable them. The scheduler does not
 replay native calls after the SDK finishes. Inspect native completion events when an
 operation has model-specific finish states. Async jobs are submitted once and are not
 polled automatically; use `GetAsyncInvoke` to check status and an existing S3 output
