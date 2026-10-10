@@ -94,6 +94,7 @@ vi.mock('../../../src/util/templates', () => ({
 
 import cliState from '../../../src/cliState';
 import { importModule } from '../../../src/esm';
+import logger from '../../../src/logger';
 import { GoogleAuthManager } from '../../../src/providers/google/auth';
 import { GoogleGenericProvider } from '../../../src/providers/google/base';
 import { withGenAIToolSpan } from '../../../src/providers/tracing';
@@ -449,6 +450,9 @@ describe('GoogleGenericProvider', () => {
       );
 
       expect(mockCallback).toHaveBeenCalledWith('{"arg": "value"}');
+      expect(logger.debug).toHaveBeenCalledWith("Executing function 'test_function'", {
+        args: '{"arg": "value"}',
+      });
       expect(result).toEqual({ result: 'success' });
     });
 

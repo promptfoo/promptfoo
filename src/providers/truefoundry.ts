@@ -74,9 +74,25 @@ function getTrueFoundryBillingModelName(modelName: string, openaiAccountNames?: 
 
 function hasGuardrailCheck(value: unknown): boolean {
   if (Array.isArray(value)) {
-    return value.length > 0;
+    return value.some(hasGuardrailCheck);
   }
   if (isJsonRecord(value)) {
+    const verdict = isJsonRecord(value.data)
+      ? (value.data.verdict ?? value.verdict)
+      : value.verdict;
+    if (typeof verdict === 'boolean') {
+      return !verdict;
+    }
+    if (typeof value.result === 'boolean') {
+      return !value.result;
+    }
+    const result = getString(value.result)?.toLowerCase();
+    if (result === 'passed') {
+      return false;
+    }
+    if (result === 'failed') {
+      return true;
+    }
     return Object.keys(value).length > 0;
   }
   return Boolean(value);
@@ -158,11 +174,23 @@ function getGuardrailDirection(
 ): Pick<NonNullable<ProviderResponse['guardrails']>, 'flaggedInput' | 'flaggedOutput'> {
   const checks = payload.guardrail_checks;
   if (isJsonRecord(checks)) {
-    const flaggedInput = hasGuardrailCheck(checks.llm_input_guardrails);
-    const flaggedOutput = hasGuardrailCheck(checks.llm_output_guardrails);
+    const flaggedInput =
+      hasGuardrailCheck(checks.llm_input_guardrails) || hasGuardrailCheck(checks.input_guardrails);
+    const flaggedOutput =
+      hasGuardrailCheck(checks.llm_output_guardrails) ||
+      hasGuardrailCheck(checks.output_guardrails);
     if (flaggedInput || flaggedOutput) {
       return { flaggedInput, flaggedOutput };
     }
+  }
+
+  const error = payload.error;
+  const parameter = isJsonRecord(error) ? getString(error.param)?.toLowerCase() : undefined;
+  if (parameter === 'prompt' || parameter === 'input') {
+    return { flaggedInput: true, flaggedOutput: false };
+  }
+  if (parameter === 'response' || parameter === 'output' || parameter === 'completion') {
+    return { flaggedInput: false, flaggedOutput: true };
   }
 
   if (/\b(prompt|input)\b/i.test(message)) {
@@ -189,7 +217,10 @@ function normalizeGuardrailErrorResponse(response: ProviderResponse): ProviderRe
     return response;
   }
 
-  const message = getString(error.message) ?? 'Content blocked by provider guardrail';
+  const message =
+    getString(error.message) ??
+    getString(payload.message) ??
+    'Content blocked by provider guardrail';
   if (!isGuardrailError(payload, error, message)) {
     return response;
   }
@@ -218,14 +249,7 @@ function getTrueFoundryProviderOptions(providerOptions: TrueFoundryProviderOptio
   };
 }
 
-/**
- * TrueFoundry AI Gateway Provider
- *
- * Connects promptfoo to TrueFoundry's enterprise-grade AI Gateway, which
- * encompasses an LLM Gateway, MCP Gateway, and Agent Gateway for connecting,
- * observing, and governing agentic AI applications across providers from a
- * single control plane.
- */
+/** OpenAI-compatible gateway with TrueFoundry metadata and guardrail responses. */
 export class TrueFoundryProvider extends OpenAiChatCompletionProvider {
   constructor(modelName: string, providerOptions: TrueFoundryProviderOptions = {}) {
     super(modelName, getTrueFoundryProviderOptions(providerOptions));
