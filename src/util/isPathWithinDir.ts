@@ -1,9 +1,7 @@
 /**
- * Symlink-safe directory containment check.
- *
- * Resolves symlinks via realpath to prevent symlink-based directory
- * traversal attacks. For non-existent paths (e.g., when creating new
- * files), recursively validates the parent directory.
+ * Resolve symlinks before checking directory containment. For paths that do not
+ * exist yet, check their parent directory. The filesystem must remain trusted
+ * between this check and the caller's file operation.
  */
 
 import * as fs from 'node:fs/promises';
@@ -42,7 +40,7 @@ export async function isPathWithinDir(filePath: string, dir: string): Promise<bo
 
     // Containment check via relative() — avoids prefix gotchas like /foo/bar vs /foo/barista
     const rel = path.relative(realDir, realTarget);
-    return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel);
+    return rel !== '..' && !rel.startsWith(`..${path.sep}`) && !path.isAbsolute(rel);
   } catch (error: any) {
     // If target doesn't exist (ENOENT), validate parent directory instead.
     // This allows writes to create new files in valid directories.

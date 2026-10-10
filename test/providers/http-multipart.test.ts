@@ -6,9 +6,14 @@ import os from 'os';
 import path from 'path';
 import { pathToFileURL } from 'url';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import cliState from '../../src/cliState';
 import { HttpProvider } from '../../src/providers/http';
-import { normalizeFilePath, resolvePath } from '../../src/providers/httpMultipart';
+import {
+  normalizeFilePath,
+  renderHttpMultipartBody,
+  resolvePath,
+} from '../../src/providers/httpMultipart';
 import { createDebugContextFixture } from '../factories/literalFixtures';
 
 const createQueryField = () => ({
@@ -129,6 +134,7 @@ async function createMultipartDocumentSummarizerServer() {
 }
 
 afterEach(async () => {
+  vi.restoreAllMocks();
   await Promise.all(
     servers.splice(0).map(
       (server) =>
@@ -189,6 +195,8 @@ describe('HttpProvider structured multipart requests', () => {
   it('renders path sources with per-test variables before reading local files', async () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-multipart-'));
     tempDirs.push(tempDir);
+    const previousBasePath = cliState.basePath;
+    cliState.basePath = tempDir;
     const reportPath = path.join(tempDir, 'report-a.txt');
     const standardFileUrl = pathToFileURL(reportPath).toString();
     fs.writeFileSync(reportPath, 'report-a contents');
@@ -215,34 +223,174 @@ describe('HttpProvider structured multipart requests', () => {
       },
     });
 
-    await provider.callApi('Summarize local fixture', {
-      prompt: { raw: 'Summarize local fixture', label: 'query' },
-      vars: {
-        documentPath: reportPath,
-      },
-    });
+    try {
+      await provider.callApi('Summarize local fixture', {
+        prompt: { raw: 'Summarize local fixture', label: 'query' },
+        vars: {
+          documentPath: reportPath,
+        },
+      });
 
-    expect(mockServer.getLastRequest()).toMatchObject({
-      documentQuery: 'Summarize local fixture',
-      files: [
-        expect.objectContaining({
-          filename: 'report-a.txt',
-          contentType: 'text/plain',
-          sizeBytes: Buffer.byteLength('report-a contents'),
-        }),
-      ],
-    });
+      expect(mockServer.getLastRequest()).toMatchObject({
+        documentQuery: 'Summarize local fixture',
+        files: [
+          expect.objectContaining({
+            filename: 'report-a.txt',
+            contentType: 'text/plain',
+            sizeBytes: Buffer.byteLength('report-a contents'),
+          }),
+        ],
+      });
 
-    await provider.callApi('Summarize local fixture', {
-      prompt: { raw: 'Summarize local fixture', label: 'query' },
-      vars: {
-        documentPath: standardFileUrl.slice('file://'.length),
-      },
+      await provider.callApi('Summarize local fixture', {
+        prompt: { raw: 'Summarize local fixture', label: 'query' },
+        vars: {
+          documentPath: standardFileUrl.slice('file://'.length),
+        },
+      });
+      expect(mockServer.getLastRequest()?.files[0]).toMatchObject({
+        filename: 'report-a.txt',
+        contentType: 'text/plain',
+      });
+    } finally {
+      cliState.basePath = previousBasePath;
+    }
+  });
+
+  it('rejects path sources that escape the configured base directory', async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-multipart-'));
+    tempDirs.push(tempDir);
+    const outsidePath = path.join(path.dirname(tempDir), `${path.basename(tempDir)}-outside.txt`);
+    fs.writeFileSync(outsidePath, 'outside');
+    tempDirs.push(outsidePath);
+    const previousBasePath = cliState.basePath;
+    cliState.basePath = tempDir;
+
+    try {
+      const provider = new HttpProvider('http', {
+        config: {
+          url: 'http://127.0.0.1:1',
+          multipart: {
+            parts: [
+              {
+                kind: 'file',
+                name: 'files',
+                source: { type: 'path', path: `../${path.basename(outsidePath)}` },
+              },
+            ],
+          },
+        },
+      });
+
+      await expect(provider.callApi('test')).rejects.toThrow(
+        `File path escapes allowed base directory: ../${path.basename(outsidePath)}`,
+      );
+
+      const missingProvider = new HttpProvider('http', {
+        config: {
+          url: 'http://127.0.0.1:1',
+          multipart: {
+            parts: [
+              {
+                kind: 'file',
+                name: 'files',
+                source: { type: 'path', path: 'missing.txt' },
+              },
+            ],
+          },
+        },
+      });
+      await expect(missingProvider.callApi('test')).rejects.toMatchObject({ code: 'ENOENT' });
+    } finally {
+      cliState.basePath = previousBasePath;
+    }
+  });
+
+  it.each([false, true])(
+    'checks a linked file target against the base directory (outside: %s)',
+    async (outside) => {
+      const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-multipart-links-'));
+      tempDirs.push(tempDir);
+      const baseDir = path.join(tempDir, 'workspace');
+      const targetDir = path.join(outside ? tempDir : baseDir, 'documents');
+      fs.mkdirSync(baseDir);
+      fs.mkdirSync(targetDir);
+      fs.writeFileSync(path.join(targetDir, 'report.txt'), 'fixture contents');
+      fs.symlinkSync(targetDir, path.join(baseDir, 'linked'), 'junction');
+      const previousBasePath = cliState.basePath;
+      cliState.basePath = baseDir;
+      try {
+        const mockServer = await createMultipartDocumentSummarizerServer();
+        const provider = new HttpProvider('http', {
+          config: {
+            url: mockServer.url,
+            headers: { 'X-API-Key': 'test-api-key' },
+            multipart: {
+              parts: [
+                {
+                  kind: 'file',
+                  name: 'files',
+                  source: { type: 'path', path: 'linked/report.txt' },
+                },
+                { kind: 'field', name: 'documentQuery', value: '{{prompt}}' },
+              ],
+            },
+          },
+        });
+        if (outside) {
+          await expect(provider.callApi('test')).rejects.toThrow(
+            'File path escapes allowed base directory',
+          );
+          expect(mockServer.getLastRequest()).toBeUndefined();
+        } else {
+          await provider.callApi('test');
+          expect(mockServer.getLastRequest()?.files[0]).toMatchObject({
+            filename: 'report.txt',
+            sizeBytes: Buffer.byteLength('fixture contents'),
+          });
+        }
+      } finally {
+        cliState.basePath = previousBasePath;
+      }
+    },
+  );
+
+  it('preserves file resolution errors', async () => {
+    const error = Object.assign(new Error('File unavailable'), { code: 'EIO' });
+    vi.spyOn(fs.promises, 'realpath').mockRejectedValueOnce(error);
+    await expect(
+      renderHttpMultipartBody(
+        { parts: [{ kind: 'file', name: 'files', source: { type: 'path', path: 'report.txt' } }] },
+        {},
+      ),
+    ).rejects.toBe(error);
+  });
+
+  it('honors cancellation while resolving a local file', async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-multipart-abort-'));
+    tempDirs.push(tempDir);
+    const filePath = path.join(tempDir, 'report.txt');
+    fs.writeFileSync(filePath, 'fixture');
+    const previousBasePath = cliState.basePath;
+    cliState.basePath = tempDir;
+    const controller = new AbortController();
+    const realpath = fs.promises.realpath;
+    vi.spyOn(fs.promises, 'realpath').mockImplementationOnce(async (...args) => {
+      const resolved = await realpath(...args);
+      controller.abort();
+      return resolved;
     });
-    expect(mockServer.getLastRequest()?.files[0]).toMatchObject({
-      filename: 'report-a.txt',
-      contentType: 'text/plain',
-    });
+    try {
+      await expect(
+        renderHttpMultipartBody(
+          { parts: [{ kind: 'file', name: 'files', source: { type: 'path', path: filePath } }] },
+          {},
+          controller.signal,
+        ),
+      ).rejects.toMatchObject({ name: 'AbortError' });
+    } finally {
+      cliState.basePath = previousBasePath;
+    }
   });
 
   it('redacts secret-like multipart text fields from debug metadata', async () => {
