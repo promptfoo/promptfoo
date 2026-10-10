@@ -228,7 +228,7 @@ function getPrimaryRenderedImageSrc(text: string, inlineImageSrc?: string): stri
   return undefined;
 }
 
-function getFailAndPassReasons(output: EvaluateTableOutput): {
+export function getFailAndPassReasons(output: EvaluateTableOutput): {
   failReasons: string[];
   passReasons: string[];
 } {
@@ -245,8 +245,10 @@ function getFailAndPassReasons(output: EvaluateTableOutput): {
       .filter((reason) => reason) ?? [];
 
   if (output.error && output.failureReason === ResultFailureReason.ERROR) {
+    // The aggregate error may deliberately repeat a component reason (e.g. a
+    // promoted grader cause); show it once instead of a spurious carousel.
     return {
-      failReasons: [output.error, ...failReasons],
+      failReasons: [output.error, ...failReasons.filter((reason) => reason !== output.error)],
       passReasons,
     };
   }
