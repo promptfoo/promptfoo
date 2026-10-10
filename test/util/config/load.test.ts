@@ -159,7 +159,7 @@ vi.mock('../../../src/providers', async () => {
     await vi.importActual<typeof import('../../../src/providers')>('../../../src/providers');
   return {
     ...actual,
-    loadApiProviders: vi.fn().mockImplementation(async (providers) => {
+    loadApiProviders: vi.fn(async (providers) => {
       return providers.map((p: any) => ({
         id: () => (typeof p === 'string' ? p : p.id),
         label: typeof p === 'string' ? p : p.label || p.id,
@@ -2003,6 +2003,81 @@ describe('resolveConfigs', () => {
     // Verify the defaultTest was loaded with the provider string
     expect(result.testSuite.defaultTest).toBeDefined();
     expect((result.testSuite.defaultTest as any)?.options?.provider).toBe('openai:gpt-4');
+  });
+
+  describe('--filter-providers with test-level provider references', () => {
+    beforeEach(() => {
+      vi.mocked(maybeLoadFromExternalFile)
+        .mockReset()
+        .mockImplementation(async (value) => value);
+    });
+    afterEach(() => {
+      vi.mocked(loadApiProviders).mockReset();
+    });
+
+    it.each([
+      {
+        selection: { filterProviders: 'openai' },
+        excluded: 'anthropic:messages:claude-sonnet-4-5',
+        reference: 'anthropic:*',
+      },
+      {
+        selection: { filterTargets: 'openai' },
+        excluded: { id: 'anthropic:messages:claude-sonnet-4-5', label: 'excluded-label' },
+        reference: 'excluded-label',
+      },
+      {
+        selection: { providers: ['openai:gpt-4o-mini'] },
+        excluded: { 'anthropic:messages:claude-sonnet-4-5': { label: 'excluded-map' } },
+        reference: 'excluded-map',
+      },
+    ])(
+      'validates excluded provider references without loading them: $selection',
+      async ({ selection, excluded, reference }) => {
+        // The reference is to a provider that IS defined in the config but was filtered
+        // out of this run. That is a valid config, not a typo, so validation must pass.
+        const config = {
+          prompts: ['Tell me about {{topic}}'],
+          providers: ['openai:gpt-4o-mini', excluded],
+          tests: [{ vars: { topic: 'AI' }, providers: [reference] }],
+          defaultTest: { providers: [reference] },
+          scenarios: [
+            { config: [{ providers: [reference] }], tests: [{ providers: [reference] }] },
+          ],
+        };
+        vi.mocked(fs.existsSync).mockReturnValue(true);
+        vi.mocked(fs.readFileSync).mockImplementation((filePath: fs.PathOrFileDescriptor) => {
+          if (typeof filePath === 'string' && filePath.endsWith('config.yaml')) {
+            return yaml.dump(config);
+          }
+          return Buffer.from('');
+        });
+        vi.mocked(globSync).mockReturnValue(['config.yaml']);
+        vi.mocked(isCI).mockReturnValue(true);
+        vi.mocked(readPrompts).mockResolvedValue([
+          { raw: 'Tell me about {{topic}}', label: 'Tell me about {{topic}}', config: {} },
+        ]);
+        // Excluded providers may require unavailable SDKs or credentials.
+        vi.mocked(loadApiProviders)
+          .mockResolvedValueOnce([createMockProvider({ id: 'openai:gpt-4o-mini' })])
+          .mockRejectedValueOnce(new Error('Excluded provider must not be instantiated'));
+
+        await expect(
+          resolveConfigs({ config: ['config.yaml'], ...selection }, {}),
+        ).resolves.toBeDefined();
+        expect(loadApiProviders).toHaveBeenCalledTimes(1);
+        expect(loadApiProviders).toHaveBeenCalledWith(['openai:gpt-4o-mini'], expect.anything());
+
+        // Unknown names must still fail, even when provider selection is active.
+        config.tests[0].providers = ['undeclared-provider'];
+        vi.mocked(loadApiProviders)
+          .mockReset()
+          .mockResolvedValue([createMockProvider({ id: 'openai:gpt-4o-mini' })]);
+        await expect(resolveConfigs({ config: ['config.yaml'], ...selection }, {})).rejects.toThrow(
+          'references provider "undeclared-provider" which does not exist',
+        );
+      },
+    );
   });
 
   describe('--providers flag config preservation', () => {

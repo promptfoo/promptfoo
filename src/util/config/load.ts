@@ -1299,10 +1299,26 @@ async function resolveLoadedConfig(
     typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest : undefined,
   );
 
-  // Validate provider references in tests and scenarios
+  // References to excluded providers remain valid, but loading those providers
+  // would defeat filtering (their SDKs or credentials may be unavailable).
+  // Keep runtime identities for selected providers, and inspect only declared
+  // IDs and labels for providers that were not instantiated.
+  const excludedProviderReferences = Array.isArray(resolvedProviderConfigs)
+    ? resolvedProviderConfigs.flatMap((provider, index) => {
+        if (Array.isArray(filteredProviderConfigs) && filteredProviderConfigs.includes(provider)) {
+          return [];
+        }
+        if (isApiProvider(provider)) {
+          return [{ id: () => provider.id(), label: provider.label }];
+        }
+        const { id, label } = getProviderIdAndLabel(provider, index);
+        return [{ id: () => id, label }];
+      })
+    : [];
+
   validateTestProviderReferences(
     testSuite.tests || [],
-    testSuite.providers,
+    [...parsedProviders, ...excludedProviderReferences],
     typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest : undefined,
     testSuite.scenarios,
   );
