@@ -1,15 +1,20 @@
 import { BedrockAgentRuntime } from '@aws-sdk/client-bedrock-agent-runtime';
 import { BedrockRuntime } from '@aws-sdk/client-bedrock-runtime';
+import { EventStreamCodec } from '@smithy/core/event-streams';
 import { NumericValue } from '@smithy/core/serde';
 import { NodeHttpHandler } from '@smithy/node-http-handler';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AwsBedrockNativeApiProvider } from '../../../src/providers/bedrock/nativeApi';
+import { providerRegistry } from '../../../src/providers/providerRegistry';
 
 async function* events(items: unknown[]) {
   yield* items;
 }
 const metadata = { requestId: 'synthetic-request' };
-afterEach(() => vi.restoreAllMocks());
+afterEach(async () => {
+  await providerRegistry.shutdownAll();
+  vi.restoreAllMocks();
+});
 
 function fixture(operation: string, response: any) {
   const provider = new AwsBedrockNativeApiProvider(operation);
@@ -71,6 +76,69 @@ describe('native Bedrock APIs', () => {
     expect(result.metadata).toEqual({ operation: 'InvokeModel', aws: metadata });
     expect(result.cost).toBeUndefined();
   });
+
+  it.each(['InvokeModel', 'InvokeModelWithResponseStream'])(
+    'distinguishes literal model fields from single-key binary wrappers for %s',
+    async (operation) => {
+      const literal = { $base64: 'literal metadata', messages: [] };
+      const modelJson = JSON.stringify(literal);
+      const codec = new EventStreamCodec(
+        (bytes) => Buffer.from(bytes).toString('utf8'),
+        (text) => Buffer.from(text),
+      );
+      const encodedEvent = codec.encode({
+        headers: {
+          ':message-type': { type: 'string', value: 'event' },
+          ':event-type': { type: 'string', value: 'chunk' },
+          ':content-type': { type: 'string', value: 'application/json' },
+        },
+        body: Buffer.from(
+          JSON.stringify({ bytes: Buffer.from('{"answer":"READY"}').toString('base64') }),
+        ),
+      });
+      const handle = vi.spyOn(NodeHttpHandler.prototype, 'handle').mockImplementation(async () => ({
+        response: {
+          statusCode: 200,
+          headers: {
+            'content-type':
+              operation === 'InvokeModel'
+                ? 'application/json'
+                : 'application/vnd.amazon.eventstream',
+          },
+          body:
+            operation === 'InvokeModel'
+              ? Buffer.from('{"answer":"READY"}')
+              : events([encodedEvent]),
+        },
+      }));
+      const provider = new AwsBedrockNativeApiProvider(operation, {
+        config: {
+          region: 'us-east-1',
+          accessKeyId: 'synthetic',
+          secretAccessKey: 'synthetic',
+          maxRetries: 0,
+        },
+      });
+      try {
+        for (const body of [literal, { $base64: Buffer.from(modelJson).toString('base64') }]) {
+          handle.mockClear();
+          const result = await provider.callApi(JSON.stringify({ modelId: 'test.model', body }));
+          expect(result.error).toBeUndefined();
+          expect(result.output).toContain('READY');
+          expect(handle).toHaveBeenCalledOnce();
+          expect(Buffer.from(handle.mock.calls[0][0].body).toString('utf8')).toBe(modelJson);
+        }
+        handle.mockClear();
+        const invalid = await provider.callApi(
+          JSON.stringify({ modelId: 'test.model', body: { $base64: 'not base64' } }),
+        );
+        expect(invalid.error).toContain('valid padded base64');
+        expect(handle).not.toHaveBeenCalled();
+      } finally {
+        await provider.cleanup();
+      }
+    },
+  );
 
   it.each([
     'Converse',
@@ -365,6 +433,54 @@ describe('native Bedrock APIs', () => {
     }
   });
 
+  it.each(['1e100000', '1e-100000', '-1e100000', '-1e-100000', '-0'])(
+    'preserves native numeric literal %s without exponent expansion',
+    async (literal) => {
+      const body = '{"value":' + literal + '}';
+      const { provider, invoke } = fixture('InvokeModel', {
+        body: Buffer.from(body),
+        contentType: 'application/json',
+      });
+      const result = await provider.callApi('{"modelId":"test.model","body":' + body + '}');
+      expect(result.error).toBeUndefined();
+      expect(invoke.mock.calls[0][0].body).toBe(body);
+      expect(result.output).toContain(body);
+      expect(String(result.output).length).toBeLessThan(100);
+    },
+  );
+
+  it.each([
+    ['ListAsyncInvokes', 'maxResults', '1e1', '10'],
+    ['ListAsyncInvokes', 'maxResults', '1.0', '1'],
+    ['ListAsyncInvokes', 'submitTimeAfter', '1e3', '1000'],
+    ['ListAsyncInvokes', 'submitTimeBefore', '1000.0', '1000'],
+    ['ListFlowExecutionEvents', 'maxResults', '1e1', '10'],
+    ['ListFlowExecutionEvents', 'maxResults', '1.0', '1'],
+  ])('retains primitive query numbers for %s %s=%s', async (operation, key, literal, expected) => {
+    const handle = vi.spyOn(NodeHttpHandler.prototype, 'handle').mockResolvedValue({
+      response: {
+        statusCode: 200,
+        headers: { 'content-type': 'application/json' },
+        body: Buffer.from('{}'),
+      },
+    });
+    const provider = new AwsBedrockNativeApiProvider(operation, {
+      config: { region: 'us-east-1', accessKeyId: 'synthetic', secretAccessKey: 'synthetic' },
+    });
+    try {
+      const prefix =
+        operation === 'ListFlowExecutionEvents'
+          ? '"flowIdentifier":"FLOW123456","flowAliasIdentifier":"TSTALIASID","executionIdentifier":"execution","eventType":"OUTPUT",'
+          : '';
+      const result = await provider.callApi('{' + prefix + '"' + key + '":' + literal + '}');
+      expect(result.error).toBeUndefined();
+      expect(handle).toHaveBeenCalledOnce();
+      expect(handle.mock.calls[0][0].query[key]).toBe(expected);
+    } finally {
+      await provider.cleanup();
+    }
+  });
+
   it('preserves precise model-native JSON in streaming response chunks', async () => {
     const { provider } = fixture('InvokeModelWithResponseStream', {
       body: events([
@@ -614,6 +730,116 @@ describe('native Bedrock APIs', () => {
     expect(client.destroy).toHaveBeenCalledOnce();
     expect(provider.bedrock).toBeUndefined();
   });
+
+  it.each(['CountTokens', 'Rerank'])(
+    'closes %s clients after library evaluation scopes and supports reuse',
+    async (operation) => {
+      const handle = vi.spyOn(NodeHttpHandler.prototype, 'handle').mockResolvedValue({
+        response: {
+          statusCode: 200,
+          headers: { 'content-type': 'application/json' },
+          body: Buffer.from('{}'),
+        },
+      });
+      const destroy = vi.spyOn(NodeHttpHandler.prototype, 'destroy');
+      const provider = new AwsBedrockNativeApiProvider(operation, {
+        config: { region: 'us-east-1', accessKeyId: 'synthetic', secretAccessKey: 'synthetic' },
+      });
+      const prompt =
+        operation === 'CountTokens'
+          ? '{"modelId":"test.model","input":{"converse":{"messages":[{"role":"user","content":[{"text":"hello"}]}]}}}'
+          : '{"queries":[],"sources":[]}';
+      for (let batch = 0; batch < 2; batch++) {
+        await providerRegistry.withEvaluation(async () => {
+          await providerRegistry.useProvider(provider);
+          const result = await providerRegistry.withProvider(provider, () =>
+            provider.callApi(prompt),
+          );
+          expect(result.error).toBeUndefined();
+          expect(providerRegistry.has(provider)).toBe(true);
+          expect(destroy).toHaveBeenCalledTimes(batch);
+        });
+        expect(providerRegistry.has(provider)).toBe(false);
+        expect(destroy).toHaveBeenCalledTimes(batch + 1);
+      }
+      expect(handle).toHaveBeenCalledTimes(2);
+    },
+  );
+
+  it.each(['CountTokens', 'Rerank'])(
+    'does not dispatch %s when the evaluation ends during initialization',
+    async (operation) => {
+      const provider = new AwsBedrockNativeApiProvider(operation, {
+        config: { region: 'us-east-1' },
+      });
+      let releaseCredentials!: () => void;
+      let signalStarted!: () => void;
+      const started = new Promise<void>((resolve) => {
+        signalStarted = resolve;
+      });
+      const credentials = new Promise<{ accessKeyId: string; secretAccessKey: string }>(
+        (resolve) => {
+          releaseCredentials = () =>
+            resolve({ accessKeyId: 'synthetic', secretAccessKey: 'synthetic' });
+        },
+      );
+      vi.spyOn(provider, 'getCredentials').mockImplementation(() => {
+        signalStarted();
+        return credentials;
+      });
+      const handle = vi.spyOn(NodeHttpHandler.prototype, 'handle').mockResolvedValue({
+        response: {
+          statusCode: 200,
+          headers: { 'content-type': 'application/json' },
+          body: Buffer.from('{}'),
+        },
+      });
+      const prompt =
+        operation === 'CountTokens'
+          ? '{"modelId":"test.model","input":{"converse":{"messages":[{"role":"user","content":[{"text":"hello"}]}]}}}'
+          : '{"queries":[],"sources":[]}';
+      let call!: ReturnType<typeof provider.callApi>;
+      const evaluation = providerRegistry.withEvaluation(async () => {
+        call = providerRegistry.withProvider(provider, () => provider.callApi(prompt));
+        await started;
+      });
+      await started;
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      releaseCredentials();
+      const result = await call;
+      await evaluation;
+      expect(result.error).toContain('Evaluation ended before the provider call started');
+      expect(handle).not.toHaveBeenCalled();
+      expect(providerRegistry.has(provider)).toBe(false);
+    },
+  );
+
+  it.each(['CountTokens', 'Rerank'])(
+    'registers pending %s initialization for process cleanup',
+    async (operation) => {
+      const provider = new AwsBedrockNativeApiProvider(operation, {
+        config: { region: 'us-east-1' },
+      });
+      let releaseCredentials!: () => void;
+      vi.spyOn(provider, 'getCredentials').mockReturnValue(
+        new Promise<undefined>((resolve) => {
+          releaseCredentials = () => resolve(undefined);
+        }),
+      );
+      const destroy = vi.spyOn(NodeHttpHandler.prototype, 'destroy');
+      const initialization =
+        operation === 'CountTokens'
+          ? provider.getBedrockInstance()
+          : provider.getAgentRuntimeClient();
+      expect(providerRegistry.has(provider)).toBe(true);
+      const shutdown = providerRegistry.shutdownAll();
+      releaseCredentials();
+      await initialization;
+      await shutdown;
+      expect(destroy).toHaveBeenCalledOnce();
+      expect(providerRegistry.has(provider)).toBe(false);
+    },
+  );
 
   it('shares concurrent Runtime initialization across repeated cleanup and reuse', async () => {
     const provider = new AwsBedrockNativeApiProvider('CountTokens', {

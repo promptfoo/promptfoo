@@ -671,7 +671,10 @@ that need exact precision, use an inline string prompt (such as a YAML block) or
 prompt, and set `PROMPTFOO_DISABLE_JSON_AUTOESCAPE=true`. The shared prompt renderer's
 default JSON escaping, JSON prompt files, and object-valued prompts can round numbers
 before they reach this provider. With JSON auto-escaping disabled, use
-`{{ value | dump }}` to insert JSON-escaped string variables.
+`{{ value | dump }}` to insert JSON-escaped string variables. Raw model JSON retains
+large exponent literals without expanding them. Structured responses such as Converse
+tool arguments are decoded by the AWS SDK first and remain subject to its numeric
+parsing behavior.
 
 For SDK Document inputs, ordinary objects with `type: bigDecimal` and a numeric `string`
 field are rejected before dispatch: the SDK would turn them into numbers and discard

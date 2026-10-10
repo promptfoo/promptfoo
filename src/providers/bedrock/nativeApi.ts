@@ -1,20 +1,13 @@
 import { STATUS_CODES } from 'http';
 
-import { parseJsonBody } from '@aws-sdk/core/protocols';
-import {
-  fromBase64,
-  fromUtf8,
-  NumericValue,
-  streamCollector,
-  toBase64,
-  toUtf8,
-} from '@smithy/core/serde';
+import { NumericValue } from '@smithy/core/serde';
+import { providerRegistry } from '../providerRegistry';
 import { throwIfAborted } from '../shared';
 import { AwsBedrockGenericProvider, type BedrockOptions } from './base';
 import { isValidBedrockRetrievalFilter } from './retrievalFilter';
 import { createBedrockRequestHandler } from './util';
 import type { BedrockAgentRuntime } from '@aws-sdk/client-bedrock-agent-runtime';
-import type { DocumentSchema, ResponseMetadata, SerdeFunctions } from '@smithy/types';
+import type { ResponseMetadata } from '@smithy/types';
 
 import type {
   CallApiContextParams,
@@ -74,26 +67,39 @@ interface NativeApiConfig extends BedrockOptions {
   maxRetries?: number | string;
 }
 
-const nativeDocumentSchema: DocumentSchema = 15;
-const nativeSerdeContext: SerdeFunctions = {
-  base64Encoder: toBase64,
-  base64Decoder: fromBase64,
-  utf8Encoder: toUtf8,
-  utf8Decoder: fromUtf8,
-  streamCollector,
-};
+/** Compare decimal values without expanding exponent notation into arbitrarily many zeros. */
+function normalizeNumericLiteral(source: string): string {
+  const [mantissa, exponent = '0'] = source.toLowerCase().split('e');
+  const [integer, fraction = ''] = mantissa.split('.');
+  const digits = integer + fraction;
+  let end = digits.length;
+  while (end > 0 && digits[end - 1] === '0') {
+    end--;
+  }
+  const significant = digits.slice(0, end).replace(/^(-?)0+/, '$1');
+  if (significant === '' || significant === '-') {
+    return '0';
+  }
+  return `${significant}e${Number(exponent) - fraction.length + digits.length - end}`;
+}
 
 async function parseNativeJson(value: string | Uint8Array): Promise<any> {
-  // The SDK treats an empty body as {}, but native JSON requires a complete value.
-  if (value.length === 0) {
-    throw new SyntaxError('Unexpected end of JSON input');
-  }
-  // Use the SDK numeric reviver without its shape normalization, which discards own __proto__ values.
-  return parseJsonBody(
-    typeof value === 'string' ? fromUtf8(value) : value,
-    nativeSerdeContext,
-    nativeDocumentSchema,
-  );
+  const text = typeof value === 'string' ? value : new TextDecoder().decode(value);
+  return JSON.parse(text, (_key, number, context?: { source?: string }) => {
+    const source = context?.source;
+    if (typeof number !== 'number' || !source || source === String(number)) {
+      return number;
+    }
+    if (
+      Number.isFinite(number) &&
+      !Object.is(number, -0) &&
+      normalizeNumericLiteral(source) === normalizeNumericLiteral(String(number))
+    ) {
+      return number;
+    }
+    // Keep precise and extreme numbers lexical; the SDK reviver expands exponent literals.
+    return new NumericValue(source, 'bigDecimal');
+  });
 }
 
 /** JSON cannot represent SDK blobs. Decode only an explicit, single-key blob wrapper. */
@@ -209,7 +215,9 @@ export class AwsBedrockNativeApiProvider extends AwsBedrockGenericProvider {
   }
 
   getBedrockInstance() {
+    providerRegistry.throwIfResourceUseAborted();
     if (!this.runtime) {
+      providerRegistry.register(this);
       this.runtime = super.getBedrockInstance().catch((error) => {
         this.runtime = undefined;
         throw error;
@@ -219,7 +227,9 @@ export class AwsBedrockNativeApiProvider extends AwsBedrockGenericProvider {
   }
 
   async getAgentRuntimeClient() {
+    providerRegistry.throwIfResourceUseAborted();
     if (!this.agentRuntime) {
+      providerRegistry.register(this);
       this.agentRuntime = (async () => {
         const { BedrockAgentRuntime } = await import('@aws-sdk/client-bedrock-agent-runtime');
         const credentials = await this.getCredentials();
@@ -239,11 +249,16 @@ export class AwsBedrockNativeApiProvider extends AwsBedrockGenericProvider {
     return this.agentRuntime;
   }
 
+  async shutdown(): Promise<void> {
+    await this.cleanup();
+  }
+
   async cleanup(): Promise<void> {
     const clients = await Promise.allSettled([this.runtime ?? this.bedrock, this.agentRuntime]);
     this.bedrock = undefined;
     this.runtime = undefined;
     this.agentRuntime = undefined;
+    providerRegistry.unregister(this);
     for (const client of clients) {
       if (client.status === 'fulfilled') {
         client.value?.destroy();
@@ -270,7 +285,11 @@ export class AwsBedrockNativeApiProvider extends AwsBedrockGenericProvider {
       }
       // InvokeModel bodies are model-native JSON, not SDK structures. Leave their base64 strings intact.
       if (this.operation === 'InvokeModel' || this.operation === 'InvokeModelWithResponseStream') {
-        if (input.body && typeof input.body === 'object' && !('$base64' in input.body)) {
+        if (
+          input.body &&
+          typeof input.body === 'object' &&
+          !(Object.keys(input.body).length === 1 && '$base64' in input.body)
+        ) {
           input.body = JSON.stringify(encodeBlobs(input.body));
         }
         input.contentType ??= 'application/json';
@@ -312,6 +331,7 @@ export class AwsBedrockNativeApiProvider extends AwsBedrockGenericProvider {
         operation.service === 'runtime'
           ? await this.getBedrockInstance()
           : await this.getAgentRuntimeClient();
+      providerRegistry.throwIfResourceUseAborted();
       throwIfAborted(options?.abortSignal);
       // The operation name comes only from the fixed inference allowlist above.
       const invoke = client[operation.method as keyof typeof client] as (
