@@ -50,6 +50,10 @@ export type TransformInputType = (typeof TransformInputType)[keyof typeof Transf
 /**
  * Parses a file path string to extract the file path and function name.
  * Handles Windows drive letters (e.g., C:\path\to\file.js:functionName).
+ * Only splits at the last colon (index > 1) when the part before it is a
+ * JavaScript file or ends with `.py`; otherwise colons are treated as part
+ * of the path (e.g. POSIX directories containing `:`) and no function name
+ * is returned.
  * @param filePath - The file path string, potentially including a function name.
  * @returns A tuple containing the file path and function name (if present).
  */
@@ -57,7 +61,11 @@ function parseFilePathAndFunctionName(filePath: string): [string, string | undef
   const lastColonIndex = filePath.lastIndexOf(':');
   // Check if colon is part of Windows drive letter (position 1) or not present
   if (lastColonIndex > 1) {
-    return [filePath.slice(0, lastColonIndex), filePath.slice(lastColonIndex + 1)];
+    const candidateFilePath = filePath.slice(0, lastColonIndex);
+    if (!isJavascriptFile(candidateFilePath) && !candidateFilePath.endsWith('.py')) {
+      return [filePath, undefined];
+    }
+    return [candidateFilePath, filePath.slice(lastColonIndex + 1)];
   }
   return [filePath, undefined];
 }

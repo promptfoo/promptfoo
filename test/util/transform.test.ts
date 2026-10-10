@@ -382,6 +382,59 @@ describe('util', () => {
         const transformedOutput = await transform(transformFunctionPath, output, context);
         expect(transformedOutput).toBe('HELLO');
       });
+
+      it('loads a JavaScript file whose directory contains a colon without a function suffix', async () => {
+        const output = 'hello';
+        const context = { vars: { key: 'value' }, prompt: { id: '123' } };
+
+        mockedImportModule.mockResolvedValueOnce((output: string) => output.toUpperCase());
+
+        const transformedOutput = await transform(
+          'file://runs/2026-05-27T12:00/transform.js',
+          output,
+          context,
+        );
+        expect(transformedOutput).toBe('HELLO');
+        const calledPath = (mockedImportModule.mock.calls[0][0] as string).replace(/\\/g, '/');
+        expect(calledPath).toContain('runs/2026-05-27T12:00/transform.js');
+      });
+
+      it('loads a named function from a JavaScript file whose directory contains a colon', async () => {
+        const output = 'hello';
+        const context = { vars: { key: 'value' }, prompt: { id: '123' } };
+
+        mockedImportModule.mockResolvedValueOnce(
+          (output: string) => output.toUpperCase() + ' NAMED',
+        );
+
+        const transformedOutput = await transform(
+          'file://runs/2026-05-27T12:00/transform.js:customTransform',
+          output,
+          context,
+        );
+        expect(transformedOutput).toBe('HELLO NAMED');
+        const calledPath = (mockedImportModule.mock.calls[0][0] as string).replace(/\\/g, '/');
+        expect(calledPath).toContain('runs/2026-05-27T12:00/transform.js');
+        expect(calledPath).not.toContain('customTransform');
+      });
+
+      it('calls runPython with the full path for a Python file whose directory contains a colon', async () => {
+        const output = 'hello';
+        const context = { vars: { key: 'value' }, prompt: { id: '123' } };
+
+        const transformedOutput = await transform(
+          'file://runs/2026-05-27T12:00/transform.py',
+          output,
+          context,
+        );
+        expect(transformedOutput).toBe('HELLO FROM PYTHON');
+        expect(runPython).toHaveBeenCalledWith(expect.any(String), 'get_transform', [
+          output,
+          expect.any(Object),
+        ]);
+        const pythonPath = (vi.mocked(runPython).mock.lastCall?.[0] as string).replace(/\\/g, '/');
+        expect(pythonPath).toContain('runs/2026-05-27T12:00/transform.py');
+      });
     });
 
     describe('inline function transforms (Node.js package)', () => {
