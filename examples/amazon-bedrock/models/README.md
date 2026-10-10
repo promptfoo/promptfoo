@@ -188,7 +188,7 @@ providers:
       maxTokens: 1024
 ```
 
-Use Converse for generic Claude profiles to avoid native sampling defaults that newer Claude models reject. Opaque profile ARNs also lack automatic cost estimates, so these examples do not use cost assertions.
+These examples use Converse for opaque Claude profiles, so no `inferenceModelType` is required. Opaque profile ARNs also lack automatic cost estimates, so these examples do not use cost assertions.
 
 ### Supported Model Types
 
