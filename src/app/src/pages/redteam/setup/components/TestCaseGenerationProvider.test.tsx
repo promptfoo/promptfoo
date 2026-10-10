@@ -286,9 +286,72 @@ describe('TestCaseGenerationProvider', () => {
         expect(onError).toHaveBeenCalledTimes(1);
         if (message === 'api-error') {
           expect(onError.mock.calls[0][0]).toEqual(new Error('Invalid configuration provided'));
-        } else if (message !== null) {
+        } else if (message === null) {
+          expect(onError.mock.calls[0][0]).toBeInstanceOf(Error);
+          expect(onError.mock.calls[0][0].message).toBe('Failed to generate test case');
+        } else {
           expect(onError.mock.calls[0][0]).toBe(error);
         }
+      });
+
+      it.each([undefined, null, { message: 'Structured rejection' }, 42])(
+        'normalizes non-Error generation rejection %j for error callbacks',
+        async (rejection) => {
+          callApiMock.mockRejectedValue(rejection);
+          const onError = vi.fn((error: Error) => error.message);
+          render(
+            <ToastProvider>
+              <TestCaseGenerationProvider
+                redTeamConfig={{ ...MOCK_CONFIG, target: createHttpGenerationProvider() }}
+              >
+                <TestConsumer testPlugin="bola" testStrategy={testStrategy} onError={onError} />
+              </TestCaseGenerationProvider>
+            </ToastProvider>,
+          );
+          await userEvent.setup().click(screen.getByTestId('test-case-generation-btn'));
+          await waitFor(() => expect(onError).toHaveBeenCalledTimes(1));
+          expect(onError.mock.calls[0][0]).toBeInstanceOf(Error);
+          expect(onError).toHaveReturnedWith('Failed to generate test case');
+          expect(screen.getByText('Failed to generate test case')).toBeInTheDocument();
+          await waitFor(() =>
+            expect(screen.getByTestId('isGenerating')).toHaveTextContent('false'),
+          );
+        },
+      );
+
+      it.each([
+        new Error('Provider failed'),
+        'Non-Error provider failure',
+        undefined,
+        null,
+        { message: 'Structured provider failure' },
+      ])('reports target execution rejection %j as an Error', async (rejection) => {
+        callApiMock.mockImplementation((path, options) =>
+          path === '/providers/test'
+            ? Promise.reject(rejection)
+            : defaultCallApiImplementation(path, options),
+        );
+        const onError = vi.fn((error: Error) => error.message);
+        render(
+          <ToastProvider>
+            <TestCaseGenerationProvider
+              redTeamConfig={{ ...MOCK_CONFIG, target: createHttpGenerationProvider() }}
+            >
+              <TestConsumer testPlugin="bola" testStrategy={testStrategy} onError={onError} />
+            </TestCaseGenerationProvider>
+          </ToastProvider>,
+        );
+        await userEvent.setup().click(screen.getByTestId('test-case-generation-btn'));
+        await waitFor(() => expect(onError).toHaveBeenCalledTimes(1));
+        expect(callApiMock).toHaveBeenCalledWith('/providers/test', expect.any(Object));
+        expect(onError.mock.calls[0][0]).toBeInstanceOf(Error);
+        expect(onError).toHaveReturnedWith(
+          rejection instanceof Error ? rejection.message : 'Failed to run test against target',
+        );
+        if (rejection instanceof Error) {
+          expect(onError.mock.calls[0][0]).toBe(rejection);
+        }
+        await waitFor(() => expect(screen.getByTestId('isGenerating')).toHaveTextContent('false'));
       });
     },
   );
