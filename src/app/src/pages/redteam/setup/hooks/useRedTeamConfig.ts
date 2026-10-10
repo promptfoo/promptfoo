@@ -3,6 +3,7 @@ import {
   looksLikeCredentialValue,
   looksLikeRequestCredentialParameter,
 } from '@app/stores/evalConfig';
+import { isPlainObject } from '@app/utils/isPlainObject';
 import { REDTEAM_DEFAULTS } from '@promptfoo/redteam/constants';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
@@ -67,14 +68,6 @@ const AGENTIC_PROVIDER_IDS = [
 ];
 let recoverableNonObjectTargetMarker: string | null = null;
 let recoverableValidImportTargetMarker: string | null = null;
-
-const isPlainObject = (value: unknown): value is Record<string, unknown> => {
-  if (typeof value !== 'object' || value === null) {
-    return false;
-  }
-  const prototype = Object.getPrototypeOf(value);
-  return prototype === Object.prototype || prototype === null;
-};
 
 const isPersistedNonObjectTargetDraft = (draft: string | null): boolean => {
   if (typeof window === 'undefined' || draft === null) {
