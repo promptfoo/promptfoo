@@ -36,6 +36,7 @@ import {
   EvalRunError,
   showRedteamProviderLabelMissingWarning,
 } from '../../src/node/doEval';
+import * as evalLock from '../../src/node/evalLock';
 import {
   deleteErrorResults,
   getErrorResultIds,
@@ -1671,6 +1672,52 @@ describe('evalCommand', () => {
     } finally {
       processOnSpy.mockRestore();
       removeListenerSpy.mockRestore();
+    }
+  });
+
+  it('should fail an interrupted locked evaluation', async () => {
+    const previousExitCode = process.exitCode;
+    process.exitCode = undefined;
+    const restoreEnv = mockProcessEnv({ PROMPTFOO_PASS_RATE_THRESHOLD: '80' });
+    let sigintHandler: NodeJS.SignalsListener | undefined;
+    const processOnSpy = vi.spyOn(process, 'on').mockImplementation((event, listener) => {
+      if (event === 'SIGINT') {
+        sigintHandler = listener as NodeJS.SignalsListener;
+      }
+      return process;
+    });
+    const removeListenerSpy = vi.spyOn(process, 'removeListener').mockReturnValue(process);
+    const lock = evalLock.createEvalLock(
+      {
+        version: 1,
+        defaultTest: null,
+        tests: [],
+        scenarios: null,
+        execution: { repeat: 1, filterRange: null },
+      },
+      80,
+    );
+    const writeLockSpy = vi.spyOn(evalLock, 'writeEvalLock').mockResolvedValue(lock);
+    vi.mocked(evaluate).mockImplementationOnce(async (_testSuite, evalRecord) => {
+      sigintHandler?.('SIGINT');
+      return evalRecord as Eval;
+    });
+
+    try {
+      await doEval(
+        { write: true, lock: 'eval.lock.json' } as Parameters<typeof doEval>[0] & { lock: string },
+        defaultConfig,
+        defaultConfigPath,
+        { eventSource: 'cli' },
+      );
+
+      expect(process.exitCode).toBe(130);
+    } finally {
+      writeLockSpy.mockRestore();
+      processOnSpy.mockRestore();
+      removeListenerSpy.mockRestore();
+      restoreEnv();
+      process.exitCode = previousExitCode;
     }
   });
 

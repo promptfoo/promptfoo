@@ -59,6 +59,17 @@ describe('eval lock CLI', () => {
   }
 
   it('locks the resolved bar, verifies it, and rejects a doctored config before running', () => {
+    const unseededLockPath = path.join(tempDir, 'unseeded.lock.json');
+    const unseeded = runEval(['--filter-sample', '2', '--lock', unseededLockPath]);
+    expect(unseeded.status, unseeded.stderr || unseeded.stdout).toBe(1);
+    expect(unseeded.stdout + unseeded.stderr).toContain('require --filter-sample-seed');
+    expect(fs.existsSync(unseededLockPath)).toBe(false);
+
+    const emptyLockPath = path.join(tempDir, 'empty.lock.json');
+    const empty = runEval(['--filter-range', '99:100', '--lock', emptyLockPath]);
+    expect(empty.status, empty.stderr || empty.stdout).toBe(100);
+    expect(empty.stdout + empty.stderr).toContain('run produced no completed results');
+
     const locked = runEval(['--lock', lockPath]);
     expect(locked.status, locked.stderr || locked.stdout).toBe(0);
     expect(fs.existsSync(lockPath)).toBe(true);

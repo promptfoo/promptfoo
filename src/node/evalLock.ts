@@ -5,6 +5,10 @@ import * as path from 'path';
 import { z } from 'zod';
 import { toSerializableProviderRef } from '../models/evalResult';
 import { sha256 } from '../util/createHash';
+import {
+  buildConfiguredProviderMap,
+  resolveConfiguredProviderReference,
+} from '../util/gradingProvider';
 
 const SHA256_HEX = /^[a-f0-9]{64}$/;
 const UUID_V7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -71,6 +75,7 @@ type EvalBarSource = {
   tests?: unknown;
   scenarios?: unknown;
   extensions?: unknown;
+  providers?: unknown;
 };
 
 export type EvalBar = {
@@ -96,6 +101,55 @@ function isRuntimeApiProvider(value: unknown): value is {
     'callApi' in value &&
     typeof value.callApi === 'function'
   );
+}
+
+type ConfiguredProviderMap = ReturnType<typeof buildConfiguredProviderMap>;
+
+function snapshotGradingProviderReferences(
+  value: unknown,
+  providerMap: ConfiguredProviderMap,
+  ancestors: Set<object>,
+  providerOption = false,
+): unknown {
+  if (
+    value === null ||
+    value === undefined ||
+    typeof value !== 'object' ||
+    isRuntimeApiProvider(value) ||
+    Buffer.isBuffer(value) ||
+    value instanceof Date
+  ) {
+    return value;
+  }
+  if (ancestors.has(value)) {
+    throw new Error('Evaluation locks cannot include circular test data');
+  }
+  ancestors.add(value);
+
+  try {
+    if (Array.isArray(value)) {
+      return value.map((entry) =>
+        snapshotGradingProviderReferences(entry, providerMap, ancestors, providerOption),
+      );
+    }
+
+    const record = value as Record<string, unknown>;
+    const isAssertion = typeof record.type === 'string';
+    return Object.fromEntries(
+      Object.entries(record).map(([key, entry]) => {
+        const resolved =
+          key === 'provider' && (providerOption || isAssertion)
+            ? resolveConfiguredProviderReference(entry, providerMap)
+            : entry;
+        return [
+          key,
+          snapshotGradingProviderReferences(resolved, providerMap, ancestors, key === 'options'),
+        ];
+      }),
+    );
+  } finally {
+    ancestors.delete(value);
+  }
 }
 
 function uuidV7(): string {
@@ -268,11 +322,20 @@ export function createEvalBar(
     );
   }
 
+  const runtimeProviders = Array.isArray(testSuite.providers)
+    ? testSuite.providers.filter(isRuntimeApiProvider)
+    : [];
+  const providerMap = buildConfiguredProviderMap(
+    runtimeProviders as Parameters<typeof buildConfiguredProviderMap>[0],
+  );
+  const snapshot = (value: unknown) =>
+    snapshotGradingProviderReferences(value, providerMap, new Set());
+
   return {
     version: 1,
-    defaultTest: testSuite.defaultTest ?? null,
-    tests: testSuite.tests ?? [],
-    scenarios: testSuite.scenarios ?? null,
+    defaultTest: snapshot(testSuite.defaultTest ?? null),
+    tests: snapshot(testSuite.tests ?? []),
+    scenarios: snapshot(testSuite.scenarios ?? null),
     execution: {
       repeat: execution.repeat,
       filterRange: execution.filterRange ?? null,

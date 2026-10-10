@@ -697,6 +697,16 @@ async function doEvalWithEnv(
       : (cmdObj.filterRange ?? commandLineOptions?.filterRange ?? evaluateOptions.filterRange);
     const filterSample = cmdObj.filterSample ?? commandLineOptions?.filterSample;
     const filterSampleSeed = cmdObj.filterSampleSeed ?? commandLineOptions?.filterSampleSeed;
+    if (
+      (evalLockPath || verifyLockPath) &&
+      filterSample !== undefined &&
+      filterSampleSeed === undefined
+    ) {
+      return failEvalRun(
+        'Evaluation locks require --filter-sample-seed when sampling tests',
+        isCliInvocation,
+      );
+    }
     const hasActiveTestFilter =
       filterRange !== undefined ||
       cmdObj.filterFailing !== undefined ||
@@ -1039,6 +1049,12 @@ async function doEvalWithEnv(
 
     // If paused, print minimal guidance and skip the rest of the reporting
     if (paused && cmdObj.write !== false) {
+      if (activeEvalLock) {
+        logger.error(
+          chalk.red('Evaluation lock was not satisfied because the run was interrupted'),
+        );
+        process.exitCode = 130;
+      }
       printBorder();
       logger.info(`${chalk.yellow('⏸')} Evaluation paused. ID: ${chalk.cyan(evalRecord.id)}`);
       logger.info(`» Resume with: ${chalk.green.bold('promptfoo eval --resume ' + evalRecord.id)}`);
@@ -1336,12 +1352,21 @@ async function doEvalWithEnv(
         : (configuredPassRateThreshold ?? 100);
       const failedTestExitCode = getEnvInt('PROMPTFOO_FAILED_TEST_EXIT_CODE', 100);
 
+      const invalidLockedPassRate = Boolean(
+        activeEvalLock && (totalTests === 0 || !Number.isFinite(passRate)),
+      );
       const belowThreshold =
+        invalidLockedPassRate ||
         passRate < (Number.isFinite(passRateThreshold) ? passRateThreshold : 100);
       // An eval stopped because its target is unavailable did not run every test, so it
       // fails whatever the tests before the stop did.
       if (isCliInvocation && (belowThreshold || targetErrorStatus != null)) {
-        if (belowThreshold && (activeEvalLock || configuredPassRateThreshold !== undefined)) {
+        if (invalidLockedPassRate) {
+          logger.info(chalk.white('Evaluation lock failed: the run produced no completed results'));
+        } else if (
+          belowThreshold &&
+          (activeEvalLock || configuredPassRateThreshold !== undefined)
+        ) {
           logger.info(
             chalk.white(
               `Pass rate ${chalk.red.bold(passRate.toFixed(2))}${chalk.red('%')} is below the ${activeEvalLock ? 'locked ' : ''}threshold of ${chalk.red.bold(passRateThreshold)}${chalk.red('%')}`,

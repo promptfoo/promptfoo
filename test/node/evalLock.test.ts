@@ -15,7 +15,7 @@ import {
   writeEvalLock,
 } from '../../src/node/evalLock';
 
-import type { TestSuite } from '../../src/types';
+import type { ApiProvider, TestSuite } from '../../src/types';
 
 function createSuite(expected = 'Paris', input = 'Paris'): TestSuite {
   return {
@@ -69,6 +69,27 @@ describe('evalLock', () => {
         hashEvalBar(changedRange),
       ]).size,
     ).toBe(5);
+  });
+
+  it('binds configured grading providers referenced by label', () => {
+    const createGradedSuite = (model: string): TestSuite => {
+      const suite = createSuite();
+      suite.providers = [
+        {
+          id: () => 'grader-id',
+          label: 'grader',
+          config: { model },
+          callApi: async () => ({ output: 'ok' }),
+        } as ApiProvider,
+      ];
+      suite.tests![0].assert = [{ type: 'llm-rubric', value: 'Be correct', provider: 'grader' }];
+      return suite;
+    };
+
+    const first = hashEvalBar(createEvalBar(createGradedSuite('model-a'), { repeat: 1 }));
+    const changed = hashEvalBar(createEvalBar(createGradedSuite('model-b'), { repeat: 1 }));
+
+    expect(changed).not.toBe(first);
   });
 
   it('rejects closure-dependent function criteria', () => {
