@@ -1328,6 +1328,48 @@ describe('ResultsTable Metrics Display', () => {
         providerImagePrompt,
       );
     });
+
+    it.each([
+      'golden-047-brushless-dc-motor-assemblies-for-appliances-description-a45abef4',
+      'golden_047_brushless_dc_motor_assemblies_for_appliances_description_a45abef4',
+      'ThisIsAnOrdinaryLongTestDescriptionWithoutWhitespaceOrHyphens1234567890',
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aS3kAAAAASUVORK5CYII=',
+      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aS3kAAAAASUVORK5CYII=',
+      'promptfoo://blob/abc123def456789012345678901234567890',
+    ])('renders description %s as text, not an implicit image', (longDescription) => {
+      vi.mocked(useTableStore).mockImplementation(() => ({
+        config: {},
+        evalId: '123',
+        setTable: vi.fn(),
+        table: {
+          body: [
+            {
+              outputs: [{ pass: true, score: 1, text: 'test output' }],
+              test: { description: longDescription },
+              vars: [],
+            },
+          ],
+          head: {
+            prompts: [{}],
+            vars: [],
+          },
+        },
+        version: 4,
+        fetchEvalData: vi.fn(),
+        filters: {
+          values: {},
+          appliedCount: 0,
+          options: {
+            metric: [],
+          },
+        },
+      }));
+
+      renderWithProviders(<ResultsTable {...defaultProps} maxTextLength={1000} />);
+
+      expect(screen.getByText(longDescription)).toBeInTheDocument();
+      expect(screen.queryByRole('img', { name: 'Base64 encoded image' })).not.toBeInTheDocument();
+    });
   });
 });
 
