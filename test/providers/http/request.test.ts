@@ -1675,47 +1675,12 @@ describe('HttpProvider with token estimation', () => {
     expect(result.tokenUsage!.total).toBe(8);
   });
 
-  it('should not override existing tokenUsage from transformResponse', async () => {
+  it('should preserve cache-aware token usage from transformResponse when estimation is enabled', async () => {
     const provider = new HttpProvider('http://test.com', {
       config: {
         method: 'POST',
         body: { prompt: '{{prompt}}' },
         tokenEstimation: createEnabledSetting(),
-        transformResponse: () => ({
-          output: 'Test response',
-          tokenUsage: {
-            prompt: 100,
-            completion: 200,
-            total: 300,
-          },
-        }),
-      },
-    });
-
-    const mockResponse = {
-      data: JSON.stringify({ result: 'Hello world' }),
-      status: 200,
-      statusText: 'OK',
-      cached: false,
-    };
-    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
-
-    const result = await provider.callApi('Test prompt');
-
-    // Should use the tokenUsage from transformResponse, not estimation
-    expect(result.tokenUsage!.prompt).toBe(100);
-    expect(result.tokenUsage!.completion).toBe(200);
-    expect(result.tokenUsage!.total).toBe(300);
-  });
-
-  it('should preserve cache-aware token usage details from transformResponse', async () => {
-    const provider = new HttpProvider('http://test.com', {
-      config: {
-        method: 'POST',
-        body: { prompt: '{{prompt}}' },
-        tokenEstimation: {
-          enabled: true,
-        },
         transformResponse: () => ({
           output: 'Test response',
           tokenUsage: {
