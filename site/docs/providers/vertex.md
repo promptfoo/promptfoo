@@ -214,25 +214,27 @@ By default, supported Llama 3 models use Llama Guard for content safety. You can
 
 ### Embedding Models
 
-Reference Vertex embedding models with the `vertex:embedding:` prefix:
+Reference Vertex embedding models with the `vertex:embedding:` prefix. The provider accepts text strings for both API formats:
 
-- `vertex:embedding:gemini-embedding-001` - Recommended default. Multilingual plus code, up to 3,072 dimensions, 2,048 input-token limit
-- `vertex:embedding:text-embedding-005` - English and code, up to 768 dimensions, 2,048 input-token limit
-- `vertex:embedding:text-multilingual-embedding-002` - Multilingual, up to 768 dimensions, 2,048 input-token limit
-
-Pass `autoTruncate: true` in `config` to let Vertex truncate oversize inputs on the server instead of returning an error:
+- `vertex:embedding:gemini-embedding-2` uses `embedContent` and defaults to `global`. Set `region: us` or `region: eu` for a supported multi-region endpoint. Image, audio, video, and PDF embedding inputs are not yet exposed by promptfoo's embedding interface.
+- `vertex:embedding:gemini-embedding-001` remains the default for existing configurations and uses `predict`, as do `text-embedding-005` and `text-multilingual-embedding-002`.
 
 ```yaml
 defaultTest:
   options:
     provider:
       embedding:
-        id: vertex:embedding:gemini-embedding-001
+        id: vertex:embedding:gemini-embedding-2
         config:
-          autoTruncate: true
+          projectId: your-project-id
+          outputDimensionality: 768
 ```
 
-Upgrading between embedding model families changes the vector space, so re-embed any previously indexed content. See Google's [supported embedding models](https://cloud.google.com/vertex-ai/generative-ai/docs/embeddings/get-text-embeddings) reference for the current list.
+`outputDimensionality` is supported on both API paths. For the text prediction models, `taskType`, `title` (with `RETRIEVAL_DOCUMENT`), and `autoTruncate` are also forwarded to Vertex. Truncation defaults to `false`.
+
+Embedding 2 does not accept `taskType`, `title`, or `autoTruncate`; these settings fail before a request is sent. Include task or document instructions in the input text instead. Upgrading between embedding families changes the vector space, so re-embed previously indexed content.
+
+See Google's [text embedding guide](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/embeddings/get-text-embeddings), [Embedding 2 guide](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/embeddings/get-multimodal-embeddings), and [embedContent API reference](https://docs.cloud.google.com/gemini-enterprise-agent-platform/reference/rest/v1/projects.locations.publishers.models/embedContent) for current model limits and request fields.
 
 ### Image Generation Models
 
@@ -1420,7 +1422,7 @@ The Vertex AI provider supports core functionality for LLM evaluation:
 | Video generation         | ✅        | Use `vertex:video:` provider                                                              |
 | Image generation         | ⚠️        | [Gemini image and Imagen adapters](#image-generation-models) with `config.projectId`      |
 
-These are promptfoo provider capabilities. [Live API](#live-api) model availability varies by project and location. Embedding support here covers the [text embedding request format](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/embeddings/get-text-embeddings), not every model or modality in the cloud catalog. See [image generation models](#image-generation-models) for the Imagen adapter and native Gemini image routes.
+These are promptfoo provider capabilities. [Live API](#live-api) model availability varies by project and location. Embedding support covers text inputs through both `predict` and `embedContent`; see [embedding models](#embedding-models) for supported configuration and modality limits. See [image generation models](#image-generation-models) for the Imagen adapter and native Gemini image routes.
 
 ## See Also
 

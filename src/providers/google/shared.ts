@@ -45,6 +45,7 @@ export interface GoogleModel {
 // https://docs.cloud.google.com/vertex-ai/generative-ai/docs/learn/locations#generative_ai_models
 const VERTEX_GLOBAL_DEFAULT_MODELS = new Set([
   'gemini-3.8-flash',
+  'gemini-3.8-flash-cyber',
   'gemini-3.7-flash',
   'gemini-3.6-flash',
   'gemini-3.5-flash',
@@ -142,6 +143,19 @@ export const GOOGLE_MODELS: GoogleModel[] = [
       vertexRegionalPremium: 1.1,
     }),
   ),
+
+  // Fairwind allowlisted Vertex model; the Flash introductory discount does not apply.
+  {
+    id: 'gemini-3.8-flash-cyber',
+    vertexCost: {
+      input: 1.5 / 1e6,
+      output: 7.5 / 1e6,
+      cacheRead: 0.15 / 1e6,
+      priorityMultiplier: 1.8,
+      flexMultiplier: 0.5,
+    },
+    vertexRegionalPremium: 1.1,
+  },
 
   // Gemini 3.5 models.
   {

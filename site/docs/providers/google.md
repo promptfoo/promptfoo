@@ -341,7 +341,7 @@ setting; promptfoo rejects those settings before sending a request.
 
 :::note Gemini 3.8 Flash Cyber
 
-Google provides [Gemini 3.8 Flash Cyber through the Fairwind Program](https://deepmind.google/fairwind-program/). Its public model catalog does not list a Cyber API model ID or pricing. Use the model ID, endpoint, and access instructions supplied by Google; the regular Flash model does not grant Cyber access.
+Google documents [`gemini-3.8-flash-cyber` on Vertex](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/gemini/3-8-flash-cyber) for allowlisted Fairwind customers. Use `vertex:gemini-3.8-flash-cyber` with an authorized project; it defaults to `global` and also supports `region: us`. The public Flash introductory discount does not apply. This model supports structured output and thinking, but not function calling, grounding, code execution, Interactions, or Live. Availability on Vertex does not imply access through the Gemini API. See [Vertex pricing](https://cloud.google.com/gemini-enterprise-agent-platform/generative-ai/pricing).
 
 :::
 
