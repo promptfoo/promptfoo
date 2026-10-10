@@ -28,7 +28,7 @@ import { sanitizeConfigForOutput } from './util/sanitizer';
 import type Eval from './models/eval';
 import type EvalResult from './models/evalResult';
 import type ModelAudit from './models/modelAudit';
-import type { Prompt, TestCase } from './types';
+import type { Prompt, ProviderResponse, TestCase } from './types';
 
 interface ShareDomainResult {
   domain: string;
@@ -519,6 +519,75 @@ async function rollbackEval(url: string, evalId: string, headers: Record<string,
   }
 }
 
+async function prepareCheckpointMetadata<T>(
+  metadata: T,
+  prepare: (response: ProviderResponse) => Promise<ProviderResponse>,
+): Promise<T> {
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) {
+    return metadata;
+  }
+  const record = metadata as Record<string, unknown>;
+  if (record.interruptedStrategy !== true || !Array.isArray(record.completedTargetResponses)) {
+    return metadata;
+  }
+  return {
+    ...record,
+    completedTargetResponses: await Promise.all(
+      record.completedTargetResponses.map(async (entry) => {
+        if (
+          !entry ||
+          typeof entry !== 'object' ||
+          Array.isArray(entry) ||
+          !entry.response ||
+          typeof entry.response !== 'object' ||
+          Array.isArray(entry.response)
+        ) {
+          return entry;
+        }
+        // The extractor also follows owned metadata inside each target response.
+        // Prepare descendants first so every target remains a bounded media root.
+        const metadata = await prepareCheckpointMetadata(entry.response.metadata, prepare);
+        const response =
+          metadata === entry.response.metadata ? entry.response : { ...entry.response, metadata };
+        return { ...entry, response: await prepare(response) };
+      }),
+    ),
+  } as T;
+}
+
+/**
+ * Checkpoint wrappers can push target media past generic traversal limits. Treat
+ * each owned target response as a bounded root, only after stripping the detached
+ * share artifact. Arbitrary metadata keeps the original depth and string caps.
+ */
+async function prepareCheckpointMediaForShare(
+  result: EvalResult,
+  prepare: (response: ProviderResponse) => Promise<ProviderResponse>,
+): Promise<void> {
+  result.metadata = await prepareCheckpointMetadata(result.metadata, prepare);
+  if (result.response?.metadata) {
+    result.response = {
+      ...result.response,
+      metadata: await prepareCheckpointMetadata(result.response.metadata, prepare),
+    };
+  }
+}
+
+async function inlineResultsForShare(
+  results: EvalResult[],
+  cache: ReturnType<typeof createBlobInlineCache>,
+  localEvalId: string,
+): Promise<EvalResult[]> {
+  await Promise.all(
+    results.map((result) =>
+      prepareCheckpointMediaForShare(result, (response) =>
+        inlineBlobRefsForShare(response, cache, localEvalId),
+      ),
+    ),
+  );
+  return inlineBlobRefsForShare(results, cache, localEvalId);
+}
+
 async function prepareChunkForShare(
   chunk: EvalResult[],
   localEvalId: string,
@@ -542,19 +611,24 @@ async function prepareChunkForShare(
     return result;
   });
   const chunkToSend = inlineCache
-    ? await inlineBlobRefsForShare(sharedResults, inlineCache, localEvalId)
+    ? await inlineResultsForShare(sharedResults, inlineCache, localEvalId)
     : sharedResults;
 
   if (remoteBlobUploadCache) {
     await Promise.all(
-      chunkToSend.map((result) =>
-        uploadBlobRefsForShare(result, remoteBlobUploadCache, {
+      chunkToSend.map(async (result) => {
+        const context = {
           localEvalId,
           remoteEvalId,
           promptIdx: result.promptIdx,
           testIdx: result.testIdx,
-        }),
-      ),
+        };
+        await uploadBlobRefsForShare(result, remoteBlobUploadCache, context);
+        await prepareCheckpointMediaForShare(result, async (response) => {
+          await uploadBlobRefsForShare(response, remoteBlobUploadCache, context);
+          return response;
+        });
+      }),
     );
   }
 
@@ -588,7 +662,7 @@ async function sendChunkedResults(
     return null;
   }
   if (inlineBlobs && inlineCache) {
-    sampleResults = await inlineBlobRefsForShare(sampleResults, inlineCache, evalRecord.id);
+    sampleResults = await inlineResultsForShare(sampleResults, inlineCache, evalRecord.id);
   }
   logger.debug(`Loaded ${sampleResults.length} sample results to determine chunk size`);
 
