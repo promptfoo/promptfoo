@@ -437,19 +437,22 @@ describe('ProviderRateLimitState', () => {
   });
 
   describe('executeWithRetry - retry behavior', () => {
+    const createRetryCall =
+      (nextAttempt: () => number, succeedOn = 2) =>
+      async () => {
+        if (nextAttempt() < succeedOn) {
+          throw new Error('Rate limit');
+        }
+        return 'success';
+      };
+
     it('should retry on rate limit and eventually succeed', async () => {
       let attempt = 0;
 
       // Start the request - it will retry after rate limit
       const promise = state.executeWithRetry(
         'req-1',
-        async () => {
-          attempt++;
-          if (attempt < 2) {
-            throw new Error('Rate limit');
-          }
-          return 'success';
-        },
+        createRetryCall(() => ++attempt),
         {
           // Use 0 for immediate retry to avoid timing-dependent flakiness
           // (non-zero values race against slot queue's resetAt timer)
@@ -473,13 +476,7 @@ describe('ProviderRateLimitState', () => {
       let attempt = 0;
       const promise = state.executeWithRetry(
         'req-1',
-        async () => {
-          attempt++;
-          if (attempt < 2) {
-            throw new Error('Rate limit');
-          }
-          return 'success';
-        },
+        createRetryCall(() => ++attempt),
         {
           // Use 0 for immediate retry to avoid timing-dependent flakiness
           // (non-zero values race against slot queue's resetAt timer)
@@ -501,13 +498,7 @@ describe('ProviderRateLimitState', () => {
       let attempt = 0;
       const promise = state.executeWithRetry(
         'req-1',
-        async () => {
-          attempt++;
-          if (attempt < 3) {
-            throw new Error('Rate limit');
-          }
-          return 'success';
-        },
+        createRetryCall(() => ++attempt, 3),
         {
           // Use 0 for immediate retry to avoid timing-dependent flakiness
           // (non-zero values race against slot queue's resetAt timer)
