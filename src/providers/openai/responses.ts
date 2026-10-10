@@ -66,7 +66,6 @@ import {
   RETIRED_OPENAI_MODEL_IDS,
 } from './util';
 
-import type { EnvOverrides } from '../../types/env';
 import type {
   CallApiContextParams,
   CallApiOptionsParams,
@@ -804,7 +803,11 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
 
   constructor(
     modelName: string,
-    options: { config?: OpenAiCompletionOptions; id?: string; env?: EnvOverrides } = {},
+    options: {
+      config?: OpenAiCompletionOptions;
+      id?: string;
+      env?: OpenAiGenericProvider['env'];
+    } = {},
   ) {
     super(modelName, options);
     this.config = options.config ? { ...options.config } : {};
@@ -836,6 +839,12 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     return modelName === configuredModelName
       ? this.supportsTemperature()
       : !this.isReasoningCapabilityModel(modelName);
+  }
+
+  protected getConfiguredTopP(config: OpenAiCompletionOptions): number | undefined {
+    return config.top_p !== undefined || getEnvString('OPENAI_TOP_P')
+      ? (config.top_p ?? getEnvFloat('OPENAI_TOP_P', 1))
+      : undefined;
   }
 
   private getEffectiveModelName(config: OpenAiCompletionOptions): string {
@@ -1111,6 +1120,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         ? (config.temperature ?? temperatureDefault)
         : undefined;
     const reasoningEffort = isReasoningModel ? effectiveReasoningEffort : undefined;
+    const topP = this.getConfiguredTopP(config);
 
     const instructions = config.instructions;
 
@@ -1179,9 +1189,8 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       ...(reasoningEffort ? { reasoning: { effort: reasoningEffort } } : {}),
       ...(temperature === undefined ? {} : { temperature }),
       ...(instructions ? { instructions } : {}),
-      ...((isGPT6Model || !reasoningEffort || reasoningEffort === 'none') &&
-      (config.top_p !== undefined || getEnvString('OPENAI_TOP_P'))
-        ? { top_p: config.top_p ?? getEnvFloat('OPENAI_TOP_P', 1) }
+      ...((isGPT6Model || !reasoningEffort || reasoningEffort === 'none') && topP !== undefined
+        ? { top_p: topP }
         : {}),
       ...(responsesTools ? { tools: responsesTools } : {}),
       ...(toolChoice ? { tool_choice: toolChoice } : {}),

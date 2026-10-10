@@ -1376,9 +1376,9 @@ providers:
 ```
 
 This route uses the AWS credential chain. A bare `bedrock:us.openai.gpt-5.6-sol` selects
-InvokeModel, which does not support GPT-5.6. The Bedrock provider does not implement Runtime's
-HTTP Chat Completions or Responses endpoints; use the explicit Converse route above or the
-Mantle selectors documented here.
+InvokeModel, which does not support GPT-5.6. For Runtime's HTTP endpoints, use
+`bedrock:runtime:chat:us.openai.gpt-5.6-sol` or
+`bedrock:runtime:responses:us.openai.gpt-5.6-sol`, as described below.
 
 ### xAI Grok Models
 
@@ -1444,6 +1444,67 @@ providers:
   publish those rates.
 
 :::
+
+### Runtime Chat Completions and Responses
+
+Use `bedrock:runtime:chat:<model-id>` or `bedrock:runtime:responses:<model-id>` to
+select the OpenAI-compatible APIs on `bedrock-runtime`. These routes preserve Runtime
+model IDs, including supported geographic/global inference profiles and model ARNs.
+They use `https://bedrock-runtime.<region>.amazonaws.com/openai/v1` and accept the
+same Bedrock API key or AWS credential configuration as the Mantle adapters.
+Closed OpenAI GPT models on Runtime Chat and Responses require a system inference profile,
+such as `us.openai.gpt-5.6-sol` or `global.openai.gpt-5.6-sol`, instead of a bare
+model ID or foundation-model ARN.
+
+```yaml
+providers:
+  - id: bedrock:runtime:chat:openai.gpt-oss-120b-1:0
+    config:
+      region: us-east-1
+      max_completion_tokens: 256
+  - id: bedrock:runtime:responses:us.openai.gpt-5.6-sol
+    config:
+      region: us-east-1
+      max_output_tokens: 256
+      reasoning_effort: low
+      passthrough:
+        store: false
+```
+
+For models that support HTTP service tiers, set `service_tier` in the provider config.
+For example, use `bedrock:runtime:chat:us.moonshotai.kimi-k3` or
+`bedrock:runtime:responses:us.moonshotai.kimi-k3` with `service_tier: flex`.
+[Kimi K3](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-moonshot-ai-kimi-k3.html)
+supports Priority and Flex through these HTTP APIs; its Converse and Invoke APIs use Standard.
+
+The adapters inherit [OpenAI provider options](./openai.md), including streaming,
+client-side functions, structured output, multimodal input, and request fields through
+`passthrough`. Support depends on the chosen model and API. Runtime Responses and
+supported Runtime Chat models accept Bedrock Guardrails through request headers:
+
+```yaml
+config:
+  headers:
+    X-Amzn-Bedrock-GuardrailIdentifier: your-guardrail-id
+    X-Amzn-Bedrock-GuardrailVersion: '1'
+```
+
+Use `passthrough` for additional body fields. Do not put SDK `extra_headers` or
+`extra_body` wrappers inside the request body.
+
+Runtime Responses supports stored conversations (`previous_response_id`) and streaming,
+but does not support `background: true`, server-side tools, or GPT OSS models. Use
+Mantle Responses for GPT OSS. Neither Runtime Chat nor Responses supports application
+inference profiles. Only the account's default project is supported. Set `passthrough.store: false`
+when conversation storage is unnecessary. Keep a model ID on continuation requests.
+Automatic cost reporting requires known Bedrock rates and sufficient token usage details;
+use `inputCost` and `outputCost` for models whose rates are not yet in promptfoo.
+
+Check AWS's [Chat Completions](https://docs.aws.amazon.com/bedrock/latest/userguide/inference-chat-completions.html)
+and [Responses](https://docs.aws.amazon.com/bedrock/latest/userguide/inference-responses-api.html)
+references for current endpoint and model support. Runtime does not expose `GET /models`;
+use `aws bedrock list-foundation-models` and `aws bedrock list-inference-profiles`.
+Existing `bedrock:mantle:<id>` and bare frontier-model selectors continue to use Mantle.
 
 ### Mantle Chat Completions (`bedrock:mantle:`) {#mantle-chat-completions}
 

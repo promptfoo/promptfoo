@@ -20,6 +20,61 @@ import type { OpenAiDecisionsProvider } from '../../src/providers/openai/decisio
 import type { LoadApiProviderContext } from '../../src/types/index';
 import type { ProviderOptions } from '../../src/types/providers';
 
+describe('Bedrock Runtime OpenAI API routing', () => {
+  it.each([
+    ['chat', 'BedrockRuntimeChatProvider', 'openai.gpt-oss-120b-1:0'],
+    ['responses', 'BedrockRuntimeResponsesProvider', 'us.openai.gpt-5.6-sol'],
+  ])('routes runtime:%s with supported model IDs', async (api, name, model) => {
+    const provider = await loadApiProvider(`bedrock:runtime:${api}:${model}`, {
+      options: { config: { region: 'us-east-1', apiKey: 'fixture' } },
+    });
+    expect(provider.constructor.name).toBe(name);
+    expect(provider.id()).toBe(`bedrock:runtime:${api}:${model}`);
+  });
+
+  it.each([
+    'openai.gpt-5.6-sol',
+    'gpt-6.1-sol',
+    'arn:aws:bedrock:us-east-1::foundation-model/openai.gpt-5.6-sol',
+  ])('requires a system profile for closed GPT Runtime model %s', async (model) => {
+    for (const api of ['chat', 'responses']) {
+      await expect(loadApiProvider('bedrock:runtime:' + api + ':' + model)).rejects.toThrow(
+        'require a system inference profile',
+      );
+    }
+  });
+
+  it.each([
+    'openai.gpt-oss-120b-1:0',
+    'openai.gpt-oss-safeguard-20b',
+    'openai.gpt-oss-safeguard-120b',
+  ])('rejects GPT OSS Runtime Responses while retaining Runtime Chat for %s', async (model) => {
+    await expect(loadApiProvider('bedrock:runtime:responses:' + model)).rejects.toThrow('GPT OSS');
+    const provider = await loadApiProvider('bedrock:runtime:chat:' + model);
+    expect(provider.constructor.name).toBe('BedrockRuntimeChatProvider');
+  });
+
+  it.each(['chat', 'responses'])(
+    'preserves scoped region alias precedence for Runtime %s',
+    async (api) => {
+      const provider = await loadApiProvider(`bedrock:runtime:${api}:us.openai.gpt-5.6-sol`, {
+        env: { AWS_BEDROCK_REGION: 'us-east-1' },
+        options: { env: { AWS_REGION: 'us-west-2' }, config: { apiKey: 'fixture' } },
+      });
+      expect(provider).toMatchObject({
+        config: { apiBaseUrl: 'https://bedrock-runtime.us-west-2.amazonaws.com/openai/v1' },
+      });
+    },
+  );
+
+  it.each(['bedrock:runtime', 'bedrock:runtime:chat', 'bedrock:runtime:invalid:model'])(
+    'rejects incomplete or unknown Runtime route %s',
+    async (id) => {
+      await expect(loadApiProvider(id)).rejects.toThrow('bedrock:runtime:chat:<model-id>');
+    },
+  );
+});
+
 vi.mock('../../src/telemetry');
 
 vi.mock('../../src/providers/pythonCompletion', async (importOriginal) => {

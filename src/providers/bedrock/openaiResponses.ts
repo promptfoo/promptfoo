@@ -17,9 +17,9 @@ import { BedrockTokenProvider } from './tokenProvider';
 import type {
   CallApiContextParams,
   CallApiOptionsParams,
+  ProviderOptions,
   ProviderResponse,
-} from '../../types/index';
-import type { ProviderOptions } from '../../types/providers';
+} from '../../types/providers';
 import type { OpenAiCompletionOptions } from '../openai/types';
 
 type BedrockOpenAiResponsesBodyContext = Parameters<OpenAiResponsesProvider['getOpenAiBody']>[1];
@@ -231,11 +231,18 @@ export class BedrockOpenAiResponsesProvider extends OpenAiResponsesProvider {
     return typeof model === 'string' ? model : this.modelName;
   }
 
+  protected usesRuntimeApi(): boolean {
+    return false;
+  }
+
   async getOpenAiBody(
     prompt: string,
     context?: BedrockOpenAiResponsesBodyContext,
     callApiOptions?: BedrockOpenAiResponsesCallApiOptions,
   ) {
+    if (this.usesRuntimeApi()) {
+      return super.getOpenAiBody(prompt, context, callApiOptions);
+    }
     const model = this.getRequestModelName(context);
     if (
       isBedrockOpenAiResponsesModel(model) !== isBedrockOpenAiResponsesModel(this.modelName) ||

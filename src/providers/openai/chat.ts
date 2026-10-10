@@ -745,6 +745,23 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     };
   }
 
+  // Adapters can collect a wire-format stream before the shared response/tool parser runs.
+  protected getChatResponseFormat(_body: Record<string, any>): 'json' | 'text' {
+    return 'json';
+  }
+
+  protected parseChatResponse(data: any, _body: Record<string, any>): any {
+    return data;
+  }
+
+  // A stream adapter can preserve reported usage without accepting a failed completion.
+  protected getChatResponseErrorAccounting(
+    _error: unknown,
+    _config: OpenAiCompletionOptions,
+  ): Pick<ProviderResponse, 'tokenUsage' | 'cost' | 'cached'> | undefined {
+    return undefined;
+  }
+
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
@@ -895,43 +912,84 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       };
     };
     try {
-      ({
-        data,
-        cached,
-        status,
-        statusText,
-        latencyMs,
-        deleteFromCache,
-        headers: responseHeaders,
-      } = await fetchWithCache<OpenAIChatCompletionResponse>(
-        appendOpenAiApiPath(this.getApiUrl(), 'chat/completions'),
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(apiKey && !getAuthHeaders ? { Authorization: `Bearer ${apiKey}` } : {}),
-            ...this.getOpenAiRequestHeaders(config.headers),
+      // Streaming deadlines and latency include body consumption, not just headers.
+      const responseFormat = this.getChatResponseFormat(body);
+      const streamStartTime = responseFormat === 'text' ? Date.now() : undefined;
+      const streamController = responseFormat === 'text' ? new AbortController() : undefined;
+      const timeout = getRequestTimeoutMs();
+      const streamTimeout = streamController
+        ? setTimeout(
+            () =>
+              streamController.abort(new Error(`OpenAI chat stream timed out after ${timeout}ms`)),
+            timeout,
+          )
+        : undefined;
+      const requestSignal = streamController
+        ? callApiOptions?.abortSignal
+          ? AbortSignal.any([callApiOptions.abortSignal, streamController.signal])
+          : streamController.signal
+        : callApiOptions?.abortSignal;
+      try {
+        ({
+          data,
+          cached,
+          status,
+          statusText,
+          latencyMs,
+          deleteFromCache,
+          headers: responseHeaders,
+        } = await fetchWithCache<OpenAIChatCompletionResponse>(
+          appendOpenAiApiPath(this.getApiUrl(), 'chat/completions'),
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(apiKey && !getAuthHeaders ? { Authorization: `Bearer ${apiKey}` } : {}),
+              ...this.getOpenAiRequestHeaders(config.headers),
+            },
+            body: JSON.stringify(body),
+            ...(getAuthHeaders ? { getAuthHeaders } : {}),
+            ...(requestSignal ? { signal: requestSignal } : {}),
           },
-          body: JSON.stringify(body),
-          ...(getAuthHeaders ? { getAuthHeaders } : {}),
-          ...(callApiOptions?.abortSignal ? { signal: callApiOptions.abortSignal } : {}),
-        },
-        getRequestTimeoutMs(),
-        'json',
-        this.shouldBustCache(context),
-        this.config.maxRetries,
-        (response) => {
-          if (response.status >= 200 && response.status < 300) {
-            if (response.headers && getOpenAiGatewayRateLimitKind(response.data) !== 'quota') {
-              callApiOptions?.onResponseHeaders?.(response.headers);
+          timeout,
+          responseFormat,
+          this.shouldBustCache(context),
+          this.config.maxRetries,
+          (response) => {
+            if (response.status >= 200 && response.status < 300) {
+              if (response.headers && getOpenAiGatewayRateLimitKind(response.data) !== 'quota') {
+                callApiOptions?.onResponseHeaders?.(response.headers);
+              }
+              completedRefusal = getRefusalResponse({
+                ...response,
+                data: this.parseChatResponse(response.data, body),
+                latencyMs:
+                  streamStartTime !== undefined && !response.cached
+                    ? Date.now() - streamStartTime
+                    : response.latencyMs,
+              });
             }
-            completedRefusal = getRefusalResponse(response);
-          }
-        },
-        callApiOptions?.onResponseHeaders
-          ? (backoff) => callApiOptions.onResponseHeaders?.(backoff.headers, backoff)
-          : undefined,
-      ));
+          },
+          callApiOptions?.onResponseHeaders
+            ? (backoff) => callApiOptions.onResponseHeaders?.(backoff.headers, backoff)
+            : undefined,
+        ));
+      } finally {
+        clearTimeout(streamTimeout);
+      }
+      if (streamStartTime !== undefined && !cached) {
+        latencyMs = Date.now() - streamStartTime;
+      }
+
+      if (status >= 200 && status < 300) {
+        data = this.parseChatResponse(data, body);
+      } else if (typeof data === 'string') {
+        try {
+          data = JSON.parse(data);
+        } catch {
+          // Preserve non-JSON error bodies and their HTTP status, including streaming requests.
+        }
+      }
 
       const gatewayErrorFormat = this.usesGatewayErrorFormat();
       const policy = getOpenAiPolicyRefusal(data, gatewayErrorFormat);
@@ -1065,6 +1123,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       }
       return preserveResponseHeadersObserverError(callApiOptions?.onResponseHeaders, err, {
         error: `API call error: ${String(err)}`,
+        ...this.getChatResponseErrorAccounting(err, config),
         metadata: {
           http: {
             status: 0,
@@ -1135,7 +1194,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       } else if (
         message.content === null ||
         message.content === undefined ||
-        (message.content === '' && message.tool_calls)
+        (message.content === '' && (message.function_call || message.tool_calls))
       ) {
         output = message.function_call || message.tool_calls;
       } else {

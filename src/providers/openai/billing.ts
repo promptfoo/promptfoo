@@ -731,7 +731,7 @@ function usesOpenAIRegionalProcessing(
 function getBedrockMantleTextRates(
   modelName: string,
   config: OpenAIBillingConfig,
-  options: { apiUrl?: string; provider?: string; region?: string },
+  options: { apiUrl?: string; provider?: string; region?: string; regionalProcessing?: boolean },
   tier: OpenAIProcessingTier,
   totalInputTokens: number,
 ): OpenAITextRates | undefined {
@@ -753,7 +753,7 @@ function getBedrockMantleTextRates(
   }
 
   const catalogRates = BEDROCK_MANTLE_TEXT_RATES[billingModelName];
-  const baseRates =
+  const regionalRates =
     catalogRates &&
     usesBedrockGovCloudPricing(
       billingModelName,
@@ -764,6 +764,10 @@ function getBedrockMantleTextRates(
     )
       ? applyRateMultiplier(catalogRates, BEDROCK_GOVCLOUD_MULTIPLIER)
       : catalogRates;
+  const baseRates =
+    regionalRates && options.regionalProcessing === false && GPT_5_6_MODELS.has(billingModelName)
+      ? applyRateMultiplier(regionalRates, 1 / OPENAI_REGIONAL_PROCESSING_MULTIPLIER)
+      : regionalRates;
   return baseRates && GPT_5_6_MODELS.has(billingModelName) && totalInputTokens > 272_000
     ? { ...applyRateMultiplier(baseRates, 2), output: (baseRates.output ?? 0) * 1.5 }
     : baseRates;

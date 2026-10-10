@@ -174,7 +174,11 @@ function getProviderEnvAliasGroups(
   }
   if (providerPath.startsWith('bedrock:')) {
     const mode = getBedrockTextRoute(providerPath)?.apiMode;
-    return mode === 'chat' || mode === 'messages' || mode === 'responses'
+    return mode === 'chat' ||
+      mode === 'messages' ||
+      mode === 'responses' ||
+      mode === 'runtime-chat' ||
+      mode === 'runtime-responses'
       ? [['AWS_BEDROCK_REGION', 'AWS_REGION', 'AWS_DEFAULT_REGION']]
       : [];
   }

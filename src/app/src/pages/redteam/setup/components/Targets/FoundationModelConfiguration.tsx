@@ -6,6 +6,7 @@ import { Label } from '@app/components/ui/label';
 import { NumberInput } from '@app/components/ui/number-input';
 import {
   type BedrockApiMode,
+  getBedrockRuntimeModelError,
   getBedrockTextRoute,
   isBedrockAnthropicMessagesModel,
   isBedrockGptOssResponsesModel,
@@ -39,7 +40,16 @@ const BEDROCK_API_OPTIONS: { value: BedrockApiMode; label: string }[] = [
   { value: 'converse', label: 'Converse' },
   { value: 'chat', label: 'Chat Completions' },
   { value: 'messages', label: 'Anthropic Messages' },
+  { value: 'runtime-chat', label: 'Chat Completions (Bedrock Runtime)' },
+  { value: 'runtime-responses', label: 'Responses (Bedrock Runtime)' },
 ];
+
+function getBedrockTokenLimitKey(mode?: BedrockApiMode) {
+  if (mode === 'responses' || mode === 'runtime-responses') {
+    return 'max_output_tokens';
+  }
+  return mode === 'runtime-chat' ? 'max_completion_tokens' : 'max_tokens';
+}
 
 const BEDROCK_API_HELP: Record<BedrockApiMode, string> = {
   invoke: 'Uses the model-specific InvokeModel API on Bedrock Runtime.',
@@ -48,6 +58,10 @@ const BEDROCK_API_HELP: Record<BedrockApiMode, string> = {
   responses: 'Uses the OpenAI-compatible Responses API.',
   chat: 'Uses the OpenAI-compatible Chat Completions API.',
   messages: 'Uses the Anthropic Messages API.',
+  'runtime-chat':
+    'Uses OpenAI-compatible Chat Completions on Bedrock Runtime with Runtime model IDs.',
+  'runtime-responses':
+    'Uses OpenAI-compatible Responses on Bedrock Runtime. Background inference and server-side tools are unavailable.',
 };
 
 interface MCPServerConfig {
@@ -70,6 +84,10 @@ const buildBedrockProviderId = (apiMode: BedrockApiMode, modelId: string): strin
   if (BEDROCK_GPT_SHORTHAND.test(modelId)) {
     modelId = `openai.${modelId}`;
   }
+  if (apiMode === 'runtime-chat' || apiMode === 'runtime-responses') {
+    modelId = modelId.replace(/^(openai\.gpt-oss-(?:20b|120b))$/, '$1-1:0');
+    return `bedrock:runtime:${apiMode === 'runtime-chat' ? 'chat' : 'responses'}:${modelId}`;
+  }
   if (apiMode === 'responses' || apiMode === 'chat') {
     const prefix = apiMode === 'chat' ? 'mantle' : 'responses';
     return `bedrock:${prefix}:${modelId.replace(/^(openai\.gpt-oss-(?:20b|120b))-1:0$/, '$1')}`;
@@ -85,6 +103,12 @@ const buildBedrockProviderId = (apiMode: BedrockApiMode, modelId: string): strin
 const getBedrockApiError = (apiMode: BedrockApiMode, modelId: string): string | undefined => {
   if (!modelId) {
     return 'Enter a model ID.';
+  }
+  if (apiMode === 'runtime-chat' || apiMode === 'runtime-responses') {
+    const error = getBedrockRuntimeModelError(apiMode, modelId);
+    if (error) {
+      return error;
+    }
   }
   if (apiMode !== 'chat' && isRejectedPrefixedMythosId(modelId)) {
     return 'Mythos 5 requires the bare anthropic.claude-mythos-5 ID and Anthropic Messages API.';
@@ -137,7 +161,11 @@ const FoundationModelConfiguration = ({
   const [bedrockApiMode, setBedrockApiMode] = useState(bedrockRoute?.apiMode);
   const lastEditedTarget = useRef<{ id: string; providerType: string } | undefined>(undefined);
   const isBedrockHttpApi =
-    bedrockApiMode === 'responses' || bedrockApiMode === 'chat' || bedrockApiMode === 'messages';
+    bedrockApiMode === 'responses' ||
+    bedrockApiMode === 'runtime-responses' ||
+    bedrockApiMode === 'chat' ||
+    bedrockApiMode === 'messages' ||
+    bedrockApiMode === 'runtime-chat';
   const isBedrockNativeApi = bedrockApiMode === 'invoke' || bedrockApiMode === 'converse';
   const [modelDraft, setModelDraft] = useState({
     modelId: isBedrock ? getBedrockModelFromId(selectedTarget.id) : selectedTarget.id || '',
@@ -194,8 +222,8 @@ const FoundationModelConfiguration = ({
   };
 
   const updateProviderId = (id: string, apiMode = bedrockApiMode) => {
-    const source = bedrockApiMode === 'responses' ? 'max_output_tokens' : 'max_tokens';
-    const destination = apiMode === 'responses' ? 'max_output_tokens' : 'max_tokens';
+    const source = getBedrockTokenLimitKey(bedrockApiMode);
+    const destination = getBedrockTokenLimitKey(apiMode);
     if (source !== destination && selectedTarget.config?.[source] !== undefined) {
       const { [source]: limit, ...config } = selectedTarget.config;
       updateCustomTarget('config', { ...config, [destination]: limit });
@@ -399,9 +427,11 @@ const FoundationModelConfiguration = ({
                 {isBedrockHttpApi &&
                   (selectedTarget.config?.apiBaseUrl
                     ? 'Uses your custom endpoint from Advanced Configuration.'
-                    : bedrockApiMode === 'messages'
-                      ? 'Promptfoo selects Bedrock Mantle or Runtime based on the model ID. You can configure a custom endpoint under Advanced Configuration.'
-                      : 'Promptfoo defaults to the Bedrock Mantle endpoint. You can configure a custom endpoint under Advanced Configuration.')}
+                    : bedrockApiMode?.startsWith('runtime-')
+                      ? 'Promptfoo uses the Bedrock Runtime endpoint. You can configure a custom endpoint under Advanced Configuration.'
+                      : bedrockApiMode === 'messages'
+                        ? 'Promptfoo selects Bedrock Mantle or Runtime based on the model ID. You can configure a custom endpoint under Advanced Configuration.'
+                        : 'Promptfoo defaults to the Bedrock Mantle endpoint. You can configure a custom endpoint under Advanced Configuration.')}
               </p>
             </div>
           )}
@@ -413,7 +443,12 @@ const FoundationModelConfiguration = ({
             id="model-id"
             value={modelId}
             onChange={handleModelIdChange}
-            placeholder={providerInfo.placeholder}
+            placeholder={
+              isBedrock &&
+              (bedrockApiMode === 'runtime-responses' || bedrockApiMode === 'runtime-chat')
+                ? 'us.openai.gpt-5.6-sol'
+                : providerInfo.placeholder
+            }
             aria-invalid={Boolean(bedrockApiError)}
             aria-describedby={
               isBedrock
@@ -425,9 +460,19 @@ const FoundationModelConfiguration = ({
           />
           {isBedrock && (
             <p id="bedrock-model-help" className="text-sm text-muted-foreground">
-              Choose an API, then enter its model ID. GPT names such as <code>gpt-5.6-sol</code> are
-              saved with Bedrock's <code>openai.</code> prefix. Full Bedrock model IDs are also
-              accepted.
+              {bedrockApiMode === 'runtime-responses' || bedrockApiMode === 'runtime-chat' ? (
+                <>
+                  Closed OpenAI GPT models require a system inference profile, such as{' '}
+                  <code>us.openai.gpt-5.6-sol</code> or <code>global.openai.gpt-5.6-sol</code>.
+                  Other models use their Runtime model IDs.
+                </>
+              ) : (
+                <>
+                  Choose an API, then enter its model ID. GPT names such as <code>gpt-5.6-sol</code>{' '}
+                  are saved with Bedrock's <code>openai.</code> prefix. Full Bedrock model IDs are
+                  also accepted.
+                </>
+              )}
             </p>
           )}
           {bedrockApiError && (
@@ -641,20 +686,18 @@ const FoundationModelConfiguration = ({
 
             <div className="space-y-2">
               <Label htmlFor="max-tokens">
-                {bedrockApiMode === 'responses' ? 'Max Output Tokens' : 'Max Tokens'}
+                {bedrockApiMode === 'responses' || bedrockApiMode === 'runtime-responses'
+                  ? 'Max Output Tokens'
+                  : 'Max Tokens'}
               </Label>
               <Input
                 id="max-tokens"
                 type="number"
                 min={1}
-                value={
-                  bedrockApiMode === 'responses'
-                    ? (selectedTarget.config?.max_output_tokens ?? '')
-                    : (selectedTarget.config?.max_tokens ?? '')
-                }
+                value={selectedTarget.config?.[getBedrockTokenLimitKey(bedrockApiMode)] ?? ''}
                 onChange={(e) =>
                   updateCustomTarget(
-                    bedrockApiMode === 'responses' ? 'max_output_tokens' : 'max_tokens',
+                    getBedrockTokenLimitKey(bedrockApiMode),
                     parseInt(e.target.value) || undefined,
                   )
                 }
