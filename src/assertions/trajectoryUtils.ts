@@ -10,7 +10,6 @@ import { matchesPattern } from './traceUtils';
 import type { TraceData, TraceSpan } from '../types/tracing';
 
 export type TrajectoryStepType = 'command' | 'message' | 'reasoning' | 'search' | 'span' | 'tool';
-type TrajectoryAttributes = Record<string, unknown>;
 
 export interface TrajectoryStepMatcher {
   name?: string;
@@ -21,12 +20,8 @@ export interface TrajectoryStepMatcher {
 export interface TrajectoryStep {
   aliases: string[];
   args?: unknown;
-  attributes: TrajectoryAttributes;
-  endTime?: number;
   name: string;
-  spanId: string;
   spanName: string;
-  startTime: number;
   statusCode?: number;
   statusMessage?: string;
   type: TrajectoryStepType;

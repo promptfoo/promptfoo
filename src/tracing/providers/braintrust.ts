@@ -208,7 +208,6 @@ export class BraintrustProvider implements TraceProvider {
     }
 
     const spans: SpanData[] = [];
-    const services = new Set<string>();
     for (const row of rows) {
       if (spans.length >= maxSpans) {
         break;
@@ -218,15 +217,9 @@ export class BraintrustProvider implements TraceProvider {
         logger.warn('[BraintrustProvider] Skipping malformed span');
         continue;
       }
-      const service = span.attributes?.['service.name'];
-      if (typeof service === 'string') {
-        services.add(service);
-      }
       spans.push(span);
     }
 
-    return spans.length > 0
-      ? { traceId: normalizedTraceId, spans, services: [...services], fetchedAt: Date.now() }
-      : null;
+    return spans.length > 0 ? { spans, fetchedAt: Date.now() } : null;
   }
 }

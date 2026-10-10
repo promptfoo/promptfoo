@@ -4,6 +4,7 @@ import path from 'node:path';
 import type { Dirent } from 'node:fs';
 
 import { sha256 } from '../../../util/createHash';
+import { escapeRegExp } from '../../../util/text';
 
 import type { AssertionValue, AtomicTestCase } from '../../../types/index';
 import type { TraceData } from '../../../types/tracing';
@@ -511,10 +512,6 @@ function getObject(value: unknown): Record<string, unknown> | undefined {
 
 function getString(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim() ? value : undefined;
-}
-
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function parseProviderRaw(raw: unknown): unknown {
