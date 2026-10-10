@@ -24,11 +24,11 @@ You can reference this provider using either:
 The Claude Agent SDK and its native CLI are not included in the default Promptfoo install. Install them alongside Promptfoo in the project containing your eval config:
 
 ```bash
-npm install promptfoo @anthropic-ai/claude-agent-sdk@^0.3.273
+npm install promptfoo @anthropic-ai/claude-agent-sdk@^0.3.284
 ```
 
 :::note
-The provider checks for version `0.3.273` or later within `0.3.x` when called. It resolves the SDK from your config directory or its parents, including when Promptfoo is installed globally. Anthropic distributes the SDK under a [proprietary license](https://github.com/anthropics/claude-agent-sdk-typescript/blob/9f51899c3e04f15951949ceac81849265d545579/LICENSE.md).
+The provider checks for version `0.3.284` or later within `0.3.x` when called. It resolves the SDK from your config directory or its parents, including when Promptfoo is installed globally. Anthropic distributes the SDK under a [proprietary license](https://github.com/anthropics/claude-agent-sdk-typescript/blob/9f51899c3e04f15951949ceac81849265d545579/LICENSE.md).
 :::
 
 ## Setup
@@ -53,6 +53,24 @@ providers:
 ```
 
 This is useful when you're using a local Claude Code binary with an active session, such as Claude Code monthly plans. Promptfoo will skip its preflight API key validation, but the SDK still needs to be able to authenticate on its own.
+
+## Dynamic workflows
+
+To run [dynamic workflows](https://platform.claude.com/cookbook/claude-agent-sdk-08-dynamic-workflows), enable the `Workflow` tool and explicitly ask for a workflow in your prompt:
+
+```yaml
+providers:
+  - id: anthropic:claude-agent-sdk
+    config:
+      custom_allowed_tools: [Workflow]
+      max_budget_usd: 1
+prompts:
+  - Use a dynamic workflow to verify each calculation independently, wait for the results, and report the final verdict.
+```
+
+The provider grades the main agent's final answer and records the `Workflow` call in `metadata.toolCalls`. A workflow runs in the background, so the provider waits for the answer the main agent gives once the workflow has finished instead of grading an interim "workflow launched" message. If a workflow fails, is stopped, or the session ends before the main agent answers it, the call returns an error. The [dynamic workflows example](https://github.com/promptfoo/promptfoo/tree/main/examples/claude-agent-sdk/dynamic-workflows) checks that the tool was used as well as checking the answer. Workflows can spawn multiple agents, increasing token usage.
+
+For Anthropic-hosted sessions created with `client.beta.agents.create`, use [Claude Managed Agents](./claude-managed-agents.md).
 
 ## Other Model Providers
 
