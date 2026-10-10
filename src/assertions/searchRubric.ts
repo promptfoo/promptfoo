@@ -1,6 +1,7 @@
 import { isGraderFailure } from '../matchers/llmGrading';
 import { matchesSearchRubric } from '../matchers/search';
 import { invertScore } from '../matchers/shared';
+import { getGraderVars } from './utils';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
@@ -22,7 +23,7 @@ export async function handleSearchRubric({
     renderedValue,
     providerResponse.output,
     test.options,
-    test.vars,
+    getGraderVars(assertion, test.vars),
     assertion,
     provider,
     providerCallContext,

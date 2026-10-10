@@ -11,6 +11,7 @@ import {
   summarizeTrajectoryForJudge,
   type TrajectoryStepMatcher,
 } from './trajectoryUtils';
+import { getGraderVars } from './utils';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
@@ -643,7 +644,7 @@ export const handleTrajectoryGoalSuccess = async (
     trajectory,
     params.outputString,
     params.test.options,
-    params.assertionValueContext.vars,
+    getGraderVars(params.assertion, params.assertionValueContext.vars),
     params.assertion,
     params.providerCallContext,
   );

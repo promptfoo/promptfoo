@@ -425,11 +425,13 @@ export async function matchesContextFaithfulness(
       : grading?.rubricPrompt?.[1]?.content;
   const longformPrompt = await loadRubricPrompt(rawLongformPrompt, CONTEXT_FAITHFULNESS_LONGFORM);
   const nliPrompt = await loadRubricPrompt(rawNliPrompt, CONTEXT_FAITHFULNESS_NLI_STATEMENTS);
+  const contextString = serializeContext(context);
 
   let promptText = await renderLlmRubricPrompt(longformPrompt, {
     ...(vars || {}),
     question: query,
     answer: tryParse(output),
+    context: contextString,
   });
 
   let resp = await callProviderWithContext(
@@ -440,6 +442,7 @@ export async function matchesContextFaithfulness(
       ...(vars || {}),
       question: query,
       answer: tryParse(output),
+      context: contextString,
     },
     providerCallContext,
   );
@@ -449,8 +452,6 @@ export async function matchesContextFaithfulness(
   }
 
   invariant(typeof resp.output === 'string', 'context-faithfulness produced malformed response');
-
-  const contextString = serializeContext(context);
 
   const statements = splitIntoSentences(resp.output);
   if (statements.length === 0) {
