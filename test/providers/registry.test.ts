@@ -70,6 +70,15 @@ vi.mock('../../src/redteam/remoteGeneration', async (importOriginal) => {
 });
 
 describe('Provider Registry', () => {
+  it('loads the simulated voice provider with a canonical identity and custom label', async () => {
+    const provider = await loadApiProvider('promptfoo:simulated-voice-user', {
+      options: { label: 'Cafe voice', config: { instructions: 'Ask about opening hours' } },
+    });
+    expect(provider.constructor.name).toBe('SimulatedVoiceUser');
+    expect(provider.id()).toBe('promptfoo:simulated-voice-user');
+    expect(provider.label).toBe('Cafe voice');
+  });
+
   describe('OpenAI Decisions', () => {
     it.each([
       ['openai:decisions:gpt-6-luna', undefined, 'gpt-6-luna'],

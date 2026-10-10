@@ -179,9 +179,14 @@ async function loadFromProviderOptions(provider: ProviderOptions) {
   });
 }
 
-function isSimulatedUserProviderConfig(provider: GradingConfig['provider']): boolean {
+function isSimulatedUserProviderConfig(
+  provider: GradingConfig['provider'],
+  type: ProviderType,
+): boolean {
+  const isSimulator = (id: string) =>
+    id === 'promptfoo:simulated-user' || id === 'promptfoo:simulated-voice-user';
   if (typeof provider === 'string') {
-    return provider === 'promptfoo:simulated-user';
+    return isSimulator(provider);
   }
 
   if (!provider || typeof provider !== 'object' || Array.isArray(provider)) {
@@ -189,17 +194,15 @@ function isSimulatedUserProviderConfig(provider: GradingConfig['provider']): boo
   }
 
   if (typeof (provider as ApiProvider).id === 'function') {
-    return (provider as ApiProvider).id() === 'promptfoo:simulated-user';
+    return isSimulator((provider as ApiProvider).id());
   }
 
   const providerId = (provider as ProviderOptions).id;
   if (typeof providerId === 'string') {
-    return providerId === 'promptfoo:simulated-user';
+    return isSimulator(providerId);
   }
 
-  return Object.values(provider as ProviderTypeMap).some((providerTypeConfig) =>
-    isSimulatedUserProviderConfig(providerTypeConfig),
-  );
+  return isSimulatedUserProviderConfig((provider as ProviderTypeMap)[type], type);
 }
 
 export async function getGradingProvider(
@@ -263,7 +266,7 @@ export async function getGradingProvider(
     const defaultTestObj = typeof defaultTest === 'object' ? (defaultTest as TestCase) : null;
     const fallbackProviders = [
       defaultTestObj?.provider || undefined,
-      defaultTestObj?.options?.provider?.text || undefined,
+      defaultTestObj?.options?.provider?.[type] || undefined,
       defaultTestObj?.options?.provider || undefined,
     ];
 
@@ -272,8 +275,10 @@ export async function getGradingProvider(
         return false;
       }
 
-      if (isSimulatedUserProviderConfig(candidateProvider)) {
-        logger.debug('[Grading] Skipping promptfoo:simulated-user as an implicit grader fallback');
+      if (isSimulatedUserProviderConfig(candidateProvider, type)) {
+        logger.debug(
+          '[Grading] Skipping simulated conversation provider as an implicit grader fallback',
+        );
         return false;
       }
 

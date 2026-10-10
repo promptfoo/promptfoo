@@ -1,0 +1,35 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Bidirectional GPT-Live cafe conversation
+prompts:
+  - |
+    Answer calls for a fictional cafe. Saturday closing time is 4 pm.
+    Decaf is available until 3 pm on Saturday. Answer briefly, then listen.
+    Only use these facts. No backend delegation is needed.
+providers:
+  - id: promptfoo:simulated-voice-user
+    config:
+      durationMs: 30000
+      target:
+        audio:
+          output:
+            voice: marin
+      caller:
+        audio:
+          output:
+            voice: cedar
+tests:
+  - vars:
+      instructions: |
+        You are a customer, not an assistant. Ask when the cafe closes on Saturday.
+        After the answer, ask how late decaf is available. Thank them and say goodbye.
+        Never invent cafe facts. Do not delegate; only speak to the cafe.
+    assert:
+      - type: javascript
+        value: |
+          const heard = context.providerResponse.metadata.voice.participants.caller.heard;
+          return /(?:4|four)\s*(?:p\.?m\.?|in the afternoon)/i.test(heard)
+            && /(?:3|three)\s*(?:p\.?m\.?|in the afternoon)/i.test(heard);
+      - type: javascript
+        value: |
+          const participants = context.providerResponse.metadata.voice.participants;
+          return Object.values(participants).every(p => p.finalUsageConfirmed && p.heard.trim());
