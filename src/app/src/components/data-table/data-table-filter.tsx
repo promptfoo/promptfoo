@@ -14,6 +14,22 @@ import { cn } from '@app/lib/utils';
 import { Filter, Plus, X } from 'lucide-react';
 import type { Column, ColumnFiltersState, Table } from '@tanstack/react-table';
 
+const preventPortaledContentDismissal: NonNullable<
+  React.ComponentProps<typeof PopoverContent>['onInteractOutside']
+> = (e) => {
+  // Prevent popover from closing when interacting with portaled Select/Popover content.
+  // Radix Select renders its dropdown in a separate portal, which can be interpreted
+  // as an outside click by the parent Popover's DismissableLayer.
+  const target = e.target as HTMLElement | null;
+  if (
+    target?.closest?.(
+      '[role="listbox"], [data-radix-select-viewport], [data-radix-popover-content]',
+    )
+  ) {
+    e.preventDefault();
+  }
+};
+
 interface DataTableFilterProps<TData> {
   table: Table<TData>;
   columnFilters: ColumnFiltersState;
@@ -75,21 +91,15 @@ export const operatorFilterFn = (
   const cellString = String(cellValue ?? '').toLowerCase();
 
   switch (operator) {
-    case 'contains': {
+    case 'contains':
+    case 'startsWith':
+    case 'endsWith': {
       const filterString = String(value).toLowerCase();
-      return cellString.includes(filterString);
+      return cellString[operator === 'contains' ? 'includes' : operator](filterString);
     }
     case 'equals': {
       const filterString = String(value).toLowerCase();
       return cellString === filterString;
-    }
-    case 'startsWith': {
-      const filterString = String(value).toLowerCase();
-      return cellString.startsWith(filterString);
-    }
-    case 'endsWith': {
-      const filterString = String(value).toLowerCase();
-      return cellString.endsWith(filterString);
     }
     case 'gt': {
       const numCell = Number(cellValue);
@@ -562,19 +572,12 @@ export function DataTableHeaderFilter<TData>({ column }: { column: Column<TData,
             multiSelectTriggerRef.current?.focus();
           }
         }}
-        onInteractOutside={(e) => {
+        onInteractOutside={
           // Prevent popover from closing when interacting with portaled Select content.
           // Radix Select renders its dropdown in a separate portal, which can be interpreted
           // as an outside click by the parent Popover's DismissableLayer.
-          const target = e.target as HTMLElement | null;
-          if (
-            target?.closest?.(
-              '[role="listbox"], [data-radix-select-viewport], [data-radix-popover-content]',
-            )
-          ) {
-            e.preventDefault();
-          }
-        }}
+          preventPortaledContentDismissal
+        }
       >
         <div className="space-y-3">
           <h4 className="text-sm font-medium truncate">{`Filter ${columnHeader}`}</h4>
@@ -992,19 +995,7 @@ export function DataTableFilter<TData>({ table, columnFilters }: DataTableFilter
       <PopoverContent
         className="w-[min(520px,calc(100vw-1rem))] p-3"
         align="start"
-        onInteractOutside={(e) => {
-          // Prevent popover from closing when interacting with portaled Select/Popover content.
-          // Radix Select renders its dropdown in a separate portal, which can be interpreted
-          // as an outside click by the parent Popover's DismissableLayer.
-          const target = e.target as HTMLElement | null;
-          if (
-            target?.closest?.(
-              '[role="listbox"], [data-radix-select-viewport], [data-radix-popover-content]',
-            )
-          ) {
-            e.preventDefault();
-          }
-        }}
+        onInteractOutside={preventPortaledContentDismissal}
       >
         <div className="space-y-3">
           <div className="flex items-center justify-between">
