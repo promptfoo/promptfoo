@@ -7,6 +7,7 @@ import { EVAL_TABLE_MAX_PAGE_SIZE } from '@promptfoo/types/evalConstants';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import * as ProviderDisplayModule from './ProviderDisplay';
 import ResultsTable from './ResultsTable';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 
@@ -97,6 +98,22 @@ vi.mock('./EvalOutputCell', () => {
   };
 });
 
+function createTableStore(overrides: { table: unknown } & Record<string, unknown>) {
+  return {
+    config: {},
+    evalId: '123',
+    setTable: vi.fn(),
+    version: 4,
+    fetchEvalData: vi.fn(),
+    filters: {
+      values: {},
+      appliedCount: 0,
+      options: { metric: [] },
+    },
+    ...overrides,
+  };
+}
+
 describe('ResultsTable Metrics Display', () => {
   const mockTable = {
     body: Array(10).fill({
@@ -170,6 +187,279 @@ describe('ResultsTable Metrics Display', () => {
         },
       },
     }));
+  });
+
+  describe('provider extraction at the rendered header boundary', () => {
+    it.each([
+      ['string', 'openai:gpt-4o', 'openai:gpt-4o'],
+      ['empty string', '', undefined],
+      [
+        'long string',
+        'custom-provider:very-long-model-name-with-many-characters-exceeding-typical-length',
+        'custom-provider:very-long-model-name-with-many-characters-exceeding-typical-length',
+      ],
+      ['special characters', 'provider:model-v1.0-2024_beta', 'provider:model-v1.0-2024_beta'],
+      ['multiple colons', 'google:gemini-2.0-flash:thinking', 'google:gemini-2.0-flash:thinking'],
+      ['object id', { id: 'openai:gpt-4o', config: { temperature: 0.7 } }, 'openai:gpt-4o'],
+      ['id before label', { id: 'openai:gpt-4o', label: 'My GPT' }, 'openai:gpt-4o'],
+      [
+        'missing id',
+        { label: 'Custom Provider', config: { temperature: 0.5 } },
+        '{"label":"Custom Provider","config":{"temperature":0.5}}',
+      ],
+      ['empty object', {}, '{}'],
+      [
+        'empty id',
+        { id: '', config: { temperature: 0.5 } },
+        '{"id":"","config":{"temperature":0.5}}',
+      ],
+      [
+        'null id',
+        { id: null, config: { temperature: 0.5 } },
+        '{"id":null,"config":{"temperature":0.5}}',
+      ],
+      [
+        'undefined id',
+        { id: undefined, config: { temperature: 0.5 } },
+        '{"config":{"temperature":0.5}}',
+      ],
+      ['numeric id', { id: 123, config: {} }, 123],
+      ['boolean id', { id: true, config: {} }, true],
+      [
+        'nested object',
+        { nested: { deeply: { config: { temperature: 0.5 } } } },
+        '{"nested":{"deeply":{"config":{"temperature":0.5}}}}',
+      ],
+      ['null', null, undefined],
+      ['undefined', undefined, undefined],
+      ['number', 42, '42'],
+      ['true', true, 'true'],
+      ['false', false, undefined],
+      ['zero', 0, undefined],
+      ['NaN', NaN, undefined],
+      ['Infinity', Infinity, 'Infinity'],
+      ['array', ['openai:gpt-4o', 'anthropic:claude'], '["openai:gpt-4o","anthropic:claude"]'],
+      ['empty array', [], '[]'],
+      ['function', () => 'openai:gpt-4o', expect.stringContaining('openai:gpt-4o')],
+      ['date', new Date('2024-01-01'), '"2024-01-01T00:00:00.000Z"'],
+      ['regexp', /test/g, '{}'],
+      ['error', new Error('test error'), '{}'],
+      ['whitespace id', { id: '   ', config: {} }, '   '],
+      ['object id value', { id: { nested: 'value' }, config: {} }, { nested: 'value' }],
+      ['array id value', { id: ['test'], config: {} }, ['test']],
+    ])('handles %s', (_name, provider, expected) => {
+      const display = vi
+        .spyOn(ProviderDisplayModule, 'ProviderDisplay')
+        .mockImplementation(() => <></>);
+      vi.mocked(useTableStore).mockImplementation(() =>
+        createTableStore({
+          table: { body: [], head: { vars: [], prompts: [{ provider }] } },
+        }),
+      );
+      renderWithProviders(<ResultsTable {...defaultProps} />);
+      // Falsey providers are deliberately hidden by the real header guard.
+      if (expected === undefined) {
+        expect(display).not.toHaveBeenCalled();
+      } else {
+        expect(display.mock.calls[0][0].providerString).toEqual(expected);
+      }
+    });
+
+    it('uses a circular object id without serializing it and serializes large id-less objects', () => {
+      const display = vi
+        .spyOn(ProviderDisplayModule, 'ProviderDisplay')
+        .mockImplementation(() => <></>);
+      const circular: any = { id: 'test', config: {} };
+      circular.self = circular;
+      const large: any = { id: null };
+      for (let i = 0; i < 100; i++) {
+        large[`key${i}`] = `value${i}`;
+      }
+      vi.mocked(useTableStore).mockImplementation(() =>
+        createTableStore({
+          table: {
+            body: [],
+            head: { vars: [], prompts: [{ provider: circular }, { provider: large }] },
+          },
+        }),
+      );
+      renderWithProviders(<ResultsTable {...defaultProps} />);
+      expect(display.mock.calls.slice(0, 2).map(([props]) => props.providerString)).toEqual([
+        'test',
+        JSON.stringify(large),
+      ]);
+      expect(display.mock.calls[1][0].providerString.length).toBeGreaterThan(100);
+    });
+  });
+
+  it.each([
+    [
+      'provider string',
+      [{ response: { prompt: 'Dynamic prompt with persona and context' } }],
+      'Dynamic prompt with persona and context',
+    ],
+    [
+      'chat messages',
+      [
+        {
+          response: {
+            prompt: [
+              { role: 'system', content: 'You are a helpful assistant' },
+              { role: 'user', content: 'Hello world' },
+            ],
+          },
+        },
+      ],
+      '[{"role":"system","content":"You are a helpful assistant"},{"role":"user","content":"Hello world"}]',
+    ],
+    [
+      'provider before legacy',
+      [
+        {
+          response: {
+            prompt: 'Provider-reported prompt',
+            metadata: { redteamFinalPrompt: 'Legacy red team prompt' },
+          },
+        },
+      ],
+      'Provider-reported prompt',
+    ],
+    [
+      'legacy',
+      [{ response: { metadata: { redteamFinalPrompt: 'Legacy red team injected prompt' } } }],
+      'Legacy red team injected prompt',
+    ],
+    [
+      'output metadata ignored',
+      [{ metadata: { redteamFinalPrompt: 'Red team prompt in output metadata' } }],
+      '{{topic}}',
+    ],
+    [
+      'first provider output',
+      [
+        { response: {} },
+        { response: { prompt: 'Second output prompt' } },
+        { response: { prompt: 'Third output prompt' } },
+      ],
+      'Second output prompt',
+    ],
+    [
+      'skip missing prompts',
+      [
+        { response: {} },
+        { response: { output: 'some output' } },
+        { response: { metadata: { redteamFinalPrompt: 'Found red team prompt' } } },
+      ],
+      'Found red team prompt',
+    ],
+    [
+      'first legacy before later provider',
+      [
+        { response: { metadata: { redteamFinalPrompt: 'Legacy prompt' } } },
+        { response: { prompt: 'Provider prompt (should not be used)' } },
+      ],
+      'Legacy prompt',
+    ],
+    ['missing outputs', undefined, '{{topic}}'],
+    ['empty outputs', [], '{{topic}}'],
+    [
+      'no prompt',
+      [{ response: { output: 'just output' } }, { response: { metadata: {} } }, { response: {} }],
+      '{{topic}}',
+    ],
+    [
+      'undefined response',
+      [{ response: undefined }, { response: { prompt: 'Valid prompt' } }],
+      'Valid prompt',
+    ],
+    [
+      'null response',
+      [
+        { response: null },
+        { response: { metadata: { redteamFinalPrompt: 'Valid red team prompt' } } },
+      ],
+      'Valid red team prompt',
+    ],
+    [
+      'empty string',
+      [
+        { response: { prompt: '' } },
+        { response: { metadata: { redteamFinalPrompt: 'Fallback prompt' } } },
+      ],
+      'Fallback prompt',
+    ],
+    [
+      'empty array',
+      [
+        { response: { prompt: [] } },
+        { response: { metadata: { redteamFinalPrompt: 'Fallback prompt' } } },
+      ],
+      'Fallback prompt',
+    ],
+    [
+      'non-injected variable',
+      [{ response: { prompt: 'Ignored provider prompt' } }],
+      '{{topic}}',
+      '{{topic}}',
+      'other',
+    ],
+    [
+      'transformed fallback',
+      [{ metadata: { transformDisplayVars: { prompt: 'Transformed prompt' } } }],
+      'Transformed prompt',
+      '',
+    ],
+    [
+      'original before transformed',
+      [{ metadata: { transformDisplayVars: { prompt: 'Ignored transform' } } }],
+      '{{topic}}',
+    ],
+  ])(
+    'renders injected variable precedence: %s',
+    (_name, outputs, expected, fallback = '{{topic}}', varName = 'prompt') => {
+      vi.mocked(useTableStore).mockImplementation(() =>
+        createTableStore({
+          config: { redteam: { injectVar: 'prompt' } },
+          table: {
+            head: { vars: [varName], prompts: [{}] },
+            body: [
+              {
+                test: {},
+                vars: [fallback],
+                outputs: (outputs as any[])?.map((output) => ({
+                  pass: true,
+                  score: 1,
+                  text: 'test output',
+                  ...output,
+                })),
+              },
+            ],
+          },
+        }),
+      );
+      if (outputs === undefined) {
+        // A malformed row without outputs fails before cell rendering.
+        expect(() => renderWithProviders(<ResultsTable {...defaultProps} />)).toThrow(TypeError);
+        return;
+      }
+      const { container } = renderWithProviders(<ResultsTable {...defaultProps} />);
+      expect(container.querySelector('tbody tr td')?.textContent).toBe(expected);
+    },
+  );
+
+  it('forwards updated search text to the table data request', async () => {
+    const fetchEvalData = vi.fn();
+    vi.mocked(useTableStore).mockImplementation(() =>
+      createTableStore({ table: mockTable, fetchEvalData }),
+    );
+    const view = renderWithProviders(<ResultsTable {...defaultProps} />);
+    view.rerender(<ResultsTable {...defaultProps} debouncedSearchText="nested-value [1,2,3]" />);
+    await waitFor(() =>
+      expect(fetchEvalData).toHaveBeenLastCalledWith(
+        '123',
+        expect.objectContaining({ searchText: 'nested-value [1,2,3]' }),
+      ),
+    );
   });
 
   it('displays total cost with correct formatting', () => {
@@ -1038,101 +1328,6 @@ describe('ResultsTable Metrics Display', () => {
         providerImagePrompt,
       );
     });
-  });
-});
-
-describe('ResultsTable Metadata Search', () => {
-  it('includes metadata in search', () => {
-    // Mock a row with metadata
-    const row = {
-      outputs: [
-        {
-          text: 'test output',
-          pass: true,
-          score: 1,
-          metadata: {
-            model: 'gpt-4',
-            temperature: 0.7,
-            custom_tag: 'important',
-          },
-          namedScores: {},
-        },
-      ],
-      test: {},
-      vars: [],
-    };
-
-    // Test that metadata is included in the searchable text
-    const vars = row.outputs.map((v) => `var=${v}`).join(' ');
-    const output = row.outputs[0];
-    const namedScores = output.namedScores || {};
-    const stringifiedOutput = `${output.text} ${Object.keys(namedScores)
-      .map((k) => `metric=${k}:${namedScores[k as keyof typeof namedScores]}`)
-      .join(' ')}`;
-
-    // Create metadata string
-    const metadataString = output.metadata
-      ? Object.entries(output.metadata)
-          .map(([key, value]) => {
-            const valueStr =
-              typeof value === 'object' && value !== null ? JSON.stringify(value) : String(value);
-            return `metadata=${key}:${valueStr}`;
-          })
-          .join(' ')
-      : '';
-
-    const searchString = `${vars} ${stringifiedOutput} ${metadataString}`;
-
-    // Verify metadata is in the search string
-    expect(searchString).toContain('metadata=model:gpt-4');
-    expect(searchString).toContain('metadata=temperature:0.7');
-    expect(searchString).toContain('metadata=custom_tag:important');
-
-    // Verify we can match on it
-    expect(/metadata=model:gpt-4/i.test(searchString)).toBe(true);
-    expect(/metadata=model:gpt-3/i.test(searchString)).toBe(false);
-  });
-
-  it('includes complex nested metadata in search', () => {
-    // Mock a row with nested metadata
-    const row = {
-      outputs: [
-        {
-          text: 'test output',
-          pass: true,
-          score: 1,
-          metadata: {
-            nested: {
-              property: 'nested-value',
-              array: [1, 2, 3],
-            },
-          },
-          namedScores: {},
-        },
-      ],
-      test: {},
-      vars: [],
-    };
-
-    // Get the metadata string
-    const output = row.outputs[0];
-    const metadataString = output.metadata
-      ? Object.entries(output.metadata)
-          .map(([key, value]) => {
-            const valueStr =
-              typeof value === 'object' && value !== null ? JSON.stringify(value) : String(value);
-            return `metadata=${key}:${valueStr}`;
-          })
-          .join(' ')
-      : '';
-
-    // Verify the nested object is included correctly
-    expect(metadataString).toContain('metadata=nested:{"property":"nested-value","array":[1,2,3]}');
-
-    // Verify we can match on the nested values
-    expect(/property":"nested-value/i.test(metadataString)).toBe(true);
-    expect(/\[1,2,3\]/i.test(metadataString)).toBe(true);
-    expect(/unknown/i.test(metadataString)).toBe(false);
   });
 });
 
