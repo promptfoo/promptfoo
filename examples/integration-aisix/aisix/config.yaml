@@ -1,0 +1,7 @@
+resources_file: /etc/aisix/resources.yaml
+
+proxy:
+  addr: '0.0.0.0:3000'
+
+admin:
+  enabled: false
