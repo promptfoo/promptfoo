@@ -2,7 +2,6 @@ import logger from '../logger';
 
 export class CIProgressReporter {
   private startTime: number;
-  private lastUpdateTime: number;
   private totalTests: number;
   private completedTests: number = 0;
   private updateIntervalMs: number;
@@ -14,7 +13,6 @@ export class CIProgressReporter {
 
   constructor(totalTests: number, updateIntervalMs: number = 30000) {
     this.startTime = Date.now();
-    this.lastUpdateTime = this.startTime;
     this.totalTests = Math.max(totalTests, 1); // Ensure at least 1 to prevent division by zero
     this.updateIntervalMs = updateIntervalMs;
   }

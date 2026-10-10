@@ -84,10 +84,7 @@ async function createLogArchive(logFiles: string[], outputPath: string): Promise
           header[156] = 0x30; // '0'
 
           // Calculate checksum
-          let checksum = 0;
-          for (let i = 0; i < 512; i++) {
-            checksum += header[i];
-          }
+          const checksum = header.reduce((sum, byte) => sum + byte, 0);
           const checksumOctal = checksum.toString(8).padStart(6, '0') + '\0 ';
           Buffer.from(checksumOctal).copy(header, 148);
 
@@ -210,11 +207,7 @@ export function exportCommand(program: Command) {
         // Determine output path
         let outputPath = cmdObj.output;
         if (!outputPath) {
-          const timestamp = new Date()
-            .toISOString()
-            .replace(/[:.]/g, '-')
-            .replace('T', '_')
-            .split('.')[0];
+          const timestamp = new Date().toISOString().replace(/[:.]/g, '-').replace('T', '_');
           outputPath = `promptfoo-logs-${timestamp}.gz`;
         }
 

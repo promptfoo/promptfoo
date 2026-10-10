@@ -35,6 +35,7 @@ import {
   readTests,
   resolveTestsWatchPaths,
 } from '../../../src/util/testCaseReader';
+import { createMockFetchResponse } from '../../providers/mockProviderResponses';
 import { mockProcessEnv } from '../utils';
 
 import type { TestCase, TestSuite, UnifiedConfig } from '../../../src/types/index';
@@ -79,14 +80,11 @@ describe('suite environment loading', () => {
       PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS: 'false',
     });
     vi.mocked(fetchWithCache).mockReset();
-    vi.mocked(fetchWithCache).mockResolvedValue({
-      data: {
+    vi.mocked(fetchWithCache).mockResolvedValue(
+      createMockFetchResponse({
         choices: [{ message: { role: 'assistant', content: 'Hello' }, finish_reason: 'stop' }],
-      },
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    });
+      }),
+    );
   });
 
   afterEach(() => {
@@ -346,14 +344,11 @@ describe('suite environment loading', () => {
         'id: openai:chat:test-model\nenv:\n  OPENAI_API_KEY: file-key\n  OPENAI_API_BASE_URL: https://file.example/v1\n',
       );
       const provider = location === 'typed' ? { text: providerPath } : providerPath;
-      vi.mocked(fetchWithCache).mockResolvedValue({
-        data: {
+      vi.mocked(fetchWithCache).mockResolvedValue(
+        createMockFetchResponse({
           choices: [{ message: { content: '{"pass":true,"score":1,"reason":"ok"}' } }],
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+        }),
+      );
       const result = await evaluate(
         {
           env: { OPENAI_API_KEY: 'suite-key' },
@@ -2487,19 +2482,16 @@ describe('suite environment loading', () => {
           },
         ]),
       );
-      vi.mocked(fetchWithCache).mockResolvedValue({
-        data: {
+      vi.mocked(fetchWithCache).mockResolvedValue(
+        createMockFetchResponse({
           choices: [
             {
               message: { content: '{"pass":true,"score":1,"reason":"Correct"}' },
               finish_reason: 'stop',
             },
           ],
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+        }),
+      );
       const result = await evaluate(
         {
           env: { OPENAI_API_BASE_URL: 'https://suite.example/v1', OPENAI_API_KEY: 'suite-key' },

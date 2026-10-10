@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { Badge } from '@app/components/ui/badge';
 import { Card, CardContent } from '@app/components/ui/card';
 import { cn } from '@app/lib/utils';
+import { isValidUrl } from '@app/utils/isValidUrl';
 import { Check, ClipboardCopy, File, Globe, Link } from 'lucide-react';
 import { ellipsize } from '../../../../../util/text';
 
@@ -38,15 +39,6 @@ interface ExtractedCitation {
   source: string;
   content: string;
 }
-
-const isValidUrl = (str: string): boolean => {
-  try {
-    new URL(str);
-    return true;
-  } catch {
-    return false;
-  }
-};
 
 const getSourceIcon = (source: string) => {
   if (isValidUrl(source)) {

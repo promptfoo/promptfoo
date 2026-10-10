@@ -23,8 +23,7 @@ export async function runPythonCode<T = unknown>(
     tempDirectory = await createSecureTempDirectory('promptfoo-python-code-');
     const tempFilePath = await writeSecureTempFile(tempDirectory, 'script.py', code);
     // Necessary to await so temp file doesn't get deleted.
-    const result = await runPython<T>(tempFilePath, method, args);
-    return result;
+    return await runPython<T>(tempFilePath, method, args);
   } catch (error) {
     logger.error(`Error executing Python code: ${error}`);
     throw error;

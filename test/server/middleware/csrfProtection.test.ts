@@ -2,6 +2,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { csrfProtection } from '../../../src/server/middleware/csrfProtection';
 import type { NextFunction, Request, Response } from 'express';
 
+const createCrossSiteHeadersFixture = () => ({
+  'sec-fetch-site': 'cross-site',
+  origin: 'http://evil.com',
+  host: 'localhost:15500',
+});
+
 vi.mock('../../../src/logger', () => ({
   default: { warn: vi.fn(), debug: vi.fn(), error: vi.fn() },
 }));
@@ -68,11 +74,7 @@ describe('csrfProtection', () => {
 
     it('blocks cross-site POST from evil.com', () => {
       const req = mockReq({
-        headers: {
-          'sec-fetch-site': 'cross-site',
-          origin: 'http://evil.com',
-          host: 'localhost:15500',
-        },
+        headers: createCrossSiteHeadersFixture(),
       });
       const res = mockRes();
       csrfProtection(req, res, next);
@@ -196,11 +198,7 @@ describe('csrfProtection', () => {
     it.each(['DELETE', 'PUT', 'PATCH'])('blocks cross-site %s from evil.com', (method) => {
       const req = mockReq({
         method,
-        headers: {
-          'sec-fetch-site': 'cross-site',
-          origin: 'http://evil.com',
-          host: 'localhost:15500',
-        },
+        headers: createCrossSiteHeadersFixture(),
       });
       const res = mockRes();
       csrfProtection(req, res, next);
