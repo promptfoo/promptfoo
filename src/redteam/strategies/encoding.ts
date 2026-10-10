@@ -3,7 +3,7 @@ import type { Strategy } from './types';
 type StrategyTestCases = Awaited<ReturnType<Strategy['action']>>;
 
 interface EncodingOptions {
-  transform: (text: string) => string;
+  transform: (text: string, testCase: StrategyTestCases[number]) => string;
   metricSuffix: string;
   metadata: Record<string, unknown>;
 }
@@ -23,7 +23,7 @@ export function mapEncodingTestCases(
       })),
       vars: {
         ...testCase.vars,
-        [injectVar]: transform(originalText),
+        [injectVar]: transform(originalText, testCase),
       },
       metadata: {
         ...testCase.metadata,

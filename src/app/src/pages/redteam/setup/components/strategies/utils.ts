@@ -1,5 +1,6 @@
 import { normalizeRedteamConfigForPreview } from '@promptfoo/presentation/redteamConfig';
-import { REDTEAM_DEFAULTS } from '@promptfoo/redteam/constants';
+import { REDTEAM_DEFAULTS, STRATEGY_COLLECTION_MAPPINGS } from '@promptfoo/redteam/constants';
+import { isAttackProvider } from '@promptfoo/redteam/shared/attackProviders';
 import type { Strategy } from '@promptfoo/redteam/constants';
 import type { RedteamStrategy } from '@promptfoo/redteam/types';
 
@@ -7,6 +8,25 @@ import type { Config } from '../../types';
 
 export function getStrategyId(strategy: RedteamStrategy): string {
   return typeof strategy === 'string' ? strategy : strategy.id;
+}
+
+export function getLayerConfigError(steps: RedteamStrategy[]): string | undefined {
+  const attackIndex = steps.findIndex((step) => isAttackProvider(getStrategyId(step)));
+  if (
+    attackIndex >= 0 &&
+    steps
+      .slice(attackIndex + 1)
+      .some(
+        (step) =>
+          typeof step !== 'string' &&
+          step.id === 'bijection' &&
+          typeof step.config?.n === 'number' &&
+          step.config.n > 1,
+      )
+  ) {
+    return 'Bijection fan-out must be 1 after an attack provider';
+  }
+  return undefined;
 }
 
 // Strategies that require configuration before they can be used
@@ -24,7 +44,8 @@ function isLayerStrategyConfigValid(strategy: RedteamStrategy): boolean {
   return (
     Array.isArray(steps) &&
     steps.length > 0 &&
-    steps.every((step) => step != null && step !== '' && typeof step !== 'undefined')
+    steps.every((step) => step != null && step !== '' && typeof step !== 'undefined') &&
+    !getLayerConfigError(steps)
   );
 }
 
@@ -68,6 +89,7 @@ const STRATEGY_PROBE_MULTIPLIER: Record<Strategy, number> = {
   base64: 1,
   basic: 0, // The base cases are counted separately below.
   'best-of-n': 1,
+  bijection: 1,
   camelcase: 1,
   citation: 1,
   crescendo: 10,
@@ -93,13 +115,19 @@ const STRATEGY_PROBE_MULTIPLIER: Record<Strategy, number> = {
   'mischievous-user': 5,
   morse: 1,
   multilingual: 1, // Deprecated: now handled by global language config
-  'other-encodings': 1,
+  'other-encodings': STRATEGY_COLLECTION_MAPPINGS['other-encodings'].length,
   emoji: 1,
   piglatin: 1,
   'prompt-injection': 1,
+  'random-case': 1,
   retry: 1,
   rot13: 1,
+  'text-mutations': STRATEGY_COLLECTION_MAPPINGS['text-mutations'].length,
+  'unicode-noise': 1,
   video: 1,
+  'whitespace-obfuscation': 1,
+  zalgo: 1,
+  'zero-width': 1,
 };
 
 export function getEstimatedProbes(config: Config) {
@@ -122,12 +150,50 @@ export function getEstimatedProbes(config: Config) {
     pluginCounts.set(key, count * numLanguages);
   }
   const baseProbes = Array.from(pluginCounts.values()).reduce((total, count) => total + count, 0);
+  const selectedStrategyIds = new Set(strategies.map(getStrategyId));
 
   // Calculate total multiplier for all active strategies
   const strategyMultiplier = strategies.reduce((total, strategy) => {
     const strategyId: Strategy =
       typeof strategy === 'string' ? (strategy as Strategy) : (strategy.id as Strategy);
-    return strategyId === 'retry' ? total : total + STRATEGY_PROBE_MULTIPLIER[strategyId];
+    if (strategyId === 'retry') {
+      return total;
+    }
+    const collection =
+      STRATEGY_COLLECTION_MAPPINGS[strategyId as keyof typeof STRATEGY_COLLECTION_MAPPINGS];
+    if (collection) {
+      return total + collection.filter((member) => !selectedStrategyIds.has(member)).length;
+    }
+
+    const configuredBijectionVariants =
+      strategyId === 'bijection' && typeof strategy === 'object' ? strategy.config?.n : undefined;
+    const layerSteps =
+      strategyId === 'layer' &&
+      typeof strategy === 'object' &&
+      Array.isArray(strategy.config?.steps)
+        ? strategy.config.steps
+        : [];
+    const attackIndex = layerSteps.findIndex((step) => isAttackProvider(getStrategyId(step)));
+    const layerBijectionVariants =
+      layerSteps.length > 0
+        ? layerSteps.slice(0, attackIndex < 0 ? undefined : attackIndex).reduce((count, step) => {
+            const config =
+              typeof step === 'object' && step.id === 'bijection' ? step.config : undefined;
+            return typeof config?.n === 'number' && Number.isInteger(config.n) && config.n > 0
+              ? count * config.n
+              : count;
+          }, 1)
+        : undefined;
+    const multiplier =
+      typeof layerBijectionVariants === 'number'
+        ? layerBijectionVariants
+        : typeof configuredBijectionVariants === 'number' &&
+            Number.isInteger(configuredBijectionVariants) &&
+            configuredBijectionVariants >= 1 &&
+            configuredBijectionVariants <= 20
+          ? configuredBijectionVariants
+          : STRATEGY_PROBE_MULTIPLIER[strategyId];
+    return total + multiplier;
   }, 0);
 
   const basicStrategy = strategies.find((strategy) => getStrategyId(strategy) === 'basic');

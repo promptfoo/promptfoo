@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from 'node:util';
 import * as fs from 'fs';
 
 import async from 'async';
@@ -153,9 +154,21 @@ async function rematerializeStrategyInputVars(
 
   try {
     const parsed = JSON.parse(String(currentInjectVar));
+    const previousInputs = promptChangedSinceMaterialization
+      ? (JSON.parse(materializedPromptSnapshot as string) as Record<string, unknown>)
+      : undefined;
+    const inputsToMaterialize = previousInputs
+      ? Object.fromEntries(
+          Object.entries(inputs).filter(
+            ([key]) =>
+              !Object.hasOwn(testCase.vars ?? {}, key) ||
+              !isDeepStrictEqual(parsed[key], previousInputs[key]),
+          ),
+        )
+      : inputs;
     const materializedVars = await extractMaterializedVariablesFromJsonWithMetadata(
       parsed,
-      inputs,
+      inputsToMaterialize,
       {
         materializationIndex,
         pluginId: String(testCase.metadata?.pluginId || 'unknown-plugin'),
@@ -607,6 +620,13 @@ async function applyStrategies(
 }> {
   const newTestCases: TestCaseWithPlugin[] = [];
   const strategyResults: Record<string, { requested: number; generated: number }> = {};
+  const recordStrategyResult = (id: string, result: { requested: number; generated: number }) => {
+    const previous = strategyResults[id];
+    strategyResults[id] = {
+      requested: (previous?.requested ?? 0) + result.requested,
+      generated: (previous?.generated ?? 0) + result.generated,
+    };
+  };
 
   for (const strategy of strategies) {
     logger.debug(`Generating ${strategy.id} tests`);
@@ -806,14 +826,14 @@ async function applyStrategies(
 
       for (const [lang, result] of Object.entries(resultsByLanguage)) {
         const strategyDisplayId = lang === 'en' ? displayId : `${displayId} (${lang})`;
-        strategyResults[strategyDisplayId] = result;
+        recordStrategyResult(strategyDisplayId, result);
       }
     } else if (strategy.id === 'layer') {
       // Layer strategy: requested count is same as applicable test cases
-      strategyResults[displayId] = {
+      recordStrategyResult(displayId, {
         requested: applyNumTestsCap(applicableTestCases.length),
         generated: resultTestCases.length,
-      };
+      });
     } else {
       // get an accurate 'Requested' count for strategies that add additional tests during generation
       let n = 1;
@@ -823,10 +843,10 @@ async function applyStrategies(
         n = getDefaultNFanout(strategy.id);
       }
 
-      strategyResults[displayId] = {
+      recordStrategyResult(displayId, {
         requested: applyNumTestsCap(applicableTestCases.length * n),
         generated: resultTestCases.length,
-      };
+      });
     }
   }
 
@@ -1018,17 +1038,29 @@ export async function synthesize({
     logger.info(`Max concurrency for test generation is capped at ${MAX_MAX_CONCURRENCY}.`);
   }
 
+  const explicitStrategies = strategies.filter((strategy) => !isStrategyCollection(strategy.id));
+  const targetPlugins = (strategy: (typeof strategies)[number]) =>
+    Array.isArray(strategy.config?.plugins) ? strategy.config.plugins : [];
+  const collectionMembers = new Set<RedteamStrategyObject>();
   const expandedStrategies: typeof strategies = [];
   strategies.forEach((strategy) => {
     if (isStrategyCollection(strategy.id)) {
       const aliasedStrategies = STRATEGY_COLLECTION_MAPPINGS[strategy.id];
       if (aliasedStrategies) {
-        aliasedStrategies.forEach((strategyId) => {
-          expandedStrategies.push({
-            ...strategy,
-            id: strategyId,
-          });
-        });
+        expandedStrategies.push(
+          ...aliasedStrategies
+            .filter(
+              (strategyId) =>
+                !explicitStrategies.some(
+                  (explicit) => explicit.id === strategyId && targetPlugins(explicit).length === 0,
+                ),
+            )
+            .map((strategyId) => {
+              const member = { ...strategy, id: strategyId };
+              collectionMembers.add(member);
+              return member;
+            }),
+        );
       } else {
         logger.warn(`Strategy collection ${strategy.id} has no mappings, skipping`);
       }
@@ -1055,10 +1087,11 @@ export async function synthesize({
         return `layer:${steps.join('->')}`;
       }
     }
-    return s.id;
+    const plugins = targetPlugins(s);
+    return plugins.length ? `${s.id}:${[...plugins].sort().join(',')}` : s.id;
   };
   strategies = expandedStrategies.filter((strategy) => {
-    const key = keyForStrategy(strategy);
+    const key = `${collectionMembers.has(strategy) ? 'collection:' : ''}${keyForStrategy(strategy)}`;
     if (seen.has(key)) {
       logger.debug(`[Synthesize] Skipping duplicate strategy: ${key}`);
       return false;
@@ -1227,6 +1260,7 @@ export async function synthesize({
   }
 
   const expandedPlugins: typeof plugins = [];
+  const frameworkStrategies = new Set<RedteamStrategyObject>();
   const expandPlugin = (
     plugin: (typeof plugins)[0],
     mapping: { plugins: string[]; strategies: string[] },
@@ -1234,7 +1268,11 @@ export async function synthesize({
     mapping.plugins.forEach((p: string) =>
       expandedPlugins.push({ id: p, numTests: plugin.numTests }),
     );
-    strategies.push(...mapping.strategies.map((s: string) => ({ id: s })));
+    for (const id of mapping.strategies) {
+      const strategy = { id };
+      frameworkStrategies.add(strategy);
+      strategies.push(strategy);
+    }
   };
 
   plugins.forEach((plugin) => {
@@ -1247,9 +1285,10 @@ export async function synthesize({
       return;
     }
 
-    const mappingKey = Object.keys(ALIASED_PLUGIN_MAPPINGS).find(
-      (key) => plugin.id === key || plugin.id.startsWith(`${key}:`),
-    );
+    const mappingKeys = Object.keys(ALIASED_PLUGIN_MAPPINGS);
+    const mappingKey =
+      mappingKeys.find((key) => ALIASED_PLUGIN_MAPPINGS[key][plugin.id]) ??
+      mappingKeys.find((key) => plugin.id === key || plugin.id.startsWith(`${key}:`));
 
     if (mappingKey) {
       const mapping =
@@ -1302,6 +1341,44 @@ export async function synthesize({
   // Validate all plugins upfront
   logger.debug('Validating plugins...');
   plugins = [...new Set(expandedPlugins)].filter(validatePlugin).sort();
+
+  // Explicit strategies override collections, which override framework defaults, only
+  // for the plugins they cover.
+  strategies = strategies.flatMap((strategy) => {
+    const higherPriority = frameworkStrategies.has(strategy)
+      ? [...explicitStrategies, ...collectionMembers]
+      : collectionMembers.has(strategy)
+        ? explicitStrategies
+        : [];
+    const overrides = higherPriority.filter((override) => override.id === strategy.id);
+    if (overrides.length === 0) {
+      return [strategy];
+    }
+    const remaining = plugins
+      .filter((plugin) => {
+        const testCase = { metadata: { pluginId: plugin.id } };
+        return (
+          pluginMatchesStrategyTargets(testCase, strategy.id, targetPlugins(strategy)) &&
+          !overrides.some((explicit) =>
+            pluginMatchesStrategyTargets(testCase, strategy.id, targetPlugins(explicit)),
+          )
+        );
+      })
+      .map((plugin) => plugin.id);
+    return remaining.length
+      ? [{ ...strategy, config: { ...strategy.config, plugins: remaining } }]
+      : [];
+  });
+
+  seen.clear();
+  strategies = strategies.filter((strategy) => {
+    const key = keyForStrategy(strategy);
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
 
   // Check API health before proceeding
   if (shouldGenerateRemote()) {
