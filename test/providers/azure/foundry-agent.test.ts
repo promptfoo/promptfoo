@@ -1,9 +1,19 @@
 import { SpanStatusCode, trace } from '@opentelemetry/api';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+const { createEsLoggerModule } = await vi.hoisted(() => import('../../factories/logger'));
+
 import { getCache, isCacheEnabled } from '../../../src/cache';
 import logger from '../../../src/logger';
 import { AzureFoundryAgentProvider } from '../../../src/providers/azure/foundry-agent';
+import { AzureGenericProvider } from '../../../src/providers/azure/generic';
+import { createResponseMessage } from '../../factories/literalFixtures';
 import { mockProcessEnv } from '../../util/utils';
+
+const createCachedAgentResponse = () => ({
+  output: 'cached response',
+  __promptfooFoundryAgent: { id: 'agent_123', name: 'weather-agent' },
+});
 
 vi.mock('../../../src/cache', async (importOriginal) => {
   return {
@@ -13,15 +23,7 @@ vi.mock('../../../src/cache', async (importOriginal) => {
   };
 });
 
-vi.mock('../../../src/logger', () => ({
-  __esModule: true,
-  default: {
-    debug: vi.fn(),
-    error: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-  },
-}));
+vi.mock('../../../src/logger', () => createEsLoggerModule(true));
 
 const projectUrl = 'https://test.services.ai.azure.com/api/projects/test-project';
 const mockAgent = {
@@ -48,13 +50,7 @@ function createMessageResponse(text: string) {
     id: 'resp_123',
     model: 'gpt-4.1',
     error: null,
-    output: [
-      {
-        type: 'message',
-        role: 'assistant',
-        content: [{ type: 'output_text', text }],
-      },
-    ],
+    output: [createResponseMessage(text)],
     usage: {
       input_tokens: 10,
       output_tokens: 5,
@@ -85,6 +81,28 @@ function createFunctionCallResponse() {
       total_tokens: 30,
     },
   } as any;
+}
+
+function createMixedFunctionCallResponse() {
+  const response = createFunctionCallResponse();
+  return {
+    ...response,
+    id: 'resp_mixed',
+    output: [
+      {
+        ...response.output[0],
+        id: 'fc_weather_next',
+        call_id: 'call_weather_next',
+        arguments: '{"location":"London"}',
+      },
+      {
+        ...response.output[0],
+        id: 'fc_temperature',
+        call_id: 'call_temperature',
+        name: 'get_temperature',
+      },
+    ],
+  };
 }
 
 interface RecordedSpan {
@@ -165,6 +183,28 @@ describe('AzureFoundryAgentProvider', () => {
   });
 
   describe('instantiation', () => {
+    it('uses the Foundry client without starting or reporting Azure OpenAI authentication', async () => {
+      const genericAuth = vi
+        .spyOn(AzureGenericProvider.prototype, 'getAuthHeaders')
+        .mockRejectedValue(new Error('unused generic authentication'));
+      mockGetAgent.mockResolvedValue(mockAgent);
+      mockResponsesCreate.mockResolvedValue(createMessageResponse('Foundry response'));
+      const provider = new AzureFoundryAgentProvider('weather-agent', {
+        config: { projectUrl, azureClientId: 'private-client' },
+      });
+
+      await expect(provider.ensureInitialized()).resolves.toBeUndefined();
+      await expect(provider.callApi('hello')).resolves.toMatchObject({
+        output: 'Foundry response',
+      });
+      expect(genericAuth).not.toHaveBeenCalled();
+      expect(mockGetAgent).toHaveBeenCalledWith('weather-agent');
+      expect(logger.warn).not.toHaveBeenCalledWith(
+        expect.stringContaining('Service principal configuration'),
+        expect.anything(),
+      );
+    });
+
     it('should create provider with minimal config', () => {
       const provider = new AzureFoundryAgentProvider('weather-agent', {
         config: {
@@ -225,14 +265,16 @@ describe('AzureFoundryAgentProvider', () => {
           temperature: 0.2,
           top_p: 0.8,
         }),
-        {
+        expect.objectContaining({
           body: {
             agent_reference: {
               name: 'weather-agent',
               type: 'agent_reference',
             },
           },
-        },
+          maxRetries: 0,
+          signal: expect.any(AbortSignal),
+        }),
       );
       // Guard against regressing to the deprecated `agent` key, which the
       // Foundry Responses API now rejects with a 400.
@@ -320,14 +362,17 @@ describe('AzureFoundryAgentProvider', () => {
 
       expect(mockGetAgent).toHaveBeenCalledWith('asst_legacy');
       expect(mockListAgents).toHaveBeenCalledTimes(1);
-      expect(mockResponsesCreate).toHaveBeenCalledWith(expect.any(Object), {
-        body: {
-          agent_reference: {
-            name: 'weather-agent',
-            type: 'agent_reference',
+      expect(mockResponsesCreate).toHaveBeenCalledWith(
+        expect.any(Object),
+        expect.objectContaining({
+          body: {
+            agent_reference: {
+              name: 'weather-agent',
+              type: 'agent_reference',
+            },
           },
-        },
-      });
+        }),
+      );
       expect(result.output).toBe('Listed response');
     });
 
@@ -413,6 +458,50 @@ describe('AzureFoundryAgentProvider', () => {
       expect(secondOverride).toHaveBeenCalledOnce();
     });
 
+    describe.each(['provider', 'prompt'] as const)('%s-level tool timeout validation', (level) => {
+      it.each([null, NaN, Infinity, -Infinity, -1, '100', '100ms'])(
+        'rejects invalid maxPollTimeMs %s before initializing the client',
+        async (maxPollTimeMs) => {
+          mockGetAgent.mockResolvedValue(mockAgent);
+          mockResponsesCreate.mockResolvedValue(createMessageResponse('Should not be requested'));
+          const provider = new AzureFoundryAgentProvider('weather-agent', {
+            config: {
+              projectUrl,
+              maxPollTimeMs: level === 'provider' ? (maxPollTimeMs as number) : 1000,
+            },
+          });
+
+          const result = await provider.callApi(
+            'test prompt',
+            level === 'prompt' ? ({ prompt: { config: { maxPollTimeMs } } } as any) : undefined,
+          );
+
+          expect(result).toEqual({
+            error: expect.stringContaining('maxPollTimeMs must be a finite, non-negative number.'),
+          });
+          expect((provider as any).initializeClient).not.toHaveBeenCalled();
+          expect(mockGetAgent).not.toHaveBeenCalled();
+          expect(mockResponsesCreate).not.toHaveBeenCalled();
+        },
+      );
+    });
+
+    it('accepts a valid prompt timeout overriding an invalid provider timeout', async () => {
+      mockGetAgent.mockResolvedValue(mockAgent);
+      mockResponsesCreate.mockResolvedValue(createMessageResponse('Prompt override accepted'));
+      const provider = new AzureFoundryAgentProvider('weather-agent', {
+        config: { projectUrl, maxPollTimeMs: NaN },
+      });
+
+      const result = await provider.callApi('test prompt', {
+        prompt: { config: { maxPollTimeMs: 100 } },
+      } as any);
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('Prompt override accepted');
+      expect(mockResponsesCreate).toHaveBeenCalledOnce();
+    });
+
     it.each([0, 100])('uses prompt-level tool timeout %s', async (maxPollTimeMs) => {
       vi.mocked(isCacheEnabled).mockReturnValue(true);
       const cacheGet = vi.fn().mockResolvedValue({ output: 'stale cached response' });
@@ -454,6 +543,31 @@ describe('AzureFoundryAgentProvider', () => {
         await provider.callApi('test prompt', { prompt: { config: { maxPollTimeMs: 0 } } } as any),
       ).toMatchObject({ output: 'direct response' });
     });
+
+    it.each(['no', 'unrelated'] as const)(
+      'returns unresolved calls with a zero tool-loop timeout and %s callbacks',
+      async (callbackConfig) => {
+        mockGetAgent.mockResolvedValue(mockAgent);
+        mockResponsesCreate.mockResolvedValue(createFunctionCallResponse());
+        const callback = vi.fn().mockResolvedValue('Should not run');
+        const provider = new AzureFoundryAgentProvider('weather-agent', {
+          config: {
+            projectUrl,
+            maxPollTimeMs: 0,
+            functionToolCallbacks:
+              callbackConfig === 'unrelated' ? { get_temperature: callback } : undefined,
+          },
+        });
+
+        const result = await provider.callApi('test prompt');
+
+        expect(result.error).toBeUndefined();
+        expect(result.output).toContain('"call_id":"call_123"');
+        expect(result.output).toContain('"name":"get_weather"');
+        expect(callback).not.toHaveBeenCalled();
+        expect(mockResponsesCreate).toHaveBeenCalledOnce();
+      },
+    );
 
     it('should execute prompt-level function callbacks and continue with function_call_output items', async () => {
       mockGetAgent.mockResolvedValue(mockAgent);
@@ -500,6 +614,8 @@ describe('AzureFoundryAgentProvider', () => {
           previous_response_id: 'resp_tool',
         },
         {
+          maxRetries: 0,
+          signal: expect.any(AbortSignal),
           body: {
             agent_reference: {
               name: 'weather-agent',
@@ -688,10 +804,7 @@ describe('AzureFoundryAgentProvider', () => {
     it('emits an agent invocation span but no gen_ai.turn spans on a cache hit', async () => {
       const spans = installSpanRecorder();
       const mockCache = {
-        get: vi.fn().mockResolvedValue({
-          output: 'cached response',
-          __promptfooFoundryAgent: { id: 'agent_123', name: 'weather-agent' },
-        }),
+        get: vi.fn().mockResolvedValue(createCachedAgentResponse()),
         set: vi.fn().mockResolvedValue(undefined),
       };
       vi.mocked(isCacheEnabled).mockReturnValue(true);
@@ -722,10 +835,7 @@ describe('AzureFoundryAgentProvider', () => {
     it('restores the resolved agent identity from cache for a new legacy-ID provider', async () => {
       const spans = installSpanRecorder();
       const mockCache = {
-        get: vi.fn().mockResolvedValue({
-          output: 'cached response',
-          __promptfooFoundryAgent: { id: 'agent_123', name: 'weather-agent' },
-        }),
+        get: vi.fn().mockResolvedValue(createCachedAgentResponse()),
         set: vi.fn().mockResolvedValue(undefined),
       };
       vi.mocked(isCacheEnabled).mockReturnValue(true);
@@ -871,6 +981,100 @@ describe('AzureFoundryAgentProvider', () => {
       expect(result.output).toContain('"name":"get_weather"');
     });
 
+    it('returns an initial mixed function-call batch without executing configured callbacks', async () => {
+      mockGetAgent.mockResolvedValue(mockAgent);
+      mockResponsesCreate.mockResolvedValue(createMixedFunctionCallResponse());
+      const callback = vi.fn().mockResolvedValue('sunny');
+      const provider = new AzureFoundryAgentProvider('weather-agent', {
+        config: {
+          projectUrl,
+          functionToolCallbacks: { get_weather: callback },
+        },
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).toContain('"call_id":"call_weather_next"');
+      expect(result.output).toContain('"call_id":"call_temperature"');
+      expect(callback).not.toHaveBeenCalled();
+      expect(mockResponsesCreate).toHaveBeenCalledOnce();
+    });
+
+    it.each([99, 100, 101])(
+      'does not execute callbacks from a mixed batch returned after %sms of a 100ms budget',
+      async (elapsedMs) => {
+        vi.useFakeTimers();
+        mockGetAgent.mockResolvedValue(mockAgent);
+        mockResponsesCreate
+          .mockResolvedValueOnce(createFunctionCallResponse())
+          .mockImplementationOnce(async () => {
+            vi.advanceTimersByTime(elapsedMs);
+            return createMixedFunctionCallResponse();
+          });
+        const callback = vi.fn().mockResolvedValue('sunny');
+        const provider = new AzureFoundryAgentProvider('weather-agent', {
+          config: {
+            projectUrl,
+            maxPollTimeMs: 100,
+            functionToolCallbacks: { get_weather: callback },
+          },
+        });
+
+        const result = await provider.callApi('test prompt');
+
+        expect(callback).toHaveBeenCalledOnce();
+        expect(callback).toHaveBeenCalledWith('{"location":"Paris"}', expect.any(Object));
+        expect(mockResponsesCreate).toHaveBeenCalledTimes(2);
+        if (elapsedMs < 100) {
+          expect(result.error).toBeUndefined();
+          expect(result.output).toContain('"call_id":"call_weather_next"');
+          expect(result.output).toContain('"call_id":"call_temperature"');
+        } else {
+          expect(result.error).toContain('tool-calling loop timed out after 100ms');
+          expect(result.output).toBeUndefined();
+        }
+      },
+    );
+
+    it('times out on an unresolved function call without an item ID after the deadline', async () => {
+      vi.useFakeTimers();
+      mockGetAgent.mockResolvedValue(mockAgent);
+      mockResponsesCreate
+        .mockResolvedValueOnce(createFunctionCallResponse())
+        .mockImplementationOnce(async () => {
+          vi.advanceTimersByTime(101);
+          return {
+            ...createFunctionCallResponse(),
+            id: 'resp_without_item_id',
+            output: [
+              {
+                type: 'function_call',
+                call_id: 'call_without_item_id',
+                name: 'get_weather',
+                arguments: '{"location":"London"}',
+                status: 'completed',
+              },
+            ],
+          };
+        });
+      const callback = vi.fn().mockResolvedValue('sunny');
+      const provider = new AzureFoundryAgentProvider('weather-agent', {
+        config: {
+          projectUrl,
+          maxPollTimeMs: 100,
+          functionToolCallbacks: { get_weather: callback },
+        },
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.error).toContain('tool-calling loop timed out after 100ms');
+      expect(result.output).toBeUndefined();
+      expect(callback).toHaveBeenCalledOnce();
+      expect(mockResponsesCreate).toHaveBeenCalledTimes(2);
+    });
+
     it('should return error when agent is not found by name or id', async () => {
       mockGetAgent.mockRejectedValue(new Error('not found'));
       mockListAgents.mockReturnValue(createAsyncIterable([]));
@@ -885,28 +1089,58 @@ describe('AzureFoundryAgentProvider', () => {
       expect(result.error).toContain('azure:foundry-agent:<agent-name>');
     });
 
-    it('should return timeout error when callback loop exceeds maxPollTimeMs', async () => {
+    it.each([100, 101])(
+      'times out when a callback uses %sms of a 100ms budget',
+      async (elapsedMs) => {
+        vi.useFakeTimers();
+        mockGetAgent.mockResolvedValue(mockAgent);
+        // Always return function calls so the loop never breaks naturally
+        mockResponsesCreate.mockResolvedValue(createFunctionCallResponse());
+
+        const provider = new AzureFoundryAgentProvider('weather-agent', {
+          config: {
+            projectUrl,
+            maxPollTimeMs: 100,
+            functionToolCallbacks: {
+              get_weather: vi.fn().mockImplementation(async () => {
+                vi.advanceTimersByTime(elapsedMs);
+                return 'sunny';
+              }),
+            },
+          },
+        });
+
+        const result = await provider.callApi('test prompt');
+
+        expect(result.error).toContain('tool-calling loop timed out after 100ms');
+        expect(mockResponsesCreate).toHaveBeenCalledTimes(1);
+      },
+    );
+
+    it('returns the final response when the last turn finishes past maxPollTimeMs', async () => {
       vi.useFakeTimers();
       mockGetAgent.mockResolvedValue(mockAgent);
-      // Always return function calls so the loop never breaks naturally
-      mockResponsesCreate.mockResolvedValue(createFunctionCallResponse());
+      mockResponsesCreate
+        .mockResolvedValueOnce(createFunctionCallResponse())
+        .mockImplementationOnce(async () => {
+          // The follow-up turn spends the rest of the budget but does answer.
+          vi.advanceTimersByTime(101);
+          return { ...createMessageResponse('Tool finished'), status: 'completed' };
+        });
 
       const provider = new AzureFoundryAgentProvider('weather-agent', {
         config: {
           projectUrl,
           maxPollTimeMs: 100,
-          functionToolCallbacks: {
-            get_weather: vi.fn().mockImplementation(async () => {
-              vi.advanceTimersByTime(101);
-              return 'sunny';
-            }),
-          },
+          functionToolCallbacks: { get_weather: vi.fn().mockResolvedValue('sunny') },
         },
       });
 
       const result = await provider.callApi('test prompt');
 
-      expect(result.error).toContain('tool-calling loop timed out after 100ms');
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('Tool finished');
+      expect(mockResponsesCreate).toHaveBeenCalledTimes(2);
     });
 
     it('should warn once and omit unsupported per-request fields', async () => {
@@ -942,6 +1176,372 @@ describe('AzureFoundryAgentProvider', () => {
       expect(firstRequestBody).not.toHaveProperty('timeoutMs');
       expect(firstRequestBody).not.toHaveProperty('tool_resources');
       expect(vi.mocked(logger.warn)).toHaveBeenCalledTimes(1);
+    });
+
+    it('uses effective timeout with request-local SDK signals and disabled internal retries', async () => {
+      mockGetAgent.mockResolvedValue(mockAgent);
+      mockResponsesCreate
+        .mockResolvedValueOnce(createFunctionCallResponse())
+        .mockResolvedValueOnce(createMessageResponse('finished'));
+      const controller = new AbortController();
+      const provider = new AzureFoundryAgentProvider('weather-agent', {
+        config: {
+          projectUrl,
+          timeoutMs: 1000,
+          retryOptions: { maxRetries: 2 },
+          functionToolCallbacks: { get_weather: vi.fn().mockResolvedValue('sunny') },
+        },
+      });
+
+      const result = await provider.callApi(
+        'prompt',
+        { prompt: { config: { timeoutMs: 250, retryOptions: { maxRetries: 0 } } } } as any,
+        { abortSignal: controller.signal },
+      );
+
+      expect(result.output).toBe('finished');
+      expect(mockResponsesCreate).toHaveBeenCalledTimes(2);
+      for (const [, options] of mockResponsesCreate.mock.calls) {
+        expect(options).toEqual({
+          body: { agent_reference: { name: 'weather-agent', type: 'agent_reference' } },
+          timeout: 250,
+          maxRetries: 0,
+          signal: expect.any(AbortSignal),
+        });
+        expect(options.signal).not.toBe(controller.signal);
+        expect(options.signal.aborted).toBe(true);
+      }
+      expect(mockResponsesCreate.mock.calls[0][1].signal).not.toBe(
+        mockResponsesCreate.mock.calls[1][1].signal,
+      );
+      expect(logger.warn).not.toHaveBeenCalled();
+    });
+
+    describe.each(['provider', 'prompt'] as const)(
+      '%s-level request timeout validation',
+      (level) => {
+        it.each([0, -1, 0.5, 1000.5, NaN, Infinity, '1000', 2_147_483_648, Number.MAX_VALUE])(
+          'rejects invalid request timeout %s before client initialization',
+          async (timeoutMs) => {
+            const provider = new AzureFoundryAgentProvider('weather-agent', {
+              config: {
+                projectUrl,
+                timeoutMs: level === 'provider' ? (timeoutMs as number) : 1000,
+              },
+            });
+
+            expect(
+              await provider.callApi(
+                'prompt',
+                level === 'prompt' ? ({ prompt: { config: { timeoutMs } } } as any) : undefined,
+              ),
+            ).toEqual({
+              error:
+                'Azure Foundry agent timeoutMs must be a positive integer no greater than 2147483647.',
+            });
+            expect((provider as any).initializeClient).not.toHaveBeenCalled();
+            expect(mockGetAgent).not.toHaveBeenCalled();
+            expect(mockListAgents).not.toHaveBeenCalled();
+            expect(mockResponsesCreate).not.toHaveBeenCalled();
+          },
+        );
+      },
+    );
+
+    it.each([-1, 1.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1, '2'])(
+      'rejects invalid SDK retry count %s',
+      async (maxRetries) => {
+        const provider = new AzureFoundryAgentProvider('weather-agent', {
+          config: { projectUrl, retryOptions: { maxRetries: maxRetries as number } },
+        });
+
+        expect(await provider.callApi('prompt')).toEqual({
+          error: 'Azure Foundry agent retryOptions.maxRetries must be a non-negative integer.',
+        });
+        expect((provider as any).initializeClient).not.toHaveBeenCalled();
+        expect(mockResponsesCreate).not.toHaveBeenCalled();
+      },
+    );
+
+    it('warns about unsupported retry tuning without treating maxRetries as unsupported', async () => {
+      mockGetAgent.mockResolvedValue(mockAgent);
+      mockResponsesCreate.mockResolvedValue(createMessageResponse('finished'));
+      const provider = new AzureFoundryAgentProvider('weather-agent', {
+        config: { projectUrl, retryOptions: { maxRetries: 0, initialDelayMs: 10 } },
+      });
+
+      await provider.callApi('prompt');
+
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('retryOptions.initialDelayMs'),
+      );
+      expect(logger.warn).not.toHaveBeenCalledWith(
+        expect.stringContaining('retryOptions.maxRetries'),
+      );
+      expect(mockResponsesCreate.mock.calls[0][1].maxRetries).toBe(0);
+    });
+
+    it.each([
+      [1, 1],
+      [2.9, 2],
+      [undefined, 8],
+      [0, 8],
+      [-1, 8],
+      [NaN, 8],
+      [65, 8],
+      ['2', 8],
+    ])('bounds repeated tool calls with maxToolIterations %s', async (configured, expected) => {
+      vi.useFakeTimers();
+      mockGetAgent.mockResolvedValue(mockAgent);
+      mockResponsesCreate.mockImplementation(async () => {
+        const response = createFunctionCallResponse();
+        const index = mockResponsesCreate.mock.calls.length;
+        return {
+          ...response,
+          id: `resp_${index}`,
+          output: [{ ...response.output[0], id: `fc_${index}`, call_id: `call_${index}` }],
+        };
+      });
+      const callback = vi.fn().mockResolvedValue('sunny');
+      const provider = new AzureFoundryAgentProvider('weather-agent', {
+        config: {
+          projectUrl,
+          maxToolIterations: configured as number,
+          functionToolCallbacks: { get_weather: callback },
+        },
+      });
+
+      const result = await provider.callApi('prompt');
+
+      expect(result.error).toContain(`reached maxToolIterations (${expected})`);
+      expect(result.tokenUsage).toMatchObject({
+        prompt: ((expected as number) + 1) * 20,
+        completion: ((expected as number) + 1) * 10,
+        total: ((expected as number) + 1) * 30,
+        numRequests: (expected as number) + 1,
+      });
+      expect(callback).toHaveBeenCalledTimes(expected as number);
+      expect(mockResponsesCreate).toHaveBeenCalledTimes((expected as number) + 1);
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it('counts a parallel callback batch once and accepts the final answer at the turn limit', async () => {
+      mockGetAgent.mockResolvedValue(mockAgent);
+      mockResponsesCreate
+        .mockResolvedValueOnce(createMixedFunctionCallResponse())
+        .mockResolvedValueOnce(createMessageResponse('finished'));
+      const callback = vi.fn().mockResolvedValue('sunny');
+      const provider = new AzureFoundryAgentProvider('weather-agent', {
+        config: {
+          projectUrl,
+          maxToolIterations: 1,
+          functionToolCallbacks: { get_weather: callback, get_temperature: callback },
+        },
+      });
+
+      const result = await provider.callApi('prompt');
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('finished');
+      expect(callback).toHaveBeenCalledTimes(2);
+      expect(mockResponsesCreate).toHaveBeenCalledTimes(2);
+    });
+
+    it('rejects caller cancellation before any initialization or request', async () => {
+      const controller = new AbortController();
+      controller.abort(new Error('caller stopped'));
+      const provider = new AzureFoundryAgentProvider('weather-agent', { config: { projectUrl } });
+
+      await expect(
+        provider.callApi('prompt', undefined, { abortSignal: controller.signal }),
+      ).rejects.toMatchObject({ name: 'AbortError' });
+
+      expect((provider as any).initializeClient).not.toHaveBeenCalled();
+      expect(mockResponsesCreate).not.toHaveBeenCalled();
+    });
+
+    it.each(['request', 'callback'] as const)(
+      'cancels a pending %s, removes listeners, and consumes a late rejection',
+      async (stage) => {
+        vi.useFakeTimers();
+        const spans = installSpanRecorder();
+        mockGetAgent.mockResolvedValue(mockAgent);
+        const controller = new AbortController();
+        const addListener = vi.spyOn(controller.signal, 'addEventListener');
+        const removeListener = vi.spyOn(controller.signal, 'removeEventListener');
+        let rejectPending!: (reason: Error) => void;
+        const pending = new Promise<never>((_resolve, reject) => {
+          rejectPending = reject;
+        });
+        const callback = vi.fn().mockReturnValue(pending);
+        mockResponsesCreate.mockReturnValue(
+          stage === 'request' ? pending : createFunctionCallResponse(),
+        );
+        const provider = new AzureFoundryAgentProvider('weather-agent', {
+          config: { projectUrl, functionToolCallbacks: { get_weather: callback } },
+        });
+
+        const result = provider.callApi('prompt', undefined, { abortSignal: controller.signal });
+        const rejection = expect(result).rejects.toMatchObject({ name: 'AbortError' });
+        await vi.advanceTimersByTimeAsync(0);
+        expect(mockResponsesCreate).toHaveBeenCalledOnce();
+        if (stage === 'callback') {
+          expect(callback).toHaveBeenCalledWith(
+            '{"location":"Paris"}',
+            expect.objectContaining({ abortSignal: controller.signal }),
+          );
+        }
+        controller.abort();
+        await rejection;
+        rejectPending(new Error('late non-cooperative failure'));
+        await vi.advanceTimersByTimeAsync(0);
+
+        expect(mockResponsesCreate).toHaveBeenCalledOnce();
+        if (stage === 'callback') {
+          expect(spans.find((span) => span.name === 'invoke_agent weather-agent')).toMatchObject({
+            attributes: {
+              'gen_ai.usage.input_tokens': 20,
+              'gen_ai.usage.output_tokens': 10,
+              'promptfoo.usage.total_tokens': 30,
+              'error.type': 'AbortError',
+            },
+            status: { code: SpanStatusCode.ERROR },
+          });
+        }
+        const added = addListener.mock.calls.filter(([event]) => event === 'abort');
+        for (const [, listener] of added) {
+          expect(removeListener).toHaveBeenCalledWith('abort', listener);
+        }
+        expect(vi.getTimerCount()).toBe(0);
+      },
+    );
+
+    it('preserves completed model usage when cancellation interrupts a later request', async () => {
+      vi.useFakeTimers();
+      const spans = installSpanRecorder();
+      const controller = new AbortController();
+      let rejectPending!: (error: Error) => void;
+      const pending = new Promise<never>((_resolve, reject) => {
+        rejectPending = reject;
+      });
+      mockGetAgent.mockResolvedValue(mockAgent);
+      mockResponsesCreate
+        .mockResolvedValueOnce(createFunctionCallResponse())
+        .mockReturnValueOnce(pending);
+      const callback = vi.fn().mockResolvedValue('sunny');
+      const provider = new AzureFoundryAgentProvider('weather-agent', {
+        config: { projectUrl, functionToolCallbacks: { get_weather: callback } },
+      });
+
+      const result = provider.callApi('prompt', undefined, { abortSignal: controller.signal });
+      const rejection = expect(result).rejects.toMatchObject({ name: 'AbortError' });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(mockResponsesCreate).toHaveBeenCalledTimes(2);
+      controller.abort();
+      await rejection;
+      rejectPending(new Error('late transport failure'));
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(spans.find((span) => span.name === 'invoke_agent weather-agent')).toMatchObject({
+        attributes: {
+          'gen_ai.usage.input_tokens': 20,
+          'gen_ai.usage.output_tokens': 10,
+          'promptfoo.usage.total_tokens': 30,
+          'error.type': 'AbortError',
+        },
+        status: { code: SpanStatusCode.ERROR },
+      });
+      expect(callback).toHaveBeenCalledOnce();
+      expect(mockResponsesCreate).toHaveBeenCalledTimes(2);
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it.each(['cache', 'initialization', 'agent lookup'] as const)(
+      'cancels a pending %s without allowing late completion to start a model request',
+      async (stage) => {
+        vi.useFakeTimers();
+        const controller = new AbortController();
+        let completePending!: (result: unknown) => void;
+        const pending = new Promise((resolve) => {
+          completePending = resolve;
+        });
+        const provider = new AzureFoundryAgentProvider('weather-agent', {
+          config: { projectUrl },
+        });
+        const initializeClient = vi.mocked((provider as any).initializeClient);
+        if (stage === 'cache') {
+          vi.mocked(isCacheEnabled).mockReturnValue(true);
+          vi.mocked(getCache).mockReturnValue({ get: vi.fn().mockReturnValue(pending) } as any);
+        } else if (stage === 'initialization') {
+          initializeClient.mockReturnValue(pending);
+        } else {
+          mockGetAgent.mockReturnValue(pending);
+        }
+
+        const result = provider.callApi('prompt', undefined, { abortSignal: controller.signal });
+        const rejection = expect(result).rejects.toMatchObject({ name: 'AbortError' });
+        await vi.advanceTimersByTimeAsync(0);
+        if (stage === 'initialization') {
+          expect(initializeClient).toHaveBeenCalledOnce();
+        } else if (stage === 'agent lookup') {
+          expect(mockGetAgent).toHaveBeenCalledOnce();
+        } else {
+          expect(getCache).toHaveBeenCalledOnce();
+        }
+        controller.abort();
+        await rejection;
+        completePending(stage === 'initialization' ? mockClient : mockAgent);
+        await vi.advanceTimersByTimeAsync(0);
+
+        expect(mockResponsesCreate).not.toHaveBeenCalled();
+        expect(mockClient.getOpenAIClient).not.toHaveBeenCalled();
+        expect(logger.warn).not.toHaveBeenCalled();
+        expect(vi.getTimerCount()).toBe(0);
+      },
+    );
+
+    it('does not start a callback when cancellation races with its model response', async () => {
+      mockGetAgent.mockResolvedValue(mockAgent);
+      const controller = new AbortController();
+      mockResponsesCreate.mockImplementation(async () => {
+        controller.abort();
+        return createFunctionCallResponse();
+      });
+      const callback = vi.fn().mockResolvedValue('sunny');
+      const provider = new AzureFoundryAgentProvider('weather-agent', {
+        config: { projectUrl, functionToolCallbacks: { get_weather: callback } },
+      });
+
+      await expect(
+        provider.callApi('prompt', undefined, { abortSignal: controller.signal }),
+      ).rejects.toMatchObject({ name: 'AbortError' });
+
+      expect(callback).not.toHaveBeenCalled();
+      expect(mockResponsesCreate).toHaveBeenCalledOnce();
+    });
+
+    it('removes caller cancellation listeners after a successful tool invocation', async () => {
+      const controller = new AbortController();
+      const addListener = vi.spyOn(controller.signal, 'addEventListener');
+      const removeListener = vi.spyOn(controller.signal, 'removeEventListener');
+      mockGetAgent.mockResolvedValue(mockAgent);
+      mockResponsesCreate
+        .mockResolvedValueOnce(createFunctionCallResponse())
+        .mockResolvedValueOnce(createMessageResponse('finished'));
+      const provider = new AzureFoundryAgentProvider('weather-agent', {
+        config: {
+          projectUrl,
+          functionToolCallbacks: { get_weather: vi.fn().mockResolvedValue('sunny') },
+        },
+      });
+
+      expect(
+        await provider.callApi('prompt', undefined, { abortSignal: controller.signal }),
+      ).toMatchObject({ output: 'finished' });
+
+      for (const [, listener] of addListener.mock.calls.filter(([event]) => event === 'abort')) {
+        expect(removeListener).toHaveBeenCalledWith('abort', listener);
+      }
     });
 
     it('should hash the request body in cache keys', async () => {
@@ -1087,7 +1687,7 @@ describe('AzureFoundryAgentProvider', () => {
         mockGetAgent.mockResolvedValue(mockAgent);
         mockResponsesCreate.mockRejectedValue(makeSdkError(429, 'insufficient_quota'));
         const provider = new AzureFoundryAgentProvider('weather-agent', {
-          config: { projectUrl },
+          config: { projectUrl, retryOptions: { maxRetries: 0 } },
         });
         const result = await provider.callApi('test prompt');
         expect(result.error).toContain('Quota exceeded');
@@ -1104,7 +1704,7 @@ describe('AzureFoundryAgentProvider', () => {
           }),
         );
         const provider = new AzureFoundryAgentProvider('weather-agent', {
-          config: { projectUrl },
+          config: { projectUrl, retryOptions: { maxRetries: 0 } },
         });
         const result = await provider.callApi('test prompt');
         expect(result.error).toContain('Quota exceeded');
@@ -1122,7 +1722,7 @@ describe('AzureFoundryAgentProvider', () => {
           }),
         );
         const provider = new AzureFoundryAgentProvider('weather-agent', {
-          config: { projectUrl },
+          config: { projectUrl, retryOptions: { maxRetries: 0 } },
         });
         const result = await provider.callApi('test prompt');
         expect(result.error).toContain('Rate limit exceeded');
@@ -1142,7 +1742,7 @@ describe('AzureFoundryAgentProvider', () => {
             }),
           );
           const provider = new AzureFoundryAgentProvider('weather-agent', {
-            config: { projectUrl },
+            config: { projectUrl, retryOptions: { maxRetries: 0 } },
           });
 
           const result = await provider.callApi('test prompt');
@@ -1163,7 +1763,7 @@ describe('AzureFoundryAgentProvider', () => {
           }),
         );
         const provider = new AzureFoundryAgentProvider('weather-agent', {
-          config: { projectUrl },
+          config: { projectUrl, retryOptions: { maxRetries: 0 } },
         });
         const result = await provider.callApi('test prompt');
         expect(result.metadata).toMatchObject({
@@ -1182,7 +1782,7 @@ describe('AzureFoundryAgentProvider', () => {
           }),
         );
         const provider = new AzureFoundryAgentProvider('weather-agent', {
-          config: { projectUrl },
+          config: { projectUrl, retryOptions: { maxRetries: 0 } },
         });
         const result = await provider.callApi('test prompt');
         expect(result.error).toContain('Rate limit exceeded');
@@ -1212,7 +1812,7 @@ describe('AzureFoundryAgentProvider', () => {
           }),
         );
         const provider = new AzureFoundryAgentProvider('weather-agent', {
-          config: { projectUrl },
+          config: { projectUrl, retryOptions: { maxRetries: 0 } },
         });
         const result = await provider.callApi('test prompt');
         // An ambiguous quota code next to a short Retry-After is a deployment
@@ -1237,7 +1837,7 @@ describe('AzureFoundryAgentProvider', () => {
           }),
         );
         const provider = new AzureFoundryAgentProvider('weather-agent', {
-          config: { projectUrl },
+          config: { projectUrl, retryOptions: { maxRetries: 0 } },
         });
         const result = await provider.callApi('test prompt');
         expect(
@@ -1256,7 +1856,7 @@ describe('AzureFoundryAgentProvider', () => {
           }),
         );
         const provider = new AzureFoundryAgentProvider('weather-agent', {
-          config: { projectUrl },
+          config: { projectUrl, retryOptions: { maxRetries: 0 } },
         });
         const result = await provider.callApi('test prompt');
         expect(result.metadata).toMatchObject({
@@ -1268,7 +1868,7 @@ describe('AzureFoundryAgentProvider', () => {
         mockGetAgent.mockResolvedValue(mockAgent);
         mockResponsesCreate.mockRejectedValue(makeSdkError(429, 'rate_limit_exceeded'));
         const provider = new AzureFoundryAgentProvider('weather-agent', {
-          config: { projectUrl },
+          config: { projectUrl, retryOptions: { maxRetries: 0 } },
         });
         const result = await provider.callApi('test prompt');
         expect(result.error).toContain('Rate limit exceeded');
@@ -1280,7 +1880,7 @@ describe('AzureFoundryAgentProvider', () => {
         mockGetAgent.mockResolvedValue(mockAgent);
         mockResponsesCreate.mockRejectedValue(makeSdkError(429));
         const provider = new AzureFoundryAgentProvider('weather-agent', {
-          config: { projectUrl },
+          config: { projectUrl, retryOptions: { maxRetries: 0 } },
         });
         const result = await provider.callApi('test prompt');
         expect(result.error).toContain('Rate limit exceeded');
@@ -1292,7 +1892,7 @@ describe('AzureFoundryAgentProvider', () => {
         // 500 with the same code shouldn't trigger the rate-limit branch
         mockResponsesCreate.mockRejectedValue(makeSdkError(500, 'insufficient_quota'));
         const provider = new AzureFoundryAgentProvider('weather-agent', {
-          config: { projectUrl },
+          config: { projectUrl, retryOptions: { maxRetries: 0 } },
         });
         const result = await provider.callApi('test prompt');
         expect(result.error).not.toContain('Quota exceeded');
@@ -1303,7 +1903,7 @@ describe('AzureFoundryAgentProvider', () => {
         mockGetAgent.mockResolvedValue(mockAgent);
         mockResponsesCreate.mockRejectedValue('string error');
         const provider = new AzureFoundryAgentProvider('weather-agent', {
-          config: { projectUrl },
+          config: { projectUrl, retryOptions: { maxRetries: 0 } },
         });
         const result = await provider.callApi('test prompt');
         expect(result.error).toContain('Error in Azure Foundry Agent API call');
@@ -1318,7 +1918,7 @@ describe('AzureFoundryAgentProvider', () => {
         });
         mockResponsesCreate.mockRejectedValue(sdkErr);
         const provider = new AzureFoundryAgentProvider('weather-agent', {
-          config: { projectUrl },
+          config: { projectUrl, retryOptions: { maxRetries: 0 } },
         });
         const result = await provider.callApi('test prompt');
         expect(result.error).toContain('Rate limit exceeded');
@@ -1336,7 +1936,7 @@ describe('AzureFoundryAgentProvider', () => {
         });
         mockResponsesCreate.mockRejectedValue(sdkErr);
         const provider = new AzureFoundryAgentProvider('weather-agent', {
-          config: { projectUrl },
+          config: { projectUrl, retryOptions: { maxRetries: 0 } },
         });
         const result = await provider.callApi('test prompt');
         expect(result.error).toContain('Rate limit exceeded');
@@ -1347,7 +1947,7 @@ describe('AzureFoundryAgentProvider', () => {
         mockGetAgent.mockResolvedValue(mockAgent);
         mockResponsesCreate.mockRejectedValue(makeSdkError(429, 'insufficient_quota'));
         const provider = new AzureFoundryAgentProvider('weather-agent', {
-          config: { projectUrl },
+          config: { projectUrl, retryOptions: { maxRetries: 0 } },
         });
         const result = await provider.callApi('test prompt');
         expect(result.metadata?.rateLimitKind).toBe('quota');
