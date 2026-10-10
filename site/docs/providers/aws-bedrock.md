@@ -784,7 +784,7 @@ Amazon Nova Reel (`amazon.nova-reel-v1:1`) generates studio-quality videos from 
 Nova Reel 1.0 and 1.1 reached end of life on **September 30, 2026**.
 These configurations are retained for reference and private extended-access workloads.
 For new video evaluations, check [Luma Ray 2](#luma-ray-2) and the [AWS lifecycle table](https://docs.aws.amazon.com/bedrock/latest/userguide/model-lifecycle-legacy.html)
-before using them. Promptfoo has no established same-API successor for the default `bedrock:video` route.
+before using them. Promptfoo does not migrate Nova Reel configurations automatically.
 
 :::
 

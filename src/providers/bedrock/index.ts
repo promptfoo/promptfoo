@@ -285,7 +285,9 @@ interface BedrockAmazonNovaGenerationOptions extends BedrockOptions {
     maxTokens?: number;
     max_new_tokens?: number;
     temperature?: number;
+    topP?: number;
     top_p?: number;
+    topK?: number;
     top_k?: number;
     stopSequences?: string[];
   };
