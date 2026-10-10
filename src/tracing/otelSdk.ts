@@ -89,8 +89,7 @@ export function initializeOtel(config: OtelConfig): void {
 
   // Add local exporter (writes to TraceStore/SQLite)
   if (config.localExport) {
-    const localExporter = new LocalSpanExporter();
-    spanProcessors.push(new BatchSpanProcessor(localExporter));
+    spanProcessors.push(new BatchSpanProcessor(new LocalSpanExporter()));
     logger.debug('[OtelSdk] Added local span exporter');
   }
 
@@ -99,10 +98,7 @@ export function initializeOtel(config: OtelConfig): void {
     // Local-only tracing does not need the external exporter and its transports.
     const { OTLPTraceExporter } =
       require('@opentelemetry/exporter-trace-otlp-http') as typeof import('@opentelemetry/exporter-trace-otlp-http');
-    const otlpExporter = new OTLPTraceExporter({
-      url: config.endpoint,
-    });
-    spanProcessors.push(new BatchSpanProcessor(otlpExporter));
+    spanProcessors.push(new BatchSpanProcessor(new OTLPTraceExporter({ url: config.endpoint })));
     logger.debug(`[OtelSdk] Added OTLP exporter to ${config.endpoint}`);
   }
 
@@ -116,64 +112,11 @@ export function initializeOtel(config: OtelConfig): void {
   logger.info('[OtelSdk] OpenTelemetry SDK initialized successfully');
 
   // Set up graceful shutdown
-  setupShutdownHandlers();
-}
-
-/**
- * Shutdown the OpenTelemetry SDK.
- * Flushes any pending spans and releases resources.
- */
-export async function shutdownOtel(): Promise<void> {
-  if (!initialized || !provider) {
-    return;
-  }
-
-  logger.debug('[OtelSdk] Shutting down OpenTelemetry SDK');
-
-  try {
-    await provider.shutdown();
-    logger.info('[OtelSdk] OpenTelemetry SDK shut down successfully');
-  } catch (error) {
-    logger.error('[OtelSdk] Error shutting down OpenTelemetry SDK', { error });
-  } finally {
-    provider = null;
-    initialized = false;
-    cleanupShutdownHandlers();
-  }
-}
-
-/**
- * Force flush any pending spans.
- * Useful before process exit to ensure all spans are exported.
- */
-export async function flushOtel(): Promise<void> {
-  if (!initialized || !provider) {
-    return;
-  }
-
-  logger.debug('[OtelSdk] Flushing pending spans');
-
-  try {
-    await provider.forceFlush();
-    logger.debug('[OtelSdk] Spans flushed successfully');
-  } catch (error) {
-    logger.error('[OtelSdk] Error flushing spans', { error });
-  }
-}
-
-/**
- * Check if OTEL SDK is initialized and enabled.
- */
-export function isOtelInitialized(): boolean {
-  return initialized;
-}
-
-/**
- * Set up handlers for graceful shutdown on process signals.
- * Uses once() listeners and tracks registration globally to avoid duplicates
- * across module resets (important for tests).
- */
-function setupShutdownHandlers(): void {
+  /**
+   * Set up handlers for graceful shutdown on process signals.
+   * Uses once() listeners and tracks registration globally to avoid duplicates
+   * across module resets (important for tests).
+   */
   const handlers = getHandlers();
 
   // Skip if handlers are already registered
@@ -212,23 +155,66 @@ function setupShutdownHandlers(): void {
 }
 
 /**
- * Clean up shutdown handlers.
- * Called during shutdown to prevent duplicate registrations on reinit.
+ * Shutdown the OpenTelemetry SDK.
+ * Flushes any pending spans and releases resources.
  */
-function cleanupShutdownHandlers(): void {
-  const handlers = getHandlers();
+export async function shutdownOtel(): Promise<void> {
+  if (!initialized || !provider) {
+    return;
+  }
 
-  if (handlers.sigTermHandler) {
-    process.removeListener('SIGTERM', handlers.sigTermHandler);
-    handlers.sigTermHandler = null;
+  logger.debug('[OtelSdk] Shutting down OpenTelemetry SDK');
+
+  try {
+    await provider.shutdown();
+    logger.info('[OtelSdk] OpenTelemetry SDK shut down successfully');
+  } catch (error) {
+    logger.error('[OtelSdk] Error shutting down OpenTelemetry SDK', { error });
+  } finally {
+    provider = null;
+    initialized = false;
+    /**
+     * Clean up shutdown handlers.
+     * Called during shutdown to prevent duplicate registrations on reinit.
+     */
+    const handlers = getHandlers();
+
+    for (const [event, key] of [
+      ['SIGTERM', 'sigTermHandler'],
+      ['SIGINT', 'sigIntHandler'],
+      ['beforeExit', 'beforeExitHandler'],
+    ] as const) {
+      if (handlers[key]) {
+        process.removeListener(event, handlers[key]);
+        handlers[key] = null;
+      }
+    }
+    handlers.registered = false;
   }
-  if (handlers.sigIntHandler) {
-    process.removeListener('SIGINT', handlers.sigIntHandler);
-    handlers.sigIntHandler = null;
+}
+
+/**
+ * Force flush any pending spans.
+ * Useful before process exit to ensure all spans are exported.
+ */
+export async function flushOtel(): Promise<void> {
+  if (!initialized || !provider) {
+    return;
   }
-  if (handlers.beforeExitHandler) {
-    process.removeListener('beforeExit', handlers.beforeExitHandler);
-    handlers.beforeExitHandler = null;
+
+  logger.debug('[OtelSdk] Flushing pending spans');
+
+  try {
+    await provider.forceFlush();
+    logger.debug('[OtelSdk] Spans flushed successfully');
+  } catch (error) {
+    logger.error('[OtelSdk] Error flushing spans', { error });
   }
-  handlers.registered = false;
+}
+
+/**
+ * Check if OTEL SDK is initialized and enabled.
+ */
+export function isOtelInitialized(): boolean {
+  return initialized;
 }

@@ -35,17 +35,17 @@ import {
   getPrimaryTokenUsageLabel,
   getTokenUsageTotal,
 } from '@app/utils/tokenUsage';
+import { convertResultsToTable } from '@promptfoo/presentation/evalResults';
 import {
   type EvaluateResult,
   type EvaluateSummaryV2,
   type GradingResult,
   isProviderOptions,
-  ResultFailureReason,
   type ResultLightweightWithLabel,
   type ResultsFile,
   type SharedResults,
 } from '@promptfoo/types';
-import { convertResultsToTable } from '@promptfoo/util/convertEvalResultsToTable';
+import { ResultFailureReason } from '@promptfoo/types/results';
 import { AlertTriangle, Filter, ListOrdered, Printer, Settings, X } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import FrameworkCompliance from './FrameworkCompliance';

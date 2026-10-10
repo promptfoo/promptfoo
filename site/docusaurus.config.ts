@@ -479,6 +479,10 @@ const config: Config = {
       {
         redirects: [
           {
+            from: '/docs/write-for-promptfoo',
+            to: '/docs/contributing/',
+          },
+          {
             from: '/docs/category/troubleshooting',
             to: '/docs/usage/troubleshooting/',
           },
@@ -572,6 +576,10 @@ const config: Config = {
             to: '/docs/guides/gpt-mmlu-comparison/',
           },
           // Deleted guides redirected to guides index
+          {
+            from: '/docs/guides/lintlang-prompt-assertion',
+            to: '/docs/guides/',
+          },
           {
             from: '/docs/guides/cohere-command-r-benchmark',
             to: '/docs/guides/',

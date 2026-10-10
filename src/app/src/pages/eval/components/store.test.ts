@@ -1,8 +1,8 @@
 import { HIDDEN_METADATA_KEYS } from '@app/constants';
 import { useTestTimers } from '@app/tests/timers';
 import { callApi } from '@app/utils/api';
+import { convertResultsToTable } from '@promptfoo/presentation/evalResults';
 import { Severity } from '@promptfoo/redteam/constants';
-import { convertResultsToTable } from '@promptfoo/util/convertEvalResultsToTable';
 import { act } from '@testing-library/react';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { type ResultsFilter, useTableStore } from './store';

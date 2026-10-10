@@ -1,5 +1,6 @@
 import { Button } from '@app/components/ui/button';
 import { formatASRForDisplay } from '@promptfoo/app/src/utils/redteam';
+import { calculateAttackSuccessRate } from '@promptfoo/presentation/redteamMetrics';
 import {
   ALIASED_PLUGIN_MAPPINGS,
   DOD_AI_ETHICS_PRINCIPLE_NAMES,
@@ -10,7 +11,6 @@ import {
   riskCategorySeverityMap,
   Severity,
 } from '@promptfoo/redteam/constants';
-import { calculateAttackSuccessRate } from '@promptfoo/redteam/metrics';
 import { Download as DownloadIcon } from 'lucide-react';
 import {
   type CategoryStats,

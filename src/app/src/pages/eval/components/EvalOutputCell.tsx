@@ -11,12 +11,8 @@ import {
   resolveImageSource,
   resolveVideoSource,
 } from '@app/utils/media';
-import {
-  type EvaluateTableOutput,
-  type GradingResult,
-  type ImageOutput,
-  ResultFailureReason,
-} from '@promptfoo/types';
+import { type EvaluateTableOutput, type GradingResult, type ImageOutput } from '@promptfoo/types';
+import { ResultFailureReason } from '@promptfoo/types/results';
 import { getActualPrompt } from '@promptfoo/util/providerResponse';
 import { diffJson, diffSentences, diffWords } from 'diff';
 import {
@@ -107,6 +103,7 @@ export function isImageProvider(provider: string | undefined): boolean {
  * - 'openai:video:sora-2' (OpenAI Sora)
  * - 'openai:video:sora-2-pro' (OpenAI Sora Pro)
  * - 'google:video:veo-3.1-generate-preview' (Google Veo)
+ * - 'vertex:video:veo-3.1-generate-001' (Google Veo on Vertex AI)
  * - 'google:video:veo-3.1-fast-generate-preview' (Google Veo Fast)
  * Used to skip truncation for video content.
  */

@@ -10,6 +10,7 @@ import * as yaml from 'js-yaml';
 import { CheckCircle, Copy, Download } from 'lucide-react';
 import { DownloadFormat, downloadBlob, useDownloadEval } from '../../../hooks/useDownloadEval';
 import { useToast } from '../../../hooks/useToast';
+import { toPortableConfig } from '../../../utils/portableConfig';
 import { useTableStore as useResultsViewStore } from './store';
 import type { UnifiedConfig } from '@promptfoo/types';
 
@@ -128,7 +129,7 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
     const schemaLine = '# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json\n';
 
     // Clean top-level empty properties
-    const cleanConfig = removeEmpty(configToDownload);
+    const cleanConfig = removeEmpty(toPortableConfig(configToDownload));
 
     // Convert to YAML
     const configData = yaml.dump(cleanConfig, options);

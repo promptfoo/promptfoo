@@ -2,7 +2,7 @@ import { TooltipProvider } from '@app/components/ui/tooltip';
 import { mockCallApiResponse } from '@app/tests/apiMocks';
 import { mockWindowLocation } from '@app/tests/browserMocks';
 import { renderWithRouter as renderWithProviders } from '@app/tests/renderWithRouter';
-import { ResultFailureReason } from '@promptfoo/types';
+import { ResultFailureReason } from '@promptfoo/types/results';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';

@@ -5,6 +5,12 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tool
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { cn } from '@app/lib/utils';
 import { CheckCircle, HelpCircle, Search, X } from 'lucide-react';
+import {
+  hasCustomOpenAiBaseUrl,
+  isLocalOpenAiProviderType,
+  isOpenAiChatProviderId,
+  withLocalProviderType,
+} from './helpers';
 import { allProviderOptions, createDefaultProvider } from './providerCatalog';
 import { hasSpecificDocumentation } from './providerDocumentationMap';
 
@@ -23,6 +29,7 @@ export default function ProviderTypeSelector({
   providerType,
   setProvider,
   availableProviderIds,
+  disableModelSelection = false,
 }: ProviderTypeSelectorProps) {
   const { recordEvent } = useTelemetry();
 
@@ -58,6 +65,9 @@ export default function ProviderTypeSelector({
 
   // Handle provider type selection
   const handleProviderTypeSelect = (value: string) => {
+    if (disableModelSelection) {
+      return;
+    }
     setSelectedProviderType(value);
 
     const currentLabel = provider?.label;
@@ -73,7 +83,23 @@ export default function ProviderTypeSelector({
       provider_tag: selectedOption?.tag,
     });
 
-    setProvider(createDefaultProvider(value, currentLabel), value);
+    if (
+      isLocalOpenAiProviderType(value) &&
+      provider &&
+      isOpenAiChatProviderId(provider.id) &&
+      (providerType === value ||
+        (!isLocalOpenAiProviderType(providerType) && hasCustomOpenAiBaseUrl(provider.config)))
+    ) {
+      setProvider(
+        { ...provider, config: withLocalProviderType(provider.id, provider.config, value) },
+        value,
+      );
+      return;
+    }
+    setProvider(
+      provider && providerType === value ? provider : createDefaultProvider(value, currentLabel),
+      value,
+    );
   };
 
   // Filter available options if availableProviderIds is provided, by search term, and by tag
@@ -104,7 +130,6 @@ export default function ProviderTypeSelector({
     ).length;
   };
 
-  // Show the provider list
   return (
     <div className="space-y-4">
       {/* Filter bar - chips on left, search on right */}
@@ -113,6 +138,7 @@ export default function ProviderTypeSelector({
           <button
             type="button"
             onClick={() => setSelectedTag(undefined)}
+            disabled={disableModelSelection}
             className={cn(
               'rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
               'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
@@ -128,6 +154,7 @@ export default function ProviderTypeSelector({
               key={filter.key}
               type="button"
               onClick={() => handleTagToggle(filter.key)}
+              disabled={disableModelSelection}
               className={cn(
                 'rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
@@ -150,6 +177,7 @@ export default function ProviderTypeSelector({
             placeholder="Search providers..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
+            disabled={disableModelSelection}
             className="pl-9 pr-9"
           />
           {searchTerm && (
@@ -192,7 +220,8 @@ export default function ProviderTypeSelector({
                 )}
                 <div
                   role="button"
-                  tabIndex={0}
+                  tabIndex={disableModelSelection ? -1 : 0}
+                  aria-disabled={disableModelSelection}
                   onClick={() => handleProviderTypeSelect(option.value)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' || e.key === ' ') {
@@ -206,6 +235,7 @@ export default function ProviderTypeSelector({
                     isSelected
                       ? 'border-2 border-primary bg-primary/5'
                       : 'border-border hover:bg-muted/50',
+                    disableModelSelection && 'cursor-not-allowed opacity-60',
                   )}
                 >
                   <div className="min-w-0 flex-1">

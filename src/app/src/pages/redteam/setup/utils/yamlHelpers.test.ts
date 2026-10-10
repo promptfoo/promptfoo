@@ -30,7 +30,7 @@ vi.mock('@promptfoo/redteam/constants', () => ({
   },
 }));
 
-vi.mock('@promptfoo/redteam/sharedFrontend', () => ({
+vi.mock('@promptfoo/presentation/redteamConfig', () => ({
   getUnifiedConfig: vi.fn(),
 }));
 
@@ -38,7 +38,7 @@ vi.mock('js-yaml', () => ({
   dump: vi.fn(),
 }));
 
-import { getUnifiedConfig } from '@promptfoo/redteam/sharedFrontend';
+import { getUnifiedConfig } from '@promptfoo/presentation/redteamConfig';
 import * as yaml from 'js-yaml';
 
 describe('yamlHelpers', () => {

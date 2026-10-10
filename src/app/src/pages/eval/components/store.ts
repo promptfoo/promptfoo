@@ -1,5 +1,6 @@
 import { HIDDEN_METADATA_KEYS } from '@app/constants';
 import { callApi } from '@app/utils/api';
+import { getRiskCategorySeverityMap } from '@promptfoo/presentation/redteamConfig';
 import { Severity } from '@promptfoo/redteam/constants';
 import {
   isPolicyMetric,
@@ -7,7 +8,6 @@ import {
   makeDefaultPolicyName,
   makeInlinePolicyId,
 } from '@promptfoo/redteam/plugins/policy/utils';
-import { getRiskCategorySeverityMap } from '@promptfoo/redteam/sharedFrontend';
 import { create } from 'zustand';
 import { persist, subscribeWithSelector } from 'zustand/middleware';
 import logger from '../../../../../logger';
