@@ -71,6 +71,60 @@ function stripMediaReferences(value: unknown): unknown {
   return value;
 }
 
+/** Detect output media before projection removes its identifying fields. */
+function containsCheckpointMedia(
+  value: unknown,
+  {
+    excludedRootKeys = [],
+    scanCheckpointChildren = false,
+  }: { excludedRootKeys?: string[]; scanCheckpointChildren?: boolean } = {},
+): boolean {
+  const pending = [value];
+  const visited = new WeakSet<object>();
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (
+      extractBlobHashesFromValue(current).length > 0 ||
+      (typeof current === 'string' && /^data:[^,]*,/i.test(current))
+    ) {
+      return true;
+    }
+    if (!current || typeof current !== 'object' || visited.has(current)) {
+      continue;
+    }
+    visited.add(current);
+    const record = current as Record<string, unknown>;
+    if (record.isBase64 === true) {
+      return true;
+    }
+    for (const key of ['audio', 'video', 'images']) {
+      const media = record[key];
+      const items = Array.isArray(media) ? media : [media];
+      if (
+        items.some((item) => {
+          const payload = asRecord(item);
+          return payload && ['data', 'blobRef', 'url'].some((field) => payload[field] != null);
+        })
+      ) {
+        return true;
+      }
+    }
+    for (const [key, child] of Object.entries(record)) {
+      if (
+        (current === value && excludedRootKeys.includes(key)) ||
+        (current === value &&
+          !scanCheckpointChildren &&
+          record.interruptedStrategy === true &&
+          key === 'completedTargetResponses')
+      ) {
+        continue;
+      }
+      pending.push(child);
+    }
+  }
+  return false;
+}
+
 function projectOutputMetadata<T>(
   metadata: T,
   options: ResponseProjectionOptions,
@@ -80,7 +134,7 @@ function projectOutputMetadata<T>(
   const metadataIsMedia =
     options.checkpointOutput &&
     options.stripOutput &&
-    (options.inheritedMediaOutput || extractBlobHashesFromValue(metadata).length > 0);
+    (options.inheritedMediaOutput || containsCheckpointMedia(metadata));
   let projected = metadata;
   if (metadataIsMedia) {
     // Media output can carry bytes under arbitrary child keys. Keep only
@@ -119,11 +173,13 @@ function projectOutputMetadata<T>(
     sanitizeCompletedTargetResponses(projected),
     (entry) => {
       const { prompt, response, ...extra } = entry;
-      const entryIsMedia = options.stripOutput && extractBlobHashesFromValue(entry).length > 0;
+      const entryIsMedia =
+        options.stripOutput &&
+        containsCheckpointMedia(entry, { excludedRootKeys: ['prompt', 'response'] });
       // Only prompt/response are declared checkpoint fields. Additional imported
       // fields retain the generic media scrub, including a media-shaped remainder.
       const projectedExtra = options.stripOutput
-        ? childOptions.inheritedMediaOutput
+        ? childOptions.inheritedMediaOutput || entryIsMedia
           ? {}
           : stripMediaReferences(sanitizeForDb(extra))
         : extra;
@@ -142,7 +198,8 @@ function projectOutputMetadata<T>(
     },
     options.stripOutput
       ? (value) =>
-          childOptions.inheritedMediaOutput
+          childOptions.inheritedMediaOutput ||
+          containsCheckpointMedia(value, { scanCheckpointChildren: true })
             ? '[output stripped]'
             : stripMediaReferences(sanitizeForDb(value))
       : undefined,
@@ -202,6 +259,21 @@ function projectProviderResponse(
     return response;
   }
 
+  const mediaOutput =
+    options.checkpointOutput &&
+    options.stripOutput &&
+    (options.inheritedMediaOutput ||
+      containsCheckpointMedia(response, {
+        excludedRootKeys: [...CHECKPOINT_INPUT_FIELDS, 'metadata', 'turns'],
+      }));
+  // A direct media record owns its descendants. A normal response containing
+  // audio/images still projects its metadata and turns independently, retaining
+  // unrelated diagnostics and the inputs of sibling checkpoint entries.
+  const inheritedMediaOutput =
+    options.inheritedMediaOutput || extractBlobHashesFromValue(response).length > 0;
+  const childOptions =
+    mediaOutput && inheritedMediaOutput ? { ...options, inheritedMediaOutput: true } : options;
+
   let projectedResponse: ProviderResponse & { turns?: unknown } = options.stripMetadata
     ? (({ metadata: _metadata, ...rest }) => rest)(response)
     : { ...response };
@@ -217,11 +289,6 @@ function projectProviderResponse(
   if (options.stripPromptText && 'prompt' in projectedResponse) {
     projectedResponse.prompt = '[prompt stripped]';
   }
-  const mediaOutput =
-    options.checkpointOutput &&
-    options.stripOutput &&
-    (options.inheritedMediaOutput || extractBlobHashesFromValue(projectedResponse).length > 0);
-  const childOptions = mediaOutput ? { ...options, inheritedMediaOutput: true } : options;
   if (options.checkpointOutput && options.stripOutput) {
     if (mediaOutput) {
       // Direct media records may contain unknown inline payload aliases. Retain
@@ -268,7 +335,9 @@ function projectProviderResponse(
   // Ordinary turns retain unrelated attributes. Turns within media output keep
   // only their declared input/control fields and projected children.
   const stripUnsupportedTurn = (turn: unknown) =>
-    mediaOutput ? '[output stripped]' : stripMediaReferences(sanitizeForDb(turn));
+    mediaOutput || containsCheckpointMedia(turn, { scanCheckpointChildren: true })
+      ? '[output stripped]'
+      : stripMediaReferences(sanitizeForDb(turn));
   if (Array.isArray(projectedResponse.turns)) {
     projectedResponse.turns = projectedResponse.turns.map((turn) => {
       const record = asRecord(turn);
@@ -973,11 +1042,12 @@ function sanitizeGradingResultForDb<T>(gradingResult: T): T {
 }
 
 // `__promptfoo` is reserved at the metadata top level for promptfoo-internal namespaced data
-// (currently `traceLinkage`). User-supplied non-object values under this key are overwritten —
+// (currently `traceLinkage` and `repeatLinkage`). User-supplied non-object values are overwritten —
 // log so the rare collision is visible. Mirrored in `EvalQueries.getMetadataKeysFromEval` /
 // `getMetadataValuesFromEval`, which hide the namespace from the metadata-discovery API.
 export const PROMPTFOO_METADATA_KEY = '__promptfoo';
 const TRACE_LINKAGE_KEY = 'traceLinkage';
+const REPEAT_LINKAGE_KEY = 'repeatLinkage';
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === 'object' && !Array.isArray(value)
@@ -1035,6 +1105,84 @@ export function stripTraceLinkageFromMetadata<T extends Record<string, unknown> 
   }
 
   return strippedMetadata as T;
+}
+
+export function persistRepeatMetadata(
+  metadata: EvaluateResult['metadata'],
+  repeatIndex: EvaluateResult['repeatIndex'],
+  repeatGroupId: EvaluateResult['repeatGroupId'],
+): EvaluateResult['metadata'] {
+  if (repeatIndex === undefined || !repeatGroupId) {
+    return stripRepeatLinkageFromMetadata(metadata);
+  }
+
+  const metadataRecord = metadata ?? {};
+  const promptfooMetadata = asRecord(metadataRecord[PROMPTFOO_METADATA_KEY]);
+  if (metadataRecord[PROMPTFOO_METADATA_KEY] !== undefined && promptfooMetadata === undefined) {
+    logger.warn(
+      `[EvalResult] Overwriting non-object metadata.${PROMPTFOO_METADATA_KEY} with internal repeat linkage; the key is reserved for promptfoo internals.`,
+    );
+  }
+  if (promptfooMetadata && REPEAT_LINKAGE_KEY in promptfooMetadata) {
+    logger.warn(
+      `[EvalResult] Overwriting metadata.${PROMPTFOO_METADATA_KEY}.${REPEAT_LINKAGE_KEY} with internal repeat linkage; the path is reserved for promptfoo internals.`,
+    );
+  }
+
+  return {
+    ...metadataRecord,
+    [PROMPTFOO_METADATA_KEY]: {
+      ...(promptfooMetadata ?? {}),
+      [REPEAT_LINKAGE_KEY]: { repeatIndex, repeatGroupId },
+    },
+  };
+}
+
+export function stripRepeatLinkageFromMetadata<
+  T extends Record<string, unknown> | null | undefined,
+>(metadata: T): T {
+  const metadataRecord = asRecord(metadata);
+  const promptfooMetadata = asRecord(metadataRecord?.[PROMPTFOO_METADATA_KEY]);
+  if (!metadataRecord || !promptfooMetadata || !(REPEAT_LINKAGE_KEY in promptfooMetadata)) {
+    return metadata;
+  }
+
+  const { [REPEAT_LINKAGE_KEY]: _repeatLinkage, ...remainingPromptfooMetadata } = promptfooMetadata;
+  const strippedMetadata = { ...metadataRecord };
+  delete strippedMetadata[PROMPTFOO_METADATA_KEY];
+  if (Object.keys(remainingPromptfooMetadata).length > 0) {
+    strippedMetadata[PROMPTFOO_METADATA_KEY] = remainingPromptfooMetadata;
+  }
+
+  return strippedMetadata as T;
+}
+
+function surfaceRepeatMetadata(metadata: Record<string, unknown> | null | undefined): {
+  repeatIndex?: number;
+  repeatGroupId?: string;
+  metadata: Record<string, unknown>;
+} {
+  const metadataRecord = metadata ?? {};
+  const promptfooMetadata = asRecord(metadataRecord[PROMPTFOO_METADATA_KEY]);
+  const repeatLinkage = asRecord(promptfooMetadata?.[REPEAT_LINKAGE_KEY]);
+
+  const repeatIndex =
+    typeof repeatLinkage?.repeatIndex === 'number' &&
+    Number.isInteger(repeatLinkage.repeatIndex) &&
+    repeatLinkage.repeatIndex >= 0
+      ? repeatLinkage.repeatIndex
+      : undefined;
+  const repeatGroupId =
+    typeof repeatLinkage?.repeatGroupId === 'string' && repeatLinkage.repeatGroupId.length > 0
+      ? repeatLinkage.repeatGroupId
+      : undefined;
+
+  const hasRepeatLinkage = promptfooMetadata != null && REPEAT_LINKAGE_KEY in promptfooMetadata;
+  return {
+    repeatIndex,
+    repeatGroupId,
+    metadata: hasRepeatLinkage ? stripRepeatLinkageFromMetadata(metadataRecord) : metadataRecord,
+  };
 }
 
 function surfaceTraceMetadata(metadata: Record<string, unknown> | null | undefined): {
@@ -1220,11 +1368,17 @@ export default class EvalResult {
       testCase,
       traceId,
       evaluationId,
+      repeatIndex,
+      repeatGroupId,
     } = serializeResultProviderRefs(result);
 
-    // Persist trace linkage inside a private metadata namespace so it survives
-    // EvalResult round-trips without a Drizzle schema migration.
-    const persistedMetadata = persistTraceMetadata(metadata, traceId, evaluationId);
+    // Persist trace and repeat linkage inside a private metadata namespace so they
+    // survive EvalResult round-trips without a Drizzle schema migration.
+    const persistedMetadata = persistTraceMetadata(
+      persistRepeatMetadata(metadata, repeatIndex, repeatGroupId),
+      traceId,
+      evaluationId,
+    );
 
     // In-memory evaluations and failed-write reconstruction have no persisted
     // parent guaranteed to own blob references. Keep their media inline.
@@ -1310,10 +1464,15 @@ export default class EvalResult {
       for (const result of processedResults) {
         // See `createFromEvaluateResult` for why `testCase` and `prompt` go
         // through the credential-redacting sanitizer while the other fields
-        // stay on the lighter `sanitizeForDb`. Trace IDs travel inside metadata
-        // via `persistTraceMetadata`; strip the top-level fields so the DB write
-        // only carries known-schema columns.
-        const { traceId: _traceId, evaluationId: _evaluationId, ...rest } = result;
+        // stay on the lighter `sanitizeForDb`. Trace and repeat linkage travel inside
+        // metadata; strip the top-level fields so the DB write only carries known-schema columns.
+        const {
+          traceId: _traceId,
+          evaluationId: _evaluationId,
+          repeatIndex: _repeatIndex,
+          repeatGroupId: _repeatGroupId,
+          ...rest
+        } = result;
         const sanitizedResult = {
           ...rest,
           testCase: sanitizeForDbWithSecrets(result.testCase),
@@ -1322,7 +1481,11 @@ export default class EvalResult {
             response: sanitizeForDb(result.response),
             gradingResult: sanitizeForDb(result.gradingResult),
             metadata: sanitizeForDb(
-              persistTraceMetadata(result.metadata, result.traceId, result.evaluationId),
+              persistTraceMetadata(
+                persistRepeatMetadata(result.metadata, result.repeatIndex, result.repeatGroupId),
+                result.traceId,
+                result.evaluationId,
+              ),
             ),
           }),
           namedScores: sanitizeForDb(result.namedScores),
@@ -1477,6 +1640,8 @@ export default class EvalResult {
   metadata: Record<string, any>;
   traceId?: string;
   evaluationId?: string;
+  repeatIndex?: number;
+  repeatGroupId?: string;
   failureReason: ResultFailureReason;
   persisted: boolean;
   pluginId?: string;
@@ -1520,11 +1685,13 @@ export default class EvalResult {
     this.provider = opts.provider;
     this.latencyMs = opts.latencyMs || 0;
     this.cost = opts.cost || 0;
-    ({
-      metadata: this.metadata,
-      traceId: this.traceId,
-      evaluationId: this.evaluationId,
-    } = surfaceTraceMetadata(opts.metadata));
+    const surfacedTrace = surfaceTraceMetadata(opts.metadata);
+    const surfacedRepeat = surfaceRepeatMetadata(surfacedTrace.metadata);
+    this.metadata = surfacedRepeat.metadata;
+    this.traceId = surfacedTrace.traceId;
+    this.evaluationId = surfacedTrace.evaluationId;
+    this.repeatIndex = surfacedRepeat.repeatIndex;
+    this.repeatGroupId = surfacedRepeat.repeatGroupId;
     this.failureReason = isResultFailureReason(opts.failureReason)
       ? opts.failureReason
       : ResultFailureReason.NONE;
@@ -1534,13 +1701,14 @@ export default class EvalResult {
 
   async save() {
     const db = await getDb();
-    // Trace linkage and `pluginId` aren't schema columns — `pluginId` is re-derived from
-    // testCase metadata in the constructor, and trace linkage travels inside the metadata
-    // JSON via persistTraceMetadata. Drizzle would drop them silently, but excluding them
-    // explicitly keeps the write payload aligned with the schema.
+    // Trace/repeat linkage and `pluginId` aren't schema columns — `pluginId` is re-derived
+    // from testCase metadata, while linkage travels inside the metadata JSON. Drizzle would
+    // drop them silently, but excluding them explicitly keeps the payload aligned with the schema.
     const {
       traceId: _traceId,
       evaluationId: _evaluationId,
+      repeatIndex: _repeatIndex,
+      repeatGroupId: _repeatGroupId,
       pluginId: _pluginId,
       ...rest
     } = serializeResultProviderRefs(this);
@@ -1548,7 +1716,11 @@ export default class EvalResult {
       {
         response: snapshotForMediaExtraction(rest.response),
         metadata: snapshotForMediaExtraction(
-          persistTraceMetadata(this.metadata, this.traceId, this.evaluationId),
+          persistTraceMetadata(
+            persistRepeatMetadata(this.metadata, this.repeatIndex, this.repeatGroupId),
+            this.traceId,
+            this.evaluationId,
+          ),
         ),
       },
       { evalId: this.evalId, testIdx: this.testIdx, promptIdx: this.promptIdx },
@@ -1649,6 +1821,10 @@ export default class EvalResult {
       promptIdx: this.promptIdx,
       ...(this.traceId ? { traceId: this.traceId } : {}),
       ...(this.evaluationId ? { evaluationId: this.evaluationId } : {}),
+      ...(this.repeatGroupId !== undefined && {
+        repeatGroupId: this.repeatGroupId,
+        repeatIndex: this.repeatIndex,
+      }),
       provider: { id: this.provider.id, label: this.provider.label },
       response,
       score: this.score,

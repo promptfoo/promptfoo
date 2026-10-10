@@ -29,6 +29,21 @@ import { createMockProvider, createProviderResponse } from '../factories/provide
 import { createAtomicTestCase, createPrompt } from '../factories/testSuite';
 import { mockProcessEnv } from '../util/utils';
 
+const createNestedAuthorizationFixture = () => ({
+  transformedRequest: {
+    headers: {
+      Authorization: 'Bearer nested-secret',
+    },
+  },
+});
+
+const createUserTraceMetadataFixture = () => ({
+  __promptfoo: {
+    traceLinkage: { traceId: 'user-trace', evaluationId: 'user-evaluation' },
+    retained: 'user-metadata',
+  },
+});
+
 describe('EvalResult', () => {
   beforeAll(async () => {
     await runDbMigrations();
@@ -294,6 +309,30 @@ describe('EvalResult', () => {
       });
     });
 
+    it('preserves repeat linkage across single-row persistence and later saves', async () => {
+      const result = await EvalResult.createFromEvaluateResult('test-eval-repeat-linkage', {
+        ...mockEvaluateResult,
+        repeatIndex: 2,
+        repeatGroupId: 'test-0-vars-1',
+        metadata: { source: 'repeat' },
+      });
+
+      const retrieved = await EvalResult.findById(result.id);
+
+      expect(retrieved).not.toBeNull();
+      retrieved!.score = 0.5;
+      await retrieved!.save();
+      const saved = await EvalResult.findById(result.id);
+
+      expect(saved?.toEvaluateResult()).toMatchObject({
+        repeatIndex: 2,
+        repeatGroupId: 'test-0-vars-1',
+        metadata: { source: 'repeat' },
+        score: 0.5,
+      });
+      expect(retrieved?.metadata).not.toHaveProperty('__promptfoo');
+    });
+
     it('warns and overwrites when user metadata.__promptfoo is non-object', async () => {
       const warnSpy = vi.spyOn(logger, 'warn');
 
@@ -326,12 +365,7 @@ describe('EvalResult', () => {
         ...mockEvaluateResult,
         traceId: 'internal-trace',
         evaluationId: 'internal-evaluation',
-        metadata: {
-          __promptfoo: {
-            traceLinkage: { traceId: 'user-trace', evaluationId: 'user-evaluation' },
-            retained: 'user-metadata',
-          },
-        },
+        metadata: createUserTraceMetadataFixture(),
       });
 
       expect(warnSpy).toHaveBeenCalledWith(
@@ -347,12 +381,7 @@ describe('EvalResult', () => {
     it('strips user-supplied reserved trace linkage from untraced rows', async () => {
       const result = await EvalResult.createFromEvaluateResult('test-eval-injected-linkage', {
         ...mockEvaluateResult,
-        metadata: {
-          __promptfoo: {
-            traceLinkage: { traceId: 'user-trace', evaluationId: 'user-evaluation' },
-            retained: 'user-metadata',
-          },
-        },
+        metadata: createUserTraceMetadataFixture(),
       });
 
       const retrieved = await EvalResult.findById(result.id);
@@ -1525,13 +1554,7 @@ describe('EvalResult', () => {
     it('should preserve the original response object when response stripping is disabled', () => {
       const response = {
         output: 'provider output',
-        metadata: {
-          transformedRequest: {
-            headers: {
-              Authorization: 'Bearer nested-secret',
-            },
-          },
-        },
+        metadata: createNestedAuthorizationFixture(),
       };
 
       const result = new EvalResult({
@@ -1671,13 +1694,7 @@ describe('EvalResult', () => {
           response: {
             output: 'provider output',
             latencyMs: 42,
-            metadata: {
-              transformedRequest: {
-                headers: {
-                  Authorization: 'Bearer nested-secret',
-                },
-              },
-            },
+            metadata: createNestedAuthorizationFixture(),
           },
           gradingResult: null,
           provider: mockProvider,

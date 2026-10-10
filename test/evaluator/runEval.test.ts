@@ -1,5 +1,7 @@
+import { createTokenOutput } from '../factories/literalFixtures';
 import './setup';
 
+import { getEventListeners } from 'node:events';
 import fs from 'fs/promises';
 
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -18,6 +20,31 @@ import {
 import * as fileExtensions from '../../src/util/fileExtensions';
 import { sleep } from '../../src/util/time';
 import { mockGradingApiProviderPasses, resetMockProviders } from './helpers';
+
+const createEmptyEvaluationConfig = () => ({
+  providers: [],
+  prompts: [],
+});
+
+const createAsciiSmugglingMetadata = () => ({
+  pluginId: 'ascii-smuggling',
+});
+
+const createInitialRunOptions = () => ({
+  delay: 0,
+  testIdx: 0,
+  promptIdx: 0,
+  repeatIndex: 0,
+  isRedteam: false,
+});
+
+const createCappedRedteamConfig = () => ({
+  providers: [],
+  prompts: [],
+  redteam: {
+    maxCharsPerMessage: 10,
+  },
+});
 
 describe('runEval', () => {
   beforeEach(() => {
@@ -39,19 +66,10 @@ describe('runEval', () => {
 
   const mockProvider: ApiProvider = {
     id: vi.fn().mockReturnValue('test-provider'),
-    callApi: vi.fn().mockResolvedValue({
-      output: 'Test output',
-      tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-    }),
+    callApi: vi.fn().mockResolvedValue(createTokenOutput()),
   };
 
-  const defaultOptions = {
-    delay: 0,
-    testIdx: 0,
-    promptIdx: 0,
-    repeatIndex: 0,
-    isRedteam: false,
-  };
+  const defaultOptions = createInitialRunOptions();
 
   it('should handle basic prompt evaluation', async () => {
     const results = await runEval({
@@ -410,6 +428,27 @@ describe('runEval', () => {
     });
   });
 
+  it('should not add provider errors to conversation history', async () => {
+    const conversations = {} as Record<string, any>;
+    const errorProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('error-provider'),
+      callApi: vi.fn().mockResolvedValue({ error: 'Provider failed' }),
+    };
+
+    const [result] = await runEval({
+      ...defaultOptions,
+      provider: errorProvider,
+      prompt: { raw: 'Hello {{_conversation[0].output}}', label: 'test-label' },
+      test: {},
+      conversations,
+      registers: {},
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBe('Provider failed');
+    expect(conversations).toEqual({});
+  });
+
   it('should handle conversation with custom ID', async () => {
     const conversations = {};
 
@@ -701,13 +740,7 @@ describe('runEval', () => {
     };
 
     // Define defaultOptions locally for this test
-    const defaultOptions = {
-      delay: 0,
-      testIdx: 0,
-      promptIdx: 0,
-      repeatIndex: 0,
-      isRedteam: false,
-    };
+    const defaultOptions = createInitialRunOptions();
 
     const results = await runEval({
       ...defaultOptions,
@@ -918,13 +951,7 @@ describe('runEval', () => {
           prompt: 'this is too long',
         },
       },
-      testSuite: {
-        providers: [],
-        prompts: [],
-        redteam: {
-          maxCharsPerMessage: 10,
-        },
-      } as unknown as TestSuite,
+      testSuite: createCappedRedteamConfig() as unknown as TestSuite,
       conversations: {},
       registers: {},
       isRedteam: true,
@@ -945,13 +972,7 @@ describe('runEval', () => {
       },
       prompt: { raw: 'this prompt is longer than ten chars', label: 'test-label' },
       test: {},
-      testSuite: {
-        providers: [],
-        prompts: [],
-        redteam: {
-          maxCharsPerMessage: 10,
-        },
-      } as unknown as TestSuite,
+      testSuite: createCappedRedteamConfig() as unknown as TestSuite,
       conversations: {},
       registers: {},
       isRedteam: false,
@@ -1026,14 +1047,9 @@ describe('runEval', () => {
           prompt: 'Please answer in two sentences for a user whose role is "{{purpose | trim}}".',
         },
         assert: [{ type: 'promptfoo:redteam:ascii-smuggling' }],
-        metadata: {
-          pluginId: 'ascii-smuggling',
-        },
+        metadata: createAsciiSmugglingMetadata(),
       },
-      testSuite: {
-        providers: [],
-        prompts: [],
-      } as unknown as TestSuite,
+      testSuite: createEmptyEvaluationConfig() as unknown as TestSuite,
       conversations: {},
       registers: {},
       isRedteam: false,
@@ -1067,10 +1083,7 @@ describe('runEval', () => {
         },
         options: { provider: mockGradingApiProviderPasses },
       },
-      testSuite: {
-        providers: [],
-        prompts: [],
-      } as unknown as TestSuite,
+      testSuite: createEmptyEvaluationConfig() as unknown as TestSuite,
       conversations: {},
       registers: {},
       isRedteam: false,
@@ -1090,14 +1103,9 @@ describe('runEval', () => {
           query: 'Please answer in two sentences for a user whose role is "{{purpose | trim}}".',
         },
         assert: [{ type: 'promptfoo:redteam:ascii-smuggling' }],
-        metadata: {
-          pluginId: 'ascii-smuggling',
-        },
+        metadata: createAsciiSmugglingMetadata(),
       },
-      testSuite: {
-        providers: [],
-        prompts: [],
-      } as unknown as TestSuite,
+      testSuite: createEmptyEvaluationConfig() as unknown as TestSuite,
       conversations: {},
       registers: {},
       isRedteam: false,
@@ -1122,14 +1130,9 @@ describe('runEval', () => {
           query: 'Please answer in two sentences for a user whose role is "{{purpose | trim}}".',
         },
         assert: [{ type: 'promptfoo:redteam:ascii-smuggling' }],
-        metadata: {
-          pluginId: 'ascii-smuggling',
-        },
+        metadata: createAsciiSmugglingMetadata(),
       },
-      testSuite: {
-        providers: [],
-        prompts: [],
-      } as unknown as TestSuite,
+      testSuite: createEmptyEvaluationConfig() as unknown as TestSuite,
       conversations: {},
       registers: {},
       isRedteam: false,
@@ -1154,14 +1157,9 @@ describe('runEval', () => {
             assert: [{ type: 'promptfoo:redteam:ascii-smuggling' }],
           },
         ],
-        metadata: {
-          pluginId: 'ascii-smuggling',
-        },
+        metadata: createAsciiSmugglingMetadata(),
       },
-      testSuite: {
-        providers: [],
-        prompts: [],
-      } as unknown as TestSuite,
+      testSuite: createEmptyEvaluationConfig() as unknown as TestSuite,
       conversations: {},
       registers: {},
       isRedteam: false,
@@ -1181,14 +1179,9 @@ describe('runEval', () => {
           name: 'Alice',
           query: 'Hello {{name}}',
         },
-        metadata: {
-          pluginId: 'ascii-smuggling',
-        },
+        metadata: createAsciiSmugglingMetadata(),
       },
-      testSuite: {
-        providers: [],
-        prompts: [],
-      } as unknown as TestSuite,
+      testSuite: createEmptyEvaluationConfig() as unknown as TestSuite,
       conversations: {},
       registers: {},
       isRedteam: false,
@@ -1258,10 +1251,7 @@ describe('runEval', () => {
           // on a real timer.
           await Promise.resolve();
           vi.advanceTimersByTime(50);
-          return {
-            output: 'Test output',
-            tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-          };
+          return createTokenOutput();
         }),
       };
 
@@ -1385,7 +1375,8 @@ describe('runEval', () => {
             (m) => m.activeRequests === 0 && m.queueDepth === 0,
           ),
         ).toBe(true);
-        expect(vi.getTimerCount()).toBe(0);
+        // Check this evaluation's cleanup without counting unrelated worker timers.
+        expect(getEventListeners(controller.signal, 'abort')).toHaveLength(0);
       } finally {
         registry.dispose();
         await vi.advanceTimersByTimeAsync(60000);

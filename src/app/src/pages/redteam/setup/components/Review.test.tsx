@@ -203,7 +203,7 @@ const mockGetUnifiedConfig = vi.hoisted(() =>
     strategies: [],
   }),
 );
-vi.mock('@promptfoo/redteam/sharedFrontend', () => ({
+vi.mock('@promptfoo/presentation/redteamConfig', () => ({
   getUnifiedConfig: mockGetUnifiedConfig,
 }));
 
@@ -270,7 +270,7 @@ describe('Review Component', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockGetUnifiedConfig.mockReturnValue({
+    mockGetUnifiedConfig.mockReset().mockReturnValue({
       description: 'Test config',
       plugins: [],
       strategies: [],
@@ -333,8 +333,8 @@ describe('Review Component', () => {
       restoreTestTimers();
       const user = userEvent.setup();
       const { getUnifiedConfig } = await vi.importActual<
-        typeof import('@promptfoo/redteam/sharedFrontend')
-      >('@promptfoo/redteam/sharedFrontend');
+        typeof import('@promptfoo/presentation/redteamConfig')
+      >('@promptfoo/presentation/redteamConfig');
       mockGetUnifiedConfig.mockImplementation(getUnifiedConfig);
       const config = { ...defaultConfig, target, prompts: ['Hello'] };
       const original = JSON.parse(JSON.stringify(config));
@@ -1446,6 +1446,40 @@ Application Details:
         }
         return { json: async () => ({}) } as any;
       });
+    });
+
+    it('sends per-plugin settings through the real serializer when running', async () => {
+      const { getUnifiedConfig } = await vi.importActual<
+        typeof import('@promptfoo/presentation/redteamConfig')
+      >('@promptfoo/presentation/redteamConfig');
+      mockGetUnifiedConfig.mockImplementationOnce(getUnifiedConfig);
+      const config = {
+        ...defaultConfig,
+        prompts: ['{{prompt}}'],
+        plugins: [{ id: 'bola', numTests: 17, severity: 'critical', config: {} }],
+        strategies: ['basic'],
+      };
+      mockUseRedTeamConfig.mockReturnValue({ config, updateConfig: mockUpdateConfig });
+      vi.mocked(useEmailVerification).mockReturnValue({
+        checkEmailStatus: vi.fn().mockResolvedValue({ canProceed: true }),
+      } as any);
+      renderWithProviders(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+      await userEvent
+        .setup({ delay: null })
+        .click(screen.getByRole('button', { name: /run now/i }));
+      await waitFor(() => expect(callApi).toHaveBeenCalledWith('/redteam/run', expect.any(Object)));
+      const request = vi.mocked(callApi).mock.calls.find(([url]) => url === '/redteam/run')!;
+      const payload = JSON.parse(request[1]!.body as string);
+      expect(payload.config.redteam.plugins).toEqual([
+        { id: 'bola', numTests: 17, severity: 'critical' },
+      ]);
+      expect(payload.config.redteam.numTests).toBe(10);
     });
 
     it('should disable button when isRunning is true regardless of API status', async () => {

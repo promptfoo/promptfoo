@@ -34,6 +34,46 @@ function legacyResult(response: unknown, metadata: unknown = {}): EvaluateResult
 }
 
 const outputShapes: Array<{ name: string; response: unknown }> = [
+  ...[
+    { audio: { blobRef: outputRef } },
+    { audio: { data: bytes.toString('base64'), format: 'wav' } },
+    { video: { data: bytes.toString('base64'), format: 'mp4' } },
+    { images: [{ blobRef: outputRef }] },
+    { images: [{ data: outputData }] },
+    { output: outputData },
+    { output: outputRef.uri },
+    { blobRef: outputRef },
+    {
+      output: JSON.stringify({ data: [{ b64_json: bytes.toString('base64') }] }),
+      isBase64: true,
+      format: 'json',
+    },
+  ].flatMap((media, index) => [
+    {
+      name: `canonical media with opaque sibling ${index}`,
+      response: { ...media, payload: bytes.toString('base64') },
+    },
+    {
+      name: `metadata media with opaque sibling ${index}`,
+      response: { metadata: { ...media, payload: bytes.toString('base64') } },
+    },
+    {
+      name: `nested metadata media with opaque sibling ${index}`,
+      response: { metadata: { attachment: media, payload: bytes.toString('base64') } },
+    },
+    {
+      name: `turn media with opaque sibling ${index}`,
+      response: { turns: [{ ...media, payload: bytes.toString('base64') }] },
+    },
+    {
+      name: `malformed response array with media ${index}`,
+      response: [{ ...media, payload: bytes.toString('base64') }],
+    },
+    {
+      name: `malformed turn array with media ${index}`,
+      response: { turns: [[{ ...media, payload: bytes.toString('base64') }]] },
+    },
+  ]),
   { name: 'direct reference', response: outputRef },
   {
     name: 'direct media payload',
@@ -159,6 +199,37 @@ describe('interrupted checkpoint JSON and media shapes', () => {
   });
 
   describe.each(['model', 'jsonl'] as const)('%s owned output shapes', (boundary) => {
+    it.each([
+      { response: 'legacy', audio: { data: bytes.toString('base64') } },
+      { audio: { data: bytes.toString('base64') }, payload: bytes.toString('base64') },
+      {
+        response: [
+          {
+            metadata: {
+              interruptedStrategy: true,
+              completedTargetResponses: [
+                { response: { audio: { data: bytes.toString('base64') } } },
+              ],
+            },
+          },
+        ],
+      },
+    ])('strips inline media from malformed checkpoint entries %#', async (entry) => {
+      for (const entries of [[entry], entry]) {
+        const metadata = { interruptedStrategy: true, completedTargetResponses: entries };
+        const input = legacyResult({ metadata }, metadata);
+        const row = await EvalResult.createFromEvaluateResult(randomUUID(), input, {
+          persist: false,
+        });
+        const flags = { ...getStripFlags(), shouldStripResponseOutput: true };
+        const projected =
+          boundary === 'model'
+            ? row.toEvaluateResult(flags)
+            : sanitizeResultForJsonlArtifact(input, flags);
+        expect(JSON.stringify(projected)).not.toContain(bytes.toString('base64'));
+      }
+    });
+
     it.each(outputShapes)('projects $name without stripping inputs', async ({ response }) => {
       const valid = {
         prompt: promptMedia,
@@ -223,22 +294,27 @@ describe('interrupted checkpoint JSON and media shapes', () => {
     });
 
     it.each([
-      { name: 'data URL', fields: { attachment: outputData }, collapses: false },
-      { name: 'blob URI', fields: { attachment: outputRef.uri }, collapses: false },
-      { name: 'blob record', fields: { attachment: outputRef }, collapses: false },
+      { name: 'data URL', fields: { attachment: outputData }, collapses: true },
+      { name: 'blob URI', fields: { attachment: outputRef.uri }, collapses: true },
+      { name: 'blob record', fields: { attachment: outputRef }, collapses: true },
       {
         name: 'nested media',
         fields: { attachment: { items: [null, outputRef, { data: outputData }] } },
-        collapses: false,
+        collapses: true,
       },
       {
         name: 'undeclared input aliases',
         fields: { input: outputData, materializedVars: { image: outputRef } },
-        collapses: false,
+        collapses: true,
       },
       {
         name: 'entry media record',
         fields: { ...outputRef, data: bytes.toString('base64') },
+        collapses: true,
+      },
+      {
+        name: 'entry media wrapper with opaque sibling',
+        fields: { blobRef: outputRef, payload: bytes.toString('base64') },
         collapses: true,
       },
       {
@@ -253,6 +329,7 @@ describe('interrupted checkpoint JSON and media shapes', () => {
           completedTargetResponses: [
             {
               ...fields,
+              ...(collapses && { payload: bytes.toString('base64') }),
               note: 'ordinary extra note',
               prompt: promptMedia,
               response: {
@@ -321,7 +398,7 @@ describe('interrupted checkpoint JSON and media shapes', () => {
       { name: 'hash-only entry', fields: { hash: outputHash }, media: true },
       { name: 'URI-only entry', fields: { uri: outputRef.uri }, media: true },
       { name: 'full media entry', fields: outputRef, media: true },
-      { name: 'wrapped reference entry', fields: { blobRef: outputRef }, media: false },
+      { name: 'wrapped reference entry', fields: { blobRef: outputRef }, media: true },
       { name: 'ordinary entry', fields: { label: 'ordinary entry' }, media: false },
     ])('$name child output context', ({ fields, media }) => {
       it.each(
