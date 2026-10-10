@@ -563,7 +563,7 @@ describe('Runtime Chat streaming lifecycle', () => {
   it.each([true, false])('measures full body latency only for streaming=%s', async (stream) => {
     vi.useFakeTimers();
     vi.mocked(fetchWithCache).mockImplementation(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 25));
+      vi.advanceTimersByTime(25);
       return {
         data: stream ? completed : chatReply,
         status: 200,
@@ -575,9 +575,7 @@ describe('Runtime Chat streaming lifecycle', () => {
     const provider = new BedrockRuntimeChatProvider('openai.gpt-oss-120b-1:0', {
       config: { apiKey: 'fixture', stream },
     });
-    const pending = provider.callApi('hello');
-    await vi.advanceTimersByTimeAsync(25);
-    expect((await pending).latencyMs).toBe(stream ? 25 : 1);
+    expect((await provider.callApi('hello')).latencyMs).toBe(stream ? 25 : 1);
     expect(vi.getTimerCount()).toBe(0);
   });
 
