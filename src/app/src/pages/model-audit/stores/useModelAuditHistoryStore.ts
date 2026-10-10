@@ -19,11 +19,8 @@ interface ModelAuditHistoryState {
   historyError: string | null;
   totalCount: number;
 
-  // DataGrid pagination/filtering state
   pageSize: number;
-  currentPage: number;
   sortModel: SortModel[];
-  searchQuery: string;
 
   // Actions
   fetchHistoricalScans: (signal?: AbortSignal) => Promise<void>;
@@ -33,11 +30,7 @@ interface ModelAuditHistoryState {
   ) => Promise<{ scans: HistoricalScan[]; offset: number; total: number }>;
   fetchScanById: (id: string, signal?: AbortSignal) => Promise<HistoricalScan | null>;
   deleteHistoricalScan: (id: string) => Promise<void>;
-  setPageSize: (size: number) => void;
-  setCurrentPage: (page: number) => void;
   setSortModel: (model: SortModel[]) => void;
-  setSearchQuery: (query: string) => void;
-  resetFilters: () => void;
 }
 
 const DEFAULT_PAGE_SIZE = 25;
@@ -49,30 +42,23 @@ export const useModelAuditHistoryStore = create<ModelAuditHistoryState>()((set, 
   historyError: null,
   totalCount: 0,
   pageSize: DEFAULT_PAGE_SIZE,
-  currentPage: 0,
   sortModel: [{ field: 'createdAt', sort: 'desc' }],
-  searchQuery: '',
 
   // Actions
   fetchHistoricalScans: async (signal?: AbortSignal) => {
     set({ isLoadingHistory: true, historyError: null });
 
     try {
-      const { pageSize, currentPage, sortModel, searchQuery } = get();
-      const offset = currentPage * pageSize;
+      const { pageSize, sortModel } = get();
       const sort = sortModel[0]?.field || 'createdAt';
       const order = sortModel[0]?.sort || 'desc';
 
       const params = new URLSearchParams({
         limit: pageSize.toString(),
-        offset: offset.toString(),
+        offset: '0',
         sort,
         order,
       });
-
-      if (searchQuery) {
-        params.append('search', searchQuery);
-      }
 
       const response = await callApi(`/model-audit/scans?${params.toString()}`, { signal });
       if (!response.ok) {
@@ -100,7 +86,7 @@ export const useModelAuditHistoryStore = create<ModelAuditHistoryState>()((set, 
 
   fetchHistoricalScanRange: async ({ startIndex, endIndex }, signal?: AbortSignal) => {
     try {
-      const { sortModel, searchQuery } = get();
+      const { sortModel } = get();
       const sort = sortModel[0]?.field || 'createdAt';
       const order = sortModel[0]?.sort || 'desc';
       const offset = Math.max(0, startIndex);
@@ -112,10 +98,6 @@ export const useModelAuditHistoryStore = create<ModelAuditHistoryState>()((set, 
         sort,
         order,
       });
-
-      if (searchQuery) {
-        params.append('search', searchQuery);
-      }
 
       const response = await callApi(`/model-audit/scans?${params.toString()}`, { signal });
       if (!response.ok) {
@@ -192,28 +174,5 @@ export const useModelAuditHistoryStore = create<ModelAuditHistoryState>()((set, 
     }
   },
 
-  setPageSize: (pageSize) => {
-    set({ pageSize, currentPage: 0 });
-  },
-
-  setCurrentPage: (currentPage) => {
-    set({ currentPage });
-  },
-
-  setSortModel: (sortModel) => {
-    set({ sortModel, currentPage: 0 });
-  },
-
-  setSearchQuery: (searchQuery) => {
-    set({ searchQuery, currentPage: 0 });
-  },
-
-  resetFilters: () => {
-    set({
-      pageSize: DEFAULT_PAGE_SIZE,
-      currentPage: 0,
-      sortModel: [{ field: 'createdAt', sort: 'desc' }],
-      searchQuery: '',
-    });
-  },
+  setSortModel: (sortModel) => set({ sortModel }),
 }));

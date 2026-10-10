@@ -116,10 +116,10 @@ choco install ffmpeg
 
 ## Technical Details
 
-- **Video Format**: The strategy creates MP4 videos with H.264 encoding
+- **Video Format**: The strategy creates MP4 videos using the default encoder available in your FFmpeg installation
 - **Duration**: Videos are 5 seconds long by default
 - **Resolution**: 640x480 pixels
-- **Text Rendering**: The text is centered on a white background using a standard font
+- **Text Rendering**: The text is centered on a white background using a standard system font, including Windows Arial. Apostrophes in the text are preserved.
 - **Processing**: All video creation is done locally using FFmpeg
 
 :::warning
