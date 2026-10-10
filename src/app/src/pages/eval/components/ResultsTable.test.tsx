@@ -2525,7 +2525,7 @@ describe('ResultsTable fetchEvalData pagination filters', () => {
                   type: 'metric',
                   operator: 'equals',
                   value: 'metric1',
-                  ...(field === undefined ? {} : { field }),
+                  field,
                   logicOperator: 'or',
                 },
               ],
