@@ -750,7 +750,10 @@ export function parseMessages(messages: string): {
         const systemMessage = parsed.find((msg) => msg.role === 'system');
         const thinking = parsed.find((msg) => msg.thinking)?.thinking;
         return {
-          extractedMessages: openaiChatToAnthropic(parsed) as Anthropic.MessageParam[],
+          extractedMessages: openaiChatToAnthropic(
+            parsed,
+            processAnthropicImageContent,
+          ) as Anthropic.MessageParam[],
           system: systemMessage
             ? Array.isArray(systemMessage.content)
               ? systemMessage.content
