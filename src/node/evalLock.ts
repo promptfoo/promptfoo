@@ -3,7 +3,6 @@ import fs from 'fs/promises';
 import * as path from 'path';
 
 import { z } from 'zod';
-import { getEnvBool } from '../envars';
 import { toSerializableProviderRef } from '../models/evalResult';
 import { sha256 } from '../util/createHash';
 import {
@@ -559,7 +558,12 @@ export function canonicalJson(value: unknown): string {
 
 export function createEvalBar(
   testSuite: EvalBarSource,
-  execution: { repeat: number; filterRange?: string },
+  execution: {
+    repeat: number;
+    filterRange?: string;
+    disableTemplating?: boolean;
+    disableVarExpansion?: boolean;
+  },
 ): EvalBar {
   if (Array.isArray(testSuite.extensions) && testSuite.extensions.length > 0) {
     throw new Error(
@@ -623,8 +627,8 @@ export function createEvalBar(
     execution: {
       repeat: execution.repeat,
       filterRange: execution.filterRange ?? null,
-      disableTemplating: getEnvBool('PROMPTFOO_DISABLE_TEMPLATING'),
-      disableVarExpansion: getEnvBool('PROMPTFOO_DISABLE_VAR_EXPANSION'),
+      disableTemplating: execution.disableTemplating ?? false,
+      disableVarExpansion: execution.disableVarExpansion ?? false,
     },
   };
 }

@@ -14,7 +14,6 @@ import {
   verifyEvalLock,
   writeEvalLock,
 } from '../../src/node/evalLock';
-import { mockProcessEnv } from '../util/utils';
 
 import type { Assertion, TestSuite } from '../../src/types';
 
@@ -106,24 +105,18 @@ describe('evalLock', () => {
     expect(() => createEvalBar(suite, { repeat: 1 })).toThrow('accessors');
   });
 
-  it.each(['PROMPTFOO_DISABLE_TEMPLATING', 'PROMPTFOO_DISABLE_VAR_EXPANSION'] as const)(
+  it.each(['disableTemplating', 'disableVarExpansion'] as const)(
     'rejects verification after changing %s',
     async (setting) => {
       const lockPath = path.join(tempDir, 'interpretation.lock.json');
-      const restoreDisabled = mockProcessEnv({ [setting]: 'true' });
-      try {
-        await writeEvalLock(lockPath, createEvalBar(createSuite(), { repeat: 1 }), 100);
-      } finally {
-        restoreDisabled();
-      }
-      const restoreEnabled = mockProcessEnv({ [setting]: 'false' });
-      try {
-        await expect(
-          verifyEvalLock(lockPath, createEvalBar(createSuite(), { repeat: 1 })),
-        ).rejects.toThrow('do not match');
-      } finally {
-        restoreEnabled();
-      }
+      await writeEvalLock(
+        lockPath,
+        createEvalBar(createSuite(), { repeat: 1, [setting]: true }),
+        100,
+      );
+      await expect(
+        verifyEvalLock(lockPath, createEvalBar(createSuite(), { repeat: 1, [setting]: false })),
+      ).rejects.toThrow('do not match');
     },
   );
 

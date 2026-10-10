@@ -878,6 +878,12 @@ async function doEvalWithEnv(
     }
 
     if (evalLockPath || verifyLockPath) {
+      const lockExecution = {
+        repeat,
+        filterRange,
+        disableTemplating: getEnvBool('PROMPTFOO_DISABLE_TEMPLATING'),
+        disableVarExpansion: getEnvBool('PROMPTFOO_DISABLE_VAR_EXPANSION'),
+      };
       if (evaluateOptions.progressCallback) {
         return failEvalRun(
           'Evaluation locks do not support progress callbacks because callbacks can mutate live result metrics',
@@ -909,7 +915,7 @@ async function doEvalWithEnv(
           );
         }
         try {
-          const bar = createEvalBar(testSuite, { repeat, filterRange });
+          const bar = createEvalBar(testSuite, lockExecution);
           activeEvalLock = await writeEvalLock(evalLockPath, bar, threshold);
           logger.info(
             chalk.green(
@@ -924,7 +930,7 @@ async function doEvalWithEnv(
         }
       } else if (verifyLockPath) {
         try {
-          const bar = createEvalBar(testSuite, { repeat, filterRange });
+          const bar = createEvalBar(testSuite, lockExecution);
           activeEvalLock = await verifyEvalLock(verifyLockPath, bar);
           logger.info(
             chalk.green(
