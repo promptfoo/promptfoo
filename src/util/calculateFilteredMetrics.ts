@@ -100,9 +100,16 @@ function jsonUsageCached(column: SQL, usagePath: string, cachedResponsePath?: st
 
 type TokenUsageField = 'total' | 'prompt' | 'completion' | 'cached' | 'numRequests';
 
-interface FilteredBasicMetricsRow {
+type TokenUsagePrefix =
+  | ''
+  | 'attacker_'
+  | 'grading_'
+  | 'incurred_'
+  | 'incurred_attacker_'
+  | 'incurred_grading_';
+
+type FilteredBasicMetricsRow = {
   prompt_idx: number;
-  total_count: number;
   pass_count: number;
   fail_count: number;
   error_count: number;
@@ -111,38 +118,13 @@ interface FilteredBasicMetricsRow {
   total_cost: number;
   incurred_cost: number;
   has_incurred_cost: number;
-  total_tokens: number | null;
-  prompt_tokens: number | null;
-  completion_tokens: number | null;
-  cached_tokens: number | null;
   num_requests_with_tokens: number;
-  attacker_total_tokens: number | null;
-  attacker_prompt_tokens: number | null;
-  attacker_completion_tokens: number | null;
-  attacker_cached_tokens: number | null;
-  attacker_num_requests: number | null;
-  grading_total_tokens: number | null;
-  grading_prompt_tokens: number | null;
-  grading_completion_tokens: number | null;
-  grading_cached_tokens: number | null;
-  grading_num_requests: number | null;
   has_incurred_usage: number;
-  incurred_total_tokens: number | null;
-  incurred_prompt_tokens: number | null;
-  incurred_completion_tokens: number | null;
-  incurred_cached_tokens: number | null;
-  incurred_num_requests: number | null;
-  incurred_attacker_total_tokens: number | null;
-  incurred_attacker_prompt_tokens: number | null;
-  incurred_attacker_completion_tokens: number | null;
-  incurred_attacker_cached_tokens: number | null;
-  incurred_attacker_num_requests: number | null;
-  incurred_grading_total_tokens: number | null;
-  incurred_grading_prompt_tokens: number | null;
-  incurred_grading_completion_tokens: number | null;
-  incurred_grading_cached_tokens: number | null;
-  incurred_grading_num_requests: number | null;
-}
+} & Record<
+  | `${TokenUsagePrefix}${'total_tokens' | 'prompt_tokens' | 'completion_tokens' | 'cached_tokens'}`
+  | `${Exclude<TokenUsagePrefix, ''>}num_requests`,
+  number | null
+>;
 
 function jsonUsageField(
   column: SQL,
@@ -185,55 +167,27 @@ function jsonIncurredUsageField(
   END`;
 }
 
-function getIncurredTokenUsage(
-  row: FilteredBasicMetricsRow,
-): NonNullable<PromptMetrics['tokenUsage']['incurredTokenUsage']> {
+function getTokenUsageCounts(row: FilteredBasicMetricsRow, prefix: TokenUsagePrefix) {
   return {
-    total: row.incurred_total_tokens || 0,
-    prompt: row.incurred_prompt_tokens || 0,
-    completion: row.incurred_completion_tokens || 0,
-    cached: row.incurred_cached_tokens || 0,
-    numRequests: row.incurred_num_requests || 0,
-    attacker: {
-      total: row.incurred_attacker_total_tokens || 0,
-      prompt: row.incurred_attacker_prompt_tokens || 0,
-      completion: row.incurred_attacker_completion_tokens || 0,
-      cached: row.incurred_attacker_cached_tokens || 0,
-      numRequests: row.incurred_attacker_num_requests || 0,
-    },
-    assertions: {
-      total: row.incurred_grading_total_tokens || 0,
-      prompt: row.incurred_grading_prompt_tokens || 0,
-      completion: row.incurred_grading_completion_tokens || 0,
-      cached: row.incurred_grading_cached_tokens || 0,
-      numRequests: row.incurred_grading_num_requests || 0,
-    },
+    total: row[`${prefix}total_tokens`] || 0,
+    prompt: row[`${prefix}prompt_tokens`] || 0,
+    completion: row[`${prefix}completion_tokens`] || 0,
+    cached: row[`${prefix}cached_tokens`] || 0,
+    numRequests: (prefix ? row[`${prefix}num_requests`] : row.num_requests_with_tokens) || 0,
   };
 }
 
 function getFilteredTokenUsage(row: FilteredBasicMetricsRow): PromptMetrics['tokenUsage'] {
   return {
-    total: row.total_tokens || 0,
-    prompt: row.prompt_tokens || 0,
-    completion: row.completion_tokens || 0,
-    cached: row.cached_tokens || 0,
-    numRequests: row.num_requests_with_tokens || 0,
-    attacker: {
-      total: row.attacker_total_tokens || 0,
-      prompt: row.attacker_prompt_tokens || 0,
-      completion: row.attacker_completion_tokens || 0,
-      cached: row.attacker_cached_tokens || 0,
-      numRequests: row.attacker_num_requests || 0,
-    },
-    assertions: {
-      total: row.grading_total_tokens || 0,
-      prompt: row.grading_prompt_tokens || 0,
-      completion: row.grading_completion_tokens || 0,
-      cached: row.grading_cached_tokens || 0,
-      numRequests: row.grading_num_requests || 0,
-    },
+    ...getTokenUsageCounts(row, ''),
+    attacker: getTokenUsageCounts(row, 'attacker_'),
+    assertions: getTokenUsageCounts(row, 'grading_'),
     ...(row.has_incurred_usage > 0 && {
-      incurredTokenUsage: getIncurredTokenUsage(row),
+      incurredTokenUsage: {
+        ...getTokenUsageCounts(row, 'incurred_'),
+        attacker: getTokenUsageCounts(row, 'incurred_attacker_'),
+        assertions: getTokenUsageCounts(row, 'incurred_grading_'),
+      },
     }),
   };
 }
@@ -325,7 +279,6 @@ async function calculateWithOptimizedQuery(opts: FilteredMetricsOptions): Promis
   const basicMetricsQuery = sql`
     SELECT
       prompt_idx,
-      COUNT(DISTINCT test_idx) as total_count,
       SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END) as pass_count,
       SUM(CASE WHEN success = 0 AND failure_reason != ${ResultFailureReason.ERROR} THEN 1 ELSE 0 END) as fail_count,
       SUM(CASE WHEN failure_reason = ${ResultFailureReason.ERROR} THEN 1 ELSE 0 END) as error_count,

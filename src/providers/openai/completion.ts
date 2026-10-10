@@ -163,9 +163,15 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
       };
     }
 
-    if (data.error) {
+    if (data?.error) {
       return {
         error: formatOpenAiError(data),
+      };
+    }
+    if (!data?.choices?.[0]) {
+      return {
+        error: `Malformed response data: ${JSON.stringify(data)}`,
+        cached,
       };
     }
     try {

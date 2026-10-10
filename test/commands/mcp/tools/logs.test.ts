@@ -1,14 +1,9 @@
+const { createLoggerModule } = await vi.hoisted(async () => import('../../../factories/logger'));
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Mock dependencies before importing
-vi.mock('../../../../src/logger', () => ({
-  default: {
-    debug: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  },
-}));
+vi.mock('../../../../src/logger', () => createLoggerModule());
 
 const mockReadLastLines = vi.fn();
 const mockReadFirstLines = vi.fn();

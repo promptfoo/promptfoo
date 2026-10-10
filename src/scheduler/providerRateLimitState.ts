@@ -16,6 +16,8 @@ import { parseRateLimitHeaders } from './headerParser';
 import { DEFAULT_RETRY_POLICY, getRetryDelay, type RetryPolicy, shouldRetry } from './retryPolicy';
 import { SlotQueue } from './slotQueue';
 
+import type { RateLimitExecuteOptions } from './types';
+
 export class RateLimitExhaustedError extends Error {
   constructor(
     message: string,
@@ -23,6 +25,17 @@ export class RateLimitExhaustedError extends Error {
   ) {
     super(message);
     this.name = 'RateLimitExhaustedError';
+  }
+}
+
+/**
+ * Wraps a finalizeResult throw so the retry classifier below skips it: a
+ * finalizer failure is not provider work and must never trigger another call.
+ */
+class ResultFinalizationError extends Error {
+  constructor(readonly original: unknown) {
+    super('finalizeResult failed');
+    this.name = 'ResultFinalizationError';
   }
 }
 
@@ -48,6 +61,15 @@ export interface ProviderMetrics {
   p50LatencyMs: number;
   p99LatencyMs: number;
 }
+
+type ProviderExecuteOptions<T> = RateLimitExecuteOptions<T> & {
+  /**
+   * Per-call override for `maxRetries` only. Preserves the state's other
+   * policy fields (backoff, jitter) so provider config cannot silently
+   * reset them.
+   */
+  maxRetriesOverride?: number;
+};
 
 /**
  * Manages rate limit state and retry logic for a single rate limit key.
@@ -99,22 +121,11 @@ export class ProviderRateLimitState extends EventEmitter {
   async executeWithRetry<T>(
     requestId: string,
     callFn: (onResponseHeaders?: ResponseHeadersObserver) => Promise<T>,
-    options: {
-      getHeaders?: (result: T) => Record<string, string> | undefined;
-      isRateLimited?: (result: T | undefined, error?: Error) => boolean;
-      getRetryAfter?: (result: T | undefined, error?: Error) => number | undefined;
-      /**
-       * Per-call override for `maxRetries` only. Preserves the state's other
-       * policy fields (backoff, jitter) so provider config cannot silently
-       * reset them.
-       */
-      maxRetriesOverride?: number;
-      abortSignal?: AbortSignal;
-      canRetry?: () => boolean;
-    },
+    options: ProviderExecuteOptions<T>,
   ): Promise<T> {
     this.totalRequests++;
     let attempt = 0;
+    const retryResults: T[] = [];
     const retryPolicy =
       options.maxRetriesOverride === undefined
         ? this.retryPolicy
@@ -169,6 +180,7 @@ export class ProviderRateLimitState extends EventEmitter {
         let retryError: Error | undefined;
         let retryResult: T | undefined;
         let isRateLimited: boolean;
+        let isRetryableResult = false;
         let retryAfterMs: number | undefined;
 
         try {
@@ -192,6 +204,10 @@ export class ProviderRateLimitState extends EventEmitter {
             options.canRetry?.() !== false &&
             !isObserverError &&
             (options.isRateLimited?.(result, undefined) ?? false);
+          isRetryableResult =
+            options.canRetry?.() !== false &&
+            !isObserverError &&
+            (options.isRetryableResult?.(result) ?? false);
           retryAfterMs = options.getRetryAfter?.(result, undefined);
 
           // Observer diagnostics may carry another service's headers. Keep the
@@ -216,10 +232,19 @@ export class ProviderRateLimitState extends EventEmitter {
             return result;
           }
 
-          if (!isRateLimited || (options.abortSignal?.aborted && hasRefusalResponse)) {
+          if (
+            (!isRateLimited && !isRetryableResult) ||
+            (options.abortSignal?.aborted && hasRefusalResponse)
+          ) {
+            let finalizedResult: T;
+            try {
+              finalizedResult = options.finalizeResult?.(result, retryResults) ?? result;
+            } catch (finalizerError) {
+              throw new ResultFinalizationError(finalizerError);
+            }
             this.applyConcurrencyChange(this.adaptiveConcurrency.recordSuccess());
             this.completedRequests++;
-            return result;
+            return finalizedResult;
           }
         } catch (error) {
           if (ownsSlot) {
@@ -230,6 +255,10 @@ export class ProviderRateLimitState extends EventEmitter {
 
           if (isResponseHeadersObserverError(onResponseHeaders, error)) {
             throw error;
+          }
+
+          if (error instanceof ResultFinalizationError) {
+            throw error.original;
           }
 
           // Cancellation is final, even for a custom reason or a message that
@@ -260,15 +289,36 @@ export class ProviderRateLimitState extends EventEmitter {
 
         if (
           options.canRetry?.() === false ||
-          !shouldRetry(attempt, retryError, isRateLimited, retryPolicy)
+          !shouldRetry(attempt, retryError, isRateLimited || isRetryableResult, retryPolicy)
         ) {
-          throw (
-            retryError ??
-            new RateLimitExhaustedError(
-              `Rate limit exceeded for ${this.rateLimitKey} after ${attempt + 1} attempts`,
-              retryResult,
-            )
+          if (retryError) {
+            throw retryError;
+          }
+          if (isRetryableResult) {
+            // Transient-availability exhaustion returns the terminal result with
+            // bounded retry usage merged, not the rate-limit sentinel.
+            const finalizedResult =
+              options.finalizeResult?.(retryResult as T, retryResults) ?? (retryResult as T);
+            this.failedRequests++;
+            return finalizedResult;
+          }
+          if (!options.onRateLimitExhausted && options.finalizeResult) {
+            // A bare finalizeResult keeps the older structured-return behavior;
+            // the registry's onRateLimitExhausted contract throws to convert.
+            const finalizedResult = options.finalizeResult(retryResult as T, retryResults);
+            this.failedRequests++;
+            return finalizedResult;
+          }
+          throw new RateLimitExhaustedError(
+            `Rate limit exceeded for ${this.rateLimitKey} after ${attempt + 1} attempts`,
+            retryResult,
           );
+        }
+
+        // Only transient-availability retries feed the terminal merge; a
+        // rate-limited retry must surface the last raw result as-is.
+        if (isRetryableResult && retryResult !== undefined) {
+          retryResults.push(retryResult);
         }
 
         attempt++;
