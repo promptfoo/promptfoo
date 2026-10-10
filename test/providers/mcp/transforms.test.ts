@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import logger from '../../../src/logger';
 import { createTransformResponse } from '../../../src/providers/mcp/transforms';
 
 describe('MCP createTransformResponse', () => {
@@ -100,5 +101,38 @@ describe('MCP createTransformResponse', () => {
     await expect(transform({}, 'fallback text', context)).rejects.toThrow(
       /Failed to transform MCP response/,
     );
+  });
+
+  it.each([
+    ['string expression', 'result.missing.value'],
+    ['string function', '() => { throw new Error("transform failed"); }'],
+    [
+      'function',
+      () => {
+        throw new Error('transform failed');
+      },
+    ],
+  ])('does not include tool data when a %s throws', async (_name, parser) => {
+    const errorLogger = vi.spyOn(logger, 'error').mockImplementation(() => undefined);
+    const privateResult = 'private-result-value';
+    const privateContent = 'private-content-value';
+    const privateToken = 'configured-session-value';
+    try {
+      const transform = createTransformResponse(parser);
+      const error = await transform({ privateResult }, privateContent, {
+        toolName: 'lookup_user',
+        toolArgs: { sessionToken: privateToken },
+      }).catch((err) => err);
+
+      expect(error).toBeInstanceOf(Error);
+      const logs = JSON.stringify(errorLogger.mock.calls);
+      expect(logs).toContain('lookup_user');
+      for (const value of [privateResult, privateContent, privateToken]) {
+        expect(String(error)).not.toContain(value);
+        expect(logs).not.toContain(value);
+      }
+    } finally {
+      errorLogger.mockRestore();
+    }
   });
 });

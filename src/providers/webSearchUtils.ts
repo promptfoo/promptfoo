@@ -107,8 +107,11 @@ export function hasWebSearchCapability(provider: ApiProvider | null | undefined)
     return true;
   }
 
-  // Check for Anthropic with web_search tool
-  if (id.includes('anthropic') && hasTool(provider, (t) => t.type === 'web_search_20250305')) {
+  // Check for Anthropic with any version of its dated `web_search_YYYYMMDD` server tool.
+  if (
+    id.includes('anthropic') &&
+    hasTool(provider, (t) => typeof t.type === 'string' && /^web_search_\d{8}$/.test(t.type))
+  ) {
     return true;
   }
 
@@ -126,112 +129,74 @@ export function hasWebSearchCapability(provider: ApiProvider | null | undefined)
 export async function loadWebSearchProvider(
   preferAnthropic: boolean = false,
 ): Promise<ApiProvider | null> {
-  // Anthropic Claude 4.8 Opus with web search tool
-  const loadAnthropicWebSearch = async () => {
-    try {
-      return await loadApiProvider('anthropic:messages:claude-opus-4-8', {
-        options: {
-          config: {
-            tools: [
-              {
-                type: 'web_search_20250305',
-                name: 'web_search',
-                max_uses: 5,
-              } as any,
-            ],
-          },
-        },
-      });
-    } catch (err) {
-      logger.debug(`Failed to load Anthropic web search provider: ${err}`);
-      return null;
-    }
-  };
+  const providerLoader =
+    (name: string, ...args: Parameters<typeof loadApiProvider>) =>
+    async () => {
+      try {
+        return await loadApiProvider(...args);
+      } catch (err) {
+        logger.debug(`Failed to load ${name} provider: ${err}`);
+        return null;
+      }
+    };
 
-  // OpenAI GPT-5.6 Terra with web search tool (via Responses API)
-  const loadOpenAIWebSearch = async () => {
-    try {
-      return await loadApiProvider('openai:responses:gpt-5.6-terra', {
-        options: {
-          config: { tools: [{ type: 'web_search_preview' }] },
+  const loadAnthropicWebSearch = providerLoader(
+    'Anthropic web search',
+    'anthropic:messages:claude-opus-5-5',
+    {
+      options: {
+        config: {
+          tools: [
+            {
+              type: 'web_search_20260209',
+              name: 'web_search',
+              max_uses: 5,
+            },
+          ],
         },
-      });
-    } catch (err) {
-      logger.debug(`Failed to load OpenAI web search provider: ${err}`);
-      return null;
-    }
-  };
+      },
+    },
+  );
+
+  const loadOpenAIWebSearch = providerLoader('OpenAI web search', 'openai:responses:gpt-6-sol', {
+    options: {
+      config: { tools: [{ type: 'web_search_preview' }] },
+    },
+  });
 
   // Perplexity Sonar Pro (built-in web search)
-  const loadPerplexity = async () => {
-    try {
-      return await loadApiProvider('perplexity:sonar-pro');
-    } catch (err) {
-      logger.debug(`Failed to load Perplexity provider: ${err}`);
-      return null;
-    }
-  };
+  const loadPerplexity = providerLoader('Perplexity', 'perplexity:sonar-pro');
 
   // Google Gemini 3.1 Pro Preview with googleSearch tool
-  const loadGoogleWebSearch = async () => {
-    try {
-      return await loadApiProvider('google:gemini-3.1-pro-preview', {
-        options: {
-          config: { tools: [{ googleSearch: {} }] },
-        },
-      });
-    } catch (err) {
-      logger.debug(`Failed to load Google web search provider: ${err}`);
-      return null;
-    }
-  };
+  const loadGoogleWebSearch = providerLoader('Google web search', 'google:gemini-3.1-pro-preview', {
+    options: {
+      config: { tools: [{ googleSearch: {} }] },
+    },
+  });
 
   // Vertex AI Gemini 3.1 Pro Preview with googleSearch tool
-  const loadVertexWebSearch = async () => {
-    try {
-      return await loadApiProvider('vertex:gemini-3.1-pro-preview', {
-        options: {
-          config: { tools: [{ googleSearch: {} }] },
-        },
-      });
-    } catch (err) {
-      logger.debug(`Failed to load Vertex web search provider: ${err}`);
-      return null;
-    }
-  };
+  const loadVertexWebSearch = providerLoader('Vertex web search', 'vertex:gemini-3.1-pro-preview', {
+    options: {
+      config: { tools: [{ googleSearch: {} }] },
+    },
+  });
 
   // xAI Grok 4.3 with Responses API web search (available to US and EU accounts)
-  const loadXaiWebSearch = async () => {
-    try {
-      return await loadApiProvider('xai:responses:grok-4.3', {
-        options: {
-          config: { tools: [{ type: 'web_search' }] },
-        },
-      });
-    } catch (err) {
-      logger.debug(`Failed to load xAI web search provider: ${err}`);
-      return null;
-    }
-  };
+  const loadXaiWebSearch = providerLoader('xAI web search', 'xai:responses:grok-4.3', {
+    options: {
+      config: { tools: [{ type: 'web_search' }] },
+    },
+  });
 
   // Order providers based on preference
-  const providers = preferAnthropic
-    ? [
-        loadAnthropicWebSearch,
-        loadOpenAIWebSearch,
-        loadPerplexity,
-        loadGoogleWebSearch,
-        loadVertexWebSearch,
-        loadXaiWebSearch,
-      ]
-    : [
-        loadOpenAIWebSearch,
-        loadAnthropicWebSearch,
-        loadPerplexity,
-        loadGoogleWebSearch,
-        loadVertexWebSearch,
-        loadXaiWebSearch,
-      ];
+  const providers = [
+    preferAnthropic ? loadAnthropicWebSearch : loadOpenAIWebSearch,
+    preferAnthropic ? loadOpenAIWebSearch : loadAnthropicWebSearch,
+    loadPerplexity,
+    loadGoogleWebSearch,
+    loadVertexWebSearch,
+    loadXaiWebSearch,
+  ];
 
   for (const getProvider of providers) {
     const provider = await getProvider();

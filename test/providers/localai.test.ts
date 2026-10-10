@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { LocalAiChatProvider, LocalAiCompletionProvider } from '../../src/providers/localai';
 
+const createChatResponseData = () => ({
+  data: { choices: [{ message: { content: 'Test output' } }] },
+});
+
 vi.mock('../../src/cache', () => ({
   fetchWithCache: vi.fn(),
 }));
@@ -13,9 +17,7 @@ describe('LocalAI temperature handling', () => {
   });
 
   it('should send temperature: 0 to the API when explicitly configured (chat)', async () => {
-    vi.mocked(fetchWithCache).mockResolvedValue({
-      data: { choices: [{ message: { content: 'Test output' } }] },
-    } as any);
+    vi.mocked(fetchWithCache).mockResolvedValue(createChatResponseData() as any);
 
     const provider = new LocalAiChatProvider('test-model', {
       config: { temperature: 0 },
@@ -47,9 +49,7 @@ describe('LocalAI temperature handling', () => {
   });
 
   it('should use provider-scoped env temperature when config temperature is not set (chat)', async () => {
-    vi.mocked(fetchWithCache).mockResolvedValue({
-      data: { choices: [{ message: { content: 'Test output' } }] },
-    } as any);
+    vi.mocked(fetchWithCache).mockResolvedValue(createChatResponseData() as any);
 
     const provider = new LocalAiChatProvider('test-model', {
       config: {},
@@ -65,9 +65,7 @@ describe('LocalAI temperature handling', () => {
   });
 
   it('should use provider-scoped env temperature: 0 when config temperature is not set (chat)', async () => {
-    vi.mocked(fetchWithCache).mockResolvedValue({
-      data: { choices: [{ message: { content: 'Test output' } }] },
-    } as any);
+    vi.mocked(fetchWithCache).mockResolvedValue(createChatResponseData() as any);
 
     const provider = new LocalAiChatProvider('test-model', {
       config: {},
@@ -83,9 +81,7 @@ describe('LocalAI temperature handling', () => {
   });
 
   it('should prefer config temperature over provider-scoped env', async () => {
-    vi.mocked(fetchWithCache).mockResolvedValue({
-      data: { choices: [{ message: { content: 'Test output' } }] },
-    } as any);
+    vi.mocked(fetchWithCache).mockResolvedValue(createChatResponseData() as any);
 
     const provider = new LocalAiChatProvider('test-model', {
       config: { temperature: 0.1 },
@@ -101,9 +97,7 @@ describe('LocalAI temperature handling', () => {
   });
 
   it('should fall back to 0.7 when temperature is not configured', async () => {
-    vi.mocked(fetchWithCache).mockResolvedValue({
-      data: { choices: [{ message: { content: 'Test output' } }] },
-    } as any);
+    vi.mocked(fetchWithCache).mockResolvedValue(createChatResponseData() as any);
 
     const provider = new LocalAiChatProvider('test-model', {
       config: {},
@@ -115,5 +109,47 @@ describe('LocalAI temperature handling', () => {
       (vi.mocked(fetchWithCache).mock.calls[0][1] as RequestInit).body as string,
     );
     expect(callBody.temperature).toBe(0.7);
+  });
+});
+
+describe('LocalAI empty choices handling', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+  });
+
+  it('returns a clean malformed-response error on empty choices (chat)', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({ data: { choices: [] } } as any);
+
+    const provider = new LocalAiChatProvider('test-model', { config: {} });
+    const result = await provider.callApi('Test prompt');
+
+    expect(result.error).toContain('Malformed response data');
+  });
+
+  it('returns a clean malformed-response error on empty choices (completion)', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({ data: { choices: [] } } as any);
+
+    const provider = new LocalAiCompletionProvider('test-model', { config: {} });
+    const result = await provider.callApi('Test prompt');
+
+    expect(result.error).toContain('Malformed response data');
+  });
+
+  it('returns a clean malformed-response error on a null body (chat)', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({ data: null } as any);
+
+    const provider = new LocalAiChatProvider('test-model', { config: {} });
+    const result = await provider.callApi('Test prompt');
+
+    expect(result.error).toContain('Malformed response data');
+  });
+
+  it('returns a clean malformed-response error on a null body (completion)', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({ data: null } as any);
+
+    const provider = new LocalAiCompletionProvider('test-model', { config: {} });
+    const result = await provider.callApi('Test prompt');
+
+    expect(result.error).toContain('Malformed response data');
   });
 });
