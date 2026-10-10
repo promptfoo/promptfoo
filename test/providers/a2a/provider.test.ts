@@ -195,37 +195,41 @@ describe('A2AProvider', () => {
     expect(requestBody.message.messageId).toMatch(/^promptfoo-/);
   });
 
-  it('sends a non-streaming message with templated request metadata', async () => {
+  it.each(['send', 'stream'])('sends templated JSON metadata in %s mode', async (mode) => {
+    const response = { message: { role: 'ROLE_AGENT', parts: [{ text: 'hello from a2a' }] } };
     vi.mocked(fetchWithTimeout).mockResolvedValueOnce(
-      jsonResponse({
-        message: {
-          role: 'ROLE_AGENT',
-          parts: [{ text: 'hello from a2a' }],
-        },
-      }),
+      mode === 'stream' ? sseResponse([response]) : jsonResponse(response),
     );
-
+    const value = 'quoted "value"\n日本語';
+    const metadata = {
+      field: '{{value}}',
+      nested: { prompt: '{{prompt}}' },
+      values: [false, 0, null, '{{value}}'],
+    };
     const result = await provider({
+      mode,
       message: { role: 'ROLE_USER', parts: [{ text: 'Question: {{prompt}}' }] },
-      metadata: { metadata_field: '{{metadata_field}}' },
+      metadata,
     }).callApi('hi', {
       prompt: { raw: '{{prompt}}', label: 'prompt' },
-      vars: { metadata_field: 'value-1' },
+      vars: { value },
       testCaseId: 'case-1',
     });
-
     expect(result.output).toBe('hello from a2a');
     expect(fetchWithTimeout).toHaveBeenCalledWith(
-      'https://agent.example.com/a2a/v1/message:send',
-      expect.objectContaining({
-        body: expect.stringContaining('Question: hi'),
-        method: 'POST',
-      }),
+      `https://agent.example.com/a2a/v1/message:${mode}`,
+      expect.objectContaining({ method: 'POST' }),
       expect.any(Number),
     );
     const requestBody = JSON.parse(vi.mocked(fetchWithTimeout).mock.calls[0]?.[1]?.body as string);
     expect(requestBody.message.messageId).toMatch(/^promptfoo-/);
-    expect(requestBody.metadata).toEqual({ metadata_field: 'value-1' });
+    expect(requestBody.message.parts).toEqual([{ text: 'Question: hi' }]);
+    expect(requestBody.metadata).toEqual({
+      field: value,
+      nested: { prompt: 'hi' },
+      values: [false, 0, null, value],
+    });
+    expect(metadata.field).toBe('{{value}}');
   });
 
   it('sends standards-compliant default A2A messages', async () => {
