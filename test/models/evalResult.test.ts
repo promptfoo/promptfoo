@@ -1375,6 +1375,71 @@ describe('EvalResult', () => {
 
   describe('toEvaluateResult', () => {
     it.each(
+      ['model', 'persisted', 'jsonl'].flatMap((boundary) =>
+        [false, true].map((strip) => ({ boundary, strip })),
+      ),
+    )(
+      'projects Agent Runtime metadata at $boundary output (strip: $strip)',
+      async ({ boundary, strip }) => {
+        const payloads = {
+          citations: [
+            { generatedResponsePart: { textResponsePart: { text: 'private-agent-citation' } } },
+          ],
+          returnControl: [
+            {
+              invocationInputs: [
+                { functionInvocationInput: { parameters: [{ value: 'private-tool-argument' }] } },
+              ],
+            },
+          ],
+          files: [{ bytes: Buffer.from('private-generated-file').toString('base64') }],
+          retrievalResults: [{ content: { text: 'private-retrieved-document' } }],
+        };
+        const metadata = { ...payloads, sessionId: 'session-fixture', note: 'retain diagnostics' };
+        const testMetadata = Object.fromEntries(
+          Object.keys(payloads).map((key) => [key, `test-owned ${key}`]),
+        );
+        const input = createEvaluateResult({
+          id: `agent-output-${boundary}-${strip}`,
+          response: { output: 'private-answer', metadata },
+          metadata,
+          testCase: createAtomicTestCase({ metadata: testMetadata }),
+        });
+        const flags = getStripFlags({ PROMPTFOO_STRIP_RESPONSE_OUTPUT: String(strip) });
+        let projected: EvaluateResult;
+        if (boundary === 'jsonl') {
+          projected = sanitizeResultForJsonlArtifact(input, flags);
+        } else {
+          const saved = await EvalResult.createFromEvaluateResult(
+            'agent-output-projection',
+            input,
+            { persist: boundary === 'persisted' },
+          );
+          const loaded = saved.persisted ? await EvalResult.findById(saved.id) : saved;
+          projected = loaded!.toEvaluateResult(flags);
+          expect(loaded!.response?.metadata).toMatchObject(payloads);
+        }
+        for (const [key, value] of Object.entries(payloads)) {
+          if (strip) {
+            expect(projected.response?.metadata).not.toHaveProperty(key);
+            expect(projected.metadata).not.toHaveProperty(key);
+          } else {
+            expect(projected.response?.metadata?.[key]).toEqual(value);
+            expect(projected.metadata?.[key]).toEqual(value);
+          }
+        }
+        expect(projected.response?.metadata?.sessionId).toBe('session-fixture');
+        expect(projected.testCase.metadata).toEqual(testMetadata);
+        expect(input.response?.metadata).toMatchObject(payloads);
+        const testOwned = sanitizeResultForJsonlArtifact(
+          { ...input, metadata: testMetadata },
+          flags,
+        );
+        expect(testOwned.metadata).toEqual(testMetadata);
+      },
+    );
+
+    it.each(
       [
         { boundary: 'model', strip: true },
         { boundary: 'model', strip: false },

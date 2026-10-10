@@ -2,13 +2,17 @@ import { getCache, isCacheEnabled } from '../../cache';
 import { getEnvInt } from '../../envars';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
-import { sha256 } from '../../util/createHash';
 import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { isSamplingParamsDeprecatedClaudeModel } from '../anthropic/util';
 import { AwsBedrockGenericProvider } from './base';
 import { assertBedrockModelIsAvailable } from './index';
 import { isValidBedrockRetrievalFilter } from './retrievalFilter';
-import { createBedrockRequestHandler, hasProxyEnv, INFERENCE_PROFILE_PREFIX } from './util';
+import {
+  createBedrockRequestHandler,
+  hashBedrockConfig,
+  hasProxyEnv,
+  INFERENCE_PROFILE_PREFIX,
+} from './util';
 import type {
   BedrockAgentRuntimeClient,
   GenerationConfiguration,
@@ -90,7 +94,7 @@ export class AwsBedrockKnowledgeBaseProvider
     if (id) {
       return `bedrock:kb:${id}`;
     }
-    return `bedrock:kb:external:${sha256(JSON.stringify(this.kbConfig.retrieveAndGenerateConfiguration))}`;
+    return `bedrock:kb:external:${hashBedrockConfig(this.kbConfig.retrieveAndGenerateConfiguration)}`;
   }
 
   toString(): string {
@@ -347,24 +351,20 @@ export class AwsBedrockKnowledgeBaseProvider
         !this.kbConfig.streaming &&
         !this.getApiKey();
       const sensitiveKeys = ['accessKeyId', 'secretAccessKey', 'sessionToken', 'apiKey'];
-      const cacheConfig = {
-        region,
-        modelName: this.modelName,
-        ...Object.fromEntries(
-          Object.entries(this.kbConfig).filter(([key]) => !sensitiveKeys.includes(key)),
-        ),
-      };
-      // A key-array JSON replacer drops nested filters/schemas. Sort each object instead.
-      const configStr = JSON.stringify(cacheConfig, (_key, value) =>
-        value && typeof value === 'object' && !Array.isArray(value)
-          ? Object.fromEntries(
-              Object.keys(value)
-                .sort()
-                .map((key) => [key, value[key]]),
-            )
-          : value,
-      );
-      const cacheKey = `bedrock-kb:v3:${this.kbConfig.knowledgeBaseId}:${modelArn}:${region}:${sha256(JSON.stringify({ configStr, prompt }))}`;
+      const cacheKey = useCache
+        ? `bedrock-kb:v3:${this.kbConfig.knowledgeBaseId}:${modelArn}:${region}:${hashBedrockConfig(
+            {
+              config: {
+                region,
+                modelName: this.modelName,
+                ...Object.fromEntries(
+                  Object.entries(this.kbConfig).filter(([key]) => !sensitiveKeys.includes(key)),
+                ),
+              },
+              prompt,
+            },
+          )}`
+        : '';
       if (useCache) {
         const cached = await cache.get(cacheKey);
         if (cached) {

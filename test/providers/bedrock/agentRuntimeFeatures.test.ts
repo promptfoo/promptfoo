@@ -638,3 +638,120 @@ describe('managed-search filter validation', () => {
     },
   );
 });
+
+describe.each(['agent', 'knowledge-base'] as const)('%s binary cache inputs', (kind) => {
+  it('shares equal binary content without enumerating bytes or invoking Buffer.toJSON', async () => {
+    cache.enabled = true;
+    const entries = new Map<string, string>();
+    cache.get.mockImplementation((key: string) => entries.get(key));
+    cache.set.mockImplementation((key: string, value: string) => entries.set(key, value));
+    const objectKeys = Object.keys;
+    vi.spyOn(Object, 'keys').mockImplementation((value) => {
+      if (ArrayBuffer.isView(value)) {
+        throw new Error('Binary cache input was expanded into per-byte properties');
+      }
+      return objectKeys(value);
+    });
+    vi.spyOn(Buffer.prototype, 'toJSON').mockImplementation(() => {
+      throw new Error('Binary cache input was expanded into a JSON array');
+    });
+    const ids: string[] = [];
+    for (const [index, data] of [
+      new Uint8Array([0, 97, 98, 99, 0]).subarray(1, 4),
+      Buffer.from('abc'),
+      Buffer.from('abd'),
+    ].entries()) {
+      const { provider, send } =
+        kind === 'agent'
+          ? agent({
+              sessionState: {
+                files: [
+                  {
+                    name: 'reference.txt',
+                    useCase: 'CHAT',
+                    source: {
+                      sourceType: 'BYTE_CONTENT',
+                      byteContent: { mediaType: 'text/plain', data },
+                    },
+                  },
+                ],
+              },
+            })
+          : kb({
+              knowledgeBaseId: undefined,
+              retrieveAndGenerateConfiguration: {
+                type: 'EXTERNAL_SOURCES',
+                externalSourcesConfiguration: {
+                  modelArn: 'model',
+                  sources: [
+                    {
+                      sourceType: 'BYTE_CONTENT',
+                      byteContent: {
+                        identifier: 'reference.txt',
+                        contentType: 'text/plain',
+                        data,
+                      },
+                    },
+                  ],
+                },
+              },
+            });
+      if (kind === 'agent') {
+        send.mockResolvedValue({
+          completion: events([{ chunk: { bytes: Buffer.from('answer') } }]),
+        });
+      }
+      ids.push(provider.id());
+      const result = await provider.callApi('question');
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('answer');
+      expect(send).toHaveBeenCalledTimes(index === 1 ? 0 : 1);
+      expect(result.cached === true).toBe(index === 1);
+    }
+    const keys = cache.get.mock.calls.map(([key]) => key);
+    expect(keys[0]).toBe(keys[1]);
+    expect(keys[0]).not.toBe(keys[2]);
+    if (kind === 'knowledge-base') {
+      expect(ids[0]).toBe(ids[1]);
+      expect(ids[0]).not.toBe(ids[2]);
+    }
+  });
+
+  it.each([false, true])(
+    'does not traverse uncached configuration (explicit session: %s)',
+    async (session) => {
+      cache.enabled = session;
+      const read = vi.fn(() => 1);
+      const { provider, send } =
+        kind === 'agent'
+          ? agent({
+              sessionId: session ? 'existing-session' : undefined,
+              promptCreationConfigurations: {
+                get previousConversationTurnsToInclude() {
+                  return read();
+                },
+              },
+            })
+          : kb({
+              sessionId: session ? 'existing-session' : undefined,
+              generationConfiguration: {
+                inferenceConfig: {
+                  textInferenceConfig: {
+                    get maxTokens() {
+                      return read();
+                    },
+                  },
+                },
+              },
+            });
+      if (kind === 'agent') {
+        send.mockResolvedValue({
+          completion: events([{ chunk: { bytes: Buffer.from('answer') } }]),
+        });
+      }
+      expect((await provider.callApi('question')).output).toBe('answer');
+      expect(read).not.toHaveBeenCalled();
+      expect(cache.get).not.toHaveBeenCalled();
+    },
+  );
+});

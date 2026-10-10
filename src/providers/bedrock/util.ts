@@ -1,6 +1,7 @@
 import type { Agent } from 'http';
 
 import { getEnvString } from '../../envars';
+import { sha256 } from '../../util/createHash';
 
 const REQUEST_TIMEOUT_MS = 300_000; // 5 minutes
 
@@ -11,6 +12,29 @@ const REQUEST_TIMEOUT_MS = 300_000; // 5 minutes
  * See https://docs.aws.amazon.com/bedrock/latest/userguide/inference-profiles-support.html
  */
 export const INFERENCE_PROFILE_PREFIX = /^(?:us|us-gov|eu|apac|global|jp|au|ca|in)\./;
+
+/** Hash binary inputs without expanding their bytes into JSON cache-key entries. */
+export function hashBedrockConfig(value: unknown): string {
+  const replaceBinary = (item: unknown) =>
+    ArrayBuffer.isView(item)
+      ? { $bytesSha256: sha256(Buffer.from(item.buffer, item.byteOffset, item.byteLength)) }
+      : item;
+  return sha256(
+    JSON.stringify(replaceBinary(value), (_key, item) => {
+      // Replace children before JSON.stringify can call Buffer.toJSON on them.
+      if (Array.isArray(item)) {
+        return item.map(replaceBinary);
+      }
+      return item && typeof item === 'object'
+        ? Object.fromEntries(
+            Object.keys(item)
+              .sort()
+              .map((key) => [key, replaceBinary(item[key])]),
+          )
+        : item;
+    }),
+  );
+}
 
 export function hasProxyEnv(): boolean {
   return Boolean(getEnvString('HTTP_PROXY') || getEnvString('HTTPS_PROXY'));
@@ -23,8 +47,7 @@ export function hasProxyEnv(): boolean {
  * "http2 request did not get a response" errors in many environments (see #7756).
  * This function forces HTTP/1.1 via NodeHttpHandler.
  *
- * For @aws-sdk/client-bedrock-agent-runtime (which already defaults to HTTP/1.1),
- * this is only needed for proxy support; Agent Runtime does not support API keys.
+ * Agent Runtime uses this handler only for proxy support; it requires SigV4.
  */
 export async function createBedrockRequestHandler(options?: {
   apiKey?: string;

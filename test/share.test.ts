@@ -842,6 +842,12 @@ describe('createShareableUrl', () => {
             audio: { data: outputUri },
             blobUris: [outputUri],
             preview,
+            citations: [
+              { generatedResponsePart: { textResponsePart: { text: 'private-agent-output' } } },
+            ],
+            returnControl: [{ invocationInputs: [{ value: 'private-agent-output' }] }],
+            files: [{ bytes: Buffer.from('private-agent-output').toString('base64') }],
+            retrievalResults: [{ content: { text: 'private-agent-output' } }],
             note: 'keep metadata',
           },
           response: {
@@ -854,6 +860,12 @@ describe('createShareableUrl', () => {
               blobUris: [outputUri],
               audio: { data: outputUri },
               preview,
+              citations: [
+                { generatedResponsePart: { textResponsePart: { text: 'private-agent-output' } } },
+              ],
+              returnControl: [{ invocationInputs: [{ value: 'private-agent-output' }] }],
+              files: [{ bytes: Buffer.from('private-agent-output').toString('base64') }],
+              retrievalResults: [{ content: { text: 'private-agent-output' } }],
               note: 'keep metadata',
             },
           },
@@ -873,6 +885,10 @@ describe('createShareableUrl', () => {
           : vi.mocked(inlineBlobRefsForShare).mock.calls;
         expect(scans.length).toBeGreaterThan(0);
         for (const [value] of scans) {
+          expect(JSON.stringify(value)).not.toContain('private-agent-output');
+          expect(JSON.stringify(value)).not.toContain(
+            Buffer.from('private-agent-output').toString('base64'),
+          );
           expect(JSON.stringify(value)).not.toContain(outputUri);
           expect(JSON.stringify(value)).not.toContain(dataUrl);
           expect(JSON.stringify(value)).not.toContain(svgUrl);

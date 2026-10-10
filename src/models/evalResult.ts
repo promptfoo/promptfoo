@@ -86,7 +86,14 @@ function projectOutputMetadata<T>(
       ) {
         return [[key, value]];
       }
-      return key === 'audio' || key === 'blobUris'
+      return [
+        'audio',
+        'blobUris',
+        'citations',
+        'returnControl',
+        'files',
+        'retrievalResults',
+      ].includes(key)
         ? []
         : [[key, stripMediaReferences(sanitizeForDb(value))]];
     }),

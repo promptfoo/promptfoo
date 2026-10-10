@@ -2,10 +2,9 @@ import { getCache, isCacheEnabled } from '../../cache';
 import { getEnvInt } from '../../envars';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
-import { sha256 } from '../../util/createHash';
 import { AwsBedrockGenericProvider } from './base';
 import { isValidBedrockRetrievalFilter } from './retrievalFilter';
-import { createBedrockRequestHandler, hasProxyEnv } from './util';
+import { createBedrockRequestHandler, hashBedrockConfig, hasProxyEnv } from './util';
 import type {
   BedrockAgentRuntimeClient,
   InferenceConfig,
@@ -520,36 +519,28 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
       !this.config.sessionState?.returnControlInvocationResults;
 
     // Earlier cached results omitted KB overrides and could claim an unapplied guardrail.
-    const cacheKey = `bedrock-agent:v3:${this.config.agentId}:${this.config.agentAliasId}:${this.getRegion()}:${sha256(
-      JSON.stringify(
-        {
-          prompt,
-          actionGroups: this.config.actionGroups,
-          enableTrace: this.config.enableTrace,
-          endSession: this.config.endSession,
-          guardrailConfiguration: this.config.guardrailConfiguration,
-          inferenceConfig,
-          inputDataConfig: this.config.inputDataConfig,
-          knowledgeBaseConfigurations: this.config.knowledgeBaseConfigurations,
-          memoryId: this.config.memoryId,
-          promptOverrideConfiguration: this.config.promptOverrideConfiguration,
-          sessionId: this.config.sessionId,
-          sessionState: this.config.sessionState,
-          bedrockModelConfigurations: this.config.bedrockModelConfigurations,
-          streamingConfigurations: this.config.streamingConfigurations,
-          promptCreationConfigurations: this.config.promptCreationConfigurations,
-          sourceArn: this.config.sourceArn,
-        },
-        (_key, value) =>
-          value && typeof value === 'object' && !Array.isArray(value)
-            ? Object.fromEntries(
-                Object.keys(value)
-                  .sort()
-                  .map((key) => [key, value[key]]),
-              )
-            : value,
-      ),
-    )}`;
+    const cacheKey = useCache
+      ? `bedrock-agent:v3:${this.config.agentId}:${this.config.agentAliasId}:${this.getRegion()}:${hashBedrockConfig(
+          {
+            prompt,
+            actionGroups: this.config.actionGroups,
+            enableTrace: this.config.enableTrace,
+            endSession: this.config.endSession,
+            guardrailConfiguration: this.config.guardrailConfiguration,
+            inferenceConfig,
+            inputDataConfig: this.config.inputDataConfig,
+            knowledgeBaseConfigurations: this.config.knowledgeBaseConfigurations,
+            memoryId: this.config.memoryId,
+            promptOverrideConfiguration: this.config.promptOverrideConfiguration,
+            sessionId: this.config.sessionId,
+            sessionState: this.config.sessionState,
+            bedrockModelConfigurations: this.config.bedrockModelConfigurations,
+            streamingConfigurations: this.config.streamingConfigurations,
+            promptCreationConfigurations: this.config.promptCreationConfigurations,
+            sourceArn: this.config.sourceArn,
+          },
+        )}`
+      : '';
 
     // Check cache
     if (useCache) {
