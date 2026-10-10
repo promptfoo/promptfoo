@@ -224,7 +224,7 @@ function describeError(error: unknown, secrets: Iterable<string>): string {
     .filter((part) => typeof part === 'string')
     .join(': ');
   for (const secret of secrets) {
-    reason = reason.replaceAll(secret, '[REDACTED]');
+    reason = reason.split(secret).join('[REDACTED]');
   }
   reason = sanitizeBody(reason).slice(0, 500);
   return `Claude Managed Agents API request failed (HTTP ${error.status})${reason ? `: ${reason}` : ''}`;
