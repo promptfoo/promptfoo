@@ -25,6 +25,8 @@ interface AddProviderDialogProps {
   onClose: () => void;
   onSave: (provider: ProviderOptions) => void;
   initialProvider?: ProviderOptions;
+  /** Configured ui-providers.yaml catalog. Null/undefined means unrestricted. */
+  availableProviders?: ProviderOptions[] | null;
 }
 
 export default function AddProviderDialog({
@@ -32,7 +34,9 @@ export default function AddProviderDialog({
   onClose,
   onSave,
   initialProvider,
+  availableProviders,
 }: AddProviderDialogProps) {
+  const isCatalogRestricted = availableProviders != null;
   const [step, setStep] = useState<'select' | 'configure'>('select');
   const [provider, setProvider] = useState<ProviderOptions | undefined>(initialProvider);
   const [providerType, setProviderType] = useState<string | undefined>(
@@ -109,6 +113,78 @@ export default function AddProviderDialog({
     }
     return undefined;
   };
+
+  const handleCatalogSelect = (catalogProvider: ProviderOptions) => {
+    // Save the configured provider verbatim so id, label, and config survive.
+    onSave({ ...catalogProvider });
+    onClose();
+  };
+
+  const renderCatalogList = () => {
+    if (!availableProviders || availableProviders.length === 0) {
+      return (
+        <p className="text-sm text-muted-foreground">
+          No configured providers are available. Contact your administrator.
+        </p>
+      );
+    }
+    return (
+      <div className="w-full space-y-2">
+        {availableProviders.map((catalogProvider, index) => {
+          const id = typeof catalogProvider.id === 'string' ? catalogProvider.id : '';
+          const label =
+            typeof catalogProvider.label === 'string' && catalogProvider.label
+              ? catalogProvider.label
+              : id || 'Custom Provider';
+          return (
+            <button
+              key={`${id}-${index}`}
+              type="button"
+              onClick={() => handleCatalogSelect(catalogProvider)}
+              className="flex w-full cursor-pointer items-center rounded-lg border border-border p-4 text-left transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            >
+              <div className="min-w-0 flex-1">
+                <p className="font-medium text-foreground">{label}</p>
+                {label !== id && id && (
+                  <p className="mt-1 truncate font-mono text-sm text-muted-foreground">{id}</p>
+                )}
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    );
+  };
+
+  if (isCatalogRestricted) {
+    return (
+      <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
+        <DialogContent className="flex max-h-[90vh] max-w-5xl flex-col overflow-hidden">
+          <DialogHeader>
+            <DialogTitle>{initialProvider ? 'Edit Provider' : 'Select Provider Type'}</DialogTitle>
+            <DialogDescription>
+              {initialProvider
+                ? 'Choose a configured provider to replace the current one'
+                : 'Choose one of the configured providers'}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div
+            data-testid="add-provider-dialog-scroll-body"
+            className="min-h-0 flex-1 overflow-y-auto py-4"
+          >
+            {renderCatalogList()}
+          </div>
+
+          <DialogFooter data-testid="add-provider-dialog-footer" className="shrink-0">
+            <Button variant="outline" onClick={onClose}>
+              Cancel
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    );
+  }
 
   return (
     <>

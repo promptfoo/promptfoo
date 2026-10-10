@@ -103,6 +103,73 @@ describe('Providers Routes', () => {
     });
   });
 
+  describe('GET /providers', () => {
+    it('should return an empty catalog when no custom config exists', async () => {
+      mockedGetAvailableProviders.mockReturnValue([]);
+
+      const response = await api.get('/api/providers');
+
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual({
+        success: true,
+        data: { providers: [], hasCustomConfig: false },
+      });
+    });
+
+    it('should return configured providers with id, label, and config preserved', async () => {
+      mockedGetAvailableProviders.mockReturnValue([
+        { id: 'openai:gpt-4o-mini' },
+        {
+          id: 'http://llm-gateway.internal/v1',
+          label: 'Internal Gateway',
+          config: { method: 'POST', headers: { Authorization: 'Bearer x' } },
+        },
+      ]);
+
+      const response = await api.get('/api/providers');
+
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual({
+        success: true,
+        data: {
+          providers: [
+            { id: 'openai:gpt-4o-mini' },
+            {
+              id: 'http://llm-gateway.internal/v1',
+              label: 'Internal Gateway',
+              config: { method: 'POST', headers: { Authorization: 'Bearer x' } },
+            },
+          ],
+          hasCustomConfig: true,
+        },
+      });
+    });
+
+    it('should skip entries with non-string ids instead of returning 500', async () => {
+      mockedGetAvailableProviders.mockReturnValue([
+        { id: 123 },
+        { id: 'openai:gpt-4o-mini' },
+      ] as any);
+
+      const response = await api.get('/api/providers');
+
+      expect(response.status).toBe(200);
+      expect(response.body.data.providers).toEqual([{ id: 'openai:gpt-4o-mini' }]);
+      expect(response.body.data.hasCustomConfig).toBe(true);
+    });
+
+    it('should return standardized 500 errors when catalog loading fails', async () => {
+      mockedGetAvailableProviders.mockImplementation(() => {
+        throw new Error('catalog unavailable');
+      });
+
+      const response = await api.get('/api/providers');
+
+      expect(response.status).toBe(500);
+      expect(response.body).toEqual({ error: 'Failed to load providers' });
+    });
+  });
+
   describe('POST /providers/test', () => {
     let mockProvider: ApiProvider;
 

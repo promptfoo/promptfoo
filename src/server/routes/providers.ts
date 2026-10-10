@@ -11,7 +11,7 @@ import {
   type TargetPurposeDiscoveryResult,
 } from '../../redteam/commands/discover';
 import { neverGenerateRemote } from '../../redteam/remoteGeneration';
-import { ProviderSchemas } from '../../types/api/providers';
+import { JsonProviderOptionsWithIdSchema, ProviderSchemas } from '../../types/api/providers';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { getAvailableProviders } from '../config/serverConfig';
 import { sendError } from '../utils/errors';
@@ -43,6 +43,46 @@ providersRouter.get('/config-status', (_req: Request, res: Response): void => {
     );
   } catch (error) {
     sendError(res, 500, 'Failed to load provider config status', error);
+  }
+});
+
+/**
+ * GET /api/providers
+ *
+ * Returns the configured provider catalog from ui-providers.yaml for the
+ * eval-creator UI. When a custom catalog exists, the UI replaces the built-in
+ * provider list with these entries.
+ *
+ * Invalid entries are skipped per entry so one bad row cannot 500 the catalog.
+ *
+ * Response:
+ * - providers: JSON-safe provider options (id, label, config, ...)
+ * - hasCustomConfig: Boolean indicating if ui-providers.yaml provided providers
+ */
+providersRouter.get('/', (_req: Request, res: Response): void => {
+  try {
+    const serverProviders = getAvailableProviders();
+    const providers = [];
+    for (const [index, provider] of serverProviders.entries()) {
+      const parsed = JsonProviderOptionsWithIdSchema.safeParse(provider);
+      if (!parsed.success) {
+        logger.warn('Skipping provider that is not JSON-serializable for the UI catalog', {
+          providerIndex: index,
+        });
+        continue;
+      }
+      providers.push(parsed.data);
+    }
+    const hasCustomConfig = providers.length > 0;
+
+    res.json(
+      ProviderSchemas.Catalog.Response.parse({
+        success: true,
+        data: { providers, hasCustomConfig },
+      }),
+    );
+  } catch (error) {
+    sendError(res, 500, 'Failed to load providers', error);
   }
 });
 
