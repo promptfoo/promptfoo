@@ -1,5 +1,4 @@
 import { TooltipProvider } from '@app/components/ui/tooltip';
-import { EvalHistoryProvider } from '@app/contexts/EvalHistoryContext';
 import { type ApiHealthResult, useApiHealth } from '@app/hooks/useApiHealth';
 import { useRedteamJobStore } from '@app/stores/redteamJobStore';
 import { restoreTestTimers, type TestTimers, useTestTimers } from '@app/tests/timers';
@@ -18,17 +17,9 @@ import type { DefinedUseQueryResult } from '@tanstack/react-query';
 // Helper to render with required providers
 let rerenderWithProviders: (ui: React.ReactElement) => void;
 const renderWithProviders = (ui: React.ReactElement) => {
-  const result = render(
-    <EvalHistoryProvider>
-      <TooltipProvider delayDuration={0}>{ui}</TooltipProvider>
-    </EvalHistoryProvider>,
-  );
+  const result = render(<TooltipProvider delayDuration={0}>{ui}</TooltipProvider>);
   rerenderWithProviders = (newUi: React.ReactElement) => {
-    result.rerender(
-      <EvalHistoryProvider>
-        <TooltipProvider delayDuration={0}>{newUi}</TooltipProvider>
-      </EvalHistoryProvider>,
-    );
+    result.rerender(<TooltipProvider delayDuration={0}>{newUi}</TooltipProvider>);
   };
   return result;
 };
