@@ -85,7 +85,9 @@ function buildSimilarityResult(
   const pass = inverse
     ? similarity <= threshold + Number.EPSILON
     : similarity >= threshold - Number.EPSILON;
-  const score = inverse ? 1 - similarity : similarity;
+  // Cosine can be negative and dot product is unbounded, so keep the score in [0, 1]
+  // to stop one assertion from skewing the weighted test score.
+  const score = Math.min(1, Math.max(0, inverse ? 1 - similarity : similarity));
   const greaterThanReason = `Similarity ${similarity.toFixed(2)} is greater than or equal to threshold ${threshold}`;
   const lessThanReason = `Similarity ${similarity.toFixed(2)} is less than threshold ${threshold}`;
 
