@@ -181,9 +181,9 @@ PROMPTFOO_PASS_RATE_THRESHOLD=75 promptfoo eval \
   --lock eval.lock.json
 ```
 
-The lock hashes the resolved default test, tests, assertions, scenarios, repeat count, and range. This includes the loaded contents of referenced test files rather than only their filenames. The manifest follows the open [PRML v0.1 specification](https://spec.falsify.dev/v0.1), including its canonical byte format, so independent implementations can reproduce the manifest hash. Existing lock files are never overwritten.
+The lock hashes the resolved default test, tests, assertions, scenarios, redteam grading settings, repeat count, and range. This includes the loaded contents of referenced test files rather than only their filenames, while excluding internal absolute loader paths so the same checkout can verify in CI. The manifest follows the open [PRML v0.1 specification](https://spec.falsify.dev/v0.1), including its canonical byte format, so independent implementations can reproduce the manifest hash. Existing lock files are never overwritten.
 
-To keep the commitment self-contained, eval locks reject extension hooks, in-memory function values, and unresolved `file://` or `package:` references. Replace these with static, data-backed criteria before locking. Sampling requires `--filter-sample-seed` so the selected tests can be reproduced.
+To keep the commitment self-contained, eval locks reject extension hooks, progress callbacks, in-memory function values, and unresolved `file://` or `package:` references. Model-graded assertions must set `assertion.provider` or an inherited test/default provider; redteam configs must set `redteam.provider` or a default-test provider. These requirements prevent ambient credentials from silently selecting a different grader during verification. Replace dynamic criteria with static, data-backed criteria before locking. Sampling requires `--filter-sample-seed` so the selected tests can be reproduced. The lock path must also be different from every configured eval output path.
 
 Use `--verify` for a later run. Verification happens before provider calls, and the threshold stored in the lock is authoritative for the run:
 
