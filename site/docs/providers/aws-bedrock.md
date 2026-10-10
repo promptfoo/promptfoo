@@ -1618,7 +1618,7 @@ providers:
       temperature: 0.7 # Optional — omit to use the model's own default
       top_p: 0.9 # Optional nucleus sampling
       stop: ['END'] # Optional stop sequences
-      reasoning_effort: high # Optional, reasoning models only ('low' | 'medium' | 'high')
+      reasoning_effort: high # Optional; supported values depend on the model
       showThinking: false # Strip <think>/<reasoning> blocks from the output (default: keep)
       tools: [...] # Optional OpenAI-format tool definitions
       tool_choice: 'auto' # Optional tool selection strategy
