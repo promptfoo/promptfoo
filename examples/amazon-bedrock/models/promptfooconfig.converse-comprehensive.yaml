@@ -2,13 +2,9 @@
 description: 'Bedrock Converse API - Comprehensive Test Suite'
 
 # ============================================================================
-# This example demonstrates common Converse API capabilities across model families:
-# - Text generation (all models)
-# - System prompts
-# - Multi-turn conversations
-# - Tool/function calling
-# - Extended thinking (Claude)
-# - Performance configuration
+# This example compares text generation across model families.
+# Selected Claude providers also demonstrate adaptive thinking and output effort.
+# Every provider answers the same capital-city questions.
 #
 # Model families covered:
 # - Anthropic Claude (4.x, 5, 5.5)

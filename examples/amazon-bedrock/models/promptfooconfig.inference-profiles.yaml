@@ -10,17 +10,14 @@ prompts:
 
 providers:
   # Application Inference Profiles - Usage attribution and optional cross-region routing
-  # These require the inferenceModelType configuration parameter
+  # Native InvokeModel profiles require inferenceModelType; Converse profiles do not
 
-  # Claude inference profile - optimized for high availability
-  - id: bedrock:arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/claude-ha-profile
-    label: 'Claude HA Profile'
+  # Claude profile via Converse, without model-specific sampling defaults
+  - id: bedrock:converse:arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/claude-ha-profile
+    label: 'Claude Application Profile'
     config:
-      inferenceModelType: 'claude' # Required for inference profiles
       region: 'us-east-1'
-      temperature: 0.7
-      max_tokens: 1024
-      anthropic_version: 'bedrock-2023-05-31'
+      maxTokens: 1024
 
   # Llama inference profile - latest version (defaults to Llama 4)
   - id: bedrock:arn:aws:bedrock:us-west-2:123456789012:application-inference-profile/llama-latest-profile
@@ -110,32 +107,26 @@ tests:
     options:
       # Use an inference profile for grading assertions
       provider:
-        id: bedrock:arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/grading-profile
+        id: bedrock:converse:arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/grading-profile
         config:
-          inferenceModelType: 'claude'
-          temperature: 0 # Low temperature for consistent grading
-          max_tokens: 512
+          maxTokens: 512
     assert:
       - type: llm-rubric
         value: 'The response should be comprehensive, technically accurate, and well-structured'
       - type: contains
         value: 'technology'
-      - type: min-length
-        value: 200
+      - type: javascript
+        value: output.length >= 200
 
 # Default grading configuration using an inference profile
 defaultTest:
   options:
     provider:
-      id: bedrock:arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/default-grading
+      id: bedrock:converse:arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/default-grading
       config:
-        inferenceModelType: 'claude'
         region: 'us-east-1'
-        temperature: 0
-        max_tokens: 256
+        maxTokens: 256
   assert:
-    - type: cost
-      threshold: 0.002 # Maximum cost per test
     - type: latency
       threshold: 10000 # Maximum 10 seconds
     - type: not-contains

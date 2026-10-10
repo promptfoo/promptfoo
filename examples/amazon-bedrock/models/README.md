@@ -182,12 +182,13 @@ For opaque inference-profile ARNs on the native InvokeModel route, specify `infe
 
 ```yaml
 providers:
-  - id: bedrock:arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/my-profile
+  - id: bedrock:converse:arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/my-profile
     config:
-      inferenceModelType: 'claude' # Required!
       region: 'us-east-1'
-      max_tokens: 1024
+      maxTokens: 1024
 ```
+
+Use Converse for generic Claude profiles to avoid native sampling defaults that newer Claude models reject. Opaque profile ARNs also lack automatic cost estimates, so these examples do not use cost assertions.
 
 ### Supported Model Types
 

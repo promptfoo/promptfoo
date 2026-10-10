@@ -19,17 +19,14 @@ Use the [AWS model cards](https://docs.aws.amazon.com/bedrock/latest/userguide/m
 | Unified chat and multimodal input            | `bedrock:converse:<id>`                                      | Converse / ConverseStream                                          |
 | Anthropic-compatible messages                | `bedrock:messages:<id>`                                      | Messages on Runtime or Mantle, according to the model and endpoint |
 | Mantle responses                             | `bedrock:responses:<id>`                                     | Responses on Mantle                                                |
-| Runtime chat completions                     | `bedrock:runtime:chat:<id>`                                  | Chat Completions on Runtime                                        |
-| Runtime responses                            | `bedrock:runtime:responses:<id>`                             | Responses on Runtime                                               |
 | Mantle chat completions                      | `bedrock:mantle:<id>`                                        | Chat Completions on Mantle                                         |
 | Text embeddings                              | `bedrock:embedding:<id>`                                     | Model-specific InvokeModel embedding request                       |
-| Knowledge Base retrieval and RAG             | `bedrock:kb:<id>`                                            | Retrieve, RetrieveAndGenerate / RetrieveAndGenerateStream          |
+| Knowledge Base RAG                           | `bedrock:kb:<model-id>`                                      | RetrieveAndGenerate                                                |
 | Deployed Agents                              | `bedrock-agent:<agent-id>`                                   | InvokeAgent                                                        |
-| Complete native requests and responses       | `bedrock:api:<Operation>`                                    | Inference and job-status APIs, including Flows and reranking       |
 | Nova Sonic speech                            | `bedrock:<sonic-model-id>`                                   | InvokeModelWithBidirectionalStream                                 |
 | Luma / historical Nova Reel video generation | `bedrock:video:<id>`                                         | StartAsyncInvoke and GetAsyncInvoke                                |
 
-Some bare model IDs select a specialized provider automatically. Use the explicit selectors above when choosing an API, and consult the model-specific sections below for supported IDs. Use `bedrock:api:<Operation>` for complete native SDK payloads, including image generation or video understanding through `InvokeModel`, standalone guardrails, reranking, and Flows. Native responses retain the AWS schema; use an `outputTransform` or a [custom provider](./custom-api.md) when your evaluation needs normalized output. API support, modalities, and parameters still depend on the selected model and AWS service.
+Some bare model IDs select a specialized provider automatically. Use the explicit selectors above when choosing an API, and consult the model-specific sections below for supported IDs. API support, modalities, and parameters depend on the selected model and AWS service. Use a [custom provider](./custom-api.md) when your workflow needs additional AWS operations or response handling.
 
 ### Discover current IDs and lifecycle state
 
@@ -99,17 +96,15 @@ For the native InvokeModel route, an opaque inference profile ARN requires `infe
 
 ```yaml
 providers:
-  - id: bedrock:arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/my-profile
+  - id: bedrock:converse:arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/my-profile
     config:
-      inferenceModelType: 'claude' # Required for inference profiles
       region: 'us-east-1'
-      max_tokens: 256
-      temperature: 0.7
+      maxTokens: 1024
 ```
 
 ### Supported Model Types
 
-The `inferenceModelType` config option supports the following values:
+The `inferenceModelType` config option selects the native request schema. For an opaque Claude application profile, prefer Converse: the native handler cannot infer model-specific sampling restrictions from the ARN. The option supports the following values:
 
 - `claude` - For Anthropic Claude models
 - `nova` - For Amazon Nova models (v1)
@@ -149,12 +144,10 @@ providers:
       max_tokens: 1024
 
   # Using an inference profile that routes to Claude models
-  - id: bedrock:arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/claude-profile
+  - id: bedrock:converse:arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/claude-profile
     config:
-      inferenceModelType: 'claude'
-      max_tokens: 1024
-      temperature: 0.7
-      anthropic_version: 'bedrock-2023-05-31'
+      region: 'us-east-1'
+      maxTokens: 1024
 
   # Using an inference profile for Llama models
   - id: bedrock:arn:aws:bedrock:us-west-2:123456789012:application-inference-profile/llama-profile
@@ -180,7 +173,7 @@ Application Inference Profiles provide several benefits:
 - **Cross-region routing**: A profile copied from a system cross-region profile can distribute requests among its eligible regions; a single-region profile cannot
 - **Simplified management**: Use a single ARN instead of managing multiple model IDs
 
-When using inference profiles, ensure the `inferenceModelType` matches the model family your profile is configured for, as the configuration parameters differ between model types.
+When using native InvokeModel profiles, ensure `inferenceModelType` matches the backing model family. Cost assertions require known pricing; opaque application-profile ARNs do not identify the backing model for automatic cost calculation.
 
 :::
 
@@ -2235,7 +2228,7 @@ tests:
 
 #### Required Permissions
 
-Replace the example account and bucket with your own. [StartAsyncInvoke](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_StartAsyncInvoke.html) authorizes with `bedrock:InvokeModel`; job polling uses the separate `async-invoke` resource:
+Replace the example account and bucket with your own. [StartAsyncInvoke](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_StartAsyncInvoke.html) authorizes with `bedrock:InvokeModel` on the model and the new `async-invoke` resource. Polling requires `bedrock:GetAsyncInvoke` on that invocation:
 
 ```json
 {
@@ -2243,7 +2236,10 @@ Replace the example account and bucket with your own. [StartAsyncInvoke](https:/
     {
       "Effect": "Allow",
       "Action": "bedrock:InvokeModel",
-      "Resource": "arn:aws:bedrock:us-west-2::foundation-model/luma.ray-v2:0"
+      "Resource": [
+        "arn:aws:bedrock:us-west-2::foundation-model/luma.ray-v2:0",
+        "arn:aws:bedrock:us-west-2:123456789012:async-invoke/*"
+      ]
     },
     {
       "Effect": "Allow",

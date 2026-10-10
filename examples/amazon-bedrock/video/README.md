@@ -37,7 +37,7 @@ aws s3 mb s3://your-bucket-luma-ray --region us-west-2
 
 ### 3. Configure IAM Permissions
 
-Replace the account and bucket below with your own. [StartAsyncInvoke](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_StartAsyncInvoke.html) uses `bedrock:InvokeModel`; polling authorizes against the separate async invocation resource.
+Replace the account and bucket below with your own. [StartAsyncInvoke](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_StartAsyncInvoke.html) uses `bedrock:InvokeModel` on the model and the new `async-invoke` resource. Polling requires `bedrock:GetAsyncInvoke` on that invocation.
 
 ```json
 {
@@ -46,7 +46,10 @@ Replace the account and bucket below with your own. [StartAsyncInvoke](https://d
     {
       "Effect": "Allow",
       "Action": "bedrock:InvokeModel",
-      "Resource": "arn:aws:bedrock:us-west-2::foundation-model/luma.ray-v2:0"
+      "Resource": [
+        "arn:aws:bedrock:us-west-2::foundation-model/luma.ray-v2:0",
+        "arn:aws:bedrock:us-west-2:123456789012:async-invoke/*"
+      ]
     },
     {
       "Effect": "Allow",
