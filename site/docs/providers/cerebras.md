@@ -1,13 +1,11 @@
 ---
 sidebar_label: Cerebras
-description: Configure Cerebras' Llama 4 Scout and Llama 3 models through their OpenAI-compatible API for enterprise-grade inference with advanced MoE architecture support
+description: Configure Cerebras' high-speed inference models through its OpenAI-compatible API, with support for structured outputs and tool calling
 ---
 
 # Cerebras
 
-This provider enables you to use Cerebras models through their [Inference API](https://docs.cerebras.ai).
-
-Cerebras offers an OpenAI-compatible API for various large language models including Llama models, DeepSeek, and more. You can use it as a drop-in replacement for applications currently using the [OpenAI API](/docs/providers/openai/) chat endpoints.
+The Cerebras provider calls its [Inference API](https://docs.cerebras.ai) using the [OpenAI chat format](/docs/providers/openai/). Available models include Llama and DeepSeek.
 
 ## Setup
 
@@ -21,7 +19,7 @@ Or in your config:
 
 ```yaml
 providers:
-  - id: cerebras:llama3.1-8b
+  - id: cerebras:gpt-oss-120b
     config:
       apiKey: your_api_key_here
 ```
@@ -34,18 +32,14 @@ The Cerebras provider uses a simple format:
 
 ## Available Models
 
-The Cerebras Inference API officially supports these models:
+The [public model catalog](https://inference-docs.cerebras.ai/models/overview) lists these free-trial and pay-as-you-go models:
 
-- `llama-4-scout-17b-16e-instruct` - Llama 4 Scout 17B model with 16 expert MoE
-- `llama3.1-8b` - Llama 3.1 8B model
-- `llama-3.3-70b` - Llama 3.3 70B model
-- `deepSeek-r1-distill-llama-70B` (private preview)
+| Model          | ID             | Context (free / paid) |
+| -------------- | -------------- | --------------------- |
+| OpenAI GPT OSS | `gpt-oss-120b` | 65k / 131k            |
+| Qwen 3.8 27B   | `qwen-3.8-27b` | 64k / 128k            |
 
-To get the current list of available models, use the `/models` endpoint:
-
-```bash
-curl https://api.cerebras.ai/v1/models -H "Authorization: Bearer your_api_key_here"
-```
+Availability, rate limits, and pricing depend on the account tier. Additional model families may be available through dedicated endpoints; absence from the public catalog does not establish retirement of a dedicated deployment. Check the linked catalog and [pricing](https://www.cerebras.ai/pricing) before selecting a model.
 
 ## Parameters
 
@@ -57,19 +51,18 @@ The provider accepts standard OpenAI chat parameters:
 - `stop` - Sequences where the API will stop generating further tokens
 - `seed` - Seed for deterministic generation
 - `response_format` - Controls the format of the model response (e.g., for JSON output)
-- `logprobs` - Whether to return log probabilities of the output tokens
 
 ## Advanced Capabilities
 
 ### Structured Outputs
 
-Cerebras models support structured outputs with JSON schema enforcement to ensure your AI-generated responses follow a consistent, predictable format. This makes it easier to build reliable applications that can process AI outputs programmatically.
+Cerebras models support structured outputs with JSON schema enforcement to ensure your AI-generated responses follow a consistent, predictable format. This makes it easier to build applications that can process AI outputs programmatically.
 
 To use structured outputs, set the `response_format` parameter to include a JSON schema:
 
 ```yaml
 providers:
-  - id: cerebras:llama-4-scout-17b-16e-instruct
+  - id: cerebras:gpt-oss-120b
     config:
       response_format:
         type: 'json_schema'
@@ -94,7 +87,7 @@ Cerebras models support tool use (function calling), enabling LLMs to programmat
 
 ```yaml
 providers:
-  - id: cerebras:llama-4-scout-17b-16e-instruct
+  - id: cerebras:gpt-oss-120b
     config:
       tools:
         - type: 'function'
@@ -108,6 +101,7 @@ providers:
                   type: 'string'
                   description: 'The mathematical expression to evaluate'
               required: ['expression']
+              additionalProperties: false
             strict: true
 ```
 
@@ -115,17 +109,17 @@ When using tool calling, you'll need to process the model's response and handle 
 
 ## Example Configuration
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: Cerebras model evaluation
 prompts:
   - You are an expert in {{topic}}. Explain {{question}} in simple terms.
 providers:
-  - id: cerebras:llama3.1-8b
+  - id: cerebras:gpt-oss-120b
     config:
       temperature: 0.7
       max_completion_tokens: 1024
-  - id: cerebras:llama-3.3-70b
+  - id: cerebras:qwen-3.8-27b
     config:
       temperature: 0.7
       max_completion_tokens: 1024
@@ -149,5 +143,5 @@ tests:
 - [OpenAI Provider](/docs/providers/openai) - Compatible API format used by Cerebras
 - [Configuration Reference](/docs/configuration/reference.md) - Full configuration options for providers
 - [Cerebras API Documentation](https://docs.cerebras.ai) - Official API reference
-- [Cerebras Structured Outputs Guide](https://docs.cerebras.ai/capabilities/structured-outputs/) - Learn more about JSON schema enforcement
-- [Cerebras Tool Use Guide](https://docs.cerebras.ai/capabilities/tool-use/) - Learn more about tool calling capabilities
+- [Cerebras Structured Outputs Guide](https://inference-docs.cerebras.ai/capabilities/structured-outputs) - Learn more about JSON schema enforcement
+- [Cerebras Tool Use Guide](https://inference-docs.cerebras.ai/capabilities/tool-use) - Learn more about tool calling capabilities

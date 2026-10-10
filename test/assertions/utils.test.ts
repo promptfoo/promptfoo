@@ -10,6 +10,7 @@ import {
 } from '../../src/assertions/utils';
 import cliState from '../../src/cliState';
 import { importModule } from '../../src/esm';
+import { createStringAssertion } from '../factories/literalFixtures';
 import { createMockProvider as createFactoryProvider } from '../factories/provider';
 
 import type { ApiProvider, Assertion, TestCase } from '../../src/types/index';
@@ -145,6 +146,32 @@ describe('getFinalTest', () => {
     expect(result.vars).toEqual({ var1: 'value1' });
   });
 
+  it('preserves enumerable variable metadata with independent cloned ownership', () => {
+    const metadata = Symbol('loaded media metadata');
+    const hidden = Symbol('non-enumerable metadata');
+    const vars = { audio: 'raw-media-bytes', nested: { value: 'original' } };
+    const mimeTypes = new Map([[vars.audio, 'audio/mp4']]);
+    Object.defineProperty(vars, metadata, { value: mimeTypes, enumerable: true });
+    Object.defineProperty(vars, hidden, { value: 'not copied' });
+    const result = getFinalTest({ vars }, { type: 'equals', value: 'PONG' });
+
+    expect(result.vars).not.toBe(vars);
+    expect(result.vars?.nested).not.toBe(vars.nested);
+    expect(Object.keys(result.vars!)).toEqual(['audio', 'nested']);
+    expect(JSON.parse(JSON.stringify(result.vars))).toEqual({
+      audio: 'raw-media-bytes',
+      nested: { value: 'original' },
+    });
+    expect(Reflect.has(result.vars!, hidden)).toBe(false);
+    const copiedMetadata = Reflect.get(result.vars!, metadata) as Map<string, string>;
+    expect(copiedMetadata).toEqual(mimeTypes);
+    expect(copiedMetadata).not.toBe(mimeTypes);
+    copiedMetadata.clear();
+    (result.vars!.nested as { value: string }).value = 'changed';
+    expect(mimeTypes.get(vars.audio)).toBe('audio/mp4');
+    expect(vars.nested.value).toBe('original');
+  });
+
   it('should use test provider when assertion provider is not provided', () => {
     const testProvider = createMockProvider('testProvider');
     const testCase: TestCase = {
@@ -153,10 +180,7 @@ describe('getFinalTest', () => {
       },
     };
 
-    const assertion: Assertion = {
-      type: 'equals',
-      value: 'expected value',
-    };
+    const assertion: Assertion = createStringAssertion('equals', 'expected value');
 
     const result = getFinalTest(testCase, assertion);
     expect(result.options?.provider).toBe(testProvider);
@@ -187,10 +211,7 @@ describe('getFinalTest', () => {
       options: {},
     };
 
-    const assertion: Assertion = {
-      type: 'equals',
-      value: 'expected value',
-    };
+    const assertion: Assertion = createStringAssertion('equals', 'expected value');
 
     const result = getFinalTest(testCase, assertion);
     expect(result.options?.provider).toBeUndefined();
