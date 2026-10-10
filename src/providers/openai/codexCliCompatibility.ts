@@ -149,21 +149,41 @@ async function terminateProbe(child: ChildProcess): Promise<void> {
   if (child.exitCode !== null || child.signalCode !== null) {
     return;
   }
-  await new Promise<void>((resolve, reject) => {
-    execFile(
-      'taskkill',
-      ['/pid', String(pid), '/t', '/f'],
-      { windowsHide: true, timeout: 1_000, killSignal: 'SIGKILL' },
-      (error) => {
-        if (error && child.exitCode === null && child.signalCode === null) {
-          child.kill('SIGKILL');
-          reject(error);
-        } else {
-          resolve();
-        }
-      },
-    );
-  });
+  const hostWindowsDir = process.env.SystemRoot;
+  if (!hostWindowsDir || !/^[a-z]:[\\/]/i.test(hostWindowsDir) || hostWindowsDir.includes('\0')) {
+    child.kill('SIGKILL');
+    throw new Error('Cannot locate the Windows system directory for Codex version cleanup');
+  }
+  const windowsDir = path.win32.normalize(hostWindowsDir);
+  const systemDir = path.win32.join(windowsDir, 'System32');
+  try {
+    await new Promise<void>((resolve, reject) => {
+      // Cleanup must not search the checkout or inherit CLI/ambient credentials.
+      execFile(
+        path.win32.join(systemDir, 'taskkill.exe'),
+        ['/pid', String(pid), '/t', '/f'],
+        {
+          windowsHide: true,
+          timeout: 1_000,
+          killSignal: 'SIGKILL',
+          cwd: systemDir,
+          env: { SystemRoot: windowsDir, WINDIR: windowsDir, PATH: systemDir },
+        },
+        (error) => {
+          if (error && child.exitCode === null && child.signalCode === null) {
+            reject(error);
+          } else {
+            resolve();
+          }
+        },
+      );
+    });
+  } catch (error) {
+    if (child.exitCode === null && child.signalCode === null) {
+      child.kill('SIGKILL');
+    }
+    throw error;
+  }
 }
 
 interface ProbeExit {

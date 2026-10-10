@@ -6,10 +6,12 @@ import { PassThrough } from 'node:stream';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { checkCodexCliCompatibility } from '../../../src/providers/openai/codexCliCompatibility';
+import { mockProcessEnv } from '../../util/utils';
 
 const mockSpawn = vi.hoisted(() => vi.fn());
+const mockExecFile = vi.hoisted(() => vi.fn());
 
-vi.mock('node:child_process', () => ({ spawn: mockSpawn, execFile: vi.fn() }));
+vi.mock('node:child_process', () => ({ spawn: mockSpawn, execFile: mockExecFile }));
 
 describe('checkCodexCliCompatibility', () => {
   let sdkRoot: string;
@@ -319,6 +321,290 @@ describe('checkCodexCliCompatibility', () => {
           message: expect.stringContaining('timed out after 10000ms'),
         }),
       });
+    });
+  });
+
+  describe('Windows system cleanup utility', () => {
+    let restoreEnv: () => void;
+    const cleanupCallbacks: Array<(error: Error | null) => void> = [];
+    const probes: Array<{ dispose: () => void; result: Promise<unknown> }> = [];
+
+    beforeEach(() => {
+      Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
+      vi.useFakeTimers();
+      cleanupCallbacks.length = 0;
+      probes.length = 0;
+      restoreEnv = mockProcessEnv({
+        SystemRoot: 'C:\\Windows',
+        WINDIR: 'C:\\checkout',
+        PATH: 'C:\\checkout',
+        OPENAI_API_KEY: 'SYNTHETIC_HOST_TOKEN',
+        NODE_OPTIONS: '--require synthetic-preload',
+      });
+      mockExecFile.mockImplementation((_command, _args, _options, callback) => {
+        cleanupCallbacks.push(callback);
+      });
+    });
+
+    afterEach(async () => {
+      for (const callback of cleanupCallbacks) {
+        callback(null);
+      }
+      for (const probe of probes) {
+        probe.dispose();
+      }
+      await Promise.all(probes.map(({ result }) => result));
+      restoreEnv();
+    });
+
+    // Inspect the launch contract without running a counterfeit Windows binary
+    // or making claims about native Windows descendant ownership.
+    function startProbe(signal?: AbortSignal, pid = 1234) {
+      const stdout = new PassThrough();
+      const stderr = new PassThrough();
+      let exited = false;
+      let closedPipes = 0;
+      const child = Object.assign(new EventEmitter(), {
+        stdin: null,
+        stdout,
+        stderr,
+        pid,
+        exitCode: null as number | null,
+        signalCode: null as NodeJS.Signals | null,
+        kill: vi.fn((signal: NodeJS.Signals) => {
+          exit(null, signal);
+          return true;
+        }),
+      });
+      const closeWhenReady = () => {
+        if (exited && closedPipes === 2) {
+          child.emit('close', child.exitCode, child.signalCode);
+        }
+      };
+      function exit(code: number | null, signal: NodeJS.Signals | null = null) {
+        if (exited) {
+          return;
+        }
+        exited = true;
+        child.exitCode = code;
+        child.signalCode = signal;
+        child.emit('exit', code, signal);
+        closeWhenReady();
+      }
+      for (const stream of [stdout, stderr]) {
+        stream.once('close', () => {
+          closedPipes++;
+          closeWhenReady();
+        });
+      }
+      mockSpawn.mockReturnValueOnce(child);
+      const result = checkCodexCliCompatibility({
+        sdkEntryPoint,
+        codexPathOverride: 'C:\\custom\\codex.exe',
+        env: {
+          SystemRoot: 'C:\\caller-selected',
+          PATH: 'C:\\caller-bin',
+          OPENAI_API_KEY: 'SYNTHETIC_CLI_TOKEN',
+        },
+        signal,
+      }).then(
+        () => ({ success: true as const }),
+        (error: unknown) => ({ error }),
+      );
+      probes.push({
+        result,
+        dispose: () => {
+          exit(null, 'SIGKILL');
+          stdout.destroy();
+          stderr.destroy();
+        },
+      });
+      return { child, stdout, stderr, result, exit };
+    }
+
+    it.each(['abort', 'timeout', 'stdout', 'stderr'] as const)(
+      'uses only the host system utility and restricted environment for %s',
+      async (trigger) => {
+        const controller = new AbortController();
+        const probe = startProbe(controller.signal);
+        if (trigger === 'abort') {
+          controller.abort();
+        } else if (trigger === 'timeout') {
+          await vi.advanceTimersByTimeAsync(10_000);
+        } else {
+          probe[trigger].write('x'.repeat(1024 * 1024 + 1));
+        }
+
+        expect(mockExecFile).toHaveBeenCalledExactlyOnceWith(
+          'C:\\Windows\\System32\\taskkill.exe',
+          ['/pid', '1234', '/t', '/f'],
+          {
+            windowsHide: true,
+            timeout: 1_000,
+            killSignal: 'SIGKILL',
+            cwd: 'C:\\Windows\\System32',
+            env: {
+              SystemRoot: 'C:\\Windows',
+              WINDIR: 'C:\\Windows',
+              PATH: 'C:\\Windows\\System32',
+            },
+          },
+          expect.any(Function),
+        );
+        probe.exit(null, 'SIGKILL');
+        cleanupCallbacks[0](null);
+        await expect(probe.result).resolves.toMatchObject({
+          error:
+            trigger === 'abort'
+              ? expect.objectContaining({ name: 'AbortError' })
+              : expect.objectContaining({
+                  message: expect.stringContaining(
+                    trigger === 'timeout' ? 'timed out after 10000ms' : `${trigger} exceeded`,
+                  ),
+                }),
+        });
+        expect(probe.child.kill).not.toHaveBeenCalled();
+        expect(vi.getTimerCount()).toBe(0);
+      },
+    );
+
+    it.each([
+      { name: 'missing', value: undefined },
+      { name: 'empty', value: '' },
+      { name: 'relative', value: 'checkout' },
+      { name: 'drive-relative', value: 'C:checkout' },
+      { name: 'root-relative', value: '\\Windows' },
+      { name: 'UNC', value: '\\\\server\\share' },
+      { name: 'device', value: '\\\\?\\C:\\Windows' },
+      { name: 'quoted', value: '"C:\\Windows\\SYNTHETIC_ROOT"' },
+    ])('rejects a $name system root without a utility search', async ({ value }) => {
+      const restoreRoot = mockProcessEnv({ SystemRoot: value });
+      try {
+        const probe = startProbe();
+        await vi.advanceTimersByTimeAsync(10_000);
+        expect(mockExecFile).not.toHaveBeenCalled();
+        expect(probe.child.kill).toHaveBeenCalledExactlyOnceWith('SIGKILL');
+        await expect(probe.result).resolves.toMatchObject({
+          error: expect.objectContaining({
+            message: expect.stringContaining(
+              'Cannot locate the Windows system directory for Codex version cleanup',
+            ),
+          }),
+        });
+        const outcome = await probe.result;
+        expect(outcome).toHaveProperty(
+          'error.message',
+          expect.not.stringContaining('SYNTHETIC_ROOT'),
+        );
+      } finally {
+        restoreRoot();
+      }
+    });
+
+    it('preserves caller abort when the system root is invalid', async () => {
+      const restoreRoot = mockProcessEnv({ SystemRoot: 'relative' });
+      try {
+        const controller = new AbortController();
+        const probe = startProbe(controller.signal);
+        controller.abort();
+        expect(mockExecFile).not.toHaveBeenCalled();
+        expect(probe.child.kill).toHaveBeenCalledExactlyOnceWith('SIGKILL');
+        await expect(probe.result).resolves.toMatchObject({
+          error: expect.objectContaining({ name: 'AbortError' }),
+        });
+      } finally {
+        restoreRoot();
+      }
+    });
+
+    it('accepts a fully qualified host system directory with spaces and a trailing separator', async () => {
+      const restoreRoot = mockProcessEnv({ SystemRoot: 'D:\\Windows NT\\' });
+      try {
+        const probe = startProbe();
+        await vi.advanceTimersByTimeAsync(10_000);
+        expect(mockExecFile).toHaveBeenCalledWith(
+          'D:\\Windows NT\\System32\\taskkill.exe',
+          ['/pid', '1234', '/t', '/f'],
+          expect.objectContaining({
+            cwd: 'D:\\Windows NT\\System32',
+            env: {
+              SystemRoot: 'D:\\Windows NT\\',
+              WINDIR: 'D:\\Windows NT\\',
+              PATH: 'D:\\Windows NT\\System32',
+            },
+          }),
+          expect.any(Function),
+        );
+        probe.exit(null, 'SIGKILL');
+        cleanupCallbacks[0](null);
+        await expect(probe.result).resolves.toHaveProperty('error');
+      } finally {
+        restoreRoot();
+      }
+    });
+
+    it.each(['callback', 'synchronous'] as const)(
+      'falls back only to the owned child after a %s utility startup error',
+      async (mode) => {
+        const error = new Error('taskkill ENOENT');
+        if (mode === 'synchronous') {
+          mockExecFile.mockImplementation(() => {
+            throw error;
+          });
+        }
+        const probe = startProbe();
+        await vi.advanceTimersByTimeAsync(10_000);
+        if (mode === 'callback') {
+          cleanupCallbacks[0](error);
+        }
+        await vi.advanceTimersByTimeAsync(0);
+
+        expect(mockExecFile).toHaveBeenCalledTimes(1);
+        expect(mockExecFile.mock.calls[0][0]).toBe('C:\\Windows\\System32\\taskkill.exe');
+        expect(probe.child.kill).toHaveBeenCalledExactlyOnceWith('SIGKILL');
+        await expect(probe.result).resolves.toMatchObject({
+          error: expect.objectContaining({ message: expect.stringContaining('taskkill ENOENT') }),
+        });
+      },
+    );
+
+    it('waits for cleanup completion if the process exits before the utility callback', async () => {
+      const controller = new AbortController();
+      const probe = startProbe(controller.signal);
+      const settled = vi.fn();
+      void probe.result.then(settled);
+      controller.abort();
+      probe.exit(null, 'SIGKILL');
+      await vi.advanceTimersByTimeAsync(0);
+      expect(settled).not.toHaveBeenCalled();
+      cleanupCallbacks[0](new Error('process already exited'));
+
+      await expect(probe.result).resolves.toMatchObject({
+        error: expect.objectContaining({ name: 'AbortError' }),
+      });
+      expect(probe.child.kill).not.toHaveBeenCalled();
+    });
+
+    it('targets only the cancelled probe while a concurrent probe succeeds', async () => {
+      const controller = new AbortController();
+      const cancelled = startProbe(controller.signal, 1234);
+      const survivor = startProbe(undefined, 5678);
+      controller.abort();
+      expect(mockExecFile).toHaveBeenCalledTimes(1);
+      expect(mockExecFile.mock.calls[0][1]).toEqual(['/pid', '1234', '/t', '/f']);
+      cancelled.exit(null, 'SIGKILL');
+      cleanupCallbacks[0](null);
+      await expect(cancelled.result).resolves.toMatchObject({
+        error: expect.objectContaining({ name: 'AbortError' }),
+      });
+      survivor.stdout.end('codex-cli 0.130.0');
+      survivor.stderr.end();
+      survivor.exit(0);
+
+      await expect(survivor.result).resolves.toEqual({ success: true });
+      expect(survivor.child.kill).not.toHaveBeenCalled();
+      expect(mockExecFile).toHaveBeenCalledTimes(1);
+      expect(vi.getTimerCount()).toBe(0);
     });
   });
 
