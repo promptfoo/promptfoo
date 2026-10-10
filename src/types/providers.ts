@@ -15,6 +15,10 @@ import type { TransformFunction } from './transform';
 
 export type {
   ChatMessage,
+  CodexDroppedEvent,
+  CodexExecutionHealth,
+  CodexProviderError,
+  CodexToolExitCode,
   GuardrailResponse,
   ImageOutput,
   ModerationFlag,

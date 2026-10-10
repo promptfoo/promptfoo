@@ -192,7 +192,15 @@ describe('copy_working_dir in agentic providers', () => {
     beforeEach(() => {
       const thread = {
         id: 'thread',
-        run: vi.fn().mockResolvedValue({ finalResponse: 'edited', items: [], usage: null }),
+        runStreamed: vi.fn().mockImplementation(async () => ({
+          events: (async function* () {
+            yield {
+              type: 'item.completed',
+              item: { id: 'answer', type: 'agent_message', text: 'edited' },
+            };
+            yield { type: 'turn.completed', usage: null };
+          })(),
+        })),
       };
       mocks.startThread.mockReturnValue(thread);
       mocks.codex.mockImplementation(function () {

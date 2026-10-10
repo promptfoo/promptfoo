@@ -246,7 +246,7 @@ providers:
         CODEX_HOME: ./codex-home
 ```
 
-Codex discovers project skills from `.agents/skills/` under each `working_dir`. Its `skill-used` signal is inferred from successful reads of the matching `SKILL.md`, so keep `enable_streaming: true` while developing the eval if you want Promptfoo to collect that evidence. The earlier JavaScript assertion should use `JSON.parse(output)` with Codex because `output_schema` keeps `output` as a JSON string rather than a parsed object.
+Codex discovers project skills from `.agents/skills/` under each `working_dir`. Its `skill-used` signal is inferred from successful reads of the matching `SKILL.md`; Promptfoo collects that evidence in both tracing modes. Keep `enable_streaming: true` if you also want item- and turn-level OpenTelemetry spans. The earlier JavaScript assertion should use `JSON.parse(output)` with Codex because `output_schema` keeps `output` as a JSON string rather than a parsed object.
 
 For managed security workflows rather than general local skills, use the [Codex Security SDK provider](/docs/providers/openai-codex-security). It runs native standard, deep, and diff scans plus finding validation, and returns structured findings, coverage, token usage, and estimated scan cost.
 
