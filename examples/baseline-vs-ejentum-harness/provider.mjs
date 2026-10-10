@@ -42,12 +42,11 @@ async function getLoadApiProvider() {
   throw new Error('Unable to resolve Promptfoo loadApiProvider.');
 }
 
-function getEjentumKey(config, env) {
+function getEjentumKey(config, env = {}) {
+  const customEnvar = config.ejentumApiKeyEnvar;
   return (
     config.ejentumApiKey ||
-    (config.ejentumApiKeyEnvar
-      ? process.env[config.ejentumApiKeyEnvar] || env[config.ejentumApiKeyEnvar]
-      : undefined) ||
+    (customEnvar ? env[customEnvar] || process.env[customEnvar] : undefined) ||
     env.EJENTUM_API_KEY ||
     process.env.EJENTUM_API_KEY
   );
@@ -107,10 +106,41 @@ class EjentumAugmentedProvider {
     this.env = options.env || {};
     this.providerId = options.id || `ejentum:${this.config.mode || 'reasoning'}`;
     this.underlyingProvider = options.underlyingProvider;
+    this.loadApiProvider = options.loadApiProvider;
   }
 
   id() {
     return this.providerId;
+  }
+
+  async getUnderlyingProvider() {
+    if (this.underlyingProvider) {
+      return this.underlyingProvider;
+    }
+    const {
+      mode: _mode,
+      apiUrl: _apiUrl,
+      ejentumApiKey: _ejentumApiKey,
+      ejentumApiKeyEnvar: _ejentumApiKeyEnvar,
+      model = 'gpt-5.4-mini',
+      ...forwardedConfig
+    } = this.config;
+
+    const loadApiProvider = this.loadApiProvider || (await getLoadApiProvider());
+    const providerPath = model.startsWith('openai:') ? model : `openai:chat:${model}`;
+    this.underlyingProvider = await loadApiProvider(providerPath, {
+      options: {
+        config: forwardedConfig,
+        env: this.env,
+      },
+    });
+    return this.underlyingProvider;
+  }
+
+  async cleanup() {
+    if (this.underlyingProvider && typeof this.underlyingProvider.cleanup === 'function') {
+      await this.underlyingProvider.cleanup();
+    }
   }
 
   async callApi(prompt, context) {
@@ -140,27 +170,7 @@ class EjentumAugmentedProvider {
     const augmentedPrompt = formatAugmentedPrompt(prompt, scaffoldResult.scaffold);
 
     // 3. Delegate to Promptfoo's maintained OpenAI provider
-    const {
-      mode: _mode,
-      apiUrl: _apiUrl,
-      ejentumApiKey: _ejentumApiKey,
-      ejentumApiKeyEnvar: _ejentumApiKeyEnvar,
-      model = 'gpt-5.4-mini',
-      ...forwardedConfig
-    } = config;
-
-    let provider = this.underlyingProvider;
-    if (!provider) {
-      const loadApiProvider = await getLoadApiProvider();
-      const providerPath = model.startsWith('openai:') ? model : `openai:chat:${model}`;
-      provider = await loadApiProvider(providerPath, {
-        options: {
-          config: forwardedConfig,
-          env: this.env,
-        },
-      });
-    }
-
+    const provider = await this.getUnderlyingProvider();
     return provider.callApi(augmentedPrompt, context);
   }
 }

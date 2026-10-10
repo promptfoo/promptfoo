@@ -9,12 +9,21 @@ type EjentumProviderConstructor = new (options?: {
   env?: Record<string, string | undefined>;
   underlyingProvider?: {
     callApi: (prompt: string, context?: unknown) => Promise<unknown>;
+    cleanup?: () => Promise<void>;
   };
+  loadApiProvider?: (
+    providerPath: string,
+    options?: unknown,
+  ) => Promise<{
+    callApi: (prompt: string, context?: unknown) => Promise<unknown>;
+    cleanup?: () => Promise<void>;
+  }>;
 }) => {
   callApi(
     prompt: string,
     context?: { prompt?: { config?: Record<string, unknown> } },
   ): Promise<unknown>;
+  cleanup?: () => Promise<void>;
 };
 
 let EjentumAugmentedProvider: EjentumProviderConstructor;
@@ -174,7 +183,9 @@ describe('baseline-vs-ejentum-harness provider', () => {
 
     const mockUnderlying = {
       callApi: vi.fn().mockResolvedValue({ output: 'done' }),
+      cleanup: vi.fn().mockResolvedValue(undefined),
     };
+    const mockLoadApiProvider = vi.fn().mockResolvedValue(mockUnderlying);
 
     const provider = new EjentumAugmentedProvider({
       config: {
@@ -182,13 +193,27 @@ describe('baseline-vs-ejentum-harness provider', () => {
         reasoning_effort: 'none',
         verbosity: 'low',
       },
-      underlyingProvider: mockUnderlying,
+      env: { OPENAI_API_KEY: 'openai-key' },
+      loadApiProvider: mockLoadApiProvider,
     });
 
-    await provider.callApi('test prompt');
+    const result = await provider.callApi('test prompt');
 
+    expect(mockLoadApiProvider).toHaveBeenCalledTimes(1);
+    expect(mockLoadApiProvider).toHaveBeenCalledWith('openai:chat:gpt-6-sol', {
+      options: {
+        config: {
+          reasoning_effort: 'none',
+          verbosity: 'low',
+        },
+        env: { OPENAI_API_KEY: 'openai-key' },
+      },
+    });
     expect(mockUnderlying.callApi).toHaveBeenCalledTimes(1);
-    // Verified that underlying provider call is executed with augmented prompt and unmodified context
+    expect(result).toEqual({ output: 'done' });
+
+    await provider.cleanup?.();
+    expect(mockUnderlying.cleanup).toHaveBeenCalledTimes(1);
   });
 
   it('honors custom Ejentum API URL from config and environment variable', async () => {
@@ -253,6 +278,28 @@ describe('baseline-vs-ejentum-harness provider', () => {
 
     await provider.callApi('query');
     expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe('Bearer custom-secret-key');
+  });
+
+  it('prefers options.env over process.env for custom ejentumApiKeyEnvar', async () => {
+    restoreEnv?.();
+    restoreEnv = mockProcessEnv(
+      {
+        CUSTOM_EJENTUM_SECRET: 'ambient-secret-key',
+      },
+      { clear: true },
+    );
+
+    fetchMock.mockResolvedValueOnce(mockResponse([{ reasoning: 'check assumptions' }]));
+
+    const mockUnderlying = { callApi: vi.fn().mockResolvedValue({ output: 'ok' }) };
+    const provider = new EjentumAugmentedProvider({
+      config: { ejentumApiKeyEnvar: 'CUSTOM_EJENTUM_SECRET' },
+      env: { CUSTOM_EJENTUM_SECRET: 'override-secret-key' },
+      underlyingProvider: mockUnderlying,
+    });
+
+    await provider.callApi('query');
+    expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe('Bearer override-secret-key');
   });
 
   it('handles JSON chat prompt by prepending scaffold system message', async () => {
