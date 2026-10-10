@@ -308,9 +308,10 @@ describe('OpenAI Provider', () => {
     });
 
     it.each([
-      { reported: 'ultrafast', cost: undefined },
-      { reported: undefined, cost: undefined },
+      { reported: 'ultrafast', cost: 0.018 },
+      { reported: undefined, cost: 0.018 },
       { reported: 'default', cost: 0.003 },
+      { reported: 'fast', cost: 0.006 },
     ])(
       'forwards Ultrafast and bills the actual tier $reported for GPT-6.1 Sol',
       async ({ reported, cost }) => {
@@ -342,11 +343,7 @@ describe('OpenAI Provider', () => {
         });
         expect(result.error).toBeUndefined();
         expect(result.output).toBe('Ready.');
-        if (cost === undefined) {
-          expect(result.cost).toBeUndefined();
-        } else {
-          expect(result.cost).toBeCloseTo(cost, 10);
-        }
+        expect(result.cost).toBeCloseTo(cost, 10);
       },
     );
 
