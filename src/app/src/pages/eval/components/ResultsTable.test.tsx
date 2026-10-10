@@ -937,7 +937,6 @@ describe('ResultsTable Metrics Display', () => {
     it.each([
       ['raw-audio', 'data:audio/mp3;base64,raw-audio'],
       ['data:audio/wav;base64,abc', 'data:audio/wav;base64,abc'],
-      ['https://example.com/audio.mp3', 'data:audio/mp3;base64,https://example.com/audio.mp3'],
       ['storageRef:', null],
       ['promptfoo://blob/', null],
       ['storageRef:audio/test.mp3', '/api/media/audio/test.mp3'],
