@@ -49,7 +49,6 @@ export function registerValidatePromptfooConfigTool(server: McpServer) {
             false,
             {
               originalError: error instanceof Error ? error.message : 'Unknown error',
-              suggestion: 'Run "npm install -g promptfoo" or check your installation',
             },
             'Failed to load default configuration. Ensure promptfoo is properly installed.',
           );
@@ -124,10 +123,7 @@ export function registerValidatePromptfooConfigTool(server: McpServer) {
           return createToolResponse(
             'validate_promptfoo_config',
             false,
-            {
-              providedPaths: configPaths,
-              suggestion: 'Run "promptfoo init" to create a new configuration file',
-            },
+            undefined,
             'Configuration file not found. Check the file path or create a new config.',
           );
         }

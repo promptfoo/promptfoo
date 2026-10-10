@@ -1,5 +1,5 @@
 import invariant from '../util/invariant';
-import { parseCommaSeparatedValues as parseValues } from '../util/parseCommaSeparatedValues';
+import { parseCommaSeparatedValues as parseValues } from '../validation/parseCommaSeparatedValues';
 import { normalizeForComparison } from './normalize';
 
 import type { AssertionParams, GradingResult } from '../types/index';
