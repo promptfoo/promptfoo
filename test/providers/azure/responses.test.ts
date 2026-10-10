@@ -167,7 +167,7 @@ describe('AzureResponsesProvider', () => {
 
       const provider = new AzureResponsesProvider('gpt-4.1-test', {
         config: {
-          response_format: 'file://test-schema.json' as any,
+          response_format: 'file://test-schema.json',
         },
       });
 
@@ -835,7 +835,7 @@ describe('AzureResponsesProvider', () => {
 
     it('should validate external response_format files', async () => {
       const provider = new AzureResponsesProvider('gpt-4.1-test', {
-        config: { response_format: 'file://missing.json' as any },
+        config: { response_format: 'file://missing.json' },
       });
 
       mockMaybeLoadResponseFormatFromExternalFile.mockImplementation(function () {

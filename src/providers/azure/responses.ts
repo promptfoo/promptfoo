@@ -181,10 +181,21 @@ export class AzureResponsesProvider extends AzureGenericProvider {
     const instructions = config.instructions;
 
     // Load response_format from external file if needed (handles nested schema loading)
-    const responseFormat = maybeLoadResponseFormatFromExternalFile(
-      config.response_format,
-      context?.vars,
-    );
+    let responseFormat;
+    try {
+      responseFormat = maybeLoadResponseFormatFromExternalFile(
+        config.response_format,
+        context?.vars,
+      );
+    } catch (error) {
+      const file =
+        typeof config.response_format === 'string' ? ` file: ${config.response_format}` : '';
+      throw new Error(
+        `Failed to load response_format${file}\n` +
+          `Error: ${error instanceof Error ? error.message : String(error)}\n` +
+          'Make sure the file exists and contains valid JSON schema format.',
+      );
+    }
 
     let textFormat;
     if (responseFormat) {
@@ -304,24 +315,6 @@ export class AzureResponsesProvider extends AzureGenericProvider {
         'Azure API authentication failed. Set AZURE_API_KEY environment variable or configure apiKey in provider config.\n' +
           'You can also use Microsoft Entra ID authentication.',
       );
-    }
-
-    // Validate response_format for better UX
-    if (
-      this.config.response_format &&
-      typeof this.config.response_format === 'string' &&
-      (this.config.response_format as string).startsWith('file://')
-    ) {
-      try {
-        // Validate that the file can be loaded (will throw if file doesn't exist)
-        maybeLoadResponseFormatFromExternalFile(this.config.response_format, {});
-      } catch (error) {
-        throw new Error(
-          `Failed to load response_format file: ${this.config.response_format}\n` +
-            `Error: ${error instanceof Error ? error.message : String(error)}\n` +
-            `Make sure the file exists and contains valid JSON schema format.`,
-        );
-      }
     }
 
     const body = await this.getAzureResponsesBody(prompt, context, callApiOptions);

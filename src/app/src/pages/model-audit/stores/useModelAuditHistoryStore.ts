@@ -34,6 +34,7 @@ interface ModelAuditHistoryState {
 }
 
 const DEFAULT_PAGE_SIZE = 25;
+let historyRequestId = 0;
 
 export const useModelAuditHistoryStore = create<ModelAuditHistoryState>()((set, get) => ({
   // Initial state
@@ -46,6 +47,7 @@ export const useModelAuditHistoryStore = create<ModelAuditHistoryState>()((set, 
 
   // Actions
   fetchHistoricalScans: async (signal?: AbortSignal) => {
+    const requestId = ++historyRequestId;
     set({ isLoadingHistory: true, historyError: null });
 
     try {
@@ -66,21 +68,29 @@ export const useModelAuditHistoryStore = create<ModelAuditHistoryState>()((set, 
       }
 
       const data = await response.json();
+      if (requestId !== historyRequestId) {
+        return;
+      }
       set({
         historicalScans: data.scans || [],
         totalCount: data.total || data.scans?.length || 0,
-        isLoadingHistory: false,
       });
     } catch (error) {
       // Don't set error state if request was aborted
-      if (error instanceof Error && error.name === 'AbortError') {
+      if (
+        requestId !== historyRequestId ||
+        (error instanceof Error && error.name === 'AbortError')
+      ) {
         return;
       }
       const errorMessage = error instanceof Error ? error.message : 'Failed to fetch history';
       set({
-        isLoadingHistory: false,
         historyError: errorMessage,
       });
+    } finally {
+      if (requestId === historyRequestId) {
+        set({ isLoadingHistory: false });
+      }
     }
   },
 
@@ -145,7 +155,9 @@ export const useModelAuditHistoryStore = create<ModelAuditHistoryState>()((set, 
   deleteHistoricalScan: async (id: string) => {
     // Optimistic delete: remove from UI immediately
     const previousScans = get().historicalScans;
-    const previousCount = get().totalCount;
+    const deletedIndex = previousScans.findIndex((scan) => scan.id === id);
+    const deletedScan = previousScans[deletedIndex];
+    const countAdjustment = get().totalCount > 0 ? 1 : 0;
 
     // Optimistically update UI
     set((state) => ({
@@ -163,13 +175,25 @@ export const useModelAuditHistoryStore = create<ModelAuditHistoryState>()((set, 
         throw new Error('Failed to delete scan');
       }
     } catch (error) {
-      // Revert optimistic update on failure
-      set({
-        historicalScans: previousScans,
-        totalCount: previousCount,
-      });
       const errorMessage = error instanceof Error ? error.message : 'Failed to delete scan';
-      set({ historyError: errorMessage });
+      // Roll back only this deletion, preserving other in-flight deletions and updates.
+      set((state) => {
+        const historicalScans = [...state.historicalScans];
+        if (deletedScan && !historicalScans.some((scan) => scan.id === id)) {
+          const nextScan = previousScans
+            .slice(deletedIndex + 1)
+            .find((scan) => historicalScans.some((current) => current.id === scan.id));
+          const insertIndex = nextScan
+            ? historicalScans.findIndex((scan) => scan.id === nextScan.id)
+            : historicalScans.length;
+          historicalScans.splice(insertIndex, 0, deletedScan);
+        }
+        return {
+          historicalScans,
+          totalCount: state.totalCount + countAdjustment,
+          historyError: errorMessage,
+        };
+      });
       throw error;
     }
   },

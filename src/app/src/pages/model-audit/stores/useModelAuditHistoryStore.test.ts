@@ -3,6 +3,16 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useModelAuditHistoryStore } from './useModelAuditHistoryStore';
 
+function createDeferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve;
+    reject = promiseReject;
+  });
+  return { promise, resolve, reject };
+}
+
 const createFailedResponseFixture = () => ({
   ok: false,
 });
@@ -100,7 +110,57 @@ describe('useModelAuditHistoryStore', () => {
 
       // Should not set error for abort
       expect(result.current.historyError).toBeNull();
+      expect(result.current.isLoadingHistory).toBe(false);
     });
+
+    it('keeps a newer history request loading when an older request is aborted', async () => {
+      const older = createDeferred<Response>();
+      const newer = createDeferred<Response>();
+      mockCallApi.mockReturnValueOnce(older.promise).mockReturnValueOnce(newer.promise);
+      const store = useModelAuditHistoryStore.getState();
+      const olderFetch = store.fetchHistoricalScans();
+      const newerFetch = store.fetchHistoricalScans();
+
+      older.reject(Object.assign(new Error('Aborted'), { name: 'AbortError' }));
+      await olderFetch;
+      expect(useModelAuditHistoryStore.getState().isLoadingHistory).toBe(true);
+      const scans = [createMockScan('new', 'New scan')];
+      newer.resolve({ ok: true, json: async () => ({ scans, total: 1 }) } as Response);
+      await newerFetch;
+      expect(useModelAuditHistoryStore.getState()).toMatchObject({
+        historicalScans: scans,
+        totalCount: 1,
+        isLoadingHistory: false,
+        historyError: null,
+      });
+    });
+
+    it.each(['success', 'error'])(
+      'ignores an older %s after a newer history request completes',
+      async (outcome) => {
+        const older = createDeferred<Response>();
+        const scans = [createMockScan('new', 'New scan')];
+        mockCallApi.mockReturnValueOnce(older.promise).mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ scans, total: 1 }),
+        } as Response);
+        const store = useModelAuditHistoryStore.getState();
+        const olderFetch = store.fetchHistoricalScans();
+        await store.fetchHistoricalScans();
+        if (outcome === 'success') {
+          older.resolve({ ok: true, json: async () => ({ scans: [], total: 0 }) } as Response);
+        } else {
+          older.reject(new Error('Stale failure'));
+        }
+        await olderFetch;
+        expect(useModelAuditHistoryStore.getState()).toMatchObject({
+          historicalScans: scans,
+          totalCount: 1,
+          isLoadingHistory: false,
+          historyError: null,
+        });
+      },
+    );
   });
 
   describe('fetchHistoricalScanRange', () => {
@@ -263,6 +323,83 @@ describe('useModelAuditHistoryStore', () => {
   });
 
   describe('deleteHistoricalScan', () => {
+    it.each(
+      ['failed-first', 'successful-first'].flatMap((completionOrder) =>
+        ['1', '2'].map((failedId) => ({ completionOrder, failedId })),
+      ),
+    )(
+      'only restores failed scan $failedId when deletion completes $completionOrder',
+      async ({ completionOrder, failedId }) => {
+        const scans = [
+          createMockScan('1', 'Scan 1'),
+          createMockScan('2', 'Scan 2'),
+          createMockScan('3', 'Scan 3'),
+        ];
+        useModelAuditHistoryStore.setState({ historicalScans: scans, totalCount: 3 });
+        const failing = createDeferred<Response>();
+        const successful = createDeferred<Response>();
+        mockCallApi.mockReturnValueOnce(failing.promise).mockReturnValueOnce(successful.promise);
+        const store = useModelAuditHistoryStore.getState();
+        const firstDeletion = store.deleteHistoricalScan(failedId);
+        const firstResult = expect(firstDeletion).rejects.toThrow('Failed to delete scan');
+        const secondDeletion = store.deleteHistoricalScan(failedId === '1' ? '2' : '1');
+        expect(useModelAuditHistoryStore.getState()).toMatchObject({
+          historicalScans: [scans[2]],
+          totalCount: 1,
+        });
+
+        if (completionOrder === 'successful-first') {
+          successful.resolve({ ok: true } as Response);
+          await secondDeletion;
+        }
+        failing.resolve({ ok: false } as Response);
+        await firstResult;
+        if (completionOrder === 'failed-first') {
+          successful.resolve({ ok: true } as Response);
+          await secondDeletion;
+        }
+        expect(useModelAuditHistoryStore.getState()).toMatchObject({
+          historicalScans: [scans.find((scan) => scan.id === failedId), scans[2]],
+          totalCount: 2,
+          historyError: 'Failed to delete scan',
+        });
+      },
+    );
+
+    it.each([true, false])(
+      'restores both failed deletions in order (first settles: %s)',
+      async (firstSettles) => {
+        const scans = [
+          createMockScan('1', 'Scan 1'),
+          createMockScan('2', 'Scan 2'),
+          createMockScan('3', 'Scan 3'),
+        ];
+        useModelAuditHistoryStore.setState({ historicalScans: scans, totalCount: 3 });
+        const first = createDeferred<Response>();
+        const second = createDeferred<Response>();
+        mockCallApi.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+        const store = useModelAuditHistoryStore.getState();
+        const firstResult = expect(store.deleteHistoricalScan('1')).rejects.toThrow(
+          'Failed to delete scan',
+        );
+        const secondResult = expect(store.deleteHistoricalScan('2')).rejects.toThrow(
+          'Failed to delete scan',
+        );
+        const [early, late] = firstSettles ? [first, second] : [second, first];
+        const [earlyResult, lateResult] = firstSettles
+          ? [firstResult, secondResult]
+          : [secondResult, firstResult];
+        early.resolve({ ok: false } as Response);
+        await earlyResult;
+        late.resolve({ ok: false } as Response);
+        await lateResult;
+        expect(useModelAuditHistoryStore.getState()).toMatchObject({
+          historicalScans: scans,
+          totalCount: 3,
+        });
+      },
+    );
+
     it('should delete a scan and update local state', async () => {
       const mockScans = [createMockScan('1', 'Scan 1'), createMockScan('2', 'Scan 2')];
 

@@ -1,6 +1,7 @@
 import { createDefaultProvider } from '@app/pages/redteam/setup/components/Targets/providerCatalog';
 import { useStore } from '@app/stores/evalConfig';
 import {
+  createMockResponse,
   getCallApiMock,
   mockCallApiRoutes,
   rejectCallApi,
@@ -12,15 +13,26 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import RunTestSuiteButton from './RunTestSuiteButton';
 
+function createDeferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve;
+    reject = promiseReject;
+  });
+  return { promise, resolve, reject };
+}
+
 const renderWithProvider = (ui: React.ReactElement) => {
   return render(ui);
 };
 
 const mockShowToast = vi.fn();
+const mockNavigate = vi.fn();
 let sourceEvalId: string | undefined;
 
 vi.mock('react-router', () => ({
-  useNavigate: () => vi.fn(),
+  useNavigate: () => mockNavigate,
   useLocation: () => ({ state: sourceEvalId ? { sourceEvalId } : null }),
 }));
 
@@ -41,6 +53,7 @@ describe('RunTestSuiteButton', () => {
     useStore.getState().reset();
     resetCallApiMock();
     mockShowToast.mockReset();
+    mockNavigate.mockReset();
     sourceEvalId = undefined;
     timers = useTestTimers();
   });
@@ -267,6 +280,52 @@ describe('RunTestSuiteButton', () => {
 
     expect(screen.getByRole('button', { name: 'Run Eval' })).toBeDisabled();
   });
+
+  it.each(['request', 'body'] as const)(
+    'waits for the poll %s to settle before requesting progress again',
+    async (phase) => {
+      const pendingResponse = createDeferred<Response>();
+      const pendingBody = createDeferred<unknown>();
+      const runningProgress = { status: 'in-progress', progress: 1, total: 2 };
+      getCallApiMock()
+        .mockResolvedValueOnce(createMockResponse({ id: 'slow-job' }))
+        .mockImplementationOnce(() =>
+          phase === 'request'
+            ? pendingResponse.promise
+            : Promise.resolve({ ok: true, json: () => pendingBody.promise } as Response),
+        )
+        .mockResolvedValueOnce(createMockResponse({ status: 'complete', evalId: 'finished-eval' }));
+      useStore.getState().updateConfig({
+        prompts: ['hello'],
+        providers: ['echo'],
+        tests: [{}],
+      });
+      renderWithProvider(<RunTestSuiteButton />);
+      await act(async () => {
+        screen.getByRole('button', { name: 'Run Eval' }).click();
+      });
+      await act(async () => {
+        await timers.advanceByAsync(4000);
+      });
+
+      expect(getCallApiMock()).toHaveBeenCalledTimes(2);
+      expect(mockNavigate).not.toHaveBeenCalled();
+      await act(async () => {
+        pendingResponse.resolve(createMockResponse(runningProgress));
+        pendingBody.resolve(runningProgress);
+      });
+      expect(screen.getByRole('status')).toHaveTextContent('50% complete');
+      await act(async () => {
+        await timers.advanceByAsync(1000);
+      });
+      expect(mockNavigate).toHaveBeenCalledExactlyOnceWith('/eval/finished-eval');
+      await act(async () => {
+        await timers.advanceByAsync(3000);
+      });
+      expect(getCallApiMock()).toHaveBeenCalledTimes(3);
+      expect(mockShowToast).not.toHaveBeenCalled();
+    },
+  );
 
   it('should handle progress API failure after job creation', async () => {
     const mockJobId = '123';

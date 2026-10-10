@@ -125,7 +125,12 @@ const RunTestSuiteButton = () => {
       }
 
       clearPollInterval();
+      let isPolling = false;
       const intervalId = setInterval(async () => {
+        if (isPolling) {
+          return;
+        }
+        isPolling = true;
         try {
           const progressResponse = await callApi(`/eval/job/${job.id}/`);
           if (!isMountedRef.current) {
@@ -164,6 +169,8 @@ const RunTestSuiteButton = () => {
         } catch (error) {
           clearPollInterval();
           handleRunError(error);
+        } finally {
+          isPolling = false;
         }
       }, 1000);
       pollIntervalRef.current = intervalId;
