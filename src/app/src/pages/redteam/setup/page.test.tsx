@@ -57,8 +57,10 @@ const reviewRunGates = vi.hoisted(() => ({
 vi.mock('@app/hooks/useApiHealth', () => ({
   useApiHealth: () => ({ data: { status: 'connected' }, isLoading: false }),
 }));
-vi.mock('@app/hooks/useEmailVerification', () => ({
-  useEmailVerification: () => ({ checkEmailStatus: reviewRunGates.checkEmailStatus }),
+vi.mock('@app/utils/emailVerification', () => ({
+  checkEmailStatus: reviewRunGates.checkEmailStatus,
+  saveEmail: vi.fn(),
+  clearEmail: vi.fn(),
 }));
 vi.mock('@app/hooks/useEvalHistoryRefresh', () => ({
   useEvalHistoryRefresh: () => ({ signalEvalCompleted: reviewRunGates.signalEvalCompleted }),
