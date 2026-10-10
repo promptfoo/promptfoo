@@ -63,6 +63,7 @@ interface SessionOptions {
   input: LiveInputMessage[];
   audio: Buffer;
   responseWindowMs: number;
+  captureDurationMs: number;
   maxAudioBytes: number;
   websocketTimeout: number;
   closeTimeoutMs: number;
@@ -173,6 +174,7 @@ export class LiveSession {
   private reason?: string;
   private voiceSeconds?: number;
   private audioChunks: Buffer[] = [];
+  private audioChunkCount = 0;
   private audioBytes = 0;
   private inputBytesSent = 0;
   private streamStartedAt = 0;
@@ -209,6 +211,21 @@ export class LiveSession {
       (total, message) => total + Buffer.byteLength(message.content[0].text),
       0,
     );
+  }
+
+  /** Check coordinated sessions against the slowest peer startup before opening any sockets. */
+  static validateSharedStartupBudget(sessions: readonly LiveSession[]): void {
+    const startupTimeoutMs = Math.max(
+      ...sessions.map((session) => session.options.websocketTimeout),
+    );
+    for (const session of sessions) {
+      const { captureDurationMs, closeTimeoutMs, requestTimeoutMs } = session.options;
+      if (startupTimeoutMs + captureDurationMs + closeTimeoutMs >= requestTimeoutMs) {
+        throw new Error(
+          'GPT-Live shared startup, audio capture, and close timeouts must be less than REQUEST_TIMEOUT_MS. Increase REQUEST_TIMEOUT_MS or shorten the capture window or participant timeouts.',
+        );
+      }
+    }
   }
 
   run(): Promise<ProviderResponse> {
@@ -704,7 +721,7 @@ export class LiveSession {
     if (
       (typeof delta === 'string' &&
         this.audioBytes + Buffer.byteLength(delta, 'base64') > this.options.maxAudioBytes) ||
-      this.audioChunks.length >= MAX_AUDIO_CHUNKS
+      this.audioChunkCount >= MAX_AUDIO_CHUNKS
     ) {
       this.fail('GPT-Live audio exceeded the capture limit.');
       return;
@@ -715,6 +732,7 @@ export class LiveSession {
       return;
     }
     this.audioBytes += bytes.length;
+    this.audioChunkCount++;
     if (this.options.stream) {
       if (this.options.format.type === 'audio/pcm' && bytes.length % 2 !== 0) {
         this.fail('GPT-Live returned incomplete PCM16 samples.');

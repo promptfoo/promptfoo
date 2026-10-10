@@ -225,6 +225,7 @@ export class OpenAiLiveProvider extends OpenAiGenericProvider {
       format,
       ...input,
       responseWindowMs,
+      captureDurationMs,
       maxAudioBytes: (bytesPerSecond * captureDurationMs) / 1000,
       websocketTimeout,
       closeTimeoutMs,

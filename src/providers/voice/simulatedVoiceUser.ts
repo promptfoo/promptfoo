@@ -1,6 +1,6 @@
 import { getNunjucksEngine } from '../../util/templates';
 import { OpenAiLiveProvider } from '../openai/live';
-import { LIVE_FRAME_MS } from '../openai/liveSession';
+import { LIVE_FRAME_MS, LiveSession } from '../openai/liveSession';
 import { providerRegistry } from '../providerRegistry';
 import { PcmAudioQueue } from './audioQueue';
 import { formatVoiceResult } from './result';
@@ -13,7 +13,6 @@ import type {
   CallApiOptionsParams,
   ProviderOptions,
 } from '../../types/providers';
-import type { LiveSession } from '../openai/liveSession';
 import type {
   SimulatedVoiceUserConfig,
   VoiceIntervention,
@@ -91,6 +90,15 @@ export class SimulatedVoiceUser implements ApiProvider {
   }
 
   private validateConfiguration() {
+    for (const side of SPEAKERS) {
+      const participant = this.config[side];
+      if (
+        participant !== undefined &&
+        (participant === null || typeof participant !== 'object' || Array.isArray(participant))
+      ) {
+        throw new Error(`${side} must be a non-array object when provided.`);
+      }
+    }
     const durationMs = positiveInteger(this.config.durationMs ?? 60000, 'durationMs', 300000, 1000);
     const timeoutMs = positiveInteger(this.config.timeoutMs ?? 120000, 'timeoutMs', 600000);
     if (timeoutMs <= durationMs) {
@@ -312,6 +320,7 @@ export class SimulatedVoiceUser implements ApiProvider {
       }
       controller.signal.removeEventListener('abort', onInterrupted);
       controller.signal.throwIfAborted();
+      LiveSession.validateSharedStartupBudget(sessions);
       for (const [index, session] of sessions.entries()) {
         runs.push(
           session

@@ -1946,6 +1946,30 @@ describe('OpenAiLiveProvider', () => {
     expect(Buffer.from(response.audio!.data!, 'base64').length).toBe(100_044);
   });
 
+  it('bounds streamed audio chunks even when the session does not retain their buffers', async () => {
+    const onAudio = vi.fn();
+    const session = await provider({ responseWindowMs: 100_000 }).createSession(
+      'Hi',
+      undefined,
+      new AbortController().signal,
+      { onReady: vi.fn(), onAudio, onTranscript: vi.fn() },
+    );
+    const result = session.run();
+    const socket = await connect();
+    start(socket, { ack: false });
+    for (let index = 0; index <= 50_000; index++) {
+      // Two-byte PCM chunks stay below the capture-byte budget throughout this test.
+      emit(socket, { type: 'session.output_audio.delta', delta: 'AAA=' });
+    }
+    closed(socket);
+    const response = await result;
+    expect(response.error).toBe('GPT-Live audio exceeded the capture limit.');
+    expect(onAudio).toHaveBeenCalledTimes(50_000);
+    expect(response.audio).toBeUndefined();
+    expect(socket.terminate).toHaveBeenCalledOnce();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it('includes replayed input duration in the output audio budget', async () => {
     const result = provider().callApi(audioPrompt(Buffer.alloc(9600)));
     const socket = await connect();

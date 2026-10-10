@@ -871,6 +871,104 @@ describe('SimulatedVoiceUser', () => {
     providerRegistry.unregister(p);
   });
 
+  it.each(
+    ['target', 'caller'].flatMap((side) =>
+      ['openai:live:gpt-live-1', [], null, true, 42].map((value) => ({ side, value })),
+    ),
+  )(
+    'rejects a non-object $side before using ambient credentials: $value',
+    async ({ side, value }) => {
+      const restoreAmbient = mockProcessEnv({ OPENAI_API_KEY: 'ambient-fixture-key' });
+      try {
+        const result = provider({ [side]: value } as SimulatedVoiceUserConfig).callApi('Cafe');
+        await vi.runAllTimersAsync();
+        const response = await result;
+        expect(response.error).toBe(`${side} must be a non-array object when provided.`);
+        expect(sockets).toHaveLength(0);
+        expect(vi.getTimerCount()).toBe(0);
+      } finally {
+        restoreAmbient();
+      }
+    },
+  );
+
+  it.each([undefined, {}])('accepts omitted or empty participant options: %j', async (options) => {
+    const restoreAmbient = mockProcessEnv({ OPENAI_API_KEY: 'ambient-fixture-key' });
+    try {
+      const result = provider({ target: options, caller: options }).callApi('Cafe');
+      const [target, caller] = await connect();
+      acknowledgeOpening();
+      audio(target, 100);
+      audio(caller, 200);
+      transcript(target, 'Question', 0, 'input');
+      transcript(caller, 'Answer', 20, 'input');
+      await vi.advanceTimersByTimeAsync(1000);
+      finalize();
+      expect((await result).error).toBeUndefined();
+      expect(
+        sockets.every(
+          (socket) => socket.options.headers.Authorization === 'Bearer ambient-fixture-key',
+        ),
+      ).toBe(true);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      restoreAmbient();
+    }
+  });
+
+  it.each([false, true])(
+    'rejects shared startup budgets that exceed either session deadline (swapped: %s)',
+    async (swapped) => {
+      const early = { ...participant('early-key'), websocketTimeout: 1000, closeTimeoutMs: 200000 };
+      const slow = { ...participant('slow-key'), websocketTimeout: 100000, closeTimeoutMs: 15000 };
+      const result = provider({
+        durationMs: 60000,
+        timeoutMs: 400000,
+        target: swapped ? slow : early,
+        caller: swapped ? early : slow,
+      }).callApi('Cafe');
+      await vi.runAllTimersAsync();
+      const response = await result;
+      expect(response.error).toContain('shared startup');
+      expect(response.error).toContain('REQUEST_TIMEOUT_MS');
+      expect(sockets).toHaveLength(0);
+      expect(vi.getTimerCount()).toBe(0);
+    },
+  );
+
+  it('uses frame-rounded capture duration in the shared startup budget', async () => {
+    const result = provider({
+      durationMs: 1001,
+      timeoutMs: 400000,
+      target: { ...participant('target-key'), websocketTimeout: 1000, closeTimeoutMs: 198990 },
+      caller: { ...participant('caller-key'), websocketTimeout: 100000 },
+    }).callApi('Cafe');
+    await vi.runAllTimersAsync();
+    const response = await result;
+    // Raw duration would fit at 299991ms, but 1020ms of PCM requires 300010ms.
+    expect(response.error).toContain('shared startup');
+    expect(sockets).toHaveLength(0);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('accepts asymmetric participant timeouts that fit the shared startup budget', async () => {
+    const result = provider({
+      timeoutMs: 400000,
+      target: { ...participant('target-key'), websocketTimeout: 1000, closeTimeoutMs: 200000 },
+      caller: { ...participant('caller-key'), websocketTimeout: 90000, closeTimeoutMs: 15000 },
+    }).callApi('Cafe');
+    const [target, caller] = await connect();
+    acknowledgeOpening();
+    audio(target, 100);
+    audio(caller, 200);
+    transcript(target, 'Question', 0, 'input');
+    transcript(caller, 'Answer', 20, 'input');
+    await vi.advanceTimersByTimeAsync(1000);
+    finalize();
+    expect((await result).error).toBeUndefined();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it.each([
     {
       callerInterventions: Array.from({ length: 11 }, (_, atMs) => ({ atMs, instructions: 'Hi' })),
