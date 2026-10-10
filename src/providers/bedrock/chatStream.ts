@@ -45,7 +45,8 @@ export function collectBedrockChatStream(body: string): Record<string, any> {
         choice.logprobs ??= {};
         for (const key of ['content', 'refusal']) {
           if (Array.isArray(part.logprobs[key])) {
-            choice.logprobs[key] = [...(choice.logprobs[key] ?? []), ...part.logprobs[key]];
+            choice.logprobs[key] ??= [];
+            choice.logprobs[key].push(...part.logprobs[key]);
           }
         }
       }
