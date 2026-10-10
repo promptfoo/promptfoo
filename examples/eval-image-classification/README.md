@@ -7,7 +7,7 @@ npx promptfoo@latest init --example eval-image-classification
 cd eval-image-classification
 ```
 
-This example demonstrates how to use Promptfoo for image classification tasks using the Fashion MNIST dataset. The example uses GPT-4o and GPT-4o-mini with a structured json schema to analyze images, including classification, color analysis, and additional attributes.
+Classify Fashion MNIST images with two OpenAI vision models and a JSON response schema. The evaluation checks the response format and compares each predicted class with its dataset label.
 
 ## Getting Started
 
@@ -20,7 +20,7 @@ This example demonstrates how to use Promptfoo for image classification tasks us
 2. Run the evaluation:
 
    ```sh
-   npx promptfoo@latest eval
+   npx promptfoo@latest eval --no-cache
    ```
 
 3. View the results:
@@ -29,19 +29,20 @@ This example demonstrates how to use Promptfoo for image classification tasks us
    npx promptfoo@latest view
    ```
 
-4. Optionally, re-generate or update the dataset:
+4. Optionally, regenerate the dataset using Python 3.10 or newer. The included CSV is ready to evaluate without Python.
 
    ```sh
+   python3 -m venv venv
+   source venv/bin/activate
+   python -m pip install -r requirements.txt
    python dataset_gen.py
    ```
 
-   Note: You may need to install dependencies with:
+   The generator downloads the official Fashion MNIST training data and writes 100 grayscale JPEGs with their class labels. It samples without replacement using a fixed seed, then sorts by label and original index. Regenerated rows differ from the older NumPy-based sampler.
 
-   ```sh
-   pip install -r requirements.txt
-   ```
+   Use `--num_samples 10 --filename sample.csv` to choose a sample size and output file. To reuse downloaded data offline, pass `--data-dir /path/to/fashion-mnist` containing `train-images-idx3-ubyte.gz` and `train-labels-idx1-ubyte.gz`. The output columns remain `index`, `label`, and `image_base64`.
 
-   This script creates a CSV file with 100 random images from the Fashion MNIST dataset and their labels. A CSV with 10 sample images is included so you can skip this step if preferred.
+   Run the offline generator checks with `python -m unittest discover -p '*_test.py'`.
 
 5. Experiment with the configuration:
    - Modify the JSON schema in `promptfooconfig.yaml` to add or adjust required fields

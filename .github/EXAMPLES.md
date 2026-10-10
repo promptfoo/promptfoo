@@ -185,6 +185,17 @@ isolated environment/cache preparation. It can also be run directly with
 `python examples/eval-rag-full/tests/smoke_cli.py`. These profiles replace the
 standalone RAG workflow without changing its Python runtime split or assertions.
 
+## Image classification
+
+The `image-classification` profile installs Pillow and runs the four offline
+Fashion MNIST generator tests on Python 3.10 and 3.14. It checks CSV/JPEG output,
+sampling, and IDX validation without Node or model credentials:
+
+```bash
+python3.10 .github/scripts/examples.py run image-classification
+python3.14 .github/scripts/examples.py run image-classification
+```
+
 ## E2B
 
 The `e2b` profile runs the offline SDK tests on Python 3.10 and 3.14 with
