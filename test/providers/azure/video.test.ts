@@ -13,6 +13,41 @@ import {
   validateAzureVideoDuration,
 } from '../../../src/providers/azure/video';
 import { generateVideoCacheKey } from '../../../src/providers/video';
+import { createVideoRequest } from '../../factories/literalFixtures';
+
+const { createFsPromiseOverlayFactory, createRequestLoggerFactory } = await vi.hoisted(
+  () => import('../../factories/moduleMocks'),
+);
+
+const createAzureVideoOptions = () => ({
+  config: {
+    apiBaseUrl: 'https://test.azure.com',
+    apiKey: 'test-key',
+  },
+});
+
+const createCognitiveServicesConfig = () => ({
+  apiBaseUrl: 'https://test.cognitiveservices.azure.com',
+  apiKey: 'test-key',
+});
+
+const createSizedVideoJobResult = () => ({
+  id: 'job_123',
+  status: 'succeeded',
+  generations: [{ id: 'gen_456', width: 1920, height: 1080, n_seconds: 10 }],
+});
+
+const createMinimalVideoJobResult = () => ({
+  id: 'job_123',
+  status: 'succeeded',
+  generations: [{ id: 'gen_456' }],
+});
+
+const createEmptyVideoJobResult = () => ({
+  id: 'job_123',
+  status: 'succeeded',
+  generations: [],
+});
 
 // Hoist mock functions so they're available in vi.mock factories
 const {
@@ -36,17 +71,7 @@ const fsPromiseMocks = vi.hoisted(() => ({
 }));
 
 // Mock the dependencies
-vi.mock('fs/promises', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('fs/promises')>();
-  return {
-    ...actual,
-    default: {
-      ...actual,
-      ...fsPromiseMocks,
-    },
-    ...fsPromiseMocks,
-  };
-});
+vi.mock('fs/promises', createFsPromiseOverlayFactory(fsPromiseMocks));
 vi.mock('../../../src/storage', () => ({
   storeMedia: mockStoreMedia,
   mediaExists: mockMediaExists,
@@ -55,15 +80,7 @@ vi.mock('../../../src/storage', () => ({
 vi.mock('../../../src/util/config/manage', () => ({
   getConfigDirectoryPath: mockGetConfigDirectoryPath,
 }));
-vi.mock('../../../src/logger', () => ({
-  default: {
-    debug: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  },
-  logRequestResponse: vi.fn(),
-}));
+vi.mock('../../../src/logger', createRequestLoggerFactory());
 vi.mock('../../../src/util/fetch/index', () => ({
   fetchWithProxy: mockFetchWithProxy,
 }));
@@ -178,10 +195,7 @@ describe('AzureVideoProvider', () => {
   describe('constructor', () => {
     it('should create provider with deployment name', () => {
       const provider = new AzureVideoProvider('sora', {
-        config: {
-          apiBaseUrl: 'https://test.cognitiveservices.azure.com',
-          apiKey: 'test-key',
-        },
+        config: createCognitiveServicesConfig(),
       });
       expect(provider.id()).toBe('azure:video:sora');
     });
@@ -189,10 +203,7 @@ describe('AzureVideoProvider', () => {
     it('should use custom provider ID if specified', () => {
       const provider = new AzureVideoProvider('sora', {
         id: 'my-custom-video-provider',
-        config: {
-          apiBaseUrl: 'https://test.cognitiveservices.azure.com',
-          apiKey: 'test-key',
-        },
+        config: createCognitiveServicesConfig(),
       });
       expect(provider.id()).toBe('my-custom-video-provider');
     });
@@ -212,12 +223,7 @@ describe('AzureVideoProvider', () => {
 
   describe('toString', () => {
     it('should return descriptive string', () => {
-      const provider = new AzureVideoProvider('my-deployment', {
-        config: {
-          apiBaseUrl: 'https://test.azure.com',
-          apiKey: 'test-key',
-        },
-      });
+      const provider = new AzureVideoProvider('my-deployment', createAzureVideoOptions());
       expect(provider.toString()).toBe('[Azure Video Provider my-deployment]');
     });
   });
@@ -267,12 +273,9 @@ describe('AzureVideoProvider', () => {
   });
 
   describe('callApi - successful flow', () => {
-    it('should create and poll video job successfully', async () => {
-      const provider = new AzureVideoProvider('sora', {
-        config: {
-          apiBaseUrl: 'https://test.cognitiveservices.azure.com',
-          apiKey: 'test-key',
-        },
+    it('should create and poll video job using the configured deployment', async () => {
+      const provider = new AzureVideoProvider('my-video-deployment', {
+        config: createCognitiveServicesConfig(),
       });
 
       // Mock job creation
@@ -313,6 +316,9 @@ describe('AzureVideoProvider', () => {
 
       const result = await provider.callApi('A cat playing piano');
 
+      expect(JSON.parse(mockFetchWithProxy.mock.calls[0][1].body).model).toBe(
+        'my-video-deployment',
+      );
       expect(result.error).toBeUndefined();
       expect(result.output).toContain('[Video:');
       expect(result.video).toBeDefined();
@@ -336,21 +342,11 @@ describe('AzureVideoProvider', () => {
       mockFetchWithProxy
         .mockResolvedValueOnce({
           ok: true,
-          json: () =>
-            Promise.resolve({
-              id: 'job_123',
-              status: 'succeeded',
-              generations: [{ id: 'gen_456', width: 1920, height: 1080, n_seconds: 10 }],
-            }),
+          json: () => Promise.resolve(createSizedVideoJobResult()),
         })
         .mockResolvedValueOnce({
           ok: true,
-          json: () =>
-            Promise.resolve({
-              id: 'job_123',
-              status: 'succeeded',
-              generations: [{ id: 'gen_456', width: 1920, height: 1080, n_seconds: 10 }],
-            }),
+          json: () => Promise.resolve(createSizedVideoJobResult()),
         })
         .mockResolvedValueOnce({
           ok: true,
@@ -366,12 +362,7 @@ describe('AzureVideoProvider', () => {
 
   describe('callApi - error handling', () => {
     it('should handle job creation failure', async () => {
-      const provider = new AzureVideoProvider('sora', {
-        config: {
-          apiBaseUrl: 'https://test.azure.com',
-          apiKey: 'test-key',
-        },
-      });
+      const provider = new AzureVideoProvider('sora', createAzureVideoOptions());
 
       mockFetchWithProxy.mockResolvedValueOnce({
         ok: false,
@@ -389,12 +380,7 @@ describe('AzureVideoProvider', () => {
     });
 
     it('should handle polling failure', async () => {
-      const provider = new AzureVideoProvider('sora', {
-        config: {
-          apiBaseUrl: 'https://test.azure.com',
-          apiKey: 'test-key',
-        },
-      });
+      const provider = new AzureVideoProvider('sora', createAzureVideoOptions());
 
       // Job creation succeeds
       mockFetchWithProxy.mockResolvedValueOnce({
@@ -419,31 +405,16 @@ describe('AzureVideoProvider', () => {
     });
 
     it('should handle video download failure', async () => {
-      const provider = new AzureVideoProvider('sora', {
-        config: {
-          apiBaseUrl: 'https://test.azure.com',
-          apiKey: 'test-key',
-        },
-      });
+      const provider = new AzureVideoProvider('sora', createAzureVideoOptions());
 
       mockFetchWithProxy
         .mockResolvedValueOnce({
           ok: true,
-          json: () =>
-            Promise.resolve({
-              id: 'job_123',
-              status: 'succeeded',
-              generations: [{ id: 'gen_456' }],
-            }),
+          json: () => Promise.resolve(createMinimalVideoJobResult()),
         })
         .mockResolvedValueOnce({
           ok: true,
-          json: () =>
-            Promise.resolve({
-              id: 'job_123',
-              status: 'succeeded',
-              generations: [{ id: 'gen_456' }],
-            }),
+          json: () => Promise.resolve(createMinimalVideoJobResult()),
         })
         .mockResolvedValueOnce({
           ok: false,
@@ -457,31 +428,16 @@ describe('AzureVideoProvider', () => {
     });
 
     it('should handle empty generations array', async () => {
-      const provider = new AzureVideoProvider('sora', {
-        config: {
-          apiBaseUrl: 'https://test.azure.com',
-          apiKey: 'test-key',
-        },
-      });
+      const provider = new AzureVideoProvider('sora', createAzureVideoOptions());
 
       mockFetchWithProxy
         .mockResolvedValueOnce({
           ok: true,
-          json: () =>
-            Promise.resolve({
-              id: 'job_123',
-              status: 'succeeded',
-              generations: [],
-            }),
+          json: () => Promise.resolve(createEmptyVideoJobResult()),
         })
         .mockResolvedValueOnce({
           ok: true,
-          json: () =>
-            Promise.resolve({
-              id: 'job_123',
-              status: 'succeeded',
-              generations: [],
-            }),
+          json: () => Promise.resolve(createEmptyVideoJobResult()),
         });
 
       const result = await provider.callApi('Test');
@@ -492,12 +448,7 @@ describe('AzureVideoProvider', () => {
 
   describe('callApi - caching', () => {
     it('should return cached video when available', async () => {
-      const provider = new AzureVideoProvider('sora', {
-        config: {
-          apiBaseUrl: 'https://test.azure.com',
-          apiKey: 'test-key',
-        },
-      });
+      const provider = new AzureVideoProvider('sora', createAzureVideoOptions());
 
       // Set up cache hit
       vi.mocked(fsPromises.readFile).mockResolvedValue(
@@ -524,21 +475,9 @@ describe('AzureVideoProvider', () => {
 
   describe('generateVideoCacheKey for Azure', () => {
     it('should generate deterministic cache keys', () => {
-      const key1 = generateVideoCacheKey({
-        provider: 'azure',
-        prompt: 'A cat playing piano',
-        model: 'sora',
-        size: '1280x720',
-        seconds: 5,
-      });
+      const key1 = generateVideoCacheKey(createVideoRequest());
 
-      const key2 = generateVideoCacheKey({
-        provider: 'azure',
-        prompt: 'A cat playing piano',
-        model: 'sora',
-        size: '1280x720',
-        seconds: 5,
-      });
+      const key2 = generateVideoCacheKey(createVideoRequest());
 
       expect(key1).toBe(key2);
     });

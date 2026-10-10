@@ -1,14 +1,16 @@
 import { type FetchWithCacheResult, fetchWithCache } from '../cache';
-import { getEnvString } from '../envars';
 import logger from '../logger';
 import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
+import { resolveProviderApiKey } from './credentials';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { getRequestTimeoutMs } from './shared';
 
+import type { EnvOverrides } from '../contracts/env';
 import type {
   ApiProvider,
   ApiSimilarityProvider,
   CallApiContextParams,
+  CallApiOptionsParams,
   ProviderClassificationResponse,
   ProviderEmbeddingResponse,
   ProviderOptions,
@@ -18,6 +20,17 @@ import type {
 
 const HF_INFERENCE_API_URL = 'https://router.huggingface.co/hf-inference';
 const HF_CHAT_API_BASE_URL = 'https://router.huggingface.co/v1';
+
+function singleRow(data: unknown): unknown {
+  return Array.isArray(data) && data.length === 1 && Array.isArray(data[0]) ? data[0] : data;
+}
+
+function classificationResponse(ret: ProviderClassificationResponse): ProviderResponse {
+  return {
+    error: ret.error,
+    output: JSON.stringify(ret.classification),
+  };
+}
 
 interface HuggingfaceProviderOptions {
   apiKey?: string;
@@ -113,28 +126,30 @@ export class HuggingfaceChatCompletionProvider extends OpenAiChatCompletionProvi
   }
 
   getApiKey(): string | undefined {
-    return (
-      this.config.apiKey ||
-      this.env?.HF_TOKEN ||
-      this.env?.HF_API_TOKEN ||
-      getEnvString('HF_TOKEN') ||
-      getEnvString('HF_API_TOKEN') ||
-      undefined
-    );
+    return resolveProviderApiKey({ apiKey: this.config.apiKey }, this.env, [
+      'HF_TOKEN',
+      'HF_API_TOKEN',
+    ]);
   }
 }
 
 export class HuggingfaceTextGenerationProvider implements ApiProvider {
   modelName: string;
   config: HuggingfaceTextGenerationOptions;
+  env?: EnvOverrides;
   private chatProvider?: HuggingfaceChatCompletionProvider;
-  private providerOptions: { id?: string; config?: HuggingfaceTextGenerationOptions };
+  private providerOptions: {
+    id?: string;
+    config?: HuggingfaceTextGenerationOptions;
+    env?: EnvOverrides;
+  };
 
   constructor(
     modelName: string,
-    options: { id?: string; config?: HuggingfaceTextGenerationOptions } = {},
+    options: { id?: string; config?: HuggingfaceTextGenerationOptions; env?: EnvOverrides } = {},
   ) {
-    const { id, config } = options;
+    const { id, config, env } = options;
+    this.env = env;
     this.modelName = modelName;
     this.id = id ? () => id : this.id;
     this.config = config || {};
@@ -150,7 +165,10 @@ export class HuggingfaceTextGenerationProvider implements ApiProvider {
   }
 
   getApiKey(): string | undefined {
-    return this.config.apiKey || getEnvString('HF_TOKEN') || getEnvString('HF_API_TOKEN');
+    return resolveProviderApiKey({ apiKey: this.config.apiKey }, this.env, [
+      'HF_TOKEN',
+      'HF_API_TOKEN',
+    ]);
   }
 
   getConfig() {
@@ -202,7 +220,7 @@ export class HuggingfaceTextGenerationProvider implements ApiProvider {
       temperature: this.config.temperature,
       topP: this.config.top_p,
       maxTokens: this.config.max_new_tokens,
-      testIndex: context?.test?.vars?.__testIdx as number | undefined,
+      testIndex: context?.testIdx ?? (context?.test?.vars?.__testIdx as number | undefined),
       promptLabel: context?.prompt?.label,
       // W3C Trace Context for linking to evaluation trace
       traceparent: context?.traceparent,
@@ -281,17 +299,21 @@ export class HuggingfaceTextGenerationProvider implements ApiProvider {
   }
 }
 
-type HuggingfaceTextClassificationOptions = HuggingfaceProviderOptions;
-
 export class HuggingfaceTextClassificationProvider implements ApiProvider {
   modelName: string;
-  config: HuggingfaceTextClassificationOptions;
+  config: HuggingfaceProviderOptions;
+  env?: EnvOverrides;
 
   constructor(
     modelName: string,
-    options: { id?: string; config?: HuggingfaceTextClassificationOptions } = {},
+    options: {
+      id?: string;
+      config?: HuggingfaceProviderOptions;
+      env?: EnvOverrides;
+    } = {},
   ) {
-    const { id, config } = options;
+    const { id, config, env } = options;
+    this.env = env;
     this.modelName = modelName;
     this.id = id ? () => id : this.id;
     this.config = config || {};
@@ -306,7 +328,10 @@ export class HuggingfaceTextClassificationProvider implements ApiProvider {
   }
 
   getApiKey(): string | undefined {
-    return this.config.apiKey || getEnvString('HF_TOKEN') || getEnvString('HF_API_TOKEN');
+    return resolveProviderApiKey({ apiKey: this.config.apiKey }, this.env, [
+      'HF_TOKEN',
+      'HF_API_TOKEN',
+    ]);
   }
 
   async callClassificationApi(prompt: string): Promise<ProviderClassificationResponse> {
@@ -315,17 +340,12 @@ export class HuggingfaceTextClassificationProvider implements ApiProvider {
       parameters: {},
     };
 
-    interface HuggingfaceTextClassificationResponse {
-      error?: string;
-      [0]?: Array<{ label: string; score: number }>;
-    }
-
-    let response: FetchWithCacheResult<HuggingfaceTextClassificationResponse> | undefined;
+    let response: FetchWithCacheResult<unknown> | undefined;
     try {
       const url = this.config.apiEndpoint
         ? this.config.apiEndpoint
         : `${HF_INFERENCE_API_URL}/models/${this.modelName}`;
-      response = await fetchWithCache<HuggingfaceTextClassificationResponse>(
+      response = await fetchWithCache<unknown>(
         url,
         {
           method: 'POST',
@@ -338,19 +358,30 @@ export class HuggingfaceTextClassificationProvider implements ApiProvider {
         getRequestTimeoutMs(),
       );
 
-      if (response.data.error) {
+      if (response.data && typeof response.data === 'object' && 'error' in response.data) {
         return {
           error: `API call error: ${response.data.error}`,
         };
       }
-      if (!response.data[0] || !Array.isArray(response.data[0])) {
+      const items = singleRow(response.data);
+      if (
+        !Array.isArray(items) ||
+        items.length === 0 ||
+        !items.every(
+          (item) =>
+            item &&
+            typeof item.label === 'string' &&
+            typeof item.score === 'number' &&
+            Number.isFinite(item.score),
+        )
+      ) {
         return {
           error: `Malformed response data: ${response.data}`,
         };
       }
 
       const scores: Record<string, number> = {};
-      response.data[0].forEach((item) => {
+      items.forEach((item) => {
         scores[item.label] = item.score;
       });
 
@@ -365,28 +396,28 @@ export class HuggingfaceTextClassificationProvider implements ApiProvider {
   }
 
   async callApi(prompt: string): Promise<ProviderResponse> {
-    const ret = await this.callClassificationApi(prompt);
-    return {
-      error: ret.error,
-      output: JSON.stringify(ret.classification),
-    };
+    return classificationResponse(await this.callClassificationApi(prompt));
   }
 }
 
-type HuggingfaceFeatureExtractionOptions = HuggingfaceProviderOptions & {
+type HuggingfaceInferenceOptions = HuggingfaceProviderOptions & {
   use_cache?: boolean;
   wait_for_model?: boolean;
 };
 
 export class HuggingfaceFeatureExtractionProvider implements ApiProvider {
+  readonly supportsEmbeddingCancellation = true;
+
   modelName: string;
-  config: HuggingfaceFeatureExtractionOptions;
+  config: HuggingfaceInferenceOptions;
+  env?: EnvOverrides;
 
   constructor(
     modelName: string,
-    options: { id?: string; config?: HuggingfaceFeatureExtractionOptions } = {},
+    options: { id?: string; config?: HuggingfaceInferenceOptions; env?: EnvOverrides } = {},
   ) {
-    const { id, config } = options;
+    const { id, config, env } = options;
+    this.env = env;
     this.modelName = modelName;
     this.id = id ? () => id : this.id;
     this.config = config || {};
@@ -401,14 +432,21 @@ export class HuggingfaceFeatureExtractionProvider implements ApiProvider {
   }
 
   getApiKey(): string | undefined {
-    return this.config.apiKey || getEnvString('HF_TOKEN') || getEnvString('HF_API_TOKEN');
+    return resolveProviderApiKey({ apiKey: this.config.apiKey }, this.env, [
+      'HF_TOKEN',
+      'HF_API_TOKEN',
+    ]);
   }
 
   async callApi(): Promise<ProviderResponse> {
     throw new Error('Cannot use a feature extraction provider for text generation');
   }
 
-  async callEmbeddingApi(text: string): Promise<ProviderEmbeddingResponse> {
+  async callEmbeddingApi(
+    text: string,
+    _context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderEmbeddingResponse> {
     // https://huggingface.co/docs/api-inference/detailed_parameters#feature-extraction-task
     const params = {
       inputs: text,
@@ -418,17 +456,13 @@ export class HuggingfaceFeatureExtractionProvider implements ApiProvider {
       },
     };
 
-    interface HuggingfaceFeatureExtractionResponse {
-      error?: string;
-    }
-
-    let response: FetchWithCacheResult<HuggingfaceFeatureExtractionResponse | number[]> | undefined;
+    let response: FetchWithCacheResult<unknown> | undefined;
     try {
       const url = this.config.apiEndpoint
         ? this.config.apiEndpoint
         : `${HF_INFERENCE_API_URL}/models/${this.modelName}`;
       logger.debug('Huggingface API request', { url, params });
-      response = await fetchWithCache<HuggingfaceFeatureExtractionResponse | number[]>(
+      response = await fetchWithCache<unknown>(
         url,
         {
           method: 'POST',
@@ -437,25 +471,32 @@ export class HuggingfaceFeatureExtractionProvider implements ApiProvider {
             ...(this.getApiKey() ? { Authorization: `Bearer ${this.getApiKey()}` } : {}),
           },
           body: JSON.stringify(params),
+          ...(options?.abortSignal && { signal: options.abortSignal }),
         },
         getRequestTimeoutMs(),
       );
 
-      if (typeof response.data === 'object' && 'error' in response.data) {
+      if (response.data && typeof response.data === 'object' && 'error' in response.data) {
         return {
           error: `API call error: ${response.data.error}`,
         };
       }
-      if (!Array.isArray(response.data)) {
+      const embedding = singleRow(response.data);
+      if (
+        !Array.isArray(embedding) ||
+        embedding.length === 0 ||
+        !embedding.every((value) => typeof value === 'number' && Number.isFinite(value))
+      ) {
         return {
           error: `Malformed response data: ${response.data}`,
         };
       }
 
       return {
-        embedding: response.data,
+        embedding,
       };
     } catch (err) {
+      options?.abortSignal?.throwIfAborted();
       return {
         error: `API call error: ${String(err)}. Output:\n${response?.data}`,
       };
@@ -463,20 +504,21 @@ export class HuggingfaceFeatureExtractionProvider implements ApiProvider {
   }
 }
 
-type HuggingfaceSentenceSimilarityOptions = HuggingfaceProviderOptions & {
-  use_cache?: boolean;
-  wait_for_model?: boolean;
-};
-
 export class HuggingfaceSentenceSimilarityProvider implements ApiSimilarityProvider {
   modelName: string;
-  config: HuggingfaceSentenceSimilarityOptions;
+  config: HuggingfaceInferenceOptions;
+  env?: EnvOverrides;
 
   constructor(
     modelName: string,
-    options: { id?: string; config?: HuggingfaceSentenceSimilarityOptions } = {},
+    options: {
+      id?: string;
+      config?: HuggingfaceInferenceOptions;
+      env?: EnvOverrides;
+    } = {},
   ) {
-    const { id, config } = options;
+    const { id, config, env } = options;
+    this.env = env;
     this.modelName = modelName;
     this.id = id ? () => id : this.id;
     this.config = config || {};
@@ -487,7 +529,10 @@ export class HuggingfaceSentenceSimilarityProvider implements ApiSimilarityProvi
   }
 
   getApiKey(): string | undefined {
-    return this.config.apiKey || getEnvString('HF_TOKEN') || getEnvString('HF_API_TOKEN');
+    return resolveProviderApiKey({ apiKey: this.config.apiKey }, this.env, [
+      'HF_TOKEN',
+      'HF_API_TOKEN',
+    ]);
   }
 
   toString(): string {
@@ -567,12 +612,18 @@ type HuggingfaceTokenClassificationOptions = HuggingfaceProviderOptions & {
 export class HuggingfaceTokenExtractionProvider implements ApiProvider {
   modelName: string;
   config: HuggingfaceTokenClassificationOptions;
+  env?: EnvOverrides;
 
   constructor(
     modelName: string,
-    options: { id?: string; config?: HuggingfaceTokenClassificationOptions } = {},
+    options: {
+      id?: string;
+      config?: HuggingfaceTokenClassificationOptions;
+      env?: EnvOverrides;
+    } = {},
   ) {
-    const { id, config } = options;
+    const { id, config, env } = options;
+    this.env = env;
     this.modelName = modelName;
     this.id = id ? () => id : this.id;
     this.config = config || {};
@@ -583,7 +634,10 @@ export class HuggingfaceTokenExtractionProvider implements ApiProvider {
   }
 
   getApiKey(): string | undefined {
-    return this.config.apiKey || getEnvString('HF_TOKEN') || getEnvString('HF_API_TOKEN');
+    return resolveProviderApiKey({ apiKey: this.config.apiKey }, this.env, [
+      'HF_TOKEN',
+      'HF_API_TOKEN',
+    ]);
   }
 
   async callClassificationApi(input: string): Promise<ProviderClassificationResponse> {
@@ -653,10 +707,6 @@ export class HuggingfaceTokenExtractionProvider implements ApiProvider {
   }
 
   async callApi(prompt: string): Promise<ProviderResponse> {
-    const ret = await this.callClassificationApi(prompt);
-    return {
-      error: ret.error,
-      output: JSON.stringify(ret.classification),
-    };
+    return classificationResponse(await this.callClassificationApi(prompt));
   }
 }

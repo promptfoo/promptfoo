@@ -1,6 +1,24 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AZURE_MODELS } from '../../../src/providers/azure/defaults';
 import { calculateAzureCost, throwConfigurationError } from '../../../src/providers/azure/util';
+
+const createModelPricing = (
+  id: string,
+  input: number,
+  cached: number,
+  output: number,
+  longInput: number,
+  longCached: number,
+  longOutput: number,
+) => ({
+  id,
+  input,
+  cached,
+  output,
+  longInput,
+  longCached,
+  longOutput,
+});
 
 describe('throwConfigurationError', () => {
   it('throws error with formatted message and docs link', () => {
@@ -12,6 +30,10 @@ describe('throwConfigurationError', () => {
 });
 
 describe('calculateAzureCost', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it('calculates cost for valid model and tokens', () => {
     const cost = calculateAzureCost(
       'gpt-5.4',
@@ -73,34 +95,34 @@ describe('calculateAzureCost', () => {
     { id: 'gpt-5.6-sol', input: 5, output: 30, longInput: 10, longOutput: 45 },
     { id: 'gpt-5.6-terra', input: 2.5, output: 15, longInput: 5, longOutput: 22.5 },
     { id: 'gpt-5.6-luna', input: 1, output: 6, longInput: 2, longOutput: 9 },
-    { id: 'gpt-5.5-pro', input: 30, output: 180, longInput: 60, longOutput: 270 },
     {
-      id: 'gpt-5.5-pro-2026-04-23',
-      input: 30,
-      output: 180,
-      longInput: 60,
-      longOutput: 270,
+      id: 'gpt-5.5-2026-04-24',
+      input: 5,
+      output: 30,
+      longInput: 10,
+      longOutput: 45,
     },
-  ])('uses the correct standard and long-context pricing for $id', ({
-    id,
-    input,
-    output,
-    longInput,
-    longOutput,
-  }) => {
-    expect(calculateAzureCost(id, {}, 272_000, 1_000)).toBeCloseTo(
-      (272_000 * input + 1_000 * output) / 1e6,
-      12,
-    );
-    expect(calculateAzureCost(id, {}, 272_001, 1_000)).toBeCloseTo(
-      (272_001 * longInput + 1_000 * longOutput) / 1e6,
-      12,
-    );
-  });
+  ])(
+    'uses the correct standard and long-context pricing for $id',
+    ({ id, input, output, longInput, longOutput }) => {
+      expect(calculateAzureCost(id, {}, 272_000, 1_000)).toBeCloseTo(
+        (272_000 * input + 1_000 * output) / 1e6,
+        12,
+      );
+      expect(calculateAzureCost(id, {}, 272_001, 1_000)).toBeCloseTo(
+        (272_001 * longInput + 1_000 * longOutput) / 1e6,
+        12,
+      );
+    },
+  );
 
   it.each([
+    createModelPricing('gpt-5.6', 5, 0.5, 30, 10, 1, 45),
+    createModelPricing('gpt-5.6-sol', 5, 0.5, 30, 10, 1, 45),
+    createModelPricing('gpt-5.6-terra', 2.5, 0.25, 15, 5, 0.5, 22.5),
+    createModelPricing('gpt-5.6-luna', 1, 0.1, 6, 2, 0.2, 9),
     {
-      id: 'gpt-5.6',
+      id: 'gpt-5.5-2026-04-24',
       input: 5,
       cached: 0.5,
       output: 30,
@@ -108,126 +130,39 @@ describe('calculateAzureCost', () => {
       longCached: 1,
       longOutput: 45,
     },
-    {
-      id: 'gpt-5.6-sol',
-      input: 5,
-      cached: 0.5,
-      output: 30,
-      longInput: 10,
-      longCached: 1,
-      longOutput: 45,
+  ])(
+    'uses the correct cached-input rate for $id',
+    ({ id, input, cached, output, longInput, longCached, longOutput }) => {
+      expect(calculateAzureCost(id, {}, 2_000, 1_000, 500)).toBeCloseTo(
+        (1_500 * input + 500 * cached + 1_000 * output) / 1e6,
+        12,
+      );
+      expect(calculateAzureCost(id, {}, 272_001, 1_000, 1_000)).toBeCloseTo(
+        (271_001 * longInput + 1_000 * longCached + 1_000 * longOutput) / 1e6,
+        12,
+      );
     },
-    {
-      id: 'gpt-5.6-terra',
-      input: 2.5,
-      cached: 0.25,
-      output: 15,
-      longInput: 5,
-      longCached: 0.5,
-      longOutput: 22.5,
-    },
-    {
-      id: 'gpt-5.6-luna',
-      input: 1,
-      cached: 0.1,
-      output: 6,
-      longInput: 2,
-      longCached: 0.2,
-      longOutput: 9,
-    },
-    {
-      id: 'gpt-5.5-pro',
-      input: 30,
-      cached: 3,
-      output: 180,
-      longInput: 60,
-      longCached: 6,
-      longOutput: 270,
-    },
-    {
-      id: 'gpt-5.5-pro-2026-04-23',
-      input: 30,
-      cached: 3,
-      output: 180,
-      longInput: 60,
-      longCached: 6,
-      longOutput: 270,
-    },
-  ])('uses the correct cached-input rate for $id', ({
-    id,
-    input,
-    cached,
-    output,
-    longInput,
-    longCached,
-    longOutput,
-  }) => {
-    expect(calculateAzureCost(id, {}, 2_000, 1_000, 500)).toBeCloseTo(
-      (1_500 * input + 500 * cached + 1_000 * output) / 1e6,
-      12,
-    );
-    expect(calculateAzureCost(id, {}, 272_001, 1_000, 1_000)).toBeCloseTo(
-      (271_001 * longInput + 1_000 * longCached + 1_000 * longOutput) / 1e6,
-      12,
-    );
-  });
+  );
 
   it.each([
-    {
-      id: 'gpt-5.6',
-      input: 5,
-      cached: 0.5,
-      output: 30,
-      longInput: 10,
-      longCached: 1,
-      longOutput: 45,
+    createModelPricing('gpt-5.6', 5, 0.5, 30, 10, 1, 45),
+    createModelPricing('gpt-5.6-sol', 5, 0.5, 30, 10, 1, 45),
+    createModelPricing('gpt-5.6-terra', 2.5, 0.25, 15, 5, 0.5, 22.5),
+    createModelPricing('gpt-5.6-luna', 1, 0.1, 6, 2, 0.2, 9),
+  ])(
+    'uses the priority-tier rate for $id',
+    ({ id, input, cached, output, longInput, longCached, longOutput }) => {
+      const config = { passthrough: { service_tier: 'priority' } };
+      expect(calculateAzureCost(id, config, 2_000, 1_000, 500)).toBeCloseTo(
+        (2 * (1_500 * input + 500 * cached + 1_000 * output)) / 1e6,
+        12,
+      );
+      expect(calculateAzureCost(id, config, 272_001, 1_000, 1_000)).toBeCloseTo(
+        (2 * (271_001 * longInput + 1_000 * longCached + 1_000 * longOutput)) / 1e6,
+        12,
+      );
     },
-    {
-      id: 'gpt-5.6-sol',
-      input: 5,
-      cached: 0.5,
-      output: 30,
-      longInput: 10,
-      longCached: 1,
-      longOutput: 45,
-    },
-    {
-      id: 'gpt-5.6-terra',
-      input: 2.5,
-      cached: 0.25,
-      output: 15,
-      longInput: 5,
-      longCached: 0.5,
-      longOutput: 22.5,
-    },
-    {
-      id: 'gpt-5.6-luna',
-      input: 1,
-      cached: 0.1,
-      output: 6,
-      longInput: 2,
-      longCached: 0.2,
-      longOutput: 9,
-    },
-  ])('uses the priority-tier rate for $id', ({
-    id,
-    input,
-    cached,
-    output,
-    longInput,
-    longCached,
-    longOutput,
-  }) => {
-    const config = { passthrough: { service_tier: 'priority' } };
-    expect(calculateAzureCost(id, config, 2_000, 1_000, 500)).toBeCloseTo(
-      (2 * (1_500 * input + 500 * cached + 1_000 * output)) / 1e6,
-      12,
-    );
-    expect(calculateAzureCost(id, config, 272_001, 1_000, 1_000)).toBeCloseTo(
-      (2 * (271_001 * longInput + 1_000 * longCached + 1_000 * longOutput)) / 1e6,
-      12,
-    );
-  });
+  );
 
   it.each([
     { id: 'gpt-realtime', input: 4, output: 16, audioInput: 32, audioOutput: 64 },
@@ -300,18 +235,15 @@ describe('calculateAzureCost', () => {
       audioInput: 10,
       audioOutput: 20,
     },
-  ])('uses the correct audio-token rates for $id', ({
-    id,
-    input,
-    output,
-    audioInput,
-    audioOutput,
-  }) => {
-    expect(calculateAzureCost(id, {}, 1_000, 500, 0, 200, 100)).toBeCloseTo(
-      (800 * input + 200 * audioInput + 400 * output + 100 * audioOutput) / 1e6,
-      12,
-    );
-  });
+  ])(
+    'uses the correct audio-token rates for $id',
+    ({ id, input, output, audioInput, audioOutput }) => {
+      expect(calculateAzureCost(id, {}, 1_000, 500, 0, 200, 100)).toBeCloseTo(
+        (800 * input + 200 * audioInput + 400 * output + 100 * audioOutput) / 1e6,
+        12,
+      );
+    },
+  );
 
   it('clamps invalid cached and audio token counts to the reported totals', () => {
     expect(
@@ -346,8 +278,18 @@ describe('calculateAzureCost', () => {
     ['gpt-5-chat-2025-10-03', 0.125],
     ['gpt-5-codex-2025-09-15', 0.125],
     ['gpt-5.5', 0.5],
+    ['gpt-5.5-2026-04-24', 0.5],
+    ['gpt-chat-latest', 0.5],
+    ['gpt-chat-latest-2026-08-06', 0.5],
+    ['gpt-chat-latest-2026-06-24', 0.5],
+    ['gpt-chat-latest-2026-05-28', 0.5],
+    ['gpt-chat-latest-2026-05-05', 0.5],
     ['gpt-5.4', 0.25],
     ['gpt-5.2-2025-12-11', 0.175],
+    ['gpt-5.2-chat-2026-02-10', 0.175],
+    ['gpt-5.2-codex-2026-01-14', 0.175],
+    ['gpt-5.3-chat-2026-03-03', 0.175],
+    ['gpt-5.3-codex-2026-02-24', 0.175],
     ['gpt-5.1-codex-mini-2025-11-13', 0.025],
     ['gpt-4.1', 0.5],
     ['gpt-4.1-mini', 0.1],
@@ -355,6 +297,8 @@ describe('calculateAzureCost', () => {
     ['gpt-4o', 1.25],
     ['o4-mini', 0.275],
     ['o3-mini', 0.55],
+    ['claude-mythos-5', 1],
+    ['claude-mythos-preview', 2.5],
     ['claude-opus-4-6-20260205', 0.5],
   ])('uses the catalog cached-input rate for %s', (id, cachedInput) => {
     expect(calculateAzureCost(id, {}, 1_000, 0, 1_000)).toBeCloseTo(
@@ -363,16 +307,27 @@ describe('calculateAzureCost', () => {
     );
   });
 
+  it.each(['gpt-5.5', 'gpt-5.5-2026-04-24'])(
+    'uses the published Global short-context priority meters for %s',
+    (model) => {
+      const config = { passthrough: { service_tier: 'priority' } };
+      expect(calculateAzureCost(model, config, 1_000, 0)).toBeCloseTo(0.0125, 12);
+      expect(calculateAzureCost(model, config, 1_000, 0, 1_000)).toBeCloseTo(0.00125, 12);
+      expect(calculateAzureCost(model, config, 0, 1_000)).toBeCloseTo(0.075, 12);
+      expect(calculateAzureCost(model, config, 1_000, 1_000)).toBeCloseTo(0.0875, 12);
+      expect(calculateAzureCost(model, config, 272_000, 1_000, 1_000)).toBeCloseTo(
+        (271_000 * 12.5 + 1_000 * 1.25 + 1_000 * 75) / 1e6,
+        12,
+      );
+      // The short-context correction must not change the existing long-context calculation.
+      expect(calculateAzureCost(model, config, 272_001, 1_000, 1_000)).toBeCloseTo(
+        (2 * (271_001 * 10 + 1_000 * 1 + 1_000 * 45)) / 1e6,
+        12,
+      );
+    },
+  );
+
   it('uses cached and priority pricing for existing GPT-5 models', () => {
-    expect(
-      calculateAzureCost(
-        'gpt-5.5',
-        { passthrough: { service_tier: 'priority' } },
-        2_000,
-        1_000,
-        500,
-      ),
-    ).toBeCloseTo(0.0755, 12);
     // Top-level `service_tier` is intentionally ignored here: chat/completion never send
     // it on the wire, and the Responses provider bridges it into `passthrough` at the
     // call site. Only `passthrough.service_tier` reflects what Azure actually billed.
@@ -405,6 +360,17 @@ describe('calculateAzureCost', () => {
         500,
       ),
     ).toBeCloseTo((2 * (1_500 * 1.75 + 500 * 0.175 + 1_000 * 14)) / 1e6, 12);
+    for (const modelName of ['gpt-5.2-chat-2026-02-10', 'gpt-5.3-chat-2026-03-03']) {
+      expect(
+        calculateAzureCost(
+          modelName,
+          { passthrough: { service_tier: 'priority' } },
+          2_000,
+          1_000,
+          500,
+        ),
+      ).toBeCloseTo((2 * (1_500 * 1.75 + 500 * 0.175 + 1_000 * 14)) / 1e6, 12);
+    }
   });
 
   it.each([
@@ -414,11 +380,20 @@ describe('calculateAzureCost', () => {
     ['gpt-5.4-mini-2026-03-17', 0.75, 0.075, 4.5],
     ['gpt-5.4-nano', 0.2, 0.02, 1.25],
     ['gpt-5.4-nano-2026-03-17', 0.2, 0.02, 1.25],
-  ])('uses the supported Azure tier rates without a priority surcharge for %s', (id, input, cached, output) => {
-    expect(
-      calculateAzureCost(id, { passthrough: { service_tier: 'priority' } }, 272_001, 1_000, 1_000),
-    ).toBeCloseTo((271_001 * input + 1_000 * cached + 1_000 * output) / 1e6, 12);
-  });
+  ])(
+    'uses the supported Azure tier rates without a priority surcharge for %s',
+    (id, input, cached, output) => {
+      expect(
+        calculateAzureCost(
+          id,
+          { passthrough: { service_tier: 'priority' } },
+          272_001,
+          1_000,
+          1_000,
+        ),
+      ).toBeCloseTo((271_001 * input + 1_000 * cached + 1_000 * output) / 1e6, 12);
+    },
+  );
 
   it('prices Phi-4 multimodal audio input using the Foundry audio-token rate', () => {
     expect(calculateAzureCost('Phi-4-multimodal-instruct', {}, 1_000, 1_000, 0, 1_000)).toBeCloseTo(
@@ -427,15 +402,15 @@ describe('calculateAzureCost', () => {
     );
   });
 
-  it.each([
-    'gpt-4o-mini-tts',
-    'gpt-4o-mini-tts-2025-03-20',
-  ])('prices %s text input and audio output using the current Azure rates', (id) => {
-    expect(calculateAzureCost(id, {}, 1_000, 1_000, 0, 0, 1_000)).toBeCloseTo(
-      (1_000 * 0.6 + 1_000 * 12) / 1e6,
-      12,
-    );
-  });
+  it.each(['gpt-4o-mini-tts', 'gpt-4o-mini-tts-2025-03-20'])(
+    'prices %s text input and audio output using the current Azure rates',
+    (id) => {
+      expect(calculateAzureCost(id, {}, 1_000, 1_000, 0, 0, 1_000)).toBeCloseTo(
+        (1_000 * 0.6 + 1_000 * 12) / 1e6,
+        12,
+      );
+    },
+  );
 
   it.each([
     ['gpt-image-1', 5, 1.25, 10, 40],
@@ -448,15 +423,15 @@ describe('calculateAzureCost', () => {
     );
   });
 
-  it.each([
-    'gpt-image-2',
-    'gpt-image-2-2026-04-21',
-  ])('prices Azure image input and output tokens for %s', (id) => {
-    expect(calculateAzureCost(id, {}, 1_000, 1_000, 100, 0, 0, 400, 0, 100, 600)).toBeCloseTo(
-      (600 * 5 + 300 * 8 + 100 * 1.25 + 400 * 10 + 600 * 30) / 1e6,
-      12,
-    );
-  });
+  it.each(['gpt-image-2', 'gpt-image-2-2026-04-21'])(
+    'prices Azure image input and output tokens for %s',
+    (id) => {
+      expect(calculateAzureCost(id, {}, 1_000, 1_000, 100, 0, 0, 400, 0, 100, 600)).toBeCloseTo(
+        (600 * 5 + 300 * 8 + 100 * 1.25 + 400 * 10 + 600 * 30) / 1e6,
+        12,
+      );
+    },
+  );
 
   it.each([
     {
@@ -486,26 +461,21 @@ describe('calculateAzureCost', () => {
       output: 16,
       audioOutput: 64,
     },
-  ])('prices cached realtime modalities separately for $id', ({
-    id,
-    input,
-    cachedText,
-    cachedAudio,
-    cachedImage,
-    output,
-    audioOutput,
-  }) => {
-    expect(calculateAzureCost(id, {}, 1_030, 30, 100, 20, 10, 10, 20, 10)).toBeCloseTo(
-      (930 * input +
-        70 * cachedText +
-        20 * cachedAudio +
-        10 * cachedImage +
-        20 * output +
-        10 * audioOutput) /
-        1e6,
-      12,
-    );
-  });
+  ])(
+    'prices cached realtime modalities separately for $id',
+    ({ id, input, cachedText, cachedAudio, cachedImage, output, audioOutput }) => {
+      expect(calculateAzureCost(id, {}, 1_030, 30, 100, 20, 10, 10, 20, 10)).toBeCloseTo(
+        (930 * input +
+          70 * cachedText +
+          20 * cachedAudio +
+          10 * cachedImage +
+          20 * output +
+          10 * audioOutput) /
+          1e6,
+        12,
+      );
+    },
+  );
 
   it.each([
     ['gpt-realtime-mini-2025-10-06', 0.8],
@@ -552,9 +522,50 @@ describe('calculateAzureCost', () => {
     expect(calculateAzureCost('claude-fable-5', {}, 1000, 500)).toBeCloseTo(0.035, 6);
   });
 
+  it.each(['claude-fable-5-1', 'claude-mythos-5-1'])(
+    'calculates cached input cost for %s',
+    (model) => {
+      expect(calculateAzureCost(model, {}, 1000, 500, 500)).toBeCloseTo(0.030125, 8);
+    },
+  );
+
+  // Foundry bills Claude at Anthropic's API rates; the $0.2 cache read is 10% of a $2 input rate.
+  it('prices Claude Sonnet 5 at $2/$10 with a $0.2 cache read', () => {
+    expect(calculateAzureCost('claude-sonnet-5', {}, 1000, 500)).toBeCloseTo(
+      (1000 * 2 + 500 * 10) / 1e6,
+      12,
+    );
+    expect(calculateAzureCost('claude-sonnet-5', {}, 1000, 500, 500)).toBeCloseTo(
+      (500 * 2 + 500 * 0.2 + 500 * 10) / 1e6,
+      12,
+    );
+  });
+
+  it('calculates cached input cost for claude-opus-5-5 at $0.20 per million cache reads', () => {
+    // 500 uncached * $4 + 500 cached * $0.20 + 500 output * $20, per 1e6
+    expect(calculateAzureCost('claude-opus-5-5', {}, 1000, 500, 500)).toBeCloseTo(0.0121, 8);
+  });
+
+  it('prices claude-sonnet-5-5 at Anthropic rates with $0.20 cache reads', () => {
+    // 500 uncached * $2 + 500 cached * $0.20 + 500 output * $10, per 1e6
+    expect(calculateAzureCost('claude-sonnet-5-5', {}, 1000, 500, 500)).toBeCloseTo(0.0061, 8);
+  });
+
   it('returns undefined for unknown model', () => {
     const cost = calculateAzureCost('unknown-model', {}, 100, 50);
     expect(cost).toBeUndefined();
+  });
+
+  it.each([
+    'gpt-5.5-2026-04-23',
+    'gpt-5.5-pro',
+    'gpt-5.5-pro-2026-04-23',
+    'gpt-5.2-pro',
+    'gpt-5.2-pro-2025-12-11',
+    'gpt-5-chat-latest',
+  ])('does not price unpublished Azure model id %s', (id) => {
+    expect(AZURE_MODELS.some((model) => model.id === id)).toBe(false);
+    expect(calculateAzureCost(id, {}, 100, 50)).toBeUndefined();
   });
 
   it('calculates cost for Microsoft MAI image models from output tokens', () => {
@@ -717,14 +728,12 @@ describe('AZURE_MODELS cost coverage', () => {
       expectedCost: 0.00274,
       family: 'Microsoft MAI',
     },
-  ])('computes expected representative cost for $family ($id)', ({
-    id,
-    inputTokens,
-    outputTokens,
-    expectedCost,
-  }) => {
-    expect(calculateAzureCost(id, {}, inputTokens, outputTokens)).toBeCloseTo(expectedCost, 12);
-  });
+  ])(
+    'computes expected representative cost for $family ($id)',
+    ({ id, inputTokens, outputTokens, expectedCost }) => {
+      expect(calculateAzureCost(id, {}, inputTokens, outputTokens)).toBeCloseTo(expectedCost, 12);
+    },
+  );
 
   // Spot-check that a representative of each supported family is priced (documents coverage and
   // fails loudly if a whole family is dropped from the table).
@@ -766,11 +775,17 @@ describe('AZURE_MODELS cost coverage', () => {
     ['gpt-5.6-terra', 2.5, 15],
     ['gpt-5.6-luna', 1, 6],
     ['gpt-5.5', 5, 30],
-    ['gpt-5.5-pro', 30, 180],
-    ['gpt-5.5-pro-2026-04-23', 30, 180],
+    ['gpt-5.5-2026-04-24', 5, 30],
+    ['gpt-chat-latest', 5, 30],
+    ['gpt-chat-latest-2026-08-06', 5, 30],
+    ['gpt-chat-latest-2026-06-24', 5, 30],
+    ['gpt-chat-latest-2026-05-28', 5, 30],
+    ['gpt-chat-latest-2026-05-05', 5, 30],
     ['gpt-5.2', 1.75, 14],
-    ['gpt-5.2-pro', 21, 168],
-    ['gpt-5.2-pro-2025-12-11', 21, 168],
+    ['gpt-5.2-chat-2026-02-10', 1.75, 14],
+    ['gpt-5.2-codex-2026-01-14', 1.75, 14],
+    ['gpt-5.3-chat-2026-03-03', 1.75, 14],
+    ['gpt-5.3-codex-2026-02-24', 1.75, 14],
     ['gpt-5.1-codex-max', 1.25, 10],
     ['gpt-5', 1.25, 10],
     ['gpt-5-pro', 15, 120],
@@ -786,6 +801,8 @@ describe('AZURE_MODELS cost coverage', () => {
     ['gpt-5.4-mini', 0.75, 4.5],
     ['gpt-5.4-nano', 0.2, 1.25],
     ['Phi-4-multimodal-instruct', 0.08, 0.32],
+    ['claude-mythos-5', 10, 50],
+    ['claude-mythos-preview', 25, 125],
     ['claude-haiku-4-5', 1, 5],
     ['claude-haiku-4-5-20251001', 1, 5],
     ['o3', 2, 8],
@@ -801,14 +818,26 @@ describe('AZURE_MODELS cost coverage', () => {
     ['grok-code-fast-1', 0.2, 1.5],
     ['grok-4.3', 1.25, 2.5],
     ['grok-4-1-fast-reasoning', 0.2, 0.5],
+    ['grok-4-fast-reasoning', 0.2, 0.5],
+    ['grok-4-fast-non-reasoning', 0.2, 0.5],
+    ['grok-3-mini', 0.25, 1.27],
     ['Kimi-K2-Thinking', 0.6, 2.5],
     ['Kimi-K2.6', 0.95, 4],
     ['DeepSeek-V3.2', 0.58, 1.68],
     ['DeepSeek-V4-Pro', 1.74, 3.48],
     ['gpt-oss-120b', 0.15, 0.6],
+    ['mistral-medium-3-5', 1.5, 7.5],
+    ['Cohere-command-a-plus-05-2026', 0.8, 3.2],
     ['Phi-3-medium-4k-instruct', 0.17, 0.68],
   ])('prices %s at exactly %d in / %d out per 1M', (id, inputPerM, outputPerM) => {
     expect(calculateAzureCost(id, {}, 100_000, 0)).toBeCloseTo((inputPerM as number) / 10, 9);
     expect(calculateAzureCost(id, {}, 0, 1_000_000)).toBeCloseTo(outputPerM as number, 9);
   });
+});
+
+it('keeps mutable prices independent across model aliases', () => {
+  const costs = AZURE_MODELS.map(({ cost }) => cost);
+  expect(new Set(costs).size).toBe(costs.length);
+  const longContextCosts = costs.flatMap(({ longContext }) => (longContext ? [longContext] : []));
+  expect(new Set(longContextCosts).size).toBe(longContextCosts.length);
 });

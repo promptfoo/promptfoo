@@ -34,7 +34,7 @@ describe('MCP pagination', () => {
   });
 
   it('constrains the page size', () => {
-    expect(paginate(items, { pageSize: 200, maxPageSize: 5 }).pagination.pageSize).toBe(5);
+    expect(paginate(items, { pageSize: 200 }).pagination.pageSize).toBe(100);
   });
 
   it('handles empty arrays', () => {

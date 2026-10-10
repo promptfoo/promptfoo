@@ -16,6 +16,7 @@ import { parseFileTransformReference } from './transformUtils';
 import type {
   ApiProvider,
   CallApiContextParams,
+  CallApiOptionsParams,
   ProviderOptions,
   ProviderResponse,
 } from '../types/index';
@@ -32,6 +33,71 @@ function normalizeWebSocketProtocols(protocols: string | string[] | undefined): 
     .flatMap((value) => value.split(','))
     .map((value) => value.trim())
     .filter(Boolean);
+}
+
+function getSafeWebSocketError(event: WebSocket.ErrorEvent): Error {
+  const sourceError = event.error instanceof Error ? event.error : new Error(event.message);
+  const sourceCode = (sourceError as NodeJS.ErrnoException).code;
+  const isAbortError = ['AbortError', 'AbortException'].includes(sourceError.name);
+
+  if (isAbortError) {
+    const error = new Error('WebSocket connection failed');
+    error.name = sourceError.name;
+    return error;
+  }
+
+  const isSafeTransportCode = ['ECONNRESET', 'ECONNREFUSED', 'EPIPE'].includes(sourceCode ?? '');
+  const transportErrorMessage = sourceError.message.replace(/\b(?:wss?|https?):\/\/\S+/gi, '');
+  const isPermanentProtocolError =
+    /wrong version number|self signed|unable to verify|unknown ca|cert|alert protocol version|unsupported protocol/i.test(
+      transportErrorMessage,
+    );
+  let safeReason: string | undefined;
+
+  if (isSafeTransportCode) {
+    safeReason = sourceCode;
+  } else if (sourceCode === 'ETIMEDOUT') {
+    safeReason = 'TIMEOUT';
+  } else if (sourceCode === 'EPROTO' && !isPermanentProtocolError) {
+    safeReason = sourceCode;
+  } else if (sourceCode === undefined) {
+    const status = sourceError.message.match(
+      /^Unexpected server response:\s*(429|502|503|504)\b/i,
+    )?.[1];
+
+    if (status) {
+      safeReason = status;
+    } else {
+      const transientReason = sourceError.message.match(
+        /^(?:(?:read|write|connect)\s+)?(ECONNRESET|ECONNREFUSED|EPROTO)\b|^(socket hang up|(?:SSL routines:\s*)?bad record mac|(?:request\s+)?timeout|network(?: error)?|rate limit|too many requests)\b/i,
+      );
+      const candidate = (transientReason?.[1] ?? transientReason?.[2])
+        ?.toUpperCase()
+        .replace(/^(?:REQUEST\s+|SSL ROUTINES:\s*)/, '');
+
+      if (candidate !== 'EPROTO' || !isPermanentProtocolError) {
+        safeReason = candidate;
+      }
+    }
+  }
+
+  const status =
+    safeReason && /^(?:429|502|503|504)$/.test(safeReason) ? Number(safeReason) : undefined;
+  const displayReason = status === undefined ? safeReason : `HTTP ${status}`;
+  const error = new Error(
+    `WebSocket connection failed${displayReason ? ` (${displayReason})` : ''}`,
+  );
+
+  if (isSafeTransportCode) {
+    (error as NodeJS.ErrnoException).code = sourceCode;
+  } else if (safeReason === 'TIMEOUT' && sourceCode === 'ETIMEDOUT') {
+    (error as NodeJS.ErrnoException).code = sourceCode;
+  }
+  if (status !== undefined) {
+    (error as Error & { status: number }).status = status;
+  }
+
+  return error;
 }
 
 interface WebSocketProviderConfig {
@@ -216,7 +282,15 @@ export class WebSocketProvider implements ApiProvider {
     return `[WebSocket Provider ${this.providerId}]`;
   }
 
-  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+  async callApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
+    const signal = options?.abortSignal;
+    if (signal?.aborted) {
+      throw new DOMException('WebSocket request aborted', 'AbortError');
+    }
     const vars = {
       ...(context?.vars || {}),
       prompt,
@@ -229,6 +303,10 @@ export class WebSocketProvider implements ApiProvider {
     logger.debug(`Sending WebSocket message: ${message}`);
     let accumulator: ProviderResponse = { error: 'unknown error occurred' };
     return new Promise<ProviderResponse>((resolve, reject) => {
+      if (signal?.aborted) {
+        reject(new DOMException('WebSocket request aborted', 'AbortError'));
+        return;
+      }
       const wsOptions: ClientOptions = {};
       const protocols = normalizeWebSocketProtocols(this.config.protocols);
       if (this.config.headers) {
@@ -244,88 +322,107 @@ export class WebSocketProvider implements ApiProvider {
         protocols.length > 0
           ? new WebSocket(url, protocols, wsOptions)
           : new WebSocket(url, wsOptions);
-      const timeout = setTimeout(() => {
+      let timeout: ReturnType<typeof setTimeout> | undefined;
+      let settled = false;
+      const settle = (result: ProviderResponse | Error) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        clearTimeout(timeout);
+        signal?.removeEventListener('abort', onAbort);
         ws.close();
-        logger.error(`[WebSocket Provider] Request timed out`);
-        reject(new Error(`WebSocket request timed out after ${this.timeoutMs}ms`));
-      }, this.timeoutMs);
-      ws.on('open', () => {
-        logger.debug(`[WebSocket Provider]: WebSocket connection opened successfully`);
-      });
+        if (result instanceof Error) {
+          reject(result);
+        } else {
+          resolve(result);
+        }
+      };
+      const onAbort = () => settle(new DOMException('WebSocket request aborted', 'AbortError'));
+      const resetTimeout = () => {
+        clearTimeout(timeout);
+        timeout = setTimeout(() => {
+          logger.error('[WebSocket Provider] Request timed out');
+          settle(new Error(`WebSocket request timed out after ${this.timeoutMs}ms`));
+        }, this.timeoutMs);
+      };
+      resetTimeout();
 
       ws.onmessage = (event) => {
-        clearTimeout(timeout);
+        if (settled) {
+          return;
+        }
         if (streamResponse) {
+          resetTimeout();
           try {
             logger.debug(`[WebSocket Provider] Data Received: ${JSON.stringify(event.data)}`);
           } catch {
-            // ignore
+            // Logging must not interrupt the stream.
           }
           try {
             const [newAccumulator, isComplete] = streamResponse(accumulator, event, context);
             accumulator = newAccumulator;
             if (isComplete) {
-              ws.close();
-              const response = processResult(accumulator);
-              resolve(response);
+              settle(processResult(accumulator));
             }
           } catch (err) {
             logger.debug(`[WebSocket Provider]: ${(err as Error).message}`);
-            ws.close();
-            reject(new Error(`Error executing streamResponse function: ${(err as Error).message}`));
+            settle(new Error(`Error executing streamResponse function: ${(err as Error).message}`));
           }
-        } else {
-          try {
-            let data = event.data;
-            if (typeof data === 'string') {
-              try {
-                data = JSON.parse(data);
-              } catch {
-                // If parsing fails, assume it's a text response
-              }
-              logger.debug(`[WebSocket Provider] Data Received: ${safeJsonStringify(data)}`);
-            }
-            try {
-              const result = processResult(this.transformResponse(data));
+          return;
+        }
 
-              if (result.error) {
-                logger.debug(`[WebSocket Provider]: Error from provider ${result.error}`);
-                ws.close();
-                reject(new Error(result.error));
-              } else if (result.output === undefined) {
-                ws.close();
-                reject(new Error('No output from provider'));
-              }
-              ws.close();
-              resolve(result);
-            } catch (err) {
-              logger.debug(
-                `[WebSocket Provider]: Error in transform response: ${(err as Error).message}`,
-              );
-              ws.close();
-              reject(new Error(`Failed to process response: ${(err as Error).message}`));
+        try {
+          let data = event.data;
+          if (typeof data === 'string') {
+            try {
+              data = JSON.parse(data);
+            } catch {
+              // Plain text responses are valid.
             }
-          } catch (err) {
-            logger.debug(
-              `[WebSocket Provider]: Error processing response: ${(err as Error).message}`,
-            );
-            ws.close();
-            reject(new Error(`Failed to process response: ${(err as Error).message}`));
+            logger.debug(`[WebSocket Provider] Data Received: ${safeJsonStringify(data)}`);
           }
+          const result = processResult(this.transformResponse(data));
+          if (result.error) {
+            settle(new Error(result.error));
+          } else if (result.output === undefined) {
+            settle(new Error('No output from provider'));
+          } else {
+            settle(result);
+          }
+        } catch (err) {
+          logger.debug(
+            `[WebSocket Provider]: Error processing response: ${(err as Error).message}`,
+          );
+          settle(new Error(`Failed to process response: ${(err as Error).message}`));
         }
       };
 
-      ws.onerror = () => {
-        clearTimeout(timeout);
-        ws.close();
-        logger.error(`[WebSocket Provider] Connection failed`);
-        reject(new Error('WebSocket connection failed'));
+      ws.onerror = (event) => {
+        if (!settled) {
+          logger.error('[WebSocket Provider] Connection failed');
+          settle(getSafeWebSocketError(event));
+        }
+      };
+
+      ws.onclose = () => {
+        settle(new Error('WebSocket connection closed before the response completed'));
       };
 
       ws.onopen = () => {
+        if (settled) {
+          return;
+        }
+        if (streamResponse) {
+          resetTimeout();
+        }
         logger.debug(`[WebSocket Provider] Message sent: ${safeJsonStringify(message)}`);
         ws.send(message);
       };
+      signal?.addEventListener('abort', onAbort, { once: true });
+      if (signal?.aborted) {
+        onAbort();
+      }
     });
   }
 }

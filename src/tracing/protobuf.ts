@@ -16,16 +16,6 @@ let protoRoot: protobuf.Root | null = null;
 let ExportTraceServiceRequest: protobuf.Type | null = null;
 
 /**
- * Get the path to the proto files directory.
- * This works correctly in both development (tsx) and production (bundled) environments.
- */
-function getProtoDir(): string {
-  // getDirectory() returns the src/ or dist/src/ directory
-  // Proto files are in src/tracing/proto/ or dist/src/tracing/proto/
-  return path.join(getDirectory(), 'tracing', 'proto');
-}
-
-/**
  * Load and cache the OTLP proto definitions
  */
 async function loadProtoDefinitions(): Promise<protobuf.Root> {
@@ -35,7 +25,13 @@ async function loadProtoDefinitions(): Promise<protobuf.Root> {
 
   logger.debug('[Protobuf] Loading OTLP proto definitions');
 
-  const protoDir = getProtoDir();
+  /**
+   * Get the path to the proto files directory.
+   * This works correctly in both development (tsx) and production (bundled) environments.
+   */
+  // getDirectory() returns the src/ or dist/src/ directory
+  // Proto files are in src/tracing/proto/ or dist/src/tracing/proto/
+  const protoDir = path.join(getDirectory(), 'tracing', 'proto');
   logger.debug(`[Protobuf] Proto directory: ${protoDir}`);
 
   try {
@@ -65,16 +61,9 @@ async function loadProtoDefinitions(): Promise<protobuf.Root> {
  * Get the ExportTraceServiceRequest message type
  */
 async function getExportTraceServiceRequestType(): Promise<protobuf.Type> {
-  if (ExportTraceServiceRequest) {
-    return ExportTraceServiceRequest;
-  }
-
-  const root = await loadProtoDefinitions();
-  ExportTraceServiceRequest = root.lookupType(
+  return (ExportTraceServiceRequest ??= (await loadProtoDefinitions()).lookupType(
     'opentelemetry.proto.collector.trace.v1.ExportTraceServiceRequest',
-  );
-
-  return ExportTraceServiceRequest;
+  ));
 }
 
 /**
@@ -180,20 +169,6 @@ interface Long {
 }
 
 /**
- * Convert a Long or number to a JavaScript number
- */
-export function longToNumber(value: Long | number | undefined): number {
-  if (value === undefined) {
-    return 0;
-  }
-  if (typeof value === 'number') {
-    return value;
-  }
-  // It's a Long object
-  return value.toNumber();
-}
-
-/**
  * Convert a Uint8Array to a hex string
  */
 export function bytesToHex(bytes: Uint8Array | undefined, expectedLength: number): string {
@@ -237,12 +212,17 @@ export async function decodeExportTraceServiceRequest(
   }
 }
 
-/**
- * Initialize the protobuf loader (preload proto definitions)
- * Call this at startup for faster first request handling
- */
-export async function initializeProtobuf(): Promise<void> {
-  await loadProtoDefinitions();
-  await getExportTraceServiceRequestType();
-  logger.debug('[Protobuf] Protobuf decoder initialized');
+/** Encode an OTLP JSON-shaped trace payload for a protobuf-only HTTP receiver. */
+export async function encodeExportTraceServiceRequest(
+  request: Record<string, unknown>,
+): Promise<Buffer> {
+  const messageType = await getExportTraceServiceRequestType();
+
+  try {
+    const message = messageType.fromObject(request);
+    return Buffer.from(messageType.encode(message).finish());
+  } catch (error) {
+    logger.error(`[Protobuf] Failed to encode ExportTraceServiceRequest: ${error}`);
+    throw new Error(`Invalid trace data: ${error instanceof Error ? error.message : error}`);
+  }
 }

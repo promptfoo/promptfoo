@@ -1,4 +1,15 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import cliState from '../../../../src/cliState';
+import { AnthropicMessagesProvider } from '../../../../src/providers/anthropic/messages';
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+
+vi.mock('../../../../src/telemetry', () => ({
+  default: { record: vi.fn() },
+}));
 
 // Mock dependencies before importing the module
 vi.mock('../../../../src/logger', () => ({
@@ -60,7 +71,100 @@ describe('runEvaluation tool', () => {
     vi.clearAllMocks();
   });
 
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it.each([false, true])(
+    'keeps the actual Anthropic provider when using its advertised filter (mixed: %s)',
+    async (mixed) => {
+      const { resolveConfigs } = await import('../../../../src/util/config/load');
+      const actualConfig = await vi.importActual<typeof import('../../../../src/util/config/load')>(
+        '../../../../src/util/config/load',
+      );
+      vi.mocked(resolveConfigs).mockImplementationOnce(actualConfig.resolveConfigs);
+      const { runDbMigrations } = await import('../../../../src/migrate');
+      await runDbMigrations();
+      const callApi = vi
+        .spyOn(AnthropicMessagesProvider.prototype, 'callApi')
+        .mockResolvedValue({ output: 'offline fixture' });
+      const { registerRunEvaluationTool } = await import(
+        '../../../../src/commands/mcp/tools/runEvaluation'
+      );
+      const tool = vi.fn();
+      registerRunEvaluationTool({ tool } as unknown as McpServer);
+      const [, schema, handler] = tool.mock.calls[0];
+      const advertisedMatch = schema.providerFilter.description.match(/"(anthropic:[^"]+)"/);
+      expect(advertisedMatch).not.toBeNull();
+      const advertisedFilter = advertisedMatch![1];
+      const tempDir = await mkdtemp(path.join(os.tmpdir(), 'mcp-provider-filter-'));
+      const originalState = {
+        basePath: cliState.basePath,
+        config: cliState.config,
+        selectedProviderConfigs: cliState.selectedProviderConfigs,
+      };
+      try {
+        const configPath = path.join(tempDir, 'config.json');
+        await writeFile(
+          configPath,
+          JSON.stringify({
+            prompts: ['{{topic}}'],
+            providers: ['anthropic:messages:claude-sonnet-5', 'echo'],
+            tests: [
+              {
+                vars: { topic: 'offline fixture' },
+                assert: [{ type: 'equals', value: 'offline fixture' }],
+              },
+            ],
+          }),
+        );
+
+        const result = await handler({
+          configPath,
+          providerFilter: mixed ? ['echo', advertisedFilter] : advertisedFilter,
+          cache: false,
+          write: false,
+          share: false,
+        });
+        const response = JSON.parse(result.content[0].text);
+        const expectedProviders = mixed
+          ? ['anthropic:claude-sonnet-5', 'echo']
+          : ['anthropic:claude-sonnet-5'];
+
+        expect(result.isError).toBe(false);
+        expect(response.success).toBe(true);
+        expect(response.data.configuration.providers.ids).toEqual(expectedProviders);
+        expect(response.data.results.stats).toMatchObject({
+          successes: expectedProviders.length,
+          failures: 0,
+          errors: 0,
+        });
+        expect(callApi).toHaveBeenCalledTimes(1);
+        const actualProvider = callApi.mock.contexts[0] as AnthropicMessagesProvider;
+        expect(actualProvider).toBeInstanceOf(AnthropicMessagesProvider);
+        expect(actualProvider.id()).toBe('anthropic:claude-sonnet-5');
+        expect(actualProvider.modelName).toBe('claude-sonnet-5');
+      } finally {
+        Object.assign(cliState, originalState);
+        await rm(tempDir, { recursive: true, force: true });
+      }
+    },
+  );
+
   describe('result formatting', () => {
+    const createSuccessfulEvaluation = (_: unknown, i: number) => ({
+      testCase: { description: `test case ${i}`, assert: [] },
+      vars: { index: i },
+      prompt: { label: 'test', raw: 'prompt text' },
+      provider: { id: 'provider', label: 'Provider' },
+      response: { output: `response ${i}` },
+      success: true,
+      score: 1,
+      namedScores: {},
+      cost: 0.001,
+      latencyMs: 100,
+    });
+
     it('should use shared formatter for pagination', async () => {
       const { formatEvaluationResults } = await import(
         '../../../../src/commands/mcp/lib/resultFormatter'
@@ -101,18 +205,7 @@ describe('runEvaluation tool', () => {
       const mockSummary = {
         version: 3,
         stats: { successes: 100, failures: 0, errors: 0 },
-        results: Array.from({ length: 100 }, (_, i) => ({
-          testCase: { description: `test case ${i}`, assert: [] },
-          vars: { index: i },
-          prompt: { label: 'test', raw: 'prompt text' },
-          provider: { id: 'provider', label: 'Provider' },
-          response: { output: `response ${i}` },
-          success: true,
-          score: 1,
-          namedScores: {},
-          cost: 0.001,
-          latencyMs: 100,
-        })),
+        results: Array.from({ length: 100 }, createSuccessfulEvaluation),
         prompts: [],
       };
 
@@ -138,18 +231,7 @@ describe('runEvaluation tool', () => {
       const mockSummary = {
         version: 3,
         stats: { successes: 200, failures: 0, errors: 0 },
-        results: Array.from({ length: 200 }, (_, i) => ({
-          testCase: { description: `test case ${i}`, assert: [] },
-          vars: { index: i },
-          prompt: { label: 'test', raw: 'prompt text' },
-          provider: { id: 'provider', label: 'Provider' },
-          response: { output: `response ${i}` },
-          success: true,
-          score: 1,
-          namedScores: {},
-          cost: 0.001,
-          latencyMs: 100,
-        })),
+        results: Array.from({ length: 200 }, createSuccessfulEvaluation),
         prompts: [],
       };
 
@@ -348,6 +430,11 @@ describe('runEvaluation tool', () => {
       });
 
       expect(result.isError).toBe(true);
+      expect(JSON.parse(result.content[0].text)).toEqual({
+        tool: 'run_evaluation',
+        success: false,
+        timestamp: expect.any(String),
+      });
       const logger = (await import('../../../../src/logger')).default;
       expect(logger.error).toHaveBeenCalledWith(
         'Evaluation execution failed: You must provide at least 1 prompt',

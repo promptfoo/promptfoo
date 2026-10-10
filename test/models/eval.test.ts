@@ -14,9 +14,16 @@ import Eval, {
 } from '../../src/models/eval';
 import { getCachedResultsCount } from '../../src/models/evalPerformance';
 import EvalResult from '../../src/models/evalResult';
+import { EvalEvaluationStore } from '../../src/node/evaluationStore';
 import { TraceStore } from '../../src/tracing/store';
-import { type EvaluateResult, type Prompt, ResultFailureReason } from '../../src/types/index';
+import {
+  type EvaluateResult,
+  type EvaluateSummaryV3,
+  type Prompt,
+  ResultFailureReason,
+} from '../../src/types/index';
 import { updateResult, writeResultsToDatabase } from '../../src/util/database';
+import { redactAzureBlobSasTokens } from '../../src/util/sanitizer';
 import {
   getCachedStandaloneEvals,
   getStandaloneEvalCacheKey,
@@ -24,6 +31,7 @@ import {
 } from '../../src/util/standaloneEvalCache';
 import { createEvaluateResult } from '../factories/eval';
 import EvalFactory from '../factories/evalFactory';
+import { createAccuracyFilter, createPassFailOptions } from '../factories/literalFixtures';
 
 vi.mock('../../src/globalConfig/accounts', async () => {
   const actual = await vi.importActual('../../src/globalConfig/accounts');
@@ -69,6 +77,46 @@ describe('evaluator', () => {
     vi.resetAllMocks();
   });
 
+  describe('repeat stability export', () => {
+    it('includes final comparison verdicts for a row that failed persistence', async () => {
+      const evaluation = await Eval.create({}, [], { id: 'repeat-failed-persistence' });
+      const row = createEvaluateResult({
+        repeatGroupId: 'recovered',
+        repeatIndex: 0,
+        success: true,
+      });
+      evaluation.recordResultPersistenceFailure(row);
+      const [recovered] = await evaluation.getFailedResultsByTestIdx(row.testIdx);
+      recovered.success = false;
+      recovered.failureReason = ResultFailureReason.ASSERT;
+      const summary = await evaluation.getRepeatStability();
+      expect(summary?.groups[0]).toMatchObject({ repetitions: 1, passed: 0, failed: 1 });
+      expect(await EvalResult.findManyByEvalId(evaluation.id)).toEqual([]);
+    });
+
+    it('keeps cached grader evidence when grading details are stripped', async () => {
+      const evaluation = new Eval({ env: { PROMPTFOO_STRIP_GRADING_RESULT: 'true' } });
+      await evaluation.addResult(
+        createEvaluateResult({
+          repeatGroupId: 'repeated',
+          repeatIndex: 0,
+          response: { output: 'fresh target output' },
+          gradingResult: {
+            pass: true,
+            score: 1,
+            reason: 'cached grading',
+            metadata: { cachedResponse: true },
+          },
+        }),
+      );
+      const summary = (await evaluation.toEvaluateSummary()) as EvaluateSummaryV3;
+      expect(summary.version).toBe(3);
+      expect(summary.results[0].gradingResult).toBeNull();
+      expect(summary.repeatStability?.cachedResults).toBe(1);
+      expect(summary.repeatStability?.groups[0].passRateConfidenceInterval).toBeUndefined();
+    });
+  });
+
   describe('addPrompts', () => {
     it('should notify watchers when persisted prompt metadata changes', async () => {
       const eval_ = await EvalFactory.create({ numResults: 0 });
@@ -107,6 +155,152 @@ describe('evaluator', () => {
 
       expect(updateSignalFile).not.toHaveBeenCalled();
     });
+  });
+
+  describe('loadResults', () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it('preserves real in-memory rows across model and store reads and later appends', async () => {
+      const evaluation = new Eval({});
+      const store = new EvalEvaluationStore(evaluation);
+      await store.appendResult(createEvaluateResult({ response: { output: 'First result' } }));
+      const results = evaluation.results;
+      const firstResult = results[0];
+      const findResults = vi.spyOn(EvalResult, 'findManyByEvalId');
+
+      await evaluation.loadResults();
+      expect(evaluation._resultsLoaded).toBe(true);
+      expect(await store.readResults()).toBe(results);
+      expect(evaluation.results[0]).toBe(firstResult);
+      expect(firstResult.response?.output).toBe('First result');
+
+      await store.appendResult(
+        createEvaluateResult({
+          testIdx: 1,
+          success: false,
+          score: 0,
+          failureReason: ResultFailureReason.ERROR,
+          error: 'Local provider failed',
+          response: undefined,
+        }),
+      );
+      expect(await store.readResults()).toBe(results);
+      expect(results).toHaveLength(2);
+      expect(results[1]).toMatchObject({
+        testIdx: 1,
+        success: false,
+        score: 0,
+        failureReason: ResultFailureReason.ERROR,
+        error: 'Local provider failed',
+      });
+      const summary = await evaluation.toEvaluateSummary();
+      expect(summary.results).toEqual(results.map((result) => result.toEvaluateResult()));
+      const batches: EvalResult[][] = [];
+      for await (const batch of evaluation.fetchResultsBatched(1)) {
+        batches.push(batch);
+      }
+      expect(batches.flat()).toEqual(results);
+      expect(findResults).not.toHaveBeenCalled();
+    });
+
+    it('preserves explicitly assigned in-memory results', async () => {
+      const evaluation = new Eval({});
+      await evaluation.addResult(createEvaluateResult());
+      const results = [evaluation.results[0]];
+      await evaluation.setResults(results);
+      const findResults = vi.spyOn(EvalResult, 'findManyByEvalId');
+
+      expect(await evaluation.getResults()).toBe(results);
+      expect(await evaluation.getResults()).toBe(results);
+      expect(findResults).not.toHaveBeenCalled();
+    });
+
+    it('reads empty in-memory results and summaries without querying the database', async () => {
+      const evaluation = new Eval({});
+      const results = evaluation.results;
+      const findResults = vi.spyOn(EvalResult, 'findManyByEvalId');
+
+      expect(await evaluation.getResults()).toBe(results);
+      expect(await evaluation.toEvaluateSummary()).toMatchObject({
+        results: [],
+        stats: { successes: 0, failures: 0, errors: 0 },
+      });
+      expect(evaluation._resultsLoaded).toBe(true);
+      expect(findResults).not.toHaveBeenCalled();
+    });
+
+    it('refreshes persisted results after a previous read and an independent append', async () => {
+      const evaluation = await EvalFactory.create({ numResults: 0 });
+      expect((await evaluation.toEvaluateSummary()).results).toEqual([]);
+      await evaluation.addResult(createEvaluateResult({ response: { output: 'First result' } }));
+      const reloaded = await Eval.findById(evaluation.id);
+      expect(reloaded).not.toBeNull();
+      const store = new EvalEvaluationStore(reloaded!);
+
+      await reloaded!.loadResults();
+      expect(reloaded!._resultsLoaded).toBe(true);
+      expect(await store.readResults()).toHaveLength(1);
+      await evaluation.addResult(
+        createEvaluateResult({ testIdx: 1, response: { output: 'Second result' } }),
+      );
+      expect((await store.readResults()).map((result) => result.response?.output)).toEqual([
+        'First result',
+        'Second result',
+      ]);
+    });
+
+    it('keeps legacy result and summary reads on their existing path', async () => {
+      const stored = await EvalFactory.createOldResult();
+      const evaluation = (await Eval.findById(stored.id))!;
+      const findResults = vi.spyOn(EvalResult, 'findManyByEvalId');
+
+      expect(evaluation.useOldResults()).toBe(true);
+      expect(await evaluation.getResults()).toBe(evaluation.oldResults!.results);
+      expect(await evaluation.toEvaluateSummary()).toMatchObject({
+        version: 2,
+        results: evaluation.oldResults!.results,
+        table: evaluation.oldResults!.table,
+        stats: evaluation.oldResults!.stats,
+      });
+      expect(findResults).not.toHaveBeenCalled();
+    });
+  });
+
+  it('preserves duplicate SAS signatures when saving an unchanged redacted config', async () => {
+    const config = {
+      tests: [
+        { vars: { label: 'first', file: 'az://account/container/a.yaml?sig=secret-a' } },
+        { vars: { label: 'second', file: 'az://account/container/a.yaml?sig=secret-b' } },
+      ],
+    };
+    const eval_ = await Eval.create(config, []);
+    await updateResult(eval_.id, redactAzureBlobSasTokens(config));
+    const loaded = await Eval.findById(eval_.id);
+    expect(loaded?.config).toEqual(config);
+  });
+
+  it('reloads summaries after appending to an evaluation with loaded results', async () => {
+    const eval_ = await EvalFactory.create({ numResults: 1 });
+    await eval_.loadResults();
+    const [existing] = await EvalResult.findManyByEvalId(eval_.id);
+    const appended = new EvalResult({
+      ...existing,
+      id: 'appended-result',
+      testIdx: 1,
+      response: existing.response ?? null,
+    });
+    await eval_.setResults([appended]);
+    expect((await eval_.toEvaluateSummary()).results).toHaveLength(2);
+  });
+
+  it('retains persisted rows when an empty upload chunk follows a loaded summary', async () => {
+    const eval_ = await EvalFactory.create({ numResults: 1 });
+    await eval_.loadResults();
+    await eval_.setResults([]);
+    expect((await eval_.toEvaluateSummary()).results).toHaveLength(1);
+    expect(await getCachedResultsCount(eval_.id)).toBe(1);
   });
 
   describe('fetchResultsBatched', () => {
@@ -382,17 +576,31 @@ describe('evaluator', () => {
           table: { head: { prompts: [], vars: [] }, body: [] },
           stats: { successes: 0, failures: 0 },
         } as any,
-        { redteam: {} as any },
+        {
+          redteam: {} as any,
+          tracing: {
+            enabled: true,
+            provider: {
+              id: 'tempo',
+              endpoint: 'https://tempo.example.com',
+              auth: { token: 'legacy-runtime-secret' },
+              headers: { Authorization: 'Bearer legacy-secret', 'X-Scope-OrgID': 'tenant-a' },
+            },
+          },
+        },
       );
 
       const db = await getDb();
       const stored = await db
-        .select({ isRedteam: evalsTable.isRedteam })
+        .select({ isRedteam: evalsTable.isRedteam, config: evalsTable.config })
         .from(evalsTable)
         .where(eq(evalsTable.id, evalId))
         .get();
 
       expect(stored?.isRedteam).toBe(true);
+      expect(JSON.stringify(stored?.config)).not.toContain('legacy-runtime-secret');
+      expect(JSON.stringify(stored?.config)).not.toContain('legacy-secret');
+      expect(stored?.config.tracing?.provider?.headers).toEqual({ 'X-Scope-OrgID': 'tenant-a' });
     });
 
     it.each([
@@ -540,6 +748,141 @@ describe('evaluator', () => {
   });
 
   describe('create', () => {
+    it('keeps trace-provider credentials in memory while removing them from persisted evals', async () => {
+      const config = {
+        tracing: {
+          enabled: true,
+          provider: {
+            id: 'tempo' as const,
+            endpoint: 'https://tempo.example.com/traces',
+            timeout: 5_000,
+            auth: {
+              username: 'trace-reader',
+              password: 'literal-password',
+              token: 'literal-token',
+            },
+            headers: {
+              Authorization: 'Bearer literal-authorization',
+              'X-Api-Key': 'literal-api-key',
+              'X-Honeycomb-Team': 'literal-honeycomb-key',
+              'X-Tenant-Credential': 'literal-custom-credential',
+              'X-Tempo-Reader': 'short-reader-value',
+              'X-Trace-Access': 'Bearer short-secret',
+              'X-Scope-OrgID': 'tenant-a',
+            },
+          },
+        },
+      };
+
+      const evaluation = await Eval.create(config, []);
+      const persistedEvaluation = await Eval.findById(evaluation.id);
+
+      expect(evaluation.config.tracing?.provider).toEqual(config.tracing.provider);
+      expect(persistedEvaluation?.config.tracing?.provider).toEqual({
+        id: 'tempo',
+        endpoint: 'https://tempo.example.com/traces',
+        timeout: 5_000,
+        auth: { username: 'trace-reader' },
+        headers: { 'X-Scope-OrgID': 'tenant-a' },
+      });
+      expect(JSON.stringify(persistedEvaluation?.config)).not.toContain('literal-');
+      expect(JSON.stringify(persistedEvaluation?.config)).not.toContain('short-secret');
+      expect(JSON.stringify(persistedEvaluation?.config)).not.toContain('short-reader-value');
+
+      evaluation.config.tracing!.provider!.auth!.token = 'updated-runtime-token';
+      await evaluation.save();
+
+      const savedEvaluation = await Eval.findById(evaluation.id);
+      expect(JSON.stringify(savedEvaluation?.config)).not.toContain('updated-runtime-token');
+      expect(evaluation.config.tracing?.provider?.auth?.token).toBe('updated-runtime-token');
+    });
+
+    it('preserves safe trace-provider environment references for resumed evals', async () => {
+      const config = {
+        tracing: {
+          enabled: true,
+          provider: {
+            id: 'tempo' as const,
+            endpoint: 'https://tempo.example.com',
+            auth: {
+              token: '{{ env.TEMPO_TOKEN }}',
+              password: '{{ env.TEMPO_PASSWORD | trim }}',
+            },
+            headers: {
+              Authorization: 'Bearer {{ env.TEMPO_HEADER_TOKEN }}',
+              'X-Api-Key': '{{ env["TEMPO_API_KEY"] }}',
+            },
+          },
+        },
+      };
+
+      const evaluation = await Eval.create(config, []);
+      const persistedEvaluation = await Eval.findById(evaluation.id);
+
+      expect(persistedEvaluation?.config.tracing?.provider).toEqual(config.tracing.provider);
+    });
+
+    it.each([
+      'https://tempo.example.com/tempo?token=endpoint-secret',
+      'https://tempo.example.com/tempo?opaque=endpoint-secret',
+      'https://tempo.example.com/tempo#token=endpoint-secret',
+      'https://reader:endpoint-secret@tempo.example.com/tempo',
+    ])('removes trace endpoint credentials before saving or exporting: %s', async (endpoint) => {
+      const evaluation = await Eval.create(
+        {
+          tracing: {
+            enabled: true,
+            provider: { id: 'tempo', endpoint },
+          },
+        },
+        [],
+      );
+      const persistedEvaluation = await Eval.findById(evaluation.id);
+      const exportedEvaluation = await evaluation.toResultsFile();
+
+      expect(evaluation.config.tracing?.provider?.endpoint).toBe(endpoint);
+      expect(persistedEvaluation?.config.tracing?.provider?.endpoint).toBe(
+        'https://tempo.example.com/tempo',
+      );
+      expect(exportedEvaluation.config.tracing?.provider?.endpoint).toBe(
+        'https://tempo.example.com/tempo',
+      );
+      expect(JSON.stringify(persistedEvaluation?.config)).not.toContain('endpoint-secret');
+      expect(JSON.stringify(exportedEvaluation.config)).not.toContain('endpoint-secret');
+    });
+
+    it.each([
+      'token-privateTenantCredential123',
+      '2e163f4d-28e2-4f84-b6d2-05e13058d6aa',
+      '2e163f4d28e24f84b6d205e13058d6aa',
+    ])(
+      'redacts credential-like endpoint path segments before persistence: %s',
+      async (credential) => {
+        const endpoint = `https://tempo.example.com/tempo/${credential}/traces`;
+        const evaluation = await Eval.create(
+          {
+            tracing: {
+              enabled: true,
+              provider: { id: 'tempo', endpoint },
+            },
+          },
+          [],
+        );
+        const persistedEvaluation = await Eval.findById(evaluation.id);
+        const exportedEvaluation = await evaluation.toResultsFile();
+
+        expect(evaluation.config.tracing?.provider?.endpoint).toBe(endpoint);
+        expect(persistedEvaluation?.config.tracing?.provider?.endpoint).toBe(
+          'https://tempo.example.com/tempo/%5BREDACTED%5D/traces',
+        );
+        expect(exportedEvaluation.config.tracing?.provider?.endpoint).toBe(
+          'https://tempo.example.com/tempo/%5BREDACTED%5D/traces',
+        );
+        expect(JSON.stringify(persistedEvaluation?.config)).not.toContain(credential);
+        expect(JSON.stringify(exportedEvaluation.config)).not.toContain(credential);
+      },
+    );
+
     it('should use provided author when available', async () => {
       const providedAuthor = 'provided@example.com';
       // Spy must not be called — opts.author is explicit, so getAuthor() is bypassed.
@@ -671,6 +1014,32 @@ describe('evaluator', () => {
   });
 
   describe('copy', () => {
+    it('removes trace-provider credentials when copying a live evaluation', async () => {
+      const evaluation = await Eval.create(
+        {
+          tracing: {
+            enabled: true,
+            provider: {
+              id: 'tempo',
+              endpoint: 'https://tempo.example.com',
+              auth: { token: 'copy-runtime-secret' },
+              headers: { Authorization: 'Bearer copied-secret', 'X-Scope-OrgID': 'tenant-a' },
+            },
+          },
+        },
+        [],
+      );
+
+      const copiedEvaluation = await evaluation.copy();
+      const persistedCopy = await Eval.findById(copiedEvaluation.id);
+
+      expect(JSON.stringify(persistedCopy?.config)).not.toContain('copy-runtime-secret');
+      expect(JSON.stringify(persistedCopy?.config)).not.toContain('copied-secret');
+      expect(persistedCopy?.config.tracing?.provider?.headers).toEqual({
+        'X-Scope-OrgID': 'tenant-a',
+      });
+    });
+
     it('drops trace linkage from copied results without copied trace records', async () => {
       const eval_ = await EvalFactory.create({ numResults: 0 });
       await EvalResult.createFromEvaluateResult(
@@ -939,6 +1308,70 @@ describe('evaluator', () => {
   });
 
   describe('getStats', () => {
+    it('attributes generation metadata once without increasing target tokens or probes', () => {
+      const eval1 = new Eval({
+        metadata: {
+          generationAccounting: {
+            id: 'generation-1',
+            tokenUsage: { total: 40, prompt: 25, completion: 15, numRequests: 4 },
+          },
+        },
+      });
+      eval1.prompts = [
+        { metrics: { tokenUsage: { total: 10, numRequests: 1 } } },
+        { metrics: { tokenUsage: { total: 20, numRequests: 1 } } },
+      ] as any;
+
+      const stats = eval1.getStats();
+
+      expect(stats.tokenUsage).toMatchObject({
+        total: 30,
+        numRequests: 2,
+        generation: { total: 40, prompt: 25, completion: 15, numRequests: 4 },
+      });
+    });
+
+    it('does not attribute historical suite generation metadata without a run charge', () => {
+      const eval1 = new Eval({
+        metadata: {
+          generation: { id: 'old-generation', tokenUsage: { total: 40, numRequests: 4 } },
+          generationTokenUsage: { total: 40, numRequests: 4 },
+        },
+      });
+
+      expect(eval1.getStats().tokenUsage.generation).toBeUndefined();
+    });
+
+    it('preserves cached generation separately from incurred target usage', () => {
+      const eval1 = new Eval({
+        metadata: {
+          generationAccounting: {
+            id: 'generation-1',
+            tokenUsage: {
+              total: 40,
+              prompt: 25,
+              completion: 15,
+              cached: 40,
+              numRequests: 1,
+              incurredTokenUsage: { total: 0, numRequests: 0 },
+            },
+          },
+        },
+      });
+      eval1.prompts = [{ metrics: { tokenUsage: { total: 10, numRequests: 1 } } }] as any;
+
+      expect(eval1.getStats().tokenUsage).toMatchObject({
+        total: 10,
+        numRequests: 1,
+        generation: { total: 40, cached: 40, numRequests: 1 },
+        incurredTokenUsage: {
+          total: 10,
+          numRequests: 1,
+          generation: { total: 0, numRequests: 0 },
+        },
+      });
+    });
+
     it('should accumulate assertion token usage correctly', () => {
       const eval1 = new Eval({});
       eval1.prompts = [
@@ -956,6 +1389,7 @@ describe('evaluator', () => {
                 prompt: 40,
                 completion: 50,
                 cached: 10,
+                numRequests: 3,
               },
             },
           },
@@ -974,6 +1408,7 @@ describe('evaluator', () => {
                 prompt: 80,
                 completion: 100,
                 cached: 20,
+                numRequests: 5,
               },
             },
           },
@@ -986,7 +1421,7 @@ describe('evaluator', () => {
         prompt: 120,
         completion: 150,
         cached: 30,
-        numRequests: 0,
+        numRequests: 8,
         completionDetails: {
           reasoning: 0,
           acceptedPrediction: 0,
@@ -1166,6 +1601,65 @@ describe('evaluator', () => {
   });
 
   describe('toResultsFile', () => {
+    it('redacts gateway URL credentials from result files while preserving the live config', async () => {
+      const gateway = 'https://gateway.example/v1?googleAccessToken=short-private-value';
+      const evaluation = new Eval({
+        providers: [{ id: 'openai:chat:test', config: { apiBaseUrl: gateway } }],
+        metadata: { documentationUrl: 'HTTPS://Docs.Example?version=2' },
+      });
+      const result = await evaluation.toResultsFile();
+      expect(JSON.stringify(result.config)).not.toContain('short-private-value');
+      expect(JSON.stringify(result.config)).toContain('%5BREDACTED%5D');
+      expect(result.config.metadata?.documentationUrl).toBe('HTTPS://Docs.Example?version=2');
+      expect(JSON.stringify(evaluation.config)).toContain(gateway);
+    });
+
+    it('drops malformed trace-provider headers when exporting older evaluations', async () => {
+      const evaluation = new Eval({
+        tracing: {
+          enabled: true,
+          provider: {
+            id: 'tempo',
+            endpoint: 'https://tempo.example.com',
+            headers: {
+              'X-Null': null,
+              'X-Number': 42,
+              'X-Object': { malformed: true },
+              'X-Array': ['malformed'],
+              Authorization: 'Bearer legacy-secret',
+              'X-Scope-OrgID': 'tenant-a',
+            } as unknown as Record<string, string>,
+          },
+        },
+      });
+
+      const results = await evaluation.toResultsFile();
+
+      expect(results.config.tracing?.provider?.headers).toEqual({ 'X-Scope-OrgID': 'tenant-a' });
+      expect(JSON.stringify(results.config)).not.toContain('legacy-secret');
+    });
+
+    it('removes trace-provider credentials from exported results without mutating live config', async () => {
+      const evaluation = new Eval({
+        tracing: {
+          enabled: true,
+          provider: {
+            id: 'tempo',
+            endpoint: 'https://tempo.example.com',
+            auth: { token: 'export-runtime-secret' },
+            headers: { Authorization: 'Bearer exported-secret', 'X-Scope-OrgID': 'tenant-a' },
+          },
+        },
+      });
+
+      const results = await evaluation.toResultsFile();
+
+      expect(JSON.stringify(results.config)).not.toContain('export-runtime-secret');
+      expect(JSON.stringify(results.config)).not.toContain('exported-secret');
+      expect(results.config.tracing?.provider?.headers).toEqual({ 'X-Scope-OrgID': 'tenant-a' });
+      expect(evaluation.config.tracing?.provider?.auth?.token).toBe('export-runtime-secret');
+    });
+
     it('should return results file with correct version', async () => {
       const eval1 = await EvalFactory.create();
       const results = await eval1.toResultsFile();
@@ -1347,14 +1841,7 @@ describe('evaluator', () => {
     it('should filter by specific metrics', async () => {
       // This test requires setting up results with named scores in the eval factory
       const result = await evalWithResults.getTablePage({
-        filters: [
-          JSON.stringify({
-            logicOperator: 'and',
-            type: 'metric',
-            operator: 'equals',
-            value: 'accuracy',
-          }),
-        ],
+        filters: [JSON.stringify(createAccuracyFilter())],
       });
 
       // All results should have the specified metric
@@ -1364,6 +1851,21 @@ describe('evaluator', () => {
         );
         expect(hasMetric).toBe(true);
       }
+    });
+
+    it('ignores malformed filter entries while applying valid filters', async () => {
+      const validFilter = JSON.stringify({
+        logicOperator: 'and',
+        type: 'metric',
+        operator: 'equals',
+        value: 'accuracy',
+      });
+      const valid = await evalWithResults.getTablePage({ filters: [validFilter] });
+      const mixed = await evalWithResults.getTablePage({
+        filters: ['{bad json', 'null', '[]', validFilter],
+      });
+      expect(mixed.filteredCount).toBe(valid.filteredCount);
+      expect(mixed.body).toEqual(valid.body);
     });
 
     it('should combine multiple filter types', async () => {
@@ -1511,7 +2013,7 @@ describe('evaluator', () => {
           success, score, metadata
         ) VALUES
         ('promptfoo-ns-1', '${eval_.id}', 0, 0, '{}', '{}', '{}', 1, 1.0,
-          '{"userKey": "shown", "__promptfoo": {"traceLinkage": {"traceId": "abc"}}}')`,
+          '{"userKey": "shown", "__promptfoo": {"remote": true, "traceLinkage": {"traceId": "abc"}}}')`,
       );
 
       const keys = await EvalQueries.getMetadataKeysFromEval(eval_.id);
@@ -1648,14 +2150,7 @@ describe('evaluator', () => {
         withNamedScores: true,
       });
       const { testIndices, filteredCount } = await (eval_ as any).queryTestIndices({
-        filters: [
-          JSON.stringify({
-            logicOperator: 'and',
-            type: 'metric',
-            operator: 'equals',
-            value: 'accuracy',
-          }),
-        ],
+        filters: [JSON.stringify(createAccuracyFilter())],
       });
 
       expect(testIndices.length).toBeGreaterThan(0);
@@ -1665,10 +2160,7 @@ describe('evaluator', () => {
     });
 
     it('filters by metadata equals and contains', async () => {
-      const eval_ = await EvalFactory.create({
-        numResults: 6,
-        resultTypes: ['success', 'failure'],
-      });
+      const eval_ = await EvalFactory.create(createPassFailOptions(6));
 
       const db = await getDb();
       await db.run(
@@ -1710,10 +2202,7 @@ describe('evaluator', () => {
     });
 
     it('filters by metadata not_contains without dropping missing fields', async () => {
-      const eval_ = await EvalFactory.create({
-        numResults: 4,
-        resultTypes: ['success', 'failure'],
-      });
+      const eval_ = await EvalFactory.create(createPassFailOptions(4));
 
       const db = await getDb();
       await db.run(
@@ -1743,10 +2232,7 @@ describe('evaluator', () => {
     });
 
     it('filters by metadata exists operator (non-empty values only)', async () => {
-      const eval_ = await EvalFactory.create({
-        numResults: 10,
-        resultTypes: ['success', 'failure'],
-      });
+      const eval_ = await EvalFactory.create(createPassFailOptions(10));
 
       const db = await getDb();
       // Set up test data with various field states
@@ -1789,10 +2275,7 @@ describe('evaluator', () => {
     });
 
     it('filters by metadata exists operator with various data types', async () => {
-      const eval_ = await EvalFactory.create({
-        numResults: 10,
-        resultTypes: ['success', 'failure'],
-      });
+      const eval_ = await EvalFactory.create(createPassFailOptions(10));
 
       const db = await getDb();
       // Set up test data with different data types
@@ -1981,10 +2464,7 @@ describe('evaluator', () => {
     });
 
     it('filters by metadata exists operator with empty arrays and objects', async () => {
-      const eval_ = await EvalFactory.create({
-        numResults: 6,
-        resultTypes: ['success', 'failure'],
-      });
+      const eval_ = await EvalFactory.create(createPassFailOptions(6));
 
       const db = await getDb();
       // Test empty array - should match (not empty)
@@ -2059,10 +2539,7 @@ describe('evaluator', () => {
     });
 
     it('filters by plugin and strategy', async () => {
-      const eval_ = await EvalFactory.create({
-        numResults: 6,
-        resultTypes: ['success', 'failure'],
-      });
+      const eval_ = await EvalFactory.create(createPassFailOptions(6));
       const db = await getDb();
       // Set pluginId on one row and strategyId on another
       await db.run(
@@ -2142,10 +2619,7 @@ describe('evaluator', () => {
     });
 
     it('filters by explicit severity override', async () => {
-      const eval_ = await EvalFactory.create({
-        numResults: 4,
-        resultTypes: ['success', 'failure'],
-      });
+      const eval_ = await EvalFactory.create(createPassFailOptions(4));
       const db = await getDb();
       await db.run(
         `UPDATE eval_results SET metadata = json('{"severity":"high"}') WHERE eval_id = '${eval_.id}' AND test_idx = 0`,
@@ -2163,6 +2637,38 @@ describe('evaluator', () => {
       });
       expect(filteredCount).toBe(1);
       expect(testIndices).toEqual([0]);
+    });
+
+    it('searches user metadata with filters while the unfiltered path searches responses only', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 4, withNamedScores: true });
+      const metadataRows = [
+        { model: 'metadata-scalar-needle', temperature: 0.7 },
+        { nested: { property: 'metadata-nested-needle', array: [101, 202, 303] } },
+        { __promptfoo: { traceId: 'private-only-needle' } },
+        { model: 'unrelated-model' },
+      ];
+      const db = await getDb();
+      for (const [index, metadata] of metadataRows.entries()) {
+        await db.run(
+          sql`UPDATE eval_results SET metadata = ${JSON.stringify(metadata)} WHERE eval_id = ${eval_.id} AND test_idx = ${index}`,
+        );
+      }
+      for (const [searchQuery, expected] of [
+        ['metadata-scalar-needle', [0]],
+        ['metadata-nested-needle', [1]],
+        ['[101,202,303]', [1]],
+        ['absent-needle', []],
+        ['private-only-needle', []],
+      ] as const) {
+        const unfiltered = await eval_.getTablePage({ searchQuery });
+        expect(unfiltered.body).toEqual([]);
+        const page = await eval_.getTablePage({
+          searchQuery,
+          filters: [JSON.stringify(createAccuracyFilter())],
+        });
+        expect(page.body.map((row) => row.testIdx)).toEqual(expected);
+        expect(page.filteredCount).toBe(expected.length);
+      }
     });
 
     it('searches across response, grading, named scores, metadata, and vars', async () => {
@@ -2512,19 +3018,18 @@ describe('evaluator', () => {
 
     // The UI's ResultsFilter type is 'and' | 'or', so the server always receives
     // lowercase operators; an exact-match against 'OR' silently combined with AND.
-    it.each([
-      'or',
-      'Or',
-      'OR',
-    ])('should combine with OR for logicOperator %j', (logicOperator: string) => {
-      const result = combineFilterConditions([
-        { condition: sql`field1 = ${1}`, logicOperator },
-        { condition: sql`field2 = ${2}`, logicOperator },
-      ]);
-      const sqlText = toSqlText(result);
-      expect(sqlText).toContain('OR');
-      expect(sqlText).not.toContain('AND');
-    });
+    it.each(['or', 'Or', 'OR'])(
+      'should combine with OR for logicOperator %j',
+      (logicOperator: string) => {
+        const result = combineFilterConditions([
+          { condition: sql`field1 = ${1}`, logicOperator },
+          { condition: sql`field2 = ${2}`, logicOperator },
+        ]);
+        const sqlText = toSqlText(result);
+        expect(sqlText).toContain('OR');
+        expect(sqlText).not.toContain('AND');
+      },
+    );
 
     // Filters are unvalidated JSON from the query string, so a non-string operator
     // must fall back to AND rather than throwing (which would 500 the table route).
