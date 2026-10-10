@@ -14,6 +14,13 @@ export function createLoggerModule(): LoggerModule {
   };
 }
 
+export function createLoggerModuleWithLevel(): LoggerModule & { getLogLevel: Mock } {
+  return {
+    ...createLoggerModule(),
+    getLogLevel: vi.fn().mockReturnValue('info'),
+  };
+}
+
 export function createErrorFirstLoggerModule(): LoggerModule {
   return {
     default: {

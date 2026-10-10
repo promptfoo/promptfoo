@@ -1,6 +1,4 @@
 // Shared by CSV imports and assertion handlers; keep this module browser-safe.
-import invariant from './invariant';
-
 /**
  * Split a contains-any string into fields while preserving quoted commas.
  */
@@ -59,7 +57,9 @@ export function parseCommaSeparatedValues(value: string): string[] {
         }
       }
 
-      invariant(terminated, 'Unterminated quoted field in contains assertion value');
+      if (!terminated) {
+        throw new Error('Invariant failed: Unterminated quoted field in contains assertion value');
+      }
     } else {
       /**
        * Parse an unquoted field up to the next comma, trimming surrounding whitespace.
@@ -73,10 +73,11 @@ export function parseCommaSeparatedValues(value: string): string[] {
     while (i < value.length && /\s/.test(value[i])) {
       i++;
     }
-    invariant(
-      !isQuotedField || i >= value.length || value[i] === ',',
-      'Expected comma after quoted field in contains assertion value',
-    );
+    if (isQuotedField && i < value.length && value[i] !== ',') {
+      throw new Error(
+        'Invariant failed: Expected comma after quoted field in contains assertion value',
+      );
+    }
   }
   return results;
 }

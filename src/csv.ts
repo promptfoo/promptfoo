@@ -3,7 +3,7 @@ import logger from './logger';
 import { BaseAssertionTypesSchema } from './types/index';
 import { isJavascriptFile } from './util/fileExtensions';
 import invariant from './util/invariant';
-import { parseCommaSeparatedValues } from './util/parseCommaSeparatedValues';
+import { parseCommaSeparatedValues } from './validation/parseCommaSeparatedValues';
 
 import type { Assertion, AssertionType, BaseAssertionTypes, CsvRow, TestCase } from './types/index';
 

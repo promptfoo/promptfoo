@@ -30,9 +30,7 @@ describe('config command', () => {
   describe('set email', () => {
     it('should not allow setting email when user is logged in', async () => {
       // Mock logged in state
-      vi.mocked(cloudConfig.getApiKey).mockImplementation(function () {
-        return 'test-api-key';
-      });
+      vi.mocked(cloudConfig.getApiKey).mockReturnValue('test-api-key');
 
       // Execute set email command
       const setEmailCmd = program.commands
@@ -97,12 +95,8 @@ describe('config command', () => {
   describe('unset email', () => {
     it('should not allow unsetting email when user is logged in', async () => {
       // Mock logged in state
-      vi.mocked(cloudConfig.getApiKey).mockImplementation(function () {
-        return 'test-api-key';
-      });
-      vi.mocked(getUserEmail).mockImplementation(function () {
-        return 'test@example.com';
-      });
+      vi.mocked(cloudConfig.getApiKey).mockReturnValue('test-api-key');
+      vi.mocked(getUserEmail).mockReturnValue('test@example.com');
 
       // Execute unset email command
       const unsetEmailCmd = program.commands
@@ -127,9 +121,7 @@ describe('config command', () => {
       vi.mocked(cloudConfig.getApiKey).mockImplementation(function () {
         return undefined;
       });
-      vi.mocked(getUserEmail).mockImplementation(function () {
-        return 'test@example.com';
-      });
+      vi.mocked(getUserEmail).mockReturnValue('test@example.com');
 
       // Execute unset email command with force flag
       const unsetEmailCmd = program.commands
@@ -149,9 +141,7 @@ describe('config command', () => {
       vi.mocked(cloudConfig.getApiKey).mockImplementation(function () {
         return undefined;
       });
-      vi.mocked(getUserEmail).mockImplementation(function () {
-        return 'test@example.com';
-      });
+      vi.mocked(getUserEmail).mockReturnValue('test@example.com');
       vi.mocked(confirm).mockResolvedValueOnce(true);
 
       // Execute unset email command without force flag
@@ -176,9 +166,7 @@ describe('config command', () => {
       vi.mocked(cloudConfig.getApiKey).mockImplementation(function () {
         return undefined;
       });
-      vi.mocked(getUserEmail).mockImplementation(function () {
-        return 'test@example.com';
-      });
+      vi.mocked(getUserEmail).mockReturnValue('test@example.com');
       vi.mocked(confirm).mockResolvedValueOnce(false);
 
       // Execute unset email command without force flag
@@ -199,9 +187,7 @@ describe('config command', () => {
       vi.mocked(cloudConfig.getApiKey).mockImplementation(function () {
         return undefined;
       });
-      vi.mocked(getUserEmail).mockImplementation(function () {
-        return null;
-      });
+      vi.mocked(getUserEmail).mockReturnValue(null);
 
       // Execute unset email command
       const unsetEmailCmd = program.commands
@@ -220,9 +206,7 @@ describe('config command', () => {
   describe('get email', () => {
     it('should show email when it exists', async () => {
       // Mock existing email
-      vi.mocked(getUserEmail).mockImplementation(function () {
-        return 'test@example.com';
-      });
+      vi.mocked(getUserEmail).mockReturnValue('test@example.com');
       vi.mocked(cloudConfig.getApiKey).mockImplementation(function () {
         return undefined;
       });
@@ -241,9 +225,7 @@ describe('config command', () => {
 
     it('should show message when no email is set', async () => {
       // Mock no existing email
-      vi.mocked(getUserEmail).mockImplementation(function () {
-        return null;
-      });
+      vi.mocked(getUserEmail).mockReturnValue(null);
       vi.mocked(cloudConfig.getApiKey).mockImplementation(function () {
         return undefined;
       });
@@ -263,12 +245,8 @@ describe('config command', () => {
     });
 
     it('should show auth guidance when API key exists and no local email is set', async () => {
-      vi.mocked(getUserEmail).mockImplementation(function () {
-        return null;
-      });
-      vi.mocked(cloudConfig.getApiKey).mockImplementation(function () {
-        return 'test-api-key';
-      });
+      vi.mocked(getUserEmail).mockReturnValue(null);
+      vi.mocked(cloudConfig.getApiKey).mockReturnValue('test-api-key');
 
       const getEmailCmd = program.commands
         .find((cmd) => cmd.name() === 'config')

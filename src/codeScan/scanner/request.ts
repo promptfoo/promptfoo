@@ -25,18 +25,10 @@ const MAX_CAPACITY_ATTEMPTS = 7;
 const MAX_MCP_TIMEOUT_ATTEMPTS = 2;
 const BASE_DELAY_MS = 1000;
 
-interface RetryPolicy {
-  key: string;
-  maxAttempts: number;
-  status: string;
-  waitStatus: string;
-}
-
 /**
  * Options for scan execution
  */
 export interface ScanExecutionOptions {
-  showSpinner: boolean;
   spinner?: ReturnType<typeof ora>;
   abortController: AbortController;
 }
@@ -93,17 +85,17 @@ export async function executeScanRequest(
   request: ScanRequest,
   options: ScanExecutionOptions,
 ): Promise<ScanResponse> {
-  const { showSpinner, spinner, abortController } = options;
+  const { spinner, abortController } = options;
 
   // Update spinner
-  if (showSpinner && spinner) {
+  if (spinner) {
     spinner.text = 'Scanning...';
   }
 
   // Add heartbeat to show progress during long scans
   let heartbeatInterval: NodeJS.Timeout | undefined;
   let firstPulseTimeout: NodeJS.Timeout | undefined;
-  if (showSpinner && spinner) {
+  if (spinner) {
     const pulse = () => {
       // Show "Still scanning..." for 4 seconds
       spinner!.text = 'Still scanning...';
@@ -123,14 +115,10 @@ export async function executeScanRequest(
   }
 
   // Send scan request and wait for response
-  const scanResponse: ScanResponse = await new Promise((resolve, reject) => {
+  return await new Promise<ScanResponse>((resolve, reject) => {
     const cleanupTimers = () => {
-      if (firstPulseTimeout) {
-        clearTimeout(firstPulseTimeout);
-      }
-      if (heartbeatInterval) {
-        clearInterval(heartbeatInterval);
-      }
+      clearTimeout(firstPulseTimeout);
+      clearInterval(heartbeatInterval);
     };
 
     // Set up event listeners using agent lifecycle
@@ -177,47 +165,6 @@ export async function executeScanRequest(
     // Emit scan request using agent lifecycle
     client.start(request);
   });
-
-  return scanResponse;
-}
-
-/**
- * Check if error is a server capacity error
- */
-function isCapacityError(error: unknown): boolean {
-  if (error instanceof Error) {
-    return error.message.includes(CAPACITY_ERROR_MESSAGE);
-  }
-  return false;
-}
-
-function isMcpRequestTimeout(error: unknown): boolean {
-  if (error instanceof Error) {
-    return error.message.includes(MCP_REQUEST_TIMEOUT_ERROR_MESSAGE);
-  }
-  return false;
-}
-
-function getRetryPolicy(error: unknown): RetryPolicy | undefined {
-  if (isCapacityError(error)) {
-    return {
-      key: 'capacity',
-      maxAttempts: MAX_CAPACITY_ATTEMPTS,
-      status: 'Server busy',
-      waitStatus: 'Server busy',
-    };
-  }
-
-  if (isMcpRequestTimeout(error)) {
-    return {
-      key: 'mcp_timeout',
-      maxAttempts: MAX_MCP_TIMEOUT_ATTEMPTS,
-      status: 'Code scan timed out waiting for repository access',
-      waitStatus: 'Repository access timed out',
-    };
-  }
-
-  return undefined;
 }
 
 /**
@@ -242,7 +189,7 @@ export async function executeScanRequestWithRetry(
   request: ScanRequest,
   options: ScanExecutionOptions,
 ): Promise<ScanResponse> {
-  const { showSpinner, spinner } = options;
+  const { spinner } = options;
 
   const attemptsByPolicy = new Map<string, number>();
 
@@ -250,7 +197,29 @@ export async function executeScanRequestWithRetry(
     try {
       return await executeScanRequest(client, request, options);
     } catch (error) {
-      const retryPolicy = getRetryPolicy(error);
+      const getRetryPolicy = () => {
+        if (error instanceof Error && error.message.includes(CAPACITY_ERROR_MESSAGE)) {
+          return {
+            key: 'capacity',
+            maxAttempts: MAX_CAPACITY_ATTEMPTS,
+            status: 'Server busy',
+            waitStatus: 'Server busy',
+          };
+        }
+
+        if (error instanceof Error && error.message.includes(MCP_REQUEST_TIMEOUT_ERROR_MESSAGE)) {
+          return {
+            key: 'mcp_timeout',
+            maxAttempts: MAX_MCP_TIMEOUT_ATTEMPTS,
+            status: 'Code scan timed out waiting for repository access',
+            waitStatus: 'Repository access timed out',
+          };
+        }
+
+        return undefined;
+      };
+
+      const retryPolicy = getRetryPolicy();
 
       // Only retry known transient scanner errors, not other failures.
       if (!retryPolicy) {
@@ -266,15 +235,14 @@ export async function executeScanRequestWithRetry(
       }
 
       // Exponential backoff with jitter: base * 2^(per-policy attempt) * (0.7 to 1.3)
-      const jitter = 0.7 + 0.6 * Math.random();
-      const delay = BASE_DELAY_MS * Math.pow(2, policyAttempts - 1) * jitter;
+      const delay = BASE_DELAY_MS * Math.pow(2, policyAttempts - 1) * (0.7 + 0.6 * Math.random());
 
       logger.debug(
         `${retryPolicy.status}, retrying in ${Math.round(delay / 1000)}s (attempt ${policyAttempts}/${retryPolicy.maxAttempts})`,
       );
 
       // Update spinner during retry wait (abort-aware)
-      if (showSpinner && spinner) {
+      if (spinner) {
         const originalText = spinner.text;
         spinner.text = `${retryPolicy.waitStatus}, retrying in ${Math.round(delay / 1000)}s...`;
         await sleepWithAbort(delay, options.abortController.signal);
