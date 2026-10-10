@@ -185,6 +185,10 @@ The lock hashes the resolved default test, tests, assertions, scenarios, repeat 
 
 The initial lock format admits only built-in, data-only assertions such as equality, containment, regular-expression, structured-data, count, distance, trace, and local scoring checks. It rejects provider-backed or model-graded assertions, redteam criteria, scripts, webhooks, manual or comparative grading, assertion and test transforms, custom scoring functions, extension hooks, progress callbacks, in-memory functions, and unresolved `file://` or `package:` references. This explicit allowlist prevents deferred code or ambient runtime state from silently changing the effective acceptance criterion after registration. Replace dynamic criteria with static, data-backed checks before locking. Sampling requires `--filter-sample-seed` so the selected tests can be reproduced. The lock path must also be different from every configured eval output path.
 
+Every locked test must apply to every selected target and prompt. The initial format rejects per-test `prompts`/`providers` selectors, provider `prompts` selectors, and `providerPromptMap`; these can otherwise omit failing cases without changing the test definitions. You can change the prompts and models under evaluation while keeping the complete test set. Criteria must use plain JSON data: undefined values, sparse arrays, negative zero, and class instances are rejected rather than hashed lossily. The lock also binds `PROMPTFOO_DISABLE_TEMPLATING` and `PROMPTFOO_DISABLE_VAR_EXPANSION`.
+
+Locked runs give target providers separate copies of the test, variables, and prompt context so context mutations cannot change the grading criteria. Custom JavaScript still runs in the same process and must be trusted; evaluation locks do not sandbox providers.
+
 Use `--verify` for a later run. Verification happens before provider calls, and the threshold stored in the lock is authoritative for the run:
 
 ```sh
