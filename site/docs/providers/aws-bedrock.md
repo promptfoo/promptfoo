@@ -2061,8 +2061,9 @@ Set `streaming: true` for
 [RetrieveAndGenerateStream](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_agent-runtime_RetrieveAndGenerateStream.html).
 Promptfoo collects text and citations into one eval response and surfaces service
 exception events as errors. Streaming calls bypass the cache. Explicit-session and
-streaming generation requests use one SDK attempt to avoid replaying a turn after
-a connection failure. Retrieval-only calls retain the configured retry limit.
+streaming generation requests use one SDK attempt and bypass scheduler retries to
+avoid replaying a turn after a connection failure or partial stream. Retrieval-only
+calls retain the configured retry limit.
 
 For [Retrieve](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_agent-runtime_Retrieve.html)
 without generation, use `bedrock:kb` with `operation: retrieve` and `knowledgeBaseId`.
