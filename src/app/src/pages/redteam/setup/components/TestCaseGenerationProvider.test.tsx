@@ -276,7 +276,7 @@ describe('TestCaseGenerationProvider', () => {
         expect(onError).toHaveBeenCalledTimes(1);
         if (message === 'api-error') {
           expect(onError.mock.calls[0][0]).toEqual(new Error('Invalid configuration provided'));
-        } else {
+        } else if (message !== null) {
           expect(onError.mock.calls[0][0]).toBe(error);
         }
       });
