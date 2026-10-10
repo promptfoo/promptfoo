@@ -42,6 +42,62 @@ describe('HyperbolicProvider', () => {
     expect(provider.toString()).toBe(`[Hyperbolic Provider ${modelName}]`);
   });
 
+  it.each(['flat', 'nested'] as const)(
+    'uses %s credentials, endpoint, request settings, and cost overrides',
+    async (shape) => {
+      const config = {
+        apiKey: 'configured-test-key',
+        apiBaseUrl: 'http://localhost:1234/v1',
+        temperature: 0.25,
+        inputCost: 0.001,
+        outputCost: 0.003,
+      };
+      provider = new HyperbolicProvider(modelName, {
+        config: shape === 'nested' ? { config } : config,
+        env: { HYPERBOLIC_API_KEY: 'env-test-key' },
+      });
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          choices: [{ message: { content: 'answer' }, finish_reason: 'stop' }],
+          usage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('answer');
+      expect(result.cost).toBeCloseTo(0.07);
+      const [url, request] = mockFetchWithCache.mock.calls[0];
+      expect(url).toBe('http://localhost:1234/v1/chat/completions');
+      expect(request?.headers).toMatchObject({ Authorization: 'Bearer configured-test-key' });
+      expect(JSON.parse(request?.body as string)).toMatchObject({ temperature: 0.25 });
+    },
+  );
+
+  it('prefers nested settings over flat settings', () => {
+    provider = new HyperbolicProvider(modelName, {
+      config: {
+        apiKey: 'flat-test-key',
+        apiBaseUrl: 'http://localhost:1234/v1',
+        temperature: 0.5,
+        config: {
+          apiKey: 'nested-test-key',
+          apiBaseUrl: 'http://localhost:5678/v1',
+          temperature: 0,
+        },
+      },
+    });
+
+    expect(provider.getApiKey()).toBe('nested-test-key');
+    expect(provider.getApiUrl()).toBe('http://localhost:5678/v1');
+    expect(provider.config.temperature).toBe(0);
+  });
+
   it('should convert to JSON correctly', () => {
     const json = provider.toJSON();
     expect(json).toEqual({
@@ -125,6 +181,25 @@ describe('HyperbolicProvider', () => {
 });
 
 describe('calculateHyperbolicCost', () => {
+  it.each([
+    { prompt: 1000, completion: 0, cost: 0.0005 },
+    { prompt: 0, completion: 500, cost: 0.00109 },
+    { prompt: 0, completion: 0, cost: 0 },
+  ])('bills zero-valued token categories (%j)', ({ prompt, completion, cost }) => {
+    expect(calculateHyperbolicCost('deepseek-ai/DeepSeek-R1', {}, prompt, completion)).toBeCloseTo(
+      cost,
+      10,
+    );
+  });
+
+  it.each([undefined, -1, Number.NaN, Infinity, -Infinity])(
+    'rejects missing or invalid token counts (%s)',
+    (tokens) => {
+      expect(calculateHyperbolicCost('deepseek-ai/DeepSeek-R1', {}, tokens, 500)).toBeUndefined();
+      expect(calculateHyperbolicCost('deepseek-ai/DeepSeek-R1', {}, 1000, tokens)).toBeUndefined();
+    },
+  );
+
   it('should calculate cost correctly for known model', () => {
     const cost = calculateHyperbolicCost('deepseek-ai/DeepSeek-R1', {}, 1000, 500);
     expect(cost).toBe((0.5 / 1e6) * 1000 + (2.18 / 1e6) * 500);

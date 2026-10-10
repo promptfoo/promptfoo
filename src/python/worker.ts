@@ -454,11 +454,13 @@ export class PythonWorker {
       forceKill.unref();
       void closed.then(() => clearTimeout(forceKill));
 
-      pythonProcess.stdin?.end();
       if (process.platform === 'win32') {
         clearTimeout(forceKill);
+        // Keep the wrapper alive until taskkill has enumerated its descendants.
+        // Closing stdin first could let it exit and leave those children orphaned.
         this.killProcessTree(pythonProcess);
       } else {
+        pythonProcess.stdin?.end();
         pythonProcess.kill('SIGINT');
       }
     }

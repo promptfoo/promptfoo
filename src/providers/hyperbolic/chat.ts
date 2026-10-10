@@ -9,7 +9,7 @@ import type { OpenAiCompletionOptions } from '../openai/types';
 type HyperbolicConfig = OpenAiCompletionOptions;
 
 type HyperbolicProviderOptions = Omit<ProviderOptions, 'config'> & {
-  config?: {
+  config?: HyperbolicConfig & {
     config?: HyperbolicConfig;
   };
 };
@@ -184,7 +184,14 @@ export function calculateHyperbolicCost(
   completionTokens?: number,
   reasoningTokens?: number,
 ): number | undefined {
-  if (!promptTokens || !completionTokens) {
+  if (
+    typeof promptTokens !== 'number' ||
+    !Number.isFinite(promptTokens) ||
+    promptTokens < 0 ||
+    typeof completionTokens !== 'number' ||
+    !Number.isFinite(completionTokens) ||
+    completionTokens < 0
+  ) {
     return undefined;
   }
 
@@ -228,17 +235,23 @@ export class HyperbolicProvider extends OpenAiChatCompletionProvider {
   }
 
   constructor(modelName: string, providerOptions: HyperbolicProviderOptions) {
+    const hyperbolicConfig = providerOptions.config?.config;
+
     super(modelName, {
       ...providerOptions,
       config: {
         ...providerOptions.config,
+        ...hyperbolicConfig,
         apiKeyEnvar: 'HYPERBOLIC_API_KEY',
-        apiBaseUrl: 'https://api.hyperbolic.xyz/v1',
+        apiBaseUrl:
+          hyperbolicConfig?.apiBaseUrl ??
+          providerOptions.config?.apiBaseUrl ??
+          'https://api.hyperbolic.xyz/v1',
       },
     });
 
     // Store the original config for later use
-    this.originalConfig = providerOptions.config?.config;
+    this.originalConfig = hyperbolicConfig;
   }
 
   id(): string {
