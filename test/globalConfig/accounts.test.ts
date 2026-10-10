@@ -75,7 +75,7 @@ describe('accounts', () => {
       expect(writeGlobalConfig).not.toHaveBeenCalled();
     });
 
-    it('should generate new ID and save to config when no ID exists', () => {
+    const verifyNewUserId = () => {
       vi.mocked(readGlobalConfig).mockReturnValue({
         account: { email: 'test@example.com' },
       });
@@ -91,7 +91,9 @@ describe('accounts', () => {
         account: { email: 'test@example.com' },
         id: result,
       });
-    });
+    };
+
+    it('should generate new ID and save to config when no ID exists', verifyNewUserId);
 
     it('should generate new ID when global config is null', () => {
       vi.mocked(readGlobalConfig).mockReturnValue(null as any);
@@ -123,23 +125,7 @@ describe('accounts', () => {
       });
     });
 
-    it('should generate new ID when config exists but has no id property', () => {
-      vi.mocked(readGlobalConfig).mockReturnValue({
-        account: { email: 'test@example.com' },
-      });
-
-      const result = getUserId();
-
-      // Should return a UUID-like string
-      expect(typeof result).toBe('string');
-      expect(result).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
-
-      // Should have saved the config with the new ID
-      expect(writeGlobalConfig).toHaveBeenCalledWith({
-        account: { email: 'test@example.com' },
-        id: result,
-      });
-    });
+    it('should generate new ID when config exists but has no id property', verifyNewUserId);
   });
 
   describe('getUserEmail', () => {
