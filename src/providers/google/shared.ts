@@ -44,6 +44,8 @@ export interface GoogleModel {
 // global-only availability or global as the broadly available endpoint:
 // https://docs.cloud.google.com/vertex-ai/generative-ai/docs/learn/locations#generative_ai_models
 const VERTEX_GLOBAL_DEFAULT_MODELS = new Set([
+  'gemini-3.8-flash-tts',
+  'gemini-3.8-flash-lite-tts',
   'gemini-3.8-flash',
   'gemini-3.7-flash',
   'gemini-3.6-flash',
@@ -142,6 +144,23 @@ export const GOOGLE_MODELS: GoogleModel[] = [
       vertexRegionalPremium: 1.1,
     }),
   ),
+
+  ...[
+    { id: 'gemini-3.8-flash-tts', audioOutput: 18 / 1e6 },
+    { id: 'gemini-3.8-flash-lite-tts', audioOutput: 12 / 1e6 },
+  ].map(({ id, audioOutput }) => ({
+    id,
+    cost: {
+      input: 1 / 1e6,
+      output: audioOutput,
+      audioOutput,
+      priorityMultiplier: 1.8,
+      flexMultiplier: 0.5,
+    },
+    // Vertex currently publishes only standard pay-as-you-go TTS rates.
+    vertexCost: { input: 1 / 1e6, output: audioOutput, audioOutput },
+    introductoryPricing: GEMINI_FLASH_INTRODUCTORY_PRICING,
+  })),
 
   // Gemini 3.5 models.
   {

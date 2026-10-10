@@ -343,7 +343,9 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
               modality.toUpperCase(),
             ) ?? ['AUDIO'],
           speechConfig: config.generationConfig?.speechConfig ?? {
-            voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } },
+            voiceConfig: this.modelName.startsWith('gemini-3.8-')
+              ? { voice: 'Kore' }
+              : { prebuiltVoiceConfig: { voiceName: 'Kore' } },
           },
         }),
       },
@@ -380,7 +382,9 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
     let cached = false;
     let responseHeaders: unknown;
     try {
-      const endpoint = this.getApiEndpoint('generateContent');
+      const endpoint = this.getApiEndpoint(
+        config.streaming === true ? 'streamGenerateContent' : 'generateContent',
+      );
       const headers = await this.getAuthHeaders();
       const authDiscriminator = createAuthCacheDiscriminator(headers);
       const response = await fetchWithCache(

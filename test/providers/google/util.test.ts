@@ -4311,6 +4311,36 @@ describe('util', () => {
       );
     });
 
+    it.each([
+      ['gemini-3.8-flash-tts', 18],
+      ['gemini-3.8-flash-lite-tts', 12],
+    ])('prices %s with scheduled introductory rates and inference tiers', (id, audioRate) => {
+      vi.useFakeTimers();
+      try {
+        for (const [date, discount] of [
+          ['2026-12-31T23:59:59Z', 0.5],
+          ['2027-01-01T00:00:00Z', 1],
+        ] as const) {
+          vi.setSystemTime(new Date(date));
+          for (const [service_tier, multiplier] of [
+            ['standard', 1],
+            ['flex', 0.5],
+            ['priority', 1.8],
+          ] as const) {
+            expect(
+              calculateGoogleCost(String(id), { service_tier }, 1000, 250, false, 0, 250),
+            ).toBeCloseTo(((1000 + 250 * Number(audioRate)) / 1e6) * discount * multiplier, 12);
+          }
+          expect(calculateGoogleCost(String(id), {}, 1000, 250, true, 0, 250)).toBeCloseTo(
+            ((1000 + 250 * Number(audioRate)) / 1e6) * discount,
+            12,
+          );
+        }
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it('should forward standard Gemini usage metadata into modality-aware billing', () => {
       const cost = calculateGoogleCostFromUsage(
         'gemini-3.5-flash',
