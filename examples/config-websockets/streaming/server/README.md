@@ -30,7 +30,7 @@ cp env.example .env
 npm start
 ```
 
-You can also run in dev mode with automatic restarts:
+Use Node's built-in watch mode for automatic restarts:
 
 ```bash
 npm run dev
