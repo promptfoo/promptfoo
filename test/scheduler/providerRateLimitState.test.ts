@@ -156,6 +156,70 @@ describe('ProviderRateLimitState', () => {
       expect(metrics.failedRequests).toBe(1);
       expect(metrics.completedRequests).toBe(0);
     });
+
+    it('releases a slot exactly once when result finalization fails', async () => {
+      let resolvePending!: (value: string) => void;
+      const pending = state.executeWithRetry(
+        'req-pending',
+        () =>
+          new Promise<string>((resolve) => {
+            resolvePending = resolve;
+          }),
+        {},
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+
+      let finalizedCallCount = 0;
+      await expect(
+        state.executeWithRetry(
+          'req-finalizer-error',
+          async () => {
+            finalizedCallCount++;
+            return { output: 'result' };
+          },
+          {
+            finalizeResult: () => {
+              throw new Error('HTTP 503 in finalizer');
+            },
+          },
+        ),
+      ).rejects.toThrow('HTTP 503 in finalizer');
+
+      expect(finalizedCallCount).toBe(1);
+      expect(state.getMetrics()).toMatchObject({
+        activeRequests: 1,
+        totalRequests: 2,
+        completedRequests: 0,
+        failedRequests: 1,
+      });
+
+      resolvePending('complete');
+      await expect(pending).resolves.toBe('complete');
+      expect(state.getMetrics()).toMatchObject({
+        activeRequests: 0,
+        totalRequests: 2,
+        completedRequests: 1,
+        failedRequests: 1,
+      });
+    });
+
+    it('counts cancellation during error retry backoff', async () => {
+      const controller = new AbortController();
+      const pending = state.executeWithRetry(
+        'req-1',
+        async () => {
+          throw new Error('rate limit');
+        },
+        { abortSignal: controller.signal },
+      );
+      const rejected = expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+      await vi.advanceTimersByTimeAsync(0);
+      controller.abort();
+      await rejected;
+
+      expect(state.getMetrics()).toMatchObject({ totalRequests: 1, failedRequests: 1 });
+    });
   });
 
   describe('executeWithRetry - rate limit detection', () => {
@@ -186,6 +250,44 @@ describe('ProviderRateLimitState', () => {
       } catch {}
 
       expect(events.length).toBeGreaterThan(0);
+    });
+
+    it('preserves a structured result when rate-limit retries are exhausted', async () => {
+      const result = await noRetryState.executeWithRetry(
+        'req-structured-rate-limit',
+        async () => ({ error: 'rate limited', status: 429 }),
+        {
+          isRateLimited: (response) => response?.status === 429,
+          finalizeResult: (response) => response,
+        },
+      );
+
+      expect(result).toEqual({ error: 'rate limited', status: 429 });
+      expect(noRetryState.getMetrics().failedRequests).toBe(1);
+    });
+
+    it('retries a transient result and finalizes the terminal response', async () => {
+      let callCount = 0;
+      const promise = state.executeWithRetry(
+        'req-transient-result',
+        async () => {
+          callCount++;
+          return callCount === 1 ? { status: 503 } : { status: 200 };
+        },
+        {
+          isRetryableResult: (response) => response.status === 503,
+          finalizeResult: (response, retryResults) => ({
+            ...response,
+            priorStatuses: retryResults.map(({ status }) => status),
+          }),
+        },
+      );
+
+      await vi.runAllTimersAsync();
+      const result = await promise;
+
+      expect(callCount).toBe(2);
+      expect(result).toEqual({ status: 200, priorStatuses: [503] });
     });
 
     it('should detect rate limit error by message', async () => {
@@ -420,19 +522,22 @@ describe('ProviderRateLimitState', () => {
   });
 
   describe('executeWithRetry - retry behavior', () => {
+    const createRetryCall =
+      (nextAttempt: () => number, succeedOn = 2) =>
+      async () => {
+        if (nextAttempt() < succeedOn) {
+          throw new Error('Rate limit');
+        }
+        return 'success';
+      };
+
     it('should retry on rate limit and eventually succeed', async () => {
       let attempt = 0;
 
       // Start the request - it will retry after rate limit
       const promise = state.executeWithRetry(
         'req-1',
-        async () => {
-          attempt++;
-          if (attempt < 2) {
-            throw new Error('Rate limit');
-          }
-          return 'success';
-        },
+        createRetryCall(() => ++attempt),
         {
           // Use 0 for immediate retry to avoid timing-dependent flakiness
           // (non-zero values race against slot queue's resetAt timer)
@@ -456,13 +561,7 @@ describe('ProviderRateLimitState', () => {
       let attempt = 0;
       const promise = state.executeWithRetry(
         'req-1',
-        async () => {
-          attempt++;
-          if (attempt < 2) {
-            throw new Error('Rate limit');
-          }
-          return 'success';
-        },
+        createRetryCall(() => ++attempt),
         {
           // Use 0 for immediate retry to avoid timing-dependent flakiness
           // (non-zero values race against slot queue's resetAt timer)
@@ -484,13 +583,7 @@ describe('ProviderRateLimitState', () => {
       let attempt = 0;
       const promise = state.executeWithRetry(
         'req-1',
-        async () => {
-          attempt++;
-          if (attempt < 3) {
-            throw new Error('Rate limit');
-          }
-          return 'success';
-        },
+        createRetryCall(() => ++attempt, 3),
         {
           // Use 0 for immediate retry to avoid timing-dependent flakiness
           // (non-zero values race against slot queue's resetAt timer)
@@ -746,6 +839,41 @@ describe('ProviderRateLimitState', () => {
       expect(typeof metrics.p99LatencyMs).toBe('number');
     });
   });
+
+  it.each(['success', 'error'] as const)(
+    'keeps latency metrics bounded to the latest 100 %s calls',
+    async (outcome) => {
+      const error = new Error('provider failed');
+      for (let index = 0; index < 110; index++) {
+        const request = state.executeWithRetry(
+          `latency-${index}`,
+          async () => {
+            vi.advanceTimersByTime(index < 10 ? 1000 : 1);
+            if (outcome === 'error') {
+              throw error;
+            }
+            return 'success';
+          },
+          { maxRetriesOverride: 0 },
+        );
+        if (outcome === 'error') {
+          await expect(request).rejects.toBe(error);
+        } else {
+          await expect(request).resolves.toBe('success');
+        }
+      }
+
+      expect(state.getMetrics()).toMatchObject({
+        activeRequests: 0,
+        totalRequests: 110,
+        completedRequests: outcome === 'success' ? 110 : 0,
+        failedRequests: outcome === 'error' ? 110 : 0,
+        avgLatencyMs: 1,
+        p50LatencyMs: 1,
+        p99LatencyMs: 1,
+      });
+    },
+  );
 
   describe('dispose', () => {
     it('should clean up resources', () => {

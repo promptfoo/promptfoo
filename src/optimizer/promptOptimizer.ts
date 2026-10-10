@@ -12,7 +12,7 @@ import {
   type TestSuite,
 } from '../types/index';
 import { extractFirstJsonObject, safeJsonStringify } from '../util/json';
-import { isPromptAllowed } from '../util/promptMatching';
+import { getProviderPromptOverride, isPromptAllowed } from '../util/promptMatching';
 import { sanitizeObject } from '../util/sanitizer';
 
 import type EvalResult from '../models/evalResult';
@@ -459,8 +459,9 @@ function createSelectedOptimizationTestSuite(
   }
 
   const providerKey = selectedProvider.label || selectedProvider.id();
-  const allowedPrompts = testSuite.providerPromptMap?.[providerKey];
-  if (!isPromptAllowed(selectedPrompt, allowedPrompts)) {
+  const override = getProviderPromptOverride(selectedProvider, testSuite.providerPromptMap);
+  const selectors = override ?? selectedProvider.prompts?.slice();
+  if (!isPromptAllowed(selectedPrompt, selectors)) {
     throw new Error(
       `Prompt index ${promptIndex} is not configured for provider index ${providerIndex}.`,
     );
@@ -472,6 +473,14 @@ function createSelectedOptimizationTestSuite(
     ...testSuite,
     prompts: [selectedPrompt],
     providers: [selectedProvider],
+    providerPromptMap:
+      selectors === undefined
+        ? testSuite.providerPromptMap
+        : {
+            ...testSuite.providerPromptMap,
+            ...(override === undefined && { [selectedProvider.id()]: selectors }),
+            [providerKey]: selectors,
+          },
   };
 }
 
@@ -509,12 +518,15 @@ function buildCandidateProviderPromptMap(
     return testSuite.providerPromptMap;
   }
 
+  const extendedFilters = new Map<string[], string[]>();
   return Object.fromEntries(
     Object.entries(testSuite.providerPromptMap).map(([providerId, labels]) => {
-      return [
-        providerId,
-        extendPromptFilter(labels, routingPrompt, seedPrompt, candidateLabels) ?? labels,
-      ];
+      const extended =
+        extendedFilters.get(labels) ??
+        extendPromptFilter(labels, routingPrompt, seedPrompt, candidateLabels) ??
+        labels;
+      extendedFilters.set(labels, extended);
+      return [providerId, extended];
     }),
   );
 }

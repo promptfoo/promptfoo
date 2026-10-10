@@ -13,6 +13,7 @@ import {
 } from '../src/evaluatorHelpers';
 import logger from '../src/logger';
 import { AIStudioChatProvider } from '../src/providers/google/ai.studio';
+import { runPython } from '../src/python/pythonUtils';
 import { getNunjucksEngine } from '../src/util/templates';
 import { transform } from '../src/util/transform';
 import { createMockProvider } from './factories/provider';
@@ -122,6 +123,10 @@ vi.mock('../src/util/transform', () => ({
   transform: vi.fn(),
 }));
 
+vi.mock('../src/python/pythonUtils', () => ({
+  runPython: vi.fn(),
+}));
+
 const mockApiProvider = createMockProvider();
 
 function toPrompt(text: string): Prompt {
@@ -140,6 +145,7 @@ describe('evaluatorHelpers', () => {
    */
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(runPython).mockReset();
     dynamicModuleMocks.clear();
     mockPathResolve.mockReset();
     mockPathResolve.mockImplementation((...paths: string[]) => actualPathResolve(...paths));
@@ -328,6 +334,15 @@ describe('evaluatorHelpers', () => {
       expect(renderedPrompt).toBe('Test prompt with Dynamic value for var1 and var2 and var3');
     });
 
+    it('should accept an empty string from an external JavaScript variable', async () => {
+      const prompt = toPrompt('before{{ var1 }}after');
+      const vars = { var1: 'file:///path/to/empty.js' };
+
+      mockDynamicModule('/path/to/empty.js', () => ({ output: '' }));
+
+      await expect(renderPrompt(prompt, vars, {})).resolves.toBe('beforeafter');
+    });
+
     it('should load external js package in renderPrompt and execute the exported function', async () => {
       const prompt = toPrompt('Test prompt with {{ var1 }}');
       const vars = {
@@ -348,6 +363,63 @@ describe('evaluatorHelpers', () => {
       const renderedPrompt = await renderPrompt(prompt, vars, evaluateOptions);
       expect(renderedPrompt).toBe('Test prompt with Dynamic value for var1');
     });
+
+    it('should accept an empty string from a package variable', async () => {
+      const prompt = toPrompt('before{{ var1 }}after');
+      const vars = { var1: 'package:@promptfoo/fake:emptyVariable' };
+
+      const require = createRequire('');
+      vi.mocked(require.resolve).mockReturnValueOnce('/node_modules/@promptfoo/fake/index.js');
+      mockDynamicModule('/node_modules/@promptfoo/fake/index.js', {
+        emptyVariable: () => ({ output: '' }),
+      });
+
+      await expect(renderPrompt(prompt, vars, {})).resolves.toBe('beforeafter');
+    });
+
+    it('should accept an empty string from an external Python variable', async () => {
+      const prompt = toPrompt('before{{ var1 }}after');
+      const vars = { var1: 'file:///path/to/empty.py' };
+
+      vi.mocked(runPython).mockResolvedValueOnce({ output: '' });
+
+      await expect(renderPrompt(prompt, vars, {})).resolves.toBe('beforeafter');
+    });
+
+    it.each([undefined, null, false, 0, 1, [], {}])(
+      'rejects non-string JavaScript variable output %j',
+      async (output) => {
+        mockDynamicModule('/path/to/variable.js', () => ({ output }));
+
+        await expect(
+          renderPrompt(toPrompt('{{ var1 }}'), { var1: 'file:///path/to/variable.js' }, {}),
+        ).rejects.toThrow('to return { output: string }');
+      },
+    );
+
+    it.each([undefined, null, false, 0, 1, [], {}])(
+      'rejects non-string package variable output %j',
+      async (output) => {
+        mockDynamicModule('/node_modules/@promptfoo/fake/index.js', {
+          variable: () => ({ output }),
+        });
+
+        await expect(
+          renderPrompt(toPrompt('{{ var1 }}'), { var1: 'package:@promptfoo/fake:variable' }, {}),
+        ).rejects.toThrow('to return { output: string }');
+      },
+    );
+
+    it.each([undefined, null, false, 0, 1, [], {}])(
+      'rejects non-string Python variable output %j',
+      async (output) => {
+        vi.mocked(runPython).mockResolvedValueOnce({ output });
+
+        await expect(
+          renderPrompt(toPrompt('{{ var1 }}'), { var1: 'file:///path/to/variable.py' }, {}),
+        ).rejects.toThrow(output == null ? 'did not return any output' : 'must be a string');
+      },
+    );
 
     it('should throw a clear error when a package variable does not export a function', async () => {
       const prompt = toPrompt('Test prompt with {{ var1 }}');

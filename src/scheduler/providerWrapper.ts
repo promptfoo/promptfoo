@@ -5,6 +5,8 @@
  * code paths that bypass the main evaluator.
  */
 
+import { composeResponseHeadersObservers } from '../util/fetch/responseHeadersObserver';
+import { isSafeCost, isSafeTokenCount } from '../util/numeric';
 import { parseRetryAfter } from './headerParser';
 import {
   getProviderResponseHeaders,
@@ -17,6 +19,7 @@ import type {
   CallApiContextParams,
   CallApiOptionsParams,
   ProviderResponse,
+  TokenUsage,
 } from '../types/providers';
 import type { RateLimitRegistry } from './rateLimitRegistry';
 
@@ -31,6 +34,52 @@ const WRAPPED_SYMBOL = Symbol.for('promptfoo.rateLimitWrapped');
  * Uses the specific WRAPPED_SYMBOL for type safety.
  */
 type WrappedApiProvider = ApiProvider & { [WRAPPED_SYMBOL]: boolean };
+
+const TOKEN_USAGE_FIELDS = ['prompt', 'completion', 'cached', 'total'] as const;
+const COMPLETION_DETAIL_FIELDS = [
+  'reasoning',
+  'acceptedPrediction',
+  'rejectedPrediction',
+  'cacheReadInputTokens',
+  'cacheCreationInputTokens',
+] as const;
+
+function addSafeTokenMetric(current: number | undefined, value: unknown): number | undefined {
+  if (!isSafeTokenCount(value)) {
+    return undefined;
+  }
+  const total = (current ?? 0) + value;
+  return Number.isSafeInteger(total) ? total : undefined;
+}
+
+function accumulateRetryTokenUsage(target: Partial<TokenUsage>, response: ProviderResponse): void {
+  const usage = response.tokenUsage;
+  for (const field of TOKEN_USAGE_FIELDS) {
+    const total = addSafeTokenMetric(target[field], usage?.[field]);
+    if (total !== undefined) {
+      target[field] = total;
+    }
+  }
+
+  for (const field of COMPLETION_DETAIL_FIELDS) {
+    const value = usage?.completionDetails?.[field];
+    const total = addSafeTokenMetric(target.completionDetails?.[field], value);
+    if (total !== undefined) {
+      target.completionDetails ??= {};
+      target.completionDetails[field] = total;
+    }
+  }
+
+  const requests = response.cached
+    ? 0
+    : isSafeTokenCount(usage?.numRequests)
+      ? usage.numRequests
+      : 1;
+  const totalRequests = addSafeTokenMetric(target.numRequests, requests);
+  if (totalRequests !== undefined) {
+    target.numRequests = totalRequests;
+  }
+}
 
 /**
  * Check if a provider is already wrapped with rate limiting.
@@ -96,6 +145,31 @@ export function createProviderRateLimitOptions(
       }
       return undefined;
     },
+    isRetryableResult: (result) => {
+      return result.metadata?.retryableErrorKind === 'transient_availability';
+    },
+    finalizeResult: (result, retryResults) => {
+      if (retryResults.length === 0) {
+        return result;
+      }
+      const tokenUsage: Partial<TokenUsage> = {};
+      let combinedCost = 0;
+      let hasCost = false;
+      for (const response of [...retryResults, result]) {
+        accumulateRetryTokenUsage(tokenUsage, response);
+        if (isSafeCost(response.cost)) {
+          combinedCost += response.cost;
+          hasCost = true;
+        }
+      }
+      const resultWithoutCost = { ...result };
+      delete resultWithoutCost.cost;
+      return {
+        ...resultWithoutCost,
+        tokenUsage,
+        ...(hasCost && Number.isFinite(combinedCost) && { cost: combinedCost }),
+      };
+    },
   };
 }
 
@@ -131,7 +205,20 @@ export function wrapProviderWithRateLimiting(
     ): Promise<ProviderResponse> => {
       return registry.execute(
         provider,
-        () => originalCallApi(prompt, context, options),
+        (onResponseHeaders) =>
+          originalCallApi(
+            prompt,
+            context,
+            onResponseHeaders
+              ? {
+                  ...options,
+                  onResponseHeaders: composeResponseHeadersObservers(
+                    onResponseHeaders,
+                    options?.onResponseHeaders,
+                  ),
+                }
+              : options,
+          ),
         createProviderRateLimitOptions(options?.abortSignal),
       );
     },

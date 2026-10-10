@@ -1,11 +1,15 @@
+import { createTokenOutput } from '../factories/literalFixtures';
 import './setup';
 
+import { getEventListeners } from 'node:events';
 import fs from 'fs/promises';
 
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearCache } from '../../src/cache';
 import { runEval } from '../../src/evaluator';
+import logger from '../../src/logger';
 import { geminiFormatAndSystemInstructions } from '../../src/providers/google/util';
+import { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
 import {
   type ApiProvider,
   type CallApiContextParams,
@@ -14,7 +18,33 @@ import {
   type TestSuite,
 } from '../../src/types/index';
 import * as fileExtensions from '../../src/util/fileExtensions';
+import { sleep } from '../../src/util/time';
 import { mockGradingApiProviderPasses, resetMockProviders } from './helpers';
+
+const createEmptyEvaluationConfig = () => ({
+  providers: [],
+  prompts: [],
+});
+
+const createAsciiSmugglingMetadata = () => ({
+  pluginId: 'ascii-smuggling',
+});
+
+const createInitialRunOptions = () => ({
+  delay: 0,
+  testIdx: 0,
+  promptIdx: 0,
+  repeatIndex: 0,
+  isRedteam: false,
+});
+
+const createCappedRedteamConfig = () => ({
+  providers: [],
+  prompts: [],
+  redteam: {
+    maxCharsPerMessage: 10,
+  },
+});
 
 describe('runEval', () => {
   beforeEach(() => {
@@ -36,19 +66,10 @@ describe('runEval', () => {
 
   const mockProvider: ApiProvider = {
     id: vi.fn().mockReturnValue('test-provider'),
-    callApi: vi.fn().mockResolvedValue({
-      output: 'Test output',
-      tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-    }),
+    callApi: vi.fn().mockResolvedValue(createTokenOutput()),
   };
 
-  const defaultOptions = {
-    delay: 0,
-    testIdx: 0,
-    promptIdx: 0,
-    repeatIndex: 0,
-    isRedteam: false,
-  };
+  const defaultOptions = createInitialRunOptions();
 
   it('should handle basic prompt evaluation', async () => {
     const results = await runEval({
@@ -407,6 +428,27 @@ describe('runEval', () => {
     });
   });
 
+  it('should not add provider errors to conversation history', async () => {
+    const conversations = {} as Record<string, any>;
+    const errorProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('error-provider'),
+      callApi: vi.fn().mockResolvedValue({ error: 'Provider failed' }),
+    };
+
+    const [result] = await runEval({
+      ...defaultOptions,
+      provider: errorProvider,
+      prompt: { raw: 'Hello {{_conversation[0].output}}', label: 'test-label' },
+      test: {},
+      conversations,
+      registers: {},
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBe('Provider failed');
+    expect(conversations).toEqual({});
+  });
+
   it('should handle conversation with custom ID', async () => {
     const conversations = {};
 
@@ -698,13 +740,7 @@ describe('runEval', () => {
     };
 
     // Define defaultOptions locally for this test
-    const defaultOptions = {
-      delay: 0,
-      testIdx: 0,
-      promptIdx: 0,
-      repeatIndex: 0,
-      isRedteam: false,
-    };
+    const defaultOptions = createInitialRunOptions();
 
     const results = await runEval({
       ...defaultOptions,
@@ -915,13 +951,7 @@ describe('runEval', () => {
           prompt: 'this is too long',
         },
       },
-      testSuite: {
-        providers: [],
-        prompts: [],
-        redteam: {
-          maxCharsPerMessage: 10,
-        },
-      } as unknown as TestSuite,
+      testSuite: createCappedRedteamConfig() as unknown as TestSuite,
       conversations: {},
       registers: {},
       isRedteam: true,
@@ -942,13 +972,7 @@ describe('runEval', () => {
       },
       prompt: { raw: 'this prompt is longer than ten chars', label: 'test-label' },
       test: {},
-      testSuite: {
-        providers: [],
-        prompts: [],
-        redteam: {
-          maxCharsPerMessage: 10,
-        },
-      } as unknown as TestSuite,
+      testSuite: createCappedRedteamConfig() as unknown as TestSuite,
       conversations: {},
       registers: {},
       isRedteam: false,
@@ -1023,14 +1047,9 @@ describe('runEval', () => {
           prompt: 'Please answer in two sentences for a user whose role is "{{purpose | trim}}".',
         },
         assert: [{ type: 'promptfoo:redteam:ascii-smuggling' }],
-        metadata: {
-          pluginId: 'ascii-smuggling',
-        },
+        metadata: createAsciiSmugglingMetadata(),
       },
-      testSuite: {
-        providers: [],
-        prompts: [],
-      } as unknown as TestSuite,
+      testSuite: createEmptyEvaluationConfig() as unknown as TestSuite,
       conversations: {},
       registers: {},
       isRedteam: false,
@@ -1064,10 +1083,7 @@ describe('runEval', () => {
         },
         options: { provider: mockGradingApiProviderPasses },
       },
-      testSuite: {
-        providers: [],
-        prompts: [],
-      } as unknown as TestSuite,
+      testSuite: createEmptyEvaluationConfig() as unknown as TestSuite,
       conversations: {},
       registers: {},
       isRedteam: false,
@@ -1087,14 +1103,9 @@ describe('runEval', () => {
           query: 'Please answer in two sentences for a user whose role is "{{purpose | trim}}".',
         },
         assert: [{ type: 'promptfoo:redteam:ascii-smuggling' }],
-        metadata: {
-          pluginId: 'ascii-smuggling',
-        },
+        metadata: createAsciiSmugglingMetadata(),
       },
-      testSuite: {
-        providers: [],
-        prompts: [],
-      } as unknown as TestSuite,
+      testSuite: createEmptyEvaluationConfig() as unknown as TestSuite,
       conversations: {},
       registers: {},
       isRedteam: false,
@@ -1119,14 +1130,9 @@ describe('runEval', () => {
           query: 'Please answer in two sentences for a user whose role is "{{purpose | trim}}".',
         },
         assert: [{ type: 'promptfoo:redteam:ascii-smuggling' }],
-        metadata: {
-          pluginId: 'ascii-smuggling',
-        },
+        metadata: createAsciiSmugglingMetadata(),
       },
-      testSuite: {
-        providers: [],
-        prompts: [],
-      } as unknown as TestSuite,
+      testSuite: createEmptyEvaluationConfig() as unknown as TestSuite,
       conversations: {},
       registers: {},
       isRedteam: false,
@@ -1151,14 +1157,9 @@ describe('runEval', () => {
             assert: [{ type: 'promptfoo:redteam:ascii-smuggling' }],
           },
         ],
-        metadata: {
-          pluginId: 'ascii-smuggling',
-        },
+        metadata: createAsciiSmugglingMetadata(),
       },
-      testSuite: {
-        providers: [],
-        prompts: [],
-      } as unknown as TestSuite,
+      testSuite: createEmptyEvaluationConfig() as unknown as TestSuite,
       conversations: {},
       registers: {},
       isRedteam: false,
@@ -1178,14 +1179,9 @@ describe('runEval', () => {
           name: 'Alice',
           query: 'Hello {{name}}',
         },
-        metadata: {
-          pluginId: 'ascii-smuggling',
-        },
+        metadata: createAsciiSmugglingMetadata(),
       },
-      testSuite: {
-        providers: [],
-        prompts: [],
-      } as unknown as TestSuite,
+      testSuite: createEmptyEvaluationConfig() as unknown as TestSuite,
       conversations: {},
       registers: {},
       isRedteam: false,
@@ -1255,10 +1251,7 @@ describe('runEval', () => {
           // on a real timer.
           await Promise.resolve();
           vi.advanceTimersByTime(50);
-          return {
-            output: 'Test output',
-            tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-          };
+          return createTokenOutput();
         }),
       };
 
@@ -1302,5 +1295,136 @@ describe('runEval', () => {
 
       expect(results[0].latencyMs).toBe(0);
     });
+  });
+
+  it.each(['already-aborted', 'during-delay', 'ordinary', 'cached'] as const)(
+    'preserves completed provider diagnostics through %s delay handling',
+    async (phase) => {
+      const actualTime =
+        await vi.importActual<typeof import('../../src/util/time')>('../../src/util/time');
+      vi.mocked(sleep).mockImplementation(actualTime.sleep);
+      vi.useFakeTimers({
+        toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'],
+      });
+      const registry = new RateLimitRegistry({ maxConcurrency: 1 });
+      const controller = new AbortController();
+      const reason = Object.freeze(
+        Object.assign(new Error('caller stopped'), { name: 'AbortException' }),
+      );
+      const response = {
+        error: 'Completed callback diagnostic',
+        cost: 0.25,
+        tokenUsage: { prompt: 2, completion: 3, total: 5, numRequests: 1 },
+        metadata: { errorOrigin: 'tool' as const },
+        cached: phase === 'cached',
+      };
+      const provider: ApiProvider = {
+        id: () => 'completed-diagnostic',
+        delay: 60000,
+        callApi: vi.fn(async () => {
+          if (phase === 'already-aborted') {
+            controller.abort(reason);
+          }
+          return response;
+        }),
+      };
+      let outcome: { rows: Awaited<ReturnType<typeof runEval>> } | { error: unknown } | undefined;
+      const pending = runEval({
+        ...defaultOptions,
+        provider,
+        prompt: { raw: 'Test prompt', label: 'test-label' },
+        test: {},
+        abortSignal: controller.signal,
+        rateLimitRegistry: registry,
+      }).then(
+        (rows) => {
+          outcome = { rows };
+        },
+        (error: unknown) => {
+          outcome = { error };
+        },
+      );
+      try {
+        await vi.advanceTimersByTimeAsync(0);
+        expect(provider.callApi).toHaveBeenCalledOnce();
+        if (phase === 'ordinary' || phase === 'during-delay') {
+          expect(outcome).toBeUndefined();
+        }
+        if (phase === 'during-delay') {
+          controller.abort(reason);
+          await vi.advanceTimersByTimeAsync(0);
+        } else if (phase === 'ordinary') {
+          await vi.advanceTimersByTimeAsync(59999);
+          expect(outcome).toBeUndefined();
+          await vi.advanceTimersByTimeAsync(1);
+        }
+        await pending;
+        expect(outcome).toBeDefined();
+        if (!outcome || 'error' in outcome) {
+          throw new Error('runEval did not settle with a result');
+        }
+        const [row] = outcome.rows;
+        expect(row.error).toBe(response.error);
+        expect(row.response?.cost).toBe(0.25);
+        expect(row.response?.tokenUsage).toMatchObject({ prompt: 2, completion: 3, total: 5 });
+        expect(row.success).toBe(false);
+        expect(row.failureReason).toBe(ResultFailureReason.ERROR);
+        expect(provider.callApi).toHaveBeenCalledOnce();
+        expect(
+          Object.values(registry.getMetrics()).every(
+            (m) => m.activeRequests === 0 && m.queueDepth === 0,
+          ),
+        ).toBe(true);
+        // Check this evaluation's cleanup without counting unrelated worker timers.
+        expect(getEventListeners(controller.signal, 'abort')).toHaveLength(0);
+      } finally {
+        registry.dispose();
+        await vi.advanceTimersByTimeAsync(60000);
+        await pending;
+        vi.mocked(sleep).mockReset();
+      }
+    },
+  );
+
+  it.each([
+    { description: 'caller AbortException', name: 'AbortException', aborted: true, logged: false },
+    { description: 'independent SDK AbortError', name: 'AbortError', aborted: false, logged: true },
+    {
+      description: 'unrelated error during caller cancellation',
+      name: 'SyntaxError',
+      aborted: true,
+      logged: true,
+    },
+  ])('classifies provider logging for $description', async ({ name, aborted, logged }) => {
+    const controller = new AbortController();
+    const error = Object.freeze(Object.assign(new Error('Exact provider diagnostic'), { name }));
+    const errorLog = vi.spyOn(logger, 'error').mockImplementation(() => logger);
+    const provider: ApiProvider = {
+      id: () => 'logging-control',
+      callApi: vi.fn(async () => {
+        if (aborted) {
+          controller.abort(error);
+        }
+        throw error;
+      }),
+    };
+    const [row] = await runEval({
+      ...defaultOptions,
+      provider,
+      prompt: { raw: 'Test prompt', label: 'test-label' },
+      test: {},
+      abortSignal: controller.signal,
+    });
+    expect(row.error).toContain('Exact provider diagnostic');
+    expect(row.failureReason).toBe(ResultFailureReason.ERROR);
+    expect(row.success).toBe(false);
+    expect(provider.callApi).toHaveBeenCalledOnce();
+    expect(error.name).toBe(name);
+    if (aborted) {
+      expect(controller.signal.reason).toBe(error);
+    }
+    expect(
+      errorLog.mock.calls.filter(([message]) => message === 'Provider call failed during eval'),
+    ).toHaveLength(logged ? 1 : 0);
   });
 });
