@@ -52,6 +52,26 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 
 describe('Converse native request features', () => {
+  it('omits empty OpenAI tool descriptions while preserving strict schemas', async () => {
+    const { provider, send } = fixture({
+      tools: [
+        {
+          type: 'function',
+          function: {
+            name: 'lookup',
+            description: '',
+            strict: true,
+            parameters: { type: 'object', properties: {} },
+          },
+        },
+      ],
+    });
+    expect((await provider.callApi('hello')).error).toBeUndefined();
+    const spec = send.mock.calls[0][0].input.toolConfig.tools[0].toolSpec;
+    expect(spec).not.toHaveProperty('description');
+    expect(spec.strict).toBe(true);
+  });
+
   it('keeps text-only max-token responses without invoking tools', async () => {
     const { provider, send } = fixture({ streaming: true });
     send.mockResolvedValueOnce(
@@ -195,6 +215,7 @@ describe('Converse native request features', () => {
     const content = [
       { image: { source: { media_type: 'image/jpeg', data: 'YWJj' } } },
       { image: { source: { bytes: 'YWJj' } } },
+      { image: { format: 'jpg', source: { bytes: 'YWJj' } } },
       { document: { source: { bytes: 'YWJj' } } },
       { toolUse: { id: 'call-1', name: 'lookup', input: { query: 'hello' } } },
       { toolResult: { tool_use_id: 'call-1', content: 'ok' } },
@@ -204,6 +225,7 @@ describe('Converse native request features', () => {
     expect(messages[0].content).toEqual([
       { image: { format: 'jpeg', source: { bytes: Buffer.from('abc') } } },
       { image: { format: 'png', source: { bytes: Buffer.from('abc') } } },
+      { image: { format: 'jpeg', source: { bytes: Buffer.from('abc') } } },
       { document: { format: 'txt', name: 'document', source: { bytes: Buffer.from('abc') } } },
       { toolUse: { toolUseId: 'call-1', name: 'lookup', input: { query: 'hello' } } },
       { toolResult: { toolUseId: 'call-1', content: [{ text: 'ok' }] } },

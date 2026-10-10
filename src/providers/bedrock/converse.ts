@@ -195,7 +195,7 @@ function convertToolsToConverseFormat(tools: BedrockConverseToolConfig[]): Tool[
         toolSpec: {
           name: tool.function.name,
           ...(tool.function.strict === undefined ? {} : { strict: tool.function.strict }),
-          description: tool.function.description,
+          ...(tool.function.description ? { description: tool.function.description } : {}),
           inputSchema: {
             json: (tool.function.parameters || { type: 'object', properties: {} }) as DocumentType,
           },
@@ -453,6 +453,9 @@ function decodeNativeBytes(bytes: unknown): Uint8Array {
 }
 
 function normalizeNativeContentBlock(block: ContentBlock): ContentBlock {
+  if (block.image && (block.image.format as string) === 'jpg') {
+    block.image.format = 'jpeg';
+  }
   for (const key of ['image', 'document', 'video', 'audio'] as const) {
     const media = block[key];
     if (media?.source?.bytes !== undefined) {
