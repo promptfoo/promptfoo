@@ -32,25 +32,19 @@ function roundToNearest(num, nearest) {
   return Math.round(num / nearest) * nearest;
 }
 
-async function fetchWithTimeout(url, options = {}) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-  try {
-    const headers = { 'User-Agent': 'promptfoo-site-build', ...options.headers };
-    if (process.env.GITHUB_TOKEN) {
-      const { hostname } = new URL(url);
-      if (hostname === 'api.github.com' || hostname === 'github.com') {
-        headers.Authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
-      }
+async function fetchWithTimeout(url) {
+  const headers = { 'User-Agent': 'promptfoo-site-build' };
+  if (process.env.GITHUB_TOKEN) {
+    const { hostname } = new URL(url);
+    if (hostname === 'api.github.com' || hostname === 'github.com') {
+      headers.Authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
     }
-    const res = await fetch(url, { ...options, headers, signal: controller.signal });
-    if (!res.ok) {
-      throw new Error(`HTTP ${res.status} ${res.statusText}`);
-    }
-    return res;
-  } finally {
-    clearTimeout(timer);
   }
+  const res = await fetch(url, { headers, signal: AbortSignal.timeout(TIMEOUT_MS) });
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status} ${res.statusText}`);
+  }
+  return res;
 }
 
 async function fetchGitHubStars() {
