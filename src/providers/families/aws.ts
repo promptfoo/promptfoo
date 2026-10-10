@@ -173,9 +173,8 @@ export const awsProviderFactories: ProviderFactory[] = [
             ? splits[1]
             : undefined;
       // Prefixed Grok ids are never mantle ids — the mantle endpoint 404s on them. Most are
-      // simply invalid, but Grok 4.6 publishes Runtime profiles. Preserve their existing
-      // routing; recommend explicit Converse in docs because the current AWS card does not
-      // list InvokeModel. An explicit `bedrock:mantle:` request is rejected either way.
+      // simply invalid, but supported Grok Runtime profiles use InvokeModel or Converse.
+      // An explicit `bedrock:mantle:` request is rejected either way.
       const routedGrokModel = modelType === 'mantle' ? modelName : candidateResponsesModel;
       if (routedGrokModel && isRejectedPrefixedGrokId(routedGrokModel, modelType === 'mantle')) {
         throw new Error(

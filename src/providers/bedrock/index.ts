@@ -537,7 +537,7 @@ interface BedrockOpenAICompatGenerationOptions extends BedrockQwenGenerationOpti
    * Reasoning depth for reasoning-capable models in this group (e.g. MiniMax M2, NVIDIA
    * Nemotron). Forwarded as-is so Bedrock validates it; omitted unless explicitly set.
    */
-  reasoning_effort?: 'low' | 'medium' | 'high' | 'max';
+  reasoning_effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 }
 
 // =============================================================================
@@ -2488,10 +2488,11 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   // use `{ messages, max_tokens, ... }` -> `{ choices: [{ message: { content } }] }`, so they
   // share BEDROCK_MODEL.OPENAI_COMPAT. Verified available via `aws bedrock list-foundation-models`.
 
-  // Z.AI GLM
-  // GLM 5.3 and Kimi K3 require Runtime cross-region inference profiles.
+  // Grok 4.7, GLM 5.3, and Kimi K3 require Runtime cross-region inference profiles.
   'us.xai.grok-4.7': BEDROCK_MODEL.OPENAI_COMPAT,
   'global.xai.grok-4.7': BEDROCK_MODEL.OPENAI_COMPAT,
+
+  // Z.AI GLM
   'us.zai.glm-5.3': BEDROCK_MODEL.OPENAI_COMPAT,
   'global.zai.glm-5.3': BEDROCK_MODEL.OPENAI_COMPAT,
   'zai.glm-5': BEDROCK_MODEL.OPENAI_COMPAT,
@@ -2792,14 +2793,13 @@ export function getHandlerForModel(
     );
   }
   if (modelName.includes('xai.') || modelName.includes('grok')) {
-    // Grok runs on Mantle (OpenAI-compatible Responses API), not InvokeModel. The bare id is
-    // normally intercepted in src/providers/families/aws.ts before reaching here; this guards
-    // direct or prefixed ids that bypass the factory's supported bare-id route.
+    // Supported Grok Runtime profiles are handled above. Bare Mantle IDs are normally
+    // intercepted by the factory; other direct or prefixed IDs need route guidance.
     throw new Error(
       `xAI model "${modelName}" is not served by Bedrock's InvokeModel API under that id. ` +
-        `Grok 4.6 supports Runtime Converse through an inference profile — use ` +
+        `Grok 4.6 and 4.7 support Runtime InvokeModel and Converse through an inference profile — use ` +
         `"bedrock:converse:us.xai.grok-4.6" or "bedrock:converse:global.xai.grok-4.6" ` +
-        `with ordinary AWS credentials. Other Grok models run on ` +
+        `with AWS credentials. Mantle-served Grok models use ` +
         `the OpenAI-compatible Responses API (mantle endpoint) — use the bare id such as ` +
         `"bedrock:xai.grok-4.3" and set AWS_BEARER_TOKEN_BEDROCK. See ` +
         `https://www.promptfoo.dev/docs/providers/aws-bedrock/#xai-grok-models`,

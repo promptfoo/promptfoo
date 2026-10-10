@@ -112,6 +112,16 @@ describe('Bedrock Runtime model compatibility', () => {
     expect(handler.output({}, { choices: [{ message: { content: 'READY' } }] })).toBe('READY');
   });
 
+  it.each([
+    ['us.xai.grok-4.7', 'xhigh'],
+    ['global.zai.glm-5.3', 'max'],
+  ] as const)('forwards the highest reasoning effort for %s', async (model, reasoning_effort) => {
+    const config = { region: 'us-east-1', reasoning_effort };
+    expect(await getHandlerForModel(model).params(config, 'Hello', [], model)).toMatchObject({
+      reasoning_effort,
+    });
+  });
+
   it.each(['zai.glm-5.3', 'moonshotai.kimi-k3'])(
     'explains why the bare %s model cannot use on-demand InvokeModel',
     (model) => {
