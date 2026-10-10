@@ -32,7 +32,7 @@ Cloud sharing creates private links only visible to you and your organization. I
 
 ## Web Interface Sharing
 
-Share evals directly from the web interface with a single click. The **Share** button appears in the "Eval actions" dropdown menu for all evals.
+In the local web interface, use **Eval actions → Share** to upload an eval. Hosted Cloud and Enterprise use different controls; see [Enterprise link access and public visibility](/docs/enterprise/findings#share-an-existing-eval).
 
 ![Share button location in web interface](/img/docs/usage/sharing-webui.png)
 
@@ -45,14 +45,13 @@ Share evals directly from the web interface with a single click. The **Share** b
 
 :::tip
 
-The share button is visible by default for all evals. If sharing isn't configured, you'll see helpful setup instructions instead of errors.
+The local web interface shows sharing setup instructions if a destination isn't configured.
 
 :::
 
 ### Sharing Behavior by Setup Type
 
-- **Cloud users**: Generates private sharing URLs automatically
-- **Enterprise users**: Creates team-accessible links with role-based permissions
+- **Cloud/Enterprise CLI uploads**: Return an eval URL; recipients need the appropriate access unless the eval is public
 - **Self-hosted users**: Uses your configured sharing endpoints
 - **Unconfigured setups**: Displays clear setup instructions with next steps
 
