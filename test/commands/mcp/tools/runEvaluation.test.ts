@@ -152,6 +152,19 @@ describe('runEvaluation tool', () => {
   );
 
   describe('result formatting', () => {
+    const createSuccessfulEvaluation = (_: unknown, i: number) => ({
+      testCase: { description: `test case ${i}`, assert: [] },
+      vars: { index: i },
+      prompt: { label: 'test', raw: 'prompt text' },
+      provider: { id: 'provider', label: 'Provider' },
+      response: { output: `response ${i}` },
+      success: true,
+      score: 1,
+      namedScores: {},
+      cost: 0.001,
+      latencyMs: 100,
+    });
+
     it('should use shared formatter for pagination', async () => {
       const { formatEvaluationResults } = await import(
         '../../../../src/commands/mcp/lib/resultFormatter'
@@ -192,18 +205,7 @@ describe('runEvaluation tool', () => {
       const mockSummary = {
         version: 3,
         stats: { successes: 100, failures: 0, errors: 0 },
-        results: Array.from({ length: 100 }, (_, i) => ({
-          testCase: { description: `test case ${i}`, assert: [] },
-          vars: { index: i },
-          prompt: { label: 'test', raw: 'prompt text' },
-          provider: { id: 'provider', label: 'Provider' },
-          response: { output: `response ${i}` },
-          success: true,
-          score: 1,
-          namedScores: {},
-          cost: 0.001,
-          latencyMs: 100,
-        })),
+        results: Array.from({ length: 100 }, createSuccessfulEvaluation),
         prompts: [],
       };
 
@@ -229,18 +231,7 @@ describe('runEvaluation tool', () => {
       const mockSummary = {
         version: 3,
         stats: { successes: 200, failures: 0, errors: 0 },
-        results: Array.from({ length: 200 }, (_, i) => ({
-          testCase: { description: `test case ${i}`, assert: [] },
-          vars: { index: i },
-          prompt: { label: 'test', raw: 'prompt text' },
-          provider: { id: 'provider', label: 'Provider' },
-          response: { output: `response ${i}` },
-          success: true,
-          score: 1,
-          namedScores: {},
-          cost: 0.001,
-          latencyMs: 100,
-        })),
+        results: Array.from({ length: 200 }, createSuccessfulEvaluation),
         prompts: [],
       };
 
@@ -439,6 +430,11 @@ describe('runEvaluation tool', () => {
       });
 
       expect(result.isError).toBe(true);
+      expect(JSON.parse(result.content[0].text)).toEqual({
+        tool: 'run_evaluation',
+        success: false,
+        timestamp: expect.any(String),
+      });
       const logger = (await import('../../../../src/logger')).default;
       expect(logger.error).toHaveBeenCalledWith(
         'Evaluation execution failed: You must provide at least 1 prompt',
