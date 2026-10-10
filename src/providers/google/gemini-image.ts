@@ -1,10 +1,13 @@
 import { fetchWithCache } from '../../cache';
-import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import { toDataUri } from '../../util/dataUrl';
+import { resolveProviderApiKey } from '../credentials';
+import { resolveProviderEnv } from '../env';
 import { getRequestTimeoutMs } from '../shared';
+import { GoogleAuthManager } from './auth';
 import {
   createAuthCacheDiscriminator,
+  determineGoogleVertexMode,
   geminiFormatAndSystemInstructions,
   getGoogleClient,
   loadCredentials,
@@ -22,10 +25,10 @@ import type {
   ImageOutput,
   ProviderResponse,
 } from '../../types/index';
-import type { CompletionOptions } from './types';
+import type { GoogleProviderConfig } from './types';
 
 interface GeminiImageOptions {
-  config?: CompletionOptions;
+  config?: GoogleProviderConfig;
   id?: string;
   env?: EnvOverrides;
 }
@@ -98,7 +101,7 @@ const MODEL_IMAGE_SIZES: Record<string, string[]> = {
  */
 export class GeminiImageProvider implements ApiProvider {
   modelName: string;
-  config: CompletionOptions;
+  config: GoogleProviderConfig;
   env?: EnvOverrides;
 
   constructor(modelName: string, options: GeminiImageOptions = {}) {
@@ -115,16 +118,22 @@ export class GeminiImageProvider implements ApiProvider {
     return `[Google Gemini Image Generation Provider ${this.modelName}]`;
   }
 
-  private getApiKey(): string | undefined {
+  requiresApiKey(): boolean {
     return (
-      this.config.apiKey ||
-      getEnvString('GOOGLE_API_KEY') ||
-      getEnvString('GOOGLE_GENERATIVE_AI_API_KEY') ||
-      getEnvString('GEMINI_API_KEY') ||
-      this.env?.GOOGLE_API_KEY ||
-      this.env?.GOOGLE_GENERATIVE_AI_API_KEY ||
-      this.env?.GEMINI_API_KEY
+      this.config.apiKeyRequired !== false && !determineGoogleVertexMode(this.config, this.env)
     );
+  }
+
+  private getApiKey(): string | undefined {
+    return resolveProviderApiKey({ apiKey: this.config.apiKey }, this.env, [
+      'GOOGLE_API_KEY',
+      'GOOGLE_GENERATIVE_AI_API_KEY',
+      'GEMINI_API_KEY',
+    ]);
+  }
+
+  private getVertexApiKey(): string | undefined {
+    return GoogleAuthManager.getApiKey(this.config, this.env, true).apiKey;
   }
 
   /**
@@ -154,21 +163,78 @@ export class GeminiImageProvider implements ApiProvider {
       return { error: sizeError };
     }
 
-    // Check if we should use Vertex AI (when projectId is provided)
-    const projectId =
-      this.config.projectId ||
-      getEnvString('GOOGLE_CLOUD_PROJECT') ||
-      getEnvString('GOOGLE_PROJECT_ID') ||
-      this.env?.GOOGLE_CLOUD_PROJECT ||
-      this.env?.GOOGLE_PROJECT_ID;
+    const aiStudioApiKey = this.getApiKey();
 
-    if (projectId) {
+    // Explicit AI Studio mode must not be overridden by ambient Vertex project configuration.
+    const isVertexMode = determineGoogleVertexMode(this.config, this.env);
+    const projectId = isVertexMode
+      ? this.config.projectId ||
+        resolveProviderEnv(this.env, [
+          'VERTEX_PROJECT_ID',
+          'GOOGLE_PROJECT_ID',
+          'GOOGLE_CLOUD_PROJECT',
+        ])?.value
+      : undefined;
+
+    const vertexApiKey = isVertexMode ? this.getVertexApiKey() : undefined;
+    const hasOAuthConfig = Boolean(
+      this.config.credentials ||
+        this.config.keyFilename ||
+        this.config.googleAuthOptions?.keyFilename ||
+        this.config.googleAuthOptions?.keyFile ||
+        this.config.googleAuthOptions?.authClient ||
+        this.config.googleAuthOptions?.credentials,
+    );
+    const providerScopedRegion =
+      this.config.region ||
+      this.env?.VERTEX_REGION ||
+      this.env?.GOOGLE_CLOUD_LOCATION ||
+      this.env?.GOOGLE_LOCATION;
+    const hasProviderScopedOAuthConfig = Boolean(
+      this.config.projectId ||
+        this.config.googleAuthOptions?.projectId ||
+        this.env?.VERTEX_PROJECT_ID ||
+        this.env?.GOOGLE_PROJECT_ID ||
+        this.env?.GOOGLE_CLOUD_PROJECT ||
+        (providerScopedRegion && providerScopedRegion !== 'global'),
+    );
+    const explicitlyRequestedExpress =
+      this.config.expressMode === true ||
+      Boolean(this.config.apiKey) ||
+      (Boolean(this.env?.VERTEX_API_KEY || this.env?.GOOGLE_API_KEY) &&
+        !hasProviderScopedOAuthConfig);
+    const effectiveRegion =
+      this.config.region ||
+      resolveProviderEnv(this.env, ['VERTEX_REGION', 'GOOGLE_CLOUD_LOCATION', 'GOOGLE_LOCATION'])
+        ?.value;
+    const hasProjectScopedOAuthConfig = Boolean(
+      projectId ||
+        this.config.googleAuthOptions?.projectId ||
+        (effectiveRegion && effectiveRegion !== 'global'),
+    );
+    const usesVertexExpress =
+      isVertexMode &&
+      Boolean(vertexApiKey) &&
+      this.config.expressMode !== false &&
+      !hasOAuthConfig &&
+      (explicitlyRequestedExpress || !hasProjectScopedOAuthConfig);
+
+    if (usesVertexExpress && vertexApiKey) {
+      const region = effectiveRegion || 'global';
+      if (region !== 'global') {
+        return {
+          error: `Vertex Express image generation supports only the global endpoint, but region ${region} was configured. Set expressMode: false and use OAuth or Application Default Credentials for a regional endpoint.`,
+        };
+      }
+      return this.callVertexExpressApi(prompt, context, vertexApiKey);
+    }
+
+    if (isVertexMode) {
       return this.callVertexApi(prompt, context);
     }
 
     // Otherwise, try Google AI Studio with API key
-    const apiKey = this.getApiKey();
-    if (apiKey) {
+    if (aiStudioApiKey || this.config.apiKeyRequired === false) {
       return this.callAIStudioApi(prompt, context);
     }
 
@@ -185,7 +251,7 @@ export class GeminiImageProvider implements ApiProvider {
     context?: CallApiContextParams,
   ): Promise<ProviderResponse> {
     const apiKey = this.getApiKey();
-    if (!apiKey) {
+    if (!apiKey && this.config.apiKeyRequired !== false) {
       return {
         error:
           'API key not found. Set GOOGLE_API_KEY, GOOGLE_GENERATIVE_AI_API_KEY, or GEMINI_API_KEY environment variable.',
@@ -204,7 +270,7 @@ export class GeminiImageProvider implements ApiProvider {
     try {
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
-        'x-goog-api-key': apiKey,
+        ...(apiKey ? { 'x-goog-api-key': apiKey } : {}),
         ...(this.config.headers || {}),
       };
       const authDiscriminator = createAuthCacheDiscriminator(headers);
@@ -231,6 +297,53 @@ export class GeminiImageProvider implements ApiProvider {
     }
   }
 
+  private async callVertexExpressApi(
+    prompt: string,
+    context: CallApiContextParams | undefined,
+    apiKey: string,
+  ): Promise<ProviderResponse> {
+    const configuredHost =
+      this.config.apiBaseUrl ||
+      this.config.apiHost ||
+      resolveProviderEnv(this.env, ['VERTEX_API_HOST'])?.value ||
+      'aiplatform.googleapis.com';
+    const apiHost = /^https?:\/\//i.test(configuredHost)
+      ? configuredHost
+      : `https://${configuredHost}`;
+    const apiVersion =
+      this.config.apiVersion || resolveProviderEnv(this.env, ['VERTEX_API_VERSION'])?.value || 'v1';
+    const endpoint = `${apiHost.replace(/\/+$/, '')}/${apiVersion}/publishers/google/models/${this.modelName}:generateContent`;
+    const { contents } = geminiFormatAndSystemInstructions(prompt, context?.vars);
+    const body = this.buildRequestBody(contents);
+
+    try {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': apiKey,
+        ...(this.config.headers || {}),
+      };
+      const startTime = Date.now();
+      const { data, cached } = (await fetchWithCache(
+        endpoint,
+        {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(body),
+        } as RequestInit,
+        getRequestTimeoutMs(),
+        'json',
+        true,
+      )) as { data: any; cached: boolean };
+      const latencyMs = Date.now() - startTime;
+
+      return this.processResponse(data, cached, latencyMs);
+    } catch (err) {
+      return {
+        error: `Vertex AI Express API call error: ${String(err)}`,
+      };
+    }
+  }
+
   private async callVertexApi(
     prompt: string,
     context?: CallApiContextParams,
@@ -240,13 +353,18 @@ export class GeminiImageProvider implements ApiProvider {
     const location = usesGlobalVertexEndpoint
       ? 'global'
       : this.config.region ||
-        getEnvString('GOOGLE_LOCATION') ||
-        this.env?.GOOGLE_LOCATION ||
+        resolveProviderEnv(this.env, ['VERTEX_REGION', 'GOOGLE_CLOUD_LOCATION', 'GOOGLE_LOCATION'])
+          ?.value ||
         'us-central1';
 
     try {
       const credentials = loadCredentials(this.config.credentials);
-      const { client } = await getGoogleClient({ credentials });
+      const { client } = await getGoogleClient({
+        credentials,
+        googleAuthOptions: this.config.googleAuthOptions,
+        scopes: this.config.scopes,
+        keyFilename: this.config.keyFilename,
+      });
       const projectId = await resolveProjectId(this.config, this.env);
 
       if (!projectId) {
@@ -258,9 +376,10 @@ export class GeminiImageProvider implements ApiProvider {
 
       const apiVersion = 'v1';
       // Global endpoint uses a different URL format (no region prefix)
-      const baseUrl = usesGlobalVertexEndpoint
-        ? 'https://aiplatform.googleapis.com'
-        : `https://${location}-aiplatform.googleapis.com`;
+      const baseUrl =
+        location === 'global'
+          ? 'https://aiplatform.googleapis.com'
+          : `https://${location}-aiplatform.googleapis.com`;
       const endpoint = `${baseUrl}/${apiVersion}/projects/${projectId}/locations/${location}/publishers/google/models/${this.modelName}:generateContent`;
 
       logger.debug(`Vertex AI Gemini Image API endpoint: ${endpoint}`);
