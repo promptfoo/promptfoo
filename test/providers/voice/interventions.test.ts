@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { isCacheEnabled } from '../../../src/cache';
+import { getCache, getScopedCacheKey, isCacheEnabled } from '../../../src/cache';
 import { OpenAiTtsProvider } from '../../../src/providers/openai/tts';
 import { prepareVoiceInterventions } from '../../../src/providers/voice/interventions';
 import { fetchWithRetries } from '../../../src/util/fetch/index';
@@ -10,6 +10,7 @@ import type {
   VoiceInterventionConfig,
   VoiceParticipantOptions,
 } from '../../../src/providers/voice/types';
+import type { CallApiContextParams } from '../../../src/types/providers';
 
 vi.mock('../../../src/cache');
 vi.mock('../../../src/util/fetch/index');
@@ -39,6 +40,7 @@ function prepare(
   durationMs = 2000,
   signal = new AbortController().signal,
   onResponse = vi.fn(),
+  context?: CallApiContextParams,
 ) {
   return prepareVoiceInterventions(
     entries,
@@ -48,6 +50,7 @@ function prepare(
     undefined,
     signal,
     onResponse,
+    context,
   );
 }
 
@@ -371,4 +374,188 @@ describe('prepareVoiceInterventions', () => {
     expect(onResponse.mock.calls[1][0].error).toMatch(/API error 503/);
     expect(onResponse.mock.calls[1][0].cost).toBeUndefined();
   });
+
+  it.each<{
+    name: string;
+    caller: VoiceParticipantOptions;
+    echo: string;
+    secrets: string[];
+  }>([
+    {
+      name: 'explicit key',
+      caller: { apiKey: 'raw-caller-private-key' },
+      echo: 'raw-caller-private-key',
+      secrets: ['raw-caller-private-key'],
+    },
+    {
+      name: 'named key',
+      caller: { apiKeyEnvar: 'CALLER_VOICE_KEY' },
+      echo: 'named-caller-private-key',
+      secrets: ['named-caller-private-key'],
+    },
+    {
+      name: 'custom credential header',
+      caller: {
+        apiBaseUrl: 'https://gateway.example.test/v1',
+        headers: { 'x-api-key': 'header-caller-private-key' },
+      },
+      echo: 'header-caller-private-key',
+      secrets: ['header-caller-private-key'],
+    },
+    {
+      name: 'bare authorization token',
+      caller: {
+        apiBaseUrl: 'https://gateway.example.test/v1',
+        headers: { Authorization: 'CustomAuth scheme-private-key' },
+      },
+      echo: 'scheme-private-key',
+      secrets: ['scheme-private-key'],
+    },
+    {
+      name: 'decoded and escaped Basic credentials',
+      caller: { apiBaseUrl: 'https://qa-user:s3cr3t%21@gateway.example.test/v1' },
+      echo: `Basic ${Buffer.from('qa-user:s3cr3t!').toString('base64')} qa-user:s3cr3t! qa-user s3cr3t! s3cr3t%21`,
+      secrets: [
+        Buffer.from('qa-user:s3cr3t!').toString('base64'),
+        'qa-user',
+        's3cr3t!',
+        's3cr3t%21',
+      ],
+    },
+    {
+      name: 'decoded cookie credential',
+      caller: {
+        apiBaseUrl: 'https://gateway.example.test/v1',
+        headers: { Cookie: 'session=cookie-private%40value' },
+      },
+      echo: 'cookie-private@value',
+      secrets: ['cookie-private@value'],
+    },
+  ])(
+    'redacts echoed $name before response retention and propagation',
+    async ({ caller, echo, secrets }) => {
+      mockProcessEnv({ CALLER_VOICE_KEY: 'named-caller-private-key' });
+      mockedFetch.mockResolvedValue({
+        ok: false,
+        status: 401,
+        statusText: 'Unauthorized',
+        text: async () =>
+          JSON.stringify({
+            error: { message: `Authentication failed: ${echo}. Reference diag-42.` },
+          }),
+      } as Response);
+      const onResponse = vi.fn();
+      const error = await prepare(undefined, caller, undefined, undefined, onResponse).catch(
+        (failure) => failure,
+      );
+      expect(error).toBeInstanceOf(Error);
+      expect(error.message).toContain('Reference diag-42.');
+      expect(error.message).toContain('[REDACTED]');
+      expect(onResponse).toHaveBeenCalledOnce();
+      expect(onResponse.mock.calls[0][0].error).toContain('Reference diag-42.');
+      for (const secret of secrets) {
+        expect(error.message).not.toContain(secret);
+        expect(error.stack).not.toContain(secret);
+        expect(JSON.stringify(onResponse.mock.calls)).not.toContain(secret);
+      }
+    },
+  );
+
+  it('redacts a thrown transport cancellation while retaining its AbortError classification', async () => {
+    const failure = new Error(
+      'Speech transport aborted for caller-private-key; reference diag-73.',
+      {
+        cause: new Error('Unsafe nested caller-private-key'),
+      },
+    );
+    failure.name = 'AbortError';
+    mockedFetch.mockRejectedValue(failure);
+    const onResponse = vi.fn();
+    const error = await prepare(
+      undefined,
+      { apiKey: 'caller-private-key' },
+      undefined,
+      undefined,
+      onResponse,
+    ).catch((caught) => caught);
+    expect(error).toMatchObject({
+      name: 'AbortError',
+      message: expect.stringContaining('reference diag-73.'),
+    });
+    expect(error.message).not.toContain('caller-private-key');
+    expect(error.stack).not.toContain('caller-private-key');
+    expect(error.cause).toBeUndefined();
+    expect(onResponse).toHaveBeenCalledExactlyOnceWith({
+      error: 'Speech preparation ended without a response; usage is unconfirmed.',
+    });
+  });
+
+  it('preserves the original cancellation object when its diagnostics require no redaction', async () => {
+    const cancellation = new Error('User stopped this evaluation.');
+    cancellation.name = 'AbortError';
+    mockedFetch.mockRejectedValue(cancellation);
+    await expect(prepare()).rejects.toBe(cancellation);
+  });
+
+  it.each([
+    { flags: { bustCache: true }, fresh: true },
+    { flags: { debug: true }, fresh: true },
+    { flags: { bustCache: true, debug: false }, fresh: true },
+    { flags: { bustCache: false, debug: true }, fresh: false },
+    { flags: { bustCache: false }, fresh: false },
+    { flags: {}, fresh: false },
+  ])(
+    'honors cache controls $flags without inheriting target prompt configuration',
+    async ({ flags, fresh }) => {
+      const cache = {
+        get: vi
+          .fn()
+          .mockResolvedValue(
+            JSON.stringify({ audio: { format: 'pcm16', data: tone().toString('base64') } }),
+          ),
+        set: vi.fn().mockResolvedValue(undefined),
+      };
+      vi.mocked(getCache).mockReturnValue(cache as unknown as ReturnType<typeof getCache>);
+      vi.mocked(getScopedCacheKey).mockImplementation((key) => key);
+      vi.mocked(isCacheEnabled).mockReturnValue(true);
+      const context: CallApiContextParams = {
+        ...flags,
+        vars: { targetOnly: 'Do not pass this to caller synthesis.' },
+        prompt: {
+          raw: 'Unrelated target prompt.',
+          label: 'Target',
+          config: {
+            model: 'tts-1',
+            voice: 'onyx',
+            response_format: 'mp3',
+            apiKey: 'target-only-key',
+          },
+        },
+      };
+      const onResponse = vi.fn();
+      const prepared = await prepare(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        onResponse,
+        context,
+      );
+      expect(prepared[0].audio).toEqual(tone());
+      expect(mockedFetch).toHaveBeenCalledTimes(fresh ? 1 : 0);
+      expect(cache.get).toHaveBeenCalledTimes(fresh ? 0 : 1);
+      expect(onResponse.mock.calls[0][0].cached).toBe(!fresh);
+      if (fresh) {
+        expect(JSON.parse(mockedFetch.mock.calls[0][1]?.body as string)).toEqual({
+          model: 'gpt-4o-mini-tts',
+          input: 'Actually, please use decaf.',
+          voice: 'cedar',
+          response_format: 'pcm',
+        });
+        expect(new Headers(mockedFetch.mock.calls[0][1]?.headers).get('authorization')).toBe(
+          'Bearer caller-test-key',
+        );
+      }
+    },
+  );
 });

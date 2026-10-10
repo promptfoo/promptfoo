@@ -14,6 +14,7 @@ const SPEAKERS: VoiceSpeaker[] = ['target', 'caller'];
 interface VoiceResultInput {
   transcript: VoiceTranscriptFragment[];
   interventions: VoiceIntervention[];
+  scheduledAudioInterventions: number;
   recordings: Buffer[];
   responses: Array<ProviderResponse | undefined>;
   preparationResponses?: ProviderResponse[];
@@ -30,6 +31,7 @@ interface VoiceResultInput {
 export function formatVoiceResult({
   transcript,
   interventions,
+  scheduledAudioInterventions,
   recordings,
   responses,
   preparationResponses = [],
@@ -51,7 +53,9 @@ export function formatVoiceResult({
   if (
     !error &&
     !responses[0]?.isRefusal &&
-    interventions.some((entry) => entry.mode === 'audio' && entry.completedAtMs === undefined)
+    // A late timer or early hangup may stop the call before a clip gets a dispatch record.
+    interventions.filter((entry) => entry.mode === 'audio' && entry.completedAtMs !== undefined)
+      .length < scheduledAudioInterventions
   ) {
     error = 'Scheduled caller speech ended before the complete clip was delivered.';
   }

@@ -216,6 +216,7 @@ export class SimulatedVoiceUser implements ApiProvider {
     let mediaStartedAt = startedAt;
     const transcript: VoiceTranscriptFragment[] = [];
     const interventionsSent: VoiceIntervention[] = [];
+    let scheduledAudioInterventions = 0;
     const recordings: Buffer[] = [];
     const responses: Array<ProviderResponse | undefined> = [];
     const preparationResponses: ProviderResponse[] = [];
@@ -374,7 +375,9 @@ export class SimulatedVoiceUser implements ApiProvider {
         this.env,
         controller.signal,
         (response) => preparationResponses.push(response),
+        context,
       );
+      scheduledAudioInterventions = scheduled.filter((entry) => entry.audio).length;
       controller.signal.throwIfAborted();
       for (const [index, session] of sessions.entries()) {
         runs.push(
@@ -586,6 +589,7 @@ export class SimulatedVoiceUser implements ApiProvider {
     return formatVoiceResult({
       transcript,
       interventions: interventionsSent,
+      scheduledAudioInterventions,
       recordings,
       responses,
       preparationResponses,

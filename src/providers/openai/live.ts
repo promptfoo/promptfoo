@@ -2,9 +2,10 @@ import { loadCallbackFromFileUrl } from '../../util/functions/loadFunction';
 import { providerRegistry } from '../providerRegistry';
 import { getRequestTimeoutMs } from '../shared';
 import { decodeUrlComponent } from '../urlEncoding';
+import { isOpenAiCredentialHeader } from './credentialRedaction';
 import { hasHeaderOverride, OpenAiGenericProvider } from './index';
 import { getLiveBytesPerSecond, LIVE_MAX_CAPTURE_MS, prepareLiveInput } from './liveInput';
-import { isLiveCredentialHeader, LIVE_FRAME_MS, LiveSession } from './liveSession';
+import { LIVE_FRAME_MS, LiveSession } from './liveSession';
 import { appendOpenAiApiPath, assertOpenAiApiModel } from './util';
 
 import type { EnvOverrides } from '../../types/env';
@@ -129,7 +130,7 @@ export class OpenAiLiveProvider extends OpenAiGenericProvider {
       (config.apiKeyRequired ?? true) &&
       !Object.entries(headers).some(
         ([name, value]) =>
-          isLiveCredentialHeader(name) &&
+          isOpenAiCredentialHeader(name) &&
           value.trim().length > 0 &&
           !(name.toLowerCase() === 'authorization' && /^(?:bearer|basic)$/i.test(value.trim())),
       )
@@ -170,7 +171,7 @@ export class OpenAiLiveProvider extends OpenAiGenericProvider {
     ) {
       config.headers = Object.fromEntries(
         Object.entries(config.headers).filter(
-          ([name, value]) => !isLiveCredentialHeader(name, value),
+          ([name, value]) => !isOpenAiCredentialHeader(name, value),
         ),
       );
     }

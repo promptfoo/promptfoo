@@ -1,12 +1,14 @@
 import { sha256 } from '../../util/createHash';
 import { resolveProviderApiKey } from '../credentials';
 import { resolveOpenAiApiUrl } from '../openai';
+import { createOpenAiCredentialRedactor } from '../openai/credentialRedaction';
 import { prepareLiveInput } from '../openai/liveInput';
 import { OpenAiTtsProvider } from '../openai/tts';
 import { decodeUrlComponent } from '../urlEncoding';
 
 import type { EnvOverrides } from '../../contracts/env';
 import type { ProviderResponse } from '../../contracts/providers';
+import type { CallApiContextParams } from '../../types/providers';
 import type {
   SimulatedVoiceUserConfig,
   VoiceInterventionConfig,
@@ -17,6 +19,23 @@ const SAMPLE_RATE = 24000;
 const BYTES_PER_MS = (SAMPLE_RATE * 2) / 1000;
 const MAX_CLIP_MS = 30000;
 const DEFAULT_TTS_MODEL = 'gpt-4o-mini-tts';
+
+/** Preserve cancellation classification without carrying credential-bearing diagnostics or causes. */
+function redactPreparationFailure(error: unknown, redact: (text: string) => string): Error {
+  if (!(error instanceof Error)) {
+    return new Error(redact(String(error)));
+  }
+  const message = redact(error.message);
+  const stack = error.stack === undefined ? undefined : redact(error.stack);
+  const hasCause = 'cause' in error && error.cause !== undefined;
+  if (message === error.message && stack === error.stack && !hasCause) {
+    return error;
+  }
+  const safe = new Error(message);
+  safe.name = error.name;
+  safe.stack = stack;
+  return safe;
+}
 
 export interface PreparedVoiceIntervention extends VoiceInterventionConfig {
   audio?: Buffer;
@@ -73,6 +92,7 @@ export async function prepareVoiceInterventions(
   env: EnvOverrides | undefined,
   signal: AbortSignal,
   onResponse: (response: ProviderResponse) => void,
+  context?: Pick<CallApiContextParams, 'bustCache' | 'debug'>,
 ): Promise<PreparedVoiceIntervention[]> {
   signal.throwIfAborted();
   if (!entries.some((entry) => entry.text)) {
@@ -135,6 +155,10 @@ export async function prepareVoiceInterventions(
       response_format: 'pcm',
     },
   });
+  const redact = createOpenAiCredentialRedactor({
+    ...provider.getOpenAiRequestHeaders(),
+    ...(apiKey ? { 'api-key': apiKey } : {}),
+  });
   const prepared: PreparedVoiceIntervention[] = [];
   for (const [index, entry] of entries.entries()) {
     signal.throwIfAborted();
@@ -144,12 +168,24 @@ export async function prepareVoiceInterventions(
     }
     let response: ProviderResponse;
     try {
-      response = await provider.callApi(entry.text, undefined, { abortSignal: signal });
+      response = await provider.callApi(
+        entry.text,
+        {
+          prompt: { raw: entry.text, label: 'Scheduled caller speech' },
+          vars: {},
+          bustCache: context?.bustCache,
+          debug: context?.debug,
+        },
+        { abortSignal: signal },
+      );
     } catch (error) {
       // The renderer can throw on cancellation after sending a billable request. Keep
       // the attempted operation visible, without inventing its unreported usage/cost.
       onResponse({ error: 'Speech preparation ended without a response; usage is unconfirmed.' });
-      throw error;
+      throw redactPreparationFailure(error, redact);
+    }
+    if (response.error) {
+      response = { ...response, error: redact(response.error) };
     }
     onResponse(response);
     signal.throwIfAborted();

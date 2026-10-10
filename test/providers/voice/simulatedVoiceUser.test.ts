@@ -433,6 +433,80 @@ describe('SimulatedVoiceUser', () => {
     expect(response.tokenUsage?.numRequests).toBe(3);
   });
 
+  it.each([
+    { atMs: 980, clipMs: 20, dispatched: 0 },
+    { atMs: 900, clipMs: 100, dispatched: 1 },
+  ])(
+    'reports undelivered scheduled speech after a late final tick: %j',
+    async ({ atMs, clipMs, dispatched }) => {
+      vi.mocked(OpenAiTtsProvider.prototype.callApi).mockResolvedValue({
+        audio: {
+          data: convertPcm16ToWav(Buffer.alloc(clipMs * 48, 10)).toString('base64'),
+          format: 'wav',
+        },
+      });
+      const result = provider({
+        callerInterventions: [{ atMs, text: 'Actually, decaf please.' }],
+      }).callApi('Cafe');
+      const [target, caller] = await connect();
+      acknowledgeOpening();
+      audio(target, 1000, 24000);
+      audio(caller, 2000, 24000);
+      transcript(target, 'Original question', 0, 'input');
+      transcript(caller, 'A real answer', 0, 'input');
+      await vi.advanceTimersByTimeAsync(960);
+      for (const event of caller.sent.filter((entry) => entry.type === 'session.thinking.append')) {
+        emit(caller, { type: 'session.thinking.appended', client_event_id: event.event_id });
+      }
+      // The callback due at 980 ms runs at 1000 ms without exceeding the 250 ms lag limit.
+      vi.setSystemTime(Date.now() + 20);
+      await vi.advanceTimersByTimeAsync(20);
+      finalize();
+      const response = await result;
+      expect(response.error).toContain('Scheduled caller speech');
+      expect(response.metadata?.voice.stopReason).toBe('error');
+      expect(response.metadata?.voice.interventions).toHaveLength(dispatched);
+      expect(response.metadata?.voice.durationMs).toBe(980);
+      expect(response.metadata?.voice.maximumClockLagMs).toBe(20);
+      expect(vi.getTimerCount()).toBe(0);
+    },
+  );
+
+  it.each(['remote_hangup', 'content'])(
+    'accounts for undispatched speech on target %s',
+    async (reason) => {
+      vi.mocked(OpenAiTtsProvider.prototype.callApi).mockResolvedValue({
+        audio: { data: convertPcm16ToWav(Buffer.alloc(960, 10)).toString('base64'), format: 'wav' },
+      });
+      const result = provider({
+        callerInterventions: [{ atMs: 800, text: 'Actually, decaf please.' }],
+      }).callApi('Cafe');
+      const [target, caller] = await connect();
+      acknowledgeOpening();
+      audio(target, 1000, 24000);
+      audio(caller, 2000, 24000);
+      transcript(target, 'Original question', 0, 'input');
+      transcript(caller, 'A real answer', 0, 'input');
+      await vi.advanceTimersByTimeAsync(200);
+      emit(target, { type: 'session.closed', reason, usage: { seconds: 1 } });
+      await vi.advanceTimersByTimeAsync(0);
+      emit(caller, { type: 'session.closed', reason: 'close_requested', usage: { seconds: 1 } });
+      const response = await result;
+      expect(response.metadata?.voice.interventions).toEqual([]);
+      if (reason === 'content') {
+        expect(response.error).toBeUndefined();
+        expect(response.isRefusal).toBe(true);
+        expect(response.metadata?.voice.stopReason).toBe('safety');
+      } else {
+        expect(response.error).toContain('Scheduled caller speech');
+        expect(response.metadata?.voice.stopReason).toBe('error');
+        expect(response.metadata?.voice.participants.target.deliveredAudioBytes).toBeGreaterThan(0);
+        expect(response.metadata?.voice.participants.caller.deliveredAudioBytes).toBeGreaterThan(0);
+      }
+      expect(vi.getTimerCount()).toBe(0);
+    },
+  );
+
   it('does not open Live sockets when speech preparation fails and preserves known preparation cost', async () => {
     vi.mocked(OpenAiTtsProvider.prototype.callApi).mockResolvedValue({
       error: 'Synthesis rejected',

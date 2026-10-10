@@ -45,6 +45,7 @@ describe('formatVoiceResult', () => {
     const response = formatVoiceResult({
       transcript,
       interventions: [],
+      scheduledAudioInterventions: 0,
       recordings: [],
       responses: [],
       queues: [new PcmAudioQueue(48000), new PcmAudioQueue(48000)],
