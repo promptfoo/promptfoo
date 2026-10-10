@@ -356,13 +356,7 @@ assert:
 
 #### Unicode normalization
 
-`equals` and `contains` compare raw strings, so an answer that is correct but
-differs from the expected value only in Unicode form scores 0. The commonest case
-is an accented character written as one codepoint in one place and as a letter
-plus a combining mark in the other: `café` and `café` look identical
-and are not equal.
-
-Set `normalizeUnicode` to compare normalized forms:
+String `equals` and `contains` assertions compare without Unicode normalization by default. To treat composed and decomposed characters such as `é` and `e` + a combining acute accent as equivalent, set `normalizeUnicode: true`:
 
 ```yaml
 assert:
@@ -371,34 +365,11 @@ assert:
     normalizeUnicode: true
 ```
 
-`true` means **NFC** — canonical normalization, which only composes or decomposes
-sequences that Unicode defines as the same character. It is meaning-preserving
-and safe to turn on.
+`true` selects NFC. You can also specify `NFC`, `NFD`, `NFKC`, or `NFKD`; `false` or omission preserves the original comparison. Both the expected string and the full output are normalized before comparison. For `contains`, this can also remove a substring match: `e` no longer matches `e` + a combining acute accent after NFC composes it into `é`.
 
-The compatibility forms must be named explicitly:
+NFKC and NFKD additionally fold compatibility characters, including ligatures, non-breaking spaces, and superscripts. For example, `normalizeUnicode: NFKC` makes `x²` equal to `x2`. Choose these forms only when those distinctions should not affect the result. See [Unicode normalization forms](https://unicode.org/reports/tr15/) for the differences.
 
-```yaml
-assert:
-  - type: contains
-    value: 'file'
-    normalizeUnicode: NFKC # also folds ligatures, non-breaking spaces, full-width forms
-```
-
-**Use `NFKC` and `NFKD` deliberately.** They fold characters that merely look
-related, and some of those distinctions are the answer:
-
-| Value | Under NFKC | What is lost                |
-| ----- | ---------- | --------------------------- |
-| `x²`  | `x2`       | the exponent                |
-| `½`   | `1⁄2`      | one character becomes three |
-| `Ⅳ`   | `IV`       | a Roman numeral             |
-| `Ａ`  | `A`        | full-width form             |
-
-With `normalizeUnicode: NFKC`, an `equals` assertion expecting `x²` passes on
-output of `x2`. That is occasionally what you want and is never the default.
-
-Accepted values are `true`, `false`, `NFC`, `NFD`, `NFKC` and `NFKD`. Omitted, no
-normalization is applied and comparison is byte-for-byte as before.
+The option also applies to `not-equals` and `not-contains`. It does not change case sensitivity, normalize nested values in object equality, or apply to other assertion types.
 
 ### Is-JSON
 
