@@ -49,7 +49,7 @@ This directory contains several example configurations for different Bedrock mod
 - [`promptfooconfig.nova.multimodal.yaml`](promptfooconfig.nova.multimodal.yaml) - Nova with multimodal capabilities
 - [`promptfooconfig.kb.yaml`](promptfooconfig.kb.yaml) - Knowledge Base RAG example with citations and contextTransform
 - [`promptfooconfig.inference-profiles.yaml`](promptfooconfig.inference-profiles.yaml) - Comprehensive Application Inference Profiles example with multiple model types
-- [`promptfooconfig.inference-profiles-simple.yaml`](promptfooconfig.inference-profiles-simple.yaml) - Simple production-ready inference profile setup for high availability
+- [`promptfooconfig.inference-profiles-simple.yaml`](promptfooconfig.inference-profiles-simple.yaml) - Simple inference profile setup for usage tracking and optional cross-region routing
 - [`promptfooconfig.yaml`](promptfooconfig.yaml) - Combined evaluation across multiple providers
 - [`promptfooconfig.nova-sonic.yaml`](promptfooconfig.nova-sonic.yaml) - Amazon Nova Sonic model for audio
 - [`promptfooconfig.converse.yaml`](promptfooconfig.converse.yaml) - Converse API with extended thinking (ultrathink)
@@ -172,7 +172,6 @@ The Application Inference Profiles example (`promptfooconfig.inference-profiles.
 - **Usage and Cost Attribution**: Track invocations and allocate costs with profile tags
 - **Cross-Region Routing**: Profiles copied from a system cross-region profile can route among its eligible regions; single-region profiles cannot
 - **Simplified Management**: Use a single ARN instead of managing multiple model IDs
-- **Cross-Region Availability**: Access models across multiple regions with a single profile
 
 An application profile references one model, directly or through a system cross-region profile. It does not choose the cheapest model. See [AWS inference profiles](https://docs.aws.amazon.com/bedrock/latest/userguide/inference-profiles.html).
 
