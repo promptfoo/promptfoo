@@ -1,6 +1,4 @@
-import { useState } from 'react';
-
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useSettingsState } from './hooks/useSettingsState';
@@ -94,26 +92,13 @@ describe('TableSettingsModal', () => {
     expect(screen.getByRole('button', { name: 'Done' }).closest('div')).toHaveClass('shrink-0');
   });
 
-  it('should handle prop changes while the modal is open', async () => {
-    const TestComponent = () => {
-      const [isOpen, setIsOpen] = useState(true);
-
-      setTimeout(() => {
-        setIsOpen(false);
-      }, 50);
-
-      return <TableSettingsModal {...defaultProps} open={isOpen} />;
-    };
-
-    render(<TestComponent />);
+  it('should handle prop changes while the modal is open', () => {
+    const { rerender } = render(<TableSettingsModal {...defaultProps} />);
 
     expect(screen.getByRole('dialog')).toBeInTheDocument();
 
-    await waitFor(
-      () => {
-        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-      },
-      { timeout: 300 },
-    );
+    rerender(<TableSettingsModal {...defaultProps} open={false} />);
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 });
