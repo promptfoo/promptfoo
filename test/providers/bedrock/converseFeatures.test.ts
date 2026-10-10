@@ -826,8 +826,18 @@ describe('ConverseStream response parity', () => {
     expect(response.error).toBeUndefined();
     expect(copiedBytes).toBeLessThanOrEqual(2 * count * chunk.length);
     expect(response.metadata?.content).toEqual([
-      { image: { format: 'png', source: { bytes: Buffer.alloc(count * chunk.length, 7) } } },
-      { image: { format: 'png', source: { bytes: Buffer.alloc(count * chunk.length, 7) } } },
+      {
+        image: {
+          format: 'png',
+          source: { bytes: Buffer.alloc(count * chunk.length, 7).toString('base64') },
+        },
+      },
+      {
+        image: {
+          format: 'png',
+          source: { bytes: Buffer.alloc(count * chunk.length, 7).toString('base64') },
+        },
+      },
       { image: { format: 'png', source: location } },
     ]);
   });
@@ -865,6 +875,7 @@ describe('ConverseStream response parity', () => {
           },
         },
         { text: 'After media' },
+        { reasoningContent: { redactedContent: bytes } },
       ];
       send.mockResolvedValueOnce({ ...reply, output: { message: { role: 'assistant', content } } });
       const first = await provider.callApi('hello');
@@ -879,7 +890,15 @@ describe('ConverseStream response parity', () => {
         expect(first.output).toContain(`[${type} output]`);
       }
       expect(first.output.length).toBeLessThan(1024);
-      expect(first.metadata?.content).toEqual(content);
+      const serializedContent = JSON.parse(JSON.stringify(first.metadata?.content));
+      const roundTrip = parseConverseMessages(
+        JSON.stringify([{ role: 'assistant', content: serializedContent }]),
+      );
+      expect(roundTrip.messages[0].content).toEqual(content);
+      expect(JSON.stringify(first.metadata).length).toBeLessThan(bytes.length * 10);
+      await expect(send.mock.results[0].value).resolves.toMatchObject({
+        output: { message: { content } },
+      });
       cache.get.mockResolvedValueOnce(cache.set.mock.calls[0][1]);
       const second = await provider.callApi('hello');
       expect(second.cached).toBe(true);
@@ -928,7 +947,7 @@ describe('ConverseStream response parity', () => {
     const result = await provider.callApi('hello');
     expect(result.error).toBeUndefined();
     expect(result.metadata?.content).toEqual([
-      { image: { format: 'png', source: { bytes: Buffer.from('abcd') } } },
+      { image: { format: 'png', source: { bytes: 'YWJjZA==' } } },
       {
         toolResult: {
           toolUseId: 'lookup',
@@ -940,6 +959,47 @@ describe('ConverseStream response parity', () => {
     ]);
     expect(result.output).toContain('part two');
   });
+
+  it.each(['malformed_tool_use', 'service_unavailable', 'max_tokens'])(
+    'retains valid and invalid tool arguments after %s without dispatch or caching',
+    async (stopReason) => {
+      cache.enabled = true;
+      const callback = vi.fn();
+      const { provider, send } = fixture({
+        streaming: true,
+        functionToolCallbacks: { lookup: callback },
+      });
+      const inputs = ['{"query":"diagnostic value"}', '{"broken":diagnostic'];
+      send.mockResolvedValueOnce(
+        stream([
+          ...inputs.flatMap((input, contentBlockIndex) => [
+            {
+              contentBlockStart: {
+                contentBlockIndex,
+                start: { toolUse: { name: 'lookup', toolUseId: String(contentBlockIndex) } },
+              },
+            },
+            { contentBlockDelta: { contentBlockIndex, delta: { toolUse: { input } } } },
+            { contentBlockStop: { contentBlockIndex } },
+          ]),
+          { messageStop: { stopReason } },
+          { metadata: { usage: reply.usage } },
+        ]),
+      );
+      const response = await provider.callApi('hello');
+      expect(response.error).toContain(stopReason);
+      expect(response.metadata?.content).toEqual([
+        { toolUse: { name: 'lookup', toolUseId: '0', input: { query: 'diagnostic value' } } },
+        { toolUse: { name: 'lookup', toolUseId: '1', input: inputs[1] } },
+      ]);
+      expect(response.output).toContain('diagnostic value');
+      expect(response.output).toContain('broken');
+      expect(response.tokenUsage).toMatchObject({ prompt: 3, completion: 2, total: 5 });
+      expect(response.cost).toBeGreaterThan(0);
+      expect(callback).not.toHaveBeenCalled();
+      expect(cache.set).not.toHaveBeenCalled();
+    },
+  );
 
   it.each(['{broken', 'null', '[]', '1'])(
     'rejects invalid local tool arguments %s without invoking the callback',
@@ -1045,7 +1105,7 @@ describe('ConverseStream response parity', () => {
     });
     expect(result.metadata?.content).toEqual([
       { reasoningContent: { reasoningText: { text: 'thinking', signature: 'signed' } } },
-      { reasoningContent: { redactedContent: Buffer.from('abc') } },
+      { reasoningContent: { redactedContent: 'YWJj' } },
       {
         citationsContent: {
           content: [{ text: 'Answer with evidence' }],
@@ -1163,7 +1223,7 @@ describe('native Converse configuration and cached binary parity', () => {
   });
 
   it.each(['typed', 'legacy'])(
-    'restores %s cached native binary content without changing tool JSON',
+    'keeps %s cached native binary content compact without changing tool JSON',
     async (kind) => {
       cache.enabled = true;
       const { provider, send } = fixture();
@@ -1190,10 +1250,8 @@ describe('native Converse configuration and cached binary parity', () => {
       expect(second.cached).toBe(true);
       expect(second.output).toEqual(first.output);
       const cachedContent = second.metadata?.content as any[];
-      expect(cachedContent[1].image.source.bytes).toBeInstanceOf(Uint8Array);
-      expect(Array.from(cachedContent[1].image.source.bytes)).toEqual([1, 2, 3]);
-      expect(Array.from(cachedContent[2].reasoningContent.redactedContent)).toEqual([4, 5]);
-      expect(cachedContent[2].reasoningContent.redactedContent).toBeInstanceOf(Uint8Array);
+      expect(cachedContent[1].image.source.bytes).toBe('AQID');
+      expect(cachedContent[2].reasoningContent.redactedContent).toBe('BAU=');
       expect(cachedContent[3].toolResult.content[0].json).toEqual(
         content[3].toolResult?.content[0].json,
       );

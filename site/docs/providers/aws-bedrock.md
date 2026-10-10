@@ -272,12 +272,21 @@ Promptfoo collects the stream into one eval response. Both modes preserve conten
 blocks in `response.metadata.content`, along with returned usage, cache counts,
 latency, guardrail traces, service tier, performance settings, and requested
 additional response fields. Text output uses compact placeholders for generated
-media; the original bytes remain in `response.metadata.content`. Built-in tool
+media; binary fields in `response.metadata.content` use base64 strings so they
+remain compact through serialization and can be passed back as native content. Built-in tool
 failures such as `service_unavailable`, `invalid_query`, and `max_tool_invocations`
 produce eval errors and are not cached. Streaming also executes configured MCP
 tools and local `functionToolCallbacks` after a completed client tool request. Server-side tool
 blocks remain in the response and are not executed locally. Missing, interrupted,
 or failed tool streams produce an error before callbacks or cache writes.
+Failed completed streams retain collected tool arguments, including raw arguments
+when the model emits invalid JSON.
+
+With `PROMPTFOO_STRIP_RESPONSE_OUTPUT=true`, `content`, `trace`, and
+`additionalModelResponseFields` are reserved output metadata: they are stripped
+even if an `afterEach` hook annotates them or removes the canonical response
+metadata. Put hook annotations in separate metadata keys to retain them. Explicit
+test metadata is preserved.
 
 ```yaml
 providers:

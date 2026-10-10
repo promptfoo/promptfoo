@@ -1376,7 +1376,69 @@ describe('EvalResult', () => {
 
   describe('toEvaluateResult', () => {
     it.each(
-      ['memory', 'persisted', 'batch'].flatMap((boundary) =>
+      ['present', 'removed', 'replaced'].flatMap((canonical) =>
+        [false, true].map((testOwned) => ({ canonical, testOwned })),
+      ),
+    )(
+      'strips annotated reserved fields with canonical=$canonical and testOwned=$testOwned',
+      async ({ canonical, testOwned }) => {
+        const nativeContent = [
+          { image: { format: 'png', source: { bytes: Buffer.from([1, 2, 3]) } } },
+          { reasoningContent: { redactedContent: new Uint8Array([4, 5, 6]) } },
+          { text: 'data:image/png;base64,AQID' },
+        ];
+        const nativeMetadata = {
+          content: nativeContent,
+          trace: { image: Buffer.from([1, 2, 3]), redacted: new Uint8Array([4, 5, 6]) },
+          additionalModelResponseFields: { bytes: 'AQID', output: 'provider secret' },
+        };
+        const metadata = {
+          content: [...nativeContent, { text: 'hook annotation' }],
+          trace: { ...nativeMetadata.trace, annotation: 'hook annotation' },
+          additionalModelResponseFields: {
+            ...nativeMetadata.additionalModelResponseFields,
+            annotation: 'hook annotation',
+          },
+          annotation: 'keep separate annotation',
+        };
+        const input = createEvaluateResult({
+          response: {
+            output: 'provider secret',
+            metadata:
+              canonical === 'present'
+                ? nativeMetadata
+                : canonical === 'replaced'
+                  ? { note: 'replacement' }
+                  : undefined,
+          },
+          metadata,
+          testCase: createAtomicTestCase({ metadata: testOwned ? metadata : {} }),
+        });
+        const saved = await EvalResult.createFromEvaluateResult('reserved-output-contract', input, {
+          persist: false,
+        });
+        const flags = getStripFlags({ PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'true' });
+        for (const projected of [
+          saved.toEvaluateResult(flags),
+          sanitizeResultForJsonlArtifact(input, flags),
+        ]) {
+          expect(projected.metadata?.annotation).toBe('keep separate annotation');
+          for (const key of Object.keys(nativeMetadata)) {
+            expect(projected.response?.metadata ?? {}).not.toHaveProperty(key);
+            if (testOwned) {
+              expect(projected.metadata?.[key]).toEqual(
+                JSON.parse(JSON.stringify(metadata[key as keyof typeof metadata])),
+              );
+            } else {
+              expect(projected.metadata).not.toHaveProperty(key);
+            }
+          }
+        }
+      },
+    );
+
+    it.each(
+      ['memory', 'persisted', 'batch', 'legacy'].flatMap((boundary) =>
         ['provider', 'test', 'hook'].map((owner) => ({ boundary, owner })),
       ),
     )(
@@ -1394,6 +1456,7 @@ describe('EvalResult', () => {
           content: 'owned content',
           trace: { note: 'owned trace' },
           additionalModelResponseFields: { note: 'owned fields' },
+          annotation: 'keep separate annotation',
         };
         const metadata =
           owner === 'provider' ? nativeMetadata : { ...nativeMetadata, ...ownedMetadata };
@@ -1408,8 +1471,13 @@ describe('EvalResult', () => {
           boundary === 'batch'
             ? (await EvalResult.createManyFromEvaluateResult([input], evalRecord.id))[0]
             : await EvalResult.createFromEvaluateResult(evalRecord.id, input, {
-                persist: boundary === 'persisted',
+                persist: boundary === 'persisted' || boundary === 'legacy',
               });
+        if (boundary === 'legacy') {
+          // Older rows retained the original mirrored data URL after canonical blob extraction.
+          saved.metadata = metadata;
+          await saved.save();
+        }
         const loaded = saved.persisted ? await EvalResult.findById(saved.id) : saved;
         expect(loaded!.response?.metadata?.audio).toHaveProperty('blobRef');
         expect(JSON.stringify(loaded!.response?.metadata)).not.toContain(dataUrl);
@@ -1422,12 +1490,12 @@ describe('EvalResult', () => {
           expect(projected.metadata).not.toHaveProperty('audio');
           for (const key of ['content', 'trace', 'additionalModelResponseFields']) {
             expect(projected.response?.metadata).not.toHaveProperty(key);
-            if (owner === 'provider') {
-              expect(projected.metadata).not.toHaveProperty(key);
-            } else {
+            if (owner === 'test') {
               expect(projected.metadata?.[key]).toEqual(
                 ownedMetadata[key as keyof typeof ownedMetadata],
               );
+            } else {
+              expect(projected.metadata).not.toHaveProperty(key);
             }
           }
           expect(JSON.stringify(projected)).not.toContain('private-native-output');
@@ -1473,6 +1541,7 @@ describe('EvalResult', () => {
                 content: 'hook-owned note',
                 trace: { note: 'hook-owned trace' },
                 additionalModelResponseFields: { note: 'hook-owned fields' },
+                annotation: 'keep hook annotation',
               };
         const metadata = { ...nativeMetadata, latencyMs: 42, note: 'retain diagnostics' };
         const input = createEvaluateResult({
@@ -1498,7 +1567,7 @@ describe('EvalResult', () => {
         for (const [key, value] of Object.entries(nativeMetadata)) {
           if (strip) {
             expect(projected.response?.metadata).not.toHaveProperty(key);
-            if (owner === 'provider') {
+            if (owner !== 'test') {
               expect(projected.metadata).not.toHaveProperty(key);
             }
           } else {
@@ -1512,7 +1581,9 @@ describe('EvalResult', () => {
           expect(JSON.stringify(projected)).not.toContain('native-response-secret');
         }
         if (owner !== 'provider') {
-          expect(projected.metadata).toEqual(ownedMetadata);
+          expect(projected.metadata).toEqual(
+            strip && owner === 'hook' ? { annotation: 'keep hook annotation' } : ownedMetadata,
+          );
         }
         expect(projected.response?.metadata?.latencyMs).toBe(42);
         expect(projected.testCase.metadata).toEqual(testMetadata);

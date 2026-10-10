@@ -202,6 +202,21 @@ export async function collectConverseStream(
   if (!receivedMetadata || openBlocks.size) {
     throw new Error('Bedrock response stream ended before terminal metadata or contentBlockStop');
   }
+  let invalidToolInput = false;
+  for (const [index, raw] of toolInputs) {
+    const toolUse = blocks.get(index)!.toolUse!;
+    try {
+      const input: unknown = JSON.parse(raw || '{}');
+      if (input === null || typeof input !== 'object' || Array.isArray(input)) {
+        throw new Error('Expected an object');
+      }
+      toolUse.input = input as typeof toolUse.input;
+    } catch {
+      // Retain failed arguments for diagnostics; validation below still prevents dispatch/cache.
+      toolUse.input = raw;
+      invalidToolInput = true;
+    }
+  }
   result.output = {
     message: {
       role: 'assistant',
@@ -229,19 +244,11 @@ export async function collectConverseStream(
       result,
     );
   }
-  for (const [index, raw] of toolInputs) {
-    try {
-      const input: unknown = JSON.parse(raw || '{}');
-      if (input === null || typeof input !== 'object' || Array.isArray(input)) {
-        throw new Error('Expected an object');
-      }
-      blocks.get(index)!.toolUse!.input = input as NonNullable<ContentBlock['toolUse']>['input'];
-    } catch {
-      throw new ConverseStreamValidationError(
-        'Bedrock model emitted invalid JSON arguments for a tool',
-        result,
-      );
-    }
+  if (invalidToolInput) {
+    throw new ConverseStreamValidationError(
+      'Bedrock model emitted invalid JSON arguments for a tool',
+      result,
+    );
   }
   return result;
 }

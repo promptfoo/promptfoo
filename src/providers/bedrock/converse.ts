@@ -762,6 +762,48 @@ export function parseConverseMessages(prompt: string): {
   return { messages, system };
 }
 
+/** Keep native binary fields compact and reusable after metadata JSON serialization. */
+function serializeNativeContentBlock(block: ContentBlock): Record<string, unknown> {
+  const serialized: Record<string, unknown> = { ...block };
+  for (const key of ['image', 'document', 'video', 'audio'] as const) {
+    const media = block[key];
+    if (media?.source?.bytes instanceof Uint8Array) {
+      serialized[key] = {
+        ...media,
+        source: { ...media.source, bytes: Buffer.from(media.source.bytes).toString('base64') },
+      };
+    }
+  }
+  if (block.reasoningContent?.redactedContent instanceof Uint8Array) {
+    serialized.reasoningContent = {
+      ...block.reasoningContent,
+      redactedContent: Buffer.from(block.reasoningContent.redactedContent).toString('base64'),
+    };
+  }
+  if (block.toolResult?.content) {
+    serialized.toolResult = {
+      ...block.toolResult,
+      content: block.toolResult.content.map((part) =>
+        serializeNativeContentBlock(part as ContentBlock),
+      ),
+    };
+  }
+  const guardImage = block.guardContent?.image;
+  if (guardImage?.source?.bytes instanceof Uint8Array) {
+    serialized.guardContent = {
+      ...block.guardContent,
+      image: {
+        ...guardImage,
+        source: {
+          ...guardImage.source,
+          bytes: Buffer.from(guardImage.source.bytes).toString('base64'),
+        },
+      },
+    };
+  }
+  return serialized;
+}
+
 /**
  * Extract text output from Converse API response content blocks
  */
@@ -1690,7 +1732,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     );
 
     // Build metadata
-    const metadata: Record<string, unknown> = { content };
+    const metadata: Record<string, unknown> = { content: content.map(serializeNativeContentBlock) };
 
     // Add latency
     if (response.metrics?.latencyMs !== undefined) {
