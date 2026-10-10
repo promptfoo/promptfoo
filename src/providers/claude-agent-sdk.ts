@@ -2199,17 +2199,34 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
           let lastMainResultMsg: SDKResultMessage | undefined;
           let resultMsgCount = 0;
           const workflowTasks = new Map<string, { sessionId: string; status: string }>();
-          const pendingWorkflowResults = new Map<string, number>();
-          // Workflow completions the main agent has not answered yet. A completion that
-          // a running turn reads is answered by that turn's own result, and the SDK emits
-          // no continuation for it. One that arrives too late for the turn to read stays
-          // unanswered until its continuation does.
-          let unansweredWorkflows = 0;
-          let workflowsReadByTurn = 0;
+          // Which turn each workflow completion reached, per session that launched one.
+          // A turn answers the completions it was given, and nothing else:
+          //   queued: reported, and not yet given to any turn
+          //   waking: given to a turn as it started; the SDK emits one result for each
+          //   read:   handed to the running turn part-way through, with no result of its own
+          const workflowTurns = new Map<
+            string,
+            { open: boolean; queued: number; waking: number; read: number }
+          >();
+          const startWorkflowTurn = (sessionId: string) => {
+            const turn = workflowTurns.get(sessionId);
+            if (turn && !turn.open) {
+              turn.open = true;
+              turn.waking += turn.queued;
+              turn.queued = 0;
+            }
+            return turn;
+          };
+          // Only replayed user messages show a completion being handed to a running
+          // turn. Without them, a later main-agent result is taken to answer it.
           let replaysUserMessages = false;
+          let workflowAnswerOwed = false;
 
           for await (const msg of res) {
             if (msg.type === 'assistant') {
+              if (msg.parent_tool_use_id === null) {
+                startWorkflowTurn(msg.session_id);
+              }
               const turnIndex = emitTurnSpan(msg);
               // Extract tool_use content blocks from assistant messages
               for (const block of msg.message.content) {
@@ -2245,8 +2262,14 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
                   msg.origin?.kind === 'task-notification'
                     ? taskNotificationTaskId(content)
                     : undefined;
-                if (taskId && workflowTasks.get(taskId)?.sessionId === msg.session_id) {
-                  workflowsReadByTurn++;
+                const turn = workflowTurns.get(msg.session_id);
+                if (
+                  taskId &&
+                  workflowTasks.get(taskId)?.sessionId === msg.session_id &&
+                  turn?.queued
+                ) {
+                  turn.queued--;
+                  turn.read++;
                 }
               }
               if (Array.isArray(content)) {
@@ -2283,17 +2306,21 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
                 !tool.parentToolUseId
               ) {
                 workflowTasks.set(msg.task_id, { sessionId: msg.session_id, status: 'running' });
+                // The turn that made the Workflow call is still running.
+                if (!workflowTurns.has(msg.session_id)) {
+                  workflowTurns.set(msg.session_id, { open: true, queued: 0, waking: 0, read: 0 });
+                }
               }
             } else if (msg.type === 'system' && msg.subtype === 'task_notification') {
               const task = workflowTasks.get(msg.task_id);
-              if (task?.sessionId === msg.session_id && task.status === 'running') {
+              const turn = workflowTurns.get(msg.session_id);
+              if (turn && task?.sessionId === msg.session_id && task.status === 'running') {
                 task.status = msg.status;
-                unansweredWorkflows++;
-                pendingWorkflowResults.set(
-                  msg.session_id,
-                  (pendingWorkflowResults.get(msg.session_id) ?? 0) + 1,
-                );
+                turn.queued++;
+                workflowAnswerOwed = true;
               }
+            } else if (msg.type === 'system' && msg.subtype === 'init') {
+              startWorkflowTurn(msg.session_id);
             } else if (msg.type === 'result') {
               lastResultMsg = msg;
               resultMsgCount++;
@@ -2308,40 +2335,31 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
                 msg.origin?.kind === 'task-notification' &&
                 !('subkind' in msg.origin && msg.origin.subkind === 'scheduled-trigger');
               // A Workflow completion wakes the main session for another turn. Its
-              // answer is tagged task-notification, just like unrelated background
-              // deliveries. Accept only the session-task producer after a matching
-              // top-level workflow notification, never a peer or child-session result.
+              // answer is tagged task-notification, just like the follow-up to any other
+              // background task the session started. Accept only the session-task
+              // producer, and only from a turn that was given a workflow completion,
+              // never a peer or child-session result. A stream with no turn boundary
+              // before this result starts the turn here.
               // `producer` is emitted by CLI 2.1.284, ahead of the SDK origin type.
+              const turn = startWorkflowTurn(msg.session_id);
               const isWorkflowContinuation =
-                pendingWorkflowResults.has(msg.session_id) &&
+                Boolean(turn && (turn.waking > 0 || turn.read > 0)) &&
                 msg.origin?.kind === 'task-notification' &&
                 !msg.origin.subkind &&
                 'producer' in msg.origin &&
                 msg.origin.producer === 'session-task';
               if (!isBackgroundTaskResult || isWorkflowContinuation) {
                 lastMainResultMsg = msg;
-                // Without replayed user messages nothing records what a turn read, so a
-                // later main-agent result is taken to answer the completions before it.
-                unansweredWorkflows = replaysUserMessages
-                  ? Math.max(
-                      0,
-                      unansweredWorkflows - workflowsReadByTurn - (isWorkflowContinuation ? 1 : 0),
-                    )
-                  : 0;
-                workflowsReadByTurn = 0;
-              }
-              if (isWorkflowContinuation) {
-                const pending = pendingWorkflowResults.get(msg.session_id) ?? 0;
-                // Batched notifications still emit one result per task. Earlier
-                // results can be empty; only the last carries the shared answer.
-                // The launch turn's own result does not consume a notification that
-                // arrived while it was running: one too late for that turn to read
-                // still wakes the session, and its continuation must stay recognizable.
-                if (pending > 1) {
-                  pendingWorkflowResults.set(msg.session_id, pending - 1);
-                } else {
-                  pendingWorkflowResults.delete(msg.session_id);
+                workflowAnswerOwed = false;
+                if (turn) {
+                  turn.read = 0;
+                  // Completions that wake a turn together each get a result. Earlier
+                  // results can be empty; only the last carries the shared answer.
+                  turn.waking = isWorkflowContinuation ? Math.max(0, turn.waking - 1) : 0;
                 }
+              }
+              if (turn) {
+                turn.open = false;
               }
             }
           }
@@ -2529,7 +2547,11 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
                 unfinished[1].status === 'running'
                   ? `workflow task ${unfinished[0]} never reported completion`
                   : `workflow task ${unfinished[0]} ended as ${unfinished[1].status}`;
-            } else if (unansweredWorkflows > 0) {
+            } else if (
+              replaysUserMessages
+                ? [...workflowTurns.values()].some((turn) => turn.queued + turn.waking + turn.read)
+                : workflowAnswerOwed
+            ) {
               incompleteReason = 'the stream ended before the main agent answered the workflow';
             } else if (!finalMsg.result && finalMsg.structured_output === undefined) {
               incompleteReason = 'the final main-agent response was empty';

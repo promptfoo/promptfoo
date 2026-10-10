@@ -2053,6 +2053,12 @@ describe('ClaudeCodeSDKProvider', () => {
             message: { role: 'user', content },
           }) as Partial<SDKMessage>;
         const promptEcho = echo('Verify');
+        // The CLI opens every turn with an init message.
+        const turnStart: Partial<SDKMessage> = {
+          type: 'system',
+          subtype: 'init',
+          session_id: 'main-session',
+        };
         // What the CLI echoes when it hands a completion to the turn that is running.
         const readByTurn = (index: number, asBlocks = false): Partial<SDKMessage> => {
           const text = `<task-notification>\n<task-id>task-${index}</task-id>\n<status>completed</status>\n</task-notification>`;
@@ -2152,6 +2158,61 @@ describe('ClaudeCodeSDKProvider', () => {
             } else {
               expect(result.error).toBeUndefined();
             }
+          },
+        );
+
+        it('keeps the answer when another background task is followed up afterwards', async () => {
+          const result = await run([
+            promptEcho,
+            ...launch(1),
+            completed(1),
+            readByTurn(1),
+            turnResult('VERIFIED'),
+            turnStart,
+            turnResult('The background agent finished as well.', continuation),
+          ]);
+          expect(result.error).toBeUndefined();
+          expect(result.output).toBe('VERIFIED');
+        });
+
+        it.each([
+          [true, undefined],
+          [false, 'stream ended before the main agent answered'],
+        ])(
+          'does not take a turn that began before the workflow finished as its continuation (continued: %s)',
+          async (continued, error) => {
+            const result = await run([
+              promptEcho,
+              ...launch(1),
+              turnResult('Workflow launched'),
+              // Another background task wakes the session; the workflow finishes mid-turn.
+              turnStart,
+              completed(1),
+              turnResult('The workflow is still running.', continuation),
+              ...(continued ? [turnStart, turnResult('VERIFIED', continuation)] : []),
+            ]);
+            expect(result.output).toBe(continued ? 'VERIFIED' : undefined);
+            if (error) {
+              expect(result.error).toContain(error);
+            } else {
+              expect(result.error).toBeUndefined();
+            }
+          },
+        );
+
+        it.each(['before', 'after'])(
+          'grades a continuation whose completion is also echoed %s the turn starts',
+          async (position) => {
+            const result = await run([
+              promptEcho,
+              ...launch(1),
+              turnResult('Workflow launched'),
+              completed(1),
+              ...(position === 'before' ? [readByTurn(1), turnStart] : [turnStart, readByTurn(1)]),
+              turnResult('VERIFIED', continuation),
+            ]);
+            expect(result.error).toBeUndefined();
+            expect(result.output).toBe('VERIFIED');
           },
         );
 
