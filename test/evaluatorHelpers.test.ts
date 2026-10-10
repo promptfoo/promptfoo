@@ -14,6 +14,7 @@ import {
 import logger from '../src/logger';
 import { AIStudioChatProvider } from '../src/providers/google/ai.studio';
 import { runPython } from '../src/python/pythonUtils';
+import { getNunjucksEngine } from '../src/util/templates';
 import { transform } from '../src/util/transform';
 import { createMockProvider } from './factories/provider';
 import { mockProcessEnv } from './util/utils';
@@ -726,6 +727,190 @@ describe('evaluatorHelpers', () => {
         });
       },
     );
+
+    it('should leave placeholders inside raw blocks untouched', () => {
+      const variables = {
+        varOne: 'abc',
+        varThree: '{% raw %}{{varOne}}{% endraw %}',
+      };
+      expect(resolveVariables(variables)).toEqual({
+        varOne: 'abc',
+        varThree: '{% raw %}{{varOne}}{% endraw %}',
+      });
+    });
+
+    it('should leave placeholders nested in another expression untouched', () => {
+      const variables = {
+        varOne: 'abc',
+        varTwo: "{{ '{{varOne}}' }}",
+      };
+      expect(resolveVariables(variables)).toEqual({
+        varOne: 'abc',
+        varTwo: "{{ '{{varOne}}' }}",
+      });
+    });
+
+    it('should still substitute simple placeholders around protected spans', () => {
+      const variables = {
+        x: 'yes',
+        mixed: '{{x}} and {% raw %}{{x}}{% endraw %}',
+      };
+      expect(resolveVariables(variables)).toEqual({
+        x: 'yes',
+        mixed: 'yes and {% raw %}{{x}}{% endraw %}',
+      });
+    });
+
+    it('should leave an earlier raw-block occurrence untouched when the placeholder repeats', () => {
+      const variables = {
+        x: 'yes',
+        mixed: '{% raw %}{{x}}{% endraw %} and {{x}}',
+      };
+      expect(resolveVariables(variables)).toEqual({
+        x: 'yes',
+        mixed: '{% raw %}{{x}}{% endraw %} and yes',
+      });
+    });
+
+    it('should leave placeholders inside nested raw blocks untouched', () => {
+      // Nunjucks balances nested raw blocks: the outer block stays open until
+      // the matching endraw, so {{y}} here renders literally.
+      const variables = {
+        x: 'yes',
+        y: 'no',
+        nested: '{% raw %}{% raw %}{{x}}{% endraw %} {{y}}{% endraw %}',
+      };
+      expect(resolveVariables(variables)).toEqual({
+        x: 'yes',
+        y: 'no',
+        nested: '{% raw %}{% raw %}{{x}}{% endraw %} {{y}}{% endraw %}',
+      });
+    });
+
+    it('should protect an unterminated raw block through its last raw token', () => {
+      // parseRaw swallows everything through the last raw/endraw token even
+      // when the nesting never closes, so {{x}} stays literal while the
+      // trailing {{y}} parses normally.
+      const variables = {
+        x: 'yes',
+        y: 'no',
+        nested: '{% raw %}{% raw %}{{x}}{% endraw %} {{y}}',
+      };
+      expect(resolveVariables(variables)).toEqual({
+        x: 'yes',
+        y: 'no',
+        nested: '{% raw %}{% raw %}{{x}}{% endraw %} no',
+      });
+    });
+
+    it('should still resolve placeholders after a lone unclosed raw tag', () => {
+      // A {% raw %} with no further raw/endraw token is inert: Nunjucks
+      // renders what follows as a normal template.
+      const variables = {
+        x: 'yes',
+        v: '{% raw %}foo {{x}}',
+      };
+      expect(resolveVariables(variables)).toEqual({
+        x: 'yes',
+        v: '{% raw %}foo yes',
+      });
+    });
+
+    it.each([
+      ['balanced nested', '{% raw %}{% raw %}{{x}}{% endraw %} {{y}}{% endraw %}'],
+      ['unterminated nested', '{% raw %}{% raw %}{{x}}{% endraw %} {{y}}'],
+      ['lone unclosed', '{% raw %}foo {{x}}'],
+      ['balanced then unclosed', '{% raw %}{{x}}{% endraw %} {% raw %}{{y}}'],
+    ])('should render %s raw blocks exactly like Nunjucks does', async (_name, template) => {
+      const rendered = await renderPrompt(
+        toPrompt('{{v}}'),
+        { v: template, x: 'yes', y: 'no' },
+        {},
+      );
+      const engine = getNunjucksEngine();
+      expect(rendered).toBe(engine.renderString(template, { x: 'yes', y: 'no' }));
+    });
+
+    it('should leave quoted placeholders inside a concat expression untouched', () => {
+      // The first quoted pair opens and closes before the second starts; a
+      // lastIndexOf nesting check misses that and substitutes the second.
+      const variables = {
+        x: 'XVAL',
+        y: 'YVAL',
+        text: `{{ '{{x}}' ~ '{{y}}' }}`,
+      };
+      expect(resolveVariables(variables)).toEqual({
+        x: 'XVAL',
+        y: 'YVAL',
+        text: `{{ '{{x}}' ~ '{{y}}' }}`,
+      });
+    });
+
+    it('should respect whitespace-control dashes on raw tags', () => {
+      const variables = {
+        x: 'XVAL',
+        dashed: `{%- raw %}{{x}}{% endraw %}`,
+        bothDashed: `{%- raw -%}{{x}}{%- endraw %}`,
+      };
+      expect(resolveVariables(variables)).toEqual({
+        x: 'XVAL',
+        dashed: `{%- raw %}{{x}}{% endraw %}`,
+        bothDashed: `{%- raw -%}{{x}}{%- endraw %}`,
+      });
+    });
+
+    it('should substitute around a whitespace-controlled raw block', () => {
+      const variables = {
+        x: 'yes',
+        mixed: `{%- raw %}{{x}}{% endraw %} and {{x}}`,
+      };
+      expect(resolveVariables(variables)).toEqual({
+        x: 'yes',
+        mixed: `{%- raw %}{{x}}{% endraw %} and yes`,
+      });
+    });
+
+    it('should render a raw-carrying var to literal text in a JSON prompt', async () => {
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{"text": "{{v}}"}'),
+        { v: '{% raw %}{{x}}{% endraw %}' },
+        {},
+      );
+      expect(renderedPrompt).toBe(JSON.stringify({ text: '{{x}}' }, null, 2));
+    });
+
+    it('should render a concat-expression var exactly like Nunjucks in a JSON prompt', async () => {
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{"text": "{{v}}"}'),
+        { v: `{{ '{{x}}' ~ '{{y}}' }}`, x: 'XVAL', y: 'YVAL' },
+        {},
+      );
+      expect(renderedPrompt).toBe(JSON.stringify({ text: '{{x}}{{y}}' }, null, 2));
+    });
+
+    it('should render a raw-carrying var to literal text when JSON autoescape is disabled', async () => {
+      mockProcessEnv({ PROMPTFOO_DISABLE_JSON_AUTOESCAPE: 'true' });
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{{v}}'),
+        { v: '{% raw %}{{x}}{% endraw %}' },
+        {},
+      );
+      expect(renderedPrompt).toBe('{{x}}');
+      mockProcessEnv({ PROMPTFOO_DISABLE_JSON_AUTOESCAPE: undefined });
+    });
+
+    it('should not pre-render a var whose unprotected references are undefined', async () => {
+      // x only appears inside the raw span, but y is genuinely referenced and
+      // undefined, so the value must pass through untouched.
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{"text": "{{v}}"}'),
+        { v: '{% raw %}{{x}}{% endraw %} {{y}}' },
+        {},
+      );
+      expect(renderedPrompt).toBe(
+        JSON.stringify({ text: '{% raw %}{{x}}{% endraw %} {{y}}' }, null, 2),
+      );
+    });
   });
 
   describe('runExtensionHook', () => {
