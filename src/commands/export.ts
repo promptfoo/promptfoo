@@ -158,7 +158,18 @@ export function exportCommand(program: Command) {
           evalId,
         });
       } catch (error) {
-        logger.error(`Failed to export eval: ${error}`);
+        if (
+          !cmdObj.output &&
+          error instanceof RangeError &&
+          (('code' in error && error.code === 'ERR_STRING_TOO_LONG') ||
+            /Invalid string length|Cannot create a string longer than/i.test(error.message))
+        ) {
+          logger.error(
+            'Eval too large for console output. Export rows with --output output.jsonl instead.',
+          );
+        } else {
+          logger.error(`Failed to export eval: ${error}`);
+        }
         process.exitCode = 1;
       }
     });
