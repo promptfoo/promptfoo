@@ -302,6 +302,95 @@ describe('native Bedrock APIs', () => {
     expect(result.output).toContain('"lookalike":{"type":"bigDecimal","string":"2.5"}');
   });
 
+  it.each(['9007199254740993', '0.123456789012345678901'])(
+    'preserves numeric retrieval filter value %s through the actual SDK',
+    async (literal) => {
+      const handle = vi.spyOn(NodeHttpHandler.prototype, 'handle').mockResolvedValue({
+        response: {
+          statusCode: 200,
+          headers: { 'content-type': 'application/json' },
+          body: Buffer.from('{"retrievalResults":[]}'),
+        },
+      });
+      const provider = new AwsBedrockNativeApiProvider('Retrieve', {
+        config: { region: 'us-east-1', accessKeyId: 'synthetic', secretAccessKey: 'synthetic' },
+      });
+      try {
+        const result = await provider.callApi(
+          '{"knowledgeBaseId":"KB12345678","retrievalQuery":{"text":"hello"},"retrievalConfiguration":{"vectorSearchConfiguration":{"filter":{"equals":{"key":"number","value":' +
+            literal +
+            '}}}}}',
+        );
+        expect(result.error).toBeUndefined();
+        expect(handle).toHaveBeenCalledOnce();
+        expect(Buffer.from(handle.mock.calls[0][0].body).toString('utf8')).toContain(
+          '"value":' + literal,
+        );
+      } finally {
+        await provider.cleanup();
+      }
+    },
+  );
+
+  it('preserves precise InvokeModel request and response JSON', async () => {
+    const body =
+      '{"large":9007199254740993,"precise":0.123456789012345678901,"max_tokens":1e3,"temperature":1.00e-3,"lookalike":{"type":"bigDecimal","string":"2.5"}}';
+    const handle = vi.spyOn(NodeHttpHandler.prototype, 'handle').mockResolvedValue({
+      response: {
+        statusCode: 200,
+        headers: { 'content-type': 'application/json' },
+        body: Buffer.from(body),
+      },
+    });
+    const provider = new AwsBedrockNativeApiProvider('InvokeModel', {
+      config: { region: 'us-east-1', accessKeyId: 'synthetic', secretAccessKey: 'synthetic' },
+    });
+    try {
+      const result = await provider.callApi('{"modelId":"test.model","body":' + body + '}');
+      expect(result.error).toBeUndefined();
+      const request = Buffer.from(handle.mock.calls[0][0].body).toString('utf8');
+      for (const text of [request, String(result.output)]) {
+        expect(text).toContain('"large":9007199254740993');
+        expect(text).toContain('"precise":0.123456789012345678901');
+        expect(text).toContain('"max_tokens":1000');
+        expect(text).toContain('"temperature":0.001');
+        expect(text).toContain('"lookalike":{"type":"bigDecimal","string":"2.5"}');
+      }
+    } finally {
+      await provider.cleanup();
+    }
+  });
+
+  it('preserves precise model-native JSON in streaming response chunks', async () => {
+    const { provider } = fixture('InvokeModelWithResponseStream', {
+      body: events([
+        {
+          chunk: {
+            bytes: Buffer.from('{"large":9007199254740993,"precise":0.123456789012345678901}'),
+          },
+        },
+      ]),
+    });
+    const result = await provider.callApi('{"modelId":"test.model","body":{}}');
+    expect(result.error).toBeUndefined();
+    expect(result.output).toContain('"large":9007199254740993');
+    expect(result.output).toContain('"precise":0.123456789012345678901');
+  });
+
+  it.each(['InvokeModel', 'InvokeModelWithResponseStream'])(
+    'rejects an empty %s JSON body',
+    async (operation) => {
+      const response =
+        operation === 'InvokeModel'
+          ? { body: Buffer.alloc(0), contentType: 'application/json' }
+          : { body: events([{ chunk: { bytes: Buffer.alloc(0) } }]) };
+      const { provider } = fixture(operation, response);
+      const result = await provider.callApi('{"modelId":"test.model","body":{}}');
+      expect(result.error).toContain('Unexpected end of JSON input');
+      expect(result.output).toBeUndefined();
+    },
+  );
+
   it('preserves binary InvokeModel outputs without trying to parse image bytes', async () => {
     const { provider } = fixture('InvokeModel', {
       body: Buffer.from([1, 2, 3]),
@@ -314,14 +403,20 @@ describe('native Bedrock APIs', () => {
     });
   });
 
-  it.each(['null', '[]', 'not json', '{"blob":{"$base64":"invalid!"}}'])(
-    'rejects invalid request %s before AWS calls',
-    async (prompt) => {
-      const { provider, invoke } = fixture('Converse', {});
-      expect((await provider.callApi(prompt)).error).toBeTruthy();
-      expect(invoke).not.toHaveBeenCalled();
-    },
-  );
+  it.each([
+    '',
+    '   ',
+    'null',
+    '[]',
+    '9007199254740993',
+    '0.123456789012345678901',
+    'not json',
+    '{"blob":{"$base64":"invalid!"}}',
+  ])('rejects invalid request %s before AWS calls', async (prompt) => {
+    const { provider, invoke } = fixture('Converse', {});
+    expect((await provider.callApi(prompt)).error).toBeTruthy();
+    expect(invoke).not.toHaveBeenCalled();
+  });
 
   it.each(['throttlingException', 'modelStreamErrorException', 'validationException'])(
     'fails %s events without returning partial results',

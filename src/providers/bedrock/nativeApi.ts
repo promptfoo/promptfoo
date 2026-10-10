@@ -1,14 +1,14 @@
 import { STATUS_CODES } from 'http';
 
+import { JsonCodec2 } from '@aws-sdk/core/protocols';
 import { NumericValue } from '@smithy/core/serde';
 import { throwIfAborted } from '../shared';
 import { AwsBedrockGenericProvider, type BedrockOptions } from './base';
 import { isValidBedrockRetrievalFilter } from './retrievalFilter';
 import { createBedrockRequestHandler } from './util';
 import type { BedrockAgentRuntime } from '@aws-sdk/client-bedrock-agent-runtime';
-import type { ResponseMetadata } from '@smithy/types';
+import type { DocumentSchema, ResponseMetadata } from '@smithy/types';
 
-import type { EnvOverrides } from '../../types/env';
 import type {
   CallApiContextParams,
   CallApiOptionsParams,
@@ -67,8 +67,26 @@ interface NativeApiConfig extends BedrockOptions {
   maxRetries?: number | string;
 }
 
+const nativeDocumentSchema: DocumentSchema = 15;
+const nativeJsonDeserializer = new JsonCodec2({
+  jsonName: false,
+  timestampFormat: { useTrait: true, default: 7 },
+}).createDeserializer();
+
+async function parseNativeJson(value: string | Uint8Array): Promise<any> {
+  // The SDK treats an empty body as {}, but native JSON requires a complete value.
+  if (value.length === 0) {
+    throw new SyntaxError('Unexpected end of JSON input');
+  }
+  const text = typeof value === 'string' ? value : new TextDecoder().decode(value);
+  return nativeJsonDeserializer.read(nativeDocumentSchema, text);
+}
+
 /** JSON cannot represent SDK blobs. Decode only an explicit, single-key blob wrapper. */
 function decodeBlobs(value: any): any {
+  if (NumericValue.prototype.isPrototypeOf(value)) {
+    return value;
+  }
   if (Array.isArray(value)) {
     return value.map(decodeBlobs);
   }
@@ -125,7 +143,9 @@ export class AwsBedrockNativeApiProvider extends AwsBedrockGenericProvider {
 
   constructor(
     operation: string,
-    options: { config?: NativeApiConfig; id?: string; env?: EnvOverrides } = {},
+    options: ConstructorParameters<typeof AwsBedrockGenericProvider>[1] & {
+      config?: NativeApiConfig;
+    } = {},
   ) {
     if (!Object.prototype.hasOwnProperty.call(OPERATIONS, operation)) {
       throw new Error(
@@ -199,14 +219,19 @@ export class AwsBedrockNativeApiProvider extends AwsBedrockGenericProvider {
     let responseMetadata: ResponseMetadata | undefined;
     try {
       throwIfAborted(options?.abortSignal);
-      const input = JSON.parse(prompt);
-      if (!input || typeof input !== 'object' || Array.isArray(input)) {
+      const input = await parseNativeJson(prompt);
+      if (
+        !input ||
+        typeof input !== 'object' ||
+        Array.isArray(input) ||
+        NumericValue.prototype.isPrototypeOf(input)
+      ) {
         throw new Error('Native Bedrock prompts must be JSON request objects');
       }
       // InvokeModel bodies are model-native JSON, not SDK structures. Leave their base64 strings intact.
       if (this.operation === 'InvokeModel' || this.operation === 'InvokeModelWithResponseStream') {
         if (input.body && typeof input.body === 'object' && !('$base64' in input.body)) {
-          input.body = JSON.stringify(input.body);
+          input.body = JSON.stringify(encodeBlobs(input.body));
         }
         input.contentType ??= 'application/json';
         input.accept ??= 'application/json';
@@ -280,7 +305,7 @@ export class AwsBedrockNativeApiProvider extends AwsBedrockGenericProvider {
               ...event,
               chunk: {
                 ...event.chunk,
-                bytes: JSON.parse(new TextDecoder().decode(event.chunk.bytes)),
+                bytes: await parseNativeJson(event.chunk.bytes),
               },
             });
           } else {
@@ -296,7 +321,7 @@ export class AwsBedrockNativeApiProvider extends AwsBedrockGenericProvider {
           throw new Error('Bedrock InvokeModel returned no response body');
         }
         native.body = (native.contentType ?? 'application/json').includes('json')
-          ? JSON.parse(new TextDecoder().decode(native.body))
+          ? await parseNativeJson(native.body)
           : encodeBlobs(native.body);
       }
       return {
