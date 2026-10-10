@@ -1468,6 +1468,12 @@ providers:
         store: false
 ```
 
+For models that support HTTP service tiers, set `service_tier` in the provider config.
+For example, use `bedrock:runtime:chat:us.moonshotai.kimi-k3` or
+`bedrock:runtime:responses:us.moonshotai.kimi-k3` with `service_tier: flex`.
+[Kimi K3](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-moonshot-ai-kimi-k3.html)
+supports Priority and Flex through these HTTP APIs; its Converse and Invoke APIs use Standard.
+
 The adapters inherit [OpenAI provider options](./openai.md), including streaming,
 client-side functions, structured output, multimodal input, and request fields through
 `passthrough`. Support depends on the chosen model and API. For Runtime Chat models
