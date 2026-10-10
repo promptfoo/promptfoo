@@ -16,6 +16,7 @@ import { parseFileTransformReference } from './transformUtils';
 import type {
   ApiProvider,
   CallApiContextParams,
+  CallApiOptionsParams,
   ProviderOptions,
   ProviderResponse,
 } from '../types/index';
@@ -243,7 +244,7 @@ export async function createStreamResponse(
 // Close codes that mean the transport died rather than the peer rejecting the
 // message: retrying a fresh connection can succeed. Everything else (protocol
 // or policy violations) keeps failing fast, since the same payload would lose
-// again on a new socket. RFC 6455 section 7.4.
+// again on a new socket. See the IANA WebSocket close-code registry.
 const TRANSIENT_CLOSE_CODES: ReadonlySet<number> = new Set([1005, 1006, 1012, 1013]);
 const CLOSE_CODE_REASONS: Readonly<Record<number, string>> = {
   1005: 'no status received',
@@ -293,7 +294,15 @@ export class WebSocketProvider implements ApiProvider {
     return `[WebSocket Provider ${this.providerId}]`;
   }
 
-  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+  async callApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
+    const signal = options?.abortSignal;
+    if (signal?.aborted) {
+      throw new DOMException('WebSocket request aborted', 'AbortError');
+    }
     const vars = {
       ...(context?.vars || {}),
       prompt,
@@ -306,6 +315,10 @@ export class WebSocketProvider implements ApiProvider {
     logger.debug(`Sending WebSocket message: ${message}`);
     let accumulator: ProviderResponse = { error: 'unknown error occurred' };
     return new Promise<ProviderResponse>((resolve, reject) => {
+      if (signal?.aborted) {
+        reject(new DOMException('WebSocket request aborted', 'AbortError'));
+        return;
+      }
       const wsOptions: ClientOptions = {};
       const protocols = normalizeWebSocketProtocols(this.config.protocols);
       if (this.config.headers) {
@@ -321,97 +334,90 @@ export class WebSocketProvider implements ApiProvider {
         protocols.length > 0
           ? new WebSocket(url, protocols, wsOptions)
           : new WebSocket(url, wsOptions);
-      const timeout = setTimeout(() => {
+      let timeout: ReturnType<typeof setTimeout> | undefined;
+      let settled = false;
+      const settle = (result: ProviderResponse | Error) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        clearTimeout(timeout);
+        signal?.removeEventListener('abort', onAbort);
         ws.close();
-        logger.error(`[WebSocket Provider] Request timed out`);
-        reject(new Error(`WebSocket request timed out after ${this.timeoutMs}ms`));
-      }, this.timeoutMs);
-      ws.on('open', () => {
-        logger.debug(`[WebSocket Provider]: WebSocket connection opened successfully`);
-      });
+        if (result instanceof Error) {
+          reject(result);
+        } else {
+          resolve(result);
+        }
+      };
+      const onAbort = () => settle(new DOMException('WebSocket request aborted', 'AbortError'));
+      const resetTimeout = () => {
+        clearTimeout(timeout);
+        timeout = setTimeout(() => {
+          logger.error('[WebSocket Provider] Request timed out');
+          settle(new Error(`WebSocket request timed out after ${this.timeoutMs}ms`));
+        }, this.timeoutMs);
+      };
+      resetTimeout();
 
       ws.onmessage = (event) => {
+        if (settled) {
+          return;
+        }
         if (streamResponse) {
+          resetTimeout();
           try {
             logger.debug(`[WebSocket Provider] Data Received: ${JSON.stringify(event.data)}`);
           } catch {
-            // ignore
+            // Logging must not interrupt the stream.
           }
           try {
             const [newAccumulator, isComplete] = streamResponse(accumulator, event, context);
             accumulator = newAccumulator;
-            // Only disarm the request deadline once the stream settles this promise.
-            // Clearing it on every chunk leaves a stalled stream pending forever.
             if (isComplete) {
-              clearTimeout(timeout);
-              ws.close();
-              const response = processResult(accumulator);
-              resolve(response);
+              settle(processResult(accumulator));
             }
           } catch (err) {
-            clearTimeout(timeout);
             logger.debug(`[WebSocket Provider]: ${(err as Error).message}`);
-            ws.close();
-            reject(new Error(`Error executing streamResponse function: ${(err as Error).message}`));
+            settle(new Error(`Error executing streamResponse function: ${(err as Error).message}`));
           }
-        } else {
-          clearTimeout(timeout);
-          try {
-            let data = event.data;
-            if (typeof data === 'string') {
-              try {
-                data = JSON.parse(data);
-              } catch {
-                // If parsing fails, assume it's a text response
-              }
-              logger.debug(`[WebSocket Provider] Data Received: ${safeJsonStringify(data)}`);
-            }
-            try {
-              const result = processResult(this.transformResponse(data));
+          return;
+        }
 
-              if (result.error) {
-                logger.debug(`[WebSocket Provider]: Error from provider ${result.error}`);
-                ws.close();
-                reject(new Error(result.error));
-              } else if (result.output === undefined) {
-                ws.close();
-                reject(new Error('No output from provider'));
-              }
-              ws.close();
-              resolve(result);
-            } catch (err) {
-              logger.debug(
-                `[WebSocket Provider]: Error in transform response: ${(err as Error).message}`,
-              );
-              ws.close();
-              reject(new Error(`Failed to process response: ${(err as Error).message}`));
+        try {
+          let data = event.data;
+          if (typeof data === 'string') {
+            try {
+              data = JSON.parse(data);
+            } catch {
+              // Plain text responses are valid.
             }
-          } catch (err) {
-            logger.debug(
-              `[WebSocket Provider]: Error processing response: ${(err as Error).message}`,
-            );
-            ws.close();
-            reject(new Error(`Failed to process response: ${(err as Error).message}`));
+            logger.debug(`[WebSocket Provider] Data Received: ${safeJsonStringify(data)}`);
           }
+          const result = processResult(this.transformResponse(data));
+          if (result.error) {
+            settle(new Error(result.error));
+          } else if (result.output === undefined) {
+            settle(new Error('No output from provider'));
+          } else {
+            settle(result);
+          }
+        } catch (err) {
+          logger.debug(
+            `[WebSocket Provider]: Error processing response: ${(err as Error).message}`,
+          );
+          settle(new Error(`Failed to process response: ${(err as Error).message}`));
         }
       };
 
       ws.onerror = (event) => {
-        clearTimeout(timeout);
-        ws.close();
-        logger.error(`[WebSocket Provider] Connection failed`);
-        reject(getSafeWebSocketError(event));
+        if (!settled) {
+          logger.error('[WebSocket Provider] Connection failed');
+          settle(getSafeWebSocketError(event));
+        }
       };
 
       ws.onclose = (event) => {
-        // A peer that closes mid-stream fires no error and completes nothing,
-        // so without this the promise would sit until the request deadline.
-        // Fail fast instead. Our own close() calls settle the promise first,
-        // making this reject a no-op on every path we initiated. Transport-level
-        // and reconnect-inviting codes reject as a connection reset, so the
-        // retry policy fires its backoff right away instead of after the full
-        // deadline; codes that reject the message itself stay permanent.
-        clearTimeout(timeout);
         if (TRANSIENT_CLOSE_CODES.has(event.code)) {
           const transient = new Error(
             `WebSocket closed mid-stream by the peer with code ${event.code} (${
@@ -419,10 +425,10 @@ export class WebSocketProvider implements ApiProvider {
             })`,
           ) as NodeJS.ErrnoException;
           transient.code = 'ECONNRESET';
-          reject(transient);
+          settle(transient);
           return;
         }
-        reject(
+        settle(
           new Error(
             `WebSocket connection closed before the response completed (code ${event.code ?? 'unknown'})`,
           ),
@@ -430,9 +436,19 @@ export class WebSocketProvider implements ApiProvider {
       };
 
       ws.onopen = () => {
+        if (settled) {
+          return;
+        }
+        if (streamResponse) {
+          resetTimeout();
+        }
         logger.debug(`[WebSocket Provider] Message sent: ${safeJsonStringify(message)}`);
         ws.send(message);
       };
+      signal?.addEventListener('abort', onAbort, { once: true });
+      if (signal?.aborted) {
+        onAbort();
+      }
     });
   }
 }
