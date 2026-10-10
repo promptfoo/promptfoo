@@ -1961,10 +1961,11 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       executableArgs: config.executable_args,
       // A workflow completion that a running turn reads is only visible as a replayed
       // user message, which result selection needs to tell it from one still queued.
+      // The flag goes last so `extra_args` cannot turn it off.
       extraArgs:
         Array.isArray(tools) && !tools.includes('Workflow')
           ? config.extra_args
-          : { 'replay-user-messages': null, ...config.extra_args },
+          : { ...config.extra_args, 'replay-user-messages': null },
       pathToClaudeCodeExecutable: config.path_to_claude_code_executable
         ? safeResolve(basePath, config.path_to_claude_code_executable)
         : undefined,

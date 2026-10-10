@@ -5503,6 +5503,13 @@ describe('ClaudeCodeSDKProvider', () => {
             { custom_allowed_tools: ['Workflow'], extra_args: { verbose: null } },
             { 'replay-user-messages': null, verbose: null },
           ],
+          [
+            {
+              custom_allowed_tools: ['Workflow'],
+              extra_args: { 'replay-user-messages': 'false', verbose: null },
+            },
+            { 'replay-user-messages': null, verbose: null },
+          ],
           [{ custom_allowed_tools: ['Read'] }, undefined],
           [{}, undefined],
         ])(

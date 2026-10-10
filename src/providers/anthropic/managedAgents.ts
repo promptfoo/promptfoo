@@ -806,13 +806,13 @@ export class AnthropicManagedAgentsProvider extends AnthropicGenericProvider {
         metadata.workflowStartErrors = state.startErrors;
       }
       metadata.stopReason = state.stopReason;
-      applyUsage(response, state.usage);
-      await this.cleanupResources(
+      const settledUsage = await this.cleanupResources(
         config,
         { params, headers, secrets },
         { agentId, environmentId, sessionId },
         response,
       );
+      applyUsage(response, settledUsage ?? state.usage);
     }
     return response;
   }
@@ -965,13 +965,13 @@ export class AnthropicManagedAgentsProvider extends AnthropicGenericProvider {
     call: { params: CallParams; headers: Record<string, string>; secrets: Set<string> },
     ids: { agentId?: string; environmentId?: string; sessionId?: string },
     response: ProviderResponse,
-  ): Promise<void> {
+  ): Promise<BetaManagedAgentsSessionUsage | undefined> {
     const { agentId, environmentId, sessionId } = ids;
     const { params, secrets } = call;
     const metadata = response.metadata!;
     if (config.retainSession && !response.error) {
       metadata.sessionArchived = false;
-      return;
+      return undefined;
     }
     // Cleanup has its own deadline, including when the caller cancelled the run.
     const cleanupController = new AbortController();
@@ -984,8 +984,18 @@ export class AnthropicManagedAgentsProvider extends AnthropicGenericProvider {
       headers: call.headers,
     };
     const cleanupErrors: string[] = [];
-    const archive = async (kind: ArchivableKind, id: string) => {
-      const error = await this.archive(kind, id, params, cleanupRequest, cleanupTimeoutMs, secrets);
+    let settledUsage: BetaManagedAgentsSessionUsage | undefined;
+    const archive = async (
+      kind: ArchivableKind,
+      id: string,
+      whileRunning?: () => Promise<void>,
+    ) => {
+      const error = await this.archive(
+        kind,
+        id,
+        { params, request: cleanupRequest, cleanupTimeoutMs, secrets },
+        whileRunning,
+      );
       if (error !== undefined) {
         cleanupErrors.push(`${kind === 'session' ? 'Session' : kind} ${id}: ${error}`);
       }
@@ -993,10 +1003,28 @@ export class AnthropicManagedAgentsProvider extends AnthropicGenericProvider {
     };
     try {
       if (sessionId) {
-        if (response.error) {
-          await this.interruptSession(sessionId, params, cleanupRequest, metadata, secrets);
+        const failed = Boolean(response.error);
+        // An interrupt that met a passing failure is sent again for as long as the
+        // session keeps running. Nothing else will stop it before the deadline.
+        let interruptOwed = failed;
+        const interrupt = async () => {
+          if (interruptOwed) {
+            interruptOwed = await this.interruptSession(
+              sessionId,
+              params,
+              cleanupRequest,
+              metadata,
+              secrets,
+            );
+          }
+        };
+        await interrupt();
+        metadata.sessionArchived = await archive('session', sessionId, interrupt);
+        if (failed) {
+          // A failed call left its session working until the interrupt took effect, so
+          // only the totals read now cover what it went on to spend.
+          settledUsage = await this.settledUsage(sessionId, params, cleanupRequest);
         }
-        metadata.sessionArchived = await archive('session', sessionId);
       } else if (metadata.unconfirmedCreate === 'session' && config.agent && agentId) {
         // The create got no response, so the session may exist all the same. Every
         // session of an agent this call made is its own, so it can be found.
@@ -1032,6 +1060,24 @@ export class AnthropicManagedAgentsProvider extends AnthropicGenericProvider {
         .filter(Boolean)
         .join('. ');
     }
+    return settledUsage;
+  }
+
+  /** The session's totals once it has stopped, or undefined when they cannot be read in time. */
+  private async settledUsage(
+    sessionId: string,
+    params: CallParams,
+    request: CleanupRequest,
+  ): Promise<BetaManagedAgentsSessionUsage | undefined> {
+    if (request.signal.aborted) {
+      return undefined;
+    }
+    try {
+      return (await this.anthropic.beta.sessions.retrieve(sessionId, params, request)).usage;
+    } catch {
+      // The last streamed snapshot is reported instead.
+      return undefined;
+    }
   }
 
   /** The session of an agent this call created, if the server did make one. */
@@ -1053,13 +1099,14 @@ export class AnthropicManagedAgentsProvider extends AnthropicGenericProvider {
     }
   }
 
+  /** Returns whether the interrupt is still owed: it failed in a way that may pass. */
   private async interruptSession(
     sessionId: string,
     params: CallParams,
-    request: Anthropic.RequestOptions,
+    request: CleanupRequest,
     metadata: NonNullable<ProviderResponse['metadata']>,
     secrets: Set<string>,
-  ): Promise<void> {
+  ): Promise<boolean> {
     try {
       await this.anthropic.beta.sessions.events.send(
         sessionId,
@@ -1067,10 +1114,13 @@ export class AnthropicManagedAgentsProvider extends AnthropicGenericProvider {
         request,
       );
       metadata.interruptRequested = true;
+      delete metadata.interruptError;
+      return false;
     } catch (error) {
       // Still attempt archival if the interrupt fails. An interrupt alone
       // does not end dynamic workflow runs; only archival confirms cleanup.
       metadata.interruptError = describeError(error, secrets);
+      return !request.signal.aborted && failureKind(error) === 'transient';
     }
   }
 
@@ -1128,11 +1178,15 @@ export class AnthropicManagedAgentsProvider extends AnthropicGenericProvider {
   private async archive(
     kind: ArchivableKind,
     id: string,
-    params: CallParams,
-    request: CleanupRequest,
-    cleanupTimeoutMs: number,
-    secrets: Set<string>,
+    cleanup: {
+      params: CallParams;
+      request: CleanupRequest;
+      cleanupTimeoutMs: number;
+      secrets: Set<string>;
+    },
+    whileRunning?: () => Promise<void>,
   ): Promise<string | undefined> {
+    const { params, request, cleanupTimeoutMs, secrets } = cleanup;
     let refusal: string | undefined;
     let running = false;
     let settled = false;
@@ -1157,6 +1211,9 @@ export class AnthropicManagedAgentsProvider extends AnthropicGenericProvider {
           return undefined;
         }
         running = state === 'running';
+        if (running) {
+          await whileRunning?.();
+        }
         const wait = state !== 'settled' || failure === 'transient';
         // Refused while settled both before and after the attempt: waiting will not
         // help a session that, for example, still has an open workflow run.

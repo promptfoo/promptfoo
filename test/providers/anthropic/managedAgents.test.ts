@@ -204,6 +204,44 @@ describe('Claude Managed Agents', () => {
     expect(result.metadata?.sessionArchived).toBe(true);
   });
 
+  it.each([
+    [503, 2, undefined],
+    [400, 1, 'HTTP 400'],
+  ])(
+    'sends a failed interrupt again only when the failure may pass (%i)',
+    async (status, interrupts, interruptError) => {
+      vi.useFakeTimers();
+      const f = setup({}, [idle('budget_reached')]);
+      let rejected = false;
+      f.send.mockImplementation(((_id: string, body: { events: { type: string }[] }) => {
+        if (body.events[0].type === 'user.interrupt' && !rejected) {
+          rejected = true;
+          return Promise.reject(apiError(status, 'Not now.', 'api_error'));
+        }
+        return Promise.resolve({});
+      }) as never);
+      // The session keeps running until an interrupt reaches it.
+      f.archive.mockImplementation((() =>
+        f.send.mock.calls.filter((call) => call[1].events[0].type === 'user.interrupt').length >= 2
+          ? Promise.resolve({})
+          : Promise.reject(stillRunning())) as never);
+      f.retrieve.mockResolvedValue({ status: 'running', usage } as never);
+      const pending = f.provider.callApi('test');
+      await vi.advanceTimersByTimeAsync(15_000);
+      const result = await pending;
+      expect(
+        f.send.mock.calls.filter((call) => call[1].events[0].type === 'user.interrupt'),
+      ).toHaveLength(interrupts);
+      expect(result.metadata?.sessionArchived).toBe(interrupts === 2);
+      expect(result.metadata?.interruptRequested).toBe(interrupts === 2 ? true : undefined);
+      if (interruptError) {
+        expect(result.metadata?.interruptError).toContain(interruptError);
+      } else {
+        expect(result.metadata).not.toHaveProperty('interruptError');
+      }
+    },
+  );
+
   it('reports an open workflow that cannot be archived after interruption', async () => {
     const f = setup({}, [
       { type: 'workflow_run.created', workflow_run_id: 'run-open' },
@@ -1485,6 +1523,27 @@ describe('Claude Managed Agents', () => {
     expect((await setup({}, events as unknown[]).provider.callApi('test')).error).toContain(error);
   });
 
+  it('reports what a failed session went on to use before it stopped', async () => {
+    const f = setup({}, [
+      { type: 'session.usage', usage: { input_tokens: 1, output_tokens: 1 } },
+      idle('budget_reached'),
+    ]);
+    const settled = {
+      input_tokens: 40,
+      output_tokens: 60,
+      list_cost: { amount: '7', currency: 'USD' },
+    };
+    f.retrieve.mockResolvedValue({ status: 'terminated', usage: settled } as never);
+    const result = await f.provider.callApi('test');
+    expect(result.error).toContain('budget_reached');
+    expect(result.tokenUsage).toMatchObject({ prompt: 40, completion: 60, total: 100 });
+    expect(result.cost).toBe(0.07);
+    // The totals are read once the session has been stopped and archived.
+    expect(f.archive.mock.invocationCallOrder[0]).toBeLessThan(
+      f.retrieve.mock.invocationCallOrder[0],
+    );
+  });
+
   it('preserves known usage on failure without inventing missing token counts or non-USD cost', async () => {
     const f = setup({}, [
       {
@@ -1493,6 +1552,8 @@ describe('Claude Managed Agents', () => {
       },
       idle('budget_reached'),
     ]);
+    // The settled totals cannot be read, so the last streamed snapshot stands.
+    f.retrieve.mockRejectedValue(apiError(503, 'Try again later.', 'api_error'));
     const result = await f.provider.callApi('test');
     expect(result.tokenUsage?.completion).toBe(5);
     expect(result.tokenUsage?.prompt).toBeUndefined();
