@@ -3,27 +3,63 @@ import path from 'path';
 import type { ConnectionOptions } from 'tls';
 
 import { getProxyForUrl } from 'proxy-from-env';
-import { Agent, type Dispatcher, interceptors, ProxyAgent } from 'undici';
+import { Agent, type Dispatcher, ProxyAgent } from 'undici';
 import cliState from '../../cliState';
 import { DEFAULT_MAX_CONCURRENCY, VERSION } from '../../constants';
 import { getEnvBool, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
 import { getRequestTimeoutMs } from '../../providers/shared';
-import { parseRateLimitHeaders, parseRetryAfter } from '../../scheduler/headerParser';
+import { parseRateLimitHeaders } from '../../scheduler/headerParser';
 import invariant from '../../util/invariant';
 import { sleep } from '../../util/time';
-import { sanitizeUrl } from '../sanitizer';
+import { sanitizeUrl, sanitizeUrlForLogging } from '../sanitizer';
+import { CloudAuthRedirectError } from './cloudAuthRedirects';
+import { createDecompressionInterceptor, stripDecompressionHeaders } from './decompress';
 import {
   extractRateLimitErrorCode,
+  extractRateLimitErrorType,
+  getAbortError,
   HttpRateLimitError,
-  isHardQuotaCode,
   type SystemError,
 } from './errors';
-import { monkeyPatchFetch } from './monkeyPatchFetch';
+import { monkeyPatchFetch, preserveCloudAuthRedirects } from './monkeyPatchFetch';
+import { getEffectiveRequestSignal } from './requestSignal';
 import { getFetchRetryContextMaxRetries } from './retryContext';
-import { stripDecompressionHeaders } from './stripDecompressionHeaders';
 
 import type { FetchOptions } from './types';
+
+export type FetchRateLimitObservation = {
+  headers: Record<string, string>;
+  status: number;
+  resetAt: number;
+};
+
+// Credential failures are not transient HTTP failures and must not be retried by this layer.
+class RequestAuthenticationError extends Error {}
+
+async function resolveAuthenticationHeaders(
+  getAuthHeaders: NonNullable<FetchOptions['getAuthHeaders']>,
+  explicitHeaders: HeadersInit | undefined,
+  signal: AbortSignal | null | undefined,
+): Promise<Record<string, string>> {
+  signal?.throwIfAborted();
+  let headers: Headers;
+  try {
+    headers = new Headers(await getAuthHeaders(signal ?? undefined));
+  } catch (error) {
+    signal?.throwIfAborted();
+    throw Object.assign(
+      new RequestAuthenticationError(
+        error instanceof Error ? error.message : 'Request authentication failed',
+      ),
+      { cause: error },
+    );
+  }
+  signal?.throwIfAborted();
+  // Never mutate the original headers: a retry must not inherit the previous attempt's token.
+  new Headers(explicitHeaders).forEach((value, name) => headers.set(name, value));
+  return Object.fromEntries(headers);
+}
 
 // Cached agents to avoid recreating on every request.
 // Keep separate entries per resolved connection count so overlapping requests
@@ -46,8 +82,9 @@ const cachedProxyAgents: Map<string, Dispatcher> = new Map();
 function getConnectionPoolSize(): number {
   const envConnections = getEnvString('PROMPTFOO_FETCH_CONNECTIONS');
   if (envConnections != null) {
-    const parsed = parseInt(envConnections, 10);
-    if (!isNaN(parsed)) {
+    const normalized = envConnections.trim();
+    const parsed = Number(normalized);
+    if (/^\d+$/.test(normalized) && Number.isSafeInteger(parsed) && parsed > 0) {
       return parsed;
     }
   }
@@ -86,7 +123,7 @@ function getOrCreateAgent(tlsOptions: ConnectionOptions): Dispatcher {
     connections: concurrency,
     connect: tlsOptions,
   })
-    .compose(interceptors.decompress({ skipErrorResponses: false }))
+    .compose(createDecompressionInterceptor())
     .compose(stripDecompressionHeaders());
   cachedAgents.set(concurrency, agent);
   return agent;
@@ -112,7 +149,7 @@ function getOrCreateProxyAgent(proxyUrl: string, tlsOptions: ConnectionOptions):
     keepAliveMaxTimeout: 60_000,
     connections: concurrency,
   })
-    .compose(interceptors.decompress({ skipErrorResponses: false }))
+    .compose(createDecompressionInterceptor())
     .compose(stripDecompressionHeaders());
   cachedProxyAgents.set(cacheKey, agent);
   return agent;
@@ -180,6 +217,7 @@ export async function fetchWithProxy(
   options: FetchOptions = {},
   abortSignal?: AbortSignal,
 ): Promise<Response> {
+  options = preserveCloudAuthRedirects(url, options);
   let finalUrl = url;
   let finalUrlString = getFetchUrlString(url);
 
@@ -195,40 +233,54 @@ export async function fetchWithProxy(
     : options.signal;
 
   // This is overridden globally but Node v20 is still complaining so we need to add it here too
+  const { getAuthHeaders, ...requestOptions } = options;
   const finalOptions: FetchOptions & { dispatcher?: any } = {
-    ...options,
+    ...requestOptions,
     headers: getFetchWithProxyHeaders(url, options),
     signal: combinedSignal,
   };
+  const logEnabled = new Headers(finalOptions.headers).get('x-promptfoo-silent') !== 'true';
 
   if (typeof url === 'string') {
     try {
       const parsedUrl = new URL(url);
       if (parsedUrl.username || parsedUrl.password) {
-        if (
-          finalOptions.headers &&
-          'Authorization' in (finalOptions.headers as Record<string, string>)
-        ) {
-          logger.warn(
-            'Both URL credentials and Authorization header present - URL credentials will be ignored',
-          );
+        const headers = (finalOptions.headers ?? {}) as Record<string, string>;
+        // Header names are case-insensitive, and a Headers instance or array lowercases them.
+        // Matching only `Authorization` would add a second value that servers receive combined.
+        if (Object.keys(headers).some((name) => name.toLowerCase() === 'authorization')) {
+          if (logEnabled) {
+            logger.warn(
+              'Both URL credentials and Authorization header present - URL credentials will be ignored',
+            );
+          }
         } else {
-          // Move credentials to Authorization header
-          const username = parsedUrl.username || '';
-          const password = parsedUrl.password || '';
-          const credentials = Buffer.from(`${username}:${password}`).toString('base64');
+          // Userinfo percent-encodes reserved characters, and HTTP clients decode it before
+          // Basic auth, so a password written as p%40ss must authenticate as p@ss. A malformed
+          // escape has no decoding and stays as written.
+          const credentials = [parsedUrl.username, parsedUrl.password]
+            .map((part) => {
+              try {
+                return decodeURIComponent(part);
+              } catch {
+                return part;
+              }
+            })
+            .join(':');
           finalOptions.headers = {
-            ...(finalOptions.headers as Record<string, string>),
-            Authorization: `Basic ${credentials}`,
+            ...headers,
+            Authorization: `Basic ${Buffer.from(credentials).toString('base64')}`,
           };
         }
         parsedUrl.username = '';
         parsedUrl.password = '';
         finalUrl = parsedUrl.toString();
-        finalUrlString = finalUrl.toString();
+        finalUrlString = finalUrl;
       }
     } catch (e) {
-      logger.debug(`URL parsing failed in fetchWithProxy: ${e}`);
+      if (logEnabled) {
+        logger.debug(`URL parsing failed in fetchWithProxy: ${e}`);
+      }
     }
   }
 
@@ -243,9 +295,13 @@ export async function fetchWithProxy(
       const resolvedPath = path.resolve(cliState.basePath || '', caCertPath);
       const ca = await fsPromises.readFile(resolvedPath, 'utf8');
       tlsOptions.ca = ca;
-      logger.debug(`Using custom CA certificate from ${resolvedPath}`);
+      if (logEnabled) {
+        logger.debug(`Using custom CA certificate from ${resolvedPath}`);
+      }
     } catch (e) {
-      logger.warn(`Failed to read CA certificate from ${caCertPath}: ${e}`);
+      if (logEnabled) {
+        logger.warn(`Failed to read CA certificate from ${caCertPath}: ${e}`);
+      }
     }
   }
   const proxyUrl = finalUrlString ? getProxyForUrl(finalUrlString) : '';
@@ -254,7 +310,9 @@ export async function fetchWithProxy(
   // Respect a caller-provided dispatcher (e.g. HTTP provider's custom TLS agent for mTLS).
   if (!finalOptions.dispatcher) {
     if (proxyUrl) {
-      logger.debug(`Using proxy: ${sanitizeUrl(proxyUrl)}`);
+      if (logEnabled) {
+        logger.debug(`Using proxy: ${sanitizeUrl(proxyUrl)}`);
+      }
       finalOptions.dispatcher = getOrCreateProxyAgent(proxyUrl, tlsOptions);
     } else {
       finalOptions.dispatcher = getOrCreateAgent(tlsOptions);
@@ -268,13 +326,26 @@ export async function fetchWithProxy(
   const maxTransientRetries = disableTransientRetries ? 0 : 3;
 
   for (let attempt = 0; attempt <= maxTransientRetries; attempt++) {
-    const response = await monkeyPatchFetch(finalUrl, finalOptions);
+    let attemptOptions = finalOptions;
+    if (getAuthHeaders) {
+      attemptOptions = {
+        ...finalOptions,
+        headers: await resolveAuthenticationHeaders(
+          getAuthHeaders,
+          finalOptions.headers,
+          combinedSignal,
+        ),
+      };
+    }
+    const response = await monkeyPatchFetch(finalUrl, attemptOptions);
 
     if (!disableTransientRetries && isTransientError(response) && attempt < maxTransientRetries) {
       const backoffMs = Math.pow(2, attempt) * 1000; // 1s, 2s, 4s
-      logger.debug(
-        `Transient error (${response.status} ${response.statusText}), retry ${attempt + 1}/${maxTransientRetries} after ${backoffMs}ms`,
-      );
+      if (logEnabled) {
+        logger.debug(
+          `Transient error (${response.status} ${response.statusText}), retry ${attempt + 1}/${maxTransientRetries} after ${backoffMs}ms`,
+        );
+      }
       await sleep(backoffMs);
       continue;
     }
@@ -339,18 +410,17 @@ export function isRateLimited(response: Response): boolean {
 
 /**
  * Compute how long to wait after a rate-limited response.
- * Reads `Retry-After`, `X-RateLimit-Reset`, and OpenAI-style reset headers.
+ * Reads `retry-after-ms`, `Retry-After`, `X-RateLimit-Reset`, and OpenAI-style reset headers.
  * Default: 60s.
  */
 export function computeRateLimitWaitMs(response: Response): number {
+  const parsedHeaders = parseRateLimitHeaders(Object.fromEntries(response.headers.entries()));
   const rateLimitReset = response.headers.get('X-RateLimit-Reset');
-  const retryAfter = response.headers.get('Retry-After');
   const openaiReset =
     response.headers.get('x-ratelimit-reset-requests') ||
     response.headers.get('x-ratelimit-reset-tokens');
 
   if (openaiReset) {
-    const parsedHeaders = parseRateLimitHeaders(Object.fromEntries(response.headers.entries()));
     if (parsedHeaders.resetAt !== undefined) {
       return Math.max(parsedHeaders.resetAt - Date.now(), 0);
     }
@@ -363,7 +433,7 @@ export function computeRateLimitWaitMs(response: Response): number {
     }
   }
 
-  return retryAfter ? (parseRetryAfter(retryAfter) ?? 60_000) : 60_000;
+  return parsedHeaders.retryAfterMs ?? 60_000;
 }
 
 /**
@@ -372,19 +442,54 @@ export function computeRateLimitWaitMs(response: Response): number {
  */
 const RATE_LIMIT_JITTER_MS = 1000;
 
+async function sleepWithAbort(waitTime: number, signal?: AbortSignal | null): Promise<void> {
+  if (!signal) {
+    await sleep(waitTime);
+    return;
+  }
+  if (signal.aborted) {
+    throw getAbortError(signal);
+  }
+  await new Promise<void>((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      signal.removeEventListener('abort', onAbort);
+      resolve();
+    }, waitTime);
+    const onAbort = () => {
+      clearTimeout(timeout);
+      signal.removeEventListener('abort', onAbort);
+      reject(getAbortError(signal));
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
 /**
  * Handle rate limiting by waiting the appropriate amount of time, plus a
  * uniform random jitter to avoid synchronized retry storms when many
  * concurrent requests hit the same rate limit.
  */
-export async function handleRateLimit(response: Response): Promise<void> {
+export async function handleRateLimit(
+  response: Response,
+  signal?: AbortSignal | null,
+  onRateLimitBackoff?: (observation: FetchRateLimitObservation) => void,
+): Promise<void> {
   const waitTime = computeRateLimitWaitMs(response);
+  if (!signal?.aborted) {
+    onRateLimitBackoff?.(
+      Object.freeze({
+        headers: Object.freeze(Object.fromEntries(response.headers.entries())),
+        status: response.status,
+        resetAt: Date.now() + waitTime,
+      }),
+    );
+  }
   const jitter = Math.floor(Math.random() * RATE_LIMIT_JITTER_MS);
   const totalWait = waitTime + jitter;
   logger.debug(
     `Rate limited, waiting ${totalWait}ms (base ${waitTime}ms + ${jitter}ms jitter) before retry`,
   );
-  await sleep(totalWait);
+  await sleepWithAbort(totalWait, signal);
 }
 
 /**
@@ -405,41 +510,59 @@ const RATE_LIMIT_BODY_PEEK_BYTES = 64 * 1024;
  * response may still be observed by upstream wrappers (logging middleware,
  * monkey-patched fetch); cloning preserves their ability to read the body.
  *
- * Failures (clone, read, parse) degrade to `{ body: undefined, code:
- * undefined }` and are logged at debug level. Losing the body code only
+ * Clone/read failures degrade to `{ body: undefined, code: undefined }`
+ * unless the caller cancelled the unfinished peek. Losing the body code only
  * widens classification from `quota` to `rate_limit`, which is the safer
  * (retryable) side of the misclassification.
  */
 async function peekRateLimitBody(
   response: Response,
-): Promise<{ body: unknown; code: string | undefined }> {
+  logEnabled: boolean,
+  signal?: AbortSignal | null,
+): Promise<{ body: unknown; code: string | undefined; type: string | undefined }> {
   let cloned: Response;
   try {
     cloned = response.clone();
   } catch (err) {
-    logger.debug(`[fetch] peekRateLimitBody: clone failed, skipping body code lookup: ${err}`);
-    return { body: undefined, code: undefined };
+    if (signal?.aborted) {
+      throw getAbortError(signal);
+    }
+    if (logEnabled) {
+      logger.debug(`[fetch] peekRateLimitBody: clone failed, skipping body code lookup: ${err}`);
+    }
+    return { body: undefined, code: undefined, type: undefined };
   }
 
   let text: string;
   try {
-    text = await readBoundedText(cloned, RATE_LIMIT_BODY_PEEK_BYTES);
+    text = await readBoundedText(cloned, RATE_LIMIT_BODY_PEEK_BYTES, { requireStream: true });
   } catch (err) {
-    logger.debug(`[fetch] peekRateLimitBody: body read failed: ${err}`);
-    return { body: undefined, code: undefined };
+    if (signal?.aborted) {
+      throw getAbortError(signal);
+    }
+    if (logEnabled) {
+      logger.debug(`[fetch] peekRateLimitBody: body read failed: ${err}`);
+    }
+    return { body: undefined, code: undefined, type: undefined };
   }
 
   if (!text) {
-    return { body: undefined, code: undefined };
+    return { body: undefined, code: undefined, type: undefined };
   }
 
   try {
     const json = JSON.parse(text);
-    return { body: json, code: extractRateLimitErrorCode(json) };
+    return {
+      body: json,
+      code: extractRateLimitErrorCode(json),
+      type: extractRateLimitErrorType(json),
+    };
   } catch {
     // Keep the raw bytes for diagnostics; no code is extractable.
-    logger.debug('[fetch] peekRateLimitBody: response body was not JSON');
-    return { body: text, code: undefined };
+    if (logEnabled) {
+      logger.debug('[fetch] peekRateLimitBody: response body was not JSON');
+    }
+    return { body: text, code: undefined, type: undefined };
   }
 }
 
@@ -447,15 +570,18 @@ async function peekRateLimitBody(
  * Drain a Response's body into a string, but stop reading once `maxBytes`
  * have been collected. Each streamed chunk is bounded to the remaining
  * budget *before* it enters the in-memory buffer, so a single oversized
- * chunk cannot exceed `maxBytes` of retained memory. Falls back to
- * `.text()` when the body stream isn't available (some Response polyfills);
- * in that path we consult `Content-Length` first to skip materializing
- * very large bodies entirely.
+ * chunk cannot exceed `maxBytes` of retained memory. `requireStream` skips
+ * streamless polyfills to guarantee bounded buffering for rate-limit peeking.
+ * Other callers retain the legacy text fallback, which buffers before truncation.
  */
-async function readBoundedText(response: Response, maxBytes: number): Promise<string> {
+export async function readBoundedText(
+  response: Response,
+  maxBytes: number,
+  options: { requireStream?: boolean } = {},
+): Promise<string> {
   if (!response.body) {
     const contentLength = Number.parseInt(response.headers?.get?.('content-length') ?? '', 10);
-    if (Number.isFinite(contentLength) && contentLength > maxBytes) {
+    if (options.requireStream || (Number.isFinite(contentLength) && contentLength > maxBytes)) {
       return '';
     }
     const text = await response.text();
@@ -493,10 +619,24 @@ async function readBoundedText(response: Response, maxBytes: number): Promise<st
   return new TextDecoder().decode(merged);
 }
 
+/**
+ * Retry-After / reset timing from a rate-limit response's headers, for callers
+ * that build an {@link HttpRateLimitError} from an SDK error rather than a
+ * `Response`. Keeps the header parsing in one place.
+ */
+export function rateLimitTimingFromHeaders(headers: Record<string, string>): {
+  retryAfterMs?: number;
+  resetAt?: number;
+} {
+  const parsed = parseRateLimitHeaders(headers);
+  return { retryAfterMs: parsed.retryAfterMs, resetAt: parsed.resetAt };
+}
+
 function buildHttpRateLimitError(
   response: Response,
   body: unknown,
   code: string | undefined,
+  type: string | undefined,
 ): HttpRateLimitError {
   const headers = Object.fromEntries(response.headers.entries());
   const parsed = parseRateLimitHeaders(headers);
@@ -506,6 +646,7 @@ function buildHttpRateLimitError(
     retryAfterMs: parsed.retryAfterMs,
     resetAt: parsed.resetAt,
     code,
+    type,
     headers,
     body,
   });
@@ -557,7 +698,7 @@ export type { FetchOptions } from './types';
  */
 function urlForLog(url: RequestInfo): string {
   const raw = typeof url === 'string' ? url : url.url;
-  return sanitizeUrl(raw);
+  return sanitizeUrlForLogging(raw);
 }
 
 async function handleRateLimitedResponse(
@@ -565,6 +706,9 @@ async function handleRateLimitedResponse(
   url: RequestInfo,
   attempt: number,
   maxRetries: number,
+  logEnabled: boolean,
+  signal?: AbortSignal | null,
+  onRateLimitBackoff?: (observation: FetchRateLimitObservation) => void,
 ): Promise<void> {
   // Only the 429 path produces a structured error. A 200 OK with
   // `X-RateLimit-Remaining=0` is a soft hint that we're approaching a limit —
@@ -572,49 +716,63 @@ async function handleRateLimitedResponse(
   // error on retry exhaustion would be misleading and pointlessly buffers a
   // 64 KB body peek on every successful call.
   const isHardRateLimit = response.status === 429;
-  const { body, code } = isHardRateLimit
-    ? await peekRateLimitBody(response)
-    : { body: undefined, code: undefined };
   const safeUrl = urlForLog(url);
 
-  // Hard quota codes (e.g. insufficient_quota) won't resolve on retry. Fail
+  // Classify a 429 up front: `HttpRateLimitError` derives `kind` from the body
+  // code / type and the Retry-After downgrade, so the fail-fast decision below
+  // sees the same classification callers do.
+  let rateLimitError: HttpRateLimitError | undefined;
+  if (isHardRateLimit) {
+    const { body, code, type } = await peekRateLimitBody(response, logEnabled, signal);
+    rateLimitError = buildHttpRateLimitError(response, body, code, type);
+  }
+
+  // Hard quota failures (e.g. insufficient_quota) won't resolve on retry. Fail
   // fast with a structured error so the caller can stop instead of amplifying
   // load against an exhausted account.
-  if (isHardRateLimit && isHardQuotaCode(code)) {
-    logger.debug(
-      `Quota exhausted on URL ${safeUrl}: HTTP ${response.status} (code: ${code}), failing fast.`,
-    );
-    throw buildHttpRateLimitError(response, body, code);
+  if (rateLimitError?.kind === 'quota') {
+    if (logEnabled) {
+      logger.debug(
+        `Quota exhausted on URL ${safeUrl}: HTTP ${response.status} (code: ${rateLimitError.code}), failing fast.`,
+      );
+    }
+    throw rateLimitError;
   }
 
   if (attempt >= maxRetries) {
-    if (isHardRateLimit) {
+    if (rateLimitError) {
       // No retries remain: throw a structured error instead of a bare string
       // so callers can read Retry-After / reset / code without re-parsing.
-      logger.debug(
-        `Rate limited on URL ${safeUrl}: HTTP ${response.status} ${response.statusText}, attempt ${attempt + 1}/${maxRetries + 1}, no retries remain.`,
-      );
-      throw buildHttpRateLimitError(response, body, code);
+      if (logEnabled) {
+        logger.debug(
+          `Rate limited on URL ${safeUrl}: HTTP ${response.status} ${response.statusText}, attempt ${attempt + 1}/${maxRetries + 1}, no retries remain.`,
+        );
+      }
+      throw rateLimitError;
     }
     throw new Error(
       `Rate limited: ${response.status} ${response.statusText} after ${maxRetries + 1} attempts`,
     );
   }
 
-  logger.debug(
-    `Rate limited on URL ${safeUrl}: HTTP ${response.status} ${response.statusText}, attempt ${attempt + 1}/${maxRetries + 1}, waiting before retry...`,
-  );
-  await handleRateLimit(response);
+  if (logEnabled) {
+    logger.debug(
+      `Rate limited on URL ${safeUrl}: HTTP ${response.status} ${response.statusText}, attempt ${attempt + 1}/${maxRetries + 1}, waiting before retry...`,
+    );
+  }
+  await handleRateLimit(response, signal, onRateLimitBackoff);
 }
 
-function formatFetchErrorMessage(error: unknown): string {
+function formatFetchErrorMessage(error: unknown, url: RequestInfo): string {
   if (!(error instanceof Error)) {
     return String(error);
   }
   const typedError = error as SystemError;
-  let message = `${typedError.name}: ${typedError.message}`;
+  const rawUrl = typeof url === 'string' ? url : url.url;
+  const redactUrl = (value: string) => value.split(rawUrl).join(urlForLog(url));
+  let message = `${typedError.name}: ${redactUrl(typedError.message)}`;
   if (typedError.cause) {
-    message += ` (Cause: ${typedError.cause})`;
+    message += ` (Cause: ${redactUrl(String(typedError.cause))})`;
   }
   if (typedError.code) {
     message += ` (Code: ${typedError.code})`;
@@ -627,12 +785,17 @@ export async function fetchWithRetries(
   options: FetchOptions = {},
   timeout: number,
   maxRetries?: number,
+  onRateLimitBackoff?: (observation: FetchRateLimitObservation) => void,
 ): Promise<Response> {
+  options = preserveCloudAuthRedirects(url, options);
   const contextMaxRetries = getFetchRetryContextMaxRetries();
   maxRetries = Math.max(0, maxRetries ?? contextMaxRetries ?? 4);
 
   let lastErrorMessage: string | undefined;
   const backoff = getEnvInt('PROMPTFOO_REQUEST_BACKOFF_MS', 5000);
+  const signal = getEffectiveRequestSignal(url, options);
+  const logEnabled =
+    new Headers(getFetchWithProxyHeaders(url, options)).get('x-promptfoo-silent') !== 'true';
 
   for (let i = 0; i <= maxRetries; i++) {
     let response;
@@ -649,7 +812,15 @@ export async function fetchWithRetries(
       }
 
       if (response && isRateLimited(response)) {
-        await handleRateLimitedResponse(response, url, i, maxRetries);
+        await handleRateLimitedResponse(
+          response,
+          url,
+          i,
+          maxRetries,
+          logEnabled,
+          signal,
+          onRateLimitBackoff,
+        );
         continue;
       }
 
@@ -659,22 +830,29 @@ export async function fetchWithRetries(
       if (error instanceof Error && error.name === 'AbortError') {
         throw error;
       }
-
-      // Structured rate-limit errors are already final (quota fail-fast or
-      // retries exhausted) and carry retry-after / reset metadata. Don't
-      // swallow them in the generic retry path.
-      if (error instanceof HttpRateLimitError) {
+      // Preserve completed policy and rate-limit diagnostics even if cancellation
+      // arrives after the response. These failures never consume another retry.
+      if (
+        error instanceof CloudAuthRedirectError ||
+        error instanceof HttpRateLimitError ||
+        error instanceof RequestAuthenticationError
+      ) {
         throw error;
       }
+      if (signal?.aborted) {
+        throw getAbortError(signal);
+      }
 
-      const errorMessage = formatFetchErrorMessage(error);
+      const errorMessage = formatFetchErrorMessage(error, url);
 
-      logger.debug(
-        `Request to ${urlForLog(url)} failed (attempt #${i + 1}), retrying: ${errorMessage}`,
-      );
+      if (logEnabled) {
+        logger.debug(
+          `Request to ${urlForLog(url)} failed (attempt #${i + 1}), retrying: ${errorMessage}`,
+        );
+      }
       if (i < maxRetries) {
         const waitTime = Math.pow(2, i) * (backoff + 1000 * Math.random());
-        await sleep(waitTime);
+        await sleepWithAbort(waitTime, signal);
       }
       lastErrorMessage = errorMessage;
     }

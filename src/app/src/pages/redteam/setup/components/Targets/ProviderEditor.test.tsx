@@ -12,6 +12,8 @@ vi.mock('./ProviderConfigEditor', () => {
   return {
     default: (props: {
       providerType?: string;
+      provider?: ProviderOptions;
+      setProvider?: (provider: ProviderOptions) => void;
       validateAll?: boolean;
       setError?: (error: string | null) => void;
       onValidationRequest?: (validator: () => boolean) => void;
@@ -30,7 +32,16 @@ vi.mock('./ProviderConfigEditor', () => {
         }
       }, [props.validateAll, props.setError, validate]);
 
-      return <div data-testid="provider-config-editor" data-providertype={props.providerType} />;
+      return (
+        <div data-testid="provider-config-editor" data-providertype={props.providerType}>
+          <button
+            data-testid="clear-provider-id"
+            onClick={() => props.provider && props.setProvider?.({ ...props.provider, id: '' })}
+          >
+            Clear provider ID
+          </button>
+        </div>
+      );
     },
   };
 });
@@ -124,7 +135,7 @@ describe('ProviderEditor', () => {
 
     expect(setProvider).toHaveBeenCalledTimes(1);
     const expectedNewProvider: ProviderOptions = {
-      id: 'openai:gpt-5.5',
+      id: 'openai:gpt-6-sol',
       config: {},
       label: 'My Test Provider',
     };
@@ -135,6 +146,23 @@ describe('ProviderEditor', () => {
       'data-providertype',
       'openai',
     );
+  });
+
+  it('passes the model selection lock to the provider selector', async () => {
+    const user = userEvent.setup();
+    const setProvider = vi.fn();
+    renderWithProviders(
+      <ProviderEditor
+        provider={defaultHttpTarget()}
+        setProvider={setProvider}
+        opts={{ disableModelSelection: true }}
+      />,
+    );
+
+    await user.click(screen.getByText('OpenAI').closest('[role="button"]')!);
+
+    expect(setProvider).not.toHaveBeenCalled();
+    expect(screen.getByLabelText('Search providers')).toBeDisabled();
   });
 
   it('should call onActionButtonClick when the action button is clicked and validation passes', async () => {
@@ -154,6 +182,32 @@ describe('ProviderEditor', () => {
     await user.click(nextButton);
 
     expect(onActionButtonClick).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the Open Interpreter editor mounted while its target ID is cleared', async () => {
+    const user = userEvent.setup();
+    const TestComponent = () => {
+      const [provider, setProvider] = React.useState<ProviderOptions>({
+        id: 'openinterpreter',
+        label: 'Open Interpreter',
+        config: {},
+      });
+
+      return <ProviderEditor provider={provider} setProvider={setProvider} />;
+    };
+
+    renderWithProviders(<TestComponent />);
+    expect(screen.getByTestId('provider-config-editor')).toHaveAttribute(
+      'data-providertype',
+      'openinterpreter',
+    );
+
+    await user.click(screen.getByTestId('clear-provider-id'));
+
+    expect(screen.getByTestId('provider-config-editor')).toHaveAttribute(
+      'data-providertype',
+      'openinterpreter',
+    );
   });
 
   it('should immediately validate configuration and update validationErrors state when validateAll prop changes from false to true', () => {

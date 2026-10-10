@@ -165,6 +165,7 @@ const redTeamSidebar = [
         label: 'Single-Turn',
         collapsed: true,
         items: [
+          'red-team/strategies/arabic-presentation-forms',
           'red-team/strategies/base64',
           'red-team/strategies/basic',
           'red-team/strategies/best-of-n',
@@ -198,6 +199,7 @@ const redTeamSidebar = [
           'red-team/strategies/iterative',
           'red-team/strategies/meta',
           'red-team/strategies/hydra',
+          'red-team/strategies/goblin',
           'red-team/strategies/tree',
           'red-team/strategies/composite-jailbreaks',
         ],
@@ -538,6 +540,7 @@ const sidebars = {
       items: [
         { type: 'doc', id: 'enterprise/index' },
         { type: 'doc', id: 'enterprise/authentication' },
+        { type: 'doc', id: 'enterprise/sso' },
         { type: 'doc', id: 'enterprise/service-accounts' },
         { type: 'doc', id: 'enterprise/teams' },
         { type: 'doc', id: 'enterprise/red-teams' },
@@ -556,10 +559,6 @@ const sidebars = {
     {
       type: 'doc',
       id: 'contributing',
-    },
-    {
-      type: 'doc',
-      id: 'write-for-promptfoo',
     },
     {
       type: 'doc',

@@ -6,6 +6,9 @@ import { mockProcessEnv } from '../util/utils';
 
 import type { DatabricksMosaicAiProviderOptions } from '../../src/providers/databricks';
 
+const createEmptyProviderOptions = () => ({
+  config: {},
+});
 vi.mock('../../src/logger');
 
 describe('Databricks Foundation Model APIs Provider', () => {
@@ -54,16 +57,14 @@ describe('Databricks Foundation Model APIs Provider', () => {
       );
 
       expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
-      expect(provider.config.apiBaseUrl).toBe(workspaceUrl);
+      expect(provider.config.apiBaseUrl).toBe(`${workspaceUrl}/serving-endpoints`);
       expect(provider.config.apiKeyEnvar).toBe('DATABRICKS_TOKEN');
     });
 
     it('should create provider with workspace URL from environment variable', () => {
       mockProcessEnv({ DATABRICKS_WORKSPACE_URL: workspaceUrl });
 
-      const options: DatabricksMosaicAiProviderOptions = {
-        config: {},
-      };
+      const options: DatabricksMosaicAiProviderOptions = createEmptyProviderOptions();
       const provider = new DatabricksMosaicAiChatCompletionProvider('my-endpoint', options);
 
       expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
@@ -83,9 +84,7 @@ describe('Databricks Foundation Model APIs Provider', () => {
     });
 
     it('should throw error when no workspace URL is provided', () => {
-      const options: DatabricksMosaicAiProviderOptions = {
-        config: {},
-      };
+      const options: DatabricksMosaicAiProviderOptions = createEmptyProviderOptions();
       expect(() => new DatabricksMosaicAiChatCompletionProvider('my-endpoint', options)).toThrow(
         'Databricks workspace URL is required. Set it in the config or DATABRICKS_WORKSPACE_URL environment variable.',
       );
@@ -140,7 +139,7 @@ describe('Databricks Foundation Model APIs Provider', () => {
       };
       const provider = new DatabricksMosaicAiChatCompletionProvider('my-endpoint', options);
 
-      expect((provider.config as any).extraBodyParams).toEqual({
+      expect((provider.config as any).passthrough).toEqual({
         usage_context: {
           project: 'test-project',
           team: 'engineering',
@@ -155,14 +154,14 @@ describe('Databricks Foundation Model APIs Provider', () => {
           usageContext: {
             project: 'test-project',
           },
-          extraBodyParams: {
+          passthrough: {
             custom_param: 'value',
           },
         },
       };
       const provider = new DatabricksMosaicAiChatCompletionProvider('my-endpoint', options);
 
-      expect((provider.config as any).extraBodyParams).toEqual({
+      expect((provider.config as any).passthrough).toEqual({
         custom_param: 'value',
         usage_context: {
           project: 'test-project',
@@ -202,7 +201,7 @@ describe('Databricks Foundation Model APIs Provider', () => {
   });
 
   describe('getApiUrl method', () => {
-    it('should return custom URL for pay-per-token endpoints', () => {
+    it('should return the compatible base URL for pay-per-token endpoints', () => {
       const options: DatabricksMosaicAiProviderOptions = {
         config: {
           workspaceUrl,
@@ -217,9 +216,7 @@ describe('Databricks Foundation Model APIs Provider', () => {
       // Use type assertion to access protected method
       const url = (provider as any).getApiUrl();
 
-      expect(url).toBe(
-        `${workspaceUrl}/serving-endpoints/databricks-meta-llama-3-3-70b-instruct/invocations`,
-      );
+      expect(url).toBe(`${workspaceUrl}/serving-endpoints`);
     });
 
     it('should use parent class URL for custom endpoints', () => {

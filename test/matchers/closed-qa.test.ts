@@ -6,16 +6,18 @@ import { mockProcessEnv } from '../util/utils';
 
 import type { GradingConfig } from '../../src/types/index';
 
+const createMixedVerdictResponse = () => ({
+  output: 'foo \n \n bar\n Y Y \n',
+  tokenUsage: { total: 10, prompt: 5, completion: 5 },
+});
+
 describe('matchesClosedQa', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.resetAllMocks();
 
     vi.spyOn(DefaultGradingProvider, 'callApi').mockReset();
-    vi.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValue({
-      output: 'foo \n \n bar\n Y Y \n',
-      tokenUsage: { total: 10, prompt: 5, completion: 5 },
-    });
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValue(createMixedVerdictResponse());
   });
 
   afterEach(() => {
@@ -28,10 +30,7 @@ describe('matchesClosedQa', () => {
     const output = 'Sample output';
     const grading = {};
 
-    vi.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValueOnce({
-      output: 'foo \n \n bar\n Y Y \n',
-      tokenUsage: { total: 10, prompt: 5, completion: 5 },
-    });
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValueOnce(createMixedVerdictResponse());
 
     await expect(matchesClosedQa(input, expected, output, grading)).resolves.toEqual({
       pass: true,
@@ -86,6 +85,47 @@ describe('matchesClosedQa', () => {
 
     await expect(matchesClosedQa(input, expected, output, grading)).rejects.toThrow(
       'An error occurred',
+    );
+  });
+
+  it('should tag a grading provider error as a grader failure', async () => {
+    // `metadata.graderError` lets inverse-aware callers (e.g.
+    // not-model-graded-closedqa) propagate the failure instead of flipping a
+    // transport error into a pass.
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValueOnce({
+      error: 'Grader provider unavailable',
+    });
+
+    await expect(
+      matchesClosedQa('Input text', 'Expected output', 'Sample output', {}),
+    ).resolves.toEqual({
+      pass: false,
+      reason: 'Grader provider unavailable',
+      score: 0,
+      tokensUsed: {
+        total: expect.any(Number),
+        prompt: expect.any(Number),
+        completion: expect.any(Number),
+        cached: expect.any(Number),
+        completionDetails: expect.any(Object),
+        numRequests: 0,
+      },
+      metadata: { graderError: true },
+    });
+  });
+
+  it('should tag an empty grading provider response as a grader failure', async () => {
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValueOnce({ output: undefined });
+
+    const result = await matchesClosedQa('Input text', 'Expected output', 'Sample output', {});
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        pass: false,
+        reason: 'No output',
+        score: 0,
+        metadata: { graderError: true },
+      }),
     );
   });
 
@@ -202,5 +242,40 @@ Does the answer meet the criteria? Answer Y or N.`;
     expect(actualPrompt).not.toContain('{{input}}');
     expect(actualPrompt).not.toContain('{{criteria}}');
     expect(actualPrompt).not.toContain('{{completion}}');
+  });
+
+  it('should keep reserved closed-qa vars ahead of user vars', async () => {
+    const mockCallApi = vi.spyOn(DefaultGradingProvider, 'callApi');
+
+    await matchesClosedQa(
+      'input from prompt',
+      'criteria from assertion',
+      'completion from provider',
+      {
+        rubricPrompt:
+          'input={{ input }}\ncriteria={{ criteria }}\ncompletion={{ completion }}\nextra={{ extra }}',
+      },
+      {
+        input: 'vars input sentinel',
+        criteria: 'vars criteria sentinel',
+        completion: 'vars completion sentinel',
+        extra: 'kept user var',
+      },
+    );
+
+    const [prompt, callApiContext] = mockCallApi.mock.calls[0];
+    expect(prompt).toContain('input=input from prompt');
+    expect(prompt).toContain('criteria=criteria from assertion');
+    expect(prompt).toContain('completion=completion from provider');
+    expect(prompt).toContain('extra=kept user var');
+    expect(prompt).not.toContain('vars input sentinel');
+    expect(prompt).not.toContain('vars criteria sentinel');
+    expect(prompt).not.toContain('vars completion sentinel');
+    expect(callApiContext?.vars).toMatchObject({
+      input: 'input from prompt',
+      criteria: 'criteria from assertion',
+      completion: 'completion from provider',
+      extra: 'kept user var',
+    });
   });
 });

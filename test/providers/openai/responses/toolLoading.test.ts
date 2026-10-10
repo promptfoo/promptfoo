@@ -1,3 +1,4 @@
+import { createMockFetchResponse } from '../../mockProviderResponses';
 // Load-bearing: registers shared vi.mock / beforeEach hooks before any
 // module-under-test import below. See ./setup.ts for details.
 import './setup';
@@ -57,13 +58,14 @@ describe('OpenAiResponsesProvider tool loading', () => {
       const provider = new OpenAiResponsesProvider('o4-mini-deep-research', {
         config: {
           apiKey: 'test-key',
+          apiBaseUrl: 'https://gateway.example/v1',
           tools: [{ type: 'web_search_preview' }],
         },
       });
 
       // Mock the API call
-      vi.mocked(cache.fetchWithCache).mockResolvedValue({
-        data: {
+      vi.mocked(cache.fetchWithCache).mockResolvedValue(
+        createMockFetchResponse({
           id: 'resp_123',
           object: 'response',
           status: 'completed',
@@ -75,21 +77,19 @@ describe('OpenAiResponsesProvider tool loading', () => {
             },
           ],
           usage: { input_tokens: 10, output_tokens: 20, total_tokens: 30 },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+        }),
+      );
 
       // This should not throw TypeError because config.tools is now an array
       const result = await provider.callApi('test');
       expect(result.error).toBeUndefined();
     });
 
-    it('should return error for deep-research without web_search_preview', async () => {
+    it('should return an error for deep-research without a data source', async () => {
       const provider = new OpenAiResponsesProvider('o4-mini-deep-research', {
         config: {
           apiKey: 'test-key',
+          apiBaseUrl: 'https://gateway.example/v1',
           tools: [
             {
               type: 'function',
@@ -101,7 +101,7 @@ describe('OpenAiResponsesProvider tool loading', () => {
 
       const result = await provider.callApi('test');
 
-      expect(result.error).toContain('requires the web_search_preview tool');
+      expect(result.error).toContain('requires at least one data source');
     });
   });
 });

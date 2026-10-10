@@ -1,5 +1,6 @@
 import { type ChildProcess, spawn } from 'child_process';
 import { writeFileSync } from 'fs';
+import fs from 'fs/promises';
 
 import { Command } from 'commander';
 import { afterEach, beforeEach, describe, expect, it, Mock, MockInstance, vi } from 'vitest';
@@ -9,6 +10,7 @@ import {
 } from '../../src/commands/modelScan';
 import logger from '../../src/logger';
 import { checkModelAuditInstalled } from '../../src/util/modelAuditInstall';
+import { asMockChildProcess, createMockChildProcess } from '../util/mockChildProcess';
 import { mockProcessEnv } from '../util/utils';
 
 vi.mock('child_process');
@@ -32,7 +34,6 @@ vi.mock('../../src/models/modelAudit', () => ({
   default: {
     create: vi.fn().mockResolvedValue({ id: 'scan-abc-2025-01-01T00:00:00' }),
     findByRevision: vi.fn().mockResolvedValue(null),
-    findLatestByModelId: vi.fn().mockResolvedValue(null),
   },
 }));
 vi.mock('../../src/updates', async (importOriginal) => {
@@ -64,7 +65,27 @@ const VALID_SCAN_OUTPUT = JSON.stringify({
   checks: [],
 });
 
-function createSignalTerminatedProcess(signal: NodeJS.Signals, stdout = ''): ChildProcess {
+function mockProcessExit() {
+  return vi.spyOn(process, 'exit').mockImplementation(function () {
+    return undefined as never;
+  });
+}
+
+function createPassThroughProcess(exitCode: number): ChildProcess {
+  const mockChildProcess = {
+    killed: false,
+    kill: vi.fn(),
+    on: vi.fn().mockImplementation(function (event: string, callback: any) {
+      if (event === 'close') {
+        callback(exitCode);
+      }
+      return mockChildProcess;
+    }),
+  } as unknown as ChildProcess;
+  return mockChildProcess;
+}
+
+function createClosedProcess(signal: NodeJS.Signals | null, stdout = ''): ChildProcess {
   const mockChildProcess = {
     stdout: {
       on: vi.fn().mockImplementation(function (event: string, callback: any) {
@@ -92,34 +113,6 @@ function createSignalTerminatedProcess(signal: NodeJS.Signals, stdout = ''): Chi
   return mockChildProcess;
 }
 
-function createProcessClosedWithoutExitCode(stdout = ''): ChildProcess {
-  const mockChildProcess = {
-    stdout: {
-      on: vi.fn().mockImplementation(function (event: string, callback: any) {
-        if (event === 'data' && stdout) {
-          callback(Buffer.from(stdout));
-        }
-        return mockChildProcess.stdout;
-      }),
-    },
-    stderr: {
-      on: vi.fn().mockImplementation(function () {
-        return mockChildProcess.stderr;
-      }),
-    },
-    killed: false,
-    kill: vi.fn(),
-    on: vi.fn().mockImplementation(function (event: string, callback: any) {
-      if (event === 'close') {
-        callback(null, null);
-      }
-      return mockChildProcess;
-    }),
-  } as unknown as ChildProcess;
-
-  return mockChildProcess;
-}
-
 async function resetModelScanTestMocks() {
   vi.clearAllMocks();
 
@@ -131,8 +124,6 @@ async function resetModelScanTestMocks() {
   const ModelAudit = (await import('../../src/models/modelAudit')).default;
   vi.mocked(ModelAudit.findByRevision).mockReset();
   vi.mocked(ModelAudit.findByRevision).mockResolvedValue(null);
-  vi.mocked(ModelAudit.findLatestByModelId).mockReset();
-  vi.mocked(ModelAudit.findLatestByModelId).mockResolvedValue(null);
   vi.mocked(ModelAudit.create).mockReset();
   vi.mocked(ModelAudit.create).mockResolvedValue({ id: 'scan-abc-2025-01-01T00:00:00' } as any);
 
@@ -153,9 +144,7 @@ describe('modelScanCommand', () => {
 
   beforeEach(async () => {
     program = new Command();
-    mockExit = vi.spyOn(process, 'exit').mockImplementation(function () {
-      return undefined as never;
-    });
+    mockExit = mockProcessExit();
     process.exitCode = 0;
     await resetModelScanTestMocks();
   });
@@ -239,18 +228,7 @@ describe('modelScanCommand', () => {
     // getModelAuditCurrentVersion is already mocked to return '0.2.16' (installed)
     // Using --no-write to test pass-through mode without temp file handling
 
-    const mockChildProcess = {
-      killed: false,
-      kill: vi.fn(),
-      on: vi.fn().mockImplementation(function (event: string, callback: any) {
-        if (event === 'close') {
-          callback(0);
-        }
-        return mockChildProcess;
-      }),
-    } as unknown as ChildProcess;
-
-    (spawn as unknown as Mock).mockReturnValue(mockChildProcess);
+    (spawn as unknown as Mock).mockReturnValue(createPassThroughProcess(0));
 
     modelScanCommand(program);
 
@@ -307,18 +285,7 @@ describe('modelScanCommand', () => {
   });
 
   it('should pass scanner selection options to modelaudit', async () => {
-    const mockChildProcess = {
-      killed: false,
-      kill: vi.fn(),
-      on: vi.fn().mockImplementation(function (event: string, callback: any) {
-        if (event === 'close') {
-          callback(0);
-        }
-        return mockChildProcess;
-      }),
-    } as unknown as ChildProcess;
-
-    (spawn as unknown as Mock).mockReturnValue(mockChildProcess);
+    (spawn as unknown as Mock).mockReturnValue(createPassThroughProcess(0));
 
     modelScanCommand(program);
 
@@ -359,18 +326,7 @@ describe('modelScanCommand', () => {
   });
 
   it('should keep no-write JSON passthrough output free of promptfoo logs', async () => {
-    const mockChildProcess = {
-      killed: false,
-      kill: vi.fn(),
-      on: vi.fn().mockImplementation(function (event: string, callback: any) {
-        if (event === 'close') {
-          callback(0);
-        }
-        return mockChildProcess;
-      }),
-    } as unknown as ChildProcess;
-
-    (spawn as unknown as Mock).mockReturnValue(mockChildProcess);
+    (spawn as unknown as Mock).mockReturnValue(createPassThroughProcess(0));
 
     modelScanCommand(program);
 
@@ -390,18 +346,7 @@ describe('modelScanCommand', () => {
   });
 
   it('should list modelaudit scanners without requiring paths', async () => {
-    const mockChildProcess = {
-      killed: false,
-      kill: vi.fn(),
-      on: vi.fn().mockImplementation(function (event: string, callback: any) {
-        if (event === 'close') {
-          callback(0);
-        }
-        return mockChildProcess;
-      }),
-    } as unknown as ChildProcess;
-
-    (spawn as unknown as Mock).mockReturnValue(mockChildProcess);
+    (spawn as unknown as Mock).mockReturnValue(createPassThroughProcess(0));
 
     modelScanCommand(program);
 
@@ -493,18 +438,7 @@ describe('modelScanCommand', () => {
     // getModelAuditCurrentVersion is already mocked to return '0.2.16' (installed)
     // Using --no-write to test pass-through mode
 
-    const mockChildProcess = {
-      killed: false,
-      kill: vi.fn(),
-      on: vi.fn().mockImplementation(function (event: string, callback: any) {
-        if (event === 'close') {
-          callback(2);
-        }
-        return mockChildProcess;
-      }),
-    } as unknown as ChildProcess;
-
-    (spawn as unknown as Mock).mockReturnValue(mockChildProcess);
+    (spawn as unknown as Mock).mockReturnValue(createPassThroughProcess(2));
 
     modelScanCommand(program);
 
@@ -525,9 +459,7 @@ describe('Signal termination handling', () => {
 
   beforeEach(async () => {
     program = new Command();
-    mockExit = vi.spyOn(process, 'exit').mockImplementation(function () {
-      return undefined as never;
-    });
+    mockExit = mockProcessExit();
     process.exitCode = 0;
     await resetModelScanTestMocks();
   });
@@ -538,19 +470,22 @@ describe('Signal termination handling', () => {
     vi.resetAllMocks();
   });
 
-  it.each(
-    SIGNAL_TERMINATIONS,
-  )('fails closed in --no-write mode when modelaudit terminates via %s', async (signal) => {
-    (spawn as unknown as Mock).mockReturnValue(createSignalTerminatedProcess(signal));
+  it.each(SIGNAL_TERMINATIONS)(
+    'fails closed in --no-write mode when modelaudit terminates via %s',
+    async (signal) => {
+      (spawn as unknown as Mock).mockReturnValue(createClosedProcess(signal));
 
-    modelScanCommand(program);
-    const command = program.commands.find((cmd) => cmd.name() === 'scan-model')!;
+      modelScanCommand(program);
+      const command = program.commands.find((cmd) => cmd.name() === 'scan-model')!;
 
-    await command.parseAsync(['node', 'scan-model', 'model.pkl', '--no-write']);
+      await command.parseAsync(['node', 'scan-model', 'model.pkl', '--no-write']);
 
-    expect(logger.error).toHaveBeenCalledWith(`Model scan process terminated by signal ${signal}`);
-    expect(process.exitCode).toBe(1);
-  });
+      expect(logger.error).toHaveBeenCalledWith(
+        `Model scan process terminated by signal ${signal}`,
+      );
+      expect(process.exitCode).toBe(1);
+    },
+  );
 
   it('forwards parent SIGINT to modelaudit as SIGINT', async () => {
     let closeHandler: ((code: number | null, signal: NodeJS.Signals | null) => void) | undefined;
@@ -583,7 +518,7 @@ describe('Signal termination handling', () => {
   });
 
   it('fails closed when modelaudit closes without an exit code or signal', async () => {
-    (spawn as unknown as Mock).mockReturnValue(createProcessClosedWithoutExitCode());
+    (spawn as unknown as Mock).mockReturnValue(createClosedProcess(null));
 
     modelScanCommand(program);
     const command = program.commands.find((cmd) => cmd.name() === 'scan-model')!;
@@ -595,9 +530,7 @@ describe('Signal termination handling', () => {
   });
 
   it('fails closed in stdout-capture mode after JSON output when modelaudit closes without an exit code or signal', async () => {
-    (spawn as unknown as Mock).mockReturnValue(
-      createProcessClosedWithoutExitCode(VALID_SCAN_OUTPUT),
-    );
+    (spawn as unknown as Mock).mockReturnValue(createClosedProcess(null, VALID_SCAN_OUTPUT));
 
     modelScanCommand(program);
     const command = program.commands.find((cmd) => cmd.name() === 'scan-model')!;
@@ -610,45 +543,49 @@ describe('Signal termination handling', () => {
     expect(ModelAudit.create).not.toHaveBeenCalled();
   });
 
-  it.each(
-    SIGNAL_TERMINATIONS,
-  )('fails closed in stdout-capture mode after JSON output when modelaudit terminates via %s', async (signal) => {
-    (spawn as unknown as Mock).mockReturnValue(
-      createSignalTerminatedProcess(signal, VALID_SCAN_OUTPUT),
-    );
+  it.each(SIGNAL_TERMINATIONS)(
+    'fails closed in stdout-capture mode after JSON output when modelaudit terminates via %s',
+    async (signal) => {
+      (spawn as unknown as Mock).mockReturnValue(createClosedProcess(signal, VALID_SCAN_OUTPUT));
 
-    modelScanCommand(program);
-    const command = program.commands.find((cmd) => cmd.name() === 'scan-model')!;
-    const ModelAudit = (await import('../../src/models/modelAudit')).default;
+      modelScanCommand(program);
+      const command = program.commands.find((cmd) => cmd.name() === 'scan-model')!;
+      const ModelAudit = (await import('../../src/models/modelAudit')).default;
 
-    await command.parseAsync(['node', 'scan-model', 'model.pkl']);
+      await command.parseAsync(['node', 'scan-model', 'model.pkl']);
 
-    expect(logger.error).toHaveBeenCalledWith(`Model scan process terminated by signal ${signal}`);
-    expect(process.exitCode).toBe(1);
-    expect(ModelAudit.create).not.toHaveBeenCalled();
-  });
+      expect(logger.error).toHaveBeenCalledWith(
+        `Model scan process terminated by signal ${signal}`,
+      );
+      expect(process.exitCode).toBe(1);
+      expect(ModelAudit.create).not.toHaveBeenCalled();
+    },
+  );
 
-  it.each(
-    SIGNAL_TERMINATIONS,
-  )('fails closed in temp-output mode after JSON output when modelaudit terminates via %s', async (signal) => {
-    const { getModelAuditCurrentVersion } = await import('../../src/updates');
-    vi.mocked(getModelAuditCurrentVersion).mockResolvedValue('0.2.20');
-    (spawn as unknown as Mock).mockImplementation((_command: string, args: string[]) => {
-      const outputFlagIndex = args.indexOf('--output');
-      writeFileSync(args[outputFlagIndex + 1], VALID_SCAN_OUTPUT);
-      return createSignalTerminatedProcess(signal);
-    });
+  it.each(SIGNAL_TERMINATIONS)(
+    'fails closed in temp-output mode after JSON output when modelaudit terminates via %s',
+    async (signal) => {
+      const { getModelAuditCurrentVersion } = await import('../../src/updates');
+      vi.mocked(getModelAuditCurrentVersion).mockResolvedValue('0.2.20');
+      (spawn as unknown as Mock).mockImplementation((_command: string, args: string[]) => {
+        const outputFlagIndex = args.indexOf('--output');
+        writeFileSync(args[outputFlagIndex + 1], VALID_SCAN_OUTPUT);
+        return createClosedProcess(signal);
+      });
 
-    modelScanCommand(program);
-    const command = program.commands.find((cmd) => cmd.name() === 'scan-model')!;
-    const ModelAudit = (await import('../../src/models/modelAudit')).default;
+      modelScanCommand(program);
+      const command = program.commands.find((cmd) => cmd.name() === 'scan-model')!;
+      const ModelAudit = (await import('../../src/models/modelAudit')).default;
 
-    await command.parseAsync(['node', 'scan-model', 'model.pkl']);
+      await command.parseAsync(['node', 'scan-model', 'model.pkl']);
 
-    expect(logger.error).toHaveBeenCalledWith(`Model scan process terminated by signal ${signal}`);
-    expect(process.exitCode).toBe(1);
-    expect(ModelAudit.create).not.toHaveBeenCalled();
-  });
+      expect(logger.error).toHaveBeenCalledWith(
+        `Model scan process terminated by signal ${signal}`,
+      );
+      expect(process.exitCode).toBe(1);
+      expect(ModelAudit.create).not.toHaveBeenCalled();
+    },
+  );
 
   it('fails closed in temp-output mode after JSON output when modelaudit closes without an exit code or signal', async () => {
     const { getModelAuditCurrentVersion } = await import('../../src/updates');
@@ -656,7 +593,7 @@ describe('Signal termination handling', () => {
     (spawn as unknown as Mock).mockImplementation((_command: string, args: string[]) => {
       const outputFlagIndex = args.indexOf('--output');
       writeFileSync(args[outputFlagIndex + 1], VALID_SCAN_OUTPUT);
-      return createProcessClosedWithoutExitCode();
+      return createClosedProcess(null);
     });
 
     modelScanCommand(program);
@@ -677,9 +614,7 @@ describe('Result verdict handling', () => {
 
   beforeEach(async () => {
     program = new Command();
-    mockExit = vi.spyOn(process, 'exit').mockImplementation(function () {
-      return undefined as never;
-    });
+    mockExit = mockProcessExit();
     process.exitCode = 0;
     await resetModelScanTestMocks();
   });
@@ -756,6 +691,49 @@ describe('Result verdict handling', () => {
 
     expect(process.exitCode).toBe(1);
   });
+
+  it.each([
+    ['not valid json {{{', 'Failed to parse scan results:'],
+    ['   \n\t', 'No output received from model scan'],
+  ])('rejects invalid temp-file scan output %j', async (contents, message) => {
+    const { getModelAuditCurrentVersion } = await import('../../src/updates');
+    vi.mocked(getModelAuditCurrentVersion).mockResolvedValue('0.2.20');
+    vi.mocked(spawn).mockImplementation((_command, args) => {
+      const outputPath = (args as string[])[(args as string[]).indexOf('--output') + 1];
+      writeFileSync(outputPath, contents);
+      return asMockChildProcess(createMockChildProcess());
+    });
+    modelScanCommand(program);
+    await program.commands[0].parseAsync(['node', 'scan-model', 'model.pkl']);
+    expect(logger.error).toHaveBeenCalledWith(expect.stringContaining(message));
+    expect(process.exitCode).toBe(1);
+    const ModelAudit = (await import('../../src/models/modelAudit')).default;
+    expect(ModelAudit.create).not.toHaveBeenCalled();
+  });
+
+  it('logs failed asynchronous temp cleanup at debug level and retains successful results', async () => {
+    const { getModelAuditCurrentVersion } = await import('../../src/updates');
+    vi.mocked(getModelAuditCurrentVersion).mockResolvedValue('0.2.20');
+    vi.mocked(spawn).mockImplementation((_command, args) => {
+      const outputPath = (args as string[])[(args as string[]).indexOf('--output') + 1];
+      writeFileSync(outputPath, VALID_SCAN_OUTPUT);
+      return asMockChildProcess(createMockChildProcess());
+    });
+    const cleanup = vi.spyOn(fs, 'rm').mockRejectedValueOnce(new Error('EPERM: fixture cleanup'));
+    try {
+      modelScanCommand(program);
+      await program.commands[0].parseAsync(['node', 'scan-model', 'model.pkl']);
+      expect(logger.debug).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to cleanup temp file'),
+      );
+      expect(logger.error).not.toHaveBeenCalled();
+      expect(process.exitCode).toBe(0);
+      const ModelAudit = (await import('../../src/models/modelAudit')).default;
+      expect(ModelAudit.create).toHaveBeenCalledTimes(1);
+    } finally {
+      cleanup.mockRestore();
+    }
+  });
 });
 
 describe('Re-scan on version change behavior', () => {
@@ -764,9 +742,7 @@ describe('Re-scan on version change behavior', () => {
 
   beforeEach(async () => {
     program = new Command();
-    mockExit = vi.spyOn(process, 'exit').mockImplementation(function () {
-      return undefined as never;
-    });
+    mockExit = mockProcessExit();
     await resetModelScanTestMocks();
   });
 
@@ -803,7 +779,7 @@ describe('Re-scan on version change behavior', () => {
 
     // Mock getModelAuditCurrentVersion to return same version (0.2.16)
     (getModelAuditCurrentVersion as Mock).mockResolvedValue('0.2.16');
-    (spawn as unknown as Mock).mockReturnValue(createSignalTerminatedProcess('SIGTERM'));
+    (spawn as unknown as Mock).mockReturnValue(createClosedProcess('SIGTERM'));
 
     modelScanCommand(program);
     const command = program.commands.find((cmd) => cmd.name() === 'scan-model');
@@ -859,7 +835,6 @@ describe('Re-scan on version change behavior', () => {
     await command?.parseAsync(['node', 'scan-model', 'hf://test-owner/test-model']);
 
     expect(ModelAudit.findByRevision).toHaveBeenCalledWith('test-owner/test-model', 'abc123');
-    expect(ModelAudit.findLatestByModelId).not.toHaveBeenCalled();
     expect(ModelAudit.create).toHaveBeenCalledWith(
       expect.objectContaining({
         modelId: 'test-owner/test-model',
@@ -1377,9 +1352,7 @@ describe('Command Options Validation', () => {
 
   beforeEach(async () => {
     program = new Command();
-    mockExit = vi.spyOn(process, 'exit').mockImplementation(function () {
-      return undefined as never;
-    });
+    mockExit = mockProcessExit();
     await resetModelScanTestMocks();
   });
 
@@ -1448,6 +1421,28 @@ describe('Command Options Validation', () => {
     invalidOptions.forEach((option) => {
       expect(optionNames).not.toContain(option);
     });
+  });
+
+  it('should reject obsolete options before the action handler', async () => {
+    modelScanCommand(program);
+
+    const command = program.commands.find((cmd) => cmd.name() === 'scan-model')!;
+    const actionReached = vi.fn();
+    command.hook('preAction', actionReached);
+    command.exitOverride();
+    command.configureOutput({
+      writeErr: vi.fn(),
+      writeOut: vi.fn(),
+    });
+
+    await expect(
+      command.parseAsync(['node', 'scan-model', 'model.pkl', '--max-file-size', '500MB']),
+    ).rejects.toMatchObject({
+      code: 'commander.unknownOption',
+      message: "error: unknown option '--max-file-size'",
+    });
+    expect(actionReached).not.toHaveBeenCalled();
+    expect(spawn).not.toHaveBeenCalled();
   });
 
   it('should only pass valid arguments to modelaudit', async () => {
@@ -1605,9 +1600,7 @@ describe('Temp file JSON output (CLI UI fix)', () => {
 
   beforeEach(async () => {
     program = new Command();
-    mockExit = vi.spyOn(process, 'exit').mockImplementation(function () {
-      return undefined as never;
-    });
+    mockExit = mockProcessExit();
     await resetModelScanTestMocks();
   });
 
@@ -1618,18 +1611,7 @@ describe('Temp file JSON output (CLI UI fix)', () => {
 
   it('should use inherited stdio when --no-write is specified', async () => {
     // Mock inherited stdio process (captureOutput: false)
-    const mockChildProcess = {
-      killed: false,
-      kill: vi.fn(),
-      on: vi.fn().mockImplementation(function (event: string, callback: any) {
-        if (event === 'close') {
-          callback(0);
-        }
-        return mockChildProcess;
-      }),
-    } as unknown as ChildProcess;
-
-    (spawn as unknown as Mock).mockReturnValue(mockChildProcess);
+    (spawn as unknown as Mock).mockReturnValue(createPassThroughProcess(0));
 
     modelScanCommand(program);
     const command = program.commands.find((cmd) => cmd.name() === 'scan-model')!;
@@ -1653,18 +1635,7 @@ describe('Temp file JSON output (CLI UI fix)', () => {
   });
 
   it('should not use temp file --output flag when --no-write is specified', async () => {
-    const mockChildProcess = {
-      killed: false,
-      kill: vi.fn(),
-      on: vi.fn().mockImplementation(function (event: string, callback: any) {
-        if (event === 'close') {
-          callback(0);
-        }
-        return mockChildProcess;
-      }),
-    } as unknown as ChildProcess;
-
-    (spawn as unknown as Mock).mockReturnValue(mockChildProcess);
+    (spawn as unknown as Mock).mockReturnValue(createPassThroughProcess(0));
 
     modelScanCommand(program);
     const command = program.commands.find((cmd) => cmd.name() === 'scan-model')!;
@@ -1721,9 +1692,7 @@ describe('Sharing behavior', () => {
 
   beforeEach(async () => {
     program = new Command();
-    mockExit = vi.spyOn(process, 'exit').mockImplementation(function () {
-      return undefined as never;
-    });
+    mockExit = mockProcessExit();
     await resetModelScanTestMocks();
 
     // Get mocks

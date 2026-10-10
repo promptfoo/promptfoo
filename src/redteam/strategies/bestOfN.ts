@@ -1,4 +1,5 @@
 import logger from '../../logger';
+import { appendMetricSuffix } from './assertions';
 
 import type { TestCase, TestCaseWithPlugin } from '../../types/index';
 
@@ -34,10 +35,7 @@ export async function addBestOfNTestCases(
               metric: `${testCase.assert?.[0]?.metric}/BestOfN`,
             },
           ]
-        : testCase.assert?.map((assertion) => ({
-            ...assertion,
-            metric: `${assertion.metric}/BestOfN`,
-          })),
+        : appendMetricSuffix(testCase, 'BestOfN'),
     };
   });
 }

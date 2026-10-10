@@ -1,4 +1,6 @@
+import { execFileSync } from 'child_process';
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, MockInstance, vi } from 'vitest';
@@ -7,8 +9,10 @@ import cliState from '../../src/cliState';
 import { getDirectory, importModule, resolvePackageEntryPoint } from '../../src/esm';
 import logger from '../../src/logger';
 import { OpenAICodexSDKProvider } from '../../src/providers/openai/codex-sdk';
+import { CodexCliCompatibilityError } from '../../src/providers/openai/codexCliCompatibility';
 import { providerRegistry } from '../../src/providers/providerRegistry';
 import { getTraceparent } from '../../src/tracing/genaiTracer';
+import { getPackageVersion } from '../../src/util/packageVersion';
 import { checkProviderApiKeys } from '../../src/util/provider';
 import { createDeferred, mockProcessEnv } from '../util/utils';
 
@@ -18,6 +22,7 @@ const mockRun = vi.fn();
 const mockRunStreamed = vi.fn();
 const mockStartThread = vi.fn();
 const mockResumeThread = vi.fn();
+const mockCompatibilityPreflight = vi.hoisted(() => vi.fn());
 
 // Mock thread instance
 const mockThread = {
@@ -52,6 +57,12 @@ vi.mock('../../src/esm', async (importOriginal) => {
 
 // Mock the SDK package (for type safety)
 vi.mock('@openai/codex-sdk', () => mockCodexSDK);
+vi.mock('../../src/util/packageVersion', () => ({ getPackageVersion: vi.fn() }));
+
+vi.mock('../../src/providers/openai/codexCliCompatibility', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/providers/openai/codexCliCompatibility')>()),
+  checkCodexCliCompatibility: mockCompatibilityPreflight,
+}));
 
 vi.mock('../../src/tracing/genaiTracer', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../src/tracing/genaiTracer')>()),
@@ -64,6 +75,7 @@ const createMockResponse = (
   usage?: {
     input_tokens?: number;
     cached_input_tokens?: number;
+    cache_write_input_tokens?: number;
     output_tokens?: number;
     reasoning_output_tokens?: number;
   },
@@ -74,6 +86,9 @@ const createMockResponse = (
     ? {
         input_tokens: usage.input_tokens ?? 0,
         cached_input_tokens: usage.cached_input_tokens ?? 0,
+        ...(usage.cache_write_input_tokens === undefined
+          ? {}
+          : { cache_write_input_tokens: usage.cache_write_input_tokens }),
         output_tokens: usage.output_tokens ?? 0,
         ...(usage.reasoning_output_tokens === undefined
           ? {}
@@ -91,6 +106,41 @@ function restoreEnvVar(name: 'OPENAI_API_KEY' | 'CODEX_API_KEY', value: string |
   }
 }
 
+const bundledCodexCli = path.resolve(process.cwd(), 'node_modules/@openai/codex/bin/codex.js');
+
+describe('bundled Codex model metadata', () => {
+  it.runIf(fs.existsSync(bundledCodexCli))(
+    'includes the supported Sol and Luna reasoning modes offline',
+    () => {
+      const codexHome = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-codex-models-'));
+      try {
+        const output = execFileSync(
+          process.execPath,
+          [bundledCodexCli, 'debug', 'models', '--bundled'],
+          {
+            cwd: codexHome,
+            encoding: 'utf8',
+            env: { ...process.env, CODEX_HOME: codexHome, CODEX_API_KEY: '', OPENAI_API_KEY: '' },
+            maxBuffer: 10 * 1024 * 1024,
+          },
+        );
+        const catalog = JSON.parse(output) as {
+          models: Array<{ slug: string; supported_reasoning_levels: Array<{ effort: string }> }>;
+        };
+        const modelEfforts = (slug: string) =>
+          catalog.models
+            .find((model) => model.slug === slug)
+            ?.supported_reasoning_levels.map(({ effort }) => effort);
+        expect(modelEfforts('gpt-6-sol')).toEqual(expect.arrayContaining(['high', 'max', 'ultra']));
+        expect(modelEfforts('gpt-6-luna')).toEqual(expect.arrayContaining(['high', 'max']));
+        expect(modelEfforts('gpt-6-luna')).not.toContain('ultra');
+      } finally {
+        fs.rmSync(codexHome, { recursive: true, force: true });
+      }
+    },
+  );
+});
+
 describe('OpenAICodexSDKProvider', () => {
   let statSyncSpy: MockInstance;
   let existsSyncSpy: MockInstance;
@@ -103,6 +153,7 @@ describe('OpenAICodexSDKProvider', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(getPackageVersion).mockReturnValue('0.156.1');
     originalBasePath = cliState.basePath;
     cliState.basePath = undefined;
     originalOpenAiApiKey = process.env.OPENAI_API_KEY;
@@ -123,6 +174,8 @@ describe('OpenAICodexSDKProvider', () => {
     mockResolvePackageEntryPoint.mockReset();
     mockResolvePackageEntryPoint.mockReturnValue('@openai/codex-sdk');
     mockGetTraceparent.mockReturnValue(undefined);
+    mockCompatibilityPreflight.mockReset();
+    mockCompatibilityPreflight.mockResolvedValue(undefined);
 
     // Default mocks
     statSyncSpy = vi.spyOn(fs, 'statSync').mockReturnValue({
@@ -139,6 +192,32 @@ describe('OpenAICodexSDKProvider', () => {
     restoreEnvVar('OPENAI_API_KEY', originalOpenAiApiKey);
     restoreEnvVar('CODEX_API_KEY', originalCodexApiKey);
     await clearCache();
+  });
+
+  it.each(['0.144.0', '0.157.0', '1.0.0', 'invalid', null])(
+    'rejects incompatible SDK %s before importing it',
+    async (version) => {
+      vi.mocked(getPackageVersion).mockReturnValue(version);
+      const provider = new OpenAICodexSDKProvider({ config: { apiKey: 'test-key' } });
+      const response = await provider.callApi('test');
+      expect(response.error).toContain('requires @openai/codex-sdk@^0.156.1');
+      expect(response.error).toContain('npm install promptfoo @openai/codex-sdk@^0.156.1');
+      expect(importModule).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([false, true])('honors inherit_process_env=%s for file defaults', (inheritProcessEnv) => {
+    const provider = new OpenAICodexSDKProvider({ config: {} });
+    cliState.withEnvFileOverrides({ PATH: 'file-path', PROMPTFOO_REVIEW_ENV_PROBE: 'file' }, () => {
+      const env = (provider as any).prepareEnvironment({ inherit_process_env: inheritProcessEnv });
+      expect(env.PATH).toBe('file-path');
+      expect(env.PROMPTFOO_REVIEW_ENV_PROBE).toBe(inheritProcessEnv ? 'file' : undefined);
+      const explicit = (provider as any).prepareEnvironment({
+        inherit_process_env: inheritProcessEnv,
+        cli_env: { PROMPTFOO_REVIEW_ENV_PROBE: 'explicit' },
+      });
+      expect(explicit.PROMPTFOO_REVIEW_ENV_PROBE).toBe('explicit');
+    });
   });
 
   describe('constructor', () => {
@@ -186,14 +265,13 @@ describe('OpenAICodexSDKProvider', () => {
       expect(provider.id()).toBe('custom-provider-id');
     });
 
-    it('should warn about unknown model', () => {
+    it('should warn about an unknown model', () => {
+      const model = 'unknown-model';
       const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
 
-      new OpenAICodexSDKProvider({ config: { model: 'unknown-model' } });
+      new OpenAICodexSDKProvider({ config: { model } });
 
-      expect(warnSpy).toHaveBeenCalledWith(
-        'Using unknown model for OpenAI Codex SDK: unknown-model',
-      );
+      expect(warnSpy).toHaveBeenCalledWith(`Using unknown model for OpenAI Codex SDK: ${model}`);
 
       warnSpy.mockRestore();
     });
@@ -202,24 +280,27 @@ describe('OpenAICodexSDKProvider', () => {
       const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
 
       new OpenAICodexSDKProvider({ config: { model: 'gpt-5.2' } });
+      new OpenAICodexSDKProvider({ config: { model: 'gpt-5.4-mini' } });
       new OpenAICodexSDKProvider({ config: { model: 'gpt-5.5' } });
       new OpenAICodexSDKProvider({ config: { model: 'gpt-5.5-pro' } });
+      new OpenAICodexSDKProvider({ config: { model: 'gpt-5.6-sol' } });
+      new OpenAICodexSDKProvider({ config: { model: 'gpt-6-astra' } });
+      new OpenAICodexSDKProvider({ config: { model: 'gpt-6-sol' } });
+      new OpenAICodexSDKProvider({ config: { model: 'gpt-6-luna' } });
 
       expect(warnSpy).not.toHaveBeenCalled();
 
       warnSpy.mockRestore();
     });
 
-    it('should not warn about gpt-5.1-codex models', () => {
-      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
-
-      new OpenAICodexSDKProvider({ config: { model: 'gpt-5.1-codex' } });
-      new OpenAICodexSDKProvider({ config: { model: 'gpt-5.1-codex-max' } });
-      new OpenAICodexSDKProvider({ config: { model: 'gpt-5.1-codex-mini' } });
-
-      expect(warnSpy).not.toHaveBeenCalled();
-
-      warnSpy.mockRestore();
+    it.each([
+      'gpt-5-codex',
+      'gpt-5.1-codex',
+      'gpt-5.1-codex-max',
+      'gpt-5.1-codex-mini',
+      'gpt-5.2-codex',
+    ])('does not advertise retired Codex model %s', (model) => {
+      expect(OpenAICodexSDKProvider.OPENAI_MODELS).not.toContain(model);
     });
 
     it('should not warn about provider-specific model ids when routing through a custom model_provider', () => {
@@ -229,6 +310,9 @@ describe('OpenAICodexSDKProvider', () => {
       new OpenAICodexSDKProvider({
         config: { model: 'openai.gpt-5.5', model_provider: 'amazon-bedrock' },
       });
+      for (const model of ['openai.gpt-5.6-sol', 'openai.gpt-5.6-terra', 'openai.gpt-5.6-luna']) {
+        new OpenAICodexSDKProvider({ config: { model, model_provider: 'amazon-bedrock' } });
+      }
       // Same when the provider is supplied through raw cli_config.
       new OpenAICodexSDKProvider({
         config: { model: 'openai.gpt-5.4', cli_config: { model_provider: 'amazon-bedrock' } },
@@ -518,6 +602,63 @@ describe('OpenAICodexSDKProvider', () => {
             headers: {},
           },
         });
+      });
+
+      it('should classify a hard-quota SDK error type next to an unknown code as non-retryable', async () => {
+        vi.spyOn(logger, 'error').mockImplementation(() => {});
+        mockRun.mockRejectedValue(
+          Object.assign(new Error('Request was refused by the billing service.'), {
+            status: 429,
+            code: 'new_billing_code',
+            type: 'insufficient_quota',
+          }),
+        );
+
+        const provider = new OpenAICodexSDKProvider({
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.error).toContain('Quota exceeded: HTTP 429 Too Many Requests');
+        expect(result.error).toContain('new_billing_code');
+        expect(result.metadata?.rateLimitKind).toBe('quota');
+        expect(result.metadata?.http?.headers).toEqual({});
+      });
+
+      it('should classify credit_balance_exhausted from the SDK error code as non-retryable', async () => {
+        vi.spyOn(logger, 'error').mockImplementation(() => {});
+        mockRun.mockRejectedValue(
+          Object.assign(
+            new Error('You have no credits remaining. Please add credits to your account.'),
+            {
+              status: 429,
+              code: 'credit_balance_exhausted',
+            },
+          ),
+        );
+
+        const provider = new OpenAICodexSDKProvider({
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.error).toContain('Quota exceeded: HTTP 429 Too Many Requests');
+        expect(result.error).toContain('credit_balance_exhausted');
+        expect(result.metadata?.rateLimitKind).toBe('quota');
+        expect(result.metadata?.http?.headers).toEqual({});
+      });
+
+      it('should classify a "no credits remaining" message without a code as non-retryable', async () => {
+        vi.spyOn(logger, 'error').mockImplementation(() => {});
+        mockRun.mockRejectedValue(new Error('You have no credits remaining ...'));
+
+        const provider = new OpenAICodexSDKProvider({
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.metadata?.rateLimitKind).toBe('quota');
+        expect(result.error).toContain('Retries will not help');
       });
 
       it('should ignore non-provider prompt config keys merged from test options', async () => {
@@ -1483,6 +1624,55 @@ describe('OpenAICodexSDKProvider', () => {
         expect(mockStartThread).not.toHaveBeenCalled();
       });
 
+      it('should serialize the same explicit thread across Codex instance changes', async () => {
+        const firstRun = createDeferred<ReturnType<typeof createMockResponse>>();
+        const firstThread = {
+          id: 'existing-thread-123',
+          run: vi.fn().mockReturnValue(firstRun.promise),
+          runStreamed: mockRunStreamed,
+        };
+        const secondThread = {
+          id: 'existing-thread-123',
+          run: vi.fn().mockResolvedValue(createMockResponse('Second response')),
+          runStreamed: mockRunStreamed,
+        };
+        MockCodex.mockImplementationOnce(function () {
+          return {
+            startThread: vi.fn().mockReturnValue(firstThread),
+            resumeThread: vi.fn().mockReturnValue(firstThread),
+          };
+        }).mockImplementationOnce(function () {
+          return {
+            startThread: vi.fn().mockReturnValue(secondThread),
+            resumeThread: vi.fn().mockReturnValue(secondThread),
+          };
+        });
+        const provider = new OpenAICodexSDKProvider({
+          config: { thread_id: 'existing-thread-123' },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        const firstCall = provider.callApi('First', {
+          prompt: { config: { cli_config: { profile: 'first' } } },
+        } as any);
+        await vi.waitFor(() => expect(firstThread.run).toHaveBeenCalledTimes(1));
+
+        const secondCall = provider.callApi('Second', {
+          prompt: { config: { cli_config: { profile: 'second' } } },
+        } as any);
+        await new Promise<void>((resolve) => queueMicrotask(resolve));
+        expect(secondThread.run).not.toHaveBeenCalled();
+
+        firstRun.resolve(createMockResponse('First response'));
+        await expect(firstCall).resolves.toEqual(
+          expect.objectContaining({ output: 'First response' }),
+        );
+        await expect(secondCall).resolves.toEqual(
+          expect.objectContaining({ output: 'Second response' }),
+        );
+        expect(secondThread.run).toHaveBeenCalledTimes(1);
+      });
+
       it('should reuse cached thread when resuming same thread_id', async () => {
         mockRun.mockResolvedValue(createMockResponse('Response'));
 
@@ -1502,6 +1692,92 @@ describe('OpenAICodexSDKProvider', () => {
         await provider.callApi('Test prompt 2');
         expect(mockResumeThread).toHaveBeenCalledTimes(1); // Still 1
         expect(mockRun).toHaveBeenCalledTimes(2); // But ran twice
+      });
+
+      it('should not reuse an explicit thread cache entry across authority changes', async () => {
+        mockRun.mockResolvedValue(createMockResponse('Response'));
+
+        const provider = new OpenAICodexSDKProvider({
+          config: {
+            thread_id: 'existing-thread-123',
+            persist_threads: true,
+            sandbox_mode: 'danger-full-access',
+            approval_policy: 'never',
+          },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        await provider.callApi('Broad prompt');
+        await provider.callApi('Restricted prompt', {
+          prompt: {
+            raw: 'Restricted prompt',
+            config: {
+              sandbox_mode: 'read-only',
+              approval_policy: 'on-request',
+            },
+          },
+        } as any);
+
+        expect(mockResumeThread).toHaveBeenNthCalledWith(1, 'existing-thread-123', {
+          skipGitRepoCheck: false,
+          workingDirectory: process.cwd(),
+          sandboxMode: 'danger-full-access',
+          approvalPolicy: 'never',
+        });
+        expect(mockResumeThread).toHaveBeenNthCalledWith(2, 'existing-thread-123', {
+          skipGitRepoCheck: false,
+          workingDirectory: process.cwd(),
+          sandboxMode: 'read-only',
+          approvalPolicy: 'on-request',
+        });
+      });
+
+      it('should evict stale explicit thread cache entries when options change', async () => {
+        mockRun.mockResolvedValue(createMockResponse('Response'));
+
+        const provider = new OpenAICodexSDKProvider({
+          config: {
+            thread_id: 'existing-thread-123',
+            persist_threads: true,
+            sandbox_mode: 'danger-full-access',
+            approval_policy: 'never',
+          },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        await provider.callApi('Broad prompt');
+        await provider.callApi('Restricted prompt', {
+          prompt: {
+            raw: 'Restricted prompt',
+            config: {
+              sandbox_mode: 'read-only',
+              approval_policy: 'on-request',
+            },
+          },
+        } as any);
+        await provider.callApi('Broad prompt again');
+
+        expect(mockResumeThread).toHaveBeenCalledTimes(3);
+      });
+
+      it('should keep delimiter-like explicit thread IDs in separate cache families', async () => {
+        mockRun.mockResolvedValue(createMockResponse('Response'));
+        const provider = new OpenAICodexSDKProvider({
+          config: { thread_id: 'thread:a', persist_threads: true },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        await provider.callApi('Nested ID');
+        await provider.callApi('Short ID', {
+          prompt: { config: { thread_id: 'thread' } },
+        } as any);
+        await provider.callApi('Short ID changed', {
+          prompt: { config: { thread_id: 'thread', sandbox_mode: 'read-only' } },
+        } as any);
+        await provider.callApi('Nested ID again');
+
+        expect(mockResumeThread).toHaveBeenCalledTimes(3);
+        expect(mockRun).toHaveBeenCalledTimes(4);
       });
 
       it('should enforce thread pool size limits', async () => {
@@ -1650,14 +1926,21 @@ describe('OpenAICodexSDKProvider', () => {
       });
 
       it.each([
-        'max',
-        'ultra',
-      ] as const)('should pass GPT-5.6 %s reasoning to thread options', async (effort) => {
+        ['gpt-6-astra', 'max'],
+        ['gpt-6-astra', 'ultra'],
+        ['gpt-6-sol', 'max'],
+        ['gpt-6-luna', 'max'],
+        ['gpt-5.6-sol', 'max'],
+        ['gpt-5.6-sol', 'ultra'],
+        ['gpt-5.6-terra', 'max'],
+        ['gpt-5.6-terra', 'ultra'],
+        ['gpt-5.6-luna', 'max'],
+      ] as const)('should pass %s %s reasoning to thread options', async (model, effort) => {
         mockRun.mockResolvedValue(createMockResponse('Response'));
 
         const provider = new OpenAICodexSDKProvider({
           config: {
-            model: 'gpt-5.6-sol',
+            model,
             model_reasoning_effort: effort,
           },
           env: { OPENAI_API_KEY: 'test-api-key' },
@@ -1667,7 +1950,7 @@ describe('OpenAICodexSDKProvider', () => {
 
         expect((MockCodex.mock.instances[0] as any).startThread).toHaveBeenCalledWith(
           expect.objectContaining({
-            model: 'gpt-5.6-sol',
+            model,
             modelReasoningEffort: effort,
           }),
         );
@@ -1934,6 +2217,32 @@ describe('OpenAICodexSDKProvider', () => {
 
         expect(result.error).toBeUndefined();
         expect(result.output).toBe('Recovered response');
+      });
+
+      it.each([
+        ['insufficient_quota: credit_balance_exhausted', 'credit_balance_exhausted'],
+        ['rate_limit_exceeded: billing_not_active', 'billing_not_active'],
+        ['insufficient_quota: no credits remaining', 'credit_balance_exhausted'],
+      ])('keeps mixed billing messages non-retryable: %s', async (message, code) => {
+        vi.spyOn(logger, 'error').mockImplementation(() => {});
+        const mockEvents = async function* () {
+          yield {
+            type: 'turn.failed',
+            error: { message: `${message}. Please try again in 25ms.` },
+          };
+        };
+        mockRunStreamed.mockResolvedValue({ events: mockEvents() });
+        const provider = new OpenAICodexSDKProvider({
+          config: { enable_streaming: true },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.metadata?.rateLimitKind).toBe('quota');
+        expect(result.metadata?.http?.headers).toEqual({});
+        expect(result.error).toContain(`(code: ${code})`);
+        expect(result.error).toContain('Retries will not help');
       });
 
       it('should retry if a stream ends after a TPM error event', async () => {
@@ -2345,9 +2654,94 @@ describe('OpenAICodexSDKProvider', () => {
                 `deployment.environment=test,promptfoo.trace_id=${traceId},` +
                 `promptfoo.parent_span_id=${spanId}`,
             }),
+            config: expect.objectContaining({
+              otel: {
+                trace_exporter: {
+                  'otlp-http': {
+                    endpoint: 'http://127.0.0.1:4318/v1/traces',
+                    protocol: 'json',
+                  },
+                },
+              },
+            }),
           }),
         );
       });
+
+      it('routes native Codex spans to the receiver configured for the active eval', async () => {
+        mockRun.mockResolvedValue(createMockResponse('Response'));
+        const provider = new OpenAICodexSDKProvider({
+          config: { deep_tracing: true },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        await cliState.withRequestTracingConfig(
+          { enabled: true, otlp: { http: { enabled: true, host: '127.0.0.2', port: 14318 } } },
+          async () => provider.callApi('Test prompt'),
+        );
+
+        expect(MockCodex).toHaveBeenCalledWith(
+          expect.objectContaining({
+            env: expect.objectContaining({
+              OTEL_EXPORTER_OTLP_ENDPOINT: 'http://127.0.0.2:14318',
+            }),
+            config: expect.objectContaining({
+              otel: {
+                trace_exporter: {
+                  'otlp-http': {
+                    endpoint: 'http://127.0.0.2:14318/v1/traces',
+                    protocol: 'json',
+                  },
+                },
+              },
+            }),
+          }),
+        );
+      });
+
+      it.each([
+        [['json'], 'http/json', 'json'],
+        [['protobuf'], 'http/protobuf', 'binary'],
+      ])(
+        'matches Codex SDK tracing protocol to receiver formats %j',
+        async (acceptFormats, protocol, exporterProtocol) => {
+          mockRun.mockResolvedValue(createMockResponse('Response'));
+          const provider = new OpenAICodexSDKProvider({
+            config: { deep_tracing: true },
+            env: { OPENAI_API_KEY: 'test-api-key' },
+          });
+
+          await cliState.withRequestTracingConfig(
+            {
+              enabled: true,
+              otlp: {
+                http: {
+                  enabled: true,
+                  port: 4318,
+                  acceptFormats: acceptFormats as Array<'json' | 'protobuf'>,
+                },
+              },
+            },
+            () => provider.callApi('Test prompt'),
+          );
+
+          expect(MockCodex).toHaveBeenCalledWith(
+            expect.objectContaining({
+              env: expect.objectContaining({ OTEL_EXPORTER_OTLP_PROTOCOL: protocol }),
+              config: expect.objectContaining({
+                otel: {
+                  trace_exporter: {
+                    'otlp-http': {
+                      endpoint: 'http://127.0.0.1:4318/v1/traces',
+                      protocol: exporterProtocol,
+                    },
+                  },
+                },
+              }),
+            }),
+          );
+        },
+      );
 
       it('should prefer a valid active traceparent over the evaluator trace', async () => {
         mockRun.mockResolvedValue(createMockResponse('Response'));
@@ -2381,31 +2775,34 @@ describe('OpenAICodexSDKProvider', () => {
       it.each([
         '00-00000000000000000000000000000000-b7ad6b7169203331-01',
         '00-0af7651916cd43dd8448eb211c80319c-0000000000000000-01',
-      ])('should ignore an invalid active traceparent and use the evaluator trace', async (active) => {
-        mockRun.mockResolvedValue(createMockResponse('Response'));
-        mockGetTraceparent.mockReturnValue(active);
-        const traceId = '4bf92f3577b34da6a3ce929d0e0e4736';
-        const spanId = '00f067aa0ba902b7';
-        const provider = new OpenAICodexSDKProvider({
-          config: { deep_tracing: true },
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
+      ])(
+        'should ignore an invalid active traceparent and use the evaluator trace',
+        async (active) => {
+          mockRun.mockResolvedValue(createMockResponse('Response'));
+          mockGetTraceparent.mockReturnValue(active);
+          const traceId = '4bf92f3577b34da6a3ce929d0e0e4736';
+          const spanId = '00f067aa0ba902b7';
+          const provider = new OpenAICodexSDKProvider({
+            config: { deep_tracing: true },
+            env: { OPENAI_API_KEY: 'test-api-key' },
+          });
 
-        await provider.callApi('Test prompt', {
-          traceparent: `00-${traceId}-${spanId}-01`,
-          prompt: { raw: 'Test prompt', label: 'test' },
-          vars: {},
-        } as CallApiContextParams);
+          await provider.callApi('Test prompt', {
+            traceparent: `00-${traceId}-${spanId}-01`,
+            prompt: { raw: 'Test prompt', label: 'test' },
+            vars: {},
+          } as CallApiContextParams);
 
-        expect(MockCodex).toHaveBeenCalledWith(
-          expect.objectContaining({
-            env: expect.objectContaining({
-              TRACEPARENT: `00-${traceId}-${spanId}-01`,
-              OTEL_RESOURCE_ATTRIBUTES: `promptfoo.trace_id=${traceId},promptfoo.parent_span_id=${spanId}`,
+          expect(MockCodex).toHaveBeenCalledWith(
+            expect.objectContaining({
+              env: expect.objectContaining({
+                TRACEPARENT: `00-${traceId}-${spanId}-01`,
+                OTEL_RESOURCE_ATTRIBUTES: `promptfoo.trace_id=${traceId},promptfoo.parent_span_id=${spanId}`,
+              }),
             }),
-          }),
-        );
-      });
+          );
+        },
+      );
 
       it('should handle codex_path_override', async () => {
         mockRun.mockResolvedValue(createMockResponse('Response'));
@@ -2413,18 +2810,121 @@ describe('OpenAICodexSDKProvider', () => {
         const provider = new OpenAICodexSDKProvider({
           config: {
             codex_path_override: '/custom/path/to/codex',
+            cli_env: { LD_LIBRARY_PATH: '/custom/lib' },
           },
           env: { OPENAI_API_KEY: 'test-api-key' },
         });
 
         await provider.callApi('Test prompt');
 
+        expect(mockCompatibilityPreflight).toHaveBeenCalledWith({
+          sdkEntryPoint: '@openai/codex-sdk',
+          codexPathOverride: '/custom/path/to/codex',
+          env: expect.any(Object),
+        });
+        const preflightEnv = mockCompatibilityPreflight.mock.calls[0][0].env;
+        expect(preflightEnv).not.toHaveProperty('CODEX_API_KEY');
+        expect(preflightEnv).not.toHaveProperty('OPENAI_API_KEY');
+        expect(preflightEnv).toHaveProperty('LD_LIBRARY_PATH', '/custom/lib');
         expect(MockCodex).toHaveBeenCalledWith(
           expect.objectContaining({
             env: expect.any(Object),
             codexPathOverride: '/custom/path/to/codex',
           }),
         );
+      });
+
+      it('should skip compatibility preflight without a custom binary', async () => {
+        mockRun.mockResolvedValue(createMockResponse('Response'));
+        const provider = new OpenAICodexSDKProvider({
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        await provider.callApi('Test prompt');
+
+        expect(mockCompatibilityPreflight).not.toHaveBeenCalled();
+      });
+
+      it('should allow an explicit custom-binary version-check opt-out', async () => {
+        mockRun.mockResolvedValue(createMockResponse('Response'));
+        const provider = new OpenAICodexSDKProvider({
+          config: {
+            codex_path_override: '/custom/path/to/codex',
+            skip_codex_version_check: true,
+          },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        await provider.callApi('Test prompt');
+
+        expect(mockCompatibilityPreflight).not.toHaveBeenCalled();
+        expect(MockCodex).toHaveBeenCalled();
+      });
+
+      it('should abort promptly while a shared compatibility preflight continues', async () => {
+        const preflight = createDeferred<void>();
+        mockCompatibilityPreflight.mockReturnValue(preflight.promise);
+        const abortController = new AbortController();
+        const provider = new OpenAICodexSDKProvider({
+          config: { codex_path_override: '/custom/codex' },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        const resultPromise = provider.callApi('Test prompt', undefined, {
+          abortSignal: abortController.signal,
+        });
+        await vi.waitFor(() => expect(mockCompatibilityPreflight).toHaveBeenCalledOnce());
+        abortController.abort();
+
+        await expect(resultPromise).resolves.toEqual({ error: 'OpenAI Codex SDK call aborted' });
+        expect(MockCodex).not.toHaveBeenCalled();
+        preflight.resolve(undefined);
+      });
+
+      it('should not start compatibility preflight after aborting during SDK import', async () => {
+        const sdkImport = createDeferred<typeof mockCodexSDK>();
+        mockImportModule.mockReturnValueOnce(sdkImport.promise);
+        const abortController = new AbortController();
+        const provider = new OpenAICodexSDKProvider({
+          config: { codex_path_override: '/custom/codex' },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        const resultPromise = provider.callApi('Test prompt', undefined, {
+          abortSignal: abortController.signal,
+        });
+        abortController.abort();
+        sdkImport.resolve(mockCodexSDK);
+
+        await expect(resultPromise).resolves.toEqual({ error: 'OpenAI Codex SDK call aborted' });
+        expect(mockCompatibilityPreflight).not.toHaveBeenCalled();
+        expect(MockCodex).not.toHaveBeenCalled();
+      });
+
+      it('should reject an incompatible SDK and CLI before starting a Codex turn', async () => {
+        mockCompatibilityPreflight.mockRejectedValue(
+          new CodexCliCompatibilityError(
+            '@openai/codex-sdk supports Codex CLI/event schema 0.130.0, but /custom/429/codex reports 0.429.0',
+          ),
+        );
+
+        const provider = new OpenAICodexSDKProvider({
+          config: { codex_path_override: '/custom/codex' },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.error).toContain(
+          '@openai/codex-sdk supports Codex CLI/event schema 0.130.0, but /custom/429/codex reports 0.429.0',
+        );
+        expect(result.metadata?.rateLimitKind).toBeUndefined();
+        expect(result.metadata?.http).toBeUndefined();
+        expect(MockCodex).not.toHaveBeenCalled();
+        expect(mockStartThread).not.toHaveBeenCalled();
+        expect(mockResumeThread).not.toHaveBeenCalled();
+        expect(mockRun).not.toHaveBeenCalled();
+        expect(mockRunStreamed).not.toHaveBeenCalled();
       });
     });
 
@@ -2514,6 +3014,35 @@ describe('OpenAICodexSDKProvider', () => {
             }),
           }),
         );
+      });
+
+      it('should ignore attached live provider objects before rendering prompt config vars', async () => {
+        mockRun.mockResolvedValue(createMockResponse('Response'));
+
+        const attachedProvider: Record<string, unknown> = {
+          id: () => 'attached-provider',
+        };
+        attachedProvider.self = attachedProvider;
+
+        const provider = new OpenAICodexSDKProvider({
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        await expect(
+          provider.callApi('Test prompt', {
+            prompt: {
+              config: {
+                model: '{{ model }}',
+                provider: attachedProvider,
+              } as any,
+            },
+            vars: { model: 'gpt-5.2' },
+          } as any),
+        ).resolves.toMatchObject({
+          output: 'Response',
+        });
+
+        expect(mockRun).toHaveBeenCalledWith('Test prompt', {});
       });
 
       it('should use CODEX_API_KEY from env if available', async () => {
@@ -2826,24 +3355,77 @@ describe('OpenAICodexSDKProvider', () => {
       });
     });
 
-    describe('GPT-5.2 through GPT-5.6 models', () => {
-      it.each([
-        'gpt-5.6-sol',
-        'gpt-5.6-terra',
-        'gpt-5.6-luna',
-      ])('should recognize %s as a known model', (model) => {
-        const provider = new OpenAICodexSDKProvider({
-          config: { model },
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
-        expect(provider.config.model).toBe(model);
-      });
-
-      it('should calculate cost for gpt-5.6-sol with cached input tokens', async () => {
+    describe('GPT-5.2 through GPT-6 Astra models', () => {
+      it('includes SDK cache-write tokens in Astra usage and cost', async () => {
         mockRun.mockResolvedValue(
           createMockResponse('Response', {
             input_tokens: 2000,
             cached_input_tokens: 500,
+            cache_write_input_tokens: 250,
+            output_tokens: 1000,
+            reasoning_output_tokens: 200,
+          }),
+        );
+        const provider = new OpenAICodexSDKProvider({ config: { model: 'gpt-6-astra' } });
+
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.tokenUsage?.completionDetails).toEqual({
+          reasoning: 200,
+          cacheCreationInputTokens: 250,
+        });
+        expect(result.cost).toBeCloseTo(0.066125, 10);
+      });
+
+      it.each(['gpt-5.6', 'gpt-5.4-mini', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna'])(
+        'should recognize %s as a known model',
+        (model) => {
+          const provider = new OpenAICodexSDKProvider({
+            config: { model },
+            env: { OPENAI_API_KEY: 'test-api-key' },
+          });
+          expect(provider.config.model).toBe(model);
+        },
+      );
+
+      it.each([
+        ['gpt-6-astra', 10, 1, 50],
+        ['gpt-6-sol', 2, 0.2, 10],
+        ['gpt-6-luna', 0.1, 0.01, 0.5],
+        ['gpt-5.6-sol', 4, 0.4, 20],
+        ['gpt-5.6-terra', 2, 0.2, 12],
+        ['gpt-5.6-luna', 0.2, 0.02, 1.2],
+        ['openai.gpt-5.6-sol', 4.4, 0.44, 22],
+        ['openai.gpt-5.6-terra', 2.2, 0.22, 13.2],
+        ['openai.gpt-5.6-luna', 0.22, 0.022, 1.32],
+      ])('leaves %s cost unknown without cache-write tokens', async (model) => {
+        mockRun.mockResolvedValue(
+          createMockResponse('Response', {
+            input_tokens: 2000,
+            cached_input_tokens: 500,
+            output_tokens: 1000,
+          }),
+        );
+
+        const provider = new OpenAICodexSDKProvider({
+          config: {
+            model,
+            ...(model.startsWith('openai.') ? { model_provider: 'amazon-bedrock' } : {}),
+          },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.cost).toBeUndefined();
+      });
+
+      it('should calculate gpt-5.6 cost when Codex reports cache-write tokens', async () => {
+        mockRun.mockResolvedValue(
+          createMockResponse('Response', {
+            input_tokens: 2000,
+            cached_input_tokens: 500,
+            cache_write_input_tokens: 250,
             output_tokens: 1000,
           }),
         );
@@ -2855,8 +3437,111 @@ describe('OpenAICodexSDKProvider', () => {
 
         const result = await provider.callApi('Test prompt');
 
-        expect(result.cost).toBeCloseTo(0.03775, 6);
+        expect(result.cost).toBeCloseTo(0.02645, 6);
+        expect(result.tokenUsage?.completionDetails?.cacheCreationInputTokens).toBe(250);
       });
+
+      it.each([
+        ['openai.gpt-5.4', 0.0207625],
+        ['openai.gpt-5.5', 0.041525],
+      ] as const)('preserves existing Bedrock Codex billing for %s', async (model, cost) => {
+        mockRun.mockResolvedValue(
+          createMockResponse('Response', {
+            input_tokens: 2000,
+            cached_input_tokens: 500,
+            output_tokens: 1000,
+          }),
+        );
+
+        for (const providerConfig of [
+          { model_provider: 'amazon-bedrock' },
+          { cli_config: { model_provider: 'amazon-bedrock' } },
+        ]) {
+          const provider = new OpenAICodexSDKProvider({
+            config: { model, ...providerConfig },
+          });
+          const result = await provider.callApi('Test prompt');
+          expect(result.error).toBeUndefined();
+          expect(result.cost).toBeCloseTo(cost, 10);
+          expect(provider.config.model).toBe(model);
+        }
+      });
+
+      it('should calculate Bedrock cost for an amazon-bedrock model id', async () => {
+        mockRun.mockResolvedValue(
+          createMockResponse('Response', {
+            input_tokens: 2000,
+            cached_input_tokens: 500,
+            cache_write_input_tokens: 250,
+            output_tokens: 1000,
+          }),
+        );
+
+        const provider = new OpenAICodexSDKProvider({
+          config: {
+            model: 'openai.gpt-5.6-sol',
+            model_provider: 'amazon-bedrock',
+          },
+        });
+
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.cost).toBeCloseTo(0.029095, 8);
+        expect(result.tokenUsage?.completionDetails?.cacheCreationInputTokens).toBe(250);
+      });
+
+      it('should calculate gpt-5.6 cost when a custom Codex binary reports positive cache-write tokens', async () => {
+        mockRun.mockResolvedValue(
+          createMockResponse('Response', {
+            input_tokens: 2000,
+            cached_input_tokens: 500,
+            cache_write_input_tokens: 250,
+            output_tokens: 1000,
+          }),
+        );
+
+        const provider = new OpenAICodexSDKProvider({
+          config: {
+            model: 'gpt-5.6-sol',
+            codex_path_override: '/custom/path/to/codex',
+          },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.cost).toBeCloseTo(0.02645, 6);
+        expect(result.tokenUsage?.completionDetails?.cacheCreationInputTokens).toBe(250);
+      });
+
+      it.each([
+        ['omits cache-write usage', undefined],
+        ['reports zero cache-write usage', 0],
+      ])(
+        'should not estimate gpt-5.6 cost when a custom Codex binary %s',
+        async (_description, cacheWriteInputTokens) => {
+          mockRun.mockResolvedValue(
+            createMockResponse('Response', {
+              input_tokens: 2000,
+              cached_input_tokens: 500,
+              cache_write_input_tokens: cacheWriteInputTokens,
+              output_tokens: 1000,
+            }),
+          );
+
+          const provider = new OpenAICodexSDKProvider({
+            config: {
+              model: 'gpt-5.6-sol',
+              codex_path_override: '/custom/path/to/codex',
+            },
+            env: { OPENAI_API_KEY: 'test-api-key' },
+          });
+
+          const result = await provider.callApi('Test prompt');
+
+          expect(result.cost).toBeUndefined();
+        },
+      );
 
       it('should recognize gpt-5.5 as a known model', () => {
         const provider = new OpenAICodexSDKProvider({
@@ -3066,7 +3751,7 @@ describe('OpenAICodexSDKProvider', () => {
         expect(result.cost).toBeCloseTo(0.24, 6);
       });
 
-      it('should recognize gpt-5.2-codex as a known model', () => {
+      it('should allow an explicitly configured model outside the advertised catalog', () => {
         const provider = new OpenAICodexSDKProvider({
           config: { model: 'gpt-5.2-codex' },
           env: { OPENAI_API_KEY: 'test-api-key' },
@@ -3153,7 +3838,7 @@ describe('OpenAICodexSDKProvider', () => {
         expect(result.cost).toBeCloseTo(0.00875, 6);
       });
 
-      it('should calculate cost for gpt-5.3-codex-spark model', async () => {
+      it('should leave cost unset for the Codex-only gpt-5.3-codex-spark model', async () => {
         mockRun.mockResolvedValue(
           createMockResponse('Response', {
             input_tokens: 2000,
@@ -3169,11 +3854,7 @@ describe('OpenAICodexSDKProvider', () => {
 
         const result = await provider.callApi('Test prompt');
 
-        // gpt-5.3-codex-spark: $0.5/1M input, $0.05/1M cache_read, $4/1M output
-        // uncached input = 2000 - 500 = 1500, cached = 500
-        // Cost = (1500 * 0.5/1000000) + (500 * 0.05/1000000) + (1000 * 4/1000000)
-        //      = 0.00075 + 0.000025 + 0.004 = 0.004775
-        expect(result.cost).toBeCloseTo(0.004775, 6);
+        expect(result.cost).toBeUndefined();
       });
     });
 
@@ -3496,7 +4177,7 @@ describe('OpenAICodexSDKProvider', () => {
         spy.mockRestore();
       });
 
-      it('carries cached and reasoning token usage onto the turn span', async () => {
+      it('carries cache reads, cache writes, and reasoning usage onto the turn span', async () => {
         const { emitted, spy } = await installTurnSpanTracerSpy();
         mockRunStreamed.mockResolvedValue({
           events: (async function* () {
@@ -3507,6 +4188,7 @@ describe('OpenAICodexSDKProvider', () => {
                 input_tokens: 100,
                 output_tokens: 40,
                 cached_input_tokens: 25,
+                cache_write_input_tokens: 10,
                 reasoning_output_tokens: 12,
               },
             };
@@ -3522,8 +4204,9 @@ describe('OpenAICodexSDKProvider', () => {
         const turnSpan = emitted.find((s) => s.name === 'gen_ai.turn 1');
         expect(turnSpan?.attrs['gen_ai.usage.input_tokens']).toBe(100);
         expect(turnSpan?.attrs['gen_ai.usage.output_tokens']).toBe(40);
-        expect(turnSpan?.attrs['gen_ai.usage.cached_tokens']).toBe(25);
-        expect(turnSpan?.attrs['gen_ai.usage.reasoning_tokens']).toBe(12);
+        expect(turnSpan?.attrs['gen_ai.usage.cache_read.input_tokens']).toBe(25);
+        expect(turnSpan?.attrs['gen_ai.usage.cache_creation.input_tokens']).toBe(10);
+        expect(turnSpan?.attrs['gen_ai.usage.reasoning.output_tokens']).toBe(12);
         spy.mockRestore();
       });
     });
@@ -3556,6 +4239,8 @@ describe('OpenAICodexSDKProvider', () => {
         'codex.mcp.server': 'inventory',
         'codex.mcp.tool': 'search_inventory',
         'codex.mcp.input': '{"query":"quantum computing","limit":3}',
+        'gen_ai.operation.name': 'execute_tool',
+        'gen_ai.tool.name': 'search_inventory',
       });
 
       expect(
@@ -3598,6 +4283,8 @@ describe('OpenAICodexSDKProvider', () => {
         'codex.mcp.tool': 'search_inventory',
         'codex.mcp.input':
           '{"query":"quantum computing","email":"[REDACTED]","apiKey":"[REDACTED]","headers":{"Authorization":"[REDACTED]"}}',
+        'gen_ai.operation.name': 'execute_tool',
+        'gen_ai.tool.name': 'search_inventory',
       });
 
       expect(
@@ -3767,19 +4454,191 @@ describe('OpenAICodexSDKProvider', () => {
       expect((provider as any).threads.size).toBe(0);
     });
 
-    it('should keep the provider registered during cleanup and unregister it on shutdown', async () => {
-      const unregisterSpy = vi.spyOn(providerRegistry, 'unregister');
-      const provider = new OpenAICodexSDKProvider({
-        env: { OPENAI_API_KEY: 'test-api-key' },
-      });
+    it.each([
+      { threadId: undefined, finishCleanupFirst: true },
+      { threadId: 'explicit-thread', finishCleanupFirst: true },
+      { threadId: undefined, finishCleanupFirst: false },
+      { threadId: 'explicit-thread', finishCleanupFirst: false },
+    ])(
+      'interrupts queued turns during cleanup (threadId=$threadId, finishCleanupFirst=$finishCleanupFirst)',
+      async ({ threadId, finishCleanupFirst }) => {
+        const firstRun = createDeferred<ReturnType<typeof createMockResponse>>();
+        const destruction = createDeferred<void>();
+        mockRun
+          .mockReturnValueOnce(firstRun.promise)
+          .mockResolvedValueOnce(createMockResponse('Queued response'));
+        MockCodex.mockImplementation(function () {
+          return {
+            startThread: mockStartThread.mockReturnValue(mockThread),
+            resumeThread: mockResumeThread.mockReturnValue(mockThread),
+            destroy: () => destruction.promise,
+          };
+        });
+        const provider = new OpenAICodexSDKProvider({
+          config: { persist_threads: true, thread_id: threadId },
+        });
+        const firstCall = provider.callApi('Shared prompt');
+        let queuedCall: ReturnType<typeof provider.callApi> | undefined;
+        let cleanup: Promise<void> | undefined;
 
-      await provider.cleanup();
-      expect(unregisterSpy).not.toHaveBeenCalled();
+        try {
+          await vi.waitFor(() => expect(mockRun).toHaveBeenCalledTimes(1));
+          const queues = (provider as any).threadRunQueues as Map<string, Promise<void>>;
+          const firstQueue = [...queues.values()][0];
+          queuedCall = provider.callApi('Shared prompt');
+          await vi.waitFor(() => expect([...queues.values()][0]).not.toBe(firstQueue));
+          expect(mockRun).toHaveBeenCalledTimes(1);
 
-      await provider.shutdown();
+          cleanup = provider.cleanup();
+          expect(providerRegistry.has(provider)).toBe(false);
+          expect((provider as any).threads.size).toBe(0);
+          if (finishCleanupFirst) {
+            destruction.resolve();
+            await cleanup;
+            expect(providerRegistry.has(provider)).toBe(false);
+          }
 
-      expect(unregisterSpy).toHaveBeenCalledWith(provider);
-    });
+          firstRun.resolve(createMockResponse('First response'));
+          expect(await firstCall).toMatchObject({ output: 'First response' });
+          expect((await queuedCall).error).toContain('interrupted by cleanup');
+          destruction.resolve();
+          await cleanup;
+          expect(mockRun).toHaveBeenCalledTimes(1);
+          expect((provider as any).threads.size).toBe(0);
+          expect(providerRegistry.has(provider)).toBe(false);
+
+          expect(await provider.callApi('Fresh call')).toMatchObject({ output: 'Queued response' });
+          expect(MockCodex).toHaveBeenCalledTimes(2);
+          expect(providerRegistry.has(provider)).toBe(true);
+          await providerRegistry.shutdownAll();
+          expect((provider as any).threads.size).toBe(0);
+          expect(providerRegistry.has(provider)).toBe(false);
+        } finally {
+          destruction.resolve();
+          firstRun.resolve(createMockResponse('First response'));
+          await Promise.all([firstCall, queuedCall, cleanup]);
+          await provider.cleanup();
+        }
+      },
+    );
+
+    it.each(['cleanup', 'shutdown', 'shutdownAll'] as const)(
+      'registers reused resources after %s',
+      async (method) => {
+        mockRun.mockResolvedValue(createMockResponse('Response'));
+        const destroy = vi.fn();
+        MockCodex.mockImplementation(function () {
+          return { startThread: mockStartThread.mockReturnValue(mockThread), destroy };
+        });
+        const provider = new OpenAICodexSDKProvider({
+          config: { persist_threads: true },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        expect(providerRegistry.has(provider)).toBe(true);
+        await provider.cleanup();
+        await provider.cleanup();
+        expect(providerRegistry.has(provider)).toBe(false);
+
+        for (const prompt of ['First reuse', 'Second reuse']) {
+          expect(await provider.callApi(prompt)).toMatchObject({ output: 'Response' });
+          expect(providerRegistry.has(provider)).toBe(true);
+          if (method === 'shutdownAll') {
+            await providerRegistry.shutdownAll();
+          } else {
+            await provider[method]();
+          }
+          expect(providerRegistry.has(provider)).toBe(false);
+        }
+        expect(destroy).toHaveBeenCalledTimes(2);
+      },
+    );
+
+    it.each([false, true])(
+      'interrupts an SDK load pending when cleanup starts (deep_tracing=%s)',
+      async (deepTracing) => {
+        const module = createDeferred<typeof mockCodexSDK>();
+        mockImportModule.mockReturnValueOnce(module.promise);
+        mockRun.mockResolvedValue(createMockResponse('Fresh response'));
+        const provider = new OpenAICodexSDKProvider({ config: { deep_tracing: deepTracing } });
+        const pendingCall = provider.callApi('Pending call');
+
+        try {
+          await vi.waitFor(() => expect(mockImportModule).toHaveBeenCalledTimes(1));
+          await provider.cleanup();
+          module.resolve(mockCodexSDK);
+          expect((await pendingCall).error).toContain('interrupted by cleanup');
+          expect(MockCodex).not.toHaveBeenCalled();
+          expect(providerRegistry.has(provider)).toBe(false);
+
+          expect(await provider.callApi('Fresh call')).toMatchObject({ output: 'Fresh response' });
+          expect(MockCodex).toHaveBeenCalledTimes(1);
+          expect(providerRegistry.has(provider)).toBe(true);
+        } finally {
+          module.resolve(mockCodexSDK);
+          await pendingCall;
+          await provider.cleanup();
+        }
+      },
+    );
+
+    it.each([
+      { method: 'cleanup', differentConfig: false },
+      { method: 'cleanup', differentConfig: true },
+      { method: 'shutdown', differentConfig: false },
+      { method: 'shutdown', differentConfig: true },
+      { method: 'shutdownAll', differentConfig: false },
+      { method: 'shutdownAll', differentConfig: true },
+    ] as const)(
+      'preserves fresh instances during $method (differentConfig=$differentConfig)',
+      async ({ method, differentConfig }) => {
+        const destruction = createDeferred<void>();
+        const original = {
+          startThread: vi.fn().mockReturnValue(mockThread),
+          destroy: vi.fn().mockReturnValue(destruction.promise),
+        };
+        const replacement = {
+          startThread: vi.fn().mockReturnValue(mockThread),
+          destroy: vi.fn().mockResolvedValue(undefined),
+        };
+        MockCodex.mockImplementationOnce(function () {
+          return original;
+        }).mockImplementationOnce(function () {
+          return replacement;
+        });
+        mockRun.mockResolvedValue(createMockResponse('Response'));
+        const provider = new OpenAICodexSDKProvider({ config: { persist_threads: true } });
+        expect(await provider.callApi('Original call')).toMatchObject({ output: 'Response' });
+        const cleanup =
+          method === 'shutdownAll' ? providerRegistry.shutdownAll() : provider[method]();
+
+        try {
+          expect(original.destroy).toHaveBeenCalledTimes(1);
+          expect(providerRegistry.has(provider)).toBe(false);
+          const context = differentConfig
+            ? ({ prompt: { config: { model: 'gpt-6-luna' } } } as CallApiContextParams)
+            : undefined;
+          expect(await provider.callApi('Fresh call', context)).toMatchObject({
+            output: 'Response',
+          });
+          expect(MockCodex).toHaveBeenCalledTimes(2);
+          expect(replacement.startThread).toHaveBeenCalledTimes(1);
+
+          destruction.resolve();
+          await cleanup;
+          expect(replacement.destroy).not.toHaveBeenCalled();
+          expect(providerRegistry.has(provider)).toBe(true);
+
+          await providerRegistry.shutdownAll();
+          expect(replacement.destroy).toHaveBeenCalledTimes(1);
+          expect(providerRegistry.has(provider)).toBe(false);
+        } finally {
+          destruction.resolve();
+          await cleanup;
+          await provider.cleanup();
+        }
+      },
+    );
 
     it('should destroy cached Codex instances on shutdown', async () => {
       mockRun.mockResolvedValue(createMockResponse('Response'));

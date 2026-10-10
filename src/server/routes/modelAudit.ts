@@ -23,7 +23,7 @@ export const modelAuditRouter = Router();
 const LIST_SCANNERS_ARGS = parseModelAuditArgs([], {
   listScanners: true,
   format: 'json',
-}).args;
+});
 
 function getModelAuditDelegationEnv(): NodeJS.ProcessEnv {
   return {
@@ -32,14 +32,10 @@ function getModelAuditDelegationEnv(): NodeJS.ProcessEnv {
   };
 }
 
-interface SpawnCaptureOptions {
-  /** Abort signal to terminate the child process (e.g. on client disconnect). */
-  signal?: AbortSignal;
-}
-
 function spawnModelAuditCapture(
   args: string[],
-  options: SpawnCaptureOptions = {},
+  /** Abort signal to terminate the child process (e.g. on client disconnect). */
+  signal: AbortSignal,
 ): Promise<{
   code: number | null;
   signal: NodeJS.Signals | null;
@@ -60,12 +56,12 @@ function spawnModelAuditCapture(
         child.kill('SIGTERM');
       }
     };
-    if (options.signal?.aborted) {
+    if (signal.aborted) {
       onAbort();
     } else {
-      options.signal?.addEventListener('abort', onAbort, { once: true });
+      signal.addEventListener('abort', onAbort, { once: true });
     }
-    const cleanupAbort = () => options.signal?.removeEventListener('abort', onAbort);
+    const cleanupAbort = () => signal.removeEventListener('abort', onAbort);
 
     child.stdout?.on('data', (data) => {
       stdout += stdoutDecoder.write(data);
@@ -120,9 +116,10 @@ modelAuditRouter.get('/scanners', async (req: Request, res: Response): Promise<v
       return;
     }
 
-    const { code, signal, stdout, stderr } = await spawnModelAuditCapture(LIST_SCANNERS_ARGS, {
-      signal: abortController.signal,
-    });
+    const { code, signal, stdout, stderr } = await spawnModelAuditCapture(
+      LIST_SCANNERS_ARGS,
+      abortController.signal,
+    );
 
     if (abortController.signal.aborted) {
       return;
@@ -257,7 +254,7 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
     // Use the centralized CLI parser to build command arguments
     const effectiveVerbose = normalizedOptions.verbose !== false;
     const effectiveTimeout = normalizedOptions.timeout || 3600;
-    const { args } = parseModelAuditArgs(resolvedPaths, {
+    const args = parseModelAuditArgs(resolvedPaths, {
       ...normalizedOptions,
       // Force JSON format for API responses (required for parsing)
       format: 'json',

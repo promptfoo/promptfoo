@@ -1,18 +1,27 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createMockProvider, type MockApiProvider } from '../../factories/provider';
+const { createWarningLoggerModule } = await vi.hoisted(
+  async () => import('../../factories/logger'),
+);
 
-import type { CallApiContextParams } from '../../../src/types/index';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { isProviderResponseRateLimited } from '../../../src/scheduler/types';
+import { isResponseHeadersObserverErrorResponse } from '../../../src/util/fetch/responseHeadersObserver';
+import { createMockProvider, type MockApiProvider } from '../../factories/provider';
+import { createSelectedObserverErrorResponse } from '../../util/selectedObserverError';
+import {
+  createPredispatchAbortTarget,
+  createSelectedToolErrorTarget,
+} from '../../util/selectedToolErrorTarget';
+
+import type { CallApiContextParams, ProviderResponse } from '../../../src/types/index';
 
 // Mock dependencies
-vi.mock('../../../src/logger', () => ({
-  default: {
-    debug: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  },
+vi.mock('../../../src/logger', async (importOriginal) => ({
+  ...(await importOriginal()),
+  ...createWarningLoggerModule(),
 }));
 
-vi.mock('../../../src/envars', () => ({
+vi.mock('../../../src/envars', async (importOriginal) => ({
+  ...(await importOriginal()),
   getEnvInt: vi.fn().mockReturnValue(2), // 2 iterations for tests
   getEnvBool: vi.fn().mockReturnValue(false),
 }));
@@ -25,7 +34,13 @@ vi.mock('../../../src/util/time', () => ({
   sleep: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock('../../../src/redteam/providers/shared', () => ({
+vi.mock('../../../src/redteam/providers/shared', async (importOriginal) => ({
+  preserveSelectedError: (
+    await importOriginal<typeof import('../../../src/redteam/providers/shared')>()
+  ).preserveSelectedError,
+  isTargetCallAbortError: (
+    await importOriginal<typeof import('../../../src/redteam/providers/shared')>()
+  ).isTargetCallAbortError,
   redteamProviderManager: {
     getProvider: vi.fn(),
   },
@@ -71,10 +86,237 @@ describe('RedteamIterativeImageProvider', () => {
     vi.clearAllMocks();
   });
 
+  it('preserves caller reason at target entry through the image outer catch', async () => {
+    const reason = Object.freeze(
+      Object.assign(new Error('caller stopped at target entry'), {
+        name: 'AbortException',
+      }),
+    );
+    const fixture = createPredispatchAbortTarget(reason);
+    const shared = await vi.importActual<typeof import('../../../src/redteam/providers/shared')>(
+      '../../../src/redteam/providers/shared',
+    );
+    vi.mocked(getTargetResponse).mockReset().mockImplementation(shared.getTargetResponse);
+    mockRedteamProvider.callApi.mockImplementation(async (_prompt, _context, options) => {
+      options?.abortSignal?.throwIfAborted();
+      fixture.events.push('attacker response');
+      return { output: JSON.stringify({ improvement: 'Use a greeting', prompt: 'Say hello' }) };
+    });
+    try {
+      const provider = new RedteamIterativeProvider({ injectVar: 'goal' });
+      const outcome = await fixture.run(() =>
+        provider.callApi(
+          'Say hello',
+          {
+            originalProvider: fixture.target,
+            vars: { goal: 'Say hello' },
+            prompt: { raw: '{{goal}}', label: 'greeting' },
+          },
+          { abortSignal: fixture.controller.signal },
+        ),
+      );
+      await fixture.expectRejected(outcome);
+      expect(fixture.events).toEqual(['attacker response', 'target entered', 'caller abort']);
+      expect(mockRedteamProvider.callApi).toHaveBeenCalledOnce();
+    } finally {
+      await fixture.cleanup();
+      vi.mocked(getTargetResponse).mockReset();
+    }
+  });
+
+  it('finalizes a completed target error before another canceled image iteration', async () => {
+    const fixture = createSelectedToolErrorTarget();
+    const shared = await vi.importActual<typeof import('../../../src/redteam/providers/shared')>(
+      '../../../src/redteam/providers/shared',
+    );
+    vi.mocked(getTargetResponse).mockReset().mockImplementation(shared.getTargetResponse);
+    mockRedteamProvider.callApi.mockImplementation(async (_prompt, _context, options) => {
+      options?.abortSignal?.throwIfAborted();
+      return { output: JSON.stringify({ improvement: 'Use a greeting', prompt: 'Say hello' }) };
+    });
+    try {
+      const provider = new RedteamIterativeProvider({ injectVar: 'goal' });
+      const result = await fixture.run(() =>
+        provider.callApi(
+          'Say hello',
+          {
+            originalProvider: fixture.target,
+            vars: { goal: 'Say hello' },
+            prompt: { raw: '{{goal}}', label: 'greeting' },
+          },
+          { abortSignal: fixture.controller.signal },
+        ),
+      );
+      await fixture.expectSelected(result);
+      expect(mockRedteamProvider.callApi).toHaveBeenCalledOnce();
+    } finally {
+      await fixture.cleanup();
+      vi.mocked(getTargetResponse).mockReset();
+    }
+  });
+
   it('should have correct ID', () => {
     const provider = new RedteamIterativeProvider({ injectVar: 'goal' });
     expect(provider.id()).toBe('promptfoo:redteam:iterative:image');
   });
+
+  it.each([
+    { label: 'selected tool error', error: 'lookup: downstream 429 rate limit', origin: 'tool' },
+    { label: 'unmarked target error', error: 'target 429 rate limit', origin: undefined },
+    { label: 'non-tool target error', error: 'target 429 rate limit', origin: 'provider' },
+    { label: 'successful marked target', error: undefined, origin: 'tool' },
+  ])('projects only selected tool-error origin for $label', async ({ error, origin }) => {
+    // External provider metadata may contain an unknown origin marker.
+    const originMetadata: Record<string, unknown> = origin ? { errorOrigin: origin } : {};
+    const shared = await vi.importActual<typeof import('../../../src/redteam/providers/shared')>(
+      '../../../src/redteam/providers/shared',
+    );
+    const { getEnvInt } = await import('../../../src/envars');
+    const previousGetEnvInt = vi.mocked(getEnvInt).getMockImplementation();
+    vi.mocked(getEnvInt).mockReturnValue(1);
+    vi.mocked(getTargetResponse).mockReset().mockImplementation(shared.getTargetResponse);
+    mockRedteamProvider.callApi.mockResolvedValueOnce({
+      output: JSON.stringify({ improvement: 'Use a greeting', prompt: 'Say hello' }),
+    });
+    mockTargetProvider.callApi.mockResolvedValue({
+      output: 'Hello',
+      ...(error ? { error } : {}),
+      metadata: {
+        ...originMetadata,
+        http: { status: 200, statusText: 'OK', headers: { 'x-ratelimit-remaining': '0' } },
+        rateLimit: { remaining: 0 },
+        targetOnly: 'must stay on the target',
+      },
+      tokenUsage: { prompt: 2, completion: 3, total: 5, numRequests: 1 },
+    });
+
+    try {
+      const provider = new RedteamIterativeProvider({});
+      const result: ProviderResponse = await provider.callApi('Say hello', {
+        originalProvider: mockTargetProvider,
+        vars: { goal: 'Say hello' },
+        prompt: { raw: '{{goal}}', label: 'greeting' },
+        injectVar: 'goal',
+      });
+
+      expect(mockTargetProvider.callApi).toHaveBeenCalledOnce();
+      // Errors and plain text without an image URL reach the final builder without vision calls.
+      expect(mockRedteamProvider.callApi).toHaveBeenCalledOnce();
+      expect(result.output).toBe('Hello');
+      expect(result.error).toBe(error);
+      expect(result.metadata?.errorOrigin).toBe(error && origin === 'tool' ? 'tool' : undefined);
+      expect(result.metadata).not.toHaveProperty('http');
+      expect(result.metadata).not.toHaveProperty('rateLimit');
+      expect(result.metadata).not.toHaveProperty('targetOnly');
+      expect(result.metadata).toMatchObject({ redteamFinalPrompt: 'rendered prompt' });
+      expect(result.tokenUsage).toMatchObject({
+        prompt: 2,
+        completion: 3,
+        total: 5,
+        numRequests: 1,
+      });
+    } finally {
+      vi.mocked(getTargetResponse).mockReset();
+      vi.mocked(getEnvInt).mockReset();
+      if (previousGetEnvInt) {
+        vi.mocked(getEnvInt).mockImplementation(previousGetEnvInt);
+      }
+    }
+  });
+
+  it.each([
+    {
+      label: 'final observer error after an earlier success',
+      earlierObserver: false,
+      finalObserver: true,
+      finalError: 'metrics rate limit exceeded',
+    },
+    {
+      label: 'final success after an earlier observer error',
+      earlierObserver: true,
+      finalObserver: false,
+      finalError: undefined,
+    },
+    {
+      label: 'final unrelated rate limit after an earlier observer error',
+      earlierObserver: true,
+      finalObserver: false,
+      finalError: 'final target 429 rate limit',
+    },
+  ])(
+    'preserves selected caller-observer provenance for $label',
+    async ({ earlierObserver, finalObserver, finalError }) => {
+      const shared = await vi.importActual<typeof import('../../../src/redteam/providers/shared')>(
+        '../../../src/redteam/providers/shared',
+      );
+      const { getEnvInt } = await import('../../../src/envars');
+      const previousGetEnvInt = vi.mocked(getEnvInt).getMockImplementation();
+      vi.mocked(getEnvInt).mockReturnValue(2);
+      vi.mocked(getTargetResponse).mockReset().mockImplementation(shared.getTargetResponse);
+      mockRedteamProvider.callApi.mockResolvedValue({
+        output: JSON.stringify({ improvement: 'Use a greeting', prompt: 'Say hello' }),
+      });
+      const earlierResponse: ProviderResponse = {
+        output: 'Earlier greeting',
+        tokenUsage: { prompt: 2, completion: 3, total: 5, numRequests: 1 },
+      };
+      const finalResponse: ProviderResponse = {
+        output: 'Final greeting',
+        ...(finalError ? { error: finalError } : {}),
+        metadata: { targetOnly: 'must stay on the target' },
+        tokenUsage: { prompt: 7, completion: 4, total: 11, numRequests: 1 },
+      };
+      mockTargetProvider.callApi
+        .mockImplementationOnce(async () =>
+          earlierObserver
+            ? createSelectedObserverErrorResponse(
+                earlierResponse,
+                'earlier metrics rate limit exceeded',
+              )
+            : earlierResponse,
+        )
+        .mockImplementationOnce(async () =>
+          finalObserver ? createSelectedObserverErrorResponse(finalResponse) : finalResponse,
+        );
+
+      try {
+        const provider = new RedteamIterativeProvider({});
+        const result: ProviderResponse = await provider.callApi('Say hello', {
+          originalProvider: mockTargetProvider,
+          vars: { goal: 'Say hello' },
+          prompt: { raw: '{{goal}}', label: 'greeting' },
+          injectVar: 'goal',
+        });
+
+        expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(2);
+        // Plain greetings and errors do not invoke the vision provider or judge.
+        expect(mockRedteamProvider.callApi).toHaveBeenCalledTimes(2);
+        expect(result.output).toBe('Final greeting');
+        expect(result.error).toBe(finalError);
+        expect(isResponseHeadersObserverErrorResponse(result)).toBe(finalObserver);
+        expect(isProviderResponseRateLimited(result, undefined)).toBe(
+          !finalObserver && finalError !== undefined,
+        );
+        expect(result.metadata).not.toHaveProperty('errorOrigin');
+        expect(result.metadata).not.toHaveProperty('http');
+        expect(result.metadata).not.toHaveProperty('rateLimit');
+        expect(result.metadata).not.toHaveProperty('targetOnly');
+        expect(result.metadata).toMatchObject({ redteamFinalPrompt: 'rendered prompt' });
+        expect(result.tokenUsage).toMatchObject({
+          prompt: 9,
+          completion: 7,
+          total: 16,
+          numRequests: 2,
+        });
+      } finally {
+        vi.mocked(getTargetResponse).mockReset();
+        vi.mocked(getEnvInt).mockReset();
+        if (previousGetEnvInt) {
+          vi.mocked(getEnvInt).mockImplementation(previousGetEnvInt);
+        }
+      }
+    },
+  );
 
   it('should throw error when originalProvider is not set', async () => {
     const provider = new RedteamIterativeProvider({ injectVar: 'goal' });
@@ -143,13 +385,14 @@ describe('RedteamIterativeImageProvider', () => {
 
     const result = await provider.callApi('test', context);
 
-    // Verify token usage is accumulated from: redteam (25) + target (150) + vision (70) + judge (45) = 290
-    expect(result.tokenUsage).toBeDefined();
-    expect(result.tokenUsage?.total).toBeGreaterThanOrEqual(200);
-    expect(result.tokenUsage?.prompt).toBeGreaterThan(0);
-    expect(result.tokenUsage?.completion).toBeGreaterThan(0);
-    // Probe counting should only include target calls.
-    expect(result.tokenUsage?.numRequests).toBe(1);
+    expect(result.tokenUsage).toMatchObject({
+      total: 150,
+      prompt: 100,
+      completion: 50,
+      numRequests: 1,
+      attacker: { total: 25, prompt: 15, completion: 10, numRequests: 1 },
+      assertions: { total: 115, prompt: 80, completion: 35, numRequests: 2 },
+    });
   });
 
   it('should track token usage from vision provider calls', async () => {
@@ -205,11 +448,14 @@ describe('RedteamIterativeImageProvider', () => {
 
     const result = await provider.callApi('test', context);
 
-    // Vision provider (300) + target (75) + redteam (15) + judge (30) = 420 total
-    expect(result.tokenUsage).toBeDefined();
-    expect(result.tokenUsage?.total).toBeGreaterThanOrEqual(300); // At least vision tokens
-    // Probe counting should only include target calls.
-    expect(result.tokenUsage?.numRequests).toBe(1);
+    expect(result.tokenUsage).toMatchObject({
+      total: 75,
+      prompt: 50,
+      completion: 25,
+      numRequests: 1,
+      attacker: { total: 15, prompt: 10, completion: 5, numRequests: 1 },
+      assertions: { total: 330, prompt: 220, completion: 110, numRequests: 2 },
+    });
   });
 
   it('should handle errors and still return accumulated token usage', async () => {

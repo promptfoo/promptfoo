@@ -30,6 +30,7 @@ import type {
 const nunjucks = getNunjucksEngine(undefined, false, true);
 const DEFAULT_GRADING_MAX_IMAGES = 4;
 const DEFAULT_GRADING_IMAGE_MAX_BYTES = 20 * 1024 * 1024;
+const GRADING_AUDIO_MAX_BYTES = 20 * 1024 * 1024;
 const DEFAULT_GRADING_IMAGE_MAX_TOTAL_BYTES = 20 * 1024 * 1024;
 const DATA_URI_METADATA_MAX_CHARS = 256;
 const DEFAULT_GRADING_IMAGE_MAX_RAW_CHARS =
@@ -160,6 +161,7 @@ export async function renderLlmRubricPrompt(
 
 type MultimodalPromptPart =
   | { type: 'text'; text: string }
+  | { type: 'input_audio'; input_audio: { data: string; format: 'wav' | 'mp3' } }
   | { type: 'image_url'; image_url: { url: string } }
   | { type: 'input_text'; text: string }
   | { type: 'input_image'; image_url: string }
@@ -391,9 +393,9 @@ export function materializeImageOutputsForGrading(images?: ImageOutput[]): {
   };
 }
 
-function appendImagesToContent(
+function appendMediaToContent(
   content: unknown,
-  imageParts: MultimodalPromptPart[],
+  mediaParts: MultimodalPromptPart[],
   format: MultimodalPromptFormat,
 ): MultimodalPromptPart[] {
   if (Array.isArray(content)) {
@@ -403,18 +405,18 @@ function appendImagesToContent(
         : format === 'google'
           ? content.map(toGoogleContentPart)
           : content;
-    return [...normalizedContent, ...imageParts] as MultimodalPromptPart[];
+    return [...normalizedContent, ...mediaParts] as MultimodalPromptPart[];
   }
 
   if (typeof content === 'string') {
-    return [buildTextPart(content, format), ...imageParts];
+    return [buildTextPart(content, format), ...mediaParts];
   }
 
   if (content === undefined || content === null) {
-    return imageParts;
+    return mediaParts;
   }
 
-  return [buildTextPart(stringifyContentPart(content), format), ...imageParts];
+  return [buildTextPart(stringifyContentPart(content), format), ...mediaParts];
 }
 
 function getMultimodalPromptFormat(provider: ApiProvider): MultimodalPromptFormat {
@@ -654,16 +656,11 @@ function stringifyContentPart(part: unknown): string {
   return JSON.stringify(part) ?? String(part);
 }
 
-function appendImagesToChatPrompt(
+function appendMediaToChatPrompt(
   renderedPrompt: string,
-  images: { dataUri: string; base64Data: string; mimeType: string }[],
+  mediaParts: MultimodalPromptPart[],
   format: MultimodalPromptFormat,
 ): string {
-  const imageParts: MultimodalPromptPart[] = [
-    buildTextPart(MULTIMODAL_GRADING_INSTRUCTION, format),
-    ...buildImageParts(images, format),
-  ];
-
   let parsed: ChatMessageLike[] | undefined;
   const trimmedPrompt = renderedPrompt.trim();
   if (trimmedPrompt.startsWith('- role:')) {
@@ -683,22 +680,16 @@ function appendImagesToChatPrompt(
   }
   if (isChatMessageArray(parsed)) {
     const messages = parsed.map((message) => ({ ...message }));
-    let userMessageIndex = -1;
-    for (let i = messages.length - 1; i >= 0; i--) {
-      if (messages[i].role === 'user') {
-        userMessageIndex = i;
-        break;
-      }
-    }
+    const userMessageIndex = messages.map((message) => message.role).lastIndexOf('user');
 
     if (userMessageIndex >= 0) {
       const userMessage = messages[userMessageIndex];
       messages[userMessageIndex] = {
         ...userMessage,
-        content: appendImagesToContent(userMessage.content, imageParts, format),
+        content: appendMediaToContent(userMessage.content, mediaParts, format),
       };
     } else {
-      messages.push({ role: 'user', content: imageParts });
+      messages.push({ role: 'user', content: mediaParts });
     }
 
     return JSON.stringify(messages);
@@ -707,30 +698,69 @@ function appendImagesToChatPrompt(
   return JSON.stringify([
     {
       role: 'user',
-      content: [buildTextPart(renderedPrompt, format), ...imageParts],
+      content: [buildTextPart(renderedPrompt, format), ...mediaParts],
     },
   ]);
+}
+
+function buildAudioGradingPart(
+  audio: NonNullable<ProviderResponse['audio']>,
+  provider: ApiProvider,
+): MultimodalPromptPart | undefined {
+  if (provider.getAudioInputFormat?.() !== 'openai') {
+    return undefined;
+  }
+  if (audio.blobRef || hasBlobRefImageValue(audio.data)) {
+    throw new Error(
+      'Audio grading requires inline base64 audio; blob references are not supported.',
+    );
+  }
+  if (audio.format !== 'wav' && audio.format !== 'mp3') {
+    throw new Error('Audio grading requires WAV or MP3 output. Configure the target audio format.');
+  }
+  const data = audio.data?.replace(/\s/g, '') || '';
+  if (data.length > Math.ceil(GRADING_AUDIO_MAX_BYTES / 3) * 4) {
+    throw new Error('Audio output exceeds the 20 MiB grading size limit.');
+  }
+  if (!isValidBase64Payload(data) || getBase64DecodedBytes(data) <= 0) {
+    throw new Error('Audio grading requires non-empty, valid base64 audio data.');
+  }
+  if (getBase64DecodedBytes(data) > GRADING_AUDIO_MAX_BYTES) {
+    throw new Error('Audio output exceeds the 20 MiB grading size limit.');
+  }
+  return { type: 'input_audio', input_audio: { data, format: audio.format } };
 }
 
 async function buildGradingProviderPrompt(
   renderedPrompt: string,
   images?: ImageOutput[],
   provider?: ApiProvider,
-): Promise<{ prompt: string; imageCount: number }> {
-  if (!images?.length) {
-    return { prompt: renderedPrompt, imageCount: 0 };
-  }
-
+  audio?: ProviderResponse['audio'],
+): Promise<{ prompt: string; imageCount: number; audioAttached: boolean }> {
   const { imageData } = materializeImageOutputsForGrading(images);
-
-  if (imageData.length === 0) {
-    return { prompt: renderedPrompt, imageCount: 0 };
+  const audioPart = audio && provider ? buildAudioGradingPart(audio, provider) : undefined;
+  const promptFormat = audioPart || !provider ? 'openai' : getMultimodalPromptFormat(provider);
+  const mediaParts: MultimodalPromptPart[] = imageData.length
+    ? [
+        buildTextPart(MULTIMODAL_GRADING_INSTRUCTION, promptFormat),
+        ...buildImageParts(imageData, promptFormat),
+      ]
+    : [];
+  if (audioPart) {
+    mediaParts.push(
+      buildTextPart(
+        'The evaluated output includes the attached audio. Listen to it as primary evidence for the rubric. Use the transcript only as supporting context; do not infer vocal delivery or sound quality from the transcript alone.',
+        promptFormat,
+      ),
+      audioPart,
+    );
   }
-
-  const promptFormat = provider ? getMultimodalPromptFormat(provider) : 'openai';
   return {
-    prompt: appendImagesToChatPrompt(renderedPrompt, imageData, promptFormat),
+    prompt: mediaParts.length
+      ? appendMediaToChatPrompt(renderedPrompt, mediaParts, promptFormat)
+      : renderedPrompt,
     imageCount: imageData.length,
+    audioAttached: Boolean(audioPart),
   };
 }
 
@@ -738,7 +768,7 @@ function parseJsonGradingResponse(
   label: string,
   resp: ProviderResponse,
 ): { parsed?: Partial<GradingResult>; failure?: Omit<GradingResult, 'assertion'> } {
-  const failWithTokens = (reason: string) => graderFail(reason, resp.tokenUsage);
+  const failWithTokens = (reason: string) => graderFailureFromResponse(reason, resp);
 
   let jsonObjects: unknown[] = [];
   if (typeof resp.output === 'string') {
@@ -778,6 +808,71 @@ function parseJsonGradingResponse(
   return { parsed: parsed as Partial<GradingResult> };
 }
 
+function graderFailureFromResponse(
+  reason: string,
+  response: ProviderResponse,
+): Omit<GradingResult, 'assertion'> {
+  const failure = graderFail(reason, response.tokenUsage);
+  if (response.cached) {
+    return {
+      ...failure,
+      metadata: { ...failure.metadata, cachedResponse: true },
+    };
+  }
+
+  const usage = failure.tokensUsed;
+  if (
+    usage &&
+    !usage.numRequests &&
+    !(usage.total ?? 0) &&
+    !(usage.prompt ?? 0) &&
+    !(usage.completion ?? 0)
+  ) {
+    return { ...failure, tokensUsed: { ...usage, numRequests: 1 } };
+  }
+
+  return failure;
+}
+
+function deriveVerdictFromGrader(
+  parsed: { pass?: unknown; score?: unknown },
+  threshold: number | undefined,
+): { pass: boolean; score: number } | undefined {
+  const hasThreshold = typeof threshold === 'number' && Number.isFinite(threshold);
+
+  // Without an explicit verdict, only a finite numeric score can be graded.
+  // Reject malformed values as grader errors so negation cannot make them pass.
+  if (parsed.pass === undefined || parsed.pass === null) {
+    const score =
+      typeof parsed.score === 'number'
+        ? parsed.score
+        : typeof parsed.score === 'string' && parsed.score.trim() !== ''
+          ? Number(parsed.score)
+          : NaN;
+    if (!Number.isFinite(score)) {
+      return undefined;
+    }
+    return { pass: hasThreshold ? score >= threshold : score > 0, score };
+  }
+
+  let pass =
+    typeof parsed.pass === 'boolean'
+      ? parsed.pass
+      : /^(true|yes|pass|y)$/i.test(String(parsed.pass));
+  const numericScore = Number(parsed.score);
+  const score =
+    typeof parsed.score === 'number'
+      ? parsed.score
+      : Number.isFinite(numericScore)
+        ? numericScore
+        : Number(pass);
+
+  if (hasThreshold) {
+    pass = pass && score >= threshold;
+  }
+  return { pass, score };
+}
+
 export async function runJsonGradingPrompt({
   assertion,
   checkName,
@@ -785,9 +880,11 @@ export async function runJsonGradingPrompt({
   grading,
   label,
   providerCallContext,
+  providerPromptConfig,
   throwOnError,
   vars,
   images,
+  audio,
 }: {
   assertion?: Assertion;
   checkName: string;
@@ -795,9 +892,12 @@ export async function runJsonGradingPrompt({
   grading: GradingConfig;
   label: string;
   providerCallContext?: CallApiContextParams;
+  /** Prompt config for the grader call, which providers merge over their own config. */
+  providerPromptConfig?: Record<string, unknown>;
   throwOnError?: boolean;
   vars: Record<string, VarValue>;
   images?: ImageOutput[];
+  audio?: ProviderResponse['audio'];
 }): Promise<GradingResult> {
   const rubricPrompt = await loadRubricPrompt(grading.rubricPrompt, defaultPrompt);
   const renderedPrompt = await renderLlmRubricPrompt(rubricPrompt, vars);
@@ -811,44 +911,41 @@ export async function runJsonGradingPrompt({
     defaultProvider,
     checkName,
   );
-  const { prompt: providerPrompt, imageCount } = await buildGradingProviderPrompt(
-    renderedPrompt,
-    images,
-    finalProvider,
-  );
+  const {
+    prompt: providerPrompt,
+    imageCount,
+    audioAttached,
+  } = await buildGradingProviderPrompt(renderedPrompt, images, finalProvider, audio);
   const resp = await callProviderWithContext(
     finalProvider,
     providerPrompt,
     label,
     vars,
     providerCallContext,
+    providerPromptConfig,
   );
   if (resp.error || !resp.output) {
     if (throwOnError) {
       throw new Error(resp.error || 'No output');
     }
-    return graderFail(resp.error || 'No output', resp.tokenUsage);
+    return graderFailureFromResponse(resp.error || 'No output', resp);
   }
   const { parsed, failure } = parseJsonGradingResponse(label, resp);
   if (!parsed) {
     return failure as Omit<GradingResult, 'assertion'>;
   }
 
-  let pass = parsed.pass ?? true;
-  if (typeof pass !== 'boolean') {
-    pass = /^(true|yes|pass|y)$/i.test(String(pass));
-  }
-
-  let score = parsed.score;
-  if (typeof score !== 'number') {
-    score = Number.isFinite(Number(score)) ? Number(score) : Number(pass);
-  }
-
   const threshold =
     typeof assertion?.threshold === 'string' ? Number(assertion.threshold) : assertion?.threshold;
-  if (typeof threshold === 'number' && Number.isFinite(threshold)) {
-    pass = pass && score >= threshold;
+
+  const verdict = deriveVerdictFromGrader(parsed, threshold);
+  if (!verdict) {
+    return graderFailureFromResponse(
+      'Grader response contained neither a pass verdict nor a finite numeric score',
+      resp,
+    );
   }
+  const { pass, score } = verdict;
 
   const reason =
     parsed.reason || (pass ? 'Grading passed' : `Score ${score} below threshold ${threshold}`);
@@ -860,6 +957,7 @@ export async function runJsonGradingPrompt({
       ? (JSON.parse(serializedMetadata) as Record<string, unknown>)
       : {};
   }
+  const { cachedResponse: _untrustedCachedResponse, ...trustedResponseMetadata } = responseMetadata;
 
   return {
     assertion,
@@ -871,9 +969,11 @@ export async function runJsonGradingPrompt({
       completionDetails: resp.tokenUsage?.completionDetails || parsed.tokensUsed?.completionDetails,
     }),
     metadata: {
-      ...responseMetadata,
+      ...trustedResponseMetadata,
       renderedGradingPrompt: renderedPrompt,
       ...(imageCount > 0 ? { renderedGradingPromptImages: imageCount } : {}),
+      ...(audioAttached ? { renderedGradingPromptAudio: true } : {}),
+      ...(resp.cached ? { cachedResponse: true } : {}),
     },
   };
 }

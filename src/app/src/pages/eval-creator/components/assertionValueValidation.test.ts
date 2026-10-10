@@ -1,4 +1,3 @@
-import { BaseAssertionTypesSchema } from '@promptfoo/types';
 import { describe, expect, it } from 'vitest';
 import {
   getAssertionValueError,
@@ -6,8 +5,6 @@ import {
   getRunnableAssertionValueError,
 } from './assertionValueValidation';
 import type { Assertion } from '@promptfoo/types';
-
-const UNSUPPORTED_TYPE_MESSAGE = 'Select a supported assertion type before running.';
 
 const make = (overrides: Partial<Assertion>): Assertion =>
   ({ type: 'contains', value: '', ...overrides }) as Assertion;
@@ -23,13 +20,9 @@ describe('getRunnableAssertionValueError', () => {
       );
     });
 
-    it('rejects numeric 0 because runtime treats it as an absent contains value', () => {
-      expect(getRunnableAssertionValueError(make({ type: 'contains', value: 0 }))).toMatch(
-        /Enter an expected value/,
-      );
-      expect(getRunnableAssertionValueError(make({ type: 'icontains', value: 0 }))).toMatch(
-        /Enter an expected value/,
-      );
+    it('accepts numeric 0 because runtime supports it as a contains value', () => {
+      expect(getRunnableAssertionValueError(make({ type: 'contains', value: 0 }))).toBeUndefined();
+      expect(getRunnableAssertionValueError(make({ type: 'icontains', value: 0 }))).toBeUndefined();
     });
 
     it('accepts non-blank strings and finite numbers', () => {
@@ -133,6 +126,35 @@ describe('getRunnableAssertionValueError', () => {
     });
   });
 
+  describe.each(['rouge-l', 'rouge-s', 'not-rouge-l', 'not-rouge-s'] as const)('%s', (type) => {
+    it('accepts a string reference and thresholds at both boundaries', () => {
+      expect(
+        getRunnableAssertionValueError(make({ type, value: 'expected output' })),
+      ).toBeUndefined();
+      for (const threshold of [0, 1]) {
+        expect(
+          getRunnableAssertionValueError(make({ type, value: 'expected output', threshold })),
+        ).toBeUndefined();
+      }
+    });
+
+    it('requires a non-blank string reference', () => {
+      for (const value of ['', '   ', 42, ['expected output']]) {
+        expect(getRunnableAssertionValueError(make({ type, value }))).toMatch(
+          /Enter an expected value/,
+        );
+      }
+    });
+
+    it('rejects thresholds outside [0, 1]', () => {
+      for (const threshold of [-0.1, 1.1]) {
+        expect(
+          getRunnableAssertionValueError(make({ type, value: 'expected output', threshold })),
+        ).toMatch(/from 0 to 1/);
+      }
+    });
+  });
+
   describe('LLM-graded assertions', () => {
     it('requires criteria for select-best', () => {
       expect(
@@ -165,16 +187,16 @@ describe('getRunnableAssertionValueError', () => {
       ).toBeUndefined();
     });
 
-    it.each([
-      'select-lowest-cost',
-      'select-lowest-latency',
-    ] as const)('does not require a value for %s', (type) => {
-      expect(getRunnableAssertionValueError(make({ type, value: undefined }))).toBeUndefined();
-      expect(getRunnableAssertionValueError(make({ type, value: '' }))).toBeUndefined();
-      expect(
-        getRunnableAssertionValueError(make({ type, value: { onlyPassing: true } })),
-      ).toBeUndefined();
-    });
+    it.each(['select-lowest-cost', 'select-lowest-latency'] as const)(
+      'does not require a value for %s',
+      (type) => {
+        expect(getRunnableAssertionValueError(make({ type, value: undefined }))).toBeUndefined();
+        expect(getRunnableAssertionValueError(make({ type, value: '' }))).toBeUndefined();
+        expect(
+          getRunnableAssertionValueError(make({ type, value: { onlyPassing: true } })),
+        ).toBeUndefined();
+      },
+    );
   });
 });
 
@@ -281,6 +303,51 @@ describe('structured value assertions', () => {
         make({ type: 'trace-span-duration', value: { pattern: 'fetch*', max: 250 } as any }),
       ),
     ).toBeUndefined();
+  });
+
+  it.each([
+    'trace-span-count',
+    'not-trace-span-count',
+    'trace-span-duration',
+    'not-trace-span-duration',
+    'trace-error-spans',
+    'not-trace-error-spans',
+  ] as const)('validates attribute filters before running %s', (type) => {
+    const value = { pattern: '*', max: 250 };
+    for (const attributes of [
+      [],
+      null,
+      'search',
+      new Date(),
+      new Map(),
+      { tool: [] },
+      { tool: {} },
+      { tool: undefined },
+      { count: Infinity },
+      { count: NaN },
+    ]) {
+      expect(
+        getRunnableAssertionValueError(make({ type, value: { ...value, attributes } })),
+      ).toMatch(/attribute filters/);
+    }
+    for (const attributes of [
+      undefined,
+      {},
+      Object.create(null),
+      { 'gen_ai.tool.name': 'search', cached: false, count: 0 },
+    ]) {
+      expect(
+        getRunnableAssertionValueError(make({ type, value: { ...value, attributes } })),
+      ).toBeUndefined();
+    }
+  });
+
+  it('preserves optional and numeric trace error limits', () => {
+    for (const value of [undefined, 0, 2]) {
+      expect(
+        getRunnableAssertionValueError(make({ type: 'trace-error-spans', value })),
+      ).toBeUndefined();
+    }
   });
 });
 
@@ -534,21 +601,5 @@ describe('getFirstRunnableAssertionValueError', () => {
       },
     ];
     expect(getFirstRunnableAssertionValueError(list)).toBeUndefined();
-  });
-});
-
-describe('supported assertion type coverage', () => {
-  // Guards against drift: `BASE_ASSERTION_TYPES` is a hand-maintained copy of the
-  // canonical schema, and `satisfies AssertionType[]` only checks the listed entries
-  // are valid — not that the list is complete. A base type added to the schema but
-  // not mirrored here would be wrongly reported as unsupported, falsely blocking a
-  // valid assertion. This test fails if that ever happens.
-  it.each(BaseAssertionTypesSchema.options)('treats base type %s as supported', (type) => {
-    expect(getRunnableAssertionValueError(make({ type: type as any, value: 'x' }))).not.toBe(
-      UNSUPPORTED_TYPE_MESSAGE,
-    );
-    expect(
-      getRunnableAssertionValueError(make({ type: `not-${type}` as any, value: 'x' })),
-    ).not.toBe(UNSUPPORTED_TYPE_MESSAGE);
   });
 });

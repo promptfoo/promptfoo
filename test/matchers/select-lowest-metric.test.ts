@@ -132,28 +132,28 @@ describe('selectMetric', () => {
     expect(grading[0].reason).toContain(`finite, non-negative ${label}`);
   });
 
-  it.each([
-    passingCostAssertion,
-    latencyAssertion,
-  ])('requires eligible outputs for $type', async (assertion) => {
-    const grading = await selectMetric(
-      [result({ promptIdx: 0, success: false }), result({ promptIdx: 1, success: false })],
-      assertion,
-    );
-    expect(grading.every(({ pass }) => !pass)).toBe(true);
-    expect(grading[0].reason).toContain('all outputs failed other assertions');
-  });
+  it.each([passingCostAssertion, latencyAssertion])(
+    'requires eligible outputs for $type',
+    async (assertion) => {
+      const grading = await selectMetric(
+        [result({ promptIdx: 0, success: false }), result({ promptIdx: 1, success: false })],
+        assertion,
+      );
+      expect(grading.every(({ pass }) => !pass)).toBe(true);
+      expect(grading[0].reason).toContain('all outputs failed other assertions');
+    },
+  );
 
-  it.each([
-    costAssertion,
-    latencyAssertion,
-  ])('fails gracefully with fewer than two outputs for $type', async (assertion) => {
-    const grading = await selectMetric([result({ promptIdx: 0, cost: 0.1 })], assertion);
-    expect(grading).toEqual([
-      expect.objectContaining({
-        pass: false,
-        reason: expect.stringContaining('at least two outputs'),
-      }),
-    ]);
-  });
+  it.each([costAssertion, latencyAssertion])(
+    'fails gracefully with fewer than two outputs for $type',
+    async (assertion) => {
+      const grading = await selectMetric([result({ promptIdx: 0, cost: 0.1 })], assertion);
+      expect(grading).toEqual([
+        expect.objectContaining({
+          pass: false,
+          reason: expect.stringContaining('at least two outputs'),
+        }),
+      ]);
+    },
+  );
 });
