@@ -1,7 +1,8 @@
 import { fetchWithCache } from '../cache';
-import { getEnvString } from '../envars';
+import { resolveProviderEnv } from './env';
 import { getRequestTimeoutMs } from './shared';
 
+import type { EnvOverrides } from '../contracts/env';
 import type { ApiProvider, ProviderResponse } from '../types/index';
 
 interface LlamaCompletionOptions {
@@ -16,20 +17,25 @@ interface LlamaCompletionOptions {
   penalize_nl?: boolean;
   presence_penalty?: number;
   frequency_penalty?: number;
-  mirostat?: boolean;
+  mirostat?: 0 | 1 | 2 | boolean;
   mirostat_tau?: number;
   mirostat_eta?: number;
   seed?: number;
   ignore_eos?: boolean;
-  logit_bias?: Record<string, number>;
+  logit_bias?: Record<string, number> | [string | number, number | false][];
 }
 
 export class LlamaProvider implements ApiProvider {
   modelName: string;
   config?: LlamaCompletionOptions;
+  env?: EnvOverrides;
 
-  constructor(modelName: string, options: { config?: LlamaCompletionOptions; id?: string } = {}) {
-    const { config, id } = options;
+  constructor(
+    modelName: string,
+    options: { config?: LlamaCompletionOptions; env?: EnvOverrides; id?: string } = {},
+  ) {
+    const { config, id, env } = options;
+    this.env = env;
     this.modelName = modelName;
     this.config = config;
     this.id = id ? () => id : this.id;
@@ -46,7 +52,7 @@ export class LlamaProvider implements ApiProvider {
   async callApi(prompt: string): Promise<ProviderResponse> {
     const body = {
       prompt,
-      n_predict: this.config?.n_predict || 512,
+      n_predict: this.config?.n_predict ?? 512,
       temperature: this.config?.temperature,
       top_k: this.config?.top_k,
       top_p: this.config?.top_p,
@@ -65,7 +71,7 @@ export class LlamaProvider implements ApiProvider {
       logit_bias: this.config?.logit_bias,
     };
 
-    const url = getEnvString('LLAMA_BASE_URL') || 'http://localhost:8080';
+    const url = resolveProviderEnv(this.env, ['LLAMA_BASE_URL'])?.value || 'http://localhost:8080';
 
     interface LlamaCompletionResponse {
       content: string;

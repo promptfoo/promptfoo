@@ -34,6 +34,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import StatefulnessRadioGroup, { STATEFULNESS_QUESTION } from '../../StatefulnessRadioGroup';
+import { normalizeLocalProviders } from '../helpers';
 import VariableSelectionDialog from './VariableSelectionDialog';
 import type { Message } from '@app/pages/eval/components/ChatMessages';
 
@@ -279,6 +280,7 @@ interface SessionsTabProps {
   selectedTarget: HttpProviderOptions;
   updateCustomTarget: (field: string, value: unknown) => void;
   onTestComplete?: (success: boolean) => void;
+  isTargetConfigInvalid?: () => boolean;
 }
 
 interface SessionRequest {
@@ -307,6 +309,7 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
   selectedTarget,
   updateCustomTarget,
   onTestComplete,
+  isTargetConfigInvalid,
 }) => {
   const [isTestRunning, setIsTestRunning] = React.useState(false);
   const [testResult, setTestResult] = React.useState<TestResult | null>(null);
@@ -317,8 +320,17 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
   // Get input variables from the provider config
   const inputVariables = selectedTarget.inputs ? Object.keys(selectedTarget.inputs) : [];
   const hasMultipleInputs = inputVariables.length > 0;
+  const targetUrl =
+    (typeof selectedTarget.config?.url === 'string' && selectedTarget.config.url.trim()) ||
+    (typeof selectedTarget.id === 'string' && /^https?:\/\//i.test(selectedTarget.id)
+      ? selectedTarget.id
+      : undefined);
 
   const handleTestSessionClick = () => {
+    if (isTargetConfigInvalid?.()) {
+      onTestComplete?.(false);
+      return;
+    }
     if (hasMultipleInputs) {
       // Pre-select first variable if none selected
       if (!selectedMainVariable && inputVariables.length > 0) {
@@ -336,6 +348,10 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
   };
 
   const runSessionTest = async (mainInputVariable?: string) => {
+    if (isTargetConfigInvalid?.()) {
+      onTestComplete?.(false);
+      return;
+    }
     setIsTestRunning(true);
     setTestResult(null);
 
@@ -345,7 +361,7 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          provider: selectedTarget,
+          provider: normalizeLocalProviders(selectedTarget, { forRuntime: true }),
           sessionConfig: {
             sessionSource: selectedTarget.config?.sessionSource,
             sessionParser: selectedTarget.config?.sessionParser,
@@ -621,7 +637,7 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
 
               <Button
                 onClick={handleTestSessionClick}
-                disabled={isTestRunning || !selectedTarget.config?.url}
+                disabled={isTestRunning || !targetUrl || Boolean(isTargetConfigInvalid?.())}
                 size="sm"
                 className="mb-3"
               >
@@ -633,7 +649,7 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
                 {isTestRunning ? 'Testing...' : 'Test Session'}
               </Button>
 
-              {!selectedTarget.config?.url && (
+              {!targetUrl && (
                 <Alert variant="warning" className="mb-3">
                   <AlertCircle className="size-4" />
                   <AlertContent>

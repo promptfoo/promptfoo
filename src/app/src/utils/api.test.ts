@@ -23,8 +23,6 @@ const mockState = (apiBaseUrl: string) =>
   ({
     apiBaseUrl,
     setApiBaseUrl: vi.fn(),
-    fetchingPromise: null,
-    setFetchingPromise: vi.fn(),
     persistApiBaseUrl: false,
     enablePersistApiBaseUrl: vi.fn(),
   }) as ReturnType<typeof useApiConfig.getState>;
@@ -93,6 +91,16 @@ describe('callApi', () => {
     };
     await callApi('/users', options);
     expect(mockFetch).toHaveBeenCalledWith('https://api.example.com/api/users', options);
+  });
+
+  it('uses an explicitly captured endpoint after global settings change', async () => {
+    const captured = getApiBaseUrl('https://original.example/proxy/');
+    vi.mocked(useApiConfig.getState).mockReturnValue(mockState('https://changed.example'));
+    await callApi('/user/cloud-config', {}, captured);
+    expect(mockFetch).toHaveBeenCalledWith(
+      'https://original.example/proxy/api/user/cloud-config',
+      {},
+    );
   });
 
   it('returns the fetch response', async () => {

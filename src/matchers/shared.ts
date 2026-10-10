@@ -3,23 +3,32 @@ import type { GradingResult, TokenUsage } from '../types/index';
 /**
  * Normalize token usage for matcher results. Unlike the evaluator-level
  * normalizeTokenUsage, this excludes the `assertions` field and preserves
- * the existing completionDetails shape (passing through whatever the
- * provider returned, or undefined if not present).
+ * the existing completionDetails shape and any incurred usage reported by
+ * the provider.
  */
 export function normalizeMatcherTokenUsage(
   tokenUsage: Partial<TokenUsage> | undefined,
 ): TokenUsage {
+  const prompt = tokenUsage?.prompt ?? 0;
+  const completion = tokenUsage?.completion ?? 0;
+  const cached = tokenUsage?.cached ?? 0;
+  const componentTotal = prompt + completion;
+  const cachedResponse = tokenUsage?.numRequests === 0 && cached > 0 && componentTotal <= cached;
+
   return {
-    total: tokenUsage?.total || 0,
-    prompt: tokenUsage?.prompt || 0,
-    completion: tokenUsage?.completion || 0,
-    cached: tokenUsage?.cached || 0,
-    numRequests: tokenUsage?.numRequests || 0,
+    total: tokenUsage?.total ?? (cachedResponse ? 0 : componentTotal),
+    prompt,
+    completion,
+    cached,
+    numRequests: tokenUsage?.numRequests ?? 0,
     completionDetails: tokenUsage?.completionDetails || {
       reasoning: 0,
       acceptedPrediction: 0,
       rejectedPrediction: 0,
     },
+    ...(tokenUsage?.incurredTokenUsage && {
+      incurredTokenUsage: tokenUsage.incurredTokenUsage,
+    }),
   };
 }
 
@@ -51,17 +60,24 @@ export function graderFail(
   };
 }
 
+/**
+ * Inverts a grader score for a negated assertion (the `not-` prefix).
+ *
+ * The result is clamped to `[0, 1]` so a NaN or out-of-range grader score cannot
+ * turn `1 - score` into a misleading negative/inflated value.
+ */
+export function invertScore(score: number): number {
+  return Math.min(1, Math.max(0, 1 - (Number.isFinite(score) ? score : 0)));
+}
+
 export function cosineSimilarity(vecA: number[], vecB: number[]): number {
-  if (vecA.length !== vecB.length) {
-    throw new Error('Vectors must be of equal length');
-  }
-  const dotProduct = vecA.reduce((acc, val, idx) => acc + val * vecB[idx], 0);
+  const product = dotProduct(vecA, vecB);
   const vecAMagnitude = Math.sqrt(vecA.reduce((acc, val) => acc + val * val, 0));
   const vecBMagnitude = Math.sqrt(vecB.reduce((acc, val) => acc + val * val, 0));
   if (vecAMagnitude === 0 || vecBMagnitude === 0) {
     return 0;
   }
-  return dotProduct / (vecAMagnitude * vecBMagnitude);
+  return product / (vecAMagnitude * vecBMagnitude);
 }
 
 export function dotProduct(vecA: number[], vecB: number[]): number {

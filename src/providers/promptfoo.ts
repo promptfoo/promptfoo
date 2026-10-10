@@ -11,14 +11,15 @@ import {
   providerRemoteGenerationContextPayload,
 } from '../redteam/remoteGeneration';
 import { getRemoteMaterializationContextFromVars } from '../redteam/remoteMaterialization';
+import { BaseTokenUsageSchema } from '../types/shared';
 import { fetchWithRetries } from '../util/fetch/index';
 import { getRequestTimeoutMs } from './shared';
 
-import type { EnvOverrides } from '../types/env';
 import type {
   ApiProvider,
   CallApiContextParams,
   CallApiOptionsParams,
+  EnvOverrides,
   Inputs,
   PluginConfig,
   ProviderResponse,
@@ -114,7 +115,17 @@ export class PromptfooHarmfulCompletionProvider implements ApiProvider {
       );
 
       if (!response.ok) {
-        throw new Error(`API call failed with status ${response.status}: ${await response.text()}`);
+        const body = await response.text();
+        const error = new Error(`API call failed with status ${response.status}: ${body}`);
+        try {
+          const parsed = JSON.parse(body) as { tokenUsage?: TokenUsage };
+          if (parsed.tokenUsage) {
+            Object.assign(error, { tokenUsage: parsed.tokenUsage });
+          }
+        } catch {
+          // Preserve the original error for non-JSON responses.
+        }
+        throw error;
       }
 
       const data = await response.json();
@@ -128,6 +139,7 @@ export class PromptfooHarmfulCompletionProvider implements ApiProvider {
 
       return {
         output: validOutputs,
+        ...(data.tokenUsage ? { tokenUsage: data.tokenUsage as TokenUsage } : {}),
       };
     } catch (err) {
       // Re-throw abort errors to properly cancel the operation
@@ -135,8 +147,14 @@ export class PromptfooHarmfulCompletionProvider implements ApiProvider {
         throw err;
       }
       logger.info(`[HarmfulCompletionProvider] ${err}`);
+      const parsedTokenUsage =
+        err && typeof err === 'object' && 'tokenUsage' in err
+          ? BaseTokenUsageSchema.safeParse(err.tokenUsage)
+          : undefined;
+      const tokenUsage = parsedTokenUsage?.success ? parsedTokenUsage.data : undefined;
       return {
         error: `[HarmfulCompletionProvider] ${err}`,
+        ...(tokenUsage ? { tokenUsage } : {}),
       };
     }
   }
@@ -160,6 +178,7 @@ interface PromptfooChatCompletionOptions {
     | 'blocking-question-analysis'
     | 'meta-agent-decision'
     | 'hydra-decision'
+    | 'goblin-decision'
     | 'voice-crescendo'
     | 'voice-crescendo-eval';
   /**
@@ -237,12 +256,36 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
 
       const data = await response.json();
 
+      // Only Cloud's explicit upstream request classification can stop Meta iterations.
+      // Missing results and unstructured error text may be refusals or transient failures.
+      if (
+        this.options.task === 'meta-agent-decision' &&
+        response.status === 400 &&
+        data.providerError?.status === 400 &&
+        data.providerError?.type === 'invalid_request_error' &&
+        data.providerError?.code === 'invalid_json'
+      ) {
+        return {
+          error:
+            'Meta-agent request failed: the upstream provider rejected the coordination request as invalid JSON (invalid_json).',
+          metadata: {
+            remoteGenerationError: {
+              status: 400,
+              type: 'invalid_request_error',
+              code: 'invalid_json',
+            },
+          },
+          ...(data.tokenUsage ? { tokenUsage: data.tokenUsage } : {}),
+        };
+      }
+
       if (!data.result) {
         logger.debug(
           `Error from promptfoo completion provider. Status: ${response.status} ${response.statusText} ${JSON.stringify(data)} `,
         );
         return {
           error: 'LLM did not return a result, likely refusal',
+          ...(data.tokenUsage ? { tokenUsage: data.tokenUsage } : {}),
         };
       }
 
@@ -330,6 +373,7 @@ export class PromptfooSimulatedUserProvider implements ApiProvider {
 
           Learn more: ${docsUrl}
         `,
+        tokenUsage: { numRequests: 0 },
       };
     }
 

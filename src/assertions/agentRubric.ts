@@ -1,6 +1,6 @@
 import { matchesAgentRubric } from '../matchers/agent';
-import { isGraderFailure } from '../matchers/llmGrading';
 import invariant from '../util/invariant';
+import { finalizeGradedAssertion } from './ragDefaults';
 import { getGraderVars } from './utils';
 
 import type { AssertionParams, GradingResult } from '../types/index';
@@ -12,6 +12,7 @@ export const handleAgentRubric = async ({
   outputString,
   test,
   providerCallContext,
+  providerResponse,
 }: AssertionParams): Promise<GradingResult> => {
   invariant(
     typeof renderedValue === 'string' ||
@@ -32,18 +33,8 @@ export const handleAgentRubric = async ({
     getGraderVars(assertion, test.vars),
     assertion,
     providerCallContext,
+    providerResponse?.metadata?.workingDir,
   );
 
-  if (isGraderFailure(resp)) {
-    return { ...resp, assertion };
-  }
-
-  const score = inverse
-    ? Math.min(1, Math.max(0, 1 - (Number.isFinite(resp.score) ? resp.score : 0)))
-    : resp.score;
-  return {
-    ...resp,
-    pass: resp.pass !== inverse,
-    score,
-  };
+  return finalizeGradedAssertion(resp, assertion, inverse);
 };

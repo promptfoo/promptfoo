@@ -51,6 +51,10 @@ describe('formatConfigBody', () => {
     expect(result).toContain('    ');
   });
 
+  it('should propagate non-string serialization errors', () => {
+    expect(() => formatConfigBody({ body: 1n })).toThrow(TypeError);
+  });
+
   it('should handle nested objects', () => {
     const body = { outer: { inner: 'deep' } };
     const result = formatConfigBody({ body });
@@ -222,6 +226,16 @@ describe('determineEffectiveSessionSource', () => {
     const provider = {
       id: () => 'test-provider',
       config: {},
+      callApi: vi.fn(),
+    } as unknown as ApiProvider;
+
+    const result = determineEffectiveSessionSource({ provider });
+    expect(result).toBe('client');
+  });
+
+  it('should default to "client" (not throw) when provider.config is undefined', () => {
+    const provider = {
+      id: () => 'test-provider',
       callApi: vi.fn(),
     } as unknown as ApiProvider;
 

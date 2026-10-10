@@ -1,11 +1,13 @@
 import { matchesClosedQa } from '../matchers/llmGrading';
 import invariant from '../util/invariant';
+import { finalizeGradedAssertion } from './ragDefaults';
 import { getGraderVars } from './utils';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
 export const handleModelGradedClosedQa = async ({
   assertion,
+  inverse,
   renderedValue,
   outputString,
   test,
@@ -20,15 +22,14 @@ export const handleModelGradedClosedQa = async ({
   // Note: rubricPrompt will be rendered later in matchesClosedQa with proper variables
   // (input, criteria, completion) available at that point
 
-  return {
-    assertion,
-    ...(await matchesClosedQa(
-      prompt,
-      renderedValue,
-      outputString,
-      test.options,
-      getGraderVars(assertion, test.vars),
-      providerCallContext,
-    )),
-  };
+  const resp = await matchesClosedQa(
+    prompt,
+    renderedValue,
+    outputString,
+    test.options,
+    getGraderVars(assertion, test.vars),
+    providerCallContext,
+  );
+
+  return finalizeGradedAssertion(resp, assertion, inverse, true);
 };

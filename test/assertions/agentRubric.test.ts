@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleAgentRubric } from '../../src/assertions/agentRubric';
 import { matchesAgentRubric } from '../../src/matchers/agent';
+import { createPassingGrade } from '../factories/literalFixtures';
 
 import type { AssertionParams, GradingResult } from '../../src/types/index';
 
@@ -71,6 +72,26 @@ describe('handleAgentRubric', () => {
       { audience: 'enterprise' },
       projectionParams.assertion,
       undefined,
+      undefined,
+    );
+  });
+
+  it("passes the target's reported working directory to the matcher", async () => {
+    mockMatchesAgentRubric.mockResolvedValue({ pass: true, score: 1, reason: 'verified' });
+
+    await handleAgentRubric({
+      ...params,
+      providerResponse: { output: 'Implemented', metadata: { workingDir: '/tmp/workspace' } },
+    });
+
+    expect(mockMatchesAgentRubric).toHaveBeenCalledWith(
+      'Verify the claimed change',
+      'Implemented',
+      {},
+      {},
+      params.assertion,
+      undefined,
+      '/tmp/workspace',
     );
   });
 
@@ -88,11 +109,7 @@ describe('handleAgentRubric', () => {
         options: { rubricPrompt },
       },
     };
-    mockMatchesAgentRubric.mockResolvedValue({
-      pass: true,
-      score: 1,
-      reason: 'verified',
-    });
+    mockMatchesAgentRubric.mockResolvedValue(createPassingGrade(1, 'verified'));
 
     await expect(handleAgentRubric(structuredParams)).resolves.toEqual({
       pass: true,
@@ -109,6 +126,7 @@ describe('handleAgentRubric', () => {
       { rubricPrompt: serializedPrompt },
       {},
       structuredParams.assertion,
+      undefined,
       undefined,
     );
   });

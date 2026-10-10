@@ -34,6 +34,9 @@ inputs:
     description: 'Enable scanning PRs from forked repositories'
     required: false
     default: 'false'
+  promptfoo-version:
+    description: 'Exact promptfoo CLI version to install for scanning (e.g. 0.121.0). Defaults to the version pinned when this action release was built.'
+    required: false
   sarif-output-path:
     description: 'Optional path to write SARIF output for upload to GitHub Code Scanning'
     required: false
