@@ -36,16 +36,22 @@ describe('Bedrock Runtime OpenAI API routing', () => {
     'openai.gpt-5.6-sol',
     'gpt-6.1-sol',
     'arn:aws:bedrock:us-east-1::foundation-model/openai.gpt-5.6-sol',
-  ])('requires a system profile for Runtime Responses model %s', async (model) => {
-    await expect(loadApiProvider(`bedrock:runtime:responses:${model}`)).rejects.toThrow(
-      'require a system inference profile',
-    );
+  ])('requires a system profile for closed GPT Runtime model %s', async (model) => {
+    for (const api of ['chat', 'responses']) {
+      await expect(loadApiProvider('bedrock:runtime:' + api + ':' + model)).rejects.toThrow(
+        'require a system inference profile',
+      );
+    }
   });
 
-  it('rejects GPT OSS Runtime Responses while retaining Runtime Chat', async () => {
-    await expect(
-      loadApiProvider('bedrock:runtime:responses:openai.gpt-oss-120b-1:0'),
-    ).rejects.toThrow('GPT OSS');
+  it.each([
+    'openai.gpt-oss-120b-1:0',
+    'openai.gpt-oss-safeguard-20b',
+    'openai.gpt-oss-safeguard-120b',
+  ])('rejects GPT OSS Runtime Responses while retaining Runtime Chat for %s', async (model) => {
+    await expect(loadApiProvider('bedrock:runtime:responses:' + model)).rejects.toThrow('GPT OSS');
+    const provider = await loadApiProvider('bedrock:runtime:chat:' + model);
+    expect(provider.constructor.name).toBe('BedrockRuntimeChatProvider');
   });
 
   it.each(['chat', 'responses'])(

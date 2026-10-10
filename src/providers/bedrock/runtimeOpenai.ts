@@ -1,4 +1,5 @@
 import { calculateOpenAIUsageCost } from '../openai/billing';
+import { isGpt6Model } from '../openai/gpt6';
 import { getOpenAICacheWriteInputTokens, getTokenUsage } from '../openai/util';
 import { getResponsesTokenUsage } from '../responses/processor';
 import { BedrockChatStreamError, collectBedrockChatStream } from './chatStream';
@@ -74,11 +75,13 @@ function runtimeCost(
   if (!['default', 'priority', 'flex', 'reserved'].includes(serviceTier ?? 'default')) {
     return undefined;
   }
-  if (/^gpt-5\.6-(?:sol|terra|luna)$/.test(capabilityName(modelName))) {
+  const model = capabilityName(modelName);
+  const gpt56 = /^gpt-5\.6-(?:sol|terra|luna)$/.test(model);
+  if (gpt56 || /^(?:gpt-6-(?:sol|luna)|gpt-6\.1-sol)$/.test(model)) {
     if (serviceTier && serviceTier !== 'default') {
       return undefined;
     }
-    return calculateOpenAIUsageCost(`bedrock:${capabilityName(modelName)}`, config, usage, {
+    return calculateOpenAIUsageCost(gpt56 ? `bedrock:${model}` : model, config, usage, {
       cachedResponse: cached,
       provider: 'bedrock',
       region,
@@ -86,16 +89,29 @@ function runtimeCost(
       serviceTier: serviceTier ?? 'default',
     });
   }
-  let cost = calculateBedrockCost(modelName, uncachedInput, output, cacheRead, cacheWrite, region, {
-    type: (serviceTier ?? 'default') as 'default' | 'priority' | 'flex' | 'reserved',
-  });
+  // An explicit input rate covers all input tokens, including cache reads/writes.
+  // Keep their total in the catalog lookup so output long-context tiers still apply.
+  const catalogInput = config.inputCost === undefined ? uncachedInput : input;
+  const catalogRead = config.inputCost === undefined ? cacheRead : 0;
+  const catalogWrite = config.inputCost === undefined ? cacheWrite : 0;
+  let cost = calculateBedrockCost(
+    modelName,
+    catalogInput,
+    output,
+    catalogRead,
+    catalogWrite,
+    region,
+    {
+      type: (serviceTier ?? 'default') as 'default' | 'priority' | 'flex' | 'reserved',
+    },
+  );
   if (cost !== undefined && (config.inputCost !== undefined || config.outputCost !== undefined)) {
     const catalogInputCost = calculateBedrockCost(
       modelName,
-      uncachedInput,
+      catalogInput,
       0,
-      cacheRead,
-      cacheWrite,
+      catalogRead,
+      catalogWrite,
       region,
       { type: (serviceTier ?? 'default') as 'default' | 'priority' | 'flex' | 'reserved' },
     );
@@ -141,9 +157,15 @@ export class BedrockRuntimeChatProvider extends BedrockMantleChatProvider {
     if (modelError) {
       throw new Error(modelError);
     }
+    if (capabilityName(result.body.model).startsWith('grok-')) {
+      delete result.body.presence_penalty;
+      delete result.body.frequency_penalty;
+      delete result.body.stop;
+    }
     // Runtime accepts the OpenAI completion cap even when a new model is not in the
     // shared reasoning catalog. Preserve an explicit cap rather than silently omit it.
     if (
+      !isGpt6Model(result.body.model) &&
       result.config.max_completion_tokens !== undefined &&
       result.body.max_completion_tokens === undefined &&
       (result.config.passthrough as { max_tokens?: unknown } | undefined)?.max_tokens === undefined

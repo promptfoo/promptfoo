@@ -169,8 +169,20 @@ describe('bedrock openaiResponses helper', () => {
       expect(isBedrockGptOssResponsesModel('openai.gpt-oss-120b')).toBe(true);
       expect(isBedrockGptOssResponsesModel('openai.gpt-oss-20b')).toBe(true);
       expect(isBedrockGptOssResponsesModel('openai.gpt-oss-120b-1:0')).toBe(false);
-      expect(isBedrockGptOssResponsesModel('openai.gpt-oss-safeguard-120b')).toBe(false);
+      expect(isBedrockGptOssResponsesModel('openai.gpt-oss-safeguard-120b')).toBe(true);
+      expect(isBedrockGptOssResponsesModel('openai.gpt-oss-safeguard-20b')).toBe(true);
     });
+
+    it.each(['openai.gpt-oss-safeguard-20b', 'openai.gpt-oss-safeguard-120b'])(
+      'routes %s through the supported Mantle Responses endpoint',
+      async (model) => {
+        const provider = createBedrockOpenAiResponsesProvider(model, {
+          config: { region: 'us-east-1', apiKey: 'fixture' },
+        });
+        expect(provider.getApiUrl()).toBe('https://bedrock-mantle.us-east-1.api.aws/v1');
+        expect((await provider.getOpenAiBody('hello')).body.model).toBe(model);
+      },
+    );
 
     it('builds the standard /v1 mantle base URL', () => {
       expect(getBedrockMantleResponsesBaseUrl('us-east-1')).toBe(

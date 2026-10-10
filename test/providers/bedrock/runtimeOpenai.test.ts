@@ -58,6 +58,121 @@ describe.each([
   ['responses', BedrockRuntimeResponsesProvider, responsesReply, 'responses'],
 ] as const)('Bedrock Runtime %s', (mode, Provider, reply, path) => {
   it.each([
+    { config: { inputCost: 0.01 }, expected: 1.000132 },
+    { config: { inputCost: 0 }, expected: 0.000132 },
+    { config: { outputCost: 0.02 }, expected: undefined },
+  ])(
+    'applies partial input overrides before unknown cache-write pricing (%j)',
+    async ({ config, expected }) => {
+      const detailKey = mode === 'chat' ? 'prompt_tokens_details' : 'input_tokens_details';
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: {
+          ...reply,
+          usage: { ...reply.usage, [detailKey]: { cached_tokens: 40, cache_write_tokens: 10 } },
+        },
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      });
+      const result = await new Provider('us.xai.grok-4.6', {
+        config: { apiKey: 'fixture', ...config },
+      }).callApi('hello');
+      expect(result.error).toBeUndefined();
+      if (expected === undefined) {
+        expect(result.cost).toBeUndefined();
+      } else {
+        expect(result.cost).toBeCloseTo(expected, 10);
+      }
+    },
+  );
+
+  it.each([
+    ['gpt-6-sol', 1000, 0.011933],
+    ['gpt-6-sol', 272001, 1.10287],
+    ['gpt-6-luna', 1000, 0.00059665],
+    ['gpt-6-luna', 272001, 0.0551435],
+  ] as const)(
+    'uses published GPT6 rates including cache and long context (%s, %s)',
+    async (model, input, globalCost) => {
+      const detailKey = mode === 'chat' ? 'prompt_tokens_details' : 'input_tokens_details';
+      for (const [profile, multiplier] of [
+        ['global', 1],
+        ['us', 1.1],
+      ] as const) {
+        vi.mocked(fetchWithCache).mockResolvedValue({
+          data: {
+            ...reply,
+            usage: {
+              ...(mode === 'chat'
+                ? { prompt_tokens: input, completion_tokens: 1000 }
+                : { input_tokens: input, output_tokens: 1000 }),
+              total_tokens: input + 1000,
+              [detailKey]: { cached_tokens: 40, cache_write_tokens: 10 },
+            },
+          },
+          status: 200,
+          statusText: 'OK',
+          cached: false,
+        });
+        const result = await new Provider(profile + '.openai.' + model, {
+          config: { apiKey: 'fixture' },
+        }).callApi('hello');
+        expect(result.error).toBeUndefined();
+        expect(result.cost).toBeCloseTo(globalCost * multiplier, 10);
+      }
+    },
+  );
+
+  it.each(['us.openai.gpt-6-astra', 'future.unpriced-model'])(
+    'keeps unpublished Bedrock rates unknown for %s',
+    async (model) => {
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: reply,
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      });
+      const result = await new Provider(model, {
+        config: { apiKey: 'fixture', inputCost: 0.01 },
+      }).callApi('hello');
+      expect(result.cost).toBeUndefined();
+    },
+  );
+
+  it('does not price an unsupported GPT6 service tier', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: { ...reply, service_tier: 'priority' },
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    });
+    const result = await new Provider('us.openai.gpt-6-sol', {
+      config: { apiKey: 'fixture' },
+    }).callApi('hello');
+    expect(result.cost).toBeUndefined();
+  });
+
+  it('forwards Bedrock guardrail headers without adding SDK wrappers to the body', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: reply,
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    });
+    const headers = {
+      'X-Amzn-Bedrock-GuardrailIdentifier': 'guardrail-fixture',
+      'X-Amzn-Bedrock-GuardrailVersion': '1',
+    };
+    const result = await new Provider('us.openai.gpt-5.6-sol', {
+      config: { apiKey: 'fixture', headers },
+    }).callApi('hello');
+    expect(result.error).toBeUndefined();
+    expect(vi.mocked(fetchWithCache).mock.calls[0][1]?.headers).toMatchObject(headers);
+    const body = JSON.parse(String(vi.mocked(fetchWithCache).mock.calls[0][1]?.body));
+    expect(body).not.toHaveProperty('extra_headers');
+  });
+
+  it.each([
     { cacheWrite: 0, manual: false, expected: 0.000286 },
     { cacheWrite: 10, manual: false, expected: undefined },
     { cacheWrite: 10, manual: true, expected: 1.4 },
@@ -806,3 +921,61 @@ it.each([
     expect(fetchWithCache).not.toHaveBeenCalled();
   },
 );
+
+it.each(['us.openai.gpt-6-sol', 'us.openai.gpt-6.1-sol'])(
+  'preserves explicit provider and prompt GPT6 output-cap resets for %s',
+  async (model) => {
+    for (const scope of ['provider', 'prompt']) {
+      const provider = new BedrockRuntimeChatProvider(model, {
+        config: {
+          apiKey: 'fixture',
+          max_completion_tokens: 512,
+          ...(scope === 'provider' ? { passthrough: { max_completion_tokens: null } } : {}),
+        },
+      });
+      const context =
+        scope === 'prompt'
+          ? {
+              vars: {},
+              prompt: {
+                raw: 'hello',
+                label: 'hello',
+                config: { passthrough: { max_completion_tokens: null } },
+              },
+            }
+          : undefined;
+      const { body } = await provider.getOpenAiBody('hello', context);
+      expect(body).not.toHaveProperty('max_completion_tokens');
+      expect(body).not.toHaveProperty('max_tokens');
+    }
+    const configured = new BedrockRuntimeChatProvider(model, {
+      config: { apiKey: 'fixture', max_completion_tokens: 512 },
+    });
+    expect((await configured.getOpenAiBody('hello')).body.max_completion_tokens).toBe(512);
+  },
+);
+
+it.each([
+  'us.xai.grok-4.6',
+  'global.xai.grok-4.6',
+  'arn:aws:bedrock:us-east-1:123456789012:inference-profile/us.xai.grok-4.6',
+])('filters unsupported Grok parameters for effective Runtime model %s', async (model) => {
+  const provider = new BedrockRuntimeChatProvider('openai.gpt-oss-120b-1:0', {
+    config: {
+      apiKey: 'fixture',
+      temperature: 0.4,
+      top_p: 0.8,
+      presence_penalty: 0.2,
+      frequency_penalty: 0.3,
+      stop: ['END'],
+    },
+  });
+  const { body } = await provider.getOpenAiBody('hello', {
+    vars: {},
+    prompt: { raw: 'hello', label: 'hello', config: { passthrough: { model } } },
+  });
+  expect(body).toMatchObject({ model, temperature: 0.4, top_p: 0.8 });
+  expect(body).not.toHaveProperty('presence_penalty');
+  expect(body).not.toHaveProperty('frequency_penalty');
+  expect(body).not.toHaveProperty('stop');
+});

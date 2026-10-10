@@ -18,7 +18,7 @@ export function getBedrockRuntimeModelError(
   }
   if (
     mode === 'runtime-responses' &&
-    /(?:^|[/.])openai\.gpt-oss-(?:20b|120b)(?:-1:0)?$/.test(modelName)
+    /(?:^|[/.])openai\.gpt-oss-(?:safeguard-)?(?:20b|120b)(?:-1:0)?$/.test(modelName)
   ) {
     return 'GPT OSS does not support Bedrock Runtime Responses. Use Runtime Chat or Mantle Responses.';
   }
@@ -26,8 +26,8 @@ export function getBedrockRuntimeModelError(
     /^arn:[^:]+:bedrock:[^:]+:[^:]*:foundation-model\//,
     '',
   );
-  if (mode === 'runtime-responses' && /^(?:openai\.)?gpt-\d/.test(foundationModel)) {
-    return 'Closed OpenAI GPT models on Bedrock Runtime Responses require a system inference profile, such as us.openai.gpt-5.6-sol or global.openai.gpt-5.6-sol.';
+  if (/^(?:openai\.)?gpt-\d/.test(foundationModel)) {
+    return 'Closed OpenAI GPT models on Bedrock Runtime require a system inference profile, such as us.openai.gpt-5.6-sol or global.openai.gpt-5.6-sol.';
   }
   return undefined;
 }
@@ -81,7 +81,7 @@ export function isBedrockOpenAiResponsesModel(modelName: string): boolean {
 }
 
 export function isBedrockGptOssResponsesModel(modelName: string): boolean {
-  return /^openai\.gpt-oss-(?:20b|120b)$/.test(modelName);
+  return /^openai\.gpt-oss-(?:safeguard-)?(?:20b|120b)$/.test(modelName);
 }
 
 export function isBedrockGrokModel(modelName: string): boolean {

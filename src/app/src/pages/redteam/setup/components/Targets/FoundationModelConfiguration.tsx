@@ -444,7 +444,8 @@ const FoundationModelConfiguration = ({
             value={modelId}
             onChange={handleModelIdChange}
             placeholder={
-              isBedrock && bedrockApiMode === 'runtime-responses'
+              isBedrock &&
+              (bedrockApiMode === 'runtime-responses' || bedrockApiMode === 'runtime-chat')
                 ? 'us.openai.gpt-5.6-sol'
                 : providerInfo.placeholder
             }
@@ -459,7 +460,7 @@ const FoundationModelConfiguration = ({
           />
           {isBedrock && (
             <p id="bedrock-model-help" className="text-sm text-muted-foreground">
-              {bedrockApiMode === 'runtime-responses' ? (
+              {bedrockApiMode === 'runtime-responses' || bedrockApiMode === 'runtime-chat' ? (
                 <>
                   Closed OpenAI GPT models require a system inference profile, such as{' '}
                   <code>us.openai.gpt-5.6-sol</code> or <code>global.openai.gpt-5.6-sol</code>.

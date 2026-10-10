@@ -3,7 +3,7 @@ export class BedrockChatStreamError extends Error {
     cause: unknown,
     readonly response: Record<string, any>,
   ) {
-    super(cause instanceof Error ? cause.message : String(cause), { cause });
+    super(cause instanceof Error ? cause.message : String(cause));
     this.name = cause instanceof Error ? cause.name : 'Error';
   }
 }
