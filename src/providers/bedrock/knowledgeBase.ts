@@ -99,8 +99,7 @@ export class AwsBedrockKnowledgeBaseProvider
 
   async getKnowledgeBaseClient() {
     if (!this.knowledgeBaseClient) {
-      // client-bedrock-agent-runtime already defaults to HTTP/1.1, so we only
-      // need a custom handler for proxy support. Agent Runtime requires SigV4.
+      // Use a custom handler when a proxy is configured. Agent Runtime requires SigV4.
       const handler = hasProxyEnv() ? await createBedrockRequestHandler() : undefined;
 
       try {
@@ -285,7 +284,7 @@ export class AwsBedrockKnowledgeBaseProvider
           ? 'aws-us-gov'
           : 'aws';
       const modelArn =
-        this.kbConfig.modelArn ??
+        this.kbConfig.modelArn ||
         (/^arn:aws(?:-[^:]+)?:bedrock:/.test(this.modelName) ||
         INFERENCE_PROFILE_PREFIX.test(this.modelName)
           ? this.modelName

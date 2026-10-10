@@ -208,8 +208,7 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
    */
   async getAgentRuntimeClient(): Promise<BedrockAgentRuntimeClient> {
     if (!this.agentRuntimeClient) {
-      // client-bedrock-agent-runtime already defaults to HTTP/1.1, so we only
-      // need a custom handler for proxy support.
+      // Use a custom handler when a proxy is configured.
       const handler = hasProxyEnv() ? await createBedrockRequestHandler() : undefined;
 
       try {

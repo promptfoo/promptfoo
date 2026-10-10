@@ -65,6 +65,70 @@ afterEach(() => {
 });
 
 describe('Knowledge Base runtime features', () => {
+  it.each([
+    ['amazon.nova-lite-v1:0', 'arn:aws:bedrock:us-east-1::foundation-model/amazon.nova-lite-v1:0'],
+    ['us.amazon.nova-2-lite-v1:0', 'us.amazon.nova-2-lite-v1:0'],
+  ])('falls back to provider model %s when modelArn is empty', async (model, expected) => {
+    const provider = new AwsBedrockKnowledgeBaseProvider(model, {
+      config: { knowledgeBaseId: 'KB12345678', region: 'us-east-1', modelArn: '' },
+    });
+    const send = vi.fn().mockResolvedValue({ output: { text: 'answer' } });
+    vi.spyOn(provider, 'getKnowledgeBaseClient').mockResolvedValue({
+      send,
+    } as unknown as BedrockAgentRuntimeClient);
+    expect((await provider.callApi('question')).output).toBe('answer');
+    expect(
+      send.mock.calls[0][0].input.retrieveAndGenerateConfiguration.knowledgeBaseConfiguration
+        .modelArn,
+    ).toBe(expected);
+  });
+
+  it.each(['retrieve', 'retrieveAndGenerate', 'streaming'] as const)(
+    'serializes user access context and managed-search restrictions for %s',
+    async (operation) => {
+      const filter = { equals: { key: 'tenant', value: 'fixture' } };
+      const { provider } = kb({
+        operation: operation === 'retrieve' ? 'retrieve' : 'retrieveAndGenerate',
+        streaming: operation === 'streaming',
+        userContext: { userId: 'fixture-user' },
+        retrievalConfiguration: { managedSearchConfiguration: { filter, numberOfResults: 3 } },
+      });
+      const handle = vi.fn(async (_request: { body?: unknown }) => ({
+        response: {
+          statusCode: 400,
+          headers: {
+            'content-type': 'application/json',
+            'x-amzn-errortype': 'ValidationException',
+          },
+          body: new TextEncoder().encode('{"message":"fixture request captured"}'),
+        },
+      }));
+      const client = new BedrockAgentRuntimeClient({
+        region: 'us-east-1',
+        credentials: { accessKeyId: 'LOCAL_FIXTURE', secretAccessKey: 'LOCAL_FIXTURE' },
+        requestHandler: { handle },
+        maxAttempts: 1,
+      });
+      vi.spyOn(provider, 'getKnowledgeBaseClient').mockResolvedValue(client);
+      try {
+        expect((await provider.callApi('question')).error).toContain('fixture request captured');
+        const rawBody = handle.mock.calls[0][0].body;
+        const body = JSON.parse(
+          typeof rawBody === 'string' ? rawBody : Buffer.from(rawBody as Uint8Array).toString(),
+        );
+        expect(body.userContext).toEqual({ userId: 'fixture-user' });
+        const retrieval =
+          operation === 'retrieve'
+            ? body.retrievalConfiguration
+            : body.retrieveAndGenerateConfiguration.knowledgeBaseConfiguration
+                .retrievalConfiguration;
+        expect(retrieval).toEqual({ managedSearchConfiguration: { filter, numberOfResults: 3 } });
+      } finally {
+        client.destroy();
+      }
+    },
+  );
+
   it.each(['retrieve', 'retrieveAndGenerate'] as const)(
     'overrides result counts in managed search for %s',
     async (operation) => {
