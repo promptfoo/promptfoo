@@ -1675,6 +1675,40 @@ describe('HttpProvider with token estimation', () => {
     expect(result.tokenUsage!.total).toBe(8);
   });
 
+  it.each([
+    { output: '', structured: false, completion: 0 },
+    { output: '', structured: true, completion: 0 },
+    { output: 'Hello world', structured: true, completion: 3 },
+  ])(
+    'estimates tokens from transformed output "$output" (structured=$structured)',
+    async ({ output, structured, completion }) => {
+      const provider = new HttpProvider('http://test.com', {
+        config: {
+          method: 'POST',
+          body: { prompt: '{{prompt}}' },
+          tokenEstimation: createEnabledSetting(),
+          transformResponse: () => (structured ? { output } : output),
+        },
+      });
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: JSON.stringify({ message: 'Raw response text must not be counted' }),
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      });
+
+      const result = await provider.callApi('Test prompt');
+
+      expect(result.output).toBe(output);
+      expect(result.tokenUsage).toEqual({
+        prompt: 3,
+        completion,
+        total: 3 + completion,
+        numRequests: 1,
+      });
+    },
+  );
+
   it('should not override existing tokenUsage from transformResponse', async () => {
     const provider = new HttpProvider('http://test.com', {
       config: {

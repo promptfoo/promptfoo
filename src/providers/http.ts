@@ -3027,7 +3027,7 @@ export class HttpProvider implements ApiProvider {
     if (typeof parsedOutput === 'string') {
       return parsedOutput;
     }
-    if (parsedOutput?.output && typeof parsedOutput.output === 'string') {
+    if (typeof parsedOutput?.output === 'string') {
       return parsedOutput.output;
     }
     return rawText;
