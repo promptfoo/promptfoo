@@ -1,0 +1,21 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Bedrock native model request
+prompts:
+  - |
+    {
+      "modelId": "us.amazon.nova-2-lite-v1:0",
+      "body": {
+        "messages": [{"role": "user", "content": [{"text": "Reply with exactly READY."}]}],
+        "inferenceConfig": {"maxTokens": 64}
+      },
+      "serviceTier": "default",
+      "requestMetadata": "{\"suite\":\"native-api-example\"}"
+    }
+providers:
+  - id: bedrock:api:InvokeModel
+    config:
+      region: us-east-1
+tests:
+  - assert:
+      - type: javascript
+        value: JSON.parse(output).body.output.message.content.some(block => block.text?.includes('READY'))
