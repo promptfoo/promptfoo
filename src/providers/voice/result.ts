@@ -24,33 +24,6 @@ interface VoiceResultInput {
   stopReason: string;
 }
 
-/** Merge estimated speaker timing without reordering either listener's delivered text. */
-function mergeListenerTranscripts(
-  transcript: VoiceTranscriptFragment[],
-): VoiceTranscriptFragment[] {
-  const [target, caller] = SPEAKERS.map((speaker) =>
-    transcript.filter((fragment) => fragment.source === 'input' && fragment.speaker === speaker),
-  );
-  const merged: VoiceTranscriptFragment[] = [];
-  let targetIndex = 0;
-  let callerIndex = 0;
-  while (targetIndex < target.length && callerIndex < caller.length) {
-    const targetFragment = target[targetIndex];
-    const callerFragment = caller[callerIndex];
-    const difference =
-      targetFragment.startMs - callerFragment.startMs ||
-      targetFragment.receivedAtMs - callerFragment.receivedAtMs;
-    if (difference <= 0) {
-      merged.push(targetFragment);
-      targetIndex++;
-    } else {
-      merged.push(callerFragment);
-      callerIndex++;
-    }
-  }
-  return merged.concat(target.slice(targetIndex), caller.slice(callerIndex));
-}
-
 /** Preserve partial evidence and separate observed duration from final, billable usage. */
 export function formatVoiceResult({
   transcript,
@@ -97,7 +70,10 @@ export function formatVoiceResult({
   }
   // Generated speech can lead playback. Grade the listener's recognition, so queued or
   // discarded output cannot satisfy assertions before the other participant hears it.
-  const heard = mergeListenerTranscripts(transcript);
+  // Callbacks append on one local clock (receivedAtMs), preserving arrival order even
+  // when timestamps tie. Model start/end estimates can drift across sessions, so they
+  // cannot order speakers. Recognition arrival is not precise acoustic turn timing.
+  const heard = transcript.filter((fragment) => fragment.source === 'input');
   const messages: Array<{ role: 'assistant' | 'user'; content: string }> = [];
   for (const fragment of heard) {
     const role = fragment.speaker === 'caller' ? 'assistant' : 'user';
@@ -183,6 +159,7 @@ export function formatVoiceResult({
         elapsedMs,
         audioChannels: ['target', 'caller'],
         gradingTranscriptSource: 'listener_input',
+        gradingTranscriptOrder: 'listener_event_arrival',
         interventions,
         transcript,
         participants,

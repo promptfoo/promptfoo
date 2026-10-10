@@ -136,7 +136,7 @@ describe('SimulatedVoiceUser', () => {
     expect(p.label).toBe('Cafe');
   });
 
-  it('bridges both directions concurrently and records aligned stereo with chronological transcripts', async () => {
+  it('bridges both directions concurrently and records aligned stereo with listener event order', async () => {
     const result = provider().callApi('Saturday closing time is four.');
     const [target, caller] = await connect();
     expect(target.options.headers.Authorization).toBe('Bearer target-key');
@@ -175,6 +175,7 @@ describe('SimulatedVoiceUser', () => {
       stopReason: 'duration_limit',
       durationMs: 1000,
       audioChannels: ['target', 'caller'],
+      gradingTranscriptOrder: 'listener_event_arrival',
       participants: {
         target: { voiceSeconds: 1, finalUsageConfirmed: true, heard: 'When do you close?Thanks.' },
         caller: { voiceSeconds: 1, heard: 'At four.' },
@@ -240,11 +241,19 @@ describe('SimulatedVoiceUser', () => {
       finalize();
       const response = await result;
       expect(response.error).toBeUndefined();
-      expect(response.output).toBe('User: Are you open?\n---\nAssistant: We are closed.');
-      expect(response.metadata?.messages).toEqual([
+      const messages = [
         { role: 'user', content: 'Are you open?' },
         { role: 'assistant', content: 'We are closed.' },
-      ]);
+      ];
+      if (callerFirst) {
+        messages.reverse();
+      }
+      expect(response.metadata?.messages).toEqual(messages);
+      expect(response.output).toBe(
+        callerFirst
+          ? 'Assistant: We are closed.\n---\nUser: Are you open?'
+          : 'User: Are you open?\n---\nAssistant: We are closed.',
+      );
       expect(response.audio?.transcript).toBe(response.output);
       expect(response.metadata?.voice.participants.target.heard).toBe('Are you open?');
       expect(response.metadata?.voice.participants.caller.heard).toBe('We are closed.');
