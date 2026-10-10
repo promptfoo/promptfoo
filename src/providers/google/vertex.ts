@@ -715,7 +715,9 @@ export class VertexChatProvider extends GoogleGenericProvider {
               modality.toUpperCase(),
             ) ?? ['AUDIO'],
           speechConfig: config.generationConfig?.speechConfig ?? {
-            voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } },
+            voiceConfig: this.modelName.startsWith('gemini-3.8-')
+              ? { voice: 'Kore' }
+              : { prebuiltVoiceConfig: { voiceName: 'Kore' } },
           },
         }),
       },

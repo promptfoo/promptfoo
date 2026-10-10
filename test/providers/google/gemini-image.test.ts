@@ -164,6 +164,98 @@ describe('GeminiImageProvider', () => {
     });
   });
 
+  describe('Nano Banana 2.1', () => {
+    it.each([
+      ['1K', 0.0336],
+      ['2K', 0.0504],
+      ['4K', 0.1134],
+    ])(
+      'sends %s output resolution and bills image plus text/thinking tokens',
+      async (imageSize, imageCost) => {
+        const provider = new GeminiImageProvider('gemini-nano-banana-2.1', {
+          config: {
+            vertexai: false,
+            imageSize: imageSize as '1K' | '2K' | '4K',
+            imageAspectRatio: '8:1',
+          },
+        });
+        mockFetchWithCache.mockResolvedValueOnce({
+          ...createMockFetchResponse(),
+          data: {
+            candidates: [createInlineImageCandidate()],
+            usageMetadata: {
+              promptTokenCount: 100,
+              thoughtsTokenCount: 20,
+              candidatesTokensDetails: [
+                { modality: 'TEXT', tokenCount: 10 },
+                { modality: 'IMAGE', tokenCount: 1120 },
+              ],
+            },
+          },
+        });
+        const result = await provider.callApi('Draw a panorama');
+        expect(result.error).toBeUndefined();
+        expect(result.images).toHaveLength(1);
+        expect(result.cost).toBeCloseTo(
+          Number(imageCost) + (100 * 1.5) / 1e6 + (30 * 7.5) / 1e6,
+          10,
+        );
+        const body = JSON.parse(mockFetchWithCache.mock.calls[0][1]?.body as string);
+        expect(body.generationConfig.imageConfig).toEqual({ imageSize, aspectRatio: '8:1' });
+      },
+    );
+
+    it.each(['IMAGE_SAFETY', 'IMAGE_PROHIBITED_CONTENT', 'IMAGE_RECITATION'])(
+      'preserves the %s refusal and message',
+      async (finishReason) => {
+        mockFetchWithCache.mockResolvedValueOnce({
+          ...createMockFetchResponse(),
+          data: {
+            candidates: [
+              { content: {}, finishReason, finishMessage: 'Unable to show the generated image.' },
+            ],
+          },
+        });
+        const provider = new GeminiImageProvider('gemini-nano-banana-2.1', {
+          config: { vertexai: false },
+        });
+        expect((await provider.callApi('Draw')).error).toContain(
+          `${finishReason}: Unable to show the generated image.`,
+        );
+      },
+    );
+
+    it('uses the global Vertex endpoint', async () => {
+      const client = createMockVertexClient();
+      mockGetGoogleClient.mockResolvedValueOnce({
+        client: client as any,
+        projectId: 'test-project',
+      });
+      const provider = new GeminiImageProvider('gemini-nano-banana-2.1', {
+        config: { projectId: 'test-project', region: 'us-central1', imageSize: '2K' },
+      });
+      expect((await provider.callApi('Draw a panorama')).error).toBeUndefined();
+      expect(client.request).toHaveBeenCalledWith(
+        expect.objectContaining({
+          url: 'https://aiplatform.googleapis.com/v1/projects/test-project/locations/global/publishers/google/models/gemini-nano-banana-2.1:generateContent',
+        }),
+      );
+    });
+
+    it.each([
+      { imageSize: '512px' as const },
+      { generationConfig: { imageConfig: { imageSize: '512px' } } },
+      { temperature: 0 },
+      { generationConfig: { topK: 1 } },
+      { seed: 0 },
+    ])('rejects unsupported settings before a request: %j', async (config) => {
+      const provider = new GeminiImageProvider('gemini-nano-banana-2.1', { config });
+      expect((await provider.callApi('Draw')).error).toBeDefined();
+      expect(mockFetchWithCache).not.toHaveBeenCalled();
+      expect(mockGetGoogleClient).not.toHaveBeenCalled();
+    });
+  });
+
   it('should construct with model name', () => {
     const provider = new GeminiImageProvider('gemini-3-pro-image-preview');
     expect(provider.id()).toBe('google:gemini-3-pro-image-preview');

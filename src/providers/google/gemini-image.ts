@@ -48,6 +48,7 @@ const FLASH_IMAGE_PRICING = { '0.5K': 0.045, '1K': 0.067, '2K': 0.101, '4K': 0.1
 const PRO_IMAGE_PRICING = { '1K': 0.134, '2K': 0.134, '4K': 0.24 }; // Nano Banana Pro
 
 const GEMINI_IMAGE_PRICING: Record<string, Record<string, number>> = {
+  'gemini-nano-banana-2.1': { '1K': 0.0336, '2K': 0.0504, '4K': 0.1134 },
   'gemini-2.5-flash-image': { default: 0.039 }, // Nano Banana
   'gemini-2.5-flash-preview-image-generation': { default: 0.039 }, // Deprecated alias
   'gemini-3.1-flash-lite-image': { default: 0.0336 }, // Nano Banana 2 Lite (1K only)
@@ -66,6 +67,7 @@ const DEFAULT_IMAGE_COST = 0.04;
  * (gemini-2.5-flash-image lists no separate text-output rate.)
  */
 const GEMINI_IMAGE_TOKEN_RATES: Record<string, { input: number; textOutput: number }> = {
+  'gemini-nano-banana-2.1': { input: 1.5 / 1e6, textOutput: 7.5 / 1e6 },
   'gemini-2.5-flash-image': { input: 0.3 / 1e6, textOutput: 0 },
   'gemini-2.5-flash-preview-image-generation': { input: 0.3 / 1e6, textOutput: 0 },
   'gemini-3.1-flash-lite-image': { input: 0.25 / 1e6, textOutput: 1.5 / 1e6 },
@@ -81,6 +83,7 @@ const GEMINI_IMAGE_TOKEN_RATES: Record<string, { input: number; textOutput: numb
  * 1K only (2K/4K unsupported, and 512px is gemini-3.1-flash-image only).
  */
 const MODEL_IMAGE_SIZES: Record<string, string[]> = {
+  'gemini-nano-banana-2.1': ['1K', '2K', '4K'],
   'gemini-3.1-flash-lite-image': ['1K'],
 };
 
@@ -141,14 +144,14 @@ export class GeminiImageProvider implements ApiProvider {
    * Older models (e.g. gemini-2.5) use regional endpoints.
    */
   private usesGlobalVertexEndpoint(): boolean {
-    return this.modelName.startsWith('gemini-3');
+    return this.modelName.startsWith('gemini-3') || this.modelName === 'gemini-nano-banana-2.1';
   }
 
   /**
    * imageSize is supported across Gemini 3.x image models.
    */
   private supportsImageSize(): boolean {
-    return this.modelName.startsWith('gemini-3');
+    return this.modelName.startsWith('gemini-3') || this.modelName === 'gemini-nano-banana-2.1';
   }
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
@@ -161,6 +164,19 @@ export class GeminiImageProvider implements ApiProvider {
     const sizeError = this.validateImageSize();
     if (sizeError) {
       return { error: sizeError };
+    }
+
+    if (this.modelName === 'gemini-nano-banana-2.1') {
+      const unsupported = ['temperature', 'topP', 'topK', 'seed', 'logprobs', 'responseLogprobs'];
+      const configured = unsupported.filter(
+        (key) =>
+          (this.config as Record<string, unknown>)[key] !== undefined ||
+          (this.config.generationConfig as Record<string, unknown> | undefined)?.[key] !==
+            undefined,
+      );
+      if (configured.length > 0) {
+        return { error: `${this.modelName} does not support ${configured.join(', ')}` };
+      }
     }
 
     const aiStudioApiKey = this.getApiKey();
@@ -264,8 +280,13 @@ export class GeminiImageProvider implements ApiProvider {
     // Use header-based auth instead of query param to avoid API key in logs
     const endpoint = `https://${apiHost}/${apiVersion}/models/${this.modelName}:generateContent`;
 
-    const { contents } = geminiFormatAndSystemInstructions(prompt, context?.vars);
-    const body = this.buildRequestBody(contents);
+    const { contents, systemInstruction } = geminiFormatAndSystemInstructions(
+      prompt,
+      context?.vars,
+      this.config.systemInstruction,
+      { basePath: this.config.basePath, useAssistantRole: this.config.useAssistantRole },
+    );
+    const body = this.buildRequestBody(contents, systemInstruction);
 
     try {
       const headers: Record<string, string> = {
@@ -313,8 +334,13 @@ export class GeminiImageProvider implements ApiProvider {
     const apiVersion =
       this.config.apiVersion || resolveProviderEnv(this.env, ['VERTEX_API_VERSION'])?.value || 'v1';
     const endpoint = `${apiHost.replace(/\/+$/, '')}/${apiVersion}/publishers/google/models/${this.modelName}:generateContent`;
-    const { contents } = geminiFormatAndSystemInstructions(prompt, context?.vars);
-    const body = this.buildRequestBody(contents);
+    const { contents, systemInstruction } = geminiFormatAndSystemInstructions(
+      prompt,
+      context?.vars,
+      this.config.systemInstruction,
+      { basePath: this.config.basePath, useAssistantRole: this.config.useAssistantRole },
+    );
+    const body = this.buildRequestBody(contents, systemInstruction);
 
     try {
       const headers: Record<string, string> = {
@@ -385,8 +411,13 @@ export class GeminiImageProvider implements ApiProvider {
       logger.debug(`Vertex AI Gemini Image API endpoint: ${endpoint}`);
       logger.debug(`Project ID: ${projectId}, Location: ${location}, Model: ${this.modelName}`);
 
-      const { contents } = geminiFormatAndSystemInstructions(prompt, context?.vars);
-      const body = this.buildRequestBody(contents);
+      const { contents, systemInstruction } = geminiFormatAndSystemInstructions(
+        prompt,
+        context?.vars,
+        this.config.systemInstruction,
+        { basePath: this.config.basePath, useAssistantRole: this.config.useAssistantRole },
+      );
+      const body = this.buildRequestBody(contents, systemInstruction);
 
       const startTime = Date.now();
       const response = await client.request({
@@ -414,9 +445,10 @@ export class GeminiImageProvider implements ApiProvider {
     }
   }
 
-  private buildRequestBody(contents: any): Record<string, any> {
+  private buildRequestBody(contents: any, systemInstruction?: unknown): Record<string, any> {
     const body: Record<string, any> = {
       contents,
+      ...(systemInstruction ? { systemInstruction } : {}),
       generationConfig: {
         responseModalities: ['TEXT', 'IMAGE'],
         ...(this.config.temperature !== undefined && { temperature: this.config.temperature }),
@@ -500,12 +532,19 @@ export class GeminiImageProvider implements ApiProvider {
     // Check if candidate was blocked
     if (
       candidate.finishReason &&
-      ['SAFETY', 'RECITATION', 'PROHIBITED_CONTENT', 'BLOCKLIST', 'SPII'].includes(
-        candidate.finishReason,
-      )
+      [
+        'SAFETY',
+        'RECITATION',
+        'PROHIBITED_CONTENT',
+        'BLOCKLIST',
+        'SPII',
+        'IMAGE_SAFETY',
+        'IMAGE_PROHIBITED_CONTENT',
+        'IMAGE_RECITATION',
+      ].includes(candidate.finishReason)
     ) {
       return {
-        error: `Response was blocked with finish reason: ${candidate.finishReason}`,
+        error: `Response was blocked with finish reason: ${candidate.finishReason}${candidate.finishMessage ? `: ${candidate.finishMessage}` : ''}`,
       };
     }
 

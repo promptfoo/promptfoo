@@ -2569,6 +2569,14 @@ describe('Provider Registry', () => {
       ],
       // Nano Banana 2 / 2 Lite / Pro GA: bare google:<model> routes dispatch on the '-image' substring.
       [
+        'google:gemini-nano-banana-2.1',
+        async () => (await import('../../src/providers/google/gemini-image')).GeminiImageProvider,
+      ],
+      [
+        'palm:gemini-nano-banana-2.1',
+        async () => (await import('../../src/providers/google/gemini-image')).GeminiImageProvider,
+      ],
+      [
         'google:gemini-3.1-flash-lite-image',
         async () => (await import('../../src/providers/google/gemini-image')).GeminiImageProvider,
       ],

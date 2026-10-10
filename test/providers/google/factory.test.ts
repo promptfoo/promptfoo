@@ -32,11 +32,14 @@ describe('Google provider factories', () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
+    vi.stubEnv('VERTEX_REGION', '');
+    vi.stubEnv('GOOGLE_CLOUD_LOCATION', '');
     vi.mocked(cache.fetchWithCache).mockResolvedValue(createMockFetchResponse(data));
     vi.mocked(fetchUtil.fetchWithProxy).mockResolvedValue(Response.json(data));
   });
 
   afterEach(() => {
+    vi.unstubAllEnvs();
     vi.restoreAllMocks();
     vi.resetAllMocks();
   });
@@ -85,6 +88,80 @@ describe('Google provider factories', () => {
       expect(googleUtil.getGoogleClient).not.toHaveBeenCalled();
     },
   );
+
+  it('routes Nano Banana 2.1 to image generation and retains system instructions', async () => {
+    const provider = await loadApiProvider('google:gemini-nano-banana-2.1', {
+      options: {
+        config: {
+          apiKey: 'test-key',
+          vertexai: false,
+          systemInstruction: 'Use a blue background',
+          imageSize: '2K',
+        },
+      },
+    });
+    vi.mocked(cache.fetchWithCache).mockResolvedValue(
+      createMockFetchResponse({
+        candidates: [
+          { content: { parts: [{ inlineData: { mimeType: 'image/png', data: 'aW1hZ2U=' } }] } },
+        ],
+      }),
+    );
+    const response = await provider.callApi('Draw a circle');
+    expect(response.images).toHaveLength(1);
+    expect(
+      JSON.parse(vi.mocked(cache.fetchWithCache).mock.calls[0][1]?.body as string),
+    ).toMatchObject({
+      systemInstruction: { parts: [{ text: 'Use a blue background' }] },
+      generationConfig: { responseModalities: ['TEXT', 'IMAGE'], imageConfig: { imageSize: '2K' } },
+    });
+  });
+
+  it.each([
+    'google:gemini-3.8-flash-tts',
+    'palm:gemini-3.8-flash-lite-tts',
+    'vertex:gemini-3.8-flash-tts',
+    'vertex:chat:gemini-3.8-flash-lite-tts',
+  ])('preserves speech metadata, WAV bytes, and modern voice defaults through %s', async (id) => {
+    const wav = Buffer.from('RIFF....WAVEfmt ....data....');
+    const audioResponse = {
+      candidates: [
+        {
+          content: {
+            parts: [{ inlineData: { mimeType: 'audio/wav', data: wav.toString('base64') } }],
+          },
+        },
+      ],
+      usageMetadata: {
+        promptTokenCount: 10,
+        candidatesTokenCount: 25,
+        totalTokenCount: 35,
+        candidatesTokensDetails: [{ modality: 'AUDIO', tokenCount: 25 }],
+      },
+    };
+    vi.mocked(cache.fetchWithCache).mockResolvedValue(createMockFetchResponse(audioResponse));
+    vi.mocked(fetchUtil.fetchWithProxy).mockResolvedValue(Response.json(audioResponse));
+    const provider = await loadApiProvider(id, { options: { config: { apiKey: 'test-key' } } });
+    const parts = [{ text: 'Hello.', speechMetadata: { style: 'cheerful', speaker: 'Narrator' } }];
+    const response = await provider.callApi(JSON.stringify([{ role: 'user', parts }]));
+    expect(response.error).toBeUndefined();
+    expect(response.audio).toEqual({ data: wav.toString('base64'), format: 'wav' });
+    expect(response.cost).toBeGreaterThan(0);
+    const request = id.startsWith('vertex:')
+      ? vi.mocked(fetchUtil.fetchWithProxy).mock.calls[0]
+      : vi.mocked(cache.fetchWithCache).mock.calls[0];
+    expect(request[0]).toMatch(/:generateContent$/);
+    if (id.startsWith('vertex:')) {
+      expect(request[0]).toMatch(/^https:\/\/aiplatform.googleapis.com\//);
+    }
+    expect(JSON.parse(request[1]?.body as string)).toMatchObject({
+      contents: [{ role: 'user', parts }],
+      generationConfig: {
+        responseModalities: ['AUDIO'],
+        speechConfig: { voiceConfig: { voice: 'Kore' } },
+      },
+    });
+  });
 
   it('uses OAuth when Vertex Express is explicitly disabled', async () => {
     const request = vi.fn().mockResolvedValue({ data });

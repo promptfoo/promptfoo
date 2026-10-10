@@ -14,6 +14,8 @@ Use `vertex:` for all Vertex AI models (Gemini, Claude, Llama, etc.). Use `googl
 
 ## Available Models
 
+For Gemini speech generation, use `vertex:gemini-3.8-flash-tts` or `vertex:gemini-3.8-flash-lite-tts` with `config.region: global`. These models use `generateContent` (or `streamGenerateContent` with `streaming: true`), support the same [speech configuration](/docs/providers/google#text-to-speech), and return audio in `providerResponse.audio`. They are [Preview on Vertex](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/gemini/3-8-flash-tts); check project access before use.
+
 ### Gemini Models
 
 **Gemini 3.8:**
