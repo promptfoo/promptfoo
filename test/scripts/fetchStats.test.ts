@@ -54,7 +54,7 @@ describe('site statistics pre-build script', () => {
       if (String(url).includes('/contributors')) {
         return response([], { link: '<https://api.github.com/contributors?page=421>; rel="last"' });
       }
-      return String(url).includes('api.github.com')
+      return new URL(String(url)).hostname === 'api.github.com'
         ? response({ stargazers_count: 12500 })
         : response({ downloads: 123456 });
     });
@@ -84,7 +84,7 @@ describe('site statistics pre-build script', () => {
         if (String(url).includes('/contributors')) {
           return response([{}, {}]);
         }
-        if (String(url).includes('api.npmjs.org')) {
+        if (new URL(String(url)).hostname === 'api.npmjs.org') {
           return response({ downloads: 2000 });
         }
         const pending = () =>
@@ -117,7 +117,7 @@ describe('site statistics pre-build script', () => {
       if (String(url).includes('/contributors')) {
         return new Response('invalid JSON');
       }
-      if (String(url).includes('api.npmjs.org')) {
+      if (new URL(String(url)).hostname === 'api.npmjs.org') {
         throw new Error('Network unavailable');
       }
       return new Response('unavailable', { status: 503, statusText: 'Service Unavailable' });
