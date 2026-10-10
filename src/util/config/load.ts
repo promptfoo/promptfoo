@@ -41,7 +41,11 @@ import { readFilters, renderEnvOnlyInObject } from '../../util/index';
 import invariant from '../../util/invariant';
 import { PromptSchema } from '../../validators/prompts';
 import { filterPrompts } from '../eval/filterPrompts';
-import { filterProviderConfigs, getProviderIdAndLabel } from '../eval/filterProviders';
+import {
+  filterProviderConfigs,
+  getExcludedProviders,
+  getProviderIdAndLabel,
+} from '../eval/filterProviders';
 import { filterTests } from '../eval/filterTests';
 import { promptfooCommand } from '../promptfooCommand';
 import { preserveTracingCredentialReferences } from '../sanitizer';
@@ -1299,10 +1303,14 @@ async function resolveLoadedConfig(
     typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest : undefined,
   );
 
-  // Validate provider references in tests and scenarios
+  // Validate provider references in tests and scenarios. A test may reference a provider that
+  // --filter-providers excluded; it just won't run on it.
+  const excludedProviders = getExcludedProviders(resolvedProviderConfigs, filteredProviderConfigs);
   validateTestProviderReferences(
     testSuite.tests || [],
-    testSuite.providers,
+    excludedProviders.length > 0
+      ? [...testSuite.providers, ...excludedProviders]
+      : testSuite.providers,
     typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest : undefined,
     testSuite.scenarios,
   );
