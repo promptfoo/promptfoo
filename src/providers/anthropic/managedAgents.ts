@@ -212,6 +212,33 @@ function collectSecrets(value: unknown, key: string, found: Set<string>, depth =
   return found;
 }
 
+/** Every credential one call sends: the API key, custom header values, and config secrets. */
+function callSecrets(config: ManagedAgentsOptions, apiKey?: string): Set<string> {
+  const secrets = collectSecrets(config, '', new Set<string>());
+  for (const value of [apiKey, ...Object.values(config.headers ?? {})]) {
+    if (typeof value === 'string' && value.length >= 8) {
+      secrets.add(value);
+    }
+  }
+  return secrets;
+}
+
+/**
+ * How a failed archive request can still end well. A state conflict clears once the
+ * session stops running. A lost response, rate limit, or server error may have
+ * archived the session anyway, or may clear on retry. Anything else is final.
+ */
+function archiveFailureKind(error: unknown): 'conflict' | 'transient' | undefined {
+  if (!(error instanceof Anthropic.APIError)) {
+    return undefined;
+  }
+  const { status } = error;
+  if (status === 400 || status === 409) {
+    return 'conflict';
+  }
+  return status === undefined || status === 429 || status >= 500 ? 'transient' : undefined;
+}
+
 /**
  * Reports the API's own reason, which is what makes a rejected agent, environment,
  * or session definition fixable. That text can echo request values, so the
@@ -426,13 +453,8 @@ export class AnthropicManagedAgentsProvider extends AnthropicGenericProvider {
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     const config = renderVarsInObject(this.config, context?.vars ?? {}) as ManagedAgentsOptions;
-    // Credentials this call sends; reported API error text is scrubbed of them.
-    const secrets = collectSecrets(config, '', new Set<string>());
-    for (const value of [this.apiKey, ...Object.values(config.headers ?? {})]) {
-      if (typeof value === 'string' && value.length >= 8) {
-        secrets.add(value);
-      }
-    }
+    // Reported API error text is scrubbed of the credentials this call sends.
+    const secrets = callSecrets(config, this.apiKey);
     const controller = new AbortController();
     const timeoutMs = config.timeoutMs ?? 600_000;
     const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -673,7 +695,7 @@ export class AnthropicManagedAgentsProvider extends AnthropicGenericProvider {
     let settled = false;
     try {
       for (let delayMs = 250; ; delayMs = Math.min(delayMs * 2, 2_000)) {
-        let transient = false;
+        let failure: ReturnType<typeof archiveFailureKind>;
         try {
           await this.anthropic.beta.sessions.archive(sessionId, params, request);
           return undefined;
@@ -682,11 +704,8 @@ export class AnthropicManagedAgentsProvider extends AnthropicGenericProvider {
             throw error;
           }
           refusal = describeError(error, secrets);
-          const status = error instanceof Anthropic.APIError ? error.status : null;
-          // A lost response, rate limit, or server error may still have archived the
-          // session, or may clear on retry. Archiving again repeats no hosted work.
-          transient = status === undefined || status === 429 || (status ?? 0) >= 500;
-          if (!transient && status !== 400 && status !== 409) {
+          failure = archiveFailureKind(error);
+          if (!failure) {
             return refusal;
           }
         }
@@ -695,14 +714,16 @@ export class AnthropicManagedAgentsProvider extends AnthropicGenericProvider {
           return undefined;
         }
         running = session.status === 'running' || session.status === 'rescheduling';
+        const wait = running || failure === 'transient';
         // Refused while settled both before and after the attempt: waiting will not
         // help a session that, for example, still has an open workflow run.
-        if (!transient && !running && settled) {
+        if (!wait && settled) {
           return refusal;
         }
-        settled = !transient && !running;
-        // A session that settled since the refusal is retried at once.
-        if (running || transient) {
+        settled = !wait;
+        // A session that settled since the refusal is retried at once. Archiving
+        // again repeats no hosted work.
+        if (wait) {
           await sleepWithAbort(delayMs, request.signal);
         }
       }
