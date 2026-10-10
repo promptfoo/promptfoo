@@ -2908,6 +2908,8 @@ describe('AIStudioChatProvider', () => {
       });
 
       it('should price cached and audio usage for AI Studio responses', async () => {
+        // Exercise the original 3.5 rates before the Gemini API redirected this ID.
+        vi.spyOn(Date, 'now').mockReturnValue(Date.UTC(2026, 8, 1));
         const provider = new AIStudioChatProvider('gemini-3.5-flash', {
           config: { apiKey: 'test-key', passthrough: { service_tier: 'priority' } },
         });
