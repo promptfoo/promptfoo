@@ -32,7 +32,12 @@ const OPERATIONS = {
   GetAsyncInvoke: { service: 'runtime', method: 'getAsyncInvoke' },
   Retrieve: { service: 'agent', method: 'retrieve' },
   GenerateQuery: { service: 'agent', method: 'generateQuery' },
-  AgenticRetrieveStream: { service: 'agent', method: 'agenticRetrieveStream', stream: 'stream' },
+  AgenticRetrieveStream: {
+    service: 'agent',
+    method: 'agenticRetrieveStream',
+    stream: 'stream',
+    maxAttempts: 1,
+  },
   OptimizePrompt: { service: 'agent', method: 'optimizePrompt', stream: 'optimizedPrompt' },
   InvokeInlineAgent: {
     service: 'agent',
@@ -43,11 +48,12 @@ const OPERATIONS = {
   StartFlowExecution: { service: 'agent', method: 'startFlowExecution', maxAttempts: 1 },
   GetFlowExecution: { service: 'agent', method: 'getFlowExecution' },
   ListFlowExecutionEvents: { service: 'agent', method: 'listFlowExecutionEvents' },
-  RetrieveAndGenerate: { service: 'agent', method: 'retrieveAndGenerate' },
+  RetrieveAndGenerate: { service: 'agent', method: 'retrieveAndGenerate', maxAttempts: 1 },
   RetrieveAndGenerateStream: {
     service: 'agent',
     method: 'retrieveAndGenerateStream',
     stream: 'stream',
+    maxAttempts: 1,
   },
   InvokeAgent: { service: 'agent', method: 'invokeAgent', stream: 'completion', maxAttempts: 1 },
   Rerank: { service: 'agent', method: 'rerank' },
@@ -127,7 +133,7 @@ export class AwsBedrockNativeApiProvider extends AwsBedrockGenericProvider {
   protected getMaxAttempts(): number {
     const operation = OPERATIONS[this.operation];
     if ('maxAttempts' in operation) {
-      // Agent and Flow invocations have no request idempotency token.
+      // These operations can mutate server-side state and have no request idempotency token.
       return operation.maxAttempts;
     }
     const raw = this.config.maxRetries;

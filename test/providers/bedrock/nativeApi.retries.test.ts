@@ -11,6 +11,14 @@ const countRequest = JSON.stringify({
   modelId: 'test.model',
   input: { converse: { messages: [{ role: 'user', content: [{ text: 'hello' }] }] } },
 });
+const existingSessionRequest = {
+  sessionId: 'existing-session',
+  input: { text: 'Continue the conversation' },
+  retrieveAndGenerateConfiguration: {
+    type: 'KNOWLEDGE_BASE',
+    knowledgeBaseConfiguration: { knowledgeBaseId: 'KB12345678', modelArn: 'test.model' },
+  },
+};
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -117,6 +125,21 @@ describe('native Bedrock retry ownership', () => {
         foundationModel: 'test.model',
         instruction: 'Answer the user',
         inputText: 'hello',
+      },
+    ],
+    ['RetrieveAndGenerate', existingSessionRequest],
+    ['RetrieveAndGenerateStream', existingSessionRequest],
+    [
+      'AgenticRetrieveStream',
+      {
+        messages: [{ role: 'user', content: { text: 'Continue the conversation' } }],
+        retrievers: [{ configuration: { knowledgeBase: { knowledgeBaseId: 'KB12345678' } } }],
+        agenticRetrieveConfiguration: { foundationModelType: 'MANAGED' },
+        generateResponse: true,
+        memoryConfiguration: {
+          memoryId: 'fixture-1234567890',
+          sessionBinding: { actorId: 'actor', sessionId: 'existing-session' },
+        },
       },
     ],
   ] as const)('does not replay %s after a lost response', async (operation, input) => {
