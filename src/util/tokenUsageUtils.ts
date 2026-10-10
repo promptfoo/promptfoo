@@ -1,3 +1,4 @@
+import { addCompletionDetails } from '../contracts/completionDetails';
 import {
   BaseTokenUsageSchema,
   type CompletionTokenDetails,
@@ -124,9 +125,6 @@ function getAccumulatedTokenTotal(usage: Partial<TokenUsage>): number {
   return componentTotal;
 }
 
-/**
- * Helper to accumulate completion details
- */
 function accumulateCompletionDetails(
   target: CompletionTokenDetails | undefined,
   update: CompletionTokenDetails | undefined,
@@ -135,16 +133,7 @@ function accumulateCompletionDetails(
     return target;
   }
 
-  return {
-    reasoning: addNumbers(target?.reasoning, update.reasoning),
-    acceptedPrediction: addNumbers(target?.acceptedPrediction, update.acceptedPrediction),
-    rejectedPrediction: addNumbers(target?.rejectedPrediction, update.rejectedPrediction),
-    cacheReadInputTokens: addNumbers(target?.cacheReadInputTokens, update.cacheReadInputTokens),
-    cacheCreationInputTokens: addNumbers(
-      target?.cacheCreationInputTokens,
-      update.cacheCreationInputTokens,
-    ),
-  };
+  return addCompletionDetails(target, update);
 }
 
 /**

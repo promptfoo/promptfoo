@@ -2,7 +2,7 @@
 # runs the Docker container, performs a health check to ensure the application
 # is running correctly, and then publishes the image to GitHub Container Registry
 # if all checks pass. This action is triggered by the release-please workflow,
-# published human-created releases, workflow dispatch, pull requests to main that
+# published human-created releases, workflow dispatch, pull requests that
 # modify the Docker/runtime update contract, and matching pushes to main.
 
 name: Test and Publish Multi-arch Docker Image
@@ -32,11 +32,13 @@ on:
     types:
       - published
   pull_request:
-    branches:
-      - main
-    paths:
+    # Include stacked PRs so their final images receive the same runtime checks.
+    paths: &runtime-paths
       - '.github/workflows/docker.yml'
       - 'Dockerfile'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'scripts/testDockerImage.js'
       - 'src/envars.ts'
       - 'src/server/routes/version*.ts'
       - 'src/types/api/version.ts'
@@ -45,14 +47,7 @@ on:
   push:
     branches:
       - main
-    paths:
-      - '.github/workflows/docker.yml'
-      - 'Dockerfile'
-      - 'src/envars.ts'
-      - 'src/server/routes/version*.ts'
-      - 'src/types/api/version.ts'
-      - 'src/updates.ts'
-      - 'src/updates/**'
+    paths: *runtime-paths
 
 concurrency:
   # Reusable workflow calls inherit the caller's github.workflow value. Keep this
@@ -70,7 +65,7 @@ env:
   # Fallback release paths build a specific tag outside release-please.yml.
   IS_RELEASE_FALLBACK: ${{ (github.event_name == 'workflow_dispatch' && inputs.tag_name != '') || github.event_name == 'release' }}
 
-permissions:
+permissions: &read-only-permissions
   contents: read
 
 jobs:
@@ -80,11 +75,11 @@ jobs:
     if: github.event_name != 'release' || github.event.release.author.type != 'Bot'
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    permissions:
-      contents: read
+    permissions: *read-only-permissions
 
     steps:
-      - name: Validate release tag
+      - &validate-release-tag
+        name: Validate release tag
         if: github.event_name == 'release' || env.RELEASE_TAG != ''
         run: |
           if [[ ! "$RELEASE_TAG" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9.-]+)?$ ]]; then
@@ -109,14 +104,16 @@ jobs:
           persist-credentials: false
 
       # github.sha is the trigger SHA; SOURCE_REF can point checkout at a different tag.
-      - name: Resolve source commit
+      - &resolve-source-commit
+        name: Resolve source commit
         id: source
         run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a # v4
 
-      - name: Set up Docker Buildx
+      - &set-up-docker-buildx
+        name: Set up Docker Buildx
         uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4
 
       - name: Build official Docker image for testing
@@ -148,6 +145,12 @@ jobs:
             BUILD_DATE=${{ env.BUILD_DATE }}
             GIT_SHA=${{ steps.source.outputs.sha }}
             PROMPTFOO_OFFICIAL_DOCKER_IMAGE=0
+
+      - name: Test final-image runtime dependencies
+        run: |
+          docker run --rm --network none -i \
+            -e PROMPTFOO_TEST_PRODUCTION_DEPS=1 \
+            local-test-image:official node --input-type=module < scripts/testDockerImage.js
 
       - name: Run Docker containers for testing
         run: |
@@ -274,13 +277,7 @@ jobs:
       contents: read
       packages: write
     steps:
-      - name: Validate release tag
-        if: github.event_name == 'release' || env.RELEASE_TAG != ''
-        run: |
-          if [[ ! "$RELEASE_TAG" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9.-]+)?$ ]]; then
-            echo "::error::RELEASE_TAG '$RELEASE_TAG' is empty or invalid"
-            exit 1
-          fi
+      - *validate-release-tag
 
       - name: Checkout repository
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -288,15 +285,12 @@ jobs:
           ref: ${{ env.SOURCE_REF }}
 
       # github.sha is the trigger SHA; SOURCE_REF can point checkout at a different tag.
-      - name: Resolve source commit
-        id: source
-        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - *resolve-source-commit
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a # v4
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4
+      - *set-up-docker-buildx
 
       - name: Docker meta
         id: meta
@@ -306,7 +300,8 @@ jobs:
           labels: |
             org.opencontainers.image.revision=${{ steps.source.outputs.sha }}
 
-      - name: Log in to the Container registry
+      - &log-in-to-the-container-registry
+        name: Log in to the Container registry
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
         with:
           registry: ${{ env.REGISTRY }}
@@ -361,15 +356,9 @@ jobs:
           pattern: digests-*
           merge-multiple: true
 
-      - name: Log in to the Container registry
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+      - *log-in-to-the-container-registry
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4
+      - *set-up-docker-buildx
 
       - name: Docker meta
         id: meta
@@ -422,12 +411,7 @@ jobs:
       packages: write
 
     steps:
-      - name: Log in to the Container registry
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+      - *log-in-to-the-container-registry
 
       - name: Attest Build Provenance
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4

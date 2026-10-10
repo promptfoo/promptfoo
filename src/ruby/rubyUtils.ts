@@ -3,6 +3,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { promisify } from 'util';
 
+import cliState from '../cliState';
 import { getEnvString, getProcessEnv } from '../envars';
 import { getWrapperDir } from '../esm';
 import logger from '../logger';
@@ -14,6 +15,7 @@ import {
 } from '../util/secureTempFiles';
 
 const execFileAsync = promisify(execFile);
+const invocationValidations = new WeakMap<object, Map<string, Promise<string>>>();
 
 function logStderr(stderr: string): void {
   for (const line of stderr.split(/\r?\n/)) {
@@ -54,30 +56,13 @@ function logStderr(stderr: string): void {
 }
 
 /**
- * Global state for Ruby executable path caching.
- * Ensures consistent Ruby executable usage across multiple provider instances.
- */
-export const state: {
-  /** The cached validated Ruby executable path */
-  cachedRubyPath: string | null;
-  /** Promise for in-progress validation to prevent duplicate validation attempts */
-  validationPromise: Promise<string> | null;
-  /** The Ruby path currently being validated to detect path changes */
-  validatingPath: string | null;
-} = {
-  cachedRubyPath: null,
-  validationPromise: null,
-  validatingPath: null,
-};
-
-/**
  * Attempts to find Ruby using Windows 'where' command.
  * Only applicable on Windows platforms.
  * @returns The validated Ruby executable path, or null if not found
  */
 async function tryWindowsWhere(): Promise<string | null> {
   try {
-    const result = await execFileAsync('where', ['ruby']);
+    const result = await execFileAsync('where', ['ruby'], { env: getProcessEnv() });
     const output = result.stdout.trim();
 
     // Handle empty output
@@ -123,7 +108,9 @@ async function tryWindowsWhere(): Promise<string | null> {
 async function tryRubyCommands(commands: string[]): Promise<string | null> {
   for (const cmd of commands) {
     try {
-      const result = await execFileAsync(cmd, ['-e', 'puts RbConfig.ruby']);
+      const result = await execFileAsync(cmd, ['-e', 'puts RbConfig.ruby'], {
+        env: getProcessEnv(),
+      });
       const executablePath = result.stdout.trim();
       if (executablePath && executablePath !== 'None') {
         return executablePath;
@@ -207,102 +194,64 @@ export async function getSysExecutable(): Promise<string | null> {
  * @returns The validated path if successful, or null if invalid.
  */
 export async function tryPath(path: string): Promise<string | null> {
-  let timeoutId: NodeJS.Timeout | undefined;
-
   try {
-    const timeoutPromise = new Promise<never>((_, reject) => {
-      timeoutId = setTimeout(() => reject(new Error('Command timed out')), 2500);
+    const result = await execFileAsync(path, ['--version'], {
+      env: getProcessEnv(),
+      timeout: 2500,
+      killSignal: 'SIGKILL',
     });
-
-    const result = await Promise.race([execFileAsync(path, ['--version']), timeoutPromise]);
-
-    if (timeoutId) {
-      clearTimeout(timeoutId);
-    }
-
-    const versionOutput = (result as { stdout: string }).stdout.trim();
-    if (versionOutput.toLowerCase().includes('ruby')) {
-      return path;
-    }
-    return null;
+    return result.stdout.trim().toLowerCase().includes('ruby') ? path : null;
   } catch {
-    if (timeoutId) {
-      clearTimeout(timeoutId);
-    }
     return null;
   }
 }
 
-/**
- * Validates and caches the Ruby executable path.
- *
- * @param rubyPath - Path to the Ruby executable.
- * @param isExplicit - If true, only tries the provided path.
- * @returns Validated Ruby executable path.
- * @throws {Error} If no valid Ruby executable is found.
- */
+/** Share validation within an invocation; failed probes can be retried. */
 export async function validateRubyPath(rubyPath: string, isExplicit: boolean): Promise<string> {
-  // Return cached result only if it matches the requested path
-  if (state.cachedRubyPath && state.validatingPath === rubyPath) {
-    return state.cachedRubyPath;
+  const scope = cliState.envScope;
+  if (!scope) {
+    return validateExecutable(rubyPath, isExplicit);
   }
 
-  // If validating a different path, clear cache and promise
-  if (state.validatingPath !== rubyPath) {
-    state.cachedRubyPath = null;
-    state.validationPromise = null;
-    state.validatingPath = rubyPath;
+  let validations = invocationValidations.get(scope);
+  if (!validations) {
+    validations = new Map();
+    invocationValidations.set(scope, validations);
+  }
+  const key = JSON.stringify([rubyPath, isExplicit]);
+  let validation = validations.get(key);
+  if (!validation) {
+    validation = validateExecutable(rubyPath, isExplicit).catch((error) => {
+      validations.delete(key);
+      throw error;
+    });
+    validations.set(key, validation);
+  }
+  return validation;
+}
+
+async function validateExecutable(rubyPath: string, isExplicit: boolean): Promise<string> {
+  const primaryPath = await tryPath(rubyPath);
+  if (primaryPath) {
+    return primaryPath;
   }
 
-  // Create validation promise atomically if it doesn't exist
-  // This prevents race conditions where multiple calls create separate validations
-  if (!state.validationPromise) {
-    state.validationPromise = (async () => {
-      try {
-        const primaryPath = await tryPath(rubyPath);
-        if (primaryPath) {
-          state.cachedRubyPath = primaryPath;
-          state.validationPromise = null;
-          return primaryPath;
-        }
+  const guidance =
+    `Please ensure Ruby is installed and set the PROMPTFOO_RUBY environment variable ` +
+    `to your Ruby executable path (e.g., '${process.platform === 'win32' ? 'C:\\Ruby32\\bin\\ruby.exe' : '/usr/bin/ruby'}').`;
 
-        if (isExplicit) {
-          const error = new Error(
-            `Ruby not found. Tried "${rubyPath}" ` +
-              `Please ensure Ruby is installed and set the PROMPTFOO_RUBY environment variable ` +
-              `to your Ruby executable path (e.g., '${process.platform === 'win32' ? 'C:\\Ruby32\\bin\\ruby.exe' : '/usr/bin/ruby'}').`,
-          );
-          // Clear promise on error to allow retry
-          state.validationPromise = null;
-          throw error;
-        }
-
-        // Try to get Ruby executable using comprehensive detection
-        const detectedPath = await getSysExecutable();
-        if (detectedPath) {
-          state.cachedRubyPath = detectedPath;
-          state.validationPromise = null;
-          return detectedPath;
-        }
-
-        const error = new Error(
-          `Ruby not found. Tried "${rubyPath}", ruby executable detection, and fallback commands. ` +
-            `Please ensure Ruby is installed and set the PROMPTFOO_RUBY environment variable ` +
-            `to your Ruby executable path (e.g., '${process.platform === 'win32' ? 'C:\\Ruby32\\bin\\ruby.exe' : '/usr/bin/ruby'}').`,
-        );
-        // Clear promise on error to allow retry
-        state.validationPromise = null;
-        throw error;
-      } catch (error) {
-        // Ensure promise is cleared on any error
-        state.validationPromise = null;
-        throw error;
-      }
-    })();
+  if (isExplicit) {
+    throw new Error(`Ruby not found. Tried "${rubyPath}" ${guidance}`);
   }
 
-  // Return the existing or newly-created promise
-  return state.validationPromise;
+  const detectedPath = await getSysExecutable();
+  if (detectedPath) {
+    return detectedPath;
+  }
+
+  throw new Error(
+    `Ruby not found. Tried "${rubyPath}", ruby executable detection, and fallback commands. ${guidance}`,
+  );
 }
 
 /**
@@ -320,14 +269,16 @@ export async function runRuby<T = unknown>(
   scriptPath: string,
   method: string,
   args: (string | number | object | undefined)[],
-  options: { rubyExecutable?: string } = {},
+  options: { rubyExecutable?: string; abortSignal?: AbortSignal } = {},
 ): Promise<T> {
+  options.abortSignal?.throwIfAborted();
   const absPath = path.resolve(scriptPath);
   const customPath = options.rubyExecutable || getEnvString('PROMPTFOO_RUBY');
   let rubyPath = customPath || 'ruby';
   let tempDirectory: string | undefined;
 
   rubyPath = await validateRubyPath(rubyPath, typeof customPath === 'string');
+  options.abortSignal?.throwIfAborted();
 
   const wrapperPath = path.join(getWrapperDir('ruby'), 'wrapper.rb');
 
@@ -341,11 +292,29 @@ export async function runRuby<T = unknown>(
     const outputPath = await writeSecureTempFile(tempDirectory, 'output.json', '');
     logger.debug('[Ruby] Running script', { scriptPath: absPath, method });
 
-    const { stdout, stderr } = await execFileAsync(
+    options.abortSignal?.throwIfAborted();
+    const execution = execFileAsync(
       rubyPath,
       [wrapperPath, absPath, method, tempJsonPath, outputPath],
-      { env: getProcessEnv() },
+      {
+        env: getProcessEnv(),
+        ...(options.abortSignal ? { signal: options.abortSignal } : {}),
+      },
     );
+
+    const closed =
+      options.abortSignal && execution.child
+        ? new Promise<void>((resolve) => execution.child.once('close', () => resolve()))
+        : undefined;
+    // execFile abort sends SIGTERM, which a provider may ignore.
+    const { stdout, stderr } = await execution.finally(async () => {
+      if (options.abortSignal?.aborted) {
+        execution.child?.kill('SIGKILL');
+      }
+      // Keep the request files until the process exits.
+      await closed;
+    });
+    options.abortSignal?.throwIfAborted();
 
     if (stdout) {
       logger.debug(stdout.trim());
@@ -374,6 +343,7 @@ export async function runRuby<T = unknown>(
 
     return result.data;
   } catch (error) {
+    options.abortSignal?.throwIfAborted();
     logger.error(
       `Error running Ruby script: ${(error as Error).message}\nStack Trace: ${
         (error as Error).stack || 'No Ruby traceback available'
