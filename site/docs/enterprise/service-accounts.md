@@ -55,6 +55,8 @@ Assign the service account only to the teams the pipeline needs. For the local e
 
 ## Using a Service Account in CI
 
+Run this example on a trusted ephemeral runner with process-argument capture disabled. The login command passes the key as an argument. Configure the CI platform to destroy the runner after every job, including forced cancellation.
+
 Install your chosen Promptfoo CLI version in the runner and store the service account key as the CI secret `PROMPTFOO_API_KEY`. Keep shell tracing disabled so the login command does not print the key.
 
 For an on-prem deployment, use its API origin for `--host` and the assigned team's name, slug, or ID for `--team`:
@@ -71,12 +73,15 @@ promptfoo auth login \
   --api-key "$PROMPTFOO_API_KEY" \
   --team customer-support
 promptfoo auth whoami
-promptfoo eval -c promptfooconfig.yaml --share
+eval_status=0
+promptfoo eval -c promptfooconfig.yaml --no-share || eval_status=$?
+promptfoo share
+exit "$eval_status"
 ```
 
-This runs the eval on the CI runner and uploads its results to the selected team. Provide the target's credentials separately, as required by `promptfooconfig.yaml`; the service account key authenticates to Promptfoo.
+This runs the eval on the CI runner and uploads its results to the selected team. The upload is attempted even when tests fail, and the job fails if either the eval or upload fails. Provide the target's credentials separately, as required by `promptfooconfig.yaml`; the service account key authenticates to Promptfoo.
 
-Login saves the credential in the CLI configuration directory. The example uses a temporary directory and removes it when the job exits; do not cache or upload it as an artifact. See [CLI authentication](./authentication.md#authenticating-into-the-cli) and [CI/CD integration](/docs/integrations/ci-cd/) for the surrounding setup.
+Login saves the credential in the CLI configuration directory. The temporary directory's `EXIT` trap cleans up on normal exit; forced termination can skip the trap, so runner destruction is required. Do not cache or upload the directory as an artifact. See [CLI authentication](./authentication.md#authenticating-into-the-cli) and [CI/CD integration](/docs/integrations/ci-cd/) for the surrounding setup.
 
 ## Replacing a Service Account Key
 
