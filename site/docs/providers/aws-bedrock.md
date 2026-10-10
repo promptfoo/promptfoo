@@ -629,6 +629,8 @@ Different models may support different configuration options. Here are some mode
 
 Amazon Nova models (e.g., `amazon.nova-lite-v1:0`, `amazon.nova-pro-v1:0`, `amazon.nova-micro-v1:0`) support advanced features like tool use and structured outputs. You can configure them with the following options:
 
+For native Nova 1 calls, `interfaceConfig` also accepts the legacy aliases `max_new_tokens`, `top_p`, and `top_k`. The canonical `maxTokens`, `topP`, and `topK` options take precedence when both names are set.
+
 ```yaml
 providers:
   - id: bedrock:amazon.nova-lite-v1:0

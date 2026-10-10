@@ -1347,7 +1347,7 @@ export const BEDROCK_MODEL = {
         addConfigParam(params, 'system', systemPrompt, undefined, undefined);
       }
 
-      const { max_new_tokens, ...inferenceConfig } = config.interfaceConfig ?? {};
+      const { max_new_tokens, top_p, top_k, ...inferenceConfig } = config.interfaceConfig ?? {};
       addConfigParam(
         inferenceConfig,
         'maxTokens',
@@ -1362,6 +1362,9 @@ export const BEDROCK_MODEL = {
         getEnvFloat('AWS_BEDROCK_TEMPERATURE'),
         0,
       );
+
+      addConfigParam(inferenceConfig, 'topP', config.interfaceConfig?.topP ?? top_p);
+      addConfigParam(inferenceConfig, 'topK', config.interfaceConfig?.topK ?? top_k);
 
       addConfigParam(params, 'inferenceConfig', inferenceConfig, undefined, undefined);
       addConfigParam(params, 'toolConfig', config.toolConfig, undefined, undefined);
