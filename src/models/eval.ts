@@ -1494,8 +1494,13 @@ export default class Eval {
       stats.successes += prompt.metrics?.testPassCount ?? 0;
       stats.failures += prompt.metrics?.testFailCount ?? 0;
       stats.errors += prompt.metrics?.testErrorCount ?? 0;
+      stats.cacheHits = (stats.cacheHits ?? 0) + (prompt.metrics?.testCacheHitCount ?? 0);
 
       accumulateTokenUsage(stats.tokenUsage, prompt.metrics?.tokenUsage);
+    }
+
+    if (stats.cacheHits === 0) {
+      delete stats.cacheHits;
     }
 
     accumulateGenerationTokenUsage(

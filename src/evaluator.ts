@@ -2197,6 +2197,9 @@ function updatePromptResultCounts(metrics: PromptMetrics, row: EvaluateResult) {
       metrics.testFailCount += 1;
     }
   }
+  if (row.response?.cached) {
+    metrics.testCacheHitCount = (metrics.testCacheHitCount ?? 0) + 1;
+  }
 }
 
 function updateDerivedMetrics(
@@ -2510,6 +2513,7 @@ function createDefaultPromptMetrics(): PromptMetrics {
     testPassCount: 0,
     testFailCount: 0,
     testErrorCount: 0,
+    testCacheHitCount: 0,
     assertPassCount: 0,
     assertFailCount: 0,
     totalLatencyMs: 0,
