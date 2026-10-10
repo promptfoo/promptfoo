@@ -1,0 +1,13 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Portkey model catalog
+
+prompts:
+  - 'Write a short tweet about {{topic}}'
+
+providers:
+  # Replace the provider slug and model with entries from your model catalog.
+  - id: 'portkey:@bedrock-eu/eu.anthropic.claude-sonnet-4-5-20250929-v1:0'
+
+tests:
+  - vars:
+      topic: bananas
