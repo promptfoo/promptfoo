@@ -5,17 +5,17 @@ description: Red team LLM grading systems by validating output classification to
 
 # About the Grader
 
-When you run a red team scan against a target, Promptfoo will evaluate the results of the output and determine whether the result passes or fails. These results are determined by a model, which is `gpt-5` by default. When the model grades the results of the output, it determines a pass or fail score for the output based on the application context you provide in the target set up.
+When you run a red team scan against a target, Promptfoo evaluates its outputs against the configured assertions. Model-graded assertions use the configured grading provider and the application context supplied with the test.
 
 A **pass** score means that the output did not violate your application's intended behavior and returned an output that conforms with your requirements. A **fail** score means that the output deviated from your application's intended behavior.
 
-Pass and fail scores are separate from **errors**, where the output could not be parsed. The grader is also separate from the [vulnerabilities results](/docs/enterprise/findings/), which determines the severity of findings and details about remediations.
+Pass and fail verdicts are separate from **errors**, such as malformed responses or provider failures. Severity and remediation details in [vulnerabilities results](/docs/enterprise/findings/) are separate from the grading verdict.
 
 A provider response with a missing, `null`, or `undefined` `output` field is an integration error, including in red team scans. Check your response parser if you see `No output` or a malformed-response error. The literal strings `"null"` and `"undefined"` are response content and are graded normally; an intentional empty string retains the existing refusal handling.
 
 ## Configuring the Grader
 
-Configuring your grader starts when you create a new target within Promptfoo and outline details about the application in the "Usage Details" section. The `purpose` that you provide in the target setup, as well as any additional context about external system access if applicable, informs the grader. The more information you provide, the better the red team attacks will be.
+Configuring your grader starts when you create a new target within Promptfoo and outline its intended behavior in **Application Details**. The target's `purpose` and additional context about access to external systems inform grading. Specify what the application may do and what would be a violation; these fields do not modify the application being tested.
 
 For custom `llm-rubric` assertions, see [Pass vs. Score Semantics](/docs/configuration/expected-outputs/model-graded/llm-rubric#pass-vs-score-semantics) if you encounter unexpected PASS results.
 
@@ -101,11 +101,7 @@ You can customize the grader at the plugin level to provide additional granulari
 
 ### Customizing Graders for Specific Plugins in Promptfoo Enterprise
 
-Within Promptfoo Enterprise, you can customize the grader at the plugin level. Provide an example output that you would consider a pass or fail, then elaborate on the reason why. Including more concrete examples gives additional context to the LLM grader, improving the efficacy of grading.
-
-<div align="center">
-  <img src="/img/docs/grading/customize_grader.png" alt="Customize grader" width="900" />
-</div>
+Use the plugin's **Grading Guidance** and examples to describe acceptable and unacceptable outputs. The [Enterprise tuning workflow](/docs/enterprise/customization/#tune-false-positives) covers these controls, manual ratings, saved examples, and when to regrade or run a new scan.
 
 ### Customizing Graders for Specific Plugins in the Open Source
 
@@ -208,6 +204,6 @@ Inside the evals view, you can review the grader reasoning for each result, modi
 
 ### Addressing False Positives
 
-False positives are when a test case is marked as passing when it should have been marked as failing or vice versa. A common cause of false positives is when the Promptfoo graders don't know enough about the target to make an accurate assessment.
+False positives are safe responses marked FAIL; genuine violations marked PASS are false negatives. Missing context about the target can cause either error.
 
-The best way to reduce false positives is by adding additional context to your target `Purpose`. If you find that false positives are higher for specific plugins, then consider creating custom graders at the plugin level to specify your requirements.
+Start with the target's purpose and permissions, then add narrow plugin guidance and representative examples. For manual PASS/FAIL controls, thumbs up/down, saved examples, and regrading limits, see [Tune false positives in Enterprise](/docs/enterprise/customization/#tune-false-positives).
