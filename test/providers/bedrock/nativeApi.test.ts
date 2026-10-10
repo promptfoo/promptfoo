@@ -6,6 +6,7 @@ import { NodeHttpHandler } from '@smithy/node-http-handler';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AwsBedrockNativeApiProvider } from '../../../src/providers/bedrock/nativeApi';
 import { providerRegistry } from '../../../src/providers/providerRegistry';
+import { mockProcessEnv } from '../../util/utils';
 
 async function* events(items: unknown[]) {
   yield* items;
@@ -433,8 +434,8 @@ describe('native Bedrock APIs', () => {
     }
   });
 
-  it.each(['1e100000', '1e-100000', '-1e100000', '-1e-100000', '-0'])(
-    'preserves native numeric literal %s without exponent expansion',
+  it.each(['1e100000', '1e-100000', '-1e100000', '-1e-100000', '-0', '[-0,{"zero":-0}]'])(
+    'preserves native JSON value %s without exponent expansion',
     async (literal) => {
       const body = '{"value":' + literal + '}';
       const { provider, invoke } = fixture('InvokeModel', {
@@ -454,6 +455,9 @@ describe('native Bedrock APIs', () => {
     ['ListAsyncInvokes', 'maxResults', '1.0', '1'],
     ['ListAsyncInvokes', 'submitTimeAfter', '1e3', '1000'],
     ['ListAsyncInvokes', 'submitTimeBefore', '1000.0', '1000'],
+    ['ListAsyncInvokes', 'submitTimeAfter', '-0', '0'],
+    ['ListAsyncInvokes', 'submitTimeAfter', '-0.0', '0'],
+    ['ListAsyncInvokes', 'submitTimeBefore', '-0e3', '0'],
     ['ListFlowExecutionEvents', 'maxResults', '1e1', '10'],
     ['ListFlowExecutionEvents', 'maxResults', '1.0', '1'],
   ])('retains primitive query numbers for %s %s=%s', async (operation, key, literal, expected) => {
@@ -893,7 +897,7 @@ describe('native Bedrock APIs', () => {
       .mockResolvedValue(undefined);
     const initialization = provider.getBedrockInstance();
     const cleanup = provider.cleanup();
-    await expect(initialization).rejects.toThrow('required as a peer dependency');
+    await expect(initialization).rejects.toThrow('Credentials unavailable');
     await expect(cleanup).resolves.toBeUndefined();
     const client = await provider.getBedrockInstance();
     const destroy = vi.spyOn(client, 'destroy');
@@ -1083,6 +1087,105 @@ it.each(['inlineSessionState', 'collaborators'])(
       'Invalid Bedrock retrieval filter',
     );
     expect(invoke).not.toHaveBeenCalled();
+  },
+);
+
+it.each([
+  { name: 'configured bearer', apiKey: 'configured-token' },
+  { name: 'process bearer', envBearer: 'process-token' },
+  { name: 'both bearer sources', apiKey: 'configured-token', envBearer: 'process-token' },
+])('keeps explicit Runtime credentials ahead of $name', async ({ apiKey, envBearer }) => {
+  const restore = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: envBearer });
+  const handle = vi.spyOn(NodeHttpHandler.prototype, 'handle').mockResolvedValue({
+    response: {
+      statusCode: 200,
+      headers: { 'content-type': 'application/json' },
+      body: Buffer.from('{"inputTokens":1}'),
+    },
+  });
+  const provider = new AwsBedrockNativeApiProvider('CountTokens', {
+    config: {
+      region: 'us-east-1',
+      endpoint: 'http://127.0.0.1:1',
+      accessKeyId: 'explicit-key',
+      secretAccessKey: 'explicit-secret',
+      sessionToken: 'explicit-session',
+      apiKey,
+    },
+  });
+  try {
+    const result = await provider.callApi(
+      '{"modelId":"test.model","input":{"converse":{"messages":[{"role":"user","content":[{"text":"hello"}]}]}}}',
+    );
+    expect(result.error).toBeUndefined();
+    const headers = handle.mock.calls[0][0].headers;
+    expect(headers.authorization).toMatch(/^AWS4-HMAC-SHA256 Credential=explicit-key\//);
+    expect(headers['x-amz-security-token']).toBe('explicit-session');
+    expect(Object.values(headers).join(' ')).not.toContain('Bearer');
+  } finally {
+    await provider.cleanup();
+    restore();
+  }
+});
+
+it.each([
+  { name: 'configured bearer', apiKey: 'configured-token', expected: 'configured-token' },
+  { name: 'process bearer', envBearer: 'process-token', expected: 'process-token' },
+  {
+    name: 'configured bearer over process bearer',
+    apiKey: 'configured-token',
+    envBearer: 'process-token',
+    expected: 'configured-token',
+  },
+  {
+    name: 'bearer with an incomplete credential tuple',
+    apiKey: 'configured-token',
+    accessKeyId: 'partial-key',
+    expected: 'configured-token',
+  },
+])(
+  'uses $name without requiring AWS credentials',
+  async ({ apiKey, envBearer, accessKeyId, expected }) => {
+    const restore = mockProcessEnv({
+      AWS_BEARER_TOKEN_BEDROCK: envBearer,
+      AWS_ACCESS_KEY_ID: undefined,
+      AWS_SECRET_ACCESS_KEY: undefined,
+      AWS_SESSION_TOKEN: undefined,
+      AWS_PROFILE: undefined,
+      AWS_EC2_METADATA_DISABLED: 'true',
+    });
+    const handle = vi.spyOn(NodeHttpHandler.prototype, 'handle').mockResolvedValue({
+      response: {
+        statusCode: 200,
+        headers: { 'content-type': 'application/json' },
+        body: Buffer.from('{"inputTokens":1}'),
+      },
+    });
+    const provider = new AwsBedrockNativeApiProvider('CountTokens', {
+      config: {
+        region: 'us-east-1',
+        endpoint: 'http://127.0.0.1:1',
+        profile: 'must-not-load',
+        apiKey,
+        accessKeyId,
+      },
+    });
+    try {
+      const result = await provider.callApi(
+        '{"modelId":"test.model","input":{"converse":{"messages":[{"role":"user","content":[{"text":"hello"}]}]}}}',
+      );
+      expect(result.error).toBeUndefined();
+      const auth = Object.entries(handle.mock.calls[0][0].headers).filter(
+        ([name]) => name.toLowerCase() === 'authorization',
+      );
+      expect(auth.length).toBeGreaterThan(0);
+      for (const [, value] of auth) {
+        expect(value).toBe('Bearer ' + expected);
+      }
+    } finally {
+      await provider.cleanup();
+      restore();
+    }
   },
 );
 

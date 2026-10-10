@@ -92,7 +92,6 @@ async function parseNativeJson(value: string | Uint8Array): Promise<any> {
     }
     if (
       Number.isFinite(number) &&
-      !Object.is(number, -0) &&
       normalizeNumericLiteral(source) === normalizeNumericLiteral(String(number))
     ) {
       return number;
@@ -140,6 +139,9 @@ const nativeJson = JSON as typeof JSON & {
 function encodeBlobs(value: any): any {
   if (nativeJson.isRawJSON(value)) {
     return value;
+  }
+  if (Object.is(value, -0)) {
+    return nativeJson.rawJSON('-0');
   }
   // NumericValue's instanceof check also matches ordinary {type, string} document objects.
   if (typeof value === 'bigint' || NumericValue.prototype.isPrototypeOf(value)) {
@@ -210,15 +212,37 @@ export class AwsBedrockNativeApiProvider extends AwsBedrockGenericProvider {
   }
 
   protected getApiKey(): string | undefined {
-    // Agent Runtime accepts SigV4 credentials, not Bedrock Runtime bearer tokens.
-    return OPERATIONS[this.operation].service === 'runtime' ? super.getApiKey() : undefined;
+    // Agent Runtime requires SigV4; explicit credentials also take precedence on Runtime.
+    return OPERATIONS[this.operation].service === 'runtime' &&
+      !(this.config.accessKeyId && this.config.secretAccessKey)
+      ? super.getApiKey()
+      : undefined;
   }
 
   getBedrockInstance() {
     providerRegistry.throwIfResourceUseAborted();
     if (!this.runtime) {
       providerRegistry.register(this);
-      this.runtime = super.getBedrockInstance().catch((error) => {
+      this.runtime = (async () => {
+        const { BedrockRuntime } = await import('@aws-sdk/client-bedrock-runtime');
+        const apiKey = this.getApiKey();
+        const credentials = await this.getCredentials();
+        this.bedrock = new BedrockRuntime({
+          region: this.getRegion(),
+          maxAttempts: this.getMaxAttempts(),
+          retryMode: 'adaptive',
+          requestHandler: await createBedrockRequestHandler(),
+          ...(credentials ? { credentials } : {}),
+          // Override the SDK's ambient bearer preference when explicit credentials are supplied.
+          ...(this.config.accessKeyId && this.config.secretAccessKey
+            ? { authSchemePreference: ['sigv4'] }
+            : apiKey
+              ? { token: { token: apiKey }, authSchemePreference: ['httpBearerAuth'] }
+              : {}),
+          ...(this.config.endpoint ? { endpoint: this.config.endpoint } : {}),
+        });
+        return this.bedrock;
+      })().catch((error) => {
         this.runtime = undefined;
         throw error;
       });
