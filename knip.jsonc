@@ -71,7 +71,12 @@
         "docs/**/*.{md,mdx}"
       ],
       "project": ["**/*.{js,ts,tsx}"],
-      "ignoreFiles": ["docs/_shared/**/*.{js,ts,tsx}", "static/js/scripts.js"],
+      "ignoreFiles": [
+        "docs/_shared/**/*.{js,ts,tsx}",
+        // Loaded by consent.js only after the corresponding category is enabled.
+        "static/js/scripts-analytics.js",
+        "static/js/scripts-marketing.js"
+      ],
       "ignoreDependencies": [
         // Docusaurus aliasing/preset conventions resolved at build time.
         "@theme/*",
