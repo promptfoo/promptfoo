@@ -1089,6 +1089,7 @@
         "agent-rubric",
         "answer-relevance",
         "bleu",
+        "character-count",
         "classifier",
         "contains",
         "contains-all",
