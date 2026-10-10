@@ -1328,22 +1328,11 @@ async function extractMetadataFromMarkdown(routePath) {
         const content = await fs.readFile(filePath, 'utf8');
         const { data, content: markdownContent } = matter(content);
 
-        // Extract all metadata
+        // Extract metadata used by the image template
         const metadata = {
           title: data.title || null,
-          description: data.description || null,
-          author:
-            data.author ||
-            (data.authors && Array.isArray(data.authors)
-              ? data.authors.map((a) => (typeof a === 'object' ? a.name : a)).join(' & ')
-              : data.authors) ||
-            null,
-          date: data.date || null,
           image: data.image || null,
-          tags: data.tags || [],
-          keywords: data.keywords || [],
           ogTitle: data.og_title || data.ogTitle || null,
-          ogDescription: data.og_description || data.ogDescription || null,
         };
 
         // If no frontmatter title, try to extract H1 from markdown
@@ -1441,15 +1430,6 @@ async function injectOgImageMetaTags(outDir, routePath, imageUrl, siteConfig) {
 module.exports = function () {
   return {
     name: 'docusaurus-plugin-og-image',
-
-    async contentLoaded({ content, actions }) {
-      const { setGlobalData } = actions;
-
-      // Store plugin data globally so it can be accessed by theme components
-      setGlobalData({
-        ogImagePlugin: true,
-      });
-    },
 
     async postBuild({ siteConfig, routesPaths, outDir }) {
       // Skip OG image generation if disabled via environment variable
