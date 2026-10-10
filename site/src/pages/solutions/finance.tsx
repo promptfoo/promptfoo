@@ -11,6 +11,8 @@ import MonitorHeartIcon from '@mui/icons-material/MonitorHeart';
 import ShieldIcon from '@mui/icons-material/Shield';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import VerifiedUserIcon from '@mui/icons-material/VerifiedUser';
+import { ApplicationCard } from '@site/src/components/ApplicationCard';
+import { BenefitItem } from '@site/src/components/BenefitItem';
 import Layout from '@theme/Layout';
 import clsx from 'clsx';
 import styles from '../landing-page.module.css';
@@ -227,36 +229,26 @@ export default function Finance() {
             <h2 className={styles.sectionTitle}>Tested across the enterprise</h2>
 
             <div className={styles.solutionGrid}>
-              <div className={styles.solutionCard}>
-                <div className={styles.solutionTitle}>
-                  <TrendingUpIcon className={styles.solutionIcon} />
-                  Wealth & Advisory
-                </div>
-                <p>
-                  Robo-advisors, investment assistants, portfolio analysis tools, and financial
-                  planning copilots.
-                </p>
-              </div>
-              <div className={styles.solutionCard}>
-                <div className={styles.solutionTitle}>
-                  <InsightsIcon className={styles.solutionIcon} />
-                  Capital Markets
-                </div>
-                <p>
-                  Trading support, research synthesis, market analysis, and deal execution
-                  assistance.
-                </p>
-              </div>
-              <div className={styles.solutionCard}>
-                <div className={styles.solutionTitle}>
-                  <AccountBalanceIcon className={styles.solutionIcon} />
-                  Banking Services
-                </div>
-                <p>
-                  Customer service bots, loan processing assistants, credit analysis, and account
-                  management tools.
-                </p>
-              </div>
+              <ApplicationCard
+                icon={<TrendingUpIcon className={styles.solutionIcon} />}
+                title="Wealth & Advisory"
+              >
+                Robo-advisors, investment assistants, portfolio analysis tools, and financial
+                planning copilots.
+              </ApplicationCard>
+              <ApplicationCard
+                icon={<InsightsIcon className={styles.solutionIcon} />}
+                title="Capital Markets"
+              >
+                Trading support, research synthesis, market analysis, and deal execution assistance.
+              </ApplicationCard>
+              <ApplicationCard
+                icon={<AccountBalanceIcon className={styles.solutionIcon} />}
+                title="Banking Services"
+              >
+                Customer service bots, loan processing assistants, credit analysis, and account
+                management tools.
+              </ApplicationCard>
             </div>
           </div>
         </section>
@@ -320,36 +312,27 @@ export default function Finance() {
             <h2 className={styles.sectionTitle}>Why financial institutions choose Promptfoo</h2>
 
             <div className={styles.benefitsList}>
-              <div className={styles.benefitItem}>
-                <LockIcon className={styles.benefitIcon} />
-                <div className={styles.benefitContent}>
-                  <h3>Self-hosted deployment</h3>
-                  <p>
-                    Run entirely within your infrastructure. No data leaves your environment,
-                    meeting the strictest data residency and security requirements.
-                  </p>
-                </div>
-              </div>
-              <div className={styles.benefitItem}>
-                <MonitorHeartIcon className={styles.benefitIcon} />
-                <div className={styles.benefitContent}>
-                  <h3>Continuous monitoring</h3>
-                  <p>
-                    Integrate with CI/CD pipelines to catch regressions before deployment. Track
-                    security posture across model updates and prompt changes.
-                  </p>
-                </div>
-              </div>
-              <div className={styles.benefitItem}>
-                <VerifiedUserIcon className={styles.benefitIcon} />
-                <div className={styles.benefitContent}>
-                  <h3>Audit-ready documentation</h3>
-                  <p>
-                    Generate structured reports that map directly to regulatory requirements.
-                    Demonstrate due diligence with reproducible test results.
-                  </p>
-                </div>
-              </div>
+              <BenefitItem
+                icon={<LockIcon className={styles.benefitIcon} />}
+                title="Self-hosted deployment"
+              >
+                Run entirely within your infrastructure. No data leaves your environment, meeting
+                the strictest data residency and security requirements.
+              </BenefitItem>
+              <BenefitItem
+                icon={<MonitorHeartIcon className={styles.benefitIcon} />}
+                title="Continuous monitoring"
+              >
+                Integrate with CI/CD pipelines to catch regressions before deployment. Track
+                security posture across model updates and prompt changes.
+              </BenefitItem>
+              <BenefitItem
+                icon={<VerifiedUserIcon className={styles.benefitIcon} />}
+                title="Audit-ready documentation"
+              >
+                Generate structured reports that map directly to regulatory requirements.
+                Demonstrate due diligence with reproducible test results.
+              </BenefitItem>
             </div>
           </div>
         </section>
