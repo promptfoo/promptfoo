@@ -339,7 +339,7 @@ Marengo 3 through text similarity assertions. It uses an echo target, so only em
 requests are billed. Configure AWS credentials and model access in `us-east-1`, then run:
 
 ```bash
-promptfoo eval -c examples/amazon-bedrock/models/promptfooconfig.embeddings.yaml --no-cache -o embeddings-results.json
+promptfoo eval -c promptfooconfig.embeddings.yaml --no-cache -o embeddings-results.json
 ```
 
 Both assertions compare identical text and expect similarity near 1. Nova exposes
