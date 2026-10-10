@@ -91,7 +91,8 @@ defaultTest:
         try {
           const tool = JSON.parse(output);
           return tool.name === 'color_json' &&
-            typeof tool.input?.name === 'string' && tool.input.name.trim().length > 0 &&
+            typeof tool.input?.name === 'string' &&
+            tool.input.name.trim().toLowerCase() === context.vars.topic.toLowerCase() &&
             tool.input?.color?.toLowerCase() === context.vars.expectedColor;
         } catch {
           return false;
