@@ -1,4 +1,5 @@
 import { calculateOpenAIUsageCost } from '../openai/billing';
+import { getOpenAICacheWriteInputTokens } from '../openai/util';
 import { collectBedrockChatStream } from './chatStream';
 import { resolveBedrockMantleRegion } from './mantle';
 import { BedrockMantleChatProvider } from './mantleChat';
@@ -66,6 +67,9 @@ function runtimeCost(
   const output = usage?.output_tokens ?? usage?.completion_tokens;
   const cacheRead =
     usage?.input_tokens_details?.cached_tokens ?? usage?.prompt_tokens_details?.cached_tokens ?? 0;
+  const cacheWrite = getOpenAICacheWriteInputTokens(usage) ?? 0;
+  const uncachedInput =
+    typeof input === 'number' ? Math.max(0, input - cacheRead - cacheWrite) : undefined;
   if (!['default', 'priority', 'flex', 'reserved'].includes(serviceTier ?? 'default')) {
     return undefined;
   }
@@ -81,22 +85,16 @@ function runtimeCost(
       serviceTier: serviceTier ?? 'default',
     });
   }
-  let cost = calculateBedrockCost(
-    modelName,
-    typeof input === 'number' ? Math.max(0, input - cacheRead) : undefined,
-    output,
-    cacheRead,
-    0,
-    region,
-    { type: (serviceTier ?? 'default') as 'default' | 'priority' | 'flex' | 'reserved' },
-  );
+  let cost = calculateBedrockCost(modelName, uncachedInput, output, cacheRead, cacheWrite, region, {
+    type: (serviceTier ?? 'default') as 'default' | 'priority' | 'flex' | 'reserved',
+  });
   if (cost !== undefined && (config.inputCost !== undefined || config.outputCost !== undefined)) {
     const catalogInputCost = calculateBedrockCost(
       modelName,
-      Math.max(0, input - cacheRead),
+      uncachedInput,
       0,
       cacheRead,
-      0,
+      cacheWrite,
       region,
       { type: (serviceTier ?? 'default') as 'default' | 'priority' | 'flex' | 'reserved' },
     );

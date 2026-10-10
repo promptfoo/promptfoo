@@ -443,7 +443,11 @@ const FoundationModelConfiguration = ({
             id="model-id"
             value={modelId}
             onChange={handleModelIdChange}
-            placeholder={providerInfo.placeholder}
+            placeholder={
+              isBedrock && bedrockApiMode === 'runtime-responses'
+                ? 'us.openai.gpt-5.6-sol'
+                : providerInfo.placeholder
+            }
             aria-invalid={Boolean(bedrockApiError)}
             aria-describedby={
               isBedrock
@@ -455,9 +459,19 @@ const FoundationModelConfiguration = ({
           />
           {isBedrock && (
             <p id="bedrock-model-help" className="text-sm text-muted-foreground">
-              Choose an API, then enter its model ID. GPT names such as <code>gpt-5.6-sol</code> are
-              saved with Bedrock's <code>openai.</code> prefix. Full Bedrock model IDs are also
-              accepted.
+              {bedrockApiMode === 'runtime-responses' ? (
+                <>
+                  Closed OpenAI GPT models require a system inference profile, such as{' '}
+                  <code>us.openai.gpt-5.6-sol</code> or <code>global.openai.gpt-5.6-sol</code>.
+                  Other models use their Runtime model IDs.
+                </>
+              ) : (
+                <>
+                  Choose an API, then enter its model ID. GPT names such as <code>gpt-5.6-sol</code>{' '}
+                  are saved with Bedrock's <code>openai.</code> prefix. Full Bedrock model IDs are
+                  also accepted.
+                </>
+              )}
             </p>
           )}
           {bedrockApiError && (

@@ -22,6 +22,13 @@ export function getBedrockRuntimeModelError(
   ) {
     return 'GPT OSS does not support Bedrock Runtime Responses. Use Runtime Chat or Mantle Responses.';
   }
+  const foundationModel = modelName.replace(
+    /^arn:[^:]+:bedrock:[^:]+:[^:]*:foundation-model\//,
+    '',
+  );
+  if (mode === 'runtime-responses' && /^(?:openai\.)?gpt-\d/.test(foundationModel)) {
+    return 'Closed OpenAI GPT models on Bedrock Runtime Responses require a system inference profile, such as us.openai.gpt-5.6-sol or global.openai.gpt-5.6-sol.';
+  }
   return undefined;
 }
 

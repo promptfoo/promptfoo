@@ -32,6 +32,16 @@ describe('Bedrock Runtime OpenAI API routing', () => {
     expect(provider.id()).toBe(`bedrock:runtime:${api}:${model}`);
   });
 
+  it.each([
+    'openai.gpt-5.6-sol',
+    'gpt-6.1-sol',
+    'arn:aws:bedrock:us-east-1::foundation-model/openai.gpt-5.6-sol',
+  ])('requires a system profile for Runtime Responses model %s', async (model) => {
+    await expect(loadApiProvider(`bedrock:runtime:responses:${model}`)).rejects.toThrow(
+      'require a system inference profile',
+    );
+  });
+
   it('rejects GPT OSS Runtime Responses while retaining Runtime Chat', async () => {
     await expect(
       loadApiProvider('bedrock:runtime:responses:openai.gpt-oss-120b-1:0'),

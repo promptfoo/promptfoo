@@ -57,6 +57,40 @@ describe.each([
   ['chat', BedrockRuntimeChatProvider, chatReply, 'chat/completions'],
   ['responses', BedrockRuntimeResponsesProvider, responsesReply, 'responses'],
 ] as const)('Bedrock Runtime %s', (mode, Provider, reply, path) => {
+  it.each([
+    { cacheWrite: 0, manual: false, expected: 0.000286 },
+    { cacheWrite: 10, manual: false, expected: undefined },
+    { cacheWrite: 10, manual: true, expected: 1.4 },
+  ])(
+    'preserves cache-write pricing uncertainty (writes: $cacheWrite, manual: $manual)',
+    async ({ cacheWrite, manual, expected }) => {
+      const detailKey = mode === 'chat' ? 'prompt_tokens_details' : 'input_tokens_details';
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: {
+          ...reply,
+          usage: {
+            ...reply.usage,
+            [detailKey]: { cached_tokens: 40, cache_write_tokens: cacheWrite },
+          },
+        },
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      });
+      const provider = new Provider('us.xai.grok-4.6', {
+        config: { apiKey: 'fixture', ...(manual ? { inputCost: 0.01, outputCost: 0.02 } : {}) },
+      });
+      const result = await provider.callApi('hello');
+      expect(result.error).toBeUndefined();
+      if (expected === undefined) {
+        expect(result.cost).toBeUndefined();
+      } else {
+        expect(result.cost).toBeCloseTo(expected, 10);
+      }
+      expect(result.tokenUsage?.completionDetails?.cacheCreationInputTokens).toBe(cacheWrite);
+    },
+  );
+
   it('forwards the Kimi K3 profile and HTTP service tier', async () => {
     const provider = new Provider('us.moonshotai.kimi-k3', {
       config: { apiKey: 'fixture', service_tier: 'flex' },
@@ -626,3 +660,20 @@ describe('Runtime Chat streaming lifecycle', () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 });
+
+it.each([
+  'openai.gpt-5.6-sol',
+  'gpt-6.1-sol',
+  'arn:aws:bedrock:us-east-1::foundation-model/openai.gpt-5.6-sol',
+])(
+  'rejects closed GPT foundation ID %s in the effective Runtime Responses request',
+  async (model) => {
+    const provider = new BedrockRuntimeResponsesProvider('us.openai.gpt-5.6-sol', {
+      config: { apiKey: 'fixture', passthrough: { model } },
+    });
+    await expect(provider.getOpenAiBody('hello')).rejects.toThrow(
+      'require a system inference profile',
+    );
+    expect(fetchWithCache).not.toHaveBeenCalled();
+  },
+);
