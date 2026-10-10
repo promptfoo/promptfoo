@@ -949,6 +949,10 @@ Sonnet 5.5 global cache reads cost $0.10 per million tokens (0.05 times its inpu
 Cost accounting covers InvokeModel, Converse, and Messages. Consult
 [AWS pricing](https://aws.amazon.com/bedrock/pricing/) for current rates and service tiers.
 
+For InvokeModel with an opaque application inference profile ARN, promptfoo omits the
+default temperature because it cannot identify the backing Claude model. Explicit
+temperatures are preserved; set `temperature: 0` only if that model supports sampling.
+
 #### Claude Fable and Mythos models
 
 [Claude Fable 5.1](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-fable-5-1.html)
