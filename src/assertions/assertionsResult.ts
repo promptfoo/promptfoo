@@ -306,7 +306,12 @@ export class AssertionsResult {
 
     this.failedReason = result.reason;
 
-    if (getEnvBool('PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES')) {
+    // A zero-weight assert-set is metric-only and can't fail: its children must
+    // neither fail the test nor abort the evaluation under short-circuiting.
+    if (
+      getEnvBool('PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES') &&
+      this._parentAssertionSet?.assertionSet.weight !== 0
+    ) {
       throw new Error(result.reason);
     }
   }

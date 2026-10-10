@@ -113,10 +113,24 @@ function parseFactualityJsonResponse(
   }
 }
 
+// Malformed judge output is embedded in grader-failure reasons for
+// diagnosability, but a judge can echo prompt/reference data back, so only a
+// bounded preview is retained. Full outputs remain in per-component grading
+// details, not in the promoted row error.
+const MALFORMED_GRADER_OUTPUT_PREVIEW_LENGTH = 500;
+
+function previewMalformedGraderOutput(output: string): string {
+  return output.length > MALFORMED_GRADER_OUTPUT_PREVIEW_LENGTH
+    ? `${output.slice(0, MALFORMED_GRADER_OUTPUT_PREVIEW_LENGTH)}...`
+    : output;
+}
+
 function parseLegacyFactualityResponse(responseText: string): { option: string; reason: string } {
   const answerMatch = responseText.match(/\s*\(?([a-eA-E])\)/);
   if (!answerMatch) {
-    throw new Error(`Factuality checker output did not match expected format: ${responseText}`);
+    throw new Error(
+      `Factuality checker output did not match expected format: ${previewMalformedGraderOutput(responseText)}`,
+    );
   }
 
   const option = answerMatch[1].toUpperCase();
@@ -426,7 +440,7 @@ export async function matchesClosedQa(
       reason = `The submission does not meet the criterion:\n${resp.output}`;
     } else {
       return graderFail(
-        `Model grader produced a malformed response:\n${resp.output}`,
+        `Model grader produced a malformed response:\n${previewMalformedGraderOutput(resp.output)}`,
         resp.tokenUsage,
       );
     }

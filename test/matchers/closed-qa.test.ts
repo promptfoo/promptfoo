@@ -156,6 +156,23 @@ describe('matchesClosedQa', () => {
     );
   });
 
+  it('should bound the judge output embedded in a malformed-response reason', async () => {
+    // A judge can echo prompt/reference data; only a preview is retained so
+    // the promoted row error stays bounded.
+    const longOutput = `z${'x'.repeat(599)}`;
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValueOnce({
+      output: longOutput,
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+
+    const result = await matchesClosedQa('Input text', 'Expected output', 'Sample output', {});
+
+    expect(result).toMatchObject({ pass: false, score: 0, metadata: { graderError: true } });
+    expect(result.reason.endsWith('...')).toBe(true);
+    expect(result.reason.length).toBeLessThan(longOutput.length);
+    expect(result.reason).not.toContain(longOutput);
+  });
+
   it('should handle input, criteria, and completion that need escaping', async () => {
     const input = 'Input "text" with \\ escape characters and \\"nested\\" escapes';
     const expected = 'Expected "output" with \\\\ escape characters and \\"nested\\" escapes';

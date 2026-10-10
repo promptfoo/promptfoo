@@ -284,6 +284,24 @@ describe('matchesFactuality', () => {
     });
   });
 
+  it('should bound the judge output embedded in a malformed-response reason', async () => {
+    // A judge can echo prompt/reference data; only a preview is retained so
+    // the promoted row error stays bounded.
+    const longOutput = `z${'x'.repeat(599)}`;
+    const mockCallApi = vi.fn().mockResolvedValue({
+      output: longOutput,
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
+
+    const result = await matchesFactuality('Input text', 'Expected output', 'Sample output', {});
+
+    expect(result).toMatchObject({ pass: false, score: 0, metadata: { graderError: true } });
+    expect(result.reason.endsWith('...')).toBe(true);
+    expect(result.reason.length).toBeLessThan(longOutput.length);
+    expect(result.reason).not.toContain(longOutput);
+  });
+
   it('should tag an empty grading provider response as a grader failure', async () => {
     const mockCallApi = vi.fn().mockResolvedValue({ output: undefined });
     vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
