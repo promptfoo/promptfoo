@@ -350,35 +350,17 @@ export class TrueFoundryEmbeddingProvider extends OpenAiEmbeddingProvider {
     );
   }
 
-  /**
-   * Override callEmbeddingApi to add TrueFoundry-specific headers
-   */
-  async callEmbeddingApi(
-    text: string,
-    context?: CallApiContextParams,
-    options?: CallApiOptionsParams,
-  ): Promise<ProviderResponse> {
+  override getOpenAiRequestHeaders(
+    customHeaders: Record<string, string> | undefined = this.config.headers,
+  ): Record<string, string> {
     const tfConfig = this.config as TrueFoundryCompletionOptions;
-
-    // Add TrueFoundry-specific headers
-    const headers: Record<string, string> = {
-      ...(this.config.headers || {}),
+    return {
+      ...super.getOpenAiRequestHeaders(customHeaders),
+      ...(tfConfig.metadata && { 'X-TFY-METADATA': JSON.stringify(tfConfig.metadata) }),
+      ...(tfConfig.loggingConfig && {
+        'X-TFY-LOGGING-CONFIG': JSON.stringify(tfConfig.loggingConfig),
+      }),
     };
-
-    if (tfConfig.metadata) {
-      headers['X-TFY-METADATA'] = JSON.stringify(tfConfig.metadata);
-    }
-
-    if (tfConfig.loggingConfig) {
-      headers['X-TFY-LOGGING-CONFIG'] = JSON.stringify(tfConfig.loggingConfig);
-    }
-
-    // Keep generated headers local to this request.
-    const providerForRequest = new TrueFoundryEmbeddingProvider(this.modelName, {
-      config: { ...this.config, headers },
-      env: this.env,
-    });
-    return super.callEmbeddingApi.call(providerForRequest, text, context, options);
   }
 
   id(): string {
