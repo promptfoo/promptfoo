@@ -185,6 +185,14 @@ export class OpenAiLiveProvider extends OpenAiGenericProvider {
     const responseWindowMs = positiveTimeout(config.responseWindowMs ?? 30_000, 'responseWindowMs');
     const websocketTimeout = positiveTimeout(config.websocketTimeout ?? 30_000, 'websocketTimeout');
     const closeTimeoutMs = positiveTimeout(config.closeTimeoutMs ?? 15_000, 'closeTimeoutMs');
+    const maxBufferedOutputMs = stream?.maxBufferedOutputMs ?? 0;
+    if (
+      !Number.isSafeInteger(maxBufferedOutputMs) ||
+      maxBufferedOutputMs < 0 ||
+      maxBufferedOutputMs > 10000
+    ) {
+      throw new Error('GPT-Live streamed output buffering must be an integer from 0 to 10000 ms.');
+    }
     const input = stream ? { input: [], audio: Buffer.alloc(0) } : prepareLiveInput(prompt, format);
     const bytesPerSecond = getLiveBytesPerSecond(format);
     const captureDurationMs =
@@ -227,7 +235,9 @@ export class OpenAiLiveProvider extends OpenAiGenericProvider {
       ...input,
       responseWindowMs,
       captureDurationMs,
-      maxAudioBytes: (bytesPerSecond * captureDurationMs) / 1000,
+      // Stream producers may lead the shared capture clock during peer startup or playout.
+      // Keep that lead bounded by the consumer's queue, in addition to its capture budget.
+      maxAudioBytes: (bytesPerSecond * (captureDurationMs + maxBufferedOutputMs)) / 1000,
       websocketTimeout,
       closeTimeoutMs,
       requestTimeoutMs,

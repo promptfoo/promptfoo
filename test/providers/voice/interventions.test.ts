@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getCache, getScopedCacheKey, isCacheEnabled } from '../../../src/cache';
+import { OpenAiLiveProvider } from '../../../src/providers/openai/live';
 import { OpenAiTtsProvider } from '../../../src/providers/openai/tts';
 import { prepareVoiceInterventions } from '../../../src/providers/voice/interventions';
+import * as hashing from '../../../src/util/createHash';
 import { fetchWithRetries } from '../../../src/util/fetch/index';
 import { mockProcessEnv } from '../../util/utils';
 
@@ -177,6 +179,88 @@ describe('prepareVoiceInterventions', () => {
     expect(headers.get('x-api-key')).toBe('gateway-owned-key');
     expect(headers.has('authorization')).toBe(false);
   });
+
+  it.each(['X-Gateway-Key', 'X-Gateway-Auth', 'X-Gateway-Authentication'])(
+    'prepares speech with the same %s credential accepted by Live',
+    async (header) => {
+      mockProcessEnv({ OPENAI_API_KEY: 'ambient-must-not-leak' });
+      const caller: VoiceParticipantOptions = {
+        apiBaseUrl: 'wss://gateway.example.test/v1',
+        headers: { [header]: 'caller-gateway-credential' },
+      };
+      const live = new OpenAiLiveProvider('gpt-live-1', { config: caller });
+      await expect(
+        live.createSession(
+          'Validate without opening a socket.',
+          undefined,
+          new AbortController().signal,
+        ),
+      ).resolves.toBeDefined();
+
+      const [prepared] = await prepare(undefined, caller);
+
+      expect(prepared.audio).toEqual(tone());
+      expect(mockedFetch).toHaveBeenCalledOnce();
+      const headers = new Headers(mockedFetch.mock.calls[0][1]?.headers);
+      expect(headers.get(header)).toBe('caller-gateway-credential');
+      expect(headers.has('authorization')).toBe(false);
+    },
+  );
+
+  it.each(['X-Session-Access', 'X-Tenant-Id'])(
+    'does not treat the value-sensitive %s header as authentication by presence alone',
+    async (header) => {
+      const caller: VoiceParticipantOptions = {
+        apiBaseUrl: 'wss://gateway.example.test/v1',
+        useDefaultApiKey: false,
+        headers: { [header]: 'opaque-value' },
+      };
+      const live = new OpenAiLiveProvider('gpt-live-1', { config: caller });
+      await expect(
+        live.createSession(
+          'Validate without opening a socket.',
+          undefined,
+          new AbortController().signal,
+        ),
+      ).rejects.toThrow(/credential|key/i);
+      await expect(prepare(undefined, caller)).rejects.toThrow(/API key is not set/);
+      expect(mockedFetch).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['X-Session-Access', 'X-Gateway-Key', 'X-Gateway-Auth', 'X-Gateway-Authentication'])(
+    'never hashes or caches opaque %s credentials during speech preparation',
+    async (header) => {
+      const cache = {
+        get: vi.fn().mockResolvedValue(undefined),
+        set: vi.fn().mockResolvedValue(undefined),
+      };
+      vi.mocked(getCache).mockReturnValue(cache as unknown as ReturnType<typeof getCache>);
+      vi.mocked(getScopedCacheKey).mockImplementation((key) => key);
+      vi.mocked(isCacheEnabled).mockReturnValue(true);
+      const hash = vi.spyOn(hashing, 'sha256');
+      const credentials = ['qaopaquealpha123', 'qaopaquebeta456'];
+      for (const credential of credentials) {
+        await prepare(undefined, {
+          apiBaseUrl: 'https://gateway.example.test/v1',
+          apiKeyRequired: false,
+          headers: { [header]: credential, 'X-Tenant-Id': 'tenant-a' },
+        });
+      }
+      // Observing the hash input also catches accidental hashing when caching is
+      // disabled later. Removing a credential only from persisted keys is too late.
+      const hashInputs = hash.mock.calls.flatMap(([input]) =>
+        typeof input === 'string' ? [input] : [],
+      );
+      expect(hashInputs.length).toBeGreaterThan(0);
+      for (const credential of credentials) {
+        expect(hashInputs.some((input) => input.includes(credential))).toBe(false);
+      }
+      expect(mockedFetch).toHaveBeenCalledTimes(2);
+      expect(cache.get).not.toHaveBeenCalled();
+      expect(cache.set).not.toHaveBeenCalled();
+    },
+  );
 
   it('converts caller URL userinfo to Basic authentication without leaving it in the request URL', async () => {
     mockProcessEnv({ OPENAI_API_KEY: 'ambient-must-not-leak' });

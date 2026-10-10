@@ -314,6 +314,7 @@ export class SimulatedVoiceUser implements ApiProvider {
         sessions.push(
           await Promise.race([
             provider.createSession('', undefined, controller.signal, {
+              maxBufferedOutputMs: bufferMs,
               onReady: ready,
               onClosing: ({ error: failure, isRefusal }) => {
                 if (!controller.signal.aborted) {

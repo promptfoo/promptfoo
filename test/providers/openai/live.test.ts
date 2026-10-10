@@ -1946,6 +1946,54 @@ describe('OpenAiLiveProvider', () => {
     expect(Buffer.from(response.audio!.data!, 'base64').length).toBe(100_044);
   });
 
+  it.each([false, true])(
+    'bounds streamed audio by capture plus its declared queue allowance (overflow: %s)',
+    async (overflow) => {
+      const onAudio = vi.fn();
+      const session = await provider({ responseWindowMs: 100 }).createSession(
+        'Hi',
+        undefined,
+        new AbortController().signal,
+        { onReady: vi.fn(), onAudio, onTranscript: vi.fn(), maxBufferedOutputMs: 200 },
+      );
+      const result = session.run();
+      const socket = await connect();
+      start(socket, { ack: false });
+      emit(socket, {
+        type: 'session.output_audio.delta',
+        delta: Buffer.alloc(14400).toString('base64'),
+      });
+      if (overflow) {
+        emit(socket, { type: 'session.output_audio.delta', delta: 'AAA=' });
+      }
+      session.close();
+      closed(socket);
+      const response = await result;
+      expect(response.error).toBe(
+        overflow ? 'GPT-Live audio exceeded the capture limit.' : undefined,
+      );
+      expect(onAudio).toHaveBeenCalledOnce();
+      expect(onAudio.mock.calls[0][0]).toHaveLength(14400);
+      expect(response.audio).toBeUndefined();
+      expect(vi.getTimerCount()).toBe(0);
+    },
+  );
+
+  it.each([-1, 10001, NaN, Infinity, 0.5])(
+    'rejects an invalid streamed output queue allowance: %s',
+    async (maxBufferedOutputMs) => {
+      await expect(
+        provider().createSession('Hi', undefined, new AbortController().signal, {
+          onReady: vi.fn(),
+          onAudio: vi.fn(),
+          onTranscript: vi.fn(),
+          maxBufferedOutputMs,
+        }),
+      ).rejects.toThrow('output buffering');
+      expect(sockets).toHaveLength(0);
+    },
+  );
+
   it('bounds streamed audio chunks even when the session does not retain their buffers', async () => {
     const onAudio = vi.fn();
     const session = await provider({ responseWindowMs: 100_000 }).createSession(

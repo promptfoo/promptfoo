@@ -12,6 +12,7 @@ import { isSecretField, sanitizeUrl } from '../../util/sanitizer';
 import { getRequestTimeoutMs } from '../shared';
 import { OpenAiGenericProvider } from './';
 import { convertPcm16ToWav } from './audio';
+import { isOpenAiCredentialHeader } from './credentialRedaction';
 import {
   appendOpenAiApiPath,
   assertOpenAiApiModel,
@@ -34,7 +35,7 @@ const inFlightRequests = new Map<string, Promise<ProviderResponse>>();
 const abortSignalIds = new WeakMap<AbortSignal, number>();
 let nextAbortSignalId = 0;
 
-function isSensitiveCacheHeader(key: string): boolean {
+function isSensitiveCacheField(key: string): boolean {
   return (
     isSecretField(key) ||
     /(?:authorization|api[-_]?key|token|secret|signature|credential|cookie|password)/i.test(key)
@@ -42,7 +43,7 @@ function isSensitiveCacheHeader(key: string): boolean {
 }
 
 function hasSensitiveCacheValue(value: unknown, fieldName?: string): boolean {
-  if (fieldName && isSensitiveCacheHeader(fieldName)) {
+  if (fieldName && isSensitiveCacheField(fieldName)) {
     return value !== undefined && value !== null && value !== '';
   }
   if (typeof value === 'string') {
@@ -205,7 +206,7 @@ export class OpenAiTtsProvider extends OpenAiGenericProvider {
     const customHeaders = this.getOpenAiRequestHeaders(config.headers);
     const apiKey = this.getApiKey();
     const hasHeaderCredential = Object.entries(customHeaders).some(
-      ([key, value]) => isSensitiveCacheHeader(key) && value.trim().length > 0,
+      ([key, value]) => isOpenAiCredentialHeader(key) && value.trim().length > 0,
     );
     if (!apiKey && this.requiresApiKey() && !hasHeaderCredential) {
       throw new Error(this.getMissingApiKeyErrorMessage());
@@ -244,13 +245,16 @@ export class OpenAiTtsProvider extends OpenAiGenericProvider {
     const cacheHeaders = Object.fromEntries(
       Object.entries(requestHeaders)
         .filter(
-          ([key, value]) => !isSensitiveCacheHeader(key) && !hasSensitiveCacheValue(value, key),
+          ([key, value]) =>
+            !isOpenAiCredentialHeader(key, value) && !hasSensitiveCacheValue(value, key),
         )
         .map(([key, value]) => [key.toLowerCase(), value])
         .sort(([left], [right]) => left.localeCompare(right)),
     );
     const hasSensitiveHeaderValue = Object.entries(requestHeaders).some(
-      ([key, value]) => !isSensitiveCacheHeader(key) && hasSensitiveCacheValue(value, key),
+      ([key, value]) =>
+        !isOpenAiCredentialHeader(key) &&
+        (isOpenAiCredentialHeader(key, value) || hasSensitiveCacheValue(value, key)),
     );
     const hasSensitiveBody = hasSensitiveCacheValue(body);
     const hasTenantDiscriminator = Object.entries(cacheHeaders).some(
@@ -275,7 +279,10 @@ export class OpenAiTtsProvider extends OpenAiGenericProvider {
     }
     const usesAuthenticatedCustomEndpoint =
       !sendsToOpenAiApi &&
-      (hasSensitiveUrlCredentials || Object.keys(requestHeaders).some(isSensitiveCacheHeader));
+      (hasSensitiveUrlCredentials ||
+        Object.entries(requestHeaders).some(([key, value]) =>
+          isOpenAiCredentialHeader(key, value),
+        ));
     const cacheEnabled =
       isCacheEnabled() &&
       !hasSensitiveBody &&

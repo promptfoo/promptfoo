@@ -47,6 +47,8 @@ interface LiveDelegation {
 
 /** Internal transport hooks for a caller-owned, continuously paced audio connection. */
 export interface LiveSessionStream {
+  /** Bounded caller-owned output queue, including audio received while peers connect. */
+  maxBufferedOutputMs?: number;
   onReady: () => void;
   /** Media has stopped; final usage may still be pending. Errors are already redacted. */
   onClosing?: (event: { error?: string; isRefusal: boolean }) => void;

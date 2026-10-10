@@ -1121,6 +1121,50 @@ describe('SimulatedVoiceUser', () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
+  it.each([0, 1])(
+    'preserves the full capture when participant %i emits audio during peer startup',
+    async (earlyIndex) => {
+      const result = provider({
+        target: { ...participant('target-key'), websocketTimeout: 1000 },
+        caller: { ...participant('caller-key'), websocketTimeout: 1000 },
+      }).callApi('Cafe');
+      await vi.advanceTimersByTimeAsync(0);
+      expect(sockets).toHaveLength(2);
+      for (const socket of sockets) {
+        socket.readyState = 1;
+        socket.emit('open');
+      }
+      const early = sockets[earlyIndex];
+      const late = sockets[1 - earlyIndex];
+      emit(early, { type: 'session.started', session: { id: 'early' } });
+      for (let index = 0; index < 3; index++) {
+        audio(early, 1000, 2400);
+        await vi.advanceTimersByTimeAsync(100);
+      }
+      emit(late, { type: 'session.started', session: { id: 'late' } });
+      await vi.advanceTimersByTimeAsync(0);
+      acknowledgeOpening();
+      transcript(sockets[0], 'Question', 0, 'input');
+      transcript(sockets[1], 'Answer', 0, 'input');
+      for (let index = 0; index < 10; index++) {
+        audio(early, 1000, 2400);
+        audio(late, 2000, 2400);
+        await vi.advanceTimersByTimeAsync(100);
+      }
+      finalize();
+      const response = await result;
+      expect(response.error).toBeUndefined();
+      expect(response.metadata?.voice.durationMs).toBe(1000);
+      expect(response.metadata?.voice.stopReason).toBe('duration_limit');
+      for (const socket of sockets) {
+        expect(
+          socket.sent.filter((event) => event.type === 'session.input_audio.append'),
+        ).toHaveLength(50);
+      }
+      expect(vi.getTimerCount()).toBe(0);
+    },
+  );
+
   it('accepts asymmetric participant timeouts that fit the shared startup budget', async () => {
     const result = provider({
       timeoutMs: 400000,
