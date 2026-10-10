@@ -1,5 +1,6 @@
 import { STATUS_CODES } from 'http';
 
+import { NumericValue } from '@smithy/core/serde';
 import { throwIfAborted } from '../shared';
 import { AwsBedrockGenericProvider, type BedrockOptions } from './base';
 import { isValidBedrockRetrievalFilter } from './retrievalFilter';
@@ -75,7 +76,8 @@ function decodeBlobs(value: any): any {
     if (Object.keys(value).length === 1 && '$base64' in value) {
       if (
         typeof value.$base64 !== 'string' ||
-        !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(value.$base64)
+        value.$base64.length % 4 !== 0 ||
+        !/^[A-Za-z0-9+/]*={0,2}$/.test(value.$base64)
       ) {
         throw new Error('Native Bedrock $base64 blobs require valid padded base64');
       }
@@ -86,7 +88,20 @@ function decodeBlobs(value: any): any {
   return value;
 }
 
+// Available on supported Node versions, beyond the project's ES2022 type declarations.
+const nativeJson = JSON as typeof JSON & {
+  rawJSON: (value: string) => unknown;
+  isRawJSON: (value: unknown) => boolean;
+};
+
 function encodeBlobs(value: any): any {
+  if (nativeJson.isRawJSON(value)) {
+    return value;
+  }
+  // NumericValue's instanceof check also matches ordinary {type, string} document objects.
+  if (typeof value === 'bigint' || NumericValue.prototype.isPrototypeOf(value)) {
+    return nativeJson.rawJSON(String(value));
+  }
   if (value instanceof Uint8Array) {
     return { $base64: Buffer.from(value).toString('base64') };
   }

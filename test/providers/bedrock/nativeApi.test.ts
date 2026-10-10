@@ -1,5 +1,6 @@
 import { BedrockAgentRuntime } from '@aws-sdk/client-bedrock-agent-runtime';
 import { BedrockRuntime } from '@aws-sdk/client-bedrock-runtime';
+import { NumericValue } from '@smithy/core/serde';
 import { NodeHttpHandler } from '@smithy/node-http-handler';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AwsBedrockNativeApiProvider } from '../../../src/providers/bedrock/nativeApi';
@@ -175,6 +176,130 @@ describe('native Bedrock APIs', () => {
     const input = invoke.mock.calls[0][0];
     expect(input.messages[0].content[0].image.source.bytes).toEqual(Buffer.from('hi'));
     expect(input.messages[0].content[1].toolResult.content[0].json.bytes).toBe('literal');
+  });
+
+  it('decodes a multi-megabyte document without overflowing the stack', async () => {
+    const bytes = Buffer.alloc(4 * 1024 * 1024, 'a');
+    const { provider, invoke } = fixture('Converse', {});
+    const result = await provider.callApi(
+      JSON.stringify({
+        modelId: 'test.model',
+        messages: [
+          {
+            role: 'user',
+            content: [
+              { text: 'Summarize this document' },
+              {
+                document: {
+                  name: 'fixture',
+                  format: 'txt',
+                  source: { bytes: { $base64: bytes.toString('base64') } },
+                },
+              },
+            ],
+          },
+        ],
+      }),
+    );
+    expect(result.error).toBeUndefined();
+    const decoded = invoke.mock.calls[0][0].messages[0].content[1].document.source.bytes;
+    expect(Buffer.isBuffer(decoded)).toBe(true);
+    expect(decoded.equals(bytes)).toBe(true);
+  });
+
+  it.each(['A', 'AAA', 'A===', 'AA=A', 'AA==\n', 'AA\r\n', 'AA-_'])(
+    'rejects malformed base64 %j before dispatch',
+    async (encoded) => {
+      const { provider, invoke } = fixture('Converse', {});
+      expect(
+        (await provider.callApi(JSON.stringify({ blob: { $base64: encoded } }))).error,
+      ).toContain('valid padded base64');
+      expect(invoke).not.toHaveBeenCalled();
+    },
+  );
+
+  it('rejects an invalid character after a multi-megabyte base64 prefix', async () => {
+    const { provider, invoke } = fixture('Converse', {});
+    const encoded =
+      Buffer.alloc(4 * 1024 * 1024)
+        .toString('base64')
+        .slice(0, -1) + '!';
+    expect(
+      (await provider.callApi(JSON.stringify({ blob: { $base64: encoded } }))).error,
+    ).toContain('valid padded base64');
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
+  it.each(['', 'AA==', 'AAA=', 'AAAA'])('accepts valid base64 %j', async (encoded) => {
+    const { provider, invoke } = fixture('Converse', {});
+    const result = await provider.callApi(JSON.stringify({ blob: { $base64: encoded } }));
+    expect(result.error).toBeUndefined();
+    expect(invoke.mock.calls[0][0].blob).toEqual(Buffer.from(encoded, 'base64'));
+  });
+
+  it.each(['Converse', 'Retrieve'])(
+    'preserves SDK numeric document values for %s',
+    async (operation) => {
+      const document =
+        '"large":9007199254740993,"precise":0.123456789012345678901,"lookalike":{"type":"bigDecimal","string":"2.5"}';
+      const body =
+        operation === 'Converse'
+          ? '{"output":{"message":{"role":"assistant","content":[{"toolUse":{"toolUseId":"tool-id","name":"fixture","input":{' +
+            document +
+            '}}}]}},"stopReason":"tool_use","usage":{"inputTokens":1,"outputTokens":1,"totalTokens":2},"metrics":{"latencyMs":1}}'
+          : '{"retrievalResults":[{"content":{"type":"TEXT","text":"READY"},"metadata":{' +
+            document +
+            '}}]}';
+      const handle = vi.spyOn(NodeHttpHandler.prototype, 'handle').mockResolvedValue({
+        response: {
+          statusCode: 200,
+          headers: { 'content-type': 'application/json' },
+          body: Buffer.from(body),
+        },
+      });
+      const provider = new AwsBedrockNativeApiProvider(operation, {
+        config: { region: 'us-east-1', accessKeyId: 'synthetic', secretAccessKey: 'synthetic' },
+      });
+      try {
+        const request =
+          operation === 'Converse'
+            ? { modelId: 'test.model', messages: [{ role: 'user', content: [{ text: 'hello' }] }] }
+            : { knowledgeBaseId: 'KB12345678', retrievalQuery: { text: 'hello' } };
+        const result = await provider.callApi(JSON.stringify(request));
+        expect(result.error).toBeUndefined();
+        expect(result.output).toContain('"large":9007199254740993');
+        expect(result.output).toContain('"precise":0.123456789012345678901');
+        expect(result.output).toContain('"lookalike":{"type":"bigDecimal","string":"2.5"}');
+        expect(handle).toHaveBeenCalledOnce();
+      } finally {
+        await provider.cleanup();
+      }
+    },
+  );
+
+  it('preserves numeric document values when encoding collected stream events', async () => {
+    const { provider } = fixture('AgenticRetrieveStream', {
+      stream: events([
+        {
+          result: {
+            results: [
+              {
+                metadata: {
+                  large: 9007199254740993n,
+                  precise: new NumericValue('0.123456789012345678901', 'bigDecimal'),
+                  lookalike: { type: 'bigDecimal', string: '2.5' },
+                },
+              },
+            ],
+          },
+        },
+      ]),
+    });
+    const result = await provider.callApi('{}');
+    expect(result.error).toBeUndefined();
+    expect(result.output).toContain('"large":9007199254740993');
+    expect(result.output).toContain('"precise":0.123456789012345678901');
+    expect(result.output).toContain('"lookalike":{"type":"bigDecimal","string":"2.5"}');
   });
 
   it('preserves binary InvokeModel outputs without trying to parse image bytes', async () => {
