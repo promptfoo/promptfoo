@@ -323,6 +323,34 @@ describe('useModelAuditHistoryStore', () => {
   });
 
   describe('deleteHistoricalScan', () => {
+    it.each([true, false])(
+      'preserves a refreshed count when the failed deletion is already present (initially visible: %s)',
+      async (initiallyVisible) => {
+        const scans = [createMockScan('1', 'Scan 1'), createMockScan('2', 'Scan 2')];
+        useModelAuditHistoryStore.setState({
+          historicalScans: initiallyVisible ? scans : [scans[1]],
+          totalCount: 2,
+        });
+        const deletion = createDeferred<Response>();
+        mockCallApi.mockReturnValueOnce(deletion.promise).mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ scans, total: 2 }),
+        } as Response);
+        const store = useModelAuditHistoryStore.getState();
+        const deletionResult = expect(store.deleteHistoricalScan('1')).rejects.toThrow(
+          'Failed to delete scan',
+        );
+        await store.fetchHistoricalScans();
+        deletion.resolve({ ok: false } as Response);
+        await deletionResult;
+        expect(useModelAuditHistoryStore.getState()).toMatchObject({
+          historicalScans: scans,
+          totalCount: 2,
+          historyError: 'Failed to delete scan',
+        });
+      },
+    );
+
     it.each(
       ['failed-first', 'successful-first'].flatMap((completionOrder) =>
         ['1', '2'].map((failedId) => ({ completionOrder, failedId })),

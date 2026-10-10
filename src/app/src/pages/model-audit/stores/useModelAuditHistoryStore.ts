@@ -179,7 +179,8 @@ export const useModelAuditHistoryStore = create<ModelAuditHistoryState>()((set, 
       // Roll back only this deletion, preserving other in-flight deletions and updates.
       set((state) => {
         const historicalScans = [...state.historicalScans];
-        if (deletedScan && !historicalScans.some((scan) => scan.id === id)) {
+        const scanAlreadyPresent = historicalScans.some((scan) => scan.id === id);
+        if (deletedScan && !scanAlreadyPresent) {
           const nextScan = previousScans
             .slice(deletedIndex + 1)
             .find((scan) => historicalScans.some((current) => current.id === scan.id));
@@ -190,7 +191,7 @@ export const useModelAuditHistoryStore = create<ModelAuditHistoryState>()((set, 
         }
         return {
           historicalScans,
-          totalCount: state.totalCount + countAdjustment,
+          totalCount: state.totalCount + (scanAlreadyPresent ? 0 : countAdjustment),
           historyError: errorMessage,
         };
       });
