@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import logger from '../../../src/logger';
 import { AnthropicManagedAgentsProvider } from '../../../src/providers/anthropic/managedAgents';
 
 const usage = {
@@ -21,6 +22,19 @@ const idle = (reason = 'end_turn') => ({
   stop_reason: { type: reason },
 });
 const config = { apiKey: 'test-key', agent_id: 'agent-existing', environment_id: 'env-existing' };
+const apiError = (status: number, message: string, type = 'invalid_request_error') =>
+  new Anthropic.APIError(
+    status,
+    { type: 'error', error: { type, message } },
+    undefined,
+    new Headers(),
+  );
+// The refusal the API returns when archival races an interrupt or the idle status write.
+const stillRunning = () =>
+  apiError(
+    400,
+    'Session sesn-test cannot be archived while its status is "running". Only pending or idle sessions may be archived.',
+  );
 
 function setup(
   overrides: Partial<ConstructorParameters<typeof AnthropicManagedAgentsProvider>[0]> = {},
@@ -127,22 +141,156 @@ describe('Claude Managed Agents', () => {
       { type: 'workflow_run.created', workflow_run_id: 'run-open' },
       idle('budget_reached'),
     ]);
-    f.archive.mockRejectedValue(
-      new Anthropic.APIError(400, {}, 'workflow_run_open', new Headers()),
-    );
+    f.archive.mockRejectedValue(apiError(400, 'Session sesn-test has an open workflow run.'));
+    f.retrieve.mockResolvedValue({ status: 'idle' } as never);
     const result = await f.provider.callApi('test');
     expect(result.error).toContain('cleanup failed');
+    expect(result.error).toContain('has an open workflow run');
     expect(result.metadata).toMatchObject({
       interruptRequested: true,
       sessionArchived: false,
       openWorkflowRunIds: ['run-open'],
       sessionId: 'sesn-test',
     });
+    // Waiting cannot help a settled session: one retry rules out a status race, then it reports.
+    expect(f.archive).toHaveBeenCalledTimes(2);
     // Never raise the user's budget or resume paid work to try to stop a run.
     expect(f.send.mock.calls.map((call) => call[1].events[0].type)).toEqual([
       'user.message',
       'user.interrupt',
     ]);
+  });
+
+  it.each(['budget_reached', 'end_turn'])(
+    'waits for a session that is still running before archiving it (%s)',
+    async (reason) => {
+      vi.useFakeTimers();
+      const f = setup(
+        {
+          config: {
+            apiKey: 'key',
+            agent: { name: 'QA', model: 'claude-sonnet-5' },
+            environment: { name: 'QA' },
+          },
+        },
+        [message('answer'), idle(reason)],
+      );
+      f.archive
+        .mockRejectedValueOnce(stillRunning())
+        .mockRejectedValueOnce(stillRunning())
+        .mockResolvedValue({} as never);
+      f.retrieve.mockResolvedValue({ status: 'running', usage } as never);
+      const pending = f.provider.callApi('test');
+      await vi.advanceTimersByTimeAsync(1_000);
+      const result = await pending;
+      expect(f.archive).toHaveBeenCalledTimes(3);
+      expect(result.metadata).toMatchObject({ sessionArchived: true });
+      expect(result.metadata).not.toHaveProperty('cleanupErrors');
+      expect(result.error).toBe(
+        reason === 'end_turn' ? undefined : 'Claude Managed Agents stopped: budget_reached',
+      );
+      expect(result.output).toBe(reason === 'end_turn' ? 'answer' : undefined);
+      // The definitions it created are only released once the session is.
+      expect(f.archive.mock.invocationCallOrder[2]).toBeLessThan(
+        f.agentArchive.mock.invocationCallOrder[0],
+      );
+      expect(f.environmentArchive).toHaveBeenCalledOnce();
+    },
+  );
+
+  it('archives a session that settles between the refusal and the status check', async () => {
+    const f = setup({}, [idle('budget_reached')]);
+    f.archive.mockRejectedValueOnce(stillRunning()).mockResolvedValue({} as never);
+    f.retrieve.mockResolvedValue({ status: 'idle' } as never);
+    const result = await f.provider.callApi('test');
+    expect(f.archive).toHaveBeenCalledTimes(2);
+    expect(result.metadata).toMatchObject({ sessionArchived: true });
+    expect(result.metadata).not.toHaveProperty('cleanupErrors');
+  });
+
+  it('accepts a refusal for a session that is already archived', async () => {
+    const f = setup({}, [idle('budget_reached')]);
+    f.archive.mockRejectedValue(apiError(400, 'Session sesn-test is already archived.'));
+    f.retrieve.mockResolvedValue({ status: 'terminated', archived_at: '2026-10-09' } as never);
+    const result = await f.provider.callApi('test');
+    expect(result.metadata).toMatchObject({ sessionArchived: true });
+    expect(result.error).toBe('Claude Managed Agents stopped: budget_reached');
+  });
+
+  it('reports a session that is still running when the cleanup deadline passes', async () => {
+    vi.useFakeTimers();
+    const f = setup(
+      {
+        config: {
+          apiKey: 'key',
+          agent: { name: 'QA', model: 'claude-sonnet-5' },
+          environment: { name: 'QA' },
+          cleanupTimeoutMs: 1_000,
+        },
+      },
+      [idle('budget_reached')],
+    );
+    f.archive.mockImplementation(((
+      _id: string,
+      _params: unknown,
+      request: { signal: AbortSignal },
+    ) =>
+      request.signal.aborted
+        ? Promise.reject(new Anthropic.APIUserAbortError())
+        : Promise.reject(stillRunning())) as never);
+    f.retrieve.mockResolvedValue({ status: 'running' } as never);
+    const pending = f.provider.callApi('test');
+    await vi.advanceTimersByTimeAsync(1_000);
+    const result = await pending;
+    expect(result.error).toContain('cannot be archived while its status is "running"');
+    expect(result.error).toContain('still running when the 1000ms cleanup deadline passed');
+    expect(result.metadata).toMatchObject({
+      sessionArchived: false,
+      sessionId: 'sesn-test',
+      createdAgentId: 'agent-created',
+      createdEnvironmentId: 'env-created',
+    });
+    expect(f.archive.mock.calls.length).toBeGreaterThan(1);
+    expect(f.agentArchive).not.toHaveBeenCalled();
+    expect(f.environmentArchive).not.toHaveBeenCalled();
+  });
+
+  it('reports why the API rejected a definition without echoing the credentials it was sent', async () => {
+    const errorLog = vi.spyOn(logger, 'error').mockImplementation(() => undefined as never);
+    const f = setup({
+      config: {
+        apiKey: 'sk-ant-config-credential',
+        headers: { 'x-gateway': 'gateway-credential' },
+        agent: { name: 'QA', model: 'claude-not-a-model' },
+        environment: { name: 'QA' },
+        session: {
+          resources: [
+            {
+              type: 'github_repository',
+              url: 'https://github.com/promptfoo/promptfoo',
+              authorization_token: 'repository-credential',
+            },
+          ],
+        },
+      },
+    });
+    f.agentCreate.mockRejectedValue(
+      apiError(
+        404,
+        '`model.id`: model "claude-not-a-model": model is not supported (sk-ant-config-credential, gateway-credential, repository-credential)',
+        'not_found_error',
+      ),
+    );
+    const results = [await f.provider.callApi('test'), await f.provider.callApi('test')];
+    for (const result of results) {
+      expect(result.error).toBe(
+        'Claude Managed Agents API request failed (HTTP 404): not_found_error: `model.id`: model "claude-not-a-model": model is not supported ([REDACTED], [REDACTED], [REDACTED])',
+      );
+      expect(result.metadata).toMatchObject({ http: { status: 404 }, rateLimitRetryable: false });
+    }
+    // A 404 aborts the eval before rows are shown, so the reason is also logged, once.
+    expect(errorLog).toHaveBeenCalledOnce();
+    expect(errorLog).toHaveBeenCalledWith(results[0].error);
   });
 
   it('subscribes before sending, returns the final answer and full session usage, then archives only its session', async () => {
@@ -161,11 +309,12 @@ describe('Claude Managed Agents', () => {
         prompt: 130,
         completion: 20,
         total: 150,
-        cached: 30,
         completionDetails: { cacheReadInputTokens: 30, cacheCreationInputTokens: 90 },
       },
       metadata: { sessionId: 'sesn-test', sessionArchived: true, stopReason: 'end_turn' },
     });
+    // Prompt-cache reads are not a response replayed from Promptfoo's cache.
+    expect(result.tokenUsage).not.toHaveProperty('cached');
     expect(result.error).toBeUndefined();
     expect(f.stream.mock.invocationCallOrder[0]).toBeLessThan(f.send.mock.invocationCallOrder[0]);
     expect(f.send).toHaveBeenCalledWith(
@@ -273,6 +422,25 @@ describe('Claude Managed Agents', () => {
       expect((await f.provider.callApi('test')).error).toContain(`ended with ${type}`);
     },
   );
+
+  it('includes the reason the server gives for a failed workflow', async () => {
+    const f = setup({}, [
+      { type: 'workflow_run.created', workflow_run_id: 'run' },
+      {
+        type: 'workflow_run.status_ended',
+        workflow_run_id: 'run',
+        result: {
+          type: 'error',
+          error: { type: 'timeout_error', message: 'The run exceeded its lifetime.' },
+        },
+      },
+      message('partial'),
+      idle(),
+    ]);
+    expect((await f.provider.callApi('test')).error).toContain(
+      'workflow run ended with error (timeout_error: The run exceeded its lifetime.)',
+    );
+  });
 
   it.each(['requires_action', 'budget_reached', 'retries_exhausted', 'unknown'])(
     'does not treat %s as success',

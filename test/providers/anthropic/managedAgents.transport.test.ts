@@ -127,7 +127,10 @@ describe('Claude Managed Agents SDK transport', () => {
     ['data: {bad-json}\n\n', 'invalid JSON'],
     ['data: null\n\n', 'invalid event'],
     ['data: {"type":"agent.message"}', 'incomplete event'],
-    [event('error', { error: { message: 'private' } }), 'reported an API error'],
+    [
+      event('error', { error: { type: 'overloaded_error', message: 'private' } }),
+      'reported an API error (overloaded_error)',
+    ],
   ])('rejects malformed or failed SSE %#', async (events, error) => {
     const { apiBaseUrl } = await serve(events);
     const provider = new AnthropicManagedAgentsProvider({
@@ -140,6 +143,7 @@ describe('Claude Managed Agents SDK transport', () => {
     });
     const result = await provider.callApi('test');
     expect(result.error).toContain(error);
+    expect(result.error).not.toContain('private');
     expect(result.metadata?.sessionArchived).toBe(true);
     expect(result.output).toBeUndefined();
   });
