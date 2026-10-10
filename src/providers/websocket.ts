@@ -241,6 +241,18 @@ export async function createStreamResponse(
   );
 }
 
+// Close codes that mean the transport died rather than the peer rejecting the
+// message: retrying a fresh connection can succeed. Everything else (protocol
+// or policy violations) keeps failing fast, since the same payload would lose
+// again on a new socket. See the IANA WebSocket close-code registry.
+const TRANSIENT_CLOSE_CODES: ReadonlySet<number> = new Set([1005, 1006, 1012, 1013]);
+const CLOSE_CODE_REASONS: Readonly<Record<number, string>> = {
+  1005: 'no status received',
+  1006: 'abnormal closure, connection dropped without a close frame',
+  1012: 'service restart',
+  1013: 'try again later',
+};
+
 export class WebSocketProvider implements ApiProvider {
   url: string;
   private readonly providerId: string;
@@ -405,8 +417,22 @@ export class WebSocketProvider implements ApiProvider {
         }
       };
 
-      ws.onclose = () => {
-        settle(new Error('WebSocket connection closed before the response completed'));
+      ws.onclose = (event) => {
+        if (TRANSIENT_CLOSE_CODES.has(event.code)) {
+          const transient = new Error(
+            `WebSocket closed mid-stream by the peer with code ${event.code} (${
+              CLOSE_CODE_REASONS[event.code] ?? 'abnormal close'
+            })`,
+          ) as NodeJS.ErrnoException;
+          transient.code = 'ECONNRESET';
+          settle(transient);
+          return;
+        }
+        settle(
+          new Error(
+            `WebSocket connection closed before the response completed (code ${event.code ?? 'unknown'})`,
+          ),
+        );
       };
 
       ws.onopen = () => {
