@@ -3,7 +3,6 @@ import * as fs from 'fs';
 import async from 'async';
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
-import Table from 'cli-table3';
 import cliState from '../cliState';
 import { getEnvString } from '../envars';
 import logger, { getLogLevel } from '../logger';
@@ -27,8 +26,6 @@ import {
   MULTI_INPUT_VAR,
   PHARMACY_PLUGINS,
   PII_PLUGINS,
-  riskCategorySeverityMap,
-  Severity,
   STRATEGY_COLLECTION_MAPPINGS,
   STRATEGY_COLLECTIONS,
   TEEN_SAFETY_PLUGINS,
@@ -40,13 +37,19 @@ import { extractSystemPurpose } from './extraction/purpose';
 import { trackGenerationTokenUsage } from './generationTokenUsage';
 import { CustomPlugin } from './plugins/custom';
 import { Plugins } from './plugins/index';
-import { isValidPolicyObject, makeInlinePolicyIdSync } from './plugins/policy/utils';
+import { isValidPolicyObject } from './plugins/policy/utils';
 import { redteamProviderManager } from './providers/shared';
 import { getRemoteHealthUrl, shouldGenerateRemote } from './remoteGeneration';
 import {
   remoteGenerationContextPayload,
   resolveRedteamGenerationContext,
 } from './remoteGenerationContext';
+import {
+  generateReport,
+  getPluginDisplayId,
+  getPluginSeverity,
+  type PluginReportResult,
+} from './report';
 import {
   getGeneratedPromptOverLimit,
   getMaxCharsPerMessageModifierValue,
@@ -55,11 +58,7 @@ import {
 import { validateSharpDependency } from './sharpAvailability';
 import { loadStrategy, Strategies, validateStrategies } from './strategies/index';
 import { pluginMatchesStrategyTargets } from './strategies/util';
-import {
-  extractGoalFromPrompt,
-  extractMaterializedVariablesFromJsonWithMetadata,
-  getShortPluginId,
-} from './util';
+import { extractGoalFromPrompt, extractMaterializedVariablesFromJsonWithMetadata } from './util';
 
 import type { ApiProvider, Inputs, TestCase, TestCaseWithPlugin, TokenUsage } from '../types/index';
 import type { RedteamProviderSelection } from './providers/shared';
@@ -109,6 +108,21 @@ function getPolicyText(metadata: TestCase['metadata'] | undefined): string | und
   }
 
   return undefined;
+}
+
+function formatPolicySummary(policy: Policy | undefined): string {
+  const truncate = (text: string) => {
+    const normalized = text.trim().replace(/\n+/g, ' ');
+    return normalized.length > 70 ? normalized.slice(0, 70) + '...' : normalized;
+  };
+
+  if (policy !== undefined && isValidPolicyObject(policy)) {
+    const namePrefix = policy.name ? ` ${policy.name}:` : '';
+    const text = typeof policy.text === 'string' ? truncate(policy.text) : '';
+    return text ? `${namePrefix} "${text}"` : namePrefix;
+  }
+
+  return typeof policy === 'string' ? truncate(policy) : '';
 }
 
 async function rematerializeStrategyInputVars(
@@ -185,142 +199,6 @@ async function rematerializeStrategyInputVars(
 }
 
 export const MAX_MAX_CONCURRENCY = 20;
-
-/**
- * Gets the severity level for a plugin based on its ID and configuration.
- * @param pluginId - The ID of the plugin.
- * @param pluginConfig - Optional configuration for the plugin.
- * @returns The severity level.
- */
-function getPluginSeverity(pluginId: string, pluginConfig?: Record<string, any>): Severity {
-  if (pluginConfig?.severity) {
-    return pluginConfig.severity;
-  }
-
-  const shortId = getShortPluginId(pluginId);
-  return shortId in riskCategorySeverityMap
-    ? riskCategorySeverityMap[shortId as keyof typeof riskCategorySeverityMap]
-    : Severity.Low;
-}
-
-// Maximum length for policy text preview in display
-const POLICY_PREVIEW_MAX_LENGTH = 20;
-
-/**
- * Truncates and normalizes text for display preview.
- */
-function truncateForPreview(text: string): string {
-  const normalized = text.trim().replace(/\n+/g, ' ');
-  return normalized.length > POLICY_PREVIEW_MAX_LENGTH
-    ? normalized.slice(0, POLICY_PREVIEW_MAX_LENGTH) + '...'
-    : normalized;
-}
-
-/**
- * Generates a unique display ID for a plugin instance.
- * The returned string serves as both the unique key and the human-readable display.
- *
- * For policy plugins, the ID includes a 12-char identifier (hash or UUID prefix) for uniqueness:
- * - Named cloud policy: "Policy Name"
- * - Unnamed cloud policy: "policy [12-char-id]: preview..."
- * - Inline policy: "policy [hash]: preview..."
- *
- * @param plugin - The plugin configuration.
- * @returns A unique display ID string.
- */
-function getPluginDisplayId(plugin: { id: string; config?: Record<string, any> }): string {
-  if (plugin.id !== 'policy') {
-    return plugin.id;
-  }
-
-  const policyConfig = plugin.config?.policy;
-
-  // Cloud policy (object with id)
-  if (typeof policyConfig === 'object' && policyConfig !== null && policyConfig.id) {
-    if (policyConfig.name) {
-      return policyConfig.name;
-    }
-    const shortId = policyConfig.id.replace(/-/g, '').slice(0, 12);
-    const preview = policyConfig.text ? truncateForPreview(String(policyConfig.text)) : '';
-    return preview ? `policy [${shortId}]: ${preview}` : `policy [${shortId}]`;
-  }
-
-  // Inline policy (string)
-  if (typeof policyConfig === 'string') {
-    const hash = makeInlinePolicyIdSync(policyConfig);
-    const preview = truncateForPreview(policyConfig);
-    return `policy [${hash}]: ${preview}`;
-  }
-
-  return 'policy';
-}
-
-/**
- * Determines the status of test generation based on requested and generated counts.
- * @param requested - The number of requested tests.
- * @param generated - The number of generated tests.
- * @returns A colored string indicating the status.
- */
-function getStatus(requested: number, generated: number): string {
-  if (requested === 0 && generated === 0) {
-    return chalk.gray('Skipped');
-  }
-  if (generated === 0) {
-    return chalk.red('Failed');
-  }
-  if (generated < requested) {
-    return chalk.yellow('Partial');
-  }
-  return chalk.green('Success');
-}
-
-/**
- * Generates a report of plugin and strategy results.
- * @param pluginResults - Results from plugin executions (key is the display ID).
- * @param strategyResults - Results from strategy executions.
- * @returns A formatted string containing the report.
- */
-function generateReport(
-  pluginResults: Record<string, { requested: number; generated: number }>,
-  strategyResults: Record<string, { requested: number; generated: number }>,
-): string {
-  const table = new Table({
-    head: ['#', 'Type', 'ID', 'Requested', 'Generated', 'Status'].map((h) =>
-      chalk.dim(chalk.white(h)),
-    ),
-    colWidths: [5, 10, 40, 12, 12, 14],
-  });
-
-  let rowIndex = 1;
-
-  Object.entries(pluginResults)
-    .sort((a, b) => a[0].localeCompare(b[0]))
-    .forEach(([displayId, { requested, generated }]) => {
-      table.push([
-        rowIndex++,
-        'Plugin',
-        displayId,
-        requested,
-        generated,
-        getStatus(requested, generated),
-      ]);
-    });
-
-  Object.entries(strategyResults)
-    .sort((a, b) => a[0].localeCompare(b[0]))
-    .forEach(([id, { requested, generated }]) => {
-      table.push([
-        rowIndex++,
-        'Strategy',
-        id,
-        requested,
-        generated,
-        getStatus(requested, generated),
-      ]);
-    });
-
-  return `\nTest Generation Report:\n${table.toString()}`;
-}
 
 /**
  * Resolves top-level file paths in the plugin configuration.
@@ -1109,21 +987,7 @@ export async function synthesize({
           let configSummary = '';
           if (p.config) {
             if (p.id === 'policy') {
-              const policy = p.config?.policy as Policy;
-              if (isValidPolicyObject(policy)) {
-                const policyText = policy.text!.trim().replace(/\n+/g, ' ');
-                const truncated =
-                  policyText.length > 70 ? policyText.slice(0, 70) + '...' : policyText;
-                if (policy.name) {
-                  configSummary = ` ${policy.name}:`;
-                }
-                configSummary += ` "${truncated}"`;
-              } else {
-                const policyText = policy.trim().replace(/\n+/g, ' ');
-                const truncated =
-                  policyText.length > 70 ? policyText.slice(0, 70) + '...' : policyText;
-                configSummary = truncated;
-              }
+              configSummary = formatPolicySummary(p.config?.policy as Policy | undefined);
             } else {
               // For other plugins with config, just indicate config exists
               configSummary = ' (custom config)';
@@ -1361,7 +1225,7 @@ export async function synthesize({
 
   logger.debug(`System purpose: ${purpose}`);
 
-  const pluginResults: Record<string, { requested: number; generated: number }> = {};
+  const pluginResults: PluginReportResult[] = [];
   const testCases: TestCaseWithPlugin[] = [];
   await async.forEachLimit(plugins, maxConcurrency, async (plugin) => {
     // Check for abort signal before generating tests
@@ -1526,7 +1390,7 @@ export async function synthesize({
       // Otherwise, use the aggregated result for the plugin
       const definedLanguages = languages.filter((lang) => lang !== undefined);
 
-      // Get the display ID for this plugin (also serves as the unique key)
+      // Display labels may repeat; each plugin instance keeps its own report row.
       const baseDisplayId = getPluginDisplayId(plugin);
 
       if (definedLanguages.length > 1) {
@@ -1537,7 +1401,7 @@ export async function synthesize({
           const displayId = langKey === 'en' ? baseDisplayId : `(${langKey}) ${baseDisplayId}`;
           // For intent plugin, requested should equal generated (same as single-language behavior)
           const requested = plugin.id === 'intent' ? result.generated : result.requested;
-          pluginResults[displayId] = { requested, generated: result.generated };
+          pluginResults.push({ id: displayId, requested, generated: result.generated });
         }
       } else {
         // Single language or no language - use aggregated result
@@ -1546,7 +1410,11 @@ export async function synthesize({
             ? allPluginTests.length
             : getExpectedPluginTestCount(plugin, language);
         const generated = allPluginTests.length;
-        pluginResults[baseDisplayId] = { requested, generated };
+        const displayId =
+          definedLanguages[0] && definedLanguages[0] !== 'en'
+            ? `(${definedLanguages[0]}) ${baseDisplayId}`
+            : baseDisplayId;
+        pluginResults.push({ id: displayId, requested, generated });
       }
     } else if (plugin.id.startsWith('file://')) {
       try {
@@ -1656,25 +1524,34 @@ export async function synthesize({
         if (definedLanguages.length > 1) {
           for (const [langKey, result] of Object.entries(resultsPerLanguage)) {
             const displayId = langKey === 'en' ? baseDisplayId : `(${langKey}) ${baseDisplayId}`;
-            pluginResults[displayId] = { requested: result.requested, generated: result.generated };
+            pluginResults.push({
+              id: displayId,
+              requested: result.requested,
+              generated: result.generated,
+            });
           }
         } else {
-          pluginResults[baseDisplayId] = {
+          const displayId =
+            definedLanguages[0] && definedLanguages[0] !== 'en'
+              ? `(${definedLanguages[0]}) ${baseDisplayId}`
+              : baseDisplayId;
+          pluginResults.push({
+            id: displayId,
             requested: getExpectedPluginTestCount(plugin, language),
             generated: allCustomTests.length,
-          };
+          });
         }
 
         progressBar?.increment(getExpectedPluginTestCount(plugin, language));
       } catch (e) {
         logger.error(`Error generating tests for custom plugin ${plugin.id}: ${e}`);
         const displayId = getPluginDisplayId(plugin);
-        pluginResults[displayId] = { requested: plugin.numTests, generated: 0 };
+        pluginResults.push({ id: displayId, requested: plugin.numTests, generated: 0 });
       }
     } else {
       logger.warn(`Plugin ${plugin.id} not registered, skipping`);
       const displayId = getPluginDisplayId(plugin);
-      pluginResults[displayId] = { requested: plugin.numTests, generated: 0 };
+      pluginResults.push({ id: displayId, requested: plugin.numTests, generated: 0 });
       progressBar?.increment(plugin.numTests);
     }
   });
@@ -1756,9 +1633,9 @@ export async function synthesize({
   logger.info(generateReport(pluginResults, strategyResults));
 
   // Calculate failed plugins (those that generated 0 tests when they should have generated some)
-  const failedPlugins: FailedPluginInfo[] = Object.entries(pluginResults)
-    .filter(([_, { requested, generated }]) => requested > 0 && generated === 0)
-    .map(([pluginId, { requested }]) => ({ pluginId, requested }));
+  const failedPlugins: FailedPluginInfo[] = pluginResults
+    .filter(({ requested, generated }) => requested > 0 && generated === 0)
+    .map(({ id: pluginId, requested }) => ({ pluginId, requested }));
 
   return {
     purpose,
