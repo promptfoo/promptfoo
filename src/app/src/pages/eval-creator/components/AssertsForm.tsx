@@ -204,7 +204,7 @@ const AssertsForm = ({ onAdd, initialValues }: AssertsFormProps) => {
                     value={
                       typeof assert.value === 'string'
                         ? assert.value
-                        : typeof assert.value === 'number'
+                        : typeof assert.value === 'number' || typeof assert.value === 'boolean'
                           ? String(assert.value)
                           : ''
                     }
