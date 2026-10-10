@@ -12,7 +12,7 @@ import { readAssertions } from '../../assertions/index';
 import { validateAssertions } from '../../assertions/validateAssertions';
 import cliState from '../../cliState';
 import { getEnvBool, isCI, isTemplateProcessEnvDisabled } from '../../envars';
-import { importModule } from '../../esm';
+import { ensureTypescriptLoader, importModule } from '../../esm';
 import logger from '../../logger';
 import { readPrompts } from '../../prompts/index';
 import { loadApiProviders, resolveProviderConfigs } from '../../providers/index';
@@ -35,7 +35,7 @@ import {
   UnifiedConfigSchema,
 } from '../../types/index';
 import { isApiProvider } from '../../types/providers';
-import { maybeLoadFromExternalFile } from '../../util/file';
+import { maybeLoadFromExternalFile, pathExists } from '../../util/file';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { readFilters, renderEnvOnlyInObject } from '../../util/index';
 import invariant from '../../util/invariant';
@@ -450,6 +450,11 @@ async function readConfigInScope(configPath: string): Promise<UnifiedConfig> {
 
 export async function maybeReadConfig(configPath: string): Promise<UnifiedConfig | undefined> {
   try {
+    // Later JS configs can rely on the loader initialized by a missing TS candidate.
+    await ensureTypescriptLoader(configPath);
+    if (!(await pathExists(configPath))) {
+      return undefined;
+    }
     return await readConfig(configPath);
   } catch (error) {
     // If file doesn't exist, return undefined

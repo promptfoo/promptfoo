@@ -30,7 +30,7 @@ import { EMAIL_OK_STATUS } from '../types/email';
 import { isCliEventSource } from '../types/eventSource';
 import { CommandLineOptionsSchema, MAX_SUGGESTIONS_COUNT, TestSuiteSchema } from '../types/index';
 import { checkCloudPermissions, getEvalConfigFromCloud, getOrgContext } from '../util/cloud';
-import { clearConfigCache, loadDefaultConfig } from '../util/config/default';
+import { loadDefaultConfig } from '../util/config/default';
 import { DEFAULT_CONFIG_EXTENSIONS } from '../util/config/extensions';
 import {
   ConfigResolutionError,
@@ -1246,7 +1246,6 @@ async function doEvalWithEnv(
             printBorder();
             logger.info(`File change detected: ${path}`);
             printBorder();
-            clearConfigCache();
             try {
               await runEvaluation();
             } catch (error) {

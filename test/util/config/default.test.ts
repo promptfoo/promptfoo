@@ -1,7 +1,7 @@
 import path from 'path';
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { configCache, loadDefaultConfig } from '../../../src/util/config/default';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { loadDefaultConfig } from '../../../src/util/config/default';
 import { maybeReadConfig } from '../../../src/util/config/load';
 
 vi.mock('../../../src/util/config/load', () => ({
@@ -12,7 +12,10 @@ describe('loadDefaultConfig', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     vi.spyOn(process, 'cwd').mockImplementation(() => '/test/path');
-    configCache.clear();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it('should return empty config when no config file is found', async () => {
@@ -87,7 +90,7 @@ describe('loadDefaultConfig', () => {
     expect(maybeReadConfig).toHaveBeenCalledWith(path.normalize('/test/path/redteam.yaml'));
   });
 
-  it('should use different caches for different config names', async () => {
+  it('should load different config names independently', async () => {
     const mockConfig1 = { prompts: ['Config 1'], providers: [], tests: [] };
     const mockConfig2 = { prompts: ['Config 2'], providers: [], tests: [] };
 
@@ -102,15 +105,10 @@ describe('loadDefaultConfig', () => {
     expect(result1.defaultConfig).toEqual(mockConfig1);
     expect(result2.defaultConfig).toEqual(mockConfig2);
 
-    const cachedResult1 = await loadDefaultConfig(undefined, 'promptfooconfig');
-    const cachedResult2 = await loadDefaultConfig(undefined, 'redteam');
-
-    expect(cachedResult1).toEqual(result1);
-    expect(cachedResult2).toEqual(result2);
     expect(maybeReadConfig).toHaveBeenCalledTimes(2);
   });
 
-  it('should use different caches for different directories', async () => {
+  it('should load different directories independently', async () => {
     const mockConfig1 = { prompts: ['Config 1'], providers: [], tests: [] };
     const mockConfig2 = { prompts: ['Config 2'], providers: [], tests: [] };
 
@@ -128,23 +126,7 @@ describe('loadDefaultConfig', () => {
     expect(result1.defaultConfig).toEqual(mockConfig1);
     expect(result2.defaultConfig).toEqual(mockConfig2);
 
-    const cachedResult1 = await loadDefaultConfig(dir1);
-    const cachedResult2 = await loadDefaultConfig(dir2);
-
-    expect(cachedResult1).toEqual(result1);
-    expect(cachedResult2).toEqual(result2);
     expect(maybeReadConfig).toHaveBeenCalledTimes(2);
-  });
-
-  it('should use cache for subsequent calls with same parameters', async () => {
-    const mockConfig = { prompts: ['Cached config'], providers: [], tests: [] };
-    vi.mocked(maybeReadConfig).mockResolvedValueOnce(mockConfig);
-
-    const result1 = await loadDefaultConfig();
-    const result2 = await loadDefaultConfig();
-
-    expect(result1).toEqual(result2);
-    expect(maybeReadConfig).toHaveBeenCalledTimes(1);
   });
 
   it('should handle errors when reading config files', async () => {
