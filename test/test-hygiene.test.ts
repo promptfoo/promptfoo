@@ -244,7 +244,6 @@ const legacyModuleScopePersistentMockFiles = new Set<string>([
   'redteam/strategies/simpleAudio.test.ts',
   'redteam/strategies/simpleVideo.test.ts',
   'sagemaker.test.ts',
-  'server/findStaticDir.test.ts',
   'server/server.test.ts',
   'telemetry.test.ts',
   'tracing/integration.test.ts',
