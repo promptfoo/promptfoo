@@ -76,7 +76,9 @@ const assertTypes: AssertionType[] = [
   'latency',
   'perplexity',
   'perplexity-score',
+  'rouge-l',
   'rouge-n',
+  'rouge-s',
   'webhook',
 
   // Negations
@@ -89,7 +91,9 @@ const assertTypes: AssertionType[] = [
   'not-icontains',
   'not-is-json',
   'not-regex',
+  'not-rouge-l',
   'not-rouge-n',
+  'not-rouge-s',
   'not-similar',
   'not-starts-with',
   'not-webhook',
