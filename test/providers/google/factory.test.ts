@@ -152,7 +152,7 @@ describe('Google provider factories', () => {
       : vi.mocked(cache.fetchWithCache).mock.calls[0];
     expect(request[0]).toMatch(/:generateContent$/);
     if (id.startsWith('vertex:')) {
-      expect(request[0]).toMatch(/^https:\/\/aiplatform.googleapis.com\//);
+      expect(new URL(String(request[0])).hostname).toBe('aiplatform.googleapis.com');
     }
     expect(JSON.parse(request[1]?.body as string)).toMatchObject({
       contents: [{ role: 'user', parts }],
