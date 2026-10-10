@@ -19,7 +19,8 @@ export function processJsonFile(
   prompt: Partial<Prompt>,
   labelPath: string = filePath,
 ): Prompt[] {
-  const fileContents = fs.readFileSync(filePath, 'utf8');
+  // Drop a UTF-8 byte order mark (Windows PowerShell 5.1 writes one); JSON.parse rejects it.
+  const fileContents = fs.readFileSync(filePath, 'utf8').replace(/^﻿/, '');
 
   // Try to parse and resolve file:// references
   let processedContents = fileContents;
