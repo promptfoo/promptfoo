@@ -216,11 +216,9 @@ export class SlotQueue {
 
     return !!(
       // Request quota exhausted
-      (
-        quotaExhausted(this.remainingRequests) ||
-        // Token quota exhausted
-        quotaExhausted(this.remainingTokens)
-      )
+      quotaExhausted(this.remainingRequests) ||
+      // Token quota exhausted
+      quotaExhausted(this.remainingTokens)
     );
   }
 

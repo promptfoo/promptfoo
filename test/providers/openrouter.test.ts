@@ -849,6 +849,66 @@ describe('OpenRouter', () => {
       }
     });
 
+    it.each([
+      {
+        name: 'billing code with a 503 status',
+        code: 503,
+        metadata: { provider_code: 'credit_balance_exhausted' },
+        kind: 'quota',
+        requests: 1,
+      },
+      {
+        name: 'billing code with an overload marker',
+        code: 429,
+        metadata: {
+          provider_code: 'credit_balance_exhausted',
+          error_type: 'provider_overloaded',
+        },
+        kind: 'quota',
+        requests: 1,
+      },
+      {
+        name: 'typed rate limit with a 503 status',
+        code: 503,
+        metadata: { error_type: 'rate_limit_exceeded' },
+        kind: 'rate_limit',
+        requests: 2,
+      },
+    ])('preserves gateway classification for $name', async ({ code, metadata, kind, requests }) => {
+      const restoreEnv = mockProcessEnv({ OPENROUTER_API_KEY: 'test-key' });
+      const registry = new RateLimitRegistry({ maxConcurrency: 1, queueTimeoutMs: 100 });
+      try {
+        const provider = new OpenRouterProvider('gpt-4o', { config: { maxRetries: 1 } });
+        mockedFetchWithRetries.mockImplementation(async () =>
+          Response.json({
+            choices: [
+              {
+                message: { content: 'partial output' },
+                finish_reason: 'error',
+                error: { code, message: 'upstream failure', metadata },
+              },
+            ],
+            usage: { prompt_tokens: 2, completion_tokens: 1, total_tokens: 3 },
+          }),
+        );
+
+        const result = await registry.execute(provider, () => provider.callApi('Test prompt'), {
+          ...createProviderRateLimitOptions(),
+          getRetryAfter: () => 0,
+        });
+
+        expect(mockedFetchWithRetries).toHaveBeenCalledTimes(requests);
+        expect(result.error).toContain('upstream failure');
+        expect(result.output).toBeUndefined();
+        expect(result.metadata?.rateLimitKind).toBe(kind);
+        expect(result.metadata?.retryableErrorKind).toBeUndefined();
+        expect(result.tokenUsage).toMatchObject({ total: 3, numRequests: 1 });
+      } finally {
+        registry.dispose();
+        restoreEnv();
+      }
+    });
+
     it('retries a transient choice-level generation error', async () => {
       const restoreEnv = mockProcessEnv({ OPENROUTER_API_KEY: 'test-key' });
       const registry = new RateLimitRegistry({ maxConcurrency: 1, queueTimeoutMs: 100 });

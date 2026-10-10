@@ -316,7 +316,7 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
         // The gateway classifier (provider_code/error_type aware) wins over
         // the bare-code fallback: a billing-coded 429 must stay 'quota', not
         // be flattened to 'rate_limit'.
-        const choiceKind = getChoiceErrorKind(choiceError.error);
+        const choiceKind = rateLimitKind ? undefined : getChoiceErrorKind(choiceError.error);
         return {
           error: `API error: ${choiceError.error.message}`,
           ...(data.usage ? { tokenUsage: getTokenUsageWithRequestCount(data, cached) } : {}),
