@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MCPProvider } from '../../src/providers/mcp';
 import { maybeWrapMcpProviderForRedteam } from '../../src/redteam/mcpTargetProvider';
 import {
@@ -101,6 +101,10 @@ describe('maybeWrapMcpProviderForRedteam', () => {
   const remoteMaterializedCall = (tokenUsage?: Record<string, number>) => ({
     prompt: JSON.stringify(searchCompaniesCall),
     ...(tokenUsage ? { tokenUsage } : {}),
+  });
+
+  afterEach(() => {
+    vi.resetAllMocks();
   });
 
   beforeEach(() => {
@@ -491,6 +495,7 @@ describe('maybeWrapMcpProviderForRedteam', () => {
       ),
     ).resolves.toEqual({
       error: expect.stringContaining('Failed to materialize MCP target prompt'),
+      tokenUsage: { numRequests: 0 },
     });
     expect(target.calls).toHaveLength(0);
   });
@@ -509,6 +514,7 @@ describe('maybeWrapMcpProviderForRedteam', () => {
 
     await expect(wrapped.callApi(searchCompaniesPrompt, redteamContext())).resolves.toEqual({
       error: expect.stringContaining('Failed to materialize MCP target prompt'),
+      tokenUsage: { numRequests: 0 },
     });
     expect(target.calls).toHaveLength(0);
   });
@@ -534,6 +540,48 @@ describe('maybeWrapMcpProviderForRedteam', () => {
         numRequests: 0,
         attacker: { total: 13, prompt: 9, completion: 4, numRequests: 1 },
       },
+    });
+    expect(target.calls).toHaveLength(0);
+  });
+
+  it('does not count a target probe when remote inference fails without reported usage', async () => {
+    promptfooProviderMocks.materializeMcpToolCallRemote.mockRejectedValueOnce(
+      new Error('Remote MCP materialization failed'),
+    );
+
+    const target = new FakeMcpProvider([searchCompaniesTool]);
+    const wrapped = maybeWrapMcpProviderForRedteam(target, redteamMetadata('harmful:hate'));
+
+    await expect(wrapped.callApi(searchCompaniesPrompt, redteamContext())).resolves.toEqual({
+      error: expect.stringContaining('Remote MCP materialization failed'),
+      tokenUsage: { numRequests: 0 },
+    });
+    expect(target.calls).toHaveLength(0);
+  });
+
+  it('preserves remote materialization usage when inference fails', async () => {
+    promptfooProviderMocks.materializeMcpToolCallRemote.mockRejectedValueOnce(
+      Object.assign(new Error('Remote MCP materialization failed'), {
+        tokenUsage: { prompt: 12, completion: 4, total: 16, numRequests: 1 },
+      }),
+    );
+
+    const target = new FakeMcpProvider([searchCompaniesTool]);
+    const wrapped = maybeWrapMcpProviderForRedteam(target, redteamMetadata('harmful:hate'));
+    const response = await wrapped.callApi(searchCompaniesPrompt, redteamContext());
+
+    expect(response).toMatchObject({
+      error: expect.stringContaining('Remote MCP materialization failed'),
+      tokenUsage: {
+        numRequests: 0,
+        attacker: { total: 16, prompt: 12, completion: 4, numRequests: 1 },
+      },
+    });
+    const incurredUsage = response.tokenUsage?.incurredTokenUsage ?? response.tokenUsage;
+    expect(incurredUsage?.numRequests).toBe(0);
+    expect(incurredUsage?.attacker).toMatchObject({
+      total: 16,
+      numRequests: 1,
     });
     expect(target.calls).toHaveLength(0);
   });
