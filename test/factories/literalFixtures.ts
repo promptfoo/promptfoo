@@ -104,7 +104,7 @@ export const createTestOutput = (output = 'Test output') => ({
   output,
 });
 
-const createStringAssertion = <TType extends string>(type: TType, value: string) => ({
+export const createStringAssertion = <TType extends string>(type: TType, value: string) => ({
   type,
   value,
 });
@@ -196,6 +196,13 @@ export const createEmbeddingResult = (embedding: number, embedding2: number) => 
 export const createStatusResponse = (status = 500, statusText = 'Internal Server Error') => ({
   status,
   statusText,
+});
+
+export const createScriptAssertionParams = <TType extends string>(type: TType) => ({
+  prompt: 'Test',
+  assertion: { type, value: 'unused' },
+  test: {},
+  providerResponse: { output: 'Test output' },
 });
 
 export const createImageUsageCounts = (candidatesTokenCount: number, totalTokenCount: number) => ({
