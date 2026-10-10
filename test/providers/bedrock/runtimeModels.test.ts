@@ -1,0 +1,248 @@
+import { describe, expect, it } from 'vitest';
+import { AwsBedrockConverseProvider } from '../../../src/providers/bedrock/converse';
+import {
+  AwsBedrockCompletionProvider,
+  assertBedrockModelIsAvailable,
+  BEDROCK_MODEL,
+  getHandlerForModel,
+} from '../../../src/providers/bedrock/index';
+import {
+  calculateBedrockCost,
+  calculateBedrockInvokeModelCost,
+  getBedrockPricing,
+} from '../../../src/providers/bedrock/pricing';
+import { isRejectedPrefixedGrokId } from '../../../src/providers/bedrock/routing';
+import { awsProviderFactories } from '../../../src/providers/families/aws';
+
+const factory = awsProviderFactories.find((candidate) => candidate.test('bedrock:'))!;
+
+describe('Bedrock Runtime model compatibility', () => {
+  it.each(['zai.glm-5.3', 'moonshotai.kimi-k3'])(
+    'rejects the bare %s ID before constructing a Converse provider',
+    async (model) => {
+      await expect(factory.create(`bedrock:converse:${model}`, {}, {} as never)).rejects.toThrow(
+        `bedrock:us.${model}`,
+      );
+    },
+  );
+
+  it.each(['zai.glm-5.3', 'moonshotai.kimi-k3'])(
+    'keeps application profile resources opaque for %s',
+    (model) => {
+      const prefix = 'arn:aws:bedrock:us-east-1:123456789012:';
+      expect(() =>
+        assertBedrockModelIsAvailable(`${prefix}application-inference-profile/${model}`),
+      ).not.toThrow();
+      expect(() => assertBedrockModelIsAvailable(`${prefix}inference-profile/${model}`)).toThrow(
+        'requires a cross-region inference profile',
+      );
+    },
+  );
+
+  it.each([
+    'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/grok-eval',
+    'arn:aws:bedrock:us-east-1:123456789012:inference-profile/us.xai.grok-4.7',
+  ])('uses the xAI request contract for %s', async (arn) => {
+    const config = { inferenceModelType: 'xai' as const, max_tokens: 128, region: 'us-east-1' };
+    const handler = getHandlerForModel(arn, config);
+    expect(handler).toBe(BEDROCK_MODEL.OPENAI_COMPAT);
+    expect(await handler.params(config, 'Hello', [], arn)).toMatchObject({
+      messages: [{ role: 'user', content: 'Hello' }],
+      max_tokens: 128,
+    });
+  });
+
+  it.each(['', 'completion:', 'converse:'])(
+    'preserves Grok profile ARNs through the %s native selector',
+    async (selector) => {
+      for (const arn of [
+        'arn:aws:bedrock:us-east-1:123456789012:inference-profile/us.xai.grok-4.7',
+        'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/team.xai.eval',
+      ]) {
+        const provider = await factory.create(
+          `bedrock:${selector}${arn}`,
+          { config: { inferenceModelType: 'xai', region: 'us-east-1' } },
+          {} as never,
+        );
+        expect(provider).toBeInstanceOf(
+          selector === 'converse:' ? AwsBedrockConverseProvider : AwsBedrockCompletionProvider,
+        );
+        expect(isRejectedPrefixedGrokId(arn, true)).toBe(true);
+      }
+    },
+  );
+
+  it.each(['us.xai.grok-4.7', 'global.xai.grok-4.7'])(
+    'loads %s through Converse without selecting Mantle',
+    async (model) => {
+      expect(isRejectedPrefixedGrokId(model, false)).toBe(false);
+      expect(isRejectedPrefixedGrokId(model, true)).toBe(true);
+      const provider = await factory.create(
+        `bedrock:converse:${model}`,
+        { config: { region: 'us-east-1' } },
+        {} as never,
+      );
+      expect(provider).toBeInstanceOf(AwsBedrockConverseProvider);
+      expect(provider.id()).toBe(`bedrock:converse:${model}`);
+    },
+  );
+
+  it.each(['us', 'global'])(
+    'loads bare and explicit completion Grok 4.7 profiles for %s',
+    async (geo) => {
+      for (const prefix of ['', 'completion:']) {
+        const provider = await factory.create(
+          `bedrock:${prefix}${geo}.xai.grok-4.7`,
+          {},
+          {} as never,
+        );
+        expect(provider).toBeInstanceOf(AwsBedrockCompletionProvider);
+      }
+    },
+  );
+
+  it.each(['', 'completion:', 'converse:', 'responses:', 'mantle:'])(
+    'explains the required Grok 4.7 profile for the %s bare selector',
+    async (selector) => {
+      await expect(
+        factory.create(`bedrock:${selector}xai.grok-4.7`, {}, {} as never),
+      ).rejects.toThrow('bedrock:converse:us.xai.grok-4.7');
+    },
+  );
+
+  it.each([
+    'us.xai.grok-4.7',
+    'global.xai.grok-4.7',
+    'us.zai.glm-5.3',
+    'global.zai.glm-5.3',
+    'us.moonshotai.kimi-k3',
+    'global.moonshotai.kimi-k3',
+    'in.moonshotai.kimi-k3',
+  ])('uses the OpenAI request and response contract for %s', async (model) => {
+    const handler = getHandlerForModel(model);
+    expect(handler).toBe(BEDROCK_MODEL.OPENAI_COMPAT);
+    const config = { region: 'us-east-1', max_tokens: 256 };
+    const params = await handler.params(config, 'Hello', [], model);
+    expect(params).toMatchObject({
+      messages: [{ role: 'user', content: 'Hello' }],
+      max_tokens: 256,
+    });
+    expect(handler.output({}, { choices: [{ message: { content: 'READY' } }] })).toBe('READY');
+  });
+
+  it.each([
+    ['us.xai.grok-4.7', 'xhigh'],
+    ['global.zai.glm-5.3', 'max'],
+  ] as const)('forwards the highest reasoning effort for %s', async (model, reasoning_effort) => {
+    const config = { region: 'us-east-1', reasoning_effort };
+    expect(await getHandlerForModel(model).params(config, 'Hello', [], model)).toMatchObject({
+      reasoning_effort,
+    });
+  });
+
+  it.each(['zai.glm-5.3', 'moonshotai.kimi-k3'])(
+    'explains why the bare %s model cannot use on-demand InvokeModel',
+    (model) => {
+      expect(() => getHandlerForModel(model)).toThrow(`bedrock:us.${model}`);
+    },
+  );
+});
+
+it('includes the India Kimi profile in the bare-ID correction', () => {
+  expect(() => getHandlerForModel('moonshotai.kimi-k3')).toThrow('bedrock:in.moonshotai.kimi-k3');
+});
+
+describe('Bedrock Runtime pricing', () => {
+  it.each([
+    ['us.xai.grok-4.7', 2.2, 6.6, 0.55, 0],
+    ['us.zai.glm-5.3', 1.848, 5.808, 0.3432, 2.31],
+    ['global.zai.glm-5.3', 1.68, 5.28, 0.312, 2.1],
+    ['global.xai.grok-4.7', 2, 6, 0.5, 0],
+    ['us.moonshotai.kimi-k3', 3.3, 16.5, 0.33, 4.125],
+    ['global.moonshotai.kimi-k3', 3, 15, 0.3, 3.75],
+  ] as const)('prices %s cache usage and service tiers', (model, input, output, read, write) => {
+    for (const [type, multiplier] of [
+      ['default', 1],
+      ['priority', 1.75],
+      ['flex', 0.5],
+    ] as const) {
+      if (model.includes('kimi-k3') && type !== 'default') {
+        expect(
+          calculateBedrockCost(model, 800, 500, 200, 0, 'us-east-1', { type }),
+        ).toBeUndefined();
+        continue;
+      }
+      const writes = write > 0 ? 100 : 0;
+      const expected =
+        ((800 * input + 500 * output + 200 * read + writes * write) / 1e6) * multiplier;
+      expect(calculateBedrockCost(model, 800, 500, 200, writes, 'us-east-1', { type })).toBeCloseTo(
+        expected,
+        12,
+      );
+      expect(
+        calculateBedrockCost(
+          `arn:aws:bedrock:us-east-1:123456789012:inference-profile/${model}`,
+          800,
+          500,
+          200,
+          writes,
+          'us-east-1',
+          { type },
+        ),
+      ).toBeCloseTo(expected, 12);
+    }
+    expect(
+      calculateBedrockCost(model, 800, 500, 200, 0, 'us-east-1', { type: 'reserved' }),
+    ).toBeUndefined();
+  });
+
+  it.each([
+    'us.xai.grok-4.6',
+    'global.xai.grok-4.6',
+    'us.xai.grok-4.7',
+    'global.xai.grok-4.7',
+    'us.zai.glm-5.3',
+    'global.zai.glm-5.3',
+    'us.moonshotai.kimi-k3',
+    'global.moonshotai.kimi-k3',
+    'in.moonshotai.kimi-k3',
+    'a1b2c3d4e5',
+  ])('does not infer catalog pricing from application profile resource %s', async (resource) => {
+    const arn = `arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/${resource}`;
+    expect(calculateBedrockCost(arn, 800, 500, 200, 0, 'us-east-1')).toBeUndefined();
+    expect(calculateBedrockInvokeModelCost(arn, 800, 500, 200)).toBeUndefined();
+    const config = { inferenceModelType: 'xai' as const, region: 'us-east-1' };
+    expect(getHandlerForModel(arn, config)).toBe(BEDROCK_MODEL.OPENAI_COMPAT);
+    const provider = await factory.create(`bedrock:converse:${arn}`, { config }, {} as never);
+    expect(provider).toBeInstanceOf(AwsBedrockConverseProvider);
+    expect(provider.id()).toBe(`bedrock:converse:${arn}`);
+  });
+
+  it('does not reuse GLM 5 pricing for a bare GLM 5.3 ID', () => {
+    expect(getBedrockPricing('us.zai.glm-5.3', 'us-east-1')).toBeUndefined();
+    expect(calculateBedrockCost('zai.glm-5.3', 800, 500)).toBeUndefined();
+  });
+
+  it.each([
+    'in.moonshotai.kimi-k3',
+    'arn:aws:bedrock:ap-south-1:123456789012:inference-profile/in.moonshotai.kimi-k3',
+  ])('prices published India Kimi usage for %s', (model) => {
+    const expected = (800 * 3.3 + 500 * 16.5 + 200 * 0.33 + 100 * 4.125) / 1e6;
+    for (const region of ['ap-south-1', 'ap-south-2']) {
+      expect(calculateBedrockCost(model, 800, 500, 200, 100, region)).toBeCloseTo(expected, 12);
+      expect(
+        calculateBedrockCost(model, 800, 500, 200, 100, region, { type: 'default' }),
+      ).toBeCloseTo(expected, 12);
+      for (const type of ['priority', 'flex', 'reserved'] as const) {
+        expect(calculateBedrockCost(model, 800, 500, 200, 100, region, { type })).toBeUndefined();
+      }
+    }
+    expect(
+      calculateBedrockInvokeModelCost(model, 800, 500, 200, 100, 'ap-south-1'),
+    ).toBeUndefined();
+  });
+
+  it('does not invent cache-write pricing for Grok 4.7', () => {
+    expect(calculateBedrockCost('global.xai.grok-4.7', 800, 500, 200, 100)).toBeUndefined();
+  });
+});

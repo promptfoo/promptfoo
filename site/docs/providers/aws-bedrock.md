@@ -118,6 +118,7 @@ The `inferenceModelType` config option supports the following values:
 - `deepseek` - For DeepSeek models
 - `openai` - For OpenAI open-weight (gpt-oss) models
 - `qwen` - For Alibaba Qwen models
+- `xai` - For xAI Grok Runtime profiles
 - `zai` - For Z.AI GLM models
 - `minimax` - For MiniMax models
 - `moonshot` - For Moonshot Kimi models
@@ -1384,10 +1385,17 @@ Mantle selectors documented here.
 
 Grok reaches Bedrock two different ways, depending on the model.
 
-**Grok 4.6** (`xai.grok-4.6`) supports Runtime **Converse** through the
+**Grok 4.7** requires a Runtime inference profile: use
+`bedrock:us.xai.grok-4.7` or `bedrock:global.xai.grok-4.7` for InvokeModel, or add
+`converse:` after `bedrock:` for Converse. Set `config.region` to a supported source region. The bare `xai.grok-4.7` ID is not a
+Mantle model. On Converse, promptfoo estimates Standard, Priority (1.75×), and Flex (0.5×) costs,
+including cache reads, using the [AWS model card](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-xai-grok-4-7.html).
+InvokeModel uses and estimates Standard only; its provider does not forward `serviceTier`. Cache-write and Reserved-capacity costs remain unavailable.
+
+**Grok 4.6** (`xai.grok-4.6`) supports Runtime **InvokeModel and Converse** through the
 `us.xai.grok-4.6` and `global.xai.grok-4.6` inference profiles. The current
 [AWS model card](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-xai-grok-4-6.html)
-does not list InvokeModel support. Use the explicit Converse selector with **ordinary AWS
+lists both native APIs. Use `bedrock:us.xai.grok-4.6` for InvokeModel or the explicit Converse selector with **ordinary AWS
 credentials** (no Bedrock API key required):
 
 ```yaml
@@ -1579,6 +1587,33 @@ Several Bedrock families speak the OpenAI Chat Completions schema over `InvokeMo
 one handler and the same configuration options. They also work through the [Converse API](#converse-api)
 (`bedrock:converse:<id>`).
 
+[GLM 5.3](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-zai-glm-5-3.html)
+and [Kimi K3](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-moonshot-ai-kimi-k3.html)
+require cross-region inference profiles. Use `bedrock:us.zai.glm-5.3` or
+`bedrock:us.moonshotai.kimi-k3`; both also accept `global.` profiles, and Kimi K3 accepts
+`in.moonshotai.kimi-k3` from supported India regions. GLM 5.3 InvokeModel accepts `reasoning_effort: max`; on Converse, set `additionalModelRequestFields: { reasoning_effort: max }`.
+For Converse, add `converse:` after `bedrock:`. Kimi K3 and GLM 5.3 Converse cost estimates
+include cache reads/writes for the published US/global rates and the India Kimi rate.
+Kimi K3 Converse/Invoke support Standard only; its Priority/Flex
+tiers require the Responses or Chat Completions APIs. GLM 5.3 Converse estimates include
+Standard, Priority, and Flex. InvokeModel cost remains unavailable for both models. Rates follow the model card and [AWS pricing](https://aws.amazon.com/bedrock/pricing/). AWS documents Kimi K3 Converse limitations for document inputs
+and multi-turn history containing reasoning blocks; remove earlier reasoning blocks
+before sending a subsequent Converse turn.
+
+For Kimi K3 Priority or Flex, use Runtime Chat Completions through the generic OpenAI provider:
+
+```yaml
+providers:
+  - id: openai:chat:global.moonshotai.kimi-k3
+    config:
+      apiBaseUrl: https://bedrock-runtime.us-east-1.amazonaws.com/openai/v1
+      apiKeyEnvar: AWS_BEARER_TOKEN_BEDROCK
+      omitDefaults: true
+      service_tier: priority # Or flex
+```
+
+Kimi K3 is available on Bedrock Runtime, not Mantle.
+
 | Family          | Example model IDs                                                                                                         |
 | --------------- | ------------------------------------------------------------------------------------------------------------------------- |
 | Z.AI GLM        | `zai.glm-5`, `zai.glm-4.7`, `zai.glm-4.7-flash`                                                                           |
@@ -1597,7 +1632,7 @@ providers:
       temperature: 0.7 # Optional — omit to use the model's own default
       top_p: 0.9 # Optional nucleus sampling
       stop: ['END'] # Optional stop sequences
-      reasoning_effort: high # Optional, reasoning models only ('low' | 'medium' | 'high')
+      reasoning_effort: high # Optional; supported values depend on the model
       showThinking: false # Strip <think>/<reasoning> blocks from the output (default: keep)
       tools: [...] # Optional OpenAI-format tool definitions
       tool_choice: 'auto' # Optional tool selection strategy
@@ -1914,7 +1949,7 @@ This will show detailed AWS SDK logs including credential resolution.
 If you see this error when using an inference profile ARN:
 
 ```text
-Error: Inference profile requires inferenceModelType to be specified in config. Options: claude, nova, nova2, llama (defaults to v4), llama2, llama3, llama3.1, llama3.2, llama3.3, llama4, mistral, cohere, ai21, titan, deepseek, openai, qwen, zai, minimax, moonshot, nvidia, writer, gemma
+Error: Inference profile requires inferenceModelType to be specified in config. Options: claude, nova, nova2, llama (defaults to v4), llama2, llama3, llama3.1, llama3.2, llama3.3, llama4, mistral, cohere, ai21, titan, deepseek, openai, qwen, xai, zai, minimax, moonshot, nvidia, writer, gemma
 ```
 
 This means you're using an application inference profile ARN but haven't specified which model family it's configured for. Add the `inferenceModelType` to your configuration:

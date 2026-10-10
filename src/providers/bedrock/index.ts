@@ -20,7 +20,7 @@ import {
 } from '../anthropic/util';
 import { parseChatPrompt } from '../shared';
 import { AwsBedrockGenericProvider, type BedrockOptions, createBedrockCacheKeyHash } from './base';
-import { calculateBedrockInvokeModelCost, isBedrockGrok46Profile } from './pricing';
+import { calculateBedrockInvokeModelCost, isBedrockGrokRuntimeProfile } from './pricing';
 import { requiresBedrockAnthropicMessagesModel } from './routing';
 import { INFERENCE_PROFILE_PREFIX, novaOutputFromMessage, novaParseMessages } from './util';
 
@@ -100,6 +100,7 @@ export type BedrockModelFamily =
   | 'deepseek'
   | 'openai'
   | 'qwen'
+  | 'xai'
   | 'zai'
   | 'minimax'
   | 'moonshot'
@@ -536,7 +537,7 @@ interface BedrockOpenAICompatGenerationOptions extends BedrockQwenGenerationOpti
    * Reasoning depth for reasoning-capable models in this group (e.g. MiniMax M2, NVIDIA
    * Nemotron). Forwarded as-is so Bedrock validates it; omitted unless explicitly set.
    */
-  reasoning_effort?: 'low' | 'medium' | 'high';
+  reasoning_effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 }
 
 // =============================================================================
@@ -713,11 +714,25 @@ export function addConfigParam(
 
 function getOpenAiCompatibleTokenUsage(responseJson: any, _promptText: string): TokenUsage {
   const usage = responseJson?.usage;
+  const reasoning = coerceStrToNum(usage?.completion_tokens_details?.reasoning_tokens);
+  const cacheReadInputTokens = coerceStrToNum(usage?.prompt_tokens_details?.cached_tokens);
+  const cacheCreationInputTokens = coerceStrToNum(usage?.prompt_tokens_details?.cache_write_tokens);
+  const completionDetails: NonNullable<TokenUsage['completionDetails']> = {};
+  if (reasoning !== undefined) {
+    completionDetails.reasoning = reasoning;
+  }
+  if ((cacheReadInputTokens ?? 0) > 0) {
+    completionDetails.cacheReadInputTokens = cacheReadInputTokens;
+  }
+  if ((cacheCreationInputTokens ?? 0) > 0) {
+    completionDetails.cacheCreationInputTokens = cacheCreationInputTokens;
+  }
   return {
     prompt: coerceStrToNum(usage?.prompt_tokens),
     completion: coerceStrToNum(usage?.completion_tokens),
     total: coerceStrToNum(usage?.total_tokens),
     numRequests: 1,
+    ...(Object.keys(completionDetails).length > 0 ? { completionDetails } : {}),
   };
 }
 
@@ -2066,33 +2081,7 @@ ${prompt}
       // block, fall back to the original content so the whole response is never silently dropped.
       return answer.trim() === '' ? content : answer;
     },
-    tokenUsage: (responseJson: any, _promptText: string): TokenUsage => {
-      if (responseJson?.usage) {
-        const usage = responseJson.usage;
-        // gpt-oss reports usage the same way OpenAI's Chat Completions API does; surface
-        // reasoning and cached-input token counts (when present) under completionDetails for
-        // parity with the openai: provider.
-        const reasoningTokens = coerceStrToNum(usage.completion_tokens_details?.reasoning_tokens);
-        const cachedInputTokens = coerceStrToNum(usage.prompt_tokens_details?.cached_tokens);
-        const completionDetails: { reasoning?: number; cacheReadInputTokens?: number } = {};
-        if (reasoningTokens !== undefined) {
-          completionDetails.reasoning = reasoningTokens;
-        }
-        if ((cachedInputTokens ?? 0) > 0) {
-          completionDetails.cacheReadInputTokens = cachedInputTokens;
-        }
-        return {
-          prompt: coerceStrToNum(usage.prompt_tokens),
-          completion: coerceStrToNum(usage.completion_tokens),
-          total: coerceStrToNum(usage.total_tokens),
-          numRequests: 1,
-          ...(Object.keys(completionDetails).length > 0 ? { completionDetails } : {}),
-        };
-      }
-
-      // Return undefined values when token counts aren't provided by the API
-      return missingBedrockTokenUsage();
-    },
+    tokenUsage: getOpenAiCompatibleTokenUsage,
   },
   QWEN: {
     params: async (
@@ -2487,7 +2476,13 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   // use `{ messages, max_tokens, ... }` -> `{ choices: [{ message: { content } }] }`, so they
   // share BEDROCK_MODEL.OPENAI_COMPAT. Verified available via `aws bedrock list-foundation-models`.
 
+  // Grok 4.7, GLM 5.3, and Kimi K3 require Runtime cross-region inference profiles.
+  'us.xai.grok-4.7': BEDROCK_MODEL.OPENAI_COMPAT,
+  'global.xai.grok-4.7': BEDROCK_MODEL.OPENAI_COMPAT,
+
   // Z.AI GLM
+  'us.zai.glm-5.3': BEDROCK_MODEL.OPENAI_COMPAT,
+  'global.zai.glm-5.3': BEDROCK_MODEL.OPENAI_COMPAT,
   'zai.glm-5': BEDROCK_MODEL.OPENAI_COMPAT,
   'zai.glm-4.7': BEDROCK_MODEL.OPENAI_COMPAT,
   'zai.glm-4.7-flash': BEDROCK_MODEL.OPENAI_COMPAT,
@@ -2498,6 +2493,9 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'minimax.minimax-m2.5': BEDROCK_MODEL.OPENAI_COMPAT,
 
   // Moonshot AI (Kimi) — note the two provider prefixes Bedrock uses (`moonshot.`/`moonshotai.`)
+  'us.moonshotai.kimi-k3': BEDROCK_MODEL.OPENAI_COMPAT,
+  'global.moonshotai.kimi-k3': BEDROCK_MODEL.OPENAI_COMPAT,
+  'in.moonshotai.kimi-k3': BEDROCK_MODEL.OPENAI_COMPAT,
   'moonshotai.kimi-k2.5': BEDROCK_MODEL.OPENAI_COMPAT,
   'moonshot.kimi-k2-thinking': BEDROCK_MODEL.OPENAI_COMPAT,
 
@@ -2593,7 +2591,7 @@ export const RETIRED_BEDROCK_MODELS = new Set([
   'meta.llama2-70b-chat-v1',
 ]);
 
-/** Reject withdrawn models before InvokeModel, Converse, or Knowledge Base requests. */
+/** Reject withdrawn models and IDs that require a cross-region inference profile. */
 export function assertBedrockModelIsAvailable(modelName: string): void {
   // A system inference profile or foundation model ARN ends in the ID it resolves to.
   // Application inference profile ARNs hide the model, so they cannot be checked here.
@@ -2602,6 +2600,14 @@ export function assertBedrockModelIsAvailable(modelName: string): void {
     : modelName;
   if (RETIRED_BEDROCK_MODELS.has(modelId.replace(INFERENCE_PROFILE_PREFIX, ''))) {
     throw new Error(`Unknown Amazon Bedrock model: ${modelName}`);
+  }
+  if (modelId === 'zai.glm-5.3' || modelId === 'moonshotai.kimi-k3') {
+    throw new Error(
+      `Amazon Bedrock model "${modelId}" requires a cross-region inference profile. ` +
+        `Use "bedrock:us.${modelId}" or "bedrock:global.${modelId}"` +
+        (modelId === 'moonshotai.kimi-k3' ? ` or "bedrock:in.${modelId}"` : '') +
+        ' in a supported region.',
+    );
   }
 }
 
@@ -2628,7 +2634,7 @@ export function getHandlerForModel(
     if (!inferenceModelType) {
       throw new Error(
         'Inference profile requires inferenceModelType to be specified in config. ' +
-          'Options: claude, nova, nova2, llama (defaults to v4), llama2, llama3, llama3.1, llama3.2, llama3.3, llama4, mistral, cohere, ai21, titan, deepseek, openai, qwen, zai, minimax, moonshot, nvidia, writer, gemma',
+          'Options: claude, nova, nova2, llama (defaults to v4), llama2, llama3, llama3.1, llama3.2, llama3.3, llama4, mistral, cohere, ai21, titan, deepseek, openai, qwen, xai, zai, minimax, moonshot, nvidia, writer, gemma',
       );
     }
 
@@ -2672,6 +2678,7 @@ export function getHandlerForModel(
         return BEDROCK_MODEL.QWEN;
       case 'nova2':
         return BEDROCK_MODEL.AMAZON_NOVA_2;
+      case 'xai':
       case 'zai':
       case 'minimax':
       case 'moonshot':
@@ -2774,14 +2781,13 @@ export function getHandlerForModel(
     );
   }
   if (modelName.includes('xai.') || modelName.includes('grok')) {
-    // Grok runs on Mantle (OpenAI-compatible Responses API), not InvokeModel. The bare id is
-    // normally intercepted in src/providers/families/aws.ts before reaching here; this guards
-    // direct or prefixed ids that bypass the factory's supported bare-id route.
+    // Supported Grok Runtime profiles are handled above. Bare Mantle IDs are normally
+    // intercepted by the factory; other direct or prefixed IDs need route guidance.
     throw new Error(
       `xAI model "${modelName}" is not served by Bedrock's InvokeModel API under that id. ` +
-        `Grok 4.6 supports Runtime Converse through an inference profile — use ` +
+        `Grok 4.6 and 4.7 support Runtime InvokeModel and Converse through an inference profile — use ` +
         `"bedrock:converse:us.xai.grok-4.6" or "bedrock:converse:global.xai.grok-4.6" ` +
-        `with ordinary AWS credentials. Other Grok models run on ` +
+        `with AWS credentials. Mantle-served Grok models use ` +
         `the OpenAI-compatible Responses API (mantle endpoint) — use the bare id such as ` +
         `"bedrock:xai.grok-4.3" and set AWS_BEARER_TOKEN_BEDROCK. See ` +
         `https://www.promptfoo.dev/docs/providers/aws-bedrock/#xai-grok-models`,
@@ -2945,13 +2951,13 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
       // needs the API's uncached input count because cache tokens are priced separately.
       const cacheReadInputTokens =
         tokenUsage.completionDetails?.cacheReadInputTokens ??
-        (isBedrockGrok46Profile(this.modelName)
+        (isBedrockGrokRuntimeProfile(this.modelName)
           ? coerceStrToNum(output.usage?.prompt_tokens_details?.cached_tokens)
           : coerceStrToNum(output.usage?.cache_read_input_tokens));
       const billablePromptTokens =
         model === BEDROCK_MODEL.CLAUDE_MESSAGES
           ? coerceStrToNum(output.usage?.input_tokens ?? output.usage?.prompt_tokens)
-          : isBedrockGrok46Profile(this.modelName) && tokenUsage.prompt !== undefined
+          : isBedrockGrokRuntimeProfile(this.modelName) && tokenUsage.prompt !== undefined
             ? Math.max(tokenUsage.prompt - (cacheReadInputTokens ?? 0), 0)
             : tokenUsage.prompt;
       const cost = calculateBedrockInvokeModelCost(
@@ -2960,7 +2966,11 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
         tokenUsage.completion,
         cacheReadInputTokens,
         tokenUsage.completionDetails?.cacheCreationInputTokens ??
-          coerceStrToNum(output.usage?.cache_creation_input_tokens),
+          coerceStrToNum(
+            isBedrockGrokRuntimeProfile(this.modelName)
+              ? output.usage?.prompt_tokens_details?.cache_write_tokens
+              : output.usage?.cache_creation_input_tokens,
+          ),
         region,
         coerceStrToNum(output.usage?.cache_creation?.ephemeral_1h_input_tokens),
       );

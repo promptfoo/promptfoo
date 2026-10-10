@@ -6,9 +6,14 @@ export function isRejectedPrefixedMythosId(modelName: string): boolean {
   return /^[^.]+\.(anthropic\.claude-mythos-(?:5|preview))$/.test(modelName);
 }
 
-// Grok 4.6 profiles are served natively; all inference profiles are invalid Mantle IDs.
+// Grok Runtime profiles are served natively; inference profiles are invalid Mantle IDs.
 // These are the backend's existing compatibility rules, not an exhaustive model catalog.
-const NATIVE_GROK_PROFILE_MODELS = new Set(['us.xai.grok-4.6', 'global.xai.grok-4.6']);
+const NATIVE_GROK_PROFILE_MODELS = new Set([
+  'us.xai.grok-4.6',
+  'global.xai.grok-4.6',
+  'us.xai.grok-4.7',
+  'global.xai.grok-4.7',
+]);
 
 export function isRejectedPrefixedGrokId(
   modelName: string,
@@ -16,7 +21,10 @@ export function isRejectedPrefixedGrokId(
 ): boolean {
   return (
     modelName.includes('.xai.') &&
-    (explicitMantleRequest || !NATIVE_GROK_PROFILE_MODELS.has(modelName))
+    // Native profile ARNs are not model IDs in Mantle's namespace. They may contain
+    // the model ID or a user-chosen name; let the native provider handle them.
+    (explicitMantleRequest ||
+      (!modelName.startsWith('arn:') && !NATIVE_GROK_PROFILE_MODELS.has(modelName)))
   );
 }
 
