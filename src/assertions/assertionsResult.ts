@@ -37,9 +37,8 @@ function buildAssertionSetMetadata(assertionSet: AssertionSet) {
 /**
  * Mark a metric-only result (and any nested component results a script
  * assertion returned) so downstream assertion pass/fail stats can exclude
- * them via their `assertion.metricOnly` filters. Results with no assertion
- * object (e.g. a failed grader) still get a marker stub — downstream filters
- * only read `assertion?.metricOnly` / `assertion?.type`, hence the cast.
+ * them from counts. Assertionless results (set aggregates and failed graders)
+ * carry the marker in metadata rather than manufacturing an invalid assertion.
  */
 function withMetricOnlyMarkers(result: GradingResult): GradingResult {
   const clones = new WeakMap<GradingResult, GradingResult>();
@@ -51,7 +50,9 @@ function withMetricOnlyMarkers(result: GradingResult): GradingResult {
     }
     const target = {
       ...source,
-      assertion: { ...source.assertion, metricOnly: true } as GradingResult['assertion'],
+      ...(source.assertion
+        ? { assertion: { ...source.assertion, metricOnly: true } }
+        : { metadata: { ...source.metadata, metricOnly: true } }),
     };
     clones.set(source, target);
     pending.push(source);

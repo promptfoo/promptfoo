@@ -513,6 +513,7 @@ async function aggregateAssertions(
               FROM json_each(json_extract(grading_result, '$.componentResults'))
               WHERE CAST(json_extract(json_each.value, '$.pass') AS INTEGER) = 1
                 AND COALESCE(CAST(json_extract(json_each.value, '$.assertion.metricOnly') AS INTEGER), 0) = 0
+                AND COALESCE(CAST(json_extract(json_each.value, '$.metadata.metricOnly') AS INTEGER), 0) = 0
             )
           ELSE 0
         END
@@ -525,6 +526,7 @@ async function aggregateAssertions(
               FROM json_each(json_extract(grading_result, '$.componentResults'))
               WHERE CAST(json_extract(json_each.value, '$.pass') AS INTEGER) = 0
                 AND COALESCE(CAST(json_extract(json_each.value, '$.assertion.metricOnly') AS INTEGER), 0) = 0
+                AND COALESCE(CAST(json_extract(json_each.value, '$.metadata.metricOnly') AS INTEGER), 0) = 0
             )
           ELSE 0
         END

@@ -297,6 +297,8 @@ Two interactions to be aware of:
 
 Both `weight: 0` and `metricOnly: true` retain named measurements at unit weight and exclude them from the weighted test score. With `weight: 0`, the assertion is force-passed and still counted in assertion pass/fail stats. With `metricOnly: true`, the real component outcome is retained and excluded from those stats.
 
+In serialized results, individual assertions carry `assertion.metricOnly`. Assertionless results, including set aggregates and grader failures, carry `metadata.metricOnly`. Custom result consumers should check both fields when counting graded assertions.
+
 ### Custom assertion scoring
 
 By default, test cases use weighted averaging to combine assertion scores. You can define custom scoring functions to implement more complex logic, such as:

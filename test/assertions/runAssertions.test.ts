@@ -313,7 +313,7 @@ describe('runAssertions', () => {
       let current: GradingResult | undefined = result.componentResults![0];
       let levels = 0;
       while (current) {
-        expect(current.assertion?.metricOnly).toBe(true);
+        expect(countedComponentResults([current])).toHaveLength(0);
         levels++;
         current = current.componentResults?.[0];
       }
@@ -554,7 +554,8 @@ describe('runAssertions', () => {
       expect(result.namedScores).toMatchObject({ tp: 1, fp: 0 });
       // The set-level result carries the marker so assertion pass/fail stats
       // (evaluator, retry recompute, filtered SQL metrics) can exclude it.
-      expect(result.componentResults![1].assertion?.metricOnly).toBe(true);
+      expect(result.componentResults![1].metadata?.metricOnly).toBe(true);
+      expect(result.componentResults![1].assertion).toBeUndefined();
     });
   });
 

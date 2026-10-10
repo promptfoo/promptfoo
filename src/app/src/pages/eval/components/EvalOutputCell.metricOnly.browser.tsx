@@ -41,9 +41,14 @@ afterEach(() => {
 });
 
 describe('metric-only result reporting in Chromium', () => {
-  it.each([true, false])(
-    'retains an aggregate pass=%s with a failing metric-only counter',
-    async (pass) => {
+  it.each([
+    { pass: true, marker: 'assertion' },
+    { pass: false, marker: 'assertion' },
+    { pass: true, marker: 'metadata' },
+    { pass: false, marker: 'metadata' },
+  ])(
+    'retains an aggregate pass=$pass with a failing metric-only $marker marker',
+    async ({ pass, marker }) => {
       const reason = pass ? 'All assertions passed' : 'Aggregate score 0.60 < 0.8 threshold';
       const output: EvaluateTableOutput = {
         id: 'metric-only-browser',
@@ -66,7 +71,9 @@ describe('metric-only result reporting in Chromium', () => {
               pass: false,
               score: 0,
               reason: 'Counter scored 0',
-              assertion: { type: 'javascript', metric: 'counter', metricOnly: true },
+              ...(marker === 'metadata'
+                ? { metadata: { metricOnly: true } }
+                : { assertion: { type: 'javascript', metric: 'counter', metricOnly: true } }),
             },
           ],
         },

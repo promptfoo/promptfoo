@@ -736,14 +736,23 @@ describe('calculateFilteredMetrics', () => {
               assertion: { type: 'javascript', metric: 'fp', metricOnly: true },
             },
             {
-              // Set-level result of an all-metricOnly assert-set: marked with
-              // an assertion carrying metricOnly so the SQL filter excludes it.
+              // Legacy stored set marker remains excluded after migration.
               pass: false,
               score: 0,
               reason: 'Aggregate score 0.00 < 0.5 threshold',
-              // 'assert-set' is not a member of AssertionType; the marker is
-              // read as plain JSON at runtime (mirrors src/assertions/index.ts).
               assertion: { type: 'assert-set', metricOnly: true } as unknown as Assertion,
+            },
+            {
+              pass: false,
+              score: 0,
+              reason: 'Metric-only set aggregate',
+              metadata: { metricOnly: true },
+            },
+            {
+              pass: true,
+              score: 0,
+              reason: 'Metric-only grader result',
+              metadata: { metricOnly: true },
             },
           ],
         },

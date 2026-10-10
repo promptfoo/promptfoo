@@ -131,9 +131,11 @@ function clearMetricOnlyMarkers(result: GradingResult): GradingResult {
       return existing;
     }
     const { metricOnly: _metricOnly, ...assertion } = source.assertion ?? {};
+    const { metricOnly: _metadataMetricOnly, ...metadata } = source.metadata ?? {};
     const target = {
       ...source,
       ...(source.assertion && { assertion: assertion as Assertion }),
+      ...(source.metadata && { metadata }),
     };
     clones.set(source, target);
     pending.push(source);
@@ -940,12 +942,7 @@ export async function runAssertions({
 
     mainAssertResult.addResult({
       index,
-      // Give a metric-only set result a pseudo-assertion for addResult to
-      // stamp `metricOnly` onto, so stored stats filters can exclude it.
-      // 'assert-set' is not an AssertionType member, hence the cast.
-      result: metricOnly
-        ? { ...result, assertion: { type: 'assert-set' } as unknown as Assertion }
-        : result,
+      result,
       metric: renderMetricName(metric, vars || test.vars || {}),
       weight,
       metricOnly,

@@ -25,9 +25,11 @@ export function countedComponentResults<
     score: number;
     reason: string;
     assertion?: { type?: string; metricOnly?: boolean };
+    metadata?: { metricOnly?: boolean; [key: string]: unknown };
   },
 >(componentResults: (T | null | undefined)[] | null | undefined): T[] {
   return (componentResults ?? []).filter(
-    (result): result is T => result != null && !result.assertion?.metricOnly,
+    (result): result is T =>
+      result != null && !result.assertion?.metricOnly && !result.metadata?.metricOnly,
   );
 }

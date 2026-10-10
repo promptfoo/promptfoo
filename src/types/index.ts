@@ -573,6 +573,8 @@ export interface GradingResult {
   metadata?: {
     pluginId?: string;
     strategyId?: string;
+    // Metric-only marker for assertionless set aggregates and grader results.
+    metricOnly?: boolean;
     // Context value for context-related assertions (context-faithfulness, context-recall, context-relevance)
     context?: string | string[];
     contextUnits?: string[];

@@ -5,6 +5,7 @@ import {
   GUARDRAIL_BLOCKED_REASON,
 } from '../../src/assertions/assertionsResult';
 import { getEnvBool } from '../../src/envars';
+import { countedComponentResults } from '../../src/types/results';
 import {
   accumulateGradingRequest,
   accumulateGradingTokenUsage,
@@ -198,7 +199,7 @@ describe('AssertionsResult', () => {
       const pending = [marked];
       while (pending.length) {
         const node = pending.pop()!;
-        expect(node.assertion?.metricOnly).toBe(true);
+        expect(countedComponentResults([node])).toHaveLength(0);
         pending.push(...(node.componentResults ?? []));
       }
       expect(marked.componentResults![0].componentResults![0]).toMatchObject({
@@ -448,7 +449,8 @@ describe('AssertionsResult', () => {
       const result = await assertionsResult.testResult();
 
       expect(result.pass).toBe(true);
-      expect(result.componentResults![0].assertion?.metricOnly).toBe(true);
+      expect(result.componentResults![0].metadata?.metricOnly).toBe(true);
+      expect(result.componentResults![0].assertion).toBeUndefined();
     });
   });
 

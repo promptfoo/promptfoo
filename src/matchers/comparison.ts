@@ -134,7 +134,8 @@ export async function selectMaxScore(
         r.assertion &&
         r.assertion.type !== 'max-score' &&
         r.assertion.type !== 'select-best' &&
-        !r.assertion.metricOnly,
+        !r.assertion.metricOnly &&
+        !r.metadata?.metricOnly,
     );
 
     if (relevantResults.length === 0) {
