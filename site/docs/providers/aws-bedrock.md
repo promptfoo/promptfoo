@@ -161,7 +161,7 @@ providers:
     config:
       inferenceModelType: 'nova'
       interfaceConfig:
-        max_new_tokens: 1024
+        maxTokens: 1024
         temperature: 0.7
 ```
 
@@ -543,7 +543,7 @@ providers:
       region: 'us-east-1'
       interfaceConfig:
         temperature: 0.7
-        max_new_tokens: 256
+        maxTokens: 256
   - id: bedrock:converse:us.amazon.nova-2-lite-v1:0
     config:
       region: 'us-east-1'
@@ -624,10 +624,10 @@ providers:
   - id: bedrock:amazon.nova-lite-v1:0
     config:
       interfaceConfig:
-        max_new_tokens: 256 # Maximum number of tokens to generate
+        maxTokens: 256 # Maximum number of tokens to generate
         temperature: 0.7 # Controls randomness (0.0 to 1.0)
-        top_p: 0.9 # Nucleus sampling parameter
-        top_k: 50 # Top-k sampling parameter
+        topP: 0.9 # Nucleus sampling parameter
+        topK: 50 # Top-k sampling parameter
         stopSequences: ['END'] # Optional stop sequences
       toolConfig: # Optional tool configuration
         tools:
@@ -1726,7 +1726,7 @@ providers:
       region: 'us-east-1'
       interfaceConfig:
         temperature: 0.7
-        max_new_tokens: 256
+        maxTokens: 256
 
 tests:
   - vars:

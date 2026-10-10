@@ -45,10 +45,10 @@ providers:
       inferenceModelType: 'nova'
       region: 'eu-west-1'
       interfaceConfig:
-        max_new_tokens: 1024
+        maxTokens: 1024
         temperature: 0.7
-        top_p: 0.95
-        top_k: 50
+        topP: 0.95
+        topK: 50
 
   # Mistral inference profile
   - id: bedrock:arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/mistral-profile

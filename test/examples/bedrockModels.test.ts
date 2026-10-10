@@ -35,7 +35,7 @@ function readExample(filename: string) {
 }
 
 describe('Bedrock model examples', () => {
-  it.each(['nova', 'deepseek', 'nova.multimodal'])(
+  it.each(['nova', 'deepseek', 'nova.multimodal', 'nova.tool', 'inference-profiles'])(
     'serializes the configured request in the %s example',
     async (example) => {
       const { config, testSuite } = await resolveConfigs(
@@ -51,19 +51,41 @@ describe('Bedrock model examples', () => {
         {},
       );
       testSuite.tests = testSuite.tests?.slice(0, 1);
-      const handle = vi.fn(async (_request: { body?: unknown; path?: string }) => ({
-        response: {
-          statusCode: 200,
-          headers: { 'content-type': 'application/json' },
-          body: new TextEncoder().encode(
-            JSON.stringify({
-              output: { message: { role: 'assistant', content: [{ text: 'A cat is pictured.' }] } },
-              choices: [{ text: 'A short tweet.' }],
-              usage: { inputTokens: 10, outputTokens: 5 },
-            }),
-          ),
-        },
-      }));
+      if (example === 'inference-profiles') {
+        testSuite.providers = testSuite.providers.filter((provider) =>
+          provider.id().includes('nova-cost-optimized'),
+        );
+        expect(testSuite.providers).toHaveLength(1);
+        // This case checks the Nova request independently of model-graded assertions.
+        testSuite.defaultTest = {};
+        testSuite.tests = testSuite.tests?.map((test) => ({ ...test, assert: [] }));
+      }
+      const handle = vi.fn(async (request: { body?: unknown; path?: string }) => {
+        const content = JSON.parse(String(request.body)).toolConfig
+          ? [
+              {
+                toolUse: {
+                  toolUseId: 'test-tool',
+                  name: 'color_json',
+                  input: { name: 'sky', color: 'blue' },
+                },
+              },
+            ]
+          : [{ text: 'A cat is pictured.' }];
+        return {
+          response: {
+            statusCode: 200,
+            headers: { 'content-type': 'application/json' },
+            body: new TextEncoder().encode(
+              JSON.stringify({
+                output: { message: { role: 'assistant', content } },
+                choices: [{ text: 'A short tweet.' }],
+                usage: { inputTokens: 10, outputTokens: 5 },
+              }),
+            ),
+          },
+        };
+      });
       const client = new BedrockRuntime({
         region: 'us-east-1',
         credentials: { accessKeyId: 'LOCAL_FIXTURE', secretAccessKey: 'LOCAL_FIXTURE' },
@@ -75,12 +97,13 @@ describe('Bedrock model examples', () => {
         const evaluation = new Eval(config);
         await evaluate(testSuite, evaluation, { cache: false, maxConcurrency: 1 });
         const summary = await evaluation.toEvaluateSummary();
+        const expectedRequests = testSuite.providers.length * testSuite.prompts.length;
         expect(summary.stats).toMatchObject({
-          successes: testSuite.providers.length,
+          successes: expectedRequests,
           failures: 0,
           errors: 0,
         });
-        expect(handle).toHaveBeenCalledTimes(testSuite.providers.length);
+        expect(handle).toHaveBeenCalledTimes(expectedRequests);
         if (example === 'nova') {
           expect(handle.mock.calls.some(([request]) => request.path?.includes('nova-2-lite'))).toBe(
             true,
@@ -88,14 +111,21 @@ describe('Bedrock model examples', () => {
         }
         for (const [request] of handle.mock.calls) {
           const body = JSON.parse(String(request.body));
-          if (example === 'deepseek') {
+          if (example === 'inference-profiles') {
+            expect(body.inferenceConfig).toEqual({
+              maxTokens: 1024,
+              temperature: 0.7,
+              topP: 0.95,
+              topK: 50,
+            });
+          } else if (example === 'deepseek') {
             expect(body).toMatchObject({ temperature: 0.7, max_tokens: 4096 });
-          } else if (request.path?.includes('nova-2-lite')) {
-            expect(request.path).toMatch(/\/converse$/);
+          } else {
             expect(body.inferenceConfig).toMatchObject({ temperature: 0.7, maxTokens: 256 });
             expect(body.inferenceConfig).not.toHaveProperty('max_new_tokens');
-          } else {
-            expect(body.inferenceConfig).toMatchObject({ temperature: 0.7, max_new_tokens: 256 });
+            if (request.path?.includes('nova-2-lite')) {
+              expect(request.path).toMatch(/\/converse$/);
+            }
           }
           if (example === 'nova.multimodal') {
             expect(body.messages[0].content[0].image).toEqual({
