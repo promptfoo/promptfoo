@@ -5,6 +5,7 @@ import Link from '@docusaurus/Link';
 import { useForcedTheme } from '@site/src/hooks/useForcedTheme';
 import Layout from '@theme/Layout';
 import { SITE_CONSTANTS } from '../../constants';
+import { scrollToEventSectionWithReducedMotion as handleSmoothScroll } from '../../utils/eventScroll';
 import styles from './blackhat-2026.module.css';
 
 const BOOTH = 'Booth #2967';
@@ -214,19 +215,6 @@ const FloorPlanIcon = () => (
 
 export default function BlackHat2026(): React.ReactElement {
   useForcedTheme('dark');
-
-  const handleSmoothScroll = (e: React.MouseEvent<HTMLAnchorElement>, targetId: string) => {
-    e.preventDefault();
-    const element = document.querySelector(targetId);
-    if (!element) {
-      return;
-    }
-    const offset = 80; // Offset for fixed header
-    const offsetPosition = element.getBoundingClientRect().top + window.scrollY - offset;
-    const prefersReducedMotion =
-      window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches ?? false;
-    window.scrollTo({ top: offsetPosition, behavior: prefersReducedMotion ? 'auto' : 'smooth' });
-  };
 
   return (
     <Layout title="Promptfoo at Black Hat USA 2026" description={DESCRIPTION}>
