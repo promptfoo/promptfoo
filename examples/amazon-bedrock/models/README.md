@@ -332,6 +332,20 @@ Error responses include categorized error types in `metadata.errorType`:
 - `parsing`: Response parsing failures
 - `session`: Bidirectional stream session errors
 
+## Text Embeddings
+
+`promptfooconfig.embeddings.yaml` verifies Nova Multimodal Embeddings and TwelveLabs
+Marengo 3 through text similarity assertions. It uses an echo target, so only embedding
+requests are billed. Configure AWS credentials and model access in `us-east-1`, then run:
+
+```bash
+npx promptfoo@latest eval -c promptfooconfig.embeddings.yaml --no-cache -o embeddings-results.json
+```
+
+Both assertions compare identical text and expect similarity near 1. Nova exposes
+`embeddingPurpose`, `embeddingDimension`, and `truncationMode`. This provider route
+accepts text only; it does not submit media or asynchronous embedding jobs.
+
 ## Getting Started
 
 1. Run the evaluation:
