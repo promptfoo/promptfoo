@@ -2275,6 +2275,106 @@ describe('ClaudeCodeSDKProvider', () => {
           },
         );
 
+        it('counts a completion that joins a batch part-way through', async () => {
+          const result = await run([
+            promptEcho,
+            ...launch(1),
+            turnResult('Workflow launched'),
+            // Two other tasks start a batch. The workflow finishes before the second is
+            // dequeued, so the batch grows by one and writes another empty result.
+            otherTaskCompleted,
+            otherTaskCompleted,
+            turnStart,
+            batchPlaceholder,
+            completed(1),
+            turnStart,
+            batchPlaceholder,
+            turnStart,
+            turnResult('VERIFIED', continuation),
+          ]);
+          expect(result.error).toBeUndefined();
+          expect(result.output).toBe('VERIFIED');
+        });
+
+        it.each([
+          [true, undefined],
+          [false, 'stream ended before the main agent answered'],
+        ])(
+          'grades the last answer when queued completions get a turn each (continued: %s)',
+          async (continued, error) => {
+            const result = await run([
+              promptEcho,
+              ...launch(2),
+              completed(1),
+              completed(2),
+              turnResult('Workflows launched'),
+              turnStart,
+              turnResult('First check passed; the second is next', continuation),
+              ...(continued ? [turnStart, turnResult('VERIFIED', continuation)] : []),
+            ]);
+            expect(result.output).toBe(continued ? 'VERIFIED' : undefined);
+            if (error) {
+              expect(result.error).toContain(error);
+            } else {
+              expect(result.error).toBeUndefined();
+            }
+          },
+        );
+
+        // With its control channel closed, the CLI holds a result back while a workflow
+        // is still running and writes it just before the next one. The turns that
+        // produced the held results started, in order, long before.
+        it.each([1, 2])('grades the answer written after %i held results', async (held) => {
+          const followUps = Array.from({ length: held }, (_, i) => `Build ${i + 1} finished.`);
+          const result = await run([
+            turnStart,
+            promptEcho,
+            ...launch(1),
+            turnResult('Workflow launched'),
+            ...followUps.flatMap(() => [otherTaskCompleted, turnStart]),
+            completed(1),
+            turnStart,
+            ...followUps.map((text) => turnResult(text, continuation)),
+            turnResult('VERIFIED', continuation),
+          ]);
+          expect(result.error).toBeUndefined();
+          expect(result.output).toBe('VERIFIED');
+        });
+
+        it('reports held results that end before the workflow is answered', async () => {
+          const result = await run([
+            turnStart,
+            promptEcho,
+            ...launch(1),
+            turnResult('Workflow launched'),
+            otherTaskCompleted,
+            turnStart,
+            completed(1),
+            turnStart,
+            turnResult('Build 1 finished.', continuation),
+          ]);
+          expect(result.error).toContain('stream ended before the main agent answered');
+          expect(result.output).toBeUndefined();
+        });
+
+        it('counts two completions handed to a turn in one message', async () => {
+          const notification = (index: number) =>
+            `<task-notification>\n<task-id>task-${index}</task-id>\n<status>completed</status>\n</task-notification>`;
+          const result = await run([
+            promptEcho,
+            ...launch(2),
+            completed(1),
+            completed(2),
+            {
+              ...echo(`${notification(1)}\n${notification(2)}`),
+              origin: continuation,
+            } as Partial<SDKMessage>,
+            turnResult('VERIFIED'),
+          ]);
+          expect(result.error).toBeUndefined();
+          expect(result.output).toBe('VERIFIED');
+        });
+
         it.each(['before', 'after'])(
           'grades a continuation whose completion is also echoed %s the turn starts',
           async (position) => {
