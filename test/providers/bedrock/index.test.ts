@@ -4010,6 +4010,36 @@ describe('AwsBedrockCompletionProvider', () => {
     AWS_BEDROCK_MODELS['us.anthropic.claude-3-7-sonnet-20250219-v1:0'] = originalModelHandler;
   });
 
+  it.each([undefined, 0])(
+    'uses only an explicit temperature for an opaque Claude application profile (%s)',
+    async (temperature) => {
+      const modelName =
+        'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/haiku-prod';
+      const responseJson = JSON.stringify({
+        content: [{ type: 'text', text: 'READY' }],
+        usage: { input_tokens: 10, output_tokens: 1 },
+      });
+      const body = Object.assign(new TextEncoder().encode(responseJson), {
+        transformToString: () => responseJson,
+      });
+      mockInvokeModel.mockResolvedValueOnce({ body });
+      const config = { inferenceModelType: 'claude', region: 'us-east-1', temperature };
+      const provider = new AwsBedrockCompletionProvider(modelName, { config });
+
+      const response = await provider.callApi('Return READY');
+
+      expect(response.output).toBe('READY');
+      const request = mockInvokeModel.mock.calls.at(-1)?.[0];
+      expect(request.modelId).toBe(modelName);
+      const requestBody = JSON.parse(request.body);
+      if (temperature === undefined) {
+        expect(requestBody).not.toHaveProperty('temperature');
+      } else {
+        expect(requestBody.temperature).toBe(temperature);
+      }
+    },
+  );
+
   it.each([
     ['us.xai.grok-4.6', 2.2, 6.6, 0.55],
     ['global.xai.grok-4.6', 2, 6, 0.5],

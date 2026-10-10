@@ -1,5 +1,5 @@
 import { parseDataUrl } from '../../util/dataUrl';
-import { calculateCost as calculateCostBase } from '../shared';
+import { calculateCost as calculateCostBase, type ModelCost } from '../shared';
 import type Anthropic from '@anthropic-ai/sdk';
 
 import type { TokenUsage } from '../../types/index';
@@ -25,7 +25,11 @@ export const ANTHROPIC_MODELS = [
   ),
   // Haiku 5.5 uses these rates through 100K input tokens; larger prompts are
   // priced in calculateAnthropicCost, including cached input in the threshold.
-  ...modelsWithCost(['claude-haiku-5-5'], { input: 0.1 / 1e6, output: 0.5 / 1e6 }),
+  ...modelsWithCost(['claude-haiku-5-5'], {
+    input: 0.1 / 1e6,
+    output: 0.5 / 1e6,
+    longContext: { threshold: 100_000, input: 0.5 / 1e6, output: 2.5 / 1e6 },
+  }),
   // Claude Opus 5.5 — 1M context billed at a flat rate. Fast mode ($8/$40, Claude API only)
   // is a separate research-preview rate that is intentionally not encoded here.
   ...modelsWithCost(['claude-opus-5-5'], {
@@ -883,8 +887,9 @@ export function calculateAnthropicCost(
   const totalInputTokens =
     (promptTokens ?? 0) + (cacheReadTokens ?? 0) + (cacheCreationTokens ?? 0);
   const modelInfo =
-    registeredModel && isClaudeHaiku55Model(pricingModelName) && totalInputTokens > 100_000
-      ? { ...registeredModel, cost: { input: 0.5 / 1e6, output: 2.5 / 1e6 } }
+    registeredModel?.cost.longContext &&
+    totalInputTokens > registeredModel.cost.longContext.threshold
+      ? { ...registeredModel, cost: registeredModel.cost.longContext }
       : pricingModelName !== modelName && pricingModelName === 'claude-sonnet-5'
         ? { id: pricingModelName, cost: { input: 3 / 1e6, output: 15 / 1e6 } }
         : registeredModel;
@@ -1171,6 +1176,6 @@ export function processAnthropicTools(
   return { processedTools, requiredBetaFeatures };
 }
 
-function modelsWithCost(ids: string[], cost: { input: number; output: number }) {
+function modelsWithCost(ids: string[], cost: ModelCost) {
   return ids.map((id) => ({ id, cost: { ...cost } }));
 }

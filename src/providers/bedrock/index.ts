@@ -1664,7 +1664,12 @@ export const BEDROCK_MODEL = {
           samplingParamsDeprecated: modelName
             ? isSamplingParamsDeprecatedClaudeModel(modelName)
             : false,
-          defaultTemperature: 0,
+          // An application profile hides the backing model, which may reject sampling.
+          // Preserve explicit values but leave the default to AWS.
+          defaultTemperature:
+            modelName?.startsWith('arn:') && modelName.includes(':application-inference-profile/')
+              ? undefined
+              : 0,
         },
       );
       for (const warning of samplingWarnings) {
