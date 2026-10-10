@@ -92,10 +92,10 @@ export class TokenUsageTracker {
   /**
    * Get the cumulative token usage for a specific provider
    * @param providerId The ID of the provider to get usage for
-   * @returns The token usage for the provider
+   * @returns A detached snapshot of the token usage for the provider
    */
   public getProviderUsage(providerId: string): TokenUsage | undefined {
-    return this.providersMap.get(providerId);
+    return structuredClone(this.providersMap.get(providerId));
   }
 
   /**

@@ -1,4 +1,5 @@
 import { omitProviderCredentials } from '@app/stores/evalConfig';
+import { isPlainObject } from '@app/utils/isPlainObject';
 import { create } from 'zustand';
 import { targetConfigSha256 } from './targetConfigSha256';
 
@@ -16,14 +17,6 @@ let targetConfigMarkerSequence = 0;
 
 export const getCurrentTargetConfigInvalidMarker = (): string | null =>
   currentTargetConfigInvalidMarker;
-
-const isPlainObject = (value: unknown): value is Record<string, unknown> => {
-  if (typeof value !== 'object' || value === null) {
-    return false;
-  }
-  const prototype = Object.getPrototypeOf(value);
-  return prototype === Object.prototype || prototype === null;
-};
 
 const getPersistedTargetSnapshot = (): {
   config: Config;
