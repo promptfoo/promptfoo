@@ -370,8 +370,13 @@ export class AssertionsResult {
     // output, tagged `metadata.graderError` by the matcher) is not evidence that
     // the criterion was or was not met. Propagate the marker so the evaluator
     // can surface the row as ERROR rather than an ordinary assertion failure.
+    // Inspect only failed direct components: nested assert-sets propagate the
+    // marker to their own top level when they fail, while an effectively-passed
+    // set (e.g. `threshold: 0`) or a `weight: 0` metric-only assertion may still
+    // carry a grader failure that must not reclassify an unrelated failure.
     const hasGraderError =
-      !pass && flattenedComponentResults.some((result) => result.metadata?.graderError === true);
+      !pass &&
+      this.componentResults.some((result) => !result.pass && result.metadata?.graderError === true);
 
     this.result = {
       pass,

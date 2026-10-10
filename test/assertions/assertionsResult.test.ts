@@ -247,6 +247,95 @@ describe('AssertionsResult', () => {
       expect(result.metadata?.graderError).toBeUndefined();
     });
 
+    it('ignores grader failures inside an effectively-passed assert-set', async () => {
+      const subAssertResult = new AssertionsResult({ threshold: 0 });
+      subAssertResult.addResult({
+        index: 0,
+        result: {
+          pass: false,
+          score: 0,
+          reason: 'Grader provider unavailable',
+          tokensUsed: DEFAULT_TOKENS_USED,
+          metadata: { graderError: true },
+        },
+      });
+      const passedSet = await subAssertResult.testResult();
+      expect(passedSet.pass).toBe(true);
+
+      const assertionsResult = new AssertionsResult({});
+      assertionsResult.addResult({ index: 0, result: passedSet });
+      assertionsResult.addResult({
+        index: 1,
+        result: {
+          pass: false,
+          score: 0,
+          reason: 'The submission does not meet the criterion',
+          tokensUsed: DEFAULT_TOKENS_USED,
+        },
+      });
+
+      const result = await assertionsResult.testResult();
+
+      expect(result.pass).toBe(false);
+      expect(result.metadata?.graderError).toBeUndefined();
+    });
+
+    it('ignores grader failures from metric-only weight-0 assertions', async () => {
+      // runAssertion forces pass:true for weight-0 assertions without clearing
+      // metadata, so a grader failure can arrive as a passing component.
+      const assertionsResult = new AssertionsResult({});
+      assertionsResult.addResult({
+        index: 0,
+        result: {
+          pass: true,
+          score: 0,
+          reason: 'Grader provider unavailable',
+          tokensUsed: DEFAULT_TOKENS_USED,
+          metadata: { graderError: true },
+        },
+        weight: 0,
+      });
+      assertionsResult.addResult({
+        index: 1,
+        result: {
+          pass: false,
+          score: 0,
+          reason: 'The submission does not meet the criterion',
+          tokensUsed: DEFAULT_TOKENS_USED,
+        },
+      });
+
+      const result = await assertionsResult.testResult();
+
+      expect(result.pass).toBe(false);
+      expect(result.metadata?.graderError).toBeUndefined();
+    });
+
+    it('propagates grader errors from a failed nested assert-set', async () => {
+      const subAssertResult = new AssertionsResult({});
+      subAssertResult.addResult({
+        index: 0,
+        result: {
+          pass: false,
+          score: 0,
+          reason: 'Grader provider unavailable',
+          tokensUsed: DEFAULT_TOKENS_USED,
+          metadata: { graderError: true },
+        },
+      });
+      const failedSet = await subAssertResult.testResult();
+      expect(failedSet.pass).toBe(false);
+      expect(failedSet.metadata?.graderError).toBe(true);
+
+      const assertionsResult = new AssertionsResult({});
+      assertionsResult.addResult({ index: 0, result: failedSet });
+
+      const result = await assertionsResult.testResult();
+
+      expect(result.pass).toBe(false);
+      expect(result.metadata?.graderError).toBe(true);
+    });
+
     it('does not mark mixed fresh and cached grading responses as fully cached', async () => {
       const assertionsResult = new AssertionsResult({});
       assertionsResult.addResult({
