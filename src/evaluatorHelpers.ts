@@ -97,7 +97,9 @@ export function resolveVariables(
   return variables;
 }
 
-const RAW_TOKEN_REGEX = /\{%\s*(raw|endraw)\s*%\}/g;
+// Nunjucks tags accept a whitespace-control dash on either side
+// ({%- raw -%}), so the scan cannot anchor on '{%' followed by whitespace.
+const RAW_TOKEN_REGEX = /\{%-?\s*(raw|endraw)\s*-?%\}/g;
 const SIMPLE_PLACEHOLDER_REGEX = /\{\{\s*(\w+)\s*\}\}/g;
 
 // Regex substitution cannot see Nunjucks structure, so a placeholder inside a
@@ -114,7 +116,10 @@ function firstUnprotectedPlaceholder(
       continue;
     }
     const before = value.slice(0, start);
-    if (before.lastIndexOf('{{') > before.lastIndexOf('}}')) {
+    // Depth, not lastIndexOf: in `{{ '{{x}}' ~ '{{y}}' }}` the first quoted
+    // pair opens and closes before the second one starts, so comparing the
+    // last positions of '{{' and '}}' thinks the second is top-level.
+    if (before.split('{{').length - 1 > before.split('}}').length - 1) {
       continue;
     }
     return { placeholder: match[0], varName: match[1]!, index: start };
@@ -158,7 +163,8 @@ function autoWrapRawIfPartialNunjucks(prompt: string): string {
   // Detects any occurrence of an opening Nunjucks tag without a matching close
   // e.g. "{%" or "{{" not followed by a closing "%}" or "}}"
   const hasPartialTag = /({%[^%]*$|{{[^}]*$|{#[^#]*$)/m.test(prompt);
-  const alreadyWrapped = /{\%\s*raw\s*\%}/.test(prompt) && /{\%\s*endraw\s*\%}/.test(prompt);
+  const alreadyWrapped =
+    /{\%-?\s*raw\s*-?\%}/.test(prompt) && /{\%-?\s*endraw\s*-?\%}/.test(prompt);
   if (hasPartialTag && !alreadyWrapped) {
     return `{% raw %}${prompt}{% endraw %}`;
   }
@@ -166,7 +172,15 @@ function autoWrapRawIfPartialNunjucks(prompt: string): string {
 }
 
 function referencesUndefinedVariables(template: string, vars: Record<string, VarValue>): boolean {
-  return extractVariablesFromTemplate(template).some((variableName) => {
+  // Raw spans are literal text, not references: {% raw %}{{x}}{% endraw %}
+  // cannot count x as a dependency, or this guard would skip the very render
+  // pass that resolves the raw block.
+  const spans = collectRawSpans(template);
+  let scrubbed = template;
+  for (let i = spans.length - 1; i >= 0; i--) {
+    scrubbed = scrubbed.slice(0, spans[i][0]) + scrubbed.slice(spans[i][1]);
+  }
+  return extractVariablesFromTemplate(scrubbed).some((variableName) => {
     const rootVariableName = /^([A-Za-z_]\w*)/.exec(variableName)?.[1];
     return Boolean(
       rootVariableName && rootVariableName !== 'env' && vars[rootVariableName] === undefined,
@@ -565,37 +579,39 @@ export async function renderPrompt(
     return heliconeResult;
   }
   // Render prompt
+  // Vars values can be template strings, so render them first. Every path
+  // below consumes the same pre-rendered values: a {% raw %} block inside a
+  // value comes out as literal text whether the prompt is plain, JSON, or
+  // rendered with PROMPTFOO_DISABLE_JSON_AUTOESCAPE.
+  const renderedVars = Object.fromEntries(
+    Object.entries(vars).map(([key, value]) => {
+      if (
+        typeof value !== 'string' ||
+        skipRenderVars?.includes(key) ||
+        varsResolvedFromSkipped.has(key)
+      ) {
+        return [key, value];
+      }
+
+      if (referencesUndefinedVariables(value, vars)) {
+        return [key, value];
+      }
+
+      return [key, nunjucks.renderString(autoWrapRawIfPartialNunjucks(value), vars)];
+    }),
+  );
   try {
     if (getEnvBool('PROMPTFOO_DISABLE_JSON_AUTOESCAPE')) {
       // Pre-process: auto-wrap in {% raw %} if partial Nunjucks tags detected
       basePrompt = autoWrapRawIfPartialNunjucks(basePrompt);
-      return nunjucks.renderString(basePrompt, vars);
+      return nunjucks.renderString(basePrompt, renderedVars);
     }
 
     const parsed = JSON.parse(basePrompt);
     // The _raw_ prompt is valid JSON. That means that the user likely wants to substitute vars _within_ the JSON itself.
     // Recursively walk the JSON structure. If we find a string, render it with nunjucks.
-    return JSON.stringify(renderVarsInObject(parsed, vars), null, 2);
+    return JSON.stringify(renderVarsInObject(parsed, renderedVars), null, 2);
   } catch {
-    // Vars values can be template strings, so we need to render them first:
-    const renderedVars = Object.fromEntries(
-      Object.entries(vars).map(([key, value]) => {
-        if (
-          typeof value !== 'string' ||
-          skipRenderVars?.includes(key) ||
-          varsResolvedFromSkipped.has(key)
-        ) {
-          return [key, value];
-        }
-
-        if (referencesUndefinedVariables(value, vars)) {
-          return [key, value];
-        }
-
-        return [key, nunjucks.renderString(autoWrapRawIfPartialNunjucks(value), vars)];
-      }),
-    );
-
     // Pre-process: auto-wrap in {% raw %} if partial Nunjucks tags detected
     basePrompt = autoWrapRawIfPartialNunjucks(basePrompt);
     // Note: Explicitly not using `renderVarsInObject` as it will re-call `renderString`; each call will

@@ -458,6 +458,95 @@ tests:
         expect(parsed.results.results[1].success).toBe(true);
       });
     });
+
+    describe('Raw blocks and expression structure in vars', () => {
+      it('renders protected var values to literal text in JSON prompts', () => {
+        const configPath = path.join(FIXTURES_DIR, 'configs/raw-block-json-vars.yaml');
+        const outputPath = path.join(OUTPUT_DIR, 'raw-block-json-vars-output.json');
+
+        const tempConfig = `
+description: 'Raw-protected var values inside a JSON prompt'
+providers:
+  - echo
+prompts:
+  - '{"text": "{{v}}"}'
+tests:
+  - vars:
+      v: '{% raw %}{{x}}{% endraw %}'
+      x: ignored
+    assert:
+      - type: contains
+        value: '{% raw %}{{x}}{% endraw %}'
+      - type: not-contains
+        value: endraw
+  - vars:
+      v: '{%- raw %}{{x}}{% endraw %}'
+      x: ignored
+    assert:
+      - type: contains
+        value: '{% raw %}{{x}}{% endraw %}'
+      - type: not-contains
+        value: endraw
+  - vars:
+      v: "{{ '{{x}}' ~ '{{y}}' }}"
+      x: XVAL
+      y: YVAL
+    assert:
+      - type: contains
+        value: '{% raw %}{{x}}{{y}}{% endraw %}'
+      - type: not-contains
+        value: XVAL
+`;
+        fs.writeFileSync(configPath, tempConfig);
+
+        const { exitCode } = runCli(['eval', '-c', configPath, '-o', outputPath, '--no-cache']);
+
+        expect(exitCode).toBe(0);
+
+        const content = fs.readFileSync(outputPath, 'utf-8');
+        const parsed = JSON.parse(content);
+
+        expect(parsed.results.results.length).toBe(3);
+        for (const result of parsed.results.results) {
+          expect(result.success).toBe(true);
+        }
+      });
+
+      it('renders protected var values with JSON autoescape disabled', () => {
+        const configPath = path.join(FIXTURES_DIR, 'configs/raw-block-plain-vars.yaml');
+        const outputPath = path.join(OUTPUT_DIR, 'raw-block-plain-vars-output.json');
+
+        const tempConfig = `
+description: 'Raw-protected var values with PROMPTFOO_DISABLE_JSON_AUTOESCAPE'
+providers:
+  - echo
+prompts:
+  - '{{v}}'
+tests:
+  - vars:
+      v: '{% raw %}{{x}}{% endraw %}'
+      x: ignored
+    assert:
+      - type: contains
+        value: '{% raw %}{{x}}{% endraw %}'
+      - type: not-contains
+        value: endraw
+`;
+        fs.writeFileSync(configPath, tempConfig);
+
+        const { exitCode } = runCli(['eval', '-c', configPath, '-o', outputPath, '--no-cache'], {
+          env: { PROMPTFOO_DISABLE_JSON_AUTOESCAPE: 'true' },
+        });
+
+        expect(exitCode).toBe(0);
+
+        const content = fs.readFileSync(outputPath, 'utf-8');
+        const parsed = JSON.parse(content);
+
+        expect(parsed.results.results.length).toBe(1);
+        expect(parsed.results.results[0].success).toBe(true);
+      });
+    });
   });
 
   describe('Circular Reference Handling', () => {
