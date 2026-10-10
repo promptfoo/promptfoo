@@ -15,7 +15,7 @@ import {
   writeEvalLock,
 } from '../../src/node/evalLock';
 
-import type { Assertion, TestSuite } from '../../src/types';
+import type { ApiProvider, Assertion, TestSuite } from '../../src/types';
 
 function createSuite(expected = 'Paris', input = 'Paris'): TestSuite {
   return {
@@ -69,6 +69,19 @@ describe('evalLock', () => {
         hashEvalBar(changedRange),
       ]).size,
     ).toBe(5);
+  });
+
+  it('binds template interpretation mode into the bar hash', () => {
+    const templated = createEvalBar(createSuite('{{expected}}'), {
+      repeat: 1,
+      disableTemplating: false,
+    });
+    const literal = createEvalBar(createSuite('{{expected}}'), {
+      repeat: 1,
+      disableTemplating: true,
+    });
+
+    expect(hashEvalBar(literal)).not.toBe(hashEvalBar(templated));
   });
 
   it.each([
@@ -207,6 +220,33 @@ describe('evalLock', () => {
     expect(canonicalJson(first)).not.toContain('providerBasePath');
   });
 
+  it('strips checkout-specific base paths from runtime provider snapshots', () => {
+    const createProviderSuite = (basePath: string): TestSuite => {
+      const suite = createSuite();
+      suite.tests![0].provider = {
+        id: () => 'custom-provider',
+        config: { basePath, model: 'stable-model' },
+        callApi: async () => ({ output: 'Paris' }),
+      } as ApiProvider;
+      return suite;
+    };
+
+    const first = createEvalBar(createProviderSuite('/checkout/one'), { repeat: 1 });
+    const relocated = createEvalBar(createProviderSuite('/checkout/two'), { repeat: 1 });
+
+    expect(hashEvalBar(relocated)).toBe(hashEvalBar(first));
+    expect(canonicalJson(first)).not.toContain('basePath');
+  });
+
+  it('rejects undefined criteria instead of erasing object properties', () => {
+    const suite = createSuite();
+    (suite.tests![0].assert![0] as Assertion).value = { required: undefined };
+
+    expect(() => hashEvalBar(createEvalBar(suite, { repeat: 1 }))).toThrow(
+      'cannot include undefined values',
+    );
+  });
+
   it('rejects closure-dependent function criteria', () => {
     const suite = createSuite();
     const expected = 'Paris';
@@ -239,6 +279,17 @@ describe('evalLock', () => {
 
     expect(() => createEvalBar(suite, { repeat: 1 })).toThrow(
       'extension hooks because hooks can mutate tests after verification',
+    );
+  });
+
+  it('rejects custom Nunjucks filters that can alter criteria at runtime', () => {
+    const suite = {
+      ...createSuite(),
+      nunjucksFilters: { mutable: (value: string) => value },
+    };
+
+    expect(() => createEvalBar(suite, { repeat: 1 })).toThrow(
+      'do not support custom Nunjucks filters',
     );
   });
 

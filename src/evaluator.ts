@@ -712,6 +712,35 @@ interface ProviderCallResult {
   traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>>;
 }
 
+const cloneProviderContextValue = Clone({ circles: true });
+
+function assertLockRuntimeIntegrity(lockIntegrity: RunEvalOptions['lockIntegrity']): void {
+  if (
+    lockIntegrity &&
+    getEnvBool('PROMPTFOO_DISABLE_TEMPLATING', false) !== lockIntegrity.disableTemplating
+  ) {
+    throw new Error(
+      'Evaluation lock runtime integrity check failed: PROMPTFOO_DISABLE_TEMPLATING changed after verification',
+    );
+  }
+}
+
+function isolateLockedProviderContext(
+  test: AtomicTestCase,
+  prompt: Prompt,
+  vars: Vars,
+): { test: AtomicTestCase; prompt: Prompt; vars: Vars } {
+  const isolatedVars = cloneProviderContextValue(vars);
+  const isolatedTest = cloneProviderContextValue(test);
+  isolatedTest.vars = isolatedVars;
+
+  return {
+    test: isolatedTest,
+    prompt: cloneProviderContextValue(prompt),
+    vars: isolatedVars,
+  };
+}
+
 function mergeProviderPromptConfig(
   promptConfig: Prompt['config'],
   testOptions: AtomicTestCase['options'],
@@ -929,6 +958,7 @@ async function callProviderForRunEval({
   testSuite,
   traceContext,
   vars,
+  lockIntegrity,
 }: Pick<
   RunEvalOptions,
   | 'abortSignal'
@@ -939,6 +969,7 @@ async function callProviderForRunEval({
   | 'repeatIndex'
   | 'test'
   | 'testSuite'
+  | 'lockIntegrity'
 > & {
   filters: RunEvalOptions['nunjucksFilters'];
   pauseSignal?: AbortSignal;
@@ -980,9 +1011,11 @@ async function callProviderForRunEval({
         testSuite,
         traceContext,
         vars,
+        lockIntegrity,
       });
     }
 
+    assertLockRuntimeIntegrity(lockIntegrity);
     sanitizeResponseMetadata(response);
 
     return {
@@ -1103,9 +1136,17 @@ async function callActiveProvider({
   testSuite,
   traceContext,
   vars,
+  lockIntegrity,
 }: Pick<
   RunEvalOptions,
-  'abortSignal' | 'evalId' | 'provider' | 'rateLimitRegistry' | 'repeatIndex' | 'test' | 'testSuite'
+  | 'abortSignal'
+  | 'evalId'
+  | 'provider'
+  | 'rateLimitRegistry'
+  | 'repeatIndex'
+  | 'test'
+  | 'testSuite'
+  | 'lockIntegrity'
 > & {
   filters: RunEvalOptions['nunjucksFilters'];
   pauseSignal?: AbortSignal;
@@ -1134,6 +1175,7 @@ async function callActiveProvider({
     testIndex,
     traceContext,
     vars,
+    lockIntegrity,
   });
   let completedResponse: ProviderResponse | undefined;
   const completedTargets: { prompt: string; response: ProviderResponse }[] = [];
@@ -1247,6 +1289,7 @@ function buildCallApiContext({
   testIndex,
   traceContext,
   vars,
+  lockIntegrity,
 }: {
   evalId?: string;
   filters: RunEvalOptions['nunjucksFilters'];
@@ -1257,13 +1300,17 @@ function buildCallApiContext({
   testIndex: number;
   traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>>;
   vars: Vars;
+  lockIntegrity?: RunEvalOptions['lockIntegrity'];
 }): CallApiContextParams {
+  const isolated = lockIntegrity
+    ? isolateLockedProviderContext(test, promptForRender, vars)
+    : undefined;
   const callApiContext: CallApiContextParams = {
-    vars,
-    prompt: promptForRender,
+    vars: isolated?.vars ?? vars,
+    prompt: isolated?.prompt ?? promptForRender,
     filters,
     originalProvider,
-    test,
+    test: isolated?.test ?? test,
     logger: logger as unknown as winston.Logger,
     getCache,
     repeatIndex,
@@ -1469,6 +1516,7 @@ async function applyRunEvalResponseOutcome({
   testSuite,
   traceContext,
   vars,
+  lockIntegrity,
 }: {
   abortSignal?: AbortSignal;
   deferGrading?: boolean;
@@ -1488,6 +1536,7 @@ async function applyRunEvalResponseOutcome({
   testSuite?: TestSuite;
   traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>>;
   vars: Vars;
+  lockIntegrity?: RunEvalOptions['lockIntegrity'];
 }) {
   if (response.error) {
     ret.error = response.error;
@@ -1525,6 +1574,7 @@ async function applyRunEvalResponseOutcome({
     testSuite,
     traceContext,
     vars,
+    lockIntegrity,
   });
 }
 
@@ -1547,6 +1597,7 @@ async function gradeRunEvalResponse({
   testSuite,
   traceContext,
   vars,
+  lockIntegrity,
 }: {
   abortSignal?: AbortSignal;
   deferGrading?: boolean;
@@ -1566,6 +1617,7 @@ async function gradeRunEvalResponse({
   testSuite?: TestSuite;
   traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>>;
   vars: Vars;
+  lockIntegrity?: RunEvalOptions['lockIntegrity'];
 }) {
   const { processedResponse, providerTransformedOutput } = await transformRunEvalResponse({
     evalId,
@@ -1609,6 +1661,7 @@ async function gradeRunEvalResponse({
           latencyMs: response.latencyMs ?? latencyMs,
           assertScoringFunction: test.assertScoringFunction as ScoringFunction,
           traceId,
+          disableTemplating: lockIntegrity?.disableTemplating,
         }).then((checkResult) => applyGradingResult(ret, checkResult)),
     ).catch((error) => {
       applyGradingError(ret, error, deferredGradingAbortSignal);
@@ -1630,6 +1683,7 @@ async function gradeRunEvalResponse({
           latencyMs: response.latencyMs ?? latencyMs,
           assertScoringFunction: test.assertScoringFunction as ScoringFunction,
           traceId,
+          disableTemplating: lockIntegrity?.disableTemplating,
         }),
     );
     applyGradingResult(ret, checkResult);
@@ -1785,6 +1839,7 @@ async function runEvalInternal(
     evalId,
     providerCallQueue,
     rateLimitRegistry,
+    lockIntegrity,
   }: RunEvalOptions,
   orchestrationOptions: Pick<InternalEvaluateOptions, 'abortSignal' | 'pauseSignal'> = {
     abortSignal,
@@ -1795,6 +1850,7 @@ async function runEvalInternal(
     typeof provider.delay === 'number',
     `Provider delay should be set for ${provider.label}`,
   );
+  assertLockRuntimeIntegrity(lockIntegrity);
 
   const state = createRunEvalState({ provider, prompt, promptIndex, test });
   attachConversationVar({
@@ -1882,6 +1938,7 @@ async function runEvalInternal(
             testSuite,
             traceContext: executionTraceContext,
             vars: state.vars,
+            lockIntegrity,
           });
           providerCallCompleted = true;
           const response = normalizeCachedTargetResponse(providerCall.response);
@@ -1952,6 +2009,7 @@ async function runEvalInternal(
             testSuite,
             traceContext: executionTraceContext,
             vars: persistedVars,
+            lockIntegrity,
           });
 
           // Update token usage stats
@@ -3401,6 +3459,7 @@ function createRunEvalOption({
     abortSignal: providerAbortSignal,
     evalId,
     rateLimitRegistry,
+    lockIntegrity: options.lockIntegrity,
   };
 }
 

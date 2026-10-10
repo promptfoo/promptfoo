@@ -81,6 +81,7 @@ type EvalBarSource = {
   tests?: unknown;
   scenarios?: unknown;
   extensions?: unknown;
+  nunjucksFilters?: unknown;
   providers?: unknown;
   redteam?: unknown;
 };
@@ -98,6 +99,7 @@ export type EvalBar = {
   execution: {
     repeat: number;
     filterRange: string | null;
+    disableTemplating: boolean;
   };
 };
 
@@ -195,15 +197,23 @@ function snapshotGradingProviderReferences(
     const record = value as Record<string, unknown>;
     const isAssertion = typeof record.type === 'string';
     return Object.fromEntries(
-      Object.entries(record).map(([key, entry]) => {
+      Object.entries(record).flatMap(([key, entry]) => {
+        // Resolved default-test and options objects contain absent optional fields as
+        // explicit `undefined`. They have the same runtime meaning as an omitted field.
+        // Assertion values are traversed with providerOption=false and remain strict.
+        if (providerOption && entry === undefined) {
+          return [];
+        }
         if (key === '__promptfoo' && entry && typeof entry === 'object' && !Array.isArray(entry)) {
           const { providerBasePath: _providerBasePath, ...portableMetadata } = entry as Record<
             string,
             unknown
           >;
           return [
-            key,
-            snapshotGradingProviderReferences(portableMetadata, providerMap, ancestors, false),
+            [
+              key,
+              snapshotGradingProviderReferences(portableMetadata, providerMap, ancestors, false),
+            ] as [string, unknown],
           ];
         }
         const resolved =
@@ -211,8 +221,10 @@ function snapshotGradingProviderReferences(
             ? resolveConfiguredProviderReference(entry, providerMap)
             : entry;
         return [
-          key,
-          snapshotGradingProviderReferences(resolved, providerMap, ancestors, key === 'options'),
+          [
+            key,
+            snapshotGradingProviderReferences(resolved, providerMap, ancestors, key === 'options'),
+          ] as [string, unknown],
         ];
       }),
     );
@@ -225,6 +237,27 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === 'object' && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : undefined;
+}
+
+function portableProviderRef(provider: unknown): unknown {
+  const serialized = toSerializableProviderRef(provider);
+  const providerRecord = asRecord(serialized);
+  if (!providerRecord) {
+    return serialized;
+  }
+
+  // Provider serialization exposes absent optional fields as `undefined`; normalize those
+  // implementation details before applying the stricter criteria-level undefined check.
+  const portableProvider = Object.fromEntries(
+    Object.entries(providerRecord).filter(([, value]) => value !== undefined),
+  );
+  const config = asRecord(portableProvider.config);
+  if (!config || !Object.hasOwn(config, 'basePath')) {
+    return portableProvider;
+  }
+
+  const { basePath: _basePath, ...portableConfig } = config;
+  return { ...portableProvider, config: portableConfig };
 }
 
 function validateDataOnlyAssertions(assertions: unknown): void {
@@ -406,7 +439,7 @@ export function canonicalPrml(manifest: Record<string, unknown>): string {
   return `${renderPrmlMapping(manifest)}\n`;
 }
 
-function canonicalize(value: unknown, ancestors: Set<object>): unknown {
+function canonicalize(value: unknown, ancestors: Set<object>, location: string): unknown {
   if (value === null || typeof value === 'boolean' || typeof value === 'number') {
     if (typeof value === 'number' && !Number.isFinite(value)) {
       throw new Error('Evaluation locks cannot include non-finite numbers');
@@ -424,7 +457,9 @@ function canonicalize(value: unknown, ancestors: Set<object>): unknown {
   }
 
   if (value === undefined) {
-    return undefined;
+    throw new Error(
+      `Evaluation locks cannot include undefined values because they are not represented in JSON (${location})`,
+    );
   }
 
   if (typeof value === 'function') {
@@ -438,7 +473,7 @@ function canonicalize(value: unknown, ancestors: Set<object>): unknown {
   }
 
   if (isRuntimeApiProvider(value)) {
-    return canonicalize(toSerializableProviderRef(value), ancestors);
+    return canonicalize(portableProviderRef(value), ancestors, location);
   }
 
   if (Buffer.isBuffer(value)) {
@@ -456,16 +491,16 @@ function canonicalize(value: unknown, ancestors: Set<object>): unknown {
 
   try {
     if (Array.isArray(value)) {
-      return value.map((entry) => canonicalize(entry, ancestors) ?? null);
+      return value.map((entry, index) => canonicalize(entry, ancestors, `${location}[${index}]`));
     }
 
     const record = value as Record<string, unknown>;
     const entries = Object.keys(record)
       .sort()
-      .flatMap((key) => {
-        const normalized = canonicalize(record[key], ancestors);
-        return normalized === undefined ? [] : ([[key, normalized]] as [string, unknown][]);
-      });
+      .map(
+        (key) =>
+          [key, canonicalize(record[key], ancestors, `${location}.${key}`)] as [string, unknown],
+      );
     return Object.fromEntries(entries);
   } finally {
     ancestors.delete(value);
@@ -473,16 +508,22 @@ function canonicalize(value: unknown, ancestors: Set<object>): unknown {
 }
 
 export function canonicalJson(value: unknown): string {
-  return JSON.stringify(canonicalize(value, new Set()));
+  return JSON.stringify(canonicalize(value, new Set(), '$'));
 }
 
 export function createEvalBar(
   testSuite: EvalBarSource,
-  execution: { repeat: number; filterRange?: string },
+  execution: { repeat: number; filterRange?: string; disableTemplating?: boolean },
 ): EvalBar {
   if (Array.isArray(testSuite.extensions) && testSuite.extensions.length > 0) {
     throw new Error(
       'Evaluation locks do not support extension hooks because hooks can mutate tests after verification',
+    );
+  }
+  const nunjucksFilters = asRecord(testSuite.nunjucksFilters);
+  if (nunjucksFilters && Object.keys(nunjucksFilters).length > 0) {
+    throw new Error(
+      'Evaluation locks do not support custom Nunjucks filters because filters can execute against mutable runtime state',
     );
   }
   validateDataOnlyCriteria(testSuite);
@@ -508,6 +549,7 @@ export function createEvalBar(
     execution: {
       repeat: execution.repeat,
       filterRange: execution.filterRange ?? null,
+      disableTemplating: execution.disableTemplating ?? false,
     },
   };
 }

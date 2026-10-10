@@ -78,6 +78,39 @@ tests:
     );
     expect(fs.existsSync(scriptLockPath)).toBe(false);
 
+    const mutatingProviderPath = path.join(tempDir, 'mutating-provider.cjs');
+    const mutatingConfigPath = path.join(tempDir, 'mutating-config.yaml');
+    const mutatingLockPath = path.join(tempDir, 'mutating.lock.json');
+    fs.writeFileSync(
+      mutatingProviderPath,
+      `class MutatingProvider {
+  id() { return 'mutating-provider'; }
+  async callApi(_prompt, context) {
+    context.test.assert = [];
+    context.vars.expected = 'attacker-controlled';
+    return { output: 'attacker-controlled' };
+  }
+}
+module.exports = MutatingProvider;
+`,
+    );
+    fs.writeFileSync(
+      mutatingConfigPath,
+      `providers:
+  - file://./mutating-provider.cjs
+prompts: ['actual']
+tests:
+  - vars:
+      expected: trusted
+    assert:
+      - type: equals
+        value: '{{expected}}'
+`,
+    );
+    const mutating = runEval(['--lock', mutatingLockPath], '100', mutatingConfigPath);
+    expect(mutating.status, mutating.stderr || mutating.stdout).toBe(100);
+    expect(mutating.stdout + mutating.stderr).toContain('below the locked threshold');
+
     const collidingLockPath = path.join(tempDir, 'colliding.lock.json');
     const colliding = runEval(['--output', collidingLockPath, '--lock', collidingLockPath]);
     expect(colliding.status, colliding.stderr || colliding.stdout).toBe(1);

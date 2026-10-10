@@ -1678,7 +1678,10 @@ describe('evalCommand', () => {
   it('should fail an interrupted locked evaluation', async () => {
     const previousExitCode = process.exitCode;
     process.exitCode = undefined;
-    const restoreEnv = mockProcessEnv({ PROMPTFOO_PASS_RATE_THRESHOLD: '80' });
+    const restoreEnv = mockProcessEnv({
+      PROMPTFOO_DISABLE_TEMPLATING: 'true',
+      PROMPTFOO_PASS_RATE_THRESHOLD: '80',
+    });
     let sigintHandler: NodeJS.SignalsListener | undefined;
     const processOnSpy = vi.spyOn(process, 'on').mockImplementation((event, listener) => {
       if (event === 'SIGINT') {
@@ -1695,7 +1698,7 @@ describe('evalCommand', () => {
         tests: [],
         scenarios: null,
         redteam: null,
-        execution: { repeat: 1, filterRange: null },
+        execution: { repeat: 1, filterRange: null, disableTemplating: true },
       },
       80,
     );
@@ -1714,6 +1717,11 @@ describe('evalCommand', () => {
       );
 
       expect(process.exitCode).toBe(130);
+      expect(evaluate).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        expect.objectContaining({ lockIntegrity: { disableTemplating: true } }),
+      );
     } finally {
       writeLockSpy.mockRestore();
       processOnSpy.mockRestore();

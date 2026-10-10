@@ -373,6 +373,7 @@ async function doEvalWithEnv(
     let commandLineOptions: Record<string, any> | undefined;
     let testSources: Awaited<ReturnType<typeof resolveConfigs>>['testSources'];
     let activeEvalLock: EvalLockFile | undefined;
+    let lockIntegrity: InternalEvaluateOptions['lockIntegrity'];
     telemetry.record('command_used', {
       name: 'eval - started',
       watch: Boolean(cmdObj.watch),
@@ -886,6 +887,7 @@ async function doEvalWithEnv(
       }
 
       const activeLockPath = path.resolve(process.cwd(), evalLockPath ?? verifyLockPath!);
+      const disableTemplating = getEnvBool('PROMPTFOO_DISABLE_TEMPLATING', false);
       const configuredOutputPaths = (
         Array.isArray(config.outputPath) ? config.outputPath : [config.outputPath]
       ).filter((outputPath): outputPath is string => typeof outputPath === 'string');
@@ -909,8 +911,9 @@ async function doEvalWithEnv(
           );
         }
         try {
-          const bar = createEvalBar(testSuite, { repeat, filterRange });
+          const bar = createEvalBar(testSuite, { repeat, filterRange, disableTemplating });
           activeEvalLock = await writeEvalLock(evalLockPath, bar, threshold);
+          lockIntegrity = { disableTemplating };
           logger.info(
             chalk.green(
               `Locked resolved eval bar at ${path.resolve(process.cwd(), evalLockPath)} (sha256 ${activeEvalLock.manifest.dataset.hash})`,
@@ -924,8 +927,9 @@ async function doEvalWithEnv(
         }
       } else if (verifyLockPath) {
         try {
-          const bar = createEvalBar(testSuite, { repeat, filterRange });
+          const bar = createEvalBar(testSuite, { repeat, filterRange, disableTemplating });
           activeEvalLock = await verifyEvalLock(verifyLockPath, bar);
+          lockIntegrity = { disableTemplating };
           logger.info(
             chalk.green(
               `Verified eval bar against ${path.resolve(process.cwd(), verifyLockPath)} before running`,
@@ -1037,6 +1041,7 @@ async function doEvalWithEnv(
         abortSignal: evaluateOptions.abortSignal,
         pauseSignal: isCliInvocation && cmdObj.write !== false ? abortController.signal : undefined,
         isRedteam: Boolean(config.redteam),
+        lockIntegrity,
       });
 
       // Post-evaluation cleanup for retry-errors mode
