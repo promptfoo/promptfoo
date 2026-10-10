@@ -1695,7 +1695,12 @@ describe('evalCommand', () => {
         tests: [],
         scenarios: null,
         redteam: null,
-        execution: { repeat: 1, filterRange: null },
+        execution: {
+          repeat: 1,
+          filterRange: null,
+          disableTemplating: false,
+          disableVarExpansion: false,
+        },
       },
       80,
     );

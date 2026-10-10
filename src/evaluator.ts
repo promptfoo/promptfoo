@@ -917,6 +917,7 @@ function isCliPauseCancellation(
 async function callProviderForRunEval({
   abortSignal,
   pauseSignal,
+  isolateProviderContext,
   evalId,
   filters,
   promptForRender,
@@ -942,6 +943,7 @@ async function callProviderForRunEval({
 > & {
   filters: RunEvalOptions['nunjucksFilters'];
   pauseSignal?: AbortSignal;
+  isolateProviderContext?: boolean;
   promptForRender: Prompt;
   renderedPrompt: string;
   testIndex: number;
@@ -965,6 +967,7 @@ async function callProviderForRunEval({
       response = await callActiveProvider({
         abortSignal,
         pauseSignal,
+        isolateProviderContext,
         evalId,
         filters,
         onProviderInvoked: () => {
@@ -1090,6 +1093,7 @@ async function collectExternalTraceAfterProviderCall({
 async function callActiveProvider({
   abortSignal,
   pauseSignal,
+  isolateProviderContext,
   evalId,
   filters,
   onProviderInvoked,
@@ -1109,6 +1113,7 @@ async function callActiveProvider({
 > & {
   filters: RunEvalOptions['nunjucksFilters'];
   pauseSignal?: AbortSignal;
+  isolateProviderContext?: boolean;
   onProviderInvoked: () => void;
   promptForRender: Prompt;
   renderedPrompt: string;
@@ -1135,6 +1140,19 @@ async function callActiveProvider({
     traceContext,
     vars,
   });
+  if (isolateProviderContext) {
+    // Keep runtime providers intact, but do not expose the grading test, vars, or
+    // prompt by reference. Targets may freely modify their own context copy.
+    const providerTest = { ...test };
+    delete providerTest.provider;
+    const contextData = clonePromptConfig({ test: providerTest, vars, prompt: promptForRender });
+    callApiContext.test = {
+      ...contextData.test,
+      ...(test.provider ? { provider: test.provider } : {}),
+    };
+    callApiContext.vars = contextData.vars;
+    callApiContext.prompt = contextData.prompt;
+  }
   let completedResponse: ProviderResponse | undefined;
   const completedTargets: { prompt: string; response: ProviderResponse }[] = [];
   const callApi = (onResponseHeaders?: CallApiOptionsParams['onResponseHeaders']) => {
@@ -1786,7 +1804,10 @@ async function runEvalInternal(
     providerCallQueue,
     rateLimitRegistry,
   }: RunEvalOptions,
-  orchestrationOptions: Pick<InternalEvaluateOptions, 'abortSignal' | 'pauseSignal'> = {
+  orchestrationOptions: Pick<
+    InternalEvaluateOptions,
+    'abortSignal' | 'pauseSignal' | 'isolateProviderContext'
+  > = {
     abortSignal,
   },
 ): Promise<EvaluateResult[]> {
@@ -1865,6 +1886,7 @@ async function runEvalInternal(
           const providerCall = await callProviderForRunEval({
             abortSignal,
             pauseSignal: orchestrationOptions.pauseSignal,
+            isolateProviderContext: orchestrationOptions.isolateProviderContext,
             evalId,
             filters,
             promptForRender: {
@@ -4401,7 +4423,11 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         deferGrading,
         providerCallQueue: deferGrading ? providerCallQueue : undefined,
       },
-      { abortSignal: deferredGradingAbortSignal, pauseSignal: this.options.pauseSignal },
+      {
+        abortSignal: deferredGradingAbortSignal,
+        pauseSignal: this.options.pauseSignal,
+        isolateProviderContext: this.options.isolateProviderContext,
+      },
     );
     onRowsReady?.();
     return rows;

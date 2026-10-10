@@ -14,6 +14,7 @@ import {
   verifyEvalLock,
   writeEvalLock,
 } from '../../src/node/evalLock';
+import { mockProcessEnv } from '../util/utils';
 
 import type { Assertion, TestSuite } from '../../src/types';
 
@@ -45,6 +46,143 @@ describe('evalLock', () => {
     expect(canonicalJson({ z: 1, nested: { b: 2, a: 1 }, a: 3 })).toBe(
       '{"a":3,"nested":{"a":1,"b":2},"z":1}',
     );
+  });
+
+  it.each([
+    undefined,
+    { required: undefined },
+    [undefined],
+    Array(1),
+    -0,
+    new Date(),
+    new Map(),
+    { nested: Object.assign(Object.create(null), { expected: 'value' }) },
+    { nested: Object.assign(['value'], { extra: 'criterion' }) },
+    { nested: new (class extends Array<string> {})('value') },
+    { [Symbol('criterion')]: true },
+    {
+      get expected() {
+        return 'dynamic';
+      },
+    },
+  ])('rejects criteria that cannot be represented faithfully as JSON: %j', (value) => {
+    const suite = createSuite();
+    suite.tests![0].assert![0] = { type: 'equals', value } as Assertion;
+    expect(() => hashEvalBar(createEvalBar(suite, { repeat: 1 }))).toThrow();
+  });
+
+  it('rejects undefined nested variables without rejecting optional loader fields', () => {
+    const suite = createSuite();
+    suite.defaultTest = {
+      metadata: undefined,
+      vars: undefined,
+      options: { prefix: undefined, suffix: undefined, provider: undefined },
+    };
+    expect(() => hashEvalBar(createEvalBar(suite, { repeat: 1 }))).not.toThrow();
+    suite.tests![0].vars = { object: { required: undefined } };
+    expect(() => hashEvalBar(createEvalBar(suite, { repeat: 1 }))).toThrow('undefined');
+  });
+
+  it('rejects accessors in option and scenario envelopes before copying them', () => {
+    const suite = createSuite();
+    suite.defaultTest = {
+      options: {
+        get prefix() {
+          return 'dynamic';
+        },
+      },
+    };
+    expect(() => createEvalBar(suite, { repeat: 1 })).toThrow('accessors');
+    suite.defaultTest = undefined;
+    suite.scenarios = [
+      {
+        config: [{}],
+        tests: [],
+        get description() {
+          return 'dynamic';
+        },
+      },
+    ];
+    expect(() => createEvalBar(suite, { repeat: 1 })).toThrow('accessors');
+  });
+
+  it.each(['PROMPTFOO_DISABLE_TEMPLATING', 'PROMPTFOO_DISABLE_VAR_EXPANSION'] as const)(
+    'rejects verification after changing %s',
+    async (setting) => {
+      const lockPath = path.join(tempDir, 'interpretation.lock.json');
+      const restoreDisabled = mockProcessEnv({ [setting]: 'true' });
+      try {
+        await writeEvalLock(lockPath, createEvalBar(createSuite(), { repeat: 1 }), 100);
+      } finally {
+        restoreDisabled();
+      }
+      const restoreEnabled = mockProcessEnv({ [setting]: 'false' });
+      try {
+        await expect(
+          verifyEvalLock(lockPath, createEvalBar(createSuite(), { repeat: 1 })),
+        ).rejects.toThrow('do not match');
+      } finally {
+        restoreEnabled();
+      }
+    },
+  );
+
+  it.each([
+    (suite: TestSuite) => {
+      suite.tests![0].prompts = ['easy'];
+    },
+    (suite: TestSuite) => {
+      suite.tests![0].providers = ['easy'];
+    },
+    (suite: TestSuite) => {
+      suite.defaultTest = { prompts: ['easy'] };
+    },
+    (suite: TestSuite) => {
+      suite.scenarios = [{ config: [{ providers: ['easy'] }], tests: [{}] }];
+    },
+    (suite: TestSuite) => {
+      suite.scenarios = [{ config: [{}], tests: [{ prompts: ['easy'] }] }];
+    },
+    (suite: TestSuite) => {
+      suite.providers = [
+        { id: () => 'echo', callApi: async () => ({ output: '' }), prompts: ['easy'] },
+      ];
+    },
+    (suite: TestSuite) => {
+      suite.providerPromptMap = { echo: ['easy'] };
+    },
+  ])('rejects selective routing that could omit locked tests (%#)', (mutateSuite) => {
+    const suite = createSuite();
+    mutateSuite(suite);
+    expect(() => createEvalBar(suite, { repeat: 1 })).toThrow('selectors');
+  });
+
+  it('allows changing the prompt and target when every locked test still applies', () => {
+    const original = createSuite();
+    const changed = createSuite();
+    changed.prompts = [{ raw: 'A different prompt', label: 'Different' }];
+    changed.providers = [{ id: () => 'different-target', callApi: async () => ({ output: '' }) }];
+    expect(hashEvalBar(createEvalBar(changed, { repeat: 1 }))).toBe(
+      hashEvalBar(createEvalBar(original, { repeat: 1 })),
+    );
+  });
+
+  it('strips only loader basePath from runtime per-test providers', () => {
+    const createImportedSuite = (basePath: string, temperature = 0) => {
+      const suite = createSuite();
+      suite.tests![0].provider = {
+        id: () => 'echo',
+        callApi: async () => ({ output: '' }),
+        config: { basePath, temperature, payload: { basePath: 'user-data' } },
+      };
+      return suite;
+    };
+    const original = createImportedSuite('/checkout/a');
+    const hash = (suite: TestSuite) => hashEvalBar(createEvalBar(suite, { repeat: 1 }));
+    expect(hash(createImportedSuite('/checkout/b'))).toBe(hash(original));
+    expect(hash(createImportedSuite('/checkout/b', 1))).not.toBe(hash(original));
+    expect(original.tests![0].provider).toMatchObject({ config: { basePath: '/checkout/a' } });
+    expect(canonicalJson(createEvalBar(original, { repeat: 1 }))).toContain('user-data');
   });
 
   it('binds tests, assertions, repeat, and range into the bar hash', () => {
@@ -205,6 +343,21 @@ describe('evalLock', () => {
     expect(hashEvalBar(relocated)).toBe(hashEvalBar(first));
     expect(hashEvalBar(changedMetadata)).not.toBe(hashEvalBar(first));
     expect(canonicalJson(first)).not.toContain('providerBasePath');
+  });
+
+  it('retains loader-like keys inside assertion values and variables', () => {
+    const original = createSuite();
+    original.tests![0].assert = [
+      { type: 'equals', value: { __promptfoo: { providerBasePath: 'required' } } },
+    ];
+    original.tests![0].vars = { data: { __promptfoo: { providerBasePath: 'required' } } };
+    const originalHash = hashEvalBar(createEvalBar(original, { repeat: 1 }));
+    const changedAssertion = structuredClone(original);
+    changedAssertion.tests![0].assert = [{ type: 'equals', value: { __promptfoo: {} } }];
+    expect(hashEvalBar(createEvalBar(changedAssertion, { repeat: 1 }))).not.toBe(originalHash);
+    const changedVars = structuredClone(original);
+    changedVars.tests![0].vars = { data: { __promptfoo: {} } };
+    expect(hashEvalBar(createEvalBar(changedVars, { repeat: 1 }))).not.toBe(originalHash);
   });
 
   it('rejects closure-dependent function criteria', () => {

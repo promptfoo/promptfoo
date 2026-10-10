@@ -7,7 +7,12 @@ import { randomUUID } from 'crypto';
 import { expect, it, vi } from 'vitest';
 import { evaluate } from '../../src/evaluator';
 import Eval from '../../src/models/eval';
-import { type ApiProvider, ResultFailureReason, type TestSuite } from '../../src/types/index';
+import {
+  type ApiProvider,
+  type AtomicTestCase,
+  ResultFailureReason,
+  type TestSuite,
+} from '../../src/types/index';
 import {
   mockApiProvider,
   mockGradingApiProviderFails,
@@ -17,6 +22,75 @@ import {
 import { describeEvaluator } from './lifecycle';
 
 describeEvaluator('evaluator assertions', () => {
+  it.each(['target', 'per-test'] as const)(
+    'isolates locked grading criteria and variables from a mutating %s provider',
+    async (placement) => {
+      const mutatingProvider: ApiProvider = {
+        id: () => 'mutating-target',
+        callApi: async (_prompt, context) => {
+          const exposedTest = context!.test as AtomicTestCase;
+          exposedTest.assert = [];
+          exposedTest.threshold = 0;
+          context!.vars.expected = 'wrong';
+          return { output: 'wrong' };
+        },
+      };
+      const suite: TestSuite = {
+        providers: [placement === 'target' ? mutatingProvider : mockApiProvider],
+        prompts: [toPrompt('Answer')],
+        tests: [
+          {
+            ...(placement === 'per-test' && { provider: mutatingProvider }),
+            vars: { expected: 'expected' },
+            assert: [{ type: 'equals', value: '{{expected}}' }],
+          },
+        ],
+      };
+      const evalRecord = await Eval.create({}, suite.prompts, { id: randomUUID() });
+      await evaluate(suite, evalRecord, { isolateProviderContext: true });
+      const summary = await evalRecord.toEvaluateSummary();
+      expect(summary.results).toHaveLength(1);
+      expect(summary.results[0]).toMatchObject({
+        success: false,
+        score: 0,
+        response: { output: 'wrong' },
+      });
+      expect(summary.results[0].gradingResult?.componentResults).toHaveLength(1);
+      expect(suite.tests![0].assert).toHaveLength(1);
+      expect(suite.tests![0].vars).toEqual({ expected: 'expected' });
+    },
+  );
+
+  it('deeply isolates nested assertion values and variables in locked provider contexts', async () => {
+    const provider: ApiProvider = {
+      id: () => 'nested-mutation',
+      callApi: async (_prompt, context) => {
+        const assertion = (context!.test as AtomicTestCase).assert![0];
+        if (assertion.type === 'equals') {
+          assertion.value = 'wrong';
+        }
+        (context!.vars.data as { expected: string }).expected = 'wrong';
+        return { output: 'wrong' };
+      },
+    };
+    const suite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Answer')],
+      tests: [
+        {
+          vars: { data: { expected: 'expected' } },
+          assert: [{ type: 'equals', value: '{{data.expected}}' }],
+        },
+      ],
+    };
+    const evalRecord = await Eval.create({}, suite.prompts, { id: randomUUID() });
+    await evaluate(suite, evalRecord, { isolateProviderContext: true });
+    const summary = await evalRecord.toEvaluateSummary();
+    expect(summary.results[0]).toMatchObject({ success: false, score: 0 });
+    expect(suite.tests![0].assert![0]).toMatchObject({ value: '{{data.expected}}' });
+    expect(suite.tests![0].vars).toEqual({ data: { expected: 'expected' } });
+  });
+
   it.each(['failed', 'aborted'])(
     'preserves completed audio output when grading is %s',
     async (outcome) => {

@@ -13,6 +13,8 @@ export type InternalEvaluateOptions = EvaluateOptions & {
   pauseSignal?: AbortSignal;
   /** CLI recovery reuses saved columns; this is neither configurable nor persisted. */
   restorePromptColumns?: boolean;
+  /** Locked evaluations keep provider context separate from authoritative grading inputs. */
+  isolateProviderContext?: boolean;
   generationEventId?: string;
   generationTokenUsage?: TokenUsage;
 };
