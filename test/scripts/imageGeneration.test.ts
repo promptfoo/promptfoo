@@ -2,6 +2,8 @@ import { EventEmitter } from 'node:events';
 import fs from 'node:fs/promises';
 import https from 'node:https';
 import { createRequire } from 'node:module';
+import path from 'node:path';
+import { runInNewContext } from 'node:vm';
 import type { ClientRequest, IncomingMessage } from 'node:http';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -40,6 +42,43 @@ afterEach(() => {
 });
 
 describe('image generation request', () => {
+  it('sends the blog CLI Unicode prompt with its UTF-8 byte length', async () => {
+    const transport = mockHttps('request');
+    const write = vi.spyOn(fs, 'writeFile').mockResolvedValue();
+    const scriptPath = require.resolve('../../scripts/generate-blog-image.cjs');
+    const scriptRequire = createRequire(scriptPath);
+    const prompt = 'A panda 🐼 visiting a café in 東京';
+    const result = runInNewContext(await fs.readFile(scriptPath, 'utf8'), {
+      require: (id: string) =>
+        id === '../src/util/envFile.ts' ? { loadEnvFiles: vi.fn() } : scriptRequire(id),
+      __dirname: path.dirname(scriptPath),
+      Buffer,
+      console: { log: vi.fn(), error: vi.fn() },
+      process: {
+        argv: ['node', scriptPath, '--prompt', prompt],
+        env: { OPENAI_API_KEY: 'test-api-key' },
+        exit: (code: number) => {
+          throw new Error(`Unexpected process exit: ${code}`);
+        },
+      },
+    }) as Promise<void>;
+
+    const data = transport.request.write.mock.calls[0][0] as string;
+    const options = transport.spy.mock.calls[0][0] as https.RequestOptions;
+    transport.respond();
+    transport.response.emit('data', '{"data":[{"b64_json":"aW1hZ2U="}]}');
+    transport.response.emit('end');
+    await result;
+
+    expect(JSON.parse(data).prompt).toBe(prompt);
+    expect(Buffer.byteLength(data)).toBeGreaterThan(data.length);
+    expect(options.headers).toMatchObject({ 'Content-Length': Buffer.byteLength(data) });
+    expect(write).toHaveBeenCalledExactlyOnceWith(
+      path.join(path.dirname(scriptPath), '..', 'site', 'static', 'img', 'blog', 'blog-image.png'),
+      Buffer.from('image'),
+    );
+  });
+
   it.each(['ASCII prompt', 'Unicode 🐼 café'])(
     'sends the serialized request for %s',
     async (prompt) => {

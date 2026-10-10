@@ -73,7 +73,7 @@ async function generateImage() {
     quality: 'high',
     n: 1,
   });
-  return requestImage(data, OPENAI_API_KEY, data.length);
+  return requestImage(data, OPENAI_API_KEY, Buffer.byteLength(data));
 }
 async function main() {
   try {
