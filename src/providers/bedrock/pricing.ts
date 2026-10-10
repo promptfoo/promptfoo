@@ -492,8 +492,6 @@ export function calculateBedrockCost(
     // Kimi Priority/Flex are supported only on Responses and Chat Completions,
     // not the native Converse/Invoke paths priced here.
     if (
-      // India routing is available, but AWS has not published its token rates.
-      kimi3?.[1] === 'in' ||
       (kimi3 && serviceTier?.type && serviceTier.type !== 'default') ||
       (grok47 && cacheWriteTokens > 0)
     ) {

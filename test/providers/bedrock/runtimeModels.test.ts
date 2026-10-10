@@ -205,6 +205,7 @@ describe('Bedrock Runtime pricing', () => {
     'global.zai.glm-5.3',
     'us.moonshotai.kimi-k3',
     'global.moonshotai.kimi-k3',
+    'in.moonshotai.kimi-k3',
     'a1b2c3d4e5',
   ])('does not infer catalog pricing from application profile resource %s', async (resource) => {
     const arn = `arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/${resource}`;
@@ -225,8 +226,20 @@ describe('Bedrock Runtime pricing', () => {
   it.each([
     'in.moonshotai.kimi-k3',
     'arn:aws:bedrock:ap-south-1:123456789012:inference-profile/in.moonshotai.kimi-k3',
-  ])('leaves unpublished India Kimi pricing unknown for %s', (model) => {
-    expect(calculateBedrockCost(model, 800, 500, 200, 100, 'ap-south-1')).toBeUndefined();
+  ])('prices published India Kimi usage for %s', (model) => {
+    const expected = (800 * 3.3 + 500 * 16.5 + 200 * 0.33 + 100 * 4.125) / 1e6;
+    for (const region of ['ap-south-1', 'ap-south-2']) {
+      expect(calculateBedrockCost(model, 800, 500, 200, 100, region)).toBeCloseTo(expected, 12);
+      expect(
+        calculateBedrockCost(model, 800, 500, 200, 100, region, { type: 'default' }),
+      ).toBeCloseTo(expected, 12);
+      for (const type of ['priority', 'flex', 'reserved'] as const) {
+        expect(calculateBedrockCost(model, 800, 500, 200, 100, region, { type })).toBeUndefined();
+      }
+    }
+    expect(
+      calculateBedrockInvokeModelCost(model, 800, 500, 200, 100, 'ap-south-1'),
+    ).toBeUndefined();
   });
 
   it('does not invent cache-write pricing for Grok 4.7', () => {
