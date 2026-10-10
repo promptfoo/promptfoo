@@ -68,6 +68,8 @@ These assertions can check LLM output or provider metadata directly. Configured 
 | [rouge-l](#rouge-l)                                             | ROUGE-Lsum score is at least the threshold                         |
 | [rouge-n](#rouge-n)                                             | Rouge-N score is above a given threshold                           |
 | [rouge-s](#rouge-s)                                             | ROUGE-S skip-bigram score is at least the threshold                |
+| [select-lowest-cost](#select-lowest-cost)                       | Lowest-cost output is selected                                     |
+| [select-lowest-latency](#select-lowest-latency)                 | Lowest-latency eligible output is selected                         |
 | [starts-with](#starts-with)                                     | output starts with string                                          |
 | [trace-span-count](#trace-span-count)                           | Count spans matching names and attributes with min/max thresholds  |
 | [trace-span-duration](#trace-span-duration)                     | Check span durations with percentile support                       |
@@ -325,6 +327,23 @@ derivedMetrics:
 ```
 
 Threshold-based `cost` assertions, including `not-cost`, continue to report binary pass/fail scores.
+
+### Select-Lowest-Cost
+
+`select-lowest-cost` passes only the lowest-cost output for a test case. It requires at least two outputs and provider-reported cost data.
+
+By default, it considers every output. To consider only outputs that pass the other assertions:
+
+```yaml
+assert:
+  - type: contains
+    value: '42'
+  - type: select-lowest-cost
+    value:
+      onlyPassing: true
+```
+
+With `onlyPassing`, the selector fails all outputs if none pass the other assertions. Provider errors are excluded from the comparison. Run with `promptfoo eval --no-cache`; a cached eligible output or an eligible output with missing or invalid cost fails the entire comparison. Ties are resolved by prompt order.
 
 ### Equality
 
@@ -1017,6 +1036,21 @@ assert:
 ```
 
 Note that `latency` requires that the [cache is disabled](/docs/configuration/caching) with `promptfoo eval --no-cache` or an equivalent option.
+
+### Select-Lowest-Latency
+
+`select-lowest-latency` passes only the fastest output that passed the other assertions. It requires at least two outputs. To include outputs that failed another assertion, set `value.onlyPassing` to `false`.
+
+```yaml
+assert:
+  - type: contains
+    value: 'scattering'
+  - type: select-lowest-latency
+```
+
+If no output passes the other assertions, the selector fails all outputs. Run with `promptfoo eval --no-cache`; cached outputs and missing or invalid latency fail the comparison. Ties are resolved by prompt order.
+
+Metric selectors run after regular assertions and before `select-best` and `max-score`. If you add multiple metric selectors to one test, their verdicts use AND semantics: an output must win every selector to pass. When different outputs win, all outputs fail and Promptfoo logs a warning.
 
 ### Levenshtein distance
 
