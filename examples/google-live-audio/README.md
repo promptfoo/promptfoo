@@ -1,6 +1,6 @@
 # google-live-audio (Google Live API Audio with Gemini)
 
-This example demonstrates how to use promptfoo with Google's Live API for audio generation using Gemini models.
+This example demonstrates how to use promptfoo with Google's Live API for audio generation using `gemini-3.8-live`. It returns audio and a text transcript. The older 3.1 Flash Live preview is scheduled to shut down on November 17, 2026; check the [Gemini API lifecycle](https://ai.google.dev/gemini-api/docs/deprecations) for changes.
 
 You can run this example with:
 

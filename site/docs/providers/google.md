@@ -180,7 +180,7 @@ providers:
 
 ```bash
 # Check if the environment variable is set
-echo $GOOGLE_API_KEY
+test -n "${GOOGLE_API_KEY:-${GEMINI_API_KEY:-}}" && echo "API key is set" || echo "API key is missing"
 
 # If empty, set it again
 export GOOGLE_API_KEY="your_api_key_here"
@@ -208,7 +208,7 @@ export GOOGLE_API_KEY="your_api_key_here"
     delay: 1000 # 1 second delay between API calls
   ```
 - Upgrade your API quota in Google AI Studio
-- Use a lower rate tier model like `gemini-2.5-flash-lite`
+- Use a lower rate tier model like `gemini-3.5-flash-lite`
 
 #### 4. Model Not Available
 
@@ -239,7 +239,7 @@ export GOOGLE_API_KEY="your_api_key_here"
 3. **Check your environment**:
    ```bash
    # List all GOOGLE_ environment variables
-   env | grep GOOGLE_
+   env | cut -d= -f1 | grep '^GOOGLE_'
    ```
 
 ## Migration Guide
@@ -248,35 +248,52 @@ export GOOGLE_API_KEY="your_api_key_here"
 
 If you need more advanced features or enterprise capabilities, you can migrate to Vertex AI:
 
-| Google AI Studio               | Vertex AI                      | Notes                                    |
-| ------------------------------ | ------------------------------ | ---------------------------------------- |
-| `google:gemini-3.8-flash`      | `vertex:gemini-3.8-flash`      | Vertex supports `global`, `us`, and `eu` |
-| `google:gemini-3.7-flash`      | `vertex:gemini-3.7-flash`      | Vertex supports `global`, `us`, and `eu` |
-| `google:gemini-3.6-flash`      | `vertex:gemini-3.6-flash`      | Vertex supports `global`, `us`, and `eu` |
-| `google:gemini-3.5-flash-lite` | `vertex:gemini-3.5-flash-lite` | Vertex supports `global`, `us`, and `eu` |
-| `google:gemini-2.5-flash`      | `vertex:gemini-2.5-flash`      | Same model, different endpoint           |
-| `GOOGLE_API_KEY`               | `GOOGLE_CLOUD_PROJECT` + auth  | Vertex uses Google Cloud authentication  |
-| Simple API key                 | Multiple auth methods          | Vertex supports ADC, service accounts    |
-| Global endpoint                | Regional endpoints             | Vertex requires region selection         |
+| Google AI Studio               | Vertex AI                                   | Notes                                    |
+| ------------------------------ | ------------------------------------------- | ---------------------------------------- |
+| `google:gemini-3.8-flash`      | `vertex:gemini-3.8-flash`                   | Vertex supports `global`, `us`, and `eu` |
+| `google:gemini-3.6-flash`      | `vertex:gemini-3.6-flash`                   | Vertex supports `global`, `us`, and `eu` |
+| `google:gemini-3.5-flash-lite` | `vertex:gemini-3.5-flash-lite`              | Vertex supports `global`, `us`, and `eu` |
+| `google:gemini-2.5-flash`      | `vertex:gemini-2.5-flash`                   | Same model, different endpoint           |
+| `GOOGLE_API_KEY`               | `GOOGLE_CLOUD_PROJECT` + auth               | Vertex uses Google Cloud authentication  |
+| Simple API key                 | Multiple auth methods                       | Vertex supports ADC, service accounts    |
+| Global endpoint                | Global, regional, or multi-region endpoints | Availability depends on the model        |
 
 Example migration:
 
 ```yaml
 # Before (Google AI Studio)
 providers:
-  - google:gemini-2.5-pro
+  - google:gemini-3.8-flash
 ```
 
 ```yaml
 # After (Vertex AI)
 providers:
-  - id: vertex:gemini-2.5-pro
+  - id: vertex:gemini-3.8-flash
     config:
       projectId: my-project-id
-      region: us-central1
+      region: global
 ```
 
 See the [Vertex AI provider documentation](/docs/providers/vertex) for detailed setup instructions.
+
+## API coverage
+
+A model ID selects a provider route; it does not enable every operation offered by Google. Support also depends on the chosen model and account:
+
+| API path or capability                                        | Promptfoo support                                                                                                                                       |
+| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `generateContent` / `streamGenerateContent`                   | Chat, multimodal input, structured output, thinking, tools, and speech output; use `streaming: true` to collect streamed responses into one eval result |
+| `embedContent`                                                | Text strings through `google:embedding:`; multimodal embedding inputs are not exposed                                                                   |
+| Live WebSocket API                                            | Finite text/audio eval sessions, transcripts, and function callbacks through `google:live:`                                                             |
+| Interactions API                                              | Dedicated Gemini Omni video and Robotics routes; not a general-purpose chat or managed-agent endpoint                                                   |
+| Video generation                                              | `google:video:` uses Veo's long-running prediction API; Omni uses Interactions                                                                          |
+| Native Gemini images                                          | Model-specific image provider; the legacy `google:image:` prefix instead selects Imagen's prediction format                                             |
+| Cached content                                                | Reference an existing cache with `passthrough.cachedContent`; cache creation and deletion are not provided                                              |
+| File management, Batch jobs, token counting, voice management | No dedicated provider operations; supplying an existing file URI or voice does not upload a file or create a voice                                      |
+| Lyria music and dedicated Transcribe Live events              | No dedicated adapters                                                                                                                                   |
+
+Use a [custom provider](/docs/providers/custom-api) when you need an operation or response format outside these routes. `passthrough` adds request fields to an existing route; it does not change the API protocol. Consult the [Gemini API reference](https://ai.google.dev/api) for upstream capabilities.
 
 ## Available Models
 
@@ -287,9 +304,7 @@ Lyria music generation is not currently supported by promptfoo's Google provider
 - `google:gemma-4-31b-it` - Gemma 4 31B instruction-tuned open model with strong reasoning, coding, and agentic capabilities
 - `google:gemma-4-26b-a4b-it` - Gemma 4 26B A4B instruction-tuned open model for lower-latency reasoning and coding evals
 - `google:gemini-3.8-flash` - Latest Gemini Flash model for coding and agentic workflows ($0.75/1M input, $3.75/1M output through December 31, 2026)
-- `google:gemini-3.7-flash` - Previous-generation Gemini Flash model for coding, multimodal reasoning, and agentic workflows ($0.75/1M input, $3.75/1M output through December 31, 2026)
 - `google:gemini-3.6-flash` - Previous-generation Gemini Flash model for coding and agentic tasks ($0.75/1M input, $3.75/1M output through December 31, 2026)
-- `google:gemini-3.5-flash` - Gemini 3.5 Flash for agentic and coding tasks ($1.50/1M input, $9/1M output)
 - `google:gemini-3.5-flash-lite` - Fast, cost-efficient Gemini 3.5 model for high-volume agentic workflows ($0.30/1M input, $2.50/1M output)
 - `google:live:gemini-3.5-live-translate-preview` - Gemini 3.5 Live Translate for real-time audio-to-audio translation with text transcripts ($3.50/1M audio input, $21/1M audio output)
 - `google:gemini-omni-1.1-flash` - Stable Gemini Omni Flash for conversational video generation/editing via the Interactions API ($1.50/1M input, $9/1M text/thinking output, $17.50/1M video output); `google:gemini-omni-flash-preview` remains available
@@ -310,7 +325,7 @@ Lyria music generation is not currently supported by promptfoo's Google provider
 - `google:gemini-flash-latest` - Google-maintained alias for the current Gemini Flash release ($0.75/1M input, $3.75/1M output through December 31, 2026)
 - `google:gemini-flash-lite-latest` - Google-maintained alias for the latest Gemini Flash-Lite release (currently Gemini 3.5 Flash-Lite pricing)
 
-Gemini 3.8 Flash, 3.7 Flash, and 3.6 Flash share [introductory pricing](https://ai.google.dev/gemini-api/docs/pricing#gemini-3.8-flash) through December 31, 2026.
+Gemini 3.8 Flash and 3.6 Flash share [introductory pricing](https://ai.google.dev/gemini-api/docs/pricing#gemini-3.8-flash) through December 31, 2026.
 Beginning January 1, 2027, their published rates increase to $1.50 per million input
 tokens and $7.50 per million output tokens. These models support a 1,048,576-token
 input context and up to 65,536 output tokens.
@@ -358,7 +373,9 @@ Google recommends `gemini-3.8-flash-tts` or `gemini-3.8-flash-lite-tts` for new 
 The 2.5 and 3.1 TTS previews have no announced shutdown dates; check the
 [model lifecycle page](https://ai.google.dev/gemini-api/docs/deprecations) before selecting one.
 
-This list describes current endpoints. Promptfoo may retain pricing for retired model IDs so saved
+For reproducible comparisons, use the replacement model IDs directly. Since [October 8, 2026](https://ai.google.dev/gemini-api/docs/changelog#october-8-2026), the Gemini API redirects `gemini-3.7-flash` to `gemini-3.8-flash` and `gemini-3.5-flash` to `gemini-3.6-flash`. Comparing an old ID with its replacement no longer compares distinct models. These redirects do not describe Vertex availability.
+
+This list includes legacy and preview endpoints. Promptfoo may retain pricing for retired model IDs so saved
 evaluations can still be scored; historical pricing data does not mean that Google still serves an
 endpoint. Check Google's [model lifecycle page](https://ai.google.dev/gemini-api/docs/deprecations)
 before starting new work with an older ID.
@@ -1441,15 +1458,15 @@ Access the Google Live API by specifying the model with the 'live' service type:
 
 ```yaml
 providers:
-  - id: 'google:live:gemini-3.1-flash-live-preview'
+  - id: 'google:live:gemini-3.8-live'
     config:
       generationConfig:
         response_modalities: ['audio']
         outputAudioTranscription: {}
-      timeoutMs: 10000
+      timeoutMs: 30000
 ```
 
-Gemini 3.1 Flash Live uses the `v1beta` WebSocket endpoint by default and produces native audio. If `response_modalities: ['text']` is configured, Promptfoo requests audio with output transcription so text-based assertions continue to work. Video must be supplied as individual `image/jpeg` or `image/png` frames, not as an inline video container such as `video/mp4`; Promptfoo paces multiple frames at one frame per second, bills those frames using the per-second video-input rate, and automatically terminates finite audio inputs. Promptfoo prices returned `IMAGE` and `DOCUMENT` input-token usage at the image rate and honors Gemini context-cache rates when the API reports cached-content usage.
+For legacy configurations, Gemini 3.1 Flash Live uses the `v1beta` WebSocket endpoint by default and produces native audio. If `response_modalities: ['text']` is configured, Promptfoo requests audio with output transcription so text-based assertions continue to work. Video must be supplied as individual `image/jpeg` or `image/png` frames, not as an inline video container such as `video/mp4`; Promptfoo paces multiple frames at one frame per second, bills those frames using the per-second video-input rate, and automatically terminates finite audio inputs. Promptfoo prices returned `IMAGE` and `DOCUMENT` input-token usage at the image rate and honors Gemini context-cache rates when the API reports cached-content usage.
 
 ### Gemini Robotics ER 2 Streaming
 
