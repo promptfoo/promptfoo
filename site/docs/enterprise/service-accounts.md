@@ -57,6 +57,8 @@ Assign the service account only to the teams the pipeline needs. For the local e
 
 Run this example on a trusted ephemeral runner with process-argument capture disabled. The login command passes the key as an argument. Configure the CI platform to destroy the runner after every job, including forced cancellation.
 
+Use reviewed configurations, providers, scripts, and dependencies from a trusted revision. Do not expose this credentialed job to untrusted pull-request code: evals and CLI configuration can execute code with access to the environment and saved login. See the [security policy](https://github.com/promptfoo/promptfoo/blob/main/SECURITY.md) for isolation guidance.
+
 Install your chosen Promptfoo CLI version in the runner and store the service account key as the CI secret `PROMPTFOO_API_KEY`. Keep shell tracing disabled so the login command does not print the key.
 
 For an on-prem deployment, use its API origin for `--host` and the assigned team's name, slug, or ID for `--team`:
