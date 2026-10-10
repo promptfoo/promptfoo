@@ -9,6 +9,7 @@ import {
 import invariant from '../../util/invariant';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { applyGpt6RequestRules, getGpt6ResponsesReasoning, isGpt6Model } from '../openai/gpt6';
+import { flattenResponseTool } from '../openai/util';
 import { ResponsesProcessor } from '../responses/index';
 import { getRequestTimeoutMs, LONG_RUNNING_MODEL_TIMEOUT_MS } from '../shared';
 import { AzureGenericProvider } from './generic';
@@ -20,21 +21,18 @@ import type {
   ProviderResponse,
 } from '../../types/index';
 import type { ReasoningEffort } from '../openai/types';
-import type { AzureChatResponsesOptions, AzureProviderOptions } from './types';
+import type { AzureProviderOptions, AzureResponsesOptions } from './types';
 
 // Azure Responses API uses the v1 preview API version
 const AZURE_RESPONSES_API_VERSION = 'preview';
 
 export class AzureResponsesProvider extends AzureGenericProvider {
-  declare config: AzureChatResponsesOptions;
+  declare config: AzureResponsesOptions;
 
   private functionCallbackHandler = new FunctionCallbackHandler();
   private processor: ResponsesProcessor;
 
-  constructor(
-    deploymentName: string,
-    options: AzureProviderOptions<AzureChatResponsesOptions> = {},
-  ) {
+  constructor(deploymentName: string, options: AzureProviderOptions<AzureResponsesOptions> = {}) {
     super(deploymentName, options);
 
     // Initialize the shared response processor
@@ -42,17 +40,21 @@ export class AzureResponsesProvider extends AzureGenericProvider {
       modelName: this.deploymentName,
       providerType: 'azure',
       functionCallbackHandler: this.functionCallbackHandler,
-      // The processor invokes costCalculator(modelName, data.usage, requestConfig). calculateAzureCost
-      // expects (modelName, config, promptTokens, completionTokens) — extract the token counts from
-      // the Responses-shaped usage object (input_tokens/output_tokens) so cost is non-zero.
-      costCalculator: (modelName: string, usage: any, config?: any) =>
-        calculateAzureCost(
+      // calculateAzureCost expects (modelName, config, promptTokens, completionTokens). Extract
+      // token counts from Responses usage and map the tier Azure actually served into its
+      // passthrough-based cost contract, falling back to the effective requested tier.
+      costCalculator: (modelName: string, usage: any, config?: any, responseData?: any) => {
+        const { service_tier: requestedServiceTier, ...costConfig } = config ?? {};
+        const serviceTier = responseData?.service_tier ?? requestedServiceTier;
+        return calculateAzureCost(
           typeof config?.model === 'string' ? config.model : modelName,
           {
-            ...config,
+            ...costConfig,
             passthrough: {
-              ...config?.passthrough,
-              ...(config?.service_tier === undefined ? {} : { service_tier: config.service_tier }),
+              ...costConfig.passthrough,
+              ...(serviceTier === undefined || serviceTier === null
+                ? {}
+                : { service_tier: serviceTier }),
             },
           },
           usage?.prompt_tokens ?? usage?.input_tokens,
@@ -68,22 +70,15 @@ export class AzureResponsesProvider extends AzureGenericProvider {
             usage?.input_tokens_details?.cached_tokens_details?.image_tokens,
           usage?.completion_tokens_details?.image_tokens ??
             usage?.output_tokens_details?.image_tokens,
-        ),
+        );
+      },
     });
-
-    if (this.config.mcp?.enabled) {
-      this.initializationPromise = this.initializeMCP();
-    }
-  }
-
-  private async initializeMCP(): Promise<void> {
-    // TODO: Initialize MCP if needed
   }
 
   /**
    * Check if the current deployment is a reasoning model.
    * Reasoning models use max_completion_tokens instead of max_tokens,
-   * don't support temperature, and accept reasoning_effort parameter.
+   * don't support temperature, and may support configurable reasoning effort.
    */
   isReasoningModel(modelName = this.config.modelName ?? this.deploymentName): boolean {
     // Check explicit config flags first (match chat.ts behavior)
@@ -103,6 +98,8 @@ export class AzureResponsesProvider extends AzureGenericProvider {
       // GPT-5 series (reasoning by default)
       lowerName.startsWith('gpt-5') ||
       lowerName.includes('-gpt-5') ||
+      lowerName === 'gpt-chat-latest' ||
+      lowerName.startsWith('gpt-chat-latest-') ||
       isGpt6Model(lowerName) ||
       // DeepSeek reasoning models
       lowerName.includes('deepseek-r1') ||
@@ -148,6 +145,7 @@ export class AzureResponsesProvider extends AzureGenericProvider {
         : (config.modelName ?? this.deploymentName)
     ).toLowerCase();
     const isReasoningModel = this.isReasoningModel(capabilityModelName);
+    const isFixedReasoningModel = /^gpt-chat-latest(?:-|$)/.test(capabilityModelName);
     const isGPT6Model = isGpt6Model(capabilityModelName);
     const maxOutputTokensDefault = config.omitDefaults
       ? getEnvString('OPENAI_MAX_TOKENS') === undefined
@@ -176,7 +174,7 @@ export class AzureResponsesProvider extends AzureGenericProvider {
         )
       : undefined;
     const reasoningEffort =
-      isReasoningModel && !isGPT6Model
+      isReasoningModel && !isGPT6Model && !isFixedReasoningModel
         ? (renderVarsInObject(config.reasoning_effort, context?.vars) as ReasoningEffort)
         : undefined;
 
@@ -225,15 +223,7 @@ export class AzureResponsesProvider extends AzureGenericProvider {
     const loadedTools = config.tools
       ? await maybeLoadToolsFromExternalFile(config.tools, context?.vars)
       : undefined;
-    const tools = Array.isArray(loadedTools)
-      ? loadedTools.map((tool) => {
-          if (tool?.type !== 'function' || !tool.function) {
-            return tool;
-          }
-          const { function: functionDefinition, ...rest } = tool;
-          return { ...rest, ...functionDefinition };
-        })
-      : loadedTools;
+    const tools = Array.isArray(loadedTools) ? loadedTools.map(flattenResponseTool) : loadedTools;
     const toolChoice =
       typeof config.tool_choice === 'object' &&
       config.tool_choice?.type === 'function' &&
@@ -265,8 +255,19 @@ export class AzureResponsesProvider extends AzureGenericProvider {
         : {}),
       ...(config.stream ? { stream: config.stream } : {}),
       ...('store' in config ? { store: Boolean(config.store) } : {}),
+      ...(config.service_tier === undefined || config.service_tier === null
+        ? {}
+        : { service_tier: config.service_tier }),
       ...(config.passthrough || {}),
     };
+
+    if (isFixedReasoningModel && body.reasoning && typeof body.reasoning === 'object') {
+      body.reasoning = { ...body.reasoning };
+      delete body.reasoning.effort;
+      if (Object.keys(body.reasoning).length === 0) {
+        delete body.reasoning;
+      }
+    }
 
     if (isGPT6Model) {
       if (gpt6Reasoning) {
@@ -288,9 +289,6 @@ export class AzureResponsesProvider extends AzureGenericProvider {
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    if (this.initializationPromise != null) {
-      await this.initializationPromise;
-    }
     await this.ensureInitialized();
     invariant(this.authHeaders, 'auth headers are not initialized');
 

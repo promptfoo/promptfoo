@@ -338,6 +338,23 @@ ${nativeSource}`,
         const stat = fs.readFileSync(`/proc/${pid}/stat`, 'utf8');
         return stat.slice(stat.lastIndexOf(')') + 2, stat.lastIndexOf(')') + 3) !== 'Z';
       }
+      if (process.platform === 'darwin') {
+        // Match the fixture supervisor: exited descendants can await reaping on macOS too.
+        const status = spawnSync('ps', ['-p', String(pid), '-o', 'stat='], {
+          encoding: 'utf8',
+          timeout: 1_000,
+        });
+        if (status.error) {
+          throw status.error;
+        }
+        if (status.status === 1 && !status.stdout.trim() && !status.stderr.trim()) {
+          return false; // The process exited between kill(0) and ps.
+        }
+        if (status.status !== 0) {
+          throw new Error(`Could not inspect fixture process ${pid}: ${status.stderr}`);
+        }
+        return !status.stdout.trim().startsWith('Z');
+      }
       return true;
     } catch (error) {
       if (['ESRCH', 'ENOENT'].includes((error as NodeJS.ErrnoException).code ?? '')) {
