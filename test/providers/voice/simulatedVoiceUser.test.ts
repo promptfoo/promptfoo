@@ -426,6 +426,19 @@ describe('SimulatedVoiceUser', () => {
       const response = await result;
       expect(response.error).toMatch(/commentary/i);
       expect(response.metadata?.voice.durationMs).toBeLessThan(1000);
+      if (mode === 'rejected') {
+        for (const participant of ['target', 'caller']) {
+          expect(response.metadata?.voice.participants[participant]).toMatchObject({
+            finalUsageConfirmed: true,
+            voiceSeconds: 1,
+            backendCost: 0,
+          });
+        }
+        expect(response.cost).toBeCloseTo((2 * 0.05) / 60, 9);
+      } else {
+        expect(response.metadata?.voice.participants.caller.finalUsageConfirmed).toBe(false);
+        expect(response.cost).toBeUndefined();
+      }
       expect(vi.getTimerCount()).toBe(0);
     },
   );

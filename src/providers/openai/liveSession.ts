@@ -790,6 +790,10 @@ export class LiveSession {
       // session.close cancels pending appends and queued work; those errors don't change the result.
       return;
     } else {
+      if (speechTimer && command) {
+        // An explicit rejection finishes this speech command; it is no longer pending work.
+        command.pending = false;
+      }
       this.setError(`GPT-Live ${rejected ?? 'API error'}${detail}`);
     }
     // Without the opening prompt, the model is never asked to speak.
