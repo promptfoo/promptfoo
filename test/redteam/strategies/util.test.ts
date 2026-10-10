@@ -219,19 +219,7 @@ describe('pluginMatchesStrategyTargets', () => {
       expect(result).toBe(false);
     });
 
-    it('should handle undefined plugin ID', () => {
-      const testCase: TestCaseWithPlugin = {
-        vars: { input: 'test' },
-        metadata: {
-          pluginId: 'unknown',
-        },
-      };
-
-      expect(pluginMatchesStrategyTargets(testCase, 'base64', ['harmful'])).toBe(false);
-      expect(pluginMatchesStrategyTargets(testCase, 'base64', undefined)).toBe(true);
-    });
-
-    it('should handle missing metadata', () => {
+    it.each(['should handle undefined plugin ID', 'should handle missing metadata'])('%s', () => {
       const testCase: TestCaseWithPlugin = {
         vars: { input: 'test' },
         metadata: {

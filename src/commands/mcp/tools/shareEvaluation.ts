@@ -135,19 +135,6 @@ export function registerShareEvaluationTool(server: McpServer) {
             false,
             {
               evalId: evalRecord.id,
-              sharingEnabled: false,
-              cloudEnabled: isCloudEnabled,
-              instructions: {
-                cloudSetup:
-                  isCloudEnabled === false
-                    ? [
-                        'Sign up or log in at https://promptfoo.app',
-                        'Follow instructions at https://promptfoo.app/welcome to login via CLI',
-                        'Configure sharing in your promptfooconfig.yaml',
-                      ]
-                    : null,
-                configHelp: 'Enable sharing by adding "sharing: true" to your promptfooconfig.yaml',
-              },
             },
             dedent`
               Sharing is not enabled for this evaluation.
@@ -190,13 +177,6 @@ export function registerShareEvaluationTool(server: McpServer) {
             false,
             {
               evalId: evalRecord.id,
-              error: 'Failed to create shareable URL',
-              troubleshooting: [
-                'Check internet connectivity',
-                'Verify sharing service is accessible',
-                'Check authentication credentials',
-                'Ensure evaluation data is valid',
-              ],
             },
             'Failed to create shareable URL. Check connectivity and authentication.',
           );
@@ -233,31 +213,9 @@ export function registerShareEvaluationTool(server: McpServer) {
 
         const errorData = {
           evalId: args.evalId || 'latest',
-          error: errorMessage,
           sharing: {
             showAuth: args.showAuth || false,
             cloudEnabled: cloudConfig.isEnabled(),
-          },
-          troubleshooting: {
-            commonIssues: [
-              'Network connectivity problems',
-              'Authentication/authorization issues',
-              'Invalid evaluation ID',
-              'Sharing service unavailable',
-              'Evaluation not completed or corrupted',
-            ],
-            configurationTips: [
-              'Ensure sharing is enabled in promptfooconfig.yaml',
-              'Check cloud authentication status',
-              'Verify evaluation exists and completed successfully',
-              'Check network connectivity to sharing service',
-            ],
-            examples: {
-              shareLatest: '{"evalId": null}',
-              shareSpecific: '{"evalId": "eval_abc123def456"}',
-              withAuth: '{"evalId": "eval_123", "showAuth": true}',
-              overwrite: '{"evalId": "eval_123", "overwrite": true}',
-            },
           },
         };
 
