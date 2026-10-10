@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleAgentRubric } from '../../src/assertions/agentRubric';
 import { matchesAgentRubric } from '../../src/matchers/agent';
+import { createPassingGrade } from '../factories/literalFixtures';
 
 import type { AssertionParams, GradingResult } from '../../src/types/index';
 
@@ -41,11 +42,7 @@ describe('handleAgentRubric', () => {
   });
 
   it('passes rubric inputs to the agent matcher', async () => {
-    const result: GradingResult = {
-      pass: true,
-      score: 1,
-      reason: 'verified',
-    };
+    const result: GradingResult = createPassingGrade(1, 'verified');
     mockMatchesAgentRubric.mockResolvedValue(result);
 
     await expect(handleAgentRubric(params)).resolves.toEqual(result);
@@ -93,11 +90,7 @@ describe('handleAgentRubric', () => {
         options: { rubricPrompt },
       },
     };
-    mockMatchesAgentRubric.mockResolvedValue({
-      pass: true,
-      score: 1,
-      reason: 'verified',
-    });
+    mockMatchesAgentRubric.mockResolvedValue(createPassingGrade(1, 'verified'));
 
     await expect(handleAgentRubric(structuredParams)).resolves.toEqual({
       pass: true,

@@ -10,6 +10,8 @@ import { createMockProvider, type MockApiProvider } from '../factories/provider'
 
 import type { UnifiedConfig } from '../../src/types/index';
 
+const { createUuidModuleFactory } = await vi.hoisted(() => import('../factories/moduleMocks'));
+
 vi.mock('../../src/logger');
 vi.mock('../../src/util/config/load', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../src/util/config/load')>()),
@@ -24,13 +26,7 @@ vi.mock('../../src/telemetry', () => ({
     send: vi.fn(),
   },
 }));
-vi.mock('../../src/util/uuid', () => ({
-  isUuid: vi.fn((str: string) => {
-    // Check if the string looks like a UUID
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    return uuidRegex.test(str);
-  }),
-}));
+vi.mock('../../src/util/uuid', createUuidModuleFactory());
 
 describe('Validate Command Provider Tests', () => {
   let program: Command;
@@ -266,7 +262,7 @@ describe('Validate Command Provider Tests', () => {
 
       await doValidateTarget({ target: cloudUUID }, defaultConfig);
 
-      expect(getProviderFromCloud).toHaveBeenCalledWith(cloudUUID);
+      expect(getProviderFromCloud).toHaveBeenCalledWith(cloudUUID, {});
       expect(loadApiProvider).toHaveBeenCalledWith(
         'openai:gpt-4',
         expect.objectContaining({
@@ -446,7 +442,7 @@ describe('Validate Command Provider Tests', () => {
 
       await doValidateTarget({ target: cloudUUID }, defaultConfig);
 
-      expect(getProviderFromCloud).toHaveBeenCalledWith(cloudUUID);
+      expect(getProviderFromCloud).toHaveBeenCalledWith(cloudUUID, {});
       expect(loadApiProvider).toHaveBeenCalledWith(
         'openai:gpt-4',
         expect.objectContaining({
@@ -483,6 +479,28 @@ describe('Validate Command Provider Tests', () => {
       expect(process.exitCode).toBe(1);
       expect(loadApiProvider).not.toHaveBeenCalled();
       expect(loadApiProviders).not.toHaveBeenCalled();
+    });
+
+    it('should reload config providers with the string env values of the resolved suite', async () => {
+      // A config can give env values as numbers or booleans, which providers that call
+      // string methods on them, as OpenClaw does on its gateway port, cannot take.
+      const suiteEnv = { OPENCLAW_GATEWAY_PORT: '18789', FEATURE_FLAG: 'true' };
+      vi.mocked(resolveConfigs).mockResolvedValue({
+        config: {
+          env: { OPENCLAW_GATEWAY_PORT: 18789, FEATURE_FLAG: true },
+          providers: ['echo'],
+        } as unknown as UnifiedConfig,
+        testSuite: { prompts: [], providers: [], env: suiteEnv },
+        basePath: '',
+      });
+      vi.mocked(loadApiProviders).mockResolvedValue([]);
+
+      await doValidateTarget({ config: 'config.yaml' }, defaultConfig);
+
+      expect(loadApiProviders).toHaveBeenCalledWith(
+        ['echo'],
+        expect.objectContaining({ env: suiteEnv }),
+      );
     });
 
     it('should set exitCode 1 when loading config fails', async () => {

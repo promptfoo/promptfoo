@@ -1,7 +1,8 @@
 import { isDeepStrictEqual } from 'node:util';
 
+import { addCompletionDetails } from '../contracts/completionDetails';
 import { getEnvBool } from '../envars';
-import { isGradingResult } from '../types/index';
+import { asGradingResult } from './scriptResultNormalization';
 
 import type { AssertionSet, GradingResult, ScoringFunction } from '../types/index';
 
@@ -90,20 +91,10 @@ function accumulateNormalizedAssertionTokenUsage(
   }
 
   if (update.completionDetails) {
-    const currentDetails = target.completionDetails;
-    const incomingDetails = update.completionDetails;
-    target.completionDetails = {
-      reasoning: (currentDetails?.reasoning ?? 0) + (incomingDetails.reasoning ?? 0),
-      acceptedPrediction:
-        (currentDetails?.acceptedPrediction ?? 0) + (incomingDetails.acceptedPrediction ?? 0),
-      rejectedPrediction:
-        (currentDetails?.rejectedPrediction ?? 0) + (incomingDetails.rejectedPrediction ?? 0),
-      cacheReadInputTokens:
-        (currentDetails?.cacheReadInputTokens ?? 0) + (incomingDetails.cacheReadInputTokens ?? 0),
-      cacheCreationInputTokens:
-        (currentDetails?.cacheCreationInputTokens ?? 0) +
-        (incomingDetails.cacheCreationInputTokens ?? 0),
-    };
+    target.completionDetails = addCompletionDetails(
+      target.completionDetails,
+      update.completionDetails!,
+    );
   }
 
   if (trackIncurredUsage && target.incurredTokenUsage) {
@@ -280,9 +271,11 @@ export class AssertionsResult {
       this.failedContentSafetyChecks = true;
     }
 
+    // Zero-weight assertions collect measurements without affecting the aggregate score.
+    const metricWeight = weight === 0 ? 1 : weight;
     if (metric) {
-      this.namedScores[metric] = (this.namedScores[metric] ?? 0) + result.score * weight;
-      this.namedScoreWeights[metric] = (this.namedScoreWeights[metric] ?? 0) + weight;
+      this.namedScores[metric] = (this.namedScores[metric] ?? 0) + result.score * metricWeight;
+      this.namedScoreWeights[metric] = (this.namedScoreWeights[metric] ?? 0) + metricWeight;
     }
 
     if (result.namedScores) {
@@ -293,7 +286,7 @@ export class AssertionsResult {
             Object.prototype.hasOwnProperty.call(result.namedScoreWeights, metricName)
               ? (result.namedScoreWeights[metricName] ?? 1)
               : 1;
-          const weightedIncomingWeight = incomingWeight * weight;
+          const weightedIncomingWeight = incomingWeight * metricWeight;
           this.namedScores[metricName] =
             (this.namedScores[metricName] ?? 0) + score * weightedIncomingWeight;
           this.namedScoreWeights[metricName] =
@@ -393,13 +386,15 @@ export class AssertionsResult {
 
     if (scoringFunction) {
       try {
-        const scoringResult = await scoringFunction(normalizedNamedScores, {
-          threshold: this.threshold,
-          parentAssertionSet: this._parentAssertionSet,
-          componentResults: flattenedComponentResults,
-          tokensUsed: this.tokensUsed,
-        });
-        if (!isGradingResult(scoringResult)) {
+        const scoringResult = asGradingResult(
+          await scoringFunction(normalizedNamedScores, {
+            threshold: this.threshold,
+            parentAssertionSet: this._parentAssertionSet,
+            componentResults: flattenedComponentResults,
+            tokensUsed: this.tokensUsed,
+          }),
+        );
+        if (!scoringResult) {
           throw new Error('assertion scoring function must return a GradingResult');
         }
         this.result = {

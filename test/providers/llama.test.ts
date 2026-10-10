@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
 import { LlamaProvider } from '../../src/providers/llama';
 import { getRequestTimeoutMs } from '../../src/providers/shared';
+import { createMockFetchResponse } from './mockProviderResponses';
 
 vi.mock('../../src/cache', async (importOriginal) => {
   return {
@@ -95,12 +96,7 @@ describe('LlamaProvider', () => {
     it.each([0, -1, 128])(
       'preserves an explicit n_predict=%s in the native request',
       async (nPredict) => {
-        vi.mocked(fetchWithCache).mockResolvedValue({
-          data: { content: '' },
-          cached: false,
-          status: 200,
-          statusText: 'OK',
-        });
+        vi.mocked(fetchWithCache).mockResolvedValue(createMockFetchResponse({ content: '' }));
         const provider = new LlamaProvider(modelName, { config: { n_predict: nPredict } });
         const result = await provider.callApi('Hello');
         const request = vi.mocked(fetchWithCache).mock.calls[0][1];
@@ -110,12 +106,7 @@ describe('LlamaProvider', () => {
     );
 
     it('forwards native Mirostat modes and token-bias pairs', async () => {
-      vi.mocked(fetchWithCache).mockResolvedValue({
-        data: { content: 'ok' },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+      vi.mocked(fetchWithCache).mockResolvedValue(createMockFetchResponse({ content: 'ok' }));
       const provider = new LlamaProvider(modelName, {
         config: {
           mirostat: 2,
@@ -139,12 +130,9 @@ describe('LlamaProvider', () => {
     });
 
     it('should return the correct response on success', async () => {
-      vi.mocked(fetchWithCache).mockResolvedValue({
-        data: { content: 'test response' },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+      vi.mocked(fetchWithCache).mockResolvedValue(
+        createMockFetchResponse({ content: 'test response' }),
+      );
 
       const provider = new LlamaProvider(modelName, { config });
       const result = await provider.callApi(prompt);
@@ -166,7 +154,7 @@ describe('LlamaProvider', () => {
     });
 
     it('should return an error if response data is malformed', async () => {
-      const malformedResponse = { data: null, cached: false, status: 200, statusText: 'OK' };
+      const malformedResponse = createMockFetchResponse(null);
       vi.mocked(fetchWithCache).mockResolvedValue(malformedResponse);
 
       const provider = new LlamaProvider(modelName, { config });
