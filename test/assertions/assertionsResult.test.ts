@@ -365,6 +365,70 @@ describe('AssertionsResult', () => {
       expect(result.metadata?.graderError).toBe(true);
     });
 
+    it('tolerates sparse slots left by skipped comparison assertions', async () => {
+      // select-best/max-score entries skip addResult, leaving holes that
+      // Array.prototype.find visits as undefined.
+      const assertionsResult = new AssertionsResult({});
+      assertionsResult.addResult({
+        index: 1,
+        result: {
+          pass: false,
+          score: 0,
+          reason: 'The submission does not meet the criterion',
+          tokensUsed: DEFAULT_TOKENS_USED,
+        },
+      });
+
+      const result = await assertionsResult.testResult();
+
+      expect(result.pass).toBe(false);
+      expect(result.reason).toBe('The submission does not meet the criterion');
+      expect(result.metadata?.graderError).toBeUndefined();
+    });
+
+    it('marks grader failures with an empty reason', async () => {
+      const assertionsResult = new AssertionsResult({});
+      assertionsResult.addResult({
+        index: 0,
+        result: {
+          pass: false,
+          score: 0,
+          reason: '',
+          tokensUsed: DEFAULT_TOKENS_USED,
+          metadata: { graderError: true },
+        },
+      });
+
+      const result = await assertionsResult.testResult();
+
+      expect(result.pass).toBe(false);
+      expect(result.metadata?.graderError).toBe(true);
+    });
+
+    it('marks grader failures when custom scoring fails a passing aggregate', async () => {
+      const assertionsResult = new AssertionsResult({ threshold: 0 });
+      assertionsResult.addResult({
+        index: 0,
+        result: {
+          pass: false,
+          score: 0,
+          reason: 'Grader provider unavailable',
+          tokensUsed: DEFAULT_TOKENS_USED,
+          metadata: { graderError: true },
+        },
+      });
+
+      const result = await assertionsResult.testResult(() => ({
+        pass: false,
+        score: 0,
+        reason: 'Custom scorer rejected the run',
+      }));
+
+      expect(result.pass).toBe(false);
+      expect(result.reason).toBe('Custom scorer rejected the run');
+      expect(result.metadata?.graderError).toBe(true);
+    });
+
     it('does not mark mixed fresh and cached grading responses as fully cached', async () => {
       const assertionsResult = new AssertionsResult({});
       assertionsResult.addResult({

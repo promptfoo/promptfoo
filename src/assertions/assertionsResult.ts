@@ -376,12 +376,17 @@ export class AssertionsResult {
     // carry a grader failure that must not reclassify an unrelated failure.
     // Keep the first failing grader component's reason: by this point `reason`
     // may be an aggregate threshold summary or another component's failure.
-    const graderFailureReason = pass
+    // componentResults can be sparse: comparison assertions (select-best,
+    // max-score) skip addResult, leaving holes that Array.prototype.find
+    // visits as undefined. Existence comes from the matched component itself,
+    // not its reason, so an empty-string reason still marks the failure.
+    const failedGrader = pass
       ? undefined
       : this.componentResults.find(
-          (result) => !result.pass && result.metadata?.graderError === true,
-        )?.reason;
-    const hasGraderError = graderFailureReason !== undefined;
+          (result) => result !== undefined && !result.pass && result.metadata?.graderError === true,
+        );
+    const graderFailureReason = failedGrader?.reason;
+    const hasGraderError = failedGrader !== undefined;
 
     this.result = {
       pass,
@@ -470,6 +475,21 @@ export class AssertionsResult {
           );
         }
       }
+    }
+
+    // A custom scoring function (or the guards above) can fail the result after
+    // preliminary aggregation passed it. Re-derive the marker from the final
+    // state so a failed grader is never recorded as an ordinary assertion
+    // failure. Only the marker is applied here: a custom scorer owns its
+    // reason.
+    if (
+      !this.result.pass &&
+      this.result.metadata?.graderError !== true &&
+      this.componentResults.some(
+        (result) => result !== undefined && !result.pass && result.metadata?.graderError === true,
+      )
+    ) {
+      this.result.metadata = { ...this.result.metadata, graderError: true as const };
     }
 
     return this.result;
