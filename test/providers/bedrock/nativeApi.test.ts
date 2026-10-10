@@ -391,6 +391,92 @@ describe('native Bedrock APIs', () => {
     },
   );
 
+  it.each(['Converse', 'Rerank', 'InvokeFlow'])(
+    'rejects SDK decimal-shaped document objects before %s dispatch',
+    async (operation) => {
+      const document = { value: { type: 'bigDecimal', string: '2.5', extra: 'keep' } };
+      const requests: Record<string, unknown> = {
+        Converse: {
+          modelId: 'test.model',
+          messages: [
+            {
+              role: 'user',
+              content: [{ toolResult: { toolUseId: 'tool', content: [{ json: document }] } }],
+            },
+          ],
+        },
+        Rerank: {
+          queries: [{ type: 'TEXT', textQuery: { text: 'hello' } }],
+          sources: [
+            { type: 'INLINE', inlineDocumentSource: { type: 'JSON', jsonDocument: document } },
+          ],
+          rerankingConfiguration: {
+            type: 'BEDROCK_RERANKING_MODEL',
+            bedrockRerankingConfiguration: { modelConfiguration: { modelArn: 'test.model' } },
+          },
+        },
+        InvokeFlow: {
+          flowIdentifier: 'FLOW123456',
+          flowAliasIdentifier: 'TSTALIASID',
+          inputs: [{ nodeName: 'input', nodeOutputName: 'document', content: { document } }],
+        },
+      };
+      const handle = vi
+        .spyOn(NodeHttpHandler.prototype, 'handle')
+        .mockResolvedValue({
+          response: {
+            statusCode: 200,
+            headers: { 'content-type': 'application/json' },
+            body: Buffer.from('{}'),
+          },
+        });
+      const provider = new AwsBedrockNativeApiProvider(operation, {
+        config: { region: 'us-east-1', accessKeyId: 'synthetic', secretAccessKey: 'synthetic' },
+      });
+      try {
+        const result = await provider.callApi(JSON.stringify(requests[operation]));
+        expect(result.error).toContain('SDK reserved bigDecimal shape');
+        expect(result.output).toBeUndefined();
+        expect(handle).not.toHaveBeenCalled();
+      } finally {
+        await provider.cleanup();
+      }
+    },
+  );
+
+  it('preserves harmless near-lookalike objects through the actual SDK', async () => {
+    const document = {
+      nonnumeric: { type: 'bigDecimal', string: 'not-a-number', extra: 'keep' },
+      otherType: { type: 'text', string: '2.5' },
+    };
+    const handle = vi
+      .spyOn(NodeHttpHandler.prototype, 'handle')
+      .mockResolvedValue({
+        response: {
+          statusCode: 200,
+          headers: { 'content-type': 'application/json' },
+          body: Buffer.from('{}'),
+        },
+      });
+    const provider = new AwsBedrockNativeApiProvider('Converse', {
+      config: { region: 'us-east-1', accessKeyId: 'synthetic', secretAccessKey: 'synthetic' },
+    });
+    try {
+      const result = await provider.callApi(
+        JSON.stringify({
+          modelId: 'test.model',
+          messages: [{ role: 'user', content: [{ text: 'hello' }] }],
+          additionalModelRequestFields: document,
+        }),
+      );
+      expect(result.error).toBeUndefined();
+      const body = JSON.parse(Buffer.from(handle.mock.calls[0][0].body).toString('utf8'));
+      expect(body.additionalModelRequestFields).toEqual(document);
+    } finally {
+      await provider.cleanup();
+    }
+  });
+
   it('preserves binary InvokeModel outputs without trying to parse image bytes', async () => {
     const { provider } = fixture('InvokeModel', {
       body: Buffer.from([1, 2, 3]),

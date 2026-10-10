@@ -87,6 +87,11 @@ function decodeBlobs(value: any): any {
   if (NumericValue.prototype.isPrototypeOf(value)) {
     return value;
   }
+  if (value instanceof NumericValue) {
+    throw new Error(
+      'Native Bedrock document inputs cannot contain ordinary objects with the SDK reserved bigDecimal shape; the SDK would convert them into numbers',
+    );
+  }
   if (Array.isArray(value)) {
     return value.map(decodeBlobs);
   }
