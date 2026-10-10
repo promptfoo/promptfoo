@@ -17,6 +17,8 @@ import {
 } from './setupReadiness';
 import type { CreateJobResponse, GetJobResponse } from '@promptfoo/types/api/eval';
 
+const POLL_TIMEOUT_MS = 30_000;
+
 const RunTestSuiteButton = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -39,6 +41,7 @@ const RunTestSuiteButton = () => {
   const [progressPercent, setProgressPercent] = useState(0);
   const [runError, setRunError] = useState<string | null>(null);
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pollAbortRef = useRef<AbortController | null>(null);
   const isMountedRef = useRef(true);
 
   const clearPollInterval = useCallback(() => {
@@ -53,6 +56,7 @@ const RunTestSuiteButton = () => {
 
     return () => {
       isMountedRef.current = false;
+      pollAbortRef.current?.abort();
       clearPollInterval();
     };
   }, [clearPollInterval]);
@@ -131,8 +135,15 @@ const RunTestSuiteButton = () => {
           return;
         }
         isPolling = true;
+        const controller = new AbortController();
+        pollAbortRef.current = controller;
+        const timeout = setTimeout(() => {
+          controller.abort(new Error('Evaluation progress request timed out'));
+        }, POLL_TIMEOUT_MS);
         try {
-          const progressResponse = await callApi(`/eval/job/${job.id}/`);
+          const progressResponse = await callApi(`/eval/job/${job.id}/`, {
+            signal: controller.signal,
+          });
           if (!isMountedRef.current) {
             clearPollInterval();
             return;
@@ -168,8 +179,10 @@ const RunTestSuiteButton = () => {
           }
         } catch (error) {
           clearPollInterval();
-          handleRunError(error);
+          handleRunError(controller.signal.aborted ? controller.signal.reason : error);
         } finally {
+          clearTimeout(timeout);
+          pollAbortRef.current = null;
           isPolling = false;
         }
       }, 1000);

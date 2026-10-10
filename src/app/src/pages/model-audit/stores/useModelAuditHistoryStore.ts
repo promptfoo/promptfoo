@@ -35,6 +35,9 @@ interface ModelAuditHistoryState {
 
 const DEFAULT_PAGE_SIZE = 25;
 let historyRequestId = 0;
+let historyCountRevision = 0;
+let pendingDeletions = 0;
+let deletionOrder: string[] = [];
 
 export const useModelAuditHistoryStore = create<ModelAuditHistoryState>()((set, get) => ({
   // Initial state
@@ -71,6 +74,7 @@ export const useModelAuditHistoryStore = create<ModelAuditHistoryState>()((set, 
       if (requestId !== historyRequestId) {
         return;
       }
+      historyCountRevision++;
       set({
         historicalScans: data.scans || [],
         totalCount: data.total || data.scans?.length || 0,
@@ -117,6 +121,7 @@ export const useModelAuditHistoryStore = create<ModelAuditHistoryState>()((set, 
       const data = await response.json();
       const scans = data.scans || [];
       const total = data.total || scans.length || 0;
+      historyCountRevision++;
       set({
         totalCount: total,
         historyError: null,
@@ -155,9 +160,17 @@ export const useModelAuditHistoryStore = create<ModelAuditHistoryState>()((set, 
   deleteHistoricalScan: async (id: string) => {
     // Optimistic delete: remove from UI immediately
     const previousScans = get().historicalScans;
-    const deletedIndex = previousScans.findIndex((scan) => scan.id === id);
-    const deletedScan = previousScans[deletedIndex];
+    if (pendingDeletions === 0) {
+      // Concurrent deletions share the server's row order, including temporarily hidden rows.
+      deletionOrder = previousScans.map((scan) => scan.id);
+    }
+    pendingDeletions++;
+    const rollbackOrder = deletionOrder.includes(id)
+      ? deletionOrder
+      : previousScans.map((scan) => scan.id);
+    const deletedScan = previousScans.find((scan) => scan.id === id);
     const countAdjustment = get().totalCount > 0 ? 1 : 0;
+    const countRevision = historyCountRevision;
 
     // Optimistically update UI
     set((state) => ({
@@ -181,21 +194,28 @@ export const useModelAuditHistoryStore = create<ModelAuditHistoryState>()((set, 
         const historicalScans = [...state.historicalScans];
         const scanAlreadyPresent = historicalScans.some((scan) => scan.id === id);
         if (deletedScan && !scanAlreadyPresent) {
-          const nextScan = previousScans
-            .slice(deletedIndex + 1)
-            .find((scan) => historicalScans.some((current) => current.id === scan.id));
-          const insertIndex = nextScan
-            ? historicalScans.findIndex((scan) => scan.id === nextScan.id)
+          const nextScanId = rollbackOrder
+            .slice(rollbackOrder.indexOf(id) + 1)
+            .find((scanId) => historicalScans.some((current) => current.id === scanId));
+          const insertIndex = nextScanId
+            ? historicalScans.findIndex((scan) => scan.id === nextScanId)
             : historicalScans.length;
           historicalScans.splice(insertIndex, 0, deletedScan);
         }
         return {
           historicalScans,
-          totalCount: state.totalCount + (scanAlreadyPresent ? 0 : countAdjustment),
+          totalCount:
+            state.totalCount +
+            (scanAlreadyPresent || countRevision !== historyCountRevision ? 0 : countAdjustment),
           historyError: errorMessage,
         };
       });
       throw error;
+    } finally {
+      pendingDeletions--;
+      if (pendingDeletions === 0) {
+        deletionOrder = [];
+      }
     }
   },
 

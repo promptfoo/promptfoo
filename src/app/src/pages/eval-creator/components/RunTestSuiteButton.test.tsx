@@ -327,6 +327,55 @@ describe('RunTestSuiteButton', () => {
     },
   );
 
+  it.each(['request', 'body'] as const)(
+    'aborts a stalled poll %s and allows another run without applying its late result',
+    async (phase) => {
+      const pendingResponse = createDeferred<Response>();
+      const pendingBody = createDeferred<unknown>();
+      let pollSignal: AbortSignal | undefined;
+      getCallApiMock()
+        .mockResolvedValueOnce(createMockResponse({ id: 'stalled-job' }))
+        .mockImplementationOnce((_path, options) => {
+          pollSignal = options?.signal ?? undefined;
+          pollSignal?.addEventListener('abort', () => {
+            if (phase === 'request') {
+              pendingResponse.reject(pollSignal?.reason);
+            } else {
+              pendingBody.reject(pollSignal?.reason);
+            }
+          });
+          return phase === 'request'
+            ? pendingResponse.promise
+            : Promise.resolve({ ok: true, json: () => pendingBody.promise } as Response);
+        })
+        .mockResolvedValueOnce(createMockResponse({ id: 'retry-job' }))
+        .mockResolvedValueOnce(createMockResponse({ status: 'complete', evalId: 'retry-eval' }));
+      useStore.getState().updateConfig({ prompts: ['hello'], providers: ['echo'], tests: [{}] });
+      renderWithProvider(<RunTestSuiteButton />);
+      await act(async () => {
+        screen.getByRole('button', { name: 'Run Eval' }).click();
+      });
+      await act(async () => {
+        await timers.advanceByAsync(31000);
+      });
+      expect(screen.getByRole('alert')).toHaveTextContent('Evaluation progress request timed out');
+      expect(pollSignal?.aborted).toBe(true);
+      expect(getCallApiMock()).toHaveBeenCalledTimes(2);
+      expect(screen.getByRole('button', { name: 'Run Eval' })).toBeEnabled();
+      expect(mockNavigate).not.toHaveBeenCalled();
+      await act(async () => {
+        screen.getByRole('button', { name: 'Run Eval' }).click();
+      });
+      await act(async () => {
+        await timers.advanceByAsync(1000);
+        pendingResponse.resolve(createMockResponse({ status: 'complete', evalId: 'stale-eval' }));
+        pendingBody.resolve({ status: 'complete', evalId: 'stale-eval' });
+      });
+      expect(mockNavigate).toHaveBeenCalledExactlyOnceWith('/eval/retry-eval');
+      expect(getCallApiMock()).toHaveBeenCalledTimes(4);
+    },
+  );
+
   it('should handle progress API failure after job creation', async () => {
     const mockJobId = '123';
     mockCallApiRoutes([
