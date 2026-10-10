@@ -4605,6 +4605,68 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
     },
   );
 
+  it.each([
+    [0.5, false, 'Aggregate score 0.00 < 0.5 threshold'],
+    [0, true, 'Aggregate score 0.00 ≥ 0 threshold'],
+    [undefined, true, 'All assertions passed'],
+  ])(
+    'preserves the aggregate reason when clearing an all-metric-only row: %s',
+    async (threshold, pass, reason) => {
+      const user = userEvent.setup();
+      const mockTable = createMockTableWithHumanAssertion();
+      const output = mockTable.body[0].outputs[0];
+      const human = output.gradingResult.componentResults[1];
+      Object.assign(output, {
+        testCase: {
+          threshold,
+          assert: [{ type: 'javascript', metric: 'counter', metricOnly: true }],
+        },
+      });
+      Object.assign(output.gradingResult, {
+        componentResults: [
+          {
+            pass: false,
+            score: 0.25,
+            reason: 'Excluded counter failed',
+            assertion: { type: 'javascript', metric: 'counter', metricOnly: true },
+          },
+          human,
+        ],
+      });
+      vi.mocked(useTableStore).mockImplementation(() => ({
+        config: {},
+        evalId: '123',
+        inComparisonMode: false,
+        setTable: mockSetTable,
+        table: mockTable,
+        version: 4,
+        renderMarkdown: true,
+        fetchEvalData: vi.fn(),
+        isFetching: false,
+        filteredResultsCount: 1,
+        filters: { values: {}, appliedCount: 0, options: { metric: [] } },
+      }));
+      renderWithProviders(<ResultsTable {...defaultProps} />);
+      await user.click(screen.getByRole('button', { name: 'Clear rating' }));
+      await waitFor(() =>
+        expect(mockCallApi).toHaveBeenCalledWith(
+          '/eval/123/results/test-output-1/rating',
+          expect.objectContaining({ method: 'POST' }),
+        ),
+      );
+      const payload = JSON.parse(mockCallApi.mock.calls[0][1].body);
+      expect(payload).toMatchObject({ pass, score: 0, reason });
+      expect(payload.componentResults).toEqual([
+        {
+          pass: false,
+          score: 0.25,
+          reason: 'Excluded counter failed',
+          assertion: { type: 'javascript', metric: 'counter', metricOnly: true },
+        },
+      ]);
+    },
+  );
+
   it('should recalculate pass as true when all remaining assertions pass', () => {
     const mockTable = {
       body: [

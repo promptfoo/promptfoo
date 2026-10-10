@@ -564,6 +564,7 @@ type PromptMetrics = ReturnType<ReturnType<typeof useMetricsGetter>>;
 type ManualRatingUpdate = {
   pass: EvaluateTableOutput['pass'];
   score: EvaluateTableOutput['score'];
+  reason?: GradingResult['reason'];
   componentResults?: NonNullable<GradingResult['componentResults']>;
   modifiedComponentResults: boolean;
 };
@@ -904,6 +905,7 @@ export function getManualRatingUpdate({
   );
 
   if (isPass === null) {
+    let reason: GradingResult['reason'] | undefined;
     if (humanResultIndex !== -1) {
       componentResults.splice(humanResultIndex, 1);
     }
@@ -919,11 +921,16 @@ export function getManualRatingUpdate({
       const threshold = existingOutput.testCase?.threshold;
       finalScore = 0;
       finalPass = typeof threshold === 'number' && !Number.isNaN(threshold) ? threshold <= 0 : true;
+      reason =
+        typeof threshold === 'number' && !Number.isNaN(threshold)
+          ? `Aggregate score 0.00 ${finalPass ? '≥' : '<'} ${threshold} threshold`
+          : 'All assertions passed';
     }
 
     return {
       pass: finalPass,
       score: finalScore,
+      ...(reason !== undefined && { reason }),
       componentResults,
       modifiedComponentResults: true,
     };
@@ -980,7 +987,9 @@ function buildManualGradingResult({
   if (isPass === null) {
     gradingResult.pass = ratingUpdate.pass;
     gradingResult.score = ratingUpdate.score;
-    if (gradingResult.reason === 'Manual result (overrides all other grading results)') {
+    if (ratingUpdate.reason !== undefined) {
+      gradingResult.reason = ratingUpdate.reason;
+    } else if (gradingResult.reason === 'Manual result (overrides all other grading results)') {
       gradingResult.reason = ratingUpdate.componentResults?.[0]?.reason || 'Manual rating cleared';
     }
     if (gradingResult.assertion?.type === HUMAN_ASSERTION_TYPE) {

@@ -85,4 +85,45 @@ describe('handleCost', () => {
       expect(result.pass).toBe(false);
     });
   });
+
+  describe('named metric-only cost', () => {
+    const assertion = { type: 'cost' as const, metric: 'inference_cost', metricOnly: true };
+
+    it.each([0, 0.005, 2])('records metric-only cost %s without a threshold', (cost) => {
+      expect(handleCost(params({ assertion, cost }))).toMatchObject({
+        pass: true,
+        score: cost,
+        assertion,
+      });
+    });
+
+    it.each([undefined, Number.NaN, Number.POSITIVE_INFINITY, -1])(
+      'rejects unavailable or invalid metric-only cost %s',
+      (cost) => {
+        expect(() => handleCost(params({ assertion, cost }))).toThrow(
+          'Cost metric requires a finite, non-negative provider cost',
+        );
+      },
+    );
+
+    it('requires a named metric and a non-inverted assertion', () => {
+      expect(() =>
+        handleCost(params({ assertion: { type: 'cost', metricOnly: true }, cost: 0.005 })),
+      ).toThrow('Cost assertion must have a threshold');
+      expect(() => handleCost(params({ assertion, cost: 0.005, inverse: true }))).toThrow(
+        'Cost assertion must have a threshold',
+      );
+    });
+
+    it('preserves scoring and legacy measurement behavior when the flag is false', () => {
+      expect(() =>
+        handleCost(params({ assertion: { ...assertion, metricOnly: false }, cost: 0.005 })),
+      ).toThrow('Cost assertion must have a threshold');
+      expect(
+        handleCost(
+          params({ assertion: { ...assertion, metricOnly: false, weight: 0 }, cost: 0.005 }),
+        ),
+      ).toMatchObject({ pass: true, score: 0.005 });
+    });
+  });
 });

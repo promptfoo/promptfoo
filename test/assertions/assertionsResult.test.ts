@@ -153,6 +153,56 @@ describe('AssertionsResult', () => {
   });
 
   describe('metricOnly assertions', () => {
+    it('marks the complete metric-only result tree without mutating shared descendants', async () => {
+      const leaf: GradingResult = {
+        pass: false,
+        score: 0.25,
+        reason: 'shared leaf failure',
+        assertion: { type: 'javascript', metric: 'leaf', metricOnly: false },
+        metadata: { source: 'synthetic' },
+      };
+      const branch: GradingResult = {
+        pass: false,
+        score: 0.25,
+        reason: 'assertionless branch',
+        componentResults: [leaf],
+      };
+      const original: GradingResult = {
+        pass: false,
+        score: 0.25,
+        reason: 'parent',
+        componentResults: [branch, branch],
+      };
+      const before = structuredClone(original);
+      const assertionsResult = new AssertionsResult({});
+      assertionsResult.addResult({
+        index: 0,
+        result: original,
+        metric: 'counter',
+        metricOnly: true,
+      });
+      const aggregate = await assertionsResult.testResult();
+      expect(aggregate).toMatchObject({ pass: true, score: 0, namedScores: { counter: 0.25 } });
+      const marked = aggregate.componentResults![0];
+      expect(marked.componentResults![0]).toBe(marked.componentResults![1]);
+      const pending = [marked];
+      while (pending.length) {
+        const node = pending.pop()!;
+        expect(node.assertion?.metricOnly).toBe(true);
+        pending.push(...(node.componentResults ?? []));
+      }
+      expect(marked.componentResults![0].componentResults![0]).toMatchObject({
+        pass: false,
+        score: 0.25,
+        reason: 'shared leaf failure',
+        assertion: { type: 'javascript', metric: 'leaf', metricOnly: true },
+        metadata: { source: 'synthetic' },
+      });
+      expect(original).toEqual(before);
+      expect(original.componentResults![0]).toBe(branch);
+      expect(branch.componentResults![0]).toBe(leaf);
+    });
+
     it('should not fail the test when a metricOnly assertion fails, while still recording its named metric', async () => {
       const assertionsResult = new AssertionsResult({});
 

@@ -42,16 +42,29 @@ function buildAssertionSetMetadata(assertionSet: AssertionSet) {
  * only read `assertion?.metricOnly` / `assertion?.type`, hence the cast.
  */
 function withMetricOnlyMarkers(result: GradingResult): GradingResult {
-  return {
-    ...result,
-    assertion: { ...result.assertion, metricOnly: true } as GradingResult['assertion'],
-    ...(result.componentResults && {
-      componentResults: result.componentResults.map((child) => ({
-        ...child,
-        ...(child.assertion && { assertion: { ...child.assertion, metricOnly: true } }),
-      })),
-    }),
+  const clones = new WeakMap<GradingResult, GradingResult>();
+  const pending: GradingResult[] = [];
+  const clone = (source: GradingResult): GradingResult => {
+    const existing = clones.get(source);
+    if (existing) {
+      return existing;
+    }
+    const target = {
+      ...source,
+      assertion: { ...source.assertion, metricOnly: true } as GradingResult['assertion'],
+    };
+    clones.set(source, target);
+    pending.push(source);
+    return target;
   };
+  const marked = clone(result);
+  while (pending.length > 0) {
+    const source = pending.pop()!;
+    if (source.componentResults) {
+      clones.get(source)!.componentResults = source.componentResults.map(clone);
+    }
+  }
+  return marked;
 }
 
 function mergeMetadata(

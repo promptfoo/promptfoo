@@ -284,6 +284,51 @@ describe('runAssertions', () => {
   });
 
   describe('metricOnly assertions', () => {
+    it('records thresholdless metric-only cost without hiding a quality failure', async () => {
+      const result = await runAssertions({
+        test: {
+          assert: [
+            { type: 'contains', value: 'Berlin' },
+            { type: 'cost', metric: 'inference_cost', metricOnly: true },
+          ],
+        },
+        providerResponse: { output: 'Paris', cost: 0.005 },
+      });
+      expect(result).toMatchObject({
+        pass: false,
+        score: 0,
+        namedScores: { inference_cost: 0.005 },
+      });
+      expect(countedComponentResults(result.componentResults)).toHaveLength(1);
+      expect(result.componentResults![1]).toMatchObject({
+        score: 0.005,
+        assertion: { type: 'cost', metricOnly: true },
+      });
+    });
+
+    it('marks every level of a deeply nested metric-only script result', async () => {
+      const leaf: GradingResult = { pass: false, score: 0, reason: 'deep leaf' };
+      let nested = leaf;
+      for (let depth = 0; depth < 10000; depth++) {
+        nested = { pass: false, score: 0, reason: 'nested', componentResults: [nested] };
+      }
+      const result = await runAssertions({
+        test: { assert: [{ type: 'javascript', value: () => nested, metricOnly: true }] },
+        providerResponse: { output: 'synthetic' },
+      });
+      expect(result).toMatchObject({ pass: true, score: 0 });
+      let current: GradingResult | undefined = result.componentResults![0];
+      let levels = 0;
+      while (current) {
+        expect(current.assertion?.metricOnly).toBe(true);
+        levels++;
+        current = current.componentResults?.[0];
+      }
+      expect(levels).toBe(10001);
+      expect(leaf.assertion).toBeUndefined();
+      expect(nested.assertion).toBeUndefined();
+    });
+
     it('normalizes deeply nested script metadata without overflowing the stack', async () => {
       const leaf: GradingResult = {
         pass: false,
