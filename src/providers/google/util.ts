@@ -613,7 +613,9 @@ export function calculateGoogleCost(
   actualServiceTier?: GoogleServiceTier,
   vertexRegion?: string,
   requestedServiceTier?: unknown,
+  pricingTime = Date.now(),
 ): number | undefined {
+  const timestamp = Number.isFinite(pricingTime) ? pricingTime : Date.now();
   const model = GOOGLE_MODELS.find((m) => m.id === modelName);
 
   if (
@@ -645,7 +647,7 @@ export function calculateGoogleCost(
       ? model.vertexRegionalPremium
       : 1;
   const introductoryMultiplier =
-    model?.introductoryPricing && Date.now() < model.introductoryPricing.expiresAt
+    model?.introductoryPricing && timestamp < model.introductoryPricing.expiresAt
       ? model.introductoryPricing.multiplier
       : 1;
   const catalogMultiplier = introductoryMultiplier;
@@ -780,6 +782,7 @@ export function calculateGoogleCostFromUsage(
   responseServiceTier?: unknown,
   vertexRegion?: string,
   requestedServiceTier?: unknown,
+  pricingTime?: number,
 ): number | undefined {
   const promptDetails = usageMetadata?.promptTokensDetails ?? usageMetadata?.prompt_tokens_details;
   const toolPromptDetails =
@@ -825,6 +828,7 @@ export function calculateGoogleCostFromUsage(
     ),
     vertexRegion,
     requestedServiceTier,
+    pricingTime,
   );
 }
 

@@ -381,6 +381,7 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
     let data;
     let cached = false;
     let responseHeaders: unknown;
+    let responseTimestamp: number | undefined;
     try {
       const endpoint = this.getApiEndpoint(
         config.streaming === true ? 'streamGenerateContent' : 'generateContent',
@@ -402,6 +403,8 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
       data = response.data as GeminiResponseData;
       cached = response.cached;
       responseHeaders = response.headers;
+      // Cached headers retain the original response date for historical pricing.
+      responseTimestamp = Date.parse(response.headers?.date ?? '');
     } catch (err) {
       return {
         error: `API call error: ${String(err)}`,
@@ -502,6 +505,9 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
         false,
         lastData.usageMetadata,
         actualServiceTier,
+        undefined,
+        undefined,
+        responseTimestamp,
       );
       const audio = normalizeGeminiAudio(output);
 
