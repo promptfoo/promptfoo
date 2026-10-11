@@ -249,10 +249,10 @@ tests:
 
 If the LLM outputs `Goodbye world`, the `equals` assertion fails but the `contains` assertion passes and the final score is 0.33. Because this is below the 0.5 threshold, the test case fails. If the threshold were lowered to 0.2, the test case would succeed.
 
-A `threshold` of `0` passes only when the combined score is nonnegative; negative scores can still fail. The same applies to an `assert-set` threshold. To collect a metric without affecting the test verdict, use `weight: 0` instead.
+A `threshold` of `0` passes only when the combined score is nonnegative; negative scores can still fail. The same applies to an `assert-set` threshold. To collect a metric without requiring that individual assertion to pass, set `weight: 0` on the assertion instead.
 
 :::info
-If weight is set to 0, the assertion automatically passes and does not contribute to the aggregate score. Its named metrics still record their measured values, with unit weight for metric aggregation; this also applies to named metrics inside a zero-weight assertion set.
+Setting `weight: 0` on an individual assertion makes it pass and excludes its score from the aggregate. On an `assert-set`, zero weight excludes the set's score, but the set can still fail based on its children or its own `threshold`. Named metrics retain their measured values in both cases, with unit weight used in place of zero for metric aggregation.
 :::
 
 ### Custom assertion scoring
