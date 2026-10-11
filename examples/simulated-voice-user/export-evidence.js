@@ -36,9 +36,20 @@ function decodeAudio(data) {
   return bytes;
 }
 
-/** Resolve content by its hash only. Never fetch URLs or infer a local path from a blob URI. */
+/** Accept bounded inline WAVs or verify referenced content. Never fetch media URLs. */
 async function recordingBytes(audio, assets, configDir) {
   const ref = audio?.blobRef;
+  const inline = audio?.data === undefined ? undefined : decodeAudio(audio.data);
+  if (
+    inline &&
+    ((audio.format !== undefined && !['wav', 'audio/wav'].includes(audio.format)) ||
+      (audio.mimeType !== undefined && audio.mimeType !== 'audio/wav'))
+  ) {
+    throw new Error('Inline recording metadata must describe WAV audio.');
+  }
+  if (ref === undefined && inline) {
+    return { bytes: inline, source: 'inline-audio', hash: sha256(inline) };
+  }
   if (!ref || !HASH.test(ref.hash)) {
     throw new Error('A recording blob reference with a SHA-256 hash is required.');
   }
@@ -85,6 +96,9 @@ async function recordingBytes(audio, assets, configDir) {
     ref.mimeType !== 'audio/wav'
   ) {
     throw new Error('Recording SHA-256, byte count, or MIME type does not match its reference.');
+  }
+  if (inline && !inline.equals(bytes)) {
+    throw new Error('Inline audio does not match the verified recording reference.');
   }
   return { bytes, source, hash: ref.hash };
 }

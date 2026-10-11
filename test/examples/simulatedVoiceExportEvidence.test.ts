@@ -155,6 +155,164 @@ afterEach(async () => {
 });
 
 describe('voice example portable evidence export', () => {
+  it('exports bounded inline WAVs with computed hashes and retains the original failed grade', async () => {
+    const input = fixture() as any;
+    input.results.results[0].response.audio = {
+      format: 'wav',
+      data: wav().toString('base64'),
+      channels: 2,
+      sampleRate: 24000,
+    };
+    input.blobAssets = [];
+    const manifest = await run(input);
+    expect(manifest.errors).toBe(0);
+    expect(manifest.rows[0]).toMatchObject({
+      source: 'inline-audio',
+      originalSha256: createHash('sha256').update(wav()).digest('hex'),
+      evalSuccess: false,
+    });
+    expect(await readFile(path.join(root, 'out/case-001-stereo.wav'))).toEqual(wav());
+    expect(manifest.rows[0].recordings).toHaveLength(3);
+  });
+
+  it('exports a sub-threshold inline source separately from a referenced heard recording', async () => {
+    const { input } = appFixture();
+    const source = wav(1, 24000, 480);
+    const response = input.results.results[0].response;
+    response.metadata.audio = {
+      format: 'wav',
+      data: source.toString('base64'),
+      role: 'target_source',
+      clock: 'source_sample_order',
+      channels: 1,
+      sampleRate: 24000,
+      duration: 0.02,
+    };
+    const playback = response.metadata.voice.targetPlayback;
+    Object.assign(playback.metrics, {
+      sourceBytes: 960,
+      deliveredSourceBytes: 960,
+      discardedQueuedBytes: 0,
+      discardedIncomingBytes: 0,
+      pendingQueuedBytes: 0,
+      suppressedPlaybackMs: 0,
+      stops: 0,
+    });
+    playback.events = [{ type: 'closed', epoch: 0, atMs: 500, recordingAtMs: 500 }];
+    input.blobAssets = input.blobAssets.slice(0, 1);
+    const manifest = await run(input);
+    expect(source.length).toBe(1004);
+    expect(manifest.errors).toBe(0);
+    expect(manifest.rows[0].recordings).toHaveLength(3);
+    expect(manifest.rows[0].sourceRecordings).toMatchObject([
+      {
+        role: 'target_source',
+        clock: 'source_sample_order',
+        heardEvidence: false,
+        sha256: createHash('sha256').update(source).digest('hex'),
+        sizeBytes: 1004,
+      },
+    ]);
+    expect(await readFile(path.join(root, 'out/case-001-target-source.wav'))).toEqual(source);
+  });
+
+  it('keeps source-only inline startup evidence while reporting missing heard media', async () => {
+    const { input, source } = appFixture();
+    const response = input.results.results[0].response;
+    delete response.audio;
+    response.error = 'Target refused before media started.';
+    response.metadata.audio.data = source.toString('base64');
+    delete response.metadata.audio.blobRef;
+    const playback = response.metadata.voice.targetPlayback;
+    playback.clock = 'provider';
+    Object.assign(playback.metrics, {
+      deliveredSourceBytes: 0,
+      discardedQueuedBytes: 0,
+      discardedIncomingBytes: 0,
+      pendingQueuedBytes: 48000,
+      suppressedPlaybackMs: 0,
+      stops: 0,
+    });
+    playback.events = [{ type: 'closed', epoch: 0, atMs: 20, recordingAtMs: 0 }];
+    const manifest = await run(input);
+    expect(manifest.errors).toBe(1);
+    expect(manifest.rows[0].recordings).toHaveLength(0);
+    expect(manifest.rows[0].sourceRecordings).toHaveLength(1);
+    expect(manifest.rows[0].evalError).toBe('Target refused before media started.');
+    expect(manifest.rows[0].error).toContain('blob reference');
+    expect(await readFile(path.join(root, 'out/case-001-target-source.wav'))).toEqual(source);
+  });
+
+  it('accepts redundant inline bytes only after the referenced recording is verified', async () => {
+    const input = fixture() as any;
+    input.results.results[0].response.audio.data = wav().toString('base64');
+    const manifest = await run(input);
+    expect(manifest.errors).toBe(0);
+    expect(manifest.rows[0].source).toBe('portable-export');
+    expect(await readFile(path.join(root, 'out/case-001-stereo.wav'))).toEqual(wav());
+  });
+
+  it.each(['hash', 'size', 'mime', 'null-reference', 'missing-asset', 'different-inline'] as const)(
+    'does not bypass invalid or conflicting blob evidence with inline data: %s',
+    async (failure) => {
+      const input = fixture() as any;
+      const audio = input.results.results[0].response.audio;
+      audio.data = wav().toString('base64');
+      if (failure === 'hash') {
+        audio.blobRef.hash = '../not-a-hash';
+      }
+      if (failure === 'size') {
+        audio.blobRef.sizeBytes++;
+      }
+      if (failure === 'mime') {
+        audio.blobRef.mimeType = 'audio/mpeg';
+      }
+      if (failure === 'null-reference') {
+        audio.blobRef = null;
+      }
+      if (failure === 'missing-asset') {
+        input.blobAssets = [];
+      }
+      if (failure === 'different-inline') {
+        audio.data = wav(2, 16000).toString('base64');
+      }
+      const manifest = await run(input);
+      expect(manifest.errors).toBe(1);
+      expect(manifest.rows[0].recordings).toHaveLength(0);
+    },
+  );
+
+  it.each(['base64', 'oversized', 'format', 'mime', 'not-wav'] as const)(
+    'rejects invalid inline audio without losing neighboring evidence: %s',
+    async (failure) => {
+      const input = fixture() as any;
+      const invalid = structuredClone(input.results.results[0]);
+      invalid.response.audio = { format: 'wav', data: wav().toString('base64') };
+      const audio = invalid.response.audio;
+      if (failure === 'base64') {
+        audio.data += '\n';
+      }
+      if (failure === 'oversized') {
+        audio.data = 'A'.repeat(40 * 1024 * 1024 + 4);
+      }
+      if (failure === 'format') {
+        audio.format = 'mp3';
+      }
+      if (failure === 'mime') {
+        audio.mimeType = 'audio/mpeg';
+      }
+      if (failure === 'not-wav') {
+        audio.data = Buffer.from('not WAV').toString('base64');
+      }
+      input.results.results.push(invalid);
+      const manifest = await run(input);
+      expect(manifest.errors).toBe(1);
+      expect(manifest.rows[0].recordings).toHaveLength(3);
+      expect(manifest.rows[1].recordings).toHaveLength(0);
+      expect(manifest.rows[1].error).toBeTruthy();
+    },
+  );
+
   it('preserves the original WAV and deinterleaves exact samples without hiding failed grades', async () => {
     const original = wav();
     const manifest = await run(fixture(original));
