@@ -9,6 +9,8 @@ The `similar` assertion checks if an embedding of the LLM's output
 is semantically similar to the expected value,
 using a configurable similarity or distance metric with a threshold.
 
+Thresholds use the raw metric value. Assertion scores are bounded to 0–1 so that negative cosine similarities and unnormalized dot products do not distort weighted test scores.
+
 By default, embeddings are computed via OpenAI's `text-embedding-3-large` model.
 
 Example:

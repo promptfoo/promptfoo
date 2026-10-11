@@ -55,6 +55,10 @@ function buildSimilarityResult(
   metric: SimilarityMetric,
   tokensUsed: TokenUsage,
 ): Omit<GradingResult, 'assertion'> {
+  if (!Number.isFinite(similarity)) {
+    return fail(`Invalid similarity score: ${similarity}`, tokensUsed);
+  }
+
   if (metric === 'euclidean') {
     // For distance metrics: lower is better, threshold is maximum distance
     const distance = similarity;
@@ -127,9 +131,6 @@ async function calculateProviderSimilarity(
     if (similarityResp.similarity == null) {
       return fail('Unknown error fetching similarity', tokensUsed);
     }
-    if (!Number.isFinite(similarityResp.similarity)) {
-      return fail(`Invalid similarity score: ${similarityResp.similarity}`, tokensUsed);
-    }
     return similarityResp.similarity;
   }
 
@@ -176,18 +177,12 @@ async function calculateProviderSimilarity(
     return fail('Embedding not found', tokensUsed);
   }
 
-  const similarity = calculateSimilarityScore(
+  return calculateSimilarityScore(
     expectedEmbedding.embedding,
     outputEmbedding.embedding,
     metric,
     tokensUsed,
   );
-  // Very large embedding values can overflow to Infinity or NaN, which must not reach
-  // the clamp and turn into a passing score.
-  if (typeof similarity === 'number' && !Number.isFinite(similarity)) {
-    return fail(`Invalid similarity score: ${similarity}`, tokensUsed);
-  }
-  return similarity;
 }
 
 export async function matchesSimilarity(
