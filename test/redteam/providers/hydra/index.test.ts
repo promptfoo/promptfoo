@@ -1,4 +1,5 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, Mock, vi } from 'vitest';
+import { runAssertions } from '../../../../src/assertions/index';
 import * as blobExtractor from '../../../../src/blobs/extractor';
 import * as evaluatorHelpers from '../../../../src/evaluatorHelpers';
 import { PromptfooChatCompletionProvider } from '../../../../src/providers/promptfoo';
@@ -477,13 +478,24 @@ describe('HydraProvider', () => {
           vars: { input: 'test goal' },
           prompt: { raw: 'test prompt', label: 'test' },
           test: {
-            assert: [{ type: 'harmful:test' }],
-            metadata: { goal: 'test goal', pluginId: 'harmful:test' },
+            assert: [{ type: 'promptfoo:redteam:pii' }],
+            metadata: { goal: 'test goal', pluginId: 'pii', strategyId: 'jailbreak:hydra' },
+            provider: 'promptfoo:redteam:hydra',
           } as any,
         };
 
         const result = await provider.callApi('', context);
 
+        expect(result.metadata?.redteamHistory[0]).toMatchObject({
+          graderPassed: undefined,
+          graderError: 'Grading provider returned 503',
+        });
+        const grading = await runAssertions({
+          prompt: 'test prompt',
+          test: context.test!,
+          providerResponse: result,
+        });
+        expect(grading.componentResults?.[0].metadata?.gradingIncomplete).toBe(true);
         expect(result.metadata?.hydraResult).toBe(!pass);
         expect(result.metadata?.successfulAttacks ?? []).toHaveLength(pass ? 0 : 1);
         expect(getResult).toHaveBeenCalledTimes(2);

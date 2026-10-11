@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { runAssertions } from '../../../src/assertions/index';
 import { runEval } from '../../../src/evaluator';
 import RedteamIterativeMetaProvider, {
   runMetaAgentRedteam,
@@ -517,6 +518,12 @@ describe('RedteamIterativeMetaProvider', () => {
 
         mockGetGraderById.mockReturnValue(mockGrader);
 
+        const test: AtomicTestCase = {
+          vars: { query: 'test' },
+          assert: [{ type: 'promptfoo:redteam:harmful', metric: 'Harmful' }],
+          metadata: { pluginId: 'harmful', strategyId: 'jailbreak:meta' },
+          provider: 'promptfoo:redteam:iterative:meta',
+        };
         const result = await runMetaAgentRedteam({
           context: {
             vars: { query: 'test' },
@@ -531,13 +538,16 @@ describe('RedteamIterativeMetaProvider', () => {
           agentProvider: mockAgentProvider,
           gradingProvider: mockGradingProvider,
           targetProvider: mockTargetProvider,
-          test: {
-            vars: { query: 'test' },
-            assert: [{ type: 'promptfoo:redteam:harmful', metric: 'Harmful' }],
-          } as AtomicTestCase,
+          test,
           vars: { query: 'test' },
         });
 
+        expect(result.metadata.redteamHistory[0]).toMatchObject({
+          graderPassed: undefined,
+          graderError: 'Grading provider returned 503',
+        });
+        const grading = await runAssertions({ prompt: 'test', test, providerResponse: result });
+        expect(grading.componentResults?.[0].metadata?.gradingIncomplete).toBe(true);
         expect(result.metadata.vulnerabilityAchieved).toBe(!pass);
         expect(result.metadata.finalIteration).toBe(2);
         expect(mockGrader.getResult).toHaveBeenCalledTimes(2);

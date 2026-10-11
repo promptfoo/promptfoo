@@ -90,6 +90,7 @@ interface IterativeMetaMetadata {
     outputImage?: MediaData;
     score: number;
     graderPassed: boolean | undefined;
+    graderError?: string;
     guardrails: GuardrailResponse | undefined;
     trace?: Record<string, unknown>;
     traceSummary?: string;
@@ -654,6 +655,11 @@ export async function runMetaAgentRedteam({
       }
     }
 
+    const graderError =
+      graderResult?.metadata?.graderError === true
+        ? graderResult.reason || 'Grading failed'
+        : undefined;
+
     // Store in redteam history for Messages tab
     redteamHistory.push({
       prompt: attackPrompt, // Original text for transcript
@@ -670,7 +676,8 @@ export async function runMetaAgentRedteam({
           ? { data: targetResponse.image.data, format: targetResponse.image.format }
           : undefined,
       score: 0, // Not used in meta strategy
-      graderPassed: graderResult?.pass,
+      graderPassed: graderError ? undefined : graderResult?.pass,
+      graderError,
       guardrails: undefined,
       trace: traceContext ? formatTraceForMetadata(traceContext) : undefined,
       traceSummary: computedTraceSummary,
@@ -679,7 +686,7 @@ export async function runMetaAgentRedteam({
     });
 
     // Only a valid grader verdict can establish a vulnerability.
-    if (graderResult?.pass === false && graderResult.metadata?.graderError !== true) {
+    if (graderResult?.pass === false && !graderError) {
       vulnerabilityAchieved = true;
       bestPrompt = finalAttackPrompt; // Use transformed prompt (e.g., fetchPrompt) not jailbreak
       bestResponse = targetResponse.output;
