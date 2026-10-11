@@ -1,9 +1,27 @@
+const { createErrorFirstLoggerModule } = await vi.hoisted(
+  async () => import('../factories/logger'),
+);
+
 import fs from 'fs';
 import path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
 import { GolangProvider } from '../../src/providers/golangCompletion';
+import { createBasePathOptions } from '../factories/literalFixtures';
+
+const { createFsModuleFactory, createExecFileFactory } = await vi.hoisted(
+  () => import('../factories/moduleMocks'),
+);
+
+const createAbsoluteBasePathOptions = () => ({
+  config: { basePath: '/absolute/path/to' },
+});
+
+const createLabeledPrompt = () => ({
+  raw: 'test prompt',
+  label: 'test',
+});
 
 // Hoisted mock functions
 const mockExecFile = vi.hoisted(() => vi.fn());
@@ -20,31 +38,14 @@ const fsMocks = vi.hoisted(() => ({
   writeFileSync: vi.fn(),
 }));
 
-vi.mock('child_process', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('child_process')>();
-  return {
-    ...actual,
-    default: {
-      ...actual,
-      execFile: mockExecFile,
-    },
-    execFile: mockExecFile,
-  };
-});
+vi.mock('child_process', createExecFileFactory(mockExecFile));
 
 vi.mock('../../src/cache', () => ({
   getCache: mockGetCache,
   isCacheEnabled: mockIsCacheEnabled,
 }));
 
-vi.mock('../../src/logger', () => ({
-  default: {
-    debug: vi.fn(),
-    error: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-  },
-}));
+vi.mock('../../src/logger', () => createErrorFirstLoggerModule());
 
 vi.mock('../../src/esm', () => ({
   getWrapperDir: vi.fn(() => '/absolute/path/to'),
@@ -58,17 +59,7 @@ vi.mock('../../src/util/json', () => ({
   safeJsonStringify: vi.fn((value: unknown) => JSON.stringify(value)),
 }));
 
-vi.mock('fs', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('fs')>();
-  return {
-    ...actual,
-    default: {
-      ...actual,
-      ...fsMocks,
-    },
-    ...fsMocks,
-  };
-});
+vi.mock('fs', createFsModuleFactory(fsMocks));
 vi.mock('fs/promises', () => {
   // Wrap each sync mock so the corresponding fs/promises export returns a real
   // Promise (or rejects), matching the actual API contract.
@@ -107,6 +98,16 @@ afterEach(() => {
 });
 
 describe('GolangProvider', () => {
+  const createSuccessfulGoExecutor =
+    () => (_file: string, _args: any[], optionsOrCallback: any, maybeCallback?: any) => {
+      const callback = typeof optionsOrCallback === 'function' ? optionsOrCallback : maybeCallback;
+      if (!callback) {
+        return {} as any;
+      }
+      setImmediate(() => callback(null, { stdout: '{"output":"test"}', stderr: '' }, ''));
+      return {} as any;
+    };
+
   const mockReadFileSync = vi.mocked(fs.readFileSync);
   const mockResolve = vi.mocked(path.resolve);
   const mockMkdtempSync = vi.mocked(fs.mkdtempSync);
@@ -309,26 +310,20 @@ describe('GolangProvider', () => {
     });
 
     it('should initialize with golang: syntax', () => {
-      const provider = new GolangProvider('golang:script.go', {
-        id: 'testId',
-        config: { basePath: '/base' },
-      });
+      const provider = new GolangProvider('golang:script.go', createBasePathOptions());
       expect(provider.id()).toBe('testId');
     });
 
     it('should initialize with file:// prefix', () => {
-      const provider = new GolangProvider('file://script.go', {
-        id: 'testId',
-        config: { basePath: '/base' },
-      });
+      const provider = new GolangProvider('file://script.go', createBasePathOptions());
       expect(provider.id()).toBe('testId');
     });
 
     it('should initialize with file:// prefix and function name', () => {
-      const provider = new GolangProvider('file://script.go:function_name', {
-        id: 'testId',
-        config: { basePath: '/base' },
-      });
+      const provider = new GolangProvider(
+        'file://script.go:function_name',
+        createBasePathOptions(),
+      );
       expect(provider.id()).toBe('testId');
     });
 
@@ -365,9 +360,7 @@ describe('GolangProvider', () => {
 
   describe('caching', () => {
     it('should use cached result when available', async () => {
-      const provider = new GolangProvider('script.go', {
-        config: { basePath: '/absolute/path/to' },
-      });
+      const provider = new GolangProvider('script.go', createAbsoluteBasePathOptions());
       mockIsCacheEnabled.mockReturnValue(true);
       const mockCache = {
         get: vi.fn().mockResolvedValue(JSON.stringify({ output: 'cached result' })),
@@ -384,9 +377,7 @@ describe('GolangProvider', () => {
     });
 
     it('should handle cache errors', async () => {
-      const provider = new GolangProvider('script.go', {
-        config: { basePath: '/absolute/path/to' },
-      });
+      const provider = new GolangProvider('script.go', createAbsoluteBasePathOptions());
 
       mockIsCacheEnabled.mockReturnValue(true);
       const mockCache = {
@@ -399,9 +390,7 @@ describe('GolangProvider', () => {
     });
 
     it('should handle cache set errors', async () => {
-      const provider = new GolangProvider('script.go', {
-        config: { basePath: '/absolute/path/to' },
-      });
+      const provider = new GolangProvider('script.go', createAbsoluteBasePathOptions());
 
       mockIsCacheEnabled.mockReturnValue(true);
       const mockCache = {
@@ -414,9 +403,7 @@ describe('GolangProvider', () => {
     });
 
     it('should not cache results that contain errors', async () => {
-      const provider = new GolangProvider('script.go', {
-        config: { basePath: '/absolute/path/to' },
-      });
+      const provider = new GolangProvider('script.go', createAbsoluteBasePathOptions());
 
       mockIsCacheEnabled.mockReturnValue(true);
       const mockCache = {
@@ -454,9 +441,7 @@ describe('GolangProvider', () => {
     });
 
     it('should handle circular references in vars when cache is disabled', async () => {
-      const provider = new GolangProvider('script.go', {
-        config: { basePath: '/absolute/path/to' },
-      });
+      const provider = new GolangProvider('script.go', createAbsoluteBasePathOptions());
 
       mockIsCacheEnabled.mockReturnValue(false);
 
@@ -468,10 +453,7 @@ describe('GolangProvider', () => {
       });
 
       const result = await provider.callApi('test prompt', {
-        prompt: {
-          raw: 'test prompt',
-          label: 'test',
-        },
+        prompt: createLabeledPrompt(),
         vars: { circular: circularObj },
       });
 
@@ -488,9 +470,7 @@ describe('GolangProvider', () => {
     });
 
     it('should execute script directly when cache is not enabled', async () => {
-      const provider = new GolangProvider('script.go', {
-        config: { basePath: '/absolute/path/to' },
-      });
+      const provider = new GolangProvider('script.go', createAbsoluteBasePathOptions());
 
       mockIsCacheEnabled.mockReturnValue(false);
       mockGetCache.mockResolvedValue({
@@ -525,9 +505,7 @@ describe('GolangProvider', () => {
 
   describe('cleanup', () => {
     it('should clean up on error', async () => {
-      const provider = new GolangProvider('script.go', {
-        config: { basePath: '/absolute/path/to' },
-      });
+      const provider = new GolangProvider('script.go', createAbsoluteBasePathOptions());
       mockExecFile.mockImplementation(((
         _file: string,
         _args: any[],
@@ -558,9 +536,7 @@ describe('GolangProvider', () => {
 
   describe('API methods', () => {
     it('should call callEmbeddingApi successfully', async () => {
-      const provider = new GolangProvider('script.go', {
-        config: { basePath: '/absolute/path/to' },
-      });
+      const provider = new GolangProvider('script.go', createAbsoluteBasePathOptions());
       mockExecFile.mockImplementation(((
         file: string,
         args: any[],
@@ -637,9 +613,7 @@ describe('GolangProvider', () => {
     });
 
     it('should call callClassificationApi successfully', async () => {
-      const provider = new GolangProvider('script.go', {
-        config: { basePath: '/absolute/path/to' },
-      });
+      const provider = new GolangProvider('script.go', createAbsoluteBasePathOptions());
       mockExecFile.mockImplementation(((
         file: string,
         args: any[],
@@ -674,9 +648,7 @@ describe('GolangProvider', () => {
     });
 
     it('should handle stderr output without failing', async () => {
-      const provider = new GolangProvider('script.go', {
-        config: { basePath: '/absolute/path/to' },
-      });
+      const provider = new GolangProvider('script.go', createAbsoluteBasePathOptions());
       mockExecFile.mockImplementation(((
         file: string,
         args: any[],
@@ -713,12 +685,8 @@ describe('GolangProvider', () => {
 
   describe('findModuleRoot', () => {
     it('should throw error when go.mod is not found', async () => {
-      mockExistsSync.mockImplementation(function () {
-        return false;
-      });
-      const provider = new GolangProvider('script.go', {
-        config: { basePath: '/absolute/path/to' },
-      });
+      mockExistsSync.mockReturnValue(false);
+      const provider = new GolangProvider('script.go', createAbsoluteBasePathOptions());
 
       await expect(provider.callApi('test prompt')).rejects.toThrow(
         'Could not find go.mod file in any parent directory',
@@ -751,20 +719,7 @@ describe('GolangProvider', () => {
         config: { basePath: '/absolute/path/to/subdir' },
       });
 
-      mockExecFile.mockImplementation(((
-        _file: string,
-        _args: any[],
-        optionsOrCallback: any,
-        maybeCallback?: any,
-      ) => {
-        const callback =
-          typeof optionsOrCallback === 'function' ? optionsOrCallback : maybeCallback;
-        if (!callback) {
-          return {} as any;
-        }
-        setImmediate(() => callback(null, { stdout: '{"output":"test"}', stderr: '' }, ''));
-        return {} as any;
-      }) as any);
+      mockExecFile.mockImplementation(createSuccessfulGoExecutor() as any);
 
       const result = await provider.callApi('test prompt');
       expect(result).toEqual({ output: 'test' });
@@ -811,9 +766,7 @@ describe('GolangProvider', () => {
         return {} as any;
       }) as any);
 
-      const provider = new GolangProvider('script.go', {
-        config: { basePath: '/absolute/path/to' },
-      });
+      const provider = new GolangProvider('script.go', createAbsoluteBasePathOptions());
 
       await expect(provider.callApi('test prompt')).resolves.toEqual({ output: 'test' });
       expect(mockWriteFileSync).toHaveBeenCalledWith(
@@ -831,9 +784,7 @@ describe('GolangProvider', () => {
     });
 
     it('should handle JSON parsing errors', async () => {
-      const provider = new GolangProvider('script.go', {
-        config: { basePath: '/absolute/path/to' },
-      });
+      const provider = new GolangProvider('script.go', createAbsoluteBasePathOptions());
       mockExecFile.mockImplementation(((
         file: string,
         _args: any[],
@@ -870,9 +821,10 @@ describe('GolangProvider', () => {
         extension: 'go',
       });
 
-      const provider = new GolangProvider('script.go:custom_function', {
-        config: { basePath: '/absolute/path/to' },
-      });
+      const provider = new GolangProvider(
+        'script.go:custom_function',
+        createAbsoluteBasePathOptions(),
+      );
 
       let executedFunctionName = '';
       mockExecFile.mockImplementation(((
@@ -929,9 +881,7 @@ describe('GolangProvider', () => {
     });
 
     it('should handle circular references in args', async () => {
-      const provider = new GolangProvider('script.go', {
-        config: { basePath: '/absolute/path/to' },
-      });
+      const provider = new GolangProvider('script.go', createAbsoluteBasePathOptions());
 
       // Create circular reference
       const circularObj: any = { name: 'circular' };
@@ -944,10 +894,7 @@ describe('GolangProvider', () => {
 
       // This should not throw even with circular references
       const result = await provider.callApi('test prompt', {
-        prompt: {
-          raw: 'test prompt',
-          label: 'test',
-        },
+        prompt: createLabeledPrompt(),
         vars: { circular: circularObj },
       });
 
@@ -968,9 +915,7 @@ describe('GolangProvider', () => {
 
   describe('file operations', () => {
     it('should handle directory copy errors', async () => {
-      const provider = new GolangProvider('script.go', {
-        config: { basePath: '/absolute/path/to' },
-      });
+      const provider = new GolangProvider('script.go', createAbsoluteBasePathOptions());
       mockReaddirSync.mockImplementation(function () {
         throw new Error('Directory read error');
       });
@@ -979,9 +924,7 @@ describe('GolangProvider', () => {
     });
 
     it('should handle file copy errors', async () => {
-      const provider = new GolangProvider('script.go', {
-        config: { basePath: '/absolute/path/to' },
-      });
+      const provider = new GolangProvider('script.go', createAbsoluteBasePathOptions());
 
       mockCopyFileSync.mockImplementation(function () {
         throw new Error('File copy error');
@@ -991,9 +934,7 @@ describe('GolangProvider', () => {
     });
 
     it('should copy main.go files without transformation', async () => {
-      const provider = new GolangProvider('script.go', {
-        config: { basePath: '/absolute/path/to' },
-      });
+      const provider = new GolangProvider('script.go', createAbsoluteBasePathOptions());
 
       const mainGoContent = `
         package main
@@ -1022,20 +963,7 @@ describe('GolangProvider', () => {
         return undefined;
       });
 
-      mockExecFile.mockImplementation(((
-        _file: string,
-        _args: any[],
-        optionsOrCallback: any,
-        maybeCallback?: any,
-      ) => {
-        const callback =
-          typeof optionsOrCallback === 'function' ? optionsOrCallback : maybeCallback;
-        if (!callback) {
-          return {} as any;
-        }
-        setImmediate(() => callback(null, { stdout: '{"output":"test"}', stderr: '' }, ''));
-        return {} as any;
-      }) as any);
+      mockExecFile.mockImplementation(createSuccessfulGoExecutor() as any);
 
       await provider.callApi('test prompt');
 
@@ -1051,9 +979,7 @@ describe('GolangProvider', () => {
     });
 
     it('should correctly handle nested directories in copyDir', async () => {
-      const provider = new GolangProvider('script.go', {
-        config: { basePath: '/absolute/path/to' },
-      });
+      const provider = new GolangProvider('script.go', createAbsoluteBasePathOptions());
 
       // Mock a nested directory structure
       mockReaddirSync.mockImplementation(function (p: fs.PathOrFileDescriptor) {
@@ -1080,20 +1006,7 @@ describe('GolangProvider', () => {
         return undefined;
       });
 
-      mockExecFile.mockImplementation(((
-        _file: string,
-        _args: any[],
-        optionsOrCallback: any,
-        maybeCallback?: any,
-      ) => {
-        const callback =
-          typeof optionsOrCallback === 'function' ? optionsOrCallback : maybeCallback;
-        if (!callback) {
-          return {} as any;
-        }
-        setImmediate(() => callback(null, { stdout: '{"output":"test"}', stderr: '' }, ''));
-        return {} as any;
-      }) as any);
+      mockExecFile.mockImplementation(createSuccessfulGoExecutor() as any);
 
       await provider.callApi('test prompt');
 
@@ -1110,9 +1023,7 @@ describe('GolangProvider', () => {
     });
 
     it('should handle copyFileSync errors', async () => {
-      const provider = new GolangProvider('script.go', {
-        config: { basePath: '/absolute/path/to' },
-      });
+      const provider = new GolangProvider('script.go', createAbsoluteBasePathOptions());
 
       mockReaddirSync.mockReturnValue([{ name: 'main.go', isDirectory: () => false }] as any);
 
