@@ -1025,24 +1025,6 @@ export function maybeCoerceToGeminiFormat(
     const toolNames = new Map<string, string>();
     coercedContents = [];
     for (const item of contents) {
-      const role = (
-        item.role === 'assistant' ? targetRole : item.role === 'developer' ? 'system' : item.role
-      ) as 'user' | 'model';
-      const parts: Part[] =
-        item.parts?.slice() ??
-        (Array.isArray(item.content)
-          ? item.content.map((part: any) =>
-              typeof part === 'string'
-                ? { text: part }
-                : part.type === 'text'
-                  ? { text: part.text }
-                  : part,
-            )
-          : typeof item.content === 'object' && item.content !== null
-            ? [item.content]
-            : item.content == null || (item.tool_calls?.length && item.content === '')
-              ? []
-              : [{ text: item.content }]);
       if (item.role === 'tool' || item.tool_call_id !== undefined) {
         const name = toolNames.get(item.tool_call_id) ?? item.name;
         if (
@@ -1073,6 +1055,24 @@ export function maybeCoerceToGeminiFormat(
         }
         continue;
       }
+      const role = (
+        item.role === 'assistant' ? targetRole : item.role === 'developer' ? 'system' : item.role
+      ) as 'user' | 'model';
+      const parts: Part[] =
+        item.parts?.slice() ??
+        (Array.isArray(item.content)
+          ? item.content.map((part: any) =>
+              typeof part === 'string'
+                ? { text: part }
+                : part.type === 'text'
+                  ? { text: part.text }
+                  : part,
+            )
+          : typeof item.content === 'object' && item.content !== null
+            ? [item.content]
+            : item.content == null || (item.tool_calls?.length && item.content === '')
+              ? []
+              : [{ text: item.content }]);
       for (const call of item.tool_calls ?? []) {
         if (
           typeof call?.function?.name !== 'string' ||

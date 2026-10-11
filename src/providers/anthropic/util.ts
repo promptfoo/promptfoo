@@ -749,11 +749,6 @@ export function parseMessages(messages: string): {
       (msg) => msg.role === 'system' || msg.role === 'developer',
     );
     for (const msg of parsed.filter((item) => item.role && !systemMessages.includes(item))) {
-      const content: Anthropic.ContentBlockParam[] = Array.isArray(msg.content)
-        ? processAnthropicImageContent(msg.content)
-        : msg.content == null || (msg.tool_calls?.length && msg.content === '')
-          ? []
-          : [{ type: 'text', text: msg.content }];
       if (msg.role === 'tool' || msg.tool_call_id !== undefined) {
         if (typeof msg.tool_call_id !== 'string' || !msg.tool_call_id) {
           throw new Error('Tool result requires a tool_call_id');
@@ -780,6 +775,11 @@ export function parseMessages(messages: string): {
         }
         continue;
       }
+      const content: Anthropic.ContentBlockParam[] = Array.isArray(msg.content)
+        ? processAnthropicImageContent(msg.content)
+        : msg.content == null || (msg.tool_calls?.length && msg.content === '')
+          ? []
+          : [{ type: 'text', text: msg.content }];
       for (const call of msg.tool_calls ?? []) {
         if (
           typeof call?.id !== 'string' ||
