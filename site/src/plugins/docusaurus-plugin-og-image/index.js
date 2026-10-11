@@ -193,6 +193,90 @@ try {
 }
 const SITE_STATS = { ...siteStats, ...generatedStats };
 
+function createBrandHeader(logoBase64, marginBottom = 50) {
+  return {
+    type: 'div',
+    props: {
+      style: {
+        display: 'flex',
+        alignItems: 'center',
+        marginBottom,
+      },
+      children: [
+        logoBase64
+          ? {
+              type: 'img',
+              props: {
+                src: logoBase64,
+                width: 56,
+                height: 56,
+                style: { marginRight: 16 },
+              },
+            }
+          : null,
+        {
+          type: 'div',
+          props: {
+            style: {
+              fontSize: 28,
+              fontWeight: 600,
+              color: '#ff7a7a',
+            },
+            children: 'promptfoo',
+          },
+        },
+      ].filter(Boolean),
+    },
+  };
+}
+
+function createTrustFooter() {
+  return {
+    type: 'div',
+    props: {
+      style: {
+        marginTop: 'auto',
+        display: 'flex',
+        alignItems: 'baseline',
+        gap: 8,
+      },
+      children: [
+        {
+          type: 'div',
+          props: {
+            style: {
+              fontSize: 20,
+              color: 'rgba(255, 255, 255, 0.6)',
+            },
+            children: 'Trusted by',
+          },
+        },
+        {
+          type: 'div',
+          props: {
+            style: {
+              fontSize: 24,
+              fontWeight: 600,
+              color: 'white',
+            },
+            children: `${SITE_STATS.FORTUNE_500_COUNT} Fortune 500 companies`,
+          },
+        },
+        {
+          type: 'div',
+          props: {
+            style: {
+              fontSize: 20,
+              color: 'rgba(255, 255, 255, 0.6)',
+            },
+            children: `and ${SITE_STATS.USER_COUNT_SHORT}+ developers`,
+          },
+        },
+      ],
+    },
+  };
+}
+
 // Generate Satori JSX template for Pricing page OG image
 async function generatePricingTemplate() {
   const logoBase64 = await getLogoAsBase64();
@@ -211,40 +295,7 @@ async function generatePricingTemplate() {
       },
       children: [
         // Header row (logo + brand)
-        {
-          type: 'div',
-          props: {
-            style: {
-              display: 'flex',
-              alignItems: 'center',
-              marginBottom: 50,
-            },
-            children: [
-              logoBase64
-                ? {
-                    type: 'img',
-                    props: {
-                      src: logoBase64,
-                      width: 56,
-                      height: 56,
-                      style: { marginRight: 16 },
-                    },
-                  }
-                : null,
-              {
-                type: 'div',
-                props: {
-                  style: {
-                    fontSize: 28,
-                    fontWeight: 600,
-                    color: '#ff7a7a',
-                  },
-                  children: 'promptfoo',
-                },
-              },
-            ].filter(Boolean),
-          },
-        },
+        createBrandHeader(logoBase64),
         // Main headline - big and bold
         {
           type: 'div',
@@ -305,50 +356,56 @@ async function generatePricingTemplate() {
           },
         },
         // Trust signal - pushed to bottom
+        createTrustFooter(),
+      ],
+    },
+  };
+}
+
+function createCompanyPageTemplate(logoBase64, headline, subtitle) {
+  return {
+    type: 'div',
+    props: {
+      style: {
+        width: WIDTH,
+        height: HEIGHT,
+        display: 'flex',
+        flexDirection: 'column',
+        background: 'linear-gradient(135deg, #10191c 0%, #17252b 100%)',
+        fontFamily: 'Inter',
+        padding: 60,
+      },
+      children: [
+        // Header row (logo + brand)
+        createBrandHeader(logoBase64),
+        // Main headline
         {
           type: 'div',
           props: {
             style: {
-              marginTop: 'auto',
-              display: 'flex',
-              alignItems: 'baseline',
-              gap: 8,
+              fontSize: 56,
+              fontWeight: 600,
+              color: 'white',
+              lineHeight: 1.15,
+              marginBottom: 30,
             },
-            children: [
-              {
-                type: 'div',
-                props: {
-                  style: {
-                    fontSize: 20,
-                    color: 'rgba(255, 255, 255, 0.6)',
-                  },
-                  children: 'Trusted by',
-                },
-              },
-              {
-                type: 'div',
-                props: {
-                  style: {
-                    fontSize: 24,
-                    fontWeight: 600,
-                    color: 'white',
-                  },
-                  children: `${SITE_STATS.FORTUNE_500_COUNT} Fortune 500 companies`,
-                },
-              },
-              {
-                type: 'div',
-                props: {
-                  style: {
-                    fontSize: 20,
-                    color: 'rgba(255, 255, 255, 0.6)',
-                  },
-                  children: `and ${SITE_STATS.USER_COUNT_SHORT}+ developers`,
-                },
-              },
-            ],
+            children: headline,
           },
         },
+        // Subtitle
+        {
+          type: 'div',
+          props: {
+            style: {
+              fontSize: 24,
+              color: 'rgba(255, 255, 255, 0.7)',
+              marginBottom: 50,
+            },
+            children: subtitle,
+          },
+        },
+        // Trust signal - consistent with other pages
+        createTrustFooter(),
       ],
     },
   };
@@ -358,384 +415,33 @@ async function generatePricingTemplate() {
 async function generateAboutTemplate() {
   const logoBase64 = await getLogoAsBase64();
 
-  return {
-    type: 'div',
-    props: {
-      style: {
-        width: WIDTH,
-        height: HEIGHT,
-        display: 'flex',
-        flexDirection: 'column',
-        background: 'linear-gradient(135deg, #10191c 0%, #17252b 100%)',
-        fontFamily: 'Inter',
-        padding: 60,
-      },
-      children: [
-        // Header row (logo + brand)
-        {
-          type: 'div',
-          props: {
-            style: {
-              display: 'flex',
-              alignItems: 'center',
-              marginBottom: 50,
-            },
-            children: [
-              logoBase64
-                ? {
-                    type: 'img',
-                    props: {
-                      src: logoBase64,
-                      width: 56,
-                      height: 56,
-                      style: { marginRight: 16 },
-                    },
-                  }
-                : null,
-              {
-                type: 'div',
-                props: {
-                  style: {
-                    fontSize: 28,
-                    fontWeight: 600,
-                    color: '#ff7a7a',
-                  },
-                  children: 'promptfoo',
-                },
-              },
-            ].filter(Boolean),
-          },
-        },
-        // Main headline
-        {
-          type: 'div',
-          props: {
-            style: {
-              fontSize: 56,
-              fontWeight: 600,
-              color: 'white',
-              lineHeight: 1.15,
-              marginBottom: 30,
-            },
-            children: 'Securing the Future of AI',
-          },
-        },
-        // Subtitle
-        {
-          type: 'div',
-          props: {
-            style: {
-              fontSize: 24,
-              color: 'rgba(255, 255, 255, 0.7)',
-              marginBottom: 50,
-            },
-            children: 'Helping developers and enterprises build secure AI applications',
-          },
-        },
-        // Trust signal - consistent with other pages
-        {
-          type: 'div',
-          props: {
-            style: {
-              marginTop: 'auto',
-              display: 'flex',
-              alignItems: 'baseline',
-              gap: 8,
-            },
-            children: [
-              {
-                type: 'div',
-                props: {
-                  style: {
-                    fontSize: 20,
-                    color: 'rgba(255, 255, 255, 0.6)',
-                  },
-                  children: 'Trusted by',
-                },
-              },
-              {
-                type: 'div',
-                props: {
-                  style: {
-                    fontSize: 24,
-                    fontWeight: 600,
-                    color: 'white',
-                  },
-                  children: `${SITE_STATS.FORTUNE_500_COUNT} Fortune 500 companies`,
-                },
-              },
-              {
-                type: 'div',
-                props: {
-                  style: {
-                    fontSize: 20,
-                    color: 'rgba(255, 255, 255, 0.6)',
-                  },
-                  children: `and ${SITE_STATS.USER_COUNT_SHORT}+ developers`,
-                },
-              },
-            ],
-          },
-        },
-      ],
-    },
-  };
+  return createCompanyPageTemplate(
+    logoBase64,
+    'Securing the Future of AI',
+    'Helping developers and enterprises build secure AI applications',
+  );
 }
 
 // Generate Satori JSX template for Contact page OG image
 async function generateContactTemplate() {
   const logoBase64 = await getLogoAsBase64();
 
-  return {
-    type: 'div',
-    props: {
-      style: {
-        width: WIDTH,
-        height: HEIGHT,
-        display: 'flex',
-        flexDirection: 'column',
-        background: 'linear-gradient(135deg, #10191c 0%, #17252b 100%)',
-        fontFamily: 'Inter',
-        padding: 60,
-      },
-      children: [
-        // Header row (logo + brand)
-        {
-          type: 'div',
-          props: {
-            style: {
-              display: 'flex',
-              alignItems: 'center',
-              marginBottom: 50,
-            },
-            children: [
-              logoBase64
-                ? {
-                    type: 'img',
-                    props: {
-                      src: logoBase64,
-                      width: 56,
-                      height: 56,
-                      style: { marginRight: 16 },
-                    },
-                  }
-                : null,
-              {
-                type: 'div',
-                props: {
-                  style: {
-                    fontSize: 28,
-                    fontWeight: 600,
-                    color: '#ff7a7a',
-                  },
-                  children: 'promptfoo',
-                },
-              },
-            ].filter(Boolean),
-          },
-        },
-        // Main headline
-        {
-          type: 'div',
-          props: {
-            style: {
-              fontSize: 56,
-              fontWeight: 600,
-              color: 'white',
-              lineHeight: 1.15,
-              marginBottom: 30,
-            },
-            children: 'Book a Demo',
-          },
-        },
-        // Subtitle
-        {
-          type: 'div',
-          props: {
-            style: {
-              fontSize: 24,
-              color: 'rgba(255, 255, 255, 0.7)',
-              marginBottom: 50,
-            },
-            children: 'See how Promptfoo can secure your AI infrastructure',
-          },
-        },
-        // Trust signal
-        {
-          type: 'div',
-          props: {
-            style: {
-              marginTop: 'auto',
-              display: 'flex',
-              alignItems: 'baseline',
-              gap: 8,
-            },
-            children: [
-              {
-                type: 'div',
-                props: {
-                  style: {
-                    fontSize: 20,
-                    color: 'rgba(255, 255, 255, 0.6)',
-                  },
-                  children: 'Trusted by',
-                },
-              },
-              {
-                type: 'div',
-                props: {
-                  style: {
-                    fontSize: 24,
-                    fontWeight: 600,
-                    color: 'white',
-                  },
-                  children: `${SITE_STATS.FORTUNE_500_COUNT} Fortune 500 companies`,
-                },
-              },
-              {
-                type: 'div',
-                props: {
-                  style: {
-                    fontSize: 20,
-                    color: 'rgba(255, 255, 255, 0.6)',
-                  },
-                  children: `and ${SITE_STATS.USER_COUNT_SHORT}+ developers`,
-                },
-              },
-            ],
-          },
-        },
-      ],
-    },
-  };
+  return createCompanyPageTemplate(
+    logoBase64,
+    'Book a Demo',
+    'See how Promptfoo can secure your AI infrastructure',
+  );
 }
 
 // Generate Satori JSX template for Press page OG image
 async function generatePressTemplate() {
   const logoBase64 = await getLogoAsBase64();
 
-  return {
-    type: 'div',
-    props: {
-      style: {
-        width: WIDTH,
-        height: HEIGHT,
-        display: 'flex',
-        flexDirection: 'column',
-        background: 'linear-gradient(135deg, #10191c 0%, #17252b 100%)',
-        fontFamily: 'Inter',
-        padding: 60,
-      },
-      children: [
-        // Header row (logo + brand)
-        {
-          type: 'div',
-          props: {
-            style: {
-              display: 'flex',
-              alignItems: 'center',
-              marginBottom: 50,
-            },
-            children: [
-              logoBase64
-                ? {
-                    type: 'img',
-                    props: {
-                      src: logoBase64,
-                      width: 56,
-                      height: 56,
-                      style: { marginRight: 16 },
-                    },
-                  }
-                : null,
-              {
-                type: 'div',
-                props: {
-                  style: {
-                    fontSize: 28,
-                    fontWeight: 600,
-                    color: '#ff7a7a',
-                  },
-                  children: 'promptfoo',
-                },
-              },
-            ].filter(Boolean),
-          },
-        },
-        // Main headline
-        {
-          type: 'div',
-          props: {
-            style: {
-              fontSize: 56,
-              fontWeight: 600,
-              color: 'white',
-              lineHeight: 1.15,
-              marginBottom: 30,
-            },
-            children: 'Press Center',
-          },
-        },
-        // Subtitle
-        {
-          type: 'div',
-          props: {
-            style: {
-              fontSize: 24,
-              color: 'rgba(255, 255, 255, 0.7)',
-              marginBottom: 50,
-            },
-            children: 'News, resources, and media information',
-          },
-        },
-        // Trust signal - consistent with other pages
-        {
-          type: 'div',
-          props: {
-            style: {
-              marginTop: 'auto',
-              display: 'flex',
-              alignItems: 'baseline',
-              gap: 8,
-            },
-            children: [
-              {
-                type: 'div',
-                props: {
-                  style: {
-                    fontSize: 20,
-                    color: 'rgba(255, 255, 255, 0.6)',
-                  },
-                  children: 'Trusted by',
-                },
-              },
-              {
-                type: 'div',
-                props: {
-                  style: {
-                    fontSize: 24,
-                    fontWeight: 600,
-                    color: 'white',
-                  },
-                  children: `${SITE_STATS.FORTUNE_500_COUNT} Fortune 500 companies`,
-                },
-              },
-              {
-                type: 'div',
-                props: {
-                  style: {
-                    fontSize: 20,
-                    color: 'rgba(255, 255, 255, 0.6)',
-                  },
-                  children: `and ${SITE_STATS.USER_COUNT_SHORT}+ developers`,
-                },
-              },
-            ],
-          },
-        },
-      ],
-    },
-  };
+  return createCompanyPageTemplate(
+    logoBase64,
+    'Press Center',
+    'News, resources, and media information',
+  );
 }
 
 // Generate Satori JSX template for Store page OG image
@@ -787,40 +493,7 @@ async function generateStoreTemplate() {
                   },
                   children: [
                     // Header (logo + brand)
-                    {
-                      type: 'div',
-                      props: {
-                        style: {
-                          display: 'flex',
-                          alignItems: 'center',
-                          marginBottom: 40,
-                        },
-                        children: [
-                          logoBase64
-                            ? {
-                                type: 'img',
-                                props: {
-                                  src: logoBase64,
-                                  width: 56,
-                                  height: 56,
-                                  style: { marginRight: 16 },
-                                },
-                              }
-                            : null,
-                          {
-                            type: 'div',
-                            props: {
-                              style: {
-                                fontSize: 28,
-                                fontWeight: 600,
-                                color: '#ff7a7a',
-                              },
-                              children: 'promptfoo',
-                            },
-                          },
-                        ].filter(Boolean),
-                      },
-                    },
+                    createBrandHeader(logoBase64, 40),
                     // Main headline
                     {
                       type: 'div',
@@ -869,53 +542,21 @@ async function generateStoreTemplate() {
                           gap: 12,
                           marginTop: 'auto',
                         },
-                        children: [
-                          {
-                            type: 'div',
-                            props: {
-                              style: {
-                                padding: '10px 20px',
-                                borderRadius: 20,
-                                backgroundColor: 'rgba(255, 122, 122, 0.15)',
-                                border: '1px solid rgba(255, 122, 122, 0.3)',
-                                fontSize: 16,
-                                fontWeight: 600,
-                                color: '#ff7a7a',
-                              },
-                              children: 'Apparel',
+                        children: ['Apparel', 'Accessories', 'Swag'].map((label) => ({
+                          type: 'div',
+                          props: {
+                            style: {
+                              padding: '10px 20px',
+                              borderRadius: 20,
+                              backgroundColor: 'rgba(255, 122, 122, 0.15)',
+                              border: '1px solid rgba(255, 122, 122, 0.3)',
+                              fontSize: 16,
+                              fontWeight: 600,
+                              color: '#ff7a7a',
                             },
+                            children: label,
                           },
-                          {
-                            type: 'div',
-                            props: {
-                              style: {
-                                padding: '10px 20px',
-                                borderRadius: 20,
-                                backgroundColor: 'rgba(255, 122, 122, 0.15)',
-                                border: '1px solid rgba(255, 122, 122, 0.3)',
-                                fontSize: 16,
-                                fontWeight: 600,
-                                color: '#ff7a7a',
-                              },
-                              children: 'Accessories',
-                            },
-                          },
-                          {
-                            type: 'div',
-                            props: {
-                              style: {
-                                padding: '10px 20px',
-                                borderRadius: 20,
-                                backgroundColor: 'rgba(255, 122, 122, 0.15)',
-                                border: '1px solid rgba(255, 122, 122, 0.3)',
-                                fontSize: 16,
-                                fontWeight: 600,
-                                color: '#ff7a7a',
-                              },
-                              children: 'Swag',
-                            },
-                          },
-                        ],
+                        })),
                       },
                     },
                   ],
@@ -974,40 +615,7 @@ async function generateEventsTemplate() {
       },
       children: [
         // Header row (logo + brand)
-        {
-          type: 'div',
-          props: {
-            style: {
-              display: 'flex',
-              alignItems: 'center',
-              marginBottom: 50,
-            },
-            children: [
-              logoBase64
-                ? {
-                    type: 'img',
-                    props: {
-                      src: logoBase64,
-                      width: 56,
-                      height: 56,
-                      style: { marginRight: 16 },
-                    },
-                  }
-                : null,
-              {
-                type: 'div',
-                props: {
-                  style: {
-                    fontSize: 28,
-                    fontWeight: 600,
-                    color: '#ff7a7a',
-                  },
-                  children: 'promptfoo',
-                },
-              },
-            ].filter(Boolean),
-          },
-        },
+        createBrandHeader(logoBase64),
         // Main headline
         {
           type: 'div',
@@ -1043,62 +651,24 @@ async function generateEventsTemplate() {
               gap: 16,
               marginTop: 'auto',
             },
-            children: [
-              {
-                type: 'div',
-                props: {
-                  style: {
-                    padding: '12px 24px',
-                    borderRadius: 24,
-                    backgroundColor: 'rgba(255, 122, 122, 0.15)',
-                    border: '1px solid rgba(255, 122, 122, 0.3)',
-                    fontSize: 18,
-                    fontWeight: 600,
-                    color: '#ff7a7a',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 8,
-                  },
-                  children: '🎪 Conferences',
+            children: ['🎪 Conferences', '🛠️ Workshops', '🤝 Networking'].map((label) => ({
+              type: 'div',
+              props: {
+                style: {
+                  padding: '12px 24px',
+                  borderRadius: 24,
+                  backgroundColor: 'rgba(255, 122, 122, 0.15)',
+                  border: '1px solid rgba(255, 122, 122, 0.3)',
+                  fontSize: 18,
+                  fontWeight: 600,
+                  color: '#ff7a7a',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
                 },
+                children: label,
               },
-              {
-                type: 'div',
-                props: {
-                  style: {
-                    padding: '12px 24px',
-                    borderRadius: 24,
-                    backgroundColor: 'rgba(255, 122, 122, 0.15)',
-                    border: '1px solid rgba(255, 122, 122, 0.3)',
-                    fontSize: 18,
-                    fontWeight: 600,
-                    color: '#ff7a7a',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 8,
-                  },
-                  children: '🛠️ Workshops',
-                },
-              },
-              {
-                type: 'div',
-                props: {
-                  style: {
-                    padding: '12px 24px',
-                    borderRadius: 24,
-                    backgroundColor: 'rgba(255, 122, 122, 0.15)',
-                    border: '1px solid rgba(255, 122, 122, 0.3)',
-                    fontSize: 18,
-                    fontWeight: 600,
-                    color: '#ff7a7a',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 8,
-                  },
-                  children: '🤝 Networking',
-                },
-              },
-            ],
+            })),
           },
         },
       ],
