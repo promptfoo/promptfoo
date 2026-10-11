@@ -165,6 +165,13 @@ const FoundationModelConfiguration = ({
     bedrockApiMode,
     getBedrockModelFromId(selectedTarget.id),
   );
+  // Older UI versions saved native GPT OSS limits under max_tokens.
+  const legacyTokenLimit =
+    bedrockApiMode === 'invoke' && tokenLimitKey === 'max_completion_tokens'
+      ? selectedTarget.config?.max_tokens
+      : undefined;
+  const canonicalTokenLimit = selectedTarget.config?.[tokenLimitKey];
+  const tokenLimit = canonicalTokenLimit === undefined ? legacyTokenLimit : canonicalTokenLimit;
   const lastEditedTarget = useRef<{ id: string; providerType: string } | undefined>(undefined);
   const isBedrockHttpApi =
     bedrockApiMode === 'responses' ||
@@ -229,9 +236,15 @@ const FoundationModelConfiguration = ({
 
   const updateProviderId = (id: string, apiMode = bedrockApiMode) => {
     const destination = getBedrockTokenLimitKey(apiMode, getBedrockModelFromId(id));
-    if (tokenLimitKey !== destination && selectedTarget.config?.[tokenLimitKey] !== undefined) {
-      const { [tokenLimitKey]: limit, ...config } = selectedTarget.config;
-      updateCustomTarget('config', { ...config, [destination]: limit });
+    if (
+      (tokenLimitKey !== destination || legacyTokenLimit !== undefined) &&
+      tokenLimit !== undefined
+    ) {
+      const { [tokenLimitKey]: _limit, ...config } = selectedTarget.config || {};
+      if (legacyTokenLimit !== undefined) {
+        delete config.max_tokens;
+      }
+      updateCustomTarget('config', { ...config, [destination]: tokenLimit });
     }
     lastEditedTarget.current = { id, providerType };
     updateCustomTarget('id', id);
@@ -699,10 +712,16 @@ const FoundationModelConfiguration = ({
                 id="max-tokens"
                 type="number"
                 min={1}
-                value={selectedTarget.config?.[tokenLimitKey] ?? ''}
-                onChange={(e) =>
-                  updateCustomTarget(tokenLimitKey, parseInt(e.target.value) || undefined)
-                }
+                value={tokenLimit ?? ''}
+                onChange={(e) => {
+                  const value = e.target.value === '' ? undefined : parseInt(e.target.value, 10);
+                  if (legacyTokenLimit === undefined) {
+                    updateCustomTarget(tokenLimitKey, value);
+                  } else {
+                    const { max_tokens: _legacy, ...config } = selectedTarget.config || {};
+                    updateCustomTarget('config', { ...config, [tokenLimitKey]: value });
+                  }
+                }}
               />
               <p className="text-sm text-muted-foreground">Maximum number of tokens to generate</p>
             </div>

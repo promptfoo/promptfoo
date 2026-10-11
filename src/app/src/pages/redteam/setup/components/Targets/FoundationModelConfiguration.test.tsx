@@ -1164,6 +1164,36 @@ describe('FoundationModelConfiguration', () => {
     },
   );
 
+  it.each([
+    { config: { max_tokens: 512 }, expected: 512 },
+    { config: { max_tokens: 0 }, expected: 0 },
+    { config: { max_tokens: 512, max_completion_tokens: 128 }, expected: 128 },
+    { config: { max_tokens: 512, max_completion_tokens: 0 }, expected: 0 },
+    { config: { max_tokens: 512, max_completion_tokens: null }, expected: null },
+  ])(
+    'reads the effective native GPT OSS cap and removes a legacy alias on edit: %j',
+    async ({ config, expected }) => {
+      const user = userEvent.setup();
+      render(
+        <FoundationModelConfiguration
+          selectedTarget={{ id: 'bedrock:openai.gpt-oss-120b-1:0', config }}
+          updateCustomTarget={mockUpdateCustomTarget}
+          providerType="bedrock"
+        />,
+      );
+      await user.click(screen.getByRole('button', { name: /Advanced Configuration/ }));
+      const input = screen.getByLabelText('Max Tokens');
+      expect(input).toHaveValue(expected);
+      await user.click(input);
+      await user.keyboard('{Control>}a{/Control}');
+      const edited = expected === 0 ? 256 : 0;
+      await user.paste(String(edited));
+      expect(mockUpdateCustomTarget).toHaveBeenLastCalledWith('config', {
+        max_completion_tokens: edited,
+      });
+    },
+  );
+
   it('migrates a Responses cap when switching to Runtime Chat', async () => {
     const user = userEvent.setup();
     render(

@@ -177,7 +177,7 @@ it.each(['openai.gpt-oss-120b-1:0', 'gpt-oss-120b-1:0'])(
     await expect.element(page.getByTestId('saved-target')).toHaveTextContent(
       JSON.stringify({
         id: 'bedrock:openai.gpt-oss-120b-1:0',
-        config: { max_tokens: 512 },
+        config: { max_completion_tokens: 512 },
       }),
     );
   },
@@ -248,6 +248,14 @@ it('round-trips native, Responses, and Chat Completions configuration in a real 
     }),
   );
   await expect.element(page.getByLabelText('API Base URL')).not.toBeInTheDocument();
+  await api.selectOptions('invoke');
+  await expect.element(page.getByLabelText('Max Tokens')).toHaveValue(2048);
+  await expect.element(page.getByTestId('saved-target')).toHaveTextContent(
+    JSON.stringify({
+      id: 'bedrock:openai.gpt-oss-120b-1:0',
+      config: { region: 'us-west-2', profile: 'work', max_completion_tokens: 2048 },
+    }),
+  );
 });
 
 it('resolves a legacy Responses alias without rewriting the saved provider', async () => {
@@ -286,4 +294,54 @@ it('preserves Messages routing while editing the model and credential profile', 
     }),
   );
   await expect.element(page.getByLabelText('Inference Model Type')).not.toBeInTheDocument();
+});
+
+it.each([
+  { config: { max_tokens: 512 }, expected: 512 },
+  { config: { max_tokens: 0 }, expected: 0 },
+  { config: { max_tokens: 512, max_completion_tokens: 128 }, expected: 128 },
+  { config: { max_tokens: 512, max_completion_tokens: 0 }, expected: 0 },
+  { config: { max_tokens: 512, max_completion_tokens: null }, expected: null },
+])(
+  'preserves the effective native GPT OSS cap through API changes: %j',
+  async ({ config, expected }) => {
+    const id = 'bedrock:openai.gpt-oss-120b-1:0';
+    renderEditor({ id, config });
+    await page.getByRole('button', { name: /Advanced Configuration/ }).click();
+    await expect.element(page.getByLabelText('Max Tokens')).toHaveValue(expected);
+    const api = page.getByLabelText('Bedrock API', { exact: false });
+    await api.selectOptions('responses');
+    await expect.element(page.getByTestId('saved-target')).toHaveTextContent(
+      JSON.stringify({
+        id: 'bedrock:responses:openai.gpt-oss-120b',
+        config: { max_output_tokens: expected },
+      }),
+    );
+    await api.selectOptions('invoke');
+    await expect
+      .element(page.getByTestId('saved-target'))
+      .toHaveTextContent(JSON.stringify({ id, config: { max_completion_tokens: expected } }));
+    await page.getByLabelText('Max Tokens').fill('0');
+    await expect.element(page.getByLabelText('Max Tokens')).toHaveValue(0);
+    await expect
+      .element(page.getByTestId('saved-target'))
+      .toHaveTextContent(JSON.stringify({ id, config: { max_completion_tokens: 0 } }));
+    await page.getByLabelText('Max Tokens').fill('');
+    await expect
+      .element(page.getByTestId('saved-target'))
+      .toHaveTextContent(JSON.stringify({ id, config: {} }));
+  },
+);
+
+it('canonicalizes an edited legacy GPT OSS cap without retaining its stale alias', async () => {
+  const id = 'bedrock:openai.gpt-oss-120b-1:0';
+  renderEditor({ id, config: { max_tokens: 512, region: 'us-west-2' } });
+  await page.getByRole('button', { name: /Advanced Configuration/ }).click();
+  await expect.element(page.getByLabelText('Max Tokens')).toHaveValue(512);
+  await page.getByLabelText('Max Tokens').fill('256');
+  await expect
+    .element(page.getByTestId('saved-target'))
+    .toHaveTextContent(
+      JSON.stringify({ id, config: { region: 'us-west-2', max_completion_tokens: 256 } }),
+    );
 });
