@@ -3,12 +3,13 @@ import logger from '../../logger';
 import { toDataUri } from '../../util/dataUrl';
 import { resolveProviderApiKey } from '../credentials';
 import { resolveProviderEnv } from '../env';
-import { getRequestTimeoutMs } from '../shared';
+import { getRequestTimeoutMs, shouldBustProviderCache } from '../shared';
 import { GoogleAuthManager } from './auth';
 import {
   createAuthCacheDiscriminator,
   determineGoogleVertexMode,
   geminiFormatAndSystemInstructions,
+  getGoogleApiBaseUrl,
   getGoogleClient,
   loadCredentials,
   mergeGoogleCompletionOptions,
@@ -119,15 +120,17 @@ export class GeminiImageProvider implements ApiProvider {
   modelName: string;
   config: GoogleProviderConfig;
   env?: EnvOverrides;
+  private providerId: string;
 
   constructor(modelName: string, options: GeminiImageOptions = {}) {
     this.modelName = modelName;
     this.config = options.config || {};
     this.env = options.env;
+    this.providerId = options.id ?? `google:${modelName}`;
   }
 
   id(): string {
-    return `google:${this.modelName}`;
+    return this.providerId;
   }
 
   toString(): string {
@@ -145,6 +148,7 @@ export class GeminiImageProvider implements ApiProvider {
       'GOOGLE_API_KEY',
       'GOOGLE_GENERATIVE_AI_API_KEY',
       'GEMINI_API_KEY',
+      'PALM_API_KEY',
     ]);
   }
 
@@ -174,7 +178,22 @@ export class GeminiImageProvider implements ApiProvider {
       };
     }
 
-    const sizeError = this.validateImageSize();
+    const promptConfig = context?.prompt?.config as Partial<GoogleProviderConfig> | undefined;
+    const config = mergeGoogleCompletionOptions(this.config, promptConfig);
+    // A prompt's nested image controls override provider-level shorthand defaults.
+    if (
+      promptConfig?.imageSize === undefined &&
+      promptConfig?.generationConfig?.imageConfig?.imageSize !== undefined
+    ) {
+      delete config.imageSize;
+    }
+    if (
+      promptConfig?.imageAspectRatio === undefined &&
+      promptConfig?.generationConfig?.imageConfig?.aspectRatio !== undefined
+    ) {
+      delete config.imageAspectRatio;
+    }
+    const sizeError = this.validateImageSize(config);
     if (sizeError) {
       return { error: sizeError };
     }
@@ -183,9 +202,8 @@ export class GeminiImageProvider implements ApiProvider {
       const unsupported = ['temperature', 'topP', 'topK', 'seed', 'logprobs', 'responseLogprobs'];
       const configured = unsupported.filter(
         (key) =>
-          (this.config as Record<string, unknown>)[key] !== undefined ||
-          (this.config.generationConfig as Record<string, unknown> | undefined)?.[key] !==
-            undefined,
+          (config as Record<string, unknown>)[key] !== undefined ||
+          (config.generationConfig as Record<string, unknown> | undefined)?.[key] !== undefined,
       );
       if (configured.length > 0) {
         return { error: `${this.modelName} does not support ${configured.join(', ')}` };
@@ -255,46 +273,46 @@ export class GeminiImageProvider implements ApiProvider {
           error: `Vertex Express image generation supports only the global endpoint, but region ${region} was configured. Set expressMode: false and use OAuth or Application Default Credentials for a regional endpoint.`,
         };
       }
-      return this.callVertexExpressApi(prompt, context, vertexApiKey);
+      return this.callVertexExpressApi(prompt, context, vertexApiKey, config);
     }
 
     if (isVertexMode) {
-      return this.callVertexApi(prompt, context);
+      return this.callVertexApi(prompt, context, config);
     }
 
     // Otherwise, try Google AI Studio with API key
     if (aiStudioApiKey || this.config.apiKeyRequired === false) {
-      return this.callAIStudioApi(prompt, context);
+      return this.callAIStudioApi(prompt, context, config);
     }
 
     return {
       error:
         'Gemini image models require either:\n' +
-        '1. Google AI Studio: Set GOOGLE_API_KEY, GOOGLE_GENERATIVE_AI_API_KEY, or GEMINI_API_KEY environment variable\n' +
+        '1. Google AI Studio: Set GOOGLE_API_KEY, GOOGLE_GENERATIVE_AI_API_KEY, GEMINI_API_KEY, or PALM_API_KEY environment variable\n' +
         '2. Vertex AI: Set GOOGLE_CLOUD_PROJECT environment variable or provide projectId in config, and run "gcloud auth application-default login"',
     };
   }
 
   private async callAIStudioApi(
     prompt: string,
-    context?: CallApiContextParams,
+    context: CallApiContextParams | undefined,
+    config: GoogleProviderConfig,
   ): Promise<ProviderResponse> {
     const apiKey = this.getApiKey();
     if (!apiKey && this.config.apiKeyRequired !== false) {
       return {
         error:
-          'API key not found. Set GOOGLE_API_KEY, GOOGLE_GENERATIVE_AI_API_KEY, or GEMINI_API_KEY environment variable.',
+          'API key not found. Set GOOGLE_API_KEY, GOOGLE_GENERATIVE_AI_API_KEY, GEMINI_API_KEY, or PALM_API_KEY environment variable.',
       };
     }
 
-    const apiHost = this.config.apiHost || 'generativelanguage.googleapis.com';
-    // Gemini image generation models use v1beta in AI Studio.
-    const apiVersion = 'v1beta';
-    // Use header-based auth instead of query param to avoid API key in logs
-    const endpoint = `https://${apiHost}/${apiVersion}/models/${this.modelName}:generateContent`;
+    const baseUrl = getGoogleApiBaseUrl(this.config, this.env);
+    const apiVersion = this.config.apiVersion || 'v1beta';
+    // Use header-based auth instead of query param to avoid API key in logs.
+    const endpoint = `${baseUrl}/${apiVersion}/models/${this.modelName}:generateContent`;
 
-    const { contents, systemInstruction } = this.formatPrompt(prompt, context);
-    const body = this.buildRequestBody(contents, systemInstruction);
+    const { contents, systemInstruction } = this.formatPrompt(prompt, context, config);
+    const body = this.buildRequestBody(contents, systemInstruction, config);
 
     try {
       const headers: Record<string, string> = {
@@ -314,11 +332,11 @@ export class GeminiImageProvider implements ApiProvider {
         } as RequestInit,
         getRequestTimeoutMs(),
         'json',
-        false,
+        shouldBustProviderCache(context),
       )) as { data: any; cached: boolean };
       const latencyMs = Date.now() - startTime;
 
-      return this.processResponse(data, cached, latencyMs);
+      return this.processResponse(data, config, cached, latencyMs);
     } catch (err) {
       return {
         error: `API call error: ${String(err)}`,
@@ -330,6 +348,7 @@ export class GeminiImageProvider implements ApiProvider {
     prompt: string,
     context: CallApiContextParams | undefined,
     apiKey: string,
+    config: GoogleProviderConfig,
   ): Promise<ProviderResponse> {
     const configuredHost =
       this.config.apiBaseUrl ||
@@ -342,8 +361,8 @@ export class GeminiImageProvider implements ApiProvider {
     const apiVersion =
       this.config.apiVersion || resolveProviderEnv(this.env, ['VERTEX_API_VERSION'])?.value || 'v1';
     const endpoint = `${apiHost.replace(/\/+$/, '')}/${apiVersion}/publishers/google/models/${this.modelName}:generateContent`;
-    const { contents, systemInstruction } = this.formatPrompt(prompt, context);
-    const body = this.buildRequestBody(contents, systemInstruction);
+    const { contents, systemInstruction } = this.formatPrompt(prompt, context, config);
+    const body = this.buildRequestBody(contents, systemInstruction, config);
 
     try {
       const headers: Record<string, string> = {
@@ -365,7 +384,7 @@ export class GeminiImageProvider implements ApiProvider {
       )) as { data: any; cached: boolean };
       const latencyMs = Date.now() - startTime;
 
-      return this.processResponse(data, cached, latencyMs);
+      return this.processResponse(data, config, cached, latencyMs);
     } catch (err) {
       return {
         error: `Vertex AI Express API call error: ${String(err)}`,
@@ -375,7 +394,8 @@ export class GeminiImageProvider implements ApiProvider {
 
   private async callVertexApi(
     prompt: string,
-    context?: CallApiContextParams,
+    context: CallApiContextParams | undefined,
+    config: GoogleProviderConfig,
   ): Promise<ProviderResponse> {
     // Gemini 3 models require the global endpoint
     const usesGlobalVertexEndpoint = this.usesGlobalVertexEndpoint();
@@ -414,8 +434,8 @@ export class GeminiImageProvider implements ApiProvider {
       logger.debug(`Vertex AI Gemini Image API endpoint: ${endpoint}`);
       logger.debug(`Project ID: ${projectId}, Location: ${location}, Model: ${this.modelName}`);
 
-      const { contents, systemInstruction } = this.formatPrompt(prompt, context);
-      const body = this.buildRequestBody(contents, systemInstruction);
+      const { contents, systemInstruction } = this.formatPrompt(prompt, context, config);
+      const body = this.buildRequestBody(contents, systemInstruction, config);
 
       const startTime = Date.now();
       const response = await client.request({
@@ -430,7 +450,7 @@ export class GeminiImageProvider implements ApiProvider {
       });
       const latencyMs = Date.now() - startTime;
 
-      return this.processResponse(response.data, false, latencyMs);
+      return this.processResponse(response.data, config, false, latencyMs);
     } catch (err: any) {
       if (err.response?.data?.error) {
         return {
@@ -443,9 +463,12 @@ export class GeminiImageProvider implements ApiProvider {
     }
   }
 
-  private formatPrompt(prompt: string, context?: CallApiContextParams) {
+  private formatPrompt(
+    prompt: string,
+    context: CallApiContextParams | undefined,
+    config: GoogleProviderConfig,
+  ) {
     const promptConfig = context?.prompt?.config as Partial<GoogleProviderConfig> | undefined;
-    const config = mergeGoogleCompletionOptions(this.config, promptConfig);
     return geminiFormatAndSystemInstructions(prompt, context?.vars, config.systemInstruction, {
       basePath:
         promptConfig?.systemInstruction === undefined
@@ -455,19 +478,23 @@ export class GeminiImageProvider implements ApiProvider {
     });
   }
 
-  private buildRequestBody(contents: any, systemInstruction?: unknown): Record<string, any> {
+  private buildRequestBody(
+    contents: any,
+    systemInstruction: unknown,
+    config: GoogleProviderConfig,
+  ): Record<string, any> {
     const body: Record<string, any> = {
       contents,
       ...(systemInstruction ? { systemInstruction } : {}),
       generationConfig: {
         responseModalities: ['TEXT', 'IMAGE'],
-        ...(this.config.temperature !== undefined && { temperature: this.config.temperature }),
-        ...(this.config.topP !== undefined && { topP: this.config.topP }),
-        ...(this.config.topK !== undefined && { topK: this.config.topK }),
-        ...(this.config.maxOutputTokens !== undefined && {
-          maxOutputTokens: this.config.maxOutputTokens,
+        ...(config.temperature !== undefined && { temperature: config.temperature }),
+        ...(config.topP !== undefined && { topP: config.topP }),
+        ...(config.topK !== undefined && { topK: config.topK }),
+        ...(config.maxOutputTokens !== undefined && {
+          maxOutputTokens: config.maxOutputTokens,
         }),
-        ...this.config.generationConfig,
+        ...config.generationConfig,
       },
     };
 
@@ -476,28 +503,28 @@ export class GeminiImageProvider implements ApiProvider {
     // dropping its other fields. imageSize is supported on Gemini 3.x models.
     const supportsImageSize = this.supportsImageSize();
     const imageConfig: Record<string, any> = {
-      ...(this.config.generationConfig?.imageConfig ?? {}),
-      ...(this.config.imageAspectRatio && { aspectRatio: this.config.imageAspectRatio }),
-      ...(this.config.imageSize && supportsImageSize && { imageSize: this.config.imageSize }),
+      ...(config.generationConfig?.imageConfig ?? {}),
+      ...(config.imageAspectRatio && { aspectRatio: config.imageAspectRatio }),
+      ...(config.imageSize && supportsImageSize && { imageSize: config.imageSize }),
     };
     if (Object.keys(imageConfig).length > 0) {
       body.generationConfig.imageConfig = imageConfig;
     }
 
     // Add safety settings if provided
-    if (this.config.safetySettings) {
-      body.safetySettings = normalizeSafetySettings(this.config.safetySettings);
+    if (config.safetySettings) {
+      body.safetySettings = normalizeSafetySettings(config.safetySettings);
     }
 
-    const { toolConfig, toolsDisabled } = resolveGoogleToolConfig(this.config);
+    const { toolConfig, toolsDisabled } = resolveGoogleToolConfig(config);
 
     // Add tool configuration if provided (e.g. Google Search grounding)
     if (toolConfig) {
       body.toolConfig = toolConfig;
     }
 
-    if (Array.isArray(this.config.tools) && this.config.tools.length > 0) {
-      const normalizedTools = normalizeTools(this.config.tools);
+    if (Array.isArray(config.tools) && config.tools.length > 0) {
+      const normalizedTools = normalizeTools(config.tools);
       const requestTools = toolsDisabled
         ? removeGoogleFunctionDeclarations(normalizedTools)
         : normalizedTools;
@@ -509,7 +536,12 @@ export class GeminiImageProvider implements ApiProvider {
     return body;
   }
 
-  private processResponse(data: any, cached?: boolean, latencyMs?: number): ProviderResponse {
+  private processResponse(
+    data: any,
+    config: GoogleProviderConfig,
+    cached?: boolean,
+    latencyMs?: number,
+  ): ProviderResponse {
     logger.debug(`Response data: ${JSON.stringify(data).substring(0, 500)}...`);
 
     if (!data || typeof data !== 'object') {
@@ -585,7 +617,7 @@ export class GeminiImageProvider implements ApiProvider {
         const mimeType = part.inlineData.mimeType || 'image/png';
         const base64Data = part.inlineData.data;
         imageParts.push({ mimeType, base64Data });
-        totalCost += this.getCostPerImage();
+        totalCost += this.getCostPerImage(config);
       }
     }
     totalCost += this.getTokenCost(data.usageMetadata);
@@ -644,9 +676,9 @@ export class GeminiImageProvider implements ApiProvider {
    * option wins, otherwise a pass-through `generationConfig.imageConfig`
    * value applies. Mirrors the precedence used by buildRequestBody.
    */
-  private getEffectiveImageSize(): string | undefined {
-    const topLevel = this.supportsImageSize() ? this.config.imageSize : undefined;
-    return topLevel ?? this.config.generationConfig?.imageConfig?.imageSize;
+  private getEffectiveImageSize(config: GoogleProviderConfig): string | undefined {
+    const topLevel = this.supportsImageSize() ? config.imageSize : undefined;
+    return topLevel ?? config.generationConfig?.imageConfig?.imageSize;
   }
 
   /** Normalize Google's '512px' label to its 0.5K pricing tier. */
@@ -655,9 +687,9 @@ export class GeminiImageProvider implements ApiProvider {
     return raw === '512PX' ? '0.5K' : raw;
   }
 
-  private validateImageSize(): string | undefined {
+  private validateImageSize(config: GoogleProviderConfig): string | undefined {
     const allowedSizes = MODEL_IMAGE_SIZES[this.modelName];
-    const requested = this.getEffectiveImageSize();
+    const requested = this.getEffectiveImageSize(config);
     if (!allowedSizes || requested === undefined) {
       return undefined;
     }
@@ -667,7 +699,7 @@ export class GeminiImageProvider implements ApiProvider {
     return undefined;
   }
 
-  private getCostPerImage(): number {
+  private getCostPerImage(config: GoogleProviderConfig): number {
     const pricing = GEMINI_IMAGE_PRICING[this.modelName];
     if (!pricing) {
       return DEFAULT_IMAGE_COST;
@@ -677,7 +709,7 @@ export class GeminiImageProvider implements ApiProvider {
       return pricing.default;
     }
     // Resolution-tiered models: bill by the requested imageSize (default 1K).
-    const resolution = this.normalizeImageSize(this.getEffectiveImageSize() ?? '1K');
+    const resolution = this.normalizeImageSize(this.getEffectiveImageSize(config) ?? '1K');
     return pricing[resolution] ?? pricing['1K'] ?? DEFAULT_IMAGE_COST;
   }
 

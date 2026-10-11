@@ -133,16 +133,18 @@ function getProviderEnvAliasGroups(
   providerPath: string,
   config?: ProviderOptions['config'],
 ): readonly (readonly string[])[] {
+  const isGeminiImage = /^(?:google|palm):(?:image:)?(?:[^:]*-image|gemini-nano-banana-2\.1$)/.test(
+    providerPath,
+  );
   if (
     config?.vertexai === true &&
-    /^(?:google|palm):(?:(?:interactions:)?gemini-omni-flash-preview$|(?:image:)?[^:]*-image)/.test(
-      providerPath,
-    )
+    (isGeminiImage ||
+      /^(?:google|palm):(?:interactions:)?gemini-omni-flash-preview$/.test(providerPath))
   ) {
     return [
       ['VERTEX_API_KEY', 'GOOGLE_API_KEY'],
       ['VERTEX_PROJECT_ID', 'GOOGLE_PROJECT_ID', 'GOOGLE_CLOUD_PROJECT'],
-      providerPath.includes('-image')
+      isGeminiImage
         ? ['VERTEX_REGION', 'GOOGLE_CLOUD_LOCATION', 'GOOGLE_LOCATION']
         : ['VERTEX_REGION', 'GOOGLE_CLOUD_LOCATION'],
     ];
@@ -181,9 +183,14 @@ function getProviderEnvAliasGroups(
   if (/^(?:google|palm):live:/.test(providerPath)) {
     return [['GOOGLE_API_KEY', 'GEMINI_API_KEY']];
   }
-  if (/^(?:google|palm):(?:image:|[^:]*-image)/.test(providerPath)) {
+  if (isGeminiImage || /^(?:google|palm):image:/.test(providerPath)) {
     return [
-      ['GOOGLE_API_KEY', 'GOOGLE_GENERATIVE_AI_API_KEY', 'GEMINI_API_KEY'],
+      [
+        'GOOGLE_API_KEY',
+        'GOOGLE_GENERATIVE_AI_API_KEY',
+        'GEMINI_API_KEY',
+        ...(isGeminiImage ? ['PALM_API_KEY'] : []),
+      ],
       ['VERTEX_PROJECT_ID', 'GOOGLE_PROJECT_ID', 'GOOGLE_CLOUD_PROJECT'],
       ['VERTEX_REGION', 'GOOGLE_CLOUD_LOCATION', 'GOOGLE_LOCATION'],
     ];

@@ -11,6 +11,7 @@ import { parseFileUrl } from '../../util/functions/loadFunction';
 import { renderVarsInObject } from '../../util/index';
 import { getAjv } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
+import { resolveProviderEnv } from '../env';
 import {
   calculateCost,
   clampCachedTokens,
@@ -272,6 +273,28 @@ export function mergeGoogleRequestTools(
     ...configuredTools,
     ...(Array.isArray(passthroughTools) ? passthroughTools : [passthroughTools]),
   ];
+}
+
+/** Resolve native Gemini endpoints consistently across text and image adapters. */
+export function getGoogleApiBaseUrl(
+  config: CompletionOptions,
+  env?: Readonly<Record<string, string | undefined>>,
+): string {
+  if (config.apiHost) {
+    return `https://${getNunjucksEngine().renderString(config.apiHost, {})}`;
+  }
+  if (config.apiBaseUrl) {
+    return config.apiBaseUrl;
+  }
+  const endpoint = resolveProviderEnv(env, [
+    'GOOGLE_API_HOST',
+    'PALM_API_HOST',
+    'GOOGLE_API_BASE_URL',
+  ]);
+  if (endpoint?.name === 'GOOGLE_API_BASE_URL') {
+    return endpoint.value;
+  }
+  return `https://${getNunjucksEngine().renderString(endpoint?.value || 'generativelanguage.googleapis.com', {})}`;
 }
 
 export function mergeGoogleCompletionOptions(

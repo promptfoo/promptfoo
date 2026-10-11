@@ -19,6 +19,7 @@ import {
   formatCandidateContents,
   geminiFormatAndSystemInstructions,
   getCandidate,
+  getGoogleApiBaseUrl,
   getGoogleResponseServiceTier,
   getLastPromptSafetyRatings,
   isNonCandidateStreamChunk,
@@ -119,21 +120,7 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
    * Get the base URL for Google AI Studio API.
    */
   private getApiBaseUrl(): string {
-    if (this.config.apiHost) {
-      return `https://${getNunjucksEngine().renderString(this.config.apiHost, {})}`;
-    }
-    if (this.config.apiBaseUrl) {
-      return this.config.apiBaseUrl;
-    }
-    const endpoint = resolveProviderEnv(this.env, [
-      'GOOGLE_API_HOST',
-      'PALM_API_HOST',
-      'GOOGLE_API_BASE_URL',
-    ]);
-    if (endpoint?.name === 'GOOGLE_API_BASE_URL') {
-      return endpoint.value;
-    }
-    return `https://${getNunjucksEngine().renderString(endpoint?.value || DEFAULT_API_HOST, {})}`;
+    return getGoogleApiBaseUrl(this.config, this.env);
   }
 
   /**
@@ -427,12 +414,16 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
         }
 
         const candidateForChunk = getCandidate(datum);
-        if (candidateForChunk.finishReason === 'STOP' && !candidateForChunk.content?.parts) {
+        candidate = { ...candidate, ...candidateForChunk };
+        if (
+          !candidateForChunk.content?.parts &&
+          (candidateForChunk.finishReason === 'STOP' ||
+            candidateForChunk.finishReason === 'MAX_TOKENS')
+        ) {
           continue;
         }
 
-        candidate = candidateForChunk;
-        output = mergeParts(output, formatCandidateContents(candidate));
+        output = mergeParts(output, formatCandidateContents(candidateForChunk));
       }
 
       if (output === undefined || output === '' || candidate === undefined) {
