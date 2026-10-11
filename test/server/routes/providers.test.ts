@@ -31,6 +31,7 @@ vi.mock('../../../src/globalConfig/cloud', () => ({
 import { cloudConfig } from '../../../src/globalConfig/cloud';
 import { testProviderConnectivity, testProviderSession } from '../../../src/node/testProvider';
 import { loadApiProvider } from '../../../src/providers/index';
+import { providerRegistry } from '../../../src/providers/providerRegistry';
 import { doTargetPurposeDiscovery } from '../../../src/redteam/commands/discover';
 import { neverGenerateRemote } from '../../../src/redteam/remoteGeneration';
 import { getAvailableProviders } from '../../../src/server/config/serverConfig';
@@ -43,6 +44,33 @@ const mockedTestProviderConnectivity = vi.mocked(testProviderConnectivity);
 const mockedGetAvailableProviders = vi.mocked(getAvailableProviders);
 const mockedTestProviderSession = vi.mocked(testProviderSession);
 const mockedFetchWithProxy = vi.mocked(fetchWithProxy);
+
+function createPersistentSessionProvider() {
+  const prompts: string[] = [];
+  let closed = false;
+  const session = {
+    retainOutsideEvaluation: true,
+    shutdown: vi.fn(async () => {
+      closed = true;
+      providerRegistry.unregister(session);
+    }),
+  };
+  const provider: ApiProvider = {
+    id: () => 'test-provider',
+    config: { sessionSource: 'client' },
+    callApi: vi.fn(async (prompt, context) => {
+      if (closed) {
+        throw new Error('Session closed before the diagnostic finished');
+      }
+      if (prompts.length === 0) {
+        providerRegistry.register(session);
+      }
+      prompts.push(prompt);
+      return { output: prompts.join('\n'), sessionId: context?.vars.sessionId as string };
+    }),
+  };
+  return { provider, session };
+}
 
 describe('Providers Routes', () => {
   const api = setupTestServer(createApp);
@@ -648,13 +676,144 @@ describe('Providers Routes', () => {
     });
   });
 
+  describe('POST /providers/test-session provider ownership', () => {
+    it('cleans up the owned provider after a successful diagnostic', async () => {
+      let cleaned = false;
+      const provider: ApiProvider = {
+        id: () => 'test-provider',
+        callApi: vi.fn<ApiProvider['callApi']>(),
+        cleanup: vi.fn(async () => {
+          await Promise.resolve();
+          cleaned = true;
+        }),
+      };
+      mockedLoadApiProvider.mockResolvedValue(provider);
+      mockedTestProviderSession.mockImplementation(async () => {
+        expect(cleaned).toBe(false);
+        return { success: true, message: 'Session test successful' };
+      });
+
+      const response = await api
+        .post('/api/providers/test-session')
+        .send({ provider: { id: 'test-provider' } });
+
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual({ success: true, message: 'Session test successful' });
+      expect(provider.cleanup).toHaveBeenCalledTimes(1);
+      expect(cleaned).toBe(true);
+    });
+
+    it('cleans up the owned provider when the diagnostic rejects', async () => {
+      const provider: ApiProvider = {
+        id: () => 'test-provider',
+        callApi: vi.fn<ApiProvider['callApi']>(),
+        cleanup: vi.fn().mockResolvedValue(undefined),
+      };
+      mockedLoadApiProvider.mockResolvedValue(provider);
+      mockedTestProviderSession.mockRejectedValue(new Error('diagnostic unavailable'));
+
+      const response = await api
+        .post('/api/providers/test-session')
+        .send({ provider: { id: 'test-provider' } });
+
+      expect(response.status).toBe(500);
+      expect(response.body).toEqual({ error: 'Failed to test session' });
+      expect(provider.cleanup).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps the persistent session through both actual diagnostic calls and then releases it', async () => {
+      const actual = await vi.importActual<typeof import('../../../src/node/testProvider')>(
+        '../../../src/node/testProvider',
+      );
+      const { provider, session } = createPersistentSessionProvider();
+      mockedLoadApiProvider.mockResolvedValue(provider);
+      mockedTestProviderSession.mockImplementation(actual.testProviderSession);
+      mockedNeverGenerateRemote.mockReturnValue(true);
+
+      try {
+        const response = await api
+          .post('/api/providers/test-session')
+          .send({ provider: { id: 'test-provider' } });
+
+        expect(response.status).toBe(200);
+        expect(response.body.details.response1).toBe('What can you help me with?');
+        expect(response.body.details.response2).toBe(
+          'What can you help me with?\nWhat was the last thing I asked you?',
+        );
+        expect(response.body.details.request1.sessionId).toEqual(expect.any(String));
+        expect(response.body.details.request2.sessionId).toBe(
+          response.body.details.request1.sessionId,
+        );
+        expect(provider.callApi).toHaveBeenCalledTimes(2);
+        expect(session.shutdown).toHaveBeenCalledTimes(1);
+        expect(providerRegistry.has(session)).toBe(false);
+      } finally {
+        await session.shutdown();
+      }
+    });
+
+    it.each([1, 2])(
+      'releases the persistent session when diagnostic call %i fails',
+      async (call) => {
+        const actual = await vi.importActual<typeof import('../../../src/node/testProvider')>(
+          '../../../src/node/testProvider',
+        );
+        const { provider, session } = createPersistentSessionProvider();
+        const callApi = provider.callApi;
+        let calls = 0;
+        provider.callApi = vi.fn(async (...args: Parameters<ApiProvider['callApi']>) => {
+          const response = await callApi(...args);
+          calls++;
+          return calls === call ? { error: 'Session request failed' } : response;
+        });
+        mockedLoadApiProvider.mockResolvedValue(provider);
+        mockedTestProviderSession.mockImplementation(actual.testProviderSession);
+        mockedNeverGenerateRemote.mockReturnValue(true);
+
+        try {
+          const response = await api
+            .post('/api/providers/test-session')
+            .send({ provider: { id: 'test-provider' } });
+
+          expect(response.status).toBe(200);
+          expect(response.body.success).toBe(false);
+          expect(response.body.error).toBe('Session request failed');
+          expect(provider.callApi).toHaveBeenCalledTimes(call);
+          expect(session.shutdown).toHaveBeenCalledTimes(1);
+          expect(providerRegistry.has(session)).toBe(false);
+        } finally {
+          await session.shutdown();
+        }
+      },
+    );
+
+    it('leaves caller-owned providers open when the public helper is called directly', async () => {
+      const actual = await vi.importActual<typeof import('../../../src/node/testProvider')>(
+        '../../../src/node/testProvider',
+      );
+      const { provider, session } = createPersistentSessionProvider();
+      provider.cleanup = vi.fn().mockResolvedValue(undefined);
+      mockedNeverGenerateRemote.mockReturnValue(true);
+
+      try {
+        const result = await actual.testProviderSession({ provider });
+
+        expect(result.details?.response2).toBe(
+          'What can you help me with?\nWhat was the last thing I asked you?',
+        );
+        expect(provider.cleanup).not.toHaveBeenCalled();
+        expect(session.shutdown).not.toHaveBeenCalled();
+        expect(providerRegistry.has(session)).toBe(true);
+      } finally {
+        await session.shutdown();
+      }
+    });
+  });
+
   describe('POST /providers/discover validation', () => {
-    it('should return discovered target metadata for valid provider options', async () => {
-      const mockProvider = {
-        id: vi.fn(() => 'test-provider'),
-        callApi: vi.fn(),
-        config: {},
-      } as any;
+    it('returns discovered metadata and cleans up the provider after all discovery calls', async () => {
+      const { provider, session } = createPersistentSessionProvider();
+      provider.cleanup = vi.fn().mockResolvedValue(undefined);
       const discoveryResult = {
         purpose: 'Help users',
         limitations: 'No medical advice',
@@ -669,13 +828,71 @@ describe('Providers Routes', () => {
       };
 
       mockedNeverGenerateRemote.mockReturnValue(false);
-      mockedLoadApiProvider.mockResolvedValue(mockProvider);
-      mockedDoTargetPurposeDiscovery.mockResolvedValue(discoveryResult);
+      mockedLoadApiProvider.mockResolvedValue(provider);
+      mockedDoTargetPurposeDiscovery.mockImplementation(async (target) => {
+        await target.callApi('What can you help with?');
+        await target.callApi('What tools can you use?');
+        expect(session.shutdown).not.toHaveBeenCalled();
+        return discoveryResult;
+      });
+
+      try {
+        const response = await api.post('/api/providers/discover').send({ id: 'echo' });
+
+        expect(response.status).toBe(200);
+        expect(response.body).toEqual(discoveryResult);
+        expect(provider.callApi).toHaveBeenCalledTimes(2);
+        expect(provider.cleanup).toHaveBeenCalledTimes(1);
+        expect(session.shutdown).toHaveBeenCalledTimes(1);
+        expect(providerRegistry.has(session)).toBe(false);
+      } finally {
+        await session.shutdown();
+      }
+    });
+
+    it.each(['throws', 'returns no result'])(
+      'cleans up the provider when discovery %s',
+      async (failure) => {
+        const { provider, session } = createPersistentSessionProvider();
+        provider.cleanup = vi.fn().mockResolvedValue(undefined);
+        mockedNeverGenerateRemote.mockReturnValue(false);
+        mockedLoadApiProvider.mockResolvedValue(provider);
+        mockedDoTargetPurposeDiscovery.mockImplementation(async (target) => {
+          await target.callApi('What can you help with?');
+          if (failure === 'throws') {
+            throw new Error('Discovery unavailable');
+          }
+          return undefined;
+        });
+
+        try {
+          const response = await api.post('/api/providers/discover').send({ id: 'echo' });
+
+          expect(response.status).toBe(500);
+          expect(response.body).toEqual({
+            error:
+              failure === 'throws'
+                ? "Discovery failed to discover the target's purpose"
+                : "Discovery failed to discover the target's purpose.",
+          });
+          expect(provider.cleanup).toHaveBeenCalledTimes(1);
+          expect(session.shutdown).toHaveBeenCalledTimes(1);
+          expect(providerRegistry.has(session)).toBe(false);
+        } finally {
+          await session.shutdown();
+        }
+      },
+    );
+
+    it('rejects disabled remote generation before loading a provider', async () => {
+      mockedNeverGenerateRemote.mockReturnValue(true);
 
       const response = await api.post('/api/providers/discover').send({ id: 'echo' });
 
-      expect(response.status).toBe(200);
-      expect(response.body).toEqual(discoveryResult);
+      expect(response.status).toBe(400);
+      expect(response.body).toEqual({ error: 'Requires remote generation be enabled.' });
+      expect(mockedLoadApiProvider).not.toHaveBeenCalled();
+      expect(mockedDoTargetPurposeDiscovery).not.toHaveBeenCalled();
     });
 
     it('should return 400 for empty body (missing id)', async () => {

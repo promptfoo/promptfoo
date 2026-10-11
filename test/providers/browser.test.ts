@@ -779,6 +779,120 @@ describe('BrowserProvider lifecycle', () => {
     expect(mockBrowser.close).toHaveBeenCalledTimes(2);
   });
 
+  it('retains a reused session between turns in overlapping evaluation scopes', async () => {
+    const provider = new BrowserProvider('test', {
+      config: { persistSession: true, steps: [{ ...createNavigateStep(), runOnce: true }] },
+    });
+    const firstReady = createDeferred<void>();
+    const secondReady = createDeferred<void>();
+    const finishFirst = createDeferred<void>();
+    const resumeSecond = createDeferred<void>();
+    const first = providerRegistry.withEvaluation(async () => {
+      expect((await provider.callApi('first')).error).toBeUndefined();
+      firstReady.resolve();
+      await finishFirst.promise;
+    });
+    let second: Promise<void> | undefined;
+    try {
+      await firstReady.promise;
+      second = providerRegistry.withEvaluation(async () => {
+        expect((await provider.callApi('second')).error).toBeUndefined();
+        secondReady.resolve();
+        await resumeSecond.promise;
+        expect(mockPage.isClosed()).toBe(false);
+        expect((await provider.callApi('second again')).error).toBeUndefined();
+      });
+      await secondReady.promise;
+      finishFirst.resolve();
+      await first;
+      expect(mockBrowser.close).not.toHaveBeenCalled();
+      resumeSecond.resolve();
+      await second;
+      expect(mockBrowser.newContext).toHaveBeenCalledOnce();
+      expect(mockPage.goto).toHaveBeenCalledOnce();
+      expect(mockBrowser.close).toHaveBeenCalledOnce();
+    } finally {
+      finishFirst.resolve();
+      resumeSecond.resolve();
+      await Promise.allSettled([first, ...(second ? [second] : [])]);
+      await provider.cleanup();
+    }
+  });
+
+  it('keeps an active direct call alive when a concurrent evaluation ends', async () => {
+    const provider = new BrowserProvider('test', { config: { persistSession: true, steps: [] } });
+    const ready = createDeferred<void>();
+    const finishEvaluation = createDeferred<void>();
+    const directStarted = createDeferred<void>();
+    const finishDirect = createDeferred<void>();
+    const evaluation = providerRegistry.withEvaluation(async () => {
+      expect((await provider.callApi('evaluation')).error).toBeUndefined();
+      ready.resolve();
+      await finishEvaluation.promise;
+    });
+    let direct: ReturnType<typeof provider.callApi> | undefined;
+    try {
+      await ready.promise;
+      const page = mockPage;
+      page.content.mockImplementationOnce(async () => {
+        directStarted.resolve();
+        await finishDirect.promise;
+        if (page.isClosed()) {
+          throw new Error('Page closed during direct call');
+        }
+        return '<html>direct result</html>';
+      });
+      direct = provider.callApi('direct');
+      await directStarted.promise;
+      finishEvaluation.resolve();
+      await evaluation;
+      expect(page.isClosed()).toBe(false);
+      expect(mockBrowser.close).not.toHaveBeenCalled();
+      finishDirect.resolve();
+      expect(await direct).toEqual({ output: '<html>direct result</html>' });
+      await vi.waitFor(() => expect(mockBrowser.close).toHaveBeenCalledOnce());
+    } finally {
+      finishEvaluation.resolve();
+      finishDirect.resolve();
+      await Promise.allSettled([evaluation, ...(direct ? [direct] : [])]);
+      await provider.cleanup();
+    }
+  });
+
+  it('does not create a replacement session after concurrent cleanup', async () => {
+    const provider = new BrowserProvider('test', { config: { persistSession: true, steps: [] } });
+    expect((await provider.callApi('seed')).error).toBeUndefined();
+    mockPage.isClosed.mockReturnValue(true);
+    const replacement = provider.callApi('replacement');
+    const cleanup = provider.cleanup();
+    expect((await replacement).error).toContain('Browser session was closed during cleanup');
+    await cleanup;
+    expect(mockBrowser.newContext).toHaveBeenCalledOnce();
+    expect(mockBrowser.close).toHaveBeenCalledOnce();
+    expect(providerRegistry.has(provider)).toBe(false);
+  });
+
+  it('does not execute a call cancelled while waiting for manual cleanup', async () => {
+    const provider = new BrowserProvider('test', { config: { persistSession: true, steps: [] } });
+    expect((await provider.callApi('seed')).error).toBeUndefined();
+    const closing = createDeferred<void>();
+    const originalClose = mockBrowser.close.getMockImplementation()!;
+    mockBrowser.close.mockImplementationOnce(async () => {
+      await closing.promise;
+      await originalClose();
+    });
+    const cleanup = provider.cleanup();
+    const controller = new AbortController();
+    const reason = new Error('Cancelled while cleanup was pending');
+    const pending = provider.callApi('cancelled', undefined, { abortSignal: controller.signal });
+    const rejected = expect(pending).rejects.toBe(reason);
+    controller.abort(reason);
+    closing.resolve();
+    await Promise.all([cleanup, rejected]);
+    expect(mockBrowser.newContext).toHaveBeenCalledOnce();
+    expect(providerRegistry.has(provider)).toBe(false);
+  });
+
   it.each(['first turn', 'reused turn'])(
     'resets the session after a %s action error',
     async (turn) => {
@@ -869,7 +983,7 @@ describe('BrowserProvider lifecycle', () => {
     });
     expect((await provider.callApi('test')).error).toContain('Cannot create page');
     expect(context.close).toHaveBeenCalledOnce();
-    expect(connected.close).not.toHaveBeenCalled();
+    expect(connected.close).toHaveBeenCalledOnce();
     expect(providerRegistry.has(provider)).toBe(false);
   });
 
@@ -894,7 +1008,7 @@ describe('BrowserProvider lifecycle', () => {
       });
       expect((await provider.callApi('one')).error).toBeUndefined();
       await provider.cleanup();
-      expect(connected.close).not.toHaveBeenCalled();
+      expect(connected.close).toHaveBeenCalledOnce();
       expect(context.close).toHaveBeenCalledTimes(existing ? 0 : 1);
       expect(mockPage.close).toHaveBeenCalledOnce();
       expect(mockPage.isClosed()).toBe(true);
@@ -998,10 +1112,11 @@ describe('BrowserProvider - Connect to Existing Session', () => {
     expect(mockExistingBrowser.newContext).not.toHaveBeenCalled();
   });
 
-  it('should not close browser when connected to existing session', async () => {
+  it('disconnects a connected client without closing the existing context', async () => {
     const { chromium } = await import('playwright-extra');
     const mockCloseFn = vi.fn();
     const mockPageClose = vi.fn();
+    const sharedContextClose = vi.fn();
 
     const mockConnectedBrowser = {
       contexts: vi.fn(() => [
@@ -1014,7 +1129,7 @@ describe('BrowserProvider - Connect to Existing Session', () => {
             }),
           ),
           addCookies: vi.fn(),
-          close: vi.fn(),
+          close: sharedContextClose,
         },
       ]),
       newContext: vi.fn(),
@@ -1030,7 +1145,8 @@ describe('BrowserProvider - Connect to Existing Session', () => {
     await provider.callApi('test');
 
     expect(mockPageClose).toHaveBeenCalled();
-    expect(mockCloseFn).not.toHaveBeenCalled();
+    expect(mockCloseFn).toHaveBeenCalledOnce();
+    expect(sharedContextClose).not.toHaveBeenCalled();
   });
 
   it('should handle connection failures gracefully', async () => {

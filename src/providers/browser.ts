@@ -102,6 +102,8 @@ export class BrowserProvider implements ApiProvider {
   private persistedSession?: BrowserSession;
   private sessions = new Set<BrowserSession>();
   private cleanupPromise?: Promise<void>;
+  private cleanupGeneration = 0;
+  readonly retainOutsideEvaluation = true;
 
   constructor(_: string, options: ProviderOptions) {
     this.config = options.config as BrowserProviderConfig;
@@ -131,19 +133,23 @@ export class BrowserProvider implements ApiProvider {
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    // Evaluation calls already run inside providerRegistry.withProvider. Direct callers
-    // keep their session until they explicitly call cleanup().
-    options?.abortSignal?.throwIfAborted();
-    return this.runBrowser(prompt, context);
+    return providerRegistry.withProvider(
+      this,
+      () => this.runBrowser(prompt, context, options?.abortSignal),
+      options?.abortSignal,
+    );
   }
 
   private async runBrowser(
     prompt: string,
     context?: CallApiContextParams,
+    signal?: AbortSignal,
   ): Promise<ProviderResponse> {
     if (this.cleanupPromise) {
       await this.cleanupPromise;
     }
+    providerRegistry.throwIfResourceUseAborted(signal);
+    const generation = this.cleanupGeneration;
     const vars = { ...(context?.vars || {}), prompt };
     let session = this.persistedSession;
 
@@ -151,6 +157,10 @@ export class BrowserProvider implements ApiProvider {
       if (session?.page?.isClosed()) {
         await this.closeSession(session);
         session = undefined;
+        providerRegistry.throwIfResourceUseAborted(signal);
+        if (generation !== this.cleanupGeneration) {
+          throw new Error('Browser session was closed during cleanup');
+        }
       }
       const isNewSession = !session;
       if (!session) {
@@ -163,6 +173,7 @@ export class BrowserProvider implements ApiProvider {
         if (session.closed) {
           throw new Error('Browser session was closed during initialization');
         }
+        providerRegistry.throwIfResourceUseAborted(signal);
         if (this.config.persistSession) {
           this.persistedSession = session;
         }
@@ -233,12 +244,18 @@ export class BrowserProvider implements ApiProvider {
     }
     session.cleanup = (async () => {
       await session.initialization?.catch(() => {});
-      if (session.ownsBrowser) {
+      try {
+        if (!session.ownsBrowser) {
+          if (session.ownsContext) {
+            await session.context?.close();
+          } else {
+            await session.page?.close();
+          }
+        }
+      } finally {
+        // For connected browsers, close() disconnects this client transport without
+        // terminating the external browser or its existing contexts.
         await session.browser?.close();
-      } else if (session.ownsContext) {
-        await session.context?.close();
-      } else {
-        await session.page?.close();
       }
       this.sessions.delete(session);
       if (this.sessions.size === 0) {
@@ -254,6 +271,7 @@ export class BrowserProvider implements ApiProvider {
 
   cleanup(): Promise<void> {
     if (!this.cleanupPromise) {
+      this.cleanupGeneration++;
       this.cleanupPromise = Promise.all(
         [...this.sessions].map((session) => this.closeSession(session)),
       )

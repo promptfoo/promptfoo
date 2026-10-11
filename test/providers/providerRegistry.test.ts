@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import logger from '../../src/logger';
-import { providerRegistry } from '../../src/providers/providerRegistry';
+import { ProviderRegistry, providerRegistry } from '../../src/providers/providerRegistry';
 import { createDeferred } from '../util/utils';
 
 vi.mock('../../src/logger');
@@ -48,6 +48,39 @@ describe('providerRegistry', () => {
       expect(providerRegistry.has(replacement)).toBe(false);
     },
   );
+
+  it('retains opted-in standalone resources until evaluation ownership or explicit shutdown', async () => {
+    const registry = new ProviderRegistry(false);
+    const provider = {
+      id: () => 'persistent-direct',
+      retainOutsideEvaluation: true,
+      shutdown: vi.fn(async () => {}),
+    };
+    for (let turn = 0; turn < 2; turn++) {
+      await registry.withProvider(provider, async () => registry.register(provider));
+    }
+    expect(provider.shutdown).not.toHaveBeenCalled();
+    expect(registry.has(provider)).toBe(true);
+
+    await registry.withEvaluation(() => registry.withProvider(provider, async () => {}));
+    expect(provider.shutdown).toHaveBeenCalledOnce();
+    expect(registry.has(provider)).toBe(false);
+
+    // A later standalone registration starts a new lifetime, without stale evaluation ownership.
+    await registry.withProvider(provider, async () => {});
+    expect(registry.has(provider)).toBe(true);
+    expect(provider.shutdown).toHaveBeenCalledOnce();
+    await registry.shutdownAll();
+    expect(provider.shutdown).toHaveBeenCalledTimes(2);
+  });
+
+  it('retains default resource cleanup for standalone calls without the opt-in', async () => {
+    const registry = new ProviderRegistry(false);
+    const provider = { id: () => 'default-direct', shutdown: vi.fn(async () => {}) };
+    await registry.withProvider(provider, async () => registry.register(provider));
+    await vi.waitFor(() => expect(provider.shutdown).toHaveBeenCalledOnce());
+    expect(registry.has(provider)).toBe(false);
+  });
 
   it('continues cleanup when a provider throws synchronously', async () => {
     const failing = {

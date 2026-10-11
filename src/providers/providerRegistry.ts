@@ -4,6 +4,8 @@ import logger from '../logger';
 
 interface CleanupProvider {
   shutdown(): Promise<void>;
+  /** Keep direct-call sessions alive between calls until an evaluation claims ownership. */
+  retainOutsideEvaluation?: boolean;
 }
 
 interface IdleCleanupProvider {
@@ -37,6 +39,7 @@ interface ResourceState {
   providers: Set<ProviderState>;
   registered: boolean;
   registration: number;
+  evaluationOwned: boolean;
   release?: { promise: Promise<void>; start: (force?: boolean) => Promise<void> };
 }
 
@@ -230,11 +233,13 @@ export class ProviderRegistry {
         providers: new Set(),
         registered: false,
         registration: 0,
+        evaluationOwned: false,
       };
       this.resources.set(resource, state);
     }
     if (!state.registered) {
       state.registration++;
+      state.evaluationOwned = false;
     }
     state.registered = true;
     if ('id' in resource && typeof resource.id === 'function') {
@@ -480,6 +485,7 @@ export class ProviderRegistry {
   }
 
   private claimResource(scope: EvaluationScope, resource: ResourceState): void {
+    resource.evaluationOwned = true;
     if (!scope.resources.has(resource)) {
       scope.resources.add(resource);
       resource.users.add(scope);
@@ -561,7 +567,9 @@ export class ProviderRegistry {
     if (
       !state.registered ||
       (!force &&
-        (state.users.size || [...state.providers].some((provider) => provider.activeCalls > 0)))
+        ((state.resource.retainOutsideEvaluation && !state.evaluationOwned) ||
+          state.users.size ||
+          [...state.providers].some((provider) => provider.activeCalls > 0)))
     ) {
       return undefined;
     }

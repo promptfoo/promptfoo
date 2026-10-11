@@ -6,6 +6,7 @@ import logger from '../../logger';
 import { testProviderConnectivity, testProviderSession } from '../../node/testProvider';
 import { createTransformRequest, createTransformResponse } from '../../providers/httpTransforms';
 import { loadApiProvider } from '../../providers/index';
+import { providerRegistry } from '../../providers/providerRegistry';
 import {
   doTargetPurposeDiscovery,
   type TargetPurposeDiscoveryResult,
@@ -113,10 +114,15 @@ providersRouter.post(
     }
 
     try {
-      const loadedProvider = await loadApiProvider(providerOptions.id, {
-        options: providerOptions as ProviderOptions,
+      const result = await providerRegistry.withEvaluation(async () => {
+        const loadedProvider = await loadApiProvider(providerOptions.id, {
+          options: providerOptions as ProviderOptions,
+        });
+        await providerRegistry.cleanupWhenIdle([loadedProvider]);
+        return providerRegistry.withProvider(loadedProvider, () =>
+          doTargetPurposeDiscovery(loadedProvider, undefined, false),
+        );
       });
-      const result = await doTargetPurposeDiscovery(loadedProvider, undefined, false);
 
       if (result) {
         res.json(ProviderSchemas.Discover.Response.parse(result));
@@ -326,25 +332,30 @@ providersRouter.post('/test-session', async (req: Request, res: Response): Promi
   const { provider: validatedProvider, sessionConfig, mainInputVariable } = bodyResult.data;
 
   try {
-    const loadedProvider = await loadApiProvider(validatedProvider.id, {
-      options: {
-        ...validatedProvider,
-        config: {
-          ...validatedProvider.config,
-          maxRetries: 1,
-          sessionSource: sessionConfig?.sessionSource || validatedProvider.config?.sessionSource,
-          sessionParser: sessionConfig?.sessionParser || validatedProvider.config?.sessionParser,
+    const result = await providerRegistry.withEvaluation(async () => {
+      const loadedProvider = await loadApiProvider(validatedProvider.id, {
+        options: {
+          ...validatedProvider,
+          config: {
+            ...validatedProvider.config,
+            maxRetries: 1,
+            sessionSource: sessionConfig?.sessionSource || validatedProvider.config?.sessionSource,
+            sessionParser: sessionConfig?.sessionParser || validatedProvider.config?.sessionParser,
+          },
         },
-      },
-    });
+      });
 
-    // Pass inputs from validatedProvider since loaded provider may not expose config.inputs
-    // Check both top-level inputs (from redteam UI) and config.inputs for backwards compatibility
-    const result = await testProviderSession({
-      provider: loadedProvider,
-      sessionConfig,
-      inputs: validatedProvider.inputs || validatedProvider.config?.inputs,
-      mainInputVariable,
+      // This route owns its loaded provider; retain the session through both diagnostic calls.
+      await providerRegistry.cleanupWhenIdle([loadedProvider]);
+      return providerRegistry.withProvider(loadedProvider, () =>
+        testProviderSession({
+          provider: loadedProvider,
+          sessionConfig,
+          // The loaded provider may not expose top-level inputs from the redteam UI.
+          inputs: validatedProvider.inputs || validatedProvider.config?.inputs,
+          mainInputVariable,
+        }),
+      );
     });
 
     res.json(ProviderSchemas.TestSession.Response.parse(result));
