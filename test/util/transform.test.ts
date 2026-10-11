@@ -403,9 +403,9 @@ describe('util', () => {
         const output = 'hello';
         const context = { vars: { key: 'value' }, prompt: { id: '123' } };
 
-        mockedImportModule.mockResolvedValueOnce(
-          (output: string) => output.toUpperCase() + ' NAMED',
-        );
+        mockedImportModule.mockResolvedValueOnce({
+          customTransform: (output: string) => output.toUpperCase() + ' NAMED',
+        });
 
         const transformedOutput = await transform(
           'file://runs/2026-05-27T12:00/transform.js:customTransform',
