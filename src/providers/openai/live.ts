@@ -2,9 +2,10 @@ import { loadCallbackFromFileUrl } from '../../util/functions/loadFunction';
 import { providerRegistry } from '../providerRegistry';
 import { getRequestTimeoutMs } from '../shared';
 import { decodeUrlComponent } from '../urlEncoding';
+import { isOpenAiCredentialHeader } from './credentialRedaction';
 import { hasHeaderOverride, OpenAiGenericProvider } from './index';
 import { getLiveBytesPerSecond, LIVE_MAX_CAPTURE_MS, prepareLiveInput } from './liveInput';
-import { isLiveCredentialHeader, LIVE_FRAME_MS, LiveSession } from './liveSession';
+import { LIVE_FRAME_MS, LiveSession } from './liveSession';
 import { appendOpenAiApiPath, assertOpenAiApiModel } from './util';
 
 import type { EnvOverrides } from '../../types/env';
@@ -14,6 +15,7 @@ import type {
   ProviderResponse,
 } from '../../types/index';
 import type { LiveAudioFormat } from './liveInput';
+import type { LiveSessionStream } from './liveSession';
 import type { OpenAiLiveOptions } from './liveTypes';
 
 async function resolveHandler<T extends Function>(
@@ -128,7 +130,7 @@ export class OpenAiLiveProvider extends OpenAiGenericProvider {
       (config.apiKeyRequired ?? true) &&
       !Object.entries(headers).some(
         ([name, value]) =>
-          isLiveCredentialHeader(name) &&
+          isOpenAiCredentialHeader(name) &&
           value.trim().length > 0 &&
           !(name.toLowerCase() === 'authorization' && /^(?:bearer|basic)$/i.test(value.trim())),
       )
@@ -139,6 +141,111 @@ export class OpenAiLiveProvider extends OpenAiGenericProvider {
       url: url.toString(),
       headers,
     };
+  }
+
+  /**
+   * Prepare a session without opening a socket. Duplex callers supply an external media clock;
+   * ordinary evals leave stream unset and retain finite input replay and capture behavior.
+   * The caller owns cancellation and must await run() through finalization.
+   */
+  async createSession(
+    prompt: string,
+    context: CallApiContextParams | undefined,
+    signal: AbortSignal,
+    stream?: LiveSessionStream,
+  ): Promise<LiveSession> {
+    signal.throwIfAborted();
+    const promptConfig = context?.prompt?.config;
+    const config: OpenAiLiveOptions = {
+      ...this.config,
+      ...(promptConfig?.apiBaseUrl !== undefined && { apiHost: undefined }),
+      ...(promptConfig?.apiHost !== undefined && { apiBaseUrl: undefined }),
+      ...(promptConfig?.apiKeyEnvar !== undefined && { apiKey: undefined }),
+      ...(promptConfig?.apiKey !== undefined && { apiKeyEnvar: undefined }),
+      ...promptConfig,
+    };
+    if (
+      (promptConfig?.apiBaseUrl !== undefined || promptConfig?.apiHost !== undefined) &&
+      promptConfig?.headers === undefined &&
+      config.headers
+    ) {
+      config.headers = Object.fromEntries(
+        Object.entries(config.headers).filter(
+          ([name, value]) => !isOpenAiCredentialHeader(name, value),
+        ),
+      );
+    }
+    const format: LiveAudioFormat = config.audio?.format ?? { type: 'audio/pcm', rate: 24_000 };
+    if (
+      !(format.type === 'audio/pcm' && [16_000, 24_000].includes(format.rate)) &&
+      !(['audio/pcmu', 'audio/pcma'].includes(format.type) && format.rate === 8_000)
+    ) {
+      throw new Error('GPT-Live audio.format must be PCM16 at 16000/24000 Hz or G.711 at 8000 Hz.');
+    }
+    const responseWindowMs = positiveTimeout(config.responseWindowMs ?? 30_000, 'responseWindowMs');
+    const websocketTimeout = positiveTimeout(config.websocketTimeout ?? 30_000, 'websocketTimeout');
+    const closeTimeoutMs = positiveTimeout(config.closeTimeoutMs ?? 15_000, 'closeTimeoutMs');
+    const maxBufferedOutputMs = stream?.maxBufferedOutputMs ?? 0;
+    if (
+      !Number.isSafeInteger(maxBufferedOutputMs) ||
+      maxBufferedOutputMs < 0 ||
+      maxBufferedOutputMs > 10000
+    ) {
+      throw new Error('GPT-Live streamed output buffering must be an integer from 0 to 10000 ms.');
+    }
+    const input = stream ? { input: [], audio: Buffer.alloc(0) } : prepareLiveInput(prompt, format);
+    const bytesPerSecond = getLiveBytesPerSecond(format);
+    const captureDurationMs =
+      Math.ceil(((input.audio.length / bytesPerSecond) * 1000 + responseWindowMs) / LIVE_FRAME_MS) *
+      LIVE_FRAME_MS;
+    if (captureDurationMs > LIVE_MAX_CAPTURE_MS) {
+      throw new Error('GPT-Live input audio plus response window must not exceed five minutes.');
+    }
+    const requestTimeoutMs = getRequestTimeoutMs();
+    if (websocketTimeout + captureDurationMs + closeTimeoutMs >= requestTimeoutMs) {
+      throw new Error(
+        'GPT-Live startup, audio capture, and close timeouts must be less than REQUEST_TIMEOUT_MS. Increase REQUEST_TIMEOUT_MS or shorten the capture window.',
+      );
+    }
+    if (
+      config.costPerMinute !== undefined &&
+      (!Number.isFinite(config.costPerMinute) || config.costPerMinute < 0)
+    ) {
+      throw new Error('costPerMinute must be a finite nonnegative number.');
+    }
+    if (config.delegation && !['client', 'responses'].includes(config.delegation.type)) {
+      throw new Error('GPT-Live delegation.type must be client or responses.');
+    }
+    if (config.delegation?.type === 'responses') {
+      const model = config.delegation.responses?.model;
+      if (typeof model !== 'string' || !model.trim() || Buffer.byteLength(model) > 256) {
+        throw new Error(
+          'GPT-Live Responses delegation requires a nonempty backend model of at most 256 UTF-8 bytes.',
+        );
+      }
+    }
+    const delegationHandler = await resolveHandler(config.delegationHandler);
+    const functionCallHandler = await resolveHandler(config.functionCallHandler);
+    signal.throwIfAborted();
+    return new LiveSession({
+      ...this.getConnection(config),
+      model: this.modelName,
+      config,
+      format,
+      ...input,
+      responseWindowMs,
+      captureDurationMs,
+      // Stream producers may lead the shared capture clock during peer startup or playout.
+      // Keep that lead bounded by the consumer's queue, in addition to its capture budget.
+      maxAudioBytes: (bytesPerSecond * (captureDurationMs + maxBufferedOutputMs)) / 1000,
+      websocketTimeout,
+      closeTimeoutMs,
+      requestTimeoutMs,
+      delegationHandler,
+      functionCallHandler,
+      signal,
+      stream,
+    });
   }
 
   async callApi(
@@ -154,94 +261,7 @@ export class OpenAiLiveProvider extends OpenAiGenericProvider {
     this.activeSessions.add(controller);
     providerRegistry.register(this);
     try {
-      const promptConfig = context?.prompt?.config;
-      const config: OpenAiLiveOptions = {
-        ...this.config,
-        ...(promptConfig?.apiBaseUrl !== undefined && { apiHost: undefined }),
-        ...(promptConfig?.apiHost !== undefined && { apiBaseUrl: undefined }),
-        ...(promptConfig?.apiKeyEnvar !== undefined && { apiKey: undefined }),
-        ...(promptConfig?.apiKey !== undefined && { apiKeyEnvar: undefined }),
-        ...promptConfig,
-      };
-      if (
-        (promptConfig?.apiBaseUrl !== undefined || promptConfig?.apiHost !== undefined) &&
-        promptConfig?.headers === undefined &&
-        config.headers
-      ) {
-        config.headers = Object.fromEntries(
-          Object.entries(config.headers).filter(
-            ([name, value]) => !isLiveCredentialHeader(name, value),
-          ),
-        );
-      }
-      const format: LiveAudioFormat = config.audio?.format ?? { type: 'audio/pcm', rate: 24_000 };
-      if (
-        !(format.type === 'audio/pcm' && [16_000, 24_000].includes(format.rate)) &&
-        !(['audio/pcmu', 'audio/pcma'].includes(format.type) && format.rate === 8_000)
-      ) {
-        throw new Error(
-          'GPT-Live audio.format must be PCM16 at 16000/24000 Hz or G.711 at 8000 Hz.',
-        );
-      }
-      const responseWindowMs = positiveTimeout(
-        config.responseWindowMs ?? 30_000,
-        'responseWindowMs',
-      );
-      const websocketTimeout = positiveTimeout(
-        config.websocketTimeout ?? 30_000,
-        'websocketTimeout',
-      );
-      const closeTimeoutMs = positiveTimeout(config.closeTimeoutMs ?? 15_000, 'closeTimeoutMs');
-      const input = prepareLiveInput(prompt, format);
-      const bytesPerSecond = getLiveBytesPerSecond(format);
-      const captureDurationMs =
-        Math.ceil(
-          ((input.audio.length / bytesPerSecond) * 1000 + responseWindowMs) / LIVE_FRAME_MS,
-        ) * LIVE_FRAME_MS;
-      if (captureDurationMs > LIVE_MAX_CAPTURE_MS) {
-        throw new Error('GPT-Live input audio plus response window must not exceed five minutes.');
-      }
-      const requestTimeoutMs = getRequestTimeoutMs();
-      if (websocketTimeout + captureDurationMs + closeTimeoutMs >= requestTimeoutMs) {
-        throw new Error(
-          'GPT-Live startup, audio capture, and close timeouts must be less than REQUEST_TIMEOUT_MS. Increase REQUEST_TIMEOUT_MS or shorten the capture window.',
-        );
-      }
-      if (
-        config.costPerMinute !== undefined &&
-        (!Number.isFinite(config.costPerMinute) || config.costPerMinute < 0)
-      ) {
-        throw new Error('costPerMinute must be a finite nonnegative number.');
-      }
-      if (config.delegation && !['client', 'responses'].includes(config.delegation.type)) {
-        throw new Error('GPT-Live delegation.type must be client or responses.');
-      }
-      if (config.delegation?.type === 'responses') {
-        const model = config.delegation.responses?.model;
-        if (typeof model !== 'string' || !model.trim() || Buffer.byteLength(model) > 256) {
-          throw new Error(
-            'GPT-Live Responses delegation requires a nonempty backend model of at most 256 UTF-8 bytes.',
-          );
-        }
-      }
-      const delegationHandler = await resolveHandler(config.delegationHandler);
-      const functionCallHandler = await resolveHandler(config.functionCallHandler);
-      controller.signal.throwIfAborted();
-      const session = new LiveSession({
-        ...this.getConnection(config),
-        model: this.modelName,
-        config,
-        format,
-        ...input,
-        responseWindowMs,
-        maxAudioBytes: (bytesPerSecond * captureDurationMs) / 1000,
-        websocketTimeout,
-        closeTimeoutMs,
-        requestTimeoutMs,
-        delegationHandler,
-        functionCallHandler,
-        signal: controller.signal,
-      });
+      const session = await this.createSession(prompt, context, controller.signal);
       const result = await session.run();
       controller.signal.throwIfAborted();
       return result;

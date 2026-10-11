@@ -179,9 +179,14 @@ async function loadFromProviderOptions(provider: ProviderOptions) {
   });
 }
 
-function isSimulatedUserProviderConfig(provider: GradingConfig['provider']): boolean {
+function isSimulatedUserProviderConfig(
+  provider: GradingConfig['provider'],
+  type: ProviderType,
+): boolean {
+  const isSimulator = (id: string) =>
+    id === 'promptfoo:simulated-user' || id === 'promptfoo:simulated-voice-user';
   if (typeof provider === 'string') {
-    return provider === 'promptfoo:simulated-user';
+    return isSimulator(provider);
   }
 
   if (!provider || typeof provider !== 'object' || Array.isArray(provider)) {
@@ -189,17 +194,15 @@ function isSimulatedUserProviderConfig(provider: GradingConfig['provider']): boo
   }
 
   if (typeof (provider as ApiProvider).id === 'function') {
-    return (provider as ApiProvider).id() === 'promptfoo:simulated-user';
+    return isSimulator((provider as ApiProvider).id());
   }
 
   const providerId = (provider as ProviderOptions).id;
   if (typeof providerId === 'string') {
-    return providerId === 'promptfoo:simulated-user';
+    return isSimulator(providerId);
   }
 
-  return Object.values(provider as ProviderTypeMap).some((providerTypeConfig) =>
-    isSimulatedUserProviderConfig(providerTypeConfig),
-  );
+  return isSimulatedUserProviderConfig((provider as ProviderTypeMap)[type], type);
 }
 
 export async function getGradingProvider(
@@ -263,17 +266,34 @@ export async function getGradingProvider(
     const defaultTestObj = typeof defaultTest === 'object' ? (defaultTest as TestCase) : null;
     const fallbackProviders = [
       defaultTestObj?.provider || undefined,
-      defaultTestObj?.options?.provider?.text || undefined,
+      // Preserve the existing bare-provider precedence for the special text fallback.
+      type === 'text' ? defaultTestObj?.options?.provider?.text || undefined : undefined,
       defaultTestObj?.options?.provider || undefined,
-    ];
+    ].map((candidate) => {
+      // Implicit modality maps do not override the default for an absent modality.
+      // Explicit provider maps still pass through the strict validation above.
+      if (
+        candidate &&
+        typeof candidate === 'object' &&
+        !Array.isArray(candidate) &&
+        !('id' in candidate) &&
+        ['text', 'embedding', 'classification', 'moderation'].some((key) => key in candidate)
+      ) {
+        // Keep selected maps intact so the typed loader receives evaluation env overrides.
+        return (candidate as ProviderTypeMap)[type] ? candidate : undefined;
+      }
+      return candidate;
+    });
 
     const cfg = fallbackProviders.find((candidateProvider) => {
       if (!candidateProvider) {
         return false;
       }
 
-      if (isSimulatedUserProviderConfig(candidateProvider)) {
-        logger.debug('[Grading] Skipping promptfoo:simulated-user as an implicit grader fallback');
+      if (isSimulatedUserProviderConfig(candidateProvider, type)) {
+        logger.debug(
+          '[Grading] Skipping simulated conversation provider as an implicit grader fallback',
+        );
         return false;
       }
 

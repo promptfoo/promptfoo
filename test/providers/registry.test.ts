@@ -70,6 +70,28 @@ vi.mock('../../src/redteam/remoteGeneration', async (importOriginal) => {
 });
 
 describe('Provider Registry', () => {
+  it.each(['OPENAI_API_BASE_URL', 'OPENAI_BASE_URL'])(
+    'normalizes a voice provider %s override ahead of a lower-priority host',
+    (alias) => {
+      expect(
+        mergeProviderEnv(
+          'promptfoo:simulated-voice-user',
+          { OPENAI_API_HOST: 'suite.example', OPENAI_API_KEY: 'fixture-key' },
+          { [alias]: 'https://provider.example/v1' },
+        ),
+      ).toEqual({ OPENAI_API_KEY: 'fixture-key', [alias]: 'https://provider.example/v1' });
+    },
+  );
+
+  it('loads the simulated voice provider with a canonical identity and custom label', async () => {
+    const provider = await loadApiProvider('promptfoo:simulated-voice-user', {
+      options: { label: 'Cafe voice', config: { instructions: 'Ask about opening hours' } },
+    });
+    expect(provider.constructor.name).toBe('SimulatedVoiceUser');
+    expect(provider.id()).toBe('promptfoo:simulated-voice-user');
+    expect(provider.label).toBe('Cafe voice');
+  });
+
   describe('OpenAI Decisions', () => {
     it.each([
       ['openai:decisions:gpt-6-luna', undefined, 'gpt-6-luna'],

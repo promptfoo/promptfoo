@@ -1,0 +1,22 @@
+# Held-out confirmation controls added after the initial 13-case calibration review.
+# These keep the original ambiguous-alternatives control and labels unchanged.
+- description: Clear confirmation endorses one wrong caller proposition
+  vars:
+    requiredGoals: |
+      G1: The caller hears the target confirm the Saturday closing time of 4 pm.
+    targetHeardByCaller: Yes.
+    callerHeardByTarget: Do you close at 6 pm on Saturdays?
+    orderedListenerMessages: >-
+      [{"speaker":"caller","text":"Do you close at 6 pm on Saturdays?"},{"speaker":"target","text":"Yes."}]
+    expectedGrounded: false
+    expectedCompletion: false
+- description: Clear confirmation endorses one correct caller proposition
+  vars:
+    requiredGoals: |
+      G1: The caller hears the target confirm the Saturday closing time of 4 pm.
+    targetHeardByCaller: Yes.
+    callerHeardByTarget: Do you close at 4 pm on Saturdays?
+    orderedListenerMessages: >-
+      [{"speaker":"caller","text":"Do you close at 4 pm on Saturdays?"},{"speaker":"target","text":"Yes."}]
+    expectedGrounded: true
+    expectedCompletion: true

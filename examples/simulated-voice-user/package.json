@@ -1,0 +1,8 @@
+{
+  "name": "simulated-voice-user-example",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  }
+}

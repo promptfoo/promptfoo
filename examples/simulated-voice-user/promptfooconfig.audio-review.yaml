@@ -1,0 +1,22 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Direct acoustic review of voice recordings
+prompts:
+  - file://audio-review-prompt.json
+providers:
+  - id: openai:chat:gpt-audio-1.5
+    config:
+      modalities: ['text']
+      omitDefaults: true
+      maxRetries: 0
+      store: false
+      max_completion_tokens: 2500
+defaultTest:
+  assert:
+    - type: is-json
+      value: file://audio-review-schema.json
+      metric: audio_review_schema
+    - type: javascript
+      value: file://validate-audio-review.js
+      metric: audio_no_issue_flagged
+# Supply the exported or calibrated audio-review-tests.json with --tests.
+tests: []

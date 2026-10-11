@@ -232,7 +232,10 @@ function getProviderEnvAliasGroups(
 }
 
 function getProviderEndpointAliases(providerPath: string): readonly string[] {
-  if (providerPath.startsWith('openai:') && !CODEX_CLI_PROVIDER_PATH.test(providerPath)) {
+  if (
+    (providerPath.startsWith('openai:') && !CODEX_CLI_PROVIDER_PATH.test(providerPath)) ||
+    providerPath === 'promptfoo:simulated-voice-user'
+  ) {
     return ['OPENAI_API_HOST', 'OPENAI_API_BASE_URL', 'OPENAI_BASE_URL'];
   }
   if (providerPath.startsWith('mistral:')) {
@@ -1741,6 +1744,13 @@ export const providerMap: ProviderFactory[] = [
       _context: LoadApiProviderContext,
     ) => {
       return new ManualInputProvider(providerOptions);
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath === 'promptfoo:simulated-voice-user',
+    create: async (_providerPath: string, providerOptions: ProviderOptions) => {
+      const { SimulatedVoiceUser } = await import('./voice/simulatedVoiceUser');
+      return new SimulatedVoiceUser(providerOptions);
     },
   },
   {
