@@ -19,6 +19,7 @@ import {
   fetchWithCache,
   getCache,
   getHeadersForCacheKey,
+  getScopedCacheKey,
   isCacheEnabled,
   withCacheEnabled,
   withCacheNamespace,
@@ -749,6 +750,20 @@ describe('fetchWithCache', () => {
       });
       expect([first.cached, repeat.cached, other.cached]).toEqual([false, true, false]);
       expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+    });
+
+    it('shares nested namespace policy across separately loaded module copies', async () => {
+      vi.resetModules();
+      const otherCacheModule = await import('../src/cache');
+      await withCacheNamespace('external-provider', async () => {
+        expect(otherCacheModule.getScopedCacheKey('sample')).toBe(getScopedCacheKey('sample'));
+        await otherCacheModule.withCacheNamespace('sample:1', async () => {
+          expect(otherCacheModule.getScopedCacheKey('sample')).toBe(getScopedCacheKey('sample'));
+          expect(getScopedCacheKey('sample')).not.toBe('sample');
+        });
+      });
+      expect(otherCacheModule.getScopedCacheKey('sample')).toBe('sample');
+      expect(getScopedCacheKey('sample')).toBe('sample');
     });
 
     it('should scope cache disabling to the current async context', async () => {
