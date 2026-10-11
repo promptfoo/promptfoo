@@ -230,9 +230,9 @@ defaultTest:
           outputDimensionality: 768
 ```
 
-`outputDimensionality` is supported on both API paths. For the text prediction models, `taskType`, `title` (with `RETRIEVAL_DOCUMENT`), and `autoTruncate` are also forwarded to Vertex. Truncation defaults to `false`.
+`outputDimensionality` is supported on both API paths. For the text prediction models, `taskType`, `title` (with `RETRIEVAL_DOCUMENT`), and `autoTruncate` are also forwarded to Vertex. For these text prediction models, promptfoo sets `autoTruncate` to `false` by default.
 
-Embedding 2 does not accept `taskType`, `title`, or `autoTruncate`; these settings fail before a request is sent. Include task or document instructions in the input text instead. Upgrading between embedding families changes the vector space, so re-embed previously indexed content.
+For Embedding 2, this provider rejects `taskType`, `title`, and `autoTruncate` before sending a request. Include task or document instructions in the input text instead. Upgrading between embedding families changes the vector space, so re-embed previously indexed content.
 
 See Google's [text embedding guide](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/embeddings/get-text-embeddings), [Embedding 2 guide](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/embeddings/get-multimodal-embeddings), and [embedContent API reference](https://docs.cloud.google.com/gemini-enterprise-agent-platform/reference/rest/v1/projects.locations.publishers.models/embedContent) for current model limits and request fields.
 
