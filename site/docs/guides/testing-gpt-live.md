@@ -139,7 +139,7 @@ Also run the same block with a fresh directory and identifier, changing `VOICE_E
 
 ## Export a portable recording bundle
 
-Ordinary JSON results contain blob references. Export the evaluation with media while using the same `PROMPTFOO_CONFIG_DIR`:
+JSON results usually contain blob references; very short recordings and runs with `PROMPTFOO_INLINE_MEDIA=true` can retain inline audio. Export the evaluation with media while using the same `PROMPTFOO_CONFIG_DIR`:
 
 ```bash
 node dist/src/main.js export eval latest --include-media \
@@ -153,7 +153,7 @@ node examples/simulated-voice-user/export-evidence.js \
 
 Open `review/index.html` in a browser. The bundle includes the original stereo WAV, target and caller tracks, source hashes, transcript fragments, grading results, signal measurements, and a manual-review template. The target is on the left and caller on the right. Playback and seeking work locally without a server.
 
-The helper verifies recording hashes and format. Missing or corrupt media produces a partial manifest and nonzero exit; it must not become an audio-quality pass. `manual-review.json` starts as **not reviewed**. Browser playback succeeding does not mean somebody listened.
+The helper verifies referenced recordings and accepts bounded inline WAVs with computed hashes. Missing or corrupt media produces a partial manifest and nonzero exit; it must not become an audio-quality pass. `manual-review.json` starts as **not reviewed**. Browser playback succeeding does not mean somebody listened.
 
 When present, local playout counters are bound to each exported WAV's hash and speaker. The deterministic audio grader can use that evidence; it is not sent to the audio model. A positive underflow counter identifies a relay failure even when its acoustic boundaries are hard to distinguish from a pause. Zero underflow only means that this counter recorded none.
 
