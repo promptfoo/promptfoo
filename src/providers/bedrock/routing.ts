@@ -26,6 +26,9 @@ export function getBedrockRuntimeModelError(
     /^arn:[^:]+:bedrock:[^:]+:[^:]*:foundation-model\//,
     '',
   );
+  if (/^xai\.grok-4\.[67]$/.test(foundationModel)) {
+    return 'Grok 4.6 and 4.7 on Bedrock Runtime require a system inference profile, such as us.xai.grok-4.6 or global.xai.grok-4.7.';
+  }
   if (/^(?:openai\.)?gpt-\d/.test(foundationModel)) {
     return 'Closed OpenAI GPT models on Bedrock Runtime require a system inference profile, such as us.openai.gpt-5.6-sol or global.openai.gpt-5.6-sol.';
   }

@@ -58,6 +58,33 @@ describe.each([
   ['responses', BedrockRuntimeResponsesProvider, responsesReply, 'responses'],
 ] as const)('Bedrock Runtime %s', (mode, Provider, reply, path) => {
   it.each([
+    'xai.grok-4.6',
+    'xai.grok-4.7',
+    'arn:aws:bedrock:us-east-1::foundation-model/xai.grok-4.6',
+    'arn:aws:bedrock:us-east-1::foundation-model/xai.grok-4.7',
+  ])('rejects Grok foundation model %s in the effective request', async (model) => {
+    for (const scope of ['model', 'provider', 'prompt']) {
+      const provider = new Provider(scope === 'model' ? model : 'us.xai.grok-4.6', {
+        config: {
+          apiKey: 'fixture',
+          ...(scope === 'provider' ? { passthrough: { model } } : {}),
+        },
+      });
+      const context =
+        scope === 'prompt'
+          ? {
+              vars: {},
+              prompt: { raw: 'hello', label: 'hello', config: { passthrough: { model } } },
+            }
+          : undefined;
+      await expect(provider.getOpenAiBody('hello', context)).rejects.toThrow(
+        'require a system inference profile',
+      );
+      expect(fetchWithCache).not.toHaveBeenCalled();
+    }
+  });
+
+  it.each([
     { config: { inputCost: 0.01 }, expected: 1.000132 },
     { config: { inputCost: 0 }, expected: 0.000132 },
     { config: { outputCost: 0.02 }, expected: undefined },

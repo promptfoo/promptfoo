@@ -1116,6 +1116,8 @@ describe('FoundationModelConfiguration', () => {
     ['openai.gpt-oss-safeguard-20b', 'GPT OSS'],
     ['openai.gpt-oss-safeguard-120b', 'GPT OSS'],
     ['openai.gpt-5.6-sol', 'require a system inference profile'],
+    ['xai.grok-4.6', 'require a system inference profile'],
+    ['xai.grok-4.7', 'require a system inference profile'],
     [
       'arn:aws:bedrock:us-east-1::foundation-model/openai.gpt-5.6-sol',
       'require a system inference profile',
@@ -1135,24 +1137,26 @@ describe('FoundationModelConfiguration', () => {
     );
   });
 
-  it.each(['openai.gpt-5.6-sol', 'arn:aws:bedrock:us-east-1::foundation-model/openai.gpt-6-sol'])(
-    'requires a system profile for Runtime Chat closed GPT model %s',
-    (model) => {
-      render(
-        <FoundationModelConfiguration
-          selectedTarget={{ id: 'bedrock:runtime:chat:' + model, config: {} }}
-          updateCustomTarget={mockUpdateCustomTarget}
-          providerType="bedrock"
-        />,
-      );
-      expect(screen.getByRole('alert')).toHaveTextContent('require a system inference profile');
-      expect(screen.getByRole('textbox', { name: /Model ID/ })).toHaveAttribute(
-        'placeholder',
-        'us.openai.gpt-5.6-sol',
-      );
-      expect(screen.getByText(/Other models use their Runtime model IDs/)).toBeInTheDocument();
-    },
-  );
+  it.each([
+    'openai.gpt-5.6-sol',
+    'arn:aws:bedrock:us-east-1::foundation-model/openai.gpt-6-sol',
+    'xai.grok-4.6',
+    'xai.grok-4.7',
+  ])('requires a system profile for Runtime Chat model %s', (model) => {
+    render(
+      <FoundationModelConfiguration
+        selectedTarget={{ id: 'bedrock:runtime:chat:' + model, config: {} }}
+        updateCustomTarget={mockUpdateCustomTarget}
+        providerType="bedrock"
+      />,
+    );
+    expect(screen.getByRole('alert')).toHaveTextContent('require a system inference profile');
+    expect(screen.getByRole('textbox', { name: /Model ID/ })).toHaveAttribute(
+      'placeholder',
+      'us.openai.gpt-5.6-sol',
+    );
+    expect(screen.getByText(/Other models use their Runtime model IDs/)).toBeInTheDocument();
+  });
 
   it('accepts account-scoped system inference profiles in Runtime Responses', () => {
     render(

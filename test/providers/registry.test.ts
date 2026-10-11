@@ -45,6 +45,33 @@ describe('Bedrock Runtime OpenAI API routing', () => {
   });
 
   it.each([
+    'xai.grok-4.6',
+    'xai.grok-4.7',
+    'arn:aws:bedrock:us-east-1::foundation-model/xai.grok-4.6',
+    'arn:aws:bedrock:us-east-1::foundation-model/xai.grok-4.7',
+  ])('requires a system profile for Grok Runtime model %s', async (model) => {
+    for (const api of ['chat', 'responses']) {
+      await expect(loadApiProvider('bedrock:runtime:' + api + ':' + model)).rejects.toThrow(
+        'require a system inference profile',
+      );
+    }
+  });
+
+  it.each([
+    'us.xai.grok-4.6',
+    'global.xai.grok-4.6',
+    'us.xai.grok-4.7',
+    'global.xai.grok-4.7',
+    'arn:aws:bedrock:us-east-1:123456789012:inference-profile/us.xai.grok-4.6',
+    'arn:aws:bedrock:us-east-1:123456789012:inference-profile/global.xai.grok-4.7',
+  ])('preserves Runtime Grok system profile %s', async (model) => {
+    for (const api of ['chat', 'responses']) {
+      const id = 'bedrock:runtime:' + api + ':' + model;
+      expect((await loadApiProvider(id)).id()).toBe(id);
+    }
+  });
+
+  it.each([
     'openai.gpt-oss-120b-1:0',
     'openai.gpt-oss-safeguard-20b',
     'openai.gpt-oss-safeguard-120b',
