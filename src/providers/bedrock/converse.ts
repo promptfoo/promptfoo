@@ -804,6 +804,24 @@ function serializeNativeContentBlock(block: ContentBlock): Record<string, unknow
   return serialized;
 }
 
+function canonicalizeConverseCacheValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(canonicalizeConverseCacheValue);
+  }
+  if (value && typeof value === 'object') {
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype === Object.prototype || prototype === null) {
+      const record = value as Record<string, unknown>;
+      return Object.fromEntries(
+        Object.keys(record)
+          .sort()
+          .map((key) => [key, canonicalizeConverseCacheValue(record[key])]),
+      );
+    }
+  }
+  return value;
+}
+
 /**
  * Extract text output from Converse API response content blocks
  */
@@ -1326,6 +1344,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
   ): Promise<ConverseCommandInput> {
     const { messages, system } = parseConverseMessages(prompt);
     const managedPrompt = /^arn:[^:]+:bedrock:[^:]+:[^:]+:prompt\//.test(this.modelName);
+    const promptVariables = renderVarsInObject(this.config.promptVariables, context?.vars);
     const input: ConverseCommandInput = {
       modelId: this.modelName,
       ...(managedPrompt && !prompt.trim() ? {} : { messages }),
@@ -1334,7 +1353,20 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       performanceConfig: this.buildPerformanceConfig(),
       serviceTier: this.buildServiceTier(),
       outputConfig: this.config.outputConfig,
-      promptVariables: renderVarsInObject(this.config.promptVariables, context?.vars),
+      promptVariables: promptVariables
+        ? Object.fromEntries(
+            Object.entries(promptVariables).map(([name, variable]) => {
+              const text: unknown = variable.text;
+              return [
+                name,
+                variable.$unknown === undefined &&
+                (typeof text === 'number' || typeof text === 'boolean')
+                  ? { text: String(text) }
+                  : variable,
+              ];
+            }),
+          )
+        : undefined,
       requestMetadata: this.config.requestMetadata
         ? Object.fromEntries(
             Object.entries(this.config.requestMetadata).map(([key, value]) => [key, String(value)]),
@@ -1491,7 +1523,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     const cacheKey = `bedrock:${streaming ? 'converse-stream' : 'converse'}:${this.modelName}:${region}:${createBedrockCacheKeyHash(
       {
         config: this.config,
-        params: { ...converseInput, requestMetadata: undefined },
+        params: canonicalizeConverseCacheValue({ ...converseInput, requestMetadata: undefined }),
         region,
       },
     )}`;
@@ -1863,13 +1895,37 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     }
 
     if (dispatchResults.length > 0) {
-      if (betweenToolsThinking || preserveText) {
+      let output = dispatchResults.join('\n');
+      if (preserveText) {
+        const resultsByBlock = new Map<ContentBlock, string>(
+          toolUseBlocks.map((block, index) => [block, dispatchResults[index]]),
+        );
+        const orderedResults: string[] = [];
+        const progressBlocks: ContentBlock[] = [];
+        const appendProgress = () => {
+          const progress = extractTextFromContentBlocks(progressBlocks, showThinking);
+          if (progress) {
+            orderedResults.push(progress);
+          }
+          progressBlocks.length = 0;
+        };
+        for (const block of content) {
+          if (resultsByBlock.has(block)) {
+            appendProgress();
+            orderedResults.push(resultsByBlock.get(block) ?? '');
+          } else if (!block.toolUse) {
+            progressBlocks.push(block);
+          }
+        }
+        appendProgress();
+        output = orderedResults.join('\n');
+      } else if (betweenToolsThinking) {
         const progress = extractTextFromContentBlocks(
-          content.filter((block) => (preserveText ? !block.toolUse : block.reasoningContent)),
+          content.filter((block) => block.reasoningContent),
           showThinking,
         );
         if (progress) {
-          dispatchResults.unshift(progress);
+          output = `${progress}\n${output}`;
         }
       }
       // Surface MCP failures via the response `error` field so downstream
@@ -1878,7 +1934,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       // embedded "MCP Tool Error: ..." string. Model-level failures take precedence.
       const error = modelError ?? joinMcpErrors(mcpErrors);
       return {
-        output: dispatchResults.join('\n'),
+        output,
         ...media,
         tokenUsage,
         ...(cost === undefined ? {} : { cost }),

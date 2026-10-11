@@ -583,6 +583,54 @@ describe('Converse native request features', () => {
     expect(send.mock.calls[0][0].input).not.toHaveProperty('toolConfig');
   });
 
+  it.each(
+    [false, true].flatMap((streaming) =>
+      [false, true].map((withVars) => ({ streaming, withVars })),
+    ),
+  )(
+    'coerces managed prompt text scalars (streaming=$streaming, vars=$withVars)',
+    async ({ streaming, withVars }) => {
+      const variables = {
+        count: { text: 7 },
+        enabled: { text: false },
+        label: { text: 'label' },
+        future: { $unknown: ['future', 'value'] },
+      };
+      const { provider, send } = fixture(
+        { streaming, promptVariables: variables as never },
+        'arn:aws:bedrock:us-east-1:123456789012:prompt/ABCDEFGHIJ:1',
+      );
+      if (streaming) {
+        send.mockResolvedValueOnce(
+          stream([
+            { messageStop: { stopReason: 'end_turn' } },
+            { metadata: { usage: reply.usage } },
+          ]),
+        );
+      }
+      expect(
+        (
+          await provider.callApi(
+            '',
+            withVars ? { prompt: { raw: '', label: '' }, vars: { unused: 'value' } } : undefined,
+          )
+        ).error,
+      ).toBeUndefined();
+      expect(send.mock.calls[0][0].input.promptVariables).toEqual({
+        count: { text: '7' },
+        enabled: { text: 'false' },
+        label: { text: 'label' },
+        future: { $unknown: ['future', 'value'] },
+      });
+      expect(variables).toEqual({
+        count: { text: 7 },
+        enabled: { text: false },
+        label: { text: 'label' },
+        future: { $unknown: ['future', 'value'] },
+      });
+    },
+  );
+
   it('traces the native inference configuration sent to AWS', async () => {
     const span = vi.spyOn(genaiTracer, 'withGenAISpan');
     const { provider } = fixture({
@@ -850,6 +898,145 @@ describe('Converse native request features', () => {
 });
 
 describe('ConverseStream response parity', () => {
+  it.each([true, false])(
+    'preserves interleaved streamed text, reasoning and tool results (thinking=%s)',
+    async (showThinking) => {
+      const callbacks = { a: vi.fn().mockResolvedValue('A'), b: vi.fn().mockResolvedValue('B') };
+      const { provider, send } = fixture({
+        streaming: true,
+        showThinking,
+        functionToolCallbacks: callbacks,
+      });
+      const blocks = [
+        { toolUse: { toolUseId: 'a', name: 'a', input: {} } },
+        { text: 'BETWEEN' },
+        { reasoningContent: { reasoningText: { text: 'THOUGHT' } } },
+        { toolUse: { toolUseId: 'b', name: 'b', input: {} } },
+        { text: 'AFTER' },
+      ];
+      send.mockResolvedValueOnce(
+        stream([
+          ...blocks.flatMap((block, contentBlockIndex) => [
+            ...(block.toolUse
+              ? [
+                  {
+                    contentBlockStart: {
+                      contentBlockIndex,
+                      start: {
+                        toolUse: { name: block.toolUse.name, toolUseId: block.toolUse.toolUseId },
+                      },
+                    },
+                  },
+                  { contentBlockDelta: { contentBlockIndex, delta: { toolUse: { input: '{}' } } } },
+                ]
+              : [
+                  {
+                    contentBlockDelta: {
+                      contentBlockIndex,
+                      delta: block.text
+                        ? { text: block.text }
+                        : {
+                            reasoningContent: { text: block.reasoningContent?.reasoningText.text },
+                          },
+                    },
+                  },
+                ]),
+            { contentBlockStop: { contentBlockIndex } },
+          ]),
+          { messageStop: { stopReason: 'tool_use' } },
+          { metadata: { usage: reply.usage } },
+        ]),
+      );
+      const response = await provider.callApi('hello');
+      expect(response.error).toBeUndefined();
+      expect(response.output).toBe(
+        [
+          'A',
+          showThinking ? 'BETWEEN\n\n<thinking>\nTHOUGHT\n</thinking>' : 'BETWEEN',
+          'B',
+          'AFTER',
+        ].join('\n'),
+      );
+      expect(callbacks.a).toHaveBeenCalledOnce();
+      expect(callbacks.b).toHaveBeenCalledOnce();
+      expect(response.metadata?.content).toHaveLength(blocks.length);
+      expect(response.tokenUsage).toMatchObject({ prompt: 3, completion: 2, total: 5 });
+    },
+  );
+
+  it.each([false, true])(
+    'canonicalizes cache request objects without changing arrays, binary or auth (streaming=%s)',
+    async (streaming) => {
+      cache.enabled = true;
+      const entries = new Map<string, string>();
+      cache.get.mockImplementation(async (key: string) => entries.get(key));
+      cache.set.mockImplementation(async (key: string, value: string) => {
+        entries.set(key, value);
+      });
+      const firstSchema = {
+        type: 'object',
+        properties: { a: { type: 'string' }, b: { type: 'number' } },
+        required: ['a'],
+      };
+      const reorderedSchema = {
+        required: ['a'],
+        properties: { b: { type: 'number' }, a: { type: 'string' } },
+        type: 'object',
+      };
+      const makeProvider = (schema: typeof firstSchema, secretAccessKey = 'fixture-secret') => {
+        const pair = fixture({
+          streaming,
+          accessKeyId: 'fixture-access',
+          secretAccessKey,
+          tools: [{ toolSpec: { name: 'lookup', inputSchema: { json: schema } } }],
+        });
+        pair.send.mockImplementation(async () =>
+          streaming
+            ? stream([
+                { contentBlockDelta: { contentBlockIndex: 0, delta: { text: 'READY' } } },
+                { contentBlockStop: { contentBlockIndex: 0 } },
+                { messageStop: { stopReason: 'end_turn' } },
+                { metadata: { usage: reply.usage } },
+              ])
+            : reply,
+        );
+        return pair;
+      };
+      const prompt = (texts: string[]) =>
+        JSON.stringify([
+          {
+            role: 'user',
+            content: [
+              ...texts.map((text) => ({ text })),
+              { image: { format: 'png', source: { bytes: 'AQID' } } },
+            ],
+          },
+        ]);
+      const first = makeProvider(firstSchema);
+      const reordered = makeProvider(reorderedSchema);
+      expect((await first.provider.callApi(prompt(['first', 'second']))).cached).not.toBe(true);
+      expect((await reordered.provider.callApi(prompt(['first', 'second']))).cached).toBe(true);
+      expect(first.send).toHaveBeenCalledOnce();
+      expect(reordered.send).not.toHaveBeenCalled();
+      expect((await reordered.provider.callApi(prompt(['second', 'first']))).cached).not.toBe(true);
+      expect(reordered.send).toHaveBeenCalledOnce();
+      const sent = reordered.send.mock.calls[0][0].input;
+      expect(Object.keys(sent.toolConfig.tools[0].toolSpec.inputSchema.json)).toEqual([
+        'required',
+        'properties',
+        'type',
+      ]);
+      expect(sent.messages[0].content[2].image.source.bytes).toEqual(Buffer.from([1, 2, 3]));
+      const changed = makeProvider({ ...firstSchema, required: ['b'] });
+      expect((await changed.provider.callApi(prompt(['first', 'second']))).cached).not.toBe(true);
+      expect(changed.send).toHaveBeenCalledOnce();
+      const otherAuth = makeProvider(reorderedSchema, 'different-secret');
+      expect((await otherAuth.provider.callApi(prompt(['first', 'second']))).cached).not.toBe(true);
+      expect(otherAuth.send).toHaveBeenCalledOnce();
+      expect(Object.keys(reorderedSchema)).toEqual(['required', 'properties', 'type']);
+    },
+  );
+
   it('caches complete streams and preserves replay usage', async () => {
     cache.enabled = true;
     const { provider, send } = fixture({ streaming: true });
