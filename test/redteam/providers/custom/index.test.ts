@@ -9,6 +9,7 @@ import { shouldGenerateRemote } from '../../../../src/redteam/remoteGeneration';
 import { isProviderResponseRateLimited } from '../../../../src/scheduler/types';
 import { isResponseHeadersObserverErrorResponse } from '../../../../src/util/fetch/responseHeadersObserver';
 import { checkServerFeatureSupport } from '../../../../src/util/server';
+import { createFailingGrader, createPassingGrader } from '../../../factories/mockGrader';
 import { createMockProvider, type MockApiProvider } from '../../../factories/provider';
 import { createSelectedObserverErrorResponse } from '../../../util/selectedObserverError';
 import {
@@ -127,15 +128,7 @@ describe('CustomProvider', () => {
 
     // Set up default getGraderById mock
     mockGetGraderById.mockReset();
-    mockGetGraderById.mockImplementation(function () {
-      return {
-        getResult: vi.fn(async () => ({
-          grade: {
-            pass: false,
-          },
-        })),
-      } as any;
-    });
+    mockGetGraderById.mockImplementation(createFailingGrader);
 
     // Set up default tryUnblocking mock
     vi.mocked(tryUnblocking).mockReset();
@@ -783,15 +776,9 @@ describe('CustomProvider', () => {
 
   it('should record internal evaluator success without exiting early', async () => {
     // Set up grader to pass (not detect jailbreak) so we don't fail via grader
-    mockGetGraderById.mockImplementation(function () {
-      return {
-        getResult: vi.fn(async () => ({
-          grade: {
-            pass: true, // Pass means no jailbreak detected
-          },
-        })),
-      } as any;
-    });
+    mockGetGraderById.mockImplementation(
+      /* Pass means no jailbreak detected */ createPassingGrader,
+    );
 
     // Create a new provider with smaller max turns for this test
     const testProvider = new CustomProvider({
@@ -1116,15 +1103,7 @@ describe('CustomProvider', () => {
 
   it('should stop when max backtracks reached', async () => {
     // Set up grader to pass (not detect jailbreak)
-    mockGetGraderById.mockImplementation(function () {
-      return {
-        getResult: vi.fn(async () => ({
-          grade: {
-            pass: true,
-          },
-        })),
-      } as any;
-    });
+    mockGetGraderById.mockImplementation(createPassingGrader);
 
     const testProvider = new CustomProvider({
       injectVar: 'objective',

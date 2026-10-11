@@ -1,8 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleLlmRubric } from '../../src/assertions/llmRubric';
 import { matchesLlmRubric } from '../../src/matchers/llmGrading';
+import { createPassingGrade } from '../factories/literalFixtures';
 
 import type { Assertion, AssertionParams, GradingResult } from '../../src/types/index';
+
+const createRubricPromptOptions = () => ({
+  vars: {},
+  options: {
+    rubricPrompt: 'rubric from options',
+  },
+});
 
 vi.mock('../../src/matchers/llmGrading', async () => {
   const actual = await vi.importActual<typeof import('../../src/matchers/llmGrading')>(
@@ -52,11 +60,7 @@ describe('handleLlmRubric', () => {
       renderedValue: 'test rendered value',
     };
 
-    const expectedResult: GradingResult = {
-      pass: true,
-      score: 1,
-      reason: 'test reason',
-    };
+    const expectedResult: GradingResult = createPassingGrade(1);
 
     mockMatchesLlmRubric.mockResolvedValue(expectedResult);
 
@@ -80,11 +84,7 @@ describe('handleLlmRubric', () => {
       renderedValue: { test: 'value' },
     };
 
-    const expectedResult: GradingResult = {
-      pass: true,
-      score: 1,
-      reason: 'test reason',
-    };
+    const expectedResult: GradingResult = createPassingGrade(1);
 
     mockMatchesLlmRubric.mockResolvedValue(expectedResult);
 
@@ -108,11 +108,7 @@ describe('handleLlmRubric', () => {
       renderedValue: undefined,
     };
 
-    const expectedResult: GradingResult = {
-      pass: true,
-      score: 1,
-      reason: 'test reason',
-    };
+    const expectedResult: GradingResult = createPassingGrade(1);
 
     mockMatchesLlmRubric.mockResolvedValue(expectedResult);
 
@@ -140,11 +136,7 @@ describe('handleLlmRubric', () => {
       },
     };
 
-    const expectedResult: GradingResult = {
-      pass: true,
-      score: 1,
-      reason: 'test reason',
-    };
+    const expectedResult: GradingResult = createPassingGrade(1);
 
     mockMatchesLlmRubric.mockResolvedValue(expectedResult);
 
@@ -180,11 +172,7 @@ describe('handleLlmRubric', () => {
       },
     };
 
-    const expectedResult: GradingResult = {
-      pass: true,
-      score: 1,
-      reason: 'test reason',
-    };
+    const expectedResult: GradingResult = createPassingGrade(1);
 
     mockMatchesLlmRubric.mockResolvedValue(expectedResult);
 
@@ -335,11 +323,7 @@ describe('handleLlmRubric', () => {
       },
     };
 
-    const expectedResult: GradingResult = {
-      pass: true,
-      score: 1,
-      reason: 'test reason',
-    };
+    const expectedResult: GradingResult = createPassingGrade(1);
 
     mockMatchesLlmRubric.mockResolvedValue(expectedResult);
 
@@ -358,12 +342,7 @@ describe('handleLlmRubric', () => {
         type: 'llm-rubric',
         value: undefined,
       } as Assertion,
-      test: {
-        vars: {},
-        options: {
-          rubricPrompt: 'rubric from options',
-        },
-      },
+      test: createRubricPromptOptions(),
       renderedValue: undefined,
     };
 
@@ -388,12 +367,7 @@ describe('handleLlmRubric', () => {
         type: 'llm-rubric',
         value: 'already set',
       } as Assertion,
-      test: {
-        vars: {},
-        options: {
-          rubricPrompt: 'rubric from options',
-        },
-      },
+      test: createRubricPromptOptions(),
       renderedValue: undefined,
     };
 
