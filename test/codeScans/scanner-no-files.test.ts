@@ -396,50 +396,49 @@ describe('Scanner empty-scan messaging', () => {
     vi.restoreAllMocks();
   });
 
-  it('explains the compared range when the diff is empty and the tree is clean', async () => {
-    mockScanner();
-
+  const patchless: FileRecord = {
+    path: ':foo.ts',
+    status: 'M',
+    shaA: 'a',
+    shaB: 'b',
+    linesAdded: 0,
+    linesRemoved: 0,
+  };
+  it.each([
+    {
+      name: 'empty diff',
+      files: [],
+      dirtyFiles: [],
+      messages: ['No files to scan in main...HEAD', 'no net file changes'],
+    },
+    {
+      name: 'empty diff with uncommitted files',
+      files: [],
+      dirtyFiles: [{ path: 'index.js' }, { path: 'lib/util.js' }],
+      messages: ['2 uncommitted file(s)'],
+    },
+    {
+      name: 'skipped files with uncommitted work',
+      files: [{ ...patchless, path: 'package-lock.json', skipReason: 'denylist' as const }],
+      dirtyFiles: [{ path: 'src/index.ts' }],
+      messages: ['skipped: denylist', '1 uncommitted file(s)'],
+    },
+    {
+      name: 'unpatched records without skip reasons',
+      files: [patchless],
+      dirtyFiles: [],
+      messages: ['1 changed file(s) contain no scannable patches'],
+    },
+  ])('explains $name', async ({ files, dirtyFiles, messages }) => {
+    mockScanner({ processDiffFiles: files, dirtyFiles });
     const { executeScan } = await import('../../src/codeScan/scanner/index');
     const logger = (await import('../../src/logger')).default;
-
     await executeScan('/test/repo', { diffsOnly: true });
-
-    expect(logger.info).toHaveBeenCalledWith(
-      expect.stringContaining('No committed changes in main...HEAD'),
-    );
-  });
-
-  it('calls out uncommitted files when the diff is empty but the tree is dirty', async () => {
-    mockScanner({ dirtyFiles: [{ path: 'index.js' }, { path: 'lib/util.js' }] });
-
-    const { executeScan } = await import('../../src/codeScan/scanner/index');
-    const logger = (await import('../../src/logger')).default;
-
-    await executeScan('/test/repo', { diffsOnly: true });
-
-    expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('2 uncommitted file(s)'));
-  });
-
-  it('names skip reasons when every changed file is filtered out', async () => {
-    mockScanner({
-      processDiffFiles: [
-        {
-          path: 'package-lock.json',
-          status: 'M',
-          skipReason: 'denylist',
-          shaA: 'abc123',
-          shaB: 'def456',
-          linesAdded: 10,
-          linesRemoved: 5,
-        },
-      ],
-    });
-
-    const { executeScan } = await import('../../src/codeScan/scanner/index');
-    const logger = (await import('../../src/logger')).default;
-
-    await executeScan('/test/repo', { diffsOnly: true });
-
-    expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('skipped: denylist'));
+    for (const message of messages) {
+      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining(message));
+    }
+    if (files.every((file) => !file.skipReason)) {
+      expect(logger.info).not.toHaveBeenCalledWith(expect.stringContaining('skipped:'));
+    }
   });
 });

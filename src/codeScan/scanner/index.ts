@@ -34,34 +34,33 @@ import { createSpinner, displayScanResults } from './output';
 import { buildScanRequest, executeScanRequestWithRetry } from './request';
 import type { SimpleGit } from 'simple-git';
 
-/**
- * The scanner reviews commit diffs, so an empty included set on a clean
- * checkout of the base branch reads like a broken scan. Say what range was
- * compared and what to run instead. Uncommitted edits are invisible to the
- * diff and get an explicit callout; a fully skipped set names the reasons.
- */
 async function describeEmptyScan(
   git: SimpleGit,
   files: FileRecord[],
-  skippedFiles: FileRecord[],
   baseBranch: string,
   compareRef: string,
 ): Promise<string> {
-  if (files.length > 0) {
-    const reasons = [...new Set(skippedFiles.map((f) => f.skipReason))].filter(Boolean).join(', ');
-    return `No files to scan (${skippedFiles.length} changed file(s) skipped: ${reasons})`;
+  const details = [`No files to scan in ${baseBranch}...${compareRef}.`];
+  const skipped = files.filter((file) => file.skipReason);
+  const reasons = [...new Set(skipped.map((file) => file.skipReason))].join(', ');
+  details.push(
+    files.length === 0
+      ? 'There are no net file changes in this range.'
+      : `${files.length} changed file(s) contain no scannable patches.`,
+  );
+  if (skipped.length) {
+    details.push(`${skipped.length} file(s) skipped: ${reasons}.`);
   }
-  const range = `${baseBranch}...${compareRef}`;
-  let dirtyCount = 0;
   try {
-    dirtyCount = (await git.status()).files.length;
+    const dirtyCount = (await git.status()).files.length;
+    if (dirtyCount) {
+      details.push(`${dirtyCount} uncommitted file(s) are not part of the scan.`);
+    }
   } catch {
-    // Status is best-effort context for the message; the range line stands alone.
+    // Status is best-effort context; the compared range is still useful.
   }
-  if (dirtyCount > 0) {
-    return `No committed changes in ${range}, and ${dirtyCount} uncommitted file(s) are not part of the scan. Commit them first, or pass --base/--compare to scan a different range.`;
-  }
-  return `No committed changes in ${range} to scan. Run the scan on a branch with commits ahead of ${baseBranch}, or pass --base/--compare to pick a range.`;
+  details.push('Commit relevant changes, or use --base/--compare to select another range.');
+  return details.join(' ');
 }
 
 /**
@@ -281,8 +280,7 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
       // For non-text formats (JSON, SARIF), keep the stable machine-readable
       // review string for programmatic consumption
       if (outputFormat === CodeScanOutputFormat.TEXT) {
-        const skippedFiles = files.filter((f) => f.skipReason);
-        const msg = await describeEmptyScan(git, files, skippedFiles, baseBranch, compareRef);
+        const msg = await describeEmptyScan(git, files, baseBranch, compareRef);
         if (spinner) {
           spinner.succeed(msg);
         } else {
