@@ -110,16 +110,3 @@ export interface FourthwallCart {
   checkoutUrl?: string;
   subtotal?: FourthwallMoney;
 }
-
-// Store UI State Types
-export interface CartState {
-  cart: FourthwallCart | null;
-  isLoading: boolean;
-  isOpen: boolean;
-  error: string | null;
-}
-
-export interface ProductModalState {
-  product: FourthwallProduct | null;
-  selectedVariantId: string | null;
-}

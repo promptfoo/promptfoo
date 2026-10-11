@@ -1,5 +1,5 @@
 import dedent from 'dedent';
-import { RedteamGraderBase, RedteamPluginBase } from './base';
+import { createAssertion, RedteamGraderBase, RedteamPluginBase } from './base';
 
 import type { Assertion, AssertionValue, ResultSuggestion, TestCase } from '../../types/index';
 
@@ -68,12 +68,7 @@ export class UnverifiableClaimsPlugin extends RedteamPluginBase {
   }
 
   protected getAssertions(_prompt: string): Assertion[] {
-    return [
-      {
-        type: PLUGIN_ID,
-        metric: 'UnverifiableClaims',
-      },
-    ];
+    return [createAssertion(PLUGIN_ID, 'UnverifiableClaims')];
   }
 
   protected async promptsToTestCases(prompts: { __prompt: string }[]): Promise<TestCase[]> {

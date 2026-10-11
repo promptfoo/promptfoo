@@ -362,21 +362,6 @@
   border-color: #0e639c;
 }
 
-.inputField {
-  flex: 1;
-  padding: 0.5rem;
-  border: 1px solid #3c3c3c;
-  border-radius: 0.25rem;
-  background-color: #252526;
-  color: #d4d4d4;
-  font-size: 0.75rem;
-}
-
-.inputField:focus {
-  outline: none;
-  border-color: #0e639c;
-}
-
 .sendButton {
   background-color: #0e639c;
   color: white;
