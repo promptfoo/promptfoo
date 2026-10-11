@@ -224,7 +224,7 @@ Inspect exported results for provider errors as well as assertion failures. Comm
 
 ## Performance Optimization
 
-Keep caching disabled for conversation, memory, latency, and trace verification using `evaluateOptions.cache: false`, `--no-cache`, or `PROMPTFOO_CACHE_ENABLED=false`. For independent deterministic queries, caching is available by default. Limit retrieval with `knowledgeBaseConfigurations[].retrievalConfiguration.vectorSearchConfiguration.numberOfResults`; configure generation limits on the deployed agent.
+For CLI runs, disable caching for conversation, memory, latency, and trace verification with `--no-cache` or `PROMPTFOO_CACHE_ENABLED=false`. For independent deterministic queries, caching is available by default. Limit retrieval with `knowledgeBaseConfigurations[].retrievalConfiguration.vectorSearchConfiguration.numberOfResults`; configure generation limits on the deployed agent.
 
 ## Troubleshooting
 
