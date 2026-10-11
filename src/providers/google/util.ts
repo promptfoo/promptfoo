@@ -489,7 +489,11 @@ export async function loadGoogleTools(
     ? stripExecutableToolFileReferences(tools, vars)
     : tools;
   const loadedTools = requestTools
-    ? await maybeLoadToolsFromExternalFile(requestTools, vars, options.abortSignal)
+    ? await maybeLoadToolsFromExternalFile(
+        requestTools,
+        options.skipExecutableToolFiles ? undefined : vars,
+        options.abortSignal,
+      )
     : [];
   const transformedTools = Array.isArray(loadedTools)
     ? (transformTools(loadedTools, 'google') as Tool[])

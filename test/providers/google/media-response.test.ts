@@ -213,6 +213,39 @@ describe('Nano Banana response contracts', () => {
     expect(fetchWithCache).not.toHaveBeenCalled();
   });
 
+  it.each([
+    { tool_choice: 'none' },
+    { toolConfig: { functionCallingConfig: { mode: 'NONE' } } },
+  ] as const)(
+    'does not re-evaluate a deferred executable reference with %j',
+    async (toolConfig) => {
+      const executable = path.join(scratch, 'deferred.mjs');
+      const marker = path.join(scratch, 'executed');
+      fs.writeFileSync(
+        executable,
+        `import fs from 'node:fs'; export function getTools() { fs.writeFileSync(new URL('./executed', import.meta.url), 'executed'); return []; }`,
+      );
+      const provider = await loadApiProvider(id, {
+        options: {
+          config: {
+            apiKey: 'key',
+            vertexai: false,
+            ...toolConfig,
+            tools: '{{toolRef}}' as never,
+          },
+        },
+      });
+      await expect(
+        provider.callApi('Draw', {
+          prompt: { raw: 'Draw', label: 'Draw' },
+          vars: { toolRef: `{{ "file://${executable}:getTools" }}` },
+        }),
+      ).rejects.toThrow('expected an array or object, but got a string');
+      expect(fs.existsSync(marker)).toBe(false);
+      expect(fetchWithCache).not.toHaveBeenCalled();
+    },
+  );
+
   it('loads variable-backed data tools and skips executable files when functions are disabled', async () => {
     const toolsPath = path.join(scratch, 'tools.json');
     const executable = path.join(scratch, 'tools.mjs');
