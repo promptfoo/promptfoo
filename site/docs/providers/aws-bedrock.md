@@ -2052,7 +2052,9 @@ preserving its other settings. A complete `retrieveAndGenerateConfiguration`
 replaces these generated sections. For native `KNOWLEDGE_BASE` requests, set
 `vectorSearchConfiguration.numberOfResults` inside its
 `knowledgeBaseConfiguration.retrievalConfiguration` instead; convenience settings
-do not override the complete native object.
+do not override the complete native object. Complete native configurations bypass the
+response cache, so every call reaches AWS. For other Knowledge Base configurations,
+use `--no-cache` or a separate `PROMPTFOO_CONFIG_DIR` when switching AWS identities.
 
 `sessionId`, `sessionConfiguration` (including KMS encryption), and `userContext`
 are forwarded to AWS. The response exposes `metadata.sessionId`, `metadata.citations`,
