@@ -331,6 +331,65 @@ describe('Vertex embedding SDK cancellation', () => {
     expect(client.transporter.defaults.adapter).toBe(adapter);
   });
 
+  it.each(['caller', 'timeout'])(
+    'preserves %s cancellation after a timed-out SDK retry backoff',
+    async (source) => {
+      vi.useFakeTimers();
+      const { provider, client } = createSdkProvider();
+      const caller = new AbortController();
+      const firstDeadline = new AbortController();
+      const retryDeadline = new AbortController();
+      const reason = new Error(`${source} cancelled`);
+      vi.spyOn(AbortSignal, 'timeout')
+        .mockReturnValueOnce(firstDeadline.signal)
+        .mockReturnValueOnce(retryDeadline.signal);
+      let entered!: () => void;
+      let retrySignal: AbortSignal | undefined;
+      const started = new Promise<void>((resolve) => {
+        entered = resolve;
+      });
+      const fetchMock = vi
+        .fn<typeof fetch>()
+        .mockResolvedValueOnce(Response.json({}, { status: 503 }))
+        .mockImplementationOnce(
+          async (_url, options) =>
+            new Promise((_resolve, reject) => {
+              retrySignal = options?.signal ?? undefined;
+              retrySignal?.addEventListener('abort', () => reject(retrySignal!.reason), {
+                once: true,
+              });
+              entered();
+            }),
+        );
+      delete client.transporter.defaults.adapter;
+      client.transporter.defaults.fetchImplementation = fetchMock;
+      client.transporter.defaults.retryConfig = {
+        retry: 1,
+        httpMethodsToRetry: ['POST'],
+        retryBackoff: async () => {
+          firstDeadline.abort(new DOMException('attempt timed out', 'TimeoutError'));
+        },
+      };
+
+      const pending = provider.callEmbeddingApi('text', undefined, {
+        abortSignal: caller.signal,
+      });
+      const rejected = expect(pending).rejects.toThrow(reason.message);
+      try {
+        await started;
+        (source === 'caller' ? caller : retryDeadline).abort(reason);
+        await rejected;
+        expect(retrySignal?.aborted).toBe(true);
+        expect(retrySignal?.reason).toBe(reason);
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+        expect(caller.signal.aborted).toBe(source === 'caller');
+      } finally {
+        retryDeadline.abort(reason);
+        await vi.advanceTimersByTimeAsync(0);
+      }
+    },
+  );
+
   it.each(['caller', 'timeout'])('preserves %s cancellation after dispatch', async (source) => {
     const { provider, adapter } = createSdkProvider();
     const caller = new AbortController();
