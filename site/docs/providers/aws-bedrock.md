@@ -9,33 +9,50 @@ description: Configure Amazon Bedrock for LLM evals with Claude, Llama, Nova, an
 
 The `bedrock` provider accepts Amazon Bedrock model IDs, including regional IDs and inference profile IDs. Check [AWS's supported models](https://docs.aws.amazon.com/bedrock/latest/userguide/models-supported.html), [model IDs](https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html#model-ids-arns), or `aws bedrock list-foundation-models` for current IDs and regional availability.
 
-:::warning Current Bedrock Legacy models
+## Choosing a model and API
 
-AWS currently marks these model IDs as Legacy in one or more regions. New customers cannot start
-using Legacy models, existing customers may lose access after 15 days of inactivity, and requests
-fail after the region-specific EOL date unless AWS has made a private extended-access arrangement.
+Use the [AWS model cards](https://docs.aws.amazon.com/bedrock/latest/userguide/model-cards.html) to check the exact model ID, supported API, endpoint, input/output modalities, regions, and service tiers. A model listed in Bedrock's catalog is not necessarily available through every API or enabled for your account.
 
-| Model ID                                  | EOL date           |
-| ----------------------------------------- | ------------------ |
-| `ai21.jamba-1-5-large-v1:0`               | November 26, 2026  |
-| `ai21.jamba-1-5-mini-v1:0`                | November 26, 2026  |
-| `amazon.nova-canvas-v1:0`                 | September 30, 2026 |
-| `amazon.nova-reel-v1:0`                   | September 30, 2026 |
-| `amazon.nova-reel-v1:1`                   | September 30, 2026 |
-| `amazon.nova-premier-v1:0`                | September 14, 2026 |
-| `amazon.nova-sonic-v1:0`                  | September 14, 2026 |
-| `anthropic.claude-opus-4-1-20250805-v1:0` | January 8, 2027    |
-| `anthropic.claude-sonnet-4-20250514-v1:0` | October 14, 2026   |
-| `anthropic.claude-3-haiku-20240307-v1:0`  | September 10, 2026 |
-| `cohere.command-r-v1:0`                   | August 19, 2026    |
-| `cohere.command-r-plus-v1:0`              | August 19, 2026    |
-| `twelvelabs.marengo-embed-2-7-v1:0`       | November 30, 2026  |
+| Workload                                     | Promptfoo provider                                           | AWS API                                                            |
+| -------------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------------ |
+| Model-specific text generation               | `bedrock:<model-or-profile-id>` or `bedrock:completion:<id>` | InvokeModel for supported native model families                    |
+| Unified chat and multimodal input            | `bedrock:converse:<id>`                                      | Converse / ConverseStream                                          |
+| Anthropic-compatible messages                | `bedrock:messages:<id>`                                      | Messages on Runtime or Mantle, according to the model and endpoint |
+| Mantle responses                             | `bedrock:responses:<id>`                                     | Responses on Mantle                                                |
+| Mantle chat completions                      | `bedrock:mantle:<id>`                                        | Chat Completions on Mantle                                         |
+| Text embeddings                              | `bedrock:embedding:<id>`                                     | Model-specific InvokeModel embedding request                       |
+| Knowledge Base RAG                           | `bedrock:kb:<model-id>`                                      | RetrieveAndGenerate                                                |
+| Deployed Agents                              | `bedrock-agent:<agent-id>`                                   | InvokeAgent                                                        |
+| Nova Sonic speech                            | `bedrock:<sonic-model-id>`                                   | InvokeModelWithBidirectionalStream                                 |
+| Luma / historical Nova Reel video generation | `bedrock:video:<id>`                                         | StartAsyncInvoke and GetAsyncInvoke                                |
 
-Lifecycle state and dates are region-specific. Check the
-[Amazon Bedrock model lifecycle table](https://docs.aws.amazon.com/bedrock/latest/userguide/model-lifecycle.html)
-before adopting or reusing any model ID. The table above was checked on August 2, 2026.
+Some bare model IDs select a specialized provider automatically. Legacy `completion:` and `converse:` aliases for bare OpenAI frontier and Grok model IDs also use Mantle Responses. To select native Runtime Converse, supply a supported Runtime inference-profile ID to `bedrock:converse:<id>`. Consult the model-specific sections below for supported IDs, APIs, modalities, and parameters. Use a [custom provider](./custom-api.md) when your workflow needs additional AWS operations or response handling.
 
-:::
+### Discover current IDs and lifecycle state
+
+Query each region you intend to use, with the same AWS profile as your evaluation:
+
+```bash
+aws bedrock list-foundation-models --region us-east-1 \
+  --query 'modelSummaries[].{id:modelId,state:modelLifecycle.status,input:inputModalities,output:outputModalities}'
+
+aws bedrock list-inference-profiles --region us-east-1 \
+  --query 'inferenceProfileSummaries[].{id:inferenceProfileId,status:status,type:type}'
+```
+
+These commands describe the Runtime catalog. Mantle has a separate `/v1/models` catalog; see [Mantle Chat Completions](#mantle-chat-completions). Check the model card's API and endpoint compatibility before copying a returned ID into a configuration.
+
+For data residency requirements, [verify every destination region](https://docs.aws.amazon.com/bedrock/latest/userguide/inference-profiles-support.html) for each profile from every source region you plan to use:
+
+```bash
+aws bedrock get-inference-profile --region us-east-1 \
+  --inference-profile-identifier YOUR_PROFILE_ID \
+  --query 'models[].modelArn'
+```
+
+The region in each returned model ARN is a possible routing destination. Profiles and destinations can differ by source region; do not rely on the profile's geographic prefix alone.
+
+Treat example model IDs as reproducible selections, not an automatically updated inventory. Before adopting or rerunning them, check the [current lifecycle policy](https://docs.aws.amazon.com/bedrock/latest/userguide/model-lifecycle.html), the [lifecycle table for older models](https://docs.aws.amazon.com/bedrock/latest/userguide/model-lifecycle-legacy.html), and the model's card. Legacy models can restrict new access and carry different pricing. EOL models fail unless you have a private extended-access arrangement; migration is not automatic.
 
 ## Setup
 
@@ -81,25 +98,23 @@ before adopting or reusing any model ID. The table above was checked on August 2
 
 ## Application Inference Profiles
 
-AWS Bedrock supports Application Inference Profiles, which allow you to use a single ARN to access multiple foundation models across different regions. This helps optimize costs and availability while maintaining consistent performance.
+An [application inference profile](https://docs.aws.amazon.com/bedrock/latest/userguide/inference-profiles.html) tracks usage and costs for one foundation model. It can reference that model in one region or a system-defined cross-region profile for the same model. It does not select between different models based on price.
 
 ### Using Inference Profiles
 
-When using an inference profile ARN, you must specify the `inferenceModelType` in your configuration to indicate which model family the profile is configured for:
+For the native InvokeModel route, an opaque inference profile ARN requires `inferenceModelType` so promptfoo can construct the model-specific request. The explicit `bedrock:converse:<profile-arn>` route uses the unified Converse schema and does not require this option:
 
 ```yaml
 providers:
-  - id: bedrock:arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/my-profile
+  - id: bedrock:converse:arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/my-profile
     config:
-      inferenceModelType: 'claude' # Required for inference profiles
       region: 'us-east-1'
-      max_tokens: 256
-      temperature: 0.7
+      maxTokens: 1024
 ```
 
 ### Supported Model Types
 
-The `inferenceModelType` config option supports the following values:
+The `inferenceModelType` config option selects the native request schema. For an opaque Claude application profile, prefer Converse: the native handler cannot infer model-specific sampling restrictions from the ARN. The option supports the following values:
 
 - `claude` - For Anthropic Claude models
 - `nova` - For Amazon Nova models (v1)
@@ -139,12 +154,10 @@ providers:
       max_tokens: 1024
 
   # Using an inference profile that routes to Claude models
-  - id: bedrock:arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/claude-profile
+  - id: bedrock:converse:arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/claude-profile
     config:
-      inferenceModelType: 'claude'
-      max_tokens: 1024
-      temperature: 0.7
-      anthropic_version: 'bedrock-2023-05-31'
+      region: 'us-east-1'
+      maxTokens: 1024
 
   # Using an inference profile for Llama models
   - id: bedrock:arn:aws:bedrock:us-west-2:123456789012:application-inference-profile/llama-profile
@@ -158,7 +171,7 @@ providers:
     config:
       inferenceModelType: 'nova'
       interfaceConfig:
-        max_new_tokens: 1024
+        maxTokens: 1024
         temperature: 0.7
 ```
 
@@ -166,11 +179,11 @@ providers:
 
 Application Inference Profiles provide several benefits:
 
-- **Automatic failover**: If one region is unavailable, requests automatically route to another region
-- **Cost optimization**: Routes to the most cost-effective available model
+- **Usage and cost attribution**: Track invocations and allocate costs with profile tags
+- **Cross-region routing**: A profile copied from a system cross-region profile can distribute requests among its eligible regions; a single-region profile cannot
 - **Simplified management**: Use a single ARN instead of managing multiple model IDs
 
-When using inference profiles, ensure the `inferenceModelType` matches the model family your profile is configured for, as the configuration parameters differ between model types.
+When using native InvokeModel profiles, ensure `inferenceModelType` matches the backing model family. Cost assertions require known pricing; opaque application-profile ARNs do not identify the backing model for automatic cost calculation.
 
 :::
 
@@ -474,7 +487,7 @@ providers:
 
 #### 4. Default credentials (lowest priority)
 
-Use the AWS SDK's standard credential chain:
+Use the AWS SDK's standard credential chain. To select a shared AWS CLI profile, set `AWS_PROFILE=your-profile` and omit `config.profile`; the native provider's `config.profile` option uses the SSO-specific loader:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
@@ -483,7 +496,7 @@ providers:
       region: 'us-east-1' # Only region specified
 ```
 
-**The AWS SDK checks these sources in order:**
+**The default credential chain includes:**
 
 1. **Environment variables**: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`
 2. **Shared credentials file**: `~/.aws/credentials` (from `aws configure`)
@@ -540,13 +553,12 @@ providers:
       region: 'us-east-1'
       interfaceConfig:
         temperature: 0.7
-        max_new_tokens: 256
-  - id: bedrock:us.amazon.nova-premier-v1:0
+        maxTokens: 256
+  - id: bedrock:converse:us.amazon.nova-2-lite-v1:0
     config:
       region: 'us-east-1'
-      interfaceConfig:
-        temperature: 0.7
-        max_new_tokens: 256
+      temperature: 0.7
+      maxTokens: 256
   # Claude 5 models reject temperature/top_p/top_k
   - id: bedrock:us.anthropic.claude-opus-5-5
     config:
@@ -611,21 +623,23 @@ Different models may support different configuration options. Here are some mode
 
 ### General Configuration Options
 
-- `inferenceModelType`: (Required for inference profiles) Specifies the model family when using application inference profiles. See [Supported Model Types](#supported-model-types) for the full list of values.
+- `inferenceModelType`: (Required for opaque inference profile ARNs on the native InvokeModel route) Specifies the model family when using application inference profiles. See [Supported Model Types](#supported-model-types) for the full list of values.
 
 ### Amazon Nova Models
 
-Amazon Nova models (e.g., `amazon.nova-lite-v1:0`, `amazon.nova-pro-v1:0`, `amazon.nova-micro-v1:0`, `amazon.nova-premier-v1:0`) support advanced features like tool use and structured outputs. You can configure them with the following options:
+Amazon Nova models (e.g., `amazon.nova-lite-v1:0`, `amazon.nova-pro-v1:0`, `amazon.nova-micro-v1:0`) support advanced features like tool use and structured outputs. You can configure them with the following options:
+
+For native Nova 1 calls, `interfaceConfig` also accepts the legacy aliases `max_new_tokens`, `top_p`, and `top_k`. The canonical `maxTokens`, `topP`, and `topK` options take precedence when both names are set.
 
 ```yaml
 providers:
   - id: bedrock:amazon.nova-lite-v1:0
     config:
       interfaceConfig:
-        max_new_tokens: 256 # Maximum number of tokens to generate
+        maxTokens: 256 # Maximum number of tokens to generate
         temperature: 0.7 # Controls randomness (0.0 to 1.0)
-        top_p: 0.9 # Nucleus sampling parameter
-        top_k: 50 # Top-k sampling parameter
+        topP: 0.9 # Nucleus sampling parameter
+        topK: 50 # Top-k sampling parameter
         stopSequences: ['END'] # Optional stop sequences
       toolConfig: # Optional tool configuration
         tools:
@@ -689,7 +703,7 @@ Nova 2 models require cross-region inference profiles for on-demand access:
 
 - `us.amazon.nova-2-lite-v1:0` - US region (recommended)
 - `eu.amazon.nova-2-lite-v1:0` - EU region
-- `apac.amazon.nova-2-lite-v1:0` - Asia Pacific region
+- `jp.amazon.nova-2-lite-v1:0` - Japan region
 - `global.amazon.nova-2-lite-v1:0` - Global cross-region inference
 
 **Using Nova 2 with Converse API:**
@@ -769,10 +783,10 @@ Amazon Nova Reel (`amazon.nova-reel-v1:1`) generates studio-quality videos from 
 
 :::warning
 
-AWS schedules Nova Reel 1.0 and 1.1 to reach end of life on **September 30, 2026**.
-These configurations support existing Reel workloads during the remaining legacy period;
-new customers cannot enable legacy models. Check the [AWS lifecycle table](https://docs.aws.amazon.com/bedrock/latest/userguide/model-lifecycle.html)
-before using them. Promptfoo has no established same-API successor for the default `bedrock:video` route.
+Nova Reel 1.0 and 1.1 reached end of life on **September 30, 2026**.
+These configurations are retained for reference and private extended-access workloads.
+For new video evaluations, check [Luma Ray 2](#luma-ray-2) and the [AWS lifecycle table](https://docs.aws.amazon.com/bedrock/latest/userguide/model-lifecycle-legacy.html)
+before using them. Promptfoo does not migrate Nova Reel configurations automatically.
 
 :::
 
@@ -780,7 +794,7 @@ before using them. Promptfoo has no established same-API successor for the defau
 
 Nova Reel requires an Amazon S3 bucket for video output. Your AWS credentials must have:
 
-- `bedrock:InvokeModel` and `bedrock:StartAsyncInvoke` permissions
+- `bedrock:InvokeModel` for starting generation and `bedrock:GetAsyncInvoke` for polling the job
 - `s3:PutObject` permission on the output bucket
 - `s3:GetObject` permission for downloading generated videos
 
@@ -1624,9 +1638,7 @@ providers:
 or AWS model cards to confirm which of these models are enabled in your target region. Use
 `aws bedrock list-foundation-models` for direct foundation model IDs and
 `aws bedrock list-inference-profiles` for inference profiles such as Writer Palmyra's `us.`
-route — availability varies by model and region. TwelveLabs Pegasus
-(`twelvelabs.pegasus-1-2-v1:0`, video understanding) is also available through the Converse
-API, and TwelveLabs Marengo (`twelvelabs.marengo-embed-*`) is an [embeddings](#embeddings) model.
+route — availability varies by model and region. TwelveLabs Pegasus uses a separate video-understanding request schema, not Converse or this chat handler. See its [model card](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-twelvelabs-pegasus-v1-5.html) and use a custom provider. TwelveLabs Marengo uses a [model-specific embedding schema](https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-marengo-3.html). Use a custom provider for versions or input types without a documented built-in adapter.
 
 ## Model-graded tests
 
@@ -1724,16 +1736,16 @@ providers:
   - id: bedrock:amazon.nova-pro-v1:0
     config:
       region: 'us-east-1'
-      inferenceConfig:
+      interfaceConfig:
         temperature: 0.7
-        max_new_tokens: 256
+        maxTokens: 256
 
 tests:
   - vars:
       image: file://path/to/image.jpg
 ```
 
-The prompt file (`nova_multimodal_prompt.json`) should be structured to include both image and text content. This format will depend on the specific model you're using:
+The prompt file (`nova_multimodal_prompt.json`) includes image and text content. File variables resolve to data URLs; the native Nova request needs raw base64 bytes. This JPEG example removes the data URL prefix:
 
 ```json title="nova_multimodal_prompt.json"
 [
@@ -1742,8 +1754,8 @@ The prompt file (`nova_multimodal_prompt.json`) should be structured to include 
     "content": [
       {
         "image": {
-          "format": "jpg",
-          "source": { "bytes": "{{image}}" }
+          "format": "jpeg",
+          "source": { "bytes": "{{ image | replace('data:image/jpeg;base64,', '') }}" }
         }
       },
       {
@@ -1831,7 +1843,7 @@ The following environment variables can be used to configure the Bedrock provide
 - `AWS_BEARER_TOKEN_BEDROCK`: pre-generated Bedrock bearer token
 - `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`: standard AWS
   credentials used to generate short-lived bearer tokens for Responses, Mantle Chat, and Messages
-- `AWS_PROFILE`: AWS shared-config profile used for generated Bedrock bearer tokens
+- `AWS_PROFILE`: AWS shared-config profile selected by the SDK default credential chain and generated Bedrock bearer tokens; omit `config.profile` when using this environment variable
 
 **Configuration:**
 
@@ -2227,15 +2239,23 @@ tests:
 
 #### Required Permissions
 
-Your AWS credentials need these IAM permissions:
+Replace the example account and bucket with your own. [StartAsyncInvoke](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_StartAsyncInvoke.html) authorizes with `bedrock:InvokeModel` on the model and the new `async-invoke` resource. Polling requires `bedrock:GetAsyncInvoke` on that invocation:
 
 ```json
 {
   "Statement": [
     {
       "Effect": "Allow",
-      "Action": ["bedrock:InvokeModel", "bedrock:GetAsyncInvoke", "bedrock:StartAsyncInvoke"],
-      "Resource": "arn:aws:bedrock:*:*:model/luma.ray-v2:0"
+      "Action": "bedrock:InvokeModel",
+      "Resource": [
+        "arn:aws:bedrock:us-west-2::foundation-model/luma.ray-v2:0",
+        "arn:aws:bedrock:us-west-2:123456789012:async-invoke/*"
+      ]
+    },
+    {
+      "Effect": "Allow",
+      "Action": "bedrock:GetAsyncInvoke",
+      "Resource": "arn:aws:bedrock:us-west-2:123456789012:async-invoke/*"
     },
     {
       "Effect": "Allow",

@@ -7,7 +7,7 @@ npx promptfoo@latest init --example amazon-bedrock/models
 cd amazon-bedrock/models
 ```
 
-> **Legacy examples:** Nova Premier (`amazon.nova-premier-v1:0`) and Nova Sonic (`amazon.nova-sonic-v1:0`) have [Bedrock end-of-life dates of September 14, 2026](https://docs.aws.amazon.com/bedrock/latest/userguide/model-lifecycle.html). New customers cannot use these Legacy models; select an Active model for new evals.
+> **Check availability before running:** Use the [model discovery and lifecycle guidance](https://www.promptfoo.dev/docs/providers/aws-bedrock/#discover-current-ids-and-lifecycle-state). Example IDs are pinned for reproducibility. Jamba 1.5 is Legacy; the original Nova Sonic configuration is retained as a retired-model reference.
 
 ## Prerequisites
 
@@ -20,10 +20,7 @@ cd amazon-bedrock/models
 
    See [authentication docs](https://www.promptfoo.dev/docs/providers/aws-bedrock/#authentication) for other auth methods, including SSO profiles.
 
-2. Request model access in your AWS region:
-   - Visit the [AWS Bedrock Model Access page](https://us-west-2.console.aws.amazon.com/bedrock/home?region=us-west-2#/modelaccess)
-   - Switch to your desired region. We recommend us-west-2 and us-east-1 which tend to have the most models available.
-   - Enable the models you want to use.
+2. Check the [AWS model catalog](https://docs.aws.amazon.com/bedrock/latest/userguide/model-cards.html) for your target region, API, and account access requirements. Some providers require a use-case submission or Marketplace permissions. Listing a model does not establish permission to invoke it.
 3. Install required dependencies:
 
    ```bash
@@ -52,7 +49,7 @@ This directory contains several example configurations for different Bedrock mod
 - [`promptfooconfig.nova.multimodal.yaml`](promptfooconfig.nova.multimodal.yaml) - Nova with multimodal capabilities
 - [`promptfooconfig.kb.yaml`](promptfooconfig.kb.yaml) - Knowledge Base RAG example with citations and contextTransform
 - [`promptfooconfig.inference-profiles.yaml`](promptfooconfig.inference-profiles.yaml) - Comprehensive Application Inference Profiles example with multiple model types
-- [`promptfooconfig.inference-profiles-simple.yaml`](promptfooconfig.inference-profiles-simple.yaml) - Simple production-ready inference profile setup for high availability
+- [`promptfooconfig.inference-profiles-simple.yaml`](promptfooconfig.inference-profiles-simple.yaml) - Simple inference profile setup for usage tracking and optional cross-region routing
 - [`promptfooconfig.yaml`](promptfooconfig.yaml) - Combined evaluation across multiple providers
 - [`promptfooconfig.nova-sonic.yaml`](promptfooconfig.nova-sonic.yaml) - Amazon Nova Sonic model for audio
 - [`promptfooconfig.converse.yaml`](promptfooconfig.converse.yaml) - Converse API with extended thinking (ultrathink)
@@ -168,27 +165,29 @@ For detailed Knowledge Base setup instructions, see the [AWS Bedrock Knowledge B
 
 ## Application Inference Profiles Example
 
-The Application Inference Profiles example (`promptfooconfig.inference-profiles.yaml`) demonstrates how to use AWS Bedrock's inference profiles for multi-region failover and cost optimization.
+The Application Inference Profiles example (`promptfooconfig.inference-profiles.yaml`) demonstrates how to use AWS Bedrock's inference profiles for usage attribution and cross-region routing.
 
 ### Key Benefits of Inference Profiles
 
-- **Automatic Failover**: If one region is unavailable, requests automatically route to another region
-- **Cost Optimization**: Routes to the most cost-effective available model
+- **Usage and Cost Attribution**: Track invocations and allocate costs with profile tags
+- **Cross-Region Routing**: Profiles copied from a system cross-region profile can route among its eligible regions; single-region profiles cannot
 - **Simplified Management**: Use a single ARN instead of managing multiple model IDs
-- **Cross-Region Availability**: Access models across multiple regions with a single profile
+
+An application profile references one model, directly or through a system cross-region profile. It does not choose the cheapest model. See [AWS inference profiles](https://docs.aws.amazon.com/bedrock/latest/userguide/inference-profiles.html).
 
 ### Configuration Requirements
 
-When using inference profiles, you **must** specify the `inferenceModelType` parameter:
+For opaque inference-profile ARNs on the native InvokeModel route, specify `inferenceModelType`. The explicit `bedrock:converse:<profile-arn>` route does not require it:
 
 ```yaml
 providers:
-  - id: bedrock:arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/my-profile
+  - id: bedrock:converse:arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/my-profile
     config:
-      inferenceModelType: 'claude' # Required!
       region: 'us-east-1'
-      max_tokens: 1024
+      maxTokens: 1024
 ```
+
+These examples use Converse for opaque Claude profiles, so no `inferenceModelType` is required. Opaque profile ARNs also lack automatic cost estimates, so these examples do not use cost assertions.
 
 ### Supported Model Types
 
@@ -231,7 +230,7 @@ We provide two inference profile examples:
    ```
    This demonstrates:
    - A realistic customer support use case
-   - High availability setup with failover
+   - Application-level usage tracking for a selected model
    - Comparison between application and system inference profiles
    - Consistent grading using inference profiles
 
