@@ -401,8 +401,9 @@ You can also provide service account credentials directly in your configuration:
 
 ```yaml
 providers:
-  - id: vertex:gemini-2.5-pro
+  - id: vertex:gemini-3.8-flash
     config:
+      region: global
       # Load credentials from file
       credentials: 'file://service-account.json'
       projectId: 'your-project-id'
@@ -412,8 +413,9 @@ Or with inline credentials (not recommended for production):
 
 ```yaml
 providers:
-  - id: vertex:gemini-2.5-pro
+  - id: vertex:gemini-3.8-flash
     config:
+      region: global
       credentials: '{"type":"service_account","project_id":"..."}'
       projectId: 'your-project-id'
 ```
@@ -425,19 +427,7 @@ This approach:
 - Simplifies credential management in complex setups
 - Avoids the need for environment variables
 
-#### Option 4: Direct API Key (Quick Testing)
-
-For quick testing, you can use a temporary access token:
-
-```bash
-# Get a temporary access token
-export GOOGLE_API_KEY=$(gcloud auth print-access-token)
-export GOOGLE_CLOUD_PROJECT="your-project-id"
-```
-
-**Note:** Access tokens expire after 1 hour. For long-running evaluations, use Application Default Credentials or Service Account authentication.
-
-#### Option 5: Express Mode API Key (Quick Start)
+#### Option 4: Express Mode API Key (Quick Start) {#option-5-express-mode-api-key-quick-start}
 
 Vertex AI Express Mode provides simplified authentication using an API key. Just provide an API key and it works automatically.
 
@@ -450,9 +440,7 @@ export GOOGLE_API_KEY="your-express-mode-api-key"
 
 ```yaml
 providers:
-  - id: vertex:gemini-3-flash-preview
-    config:
-      temperature: 0.7
+  - vertex:gemini-3.8-flash
 ```
 
 Express mode benefits:
@@ -495,10 +483,10 @@ For advanced authentication scenarios, you can pass options directly to the unde
 
 ```yaml
 providers:
-  - id: vertex:gemini-2.5-flash
+  - id: vertex:gemini-3.8-flash
     config:
       projectId: my-project
-      region: us-central1
+      region: global
 
       # Path to service account key file (alternative to credentials)
       keyFilename: /path/to/service-account.json
@@ -539,17 +527,18 @@ The following environment variables can be used to configure the Vertex AI provi
 
 \*At least one authentication method is required (ADC, service account, or API key)
 
-†The Vertex chat provider defaults to `global` with ADC or a service account, and
-`us-central1` in express mode (API key). Choose a region supported by your model.
-Vertex embedding and Live providers default to `us-central1`.
+†The Vertex chat provider applies model-specific defaults before authentication defaults.
+Gemini 3 chat models default to `global` with either OAuth or an API key. Choose a
+region supported by your model. Prediction-based text embeddings and Vertex Live
+default to `us-central1`.
 
 ### Region Selection
 
 Different models are available in different regions. Common regions include:
 
-- `global` - Default for Vertex chat with ADC or service account credentials. Supported by Gemini 3.8 Flash, 3.7 Flash, 3.6 Flash, and 3.5 Flash-Lite
+- `global` - Default for Gemini 3 chat models with either OAuth or API-key authentication. Supported by Gemini 3.8 Flash, 3.7 Flash, 3.6 Flash, and 3.5 Flash-Lite
 - `us`, `eu` - Multi-region endpoints supported by Gemini 3.8 Flash, 3.7 Flash, 3.6 Flash, and 3.5 Flash-Lite (10% pricing premium)
-- `us-central1` - Default for embeddings, Live, and chat in express mode (API key); most models available
+- `us-central1` - Default for prediction-based text embeddings and Vertex Live; model availability varies
 - `us-east4` - Additional capacity
 - `us-east5` - Claude models available
 - `europe-west1` - EU region, Claude models available
@@ -578,7 +567,9 @@ After completing authentication, create a simple evaluation:
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 # promptfooconfig.yaml
 providers:
-  - vertex:gemini-2.5-flash
+  - id: vertex:gemini-3.8-flash
+    config:
+      region: global
 
 prompts:
   - 'Analyze the sentiment of this text: {{text}}'
@@ -610,9 +601,9 @@ Compare different models available on Vertex AI:
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   # Google models
-  - id: vertex:gemini-2.5-pro
+  - id: vertex:gemini-3.8-flash
     config:
-      region: us-central1
+      region: global
 
   # Claude models (set an enabled region, or `global` for Claude 5)
   - id: vertex:claude-sonnet-5
@@ -654,24 +645,22 @@ jobs:
           npx promptfoo@latest eval
         env:
           GOOGLE_CLOUD_PROJECT: ${{ vars.GCP_PROJECT_ID }}
-          GOOGLE_CLOUD_LOCATION: us-central1
+          GOOGLE_CLOUD_LOCATION: global
 ```
 
 ### 4. Advanced Configuration Example
 
 ```yaml
 providers:
-  - id: vertex:gemini-2.5-pro
+  - id: vertex:gemini-3.8-flash
     config:
       # Authentication options
       credentials: 'file://service-account.json' # Optional: Use specific service account
       projectId: '{{ env.GOOGLE_CLOUD_PROJECT }}'
-      region: '{{ env.GOOGLE_CLOUD_LOCATION | default("us-central1") }}'
+      region: '{{ env.GOOGLE_CLOUD_LOCATION | default("global") }}'
 
       generationConfig:
-        temperature: 0.2
         maxOutputTokens: 2048
-        topP: 0.95
       safetySettings:
         - category: HARM_CATEGORY_DANGEROUS_CONTENT
           threshold: BLOCK_ONLY_HIGH
@@ -688,13 +677,11 @@ Configure model behavior using the following options:
 ```yaml
 providers:
   # For Gemini models
-  - id: vertex:gemini-2.5-pro
+  - id: vertex:gemini-3.8-flash
     config:
+      region: global
       generationConfig:
-        temperature: 0
         maxOutputTokens: 1024
-        topP: 0.8
-        topK: 40
 
   # For Llama models
   - id: vertex:llama-3.3-70b-instruct-maas
@@ -722,12 +709,13 @@ providers:
 Control AI safety filters:
 
 ```yaml
-- id: vertex:gemini-2.5-pro
+- id: vertex:gemini-3.8-flash
   config:
+    region: global
     safetySettings:
       - category: HARM_CATEGORY_HARASSMENT
         threshold: BLOCK_ONLY_HIGH
-      - category: HARM_CATEGORY_VIOLENCE
+      - category: HARM_CATEGORY_DANGEROUS_CONTENT
         threshold: BLOCK_MEDIUM_AND_ABOVE
 ```
 
@@ -777,7 +765,10 @@ defaultTest:
   options:
     provider:
       # For llm-rubric and factuality assertions
-      text: vertex:gemini-2.5-pro
+      text:
+        id: vertex:gemini-3.8-flash
+        config:
+          region: global
       # For similarity and answer-relevance assertions
       embedding: vertex:embedding:gemini-embedding-001
 ```
@@ -786,7 +777,7 @@ defaultTest:
 
 | Option                             | Description                                                        | Default                        |
 | ---------------------------------- | ------------------------------------------------------------------ | ------------------------------ |
-| `apiKey`                           | GCloud API token                                                   | None                           |
+| `apiKey`                           | Express mode API key                                               | None                           |
 | `apiHost`                          | API host override                                                  | Derived from `region`‡         |
 | `apiVersion`                       | API version                                                        | `v1`                           |
 | `credentials`                      | Service account credentials (JSON or file path)                    | None                           |
@@ -811,7 +802,7 @@ defaultTest:
 | `expressMode`                      | Set to `false` to force OAuth/ADC even with API key                | auto (API key → `true`)        |
 | `streaming`                        | Use streaming API (`streamGenerateContent`)                        | `false`                        |
 
-‡For the Vertex chat provider, ADC or service account credentials default to `global` with host `aiplatform.googleapis.com`; express mode (API key) defaults to `us-central1` with host `{region}-aiplatform.googleapis.com`. Choose a region supported by your model. Vertex embedding and Live providers default to `us-central1`.
+‡The chat provider uses model-specific region defaults; Gemini 3 chat models use `global` with either authentication method. The `global` host is `aiplatform.googleapis.com`, including for Express mode. Regional overrides use `{region}-aiplatform.googleapis.com`; see [Region Selection](#region-selection) for multi-region hosts. Prediction-based text embeddings and Vertex Live default to `us-central1`.
 
 :::note
 Not all models support all parameters. See [Google's documentation](https://cloud.google.com/vertex-ai/generative-ai/docs/multimodal/overview) for model-specific details.
@@ -884,12 +875,12 @@ Gemini and Claude models support function calling and tool use. Configure tools 
 
 ```yaml
 providers:
-  - id: vertex:gemini-2.5-pro
+  - id: vertex:gemini-3.8-flash
     config:
+      region: global
       toolConfig:
         functionCallingConfig:
           mode: 'AUTO' # or "ANY", "NONE"
-          allowedFunctionNames: ['get_weather', 'search_places']
       tools:
         - functionDeclarations:
             - name: 'get_weather'
@@ -907,8 +898,9 @@ Tools can also be loaded from external files:
 
 ```yaml
 providers:
-  - id: vertex:gemini-2.5-pro
+  - id: vertex:gemini-3.8-flash
     config:
+      region: global
       tools: 'file://tools.json' # Supports variable substitution
 ```
 
@@ -948,8 +940,9 @@ Configure system-level instructions for the model:
 ```yaml
 providers:
   # Works with Gemini models
-  - id: vertex:gemini-2.5-pro
+  - id: vertex:gemini-3.8-flash
     config:
+      region: global
       systemInstruction: 'You are a helpful assistant'
 
   # Also works with Claude models
@@ -963,8 +956,9 @@ You can also load system instructions from a file:
 
 ```yaml
 providers:
-  - id: vertex:gemini-2.5-pro
+  - id: vertex:gemini-3.8-flash
     config:
+      region: global
       systemInstruction: file://system-instruction.txt
 ```
 
@@ -972,7 +966,7 @@ System instructions support Nunjucks templating and can be loaded from external 
 
 ### Generation Configuration
 
-Fine-tune model behavior with these parameters:
+Gemini 2.5 models support the sampling controls below. For Gemini 3.8 Flash, use [thinking levels](#thinking-configuration) instead of `temperature`, `topP`, or `topK`.
 
 ```yaml
 providers:
@@ -992,8 +986,9 @@ Control output format using JSON schemas for consistent, parseable responses:
 
 ```yaml
 providers:
-  - id: vertex:gemini-2.5-flash
+  - id: vertex:gemini-3.8-flash
     config:
+      region: global
       # Inline JSON schema
       responseSchema: |
         {
@@ -1006,8 +1001,9 @@ providers:
         }
 
   # Or load from external file
-  - id: vertex:gemini-2.5-pro
+  - id: vertex:gemini-3.8-flash
     config:
+      region: global
       responseSchema: file://schemas/analysis-schema.json
 
 tests:
@@ -1071,8 +1067,9 @@ Configure content filtering with granular control:
 
 ```yaml
 providers:
-  - id: vertex:gemini-2.5-pro
+  - id: vertex:gemini-3.8-flash
     config:
+      region: global
       safetySettings:
         - category: 'HARM_CATEGORY_HARASSMENT'
           threshold: 'BLOCK_ONLY_HIGH'
@@ -1220,8 +1217,9 @@ Use the object format to enable Search grounding:
 
 ```yaml
 providers:
-  - id: vertex:gemini-2.5-pro
+  - id: vertex:gemini-3.8-flash
     config:
+      region: global
       tools:
         - googleSearch: {}
 ```
@@ -1232,11 +1230,12 @@ You can combine Search grounding with thinking capabilities for better reasoning
 
 ```yaml
 providers:
-  - id: vertex:gemini-2.5-flash
+  - id: vertex:gemini-3.8-flash
     config:
+      region: global
       generationConfig:
         thinkingConfig:
-          thinkingBudget: 1024
+          thinkingLevel: MEDIUM
       tools:
         - googleSearch: {}
 ```
@@ -1295,8 +1294,9 @@ Code execution lets Gemini models write and run Python to solve computational pr
 
 ```yaml
 providers:
-  - id: vertex:gemini-2.5-flash
+  - id: vertex:gemini-3.8-flash
     config:
+      region: global
       tools:
         - codeExecution: {}
 ```
@@ -1307,8 +1307,9 @@ URL context lets Gemini models fetch and analyze content from specific web URLs.
 
 ```yaml
 providers:
-  - id: vertex:gemini-2.5-flash
+  - id: vertex:gemini-3.8-flash
     config:
+      region: global
       apiVersion: v1beta1
       tools:
         - urlContext: {}

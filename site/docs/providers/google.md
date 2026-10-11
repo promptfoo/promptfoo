@@ -230,7 +230,7 @@ export GOOGLE_API_KEY="your_api_key_here"
 2. **Test your API key directly**:
 
    ```bash
-   curl -X POST "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=$GOOGLE_API_KEY" \
+   curl -X POST "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=$GOOGLE_API_KEY" \
      -H "Content-Type: application/json" \
      -d '{"contents":[{"parts":[{"text":"Hello"}]}]}'
    ```
@@ -252,7 +252,6 @@ If you need more advanced features or enterprise capabilities, you can migrate t
 | `google:gemini-3.8-flash`      | `vertex:gemini-3.8-flash`                   | Vertex supports `global`, `us`, and `eu` |
 | `google:gemini-3.6-flash`      | `vertex:gemini-3.6-flash`                   | Vertex supports `global`, `us`, and `eu` |
 | `google:gemini-3.5-flash-lite` | `vertex:gemini-3.5-flash-lite`              | Vertex supports `global`, `us`, and `eu` |
-| `google:gemini-2.5-flash`      | `vertex:gemini-2.5-flash`                   | Same model, different endpoint           |
 | `GOOGLE_API_KEY`               | `GOOGLE_CLOUD_PROJECT` + auth               | Vertex uses Google Cloud authentication  |
 | Simple API key                 | Multiple auth methods                       | Vertex supports ADC, service accounts    |
 | Global endpoint                | Global, regional, or multi-region endpoints | Availability depends on the model        |
@@ -784,12 +783,9 @@ The provider supports various configuration options that can be used to customiz
 
 ```yaml
 providers:
-  - id: google:gemini-2.5-pro
+  - id: google:gemini-3.8-flash
     config:
-      temperature: 0.7 # Controls randomness (0.0 to 1.0)
       maxOutputTokens: 2048 # Maximum length of response
-      topP: 0.9 # Nucleus sampling
-      topK: 40 # Top-k sampling
       stopSequences: ['END'] # Stop generation at these sequences
 ```
 
@@ -803,19 +799,19 @@ Gemini 3 models use `thinkingLevel` for more granular control:
 
 ```yaml
 providers:
-  - id: google:gemini-3-flash-preview
+  - id: google:gemini-3.8-flash
     config:
       generationConfig:
         thinkingConfig:
-          thinkingLevel: MEDIUM # MINIMAL, LOW, MEDIUM, or HIGH
+          thinkingLevel: MEDIUM # LOW, MEDIUM, or HIGH
 ```
 
-| Level   | Description                                                |
-| ------- | ---------------------------------------------------------- |
-| MINIMAL | Fewest tokens. Best for low-complexity tasks (Flash only). |
-| LOW     | Fewer tokens. Suitable for simpler tasks.                  |
-| MEDIUM  | Balanced approach for moderate complexity (Flash only).    |
-| HIGH    | More tokens for deep reasoning.                            |
+| Level   | Description                                             |
+| ------- | ------------------------------------------------------- |
+| MINIMAL | Fewest tokens. Not supported by Gemini 3.8 Flash.       |
+| LOW     | Fewer tokens. Suitable for simpler tasks.               |
+| MEDIUM  | Balanced approach for moderate complexity (Flash only). |
+| HIGH    | More tokens for deep reasoning.                         |
 
 Defaults vary by model: Gemini 3.8 Flash, 3.7 Flash, 3.6 Flash, and 3.5 Flash default to `MEDIUM`, Gemini 3.5 Flash-Lite defaults to `MINIMAL`, and Gemini 3.1 Pro defaults to `HIGH`.
 
@@ -874,7 +870,7 @@ prompts: |
   Caption this image.
 
 providers:
-  - id: google:gemini-2.5-flash
+  - id: google:gemini-3.8-flash
 
 tests:
   - vars:
@@ -906,7 +902,7 @@ Safety settings can be configured to control content filtering:
 
 ```yaml
 providers:
-  - id: google:gemini-2.5-pro
+  - id: google:gemini-3.8-flash
     config:
       safetySettings:
         - category: HARM_CATEGORY_DANGEROUS_CONTENT
@@ -919,7 +915,7 @@ Configure system-level instructions for the model:
 
 ```yaml
 providers:
-  - id: google:gemini-2.5-pro
+  - id: google:gemini-3.8-flash
     config:
       systemInstruction: 'You are a helpful assistant'
       # To load from a file instead, use:
@@ -1144,9 +1140,8 @@ defaultTest:
     provider:
       # Override text generation provider
       text:
-        id: google:gemini-2.5-flash
-        config:
-          temperature: 0.7
+        id: google:gemini-3.8-flash
+        config: {}
       # Override embedding provider for similarity comparisons
       embedding:
         id: google:embedding:gemini-embedding-2
@@ -1172,7 +1167,8 @@ tests:
     options:
       provider:
         text:
-          id: google:gemini-2.5-flash
+          id: google:gemini-3.8-flash
+          config: {}
         embedding:
           id: google:embedding:gemini-embedding-2
     assert:
@@ -1231,7 +1227,7 @@ You can constrain the model to output structured JSON responses in two ways:
 
 ```yaml
 providers:
-  - id: google:gemini-2.5-pro
+  - id: google:gemini-3.8-flash
     config:
       generationConfig:
         response_mime_type: 'application/json'
@@ -1253,7 +1249,7 @@ providers:
 
 ```yaml
 providers:
-  - id: google:gemini-2.5-pro
+  - id: google:gemini-3.8-flash
     config:
       # Can be inline schema or file path
       responseSchema: 'file://path/to/schema.json'
@@ -1271,7 +1267,7 @@ To enable Search grounding:
 
 ```yaml
 providers:
-  - id: google:gemini-2.5-flash
+  - id: google:gemini-3.8-flash
     config:
       tools:
         - googleSearch: {} # or google_search: {}
@@ -1283,11 +1279,11 @@ You can combine Search grounding with thinking capabilities for better reasoning
 
 ```yaml
 providers:
-  - id: google:gemini-2.5-pro
+  - id: google:gemini-3.8-flash
     config:
       generationConfig:
         thinkingConfig:
-          thinkingBudget: 1024
+          thinkingLevel: MEDIUM
       tools:
         - googleSearch: {}
 ```
@@ -1361,7 +1357,7 @@ To enable code execution:
 
 ```yaml
 providers:
-  - id: google:gemini-2.5-flash
+  - id: google:gemini-3.8-flash
     config:
       tools:
         - codeExecution: {}
@@ -1386,7 +1382,7 @@ To enable URL context:
 
 ```yaml
 providers:
-  - id: google:gemini-2.5-flash
+  - id: google:gemini-3.8-flash
     config:
       tools:
         - urlContext: {}
