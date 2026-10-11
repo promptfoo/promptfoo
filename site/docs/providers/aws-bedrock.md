@@ -1514,8 +1514,8 @@ supports Priority and Flex through these HTTP APIs; its Converse and Invoke APIs
 
 The adapters inherit [OpenAI provider options](./openai.md), including streaming,
 client-side functions, structured output, multimodal input, and request fields through
-`passthrough`. Support depends on the chosen model and API. Runtime Responses and
-supported Runtime Chat models accept Bedrock Guardrails through request headers:
+`passthrough`. Support depends on the chosen model and API. Supported Runtime Chat
+models accept Bedrock Guardrails through request headers:
 
 ```yaml
 config:
@@ -1523,6 +1523,9 @@ config:
     X-Amzn-Bedrock-GuardrailIdentifier: your-guardrail-id
     X-Amzn-Bedrock-GuardrailVersion: '1'
 ```
+
+[Runtime Responses does not support Bedrock Guardrails](https://docs.aws.amazon.com/bedrock/latest/userguide/inference-responses-api.html#bedrock-mantle-responses-runtime).
+Use Converse to apply guardrails to GPT models on Bedrock Runtime.
 
 Use `passthrough` for additional body fields. Do not put SDK `extra_headers` or
 `extra_body` wrappers inside the request body.

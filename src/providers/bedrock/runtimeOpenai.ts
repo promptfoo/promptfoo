@@ -89,6 +89,14 @@ function runtimeCost(
       serviceTier: serviceTier ?? 'default',
     });
   }
+  // GPT OSS has no verified cache rates in the Bedrock catalog.
+  if (
+    model.startsWith('gpt-oss-') &&
+    config.inputCost === undefined &&
+    (cacheRead > 0 || cacheWrite > 0)
+  ) {
+    return undefined;
+  }
   // An explicit input rate covers all input tokens, including cache reads/writes.
   // Keep their total in the catalog lookup so output long-context tiers still apply.
   const catalogInput = config.inputCost === undefined ? uncachedInput : input;

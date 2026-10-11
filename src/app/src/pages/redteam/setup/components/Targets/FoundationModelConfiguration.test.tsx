@@ -722,7 +722,7 @@ describe('FoundationModelConfiguration', () => {
       'bedrock:openai.gpt-oss-120b-1:0',
       'responses',
       'bedrock:responses:openai.gpt-oss-120b',
-      'max_tokens',
+      'max_completion_tokens',
       'max_output_tokens',
     ],
     [
@@ -730,7 +730,7 @@ describe('FoundationModelConfiguration', () => {
       'invoke',
       'bedrock:openai.gpt-oss-20b-1:0',
       'max_output_tokens',
-      'max_tokens',
+      'max_completion_tokens',
     ],
     [
       'bedrock:responses:openai.gpt-oss-120b',
@@ -1075,6 +1075,94 @@ describe('FoundationModelConfiguration', () => {
     expect(screen.getByText(/Promptfoo uses the Bedrock Runtime endpoint/)).toBeInTheDocument();
     expect(screen.queryByText(/defaults to the Bedrock Mantle endpoint/)).not.toBeInTheDocument();
   });
+
+  it('preserves a Runtime Chat GPT OSS cap when switching to InvokeModel', async () => {
+    const user = userEvent.setup();
+    render(
+      <FoundationModelConfiguration
+        selectedTarget={{
+          id: 'bedrock:runtime:chat:openai.gpt-oss-120b-1:0',
+          config: { max_completion_tokens: 256 },
+        }}
+        updateCustomTarget={mockUpdateCustomTarget}
+        providerType="bedrock"
+      />,
+    );
+    await user.selectOptions(screen.getByLabelText(/Bedrock API/), 'invoke');
+    expect(mockUpdateCustomTarget).toHaveBeenCalledExactlyOnceWith(
+      'id',
+      'bedrock:openai.gpt-oss-120b-1:0',
+    );
+    await user.click(screen.getByRole('button', { name: /Advanced Configuration/ }));
+    expect(screen.getByLabelText('Max Tokens')).toHaveValue(256);
+  });
+
+  it('migrates an InvokeModel GPT OSS cap when switching to Converse', async () => {
+    const user = userEvent.setup();
+    render(
+      <FoundationModelConfiguration
+        selectedTarget={{
+          id: 'bedrock:openai.gpt-oss-120b-1:0',
+          config: { max_completion_tokens: 256 },
+        }}
+        updateCustomTarget={mockUpdateCustomTarget}
+        providerType="bedrock"
+      />,
+    );
+    await user.selectOptions(screen.getByLabelText(/Bedrock API/), 'converse');
+    expect(mockUpdateCustomTarget).toHaveBeenCalledWith('config', { max_tokens: 256 });
+    expect(mockUpdateCustomTarget).toHaveBeenLastCalledWith(
+      'id',
+      'bedrock:converse:openai.gpt-oss-120b-1:0',
+    );
+  });
+
+  it.each([
+    'openai.gpt-oss-120b-1:0',
+    'openai.gpt-oss-safeguard-20b',
+    'arn:aws:bedrock:us-east-1::foundation-model/openai.gpt-oss-120b-1:0',
+  ])('reads and edits the InvokeModel token cap for %s', async (model) => {
+    const user = userEvent.setup();
+    render(
+      <FoundationModelConfiguration
+        selectedTarget={{ id: `bedrock:${model}`, config: { max_completion_tokens: 512 } }}
+        updateCustomTarget={mockUpdateCustomTarget}
+        providerType="bedrock"
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: /Advanced Configuration/ }));
+    const input = screen.getByLabelText('Max Tokens');
+    expect(input).toHaveValue(512);
+    await user.click(input);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste('256');
+    expect(mockUpdateCustomTarget).toHaveBeenLastCalledWith('max_completion_tokens', 256);
+  });
+
+  it.each([
+    ['openai.gpt-oss-120b-1:0', 'amazon.nova-pro-v1:0', 'max_completion_tokens', 'max_tokens'],
+    ['amazon.nova-pro-v1:0', 'openai.gpt-oss-120b-1:0', 'max_tokens', 'max_completion_tokens'],
+  ])(
+    'migrates the token cap when changing InvokeModel from %s to %s',
+    async (from, to, source, destination) => {
+      const user = userEvent.setup();
+      render(
+        <FoundationModelConfiguration
+          selectedTarget={{ id: `bedrock:${from}`, config: { [source]: 256, region: 'us-east-1' } }}
+          updateCustomTarget={mockUpdateCustomTarget}
+          providerType="bedrock"
+        />,
+      );
+      const input = screen.getByRole('textbox', { name: /Model ID/ });
+      await user.clear(input);
+      await user.paste(to);
+      expect(mockUpdateCustomTarget).toHaveBeenCalledWith('config', {
+        [destination]: 256,
+        region: 'us-east-1',
+      });
+      expect(mockUpdateCustomTarget).toHaveBeenLastCalledWith('id', `bedrock:${to}`);
+    },
+  );
 
   it('migrates a Responses cap when switching to Runtime Chat', async () => {
     const user = userEvent.setup();

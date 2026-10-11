@@ -1064,20 +1064,53 @@ it('rejects application profiles in Runtime Chat before transport', async () => 
 });
 
 it.each([
-  [{ inputCost: 0.01 }, 1.000012],
-  [{ outputCost: 0.02 }, 0.400009],
-])('preserves GPT OSS catalog rates with a partial override %j', async (costs, expected) => {
-  vi.mocked(fetchWithCache).mockResolvedValue({
-    data: chatReply,
-    status: 200,
-    statusText: 'OK',
+  { read: 40, write: 0, costs: {}, cached: false, expected: undefined },
+  { read: 0, write: 10, costs: {}, cached: false, expected: undefined },
+  { read: 40, write: 0, costs: { outputCost: 0.02 }, cached: false, expected: undefined },
+  { read: 0, write: 10, costs: { outputCost: 0.02 }, cached: false, expected: undefined },
+  { read: 0, write: 0, costs: {}, cached: false, expected: 0.000027 },
+  { read: 0, write: 0, costs: { outputCost: 0.02 }, cached: false, expected: 0.400015 },
+  { read: 40, write: 10, costs: { inputCost: 0.01 }, cached: false, expected: 1.000012 },
+  { read: 40, write: 10, costs: { inputCost: 0 }, cached: false, expected: 0.000012 },
+  {
+    read: 40,
+    write: 10,
+    costs: { inputCost: 0.01, outputCost: 0.02 },
     cached: false,
-  });
-  const provider = new BedrockRuntimeChatProvider('openai.gpt-oss-120b-1:0', {
-    config: { apiKey: 'fixture', region: 'us-east-1', ...costs },
-  });
-  expect((await provider.callApi('hello')).cost).toBeCloseTo(expected, 10);
-});
+    expected: 1.4,
+  },
+  { read: 40, write: 10, costs: { inputCost: 0, outputCost: 0 }, cached: false, expected: 0 },
+  { read: 40, write: 10, costs: { inputCost: 0 }, cached: true, expected: 0 },
+])(
+  'preserves GPT OSS cache pricing uncertainty (%j)',
+  async ({ read, write, costs, cached, expected }) => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: {
+        ...chatReply,
+        usage: {
+          ...chatReply.usage,
+          prompt_tokens_details: { cached_tokens: read, cache_write_tokens: write },
+        },
+      },
+      status: 200,
+      statusText: 'OK',
+      cached,
+    });
+    const provider = new BedrockRuntimeChatProvider('openai.gpt-oss-120b-1:0', {
+      config: { apiKey: 'fixture', region: 'us-east-1', ...costs },
+    });
+    const result = await provider.callApi('hello');
+    expect(result.error).toBeUndefined();
+    if (!cached) {
+      expect(result.tokenUsage?.prompt).toBe(100);
+    }
+    if (expected === undefined) {
+      expect(result.cost).toBeUndefined();
+    } else {
+      expect(result.cost).toBeCloseTo(expected, 10);
+    }
+  },
+);
 
 describe('Runtime Chat streaming lifecycle', () => {
   const completed =

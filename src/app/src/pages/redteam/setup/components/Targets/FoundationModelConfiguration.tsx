@@ -44,11 +44,13 @@ const BEDROCK_API_OPTIONS: { value: BedrockApiMode; label: string }[] = [
   { value: 'runtime-responses', label: 'Responses (Bedrock Runtime)' },
 ];
 
-function getBedrockTokenLimitKey(mode?: BedrockApiMode) {
+function getBedrockTokenLimitKey(mode?: BedrockApiMode, modelId = '') {
   if (mode === 'responses' || mode === 'runtime-responses') {
     return 'max_output_tokens';
   }
-  return mode === 'runtime-chat' ? 'max_completion_tokens' : 'max_tokens';
+  return mode === 'runtime-chat' || (mode === 'invoke' && modelId.includes('openai.gpt-oss'))
+    ? 'max_completion_tokens'
+    : 'max_tokens';
 }
 
 const BEDROCK_API_HELP: Record<BedrockApiMode, string> = {
@@ -159,6 +161,10 @@ const FoundationModelConfiguration = ({
   const isBedrock = providerType === 'bedrock';
   const bedrockRoute = isBedrock ? getBedrockTextRoute(selectedTarget.id || 'bedrock:') : undefined;
   const [bedrockApiMode, setBedrockApiMode] = useState(bedrockRoute?.apiMode);
+  const tokenLimitKey = getBedrockTokenLimitKey(
+    bedrockApiMode,
+    getBedrockModelFromId(selectedTarget.id),
+  );
   const lastEditedTarget = useRef<{ id: string; providerType: string } | undefined>(undefined);
   const isBedrockHttpApi =
     bedrockApiMode === 'responses' ||
@@ -222,10 +228,9 @@ const FoundationModelConfiguration = ({
   };
 
   const updateProviderId = (id: string, apiMode = bedrockApiMode) => {
-    const source = getBedrockTokenLimitKey(bedrockApiMode);
-    const destination = getBedrockTokenLimitKey(apiMode);
-    if (source !== destination && selectedTarget.config?.[source] !== undefined) {
-      const { [source]: limit, ...config } = selectedTarget.config;
+    const destination = getBedrockTokenLimitKey(apiMode, getBedrockModelFromId(id));
+    if (tokenLimitKey !== destination && selectedTarget.config?.[tokenLimitKey] !== undefined) {
+      const { [tokenLimitKey]: limit, ...config } = selectedTarget.config;
       updateCustomTarget('config', { ...config, [destination]: limit });
     }
     lastEditedTarget.current = { id, providerType };
@@ -694,12 +699,9 @@ const FoundationModelConfiguration = ({
                 id="max-tokens"
                 type="number"
                 min={1}
-                value={selectedTarget.config?.[getBedrockTokenLimitKey(bedrockApiMode)] ?? ''}
+                value={selectedTarget.config?.[tokenLimitKey] ?? ''}
                 onChange={(e) =>
-                  updateCustomTarget(
-                    getBedrockTokenLimitKey(bedrockApiMode),
-                    parseInt(e.target.value) || undefined,
-                  )
+                  updateCustomTarget(tokenLimitKey, parseInt(e.target.value) || undefined)
                 }
               />
               <p className="text-sm text-muted-foreground">Maximum number of tokens to generate</p>
