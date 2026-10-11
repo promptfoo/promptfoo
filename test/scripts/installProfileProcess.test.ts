@@ -31,6 +31,47 @@ describe('terminateProcessTree', () => {
     expect(() => terminateProcessTree(1234, 'darwin')).not.toThrow();
   });
 
+  it.each([' 1234 Z\n 1234 Z+\n 5678 S\n', ' 5678 S\n'])(
+    'accepts Darwin EPERM only when no live group members remain: %j',
+    (processes) => {
+      vi.spyOn(process, 'kill').mockImplementation(() => {
+        throw Object.assign(new Error('no signalable members'), { code: 'EPERM' });
+      });
+      const inspect = vi.spyOn(childProcess, 'execFileSync').mockReturnValue(processes);
+
+      expect(() => terminateProcessTree(1234, 'darwin')).not.toThrow();
+      expect(inspect).toHaveBeenCalledExactlyOnceWith('/bin/ps', ['-axo', 'pgid=,stat='], {
+        encoding: 'utf8',
+        timeout: 10000,
+      });
+    },
+  );
+
+  it.each([' 1234 S\n', ' 1234 Z\n 1234 R+\n', 'unrecognized output\n', '', '\n'])(
+    'preserves Darwin EPERM when cleanup cannot be verified: %j',
+    (processes) => {
+      const error = Object.assign(new Error('permission denied'), { code: 'EPERM' });
+      vi.spyOn(process, 'kill').mockImplementation(() => {
+        throw error;
+      });
+      vi.spyOn(childProcess, 'execFileSync').mockReturnValue(processes);
+
+      expect(() => terminateProcessTree(1234, 'darwin')).toThrow(error);
+    },
+  );
+
+  it('preserves Darwin EPERM when process inspection fails', () => {
+    const error = Object.assign(new Error('permission denied'), { code: 'EPERM' });
+    vi.spyOn(process, 'kill').mockImplementation(() => {
+      throw error;
+    });
+    vi.spyOn(childProcess, 'execFileSync').mockImplementation(() => {
+      throw new Error('ps failed');
+    });
+
+    expect(() => terminateProcessTree(1234, 'darwin')).toThrow(error);
+  });
+
   it.each(['EPERM', 'EINVAL', undefined])('preserves POSIX cleanup errors: %s', (code) => {
     const error = Object.assign(new Error('cleanup failed'), { code });
     vi.spyOn(process, 'kill').mockImplementation(() => {
