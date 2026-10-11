@@ -161,6 +161,48 @@ describe.each(['google', 'palm'])('%s Nano Banana routing contracts', (prefix) =
     );
   });
 
+  it.each([
+    { config: {}, env: { GOOGLE_GENAI_USE_VERTEXAI: 'true' }, vertex: true },
+    { config: {}, env: { GOOGLE_GENAI_USE_VERTEXAI: '1' }, vertex: true },
+    { config: { projectId: 'project' }, env: {}, vertex: true },
+    { config: {}, env: { GOOGLE_PROJECT_ID: 'project' }, vertex: true },
+    { config: { vertexai: false }, env: { GOOGLE_GENAI_USE_VERTEXAI: 'true' }, vertex: false },
+    {
+      config: { projectId: 'project' },
+      env: { GOOGLE_GENAI_USE_VERTEXAI: 'false' },
+      vertex: false,
+    },
+    { config: { vertexai: true }, env: { GOOGLE_GENAI_USE_VERTEXAI: 'false' }, vertex: true },
+    { config: {}, env: { GOOGLE_GENAI_USE_VERTEXAI: undefined }, vertex: true },
+  ])(
+    'normalizes credential scope using effective Vertex mode: %j',
+    async ({ config, env, vertex }) => {
+      const provider = await loadApiProvider(id, {
+        env: { VERTEX_API_KEY: 'eval-key', GOOGLE_GENAI_USE_VERTEXAI: 'true' },
+        options: {
+          config: { expressMode: true, ...config },
+          env: { GOOGLE_API_KEY: 'provider-key', ...env },
+        },
+      });
+      expect((await provider.callApi('Draw')).error).toBeUndefined();
+      const [url, request] = vi.mocked(fetchWithCache).mock.calls[0];
+      expect(request?.headers).toMatchObject({ 'x-goog-api-key': 'provider-key' });
+      expect(String(url).includes('/publishers/google/')).toBe(vertex);
+    },
+  );
+
+  it('normalizes aliases when ambient environment selects Vertex mode', async () => {
+    vi.stubEnv('GOOGLE_GENAI_USE_VERTEXAI', 'true');
+    const provider = await loadApiProvider(id, {
+      env: { VERTEX_API_KEY: 'eval-key' },
+      options: { env: { GOOGLE_API_KEY: 'provider-key' } },
+    });
+    expect((await provider.callApi('Draw')).error).toBeUndefined();
+    expect(vi.mocked(fetchWithCache).mock.calls[0][1]?.headers).toMatchObject({
+      'x-goog-api-key': 'provider-key',
+    });
+  });
+
   it('retains custom provider IDs used by prompt selection', async () => {
     const provider = await loadApiProvider(id, {
       options: { id: 'custom-target', config: { apiKey: 'key', vertexai: false } },
@@ -250,6 +292,107 @@ describe('image prompt configuration', () => {
       ).toBe(callsBefore);
     },
   );
+});
+
+describe('image passthrough requests', () => {
+  it.each(['native', 'vertex-express', 'vertex-oauth'])(
+    'preserves instructions and merged tools on %s',
+    async (mode) => {
+      const request = vi.fn().mockResolvedValue({ data: imageResponse });
+      vi.mocked(googleUtil.getGoogleClient).mockResolvedValue({ client: { request } } as never);
+      const provider = await loadApiProvider(`google:${model}`, {
+        options: {
+          config: {
+            ...(mode === 'vertex-oauth'
+              ? { projectId: 'project', expressMode: false }
+              : { apiKey: 'key' }),
+            vertexai: mode !== 'native',
+            systemInstruction: 'Provider instruction',
+            tools: [
+              { codeExecution: {} },
+              { functionDeclarations: [{ name: 'disabled_function' }] },
+            ],
+            tool_choice: 'none',
+            passthrough: {
+              system_instruction: { parts: [{ text: 'Passthrough instruction' }] },
+              tools: { googleSearch: {} },
+            },
+          },
+        },
+      });
+      expect((await provider.callApi('Draw')).error).toBeUndefined();
+      const body =
+        mode === 'vertex-oauth'
+          ? request.mock.calls[0][0].data
+          : JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string);
+      expect(body.systemInstruction).toEqual({ parts: [{ text: 'Passthrough instruction' }] });
+      expect(body.system_instruction).toBeUndefined();
+      expect(body.tools).toEqual([{ codeExecution: {} }, { googleSearch: {} }]);
+      expect(body.toolConfig.functionCallingConfig.mode).toBe('NONE');
+    },
+  );
+
+  it.each(['systemInstruction', 'system_instruction'])(
+    'honors explicit null %s to clear provider instructions',
+    async (key) => {
+      const provider = await loadApiProvider(`google:${model}`, {
+        options: {
+          config: {
+            apiKey: 'key',
+            vertexai: false,
+            systemInstruction: 'Provider instruction',
+            passthrough: { [key]: null },
+          },
+        },
+      });
+      await provider.callApi('Draw');
+      const body = JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string);
+      expect(body.systemInstruction).toBeUndefined();
+      expect(body.system_instruction).toBeUndefined();
+    },
+  );
+
+  it('validates and prices the final raw generation override', async () => {
+    const provider = await loadApiProvider(`google:${model}`, {
+      options: {
+        config: {
+          apiKey: 'key',
+          vertexai: false,
+          temperature: 0,
+          imageSize: '1K',
+          passthrough: {
+            generationConfig: { responseModalities: ['IMAGE'], imageConfig: { imageSize: '4K' } },
+          },
+        },
+      },
+    });
+    const result = await provider.callApi('Draw');
+    expect(result.error).toBeUndefined();
+    expect(result.cost).toBeCloseTo(0.1134, 12);
+    const body = JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string);
+    expect(body.generationConfig).toEqual({
+      responseModalities: ['IMAGE'],
+      imageConfig: { imageSize: '4K' },
+    });
+    const calls = vi.mocked(fetchWithCache).mock.calls.length;
+    expect(
+      (
+        await provider.callApi(
+          'Invalid sampling',
+          context({ passthrough: { generationConfig: { temperature: 0 } } }),
+        )
+      ).error,
+    ).toContain('does not support temperature');
+    expect(
+      (
+        await provider.callApi(
+          'Invalid size',
+          context({ passthrough: { generationConfig: { imageConfig: { imageSize: '512px' } } } }),
+        )
+      ).error,
+    ).toContain('only supports imageSize');
+    expect(fetchWithCache).toHaveBeenCalledTimes(calls);
+  });
 });
 
 describe('native terminal stream chunks', () => {

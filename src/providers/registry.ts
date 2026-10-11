@@ -42,6 +42,7 @@ import {
 import { FalImageGenerationProvider } from './fal';
 import { createGitHubProvider } from './github/index';
 import { GolangProvider } from './golangCompletion';
+import { determineGoogleVertexMode } from './google/auth';
 import { GroqProvider, GroqResponsesProvider } from './groq/index';
 import { HeliconeGatewayProvider } from './helicone';
 import { HttpProvider } from './http';
@@ -132,13 +133,14 @@ const CODEX_CLI_PROVIDER_PATH = /^openai:(?:codex|codex-sdk|codex-app-server|cod
 function getProviderEnvAliasGroups(
   providerPath: string,
   config?: ProviderOptions['config'],
+  env?: ProviderOptions['env'],
 ): readonly (readonly string[])[] {
   const isGeminiImage = /^(?:google|palm):(?:image:)?(?:[^:]*-image|gemini-nano-banana-2\.1$)/.test(
     providerPath,
   );
   if (
-    config?.vertexai === true &&
-    (isGeminiImage ||
+    (isGeminiImage && determineGoogleVertexMode(config ?? {}, env)) ||
+    (config?.vertexai === true &&
       /^(?:google|palm):(?:interactions:)?gemini-omni-flash-preview$/.test(providerPath))
   ) {
     return [
@@ -265,7 +267,15 @@ export function mergeProviderEnv(
     typeof provider !== 'string' && provider.preserveAliases
       ? []
       : [
-          ...getProviderEnvAliasGroups(providerPath, config),
+          ...getProviderEnvAliasGroups(
+            providerPath,
+            config,
+            Object.fromEntries(
+              layers
+                .flatMap((layer) => Object.entries(layer ?? {}))
+                .filter(([, value]) => value !== undefined),
+            ),
+          ),
           getProviderEndpointAliases(providerPath),
         ];
   const isWindowsOpenCode = os.platform() === 'win32' && /^opencode(?::|$)/.test(providerPath);

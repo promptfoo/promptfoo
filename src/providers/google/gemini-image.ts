@@ -13,6 +13,7 @@ import {
   getGoogleClient,
   loadCredentials,
   mergeGoogleCompletionOptions,
+  mergeGoogleRequestTools,
   normalizeSafetySettings,
   normalizeTools,
   removeGoogleFunctionDeclarations,
@@ -200,10 +201,16 @@ export class GeminiImageProvider implements ApiProvider {
 
     if (this.modelName === 'gemini-nano-banana-2.1') {
       const unsupported = ['temperature', 'topP', 'topK', 'seed', 'logprobs', 'responseLogprobs'];
-      const configured = unsupported.filter(
-        (key) =>
-          (config as Record<string, unknown>)[key] !== undefined ||
-          (config.generationConfig as Record<string, unknown> | undefined)?.[key] !== undefined,
+      const overridesGenerationConfig = Object.prototype.hasOwnProperty.call(
+        config.passthrough ?? {},
+        'generationConfig',
+      );
+      const configured = unsupported.filter((key) =>
+        overridesGenerationConfig
+          ? (config.passthrough?.generationConfig as Record<string, unknown> | undefined)?.[key] !==
+            undefined
+          : (config as Record<string, unknown>)[key] !== undefined ||
+            (config.generationConfig as Record<string, unknown> | undefined)?.[key] !== undefined,
       );
       if (configured.length > 0) {
         return { error: `${this.modelName} does not support ${configured.join(', ')}` };
@@ -483,9 +490,23 @@ export class GeminiImageProvider implements ApiProvider {
     systemInstruction: unknown,
     config: GoogleProviderConfig,
   ): Record<string, any> {
+    const {
+      tools: passthroughTools,
+      systemInstruction: camelCaseInstruction,
+      system_instruction: snakeCaseInstruction,
+      toolConfig: _passthroughToolConfig,
+      tool_config: _passthroughToolConfigSnakeCase,
+      ...passthrough
+    } = config.passthrough ?? {};
+    const instruction =
+      camelCaseInstruction === undefined
+        ? snakeCaseInstruction === undefined
+          ? systemInstruction
+          : snakeCaseInstruction
+        : camelCaseInstruction;
     const body: Record<string, any> = {
       contents,
-      ...(systemInstruction ? { systemInstruction } : {}),
+      ...(instruction ? { systemInstruction: instruction } : {}),
       generationConfig: {
         responseModalities: ['TEXT', 'IMAGE'],
         ...(config.temperature !== undefined && { temperature: config.temperature }),
@@ -523,17 +544,20 @@ export class GeminiImageProvider implements ApiProvider {
       body.toolConfig = toolConfig;
     }
 
-    if (Array.isArray(config.tools) && config.tools.length > 0) {
-      const normalizedTools = normalizeTools(config.tools);
-      const requestTools = toolsDisabled
-        ? removeGoogleFunctionDeclarations(normalizedTools)
-        : normalizedTools;
-      if (requestTools.length > 0) {
-        body.tools = requestTools;
-      }
+    const normalizedTools = Array.isArray(config.tools) ? normalizeTools(config.tools) : [];
+    const requestTools = toolsDisabled
+      ? removeGoogleFunctionDeclarations(normalizedTools)
+      : normalizedTools;
+    const requestPassthroughTools =
+      toolsDisabled && passthroughTools !== undefined
+        ? removeGoogleFunctionDeclarations(passthroughTools)
+        : passthroughTools;
+    const mergedTools = mergeGoogleRequestTools(requestTools, requestPassthroughTools);
+    if (mergedTools) {
+      body.tools = mergedTools;
     }
 
-    return body;
+    return { ...body, ...passthrough };
   }
 
   private processResponse(
@@ -672,11 +696,14 @@ export class GeminiImageProvider implements ApiProvider {
   }
 
   /**
-   * The image size the request actually asks for: the top-level `imageSize`
-   * option wins, otherwise a pass-through `generationConfig.imageConfig`
-   * value applies. Mirrors the precedence used by buildRequestBody.
+   * A raw passthrough generationConfig replaces the generated config. Otherwise,
+   * top-level imageSize wins over generationConfig.imageConfig, matching the body.
    */
   private getEffectiveImageSize(config: GoogleProviderConfig): string | undefined {
+    if (Object.prototype.hasOwnProperty.call(config.passthrough ?? {}, 'generationConfig')) {
+      return (config.passthrough?.generationConfig as GoogleProviderConfig['generationConfig'])
+        ?.imageConfig?.imageSize;
+    }
     const topLevel = this.supportsImageSize() ? config.imageSize : undefined;
     return topLevel ?? config.generationConfig?.imageConfig?.imageSize;
   }
