@@ -748,6 +748,8 @@ evalRouter.post(
 
       // Update the result
       result.gradingResult = gradingResult;
+      // Replacement grading supersedes stripped grader evidence; target cache flags remain intact.
+      delete result.repeatCached;
       result.success = gradingResult.pass;
       result.score = gradingResult.score;
 

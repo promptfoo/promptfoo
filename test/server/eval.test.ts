@@ -5,6 +5,7 @@ import EvalResult from '../../src/models/evalResult';
 import { createApp } from '../../src/server/server';
 import { STRIPPED_TABLE_CELL_PROMPT } from '../../src/util/eval/evalTableUtils';
 import invariant from '../../src/util/invariant';
+import { createCompletedPrompt, createEvaluateResult } from '../factories/eval';
 import EvalFactory from '../factories/evalFactory';
 import { setupTestServer } from '../util/testServer';
 
@@ -115,6 +116,68 @@ describe('eval routes', () => {
   });
 
   describe('post("/:evalId/results/:id/rating")', () => {
+    it.each([false, true])(
+      'replaces stripped repeat cache evidence while retaining target cached=%s',
+      async (targetCached) => {
+        const config = {
+          env: { PROMPTFOO_STRIP_GRADING_RESULT: 'true', PROMPTFOO_STRIP_METADATA: 'true' },
+        };
+        const prompts = [createCompletedPrompt()];
+        const original = await Eval.create(config, prompts, { completedPrompts: prompts });
+        testEvalIds.add(original.id);
+        for (const repeatIndex of [0, 1]) {
+          await original.addResult(
+            createEvaluateResult({
+              testIdx: repeatIndex,
+              repeatIndex,
+              repeatGroupId: 'rated-repeats',
+              response: { output: 'target output', cached: targetCached },
+              gradingResult: {
+                pass: true,
+                score: 1,
+                reason: 'cached grader',
+                metadata: { cachedResponse: true },
+              },
+            }),
+          );
+        }
+        const exported = await original.toEvaluateSummary();
+        const imported = await Eval.create(config, prompts, { completedPrompts: prompts });
+        testEvalIds.add(imported.id);
+        await EvalResult.createManyFromEvaluateResult(exported.results, imported.id);
+
+        const rating = {
+          pass: true,
+          score: 1,
+          reason: 'Human replacement',
+          assertion: { type: 'human' },
+        };
+        for (const evaluation of [original, imported]) {
+          expect((await evaluation.getRepeatStability())?.cachedResults).toBe(2);
+          const rows = await EvalResult.findManyByEvalId(evaluation.id);
+          for (const row of rows) {
+            const response = await api
+              .post(`/api/eval/${evaluation.id}/results/${row.id}/rating`)
+              .send(rating);
+            expect(response.status).toBe(200);
+          }
+          const reloaded = await Eval.findById(evaluation.id);
+          const summary = await reloaded!.getRepeatStability();
+          expect(summary?.cachedResults).toBe(targetCached ? 2 : 0);
+          if (targetCached) {
+            expect(summary?.groups[0].passRateConfidenceInterval).toBeUndefined();
+          } else {
+            expect(summary?.groups[0].passRateConfidenceInterval).toBeDefined();
+          }
+          for (const row of await EvalResult.findManyByEvalId(evaluation.id)) {
+            expect(row.response?.cached).toBe(targetCached);
+            expect(row.gradingResult).toEqual(rating);
+            expect(row.repeatCached).toBeUndefined();
+          }
+        }
+      },
+    );
+
     it('rejects result ratings when the URL eval does not own the result', async () => {
       const evalA = await EvalFactory.create();
       const evalB = await EvalFactory.create();
