@@ -323,32 +323,141 @@ describe('Converse native request features', () => {
     },
   );
 
-  it.each([false, true])('accounts for all cached input with streaming=%s', async (streaming) => {
-    const { provider, send } = fixture({ streaming }, 'global.anthropic.claude-opus-5-5');
-    const usage = {
-      inputTokens: 100,
-      outputTokens: 10,
-      cacheReadInputTokens: 200,
-      cacheWriteInputTokens: 300,
-    };
+  it.each(
+    [false, true].flatMap((streaming) =>
+      [110, 610, undefined].map((totalTokens) => ({ streaming, totalTokens })),
+    ),
+  )(
+    'accounts for fresh and replayed prompt-cache tokens (streaming=$streaming, total=$totalTokens)',
+    async ({ streaming, totalTokens }) => {
+      cache.enabled = true;
+      const { provider, send } = fixture({ streaming }, 'global.anthropic.claude-opus-5-5');
+      const usage = {
+        inputTokens: 100,
+        outputTokens: 10,
+        totalTokens,
+        cacheReadInputTokens: 200,
+        cacheWriteInputTokens: 300,
+      };
+      send.mockResolvedValueOnce(
+        streaming
+          ? stream([
+              { contentBlockDelta: { contentBlockIndex: 0, delta: { text: 'READY' } } },
+              { contentBlockStop: { contentBlockIndex: 0 } },
+              { messageStop: { stopReason: 'end_turn' } },
+              { metadata: { usage } },
+            ])
+          : { ...reply, usage },
+      );
+      const response = await provider.callApi('hello');
+      expect(response.cached).not.toBe(true);
+      expect(response.tokenUsage).toMatchObject({
+        prompt: 600,
+        completion: 10,
+        total: 610,
+        numRequests: 1,
+        completionDetails: { cacheReadInputTokens: 200, cacheCreationInputTokens: 300 },
+      });
+      expect(response.tokenUsage).not.toHaveProperty('cached');
+      expect(response.cost).toBeCloseTo((100 * 4 + 200 * 0.2 + 300 * 5 + 10 * 20) / 1e6);
+      cache.get.mockResolvedValue(cache.set.mock.calls[0][1]);
+      const replay = await provider.callApi('hello');
+      expect(replay.cached).toBe(true);
+      expect(replay.tokenUsage).toMatchObject({
+        prompt: 600,
+        completion: 10,
+        total: 610,
+        cached: 610,
+        numRequests: 0,
+        incurredTokenUsage: {},
+        completionDetails: { cacheReadInputTokens: 200, cacheCreationInputTokens: 300 },
+      });
+      expect(replay.cost).toBe(response.cost);
+      expect(send).toHaveBeenCalledOnce();
+    },
+  );
+
+  it.each(
+    [false, true].flatMap((streaming) =>
+      [
+        {
+          usage: { outputTokens: 10, totalTokens: 110 },
+          prompt: undefined,
+          completion: 10,
+          total: 110,
+        },
+        {
+          usage: { inputTokens: 100, totalTokens: 110 },
+          prompt: 100,
+          completion: undefined,
+          total: 110,
+        },
+        {
+          usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+          prompt: 0,
+          completion: 0,
+          total: 0,
+        },
+      ].map((testCase) => ({ streaming, ...testCase })),
+    ),
+  )(
+    'preserves partial and zero token counts (streaming=$streaming, usage=$usage)',
+    async ({ streaming, usage, prompt, completion, total }) => {
+      const { provider, send } = fixture({ streaming });
+      send.mockResolvedValueOnce(
+        streaming
+          ? stream([{ messageStop: { stopReason: 'end_turn' } }, { metadata: { usage } }])
+          : { ...reply, usage },
+      );
+      const response = await provider.callApi('hello');
+      expect(response.tokenUsage).toEqual({ prompt, completion, total, numRequests: 1 });
+    },
+  );
+
+  it('keeps normalized prompt-cache usage on a completed malformed stream without dispatch or caching', async () => {
+    cache.enabled = true;
+    const callback = vi.fn();
+    const { provider, send } = fixture(
+      { streaming: true, functionToolCallbacks: { echo: callback } },
+      'global.anthropic.claude-opus-5-5',
+    );
     send.mockResolvedValueOnce(
-      streaming
-        ? stream([
-            { contentBlockDelta: { contentBlockIndex: 0, delta: { text: 'READY' } } },
-            { contentBlockStop: { contentBlockIndex: 0 } },
-            { messageStop: { stopReason: 'end_turn' } },
-            { metadata: { usage } },
-          ])
-        : { ...reply, usage },
+      stream([
+        {
+          contentBlockStart: {
+            contentBlockIndex: 0,
+            start: { toolUse: { toolUseId: 'pending', name: 'echo' } },
+          },
+        },
+        { contentBlockDelta: { contentBlockIndex: 0, delta: { toolUse: { input: '{' } } } },
+        { contentBlockStop: { contentBlockIndex: 0 } },
+        { messageStop: { stopReason: 'tool_use' } },
+        {
+          metadata: {
+            usage: {
+              inputTokens: 100,
+              outputTokens: 10,
+              totalTokens: 110,
+              cacheReadInputTokens: 200,
+              cacheWriteInputTokens: 300,
+            },
+          },
+        },
+      ]),
     );
     const response = await provider.callApi('hello');
+    expect(response.error).toContain('Bedrock model emitted invalid JSON arguments');
     expect(response.tokenUsage).toMatchObject({
       prompt: 600,
       completion: 10,
       total: 610,
+      numRequests: 1,
       completionDetails: { cacheReadInputTokens: 200, cacheCreationInputTokens: 300 },
     });
+    expect(response.tokenUsage).not.toHaveProperty('cached');
     expect(response.cost).toBeCloseTo((100 * 4 + 200 * 0.2 + 300 * 5 + 10 * 20) / 1e6);
+    expect(callback).not.toHaveBeenCalled();
+    expect(cache.set).not.toHaveBeenCalled();
   });
 
   it('keeps compatibility adapters for untyped content blocks', () => {
@@ -1963,7 +2072,8 @@ describe('ConverseStream response parity', () => {
     expect(result.output).toContain('Answer with evidence');
     expect(result.output).toContain('Signature: signed');
     expect(result.guardrails?.flagged).toBe(true);
-    expect(result.tokenUsage).toMatchObject({ prompt: 10, completion: 8, total: 18, cached: 2 });
+    expect(result.tokenUsage).toMatchObject({ prompt: 10, completion: 8, total: 18 });
+    expect(result.tokenUsage).not.toHaveProperty('cached');
     expect(result.metadata).toMatchObject({
       latencyMs: 42,
       trace: { guardrail: {} },

@@ -1725,12 +1725,10 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       prompt: totalInputTokens,
       completion: completionTokens,
       total:
-        totalTokens ??
-        (totalInputTokens !== undefined && completionTokens !== undefined
+        totalInputTokens !== undefined && completionTokens !== undefined
           ? totalInputTokens + completionTokens
-          : undefined),
+          : totalTokens,
       numRequests: 1,
-      ...(cacheReadTokens === undefined ? {} : { cached: cacheReadTokens }),
       ...(cacheReadTokens === undefined && cacheWriteTokens === undefined
         ? {}
         : {
