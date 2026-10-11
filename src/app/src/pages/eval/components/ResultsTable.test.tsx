@@ -3471,6 +3471,22 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
     { action: 'Rate', previousReason: 2, expectedReason: 0, graderError: true },
     {
       action: 'Clear rating',
+      previousReason: 2,
+      expectedReason: 2,
+      graderError: false,
+      passedComponents: true,
+      pendingComparison: true,
+    },
+    {
+      action: 'Clear rating',
+      previousReason: 0,
+      expectedReason: 2,
+      graderError: false,
+      passedComponents: true,
+      pendingComparison: true,
+    },
+    {
+      action: 'Clear rating',
       previousReason: 0,
       expectedReason: 2,
       graderError: false,
@@ -3481,7 +3497,14 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
     { action: 'Clear rating', previousReason: 0, expectedReason: 2, graderError: false },
   ])(
     'updates the displayed error category after $action (graderError=$graderError)',
-    async ({ action, previousReason, expectedReason, graderError, passedComponents }) => {
+    async ({
+      action,
+      previousReason,
+      expectedReason,
+      graderError,
+      passedComponents,
+      pendingComparison,
+    }) => {
       const user = userEvent.setup();
       const table = createMockTableWithHumanAssertion();
       const output = table.body[0].outputs[0];
@@ -3499,7 +3522,21 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
       });
       if (!graderError) {
         Object.assign(output.gradingResult.componentResults[1], {
-          metadata: { originalFailureReason: 2 },
+          metadata: { originalFailureReason: pendingComparison ? 0 : 2 },
+        });
+      }
+      if (pendingComparison) {
+        Object.assign(output, {
+          metadata: {
+            __promptfoo: {
+              comparisonError: {
+                success: true,
+                score: 1,
+                failureReason: 0,
+                originalFailureReason: 0,
+              },
+            },
+          },
         });
       }
       if (action === 'Rate') {

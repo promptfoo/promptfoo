@@ -569,6 +569,84 @@ describe('eval routes', () => {
       },
     );
 
+    it.each([false, true])(
+      'retains a comparison error raised after a live manual rating (rerate=%s)',
+      async (rerate) => {
+        const { suite, recover } = comparisonRecoverySuite();
+        const record = await Eval.create({}, suite.prompts);
+        testEvalIds.add(record.id);
+        let calls = 0;
+        suite.providers = [
+          {
+            id: () => 'live-rated-target',
+            callApi: async () => {
+              if (++calls === 2) {
+                const first = (await record.getResults())[0];
+                expect(
+                  (
+                    await api
+                      .post(`/api/eval/${record.id}/results/${first.id}/rating`)
+                      .send(createManualRatingPayload(first, true))
+                  ).status,
+                ).toBe(200);
+              }
+              return { output: 'candidate' };
+            },
+          },
+        ];
+        const previousResume = cliState.resume;
+        try {
+          await evaluate(suite, record, { maxConcurrency: 1 });
+          const first = (await record.getResults()).find((row) => row.promptIdx === 0)!;
+          expect(first.failureReason).toBe(ResultFailureReason.ERROR);
+          expect(
+            first.gradingResult?.componentResults?.find(
+              (component) => component.assertion?.type === 'human',
+            )?.metadata?.originalFailureReason,
+          ).toBe(ResultFailureReason.NONE);
+          if (rerate) {
+            expect(
+              (
+                await api
+                  .post(`/api/eval/${record.id}/results/${first.id}/rating`)
+                  .send(first.gradingResult!)
+              ).status,
+            ).toBe(200);
+          }
+          const components = first.gradingResult!.componentResults!.filter(
+            (component) => component.assertion?.type !== 'human',
+          );
+          const cleared = await api.post(`/api/eval/${record.id}/results/${first.id}/rating`).send({
+            ...first.gradingResult,
+            pass: true,
+            componentResults: components,
+            action: 'clear',
+          });
+          expect(cleared.status).toBe(200);
+          expect(cleared.body).toMatchObject({
+            success: false,
+            failureReason: ResultFailureReason.ERROR,
+            gradingResult: { pass: true },
+          });
+          expect(cleared.body.metadata.__promptfoo.comparisonError).toBeDefined();
+          recover();
+          cliState.resume = true;
+          const saved = await Eval.findById(record.id);
+          invariant(saved, 'Saved evaluation required');
+          await evaluate(suite, saved, { maxConcurrency: 1 });
+          const rows = (await saved.getResults()).sort((a, b) => a.promptIdx - b.promptIdx);
+          expect(rows.map((row) => row.success)).toEqual([true, false]);
+          expect(rows.map((row) => row.failureReason)).toEqual([
+            ResultFailureReason.NONE,
+            ResultFailureReason.ASSERT,
+          ]);
+          expect(rows.every((row) => !row.metadata?.__promptfoo?.comparisonError)).toBe(true);
+        } finally {
+          cliState.resume = previousResume;
+        }
+      },
+    );
+
     it.each(['error', 'legacy approval', 'manual failure', 'no grade'])(
       'updates only annotations on a saved %s',
       async (state) => {

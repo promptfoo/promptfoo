@@ -923,7 +923,10 @@ function getManualRatingUpdate({
     if (componentResults.length > 0) {
       finalScore = averageComponentResultScore(componentResults, finalScore);
     }
-    if (getOriginalFailureReason(existingOutput) === ResultFailureReason.ERROR) {
+    if (
+      getOriginalFailureReason(existingOutput) === ResultFailureReason.ERROR ||
+      existingOutput.metadata?.__promptfoo?.comparisonError
+    ) {
       finalPass = false;
       if (componentResults.length === 0) {
         finalScore = 0;
@@ -1076,7 +1079,8 @@ function buildRatingTableUpdate({
           ? ResultFailureReason.NONE
           : !hasManualOverride &&
               (gradingResult.metadata?.graderError === true ||
-                getOriginalFailureReason(previousOutput) === ResultFailureReason.ERROR)
+                getOriginalFailureReason(previousOutput) === ResultFailureReason.ERROR ||
+                (action === 'clear' && previousOutput.metadata?.__promptfoo?.comparisonError))
             ? ResultFailureReason.ERROR
             : ResultFailureReason.ASSERT,
     pass: ratingUpdate.pass,

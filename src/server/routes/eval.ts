@@ -772,15 +772,17 @@ evalRouter.post(
       if (manualOverride) {
         manualOverride.metadata = { ...manualOverride.metadata, originalFailureReason };
       }
-      const effectivePass =
-        action === 'clear' && originalFailureReason === ResultFailureReason.ERROR
-          ? false
-          : gradingResult.pass;
+      const clearingError =
+        action === 'clear' &&
+        (originalFailureReason === ResultFailureReason.ERROR ||
+          Boolean(result.metadata?.__promptfoo?.comparisonError));
+      const effectivePass = clearingError ? false : gradingResult.pass;
       const successChanged = result.success !== effectivePass;
       const failureReason = effectivePass
         ? ResultFailureReason.NONE
         : !manualOverride &&
-            (gradingResult.metadata?.graderError === true ||
+            (clearingError ||
+              gradingResult.metadata?.graderError === true ||
               originalFailureReason === ResultFailureReason.ERROR)
           ? ResultFailureReason.ERROR
           : ResultFailureReason.ASSERT;
