@@ -455,18 +455,21 @@ describe('Runtime Chat streaming', () => {
     'invalid-tool',
     'sparse-tool',
     'large-tool',
+    'missing-choice-zero',
+    'sparse-choice',
+    'large-choice',
     'invalid-json',
     'service-error',
     'no-usage',
   ])(
     'preserves reported accounting before rejecting %s without executing tools or publishing to cache',
     async (failure) => {
-      const callback = vi.fn();
+      const callback = vi.fn(async () => 'TOOL_OK');
       const chunks: unknown[] = [
         {
           choices: [
             {
-              index: 0,
+              index: failure === 'missing-choice-zero' ? 1 : failure === 'large-choice' ? 10000 : 0,
               delta: {
                 tool_calls: [
                   {
@@ -505,12 +508,25 @@ describe('Runtime Chat streaming', () => {
             },
           ],
         });
+      } else if (failure === 'sparse-choice') {
+        chunks.push({
+          choices: [{ index: 2, delta: { content: 'other choice' }, finish_reason: 'stop' }],
+        });
       } else if (failure === 'service-error') {
         chunks.push({ error: { message: 'Service failed' } });
       }
       const data =
-        sse(chunks, ['missing-finish', 'sparse-tool', 'large-tool'].includes(failure)) +
-        (failure === 'invalid-json' ? 'data: {broken}\n\n' : '');
+        sse(
+          chunks,
+          [
+            'missing-finish',
+            'sparse-tool',
+            'large-tool',
+            'missing-choice-zero',
+            'sparse-choice',
+            'large-choice',
+          ].includes(failure),
+        ) + (failure === 'invalid-json' ? 'data: {broken}\n\n' : '');
       const published = vi.fn();
       vi.mocked(fetchWithCache).mockImplementation(async (...args) => {
         const response = { data, status: 200, statusText: 'OK', cached: false };
@@ -588,6 +604,44 @@ describe('Runtime Chat streaming', () => {
     expect(callback).toHaveBeenCalledTimes(2);
     expect(callback.mock.calls.map(([args]) => JSON.parse(args).index)).toEqual([0, 1]);
   });
+
+  it.each([{ indexes: [0] }, { indexes: [0, 1] }, { indexes: [1, 0] }])(
+    'accepts contiguous choice indexes received as $indexes',
+    async ({ indexes }) => {
+      const callback = vi.fn(async (args) => String(JSON.parse(args).index));
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: sse([
+          {
+            choices: indexes.map((index) => ({
+              index,
+              delta: {
+                tool_calls: [
+                  {
+                    index: 0,
+                    id: 'call-' + index,
+                    type: 'function',
+                    function: { name: 'lookup', arguments: JSON.stringify({ index }) },
+                  },
+                ],
+              },
+              finish_reason: 'tool_calls',
+            })),
+          },
+        ]),
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      });
+      const provider = new BedrockRuntimeChatProvider('us.xai.grok-4.6', {
+        config: { apiKey: 'fixture', stream: true, functionToolCallbacks: { lookup: callback } },
+      });
+      const result = await provider.callApi('hello');
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('0');
+      expect(callback).toHaveBeenCalledOnce();
+      expect(JSON.parse(callback.mock.calls[0][0]).index).toBe(0);
+    },
+  );
 
   it('joins fragmented client tool arguments', async () => {
     vi.mocked(fetchWithCache).mockResolvedValue({
