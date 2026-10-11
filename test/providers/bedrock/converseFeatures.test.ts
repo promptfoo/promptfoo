@@ -4,6 +4,8 @@ import {
   ConverseStreamCommand,
 } from '@aws-sdk/client-bedrock-runtime';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { materializeImageOutputsForGrading } from '../../../src/matchers/rubric';
+import { getTableCellMedia } from '../../../src/presentation/evalTableCells';
 import {
   AwsBedrockConverseProvider,
   type BedrockConverseOptions,
@@ -886,6 +888,155 @@ describe('ConverseStream response parity', () => {
     ).toBeUndefined();
     expect(cache.get).not.toHaveBeenCalled();
     expect(cache.set).not.toHaveBeenCalled();
+  });
+
+  it.each([false, true])(
+    'assembles redacted reasoning with linear copying (showThinking=%s)',
+    async (showThinking) => {
+      const { provider, send } = fixture({ streaming: true, showThinking });
+      const chunk = Buffer.alloc(1024, 7);
+      const count = 64;
+      const events: unknown[] = [];
+      for (let i = 0; i < count; i++) {
+        for (const contentBlockIndex of [1, 0]) {
+          events.push({
+            contentBlockDelta: {
+              contentBlockIndex,
+              delta: { reasoningContent: { redactedContent: chunk } },
+            },
+          });
+        }
+      }
+      events.push(
+        ...[1, 0].map((contentBlockIndex) => ({ contentBlockStop: { contentBlockIndex } })),
+        { messageStop: { stopReason: 'end_turn' } },
+        { metadata: { usage: reply.usage } },
+      );
+      send.mockResolvedValueOnce(stream(events));
+      const concat = vi.spyOn(Buffer, 'concat');
+      const response = await provider.callApi('hello');
+      const copiedBytes = concat.mock.calls.reduce(
+        (total, [chunks]) => total + chunks.reduce((size, bytes) => size + bytes.length, 0),
+        0,
+      );
+      concat.mockRestore();
+      expect(response.error).toBeUndefined();
+      expect(copiedBytes).toBeLessThanOrEqual(2 * count * chunk.length);
+      expect(response.metadata?.content).toEqual(
+        [0, 1].map(() => ({
+          reasoningContent: {
+            redactedContent: Buffer.alloc(count * chunk.length, 7).toString('base64'),
+          },
+        })),
+      );
+      expect(response.output).toBe(
+        showThinking ? '<thinking>[Redacted]</thinking>\n\n<thinking>[Redacted]</thinking>' : '',
+      );
+    },
+  );
+
+  it.each([false, true])(
+    'exposes native media to grading and table consumers (tools=%s)',
+    async (tools) => {
+      const { provider, send } = fixture({
+        functionToolCallbacks: { local: vi.fn().mockResolvedValue('LOCAL') },
+      });
+      const image = { image: { format: 'png', source: { bytes: Buffer.from([1, 2, 3]) } } };
+      const audio = { audio: { format: 'wav', source: { bytes: Buffer.from([4, 5, 6]) } } };
+      const content = [
+        image,
+        audio,
+        { toolResult: { toolUseId: 'server', content: [image, { json: image }] } },
+        { image: { format: 'png', source: { s3Location: { uri: 's3://example/image.png' } } } },
+        ...(tools ? [{ toolUse: { toolUseId: 'local', name: 'local', input: {} } }] : []),
+      ];
+      send.mockResolvedValueOnce({
+        ...reply,
+        output: { message: { role: 'assistant', content } },
+        stopReason: tools ? 'tool_use' : 'end_turn',
+      });
+      const response = await provider.callApi('hello');
+      expect(response.error).toBeUndefined();
+      expect(response.images).toEqual(
+        [0, 1].map(() => ({ data: 'data:image/png;base64,AQID', mimeType: 'image/png' })),
+      );
+      expect(response.audio).toEqual({ data: 'BAUG', format: 'wav' });
+      expect(getTableCellMedia({ response })).toMatchObject({
+        images: response.images,
+        audio: response.audio,
+      });
+      expect(materializeImageOutputsForGrading(response.images).imageOutputs).toHaveLength(2);
+      expect(response.metadata?.content).toHaveLength(content.length);
+      expect(content[0]).toEqual(image);
+    },
+  );
+
+  it('retains completed media on generation failure without caching or dispatching tools', async () => {
+    cache.enabled = true;
+    const callback = vi.fn();
+    const { provider, send } = fixture({ functionToolCallbacks: { local: callback } });
+    send.mockResolvedValueOnce({
+      ...reply,
+      stopReason: 'tool_use',
+      output: {
+        message: {
+          role: 'assistant',
+          content: [
+            { image: { format: 'png', source: { bytes: Buffer.from([1, 2, 3]) } } },
+            {
+              audio: {
+                format: 'wav',
+                source: { bytes: Buffer.from([4, 5, 6]) },
+                error: { message: 'audio failed' },
+              },
+            },
+            { toolUse: { toolUseId: 'local', name: 'local', input: {} } },
+          ],
+        },
+      },
+    });
+    const response = await provider.callApi('hello');
+    expect(response.error).toContain('audio failed');
+    expect(response.images).toEqual([
+      { data: 'data:image/png;base64,AQID', mimeType: 'image/png' },
+    ]);
+    expect(response).not.toHaveProperty('audio');
+    expect(response.tokenUsage).toMatchObject({ prompt: 3, completion: 2, total: 5 });
+    expect(response.cost).toBeGreaterThan(0);
+    expect(callback).not.toHaveBeenCalled();
+    expect(cache.set).not.toHaveBeenCalled();
+  });
+
+  it('does not normalize errored native media or media-shaped tool JSON', async () => {
+    const { provider, send } = fixture();
+    const image = {
+      format: 'png',
+      source: { bytes: Buffer.from([1, 2, 3]) },
+      error: { message: 'image failed' },
+    };
+    const audio = {
+      format: 'wav',
+      source: { bytes: Buffer.from([4, 5, 6]) },
+      error: { message: 'audio failed' },
+    };
+    send.mockResolvedValueOnce({
+      ...reply,
+      output: {
+        message: {
+          role: 'assistant',
+          content: [
+            { image },
+            { audio },
+            { toolResult: { toolUseId: 'server', content: [{ json: { image, audio } }] } },
+          ],
+        },
+      },
+    });
+    const response = await provider.callApi('hello');
+    expect(response.error).toContain('image failed');
+    expect(response).not.toHaveProperty('images');
+    expect(response).not.toHaveProperty('audio');
+    expect(response.tokenUsage).toMatchObject({ prompt: 3, completion: 2, total: 5 });
   });
 
   it('assembles interleaved image chunks with linear copying and preserves source variants', async () => {

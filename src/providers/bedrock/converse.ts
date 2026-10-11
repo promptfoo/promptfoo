@@ -1704,6 +1704,31 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       cacheWrite1hTokens,
     );
 
+    // Native blocks remain available for replay; standard media fields feed graders and the UI.
+    const images = content
+      .flatMap((block) => [block, ...(block.toolResult?.content ?? [])])
+      .flatMap(({ image }) => {
+        if (image?.error || !image?.source?.bytes?.length) {
+          return [];
+        }
+        const mimeType = `image/${image.format ?? 'png'}`;
+        return [
+          {
+            data: `data:${mimeType};base64,${Buffer.from(image.source.bytes).toString('base64')}`,
+            mimeType,
+          },
+        ];
+      });
+    const audio = content.find(
+      (block) => !block.audio?.error && block.audio?.source?.bytes?.length,
+    )?.audio;
+    const media = {
+      ...(images.length > 0 && { images }),
+      ...(audio?.source?.bytes && {
+        audio: { data: Buffer.from(audio.source.bytes).toString('base64'), format: audio.format },
+      }),
+    };
+
     // Build metadata
     const metadata: Record<string, unknown> = { content: content.map(serializeNativeContentBlock) };
 
@@ -1854,6 +1879,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       const error = modelError ?? joinMcpErrors(mcpErrors);
       return {
         output: dispatchResults.join('\n'),
+        ...media,
         tokenUsage,
         ...(cost === undefined ? {} : { cost }),
         ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
@@ -1868,6 +1894,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
 
     return {
       output,
+      ...media,
       tokenUsage,
       ...(cost === undefined ? {} : { cost }),
       ...(Object.keys(metadata).length > 0 ? { metadata } : {}),

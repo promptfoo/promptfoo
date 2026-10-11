@@ -61,6 +61,7 @@ export async function collectConverseStream(
   const blocks = new Map<number, ContentBlock>();
   const toolInputs = new Map<number, string>();
   const imageChunks = new Map<number, Uint8Array[]>();
+  const redactedChunks = new Map<number, Uint8Array[]>();
   const openBlocks = new Set<number>();
   let receivedMetadata = false;
   const result: ConverseCommandOutput = {
@@ -116,13 +117,11 @@ export async function collectConverseStream(
       } else if (delta.reasoningContent) {
         const reasoning = delta.reasoningContent;
         if (reasoning.redactedContent) {
+          const chunks = redactedChunks.get(index) ?? [];
+          chunks.push(reasoning.redactedContent);
+          redactedChunks.set(index, chunks);
           blocks.set(index, {
-            reasoningContent: {
-              redactedContent: Buffer.concat([
-                block?.reasoningContent?.redactedContent ?? new Uint8Array(),
-                reasoning.redactedContent,
-              ]),
-            },
+            reasoningContent: { redactedContent: reasoning.redactedContent },
           });
         } else {
           const previous = block?.reasoningContent?.reasoningText;
@@ -197,6 +196,11 @@ export async function collectConverseStream(
         block.image.source = { bytes: Buffer.concat(chunks) };
       }
       imageChunks.delete(index);
+      const reasoningChunks = redactedChunks.get(index);
+      if (block?.reasoningContent?.redactedContent && reasoningChunks) {
+        block.reasoningContent.redactedContent = Buffer.concat(reasoningChunks);
+      }
+      redactedChunks.delete(index);
       openBlocks.delete(index);
     }
     if (event.messageStop) {

@@ -273,7 +273,10 @@ blocks in `response.metadata.content`, along with returned usage, cache counts,
 latency, guardrail traces, service tier, performance settings, and requested
 additional response fields. Text output uses compact placeholders for generated
 media; binary fields in `response.metadata.content` use base64 strings so they
-remain compact through serialization and can be passed back as native content. Built-in tool
+remain compact through serialization and can be passed back as native content.
+Inline images are also available in `response.images`, and the first successful
+inline audio block in `response.audio`, for media grading and display. S3-backed
+media remains in native metadata. Built-in tool
 failures such as `service_unavailable`, `invalid_query`, and `max_tool_invocations`
 produce eval errors and are not cached. Streaming also executes configured MCP
 tools and local `functionToolCallbacks` after a completed client tool request. Server-side tool
