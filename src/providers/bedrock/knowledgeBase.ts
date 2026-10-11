@@ -385,19 +385,25 @@ export class AwsBedrockKnowledgeBaseProvider
       const useCache = isCacheEnabled() && !this.kbConfig.sessionId && !this.kbConfig.streaming;
       const sensitiveKeys = ['accessKeyId', 'secretAccessKey', 'sessionToken', 'apiKey'];
       const cacheKey = useCache
-        ? `bedrock-kb:v3:${this.kbConfig.knowledgeBaseId}:${modelArn}:${region}:${hashBedrockConfig(
-            {
-              config: {
-                region,
-                modelName: this.modelName,
-                ...Object.fromEntries(
-                  Object.entries(this.kbConfig).filter(([key]) => !sensitiveKeys.includes(key)),
-                ),
-                retrieveAndGenerateConfiguration: nativeConfig,
+        ? nativeConfig
+          ? `bedrock-kb:native:v1:${hashBedrockConfig({
+              params,
+              region,
+              profile: this.kbConfig.profile,
+            })}`
+          : `bedrock-kb:v3:${this.kbConfig.knowledgeBaseId}:${modelArn}:${region}:${hashBedrockConfig(
+              {
+                config: {
+                  region,
+                  modelName: this.modelName,
+                  ...Object.fromEntries(
+                    Object.entries(this.kbConfig).filter(([key]) => !sensitiveKeys.includes(key)),
+                  ),
+                  retrieveAndGenerateConfiguration: nativeConfig,
+                },
+                prompt,
               },
-              prompt,
-            },
-          )}`
+            )}`
         : '';
       if (useCache) {
         const cached = await cache.get(cacheKey);

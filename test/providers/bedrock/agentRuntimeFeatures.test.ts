@@ -565,6 +565,92 @@ describe('Knowledge Base runtime features', () => {
     }
   });
 
+  it.each(['KNOWLEDGE_BASE', 'EXTERNAL_SOURCES'] as const)(
+    'caches effective %s requests independently of ignored convenience settings',
+    async (type) => {
+      cache.enabled = true;
+      const entries = new Map<string, string>();
+      cache.get.mockImplementation((key: string) => entries.get(key));
+      cache.set.mockImplementation((key: string, value: string) => entries.set(key, value));
+      const retrieveAndGenerateConfiguration: NonNullable<KBConfig>['retrieveAndGenerateConfiguration'] =
+        type === 'KNOWLEDGE_BASE'
+          ? {
+              type,
+              knowledgeBaseConfiguration: {
+                knowledgeBaseId: 'EFFECTIVE1',
+                modelArn: 'us.amazon.nova-2-lite-v1:0',
+              },
+            }
+          : {
+              type,
+              externalSourcesConfiguration: {
+                modelArn: 'us.amazon.nova-2-lite-v1:0',
+                sources: [{ sourceType: 'S3', s3Location: { uri: 's3://fixture/source' } }],
+              },
+            };
+      const first = kb({ retrieveAndGenerateConfiguration });
+      const second = kb({
+        retrieveAndGenerateConfiguration,
+        knowledgeBaseId: 'IGNORED002',
+        modelArn: 'anthropic.claude-v2',
+        max_tokens: 200,
+        temperature: 0.9,
+        top_p: 0.8,
+        top_k: 10,
+        numberOfResults: 99,
+        retrievalConfiguration: { vectorSearchConfiguration: { numberOfResults: 20 } },
+        generationConfiguration: { inferenceConfig: { textInferenceConfig: { maxTokens: 100 } } },
+        orchestrationConfiguration: {
+          queryTransformationConfiguration: { type: 'QUERY_DECOMPOSITION' },
+        },
+        apiKey: 'ignored-bearer',
+      });
+      second.provider.modelName = 'anthropic.claude-v2';
+      expect((await first.provider.callApi('question')).output).toBe('answer');
+      const cached = await second.provider.callApi('question');
+      expect(cached).toMatchObject({ output: 'answer', cached: true });
+      expect(cached.metadata).not.toHaveProperty('sessionId');
+      expect(first.send).toHaveBeenCalledOnce();
+      expect(second.send).not.toHaveBeenCalled();
+    },
+  );
+
+  it('preserves native request, region and profile cache boundaries', async () => {
+    cache.enabled = true;
+    const native = {
+      type: 'KNOWLEDGE_BASE' as const,
+      knowledgeBaseConfiguration: {
+        knowledgeBaseId: 'EFFECTIVE1',
+        modelArn: 'us.amazon.nova-2-lite-v1:0',
+      },
+    };
+    const cases: [KBConfig, string][] = [
+      [{}, 'question'],
+      [{}, 'different question'],
+      [{ userContext: { userId: 'different-user' } }, 'question'],
+      [{ sessionConfiguration: { kmsKeyArn: 'different-key' } }, 'question'],
+      [{ region: 'us-west-2' }, 'question'],
+      [{ profile: 'different-profile' }, 'question'],
+      [
+        {
+          retrieveAndGenerateConfiguration: {
+            ...native,
+            knowledgeBaseConfiguration: {
+              ...native.knowledgeBaseConfiguration,
+              knowledgeBaseId: 'OTHERKB123',
+            },
+          },
+        },
+        'question',
+      ],
+    ];
+    for (const [config, prompt] of cases) {
+      const { provider } = kb({ retrieveAndGenerateConfiguration: native, ...config });
+      expect((await provider.callApi(prompt)).error).toBeUndefined();
+    }
+    expect(new Set(cache.get.mock.calls.map(([key]) => key)).size).toBe(cases.length);
+  });
+
   it('distinguishes nested filters while sharing cache keys across object-key order', async () => {
     cache.enabled = true;
     for (const filter of [
