@@ -1136,23 +1136,43 @@ describe('eval routes', () => {
       });
     });
 
-    it('surfaces count-query failures without overwriting persisted metrics', async () => {
-      const record = await EvalFactory.create();
-      testEvalIds.add(record.id);
-      const result = (await record.getResults())[0];
-      const metrics = structuredClone(record.prompts[0].metrics);
-      vi.spyOn(Eval.prototype, 'getPromptGradingMetrics').mockRejectedValueOnce(
-        new Error('Synthetic query failure'),
-      );
-      const response = await api.post(`/api/eval/${record.id}/results/${result.id}/rating`).send({
-        pass: false,
-        score: 0,
-        reason: 'Changed rating',
-      });
-      expect(response.status).toBe(500);
-      expect(response.body).toEqual({ error: 'Failed to submit rating' });
-      expect((await Eval.findById(record.id))?.prompts[0].metrics).toEqual(metrics);
-    });
+    it.each([false, true])(
+      'keeps row and summary unchanged on query failure, then retries once (partial=%s)',
+      async (partial) => {
+        const record = partial ? await createPartialEval('pass') : await EvalFactory.create();
+        testEvalIds.add(record.id);
+        const result = (await record.getResults())[0];
+        invariant(result instanceof EvalResult, 'Persisted result required');
+        const metrics = structuredClone(record.prompts[0].metrics)!;
+        const original = {
+          success: result.success,
+          score: result.score,
+          failureReason: result.failureReason,
+          gradingResult: structuredClone(result.gradingResult),
+        };
+        expect(result.success).toBe(true);
+        vi.spyOn(Eval.prototype, 'getPromptGradingMetrics').mockRejectedValueOnce(
+          new Error('Synthetic query failure'),
+        );
+        const endpoint = `/api/eval/${record.id}/results/${result.id}/rating`;
+        const payload = createManualRatingPayload(result, false);
+        const response = await api.post(endpoint).send(payload);
+        expect(response.status).toBe(500);
+        expect(response.body).toEqual({ error: 'Failed to submit rating' });
+        expect(await EvalResult.findById(result.id)).toMatchObject(original);
+        expect((await Eval.findById(record.id))?.prompts[0].metrics).toEqual(metrics);
+        expect((await api.post(endpoint).send(payload)).status).toBe(200);
+        expect(await EvalResult.findById(result.id)).toMatchObject({ success: false, score: 0 });
+        expect((await Eval.findById(record.id))?.prompts[0].metrics).toMatchObject({
+          testPassCount: metrics.testPassCount - 1,
+          testFailCount: metrics.testFailCount + 1,
+          testErrorCount: metrics.testErrorCount,
+          score: metrics.score - original.score,
+          assertPassCount: metrics.assertPassCount,
+          assertFailCount: metrics.assertFailCount + 1,
+        });
+      },
+    );
 
     it('rejects a clear operation that retains a human override', async () => {
       const record = await EvalFactory.create();

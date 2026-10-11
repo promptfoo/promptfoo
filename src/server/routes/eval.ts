@@ -868,8 +868,6 @@ evalRouter.post(
         }
       }
 
-      prompt.metrics.score += scoreChange;
-      await result.save();
       const { score: persistedScore, ...counts } = await eval_.getPromptGradingMetrics(
         result.promptIdx,
       );
@@ -878,29 +876,27 @@ evalRouter.post(
       const persistedTotal = counts.testPassCount + counts.testFailCount + counts.testErrorCount;
       if (recordedTotal === persistedTotal) {
         Object.assign(prompt.metrics, counts, { score: persistedScore });
-      } else {
-        // Failed inserts remain in summary metrics and recovery output, but not in this query.
-        if (previous.success && previous.failureReason === ResultFailureReason.ERROR) {
-          // Main-era approvals added a pass and removed a fail while retaining the error.
-          prompt.metrics.testPassCount--;
-          prompt.metrics.testFailCount++;
-        }
-        const previousCount =
-          previous.failureReason === ResultFailureReason.ERROR
-            ? 'testErrorCount'
-            : previous.success
-              ? 'testPassCount'
-              : 'testFailCount';
-        const nextCount = result.success
-          ? 'testPassCount'
-          : result.failureReason === ResultFailureReason.ERROR
-            ? 'testErrorCount'
-            : 'testFailCount';
-        if (previousCount !== nextCount) {
-          prompt.metrics[previousCount]--;
-          prompt.metrics[nextCount]++;
-        }
+      } else if (previous.success && previous.failureReason === ResultFailureReason.ERROR) {
+        // Preserve missing rows; remove main-era approvals' extra error and missing fail.
+        prompt.metrics.testFailCount++;
+        prompt.metrics.testErrorCount--;
       }
+      const previousCount = previous.success
+        ? 'testPassCount'
+        : previous.failureReason === ResultFailureReason.ERROR
+          ? 'testErrorCount'
+          : 'testFailCount';
+      const nextCount = result.success
+        ? 'testPassCount'
+        : result.failureReason === ResultFailureReason.ERROR
+          ? 'testErrorCount'
+          : 'testFailCount';
+      if (previousCount !== nextCount) {
+        prompt.metrics[previousCount]--;
+        prompt.metrics[nextCount]++;
+      }
+      prompt.metrics.score += scoreChange;
+      await result.save();
       await eval_.save();
 
       res.json(EvalSchemas.SubmitRating.Response.parse(result));
