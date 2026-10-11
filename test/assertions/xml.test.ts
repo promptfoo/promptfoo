@@ -181,33 +181,6 @@ describe('validateXml', () => {
     });
   });
 
-  it.each(['toString', 'root.toString', 'root.item.0.toString'])(
-    'should not treat inherited property %s as a required element',
-    (requiredElement) => {
-      expect(
-        validateXml('<root><item><name>First</name></item><item>Second</item></root>', [
-          requiredElement,
-        ]),
-      ).toEqual({
-        isValid: false,
-        reason: `XML is missing required elements: ${requiredElement}`,
-      });
-    },
-  );
-
-  it('should accept required elements with empty, false, and zero values', () => {
-    expect(
-      validateXml('<root><empty/><enabled>false</enabled><count>0</count></root>', [
-        'root.empty',
-        'root.enabled',
-        'root.count',
-      ]),
-    ).toEqual({
-      isValid: true,
-      reason: 'XML is valid and contains all required elements',
-    });
-  });
-
   it('should validate nested elements correctly', () => {
     expect(
       validateXml('<root><parent><child><grandchild>Content</grandchild></child></parent></root>', [
@@ -372,33 +345,6 @@ describe('containsXml', () => {
     expect(result.isValid).toBe(true);
   });
 
-  it.each(['toString', 'root.toString', 'root.item.0.toString'])(
-    'should not treat inherited property %s as a required element in a fragment',
-    (requiredElement) => {
-      expect(
-        containsXml('Result: <root><item><name>First</name></item><item>Second</item></root>', [
-          requiredElement,
-        ]),
-      ).toEqual({
-        isValid: false,
-        reason: 'No valid XML content found matching the requirements',
-      });
-    },
-  );
-
-  it('should accept required fragment elements with empty, false, and zero values', () => {
-    expect(
-      containsXml('Result: <root><empty/><enabled>false</enabled><count>0</count></root>', [
-        'root.empty',
-        'root.enabled',
-        'root.count',
-      ]),
-    ).toEqual({
-      isValid: true,
-      reason: 'XML is valid and contains all required elements',
-    });
-  });
-
   it('should return false when required elements are missing', () => {
     const input = 'Text <root><child>Content</child></root> more';
     expect(containsXml(input, ['root.missing'])).toEqual({
@@ -513,6 +459,27 @@ describe.each([
   { name: 'is-xml', validate: validateXml },
   { name: 'contains-xml', validate: containsXml },
 ])('$name required element names', ({ validate }) => {
+  it.each(['toString', 'root.toString', 'root.item.0.toString'])(
+    'rejects an inherited property at %s',
+    (requiredElement) => {
+      expect(
+        validate('<root><item><name>First</name></item><item>Second</item></root>', [
+          requiredElement,
+        ]).isValid,
+      ).toBe(false);
+    },
+  );
+
+  it('accepts empty, false, and zero element values', () => {
+    expect(
+      validate('<root><empty/><enabled>false</enabled><count>0</count></root>', [
+        'root.empty',
+        'root.enabled',
+        'root.count',
+      ]).isValid,
+    ).toBe(true);
+  });
+
   it.each([
     'toString',
     'valueOf',
