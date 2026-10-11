@@ -3021,19 +3021,6 @@ export class HttpProvider implements ApiProvider {
   }
 
   /**
-   * Extracts completion text from parsed output with fallback to raw text
-   */
-  private getCompletionText(parsedOutput: any, rawText: string): string {
-    if (typeof parsedOutput === 'string') {
-      return parsedOutput;
-    }
-    if (typeof parsedOutput?.output === 'string') {
-      return parsedOutput.output;
-    }
-    return rawText;
-  }
-
-  /**
    * Processes response and adds token estimation if enabled
    */
   private async processResponseWithTokenEstimation(
@@ -3052,15 +3039,16 @@ export class HttpProvider implements ApiProvider {
       typeof originalResponse.tokenUsage === 'object'
         ? (originalResponse.tokenUsage as Partial<TokenUsage>)
         : undefined;
+    const normalizedOutput = normalizeResponseTransformResult(parsedOutput);
     // Estimate tokens if enabled
     let estimatedTokenUsage: Partial<TokenUsage> | undefined;
     if (this.config.tokenEstimation?.enabled) {
       const promptText = typeof transformedPrompt === 'string' ? transformedPrompt : prompt;
-      const completionText = this.getCompletionText(parsedOutput, rawText);
+      const completionText =
+        typeof normalizedOutput.output === 'string' ? normalizedOutput.output : rawText;
       estimatedTokenUsage = await this.estimateTokenUsage(promptText, completionText);
     }
 
-    const normalizedOutput = normalizeResponseTransformResult(parsedOutput);
     const result = {
       ...ret,
       ...normalizedOutput,
