@@ -1,3 +1,8 @@
+import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import type { EventEmitter } from 'node:events';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -10,6 +15,7 @@ import { loadYaml } from '../../../src/util/yamlLoad';
 import { mockProcessEnv } from '../../util/utils';
 
 import type { SimulatedVoiceUserConfig } from '../../../src/providers/voice/types';
+import type { ProviderResponse } from '../../../src/types/providers';
 
 interface Socket extends EventEmitter {
   readyState: number;
@@ -159,6 +165,58 @@ function acknowledgeSpeech(socket: Socket, id?: string) {
 function acknowledgeOpening() {
   const socket = sockets.find((s) => s.sent.some((e) => e.type === 'session.instructions.append'))!;
   acknowledgeSpeech(socket);
+}
+
+/** Run the shipped offline exporter against a portable copy of an actual provider response. */
+function exportVoiceEvidence(response: ProviderResponse) {
+  const directory = mkdtempSync(path.join(os.tmpdir(), 'voice-refusal-evidence-'));
+  try {
+    const inputPath = path.join(directory, 'result.json');
+    const outputPath = path.join(directory, 'evidence');
+    const exportResponse = structuredClone(response);
+    const blobAssets = [];
+    for (const recording of [exportResponse.audio, exportResponse.metadata?.audio]) {
+      if (!recording?.data) {
+        continue;
+      }
+      const bytes = Buffer.from(recording.data, 'base64');
+      const hash = createHash('sha256').update(bytes).digest('hex');
+      blobAssets.push({
+        hash,
+        sizeBytes: bytes.length,
+        mimeType: 'audio/wav',
+        data: recording.data,
+      });
+      recording.blobRef = {
+        hash,
+        sizeBytes: bytes.length,
+        mimeType: 'audio/wav',
+        provider: 'filesystem',
+      };
+      delete recording.data;
+    }
+    const portable = { results: { results: [{ response: exportResponse }] }, blobAssets };
+    writeFileSync(inputPath, JSON.stringify(portable));
+    const command = spawnSync(
+      process.execPath,
+      [
+        path.resolve(__dirname, '../../../examples/simulated-voice-user/export-evidence.js'),
+        inputPath,
+        '--out',
+        outputPath,
+      ],
+      { encoding: 'utf8', timeout: 10000 },
+    );
+    const manifest = JSON.parse(readFileSync(path.join(outputPath, 'manifest.json'), 'utf8'));
+    const sourcePath = path.join(outputPath, 'case-001-target-source.wav');
+    return {
+      command,
+      manifest,
+      source: existsSync(sourcePath) ? readFileSync(sourcePath) : undefined,
+    };
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
 }
 
 describe('SimulatedVoiceUser', () => {
@@ -360,6 +418,110 @@ describe('SimulatedVoiceUser', () => {
     expect(app.recognition.turns[0].decision).toBeUndefined();
     expect(vi.getTimerCount()).toBe(0);
   });
+
+  it.each(['before media', 'during media'] as const)(
+    'exports retained application source after target refusal %s on the correct clock',
+    async (phase) => {
+      const result = provider({ targetPlayback: { mode: 'app-barge-in' } }).callApi('Cafe');
+      const beforeMedia = phase === 'before media';
+      const { target, caller } = await connectApplication(beforeMedia ? [0] : [0, 1]);
+      audio(target, 1000, 24000);
+      transcript(target, 'I cannot help with that.', 0);
+      await vi.advanceTimersByTimeAsync(beforeMedia ? 20 : 100);
+      emit(target, { type: 'session.closed', reason: 'content', usage: { seconds: 0.1 } });
+      await vi.advanceTimersByTimeAsync(0);
+      if (beforeMedia) {
+        // A valid target refusal lets the caller finish startup and report final usage.
+        await vi.advanceTimersByTimeAsync(20);
+        emit(caller, { type: 'session.started', session: { id: 'late-caller' } });
+        await vi.advanceTimersByTimeAsync(0);
+      }
+      expect(caller.sent).toContainEqual({ type: 'session.close' });
+      emit(caller, { type: 'session.closed', reason: 'close_requested', usage: { seconds: 0 } });
+      const response = await result;
+
+      expect(response.error).toBeUndefined();
+      expect(response.isRefusal).toBe(true);
+      expect(response.metadata?.voice.stopReason).toBe('safety');
+      expect(response.metadata?.voice.participants.caller.finalUsageConfirmed).toBe(true);
+      const playback = response.metadata!.voice.targetPlayback;
+      expect(playback.metrics.sourceBytes).toBe(48000);
+      expect(playback.metrics.stops).toBe(0);
+      if (beforeMedia) {
+        expect(response.audio).toBeUndefined();
+        expect(response.metadata?.voice.durationMs).toBe(0);
+        expect(playback.metrics.deliveredSourceBytes).toBe(0);
+        expect(playback.metrics.pendingQueuedBytes).toBe(48000);
+        for (const socket of [target, caller]) {
+          expect(socket.sent.some((event) => event.type === 'session.input_audio.append')).toBe(
+            false,
+          );
+          expect(socket.sent.some((event) => event.type === 'session.instructions.append')).toBe(
+            false,
+          );
+        }
+      } else {
+        expect(response.audio?.data).toBeTruthy();
+        expect(playback.metrics.deliveredSourceBytes).toBeGreaterThan(0);
+      }
+      expect(vi.getTimerCount()).toBe(0);
+
+      const { command, manifest, source } = exportVoiceEvidence(response);
+      // No heard recording is an explicit partial-evidence error, not a fabricated success.
+      expect(command.status, command.stderr).toBe(beforeMedia ? 1 : 0);
+      expect(manifest.errors).toBe(beforeMedia ? 1 : 0);
+      expect(manifest.rows[0].recordings).toHaveLength(beforeMedia ? 0 : 3);
+      expect(manifest.rows[0].sourceRecordings).toHaveLength(1);
+      expect(source).toEqual(Buffer.from(response.metadata!.audio.data, 'base64'));
+      expect(playback.clock).toBe(beforeMedia ? 'provider' : 'media');
+      expect(manifest.rows[0].metrics.targetPlayback.clock).toBe(playback.clock);
+      if (beforeMedia) {
+        expect(playback.events).toContainEqual(
+          expect.objectContaining({ type: 'closed', atMs: 40 }),
+        );
+        expect(manifest.rows[0].metrics.targetPlayback.stops).toBeNull();
+      }
+    },
+  );
+
+  it.each(['opening speech send', 'first audio append'] as const)(
+    'keeps source evidence on the provider clock when %s fails before capture',
+    async (failure) => {
+      const result = provider({ targetPlayback: { mode: 'app-barge-in' } }).callApi('Cafe');
+      const { target, caller } = await connectApplication([0]);
+      audio(target, 1000, 24000);
+      await vi.advanceTimersByTimeAsync(40);
+      if (failure === 'opening speech send') {
+        const send = caller.send.bind(caller);
+        vi.spyOn(caller, 'send').mockImplementation((value) => {
+          if (JSON.parse(value).type === 'session.instructions.append') {
+            throw new Error('Opening speech transport failed');
+          }
+          send(value);
+        });
+      } else {
+        target.bufferedAmount = 144001;
+      }
+      emit(caller, { type: 'session.started', session: { id: 'late-caller' } });
+      await vi.advanceTimersByTimeAsync(0);
+      finalize();
+      const response = await result;
+      expect(response.error).toBeTruthy();
+      expect(response.audio).toBeUndefined();
+      expect(response.metadata?.voice.durationMs).toBe(0);
+      expect(response.metadata?.voice.targetPlayback.clock).toBe('provider');
+      expect(response.metadata?.voice.targetPlayback.events).toContainEqual(
+        expect.objectContaining({ type: 'closed', atMs: 40 }),
+      );
+      const { command, manifest, source } = exportVoiceEvidence(response);
+      expect(command.status, command.stderr).toBe(1);
+      expect(manifest.rows[0].recordings).toHaveLength(0);
+      expect(manifest.rows[0].sourceRecordings).toHaveLength(1);
+      expect(manifest.rows[0].metrics.targetPlayback.stops).toBeNull();
+      expect(source).toEqual(Buffer.from(response.metadata!.audio.data, 'base64'));
+      expect(vi.getTimerCount()).toBe(0);
+    },
+  );
 
   it('fails explicit application mode before starting participants if recognition setup fails', async () => {
     const result = provider({ targetPlayback: { mode: 'app-barge-in' } }).callApi('Cafe');

@@ -20,22 +20,22 @@ export function detectExplicitStop(
   // A terminal period might still become an ellipsis in the next delta. Wait
   // for following whitespace or completion; exclamations are already distinct.
   if (
-    /^(?:please[, ]+)?(?:stop|pause)(?:\.(?=\s)|!+(?=\s|$))/.test(normalized) ||
-    /^(?:please[, ]+)?pause[,?]/.test(normalized)
+    /^(?:please[, ]+)?(?:stop|pause|hold on)(?:\.(?=\s)|!+(?=\s|$))/.test(normalized) ||
+    /^(?:please[, ]+)?(?:pause|hold on)[,?]/.test(normalized)
   ) {
     return 'explicit-command';
   }
   // Chunk ends are not word boundaries: "hold on" can become "hold onto",
   // and "wait a second" can become "wait a secondary concern".
   const command = normalized.match(
-    /^(?:please[, ]+)?(?:stop (?:talking|speaking|reading)|wait,? (?:a second|a moment)|hold on|pause (?:please|for a moment))([\s,.!?]|$)/,
+    /^(?:please[, ]+)?(?:stop (?:talking|speaking|reading)|wait,? (?:a second|a moment)|hold on please|pause (?:please|for a moment))([\s,.!?]|$)/,
   );
   if (command && (completed || command[1])) {
     return 'explicit-command';
   }
-  // Bare "stop" and "pause" may acquire an object or continuation. Only a
-  // completed shortest command can bypass the observed-boundary requirement.
-  if (completed && /^(?:please[, ]+)?(?:stop|pause)[.!?,]*\s*$/.test(normalized)) {
+  // Bare stop/pause and "hold on " can acquire an object ("hold on to it").
+  // Wait for completion unless punctuation or a polite continuation is observed.
+  if (completed && /^(?:please[, ]+)?(?:stop|pause|hold on)[.!?,]*\s*$/.test(normalized)) {
     return 'explicit-command';
   }
   // Require a question-form continuation and the same observed word boundary.

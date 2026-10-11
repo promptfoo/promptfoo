@@ -302,7 +302,6 @@ export class SimulatedVoiceUser implements ApiProvider {
     let rejectSetup: ((reason: unknown) => void) | undefined;
     const startedAt = performance.now();
     let mediaStartedAt = startedAt;
-    let mediaStarted = false;
     const transcript: VoiceTranscriptFragment[] = [];
     const interventionsSent: VoiceIntervention[] = [];
     let scheduledAudioInterventions = 0;
@@ -581,9 +580,8 @@ export class SimulatedVoiceUser implements ApiProvider {
           throw new Error(error ?? 'Voice participant ended before both sessions were ready.');
         }),
       ]);
-      mediaStartedAt = performance.now();
-      mediaStarted = true;
       if (!stopped) {
+        mediaStartedAt = performance.now();
         const opening = this.config.targetSpeaksFirst ? 0 : 1;
         sessions[opening].requestSpeech(
           this.config.targetSpeaksFirst
@@ -796,8 +794,8 @@ export class SimulatedVoiceUser implements ApiProvider {
         recognitionSummary,
         redirects,
         sourceRecording,
-        mediaStarted,
-        mediaStartedAt - startedAt,
+        frameCount > 0,
+        frameCount > 0 ? mediaStartedAt - startedAt : 0,
       ),
     });
   }

@@ -64,6 +64,8 @@ describe('English explicit-stop policy', () => {
     'Sorry how I phrased that was wrong',
     'Please stop talk',
     'hold onto it',
+    'Hold on to my reservation',
+    'Please hold on to my reservation',
     'Wait a secondary concern',
     'Wait, a secondary concern',
     'Wait, a',
@@ -87,6 +89,8 @@ describe('English explicit-stop policy', () => {
   it.each([
     'Please pause playback of the video',
     'hold onto it',
+    'Hold on to my reservation',
+    'Please hold on to my reservation',
     'Wait a secondary concern',
     'Wait, a secondary concern',
     'Stop... by the office tomorrow.',
@@ -147,6 +151,23 @@ describe('English explicit-stop policy', () => {
       expect(detectExplicitStop(text, true)).toBeUndefined();
     },
   );
+
+  it.each(['Hold on ', 'Please hold on ', 'Hold on please'])(
+    'waits for completion when a hold request has no imperative boundary: %s',
+    (text) => {
+      expect(detectExplicitStop(text)).toBeUndefined();
+      expect(detectExplicitStop(text, true)).toBe('explicit-command');
+    },
+  );
+
+  it.each([
+    'Hold on, I need to correct that.',
+    'Hold on. I have a question.',
+    'Hold on please, I need to ask something.',
+  ])('recognizes bounded polite or punctuated hold imperatives: %s', (text) => {
+    expect(detectExplicitStop(text)).toBe('explicit-command');
+    expect(detectExplicitStop(text, true)).toBe('explicit-command');
+  });
 
   it('waits for completion to distinguish a bare stop command from a continuation', () => {
     expect(detectExplicitStop('Stop')).toBeUndefined();

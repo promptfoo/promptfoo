@@ -264,6 +264,9 @@ describe('independent Live transcription', () => {
     'Stop',
     'Stop.',
     'Hold on',
+    'Hold on ',
+    'Please hold on ',
+    'Hold on please',
     'Wait a second',
     'Wait, a second',
     'Pause for a moment',
@@ -293,7 +296,9 @@ describe('independent Live transcription', () => {
     { prefix: 'Pause', continuation: '?' },
     { prefix: 'Pause for a moment', continuation: ' ' },
     { prefix: 'Wait a second', continuation: ',' },
-    { prefix: 'Hold on', continuation: ' ' },
+    { prefix: 'Hold on', continuation: ', I need to correct that.' },
+    { prefix: 'Hold on.', continuation: ' I have a question.' },
+    { prefix: 'Hold on ', continuation: 'please, I need to ask something.' },
     { prefix: 'Stop.', continuation: ' I’m changing the booking' },
     { prefix: 'Stop.', continuation: " I'm changing the booking" },
   ])(
@@ -316,6 +321,28 @@ describe('independent Live transcription', () => {
       complete(socket, 'item-1', (prefix + continuation).trim());
       expect((await fixture.session.finish()).status).toBe('completed');
       expect(fixture.onStopDecision).toHaveBeenCalledOnce();
+    },
+  );
+
+  it.each(['hold onto it', 'Hold on to my reservation', 'Please hold on to my reservation'])(
+    'does not dispatch at any streamed prefix of a retention request: %s',
+    async (text) => {
+      const fixture = setup();
+      const socket = await fixture.start();
+      fixture.frames(5);
+      for (const character of text) {
+        delta(socket, 'item-1', character);
+        expect(fixture.onStopDecision).not.toHaveBeenCalled();
+      }
+      fixture.frames(15, false);
+      commit(socket, 'item-1');
+      complete(socket, 'item-1', text);
+      const summary = await fixture.session.finish();
+      expect(summary.status).toBe('completed');
+      expect(summary.turns[0].final).toBe(text);
+      expect(summary.turns[0].decision).toBeUndefined();
+      expect(fixture.onStopDecision).not.toHaveBeenCalled();
+      expect(fixture.onError).not.toHaveBeenCalled();
     },
   );
 
