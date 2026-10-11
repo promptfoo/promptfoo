@@ -192,296 +192,104 @@ describe('AssertionsResult', () => {
       expect(usage.numRequests).toBe(0);
     });
 
-    it('propagates graderError when a failing component is a grader failure', async () => {
-      const assertionsResult = new AssertionsResult({});
-      assertionsResult.addResult({
-        index: 0,
-        result: {
-          pass: false,
-          score: 0,
-          reason: 'Grader provider unavailable',
-          tokensUsed: DEFAULT_TOKENS_USED,
-          metadata: { graderError: true },
+    const graderFailure: GradingResult = {
+      pass: false,
+      score: 0,
+      reason: 'Grader provider unavailable',
+      metadata: { graderError: true },
+    };
+    const ordinaryFailure: GradingResult = { pass: false, score: 0, reason: 'Criterion not met' };
+
+    it.each([
+      { name: 'grader failure', component: graderFailure, graderError: true },
+      { name: 'ordinary failure', component: ordinaryFailure, graderError: undefined },
+      {
+        name: 'zero-weight set',
+        component: {
+          ...graderFailure,
+          metadata: {
+            graderError: true as const,
+            assertionSet: { type: 'assert-set' as const, assertionCount: 1, weight: 0 },
+          },
         },
-      });
-
-      const result = await assertionsResult.testResult();
-
-      expect(result.pass).toBe(false);
-      expect(result.metadata?.graderError).toBe(true);
+        graderError: undefined,
+      },
+      {
+        name: 'passing assertion',
+        component: { pass: true, score: 1, reason: 'Criterion met' },
+        graderError: undefined,
+      },
+      {
+        name: 'empty grader reason',
+        component: { ...graderFailure, reason: '' },
+        graderError: true,
+      },
+    ])('propagates only grader failures: $name', async ({ component, graderError }) => {
+      const result = new AssertionsResult({});
+      // Comparison assertions skip addResult and can leave sparse positions.
+      result.addResult({ index: 1, result: component });
+      const aggregate = await result.testResult();
+      expect(aggregate.pass).toBe(component.pass);
+      expect(aggregate.metadata?.graderError).toBe(graderError);
     });
 
-    it('does not mark ordinary assertion failures as grader errors', async () => {
-      const assertionsResult = new AssertionsResult({});
-      assertionsResult.addResult({
-        index: 0,
-        result: {
-          pass: false,
-          score: 0,
-          reason: 'The submission does not meet the criterion',
-          tokensUsed: DEFAULT_TOKENS_USED,
-        },
-      });
+    it.each([undefined, 0])('honors nested-set threshold %s', async (threshold) => {
+      const nested = new AssertionsResult({ threshold });
+      nested.addResult({ index: 0, result: graderFailure });
+      const nestedResult = await nested.testResult();
+      expect(nestedResult.pass).toBe(threshold === 0);
 
-      const result = await assertionsResult.testResult();
-
-      expect(result.pass).toBe(false);
-      expect(result.metadata?.graderError).toBeUndefined();
+      const result = new AssertionsResult({});
+      result.addResult({ index: 0, result: nestedResult });
+      result.addResult({ index: 1, result: ordinaryFailure });
+      const aggregate = await result.testResult();
+      expect(aggregate.pass).toBe(false);
+      expect(aggregate.metadata?.graderError).toBe(threshold === 0 ? undefined : true);
+      expect(aggregate.reason).toBe(
+        threshold === 0 ? ordinaryFailure.reason : graderFailure.reason,
+      );
     });
 
-    it('does not mark passing results as grader errors', async () => {
-      const assertionsResult = new AssertionsResult({});
-      assertionsResult.addResult({
-        index: 0,
-        result: {
-          pass: true,
-          score: 1,
-          reason: 'All assertions passed',
-          tokensUsed: DEFAULT_TOKENS_USED,
-        },
-      });
-
-      const result = await assertionsResult.testResult();
-
-      expect(result.pass).toBe(true);
-      expect(result.metadata?.graderError).toBeUndefined();
+    it('ignores force-passed metric-only grader failures', async () => {
+      const result = new AssertionsResult({});
+      result.addResult({ index: 0, result: { ...graderFailure, pass: true }, weight: 0 });
+      result.addResult({ index: 1, result: ordinaryFailure });
+      const aggregate = await result.testResult();
+      expect(aggregate.pass).toBe(false);
+      expect(aggregate.metadata?.graderError).toBeUndefined();
     });
 
-    it('ignores grader failures inside an effectively-passed assert-set', async () => {
-      const subAssertResult = new AssertionsResult({ threshold: 0 });
-      subAssertResult.addResult({
-        index: 0,
-        result: {
-          pass: false,
-          score: 0,
-          reason: 'Grader provider unavailable',
-          tokensUsed: DEFAULT_TOKENS_USED,
-          metadata: { graderError: true },
-        },
+    it('retains the grader cause when an aggregate threshold fails', async () => {
+      const result = new AssertionsResult({ threshold: 0.6 });
+      result.addResult({ index: 0, result: { pass: true, score: 1, reason: 'Criterion met' } });
+      result.addResult({ index: 1, result: graderFailure });
+      expect(await result.testResult()).toMatchObject({
+        pass: false,
+        reason: graderFailure.reason,
+        metadata: { graderError: true },
       });
-      const passedSet = await subAssertResult.testResult();
-      expect(passedSet.pass).toBe(true);
-
-      const assertionsResult = new AssertionsResult({});
-      assertionsResult.addResult({ index: 0, result: passedSet });
-      assertionsResult.addResult({
-        index: 1,
-        result: {
-          pass: false,
-          score: 0,
-          reason: 'The submission does not meet the criterion',
-          tokensUsed: DEFAULT_TOKENS_USED,
-        },
-      });
-
-      const result = await assertionsResult.testResult();
-
-      expect(result.pass).toBe(false);
-      expect(result.metadata?.graderError).toBeUndefined();
     });
 
-    it('ignores grader failures from metric-only weight-0 assertions', async () => {
-      // runAssertion forces pass:true for weight-0 assertions without clearing
-      // metadata, so a grader failure can arrive as a passing component.
-      const assertionsResult = new AssertionsResult({});
-      assertionsResult.addResult({
+    it.each([
+      { metricOnly: false, scorerGraderError: undefined, expected: true },
+      { metricOnly: true, scorerGraderError: true, expected: true },
+      { metricOnly: true, scorerGraderError: undefined, expected: undefined },
+    ])('preserves scorer decisions: %j', async ({ metricOnly, scorerGraderError, expected }) => {
+      const result = new AssertionsResult({ threshold: 0 });
+      result.addResult({
         index: 0,
-        result: {
-          pass: true,
-          score: 0,
-          reason: 'Grader provider unavailable',
-          tokensUsed: DEFAULT_TOKENS_USED,
-          metadata: { graderError: true },
-        },
-        weight: 0,
+        result: { ...graderFailure, pass: metricOnly },
+        weight: metricOnly ? 0 : 1,
       });
-      assertionsResult.addResult({
-        index: 1,
-        result: {
-          pass: false,
-          score: 0,
-          reason: 'The submission does not meet the criterion',
-          tokensUsed: DEFAULT_TOKENS_USED,
-        },
-      });
-
-      const result = await assertionsResult.testResult();
-
-      expect(result.pass).toBe(false);
-      expect(result.metadata?.graderError).toBeUndefined();
-    });
-
-    it('propagates grader errors from a failed nested assert-set', async () => {
-      const subAssertResult = new AssertionsResult({});
-      subAssertResult.addResult({
-        index: 0,
-        result: {
-          pass: false,
-          score: 0,
-          reason: 'Grader provider unavailable',
-          tokensUsed: DEFAULT_TOKENS_USED,
-          metadata: { graderError: true },
-        },
-      });
-      const failedSet = await subAssertResult.testResult();
-      expect(failedSet.pass).toBe(false);
-      expect(failedSet.metadata?.graderError).toBe(true);
-
-      const assertionsResult = new AssertionsResult({});
-      assertionsResult.addResult({ index: 0, result: failedSet });
-
-      const result = await assertionsResult.testResult();
-
-      expect(result.pass).toBe(false);
-      expect(result.metadata?.graderError).toBe(true);
-    });
-
-    it('keeps the grader failure reason when a threshold overrides the summary', async () => {
-      const assertionsResult = new AssertionsResult({ threshold: 0.6 });
-      assertionsResult.addResult({
-        index: 0,
-        result: {
-          pass: true,
-          score: 1,
-          reason: 'The submission meets the criterion',
-          tokensUsed: DEFAULT_TOKENS_USED,
-        },
-      });
-      assertionsResult.addResult({
-        index: 1,
-        result: {
-          pass: false,
-          score: 0,
-          reason: 'Grader provider unavailable',
-          tokensUsed: DEFAULT_TOKENS_USED,
-          metadata: { graderError: true },
-        },
-      });
-
-      const result = await assertionsResult.testResult();
-
-      expect(result.pass).toBe(false);
-      expect(result.reason).toBe('Grader provider unavailable');
-      expect(result.metadata?.graderError).toBe(true);
-    });
-
-    it('tolerates sparse slots left by skipped comparison assertions', async () => {
-      // select-best/max-score entries skip addResult, leaving holes that
-      // Array.prototype.find visits as undefined.
-      const assertionsResult = new AssertionsResult({});
-      assertionsResult.addResult({
-        index: 1,
-        result: {
-          pass: false,
-          score: 0,
-          reason: 'The submission does not meet the criterion',
-          tokensUsed: DEFAULT_TOKENS_USED,
-        },
-      });
-
-      const result = await assertionsResult.testResult();
-
-      expect(result.pass).toBe(false);
-      expect(result.reason).toBe('The submission does not meet the criterion');
-      expect(result.metadata?.graderError).toBeUndefined();
-    });
-
-    it('marks grader failures with an empty reason', async () => {
-      const assertionsResult = new AssertionsResult({});
-      assertionsResult.addResult({
-        index: 0,
-        result: {
-          pass: false,
-          score: 0,
-          reason: '',
-          tokensUsed: DEFAULT_TOKENS_USED,
-          metadata: { graderError: true },
-        },
-      });
-
-      const result = await assertionsResult.testResult();
-
-      expect(result.pass).toBe(false);
-      expect(result.metadata?.graderError).toBe(true);
-    });
-
-    it('marks grader failures when custom scoring fails a passing aggregate', async () => {
-      const assertionsResult = new AssertionsResult({ threshold: 0 });
-      assertionsResult.addResult({
-        index: 0,
-        result: {
-          pass: false,
-          score: 0,
-          reason: 'Grader provider unavailable',
-          tokensUsed: DEFAULT_TOKENS_USED,
-          metadata: { graderError: true },
-        },
-      });
-
-      const result = await assertionsResult.testResult(() => ({
+      const aggregate = await result.testResult(() => ({
         pass: false,
         score: 0,
         reason: 'Custom scorer rejected the run',
+        ...(scorerGraderError && { metadata: { graderError: true } }),
       }));
-
-      expect(result.pass).toBe(false);
-      expect(result.reason).toBe('Custom scorer rejected the run');
-      expect(result.metadata?.graderError).toBe(true);
-    });
-
-    it('lets custom scoring propagate a grader error it observes', async () => {
-      // A metric-only (weight-0) grader failure is force-passed and does not
-      // mark the aggregate by itself. A scorer that fails because the metric
-      // was unavailable can say so explicitly via its own metadata.
-      const assertionsResult = new AssertionsResult({});
-      assertionsResult.addResult({
-        index: 0,
-        result: {
-          pass: true,
-          score: 0,
-          reason: 'Grader provider unavailable',
-          tokensUsed: DEFAULT_TOKENS_USED,
-          metadata: { graderError: true },
-        },
-        weight: 0,
-      });
-
-      const result = await assertionsResult.testResult(() => ({
-        pass: false,
-        score: 0,
-        reason: 'Quality gate failed without judge signal',
-        metadata: { graderError: true },
-      }));
-
-      expect(result.pass).toBe(false);
-      expect(result.metadata?.graderError).toBe(true);
-    });
-
-    it('does not second-guess a custom scorer that stays silent on grader errors', async () => {
-      // The scorer saw the same metric-only grader failure and failed the run
-      // for its own reasons. That intent is preserved as an ordinary failure.
-      const assertionsResult = new AssertionsResult({});
-      assertionsResult.addResult({
-        index: 0,
-        result: {
-          pass: true,
-          score: 0,
-          reason: 'Grader provider unavailable',
-          tokensUsed: DEFAULT_TOKENS_USED,
-          metadata: { graderError: true },
-        },
-        weight: 0,
-      });
-
-      const result = await assertionsResult.testResult(() => ({
-        pass: false,
-        score: 0,
-        reason: 'Custom quality gate failed',
-      }));
-
-      expect(result.pass).toBe(false);
-      expect(result.reason).toBe('Custom quality gate failed');
-      expect(result.metadata?.graderError).toBeUndefined();
+      expect(aggregate.pass).toBe(false);
+      expect(aggregate.reason).toBe('Custom scorer rejected the run');
+      expect(aggregate.metadata?.graderError).toBe(expected);
     });
 
     it('does not mark mixed fresh and cached grading responses as fully cached', async () => {

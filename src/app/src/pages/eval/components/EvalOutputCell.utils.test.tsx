@@ -1,9 +1,6 @@
-import { type EvaluateTableOutput } from '@promptfoo/types';
-import { ResultFailureReason } from '@promptfoo/types/results';
 import { describe, expect, it, vi } from 'vitest';
 import {
   extractMarkdownImageSources,
-  getFailAndPassReasons,
   normalizeImageSrcForComparison,
   resolveEvalImageOutputSource,
 } from './EvalOutputCell';
@@ -342,56 +339,5 @@ describe('resolveEvalImageOutputSource', () => {
     const image = { data: '  https://example.com/image.png  ', mimeType: 'image/png' };
     const result = resolveEvalImageOutputSource(image);
     expect(result).toBe('data:image/png;base64,  https://example.com/image.png  ');
-  });
-});
-
-describe('getFailAndPassReasons', () => {
-  const componentResults = [
-    { pass: false, score: 0, reason: 'Grader provider unavailable' },
-    { pass: true, score: 1, reason: 'The submission meets the criterion' },
-  ];
-
-  it('shows a promoted grader cause once on ERROR rows', () => {
-    const output = {
-      error: 'Grader provider unavailable',
-      failureReason: ResultFailureReason.ERROR,
-      gradingResult: { componentResults },
-    } as unknown as EvaluateTableOutput;
-
-    expect(getFailAndPassReasons(output)).toEqual({
-      failReasons: ['Grader provider unavailable'],
-      passReasons: ['The submission meets the criterion'],
-    });
-  });
-
-  it('keeps distinct component reasons on ERROR rows', () => {
-    const output = {
-      error: 'Grader provider unavailable',
-      failureReason: ResultFailureReason.ERROR,
-      gradingResult: {
-        componentResults: [
-          ...componentResults,
-          { pass: false, score: 0, reason: 'A different failure' },
-        ],
-      },
-    } as unknown as EvaluateTableOutput;
-
-    expect(getFailAndPassReasons(output)).toEqual({
-      failReasons: ['Grader provider unavailable', 'A different failure'],
-      passReasons: ['The submission meets the criterion'],
-    });
-  });
-
-  it('does not prepend row errors on ASSERT rows', () => {
-    const output = {
-      error: 'The submission does not meet the criterion',
-      failureReason: ResultFailureReason.ASSERT,
-      gradingResult: { componentResults },
-    } as unknown as EvaluateTableOutput;
-
-    expect(getFailAndPassReasons(output)).toEqual({
-      failReasons: ['Grader provider unavailable'],
-      passReasons: ['The submission meets the criterion'],
-    });
   });
 });

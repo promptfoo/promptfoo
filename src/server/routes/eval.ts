@@ -7,7 +7,7 @@ import Eval, { EvalQueries } from '../../models/eval';
 import EvalResult from '../../models/evalResult';
 import { evaluateWithSource } from '../../node';
 import { EvalSchemas } from '../../types/api/eval';
-import { ResultFailureReason } from '../../types/index';
+import { ResultFailureReason } from '../../types/results';
 import { deleteEval, deleteEvals, updateResult, writeResultsToDatabase } from '../../util/database';
 import {
   ComparisonEvalNotFoundError,
@@ -746,11 +746,30 @@ evalRouter.post(
       );
       const successChanged = result.success !== gradingResult.pass;
       const scoreChange = gradingResult.score - result.score;
+      const previousCount = result.success
+        ? 'testPassCount'
+        : result.failureReason === ResultFailureReason.ERROR
+          ? 'testErrorCount'
+          : 'testFailCount';
+      const hasManualOverride =
+        gradingResult.assertion?.type === HUMAN_ASSERTION_TYPE ||
+        gradingResult.componentResults?.some((r) => r.assertion?.type === HUMAN_ASSERTION_TYPE);
+      const failureReason = gradingResult.pass
+        ? ResultFailureReason.NONE
+        : !hasManualOverride && gradingResult.metadata?.graderError === true
+          ? ResultFailureReason.ERROR
+          : ResultFailureReason.ASSERT;
+      const nextCount = gradingResult.pass
+        ? 'testPassCount'
+        : failureReason === ResultFailureReason.ERROR
+          ? 'testErrorCount'
+          : 'testFailCount';
 
       // Update the result
       result.gradingResult = gradingResult;
       result.success = gradingResult.pass;
       result.score = gradingResult.score;
+      result.failureReason = failureReason;
 
       // Update the prompt metrics
       const prompt = eval_.prompts[result.promptIdx];
@@ -764,18 +783,13 @@ evalRouter.post(
         return;
       }
 
+      if (previousCount !== nextCount) {
+        prompt.metrics[previousCount] -= 1;
+        prompt.metrics[nextCount] += 1;
+      }
+
       if (successChanged) {
         if (result.success) {
-          // Result changed from fail to pass
-          prompt.metrics.testPassCount += 1;
-          if (result.failureReason === ResultFailureReason.ERROR) {
-            // A manually approved grader-error row leaves the error bucket and
-            // clears the marker so error retries skip the approved row.
-            prompt.metrics.testErrorCount -= 1;
-            result.failureReason = ResultFailureReason.NONE;
-          } else {
-            prompt.metrics.testFailCount -= 1;
-          }
           prompt.metrics.assertPassCount += 1;
           prompt.metrics.score += scoreChange;
           if (hasExistingManualOverride) {
@@ -783,8 +797,6 @@ evalRouter.post(
             prompt.metrics.assertFailCount -= 1;
           }
         } else {
-          prompt.metrics.testPassCount -= 1;
-          prompt.metrics.testFailCount += 1;
           prompt.metrics.assertFailCount += 1;
           prompt.metrics.score += scoreChange;
           if (hasExistingManualOverride) {

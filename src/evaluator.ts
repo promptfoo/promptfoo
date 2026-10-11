@@ -623,9 +623,6 @@ function synchronizeLegacyTransportHeaders(
 function applyGradingResult(row: EvaluateResult, checkResult: GradingResult) {
   if (!checkResult.pass) {
     row.error = checkResult.reason;
-    // A grader execution failure (metadata.graderError) means the judge never
-    // produced a valid verdict — surface it as ERROR so it does not read as an
-    // ordinary assertion failure in quality metrics.
     row.failureReason =
       checkResult.metadata?.graderError === true
         ? ResultFailureReason.ERROR

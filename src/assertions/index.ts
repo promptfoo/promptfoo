@@ -902,9 +902,7 @@ export async function runAssertions({
 
     mainAssertResult.addResult({
       index,
-      // A zero-weight set is metric-only and can't fail, mirroring the atomic
-      // weight-0 override in runAssertionInternal.
-      result: weight === 0 ? { ...result, pass: true } : result,
+      result,
       metric: renderMetricName(metric, vars || test.vars || {}),
       weight,
     });

@@ -3,7 +3,7 @@ import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import EvalResult from '../../src/models/evalResult';
 import { createApp } from '../../src/server/server';
-import { ResultFailureReason } from '../../src/types/index';
+import { ResultFailureReason } from '../../src/types/results';
 import { STRIPPED_TABLE_CELL_PROMPT } from '../../src/util/eval/evalTableUtils';
 import invariant from '../../src/util/invariant';
 import EvalFactory from '../factories/evalFactory';
@@ -220,39 +220,49 @@ describe('eval routes', () => {
       );
     });
 
-    it('moves manually approved grader-error rows out of the error bucket', async () => {
+    it('moves grader-error rows between error, approval, and explicit-failure buckets', async () => {
       const eval_ = await EvalFactory.create();
       testEvalIds.add(eval_.id);
       const results = await eval_.getResults();
-      const result = results[1];
-      invariant(result.id, 'Result ID is required');
-      expect(result.success).toBe(false);
-
-      // Simulate a grader-error row as produced by the ERROR classification.
+      invariant(results[1].id, 'Result ID is required');
+      const result = await EvalResult.findById(results[1].id);
+      invariant(result?.gradingResult, 'Persisted grading result is required');
       result.failureReason = ResultFailureReason.ERROR;
+      result.gradingResult.metadata = { graderError: true };
+      const originalGrade = structuredClone(result.gradingResult);
       await result.save();
-      const promptMetrics = eval_.prompts[result.promptIdx].metrics;
-      invariant(promptMetrics, 'Prompt metrics are required');
-      promptMetrics.testFailCount -= 1;
-      promptMetrics.testErrorCount += 1;
+      const metrics = eval_.prompts[result.promptIdx].metrics;
+      invariant(metrics, 'Prompt metrics are required');
+      metrics.testFailCount -= 1;
+      metrics.testErrorCount += 1;
       await eval_.save();
 
-      const res = await api
-        .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
-        .send(createManualRatingPayload(result, true));
-
-      expect(res.status).toBe(200);
-      expect(res.body.success).toBe(true);
-
-      const updatedResult = await EvalResult.findById(result.id);
-      expect(updatedResult?.success).toBe(true);
-      expect(updatedResult?.failureReason).toBe(ResultFailureReason.NONE);
-
-      const updatedEval = await Eval.findById(eval_.id);
-      const updatedMetrics = updatedEval?.prompts[result.promptIdx].metrics;
-      expect(updatedMetrics?.testPassCount).toBe(promptMetrics.testPassCount + 1);
-      expect(updatedMetrics?.testErrorCount).toBe(promptMetrics.testErrorCount - 1);
-      expect(updatedMetrics?.testFailCount).toBe(promptMetrics.testFailCount);
+      for (const [grade, reason] of [
+        [
+          createManualRatingPayload({ gradingResult: structuredClone(originalGrade) }, true),
+          ResultFailureReason.NONE,
+        ],
+        [originalGrade, ResultFailureReason.ERROR],
+        [
+          createManualRatingPayload({ gradingResult: structuredClone(originalGrade) }, false),
+          ResultFailureReason.ASSERT,
+        ],
+        [originalGrade, ResultFailureReason.ERROR],
+      ] as const) {
+        const response = await api
+          .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+          .send(grade);
+        expect(response.status).toBe(200);
+        const updated = await EvalResult.findById(result.id);
+        expect(updated?.success).toBe(reason === ResultFailureReason.NONE);
+        expect(updated?.failureReason).toBe(reason);
+        const updatedEval = await Eval.findById(eval_.id);
+        expect(updatedEval?.prompts[result.promptIdx].metrics).toMatchObject({
+          testPassCount: metrics.testPassCount + Number(reason === ResultFailureReason.NONE),
+          testFailCount: metrics.testFailCount + Number(reason === ResultFailureReason.ASSERT),
+          testErrorCount: metrics.testErrorCount - Number(reason !== ResultFailureReason.ERROR),
+        });
+      }
     });
 
     it('Passing test and the user marked it as passing (no change)', async () => {
