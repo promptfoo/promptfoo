@@ -4,6 +4,7 @@
  */
 import deepEqual from 'fast-deep-equal';
 import safeStringify from 'fast-safe-stringify';
+import { serializeBedrockProviderRef } from './bedrockSerialization';
 import { GRADING_PROVIDER_TYPE_KEYS, isProviderTypeMap } from './gradingProvider';
 
 import type { EvalRuntimeOptions, UnifiedConfig } from '../types';
@@ -800,26 +801,37 @@ export function sanitizeConfigForOutput(
 ): Partial<UnifiedConfig> {
   const safe = sanitizeTracingConfigForPersistence(config);
   const { basePath, ...outputConfig } = safe;
-  if (options.shouldStripPromptText) {
+  const projectProvider = (provider: unknown) => {
+    const snapshot = serializeBedrockProviderRef(provider);
     // Classify live grading maps before serialization removes their provider methods.
-    outputConfig.providers = stripProviderPromptSelectors(outputConfig.providers);
-    outputConfig.defaultTest = stripTestProviderPromptSelectors(outputConfig.defaultTest);
-    if (Array.isArray(outputConfig.tests)) {
-      outputConfig.tests = outputConfig.tests.map(stripTestProviderPromptSelectors);
-    }
-    outputConfig.scenarios = outputConfig.scenarios?.map((scenario) =>
+    return options.shouldStripPromptText ? stripProviderPromptSelectors(snapshot) : snapshot;
+  };
+  const projectTest = <T>(test: T): T => mapTestProviderRefs(test, projectProvider);
+  outputConfig.providers = projectProvider(outputConfig.providers) as UnifiedConfig['providers'];
+  outputConfig.defaultTest = projectTest(outputConfig.defaultTest);
+  if (Array.isArray(outputConfig.tests)) {
+    outputConfig.tests = outputConfig.tests.map(projectTest);
+  }
+  if (Array.isArray(outputConfig.scenarios)) {
+    outputConfig.scenarios = outputConfig.scenarios.map((scenario) =>
       typeof scenario === 'object'
         ? {
             ...scenario,
-            config: scenario.config?.map(stripTestProviderPromptSelectors),
-            tests: Array.isArray(scenario.tests)
-              ? scenario.tests.map(stripTestProviderPromptSelectors)
-              : scenario.tests,
+            config: scenario.config?.map(projectTest),
+            tests: Array.isArray(scenario.tests) ? scenario.tests.map(projectTest) : scenario.tests,
           }
         : scenario,
     );
   }
-  const sanitized = sanitizeObject(outputConfig, {
+  if (Array.isArray(outputConfig.prompts)) {
+    outputConfig.prompts = outputConfig.prompts.map((prompt) =>
+      prompt && typeof prompt === 'object' && 'config' in prompt
+        ? { ...prompt, config: projectTest(prompt.config) }
+        : prompt,
+    );
+  }
+  // This boundary also exports individual prompt configs with a singular provider slot.
+  const sanitized = sanitizeObject(projectTest(outputConfig), {
     context: 'output config',
     sanitizeUrls: true,
     throwOnError: true,
