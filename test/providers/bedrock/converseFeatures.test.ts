@@ -705,6 +705,35 @@ describe('Converse native request features', () => {
     expect(send.mock.calls[0][0].input.additionalModelRequestFields?.thinking).toBeUndefined();
   });
 
+  it.each(
+    [
+      { model: 'us.anthropic.claude-opus-5', thinking: { type: 'disabled' } as const },
+      { model: 'global.anthropic.claude-sonnet-5-5', thinking: { type: 'between_tools' } as const },
+    ].flatMap((config) => ['native', 'raw'].map((effortSource) => ({ ...config, effortSource }))),
+  )(
+    'clears raw thinking when the typed override is removed for $model with $effortSource effort',
+    async ({ model, thinking, effortSource }) => {
+      const outputConfig = { effort: 'max' } as const;
+      const remainingFields = effortSource === 'raw' ? { output_config: outputConfig } : undefined;
+      const { provider, send } = fixture(
+        {
+          thinking,
+          ...(effortSource === 'native' ? { outputConfig } : {}),
+          additionalModelRequestFields: {
+            ...remainingFields,
+            thinking: { type: 'adaptive', display: 'summarized' },
+          },
+        },
+        model,
+      );
+      expect((await provider.callApi('hello')).error).toBeUndefined();
+      expect(send.mock.calls[0][0].input.additionalModelRequestFields).toEqual(remainingFields);
+      expect(send.mock.calls[0][0].input.outputConfig).toEqual(
+        effortSource === 'native' ? outputConfig : undefined,
+      );
+    },
+  );
+
   it('coerces native guardrail values loaded as YAML numbers', async () => {
     const { provider, send } = fixture({
       guardrailConfig: {
