@@ -263,9 +263,15 @@ providers:
       durationSeconds: 8
 ```
 
+Veo accepts `config.apiHost` or `VERTEX_API_HOST` for a custom Vertex host, used for
+both creation and polling. Set `config.region` or a scoped `VERTEX_REGION`,
+`GOOGLE_CLOUD_LOCATION`, or `GOOGLE_LOCATION` environment override to choose the
+location. Scoped values take precedence over process environment values. The
+default is `us-central1`.
+
 #### Video Extension
 
-The Vertex AI Veo 3.1 models listed above support extending an existing video. Set `sourceVideo` to an MP4 file (`file://`), base64 video bytes, or a Cloud Storage URI (`gs://`). For example:
+The Vertex AI Veo 3.1 models listed above support extending an existing video. Set `sourceVideo` to an MP4 file (`file://`), base64 video bytes, a base64 `data:video/mp4` URL, or a Cloud Storage URI (`gs://`). For example:
 
 ```yaml
 providers:
@@ -279,7 +285,7 @@ prompts:
   - 'Continue the camera movement toward the mountains'
 ```
 
-Vertex video extension adds 7 seconds to the source video. Promptfoo omits `durationSeconds` from extension requests and warns when a configured duration differs from 8; the configured duration does not change the extension length. For Cloud Storage input, promptfoo sends `video.gcsUri`. For base64 and `file://` input, it sends `video.bytesBase64Encoded`. Operation names such as `projects/.../operations/...` are not video inputs; promptfoo rejects them with instructions to supply the actual video.
+Vertex video extension adds 7 seconds to the source video. Promptfoo omits `durationSeconds` from extension requests and warns when a configured duration differs from 8; the configured duration does not change the extension length. For Cloud Storage input, promptfoo sends `video.gcsUri`. For base64, data URL, and `file://` input, it sends `video.bytesBase64Encoded`. Operation names such as `projects/.../operations/...` are not video inputs; promptfoo rejects them with instructions to supply the actual video.
 
 ## Model Capabilities
 

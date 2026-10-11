@@ -3891,6 +3891,63 @@ describe('util', () => {
       },
     );
 
+    it('preserves explicit token prices across service tiers', () => {
+      expect(
+        calculateGoogleCost(
+          'gemini-3.5-flash',
+          { inputCost: 1 / 1e6, outputCost: 2 / 1e6, service_tier: 'priority' },
+          1000,
+          500,
+          false,
+        ),
+      ).toBeCloseTo(0.002, 12);
+    });
+
+    it.each([
+      ['priority', { inputCost: 1 / 1e6 }, 0.0091],
+      ['flex', { outputCost: 2 / 1e6 }, 0.00175],
+      ['priority', { inputCost: 0 }, 0.0081],
+      ['priority', { cost: 0 }, 0],
+    ] as const)(
+      'preserves partial and zero overrides for %s',
+      (serviceTier, overrides, expected) => {
+        expect(
+          calculateGoogleCost(
+            'gemini-3.5-flash',
+            { ...overrides, service_tier: serviceTier },
+            1000,
+            500,
+          ),
+        ).toBeCloseTo(expected, 12);
+      },
+    );
+
+    it('preserves explicit modality prices for cached and fresh tokens', () => {
+      const cost = calculateGoogleCost(
+        'gemini-3.5-flash',
+        {
+          service_tier: 'priority',
+          inputCost: 1 / 1e6,
+          outputCost: 2 / 1e6,
+          audioInputCost: 3 / 1e6,
+          audioOutputCost: 4 / 1e6,
+          videoOutputCost: 5 / 1e6,
+          imageInputCost: 6 / 1e6,
+        },
+        1000,
+        1000,
+        false,
+        200,
+        100,
+        200,
+        300,
+        400,
+        50,
+        150,
+      );
+      expect(cost).toBeCloseTo((500 + 200 * 3 + 300 * 6 + 700 * 2 + 100 * 4 + 200 * 5) / 1e6, 12);
+    });
+
     it('preserves explicit audio price overrides in Vertex multi-regions', () => {
       const cost = calculateGoogleCost(
         'gemini-3.5-flash',
