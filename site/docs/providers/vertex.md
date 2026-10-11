@@ -9,7 +9,7 @@ description: Use Google Vertex AI models including Gemini, Claude, Llama, and sp
 The `vertex` provider connects to Google's [Vertex AI](https://cloud.google.com/vertex-ai). It supports Gemini, Llama, Claude, and other models for text, code, and embeddings.
 
 :::info Provider Selection
-Use `vertex:` for the supported Vertex inference paths listed below (Gemini, Claude, and Llama). Use `google:` for Google AI Studio (API key authentication).
+Use `vertex:` for the supported Vertex inference paths listed below (Gemini, Claude, and Llama). Use `google:` for Google AI Studio (API key authentication). [Gemini image models](#image-generation-models) also use `google:` with `config.projectId` to select Vertex AI.
 :::
 
 ## Available Models
