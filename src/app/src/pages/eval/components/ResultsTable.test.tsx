@@ -1853,6 +1853,37 @@ describe('ResultsTable rating actions', () => {
     }
   });
 
+  it('persists a human rating when the existing grade has no component results', async () => {
+    renderRatingTable({ pass: false, score: 0.2, reason: 'Existing reason' });
+
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Rate' }));
+
+    const { payload, output } = await savedRating();
+    const expectedGrade = {
+      pass: true,
+      score: 0.75,
+      reason: 'Manual result (overrides all other grading results)',
+      comment: 'test comment',
+      componentResults: [
+        {
+          pass: true,
+          score: 0.75,
+          reason: 'Manual result (overrides all other grading results)',
+          comment: 'test comment',
+          assertion: { type: 'human' },
+        },
+      ],
+    };
+    expect(payload).toEqual(expectedGrade);
+    expect(output).toEqual({
+      id: 'test-output-1',
+      text: 'test output',
+      pass: true,
+      score: 0.75,
+      gradingResult: expectedGrade,
+    });
+  });
+
   it.each([
     ['new', [automated]],
     ['existing', [human, automated]],
