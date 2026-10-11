@@ -1,6 +1,7 @@
 import { vi } from 'vitest';
 
 import type { ApiProvider, ProviderResponse, TokenUsage } from '../../src/types/index';
+import type { NormalizedTokenUsage } from '../../src/types/shared';
 
 export type MockApiProvider = ApiProvider & {
   id: ReturnType<typeof vi.fn<() => string>>;
@@ -41,7 +42,7 @@ export function createTokenUsage(overrides: TokenUsage = {}): TokenUsage {
  * defaults the caller didn't mention. This is the right behavior for fixtures
  * flowing into type-strict slots (e.g. EvaluateResult.tokenUsage).
  */
-export function createRequiredTokenUsage(overrides: TokenUsage = {}): Required<TokenUsage> {
+export function createRequiredTokenUsage(overrides: TokenUsage = {}): NormalizedTokenUsage {
   return {
     total: 10,
     prompt: 5,

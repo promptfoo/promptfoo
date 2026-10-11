@@ -2,8 +2,19 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleAnswerRelevance } from '../../src/assertions/answerRelevance';
 import { matchesAnswerRelevance } from '../../src/matchers/rag';
 import invariant from '../../src/util/invariant';
+import { createPassingGrade, createThresholdAssertion } from '../factories/literalFixtures';
 
 import type { AssertionValueFunctionContext } from '../../src/types/index';
+
+const createProviderOutput = () => ({
+  output: 'test output',
+  tokenUsage: {},
+});
+
+const createEmptyTestOptions = () => ({
+  vars: {},
+  options: {},
+});
 
 vi.mock('../../src/matchers/rag');
 vi.mock('../../src/util/invariant');
@@ -20,31 +31,18 @@ describe('handleAnswerRelevance', () => {
 
   it('should call matchesAnswerRelevance with correct parameters', async () => {
     const mockMatchesAnswerRelevance = vi.mocked(matchesAnswerRelevance);
-    mockMatchesAnswerRelevance.mockResolvedValue({
-      pass: true,
-      score: 0.8,
-      reason: 'test reason',
-    });
+    mockMatchesAnswerRelevance.mockResolvedValue(createPassingGrade());
 
     const result = await handleAnswerRelevance({
-      assertion: {
-        type: 'answer-relevance',
-        threshold: 0.7,
-      },
+      assertion: createThresholdAssertion('answer-relevance', 0.7),
       output: 'test output',
       prompt: 'test prompt',
-      test: {
-        vars: {},
-        options: {},
-      },
+      test: createEmptyTestOptions(),
       baseType: 'answer-relevance',
       assertionValueContext: {} as AssertionValueFunctionContext,
       inverse: false,
       outputString: 'test output',
-      providerResponse: {
-        output: 'test output',
-        tokenUsage: {},
-      },
+      providerResponse: createProviderOutput(),
     });
 
     expect(mockMatchesAnswerRelevance).toHaveBeenCalledWith(
@@ -67,17 +65,10 @@ describe('handleAnswerRelevance', () => {
 
   it('should use query from vars if available', async () => {
     const mockMatchesAnswerRelevance = vi.mocked(matchesAnswerRelevance);
-    mockMatchesAnswerRelevance.mockResolvedValue({
-      pass: true,
-      score: 0.8,
-      reason: 'test reason',
-    });
+    mockMatchesAnswerRelevance.mockResolvedValue(createPassingGrade());
 
     const result = await handleAnswerRelevance({
-      assertion: {
-        type: 'answer-relevance',
-        threshold: 0.7,
-      },
+      assertion: createThresholdAssertion('answer-relevance', 0.7),
       output: 'test output',
       prompt: 'test prompt',
       test: {
@@ -90,10 +81,7 @@ describe('handleAnswerRelevance', () => {
       assertionValueContext: {} as AssertionValueFunctionContext,
       inverse: false,
       outputString: 'test output',
-      providerResponse: {
-        output: 'test output',
-        tokenUsage: {},
-      },
+      providerResponse: createProviderOutput(),
     });
 
     expect(mockMatchesAnswerRelevance).toHaveBeenCalledWith(
@@ -162,13 +150,9 @@ describe('handleAnswerRelevance', () => {
     ).rejects.toThrow('answer-relevance assertion type must have a prompt');
   });
 
-  it('should use default threshold of 0 if not specified', async () => {
+  it('should use default threshold of 0.5 if not specified', async () => {
     const mockMatchesAnswerRelevance = vi.mocked(matchesAnswerRelevance);
-    mockMatchesAnswerRelevance.mockResolvedValue({
-      pass: true,
-      score: 0.8,
-      reason: 'test reason',
-    });
+    mockMatchesAnswerRelevance.mockResolvedValue(createPassingGrade());
 
     const result = await handleAnswerRelevance({
       assertion: {
@@ -176,24 +160,18 @@ describe('handleAnswerRelevance', () => {
       },
       output: 'test output',
       prompt: 'test prompt',
-      test: {
-        vars: {},
-        options: {},
-      },
+      test: createEmptyTestOptions(),
       baseType: 'answer-relevance',
       assertionValueContext: {} as AssertionValueFunctionContext,
       inverse: false,
       outputString: 'test output',
-      providerResponse: {
-        output: 'test output',
-        tokenUsage: {},
-      },
+      providerResponse: createProviderOutput(),
     });
 
     expect(mockMatchesAnswerRelevance).toHaveBeenCalledWith(
       'test prompt',
       'test output',
-      0,
+      0.5,
       {},
       undefined,
     );
@@ -204,6 +182,45 @@ describe('handleAnswerRelevance', () => {
       pass: true,
       score: 0.8,
       reason: 'test reason',
+    });
+  });
+
+  it('should invert omitted-threshold not-answer-relevance results', async () => {
+    const mockMatchesAnswerRelevance = vi.mocked(matchesAnswerRelevance);
+    mockMatchesAnswerRelevance.mockResolvedValue({
+      pass: false,
+      score: 0.4,
+      reason: 'Relevance 0.40 is less than threshold 0.5',
+    });
+
+    const result = await handleAnswerRelevance({
+      assertion: {
+        type: 'not-answer-relevance',
+      },
+      output: 'test output',
+      prompt: 'test prompt',
+      test: createEmptyTestOptions(),
+      baseType: 'answer-relevance',
+      assertionValueContext: {} as AssertionValueFunctionContext,
+      inverse: true,
+      outputString: 'test output',
+      providerResponse: createProviderOutput(),
+    });
+
+    expect(mockMatchesAnswerRelevance).toHaveBeenCalledWith(
+      'test prompt',
+      'test output',
+      0.5,
+      {},
+      undefined,
+    );
+    expect(result).toEqual({
+      assertion: {
+        type: 'not-answer-relevance',
+      },
+      pass: true,
+      score: 0.6,
+      reason: 'Relevance 0.40 is less than threshold 0.5',
     });
   });
 });

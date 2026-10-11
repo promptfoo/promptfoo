@@ -14,8 +14,7 @@
     "resolveJsonModule": true,
     "composite": true,
     "rootDir": ".",
-    "ignoreDeprecations": "6.0",
-    "baseUrl": "./"
+    "types": ["node"]
   },
   "include": [
     "*.ts",
@@ -25,7 +24,6 @@
     "src/",
     "test/",
     "scripts/",
-    "site/src/utils/markdown.ts",
     "./package.json",
     "src/**/*.json",
     "test/**/*.json",

@@ -5,23 +5,14 @@ import { getEnvBool, getEnvInt, getEnvString } from '../../src/envars';
 import { getUserEmail, isLoggedIntoCloud } from '../../src/globalConfig/accounts';
 import { materializeMcpToolCallRemote } from '../../src/redteam/extraction/util';
 
+const { createDisabledCloudConfigFactory } = await vi.hoisted(
+  () => import('../factories/moduleMocks'),
+);
+
 vi.mock('../../src/cache');
 vi.mock('../../src/envars');
 vi.mock('../../src/globalConfig/accounts');
-vi.mock('../../src/globalConfig/cloud', async (importOriginal) => {
-  return {
-    ...(await importOriginal()),
-
-    CloudConfig: class {
-      isEnabled() {
-        return false;
-      }
-      getApiHost() {
-        return 'https://api.promptfoo.app';
-      }
-    },
-  };
-});
+vi.mock('../../src/globalConfig/cloud', createDisabledCloudConfigFactory());
 
 describe('materializeMcpToolCallRemote', () => {
   const searchCompaniesTool = {
@@ -108,6 +99,34 @@ describe('materializeMcpToolCallRemote', () => {
       }),
     ).resolves.toBeUndefined();
     expect(fetchWithCache).not.toHaveBeenCalled();
+  });
+
+  it('preserves cache provenance from remote MCP materialization responses', async () => {
+    vi.mocked(getEnvString).mockImplementation((key: string) =>
+      key === 'PROMPTFOO_REMOTE_GENERATION_URL' ? 'https://remote.example.test/task' : '',
+    );
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      cached: true,
+      data: {
+        result: {
+          tool: 'search_companies',
+          args: { query: 'clean energy' },
+        },
+        tokenUsage: { total: 16, prompt: 12, completion: 4, numRequests: 1 },
+      },
+      status: 200,
+      statusText: 'OK',
+    } as Awaited<ReturnType<typeof fetchWithCache>>);
+
+    await expect(
+      materializeMcpToolCallRemote({
+        tools: [searchCompaniesTool],
+        value: 'Find clean energy companies.',
+      }),
+    ).resolves.toMatchObject({
+      cached: true,
+      tokenUsage: { total: 16, prompt: 12, completion: 4, numRequests: 1 },
+    });
   });
 
   it('returns undefined when remote generation is explicitly disabled', async () => {

@@ -16,6 +16,26 @@ export {
   type StoredBlob,
 } from './types';
 
+// MIME types retained by portable imports and allowed for inline blob responses.
+const SAFE_INLINE_BLOB_MIME_TYPES = new Set([
+  'image/avif',
+  'image/gif',
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'video/mp4',
+  'video/ogg',
+  'video/webm',
+]);
+const SAFE_INLINE_AUDIO_MIME_TYPE_REGEX = /^audio\/[a-z0-9_+-]+$/i;
+
+export function isSafeInlineBlobMimeType(mimeType: string): boolean {
+  return (
+    SAFE_INLINE_BLOB_MIME_TYPES.has(mimeType.toLowerCase()) ||
+    SAFE_INLINE_AUDIO_MIME_TYPE_REGEX.test(mimeType)
+  );
+}
+
 let defaultProvider: BlobStorageProvider | null = null;
 
 function createDefaultProvider(): BlobStorageProvider {
@@ -56,54 +76,60 @@ export async function storeBlob(
 
   // Track asset and reference in DB for dedup/auth/cascade
   const db = await getDb();
-  try {
-    await db.transaction(async (tx) => {
+  // Keep stored bytes if persistence fails: another eval may already reference them,
+  // including bytes adopted after this store began. Unreferenced bytes are safer than data loss.
+  const registeredMimeType = await db.transaction(async (tx) => {
+    await tx
+      .insert(blobAssetsTable)
+      .values({
+        hash: result.ref.hash,
+        sizeBytes: result.ref.sizeBytes,
+        // A deduplicated file may be an orphan from a failed transaction.
+        // Adopt it with the current caller's MIME type, which imports sanitize.
+        mimeType: result.deduplicated ? mimeType : result.ref.mimeType,
+        provider: result.ref.provider,
+      })
+      .onConflictDoNothing()
+      .run();
+
+    if (refContext?.evalId) {
       await tx
-        .insert(blobAssetsTable)
+        .insert(blobReferencesTable)
         .values({
-          hash: result.ref.hash,
-          sizeBytes: result.ref.sizeBytes,
-          mimeType: result.ref.mimeType,
-          provider: result.ref.provider,
+          id: randomUUID(),
+          blobHash: result.ref.hash,
+          evalId: refContext.evalId,
+          testIdx: refContext.testIdx,
+          promptIdx: refContext.promptIdx,
+          location: refContext.location,
+          kind: refContext.kind,
         })
         .onConflictDoNothing()
         .run();
-
-      if (refContext?.evalId) {
-        await tx
-          .insert(blobReferencesTable)
-          .values({
-            id: randomUUID(),
-            blobHash: result.ref.hash,
-            evalId: refContext.evalId,
-            testIdx: refContext.testIdx,
-            promptIdx: refContext.promptIdx,
-            location: refContext.location,
-            kind: refContext.kind,
-          })
-          .onConflictDoNothing()
-          .run();
-      }
-    });
-  } catch (error) {
-    // Roll back filesystem write if DB persistence fails
-    try {
-      await provider.deleteByHash(result.ref.hash);
-    } catch (cleanupError) {
-      logger.warn('[BlobStorage] Failed to rollback blob after DB error', {
-        error: cleanupError,
-        hash: result.ref.hash,
-      });
     }
-    throw error;
-  }
 
-  return result;
+    const asset = await tx
+      .select({ mimeType: blobAssetsTable.mimeType })
+      .from(blobAssetsTable)
+      .where(eq(blobAssetsTable.hash, result.ref.hash))
+      .get();
+    return asset!.mimeType;
+  });
+
+  return { ...result, ref: { ...result.ref, mimeType: registeredMimeType } };
 }
 
 export async function getBlobByHash(hash: string): Promise<StoredBlob> {
   const provider = getBlobStorageProvider();
-  return provider.getByHash(hash);
+  const blob = await provider.getByHash(hash);
+  const db = await getDb();
+  const asset = await db
+    .select({ mimeType: blobAssetsTable.mimeType })
+    .from(blobAssetsTable)
+    .where(eq(blobAssetsTable.hash, hash))
+    .get();
+  // Registered metadata takes precedence over sidecars retained from failed stores.
+  return asset ? { ...blob, metadata: { ...blob.metadata, mimeType: asset.mimeType } } : blob;
 }
 
 export async function isBlobAllowedForShare(hash: string, evalId: string): Promise<boolean> {
@@ -143,11 +169,6 @@ export async function getShareAuthorizedBlob(
   return getBlobByHash(hash);
 }
 
-export async function getBlobUrl(hash: string, expiresInSeconds?: number): Promise<string | null> {
-  const provider = getBlobStorageProvider();
-  return provider.getUrl(hash, expiresInSeconds);
-}
-
 export async function recordBlobReference(
   hash: string,
   refContext: {
@@ -174,6 +195,17 @@ export async function recordBlobReference(
   }
 
   const db = await getDb();
+  // A failed store can retain bytes without committing their asset registration.
+  // Referencing those bytes must not adopt them or create an invalid foreign key.
+  const asset = await db
+    .select({ hash: blobAssetsTable.hash })
+    .from(blobAssetsTable)
+    .where(eq(blobAssetsTable.hash, hash))
+    .get();
+  if (!asset) {
+    return;
+  }
+
   const existing = await db
     .select({
       id: blobReferencesTable.id,

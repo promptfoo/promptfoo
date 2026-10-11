@@ -2,7 +2,7 @@ import type { Buffer } from 'node:buffer';
 
 import type { BlobRef } from '../contracts/blobs';
 
-export type { BlobRef } from '../contracts/blobs';
+export type { BlobRef };
 
 export interface BlobMetadata {
   mimeType: string;

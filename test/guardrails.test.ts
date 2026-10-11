@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../src/cache';
 import { cloudConfig } from '../src/globalConfig/cloud';
 import guardrails, { type AdaptiveRequest } from '../src/guardrails';
+import { createMockFetchResponse } from './providers/mockProviderResponses';
 
 vi.mock('../src/cache', () => ({
   fetchWithCache: vi.fn(),
@@ -12,6 +13,7 @@ vi.mock('../src/globalConfig/cloud', () => ({
     isEnabled: vi.fn(),
     getApiHost: vi.fn(),
     getApiKey: vi.fn(),
+    getAuthHeaders: vi.fn(),
   },
 }));
 
@@ -44,6 +46,12 @@ describe('guardrails', () => {
     vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
     vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.promptfoo.app');
     vi.mocked(cloudConfig.getApiKey).mockReturnValue(undefined);
+    // Mirrors the real cloudConfig.getAuthHeaders(): undefined with no key,
+    // otherwise a Bearer token under the (default Authorization) header name.
+    vi.mocked(cloudConfig.getAuthHeaders).mockImplementation(() => {
+      const apiKey = cloudConfig.getApiKey();
+      return apiKey ? { Authorization: `Bearer ${apiKey}` } : undefined;
+    });
   });
 
   describe('guard', () => {
@@ -78,12 +86,7 @@ describe('guardrails', () => {
     });
 
     it('should handle empty API response', async () => {
-      vi.mocked(fetchWithCache).mockResolvedValue({
-        data: null,
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+      vi.mocked(fetchWithCache).mockResolvedValue(createMockFetchResponse(null));
 
       await expect(guardrails.guard('test input')).rejects.toThrow('No data returned from API');
     });
@@ -229,8 +232,8 @@ describe('guardrails', () => {
     });
 
     it('should have correct PII result structure with payload', async () => {
-      vi.mocked(fetchWithCache).mockResolvedValue({
-        data: {
+      vi.mocked(fetchWithCache).mockResolvedValue(
+        createMockFetchResponse({
           model: 'test-model',
           results: [
             {
@@ -253,11 +256,8 @@ describe('guardrails', () => {
               },
             },
           ],
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+        }),
+      );
 
       const result = await guardrails.pii('test input');
       expect(result).toHaveProperty('model');
@@ -392,12 +392,9 @@ describe('guardrails', () => {
     });
 
     it('routes adaptive requests to the configured cloud host with a bearer token', async () => {
-      vi.mocked(fetchWithCache).mockResolvedValue({
-        data: { model: 'm', adaptedPrompt: 'a', modifications: [] },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+      vi.mocked(fetchWithCache).mockResolvedValue(
+        createMockFetchResponse({ model: 'm', adaptedPrompt: 'a', modifications: [] }),
+      );
 
       await guardrails.adaptive({ prompt: 'test input', policies: ['No harmful content'] });
 
@@ -433,6 +430,19 @@ describe('guardrails', () => {
       // getApiHost() must not be consulted on the non-cloud path, and no token is sent.
       expect(cloudConfig.getApiHost).not.toHaveBeenCalled();
       expect((opts?.headers as Record<string, string>)?.Authorization).toBeUndefined();
+    });
+
+    it('sends the credential under a custom auth header name, without a duplicate Authorization header', async () => {
+      vi.mocked(cloudConfig.getAuthHeaders).mockReturnValue({
+        'X-Custom-Header': `Bearer ${ONPREM_KEY}`,
+      });
+
+      await guardrails.guard('test input');
+
+      const [, opts] = vi.mocked(fetchWithCache).mock.calls[0];
+      const headers = opts?.headers as Record<string, string>;
+      expect(headers['X-Custom-Header']).toBe(`Bearer ${ONPREM_KEY}`);
+      expect(headers.Authorization).toBeUndefined();
     });
 
     it('lets an explicit PROMPTFOO_REMOTE_API_BASE_URL override win, without leaking the token', async () => {

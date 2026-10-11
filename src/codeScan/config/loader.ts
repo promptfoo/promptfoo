@@ -170,21 +170,3 @@ export function resolveGuidance(options: GuidanceOptions, config: Config): strin
   // Config loader already read guidanceFile and populated guidance field
   return config.guidance;
 }
-
-/**
- * Options for resolving API host
- */
-export interface ApiHostOptions {
-  apiHost?: string;
-}
-
-/**
- * Resolve API host from options or config
- *
- * @param options - Options that may contain API host
- * @param config - Configuration that may contain API host
- * @returns API host URL
- */
-export function resolveApiHost(options: ApiHostOptions, config: Config): string {
-  return options.apiHost || config.apiHost || 'https://api.promptfoo.app';
-}

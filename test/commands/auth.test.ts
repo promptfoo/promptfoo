@@ -6,7 +6,12 @@ import { isNonInteractive } from '../../src/envars';
 import { getUserEmail, setUserEmail } from '../../src/globalConfig/accounts';
 import { cloudConfig } from '../../src/globalConfig/cloud';
 import logger from '../../src/logger';
-import { getDefaultTeam, getUserTeams } from '../../src/util/cloud';
+import {
+  getDefaultTeam,
+  getUserTeams,
+  resolveTeamFromIdentifier,
+  resolveTeamId,
+} from '../../src/util/cloud';
 import { fetchWithProxy } from '../../src/util/fetch/index';
 import { openAuthBrowser } from '../../src/util/server';
 import { createMockResponse, mockGlobal, stripAnsi } from '../util/utils';
@@ -40,7 +45,21 @@ vi.mock('../../src/envars');
 vi.mock('../../src/globalConfig/accounts');
 vi.mock('../../src/globalConfig/cloud');
 vi.mock('../../src/logger');
-vi.mock('../../src/util/cloud');
+vi.mock('../../src/util/cloud', async (importOriginal) => {
+  // Keep the pure team-matching helpers real; everything that talks to Cloud is mocked.
+  const { findTeam, getCloudOrganizationLabel, getOldestTeam } =
+    await importOriginal<typeof import('../../src/util/cloud')>();
+  return {
+    canCreateTargets: vi.fn(),
+    findTeam,
+    getCloudOrganizationLabel,
+    getDefaultTeam: vi.fn(),
+    getOldestTeam,
+    getUserTeams: vi.fn(),
+    resolveTeamFromIdentifier: vi.fn(),
+    resolveTeamId: vi.fn(),
+  };
+});
 vi.mock('../../src/util/fetch/index.ts');
 vi.mock('../../src/util/server');
 
@@ -85,13 +104,14 @@ describe('auth command', () => {
       await loginCmd?.parseAsync(['node', 'test', '--api-key', 'test-key']);
 
       expect(setUserEmail).toHaveBeenCalledWith('test@example.com');
-      expect(cloudConfig.validateApiToken).toHaveBeenCalledWith('test-key', undefined);
+      expect(cloudConfig.validateApiToken).toHaveBeenCalledWith('test-key', undefined, undefined);
       expect(cloudConfig.saveValidatedApiToken).toHaveBeenCalledWith(
         'test-key',
         undefined,
         mockCloudUser,
         mockApp,
         false,
+        undefined,
       );
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Successfully logged in'));
     });
@@ -169,13 +189,94 @@ describe('auth command', () => {
         ?.commands.find((cmd) => cmd.name() === 'login');
       await loginCmd?.parseAsync(['node', 'test', '--api-key', 'test-key', '--host', customHost]);
 
-      expect(cloudConfig.validateApiToken).toHaveBeenCalledWith('test-key', customHost);
+      expect(cloudConfig.validateApiToken).toHaveBeenCalledWith('test-key', customHost, undefined);
       expect(cloudConfig.saveValidatedApiToken).toHaveBeenCalledWith(
         'test-key',
         customHost,
         mockCloudUser,
         mockApp,
         false,
+        undefined,
+      );
+    });
+
+    it('should validate and persist an explicit --auth-header-name', async () => {
+      const loginCmd = program.commands
+        .find((cmd) => cmd.name() === 'auth')
+        ?.commands.find((cmd) => cmd.name() === 'login');
+      await loginCmd?.parseAsync([
+        'node',
+        'test',
+        '--api-key',
+        'test-key',
+        '--auth-header-name',
+        'X-Promptfoo-Api-Key',
+      ]);
+
+      expect(cloudConfig.validateApiToken).toHaveBeenCalledWith(
+        'test-key',
+        undefined,
+        'X-Promptfoo-Api-Key',
+      );
+      expect(cloudConfig.saveValidatedApiToken).toHaveBeenCalledWith(
+        'test-key',
+        undefined,
+        mockCloudUser,
+        mockApp,
+        false,
+        'X-Promptfoo-Api-Key',
+      );
+    });
+
+    it('should fall back to the currently configured auth header name when --auth-header-name is omitted', async () => {
+      vi.mocked(cloudConfig.getAuthHeaderName).mockReturnValue('X-Existing-Header');
+
+      const loginCmd = program.commands
+        .find((cmd) => cmd.name() === 'auth')
+        ?.commands.find((cmd) => cmd.name() === 'login');
+      await loginCmd?.parseAsync(['node', 'test', '--api-key', 'test-key']);
+
+      expect(cloudConfig.validateApiToken).toHaveBeenCalledWith(
+        'test-key',
+        undefined,
+        'X-Existing-Header',
+      );
+      // The resolved header name (the one actually used to validate) is what
+      // gets persisted, not the raw (unset) CLI flag value.
+      expect(cloudConfig.saveValidatedApiToken).toHaveBeenCalledWith(
+        'test-key',
+        undefined,
+        mockCloudUser,
+        mockApp,
+        false,
+        'X-Existing-Header',
+      );
+    });
+
+    it('should persist the auth header name resolved from PROMPTFOO_CLOUD_AUTH_HEADER when --auth-header-name is omitted', async () => {
+      // cloudConfig is fully mocked in this file, so getAuthHeaderName() doesn't run the
+      // real resolveAuthHeaderName() env-var fallback — mock it to return what that
+      // fallback would resolve to, reproducing an env-var-only (no --auth-header-name flag)
+      // login so the resolved value (not undefined) is what gets saved.
+      vi.mocked(cloudConfig.getAuthHeaderName).mockReturnValue('X-Env-Header');
+
+      const loginCmd = program.commands
+        .find((cmd) => cmd.name() === 'auth')
+        ?.commands.find((cmd) => cmd.name() === 'login');
+      await loginCmd?.parseAsync(['node', 'test', '--api-key', 'test-key']);
+
+      expect(cloudConfig.validateApiToken).toHaveBeenCalledWith(
+        'test-key',
+        undefined,
+        'X-Env-Header',
+      );
+      expect(cloudConfig.saveValidatedApiToken).toHaveBeenCalledWith(
+        'test-key',
+        undefined,
+        mockCloudUser,
+        mockApp,
+        false,
+        'X-Env-Header',
       );
     });
 
@@ -335,7 +436,7 @@ describe('auth command', () => {
         'security',
       ]);
 
-      expect(getUserTeams).toHaveBeenCalledWith(customHost, 'test-key');
+      expect(getUserTeams).toHaveBeenCalledWith(customHost, 'test-key', undefined);
       expect(cloudConfig.setCurrentOrganization).toHaveBeenCalledWith('org-2');
       expect(cloudConfig.cacheTeams).toHaveBeenCalledWith([mockTeams[1]], 'org-2');
       expect(cloudConfig.setCurrentTeamId).toHaveBeenCalledWith('team-2', 'org-2');
@@ -412,31 +513,61 @@ describe('auth command', () => {
       expect(cloudConfig.setCurrentTeamId).toHaveBeenCalledWith('team-2', 'org-2');
     });
 
-    it('should log and persist the resolved organization when the default org has no teams', async () => {
-      const mockTeams = [
-        {
-          id: 'team-2',
-          name: 'Security Team',
-          slug: 'security',
-          organizationId: 'org-2',
-          createdAt: '2024-01-02',
-          updatedAt: '2024-01-02',
-        },
-      ];
+    it.each([
+      { flags: [], organizationId: '1', warn: true },
+      { flags: ['--org', '1'], organizationId: '1', warn: false },
+      { flags: ['--org', 'org-2'], organizationId: 'org-2', warn: false },
+      { flags: ['--team', 'security'], organizationId: 'org-2', warn: false },
+    ])(
+      'requires an explicit switch when the key organization has no teams: $flags',
+      async ({ flags, organizationId, warn }) => {
+        const mockTeams = [
+          {
+            id: 'team-2',
+            name: 'Security Team',
+            slug: 'security',
+            organizationId: 'org-2',
+            createdAt: '2024-01-02',
+            updatedAt: '2024-01-02',
+          },
+        ];
 
-      vi.mocked(getUserTeams).mockResolvedValue(mockTeams);
+        vi.mocked(getUserTeams).mockResolvedValue(mockTeams);
+        vi.mocked(cloudConfig.getCurrentTeamId).mockReturnValue('team-2');
 
-      const loginCmd = program.commands
-        .find((cmd) => cmd.name() === 'auth')
-        ?.commands.find((cmd) => cmd.name() === 'login');
-      await loginCmd?.parseAsync(['node', 'test', '--api-key', 'test-key']);
+        await program.parseAsync([
+          'node',
+          'test',
+          'auth',
+          'login',
+          '--api-key',
+          'test-key',
+          ...flags,
+        ]);
 
-      expect(cloudConfig.setCurrentOrganization).toHaveBeenCalledWith('org-2');
-      expect(cloudConfig.cacheTeams).toHaveBeenCalledWith([mockTeams[0]], 'org-2');
-      expect(cloudConfig.setCurrentTeamId).toHaveBeenCalledWith('team-2', 'org-2');
-      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Organization:'));
-      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('org-2'));
-    });
+        expect(cloudConfig.setCurrentOrganization).toHaveBeenCalledTimes(1);
+        expect(cloudConfig.setCurrentOrganization).toHaveBeenCalledWith(organizationId);
+        expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Successfully logged in'));
+        if (organizationId === '1') {
+          expect(cloudConfig.cacheTeams).toHaveBeenCalledWith([], '1');
+          expect(cloudConfig.setCurrentTeamId).not.toHaveBeenCalled();
+          expect(cloudConfig.clearCurrentTeamId).not.toHaveBeenCalled();
+          expect(search).not.toHaveBeenCalled();
+          expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Test Org'));
+        } else {
+          expect(cloudConfig.cacheTeams).toHaveBeenCalledWith(mockTeams, 'org-2');
+          expect(cloudConfig.setCurrentTeamId).toHaveBeenCalledWith('team-2', 'org-2');
+          expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('org-2'));
+        }
+        if (warn) {
+          expect(logger.warn).toHaveBeenCalledWith(
+            expect.stringContaining('promptfoo auth login --api-key <apiKey>'),
+          );
+        } else {
+          expect(logger.warn).not.toHaveBeenCalled();
+        }
+      },
+    );
 
     it('should fail login when --org does not match any accessible team organization', async () => {
       vi.mocked(getUserTeams).mockResolvedValue([
@@ -604,8 +735,135 @@ describe('auth command', () => {
       expect(logger.warn).toHaveBeenCalledWith(
         expect.stringContaining('You have access to 2 teams'),
       );
-      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('--team flag'));
+      expect(logger.info).toHaveBeenCalledWith(
+        expect.stringContaining('promptfoo auth teams set <team>'),
+      );
     });
+
+    it("restores the organization's saved team instead of prompting or picking the oldest", async () => {
+      vi.mocked(getUserTeams).mockResolvedValue([
+        {
+          id: 'oldest',
+          name: 'Oldest',
+          slug: 'oldest',
+          organizationId: '1',
+          createdAt: '2023-01-01',
+          updatedAt: '2023-01-01',
+        },
+        {
+          id: 'saved',
+          name: 'Saved',
+          slug: 'saved',
+          organizationId: '1',
+          createdAt: '2024-01-01',
+          updatedAt: '2024-01-01',
+        },
+      ]);
+      vi.mocked(cloudConfig.getCurrentTeamId).mockImplementation((organizationId) =>
+        organizationId === '1' ? 'saved' : undefined,
+      );
+
+      await program.parseAsync(['node', 'test', 'auth', 'login', '--api-key', 'test-key']);
+
+      expect(search).not.toHaveBeenCalled();
+      expect(logger.warn).not.toHaveBeenCalled();
+      expect(cloudConfig.setCurrentTeamId).toHaveBeenCalledWith('saved', '1');
+    });
+
+    it('prefers the key organization when --team matches a name in several organizations', async () => {
+      vi.mocked(getUserTeams).mockResolvedValue([
+        {
+          id: 'other-default',
+          name: 'Default',
+          slug: 'default',
+          organizationId: 'org-2',
+          createdAt: '2023-01-01',
+          updatedAt: '2023-01-01',
+        },
+        {
+          id: 'own-default',
+          name: 'Default',
+          slug: 'default',
+          organizationId: '1',
+          createdAt: '2024-01-01',
+          updatedAt: '2024-01-01',
+        },
+      ]);
+
+      await program.parseAsync([
+        'node',
+        'test',
+        'auth',
+        'login',
+        '--api-key',
+        'k',
+        '--team',
+        'default',
+      ]);
+
+      expect(cloudConfig.setCurrentOrganization).toHaveBeenLastCalledWith('1');
+      expect(cloudConfig.setCurrentTeamId).toHaveBeenCalledWith('own-default', '1');
+    });
+
+    it('uses the oldest team without prompting after an interactive login finds a stale saved selection', async () => {
+      vi.mocked(isNonInteractive).mockReturnValue(false);
+      vi.mocked(cloudConfig.getCurrentTeamId).mockReturnValue('removed');
+      vi.mocked(getUserTeams).mockResolvedValue([
+        {
+          id: 'newer',
+          name: 'Newer',
+          slug: 'newer',
+          organizationId: '1',
+          createdAt: '2024-01-01',
+          updatedAt: '2024-01-01',
+        },
+        {
+          id: 'oldest',
+          name: 'Oldest',
+          slug: 'oldest',
+          organizationId: '1',
+          createdAt: '2023-01-01',
+          updatedAt: '2023-01-01',
+        },
+      ]);
+
+      await program.parseAsync(['node', 'test', 'auth', 'login', '--api-key', 'key']);
+
+      expect(search).not.toHaveBeenCalled();
+      expect(cloudConfig.setCurrentTeamId).toHaveBeenCalledWith('oldest', '1');
+    });
+
+    it.each(['name', 'slug'] as const)(
+      'prefers an exact team ID in another organization over a local %s',
+      async (field) => {
+        const team = { createdAt: '2024-01-01', updatedAt: '2024-01-01' };
+        vi.mocked(getUserTeams).mockResolvedValue([
+          {
+            ...team,
+            id: 'local',
+            name: 'Local',
+            slug: 'local',
+            organizationId: '1',
+            [field]: 'target-id',
+          },
+          { ...team, id: 'target-id', name: 'Target', slug: 'target', organizationId: 'org-2' },
+        ]);
+
+        await program.parseAsync([
+          'node',
+          'test',
+          'auth',
+          'login',
+          '--api-key',
+          'k',
+          '--team',
+          'target-id',
+        ]);
+
+        expect(cloudConfig.setCurrentOrganization).toHaveBeenLastCalledWith('org-2');
+        expect(cloudConfig.setCurrentTeamId).toHaveBeenCalledWith('target-id', 'org-2');
+      },
+    );
 
     it('should fall back to default team when user cancels interactive selection', async () => {
       const mockTeams = [
@@ -638,6 +896,73 @@ describe('auth command', () => {
 
       expect(cloudConfig.setCurrentTeamId).toHaveBeenCalledWith('team-2', '1');
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('(default)'));
+    });
+  });
+
+  describe('teams', () => {
+    const runTeamsCommand = async (...args: string[]) => {
+      const output: string[] = [];
+      for (const level of ['info', 'warn', 'error'] as const) {
+        vi.mocked(logger[level]).mockImplementation((message) => {
+          output.push(stripAnsi(String(message)));
+        });
+      }
+      await program.parseAsync(['node', 'test', 'auth', 'teams', ...args]);
+      return output;
+    };
+
+    beforeEach(() => {
+      vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+      vi.mocked(cloudConfig.getCurrentOrganizationId).mockReturnValue('org-1');
+    });
+
+    describe('current', () => {
+      it('shows the team resolved by the shared fallback, which never switches organizations', async () => {
+        vi.mocked(cloudConfig.getCurrentTeamId).mockReturnValue('saved');
+        vi.mocked(resolveTeamId).mockResolvedValue({ id: 'saved', name: 'Saved' });
+
+        expect(await runTeamsCommand('current')).toEqual(['Current team: Saved']);
+        expect(resolveTeamId).toHaveBeenCalledWith();
+        expect(cloudConfig.setCurrentOrganization).not.toHaveBeenCalled();
+      });
+
+      it('reports a failed lookup without touching the saved selection', async () => {
+        vi.mocked(cloudConfig.getCurrentTeamId).mockReturnValue('saved');
+        vi.mocked(resolveTeamId).mockRejectedValue(new Error('Service Unavailable'));
+
+        expect(await runTeamsCommand('current')).toEqual([
+          'Failed to get current team: Service Unavailable',
+        ]);
+        expect(process.exitCode).toBe(1);
+        expect(cloudConfig.clearCurrentTeamId).not.toHaveBeenCalled();
+        expect(cloudConfig.setCurrentTeamId).not.toHaveBeenCalled();
+      });
+
+      it('does not query teams when no team is currently selected', async () => {
+        expect(await runTeamsCommand('current')).toEqual(['No team currently selected']);
+        expect(resolveTeamId).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('set', () => {
+      it.each([
+        { organizationId: 'org-1', output: 'Switched to team: Chosen' },
+        { organizationId: 'org-2', output: 'Switched to team: Chosen (organization org-2)' },
+      ])(
+        'makes a team in $organizationId the active selection',
+        async ({ organizationId, output }) => {
+          vi.mocked(resolveTeamFromIdentifier).mockResolvedValue({
+            id: 'chosen',
+            name: 'Chosen',
+            organizationId,
+            createdAt: '2024-01-01',
+          });
+
+          expect(await runTeamsCommand('set', 'chosen')).toEqual([output]);
+          expect(cloudConfig.setCurrentOrganization).toHaveBeenCalledWith(organizationId);
+          expect(cloudConfig.setCurrentTeamId).toHaveBeenCalledWith('chosen', organizationId);
+        },
+      );
     });
   });
 
@@ -674,6 +999,11 @@ describe('auth command', () => {
   });
 
   describe('whoami', () => {
+    beforeEach(() => {
+      vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
+      vi.mocked(cloudConfig.getAuthHeaderName).mockReturnValue('Authorization');
+    });
+
     it('should show user info when logged in', async () => {
       vi.mocked(getUserEmail).mockReturnValue('test@example.com');
       vi.mocked(cloudConfig.getApiKey).mockReturnValue('test-api-key');
@@ -703,41 +1033,57 @@ describe('auth command', () => {
       await whoamiCmd?.parseAsync(['node', 'test']);
 
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Currently logged in as:'));
+      const messages = vi
+        .mocked(logger.info)
+        .mock.calls.map(([message]) => stripAnsi(String(message)))
+        .join('\n');
+      expect(messages).toContain('API URL: https://api.example.com');
+      expect(messages).toContain('Auth header: Authorization');
     });
 
-    it('should handle not logged in state', async () => {
-      // Reset logger mock before test
-      vi.mocked(logger.info).mockClear();
+    it.each([true, false])(
+      'shows the selected organization when team lookup succeeds: %s',
+      async (teamExists) => {
+        vi.mocked(getUserEmail).mockReturnValue(mockCloudUser.email);
+        vi.mocked(cloudConfig.getApiKey).mockReturnValue('test-key');
+        vi.mocked(cloudConfig.getCurrentOrganizationId).mockReturnValue('org-2');
+        vi.mocked(fetchWithProxy).mockResolvedValueOnce(
+          createMockResponse({
+            ok: true,
+            body: { user: mockCloudUser, organization: mockOrganization },
+          }),
+        );
+        if (teamExists) {
+          vi.mocked(resolveTeamId).mockResolvedValue({ id: 'team-2', name: 'Selected team' });
+        } else {
+          vi.mocked(resolveTeamId).mockRejectedValue(new Error('Team unavailable'));
+        }
 
-      vi.mocked(getUserEmail).mockReturnValue(null);
-      vi.mocked(cloudConfig.getApiKey).mockReturnValue(undefined);
+        await program.parseAsync(['node', 'test', 'auth', 'whoami']);
 
-      const whoamiCmd = program.commands
-        .find((cmd) => cmd.name() === 'auth')
-        ?.commands.find((cmd) => cmd.name() === 'whoami');
-      await whoamiCmd?.parseAsync(['node', 'test']);
+        const messages = vi
+          .mocked(logger.info)
+          .mock.calls.map(([message]) => stripAnsi(String(message)))
+          .join('\n');
+        expect(messages).toContain('Organization: org-2');
+        expect(messages).not.toContain(mockOrganization.name);
+        if (teamExists) {
+          expect(messages).toContain('Current Team: Selected team');
+        } else {
+          expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('Team unavailable'));
+        }
+      },
+    );
 
-      // Get the actual logged message
-      const infoMessages = vi.mocked(logger.info).mock.calls.map((call) => call[0]);
-
-      // Verify it contains our expected text
-      expect(infoMessages).toHaveLength(1);
-      expect(infoMessages[0]).toContain('Not logged in');
-      expect(infoMessages[0]).toContain('promptfoo auth login');
-
-      // No telemetry is recorded in this case (as per implementation)
-    });
-
-    it('should handle API error', async () => {
+    it('shows effective auth settings on failure without exposing URL credentials or the API key', async () => {
       vi.mocked(getUserEmail).mockReturnValue('test@example.com');
-      vi.mocked(cloudConfig.getApiKey).mockReturnValue('test-api-key');
-      vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
-
+      vi.mocked(cloudConfig.getApiKey).mockReturnValue('synthetic-cloud-secret');
+      vi.mocked(cloudConfig.getApiHost).mockReturnValue(
+        'https://gateway-user:gateway-password@api.example.com/v1/01234567-89ab-4cde-8fab-0123456789ab?token=synthetic-query-secret',
+      );
+      vi.mocked(cloudConfig.getAuthHeaderName).mockReturnValue('X-Promptfoo-Api-Key');
       vi.mocked(fetchWithProxy).mockResolvedValueOnce(
-        createMockResponse({
-          ok: false,
-          statusText: 'Internal Server Error',
-        }),
+        createMockResponse({ ok: false, status: 401, statusText: 'Unauthorized' }),
       );
 
       const whoamiCmd = program.commands
@@ -745,45 +1091,88 @@ describe('auth command', () => {
         ?.commands.find((cmd) => cmd.name() === 'whoami');
       await whoamiCmd?.parseAsync(['node', 'test']);
 
-      expect(logger.error).toHaveBeenCalledWith(
-        expect.stringContaining(
-          'Failed to get user info: Failed to fetch user info: Internal Server Error',
-        ),
-      );
+      const messages = vi
+        .mocked(logger.info)
+        .mock.calls.map(([message]) => stripAnsi(String(message)))
+        .join('\n');
+      expect(messages).toContain('api.example.com');
+      expect(messages).toContain('/v1/%5BREDACTED%5D');
+      expect(messages).toContain('Auth header: X-Promptfoo-Api-Key');
+      expect(messages).not.toContain('gateway-user');
+      expect(messages).not.toContain('gateway-password');
+      expect(messages).not.toContain('synthetic-query-secret');
+      expect(messages).not.toContain('synthetic-cloud-secret');
+      expect(messages).not.toContain('01234567-89ab-4cde-8fab-0123456789ab');
       expect(process.exitCode).toBe(1);
-
       process.exitCode = 0;
     });
 
-    it('should handle failed API response with empty body', async () => {
-      vi.mocked(getUserEmail).mockReturnValue('test@example.com');
-      vi.mocked(cloudConfig.getApiKey).mockReturnValue('test-api-key');
-      vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
+    it.each([undefined, 'synthetic-env-key'])(
+      'shows safe auth settings without a saved email (API key: %s)',
+      async (apiKey) => {
+        vi.mocked(getUserEmail).mockReturnValue(null);
+        vi.mocked(cloudConfig.getApiKey).mockReturnValue(apiKey);
+        vi.mocked(cloudConfig.getApiHost).mockReturnValue(
+          'https://gateway-user:gateway-password@api.example.com/v1/%74oken_privateTenantCredential123?token=synthetic-query-secret',
+        );
+        vi.mocked(cloudConfig.getAuthHeaderName).mockReturnValue('X-Promptfoo-Api-Key');
 
-      // Mock response with an empty body to exercise error-body fallback handling.
-      vi.mocked(fetchWithProxy).mockResolvedValueOnce(
-        createMockResponse({
-          ok: false,
-          statusText: 'Internal Server Error',
-          // Providing no body or an empty body
-        }),
-      );
+        const whoamiCmd = program.commands
+          .find((cmd) => cmd.name() === 'auth')
+          ?.commands.find((cmd) => cmd.name() === 'whoami');
+        await whoamiCmd?.parseAsync(['node', 'test']);
 
-      const whoamiCmd = program.commands
-        .find((cmd) => cmd.name() === 'auth')
-        ?.commands.find((cmd) => cmd.name() === 'whoami');
-      await whoamiCmd?.parseAsync(['node', 'test']);
+        const messages = vi
+          .mocked(logger.info)
+          .mock.calls.map(([message]) => stripAnsi(String(message)))
+          .join('\n');
+        expect(messages).toContain('API URL:');
+        expect(messages).toContain('api.example.com');
+        expect(messages).toContain('/v1/%5BREDACTED%5D');
+        expect(messages).toContain('Auth header: X-Promptfoo-Api-Key');
+        expect(messages).toContain('Not logged in');
+        expect(messages).toContain('promptfoo auth login');
+        expect(messages).not.toContain('gateway-user');
+        expect(messages).not.toContain('gateway-password');
+        expect(messages).not.toContain('synthetic-query-secret');
+        expect(messages).not.toContain('synthetic-env-key');
+        expect(messages).not.toContain('privateTenantCredential123');
+        expect(fetchWithProxy).not.toHaveBeenCalled();
+      },
+    );
 
-      expect(logger.error).toHaveBeenCalledWith(
-        expect.stringContaining(
-          'Failed to get user info: Failed to fetch user info: Internal Server Error',
-        ),
-      );
-      expect(process.exitCode).toBe(1);
+    it.each(['should handle API error', 'should handle failed API response with empty body'])(
+      '%s',
+      async () => {
+        vi.mocked(getUserEmail).mockReturnValue('test@example.com');
+        vi.mocked(cloudConfig.getApiKey).mockReturnValue('test-api-key');
+        vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
 
-      // Reset exitCode
-      process.exitCode = 0;
-    });
+        // Mock response with an empty body to exercise error-body fallback handling.
+        vi.mocked(fetchWithProxy).mockResolvedValueOnce(
+          createMockResponse({
+            ok: false,
+            // Providing no body or an empty body
+            statusText: 'Internal Server Error',
+          }),
+        );
+
+        const whoamiCmd = program.commands
+          .find((cmd) => cmd.name() === 'auth')
+          ?.commands.find((cmd) => cmd.name() === 'whoami');
+        await whoamiCmd?.parseAsync(['node', 'test']);
+
+        expect(logger.error).toHaveBeenCalledWith(
+          expect.stringContaining(
+            'Failed to get user info: Failed to fetch user info: Internal Server Error',
+          ),
+        );
+        expect(process.exitCode).toBe(1);
+
+        // Reset exitCode
+        process.exitCode = 0;
+      },
+    );
 
     it('should handle non-Error object in the catch block', async () => {
       vi.mocked(getUserEmail).mockReturnValue('test@example.com');

@@ -27,6 +27,7 @@ export async function extractSystemPurpose(
         'purpose' as RedTeamTask,
         prompts,
         generationContext,
+        provider,
       );
       return result as string;
     } catch (error) {

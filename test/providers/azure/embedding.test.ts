@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import { AzureEmbeddingProvider } from '../../../src/providers/azure/embedding';
+import { createMockFetchResponse } from '../mockProviderResponses';
 
 vi.mock('../../../src/cache');
 
@@ -56,6 +57,28 @@ describe('AzureEmbeddingProvider', () => {
       },
     });
   });
+
+  it.each([undefined, 256])(
+    'preserves the deployment and forwards dimensions %s',
+    async (dimensions) => {
+      provider.config.dimensions = dimensions;
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(
+        createMockFetchResponse({ data: [{ embedding: [0.1, 0.2] }], usage: { total_tokens: 2 } }),
+      );
+
+      const result = await provider.callEmbeddingApi('A small sample');
+
+      const [url, request] = vi.mocked(fetchWithCache).mock.calls[0];
+      expect(url).toContain('/deployments/test-deployment/embeddings?api-version=');
+      expect(JSON.parse(request?.body as string)).toEqual({
+        input: 'A small sample',
+        model: 'test-deployment',
+        ...(dimensions === undefined ? {} : { dimensions }),
+      });
+      expect(result.embedding).toEqual([0.1, 0.2]);
+      expect(result.cached).toBe(false);
+    },
+  );
 
   it('should handle API call errors', async () => {
     vi.mocked(fetchWithCache).mockRejectedValueOnce(new Error('API error'));

@@ -2,7 +2,7 @@ import { PageContainer } from '@app/components/layout/PageContainer';
 import { PageHeader } from '@app/components/layout/PageHeader';
 import { Card } from '@app/components/ui/card';
 import { REDTEAM_ROUTES } from '@app/constants/routes';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import ReportsTable from './ReportsTable';
 
 export default function ReportIndex() {

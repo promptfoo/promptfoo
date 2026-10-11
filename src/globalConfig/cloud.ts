@@ -74,6 +74,7 @@ interface CloudConfigState {
   appUrl: string;
   apiHost?: string;
   apiKey?: string;
+  authHeaderName?: string;
   sharing?: boolean;
   currentOrganizationId?: string;
   currentTeamId?: string;
@@ -114,6 +115,7 @@ export class CloudConfig {
       appUrl: savedConfig.appUrl || 'https://www.promptfoo.app',
       apiHost: savedConfig.apiHost,
       apiKey: savedConfig.apiKey,
+      authHeaderName: savedConfig.authHeaderName,
       sharing: savedConfig.sharing,
       currentOrganizationId: savedConfig.currentOrganizationId,
       currentTeamId: savedConfig.currentTeamId,
@@ -160,6 +162,19 @@ export class CloudConfig {
     return host.replace(/\/+$/, '');
   }
 
+  /**
+   * Returns the header name used to carry the Cloud API credential, from config file,
+   * PROMPTFOO_CLOUD_AUTH_HEADER environment variable, or the default `Authorization`.
+   * Config file takes precedence over environment variable, matching resolveApiHost().
+   *
+   * process.env is read directly (not getEnvString) for the same reason as
+   * PROMPTFOO_CLOUD_API_URL: an eval config's `env` block must never be able to
+   * influence Cloud auth routing.
+   */
+  private resolveAuthHeaderName(): string {
+    return this.config.authHeaderName || process.env.PROMPTFOO_CLOUD_AUTH_HEADER || 'Authorization';
+  }
+
   isEnabled(): boolean {
     return !!this.resolveApiKey();
   }
@@ -182,6 +197,29 @@ export class CloudConfig {
 
   getApiHost(): string {
     return this.resolveApiHost();
+  }
+
+  setAuthHeaderName(authHeaderName: string): void {
+    this.config.authHeaderName = authHeaderName;
+    this.saveConfig();
+  }
+
+  getAuthHeaderName(): string {
+    return this.resolveAuthHeaderName();
+  }
+
+  /**
+   * Returns the header(s) to attach to a Cloud API request for the current credential,
+   * or `undefined` when no API key is resolved. Callers should spread the result
+   * conditionally (`...(cloudConfig.getAuthHeaders() ?? {})`) rather than sending a
+   * header with a `Bearer undefined` value.
+   */
+  getAuthHeaders(): Record<string, string> | undefined {
+    const token = this.getApiKey();
+    if (!token) {
+      return undefined;
+    }
+    return { [this.getAuthHeaderName()]: `Bearer ${token}` };
   }
 
   setAppUrl(appUrl: string): void {
@@ -227,10 +265,14 @@ export class CloudConfig {
     user: CloudUser,
     app: CloudApp,
     hasActiveLicense?: boolean,
+    authHeaderName?: string,
   ): void {
     this.setApiKey(token);
     this.setApiHost(apiHost);
     this.setAppUrl(app.url);
+    if (authHeaderName) {
+      this.setAuthHeaderName(authHeaderName);
+    }
     // On-prem installations are always enterprise deployments. Applying the
     // public-cloud hasActiveLicense gate to on-prem hosts incorrectly disables
     // auto-sharing to the on-prem Report Server when the server omits the field
@@ -246,13 +288,18 @@ export class CloudConfig {
     }
   }
 
-  async validateApiToken(token: string, apiHost: string): Promise<CloudTokenValidation> {
+  async validateApiToken(
+    token: string,
+    apiHost: string,
+    authHeaderName?: string,
+  ): Promise<CloudTokenValidation> {
     try {
       const { fetchWithProxy } = await import('../util/fetch/index');
       const response = await fetchWithProxy(`${apiHost}/api/v1/users/me`, {
         headers: {
-          Authorization: `Bearer ${token}`,
+          [authHeaderName || this.getAuthHeaderName()]: `Bearer ${token}`,
         },
+        skipCloudAuthInjection: true,
       });
 
       if (!response.ok) {
@@ -286,11 +333,13 @@ export class CloudConfig {
     token: string,
     apiHost: string,
   ): Promise<CloudTokenValidation & { hasActiveLicense: boolean }> {
+    const authHeaderName = this.getAuthHeaderName();
     const { user, organization, app, hasActiveLicense } = await this.validateApiToken(
       token,
       apiHost,
+      authHeaderName,
     );
-    this.saveValidatedApiToken(token, apiHost, user, app, hasActiveLicense);
+    this.saveValidatedApiToken(token, apiHost, user, app, hasActiveLicense, authHeaderName);
 
     return {
       user,

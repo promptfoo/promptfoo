@@ -84,7 +84,23 @@ describe('Recent Bug Regression Tests', () => {
         const content = fs.readFileSync(outputPath, 'utf-8');
         const parsed = JSON.parse(content);
 
-        expect(parsed.results.results[0].success).toBe(true);
+        const results = parsed.results.results as Array<{
+          response: { output: string };
+          success: boolean;
+          gradingResult: { componentResults: Array<{ pass: boolean }> };
+        }>;
+        const expectedOutputs = ['DynamicValue', 'PythonScriptValue', 'RubyScriptValue'];
+
+        expect(results).toHaveLength(expectedOutputs.length);
+        expect(new Set(results.map((result) => result.response.output))).toEqual(
+          new Set(expectedOutputs),
+        );
+
+        for (const result of results) {
+          expect(result.success).toBe(true);
+          expect(result.gradingResult.componentResults).toHaveLength(1);
+          expect(result.gradingResult.componentResults[0].pass).toBe(true);
+        }
       });
     });
 

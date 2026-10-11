@@ -44,7 +44,6 @@ const mocks = vi.hoisted(() => ({
   fetchWithProxy: vi.fn(),
   getAvailableProviders: vi.fn(),
   getBlobByHash: vi.fn(),
-  getBlobUrl: vi.fn(),
   getDb: vi.fn(),
   getEnvBool: vi.fn(),
   getEnvFloat: vi.fn(),
@@ -91,7 +90,6 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('../../../src/blobs', () => ({
   getBlobByHash: mocks.getBlobByHash,
-  getBlobUrl: mocks.getBlobUrl,
 }));
 
 vi.mock('../../../src/blobs/extractor', () => ({
@@ -117,6 +115,7 @@ vi.mock('../../../src/envars', () => ({
   getEvalTimeoutMs: vi.fn(() => 0),
   getMaxEvalTimeMs: vi.fn(() => 0),
   getEnvString: mocks.getEnvString,
+  getEnvOverrides: vi.fn(),
   isCI: vi.fn(() => false),
   isNonInteractive: vi.fn(() => true),
 }));

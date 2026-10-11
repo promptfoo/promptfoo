@@ -87,6 +87,8 @@ export interface CallApiContextParams {
   prompt: Prompt;
   vars: Record<string, VarValue>;
   debug?: boolean;
+  /** True for assertion-grader calls, independent of the prompt label. */
+  isGrading?: boolean;
   // This was added so we have access to the grader inside the provider.
   // Vars and prompts should be access using the arguments above.
   test?: AtomicTestCase;
@@ -118,29 +120,74 @@ export interface CallApiOptionsParams {
    * Signal that can be used to abort the request
    */
   abortSignal?: AbortSignal;
+  /**
+   * @internal Notify the scheduler before cancellable post-processing or a
+   * selected target-fetch backoff. Backoff observations retain their original
+   * quota deadline even when a coalesced consumer joins later.
+   */
+  onResponseHeaders?: (
+    headers: Record<string, string>,
+    backoff?: { headers: Record<string, string>; status: number; resetAt: number },
+  ) => void;
+}
+
+export interface ProviderCleanupContext {
+  reason: 'evaluation-complete';
 }
 
 export interface ApiProvider extends MinimalApiProvider {
   callApi: CallApiFunction;
-  callClassificationApi?: (prompt: string) => Promise<ProviderClassificationResponse>;
+  callClassificationApi?: (
+    prompt: string,
+    options?: CallApiOptionsParams,
+  ) => Promise<ProviderClassificationResponse>;
   callEmbeddingApi?: (input: string) => Promise<ProviderEmbeddingResponse>;
+  /** Opt in to receiving evaluation cancellation through CancellableEmbeddingProvider. */
+  supportsEmbeddingCancellation?: boolean;
   config?: any;
   delay?: number;
+  /** True when callApi applies delay itself and the evaluator should not wait again. */
+  handlesOwnDelay?: boolean;
+  /**
+   * True when callApi owns retries for its operations, including requests that
+   * must not be replayed. Scheduling still applies, but the scheduler must not
+   * retry the whole call after its transport or SDK has finished. Subclasses
+   * replacing that behavior can override this with false to use scheduler retries.
+   */
+  handlesOwnRetries?: boolean;
   getSessionId?: () => string;
+  /** Native audio input content format accepted by this provider and its configured model. */
+  getAudioInputFormat?: () => 'openai' | 'google' | undefined;
   inputs?: Inputs;
   label?: ProviderLabel;
+  /** Effective prompt selectors after provider configuration has been resolved. */
+  prompts?: string[];
   transform?: string | TransformFunction;
   toJSON?: () => any;
   /**
    * Provider-wide cleanup hook for releasing long-lived resources such as worker
-   * processes, browser sessions, or pooled connections at eval shutdown.
+   * processes, browser sessions, or pooled connections. The CLI calls it without
+   * arguments unless `cleanupAfterEvaluation` is implemented or the provider registers
+   * itself for shutdown; a registered provider's `shutdown()` may delegate to this hook.
    * Request-scoped cancellation should be implemented with `abortSignal`.
    */
   cleanup?: () => void | Promise<void>;
+  /** Release idle evaluation resources separately from an explicit `cleanup()` call. */
+  cleanupAfterEvaluation?: (context: ProviderCleanupContext) => void | Promise<void>;
 }
 
 export interface ApiEmbeddingProvider extends ApiProvider {
   callEmbeddingApi: (input: string) => Promise<ProviderEmbeddingResponse>;
+}
+
+/** Embedding calls that explicitly reserve the third argument for evaluation cancellation. */
+export interface CancellableEmbeddingProvider extends ApiEmbeddingProvider {
+  supportsEmbeddingCancellation: true;
+  callEmbeddingApi: (
+    input: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ) => Promise<ProviderEmbeddingResponse>;
 }
 
 export interface ApiSimilarityProvider extends ApiProvider {
@@ -148,11 +195,19 @@ export interface ApiSimilarityProvider extends ApiProvider {
 }
 
 export interface ApiClassificationProvider extends ApiProvider {
-  callClassificationApi: (prompt: string) => Promise<ProviderClassificationResponse>;
+  callClassificationApi: (
+    prompt: string,
+    options?: CallApiOptionsParams,
+  ) => Promise<ProviderClassificationResponse>;
 }
 
 export interface ApiModerationProvider extends ApiProvider {
-  callModerationApi: (prompt: string, response: string) => Promise<ProviderModerationResponse>;
+  callModerationApi: (
+    prompt: string,
+    response: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ) => Promise<ProviderModerationResponse>;
 }
 
 export type FilePath = string;

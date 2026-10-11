@@ -1,7 +1,7 @@
 import chalk from 'chalk';
 import { formatDuration } from '../../util/formatDuration';
 
-import type { TokenUsage } from '../../types/index';
+import type { RepeatStabilitySummary, TokenUsage } from '../../types/index';
 import type { TokenUsageTracker } from '../../util/tokenUsage';
 
 /**
@@ -43,12 +43,18 @@ export interface EvalSummaryParams {
   tracker: TokenUsageTracker;
   /** HTTP status code if the scan was aborted due to a non-transient target error (401, 403, 404, 501) */
   targetErrorStatus?: number;
+  /** Aggregate pass/fail consistency for repeated test executions. */
+  repeatStability?: RepeatStabilitySummary;
 }
 
 type TokenUsageBreakdown = Pick<
   TokenUsage,
   'prompt' | 'completion' | 'total' | 'cached' | 'numRequests' | 'completionDetails'
 >;
+
+function getTokenUsageTotal(usage: TokenUsageBreakdown | undefined): number {
+  return usage?.total ?? (usage?.prompt ?? 0) + (usage?.completion ?? 0);
+}
 
 function getCompletionMessage({
   completionType,
@@ -163,36 +169,46 @@ function buildUsageDetails(usage: TokenUsageBreakdown, total: number): string[] 
   return parts;
 }
 
+function getGradingUsageLine(assertions: TokenUsage['assertions']): string | undefined {
+  const total = getTokenUsageTotal(assertions);
+  if (!assertions || (total === 0 && (assertions.cached || 0) === 0)) {
+    return undefined;
+  }
+
+  const details = buildUsageDetails(assertions, total);
+  return `  ${chalk.gray('Grading:')} ${chalk.white(total.toLocaleString())} (${details.join(', ')})`;
+}
+
 function getTokenUsageLines(
   tokenUsage: TokenUsage,
   isRedteam: boolean,
   tracker: TokenUsageTracker,
 ): string[] {
-  const hasEvalTokens =
-    (tokenUsage.total || 0) > 0 || (tokenUsage.prompt || 0) + (tokenUsage.completion || 0) > 0;
-  const hasGradingTokens = tokenUsage.assertions && (tokenUsage.assertions.total || 0) > 0;
+  const primaryTokens = getTokenUsageTotal(tokenUsage);
+  const gradingUsageLine = getGradingUsageLine(tokenUsage.assertions);
+  const hasGradingTokens = gradingUsageLine !== undefined;
+  const attackerTokens = getTokenUsageTotal(tokenUsage.attacker);
+  const generationTokens = getTokenUsageTotal(tokenUsage.generation);
+  const generationRequests = tokenUsage.generation?.numRequests ?? 0;
 
-  if (!hasEvalTokens && !hasGradingTokens) {
+  if (
+    primaryTokens === 0 &&
+    !hasGradingTokens &&
+    attackerTokens === 0 &&
+    generationTokens === 0 &&
+    generationRequests === 0
+  ) {
     return [];
   }
 
-  const combinedTotal = (tokenUsage.prompt || 0) + (tokenUsage.completion || 0);
-  const evalTokens = {
-    prompt: tokenUsage.prompt || 0,
-    completion: tokenUsage.completion || 0,
-    total: tokenUsage.total || combinedTotal,
-    cached: tokenUsage.cached || 0,
-    numRequests: tokenUsage.numRequests || 0,
-    completionDetails: tokenUsage.completionDetails || {
-      reasoning: 0,
-      acceptedPrediction: 0,
-      rejectedPrediction: 0,
-    },
-  };
-
   const lines = [
     `${chalk.bold('Total Tokens:')} ${chalk.white.bold(
-      (evalTokens.total + (tokenUsage.assertions?.total || 0)).toLocaleString(),
+      (
+        primaryTokens +
+        attackerTokens +
+        getTokenUsageTotal(tokenUsage.assertions) +
+        generationTokens
+      ).toLocaleString(),
     )}`,
   ];
 
@@ -202,22 +218,57 @@ function getTokenUsageLines(
     );
   }
 
-  if (evalTokens.total > 0) {
-    const evalParts = buildUsageDetails(evalTokens, evalTokens.total);
+  if (primaryTokens > 0) {
+    const evalParts = buildUsageDetails(tokenUsage, primaryTokens);
+    const primaryUsageLabel = isRedteam ? 'Target' : 'Provider';
     lines.push(
-      `  ${chalk.gray('Eval:')} ${chalk.white(evalTokens.total.toLocaleString())} (${evalParts.join(
-        ', ',
-      )})`,
+      `  ${chalk.gray(`${primaryUsageLabel}:`)} ${chalk.white(
+        primaryTokens.toLocaleString(),
+      )} (${evalParts.join(', ')})`,
     );
   }
 
-  if (tokenUsage.assertions?.total && tokenUsage.assertions.total > 0) {
-    const gradingParts = buildUsageDetails(tokenUsage.assertions, tokenUsage.assertions.total);
+  if (tokenUsage.generation && generationTokens > 0) {
+    const generationParts = buildUsageDetails(tokenUsage.generation, generationTokens);
     lines.push(
-      `  ${chalk.gray('Grading:')} ${chalk.white(
-        tokenUsage.assertions.total.toLocaleString(),
-      )} (${gradingParts.join(', ')})`,
+      `  ${chalk.gray('Generation:')} ${chalk.white(generationTokens.toLocaleString())} (${generationParts.join(', ')})`,
     );
+  } else if (generationRequests > 0) {
+    const requestLabel = generationRequests === 1 ? 'request' : 'requests';
+    lines.push(
+      `  ${chalk.gray('Generation:')} token usage unavailable (${generationRequests.toLocaleString()} ${requestLabel})`,
+    );
+  }
+
+  if (tokenUsage.attacker && attackerTokens > 0) {
+    const attackerParts = buildUsageDetails(tokenUsage.attacker, attackerTokens);
+    lines.push(
+      `  ${chalk.gray('Attacker:')} ${chalk.white(attackerTokens.toLocaleString())} (${attackerParts.join(', ')})`,
+    );
+  }
+
+  if (gradingUsageLine) {
+    lines.push(gradingUsageLine);
+  }
+
+  const incurredUsage = tokenUsage.incurredTokenUsage;
+  if (incurredUsage) {
+    const incurredTokens =
+      getTokenUsageTotal(incurredUsage) +
+      getTokenUsageTotal(incurredUsage.attacker) +
+      getTokenUsageTotal(incurredUsage.assertions) +
+      getTokenUsageTotal(incurredUsage.generation);
+    const evaluationTokens =
+      primaryTokens + attackerTokens + getTokenUsageTotal(tokenUsage.assertions) + generationTokens;
+    const cachedSavings = Math.max(evaluationTokens - incurredTokens, 0);
+
+    if (cachedSavings > 0) {
+      lines.push(
+        `${chalk.bold('Incurred Tokens:')} ${chalk.white.bold(incurredTokens.toLocaleString())}`,
+        `  ${chalk.gray('Cached Savings:')} ${chalk.white(cachedSavings.toLocaleString())}`,
+        `  ${chalk.gray('Actual Target Requests:')} ${chalk.white((incurredUsage.numRequests ?? 0).toLocaleString())}`,
+      );
+    }
   }
 
   lines.push(...getProviderUsageLines(tracker));
@@ -299,6 +350,57 @@ function getResultsLines({
   ];
 }
 
+function formatPassRate(value: number): string {
+  return `${(value * 100).toFixed(1)}%`;
+}
+
+function getRepeatStabilityLines(summary: RepeatStabilitySummary | undefined): string[] {
+  if (!summary) {
+    return [];
+  }
+
+  const lines = [
+    '',
+    chalk.bold('Repeat stability:'),
+    `  ${summary.totalGroups.toLocaleString()} repeated group${summary.totalGroups === 1 ? '' : 's'}; ${summary.unstableGroups.toLocaleString()} unstable`,
+  ];
+
+  for (const group of summary.groups.filter((group) => group.unstable).slice(0, 5)) {
+    const scored = group.passed + group.failed;
+    const label =
+      group.description || group.promptLabel || group.provider.label || group.provider.id;
+    const interval = group.passRateConfidenceInterval;
+    const intervalText = interval
+      ? `; 95% CI ${formatPassRate(interval.lower)}–${formatPassRate(interval.upper)}`
+      : '';
+    lines.push(
+      chalk.yellow(
+        `  ⚠ ${label}: ${group.passed}/${scored} passed across ${group.repetitions} runs${intervalText}`,
+      ),
+    );
+  }
+
+  if (summary.unstableGroups > 5) {
+    lines.push(chalk.gray(`  … and ${summary.unstableGroups - 5} more unstable groups`));
+  }
+  if (summary.groupsWithErrors > 0) {
+    lines.push(
+      chalk.red(
+        `  ${summary.groupsWithErrors} repeated group${summary.groupsWithErrors === 1 ? '' : 's'} contained errors`,
+      ),
+    );
+  }
+  if (summary.cachedResults > 0) {
+    lines.push(
+      chalk.gray(
+        `  ${summary.cachedResults} cached result${summary.cachedResults === 1 ? '' : 's'} detected; confidence intervals are omitted for affected groups`,
+      ),
+    );
+  }
+
+  return lines;
+}
+
 /**
  * Generate formatted evaluation summary output for CLI display.
  *
@@ -358,6 +460,7 @@ export function generateEvalSummary(params: EvalSummaryParams): string[] {
     }),
     '',
     ...getTokenUsageLines(params.tokenUsage, params.isRedteam, params.tracker),
+    ...getRepeatStabilityLines(params.repeatStability),
     ...getResultsLines(params),
   ];
 }

@@ -25,7 +25,7 @@ Text-to-image generation using SDXL1.0-base model.
 
 ### Audio Generation (`promptfooconfig.audio-generation.yaml`)
 
-Text-to-speech synthesis using Melo-TTS model.
+Text-to-speech synthesis through Hyperbolic's Melo TTS endpoint, using an English speaker and returning MP3 audio. The `hyperbolic:audio` route uses the local identity `Melo-TTS`; an optional route suffix does not select a different remote model. Hyperbolic has announced an [upcoming Melo TTS sunset](https://www.hyperbolic.ai/docs/inference/audio-apis) without a removal date.
 
 ### Multimodal Vision (`promptfooconfig.multimodal.yaml`)
 

@@ -1,6 +1,6 @@
-import { getEnvString } from '../../envars';
+import { resolveProviderApiKey } from '../credentials';
+import { resolveProviderEnv } from '../env';
 
-import type { EnvVarKey } from '../../envars';
 import type { EnvOverrides } from '../../types/env';
 
 export const FIREWORKS_API_BASE_URL = 'https://api.fireworks.ai/inference/v1';
@@ -29,7 +29,7 @@ export function buildFireworksProviderConfig<T extends FireworksCredentialConfig
   config: T,
   env: EnvOverrides | undefined,
 ): T & { apiBaseUrl: string; apiKeyEnvar: string } {
-  const envBaseUrl = env?.FIREWORKS_API_BASE_URL || getEnvString('FIREWORKS_API_BASE_URL');
+  const envBaseUrl = resolveProviderEnv(env, ['FIREWORKS_API_BASE_URL'])?.value;
   return {
     ...config,
     apiBaseUrl: config?.apiBaseUrl || envBaseUrl || FIREWORKS_API_BASE_URL,
@@ -44,8 +44,7 @@ export function resolveFireworksApiKey(
   config: FireworksCredentialConfig,
   env: EnvOverrides | undefined,
 ): string | undefined {
-  const envar = config?.apiKeyEnvar || DEFAULT_FIREWORKS_API_KEY_ENVAR;
-  return config?.apiKey || env?.[envar as keyof EnvOverrides] || getEnvString(envar as EnvVarKey);
+  return resolveProviderApiKey(config, env, [DEFAULT_FIREWORKS_API_KEY_ENVAR]);
 }
 
 // Resolve the request URL. The OpenAI base class consults OPENAI_API_HOST /

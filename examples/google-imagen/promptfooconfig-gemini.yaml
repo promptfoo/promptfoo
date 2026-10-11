@@ -5,7 +5,8 @@ prompts:
   - 'Create a {{quality}} image of {{subject}} with {{style}} aesthetic'
 
 providers:
-  # Gemini 2.5 Flash - Fast image generation (generally available)
+  # Legacy comparison: native Gemini 2.5 Flash Image shuts down October 2, 2026.
+  # Use gemini-3.1-flash-image (below) for new configurations.
   # Note: imageSize is not supported for Gemini 2.5 models
   - id: google:gemini-2.5-flash-image
     config:

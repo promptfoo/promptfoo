@@ -23,7 +23,7 @@ import {
   type VarValue,
 } from './types/index';
 import { isAudioFile, isImageFile, isJavascriptFile, isVideoFile } from './util/fileExtensions';
-import { renderVarsInObject } from './util/index';
+import { renderVarsInObject, setLoadedFileMimeTypes } from './util/index';
 import invariant from './util/invariant';
 import { filterFiniteScores } from './util/numeric';
 import { extractVariablesFromTemplate, getNunjucksEngine } from './util/templates';
@@ -78,7 +78,8 @@ export function resolveVariables(
           // Do nothing - final nunjucks render will fail if necessary.
           // logger.warn(`Variable "${varName}" not found for substitution.`);
         } else {
-          variables[key] = value.replace(placeholder, variables[varName] as string);
+          // A replacer function keeps `$&`, `$'` and `` $` `` in the value literal.
+          variables[key] = value.replace(placeholder, () => variables[varName] as string);
           if (skipResolveVars?.includes(varName) || varsResolvedFromSkipped?.has(varName)) {
             varsResolvedFromSkipped?.add(key);
           }
@@ -246,6 +247,7 @@ export async function renderPrompt(
   skipRenderVars?: string[],
 ): Promise<string> {
   const nunjucks = getNunjucksEngine(nunjucksFilters);
+  const loadedMimeTypes = setLoadedFileMimeTypes(vars);
 
   let basePrompt = prompt.raw;
 
@@ -271,7 +273,7 @@ export async function renderPrompt(
         if (javascriptOutput.error) {
           throw new Error(`Error running ${filePath}: ${javascriptOutput.error}`);
         }
-        if (!javascriptOutput.output) {
+        if (typeof javascriptOutput.output !== 'string') {
           throw new Error(
             `Expected ${filePath} to return { output: string } but got ${javascriptOutput}`,
           );
@@ -286,7 +288,7 @@ export async function renderPrompt(
         if (pythonScriptOutput.error) {
           throw new Error(`Error running Python script ${filePath}: ${pythonScriptOutput.error}`);
         }
-        if (!pythonScriptOutput.output) {
+        if (pythonScriptOutput.output == null) {
           throw new Error(`Python script ${filePath} did not return any output`);
         }
         invariant(
@@ -350,6 +352,14 @@ export async function renderPrompt(
           } else {
             // Keep existing behavior for video/audio files (raw base64)
             vars[varName] = base64Data;
+            if (
+              fileType === 'audio' &&
+              fileExtension?.toLowerCase() === 'm4a' &&
+              provider?.getAudioInputFormat?.() === 'google'
+            ) {
+              loadedMimeTypes.set(base64Data, 'audio/mp4');
+              setLoadedFileMimeTypes(vars, loadedMimeTypes);
+            }
           }
         } catch (error) {
           throw new Error(
@@ -375,7 +385,7 @@ export async function renderPrompt(
       if (javascriptOutput.error) {
         throw new Error(`Error running ${value}: ${javascriptOutput.error}`);
       }
-      if (!javascriptOutput.output) {
+      if (typeof javascriptOutput.output !== 'string') {
         throw new Error(
           `Expected ${value} to return { output: string } but got ${javascriptOutput}`,
         );

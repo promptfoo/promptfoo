@@ -84,7 +84,7 @@ export function registerRunEvaluationTool(server: McpServer) {
         .describe(
           dedent`
             Filter to specific providers by ID.
-            Examples: "openai:gpt-4", ["openai:gpt-4", "anthropic:claude-3"]
+            Examples: "openai:gpt-5.6", ["openai:gpt-5.6", "anthropic:claude-sonnet-5"]
           `,
         ),
       maxConcurrency: z
@@ -492,29 +492,6 @@ export function registerRunEvaluationTool(server: McpServer) {
             testCaseIndices: args.testCaseIndices,
             promptFilter: args.promptFilter,
             providerFilter: args.providerFilter,
-          },
-          error: errorMessage,
-          troubleshooting: {
-            commonIssues: [
-              'Configuration file not found or invalid format',
-              'Test case indices out of range',
-              'Provider or prompt filters not matching any items',
-              'Provider authentication or configuration errors',
-              'Assertion configuration errors',
-              'Timeout issues with slow providers',
-            ],
-            configurationTips: [
-              'Ensure promptfooconfig.yaml exists and is valid',
-              'Check that provider credentials are properly configured',
-              'Verify test case indices are within bounds',
-              'Use exact provider IDs and prompt labels for filtering',
-            ],
-            exampleUsage: {
-              singleTestCase: '{"testCaseIndices": 0}',
-              multipleTestCases: '{"testCaseIndices": [0, 2, 5]}',
-              testCaseRange: '{"testCaseIndices": {"start": 0, "end": 3}}',
-              withFilters: '{"promptFilter": "my-prompt", "providerFilter": "openai:gpt-4"}',
-            },
           },
         };
 

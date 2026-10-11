@@ -24,7 +24,7 @@ import SignalCellularAltIcon from '@mui/icons-material/SignalCellularAlt';
 import StorefrontIcon from '@mui/icons-material/Storefront';
 import Layout from '@theme/Layout';
 import clsx from 'clsx';
-import CountUp from 'react-countup';
+import AnimatedCounter from '../components/AnimatedCounter';
 import { SITE_CONSTANTS } from '../constants';
 import styles from './index.module.css';
 
@@ -130,27 +130,37 @@ function CopyCodeBox({ command }: { command: string }) {
   );
 }
 
+/** Red Teaming: what the page shows with no hash, on the server and after a hash is cleared. */
+const DEFAULT_STEP = 1;
+
+const HASH_TO_STEP: Record<string, number> = {
+  '#redteam': 1,
+  '#guardrails': 2,
+  '#modelsecurity': 3,
+  '#mcp': 4,
+  '#evals': 5,
+  '#codescanning': 6,
+};
+
 function HomepageWalkthrough() {
   const isDarkTheme = useColorMode().colorMode === 'dark';
-  const [selectedStep, setSelectedStep] = React.useState(() => {
-    if (typeof window !== 'undefined') {
-      if (window.location.hash === '#evals') {
-        return 5;
-      } else if (window.location.hash === '#redteam') {
-        return 1;
-      } else if (window.location.hash === '#guardrails') {
-        return 2;
-      } else if (window.location.hash === '#modelsecurity') {
-        return 3;
-      } else if (window.location.hash === '#mcp') {
-        return 4;
-      } else if (window.location.hash === '#codescanning') {
-        return 6;
-      }
-    }
-    return 1; // Default to Red Teaming
-  });
+  // Default to Red Teaming. The hash is applied after mount instead of in the initializer:
+  // reading `window.location.hash` during render would make the first client render disagree
+  // with the server-rendered HTML (which never has a hash) and blow up hydration.
+  const [selectedStep, setSelectedStep] = React.useState(DEFAULT_STEP);
   const [isMobile, setIsMobile] = React.useState(false);
+
+  React.useEffect(() => {
+    // Falls back to the default rather than returning early: navigating back from
+    // `/#evals` to `/` fires hashchange with an empty hash, and leaving the previously
+    // selected tab active would stop the UI reflecting the URL. Same for an unknown hash.
+    const applyHash = () => {
+      setSelectedStep(HASH_TO_STEP[window.location.hash] ?? DEFAULT_STEP);
+    };
+    applyHash();
+    window.addEventListener('hashchange', applyHash);
+    return () => window.removeEventListener('hashchange', applyHash);
+  }, []);
 
   React.useEffect(() => {
     const checkMobile = () => {
@@ -513,60 +523,6 @@ function SolutionSection() {
   );
 }
 
-function AnimatedCounter({ target, suffix = '' }: { target: string; suffix?: string }) {
-  const countUpRef = React.useRef(null);
-  const [isVisible, setIsVisible] = React.useState(false);
-
-  // Parse the target number (remove commas and convert to number)
-  const targetNumber = React.useMemo(() => {
-    return parseInt(target.replace(/,/g, ''), 10);
-  }, [target]);
-
-  React.useEffect(() => {
-    const element = countUpRef.current;
-    if (!element) return;
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting && !isVisible) {
-            setIsVisible(true);
-          }
-        });
-      },
-      {
-        threshold: 0.5,
-      },
-    );
-
-    observer.observe(element);
-
-    return () => {
-      observer.disconnect();
-    };
-  }, [isVisible]);
-
-  return (
-    <div ref={countUpRef} className={styles.communityStatNumber}>
-      {isVisible ? (
-        <CountUp
-          end={targetNumber}
-          duration={3.5}
-          separator=","
-          suffix={suffix}
-          useEasing={true}
-          easingFn={(t, b, c, d) => {
-            // easeOutExpo for smoother deceleration
-            return t === d ? b + c : c * (-Math.pow(2, (-10 * t) / d) + 1) + b;
-          }}
-        />
-      ) : (
-        <>0{suffix}</>
-      )}
-    </div>
-  );
-}
-
 function CommunitySection() {
   return (
     <section className={styles.communitySection}>
@@ -585,17 +541,29 @@ function CommunitySection() {
 
         <div className={styles.communityStats}>
           <div className={styles.communityStatCard}>
-            <AnimatedCounter target={SITE_CONSTANTS.USER_COUNT_DISPLAY} suffix="+" />
+            <AnimatedCounter
+              className={styles.communityStatNumber}
+              target={SITE_CONSTANTS.USER_COUNT_DISPLAY}
+              suffix="+"
+            />
             <div className={styles.communityStatLabel}>Open Source Users</div>
             <p>Developers securing AI applications with Promptfoo</p>
           </div>
           <div className={styles.communityStatCard}>
-            <AnimatedCounter target={String(SITE_CONSTANTS.CONTRIBUTOR_COUNT)} suffix="+" />
+            <AnimatedCounter
+              className={styles.communityStatNumber}
+              target={String(SITE_CONSTANTS.CONTRIBUTOR_COUNT)}
+              suffix="+"
+            />
             <div className={styles.communityStatLabel}>Contributors</div>
             <p>From major foundation labs and tech companies</p>
           </div>
           <div className={styles.communityStatCard}>
-            <AnimatedCounter target={SITE_CONSTANTS.WEEKLY_DOWNLOADS_DISPLAY} suffix="+" />
+            <AnimatedCounter
+              className={styles.communityStatNumber}
+              target={SITE_CONSTANTS.WEEKLY_DOWNLOADS_DISPLAY}
+              suffix="+"
+            />
             <div className={styles.communityStatLabel}>Weekly Downloads</div>
             <p>Active deployments in production workflows worldwide</p>
           </div>

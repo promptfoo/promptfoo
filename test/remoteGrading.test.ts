@@ -7,6 +7,8 @@ import {
   getRemoteGenerationUrl,
 } from '../src/redteam/remoteGeneration';
 import { doRemoteGrading } from '../src/remoteGrading';
+import { getActiveTraceparent } from '../src/tracing/spanRoles';
+import { createMockFetchResponse } from './providers/mockProviderResponses';
 
 const mockLoggerDebug = vi.hoisted(() => vi.fn());
 
@@ -46,6 +48,10 @@ vi.mock('../src/logger', () => ({
   },
 }));
 
+vi.mock('../src/tracing/spanRoles', () => ({
+  getActiveTraceparent: vi.fn(),
+}));
+
 describe('doRemoteGrading', () => {
   afterEach(() => {
     vi.resetAllMocks();
@@ -56,19 +62,16 @@ describe('doRemoteGrading', () => {
     vi.mocked(getRemoteGenerationUrl).mockReturnValue('https://api.promptfoo.test/task');
     vi.mocked(getRemoteGenerationHeaders).mockReturnValue({ authorization: 'Bearer test' });
     vi.mocked(getRequestTimeoutMs).mockReturnValue(1234);
-    vi.mocked(fetchWithCache).mockResolvedValueOnce({
-      data: {
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(
+      createMockFetchResponse({
         result: {
           pass: false,
           score: 0,
           reason: 'API error: 429 Too Many Requests',
           metadata: { graderError: true },
         },
-      },
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    } as any);
+      }) as any,
+    );
 
     const result = await doRemoteGrading({
       task: 'llm-rubric',
@@ -98,18 +101,15 @@ describe('doRemoteGrading', () => {
     vi.mocked(getRemoteGenerationUrl).mockReturnValue('https://api.promptfoo.test/task');
     vi.mocked(getRemoteGenerationHeaders).mockReturnValue({ authorization: 'Bearer test' });
     vi.mocked(getRequestTimeoutMs).mockReturnValue(1234);
-    vi.mocked(fetchWithCache).mockResolvedValueOnce({
-      data: {
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(
+      createMockFetchResponse({
         result: {
           pass: true,
           score: 1,
           reason: 'ok',
         },
-      },
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    } as any);
+      }) as any,
+    );
 
     const result = await doRemoteGrading({
       task: 'llm-rubric',
@@ -126,7 +126,40 @@ describe('doRemoteGrading', () => {
     expect(result.metadata?.graderError).toBeUndefined();
   });
 
-  it('redacts inline image data from remote grading debug logs', async () => {
+  it('counts one remote grading task while preserving usage from all internal model calls', async () => {
+    vi.mocked(getUserEmail).mockReturnValue('user@example.com');
+    vi.mocked(getRemoteGenerationUrl).mockReturnValue('https://api.promptfoo.test/task');
+    vi.mocked(getRemoteGenerationHeaders).mockReturnValue({ authorization: 'Bearer test' });
+    vi.mocked(getRequestTimeoutMs).mockReturnValue(1234);
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(
+      createMockFetchResponse({
+        result: {
+          pass: true,
+          score: 1,
+          reason: 'Grading task passed after multiple model calls',
+          tokensUsed: {
+            total: 97,
+            prompt: 61,
+            completion: 36,
+            numRequests: 4,
+            completionDetails: { reasoning: 13 },
+          },
+        },
+      }) as any,
+    );
+
+    const result = await doRemoteGrading({ task: 'llm-rubric', output: 'Example output' });
+
+    expect(result.tokensUsed).toEqual({
+      total: 97,
+      prompt: 61,
+      completion: 36,
+      numRequests: 1,
+      completionDetails: { reasoning: 13 },
+    });
+  });
+
+  it('does not count a cached remote grading result as a new grading-task request', async () => {
     vi.mocked(getUserEmail).mockReturnValue('user@example.com');
     vi.mocked(getRemoteGenerationUrl).mockReturnValue('https://api.promptfoo.test/task');
     vi.mocked(getRemoteGenerationHeaders).mockReturnValue({ authorization: 'Bearer test' });
@@ -136,13 +169,111 @@ describe('doRemoteGrading', () => {
         result: {
           pass: true,
           score: 1,
-          reason: 'ok',
+          reason: 'Cached grading result',
+          tokensUsed: { total: 97, prompt: 61, completion: 36, numRequests: 4 },
         },
       },
-      cached: false,
+      cached: true,
       status: 200,
       statusText: 'OK',
     } as any);
+
+    const result = await doRemoteGrading({ task: 'llm-rubric', output: 'Example output' });
+
+    expect(result.tokensUsed).toEqual({ total: 0, cached: 97, numRequests: 0 });
+    expect(result.metadata).toEqual({ cachedResponse: true });
+  });
+
+  it('preserves cache provenance when a cached grading result did not report token usage', async () => {
+    vi.mocked(getUserEmail).mockReturnValue('user@example.com');
+    vi.mocked(getRemoteGenerationUrl).mockReturnValue('https://api.promptfoo.test/task');
+    vi.mocked(getRemoteGenerationHeaders).mockReturnValue({ authorization: 'Bearer test' });
+    vi.mocked(getRequestTimeoutMs).mockReturnValue(1234);
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: {
+        result: {
+          pass: true,
+          score: 1,
+          reason: 'Cached grading result without token usage',
+          metadata: { pluginId: 'test-plugin' },
+        },
+      },
+      cached: true,
+      status: 200,
+      statusText: 'OK',
+    } as any);
+
+    const result = await doRemoteGrading({ task: 'llm-rubric', output: 'Example output' });
+
+    expect(result.tokensUsed).toEqual({ total: 0, cached: 0, numRequests: 0 });
+    expect(result.metadata).toEqual({ pluginId: 'test-plugin', cachedResponse: true });
+  });
+
+  it('derives cached token counts from prompt and completion when the total is missing', async () => {
+    vi.mocked(getUserEmail).mockReturnValue('user@example.com');
+    vi.mocked(getRemoteGenerationUrl).mockReturnValue('https://api.promptfoo.test/task');
+    vi.mocked(getRemoteGenerationHeaders).mockReturnValue({ authorization: 'Bearer test' });
+    vi.mocked(getRequestTimeoutMs).mockReturnValue(1234);
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: {
+        result: {
+          pass: true,
+          score: 1,
+          reason: 'Cached grading result without a total',
+          tokensUsed: { prompt: 61, completion: 36, numRequests: 4 },
+        },
+      },
+      cached: true,
+      status: 200,
+      statusText: 'OK',
+    } as any);
+
+    const result = await doRemoteGrading({ task: 'llm-rubric', output: 'Example output' });
+
+    expect(result.tokensUsed).toEqual({ total: 0, cached: 97, numRequests: 0 });
+    expect(result.metadata).toEqual({ cachedResponse: true });
+  });
+
+  it('propagates the active grader traceparent to remote grading requests', async () => {
+    const traceparent = '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01';
+    vi.mocked(getActiveTraceparent).mockReturnValue(traceparent);
+    vi.mocked(getUserEmail).mockReturnValue('user@example.com');
+    vi.mocked(getRemoteGenerationUrl).mockReturnValue('https://api.promptfoo.test/task');
+    vi.mocked(getRemoteGenerationHeaders).mockImplementation((extraHeaders) => ({
+      authorization: 'Bearer test',
+      ...extraHeaders,
+    }));
+    vi.mocked(getRequestTimeoutMs).mockReturnValue(1234);
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(
+      createMockFetchResponse({ result: { pass: true, score: 1, reason: 'ok' } }) as any,
+    );
+
+    await doRemoteGrading({ task: 'llm-rubric', output: 'Example output' });
+
+    expect(getRemoteGenerationHeaders).toHaveBeenCalledWith({ traceparent });
+    expect(fetchWithCache).toHaveBeenCalledWith(
+      'https://api.promptfoo.test/task',
+      expect.objectContaining({
+        headers: { authorization: 'Bearer test', traceparent },
+      }),
+      1234,
+    );
+  });
+
+  it('redacts inline image data from remote grading debug logs', async () => {
+    vi.mocked(getUserEmail).mockReturnValue('user@example.com');
+    vi.mocked(getRemoteGenerationUrl).mockReturnValue('https://api.promptfoo.test/task');
+    vi.mocked(getRemoteGenerationHeaders).mockReturnValue({ authorization: 'Bearer test' });
+    vi.mocked(getRequestTimeoutMs).mockReturnValue(1234);
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(
+      createMockFetchResponse({
+        result: {
+          pass: true,
+          score: 1,
+          reason: 'ok',
+        },
+      }) as any,
+    );
 
     await doRemoteGrading({
       task: 'llm-rubric',

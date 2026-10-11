@@ -10,11 +10,15 @@ providers:
     config:
       temperature: 0.2
       max_tokens: 120
-  - id: nvidia:nvidia/llama-3.1-nemotron-70b-instruct
-    label: 'Nemotron 70B'
+  - id: nvidia:nvidia/nemotron-3-super-120b-a12b
+    label: 'Nemotron 3 Super 120B A12B'
     config:
-      temperature: 0.2
-      max_tokens: 120
+      temperature: 1
+      top_p: 0.95
+      max_tokens: 1024
+      passthrough:
+        chat_template_kwargs:
+          enable_thinking: false
   - id: nvidia:qwen/qwen2.5-coder-32b-instruct
     label: 'Qwen 2.5 Coder 32B'
     config:

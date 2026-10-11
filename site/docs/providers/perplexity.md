@@ -5,9 +5,22 @@ description: "Integrate Perplexity's online LLMs with real-time web search for f
 
 # Perplexity
 
-The [Perplexity API](https://blog.perplexity.ai/blog/introducing-pplx-api) provides chat completion models with built-in search capabilities, citations, and structured output support. Perplexity models retrieve information from the web in real-time, enabling up-to-date responses with source citations.
+The [Perplexity Sonar API](https://docs.perplexity.ai/docs/sonar/quickstart) provides chat completion models with built-in search capabilities, citations, and structured output support. Perplexity models retrieve information from the web in real-time, enabling up-to-date responses with source citations.
 
 Perplexity follows OpenAI's chat completion API format - see our [OpenAI documentation](https://promptfoo.dev/docs/providers/openai) for the base API details.
+
+The four model IDs below are Perplexity's current Sonar catalog. The provider forwards model IDs without a local allow-list, but it targets the Sonar chat-completions endpoint. Perplexity's separate [Agent API](https://docs.perplexity.ai/docs/agent-api/quickstart) uses vendor-qualified IDs through a different endpoint.
+
+:::note Sonar and the Agent API
+
+Perplexity now classifies Sonar Chat Completions as a legacy API. It remains supported, including by
+this provider, but Perplexity recommends the Agent API for new projects. The closest Agent API preset
+mappings are Sonar to `fast`, Sonar Pro to `low`, Sonar Reasoning Pro to `medium`, and Sonar Deep
+Research to `high`. See Perplexity's
+[migration guide](https://docs.perplexity.ai/docs/agent-api/migrate-from-sonar/overview) before moving a
+configuration because the Agent API uses a different request and response shape.
+
+:::
 
 ## Setup
 
@@ -18,14 +31,12 @@ Perplexity follows OpenAI's chat completion API format - see our [OpenAI documen
 
 Perplexity offers several specialized models optimized for different tasks:
 
-| Model               | Context Length | Description                                         | Use Case                                         |
-| ------------------- | -------------- | --------------------------------------------------- | ------------------------------------------------ |
-| sonar-pro           | 200k           | Advanced search model with 8k max output tokens     | Long-form content, complex reasoning             |
-| sonar               | 128k           | Lightweight search model                            | Quick searches, cost-effective responses         |
-| sonar-reasoning-pro | 128k           | Premier reasoning model with Chain of Thought (CoT) | Complex analyses, multi-step problem solving     |
-| sonar-reasoning     | 128k           | Fast real-time reasoning model                      | Problem-solving with search                      |
-| sonar-deep-research | 128k           | Expert-level research model                         | Comprehensive reports, exhaustive research       |
-| r1-1776             | 128k           | Offline chat model (no search)                      | Creative content, tasks without web search needs |
+| Model               | Context Length | Description                                         | Use Case                                     |
+| ------------------- | -------------- | --------------------------------------------------- | -------------------------------------------- |
+| sonar-pro           | 200k           | Advanced search model                               | Long-form content, complex queries           |
+| sonar               | 128k           | Lightweight search model                            | Quick searches, cost-effective responses     |
+| sonar-reasoning-pro | 128k           | Premier reasoning model with Chain of Thought (CoT) | Complex analyses, multi-step problem solving |
+| sonar-deep-research | 128k           | Expert-level research model                         | Comprehensive reports, exhaustive research   |
 
 ## Basic Configuration
 
@@ -40,7 +51,7 @@ providers:
     config:
       temperature: 0.2
       max_tokens: 1000
-      search_domain_filter: ['wikipedia.org', 'nature.com', '-reddit.com'] # Include wikipedia/nature, exclude reddit
+      search_domain_filter: ['wikipedia.org', 'nature.com'] # Only search these domains
       search_recency_filter: 'week' # Only use recent sources
 ```
 
@@ -50,7 +61,7 @@ providers:
 
 Perplexity models automatically search the internet and cite sources. You can control this with:
 
-- `search_domain_filter`: List of domains to include/exclude (prefix with `-` to exclude)
+- `search_domain_filter`: Use an allowlist of domains or a denylist with each domain prefixed by `-`; [the two modes cannot be mixed](https://docs.perplexity.ai/docs/sonar/filters).
 - `search_recency_filter`: Time filter for sources ('month', 'week', 'day', 'hour')
 - `return_related_questions`: Get follow-up question suggestions
 - `web_search_options.search_context_size`: Control search context amount ('low', 'medium', 'high')
@@ -59,7 +70,7 @@ Perplexity models automatically search the internet and cite sources. You can co
 providers:
   - id: perplexity:sonar-pro
     config:
-      search_domain_filter: ['stackoverflow.com', 'github.com', '-quora.com']
+      search_domain_filter: ['stackoverflow.com', 'github.com']
       search_recency_filter: 'month'
       return_related_questions: true
       web_search_options:
@@ -114,18 +125,6 @@ providers:
             required: ['title', 'year', 'summary']
 ```
 
-Or with regex patterns (sonar model only):
-
-```yaml
-providers:
-  - id: perplexity:sonar
-    config:
-      response_format:
-        type: 'regex'
-        regex:
-          regex: "(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)"
-```
-
 **Note**: First request with a new schema may take 10-30 seconds to prepare. For reasoning models, the response will include a `<think>` section followed by the structured output.
 
 ### Image Support
@@ -139,22 +138,13 @@ providers:
       return_images: true
 ```
 
+Perplexity citations are exposed through the standard `metadata.citations` field. The raw `citations`, `search_results`, `images`, and `related_questions` arrays returned by the API are preserved under `metadata.perplexity`; for example, returned image results are available at `metadata.perplexity.images`.
+
 ### Cost Tracking
 
-promptfoo includes built-in cost calculation for Perplexity models based on their official pricing. You can specify the usage tier with the `usage_tier` parameter:
+promptfoo uses the total returned by Perplexity in `usage.cost.total_cost`, including the charges calculated by the API for that request. If the API omits a valid total, cost is unavailable; prompt and completion token counts alone omit request, search, citation, or reasoning charges. For cached responses with known cost, `cost` retains that value for assertions and the evaluator records `incurredCost: 0`. See the [Sonar response schema](https://docs.perplexity.ai/api-reference/sonar-post) and [Perplexity pricing](https://docs.perplexity.ai/docs/getting-started/pricing).
 
-```yaml
-providers:
-  - id: perplexity:sonar-pro
-    config:
-      usage_tier: 'medium' # Options: 'high', 'medium', 'low'
-```
-
-The cost calculation includes:
-
-- Different rates for input and output tokens
-- Model-specific pricing (sonar, sonar-pro, sonar-reasoning, etc.)
-- Usage tier considerations (high, medium, low)
+The legacy `usage_tier` option does not determine billing. Use the documented search controls, such as `web_search_options.search_context_size`, to configure request behavior.
 
 ## Advanced Use Cases
 
@@ -169,8 +159,8 @@ providers:
       temperature: 0.1
       max_tokens: 4000
       search_domain_filter: ['arxiv.org', 'researchgate.net', 'scholar.google.com']
-      web_search_options:
-        search_context_size: 'high'
+      passthrough:
+        reasoning_effort: 'high' # low, medium (default), or high
 ```
 
 ### Step-by-Step Reasoning
@@ -187,14 +177,15 @@ providers:
 
 ### Offline Creative Tasks
 
-For creative content that doesn't require web search:
+The former offline `r1-1776` model is retired. For Sonar Pro responses without web search, set
+[`disable_search`](https://docs.perplexity.ai/docs/sonar/filters#search-control) through `passthrough`:
 
 ```yaml
 providers:
-  - id: perplexity:r1-1776
+  - id: perplexity:sonar-pro
     config:
-      temperature: 0.7
-      max_tokens: 2000
+      passthrough:
+        disable_search: true
 ```
 
 ## Best Practices
@@ -203,21 +194,19 @@ providers:
 
 - **sonar-pro**: Use for complex queries requiring detailed responses with citations
 - **sonar**: Use for factual queries and cost efficiency
-- **sonar-reasoning-pro/sonar-reasoning**: Use for step-by-step problem solving
+- **sonar-reasoning-pro**: Use for step-by-step problem solving
 - **sonar-deep-research**: Use for comprehensive reports (may take 30+ minutes)
-- **r1-1776**: Use for creative content not requiring search
 
 ### Search Optimization
 
 - Set `search_domain_filter` to trusted domains for higher quality citations
 - Use `search_recency_filter` for time-sensitive topics
-- For cost optimization, set `web_search_options.search_context_size` to "low"
-- For comprehensive research, set `web_search_options.search_context_size` to "high"
+- For Sonar, Sonar Pro, and Sonar Reasoning Pro, set `web_search_options.search_context_size` to "low" to reduce request fees
+- For Deep Research, set `passthrough.reasoning_effort` to balance depth and cost
 
 ### Structured Output Tips
 
 - When using structured outputs with reasoning models, responses will include a `<think>` section followed by the structured output
-- For regex patterns, ensure they follow the supported syntax
 - JSON schemas cannot include recursive structures or unconstrained objects
 
 ## Example Configurations
@@ -225,7 +214,7 @@ providers:
 Check our [perplexity.ai-example](https://github.com/promptfoo/promptfoo/tree/main/examples/provider-perplexity) with multiple configurations showcasing Perplexity's capabilities:
 
 - **promptfooconfig.yaml**: Basic model comparison
-- **promptfooconfig.structured-output.yaml**: JSON schema and regex patterns
+- **promptfooconfig.structured-output.yaml**: JSON Schema structured output
 - **promptfooconfig.search-filters.yaml**: Date and location-based filters
 - **promptfooconfig.research-reasoning.yaml**: Specialized research and reasoning models
 
@@ -237,20 +226,26 @@ npx promptfoo@latest init --example provider-perplexity
 
 ## Pricing and Rate Limits
 
-Pricing varies by model and usage tier:
+Token prices are only part of each request's cost:
 
 | Model               | Input Tokens (per million) | Output Tokens (per million) |
 | ------------------- | -------------------------- | --------------------------- |
 | sonar               | $1                         | $1                          |
 | sonar-pro           | $3                         | $15                         |
-| sonar-reasoning     | $1                         | $5                          |
 | sonar-reasoning-pro | $2                         | $8                          |
 | sonar-deep-research | $2                         | $8                          |
-| r1-1776             | $2                         | $8                          |
 
-Rate limits also vary by usage tier (high, medium, low). Specify your tier with the `usage_tier` parameter to get accurate cost calculations.
+Search request fees vary by `web_search_options.search_context_size`:
 
-Check [Perplexity's pricing page](https://docs.perplexity.ai/docs/pricing) for the latest rates.
+| Model               | Low (per 1K requests) | Medium (per 1K requests) | High (per 1K requests) |
+| ------------------- | --------------------- | ------------------------ | ---------------------- |
+| sonar               | $5                    | $8                       | $12                    |
+| sonar-pro           | $6                    | $10                      | $14                    |
+| sonar-reasoning-pro | $6                    | $10                      | $14                    |
+
+Deep Research also charges $2 per million citation tokens, $5 per 1,000 search queries, and $3 per million reasoning tokens.
+
+Check [Perplexity's pricing page](https://docs.perplexity.ai/docs/getting-started/pricing) for current rates.
 
 ## Troubleshooting
 

@@ -139,40 +139,6 @@
   filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.2));
 }
 
-/* Image Overlay (for events like BSides SF 2026) */
-.imageOverlay {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  justify-content: flex-end;
-  background: linear-gradient(
-    135deg,
-    rgba(10, 15, 26, 0.6) 0%,
-    rgba(10, 15, 26, 0.2) 50%,
-    transparent 70%
-  );
-  z-index: 1;
-  text-align: left;
-  padding: 1rem;
-}
-
-.overlayTitle {
-  font-size: 1.5rem;
-  font-weight: 800;
-  color: #f97316;
-  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.7);
-  margin-bottom: 0.125rem;
-}
-
-.overlayMeta {
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: #ffffff;
-  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.7);
-}
-
 /* Status Badge */
 .badge {
   position: absolute;
@@ -356,14 +322,6 @@
     padding: 5px 12px;
     font-size: 0.625rem;
   }
-
-  .overlayTitle {
-    font-size: 1.25rem;
-  }
-
-  .overlayMeta {
-    font-size: 0.75rem;
-  }
 }
 
 /* Hover state enhancement for touch devices */
@@ -381,5 +339,20 @@
 
   .card:active {
     transform: scale(0.98);
+  }
+}
+
+/* Decorative-only loops (shimmer/pulse/glow); safe to stop entirely. */
+@media (prefers-reduced-motion: reduce) {
+  /* The root's own pseudo-elements need naming explicitly: `.card *::before`
+     matches descendants only, so `.card::before` would keep animating. */
+  .card,
+  .card::before,
+  .card::after,
+  .card *,
+  .card *::before,
+  .card *::after {
+    animation: none !important;
+    transition: none !important;
   }
 }

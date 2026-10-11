@@ -1,11 +1,13 @@
 import logger from '../../logger';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { getAttackProviderFullId, isAttackProvider } from '../shared/attackProviders';
+import { appendMetricSuffix } from './assertions';
+import { withPersistableGenerationProvider } from './types';
 import { pluginMatchesStrategyTargets } from './util';
 
 import type { TestCase, TestCaseWithPlugin } from '../../types/index';
 import type { LayerConfig } from '../shared/runtimeTransform';
-import type { Strategy } from './types';
+import type { Strategy, StrategyRuntimeContext } from './types';
 
 /**
  * Adds layer test cases by composing strategies in order.
@@ -43,6 +45,7 @@ export async function addLayerTestCases(
   config: Record<string, unknown>,
   strategies: Strategy[],
   loadStrategy: (strategyPath: string) => Promise<Strategy>,
+  runtimeContext?: StrategyRuntimeContext,
 ): Promise<TestCase[]> {
   // Compose strategies in-order. Config example:
   // { steps: [ 'base64', { id: 'rot13' } ] }
@@ -80,6 +83,13 @@ export async function addLayerTestCases(
 
       // Get the full provider ID
       const providerId = getAttackProviderFullId(stepObj.id);
+      const shouldPersistGenerationProvider = [
+        'promptfoo:redteam:crescendo',
+        'promptfoo:redteam:custom',
+        'promptfoo:redteam:iterative',
+        'promptfoo:redteam:iterative:meta',
+        'promptfoo:redteam:iterative:tree',
+      ].includes(providerId);
       const metricSuffix = getMetricSuffix(stepObj.id);
       const label = typeof config?.label === 'string' ? config.label : undefined;
       const strategyId = getStrategyId(stepObj.id, perTurnLayers, label);
@@ -102,7 +112,9 @@ export async function addLayerTestCases(
             config: {
               injectVar,
               scanId,
-              ...stepObj.config,
+              ...(shouldPersistGenerationProvider
+                ? withPersistableGenerationProvider(stepObj.config || {}, runtimeContext)
+                : stepObj.config),
               ...remoteGenerationContextPayload(
                 typeof config?.targetId === 'string' ? config.targetId : undefined,
               ),
@@ -110,10 +122,7 @@ export async function addLayerTestCases(
               ...(perTurnLayers.length > 0 && { _perTurnLayers: perTurnLayers }),
             },
           },
-          assert: testCase.assert?.map((assertion) => ({
-            ...assertion,
-            metric: assertion.metric ? `${assertion.metric}/${metricSuffix}` : assertion.metric,
-          })),
+          assert: appendMetricSuffix(testCase, metricSuffix),
           metadata: {
             ...testCase.metadata,
             strategyId,
@@ -158,10 +167,13 @@ export async function addLayerTestCases(
       pluginMatchesStrategyTargets(t, stepObj.id, stepTargets as string[] | undefined),
     );
 
-    const next = await stepAction(applicable, injectVar, {
+    const stepConfig = {
       ...(stepObj.config || {}),
       ...(config || {}),
-    });
+    };
+    const next = runtimeContext
+      ? await stepAction(applicable, injectVar, stepConfig, undefined, runtimeContext)
+      : await stepAction(applicable, injectVar, stepConfig);
 
     // Feed output to next step. If a step yields nothing, subsequent steps operate on empty set.
     current = next as TestCaseWithPlugin[];

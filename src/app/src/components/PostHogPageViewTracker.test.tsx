@@ -1,6 +1,6 @@
 import { mockWindowLocation } from '@app/tests/browserMocks';
 import { render } from '@testing-library/react';
-import { MemoryRouter, useLocation } from 'react-router-dom';
+import { MemoryRouter, useLocation } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { usePostHog } from './PostHogContext';
 import { PostHogPageViewTracker } from './PostHogPageViewTracker';
@@ -9,8 +9,8 @@ vi.mock('./PostHogContext', () => ({
   usePostHog: vi.fn(),
 }));
 
-vi.mock('react-router-dom', async () => {
-  const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
+vi.mock('react-router', async () => {
+  const actual = await vi.importActual<typeof import('react-router')>('react-router');
   return {
     ...actual,
     useLocation: vi.fn(),

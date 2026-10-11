@@ -3,12 +3,12 @@ import fs from 'fs/promises';
 import path from 'path';
 
 import chalk from 'chalk';
-import debounce from 'debounce';
 import dedent from 'dedent';
 import cliState from '../cliState';
 import logger from '../logger';
 import { wrapTable } from '../table';
 import telemetry from '../telemetry';
+import { debounce } from '../util/debounce';
 import { printBorder } from '../util/index';
 import {
   findLogFile,
@@ -76,7 +76,6 @@ interface PrintOptions {
   head?: number;
   grep?: RegExp;
   noColor: boolean;
-  noHeader?: boolean;
 }
 
 /**
@@ -215,6 +214,7 @@ async function followLogFile(logPath: string, noColor: boolean): Promise<void> {
 
   // Cleanup function
   const cleanup = () => {
+    handleChange.clear();
     if (activeWatcher) {
       activeWatcher.close();
       activeWatcher = null;

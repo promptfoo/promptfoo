@@ -2,7 +2,13 @@ import cliState from '../cliState';
 import { getDefaultProviders } from '../providers/defaults';
 import { doRemoteGrading } from '../remoteGrading';
 import { accumulateTokenUsage } from '../util/tokenUsageUtils';
-import { getAndCheckProvider, getRemoteGradingContext, shouldUseRemoteGrading } from './providers';
+import {
+  callEmbeddingProvider,
+  callGradingProvider,
+  getAndCheckProvider,
+  getRemoteGradingContext,
+  shouldUseRemoteGrading,
+} from './providers';
 import {
   cosineSimilarity,
   dotProduct,
@@ -14,6 +20,7 @@ import {
 import type {
   ApiEmbeddingProvider,
   ApiSimilarityProvider,
+  CallApiContextParams,
   GradingConfig,
   GradingResult,
   TokenUsage,
@@ -102,9 +109,15 @@ async function calculateProviderSimilarity(
   output: string,
   metric: SimilarityMetric,
   tokensUsed: TokenUsage,
+  callContext?: CallApiContextParams,
 ): Promise<number | Omit<GradingResult, 'assertion'>> {
   if (metric === 'cosine' && 'callSimilarityApi' in finalProvider) {
-    const similarityResp = await finalProvider.callSimilarityApi(expected, output);
+    const similarityResp = await callGradingProvider(
+      finalProvider,
+      'similarity',
+      () => finalProvider.callSimilarityApi(expected, output),
+      { callContext },
+    );
     accumulateTokenUsage(tokensUsed, similarityResp.tokenUsage);
     if (similarityResp.error) {
       return fail(similarityResp.error, tokensUsed);
@@ -131,8 +144,18 @@ async function calculateProviderSimilarity(
   }
 
   const [expectedEmbedding, outputEmbedding] = await Promise.all([
-    callEmbeddingApi.call(finalProvider, expected),
-    callEmbeddingApi.call(finalProvider, output),
+    callGradingProvider(
+      finalProvider,
+      'similarity.embedding',
+      (context) => callEmbeddingProvider(finalProvider, expected, context),
+      { operationName: 'embeddings', callContext },
+    ),
+    callGradingProvider(
+      finalProvider,
+      'similarity.embedding',
+      (context) => callEmbeddingProvider(finalProvider, output, context),
+      { operationName: 'embeddings', callContext },
+    ),
   ]);
 
   const mergedUsage = normalizeMatcherTokenUsage(undefined);
@@ -166,6 +189,7 @@ export async function matchesSimilarity(
   inverse: boolean = false,
   grading?: GradingConfig,
   metric: SimilarityMetric = 'cosine',
+  callContext?: CallApiContextParams,
 ): Promise<Omit<GradingResult, 'assertion'>> {
   if (
     metric === 'cosine' &&
@@ -201,6 +225,7 @@ export async function matchesSimilarity(
     output,
     metric,
     tokensUsed,
+    callContext,
   );
 
   if (typeof similarity !== 'number') {

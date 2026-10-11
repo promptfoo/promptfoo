@@ -1,5 +1,6 @@
 import { DEFAULT_AGENT_GRADING_PROMPT } from '../prompts/grading';
-import { isAgenticProvider } from '../providers/agentic-utils';
+import { isAgenticGradingProvider } from '../providers/agentic-utils';
+import { isAgentWorkspace } from '../providers/agentWorkspace';
 import { getCodexDefaultProviders } from '../providers/openai/codexDefaults';
 import { getGradingProvider } from './providers';
 import { runJsonGradingPrompt } from './rubric';
@@ -20,6 +21,7 @@ export async function matchesAgentRubric(
   vars?: Record<string, VarValue>,
   assertion?: Assertion,
   providerCallContext?: CallApiContextParams,
+  targetWorkingDir?: unknown,
 ): Promise<GradingResult> {
   if (!grading) {
     throw new Error(
@@ -32,7 +34,7 @@ export async function matchesAgentRubric(
     : null;
   const agentProvider = configuredProvider || getCodexDefaultProviders().llmRubricProvider;
 
-  if (!agentProvider || !isAgenticProvider(agentProvider)) {
+  if (!agentProvider || !isAgenticGradingProvider(agentProvider)) {
     throw new Error(
       'agent-rubric assertion requires an agentic grading provider. ' +
         'Use openai:codex-sdk, openai:codex-app-server, anthropic:claude-agent-sdk, openinterpreter, or opencode:sdk.',
@@ -49,6 +51,13 @@ export async function matchesAgentRubric(
     },
     label: 'agent-rubric',
     providerCallContext,
+    // When the output came from a copy_working_dir workspace, the grader inspects that
+    // workspace. Only a live workspace this process created is used: the target's response
+    // metadata is not trusted to choose where the grader runs.
+    ...(typeof targetWorkingDir === 'string' &&
+      isAgentWorkspace(targetWorkingDir) && {
+        providerPromptConfig: { working_dir: targetWorkingDir },
+      }),
     vars: {
       ...(vars || {}),
       output: tryParse(llmOutput),

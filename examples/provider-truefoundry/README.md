@@ -27,8 +27,8 @@ cd provider-truefoundry
 
 A simple example demonstrating basic TrueFoundry usage with multiple models:
 
-- GPT-4 via OpenAI
-- Claude 3.5 Sonnet via Anthropic
+- GPT-5 via OpenAI
+- Claude Sonnet 5 via Anthropic
 - Custom metadata and logging configuration
 
 **Run the example:**
@@ -108,15 +108,14 @@ TrueFoundry provides access to models from multiple providers. Use the format `p
 - truefoundry:openai-main/gpt-4o
 - truefoundry:openai-main/gpt-4o-mini
 - truefoundry:openai-main/o1
-- truefoundry:openai-main/o1-mini
 ```
 
 ### Anthropic
 
 ```yaml
-- truefoundry:anthropic-main/claude-sonnet-4.5
-- truefoundry:anthropic-main/claude-3-5-sonnet-20241022
-- truefoundry:anthropic-main/claude-3-opus-20240229
+- truefoundry:anthropic-main/claude-opus-5
+- truefoundry:anthropic-main/claude-sonnet-5
+- truefoundry:anthropic-main/claude-haiku-4-5
 ```
 
 ### Google Gemini
@@ -136,27 +135,36 @@ TrueFoundry provides access to models from multiple providers. Use the format `p
 
 ## Embeddings
 
-TrueFoundry also supports embedding models:
+Set `task: embedding` explicitly and use the provider for embedding-based assertions such as `similar`:
 
 ```yaml
-providers:
-  - id: truefoundry:openai-main/text-embedding-3-large
-    config:
-      metadata:
-        user_id: 'embedding-user'
-      loggingConfig:
-        enabled: true
+defaultTest:
+  options:
+    provider:
+      embedding:
+        id: truefoundry:openai-main/text-embedding-3-large
+        config:
+          task: embedding
+          metadata:
+            user_id: 'embedding-user'
+          loggingConfig:
+            enabled: true
 ```
 
 ### Cohere Embeddings
 
-When using Cohere models, specify the `input_type`:
+For Cohere, select the embedding task and pass the required `input_type` through `passthrough`:
 
 ```yaml
-providers:
-  - id: truefoundry:cohere-main/embed-english-v3.0
-    config:
-      input_type: 'search_query' # Options: search_query, search_document, classification, clustering
+defaultTest:
+  options:
+    provider:
+      embedding:
+        id: truefoundry:cohere-main/embed-english-v3.0
+        config:
+          task: embedding
+          passthrough:
+            input_type: search_query # Or search_document, classification, clustering
 ```
 
 ## Observability

@@ -13,6 +13,8 @@ This example demonstrates how to setup authentication with an http provider usin
 
 ## Setup
 
+Requires Node.js >=22.22.0 (Node.js 24 LTS recommended).
+
 ### Installation
 
 1. Install dependencies:

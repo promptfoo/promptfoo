@@ -28,7 +28,7 @@ Promptfoo is an [open-source](https://github.com/promptfoo/promptfoo) tool for r
 
 ## Prerequisites
 
-- Install [Node.js](https://nodejs.org/en/download/package-manager/) `^20.20.0` or `>=22.22.0`
+- Install [Node.js](https://nodejs.org/en/download/package-manager/) `>=22.22.0`
 - Optional: Set your `OPENAI_API_KEY` environment variable
 
 ## Initialize the project
@@ -84,6 +84,10 @@ If you just want to try out a quick example, click "Load Example" at the top of 
 ### Configure the target
 
 Next, configure Promptfoo to communicate with your target application or model.
+
+Provider cards populate an editable target ID and configuration. Choose a hosted model available to your account, or enter your own deployment, served model, or Bedrock agent and alias IDs.
+
+For llamafile, vLLM, and Text Generation WebUI, keep the `openai:chat:` prefix, enter the server's model name, and set `apiBaseUrl` including `/v1`. If your server requires authentication, set `apiKeyEnvar` to the name of an environment variable on the machine running Promptfoo. The native [llama.cpp provider](/docs/providers/llama.cpp/) uses `llama:` and reads its server URL from `LLAMA_BASE_URL` on the machine running Promptfoo.
 
 :::note
 The target defines the model being tested. Attack generation uses a separate provider (defaults to OpenAI). See [Providers](/docs/red-team/configuration/#providers) to configure a custom attack model.

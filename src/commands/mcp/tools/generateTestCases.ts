@@ -73,7 +73,7 @@ export function registerGenerateTestCasesTool(server: McpServer) {
         .describe(
           dedent`
             AI provider to use for generation.
-            Examples: "openai:gpt-4o", "anthropic:claude-3-sonnet"
+            Examples: "openai:gpt-5.6", "anthropic:claude-sonnet-5"
             Defaults to configured default provider.
           `,
         ),
@@ -97,7 +97,7 @@ export function registerGenerateTestCasesTool(server: McpServer) {
           return createToolResponse(
             'generate_test_cases',
             false,
-            { prompt, example: 'Translate to French: {{text}}' },
+            undefined,
             'No variables found in prompt. Use {{variable}} syntax to define variables.',
           );
         }
@@ -176,10 +176,7 @@ export function registerGenerateTestCasesTool(server: McpServer) {
           return createToolResponse(
             'generate_test_cases',
             false,
-            {
-              originalError: errorMessage,
-              suggestion: 'Check that the provider is properly configured with valid credentials',
-            },
+            undefined,
             'Failed to load AI provider for test case generation',
           );
         }
@@ -188,10 +185,7 @@ export function registerGenerateTestCasesTool(server: McpServer) {
           return createToolResponse(
             'generate_test_cases',
             false,
-            {
-              originalError: errorMessage,
-              suggestion: 'Try reducing numTestCases or wait before retrying',
-            },
+            undefined,
             'Rate limit exceeded while generating test cases',
           );
         }
@@ -200,11 +194,7 @@ export function registerGenerateTestCasesTool(server: McpServer) {
           return createToolResponse(
             'generate_test_cases',
             false,
-            {
-              originalError: errorMessage,
-              suggestion:
-                'Ensure your provider API keys are correctly configured and the provider is reachable',
-            },
+            undefined,
             'Test case generation timed out',
           );
         }

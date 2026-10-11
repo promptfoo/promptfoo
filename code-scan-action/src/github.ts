@@ -6,7 +6,6 @@
 
 import * as core from '@actions/core';
 import * as github from '@actions/github';
-import { Octokit } from '@octokit/rest';
 import {
   clampCommentLines,
   extractValidLineRanges,
@@ -42,8 +41,7 @@ export async function getGitHubContext(token: string): Promise<PullRequestContex
       throw new Error(`Invalid pr_number input: "${prNumberInput}"`);
     }
 
-    const octokit = new Octokit({ auth: token });
-    const { data: pr } = await octokit.pulls.get({
+    const { data: pr } = await github.getOctokit(token).rest.pulls.get({
       owner: context.repo.owner,
       repo: context.repo.repo,
       pull_number: prNumber,
@@ -82,9 +80,7 @@ export async function getPRFiles(
   token: string,
   context: PullRequestContext,
 ): Promise<FileChange[]> {
-  const octokit = new Octokit({ auth: token });
-
-  const { data: files } = await octokit.pulls.listFiles({
+  const { data: files } = await github.getOctokit(token).rest.pulls.listFiles({
     owner: context.owner,
     repo: context.repo,
     pull_number: context.number,
@@ -96,98 +92,81 @@ export async function getPRFiles(
   }));
 }
 
-/**
- * Fetch PR diff and extract valid line ranges for each file.
- * This is used to validate and clamp comment line numbers.
- */
-async function getPRDiffRanges(
-  octokit: Octokit,
-  context: PullRequestContext,
-): Promise<FileLineRanges> {
-  try {
-    const { data: diff } = await octokit.pulls.get({
-      owner: context.owner,
-      repo: context.repo,
-      pull_number: context.number,
-      mediaType: { format: 'diff' },
-    });
-
-    // The diff is returned as a string when using mediaType: { format: 'diff' }
-    return extractValidLineRanges(diff as unknown as string);
-  } catch (error) {
-    core.warning(
-      `Failed to fetch PR diff for line validation: ${error instanceof Error ? error.message : String(error)}`,
-    );
-    return new Map();
-  }
-}
-
-/**
- * Clamp a comment's line numbers to valid diff ranges.
- * Returns the adjusted comment, or null if lines cannot be clamped.
- */
-function clampCommentToValidRange(comment: Comment, validRanges: FileLineRanges): Comment | null {
-  if (!comment.file || comment.line == null) {
-    return comment;
-  }
-
-  const clamped = clampCommentLines(comment.file, comment.startLine, comment.line, validRanges);
-
-  if (!clamped) {
-    // File not in diff - return null to convert to general comment
-    return null;
-  }
-
-  return {
-    ...comment,
-    startLine: clamped.startLine,
-    line: clamped.line,
-  };
-}
-
-/**
- * Validate review-comment locations against the current PR diff.
- * Comments that cannot be placed inline are returned separately for general posting.
- */
-async function partitionReviewCommentsWithOctokit(
-  octokit: Octokit,
-  context: PullRequestContext,
-  comments: Comment[],
-): Promise<{
-  lineComments: Comment[];
-  generalComments: Comment[];
-  invalidLineComments: Comment[];
-}> {
-  const validRanges = await getPRDiffRanges(octokit, context);
-  const lineComments: Comment[] = [];
-  const generalComments: Comment[] = [];
-  const invalidLineComments: Comment[] = [];
-
-  for (const comment of comments) {
-    if (!comment.file || comment.line == null) {
-      generalComments.push(comment);
-      continue;
-    }
-
-    const clamped = clampCommentToValidRange(comment, validRanges);
-    if (clamped) {
-      lineComments.push(clamped);
-    } else {
-      core.warning(
-        `Comment on ${comment.file}:${comment.line} could not be placed in diff - converting to general comment`,
-      );
-      invalidLineComments.push(comment);
-    }
-  }
-
-  return { lineComments, generalComments, invalidLineComments };
-}
-
 export async function partitionReviewCommentsByDiff(
   token: string,
   context: PullRequestContext,
   comments: Comment[],
 ) {
-  const octokit = new Octokit({ auth: token });
-  return partitionReviewCommentsWithOctokit(octokit, context, comments);
+  const octokit = github.getOctokit(token);
+  /**
+   * Validate review-comment locations against the current PR diff.
+   * Comments that cannot be placed inline are returned separately for general posting.
+   */
+  async function partitionReviewCommentsWithOctokit(): Promise<{
+    lineComments: Comment[];
+    generalComments: Comment[];
+    invalidLineComments: Comment[];
+  }> {
+    /**
+     * Fetch PR diff and extract valid line ranges for each file.
+     * This is used to validate and clamp comment line numbers.
+     */
+    async function getPRDiffRanges(): Promise<FileLineRanges> {
+      try {
+        const { data: diff } = await octokit.rest.pulls.get({
+          owner: context.owner,
+          repo: context.repo,
+          pull_number: context.number,
+          mediaType: { format: 'diff' },
+        });
+
+        // The diff is returned as a string when using mediaType: { format: 'diff' }
+        return extractValidLineRanges(diff as unknown as string);
+      } catch (error) {
+        core.warning(
+          `Failed to fetch PR diff for line validation: ${error instanceof Error ? error.message : String(error)}`,
+        );
+        return new Map();
+      }
+    }
+
+    const validRanges = await getPRDiffRanges();
+    const lineComments: Comment[] = [];
+    const generalComments: Comment[] = [];
+    const invalidLineComments: Comment[] = [];
+
+    for (const comment of comments) {
+      if (!comment.file || comment.line == null) {
+        generalComments.push(comment);
+        continue;
+      }
+
+      /**
+       * Clamp a comment's line numbers to valid diff ranges.
+       * Comments without valid ranges are converted to general comments below.
+       */
+      if (!comment.file || comment.line == null) {
+        lineComments.push(comment);
+        continue;
+      }
+      const clamped = clampCommentLines(comment.file, comment.startLine, comment.line, validRanges);
+      if (clamped) {
+        lineComments.push({
+          ...comment,
+          startLine: clamped.startLine,
+          line: clamped.line,
+        });
+      } else {
+        // File not in diff - convert to general comment
+        core.warning(
+          `Comment on ${comment.file}:${comment.line} could not be placed in diff - converting to general comment`,
+        );
+        invalidLineComments.push(comment);
+      }
+    }
+
+    return { lineComments, generalComments, invalidLineComments };
+  }
+
+  return partitionReviewCommentsWithOctokit();
 }

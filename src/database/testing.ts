@@ -58,7 +58,10 @@ export async function resetTestDatabaseClient(client: TestDatabaseClient): Promi
   }
 }
 
-export async function closeTestDatabaseClient(client: TestDatabaseClient): Promise<void> {
+export async function closeTestDatabaseClient(
+  client: TestDatabaseClient,
+  execute: TestDatabaseClient['execute'] = client.execute.bind(client),
+): Promise<void> {
   await enqueueTestDatabaseOperation(async () => {
     const clients = (globalThis as TestDatabaseGlobal)[TEST_DATABASE_CLIENTS_KEY];
     if (!clients?.delete(client)) {
@@ -67,10 +70,11 @@ export async function closeTestDatabaseClient(client: TestDatabaseClient): Promi
     }
 
     try {
-      // libsql requires a process-wide shared in-memory cache for its internal
-      // connections. Reset it only after the final module graph has stopped using it.
+      // Clients from separate module graphs share one in-memory schema. Reset it
+      // only after the final module graph has stopped using it.
       if (clients.size === 0) {
-        await resetTestDatabaseClient(client);
+        // Teardown may run after the public operation queue has stopped accepting work.
+        await resetTestDatabaseClient({ execute, close: client.close.bind(client) });
       }
     } finally {
       client.close();

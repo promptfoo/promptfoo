@@ -129,22 +129,14 @@ describe('doRedteamRun', () => {
       defaultConfig: {},
       defaultConfigPath: 'promptfooconfig.yaml',
     });
-    vi.mocked(fs.existsSync).mockImplementation(function () {
-      return true;
-    });
+    vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fsPromises.access).mockResolvedValue(undefined);
     vi.mocked(fsPromises.mkdir).mockResolvedValue(undefined);
     vi.mocked(fsPromises.writeFile).mockResolvedValue();
-    vi.mocked(os.tmpdir).mockImplementation(function () {
-      return '/tmp';
-    });
-    vi.mocked(fs.mkdirSync).mockImplementation(function () {
-      return '';
-    });
+    vi.mocked(os.tmpdir).mockReturnValue('/tmp');
+    vi.mocked(fs.mkdirSync).mockReturnValue('');
     vi.mocked(fs.writeFileSync).mockImplementation(function () {});
-    vi.mocked(yaml.dump).mockImplementation(function () {
-      return 'mocked-yaml-content';
-    });
+    vi.mocked(yaml.dump).mockReturnValue('mocked-yaml-content');
     vi.mocked(doGenerateRedteam).mockResolvedValue({});
   });
 
@@ -210,6 +202,42 @@ describe('doRedteamRun', () => {
       expect.anything(),
       expect.anything(),
     );
+  });
+
+  it('attributes generation usage only when this run generated the test suite', async () => {
+    const tokenUsage = { total: 42, prompt: 30, completion: 12, numRequests: 3 };
+    vi.mocked(doGenerateRedteam).mockImplementation(async (options) => ({
+      metadata: {
+        generation: { id: options.generationRunId, tokenUsage },
+      },
+    }));
+
+    await doRedteamRun({});
+
+    expect(doEval).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({
+        generationEventId: expect.any(String),
+        generationTokenUsage: tokenUsage,
+      }),
+    );
+  });
+
+  it('does not charge an evaluation for a reused generated test suite', async () => {
+    vi.mocked(doGenerateRedteam).mockResolvedValue({
+      metadata: {
+        generation: {
+          id: 'previous-generation',
+          tokenUsage: { total: 42, numRequests: 3 },
+        },
+      },
+    });
+
+    await doRedteamRun({});
+
+    expect(vi.mocked(doEval).mock.calls[0][3]).not.toHaveProperty('generationTokenUsage');
   });
 
   describe('liveRedteamConfig temporary file handling', () => {

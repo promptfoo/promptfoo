@@ -27,6 +27,8 @@ type OpenAiImageModel =
   | 'dall-e-2'
   | 'dall-e-3'
   | 'gpt-image-2'
+  | 'gpt-image-2.5-sunburst'
+  | 'gpt-image-2.5-flare'
   | 'gpt-image-1'
   | 'gpt-image-1-mini'
   | 'chatgpt-image-latest'
@@ -146,6 +148,12 @@ type GptImage2Options = GptImageCommonOptions & {
   background?: GptImage2Background;
 };
 
+type GptImage25Options = Omit<GptImageCommonOptions, 'quality'> & {
+  quality?: GptImageQuality | 'xhigh' | 'max';
+  size?: GptImage2Size | 'auto';
+  background?: GptImage1Background;
+};
+
 type DallE2Options = CommonImageOptions & {
   size?: DallE2Size;
   image?: string; // Base64-encoded image or image URL
@@ -155,15 +163,20 @@ type DallE2Options = CommonImageOptions & {
 
 type OpenAiImageOptions = OpenAiSharedOptions & {
   model?: OpenAiImageModel;
-} & (DallE2Options | DallE3Options | GptImage1Options | GptImage2Options);
+} & (DallE2Options | DallE3Options | GptImage1Options | GptImage2Options | GptImage25Options);
 
 const GPT_IMAGE_QUALITIES = ['low', 'medium', 'high', 'auto'] as const;
+const GPT_IMAGE25_QUALITIES = [...GPT_IMAGE_QUALITIES, 'xhigh', 'max'] as const;
 const GPT_IMAGE1_BACKGROUNDS = ['transparent', 'opaque', 'auto'] as const;
 const GPT_IMAGE2_BACKGROUNDS = ['opaque', 'auto'] as const;
 const GPT_IMAGE_OUTPUT_FORMATS = ['png', 'jpeg', 'webp'] as const;
 const GPT_IMAGE_MODERATION_VALUES = ['auto', 'low'] as const;
 
 // Helper functions to check model types (including dated variants like gpt-image-1.5-2025-12-16)
+function isGptImage25(model: string): boolean {
+  return /^gpt-image-2\.5-(sunburst|flare)(-\d{4}-\d{2}-\d{2})?$/.test(model);
+}
+
 function isGptImage2(model: string): boolean {
   return model === 'gpt-image-2' || DATED_GPT_IMAGE2_MODEL_PATTERN.test(model);
 }
@@ -185,10 +198,19 @@ function isGptImage15(model: string): boolean {
 }
 
 function isGptImageModel(model: string): boolean {
-  return isGptImage2(model) || isGptImage1(model) || isGptImage1Mini(model) || isGptImage15(model);
+  return (
+    isGptImage25(model) ||
+    isGptImage2(model) ||
+    isGptImage1(model) ||
+    isGptImage1Mini(model) ||
+    isGptImage15(model)
+  );
 }
 
 function getGptImageModelDisplayName(model: string): string {
+  if (isGptImage25(model)) {
+    return 'GPT Image 2.5';
+  }
   if (isGptImage2(model)) {
     return 'GPT Image 2';
   }
@@ -201,7 +223,10 @@ function getGptImageModelDisplayName(model: string): string {
   return 'GPT Image 1';
 }
 
-function validateGptImage2Size(size: string): { valid: boolean; message?: string } {
+function validateCustomImageSize(
+  size: string,
+  model: string,
+): { valid: boolean; message?: string } {
   if (size === 'auto') {
     return { valid: true };
   }
@@ -213,7 +238,7 @@ function validateGptImage2Size(size: string): { valid: boolean; message?: string
   if (!sizeMatch) {
     return {
       valid: false,
-      message: `Invalid size "${size}" for GPT Image 2. ${constraints}`,
+      message: `Invalid size "${size}" for ${getGptImageModelDisplayName(model)}. ${constraints}`,
     };
   }
 
@@ -235,7 +260,7 @@ function validateGptImage2Size(size: string): { valid: boolean; message?: string
   ) {
     return {
       valid: false,
-      message: `Invalid size "${size}" for GPT Image 2. ${constraints}`,
+      message: `Invalid size "${size}" for ${getGptImageModelDisplayName(model)}. ${constraints}`,
     };
   }
 
@@ -260,8 +285,8 @@ export function validateSizeForModel(
     };
   }
 
-  if (isGptImage2(model)) {
-    return validateGptImage2Size(size);
+  if (isGptImage2(model) || isGptImage25(model)) {
+    return validateCustomImageSize(size, model);
   }
 
   if (
@@ -316,10 +341,13 @@ function validateGptImageQualityForModel(
     return { valid: true };
   }
 
-  if (typeof quality !== 'string' || !GPT_IMAGE_QUALITIES.includes(quality as GptImageQuality)) {
+  const validQualities: readonly string[] = isGptImage25(model)
+    ? GPT_IMAGE25_QUALITIES
+    : GPT_IMAGE_QUALITIES;
+  if (typeof quality !== 'string' || !validQualities.includes(quality)) {
     return {
       valid: false,
-      message: `Invalid quality "${String(quality)}" for ${getGptImageModelDisplayName(model)}. Valid qualities are: ${GPT_IMAGE_QUALITIES.join(', ')}.`,
+      message: `Invalid quality "${String(quality)}" for ${getGptImageModelDisplayName(model)}. Valid qualities are: ${validQualities.join(', ')}.`,
     };
   }
 
@@ -636,7 +664,6 @@ export function prepareRequestBody(
   }
 
   if (isGptImageModel(model)) {
-    // Quality: low, medium, high, or auto
     if ('quality' in config && config.quality) {
       body.quality = config.quality;
     }
@@ -674,6 +701,11 @@ export function calculateImageCost(
   const imageQuality = quality || 'standard';
   const gptImageQuality =
     quality === 'medium' || quality === 'high' || quality === 'low' ? quality : 'low';
+
+  // GPT Image 2.5 shares token rates with GPT Image 2, but not per-image token usage.
+  if (isGptImage25(model)) {
+    return undefined;
+  }
 
   if (model === 'dall-e-3') {
     const costKey = `${imageQuality}_${size}`;

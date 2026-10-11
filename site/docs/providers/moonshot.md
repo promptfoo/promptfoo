@@ -12,6 +12,8 @@ description: Configure Moonshot AI's OpenAI-compatible API to evaluate Kimi K3 a
 1. Get an API key from the [Kimi (Moonshot) platform](https://platform.kimi.ai/console/api-keys).
 2. Set the `MOONSHOT_API_KEY` environment variable or specify `apiKey` in your config.
 
+Kimi K3 requires a successful account top-up of at least $1; see the [access requirements](https://platform.kimi.ai/docs/guide/kimi-k3-quickstart#access-requirements).
+
 ```yaml
 providers:
   - id: moonshot:kimi-k3
@@ -76,7 +78,7 @@ The `kimi-k3` and `kimi-k2.x` models are reasoning models and behave differently
 - **Reasoning output.** Kimi returns a separate `reasoning_content` stream that promptfoo surfaces with a `Thinking: …` prefix. Set `showThinking: false` when you assert on structured output (for example `is-json`) so the reasoning doesn't contaminate the parsed result.
 - **Token budget.** Reasoning tokens count against the output budget. When you leave the token limit unset the provider lets Moonshot apply its server default (32k for K2.x, 131k for K3); if you set one, leave generous headroom for the answer. Moonshot's canonical field is `max_completion_tokens` (`max_tokens` is a deprecated alias) — the provider sends `max_completion_tokens` for `kimi-*` models whichever of the two you configure.
 - **Controlling thinking.** The two generations use different, mutually exclusive controls:
-  - `kimi-k3` is always thinking and accepts a top-level `reasoning_effort` field, which the provider forwards from `config.reasoning_effort`. Currently only `max` (the default) is accepted; Moonshot plans more levels. Do **not** send the K2.x `thinking` parameter to K3 — the API rejects it.
+  - `kimi-k3` is always thinking and accepts a top-level `reasoning_effort` field, which the provider forwards from `config.reasoning_effort`. Supported values are `low`, `high`, and `max` (the default). Do **not** send the K2.x `thinking` parameter to K3 — the API rejects it.
   - `kimi-k2.6` and `kimi-k2.5` support `thinking: { type: disabled }` (pass it via `config.passthrough`); `kimi-k2.7-code` is always thinking. The `thinking` parameter is K2.x-only.
   - Setting `config.reasoning_effort` on a non-K3 model is a configuration error and the provider fails fast with a clear message instead of sending it.
 
@@ -85,7 +87,7 @@ providers:
   - id: moonshot:kimi-k3
     config:
       showThinking: false
-      reasoning_effort: max # optional: currently the only accepted value
+      reasoning_effort: max # optional: low, high, or max (default)
   - id: moonshot:kimi-k2.6
     config:
       passthrough:

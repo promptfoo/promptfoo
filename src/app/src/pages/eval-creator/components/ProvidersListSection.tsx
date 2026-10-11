@@ -33,6 +33,9 @@ function getProviderLabel(provider: ProviderOptions): string {
 function getProviderType(provider: ProviderOptions): string {
   const id = typeof provider.id === 'string' ? provider.id : '';
 
+  if (id === 'openai:codex-security' || id.startsWith('openai:codex-security:')) {
+    return 'Codex Security SDK';
+  }
   if (id.startsWith('openai:')) {
     return 'OpenAI';
   }

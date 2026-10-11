@@ -18,11 +18,6 @@ import {
 import type { ApiProvider, ProviderResponse } from '../types/providers';
 import type { Inputs } from '../types/shared';
 
-interface Result {
-  response?: ProviderResponse;
-  metadata?: Record<string, unknown>;
-}
-
 /**
  * Minimal view of the session-relevant fields read off `provider.config` when
  * building troubleshooting advice. Intentionally local and not derived from
@@ -65,8 +60,6 @@ export interface SessionTestResult {
   };
 }
 
-type ValidationResult = { success: true } | { success: false; result: SessionTestResult };
-
 /**
  * Tests basic provider connectivity with a prompt.
  * Extracted from POST /providers/test endpoint
@@ -104,6 +97,8 @@ export async function testProviderConnectivity({
   const testSuite = {
     providers: [provider],
     prompts: [{ raw: prompt, label: 'Connectivity Test' }],
+    // Diagnostics must run independently of normal evaluation prompt filters.
+    providerPromptMap: { [provider.label || provider.id()]: ['Connectivity Test'] },
     tests: [{ vars }],
   };
 
@@ -151,7 +146,6 @@ export async function testProviderConnectivity({
 
     // Call the agent helper endpoint to evaluate the results (even if there's an error)
     const HOST = cloudConfig.getApiHost();
-    const apiKey = cloudConfig.getApiKey();
 
     try {
       logger.debug('[testProviderConnectivity] Calling agent helper', {
@@ -162,7 +156,7 @@ export async function testProviderConnectivity({
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`,
+          ...(cloudConfig.getAuthHeaders() ?? {}),
         },
         body: JSON.stringify({
           config: provider.config,
@@ -246,119 +240,21 @@ export async function testProviderConnectivity({
 }
 
 /**
- * Updates provider configuration with session settings
- */
-function updateProviderConfigWithSession({
-  provider,
-  sessionSource,
-  sessionConfig,
-}: {
-  provider: ApiProvider;
-  sessionSource: string;
-  sessionConfig?: { sessionSource?: string; sessionParser?: string };
-}): void {
-  if (!sessionConfig) {
-    return;
-  }
-
-  provider.config = {
-    ...provider.config,
-    sessionSource,
-    sessionParser: sessionConfig.sessionParser || provider.config?.sessionParser,
-  };
-}
-
-/**
- * Validates and configures session settings for the provider
- * Performs all validation checks and updates provider config if successful
- */
-function validateAndConfigureSessions({
-  provider,
-  sessionConfig,
-  options,
-}: {
-  provider: ApiProvider;
-  sessionConfig?: { sessionSource?: string; sessionParser?: string };
-  options?: { skipConfigValidation?: boolean };
-}): ValidationResult {
-  const effectiveSessionSource = determineEffectiveSessionSource({ provider, sessionConfig });
-
-  // Validate session configuration (logs warnings but does not prevent test execution)
-  // Skip validation checks for cloud targets, as that'll be validated on the UI.
-  if (!options?.skipConfigValidation) {
-    validateSessionConfig({
-      provider,
-      sessionSource: effectiveSessionSource,
-      sessionConfig,
-    });
-  }
-
-  updateProviderConfigWithSession({
-    provider,
-    sessionSource: effectiveSessionSource,
-    sessionConfig,
-  });
-
-  return { success: true };
-}
-
-/**
- * Validates that server-generated session was successfully extracted
- * Returns validation result with success flag
- */
-function validateServerSessionExtraction({
-  sessionSource,
-  sessionId,
-  firstPrompt,
-  firstResult,
-}: {
-  sessionSource: string;
-  sessionId: string;
-  firstPrompt: string;
-  firstResult: Result;
-}): ValidationResult {
-  if (sessionSource !== 'server') {
-    return { success: true };
-  }
-
-  if (!sessionId || sessionId.trim() === '') {
-    return {
-      success: false,
-      result: {
-        success: false,
-        message:
-          'Session extraction failed: The session parser did not extract a session ID from the server response',
-        reason:
-          "The session parser expression did not return a valid session ID. Check that the parser matches your server's response format.",
-        details: {
-          sessionSource,
-          sessionId: 'Not extracted',
-          request1: { prompt: firstPrompt },
-          response1: firstResult.response?.output,
-        },
-      },
-    };
-  }
-
-  return { success: true };
-}
-
-/**
  * Builds troubleshooting advice for server-side sessions
  */
 function buildServerSessionTroubleshootingAdvice({
   sessionConfig,
   providerConfig,
-  firstResult,
-  secondResult,
+  firstResponse,
+  secondResponse,
 }: {
   sessionConfig: { sessionSource?: string; sessionParser?: string } | undefined;
   providerConfig: ProviderSessionConfig;
-  firstResult: Result;
-  secondResult: Result;
+  firstResponse: ProviderResponse;
+  secondResponse: ProviderResponse;
 }): string {
-  const firstSessionId = firstResult.response?.sessionId ?? firstResult.metadata?.sessionId;
-  const secondSessionId = secondResult.response?.sessionId ?? secondResult.metadata?.sessionId;
+  const firstSessionId = firstResponse.sessionId;
+  const secondSessionId = secondResponse.sessionId;
 
   return dedent`
 
@@ -384,16 +280,16 @@ function buildTroubleshootingAdvice({
   sessionConfig,
   providerConfig,
   initialSessionId,
-  firstResult,
-  secondResult,
+  firstResponse,
+  secondResponse,
 }: {
   sessionWorking: boolean;
   sessionSource: string;
   sessionConfig: { sessionSource?: string; sessionParser?: string } | undefined;
   providerConfig: ProviderSessionConfig;
   initialSessionId: string | undefined;
-  firstResult: Result;
-  secondResult: Result;
+  firstResponse: ProviderResponse;
+  secondResponse: ProviderResponse;
 }): string {
   if (sessionWorking) {
     return '';
@@ -403,8 +299,8 @@ function buildTroubleshootingAdvice({
     return buildServerSessionTroubleshootingAdvice({
       sessionConfig,
       providerConfig,
-      firstResult,
-      secondResult,
+      firstResponse,
+      secondResponse,
     });
   }
 
@@ -458,14 +354,26 @@ export async function testProviderSession({
   mainInputVariable?: string;
 }): Promise<SessionTestResult> {
   try {
-    // Validate sessions config
-    const sessionValidation = validateAndConfigureSessions({
-      provider,
-      sessionConfig,
-      options,
-    });
-    if (!sessionValidation.success) {
-      return sessionValidation.result;
+    // Validate and configure session settings before testing the provider.
+    const configuredSessionSource = determineEffectiveSessionSource({ provider, sessionConfig });
+
+    // Validate session configuration (logs warnings but does not prevent test execution)
+    // Skip validation checks for cloud targets, as that'll be validated on the UI.
+    if (!options?.skipConfigValidation) {
+      validateSessionConfig({
+        provider,
+        sessionSource: configuredSessionSource,
+        sessionConfig,
+      });
+    }
+
+    // Update provider configuration with session settings after validation.
+    if (sessionConfig) {
+      provider.config = {
+        ...provider.config,
+        sessionSource: configuredSessionSource,
+        sessionParser: sessionConfig.sessionParser || provider.config?.sessionParser,
+      };
     }
 
     const effectiveSessionSource = determineEffectiveSessionSource({
@@ -554,16 +462,22 @@ export async function testProviderSession({
       providerId: provider.id,
     });
 
-    // Validate server session extraction
-    const serverExtraction = validateServerSessionExtraction({
-      sessionSource: effectiveSessionSource,
-      sessionId: extractedSessionId ?? '',
-      firstPrompt,
-      firstResult: { response: firstResponse },
-    });
-
-    if (!serverExtraction.success) {
-      return serverExtraction.result;
+    // Validate that the server session parser extracted a session ID before continuing.
+    const sessionId = extractedSessionId ?? '';
+    if (effectiveSessionSource === 'server' && (!sessionId || sessionId.trim() === '')) {
+      return {
+        success: false,
+        message:
+          'Session extraction failed: The session parser did not extract a session ID from the server response',
+        reason:
+          "The session parser expression did not return a valid session ID. Check that the parser matches your server's response format.",
+        details: {
+          sessionSource: effectiveSessionSource,
+          sessionId: 'Not extracted',
+          request1: { prompt: firstPrompt },
+          response1: firstResponse.output,
+        },
+      };
     }
 
     // Make second request with extracted session ID
@@ -724,8 +638,8 @@ export async function testProviderSession({
       sessionConfig,
       providerConfig: provider.config,
       initialSessionId,
-      firstResult: { response: firstResponse },
-      secondResult: { response: secondResponse },
+      firstResponse,
+      secondResponse,
     });
 
     return {

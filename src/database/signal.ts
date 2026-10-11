@@ -1,7 +1,7 @@
 import fs from 'fs';
 
-import debounce from 'debounce';
 import logger from '../logger';
+import { debounce } from '../util/debounce';
 import { getDbSignalPath } from './index';
 
 /**
@@ -333,7 +333,9 @@ export function setupSignalWatcher(onChange: () => void): fs.FSWatcher {
 
   try {
     const watcher = fs.watch(filePath);
-    watcher.on('change', debounce(onChange, SIGNAL_WATCHER_DEBOUNCE_MS));
+    const handleChange = debounce(onChange, SIGNAL_WATCHER_DEBOUNCE_MS);
+    watcher.on('change', handleChange);
+    watcher.on('close', handleChange.clear);
 
     watcher.on('error', (error) => {
       logger.warn(`File watcher error: ${error}`);

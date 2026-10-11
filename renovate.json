@@ -6,9 +6,9 @@
   "rangeStrategy": "auto",
   "postUpdateOptions": [],
   "constraints": {
-    "npm": ">= 11"
+    "npm": ">=11.18.0 <12"
   },
-  "npmrc": "registry=https://registry.npmjs.org/\nengine-strict=true",
+  "npmrc": "registry=https://registry.npmjs.org/\nengine-strict=true\nmin-release-age=10",
   "lockFileMaintenance": {
     "enabled": true,
     "schedule": [
@@ -16,12 +16,7 @@
       "before 3am on the 15th day of the month"
     ]
   },
-  "ignorePaths": [
-    "examples/**/requirements.txt",
-    "examples/**/pyproject.toml",
-    "examples/**/go.mod",
-    "test/**/go.mod"
-  ],
+  "ignorePaths": ["examples/**/go.mod", "test/**/go.mod"],
   "packageRules": [
     {
       "description": "Disable major Node.js version updates",
@@ -30,10 +25,25 @@
       "enabled": false
     },
     {
+      "description": "Preserve the intentionally unsupported Node 20.20.0 and minimum-supported Node 22.22.0 binaries used by CLI runtime-boundary smoke tests; update these pins only when the published runtime support contract changes.",
+      "matchManagers": ["github-actions"],
+      "matchFileNames": [".github/workflows/main.yml"],
+      "matchPackageNames": ["node", "actions/node-versions"],
+      "matchCurrentValue": "/^(20\\.20\\.0|22\\.22\\.0)$/",
+      "enabled": false
+    },
+    {
+      "description": "Keep Renovate's npm tool constraint on the CI-supported major; npm 12 breaks bundled lockfile maintenance",
+      "matchFileNames": ["renovate.json"],
+      "matchPackageNames": ["npm"],
+      "matchUpdateTypes": ["major"],
+      "enabled": false
+    },
+    {
       "description": "Pin the code-scan workflow's Node to 24.15.0: Node >=24.16.0 has a Linux HTTPS slowdown (~10s/request) that drags the scanner's `npm install -g promptfoo` past the job's 15-minute timeout (see the comment in .github/workflows/promptfoo-code-scan.yml; first fixed in PR #9374, regressed by the blanket bump in PR #9859). Renovate must not re-bump this pin. Re-enable when a newer Node resolves the regression.",
       "matchManagers": ["github-actions"],
       "matchFileNames": [".github/workflows/promptfoo-code-scan.yml"],
-      "matchPackageNames": ["node"],
+      "matchPackageNames": ["node", "actions/node-versions"],
       "enabled": false
     },
     {
@@ -46,17 +56,6 @@
       "description": "Group @inquirer packages together",
       "matchPackagePatterns": ["^@inquirer/"],
       "groupName": "@inquirer packages"
-    },
-    {
-      "description": "Disable Chevrotain major updates while Node 20 is supported",
-      "matchPackageNames": ["chevrotain", "/^@chevrotain\\//"],
-      "matchUpdateTypes": ["major"],
-      "enabled": false
-    },
-    {
-      "description": "Hold tsdown on 0.21.x while Node 20 is supported: tsdown 0.22+ sets engines node ^22.18.0 || >=24.0.0 (drops Node 20.19/20.20), but the repo still builds/tests on Node 20.20 with engine-strict, so 0.22+ aborts npm ci. Revisit when the Node 20 floor is dropped.",
-      "matchPackageNames": ["tsdown"],
-      "allowedVersions": "<0.22.0"
     },
     {
       "description": "Group Anthropic packages together across all dependency types",
@@ -102,6 +101,14 @@
       "groupName": "Docusaurus packages"
     },
     {
+      "description": "Keep Docusaurus's react-router-config override on Router v5 until Docusaurus migrates away from it. The app's direct Router v8 dependency remains independently upgradable.",
+      "matchManagers": ["npm"],
+      "matchFileNames": ["package.json"],
+      "matchDepTypes": ["overrides"],
+      "matchPackageNames": ["react-router"],
+      "allowedVersions": "<6"
+    },
+    {
       "description": "Group GitHub Actions packages together",
       "matchPackagePatterns": ["^@actions/"],
       "groupName": "GitHub Actions"
@@ -123,6 +130,11 @@
         "peerDependencies"
       ],
       "groupName": "IBM packages"
+    },
+    {
+      "description": "Hold ibm-cloud-sdk-core below 5.6.3 until upstream fixes JSON secret redaction with escaped quotes; 5.6.3 can expose secret suffixes in debug logs (#11472).",
+      "matchPackageNames": ["ibm-cloud-sdk-core"],
+      "allowedVersions": "<5.6.3"
     },
     {
       "description": "Group MUI packages together",
@@ -194,6 +206,11 @@
       "groupName": "TanStack packages"
     },
     {
+      "description": "Keep TanStack Table on v8 until the shared data tables migrate to v9's feature registration, hooks, row models, state APIs, and generic types; the v9 upgrade currently breaks the production build and every shared-table interaction.",
+      "matchPackageNames": ["@tanstack/react-table", "@tanstack/table-core"],
+      "allowedVersions": "<9"
+    },
+    {
       "description": "Group Testing Library packages together",
       "matchPackagePatterns": ["^@testing-library/"],
       "groupName": "Testing Library packages"
@@ -230,14 +247,21 @@
       "groupName": "socket.io"
     },
     {
-      "description": "Keep jsdom in sync across all workspaces",
+      "description": "Keep jsdom in sync across all workspaces, and hold it below 30. jsdom 30 requires node ^22.22.2 || ^24.15.0 || >=26.0.0, but this package publishes engines.node >=22.22.0 and .npmrc sets engine-strict=true, so `npm ci` fails EBADENGINE on the Node 22.22.0 lanes that exist precisely to test that floor (see the closed #10311). jsdom is a dev-only Vitest environment, so raising the published runtime floor for it would make promptfoo refuse to start on Node 22.22.0/22.22.1 for no user-facing gain. Lift this cap when engines.node moves past 22.22.2 for an independent reason.",
       "matchPackageNames": ["jsdom"],
+      "allowedVersions": "<30",
       "groupName": "jsdom"
     },
     {
-      "description": "Keep undici in sync across root and code-scan-action",
+      "description": "Keep jsdom's CSS color parser below 7 while promptfoo supports Node 22.22.0. @asamuzakjp/css-color 7 requires node ^22.22.2 || ^24.15.0 || >=26.0.0, so engine-strict clean installs fail on the minimum supported Node version even though jsdom itself remains below 30. Lift this cap when engines.node moves past 22.22.2 for an independent reason.",
+      "matchPackageNames": ["@asamuzakjp/css-color"],
+      "allowedVersions": "<7"
+    },
+    {
+      "description": "Keep undici in sync across root and code-scan-action, and below 8 until engines.node is >=26. Promptfoo hands undici dispatchers to Node's built-in fetch; on Node 22 and 24 that fetch rejects undici 8 dispatchers and every request hangs (test/fetch.compression.test.ts times out on those CI lanes).",
       "matchPackageNames": ["undici"],
-      "groupName": "undici"
+      "groupName": "undici",
+      "allowedVersions": "<8"
     },
     {
       "description": "Keep dedent in sync across all workspaces",
@@ -294,7 +318,6 @@
       "matchDatasources": ["npm"],
       "minimumReleaseAge": "10 days"
     },
-
     {
       "description": "@opencode-ai/sdk: weekly updates to reduce noise from daily releases",
       "matchPackageNames": ["@opencode-ai/sdk"],
@@ -314,14 +337,19 @@
       "minimumReleaseAge": "10 days"
     },
     {
+      "description": "Hold Knip below 6.28 until existing public barrel re-exports have been audited; 6.28 changed ignoreExportsUsedInFile and flags 130 established exports",
+      "matchPackageNames": ["knip"],
+      "allowedVersions": "<6.28.0"
+    },
+    {
       "description": "Dev tooling: weekly updates (low urgency)",
       "matchPackageNames": ["hono", "knip"],
       "schedule": ["before 6am on Monday"],
       "minimumReleaseAge": "10 days"
     },
     {
-      "description": "framer-motion: monthly updates (animation library, low urgency)",
-      "matchPackageNames": ["framer-motion"],
+      "description": "motion: monthly updates (animation library, low urgency)",
+      "matchPackageNames": ["motion"],
       "schedule": ["before 6am on the first day of the month"],
       "minimumReleaseAge": "10 days"
     },
@@ -373,6 +401,23 @@
       "schedule": ["before 6am on the first day of the month"],
       "rangeStrategy": "bump",
       "minimumReleaseAge": "10 days"
+    },
+    {
+      "description": "Update Python dependencies monthly in separate branches for each example",
+      "matchManagers": ["pip_requirements", "pep621"],
+      "matchFileNames": ["examples/**/requirements*.txt", "examples/**/pyproject.toml"],
+      "additionalBranchPrefix": "{{packageFileDir}}-",
+      "groupName": null,
+      "rangeStrategy": "bump",
+      "schedule": ["before 6am on the first day of the month"],
+      "minimumReleaseAge": "10 days"
+    },
+    {
+      "description": "Review Python support floor changes separately from dependency updates",
+      "matchManagers": ["pep621"],
+      "matchFileNames": ["examples/**/pyproject.toml"],
+      "matchDepTypes": ["requires-python"],
+      "enabled": false
     }
   ]
 }

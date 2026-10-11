@@ -9,7 +9,11 @@ export function collectKeyValueOption(
   const key = separatorIndex === -1 ? '' : value.slice(0, separatorIndex);
   const val = separatorIndex === -1 ? undefined : value.slice(separatorIndex + 1);
 
-  if (!key || val === undefined) {
+  // Reject a missing separator and any key that is empty, whitespace-only, or padded:
+  // `--tag " env =ci"` would otherwise silently register the key `" env "`. Values are
+  // taken verbatim -- `--var "sep= "` passes a deliberate space, and `key=` is an
+  // explicitly supported empty value -- so only the key is constrained.
+  if (val === undefined || !key || key.trim() !== key) {
     throw new InvalidArgumentError(`${optionName} must be specified in key=value format.`);
   }
 

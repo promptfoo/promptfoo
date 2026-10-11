@@ -83,7 +83,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '24'
 
       - name: Install promptfoo
         run: npm install -g promptfoo
