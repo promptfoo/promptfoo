@@ -199,7 +199,11 @@ export function createBedrockAnthropicMessagesProvider(
   if (
     !config.apiBaseUrl &&
     region === 'us-gov-east-1' &&
-    ['anthropic.claude-opus-5-5', 'anthropic.claude-sonnet-5-5'].includes(modelName)
+    [
+      'anthropic.claude-haiku-5-5',
+      'anthropic.claude-opus-5-5',
+      'anthropic.claude-sonnet-5-5',
+    ].includes(modelName)
   ) {
     throw new Error(
       `Amazon Bedrock model "${modelName}" uses Mantle only in us-gov-west-1 within GovCloud. ` +

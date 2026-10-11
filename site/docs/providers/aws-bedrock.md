@@ -921,7 +921,7 @@ geo profiles, add the 10% regional premium.
 and [Opus 5.5](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-opus-5-5.html)
 support InvokeModel, Converse, and the Anthropic-compatible Messages API on Bedrock Runtime.
 Use `global.`, `us.`, `eu.`, or `au.` inference profiles; Haiku and Opus also support `jp.`.
-Opus and Sonnet also accept `us-gov.` profiles in `us-gov-east-1` and
+All three also accept `us-gov.` profiles in `us-gov-east-1` and
 `us-gov-west-1`. Check the model card for source-region availability before selecting a profile.
 
 ```yaml
@@ -1047,9 +1047,12 @@ config:
   showThinking: true # Whether to include thinking content in the output (default: true)
 ```
 
-The InvokeModel path exposes no reasoning-effort field. To set the depth, use
-`bedrock:converse:` with `additionalModelRequestFields.output_config.effort`, or the
-[Anthropic provider](/docs/providers/anthropic), which takes a top-level `effort`.
+Set `config.effort` on InvokeModel providers to send `output_config.effort`.
+Converse accepts `additionalModelRequestFields.output_config.effort`, and the
+[Anthropic provider](/docs/providers/anthropic) also takes a top-level `effort`.
+Haiku 5.5 supports `low`, `medium`, `high`, `xhigh`, and `max`; its default is `medium`.
+At `xhigh` or `max`, promptfoo omits unsupported disabled thinking while retaining
+the requested effort. Manual Haiku thinking budgets become adaptive thinking.
 
 Claude 4.5 models use manual budgets. Opus 4.6 and Sonnet 4.6 still accept them,
 but also support adaptive thinking:

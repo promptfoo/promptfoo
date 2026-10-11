@@ -21,6 +21,7 @@ export function isRejectedPrefixedGrokId(
 }
 
 const RUNTIME_MESSAGES_MODELS = new Set([
+  'us-gov.anthropic.claude-haiku-5-5',
   'us-gov.anthropic.claude-opus-5-5',
   'us-gov.anthropic.claude-sonnet-5-5',
   'us.anthropic.claude-fable-5-1',

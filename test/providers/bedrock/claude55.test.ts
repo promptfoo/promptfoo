@@ -8,12 +8,22 @@ import {
   BedrockAnthropicMessagesProvider,
   createBedrockAnthropicMessagesProvider,
 } from '../../../src/providers/bedrock/anthropicMessages';
-import { BEDROCK_MODEL, getHandlerForModel } from '../../../src/providers/bedrock/index';
+import {
+  AwsBedrockCompletionProvider,
+  BEDROCK_MODEL,
+  type BedrockClaudeMessagesCompletionOptions,
+  getHandlerForModel,
+} from '../../../src/providers/bedrock/index';
 import {
   calculateBedrockCost,
   calculateBedrockInvokeModelCost,
 } from '../../../src/providers/bedrock/pricing';
 import { awsProviderFactories } from '../../../src/providers/families/aws';
+
+vi.mock('../../../src/cache', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../src/cache')>()),
+  isCacheEnabled: () => false,
+}));
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -38,7 +48,7 @@ describe('Claude 5.5 on Bedrock', () => {
   });
 
   it.each(
-    ['opus', 'sonnet'].flatMap((family) =>
+    ['haiku', 'opus', 'sonnet'].flatMap((family) =>
       ['us-gov-east-1', 'us-gov-west-1'].map((region) => ({ family, region })),
     ),
   )('routes GovCloud $family Messages to Runtime in $region', async ({ family, region }) => {
@@ -66,32 +76,35 @@ describe('Claude 5.5 on Bedrock', () => {
     }
   });
 
-  it.each(['opus', 'sonnet'])('uses only GovCloud West Mantle for bare %s5.5', async (family) => {
-    const model = `anthropic.claude-${family}-5-5`;
-    await expect(
-      factory.create(
+  it.each(['haiku', 'opus', 'sonnet'])(
+    'uses only GovCloud West Mantle for bare %s5.5',
+    async (family) => {
+      const model = `anthropic.claude-${family}-5-5`;
+      await expect(
+        factory.create(
+          `bedrock:messages:${model}`,
+          { config: { region: 'us-gov-east-1' } },
+          {} as never,
+        ),
+      ).rejects.toThrow(`bedrock:messages:us-gov.${model}`);
+      const west = await factory.create(
         `bedrock:messages:${model}`,
-        { config: { region: 'us-gov-east-1' } },
+        { config: { region: 'us-gov-west-1' } },
         {} as never,
-      ),
-    ).rejects.toThrow(`bedrock:messages:us-gov.${model}`);
-    const west = await factory.create(
-      `bedrock:messages:${model}`,
-      { config: { region: 'us-gov-west-1' } },
-      {} as never,
-    );
-    expect((west as BedrockAnthropicMessagesProvider).getApiBaseUrl()).toBe(
-      'https://bedrock-mantle.us-gov-west-1.api.aws/anthropic',
-    );
-    const proxy = await factory.create(
-      `bedrock:messages:${model}`,
-      { config: { region: 'us-gov-east-1', apiBaseUrl: 'https://proxy.example/anthropic' } },
-      {} as never,
-    );
-    expect((proxy as BedrockAnthropicMessagesProvider).getApiBaseUrl()).toBe(
-      'https://proxy.example/anthropic',
-    );
-  });
+      );
+      expect((west as BedrockAnthropicMessagesProvider).getApiBaseUrl()).toBe(
+        'https://bedrock-mantle.us-gov-west-1.api.aws/anthropic',
+      );
+      const proxy = await factory.create(
+        `bedrock:messages:${model}`,
+        { config: { region: 'us-gov-east-1', apiBaseUrl: 'https://proxy.example/anthropic' } },
+        {} as never,
+      );
+      expect((proxy as BedrockAnthropicMessagesProvider).getApiBaseUrl()).toBe(
+        'https://proxy.example/anthropic',
+      );
+    },
+  );
 
   it.each(['haiku', 'sonnet'])(
     'requires GovCloud West for bare %s 5.5 Messages',
@@ -120,6 +133,92 @@ describe('Claude 5.5 on Bedrock', () => {
     expect((provider as BedrockAnthropicMessagesProvider).getApiBaseUrl()).toBe(
       'https://bedrock-mantle.us-east-1.api.aws/anthropic',
     );
+  });
+
+  it.each(['low', 'medium', 'high', 'xhigh', 'max'] as const)(
+    'forwards native Haiku effort %s and normalizes disabled thinking before token defaults',
+    async (effort) => {
+      const responseJson = JSON.stringify({
+        content: [{ type: 'text', text: 'READY' }],
+        usage: { input_tokens: 1, output_tokens: 1 },
+      });
+      const body = Object.assign(new TextEncoder().encode(responseJson), {
+        transformToString: () => responseJson,
+      });
+      const invokeModel = vi.fn().mockResolvedValue({ body });
+      const config: BedrockClaudeMessagesCompletionOptions = {
+        region: 'us-east-1',
+        effort,
+        thinking: { type: 'disabled' },
+      };
+      const provider = new AwsBedrockCompletionProvider('us.anthropic.claude-haiku-5-5', {
+        config,
+      });
+      vi.spyOn(provider, 'getBedrockInstance').mockResolvedValue({ invokeModel } as never);
+      expect((await provider.callApi('hello')).output).toBe('READY');
+      const request = JSON.parse(invokeModel.mock.calls[0][0].body);
+      expect(request.output_config).toEqual({ effort });
+      expect(request.anthropic_version).toBe('bedrock-2023-05-31');
+      expect(request).not.toHaveProperty('temperature');
+      if (effort === 'xhigh' || effort === 'max') {
+        expect(request).not.toHaveProperty('thinking');
+        expect(request.max_tokens).toBe(2048);
+      } else {
+        expect(request.thinking).toEqual({ type: 'disabled' });
+        expect(request.max_tokens).toBe(1024);
+      }
+    },
+  );
+
+  it('honors prompt effort overrides and preserves an explicit token limit', async () => {
+    const responseJson = JSON.stringify({
+      content: [{ type: 'text', text: 'READY' }],
+      usage: { input_tokens: 1, output_tokens: 1 },
+    });
+    const body = Object.assign(new TextEncoder().encode(responseJson), {
+      transformToString: () => responseJson,
+    });
+    const invokeModel = vi.fn().mockResolvedValue({ body });
+    const config: BedrockClaudeMessagesCompletionOptions = {
+      region: 'us-east-1',
+      effort: 'low',
+      thinking: { type: 'disabled' },
+      max_tokens: 512,
+    };
+    const provider = new AwsBedrockCompletionProvider('us.anthropic.claude-haiku-5-5', { config });
+    vi.spyOn(provider, 'getBedrockInstance').mockResolvedValue({ invokeModel } as never);
+    expect(
+      (
+        await provider.callApi('hello', {
+          vars: {},
+          prompt: { raw: 'hello', label: 'override', config: { effort: 'max' } },
+        })
+      ).error,
+    ).toBeUndefined();
+    const request = JSON.parse(invokeModel.mock.calls[0][0].body);
+    expect(request.output_config).toEqual({ effort: 'max' });
+    expect(request.max_tokens).toBe(512);
+    expect(request).not.toHaveProperty('thinking');
+  });
+
+  it('omits unconfigured effort and normalizes unsupported Haiku manual thinking', async () => {
+    const normal = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
+      {},
+      'Hello',
+      [],
+      'us.anthropic.claude-haiku-5-5',
+    );
+    expect(normal).not.toHaveProperty('output_config');
+    expect(normal.max_tokens).toBe(2048);
+    const manual = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
+      { thinking: { type: 'enabled', budget_tokens: 8192 }, effort: 'max' } as never,
+      'Hello',
+      [],
+      'us.anthropic.claude-haiku-5-5',
+    );
+    expect(manual.output_config).toEqual({ effort: 'max' });
+    expect(manual.thinking).toEqual({ type: 'adaptive' });
+    expect(manual.max_tokens).toBe(2048);
   });
 
   it('gives Haiku 5.5 thinking headroom and normalizes effort-capped disabled thinking', async () => {
