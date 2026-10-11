@@ -289,7 +289,6 @@ Lyria music generation is not currently supported by promptfoo's Google provider
 - `google:gemini-3.8-flash` - Latest Gemini Flash model for coding and agentic workflows ($0.75/1M input, $3.75/1M output through December 31, 2026)
 - `google:gemini-3.7-flash` - Previous-generation Gemini Flash model for coding, multimodal reasoning, and agentic workflows ($0.75/1M input, $3.75/1M output through December 31, 2026)
 - `google:gemini-3.6-flash` - Previous-generation Gemini Flash model for coding and agentic tasks ($0.75/1M input, $3.75/1M output through December 31, 2026)
-- `google:gemini-3.5-flash` - Gemini 3.5 Flash for agentic and coding tasks ($1.50/1M input, $9/1M output)
 - `google:gemini-3.5-flash-lite` - Fast, cost-efficient Gemini 3.5 model for high-volume agentic workflows ($0.30/1M input, $2.50/1M output)
 - `google:live:gemini-3.5-live-translate-preview` - Gemini 3.5 Live Translate for real-time audio-to-audio translation with text transcripts ($3.50/1M audio input, $21/1M audio output)
 - `google:gemini-omni-1.1-flash` - Stable Gemini Omni Flash for conversational video generation/editing via the Interactions API ($1.50/1M input, $9/1M text/thinking output, $17.50/1M video output); `google:gemini-omni-flash-preview` remains available
@@ -1017,11 +1016,11 @@ providers:
 
 ### Gemini 3.5 Flash
 
-Gemini 3.5 Flash remains available for agentic and coding workloads:
+The Gemini API redirects `gemini-3.5-flash` to `gemini-3.6-flash`. Use the replacement ID directly:
 
 ```yaml
 providers:
-  - id: google:gemini-3.5-flash
+  - id: google:gemini-3.6-flash
     config:
       maxOutputTokens: 4096
       generationConfig:
