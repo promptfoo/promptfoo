@@ -255,9 +255,9 @@ describe('MCPToolResponsePoisoningPlugin', () => {
         ).toEqual(['get_weather']);
       });
 
-      it('is a no-op when the purpose advertises no catalog', () => {
-        // Nothing to enforce against, and failing here would block the
-        // non-MCP misconfiguration case that already warns on its own.
+      it('fails closed when the purpose advertises no catalog', () => {
+        // The catalog is data the server under test controls; its absence must
+        // not turn an explicit fail-closed restriction into an unrestricted run.
         expect(
           () =>
             new MCPToolResponsePoisoningPlugin(
@@ -268,7 +268,40 @@ describe('MCPToolResponsePoisoningPlugin', () => {
                 requireToolAllowlist: true,
               },
             ),
-        ).not.toThrow();
+        ).toThrow(/requireToolAllowlist[\s\S]*No tool catalog could be read/);
+      });
+
+      it('fails closed when the catalog cannot be parsed', () => {
+        const unparseablePurpose =
+          'Support MCP server.\nAvailable MCP tools:\n{name: get_weather}\n{"description":"no name"}';
+
+        expect(
+          () =>
+            new MCPToolResponsePoisoningPlugin(createMockProvider(), unparseablePurpose, 'prompt', {
+              requireToolAllowlist: true,
+            }),
+        ).toThrow(/No tool catalog could be read/);
+      });
+
+      it('keeps enforcing allowedTools when no catalog is advertised', async () => {
+        const provider = createMockProvider({
+          response: createProviderResponse({
+            output: [
+              'Prompt: {"tool":"get_weather","args":{"city":"Oslo"}}',
+              'Prompt: {"tool":"delete_ticket","args":{"id":"1"}}',
+            ].join('\n'),
+          }),
+        });
+        const plugin = new MCPToolResponsePoisoningPlugin(provider, purposeWithoutTools, 'prompt', {
+          requireToolAllowlist: true,
+          allowedTools: ['get_weather'],
+        });
+
+        const tests = await plugin.generateTests(2);
+
+        expect(tests.map((t) => JSON.parse(t.vars?.prompt as string).tool)).toEqual([
+          'get_weather',
+        ]);
       });
 
       it('does not fail closed on excludedTools alone', () => {

@@ -441,24 +441,29 @@ export class MCPToolResponsePoisoningPlugin extends RedteamPluginBase {
    * Picks the default tool set when the user configured no `allowedTools`.
    *
    * Returns `undefined` (unrestricted) only when there is no catalog to reason
-   * about — enumerating an empty catalog would permit nothing and silently
-   * drop every generated test case.
+   * about and the user did not ask to fail closed — enumerating an empty
+   * catalog would permit nothing and silently drop every generated test case.
    */
   private resolveDefaultAllowedTools(
     catalog: AdvertisedTool[],
     config: PluginConfig,
   ): ReadonlySet<string> | undefined {
-    if (catalog.length === 0) {
-      return undefined;
-    }
-
+    // Checked before the empty-catalog fallback: a missing or unparseable
+    // catalog is data the server under test controls, and it must not be able
+    // to turn an explicit fail-closed restriction into an unrestricted run.
     if (config.requireToolAllowlist) {
       throw new Error(
         `[mcp:tool-response-poisoning] requireToolAllowlist is set but no allowedTools are configured. ` +
           `Name the tools this scan may invoke in the plugin's allowedTools, or narrow the catalog with ` +
-          `the MCP provider's own tools/exclude_tools config. Advertised tools: ` +
-          `${catalog.map((tool) => tool.name).join(', ')}.`,
+          `the MCP provider's own tools/exclude_tools config. ` +
+          (catalog.length > 0
+            ? `Advertised tools: ${catalog.map((tool) => tool.name).join(', ')}.`
+            : `No tool catalog could be read from the purpose.`),
       );
+    }
+
+    if (catalog.length === 0) {
+      return undefined;
     }
 
     const skipped = catalog.filter(isSelfDeclaredMutating).map((tool) => tool.name);
