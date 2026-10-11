@@ -824,6 +824,116 @@ describe('eval routes', () => {
       },
     );
 
+    async function createPartialEval(missing: 'pass' | 'assert' | 'error', firstError = false) {
+      const suite: TestSuite = {
+        providers: [
+          {
+            id: () => 'partial-save-target',
+            callApi: async (prompt) =>
+              (prompt === 'lost' && missing === 'error') || (prompt === 'saved' && firstError)
+                ? { error: 'Target unavailable' }
+                : { output: 'ok' },
+          },
+        ],
+        prompts: [{ raw: '{{which}}', label: 'single prompt' }],
+        tests: [
+          { vars: { which: 'saved' }, assert: [{ type: 'contains', value: 'ok' }] },
+          {
+            vars: { which: 'lost' },
+            assert: [
+              {
+                type: missing === 'assert' ? 'equals' : 'contains',
+                value: missing === 'assert' ? 'other' : 'ok',
+              },
+            ],
+          },
+        ],
+      };
+      const record = await Eval.create({}, suite.prompts);
+      testEvalIds.add(record.id);
+      const addResult = record.addResult.bind(record);
+      vi.spyOn(record, 'addResult').mockImplementation(async (result) => {
+        if (result.testIdx === 1) {
+          throw new Error('Synthetic row persistence failure');
+        }
+        return addResult(result);
+      });
+      await evaluate(suite, record, { maxConcurrency: 1 });
+      expect(record.resultPersistenceFailed).toBe(true);
+      expect(await record.getResults()).toHaveLength(1);
+      return record;
+    }
+
+    it.each(['pass', 'assert', 'error'] as const)(
+      'preserves unpersisted %s counts and scores while rating a saved row',
+      async (missing) => {
+        const record = await createPartialEval(missing);
+        const row = (await record.getResults())[0];
+        invariant(row instanceof EvalResult, 'Persisted result required');
+        const original = structuredClone(row.gradingResult);
+        const endpoint = `/api/eval/${record.id}/results/${row.id}/rating`;
+        const rated = await api.post(endpoint).send(createManualRatingPayload(row, false));
+        expect(rated.status).toBe(200);
+        let saved = (await Eval.findById(record.id))!;
+        expect(saved.prompts[0].metrics).toMatchObject({
+          testPassCount: Number(missing === 'pass'),
+          testFailCount: 1 + Number(missing === 'assert'),
+          testErrorCount: Number(missing === 'error'),
+        });
+        expect(
+          (await api.post(endpoint).send({ ...rated.body.gradingResult, score: 0.4 })).status,
+        ).toBe(200);
+        saved = (await Eval.findById(record.id))!;
+        expect(saved.prompts[0].metrics?.score).toBeCloseTo(Number(missing === 'pass') + 0.4);
+        expect((await api.post(endpoint).send({ ...original, action: 'clear' })).status).toBe(200);
+        saved = (await Eval.findById(record.id))!;
+        expect(saved.prompts[0].metrics).toMatchObject({
+          testPassCount: 1 + Number(missing === 'pass'),
+          testFailCount: Number(missing === 'assert'),
+          testErrorCount: Number(missing === 'error'),
+          score: 1 + Number(missing === 'pass'),
+        });
+        expect(await saved.getResults()).toHaveLength(1);
+      },
+    );
+
+    it.each(['pass', 'assert', 'error'] as const)(
+      'clears a main-era error approval without losing an unpersisted %s',
+      async (missing) => {
+        const record = await createPartialEval(missing, true);
+        const row = (await record.getResults())[0];
+        invariant(row instanceof EvalResult, 'Persisted result required');
+        row.gradingResult = createManualRatingPayload(row, true);
+        row.success = true;
+        row.score = 1;
+        const metrics = record.prompts[0].metrics!;
+        metrics.testPassCount++;
+        metrics.testFailCount--;
+        metrics.score++;
+        await row.save();
+        await record.save();
+        expect(metrics).toMatchObject({
+          testPassCount: 1 + Number(missing === 'pass'),
+          testFailCount: Number(missing === 'assert') - 1,
+          testErrorCount: 1 + Number(missing === 'error'),
+        });
+        const response = await api.post(`/api/eval/${record.id}/results/${row.id}/rating`).send({
+          pass: false,
+          score: 0,
+          reason: 'Clear approval',
+          componentResults: [],
+          action: 'clear',
+        });
+        expect(response.status).toBe(200);
+        expect((await Eval.findById(record.id))?.prompts[0].metrics).toMatchObject({
+          testPassCount: Number(missing === 'pass'),
+          testFailCount: Number(missing === 'assert'),
+          testErrorCount: 1 + Number(missing === 'error'),
+          score: Number(missing === 'pass'),
+        });
+      },
+    );
+
     it.each(['error', 'legacy approval', 'manual failure', 'no grade'])(
       'updates only annotations on a saved %s',
       async (state) => {

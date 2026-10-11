@@ -805,6 +805,7 @@ evalRouter.post(
       }
       const scoreChange = gradingResult.score - result.score;
       const effectivePass = clearingError ? false : gradingResult.pass;
+      const previous = { success: result.success, failureReason: result.failureReason };
       const successChanged = result.success !== effectivePass;
       const failureReason = effectivePass
         ? ResultFailureReason.NONE
@@ -847,14 +848,12 @@ evalRouter.post(
       } else if (successChanged) {
         if (result.success) {
           prompt.metrics.assertPassCount += 1;
-          prompt.metrics.score += scoreChange;
           if (hasExistingManualOverride) {
             // If there was an existing manual override, we need to decrement the assertFailCount because it changed from fail to pass
             prompt.metrics.assertFailCount -= 1;
           }
         } else {
           prompt.metrics.assertFailCount += 1;
-          prompt.metrics.score += scoreChange;
           if (hasExistingManualOverride) {
             // If there was an existing manual override, we need to decrement the assertPassCount because it changed from pass to fail
             prompt.metrics.assertPassCount -= 1;
@@ -869,13 +868,38 @@ evalRouter.post(
         }
       }
 
+      prompt.metrics.score += scoreChange;
       await result.save();
       const { score: persistedScore, ...counts } = await eval_.getPromptGradingMetrics(
         result.promptIdx,
       );
-      Object.assign(prompt.metrics, counts);
-      if (action === 'clear') {
-        prompt.metrics.score = persistedScore;
+      const recordedTotal =
+        prompt.metrics.testPassCount + prompt.metrics.testFailCount + prompt.metrics.testErrorCount;
+      const persistedTotal = counts.testPassCount + counts.testFailCount + counts.testErrorCount;
+      if (recordedTotal === persistedTotal) {
+        Object.assign(prompt.metrics, counts, { score: persistedScore });
+      } else {
+        // Failed inserts remain in summary metrics and recovery output, but not in this query.
+        if (previous.success && previous.failureReason === ResultFailureReason.ERROR) {
+          // Main-era approvals added a pass and removed a fail while retaining the error.
+          prompt.metrics.testPassCount--;
+          prompt.metrics.testFailCount++;
+        }
+        const previousCount =
+          previous.failureReason === ResultFailureReason.ERROR
+            ? 'testErrorCount'
+            : previous.success
+              ? 'testPassCount'
+              : 'testFailCount';
+        const nextCount = result.success
+          ? 'testPassCount'
+          : result.failureReason === ResultFailureReason.ERROR
+            ? 'testErrorCount'
+            : 'testFailCount';
+        if (previousCount !== nextCount) {
+          prompt.metrics[previousCount]--;
+          prompt.metrics[nextCount]++;
+        }
       }
       await eval_.save();
 
