@@ -268,6 +268,22 @@ describe('config-schema.json', () => {
       expect(mainDef).toBeDefined();
       expect(mainDef.type).toBe('object');
     });
+
+    it('declares the core configuration fields in the published schema', () => {
+      const properties = schema.definitions?.PromptfooConfigSchema?.properties;
+
+      // These declarations drive editor completion even when additional properties are allowed.
+      for (const field of [
+        'prompts',
+        'providers',
+        'tests',
+        'redteam',
+        'scenarios',
+        'defaultTest',
+      ]) {
+        expect(properties).toHaveProperty(field);
+      }
+    });
   });
 
   describe('runtime input parity', () => {
