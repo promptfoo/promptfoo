@@ -184,6 +184,16 @@ it('preserves VM fallback singleton and retry behavior in native Node', async ()
       await assert.rejects(importModule(retryPath, undefined, { cacheCjsFallback: true }), /initialization failed/);
       await fs.writeFile(retryPath, 'module.exports = { value: "recovered" };');
       assert.equal((await importModule(retryPath, undefined, { cacheCjsFallback: true })).value, 'recovered');
+      const invalidConfigPath = ${JSON.stringify(path.join(directory, 'invalid.js'))};
+      await fs.writeFile(invalidConfigPath, 'require("node:fs"); module.exports = { providers: ["echo"], prompts: ["Hello"], commandLineOptions: { filterSampleSeed: "bad" } };');
+      await assert.rejects(loadDefaultConfig(directory, 'invalid'), /filterSampleSeed/);
+      await fs.writeFile(invalidConfigPath, 'module.exports = { description: "repaired", providers: ["echo"], prompts: ["Hello"], commandLineOptions: { filterSampleSeed: 123 } };');
+      await fs.writeFile(configPath, 'module.exports = { description: "should remain cached" };');
+      assert.equal((await loadDefaultConfig(directory, 'invalid')).defaultConfig.description, 'repaired');
+      assert.equal((await loadDefaultConfig(directory)).defaultConfig.description, 'edited');
+      // Stale invalidation cannot remove a newer successful module at the same path.
+      clearCjsModuleCache({ path: configPath, exports: first });
+      assert.equal((await loadDefaultConfig(directory)).defaultConfig.description, 'edited');
     `;
     execFileSync(process.execPath, ['--import', 'tsx', '--input-type=module', '--eval', script], {
       cwd: path.resolve(__dirname, '../../..'),

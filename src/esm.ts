@@ -365,8 +365,15 @@ export function isCjsInEsmError(message: string): boolean {
 // Other fallback callers keep their existing uncached behavior.
 const cjsFallbackModules = new Map<string, unknown>();
 
-export function clearCjsModuleCache(): void {
-  cjsFallbackModules.clear();
+export function clearCjsModuleCache(entry?: { path: string; exports: unknown }): void {
+  if (!entry) {
+    cjsFallbackModules.clear();
+    return;
+  }
+  const modulePath = safeResolve(entry.path);
+  if (cjsFallbackModules.get(modulePath) === entry.exports) {
+    cjsFallbackModules.delete(modulePath);
+  }
 }
 
 /**
