@@ -83,6 +83,8 @@ ENV PROMPTFOO_SELF_HOSTED=1
 ENV PROMPTFOO_RUNNING_IN_DOCKER=1
 ARG PROMPTFOO_OFFICIAL_DOCKER_IMAGE=0
 ENV PROMPTFOO_OFFICIAL_DOCKER_IMAGE=${PROMPTFOO_OFFICIAL_DOCKER_IMAGE}
+# pip installs CLIs such as modelaudit into the non-root user's script directory.
+ENV PATH="${PATH}:/home/promptfoo/.local/bin"
 
 USER promptfoo
 
