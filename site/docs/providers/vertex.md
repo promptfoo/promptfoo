@@ -440,8 +440,10 @@ export GOOGLE_API_KEY="your-express-mode-api-key"
 
 ```yaml
 providers:
-  - vertex:gemini-3.8-flash
+  - vertex:gemini-3-flash-preview
 ```
+
+Choose a model from the [Express mode model list](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/start/express-mode/overview#available_models_and_rate_limits).
 
 Express mode benefits:
 
