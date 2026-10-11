@@ -443,14 +443,71 @@ describe('util', () => {
       );
     });
 
-    it('preserves nested template text in inline system instructions', () => {
+    it('renders inline system instruction substitutions once', () => {
       expect(
         parseConfigSystemInstruction('Keep {{label}}.', {
           label: '{{name}}',
           name: '{{token}}',
           token: 'end',
         }),
-      ).toEqual({ parts: [{ text: 'Keep {{token}}.' }] });
+      ).toEqual({ parts: [{ text: 'Keep {{name}}.' }] });
+    });
+
+    it.each(
+      ['inline', 'Content', 'text file', 'JSON file'].flatMap((source) =>
+        [
+          '{{name}}',
+          '{{ env.QA_SYSTEM_TEMPLATE_CANARY }}',
+          '{% if true %}CONTROL_FLOW{% endif %}',
+          '{{ range.constructor("return 6 * 7")() }}',
+          '{{ unfinished',
+        ].map((value) => ({ source, value })),
+      ),
+    )('keeps runtime $value literal in a trusted $source instruction', ({ source, value }) => {
+      const template = 'Trusted {{ 6 * 7 }}: {{value}}';
+      const content = { parts: [{ text: template }] };
+      const instruction =
+        source === 'inline'
+          ? template
+          : source === 'Content'
+            ? content
+            : `file://instruction.${source === 'JSON file' ? 'json' : 'txt'}`;
+      if (source.endsWith('file')) {
+        vi.mocked(fs.readFileSync).mockReturnValueOnce(
+          source === 'JSON file' ? JSON.stringify(content) : template,
+        );
+      }
+      const original = structuredClone(instruction);
+      expect(
+        parseConfigSystemInstruction(instruction, {
+          value,
+          name: 'must stay literal',
+          env: { QA_SYSTEM_TEMPLATE_CANARY: 'SYNTHETIC_CANARY' },
+        }),
+      ).toEqual({ parts: [{ text: `Trusted 42: ${value}` }] });
+      expect(instruction).toEqual(original);
+    });
+
+    it('keeps text from a whole inline JSON instruction variable literal', () => {
+      const instruction = { parts: [{ text: '{{name}}' }] };
+      expect(
+        parseConfigSystemInstruction('{{instruction}}', {
+          instruction: JSON.stringify(instruction),
+          name: 'must stay literal',
+        }),
+      ).toEqual(instruction);
+    });
+
+    it('renders file contents after resolving a whole instruction reference variable', () => {
+      const instructionFile = `file://${path.resolve('/provider', 'instruction.txt')}`;
+      vi.mocked(fs.readFileSync).mockReturnValueOnce('Trusted {{ 6 * 7 }}: {{value}}');
+      expect(
+        parseConfigSystemInstruction('{{instructionFile}}', {
+          instructionFile,
+          value: '{{name}}',
+          name: 'must stay literal',
+        }),
+      ).toEqual({ parts: [{ text: 'Trusted 42: {{name}}' }] });
     });
 
     it('rejects invalid inline response schema JSON', () => {

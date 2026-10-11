@@ -1990,6 +1990,7 @@ export function parseConfigSystemInstruction(
 
   // Make a copy to avoid mutating the original
   let configInstruction = clone(configSystemInstruction);
+  let renderInstructionParts = true;
 
   // Load systemInstruction from file if it's a file path
   if (typeof configSystemInstruction === 'string') {
@@ -1997,6 +1998,7 @@ export function parseConfigSystemInstruction(
     const instructionReference = resolveGoogleConfigFileReference(renderedInstruction, basePath);
     // The reference is already rendered; do not expand inline text again while loading.
     configInstruction = loadFile(instructionReference, undefined);
+    renderInstructionParts = instructionReference.startsWith('file://');
   }
 
   // Convert string to Content structure
@@ -2004,8 +2006,8 @@ export function parseConfigSystemInstruction(
     configInstruction = { parts: [{ text: configInstruction }] };
   }
 
-  // Render Nunjucks templates in all text parts
-  if (contextVars && configInstruction) {
+  // Inline strings were already rendered; only objects and file contents need rendering.
+  if (renderInstructionParts && contextVars && configInstruction) {
     const nunjucks = getNunjucksEngine();
     for (const part of configInstruction.parts) {
       if (part.text) {
