@@ -44,6 +44,7 @@ describe('FoundationModelConfiguration', () => {
 
     expect(temperatureInput).toHaveValue(0.7);
     expect(maxTokensInput).toHaveValue(1024);
+    expect(maxTokensInput).toHaveAttribute('min', '1');
     expect(topPInput).toHaveValue(0.9);
     expect(apiKeyInput).toHaveValue('test-key-123');
     expect(apiBaseUrlInput).toHaveValue('https://custom.api.example.com/v1');
@@ -1188,6 +1189,7 @@ describe('FoundationModelConfiguration', () => {
       await user.click(screen.getByRole('button', { name: /Advanced Configuration/ }));
       const input = screen.getByLabelText('Max Tokens');
       expect(input).toHaveValue(expected);
+      expect(input).toBeValid();
       await user.click(input);
       await user.keyboard('{Control>}a{/Control}');
       const edited = expected === 0 ? 256 : 0;
@@ -1218,21 +1220,32 @@ describe('FoundationModelConfiguration', () => {
     expect(screen.getByLabelText('Max Tokens')).toHaveValue(expected);
   });
 
-  it('migrates a Responses cap when switching to Runtime Chat', async () => {
-    const user = userEvent.setup();
-    render(
-      <FoundationModelConfiguration
-        selectedTarget={{
-          id: 'bedrock:runtime:responses:us.openai.gpt-5.6-sol',
-          config: { max_output_tokens: 256 },
-        }}
-        updateCustomTarget={mockUpdateCustomTarget}
-        providerType="bedrock"
-      />,
-    );
-    await user.selectOptions(screen.getByLabelText(/Bedrock API/), 'runtime-chat');
-    expect(mockUpdateCustomTarget).toHaveBeenCalledWith('config', { max_completion_tokens: 256 });
-  });
+  it.each([256, 0, null, undefined])(
+    'migrates a Responses cap when switching to Runtime Chat: %s',
+    async (value) => {
+      const user = userEvent.setup();
+      render(
+        <FoundationModelConfiguration
+          selectedTarget={{
+            id: 'bedrock:runtime:responses:us.openai.gpt-5.6-sol',
+            config: {
+              max_output_tokens: value,
+              max_completion_tokens: 512,
+              max_tokens: 1024,
+              region: 'us-east-1',
+            },
+          }}
+          updateCustomTarget={mockUpdateCustomTarget}
+          providerType="bedrock"
+        />,
+      );
+      await user.selectOptions(screen.getByLabelText(/Bedrock API/), 'runtime-chat');
+      expect(mockUpdateCustomTarget).toHaveBeenCalledWith('config', {
+        max_completion_tokens: value,
+        region: 'us-east-1',
+      });
+    },
+  );
   it('restores the Runtime GPT OSS suffix when switching from Mantle Responses', async () => {
     const user = userEvent.setup();
     render(

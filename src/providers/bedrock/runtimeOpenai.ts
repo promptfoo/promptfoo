@@ -188,6 +188,13 @@ export class BedrockRuntimeChatProvider extends BedrockMantleChatProvider {
   }
 
   async getOpenAiBody(...args: Parameters<BedrockMantleChatProvider['getOpenAiBody']>) {
+    const config = { ...this.config, ...args[1]?.prompt?.config };
+    if (config.serviceTier !== undefined || config.passthrough?.serviceTier !== undefined) {
+      throw new Error(
+        'Amazon Bedrock Runtime Chat uses service_tier. Replace serviceTier with service_tier ' +
+          'to select an inference tier.',
+      );
+    }
     const result = await super.getOpenAiBody(...args);
     const modelError = getBedrockRuntimeModelError('runtime-chat', result.body.model);
     if (modelError) {

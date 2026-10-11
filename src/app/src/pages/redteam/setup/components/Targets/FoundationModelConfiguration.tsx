@@ -264,7 +264,7 @@ const FoundationModelConfiguration = ({
     const hasCompetingLimit = [...tokenLimitFields, ...destination.fields].some(
       (field) => field !== destination.key && selectedTarget.config?.[field] !== undefined,
     );
-    if ((tokenLimitKey !== destination.key || hasCompetingLimit) && tokenLimit !== undefined) {
+    if (tokenLimitKey !== destination.key || hasCompetingLimit) {
       updateTokenLimit(destination.key, tokenLimit, destination.fields);
     }
     lastEditedTarget.current = { id, providerType };
@@ -732,7 +732,7 @@ const FoundationModelConfiguration = ({
               <Input
                 id="max-tokens"
                 type="number"
-                min={1}
+                min={isBedrock ? 0 : 1}
                 value={tokenLimit ?? ''}
                 onChange={(e) => {
                   const value = e.target.value === '' ? undefined : parseInt(e.target.value, 10);

@@ -1931,14 +1931,17 @@ describe('Runtime Responses terminal stream policy', () => {
   });
 });
 
-describe('Runtime Responses tier spelling', () => {
+describe.each([
+  ['Chat', BedrockRuntimeChatProvider],
+  ['Responses', BedrockRuntimeResponsesProvider],
+] as const)('Runtime %s tier spelling', (_name, Provider) => {
   it.each(['provider', 'provider-passthrough', 'prompt', 'prompt-passthrough'])(
     'rejects camelCase serviceTier in %s before transport',
     async (scope) => {
       const override = scope.endsWith('passthrough')
         ? { passthrough: { serviceTier: { type: 'priority' } } }
         : { serviceTier: { type: 'priority' } };
-      const provider = new BedrockRuntimeResponsesProvider('us.xai.grok-4.6', {
+      const provider = new Provider('us.xai.grok-4.6', {
         config: { apiKey: 'fixture', ...(scope.startsWith('provider') ? override : {}) },
       });
       const context = scope.startsWith('prompt')
@@ -1954,7 +1957,7 @@ describe('Runtime Responses tier spelling', () => {
   it.each(['priority', 'flex'] as const)(
     'retains Runtime %s through prompt passthrough',
     async (tier) => {
-      const provider = new BedrockRuntimeResponsesProvider('us.xai.grok-4.6', {
+      const provider = new Provider('us.xai.grok-4.6', {
         config: { apiKey: 'fixture' },
       });
       const { body } = await provider.getOpenAiBody('hello', {
@@ -1962,6 +1965,30 @@ describe('Runtime Responses tier spelling', () => {
         prompt: { raw: 'hello', label: 'hello', config: { passthrough: { service_tier: tier } } },
       });
       expect(body.service_tier).toBe(tier);
+    },
+  );
+
+  it.each(['root', 'passthrough'])(
+    'allows a prompt override to clear %s serviceTier with undefined',
+    async (scope) => {
+      const providerTier = { serviceTier: { type: 'priority' } };
+      const promptTier = { serviceTier: undefined, service_tier: 'flex' };
+      const provider = new Provider('us.xai.grok-4.6', {
+        config: {
+          apiKey: 'fixture',
+          ...(scope === 'passthrough' ? { passthrough: providerTier } : providerTier),
+        },
+      });
+      const { body } = await provider.getOpenAiBody('hello', {
+        vars: {},
+        prompt: {
+          raw: 'hello',
+          label: 'hello',
+          config: scope === 'passthrough' ? { passthrough: promptTier } : promptTier,
+        },
+      });
+      expect(body.service_tier).toBe('flex');
+      expect(body.serviceTier).toBeUndefined();
     },
   );
 });
