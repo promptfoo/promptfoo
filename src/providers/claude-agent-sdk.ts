@@ -308,6 +308,211 @@ function createTaskOutputTranscriptRedactionHook(): HookCallbackMatcher {
   };
 }
 
+/**
+ * Reads the task id from the `<task-notification>` the CLI hands to a running turn.
+ * Only the id that opens the notification counts. Everything after it can include the
+ * task's own output, which is text the task wrote and may quote another task's id.
+ */
+function taskNotificationTaskId(content: unknown): string | undefined {
+  const text =
+    typeof content === 'string'
+      ? content
+      : Array.isArray(content)
+        ? content.map((block) => (block?.type === 'text' ? block.text : '')).join('\n')
+        : '';
+  const [opening, idTag] = ['<task-notification>', '<task-id>'];
+  const notification = text.trimStart();
+  if (!notification.startsWith(opening)) {
+    return undefined;
+  }
+  const body = notification.slice(opening.length).trimStart();
+  const end = body.indexOf('</task-id>');
+  return body.startsWith(idTag) && end >= 0 ? body.slice(idTag.length, end).trim() : undefined;
+}
+
+interface WorkflowTurn {
+  /** Workflow completions the turn was given as it started. */
+  given: number;
+  /** Completions handed to the turn while it ran. They get no result of their own. */
+  read: number;
+  /** Empty results written ahead of this turn's answer, one for each other completion in its batch. */
+  placeholders: number;
+}
+
+interface WorkflowSession {
+  /** Workflow completions reported and not yet given to a turn. */
+  queued: number;
+  /** Turns that have started and not yet produced a result, oldest first. */
+  turns: WorkflowTurn[];
+  /** What a batch's empty results pass on to the turn that carries the batch's answer. */
+  carried?: WorkflowTurn;
+}
+
+/**
+ * Decides which result answers the dynamic workflows a session launched.
+ *
+ * A workflow finishes in the background. Its completion goes to a main-agent turn: the
+ * one already running, or a new one that it wakes. That turn's result is the answer, and
+ * the follow-up to any other background task is not. Results are matched to turns in the
+ * order the turns started, because the CLI can hold a result back while background work
+ * runs and write it after later turns have begun.
+ */
+class WorkflowAnswers {
+  private readonly tasks = new Map<string, { sessionId: string; status: string }>();
+  /** Workflow tasks whose completion has been handed to a running turn. */
+  private readonly handed = new Set<string>();
+  private readonly sessions = new Map<string, WorkflowSession>();
+  /** Only replayed user messages show a completion being handed to a running turn. */
+  private replaysUserMessages = false;
+  /** Without replays, a main-agent result that follows a completion is taken to answer it. */
+  private answerOwed = false;
+
+  get taskStatuses(): Record<string, { sessionId: string; status: string }> {
+    return Object.fromEntries(this.tasks);
+  }
+
+  private session(sessionId: string): WorkflowSession {
+    let session = this.sessions.get(sessionId);
+    if (!session) {
+      session = { queued: 0, turns: [] };
+      this.sessions.set(sessionId, session);
+    }
+    return session;
+  }
+
+  /** Every turn opens with `init`. A message starts one only in a stream that has none. */
+  turnStarted(sessionId: string, boundary: 'init' | 'message'): void {
+    const session = this.session(sessionId);
+    if (boundary === 'message' && session.turns.length > 0) {
+      return;
+    }
+    if (session.carried) {
+      // The turn after an empty batch result belongs to the same batch. It carries on
+      // with what the batch was given and takes nothing that was reported since.
+      session.turns.push(session.carried);
+      session.carried = undefined;
+    } else {
+      session.turns.push({ given: session.queued, read: 0, placeholders: 0 });
+      session.queued = 0;
+    }
+  }
+
+  /** A main-thread `Workflow` call started a background task. */
+  taskStarted(taskId: string, sessionId: string): void {
+    this.tasks.set(taskId, { sessionId, status: 'running' });
+    // The turn that made the call is still running.
+    this.turnStarted(sessionId, 'message');
+  }
+
+  /** A task finished. Only a workflow's completion needs an answer. */
+  taskNotified(taskId: string, sessionId: string, status: string): void {
+    const task = this.tasks.get(taskId);
+    if (task?.sessionId === sessionId && task.status === 'running') {
+      task.status = status;
+      this.session(sessionId).queued++;
+      this.answerOwed = true;
+    }
+  }
+
+  /** A replayed user message. With a task id, the CLI handed that completion to the running turn. */
+  replayed(sessionId: string, taskId: string | undefined): void {
+    this.replaysUserMessages = true;
+    const session = this.session(sessionId);
+    const running = session.turns[session.turns.length - 1];
+    if (
+      running &&
+      taskId !== undefined &&
+      this.tasks.get(taskId)?.sessionId === sessionId &&
+      !this.handed.has(taskId) &&
+      session.queued > 0
+    ) {
+      // A completion is handed over once, however often its id is seen.
+      this.handed.add(taskId);
+      session.queued--;
+      running.read++;
+    }
+  }
+
+  /** Whether `msg` is a main-agent result, and not the follow-up to some other background task. */
+  result(msg: SDKResultMessage, isBackgroundTaskResult: boolean): boolean {
+    const session = this.session(msg.session_id);
+    if (session.turns.length === 0) {
+      // A stream with no turn boundary before this result starts the turn here.
+      this.turnStarted(msg.session_id, 'init');
+    }
+    const turn = session.turns.shift() as WorkflowTurn;
+    // A workflow's answer is tagged task-notification, like the follow-up to any other
+    // background task the session started. Accept only the session-task producer, never
+    // a peer or child-session result.
+    // `producer` is emitted by CLI 2.1.284, ahead of the SDK origin type.
+    const isSessionTask =
+      msg.origin?.kind === 'task-notification' &&
+      !msg.origin.subkind &&
+      'producer' in msg.origin &&
+      msg.origin.producer === 'session-task';
+    // Completions that wake a turn together share one model call, whatever kind of
+    // background task each came from. Every one still gets a result: all but the last
+    // are empty with `num_turns: 0`, each after an `init` of its own. A completion that
+    // was reported before one of them was dequeued is part of the batch.
+    if (
+      isSessionTask &&
+      msg.subtype === 'success' &&
+      msg.num_turns === 0 &&
+      !msg.result &&
+      msg.structured_output === undefined
+    ) {
+      session.carried = {
+        given: turn.given + session.queued,
+        read: turn.read,
+        placeholders: turn.placeholders + 1,
+      };
+      session.queued = 0;
+      return false;
+    }
+    const answersWorkflow = isSessionTask && turn.given + turn.read > 0;
+    if (isBackgroundTaskResult && !answersWorkflow) {
+      // Not an answer, so what the turn was given still needs one.
+      session.queued += turn.given + turn.read;
+      return false;
+    }
+    this.answerOwed = false;
+    // An answer covers the completion it was written for and one for each empty result
+    // before it. Any other completion the turn started with gets a turn of its own.
+    const covered = answersWorkflow ? turn.placeholders + 1 : turn.given;
+    session.queued += Math.max(0, turn.given - covered);
+    return true;
+  }
+
+  /** Why a successful final result does not answer the workflows that were launched. */
+  incompleteReason(finalMsg: SDKResultMessage): string | undefined {
+    if (this.tasks.size === 0 || finalMsg.subtype !== 'success') {
+      return undefined;
+    }
+    const unfinished = [...this.tasks].find(([, task]) => task.status !== 'completed');
+    if (unfinished) {
+      return unfinished[1].status === 'running'
+        ? `workflow task ${unfinished[0]} never reported completion`
+        : `workflow task ${unfinished[0]} ended as ${unfinished[1].status}`;
+    }
+    const unanswered = this.replaysUserMessages
+      ? [...this.sessions.values()].some(
+          (session) =>
+            session.queued > 0 ||
+            [...session.turns, ...(session.carried ? [session.carried] : [])].some(
+              (turn) => turn.given + turn.read > 0,
+            ),
+        )
+      : this.answerOwed;
+    if (unanswered) {
+      return 'the stream ended before the main agent answered the workflow';
+    }
+    if (!finalMsg.result && finalMsg.structured_output === undefined) {
+      return 'the final main-agent response was empty';
+    }
+    return undefined;
+  }
+}
+
 function deriveSkillCalls(toolCalls: ToolCallEntry[]): SkillCallEntry[] {
   return toolCalls
     .filter((toolCall) => toolCall.name === 'Skill')
@@ -338,7 +543,7 @@ function deriveSkillCalls(toolCalls: ToolCallEntry[]): SkillCallEntry[] {
  * Claude Agent SDK Provider
  *
  * This provider requires the @anthropic-ai/claude-agent-sdk package to be installed separately:
- *   npm install promptfoo @anthropic-ai/claude-agent-sdk@^0.3.273
+ *   npm install promptfoo @anthropic-ai/claude-agent-sdk@^0.3.284
  *
  * Two default configurations:
  * - No working_dir: Runs in temp directory with no tools - behaves like plain chat API
@@ -371,7 +576,7 @@ export const CLAUDE_CODE_MODEL_ALIASES = [
 ];
 
 // Accept compatible 0.3.x updates without requiring a Promptfoo release for each SDK patch.
-const CLAUDE_AGENT_SDK_RANGE = '^0.3.273';
+const CLAUDE_AGENT_SDK_RANGE = '^0.3.284';
 
 /**
  * Helper to load the Claude Agent SDK ESM module
@@ -1763,7 +1968,13 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       permissionPromptToolName: config.permission_prompt_tool_name,
       executable: config.executable,
       executableArgs: config.executable_args,
-      extraArgs: config.extra_args,
+      // A workflow completion that a running turn reads is only visible as a replayed
+      // user message, which result selection needs to tell it from one still queued.
+      // The flag goes last so `extra_args` cannot turn it off.
+      extraArgs:
+        Array.isArray(tools) && !tools.includes('Workflow')
+          ? config.extra_args
+          : { ...config.extra_args, 'replay-user-messages': null },
       pathToClaudeCodeExecutable: config.path_to_claude_code_executable
         ? safeResolve(basePath, config.path_to_claude_code_executable)
         : undefined,
@@ -1849,6 +2060,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
             {
               prompt,
               cacheKeyQueryOptions,
+              resultSelectionVersion: 2,
               ...(credentialCacheScope ? { credentialCacheScope } : {}),
               ...(config.ask_user_question ? { ask_user_question: config.ask_user_question } : {}),
             },
@@ -2179,9 +2391,13 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
           let lastResultMsg: SDKResultMessage | undefined;
           let lastMainResultMsg: SDKResultMessage | undefined;
           let resultMsgCount = 0;
+          const workflows = new WorkflowAnswers();
 
           for await (const msg of res) {
             if (msg.type === 'assistant') {
+              if (msg.parent_tool_use_id === null) {
+                workflows.turnStarted(msg.session_id, 'message');
+              }
               const turnIndex = emitTurnSpan(msg);
               // Extract tool_use content blocks from assistant messages
               for (const block of msg.message.content) {
@@ -2211,6 +2427,14 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
             } else if (msg.type === 'user') {
               // Extract tool_result content blocks and match to tool calls
               const content = msg.message?.content;
+              if ('isReplay' in msg && msg.isReplay) {
+                workflows.replayed(
+                  msg.session_id,
+                  msg.origin?.kind === 'task-notification'
+                    ? taskNotificationTaskId(content)
+                    : undefined,
+                );
+              }
               if (Array.isArray(content)) {
                 for (const block of content) {
                   if (block.type === 'tool_result') {
@@ -2237,6 +2461,19 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
                   }
                 }
               }
+            } else if (msg.type === 'system' && msg.subtype === 'task_started') {
+              const tool = msg.tool_use_id ? toolCallsMap.get(msg.tool_use_id) : undefined;
+              if (
+                msg.task_type === 'local_workflow' &&
+                tool?.name === 'Workflow' &&
+                !tool.parentToolUseId
+              ) {
+                workflows.taskStarted(msg.task_id, msg.session_id);
+              }
+            } else if (msg.type === 'system' && msg.subtype === 'task_notification') {
+              workflows.taskNotified(msg.task_id, msg.session_id, msg.status);
+            } else if (msg.type === 'system' && msg.subtype === 'init') {
+              workflows.turnStarted(msg.session_id, 'init');
             } else if (msg.type === 'result') {
               lastResultMsg = msg;
               resultMsgCount++;
@@ -2250,7 +2487,9 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
               const isBackgroundTaskResult =
                 msg.origin?.kind === 'task-notification' &&
                 !('subkind' in msg.origin && msg.origin.subkind === 'scheduled-trigger');
-              if (!isBackgroundTaskResult) {
+              // A Workflow completion wakes the main session for another turn, and
+              // the result of a turn that was given one is the main-agent answer too.
+              if (workflows.result(msg, isBackgroundTaskResult)) {
                 lastMainResultMsg = msg;
               }
             }
@@ -2430,6 +2669,20 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
 
           const toolCallsArray = Array.from(toolCallsMap.values());
           const skillCalls = deriveSkillCalls(toolCallsArray);
+
+          const incompleteReason = workflows.incompleteReason(finalMsg);
+          if (incompleteReason) {
+            return {
+              error: `Claude Agent SDK workflow did not complete with a final main-agent response: ${incompleteReason}`,
+              tokenUsage,
+              cost,
+              sessionId,
+              metadata: {
+                toolCalls: toolCallsArray,
+                workflowTasks: workflows.taskStatuses,
+              },
+            };
+          }
 
           // Aborted terminal reasons mean the agent stopped unexpectedly mid-run.
           // Mark the provider span ERROR directly — without poisoning the

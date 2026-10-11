@@ -12,7 +12,7 @@ cd claude-agent-sdk
 Install the Claude Agent SDK:
 
 ```bash
-npm install promptfoo @anthropic-ai/claude-agent-sdk@^0.3.273
+npm install promptfoo @anthropic-ai/claude-agent-sdk@^0.3.284
 ```
 
 Export your Anthropic API key as `ANTHROPIC_API_KEY`:
@@ -22,6 +22,14 @@ export ANTHROPIC_API_KEY=your_api_key_here
 ```
 
 ## Examples
+
+### Dynamic Workflows
+
+`./dynamic-workflows/` asks Claude to verify calculations with independent agents and checks both the final answer and the `Workflow` tool call.
+
+```bash
+promptfoo eval -c dynamic-workflows/promptfooconfig.yaml --no-cache
+```
 
 ### Basic Usage
 

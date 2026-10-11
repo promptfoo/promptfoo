@@ -28,20 +28,34 @@ function getScopedCustomHeaders(env?: EnvOverrides): string | undefined {
 }
 
 /**
- * Parse ANTHROPIC_CUSTOM_HEADERS the same way the Anthropic SDK does
- * (newline-separated `Name: value` lines) and map each header name to null so
- * the SDK omits it. Providers that reuse the SDK against Anthropic-compatible
- * third-party endpoints use this to keep Anthropic-scoped headers (often
- * gateway/proxy secrets) off foreign hosts.
+ * Every header ANTHROPIC_CUSTOM_HEADERS adds to requests, parsed the same way the
+ * Anthropic SDK does (newline-separated `Name: value` lines).
+ */
+export function getAnthropicEnvHeaders(env?: EnvOverrides): Record<string, string> {
+  return {
+    ...parseAnthropicCustomHeaders(process.env.ANTHROPIC_CUSTOM_HEADERS),
+    ...parseAnthropicCustomHeaders(getScopedCustomHeaders(env)),
+  };
+}
+
+/**
+ * The ANTHROPIC_CUSTOM_HEADERS headers a client built here sends. A value scoped to
+ * the provider or the config replaces the process one; it does not add to it.
+ */
+export function getActiveAnthropicEnvHeaders(env?: EnvOverrides): Record<string, string> {
+  return parseAnthropicCustomHeaders(
+    getScopedCustomHeaders(env) ?? process.env.ANTHROPIC_CUSTOM_HEADERS,
+  );
+}
+
+/**
+ * Map each ANTHROPIC_CUSTOM_HEADERS header name to null so the SDK omits it.
+ * Providers that reuse the SDK against Anthropic-compatible third-party
+ * endpoints use this to keep Anthropic-scoped headers (often gateway/proxy
+ * secrets) off foreign hosts.
  */
 export function getAnthropicEnvHeaderSuppressions(env?: EnvOverrides): Record<string, null> {
-  const scopedHeaders = getScopedCustomHeaders(env);
-  return Object.fromEntries(
-    Object.keys({
-      ...parseAnthropicCustomHeaders(process.env.ANTHROPIC_CUSTOM_HEADERS),
-      ...parseAnthropicCustomHeaders(scopedHeaders),
-    }).map((name) => [name, null]),
-  );
+  return Object.fromEntries(Object.keys(getAnthropicEnvHeaders(env)).map((name) => [name, null]));
 }
 
 /**

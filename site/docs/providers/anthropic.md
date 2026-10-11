@@ -1195,5 +1195,6 @@ We provide several example implementations demonstrating Claude's capabilities:
 #### Agentic Evaluations
 
 - [Claude Agent SDK](/docs/providers/claude-agent-sdk/) - For agentic evals with file access, tool use, and MCP servers
+- [Claude Managed Agents](/docs/providers/claude-managed-agents/) - For agents and dynamic workflows hosted by Anthropic
 
 For more examples and general usage patterns, visit our [examples directory](https://github.com/promptfoo/promptfoo/tree/main/examples) on GitHub.

@@ -975,7 +975,7 @@ for (const result of results) {
     await runChecks('incompatible');
     installConsumerPackages(
       'install supported coding SDKs',
-      ['@openai/codex-sdk@^0.156.1', '@anthropic-ai/claude-agent-sdk@^0.3.273'],
+      ['@openai/codex-sdk@^0.156.1', '@anthropic-ai/claude-agent-sdk@^0.3.284'],
       consumerDir,
       npmEnv,
     );

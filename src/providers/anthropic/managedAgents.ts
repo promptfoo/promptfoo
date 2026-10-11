@@ -1,0 +1,1247 @@
+import Anthropic from '@anthropic-ai/sdk';
+import logger from '../../logger';
+import {
+  buildChatSpanContext,
+  extractProviderResponseAttributes,
+  sanitizeBody,
+  withGenAISpan,
+} from '../../tracing/genaiTracer';
+import { renderVarsInObject } from '../../util/render';
+import { isCredentialHeader } from '../../util/sanitizer';
+import { sleepWithAbort } from '../../util/time';
+import {
+  AnthropicGenericProvider,
+  getActiveAnthropicEnvHeaders,
+  getAnthropicEnvHeaders,
+} from './generic';
+import type { AgentCreateParams } from '@anthropic-ai/sdk/resources/beta/agents/agents';
+import type { EnvironmentCreateParams } from '@anthropic-ai/sdk/resources/beta/environments/environments';
+import type { BetaManagedAgentsSessionEvent } from '@anthropic-ai/sdk/resources/beta/sessions/events';
+import type {
+  BetaManagedAgentsSessionUsage,
+  SessionCreateParams,
+} from '@anthropic-ai/sdk/resources/beta/sessions/sessions';
+
+import type { EnvOverrides } from '../../contracts/env';
+import type { ProviderResponse } from '../../contracts/providers';
+import type { CallApiContextParams, CallApiOptionsParams } from '../../types/providers';
+import type { AnthropicBaseOptions } from './types';
+
+// The public October 2026 workflow API is newer than the pinned SDK's types, which
+// gain it in @anthropic-ai/sdk 0.133.0. Until that version is adopted this extension
+// stays local; request bodies are forwarded by the SDK unchanged.
+type AgentRoster = NonNullable<AgentCreateParams['multiagent']>['agents'];
+type AgentDelegation =
+  | { type: 'disabled' }
+  | {
+      type: 'enabled';
+      inline_agents?: { type: 'enabled' | 'disabled' };
+      predefined_agents?: AgentRoster;
+    };
+type AgentDefinition = Omit<AgentCreateParams, 'multiagent' | 'betas' | 'workspace_id'> & {
+  multiagent?:
+    | AgentCreateParams['multiagent']
+    | {
+        type: 'multiagent_20261001';
+        workflows?: AgentDelegation;
+        subagents?: AgentDelegation;
+        advisor?: { type: 'disabled' } | { type: 'enabled'; model: string };
+      };
+};
+type WorkflowEvent = {
+  id: string;
+  type: `workflow_run.${string}`;
+  workflow_run_id: string | null;
+  name?: string;
+  result?: { type: string; error?: { type: string; message: string } };
+  error?: { type: string; message: string };
+};
+type WorkflowRun = { id: string; name?: string; status: string; result?: WorkflowEvent['result'] };
+type SessionEvent = BetaManagedAgentsSessionEvent | WorkflowEvent;
+
+class SessionState {
+  output?: string;
+  usage?: BetaManagedAgentsSessionUsage;
+  completed = false;
+  sessionError?: string;
+  stopReason?: string;
+  runs = new Map<string, WorkflowRun>();
+  openRuns = new Set<string>();
+  /** A run has ended and the agent has not yet finished a turn on its ending notice. */
+  noticeOwed = false;
+  /** The agent gave up on a turn, but an ending notice can still start another. */
+  gaveUp = false;
+  /** Workflow starts the server refused. No run exists for these to end. */
+  startErrors: { type: string; message: string }[] = [];
+  toolCalls: { id: string; name: string; input: unknown; output?: unknown; is_error?: boolean }[] =
+    [];
+
+  recordWorkflow(event: WorkflowEvent): void {
+    const id = event.workflow_run_id;
+    if (!id) {
+      if (event.type === 'workflow_run.error' && event.error) {
+        this.startErrors.push(event.error);
+      }
+      return;
+    }
+    const run = this.runs.get(id) ?? { id, status: 'created' };
+    if (event.name) {
+      run.name = event.name;
+    }
+    if (
+      ['workflow_run.created', 'workflow_run.status_running', 'workflow_run.status_idle'].includes(
+        event.type,
+      )
+    ) {
+      this.openRuns.add(id);
+      run.status = event.type.replace('workflow_run.', '').replace('status_', '');
+    } else if (event.type === 'workflow_run.status_ended') {
+      this.openRuns.delete(id);
+      run.status = 'ended';
+      run.result = event.result;
+      this.noticeOwed = true;
+      // The answer is what the agent says once it has been told how the run ended.
+      this.output = undefined;
+    }
+    this.runs.set(id, run);
+  }
+
+  /** Why the session last stopped, as an error message reports it. */
+  get stopDetail(): string {
+    return `${this.stopReason ?? 'unknown'}${this.sessionError ? ` (${this.sessionError})` : ''}`;
+  }
+
+  stoppedError(): Error {
+    return new Error(`Claude Managed Agents stopped: ${this.stopDetail}`);
+  }
+
+  record(event: SessionEvent): void {
+    if (event.type.startsWith('workflow_run.')) {
+      this.recordWorkflow(event as WorkflowEvent);
+      return;
+    }
+    switch (event.type) {
+      case 'agent.message':
+        this.output =
+          event.content
+            .filter((block) => block.type === 'text')
+            .map((block) => block.text)
+            .join('\n') || undefined;
+        break;
+      case 'agent.tool_use':
+      case 'agent.mcp_tool_use':
+      case 'agent.custom_tool_use':
+        this.toolCalls.push({ id: event.id, name: event.name, input: event.input });
+        if (event.type === 'agent.custom_tool_use' || event.evaluated_permission === 'ask') {
+          throw new Error(
+            `Claude Managed Agents requires client action for tool event ${event.id}; custom tools and permission confirmations are not supported`,
+          );
+        }
+        break;
+      case 'agent.tool_result':
+      case 'agent.mcp_tool_result': {
+        const toolUseId =
+          event.type === 'agent.mcp_tool_result' ? event.mcp_tool_use_id : event.tool_use_id;
+        const call = this.toolCalls.find((tool) => tool.id === toolUseId);
+        if (call) {
+          call.output = event.content;
+          call.is_error = event.is_error ?? false;
+        }
+        break;
+      }
+      case 'session.usage':
+        this.usage = event.usage;
+        break;
+      case 'session.error':
+        // Transient errors can be followed by automatic rescheduling.
+        this.sessionError = event.error.type;
+        break;
+      case 'session.status_running':
+        this.gaveUp = false;
+        break;
+      case 'session.status_idle':
+        this.stopReason = event.stop_reason?.type;
+        // With a run open, or one whose ending notice the agent has not answered, the
+        // session can go on by itself after the agent gives up on a turn.
+        if (
+          this.stopReason === 'retries_exhausted' &&
+          (this.openRuns.size > 0 || this.noticeOwed)
+        ) {
+          this.gaveUp = true;
+          // What the agent wrote in a turn it gave up on is not its answer.
+          this.output = undefined;
+          break;
+        }
+        if (this.stopReason !== 'end_turn') {
+          throw this.stoppedError();
+        }
+        this.noticeOwed = false;
+        this.completed = this.openRuns.size === 0;
+        break;
+      case 'session.status_terminated':
+        throw new Error(
+          `Claude Managed Agents session terminated before completion${this.sessionError ? ` (${this.sessionError})` : ''}`,
+        );
+    }
+  }
+
+  finalOutput(): string {
+    if (!this.completed) {
+      throw new Error('Claude Managed Agents event stream ended before the session completed');
+    }
+    // A failed run or a refused start explains a missing answer, so it is reported first.
+    // The server writes this error text itself; it carries no content from a run.
+    const failedRun = [...this.runs.values()].find((run) => run.result?.type !== 'completed');
+    if (failedRun) {
+      const cause = failedRun.result?.error;
+      throw new Error(
+        `Claude Managed Agents workflow ${failedRun.id} ended with ${failedRun.result?.type ?? 'unknown result'}${cause ? ` (${cause.type}: ${cause.message})` : ''}`,
+      );
+    }
+    const refused = this.startErrors[0];
+    if (refused) {
+      throw new Error(
+        `Claude Managed Agents could not start a workflow (${refused.type}: ${refused.message})`,
+      );
+    }
+    if (this.output === undefined) {
+      throw new Error('Claude Managed Agents completed without a text response');
+    }
+    return this.output;
+  }
+}
+
+interface ManagedAgentsOptions extends AnthropicBaseOptions {
+  agent_id?: string;
+  agent_version?: number;
+  agent?: AgentDefinition;
+  environment_id?: string;
+  environment?: Omit<EnvironmentCreateParams, 'betas' | 'workspace_id'>;
+  session?: Pick<SessionCreateParams, 'budget' | 'resources' | 'vault_ids' | 'metadata' | 'title'>;
+  workspace_id?: string;
+  timeoutMs?: number;
+  cleanupTimeoutMs?: number;
+  retainSession?: boolean;
+}
+
+function validateDuration(name: string, value: number | undefined): void {
+  if (
+    value !== undefined &&
+    (!Number.isSafeInteger(value) || value <= 0 || value > 2_147_483_647)
+  ) {
+    throw new Error(`${name} must be a positive integer no greater than 2147483647`);
+  }
+}
+
+/** Checked when the provider is built, and again once a call has rendered its templates. */
+function validateConfig(config: ManagedAgentsOptions): void {
+  if (Boolean(config.agent_id) === Boolean(config.agent)) {
+    throw new Error('Claude Managed Agents requires exactly one of agent_id or agent');
+  }
+  if (Boolean(config.environment_id) === Boolean(config.environment)) {
+    throw new Error('Claude Managed Agents requires exactly one of environment_id or environment');
+  }
+  if (config.agent && (!config.agent.name || !config.agent.model)) {
+    throw new Error('Claude Managed Agents agent requires name and model');
+  }
+  if (config.environment && !config.environment.name) {
+    throw new Error('Claude Managed Agents environment requires name');
+  }
+  if (config.environment?.config?.type === 'self_hosted') {
+    throw new Error(SELF_HOSTED_ERROR);
+  }
+  if (
+    config.agent_version !== undefined &&
+    (!config.agent_id || !Number.isSafeInteger(config.agent_version) || config.agent_version < 1)
+  ) {
+    throw new Error('agent_version requires agent_id and must be a positive integer');
+  }
+  validateDuration('timeoutMs', config.timeoutMs);
+  validateDuration('cleanupTimeoutMs', config.cleanupTimeoutMs);
+}
+
+const SECRET_KEY_PATTERN = /token|secret|passw|credential|authorization|api_?key/i;
+const CREATE_TIMEOUT_MS = 60_000;
+// Connections in a row that end at once with nothing new before the session is given up on.
+const MAX_SILENT_CONNECTIONS = 3;
+// A stream that stayed open this long before it dropped was being served, not refused.
+const STREAM_SERVED_MS = 5_000;
+// Connection failures that happen before a request is sent: no name, route, or TLS session.
+const UNSENT_ERROR_CODES = new Set([
+  'ECONNREFUSED',
+  'ENOTFOUND',
+  'EAI_AGAIN',
+  'EHOSTUNREACH',
+  'ENETUNREACH',
+  'EPROTO',
+]);
+const isUnsentErrorCode = (code: string) =>
+  UNSENT_ERROR_CODES.has(code) ||
+  code.startsWith('ERR_TLS_') ||
+  code.startsWith('UNABLE_TO_') ||
+  code.includes('CERT');
+// How long a session that gave up on a turn has to start the next one by itself.
+const RESUME_GRACE_MS = 30_000;
+const SELF_HOSTED_ERROR =
+  'Claude Managed Agents requires a cloud environment; local tool execution is not supported';
+
+/** The view of the session was lost. The session itself keeps running. */
+class StreamInterrupted extends Error {}
+
+/** Tells events that a reconnect delivers again from new ones. */
+class SeenEvents {
+  private readonly ids = new Set<string>();
+  private fresh = 0;
+
+  /** False for an event already delivered. Only persisted events carry an id. */
+  add(event: SessionEvent): boolean {
+    const id = 'id' in event ? event.id : undefined;
+    if (typeof id !== 'string' || !id) {
+      return true;
+    }
+    if (this.ids.has(id)) {
+      return false;
+    }
+    this.ids.add(id);
+    this.fresh++;
+    return true;
+  }
+
+  /** How many new persisted events arrived since this was last asked. */
+  takeFresh(): number {
+    const count = this.fresh;
+    this.fresh = 0;
+    return count;
+  }
+}
+
+type ArchivableKind = 'session' | 'agent' | 'environment';
+type CallParams = { workspace_id?: string; betas?: string[] };
+type CleanupRequest = Anthropic.RequestOptions & { signal: AbortSignal };
+type StreamCall = {
+  params: CallParams;
+  read: Anthropic.RequestOptions;
+  signal: AbortSignal;
+  /** Told when live events start to arrive, and when the connection carrying them is lost. */
+  onLive: (live: boolean) => void;
+};
+
+/** Adds a credential as configured and as sent: a header value loses the whitespace around it. */
+function addSecret(found: Set<string>, value: string, minLength: number): void {
+  for (const form of [value, value.trim()]) {
+    if (form.length >= minLength) {
+      found.add(form);
+    }
+  }
+}
+
+/** Collects credential values from a rendered config so error text can be scrubbed of them. */
+function collectSecrets(value: unknown, key: string, found: Set<string>, depth = 0): Set<string> {
+  if (typeof value === 'string') {
+    if (SECRET_KEY_PATTERN.test(key)) {
+      addSecret(found, value, 4);
+    }
+  } else if (value && typeof value === 'object' && depth < 16) {
+    for (const [childKey, child] of Object.entries(value)) {
+      collectSecrets(child, Array.isArray(value) ? key : childKey, found, depth + 1);
+    }
+  }
+  return found;
+}
+
+/**
+ * A caller's own `anthropic-beta` header would replace the one every Managed Agents
+ * request sets. Its values are passed as `betas` instead, which the SDK adds to its own.
+ */
+function splitBetaHeader(headers: Record<string, string> = {}): {
+  headers: Record<string, string>;
+  betas: string[];
+} {
+  const rest: Record<string, string> = {};
+  const betas: string[] = [];
+  for (const [name, value] of Object.entries(headers)) {
+    if (name.toLowerCase() === 'anthropic-beta') {
+      betas.push(
+        ...String(value)
+          .split(',')
+          .map((beta) => beta.trim())
+          .filter(Boolean),
+      );
+    } else {
+      rest[name] = value;
+    }
+  }
+  return { headers: rest, betas };
+}
+
+/** Every credential one call sends: the API key, header values, and config secrets. */
+function callSecrets(
+  config: ManagedAgentsOptions,
+  apiKey: string | undefined,
+  envHeaders: Record<string, string>,
+): Set<string> {
+  const secrets = collectSecrets(config, '', new Set<string>());
+  const headers: [string, unknown][] = [
+    ['x-api-key', apiKey],
+    ...Object.entries(envHeaders),
+    ...Object.entries(config.headers ?? {}),
+  ];
+  for (const [name, value] of headers) {
+    if (typeof value !== 'string' || name.toLowerCase() === 'anthropic-beta') {
+      continue;
+    }
+    // A server that echoes a credential leaves out a scheme such as "Bearer".
+    for (const candidate of [value, value.replace(/^\S+\s+/, '')]) {
+      // Any header may authenticate a gateway. Short values are only worth
+      // removing, at the cost of garbling the text, when the name says they do.
+      addSecret(secrets, candidate, isCredentialHeader(name, candidate) ? 4 : 8);
+    }
+  }
+  return secrets;
+}
+
+/**
+ * How a failed request can still end well. For archival, a state conflict clears once
+ * the session stops running. A lost response, rate limit, or server error may have
+ * taken effect anyway, or may clear on retry. Anything else is final.
+ */
+function failureKind(error: unknown): 'conflict' | 'transient' | undefined {
+  if (!(error instanceof Anthropic.APIError)) {
+    return undefined;
+  }
+  const { status } = error;
+  if (status === 400 || status === 409) {
+    return 'conflict';
+  }
+  return status === undefined || status === 429 || status >= 500 ? 'transient' : undefined;
+}
+
+/** Whether a request that got no response can still have reached the server. */
+function mayHaveArrived(error: unknown): boolean {
+  if (!(error instanceof Anthropic.APIError) || error.status !== undefined) {
+    return false;
+  }
+  let cause: unknown = error;
+  for (let depth = 0; depth < 4 && cause && typeof cause === 'object'; depth++) {
+    const { code, cause: next } = cause as { code?: unknown; cause?: unknown };
+    if (typeof code === 'string' && isUnsentErrorCode(code)) {
+      return false;
+    }
+    cause = next;
+  }
+  return true;
+}
+
+/** Removes the credentials this call sent, then anything else shaped like one. */
+function scrub(text: string, secrets: Iterable<string>): string {
+  let scrubbed = text;
+  for (const secret of secrets) {
+    scrubbed = scrubbed.split(secret).join('[REDACTED]');
+  }
+  return sanitizeBody(scrubbed).slice(0, 500);
+}
+
+/**
+ * Reports the API's own reason, which is what makes a rejected agent, environment,
+ * or session definition fixable. Error text can echo request values, such as a
+ * header value the runtime rejects, so it is scrubbed of credentials first.
+ */
+function describeError(error: unknown, secrets: Iterable<string>): string {
+  if (!(error instanceof Anthropic.APIError)) {
+    return error instanceof Error
+      ? scrub(error.message, secrets)
+      : 'Claude Managed Agents request failed';
+  }
+  if (error.status === undefined) {
+    const cause =
+      error instanceof Anthropic.APIConnectionTimeoutError
+        ? 'timed out'
+        : error instanceof Anthropic.APIUserAbortError
+          ? 'aborted'
+          : 'connection error';
+    return `Claude Managed Agents API request failed (${cause})`;
+  }
+  const detail = (error.error as { error?: { type?: unknown; message?: unknown } } | undefined)
+    ?.error;
+  const reason = scrub(
+    [detail?.type, detail?.message].filter((part) => typeof part === 'string').join(': '),
+    secrets,
+  );
+  return `Claude Managed Agents API request failed (HTTP ${error.status})${reason ? `: ${reason}` : ''}`;
+}
+
+/** What a call reports when it was cancelled or ran out of time. */
+/** The response headers the scheduler paces a retry by. No other header is kept with results. */
+function rateLimitHeaders(headers: Headers | undefined): Record<string, string> | undefined {
+  const kept: Record<string, string> = {};
+  headers?.forEach((value, name) => {
+    if (name.startsWith('retry-after') || name.includes('ratelimit')) {
+      kept[name] = value;
+    }
+  });
+  return Object.keys(kept).length > 0 ? kept : undefined;
+}
+
+function abortReason(cancelled: boolean, timeoutMs: number, state: SessionState): string {
+  if (cancelled) {
+    return 'Claude Managed Agents invocation aborted';
+  }
+  const waiting = state.gaveUp
+    ? ` waiting for the session to resume after ${state.stopDetail}`
+    : '';
+  return `Claude Managed Agents timed out after ${timeoutMs}ms${waiting}`;
+}
+
+function parseEvent(data: string[]): SessionEvent {
+  let event: SessionEvent | { type: 'error'; error?: { type?: unknown } };
+  try {
+    event = JSON.parse(data.join('\n'));
+  } catch {
+    throw new Error('Claude Managed Agents stream contains invalid JSON');
+  }
+  if (!event || typeof event.type !== 'string') {
+    throw new Error('Claude Managed Agents stream contains an invalid event');
+  }
+  if (event.type === 'error') {
+    const kind = typeof event.error?.type === 'string' ? ` (${event.error.type})` : '';
+    throw new StreamInterrupted(`the stream reported an API error${kind}`);
+  }
+  return event;
+}
+
+function applyUsage(response: ProviderResponse, usage?: BetaManagedAgentsSessionUsage): void {
+  const metadata = response.metadata!;
+  if (usage) {
+    metadata.usage = usage;
+    const cacheRead = usage.cache_read_input_tokens ?? 0;
+    const cacheWrite =
+      (usage.cache_creation?.ephemeral_5m_input_tokens ?? 0) +
+      (usage.cache_creation?.ephemeral_1h_input_tokens ?? 0);
+    const promptTokens =
+      usage.input_tokens === undefined ? undefined : usage.input_tokens + cacheRead + cacheWrite;
+    response.tokenUsage = {
+      prompt: promptTokens,
+      completion: usage.output_tokens,
+      total:
+        promptTokens !== undefined && usage.output_tokens !== undefined
+          ? promptTokens + usage.output_tokens
+          : undefined,
+      // `cached` is reserved for responses replayed from Promptfoo's own cache.
+      completionDetails: {
+        cacheReadInputTokens: cacheRead,
+        cacheCreationInputTokens: cacheWrite,
+      },
+    };
+    if (usage.list_cost?.currency === 'USD' && /^\d+$/.test(usage.list_cost.amount)) {
+      response.cost = Number(usage.list_cost.amount) / 100;
+    }
+  }
+}
+
+/**
+ * The SDK's SSE allowlist drops workflow_run.* and session.usage events, so the raw
+ * response is read here. Returns when the connection closes; a connection that fails
+ * or closes part-way through an event throws StreamInterrupted.
+ */
+async function* readEvents(response: Response, signal: AbortSignal): AsyncGenerator<SessionEvent> {
+  if (!response.body) {
+    throw new Error('Claude Managed Agents stream has no body');
+  }
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let data: string[] = [];
+  let eventSize = 0;
+  const cancel = () => {
+    void reader.cancel().catch(() => {});
+  };
+  signal.addEventListener('abort', cancel, { once: true });
+  try {
+    while (true) {
+      signal.throwIfAborted();
+      const { done, value } = await reader.read().catch((error: unknown) => {
+        signal.throwIfAborted();
+        throw new StreamInterrupted(
+          `the connection failed: ${error instanceof Error ? error.message : 'unknown error'}`,
+        );
+      });
+      signal.throwIfAborted();
+      buffer += decoder.decode(value, { stream: !done });
+      let newline: RegExpExecArray | null;
+      while ((newline = /\r\n|\r|\n/.exec(buffer))) {
+        // A CR at the end of a chunk may be the first half of CRLF.
+        if (!done && newline[0] === '\r' && newline.index === buffer.length - 1) {
+          break;
+        }
+        const line = buffer.slice(0, newline.index);
+        buffer = buffer.slice(newline.index + newline[0].length);
+        if (line.startsWith('data:')) {
+          const text = line.slice(5).replace(/^ /, '');
+          eventSize += text.length;
+          data.push(text);
+        } else if (line === '') {
+          if (data.length) {
+            yield parseEvent(data);
+          }
+          data = [];
+          eventSize = 0;
+        }
+        if (eventSize > 16 * 1024 * 1024) {
+          throw new Error('Claude Managed Agents stream event exceeds 16 MiB');
+        }
+      }
+      if (buffer.length + eventSize > 16 * 1024 * 1024) {
+        throw new Error('Claude Managed Agents stream event exceeds 16 MiB');
+      }
+      if (done) {
+        if (buffer.trim() || data.length) {
+          throw new StreamInterrupted('the stream ended with an incomplete event');
+        }
+        return;
+      }
+    }
+  } finally {
+    signal.removeEventListener('abort', cancel);
+    await reader.cancel().catch(() => {});
+    reader.releaseLock();
+  }
+}
+
+/** Every invocation owns a fresh hosted session; responses are deliberately not cached. */
+export class AnthropicManagedAgentsProvider extends AnthropicGenericProvider {
+  declare config: ManagedAgentsOptions;
+  private readonly loggedErrors = new Set<string>();
+  /** Existing environments already confirmed to be cloud ones. */
+  private readonly cloudEnvironments = new Set<string>();
+
+  constructor(
+    options: {
+      config?: ManagedAgentsOptions;
+      id?: string;
+      label?: string;
+      env?: EnvOverrides;
+    } = {},
+  ) {
+    super('managed-agents', options);
+    validateConfig(this.config);
+  }
+
+  id(): string {
+    return `anthropic:managed-agents${this.config.agent_id ? `:${this.config.agent_id}` : ''}`;
+  }
+
+  async callApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
+    return withGenAISpan(
+      buildChatSpanContext({
+        system: 'anthropic',
+        model: this.modelName,
+        providerId: this.id(),
+        prompt,
+        context,
+      }),
+      () => this.runSession(prompt, context, options),
+      extractProviderResponseAttributes,
+    );
+  }
+
+  private async runSession(
+    prompt: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
+    const config = renderVarsInObject(this.config, context?.vars ?? {}) as ManagedAgentsOptions;
+    // Reported API error text is scrubbed of the credentials this call sends.
+    const secrets = callSecrets(config, this.apiKey, getAnthropicEnvHeaders(this.env));
+    const controller = new AbortController();
+    const timeoutMs = config.timeoutMs ?? 600_000;
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    const signal = options?.abortSignal
+      ? AbortSignal.any([controller.signal, options.abortSignal])
+      : controller.signal;
+    const state = new SessionState();
+    const metadata: Record<string, unknown> = { workflowRuns: [], toolCalls: state.toolCalls };
+    const response: ProviderResponse = { metadata, cached: false };
+    const { headers, betas: configBetas } = splitBetaHeader(config.headers);
+    // The client was built before this call's templates were rendered.
+    if (config.apiKey && config.apiKey !== this.apiKey) {
+      headers['x-api-key'] = config.apiKey;
+    }
+    // A beta set through ANTHROPIC_CUSTOM_HEADERS is a client default, which each
+    // request's own beta header replaces just the same.
+    const envBetas = splitBetaHeader(getActiveAnthropicEnvHeaders(this.env)).betas;
+    const betas = [...new Set([...envBetas, ...configBetas])];
+    const params = { workspace_id: config.workspace_id, ...(betas.length > 0 && { betas }) };
+    // Mutations must not be retried: a lost response can otherwise start duplicate paid runs.
+    const request = { signal, maxRetries: 0, headers };
+    // Reads repeat nothing, so the SDK may retry them.
+    const read = { signal, maxRetries: 2, headers };
+    // Giving up on a create in flight would discard the id of a resource the server
+    // still makes, leaving nothing to archive. Creates finish, bounded only by their
+    // own timeout, and then an abort or the call's deadline is honoured.
+    const createRequest = { maxRetries: 0, headers, timeout: CREATE_TIMEOUT_MS };
+    const create = async <T>(kind: string, send: () => Promise<T>): Promise<T> => {
+      try {
+        return await send();
+      } catch (error) {
+        // With no response, the server may still have made what was asked for.
+        if (mayHaveArrived(error)) {
+          metadata.unconfirmedCreate = kind;
+        }
+        throw error;
+      }
+    };
+    let agentId = config.agent_id;
+    let environmentId = config.environment_id;
+    let sessionId: string | undefined;
+    let stream: Response | undefined;
+    let promptSent = false;
+
+    try {
+      signal.throwIfAborted();
+      // A template can render to a value the constructor would have rejected.
+      validateConfig(config);
+      if (this.config.apiKey && !config.apiKey?.trim()) {
+        throw new Error('Claude Managed Agents apiKey rendered to an empty value');
+      }
+      if (config.environment_id) {
+        await this.requireCloudEnvironment(config.environment_id, params, read);
+      }
+      if (config.agent) {
+        const definition = { ...config.agent, ...params } as AgentCreateParams;
+        const agent = await create('agent', () =>
+          this.anthropic.beta.agents.create(definition, createRequest),
+        );
+        agentId = agent.id;
+        metadata.createdAgentId = agentId;
+        signal.throwIfAborted();
+      }
+      if (config.environment) {
+        const definition = { ...config.environment, ...params };
+        const environment = await create('environment', () =>
+          this.anthropic.beta.environments.create(definition, createRequest),
+        );
+        environmentId = environment.id;
+        metadata.createdEnvironmentId = environmentId;
+        signal.throwIfAborted();
+      }
+      const session = await create('session', () =>
+        this.anthropic.beta.sessions.create(
+          {
+            title: config.session?.title,
+            metadata: config.session?.metadata,
+            budget: config.session?.budget,
+            resources: config.session?.resources,
+            vault_ids: config.session?.vault_ids,
+            ...params,
+            agent: config.agent_version
+              ? { type: 'agent', id: agentId!, version: config.agent_version }
+              : agentId!,
+            environment_id: environmentId!,
+          },
+          createRequest,
+        ),
+      );
+      sessionId = session.id;
+      metadata.sessionId = sessionId;
+      metadata.agentId = agentId;
+      metadata.environmentId = environmentId;
+      signal.throwIfAborted();
+
+      // Streams do not replay history. Subscribe before sending the user's message.
+      stream = await this.anthropic.beta.sessions.events
+        .stream(sessionId, params, request)
+        .asResponse();
+      promptSent = true;
+      try {
+        await this.anthropic.beta.sessions.events.send(
+          sessionId,
+          {
+            ...params,
+            events: [{ type: 'user.message', content: [{ type: 'text', text: prompt }] }],
+          },
+          request,
+        );
+      } catch (error) {
+        // A 429 is the server declining the message, so nothing has run and the call
+        // can be made again. Any other failure may have delivered it.
+        promptSent = !(error instanceof Anthropic.APIError && error.status === 429);
+        throw error;
+      }
+
+      await this.followSession(sessionId, stream, state, { params, read, signal });
+      signal.throwIfAborted();
+      const output = state.finalOutput();
+      response.output = output;
+      // Authoritative totals include every workflow thread and hosted runtime cost.
+      // Telemetry failure must not discard the answer, but the call's deadline and
+      // cancellation cover this read like any other.
+      try {
+        state.usage = (await this.anthropic.beta.sessions.retrieve(sessionId, params, read)).usage;
+      } catch (error) {
+        signal.throwIfAborted();
+        metadata.usageError = describeError(error, secrets);
+      }
+    } catch (error) {
+      // Once the prompt may have reached the session, retrying the entire invocation
+      // could duplicate hosted side effects and billing. Before that, nothing has run.
+      if (promptSent) {
+        metadata.rateLimitRetryable = false;
+      }
+      if (error instanceof Anthropic.APIError && error.status !== undefined) {
+        const headers = rateLimitHeaders(error.headers);
+        metadata.http = { status: error.status, ...(headers && { headers }) };
+      }
+      response.error = signal.aborted
+        ? abortReason(options?.abortSignal?.aborted === true, timeoutMs, state)
+        : describeError(error, secrets);
+      // A 401, 403, or 404 aborts the eval before its result rows are shown.
+      if (metadata.http && !signal.aborted && !this.loggedErrors.has(response.error)) {
+        this.loggedErrors.add(response.error);
+        logger.error(response.error);
+      }
+    } finally {
+      clearTimeout(timer);
+      await stream?.body?.cancel().catch(() => {});
+      controller.abort();
+      metadata.workflowRuns = [...state.runs.values()];
+      metadata.openWorkflowRunIds = [...state.openRuns];
+      if (state.startErrors.length) {
+        metadata.workflowStartErrors = state.startErrors;
+      }
+      metadata.stopReason = state.stopReason;
+      const settledUsage = await this.cleanupResources(
+        config,
+        { params, headers, secrets },
+        { agentId, environmentId, sessionId },
+        response,
+      );
+      applyUsage(response, settledUsage ?? state.usage);
+    }
+    return response;
+  }
+
+  /** Nothing here runs a self-hosted environment's tools, so an existing one must be cloud. */
+  private async requireCloudEnvironment(
+    environmentId: string,
+    params: CallParams,
+    request: Anthropic.RequestOptions,
+  ): Promise<void> {
+    const key = `${params.workspace_id ?? ''}:${environmentId}`;
+    if (this.cloudEnvironments.has(key)) {
+      return;
+    }
+    const environment = await this.anthropic.beta.environments.retrieve(
+      environmentId,
+      params,
+      request,
+    );
+    if (environment.config?.type === 'self_hosted') {
+      throw new Error(SELF_HOSTED_ERROR);
+    }
+    this.cloudEnvironments.add(key);
+  }
+
+  /** Records the session's events until it completes, fails, or gives up for good. */
+  private async followSession(
+    sessionId: string,
+    stream: Response,
+    state: SessionState,
+    call: { params: CallParams; read: Anthropic.RequestOptions; signal: AbortSignal },
+  ): Promise<void> {
+    const { signal } = call;
+    // Ends the wait for a session that gave up on a turn and has not started another.
+    const resumeDeadline = new AbortController();
+    let resumeTimer: ReturnType<typeof setTimeout> | undefined;
+    let live = true;
+    // The wait runs only while the session can be seen. During a reconnect it may
+    // resume unobserved, which the history then shows. With a run open, its ending
+    // notice is still to come, so there is no deadline yet.
+    const watch = () => {
+      if (live && state.gaveUp && state.openRuns.size === 0) {
+        resumeTimer ??= setTimeout(() => resumeDeadline.abort(), RESUME_GRACE_MS);
+      } else {
+        clearTimeout(resumeTimer);
+        resumeTimer = undefined;
+      }
+    };
+    const events = this.sessionEvents(sessionId, stream, {
+      ...call,
+      signal: AbortSignal.any([signal, resumeDeadline.signal]),
+      onLive: (isLive) => {
+        live = isLive;
+        watch();
+      },
+    });
+    let eventCount = 0;
+    try {
+      for await (const event of events) {
+        signal.throwIfAborted();
+        if (++eventCount > 100_000) {
+          throw new Error('Claude Managed Agents exceeded the event limit');
+        }
+        state.record(event);
+        if (state.completed) {
+          return;
+        }
+        watch();
+      }
+    } catch (error) {
+      throw resumeDeadline.signal.aborted && !signal.aborted ? state.stoppedError() : error;
+    } finally {
+      clearTimeout(resumeTimer);
+    }
+  }
+
+  /**
+   * Yields each session event once, in order, across dropped connections. A stream
+   * does not replay what it missed, so after a drop the next one is opened first and
+   * the gap is filled from the session's history.
+   */
+  private async *sessionEvents(
+    sessionId: string,
+    first: Response,
+    call: StreamCall,
+  ): AsyncGenerator<SessionEvent> {
+    const { signal } = call;
+    const seen = new SeenEvents();
+    // When the connection in use began to carry live events, once it has.
+    let liveSince: number | undefined = Date.now();
+    const wentLive = () => {
+      liveSince = Date.now();
+      call.onLive(true);
+    };
+    let source = readEvents(first, signal);
+    for (let silent = 0; ; source = this.reconnectedEvents(sessionId, call, wentLive)) {
+      let reason = 'the connection closed';
+      try {
+        for await (const event of source) {
+          if (seen.add(event)) {
+            yield event;
+          }
+        }
+      } catch (error) {
+        const interrupted =
+          error instanceof StreamInterrupted || failureKind(error) === 'transient';
+        if (!interrupted || signal.aborted) {
+          throw error;
+        }
+        reason = error instanceof StreamInterrupted ? error.message : 'the reconnect failed';
+      }
+      call.onLive(false);
+      // A connection that brought something new was being served. So was a stream
+      // that stayed open before it dropped, as a gateway that caps a response's
+      // duration ends them. Time spent connecting or reading history proves neither.
+      const served =
+        seen.takeFresh() > 0 ||
+        (liveSince !== undefined && Date.now() - liveSince >= STREAM_SERVED_MS);
+      liveSince = undefined;
+      silent = served ? 0 : silent + 1;
+      if (silent >= MAX_SILENT_CONNECTIONS) {
+        throw new Error(
+          `Claude Managed Agents event stream ended before the session completed (${reason})`,
+        );
+      }
+      await sleepWithAbort(Math.min(100 * 2 ** silent, 2_000), signal);
+    }
+  }
+
+  private async *reconnectedEvents(
+    sessionId: string,
+    call: StreamCall,
+    wentLive: () => void,
+  ): AsyncGenerator<SessionEvent> {
+    const { params, read, signal } = call;
+    const stream = await this.anthropic.beta.sessions.events
+      .stream(sessionId, params, read)
+      .asResponse();
+    try {
+      yield* this.anthropic.beta.sessions.events.list(sessionId, params, read);
+      wentLive();
+      yield* readEvents(stream, signal);
+    } finally {
+      await stream.body?.cancel().catch(() => {});
+    }
+  }
+
+  private async cleanupResources(
+    config: ManagedAgentsOptions,
+    call: { params: CallParams; headers: Record<string, string>; secrets: Set<string> },
+    ids: { agentId?: string; environmentId?: string; sessionId?: string },
+    response: ProviderResponse,
+  ): Promise<BetaManagedAgentsSessionUsage | undefined> {
+    const { agentId, environmentId, sessionId } = ids;
+    const { params, secrets } = call;
+    const metadata = response.metadata!;
+    if (config.retainSession && !response.error) {
+      metadata.sessionArchived = false;
+      return undefined;
+    }
+    // Cleanup has its own deadline, including when the caller cancelled the run.
+    const cleanupController = new AbortController();
+    const cleanupTimeoutMs = config.cleanupTimeoutMs ?? 10_000;
+    const cleanupTimer = setTimeout(() => cleanupController.abort(), cleanupTimeoutMs);
+    const cleanupRequest = {
+      signal: cleanupController.signal,
+      timeout: cleanupTimeoutMs,
+      maxRetries: 0,
+      headers: call.headers,
+    };
+    const cleanupErrors: string[] = [];
+    let settledUsage: BetaManagedAgentsSessionUsage | undefined;
+    const archive = async (
+      kind: ArchivableKind,
+      id: string,
+      whileRunning?: () => Promise<void>,
+    ) => {
+      const error = await this.archive(
+        kind,
+        id,
+        { params, request: cleanupRequest, cleanupTimeoutMs, secrets },
+        whileRunning,
+      );
+      if (error !== undefined) {
+        cleanupErrors.push(`${kind === 'session' ? 'Session' : kind} ${id}: ${error}`);
+      }
+      return error === undefined;
+    };
+    try {
+      if (sessionId) {
+        const failed = Boolean(response.error);
+        // An interrupt that met a passing failure is sent again for as long as the
+        // session keeps running. Nothing else will stop it before the deadline.
+        let interruptOwed = failed;
+        const interrupt = async () => {
+          if (interruptOwed) {
+            interruptOwed = await this.interruptSession(
+              sessionId,
+              params,
+              cleanupRequest,
+              metadata,
+              secrets,
+            );
+          }
+        };
+        await interrupt();
+        metadata.sessionArchived = await archive('session', sessionId, interrupt);
+        if (failed) {
+          // A failed call left its session working until the interrupt took effect, so
+          // only the totals read now cover what it went on to spend.
+          settledUsage = await this.settledUsage(sessionId, params, cleanupRequest);
+        }
+      } else if (metadata.unconfirmedCreate === 'session' && config.agent && agentId) {
+        // The create got no response, so the session may exist all the same. Every
+        // session of an agent this call made is its own, so it can be found.
+        const orphanId = await this.findSession(agentId, params, cleanupRequest);
+        if (orphanId) {
+          metadata.sessionId = orphanId;
+          metadata.sessionArchived = await archive('session', orphanId);
+          delete metadata.unconfirmedCreate;
+        }
+      }
+      // Leave definitions available for recovery when session archival failed.
+      if (metadata.sessionArchived !== false) {
+        if (config.agent && agentId) {
+          await archive('agent', agentId);
+        }
+        if (config.environment && environmentId) {
+          await archive('environment', environmentId);
+        }
+      }
+    } finally {
+      clearTimeout(cleanupTimer);
+    }
+    if (metadata.unconfirmedCreate) {
+      response.error += `. The ${metadata.unconfirmedCreate} may still have been created; check the Anthropic Console`;
+    }
+    if (cleanupErrors.length) {
+      metadata.rateLimitRetryable = false;
+      metadata.cleanupErrors = cleanupErrors;
+      response.error = [
+        response.error,
+        `Claude Managed Agents cleanup failed: ${cleanupErrors.join('; ')}`,
+      ]
+        .filter(Boolean)
+        .join('. ');
+    }
+    return settledUsage;
+  }
+
+  /** The session's totals once it has stopped, or undefined when they cannot be read in time. */
+  private async settledUsage(
+    sessionId: string,
+    params: CallParams,
+    request: CleanupRequest,
+  ): Promise<BetaManagedAgentsSessionUsage | undefined> {
+    if (request.signal.aborted) {
+      return undefined;
+    }
+    try {
+      return (await this.anthropic.beta.sessions.retrieve(sessionId, params, request)).usage;
+    } catch {
+      // The last streamed snapshot is reported instead.
+      return undefined;
+    }
+  }
+
+  /** The session of an agent this call created, if the server did make one. */
+  private async findSession(
+    agentId: string,
+    params: CallParams,
+    request: CleanupRequest,
+  ): Promise<string | undefined> {
+    try {
+      // A lookup is safe to repeat, and a missed session would be left behind.
+      const page = await this.anthropic.beta.sessions.list(
+        { ...params, agent_id: agentId },
+        { ...request, maxRetries: 2 },
+      );
+      // Only a session that names the agent is this call's to archive.
+      return page.data.find((session) => session.agent.id === agentId)?.id;
+    } catch {
+      // The create is still reported as unconfirmed.
+      return undefined;
+    }
+  }
+
+  /** Returns whether the interrupt is still owed: it failed in a way that may pass. */
+  private async interruptSession(
+    sessionId: string,
+    params: CallParams,
+    request: CleanupRequest,
+    metadata: NonNullable<ProviderResponse['metadata']>,
+    secrets: Set<string>,
+  ): Promise<boolean> {
+    try {
+      await this.anthropic.beta.sessions.events.send(
+        sessionId,
+        { ...params, events: [{ type: 'user.interrupt' }] },
+        request,
+      );
+      metadata.interruptRequested = true;
+      delete metadata.interruptError;
+      return false;
+    } catch (error) {
+      // Still attempt archival if the interrupt fails. An interrupt alone
+      // does not end dynamic workflow runs; only archival confirms cleanup.
+      metadata.interruptError = describeError(error, secrets);
+      return !request.signal.aborted && failureKind(error) === 'transient';
+    }
+  }
+
+  private archiveRequest(
+    kind: ArchivableKind,
+    id: string,
+    params: CallParams,
+    request: CleanupRequest,
+  ): Promise<unknown> {
+    const { sessions, agents, environments } = this.anthropic.beta;
+    if (kind === 'session') {
+      return sessions.archive(id, params, request);
+    }
+    return kind === 'agent'
+      ? agents.archive(id, params, request)
+      : environments.archive(id, params, request);
+  }
+
+  /** Where a resource stands for archival; `unknown` when the check itself fails for now. */
+  private async archivalState(
+    kind: ArchivableKind,
+    id: string,
+    params: CallParams,
+    request: CleanupRequest,
+  ): Promise<'archived' | 'running' | 'settled' | 'unknown'> {
+    const { sessions, agents, environments } = this.anthropic.beta;
+    try {
+      if (kind !== 'session') {
+        const definition = await (kind === 'agent'
+          ? agents.retrieve(id, params, request)
+          : environments.retrieve(id, params, request));
+        return definition.archived_at ? 'archived' : 'settled';
+      }
+      const session = await sessions.retrieve(id, params, request);
+      if (session.archived_at) {
+        return 'archived';
+      }
+      return session.status === 'running' || session.status === 'rescheduling'
+        ? 'running'
+        : 'settled';
+    } catch (error) {
+      if (request.signal.aborted || failureKind(error) !== 'transient') {
+        throw error;
+      }
+      return 'unknown';
+    }
+  }
+
+  /**
+   * Archival is refused while a session is `running`. An interrupt only takes effect
+   * at the session's next safe boundary, and the stream reports idle slightly before
+   * the stored status does, so wait for the session to settle before giving up.
+   * Returns the failure reason, or undefined once the resource is archived.
+   */
+  private async archive(
+    kind: ArchivableKind,
+    id: string,
+    cleanup: {
+      params: CallParams;
+      request: CleanupRequest;
+      cleanupTimeoutMs: number;
+      secrets: Set<string>;
+    },
+    whileRunning?: () => Promise<void>,
+  ): Promise<string | undefined> {
+    const { params, request, cleanupTimeoutMs, secrets } = cleanup;
+    let refusal: string | undefined;
+    let running = false;
+    let settled = false;
+    try {
+      for (let delayMs = 250; ; delayMs = Math.min(delayMs * 2, 2_000)) {
+        let failure: ReturnType<typeof failureKind>;
+        try {
+          await this.archiveRequest(kind, id, params, request);
+          return undefined;
+        } catch (error) {
+          if (request.signal.aborted) {
+            throw error;
+          }
+          refusal = describeError(error, secrets);
+          failure = failureKind(error);
+          if (!failure) {
+            return refusal;
+          }
+        }
+        const state = await this.archivalState(kind, id, params, request);
+        if (state === 'archived') {
+          return undefined;
+        }
+        running = state === 'running';
+        if (running) {
+          await whileRunning?.();
+        }
+        const wait = state !== 'settled' || failure === 'transient';
+        // Refused while settled both before and after the attempt: waiting will not
+        // help a session that, for example, still has an open workflow run.
+        if (!wait && settled) {
+          return refusal;
+        }
+        settled = !wait;
+        // A resource that settled since the refusal is retried at once. Archiving
+        // again repeats no hosted work.
+        if (wait) {
+          await sleepWithAbort(delayMs, request.signal);
+        }
+      }
+    } catch (error) {
+      if (!request.signal.aborted) {
+        return refusal ?? describeError(error, secrets);
+      }
+      return running
+        ? `${refusal}. The session was still running when the ${cleanupTimeoutMs}ms cleanup deadline passed`
+        : (refusal ?? `no response before the ${cleanupTimeoutMs}ms cleanup deadline`);
+    }
+  }
+}
