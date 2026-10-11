@@ -1527,7 +1527,7 @@ describe('EvalResult', () => {
     it.each(
       ['model', 'persisted', 'jsonl'].flatMap((boundary) =>
         [false, true].flatMap((strip) =>
-          ['provider', 'test', 'hook'].map((owner) => ({ boundary, strip, owner })),
+          ['provider', 'test', 'hook', 'collision'].map((owner) => ({ boundary, strip, owner })),
         ),
       ),
     )(
@@ -1560,6 +1560,8 @@ describe('EvalResult', () => {
         const testMetadata = Object.fromEntries(
           Object.keys(payloads).map((key) => [key, `test-owned ${key}`]),
         );
+        const configuredTestMetadata =
+          owner === 'test' || owner === 'collision' ? testMetadata : {};
         const ownedMetadata =
           owner === 'test'
             ? testMetadata
@@ -1570,8 +1572,8 @@ describe('EvalResult', () => {
         const input = createEvaluateResult({
           id: `agent-output-${boundary}-${strip}-${owner}`,
           response: { output: 'private-answer', metadata },
-          metadata: owner === 'provider' ? metadata : ownedMetadata,
-          testCase: createAtomicTestCase({ metadata: testMetadata }),
+          metadata: owner === 'provider' || owner === 'collision' ? metadata : ownedMetadata,
+          testCase: createAtomicTestCase({ metadata: configuredTestMetadata }),
         });
         const flags = getStripFlags({ PROMPTFOO_STRIP_RESPONSE_OUTPUT: String(strip) });
         let projected: EvaluateResult;
@@ -1590,20 +1592,22 @@ describe('EvalResult', () => {
         for (const [key, value] of Object.entries(payloads)) {
           if (strip) {
             expect(projected.response?.metadata).not.toHaveProperty(key);
-            if (owner !== 'test') {
+            if (owner === 'test' || owner === 'collision') {
+              expect(projected.metadata?.[key]).toEqual(testMetadata[key]);
+            } else {
               expect(projected.metadata).not.toHaveProperty(key);
             }
           } else {
             expect(projected.response?.metadata?.[key]).toEqual(value);
-            if (owner === 'provider') {
+            if (owner === 'provider' || owner === 'collision') {
               expect(projected.metadata?.[key]).toEqual(value);
             }
           }
         }
         expect(projected.response?.metadata?.sessionId).toBe('session-fixture');
-        expect(projected.testCase.metadata).toEqual(testMetadata);
+        expect(projected.testCase.metadata).toEqual(configuredTestMetadata);
         expect(input.response?.metadata).toMatchObject(payloads);
-        if (owner !== 'provider') {
+        if (owner === 'test' || owner === 'hook') {
           expect(projected.metadata).toEqual(
             strip && owner === 'hook' ? { annotation: 'keep hook annotation' } : ownedMetadata,
           );

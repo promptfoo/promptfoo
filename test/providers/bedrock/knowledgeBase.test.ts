@@ -706,41 +706,51 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
     mockIsCacheEnabled.mockReturnValue(false);
   });
 
-  it('should bypass the cache for API keys and keep private content out of logs', async () => {
-    mockIsCacheEnabled.mockReturnValue(true);
-
-    const provider = new AwsBedrockKnowledgeBaseProvider(
-      'us.anthropic.claude-3-7-sonnet-20241022-v2:0',
-      {
-        config: {
-          knowledgeBaseId: 'kb-123',
-          region: 'us-east-1',
-          apiKey: 'SECRET_API_KEY',
-          modelArn: 'custom:model:arn',
-        },
-      },
-    );
-
-    mockGet.mockResolvedValueOnce(null);
-    mockSend.mockResolvedValueOnce({
-      output: {
-        text: 'SECRET_RESPONSE_VALUE',
-      },
-      citations: [{ retrievedReferences: [{ content: { text: 'SECRET_CITATION_VALUE' } }] }],
-    });
-
-    await provider.callApi('SECRET_PROMPT_VALUE');
-
-    expect(mockGet).not.toHaveBeenCalled();
-    expect(mockSet).not.toHaveBeenCalled();
-    const debugLogs = JSON.stringify(vi.mocked(logger.debug).mock.calls);
-
-    expect(debugLogs).not.toContain('SECRET_PROMPT_VALUE');
-    expect(debugLogs).not.toContain('SECRET_RESPONSE_VALUE');
-    expect(debugLogs).not.toContain('SECRET_CITATION_VALUE');
-
-    mockIsCacheEnabled.mockReturnValue(false);
-  });
+  it.each(['config', 'environment'] as const)(
+    'keeps cache identity unchanged by an ignored %s API key without logging private data',
+    async (scope) => {
+      mockIsCacheEnabled.mockReturnValue(true);
+      const config = {
+        knowledgeBaseId: 'kb-123',
+        region: 'us-east-1',
+        modelArn: 'custom:model:arn',
+        accessKeyId: 'LOCAL_FIXTURE',
+        secretAccessKey: 'LOCAL_FIXTURE_SECRET',
+      };
+      const original = new AwsBedrockKnowledgeBaseProvider('default', { config });
+      mockGet.mockResolvedValueOnce(null);
+      mockSend.mockResolvedValueOnce({
+        output: { text: 'SECRET_RESPONSE_VALUE' },
+        citations: [{ retrievedReferences: [{ content: { text: 'SECRET_CITATION_VALUE' } }] }],
+      });
+      await original.callApi('SECRET_PROMPT_VALUE');
+      const [cacheKey, cachedValue] = mockSet.mock.calls[0];
+      mockGet.mockResolvedValueOnce(cachedValue);
+      if (scope === 'environment') {
+        mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'SECRET_API_KEY' });
+      }
+      const ignoredToken = new AwsBedrockKnowledgeBaseProvider('default', {
+        config: { ...config, ...(scope === 'config' ? { apiKey: 'SECRET_API_KEY' } : {}) },
+      });
+      const result = await ignoredToken.callApi('SECRET_PROMPT_VALUE');
+      expect(result.cached).toBe(true);
+      expect(result.output).toBe('SECRET_RESPONSE_VALUE');
+      expect(mockSend).toHaveBeenCalledTimes(1);
+      expect(mockGet.mock.calls[1][0]).toBe(cacheKey);
+      expect(mockSet).toHaveBeenCalledTimes(1);
+      const persistedKeyAndLogs = JSON.stringify([cacheKey, vi.mocked(logger.debug).mock.calls]);
+      for (const secret of [
+        'SECRET_API_KEY',
+        'LOCAL_FIXTURE_SECRET',
+        'SECRET_PROMPT_VALUE',
+        'SECRET_RESPONSE_VALUE',
+        'SECRET_CITATION_VALUE',
+      ]) {
+        expect(persistedKeyAndLogs).not.toContain(secret);
+      }
+      mockIsCacheEnabled.mockReturnValue(false);
+    },
+  );
 
   it('should ignore unsupported API keys from config for Agent Runtime', async () => {
     const provider = new AwsBedrockKnowledgeBaseProvider(

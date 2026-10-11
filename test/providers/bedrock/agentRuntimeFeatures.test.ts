@@ -277,6 +277,88 @@ describe('Knowledge Base runtime features', () => {
     expect(explicit.id()).toBe('custom-retrieve');
   });
 
+  it.each(['KNOWLEDGE_BASE', 'EXTERNAL_SOURCES'] as const)(
+    'derives identity from effective native %s settings and preserves it on reload',
+    async (type) => {
+      const create = (
+        target: string,
+        knowledgeBaseId = 'UNUSED1234',
+        operation?: 'retrieve',
+        modelArn = 'model',
+      ) =>
+        new AwsBedrockKnowledgeBaseProvider('anthropic.claude-v2', {
+          config: {
+            knowledgeBaseId,
+            operation,
+            modelArn: 'anthropic.claude-v2',
+            retrieveAndGenerateConfiguration: {
+              type,
+              ...(type === 'KNOWLEDGE_BASE'
+                ? { knowledgeBaseConfiguration: { knowledgeBaseId: target, modelArn } }
+                : {
+                    externalSourcesConfiguration: {
+                      modelArn,
+                      sources: [
+                        { sourceType: 'S3', s3Location: { uri: `s3://fixture/${target}` } },
+                      ],
+                    },
+                  }),
+            },
+          },
+        });
+      const original = create('NATIVE1234');
+      expect(() => create('NATIVE1234', 'UNUSED1234', undefined, 'anthropic.claude-v2')).toThrow(
+        'Unknown Amazon Bedrock model',
+      );
+      expect(original.id()).toBe(create('NATIVE1234', 'OTHERROOT').id());
+      expect(original.id()).not.toBe(create('NATIVE5678').id());
+      expect(create('NATIVE1234', 'RETRIEVE12', 'retrieve').id()).toBe(
+        'bedrock:kb:retrieve:RETRIEVE12',
+      );
+      expect(original.id()).toMatch(
+        type === 'KNOWLEDGE_BASE' ? /^bedrock:kb:NATIVE1234$/ : /^bedrock:kb:external:/,
+      );
+      const reference = toSerializableProviderRef(original) as ProviderOptions;
+      const replay = await loadApiProvider(reference.id!, { options: reference });
+      expect(replay.id()).toBe(original.id());
+      const send = vi.fn().mockResolvedValue({ output: { text: 'answer' } });
+      for (const provider of [original, replay]) {
+        vi.spyOn(
+          provider as AwsBedrockKnowledgeBaseProvider,
+          'getKnowledgeBaseClient',
+        ).mockResolvedValue({ send } as unknown as BedrockAgentRuntimeClient);
+        expect((await provider.callApi('question')).output).toBe('answer');
+      }
+      expect(send.mock.calls[0][0].input).toEqual(send.mock.calls[1][0].input);
+    },
+  );
+
+  it.each(['route', 'config'] as const)(
+    'ignores the unused retired %s model for Retrieve',
+    async (scope) => {
+      const retired = 'anthropic.claude-v2';
+      const path = `bedrock:kb:${scope === 'route' ? retired : 'default'}`;
+      const config = {
+        knowledgeBaseId: 'KB12345678',
+        ...(scope === 'config' ? { modelArn: retired } : {}),
+      };
+      const provider = await loadApiProvider(path, {
+        options: { config: { ...config, operation: 'retrieve' } },
+      });
+      const send = vi.fn().mockResolvedValue({ retrievalResults: [] });
+      vi.spyOn(
+        provider as AwsBedrockKnowledgeBaseProvider,
+        'getKnowledgeBaseClient',
+      ).mockResolvedValue({ send } as unknown as BedrockAgentRuntimeClient);
+      expect((await provider.callApi('question')).output).toBe('[]');
+      expect(send.mock.calls[0][0]).toBeInstanceOf(RetrieveCommand);
+      expect(send.mock.calls[0][0].input).not.toHaveProperty('modelArn');
+      await expect(loadApiProvider(path, { options: { config } })).rejects.toThrow(
+        'Unknown Amazon Bedrock model',
+      );
+    },
+  );
+
   it('does not expose resumable session handles from cache', async () => {
     cache.enabled = true;
     const { provider } = kb();
@@ -726,7 +808,9 @@ describe('managed-search filter validation', () => {
           ? { knowledgeBaseConfigurations }
           : { sessionState: { knowledgeBaseConfigurations } },
       );
-      expect((await provider.callApi('question')).error).toContain('Invalid');
+      const result = await provider.callApi('question');
+      expect(result.error).toContain('retrievalConfiguration filter');
+      expect(result.error).not.toContain('vectorSearchConfiguration.filter');
       expect(send).not.toHaveBeenCalled();
     },
   );

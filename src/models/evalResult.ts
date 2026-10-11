@@ -118,8 +118,16 @@ function projectOutputMetadata<T>(
   if (!stripOutput || !metadata || typeof metadata !== 'object') {
     return metadata;
   }
+  // Provider metadata is merged after test metadata during evaluation. Restore trusted
+  // test values for reserved fields before removing any response-owned copies.
+  const outputMetadata = { ...metadata } as Record<string, unknown>;
+  for (const key of RESPONSE_OUTPUT_METADATA_KEYS) {
+    if (testMetadata && Object.prototype.hasOwnProperty.call(testMetadata, key)) {
+      outputMetadata[key] = sanitizeForDb(testMetadata[key]);
+    }
+  }
   return Object.fromEntries(
-    Object.entries(metadata).flatMap(([key, value]) => {
+    Object.entries(outputMetadata).flatMap(([key, value]) => {
       if (
         testMetadata &&
         Object.prototype.hasOwnProperty.call(testMetadata, key) &&

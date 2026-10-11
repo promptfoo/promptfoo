@@ -513,6 +513,8 @@ describeEvaluator('evaluator metadata', () => {
     'annotate',
     'annotate-delete',
     'test-owned',
+    'test-owned-collision',
+    'test-owned-collision-delete',
     'failure',
   ])('preserves metadata ownership after an in-place afterEach %s', async (mode) => {
     const outputPath = path.join(os.tmpdir(), `promptfoo-hook-metadata-${randomUUID()}.jsonl`);
@@ -561,13 +563,17 @@ describeEvaluator('evaluator metadata', () => {
           ];
         }
       }
-      if (mode === 'delete' || mode === 'annotate-delete') {
+      if (
+        mode === 'delete' ||
+        mode === 'annotate-delete' ||
+        mode === 'test-owned-collision-delete'
+      ) {
         delete ctx.result.response.metadata;
       } else if (mode === 'delete-key') {
         delete ctx.result.response.metadata.citations;
       } else if (mode === 'update') {
         ctx.result.response.metadata = outputMetadata('updated-output-secret');
-      } else if (mode !== 'hook-owned' && mode !== 'annotate') {
+      } else if (mode !== 'hook-owned' && mode !== 'annotate' && mode !== 'test-owned-collision') {
         ctx.result.response.metadata = { note: 'done' };
       }
       if (mode === 'failure') {
@@ -579,7 +585,10 @@ describeEvaluator('evaluator metadata', () => {
       providers: [provider],
       prompts: [toPrompt('Test prompt')],
       tests: [
-        { ...createEqualityTest(), ...(mode === 'test-owned' && { metadata: ownedMetadata }) },
+        {
+          ...createEqualityTest(),
+          ...(mode.startsWith('test-owned') && { metadata: ownedMetadata }),
+        },
       ],
       extensions: ['file://test-extension.js:afterEach'],
     };
@@ -598,7 +607,7 @@ describeEvaluator('evaluator metadata', () => {
         );
         for (const key of Object.keys(nativeMetadata)) {
           expect(row.response.metadata ?? {}).not.toHaveProperty(key);
-          if (mode === 'test-owned') {
+          if (mode.startsWith('test-owned')) {
             expect(row.metadata[key]).toEqual(ownedMetadata[key as keyof typeof ownedMetadata]);
           } else {
             expect(row.metadata).not.toHaveProperty(key);

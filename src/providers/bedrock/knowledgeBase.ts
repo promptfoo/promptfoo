@@ -72,7 +72,15 @@ export class AwsBedrockKnowledgeBaseProvider
     options: { config?: BedrockKnowledgeBaseOptions; id?: string; env?: EnvOverrides } = {},
   ) {
     super(modelName, options);
-    assertBedrockModelIsAvailable(options.config?.modelArn || modelName);
+    if (options.config?.operation !== 'retrieve') {
+      const nativeConfig = options.config?.retrieveAndGenerateConfiguration;
+      const generationModel = nativeConfig
+        ? nativeConfig.type === 'EXTERNAL_SOURCES'
+          ? nativeConfig.externalSourcesConfiguration?.modelArn
+          : nativeConfig.knowledgeBaseConfiguration?.modelArn
+        : options.config?.modelArn || modelName;
+      assertBedrockModelIsAvailable(generationModel ?? '');
+    }
 
     // Ensure we have a knowledgeBaseId
     if (!options.config?.knowledgeBaseId && !options.config?.retrieveAndGenerateConfiguration) {
@@ -116,8 +124,10 @@ export class AwsBedrockKnowledgeBaseProvider
 
   id(): string {
     const id =
-      this.kbConfig.knowledgeBaseId ??
-      this.kbConfig.retrieveAndGenerateConfiguration?.knowledgeBaseConfiguration?.knowledgeBaseId;
+      this.kbConfig.operation === 'retrieve' || !this.kbConfig.retrieveAndGenerateConfiguration
+        ? this.kbConfig.knowledgeBaseId
+        : this.kbConfig.retrieveAndGenerateConfiguration.knowledgeBaseConfiguration
+            ?.knowledgeBaseId;
     if (id) {
       return `bedrock:kb:${this.kbConfig.operation === 'retrieve' ? 'retrieve:' : ''}${id}`;
     }
@@ -367,11 +377,7 @@ export class AwsBedrockKnowledgeBaseProvider
       const cache = await getCache();
       // Explicit sessions and streaming requests must reach AWS. A cached session response
       // cannot advance the service's conversation state.
-      const useCache =
-        isCacheEnabled() &&
-        !this.kbConfig.sessionId &&
-        !this.kbConfig.streaming &&
-        !this.getApiKey();
+      const useCache = isCacheEnabled() && !this.kbConfig.sessionId && !this.kbConfig.streaming;
       const sensitiveKeys = ['accessKeyId', 'secretAccessKey', 'sessionToken', 'apiKey'];
       const cacheKey = useCache
         ? `bedrock-kb:v3:${this.kbConfig.knowledgeBaseId}:${modelArn}:${region}:${hashBedrockConfig(

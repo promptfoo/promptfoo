@@ -435,7 +435,7 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
         filters.some((filter) => filter !== undefined && !isValidBedrockRetrievalFilter(filter))
       ) {
         return {
-          error: `Invalid knowledgeBaseConfigurations[${index}].retrievalConfiguration.vectorSearchConfiguration.filter: use an AWS RetrievalFilter with one operator, such as equals, or andAll/orAll with at least two operands. Flat metadata maps are not supported.`,
+          error: `Invalid knowledgeBaseConfigurations[${index}].retrievalConfiguration filter: use an AWS RetrievalFilter with one operator, such as equals, or andAll/orAll with at least two operands. Flat metadata maps are not supported.`,
         };
       }
     }
