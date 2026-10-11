@@ -58,7 +58,6 @@ import { checkProviderApiKeys } from '../util/provider';
 import { shouldShareResults } from '../util/sharing';
 import { resolveTestsWatchPaths } from '../util/testCaseReader';
 import { TokenUsageTracker } from '../util/tokenUsage';
-import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import { isUuid } from '../util/uuid';
 import { deleteErrorResults, getErrorResultIds, recalculatePromptMetrics } from './retry';
 import { notCloudEnabledShareInstructions } from './shareInstructions';
@@ -1009,32 +1008,7 @@ async function doEvalWithEnv(
       sharePromise = createShareableUrl(evalRecord, { silent: true });
     }
 
-    let successes = 0;
-    let failures = 0;
-    let errors = 0;
-    let cacheHits = 0;
-    const tokenUsage = createEmptyTokenUsage();
-
-    // Calculate our total successes and failures
-    for (const prompt of evalRecord.prompts) {
-      if (prompt.metrics?.testPassCount) {
-        successes += prompt.metrics.testPassCount;
-      }
-      if (prompt.metrics?.testFailCount) {
-        failures += prompt.metrics.testFailCount;
-      }
-      if (prompt.metrics?.testErrorCount) {
-        errors += prompt.metrics.testErrorCount;
-      }
-      if (prompt.metrics?.testCacheHitCount) {
-        cacheHits += prompt.metrics.testCacheHitCount;
-      }
-      accumulateTokenUsage(tokenUsage, prompt.metrics?.tokenUsage);
-    }
-    const generationTokenUsage = evalRecord.getStats().tokenUsage.generation;
-    if (generationTokenUsage) {
-      tokenUsage.generation = generationTokenUsage;
-    }
+    const { successes, failures, errors, cacheHits, tokenUsage } = evalRecord.getStats();
     const totalTests = successes + failures + errors;
     const passRate = (successes / totalTests) * 100;
 

@@ -345,24 +345,18 @@ function getResultsLines({
   const totalTests = successes + failures + errors;
   const errorLabel = errors === 1 ? 'error' : 'errors';
 
-  const lines = [
+  return [
     '',
     chalk.bold('Results:'),
     formatResultLine(successes, 'passed', successes > 0 ? '✓' : undefined, chalk.green, totalTests),
     formatResultLine(failures, 'failed', failures > 0 ? '✗' : undefined, chalk.red, totalTests),
     formatResultLine(errors, errorLabel, errors > 0 ? '✗' : undefined, chalk.red, totalTests),
-  ];
-
-  if (cacheHits && cacheHits > 0) {
-    lines.push(formatResultLine(cacheHits, 'cache hits', undefined, chalk.gray, totalTests));
-  }
-
-  lines.push(
+    ...(cacheHits
+      ? [formatResultLine(cacheHits, 'cache hits', undefined, chalk.gray, totalTests)]
+      : []),
     chalk.gray(`Duration: ${formatDuration(duration)} (concurrency: ${maxConcurrency})`),
     '',
-  );
-
-  return lines;
+  ];
 }
 
 function formatPassRate(value: number): string {
