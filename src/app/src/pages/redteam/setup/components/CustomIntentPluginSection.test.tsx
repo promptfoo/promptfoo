@@ -213,14 +213,23 @@ describe('CustomIntentPluginSection', () => {
     });
 
     it('preserves all intents without updating plugins when canceled', async () => {
-      const user = userEvent.setup();
+      const timers = useTestTimers();
+      const user = userEvent.setup({ advanceTimers: timers.advanceBy });
       mockUseRedTeamConfig.mockReturnValue({
         config: configWithIntents,
         updatePlugins: mockUpdatePlugins,
       });
       render(<CustomIntentPluginSection />);
-      await user.click(screen.getByText('Clear All'));
-      await user.click(screen.getByText('Cancel'));
+      for (const label of ['Clear All', 'Cancel']) {
+        await act(async () => {
+          const click = user.click(screen.getByText(label));
+          await timers.advanceByAsync(0);
+          await click;
+        });
+      }
+      await act(async () => {
+        await timers.advanceByAsync(1000);
+      });
       expect(screen.queryByText('Clear All Intents')).not.toBeInTheDocument();
       expect(
         screen.getAllByRole('textbox').map((input) => (input as HTMLInputElement).value),

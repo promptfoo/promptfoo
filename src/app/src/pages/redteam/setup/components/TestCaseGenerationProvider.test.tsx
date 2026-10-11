@@ -1048,16 +1048,21 @@ describe('TestCaseGenerationProvider', () => {
       );
     });
 
-    it('should fetch new batch when cache is exhausted', async () => {
+    it('should fetch new batch when cache is exhausted after prefetch fails', async () => {
       const user = userEvent.setup();
       const testPlugin = 'harmful:hate';
       const testStrategy = 'basic';
 
-      // Number each response so cached and prefetched batches are distinguishable.
       let callCount = 0;
+      let rejectPrefetch!: (error: Error) => void;
       callApiMock.mockImplementation((path, options) => {
         if (path === '/redteam/generate-test') {
           callCount++;
+          if (callCount === 2) {
+            return new Promise<Response>((_resolve, reject) => {
+              rejectPrefetch = reject;
+            });
+          }
           const body = options?.body ? JSON.parse(options.body as string) : {};
           const count = body.count || 1;
           const testCases = Array.from({ length: count }, (_, i) => ({
@@ -1093,9 +1098,7 @@ describe('TestCaseGenerationProvider', () => {
 
       const testCaseDialogComponent = screen.getByTestId('test-case-dialog');
 
-      // Click through all 5 test cases (using cache) - note: prefetch may add more
-      // We need to click regenerate multiple times to exhaust the batch
-      // Each click should use cache until batch is exhausted
+      // Keep prefetch pending while consuming all five cases from the first batch.
       for (let i = 0; i < 4; i++) {
         const regenerateButton = within(testCaseDialogComponent).getByRole('button', {
           name: /regenerate/i,
@@ -1103,22 +1106,25 @@ describe('TestCaseGenerationProvider', () => {
         await user.click(regenerateButton);
       }
 
-      // At this point we should have used 5 from first batch
-      // Verify we're showing test case #5 from first batch
+      expect(callCount).toBe(2);
       expect(within(testCaseDialogComponent).getByTestId('chat-message-0')).toHaveTextContent(
         'Batch 1 test prompt #5',
       );
+      await act(async () => {
+        rejectPrefetch(new Error('Prefetch unavailable'));
+      });
+      expect(callCount).toBe(2);
       await user.click(
         within(testCaseDialogComponent).getByRole('button', { name: /regenerate/i }),
       );
       await waitFor(() =>
         expect(within(testCaseDialogComponent).getByTestId('chat-message-0')).toHaveTextContent(
-          'Batch 2 test prompt #1',
+          'Batch 3 test prompt #1',
         ),
       );
       expect(
         callApiMock.mock.calls.filter(([path]) => path === '/redteam/generate-test'),
-      ).toHaveLength(2);
+      ).toHaveLength(3);
     });
 
     it('should NOT use batch generation for multi-turn strategies', async () => {

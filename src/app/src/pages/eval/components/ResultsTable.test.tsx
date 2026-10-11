@@ -1773,14 +1773,14 @@ describe('ResultsTable rating actions', () => {
     callApi.mockReset().mockResolvedValue({ ok: true } as Response);
   });
 
-  function renderRatingTable(gradingResult?: Partial<GradingResult>) {
+  function renderRatingTable(gradingResult?: Partial<GradingResult>, initialPass = false) {
     const table = {
       body: [
         {
           outputs: [
             {
               id: 'test-output-1',
-              pass: false,
+              pass: initialPass,
               score: 0.2,
               text: 'test output',
               gradingResult,
@@ -1888,6 +1888,7 @@ describe('ResultsTable rating actions', () => {
   it.each([
     {
       name: 'failed automated assertion',
+      initialPass: true,
       components: [automated, human],
       expectedPass: false,
       expectedScore: 0.5,
@@ -1896,6 +1897,7 @@ describe('ResultsTable rating actions', () => {
     },
     {
       name: 'passing automated assertions',
+      initialPass: false,
       components: [
         { ...automated, pass: true, score: 0.8 },
         { ...automated, pass: true, score: 0.9, assertion: { type: 'similar' as const } },
@@ -1911,6 +1913,7 @@ describe('ResultsTable rating actions', () => {
     },
     {
       name: 'mixed automated scores',
+      initialPass: true,
       components: [
         { ...automated, pass: true, score: 0.6 },
         { ...automated, pass: false, score: 0.3 },
@@ -1928,6 +1931,7 @@ describe('ResultsTable rating actions', () => {
     },
     {
       name: 'no remaining assertions',
+      initialPass: false,
       components: [human],
       expectedPass: false,
       expectedScore: 0.2,
@@ -1936,14 +1940,17 @@ describe('ResultsTable rating actions', () => {
     },
   ])(
     'clears the human rating with $name',
-    async ({ components, expectedPass, expectedScore, remaining, expectedReason }) => {
-      renderRatingTable({
-        pass: false,
-        score: 0.2,
-        reason: human.reason,
-        assertion: { type: 'human' },
-        componentResults: components,
-      });
+    async ({ initialPass, components, expectedPass, expectedScore, remaining, expectedReason }) => {
+      renderRatingTable(
+        {
+          pass: initialPass,
+          score: 0.2,
+          reason: human.reason,
+          assertion: { type: 'human' },
+          componentResults: components,
+        },
+        initialPass,
+      );
       await userEvent.setup().click(screen.getByRole('button', { name: 'Clear rating' }));
       const { payload, output } = await savedRating();
       expect(payload.pass).toBe(expectedPass);
