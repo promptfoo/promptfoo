@@ -157,7 +157,7 @@ export const GOOGLE_MODELS: GoogleModel[] = [
       priorityMultiplier: 1.8,
       flexMultiplier: 0.5,
     },
-    // Vertex currently publishes only standard pay-as-you-go TTS rates.
+    // Vertex publishes standard-tier TTS rates, with introductory credits applied below.
     vertexCost: { input: 1 / 1e6, output: audioOutput, audioOutput },
     introductoryPricing: GEMINI_FLASH_INTRODUCTORY_PRICING,
   })),

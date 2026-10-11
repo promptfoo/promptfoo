@@ -209,6 +209,148 @@ describe('Google provider factories', () => {
     expect(response.cost).toBeGreaterThan(0);
   });
 
+  it.each(
+    [
+      { source: 'provider config', config: { systemInstruction: 'Read warmly' } },
+      {
+        source: 'prompt config',
+        promptConfig: { systemInstruction: 'Read warmly' },
+      },
+      {
+        source: 'system turn',
+        prompt: JSON.stringify([
+          { role: 'system', content: 'Read warmly' },
+          { role: 'user', content: 'Hello' },
+        ]),
+      },
+      {
+        source: 'native prompt envelope',
+        prompt: JSON.stringify({
+          system_instruction: { parts: [{ text: 'Read warmly' }] },
+          contents: [{ role: 'user', parts: [{ text: 'Hello' }] }],
+        }),
+      },
+      {
+        source: 'camel-case passthrough',
+        config: { passthrough: { systemInstruction: { parts: [{ text: 'Read warmly' }] } } },
+      },
+      {
+        source: 'snake-case passthrough',
+        config: { passthrough: { system_instruction: { parts: [{ text: 'Read warmly' }] } } },
+      },
+    ].flatMap((testCase) =>
+      ['vertex:gemini-3.8-flash-tts', 'vertex:chat:gemini-3.8-flash-lite-tts'].map((id) => ({
+        id,
+        ...testCase,
+      })),
+    ),
+  )('rejects $source system instructions before $id transport', async ({ id, ...testCase }) => {
+    const provider = await loadApiProvider(id, {
+      options: { config: { apiKey: 'test-key', ...testCase.config } },
+    });
+    const prompt = testCase.prompt ?? 'Hello';
+    const response = await provider.callApi(prompt, {
+      prompt: { raw: prompt, label: prompt, config: testCase.promptConfig },
+      vars: {},
+    });
+    expect(response.error).toContain('does not support system instructions');
+    expect(response.error).toContain('speechMetadata.style');
+    expect(response.output).toBeUndefined();
+    expect(fetchUtil.fetchWithProxy).not.toHaveBeenCalled();
+    expect(googleUtil.getGoogleClient).not.toHaveBeenCalled();
+  });
+
+  it('rejects Vertex TTS system instructions before resolving OAuth credentials', async () => {
+    vi.mocked(googleUtil.getGoogleClient).mockResolvedValue({
+      client: { request: vi.fn().mockResolvedValue({ data }) } as unknown as Awaited<
+        ReturnType<typeof googleUtil.getGoogleClient>
+      >['client'],
+      projectId: 'test-project',
+    });
+    const provider = await loadApiProvider('vertex:gemini-3.8-flash-tts', {
+      options: {
+        config: {
+          projectId: 'test-project',
+          expressMode: false,
+          systemInstruction: 'Read warmly',
+        },
+      },
+    });
+    expect((await provider.callApi('Hello')).error).toContain(
+      'does not support system instructions',
+    );
+    expect(googleUtil.getGoogleClient).not.toHaveBeenCalled();
+  });
+
+  it('preserves Vertex text-model instructions and explicit TTS instruction clearing', async () => {
+    vi.mocked(fetchUtil.fetchWithProxy).mockImplementation(async () => Response.json(data));
+    const text = await loadApiProvider('vertex:gemini-2.5-flash', {
+      options: { config: { apiKey: 'test-key', systemInstruction: 'Be concise' } },
+    });
+    expect((await text.callApi('Hello')).error).toBeUndefined();
+    expect(
+      JSON.parse(vi.mocked(fetchUtil.fetchWithProxy).mock.calls[0][1]?.body as string),
+    ).toMatchObject({ systemInstruction: { parts: [{ text: 'Be concise' }] } });
+
+    const tts = await loadApiProvider('vertex:gemini-3.8-flash-tts', {
+      options: {
+        config: {
+          apiKey: 'test-key',
+          systemInstruction: 'Inherited instruction',
+          passthrough: { systemInstruction: null },
+        },
+      },
+    });
+    expect((await tts.callApi('Hello')).error).toBeUndefined();
+    expect(
+      JSON.parse(vi.mocked(fetchUtil.fetchWithProxy).mock.calls[1][1]?.body as string),
+    ).toHaveProperty('systemInstruction', null);
+  });
+
+  it.each([
+    'google:gemini-3.8-flash-tts',
+    'palm:gemini-3.8-flash-lite-tts',
+    'vertex:gemini-3.8-flash-tts',
+    'vertex:chat:gemini-3.8-flash-lite-tts',
+  ])('preserves the documented two-speaker voice schema through %s', async (id) => {
+    const vertex = id.startsWith('vertex:');
+    const speakerVoiceConfigs = [
+      {
+        speaker: 'Joe',
+        voiceConfig: vertex ? { voice: 'Puck' } : { prebuiltVoiceConfig: { voiceName: 'Puck' } },
+      },
+      {
+        speaker: 'Jane',
+        voiceConfig: vertex ? { voice: 'Kore' } : { prebuiltVoiceConfig: { voiceName: 'Kore' } },
+      },
+    ];
+    const provider = await loadApiProvider(id, {
+      options: {
+        config: {
+          apiKey: 'test-key',
+          generationConfig: { speechConfig: { multiSpeakerVoiceConfig: { speakerVoiceConfigs } } },
+        },
+      },
+    });
+    const parts = [
+      { text: 'Hello, Jane.', speechMetadata: { speaker: 'Joe', style: 'cheerful' } },
+      { text: 'Hello, Joe.', speechMetadata: { speaker: 'Jane', style: 'calm' } },
+    ];
+    expect(
+      (await provider.callApi(JSON.stringify([{ role: 'user', parts }]))).error,
+    ).toBeUndefined();
+    const request = vertex
+      ? vi.mocked(fetchUtil.fetchWithProxy).mock.calls[0]
+      : vi.mocked(cache.fetchWithCache).mock.calls[0];
+    const body = JSON.parse(request[1]?.body as string);
+    expect(body.contents).toEqual([{ role: 'user', parts }]);
+    expect(body.generationConfig).toMatchObject({
+      responseModalities: ['AUDIO'],
+      speechConfig: { multiSpeakerVoiceConfig: { speakerVoiceConfigs } },
+    });
+    expect(body.generationConfig.speechConfig).not.toHaveProperty('voiceConfig');
+  });
+
   it.each(['native', 'express', 'oauth'] as const)(
     'preserves prompt-owned image instructions on %s',
     async (mode) => {

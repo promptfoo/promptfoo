@@ -743,6 +743,15 @@ export class VertexChatProvider extends GoogleGenericProvider {
           },
         }),
     };
+    if (
+      ['gemini-3.8-flash-tts', 'gemini-3.8-flash-lite-tts'].includes(this.modelName) &&
+      (body.systemInstruction || ('system_instruction' in body && body.system_instruction))
+    ) {
+      return {
+        error: `${this.modelName} on Vertex does not support system instructions. Put delivery instructions in speechMetadata.style.`,
+      };
+    }
+
     body.generationConfig = removeDeprecatedGeminiGenerationParams(
       this.modelName,
       body.generationConfig,
