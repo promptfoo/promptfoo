@@ -1015,7 +1015,12 @@ export function maybeCoerceToGeminiFormat(
       },
     ];
     coerced = true;
-  } else if (Array.isArray(contents) && contents.every((item) => item?.role)) {
+  } else if (
+    Array.isArray(contents) &&
+    contents.every(
+      (item) => item?.role || typeof item?.content === 'string' || Array.isArray(item?.parts),
+    )
+  ) {
     const targetRole = options?.useAssistantRole ? 'assistant' : 'model';
     const toolNames = new Map<string, string>();
     coercedContents = [];

@@ -44,6 +44,17 @@ describe('OpenAI tool history in provider requests', () => {
     expect(result.coerced).toBe(true);
   });
 
+  it('keeps role-less text prompts and native parts valid alongside imported tool turns', () => {
+    expect(maybeCoerceToGeminiFormat([{ content: 'hello' }]).contents).toEqual([
+      { role: undefined, parts: [{ text: 'hello' }] },
+    ]);
+    const native = { parts: [{ text: 'native user content' }] };
+    const result = maybeCoerceToGeminiFormat([native, ...history().slice(1)]);
+    expect(result.contents[0]).toEqual(native);
+    expect(result.contents[1].parts[0].functionCall?.name).toBe('read_file');
+    expect(native).toEqual({ parts: [{ text: 'native user content' }] });
+  });
+
   it('retains the completed tool turn from #10973 in Anthropic', () => {
     expect(anthropic(history()).extractedMessages).toEqual([
       { role: 'user', content: [{ type: 'text', text: 'Read the configuration' }] },
