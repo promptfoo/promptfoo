@@ -275,6 +275,33 @@ export class ProviderRegistry {
     }
   }
 
+  /** Track an already-started cleanup of the whole resource without making later scopes own it. */
+  trackResourceCleanup(resource: CleanupProvider, cleanup: Promise<void>): void {
+    const state = this.resources.get(resource);
+    // shutdown() may call this while a registry-owned release already observes its result.
+    if (!state || state.release) {
+      return;
+    }
+    const promise = cleanup
+      .catch((error) => {
+        logger.warn('Provider resource cleanup failed.', { error });
+      })
+      .finally(() => {
+        if (state.release?.promise === promise) {
+          state.release = undefined;
+        }
+        this.forgetResource(state);
+        if (this.processShuttingDown && state.registered) {
+          void this.forceResource(state);
+        }
+      });
+    // Explicit cleanup already releases every owned handle, including pending initialization.
+    state.release = { promise, start: () => promise };
+    if (this.processShuttingDown) {
+      this.trackProcessRelease(promise);
+    }
+  }
+
   unregister(resource: CleanupProvider): void {
     const state = this.resources.get(resource);
     if (state) {

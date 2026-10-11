@@ -82,6 +82,199 @@ describe('providerRegistry', () => {
     expect(registry.has(provider)).toBe(false);
   });
 
+  describe('explicit resource cleanup', () => {
+    it('cancels a waiting evaluation without rejoining cleanup or interrupting another caller', async () => {
+      const registry = new ProviderRegistry(false);
+      const finishCleanup = createDeferred<void>();
+      const provider = {
+        id: () => 'explicit-cleanup-waiters',
+        retainOutsideEvaluation: true,
+        shutdown: vi.fn(async () => registry.unregister(provider)),
+      };
+      registry.register(provider);
+      const cleanup = finishCleanup.promise.then(() => registry.unregister(provider));
+      registry.trackResourceCleanup(provider, cleanup);
+      const controller = new AbortController();
+      const reason = new Error('cancel waiting evaluation');
+      const abandoned = vi.fn(async () => 'abandoned');
+      const resumed = vi.fn(async () => 'resumed');
+      const evaluation = registry.withEvaluation(() =>
+        registry.withProvider(provider, abandoned, controller.signal),
+      );
+      let failure: unknown;
+      void evaluation.catch((error) => {
+        failure = error;
+      });
+      const live = registry.withProvider(provider, resumed);
+
+      try {
+        controller.abort(reason);
+        await vi.waitFor(() => expect(failure).toBe(reason));
+        expect(abandoned).not.toHaveBeenCalled();
+        expect(resumed).not.toHaveBeenCalled();
+        expect(provider.shutdown).not.toHaveBeenCalled();
+
+        finishCleanup.resolve();
+        await expect(live).resolves.toBe('resumed');
+        expect(resumed).toHaveBeenCalledOnce();
+        expect(abandoned).not.toHaveBeenCalled();
+        expect(registry.has(provider)).toBe(true);
+      } finally {
+        finishCleanup.resolve();
+        await Promise.allSettled([cleanup, evaluation, live]);
+        await registry.shutdownAll();
+      }
+    });
+
+    it('ends an evaluation while its unawaited resource reservation is waiting for explicit cleanup', async () => {
+      const registry = new ProviderRegistry(false);
+      const finishCleanup = createDeferred<void>();
+      const finishEvaluation = createDeferred<void>();
+      const reservationStarted = createDeferred<void>();
+      const resource = { shutdown: vi.fn(async () => registry.unregister(resource)) };
+      registry.register(resource);
+      const cleanup = finishCleanup.promise.then(() => registry.unregister(resource));
+      registry.trackResourceCleanup(resource, cleanup);
+      const run = vi.fn();
+      let reservation: Promise<void> | undefined;
+      let reservationError: unknown;
+      const evaluation = registry.withEvaluation(async () => {
+        reservation = registry.withProvider({ id: () => 'resource-waiter' }, async () => {
+          const ready = registry.useResource(resource);
+          reservationStarted.resolve();
+          await ready;
+          run();
+        });
+        void reservation.catch((error) => {
+          reservationError = error;
+        });
+        await finishEvaluation.promise;
+      });
+      let ended = false;
+      void evaluation.then(() => {
+        ended = true;
+      });
+
+      try {
+        await reservationStarted.promise;
+        finishEvaluation.resolve();
+        await vi.waitFor(() => {
+          expect(ended).toBe(true);
+          expect(reservationError).toMatchObject({ name: 'AbortError' });
+        });
+        expect(run).not.toHaveBeenCalled();
+        expect(resource.shutdown).not.toHaveBeenCalled();
+      } finally {
+        finishCleanup.resolve();
+        finishEvaluation.resolve();
+        await Promise.allSettled([cleanup, evaluation, ...(reservation ? [reservation] : [])]);
+        await registry.shutdownAll();
+      }
+    });
+
+    it.each(['shutdownAll', 'shutdownForProcess'] as const)(
+      '%s waits for explicit cleanup without starting shutdown again',
+      async (method) => {
+        const registry = new ProviderRegistry(false);
+        const finishCleanup = createDeferred<void>();
+        const resource = { shutdown: vi.fn(async () => registry.unregister(resource)) };
+        registry.register(resource);
+        const cleanup = finishCleanup.promise.then(() => registry.unregister(resource));
+        registry.trackResourceCleanup(resource, cleanup);
+        let ended = false;
+        const shutdown = registry[method]().then(() => {
+          ended = true;
+        });
+
+        try {
+          await new Promise<void>((resolve) => setImmediate(resolve));
+          expect(ended).toBe(false);
+          expect(resource.shutdown).not.toHaveBeenCalled();
+          finishCleanup.resolve();
+          await shutdown;
+          expect(ended).toBe(true);
+          expect(registry.has(resource)).toBe(false);
+          expect(resource.shutdown).not.toHaveBeenCalled();
+        } finally {
+          finishCleanup.resolve();
+          await Promise.allSettled([cleanup, shutdown]);
+        }
+      },
+    );
+
+    it('allows reuse and a shutdown retry after an explicit cleanup fails', async () => {
+      const registry = new ProviderRegistry(false);
+      const finishCleanup = createDeferred<void>();
+      const provider = {
+        id: () => 'retry-explicit-cleanup',
+        retainOutsideEvaluation: true,
+        shutdown: vi.fn(async () => registry.unregister(provider)),
+      };
+      registry.register(provider);
+      const cleanup = finishCleanup.promise.catch((error) => {
+        registry.retainForProcessShutdown(provider);
+        throw error;
+      });
+      registry.trackResourceCleanup(provider, cleanup);
+      const failure = new Error('explicit cleanup failed');
+      const rejection = expect(cleanup).rejects.toBe(failure);
+      const run = vi.fn(async () => 'reused after cleanup failure');
+      let reuse: Promise<string> | undefined;
+
+      try {
+        finishCleanup.reject(failure);
+        await rejection;
+        expect(registry.has(provider)).toBe(true);
+        reuse = registry.withProvider(provider, run);
+        await vi.waitFor(() => expect(run).toHaveBeenCalledOnce());
+        await expect(reuse).resolves.toBe('reused after cleanup failure');
+        await registry.shutdownAll();
+        expect(provider.shutdown).toHaveBeenCalledOnce();
+        expect(registry.has(provider)).toBe(false);
+      } finally {
+        finishCleanup.resolve();
+        await Promise.allSettled([cleanup, ...(reuse ? [reuse] : [])]);
+        await registry.shutdownAll();
+      }
+    });
+
+    it('can track cleanup from inside a registry-owned shutdown without blocking later reuse', async () => {
+      const registry = new ProviderRegistry(false);
+      const finishCleanup = createDeferred<void>();
+      const provider = {
+        id: () => 'shutdown-tracks-own-cleanup',
+        retainOutsideEvaluation: true,
+        shutdown: vi.fn(() => {
+          const cleanup = finishCleanup.promise.then(() => registry.unregister(provider));
+          registry.trackResourceCleanup(provider, cleanup);
+          return cleanup;
+        }),
+      };
+      registry.register(provider);
+      const shutdown = registry.shutdownAll();
+      const otherShutdown = registry.shutdownAll();
+      const run = vi.fn(async () => 'reused');
+      let reuse: Promise<string> | undefined;
+
+      try {
+        expect(provider.shutdown).toHaveBeenCalledOnce();
+        finishCleanup.resolve();
+        await Promise.all([shutdown, otherShutdown]);
+        expect(registry.has(provider)).toBe(false);
+        reuse = registry.withProvider(provider, run);
+        await vi.waitFor(() => expect(run).toHaveBeenCalledOnce());
+        await expect(reuse).resolves.toBe('reused');
+        await registry.shutdownAll();
+        expect(provider.shutdown).toHaveBeenCalledTimes(2);
+        expect(registry.has(provider)).toBe(false);
+      } finally {
+        finishCleanup.resolve();
+        await Promise.allSettled([shutdown, otherShutdown, ...(reuse ? [reuse] : [])]);
+        await registry.shutdownAll();
+      }
+    });
+  });
+
   it('continues cleanup when a provider throws synchronously', async () => {
     const failing = {
       shutdown: vi.fn(() => {

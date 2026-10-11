@@ -280,6 +280,7 @@ export class BrowserProvider implements ApiProvider {
         .finally(() => {
           this.cleanupPromise = undefined;
         });
+      providerRegistry.trackResourceCleanup(this, this.cleanupPromise);
     }
     return this.cleanupPromise;
   }
