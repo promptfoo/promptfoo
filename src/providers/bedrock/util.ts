@@ -1,6 +1,7 @@
 import type { Agent } from 'http';
 
 import { getEnvString } from '../../envars';
+import { sha256 } from '../../util/createHash';
 
 const REQUEST_TIMEOUT_MS = 300_000; // 5 minutes
 
@@ -11,6 +12,70 @@ const REQUEST_TIMEOUT_MS = 300_000; // 5 minutes
  * See https://docs.aws.amazon.com/bedrock/latest/userguide/inference-profiles-support.html
  */
 export const INFERENCE_PROFILE_PREFIX = /^(?:us|us-gov|eu|apac|global|jp|au|ca|in)\./;
+
+/** Decode declared AWS blob fields, including the byte forms stored in eval JSON. */
+export function decodeBedrockBytes(data: unknown): Uint8Array | undefined {
+  if (data === undefined) {
+    return undefined;
+  }
+  if (typeof data === 'string') {
+    const bytes = Buffer.from(data, 'base64');
+    const canonical = bytes.toString('base64');
+    if (data !== canonical && data !== canonical.replace(/=+$/, '')) {
+      throw new Error('Invalid Bedrock byte content: expected canonical base64.');
+    }
+    return bytes;
+  }
+  if (ArrayBuffer.isView(data)) {
+    return Buffer.from(data.buffer, data.byteOffset, data.byteLength);
+  }
+  const invalid =
+    'Invalid Bedrock byte content: expected base64 or a native/serialized byte array.';
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    throw new Error(invalid);
+  }
+  const record = data as Record<string, unknown>;
+  const keys = Object.keys(record);
+  const bufferData =
+    keys.length === 2 && record.type === 'Buffer' && Array.isArray(record.data)
+      ? record.data
+      : undefined;
+  const bytes = new Uint8Array(bufferData?.length ?? keys.length);
+  for (let index = 0; index < bytes.length; index++) {
+    if (!bufferData && keys[index] !== String(index)) {
+      throw new Error(invalid);
+    }
+    const value = bufferData ? bufferData[index] : record[String(index)];
+    if (typeof value !== 'number' || !Number.isInteger(value) || value < 0 || value > 255) {
+      throw new Error(invalid);
+    }
+    bytes[index] = value;
+  }
+  return bytes;
+}
+
+/** Hash binary inputs without expanding their bytes into JSON cache-key entries. */
+export function hashBedrockConfig(value: unknown): string {
+  const replaceBinary = (item: unknown) =>
+    ArrayBuffer.isView(item)
+      ? { $bytesSha256: sha256(Buffer.from(item.buffer, item.byteOffset, item.byteLength)) }
+      : item;
+  return sha256(
+    JSON.stringify(replaceBinary(value), (_key, item) => {
+      // Replace children before JSON.stringify can call Buffer.toJSON on them.
+      if (Array.isArray(item)) {
+        return item.map(replaceBinary);
+      }
+      return item && typeof item === 'object'
+        ? Object.fromEntries(
+            Object.keys(item)
+              .sort()
+              .map((key) => [key, replaceBinary(item[key])]),
+          )
+        : item;
+    }),
+  );
+}
 
 export function hasProxyEnv(): boolean {
   return Boolean(getEnvString('HTTP_PROXY') || getEnvString('HTTPS_PROXY'));
@@ -23,8 +88,7 @@ export function hasProxyEnv(): boolean {
  * "http2 request did not get a response" errors in many environments (see #7756).
  * This function forces HTTP/1.1 via NodeHttpHandler.
  *
- * For @aws-sdk/client-bedrock-agent-runtime (which already defaults to HTTP/1.1),
- * this is only needed when proxy or API key authentication is required.
+ * Agent Runtime uses this handler only for proxy support; it requires SigV4.
  */
 export async function createBedrockRequestHandler(options?: {
   apiKey?: string;

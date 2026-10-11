@@ -1981,6 +1981,9 @@ If you see this error, the cause depends on which model provider you're using:
 
 ## Knowledge Base
 
+Agent Runtime requires AWS credentials (SigV4). Bedrock API keys are unsupported and
+do not override a configured AWS profile or the default credential chain.
+
 AWS Bedrock Knowledge Bases provide Retrieval Augmented Generation (RAG) functionality, allowing you to query a knowledge base with natural language and get responses based on your data.
 
 ### Prerequisites
@@ -2035,6 +2038,47 @@ Configuration options include:
 For Claude models that no longer support sampling parameters — [Opus 4.7](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-opus-4-7.html), Opus 4.8, Opus 5, Opus 5.5, Sonnet 5, and the Fable/Mythos 5 models — the provider omits `temperature`, `top_p`, and `top_k` while preserving `max_tokens`. This check uses `config.modelArn` when supplied.
 
 [Claude Sonnet 4.5 and Haiku 4.5](https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-anthropic-claude-messages-request-response.html) accept either `temperature` or `top_p`. When both are configured, `top_p` takes precedence. The provider applies the same precedence to Sonnet 4.6. For Amazon Nova, `top_k` is mapped to its native `inferenceConfig.topK` request field; for [Cohere Command R and R+](https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-cohere-command-r-plus.html), it is mapped to `k`.
+
+### Native Knowledge Base API options
+
+Set `retrievalConfiguration`, `generationConfiguration`, and
+`orchestrationConfiguration` using the native
+[RetrieveAndGenerate shapes](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_agent-runtime_RetrieveAndGenerate.html).
+This exposes metadata filters, implicit filtering, reranking, prompt templates,
+generation guardrails, query decomposition, and model-specific request fields.
+An explicit `generationConfiguration` replaces the convenience sampling options;
+`numberOfResults` overrides only the retrieval result count, preserving other
+retrieval settings.
+
+`sessionId`, `sessionConfiguration` (including KMS encryption), and `userContext`
+are forwarded to AWS. The response exposes `metadata.sessionId`, `metadata.citations`,
+and `metadata.guardrailAction`; an `INTERVENED` action sets `guardrails.flagged`.
+Reuse the returned session ID explicitly to continue a conversation. Calls with an
+explicit session ID bypass the cache so each turn reaches AWS. Cached results omit
+the session ID; use `--no-cache` when starting a conversation that you intend to continue.
+
+Set `streaming: true` for
+[RetrieveAndGenerateStream](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_agent-runtime_RetrieveAndGenerateStream.html).
+Promptfoo collects text and citations into one eval response and surfaces service
+exception events as errors. Streaming calls bypass the cache. Explicit-session and
+streaming generation requests use one SDK attempt and bypass scheduler retries to
+avoid replaying a turn after a connection failure or partial stream. Retrieval-only
+calls retain the configured retry limit.
+
+For [Retrieve](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_agent-runtime_Retrieve.html)
+without generation, use `bedrock:kb` with `operation: retrieve` and `knowledgeBaseId`.
+No generation model is required. `retrievalConfiguration`, `guardrailConfiguration`,
+`userContext`, and `nextToken` are supported. The output is a JSON array of retrieval
+results; `metadata.nextToken` exposes the next page when present. Pagination is
+explicit, so one eval call retrieves one page. Managed Knowledge Bases support
+`managedSearchConfiguration` with `operation: retrieve`; AWS does not support managed
+Knowledge Bases with either generation API, including streaming.
+
+To query supplied documents instead of a Knowledge Base, provide the complete
+`retrieveAndGenerateConfiguration` with `type: EXTERNAL_SOURCES`. This native object
+replaces the generated Knowledge Base configuration and removes the requirement for
+`knowledgeBaseId`. For byte-content sources, encode `byteContent.data` as base64 in
+JSON/YAML. External-source model and region restrictions are determined by AWS.
 
 ### Knowledge Base Example
 

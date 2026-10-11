@@ -69,26 +69,80 @@ function stripMediaReferences(value: unknown): unknown {
   return value;
 }
 
+const RESPONSE_OUTPUT_METADATA_KEYS: readonly string[] = [
+  'audio',
+  'blobUris',
+  'trace',
+  'citations',
+  'returnControl',
+  'files',
+  'retrievalResults',
+];
+
+// Keep provider-derived copies aligned when hooks or blob extraction change response metadata.
+// Preserve distinct values supplied by tests or hooks.
+export function synchronizeResponseMetadata(
+  originalMetadata: Record<string, unknown> | undefined,
+  originalResponseMetadata: Record<string, unknown> | undefined,
+  updatedMetadata: Record<string, unknown> | undefined,
+  updatedResponseMetadata: Record<string, unknown> | undefined,
+  testMetadata: Record<string, unknown> | undefined,
+) {
+  let metadata = updatedMetadata;
+  for (const key of ['headers', ...RESPONSE_OUTPUT_METADATA_KEYS]) {
+    const originalValue = originalMetadata?.[key];
+    if (
+      originalValue === undefined ||
+      !isDeepStrictEqual(originalValue, originalResponseMetadata?.[key]) ||
+      !isDeepStrictEqual(updatedMetadata?.[key], originalValue) ||
+      (key !== 'headers' && testMetadata && isDeepStrictEqual(originalValue, testMetadata[key]))
+    ) {
+      continue;
+    }
+
+    const { [key]: _staleValue, ...metadataWithoutKey } = metadata ?? {};
+    metadata =
+      updatedResponseMetadata?.[key] === undefined
+        ? metadataWithoutKey
+        : { ...metadataWithoutKey, [key]: updatedResponseMetadata[key] };
+  }
+  return metadata;
+}
+
 function projectOutputMetadata<T>(
   metadata: T,
   stripOutput: boolean,
   responseMetadata: ProviderResponse['metadata'],
   testMetadata?: AtomicTestCase['metadata'],
 ): T {
-  if (!stripOutput || !metadata || !responseMetadata || typeof metadata !== 'object') {
+  if (!stripOutput || !metadata || typeof metadata !== 'object') {
     return metadata;
   }
+  // Provider metadata is merged after test metadata during evaluation. Restore trusted
+  // test values for reserved fields before removing any response-owned copies.
+  const outputMetadata = { ...metadata } as Record<string, unknown>;
+  for (const key of RESPONSE_OUTPUT_METADATA_KEYS) {
+    if (testMetadata && Object.prototype.hasOwnProperty.call(testMetadata, key)) {
+      outputMetadata[key] = sanitizeForDb(testMetadata[key]);
+    }
+  }
   return Object.fromEntries(
-    Object.entries(metadata).flatMap(([key, value]) => {
+    Object.entries(outputMetadata).flatMap(([key, value]) => {
       if (
-        !Object.prototype.hasOwnProperty.call(responseMetadata, key) ||
-        (testMetadata && isDeepStrictEqual(value, testMetadata[key]))
+        testMetadata &&
+        Object.prototype.hasOwnProperty.call(testMetadata, key) &&
+        isDeepStrictEqual(sanitizeForDb(value), sanitizeForDb(testMetadata[key]))
       ) {
         return [[key, value]];
       }
-      return key === 'audio' || key === 'blobUris'
-        ? []
-        : [[key, stripMediaReferences(sanitizeForDb(value))]];
+      // These keys contain response output even when hooks annotate or replace their copies.
+      if (RESPONSE_OUTPUT_METADATA_KEYS.includes(key)) {
+        return [];
+      }
+      if (!responseMetadata || !Object.prototype.hasOwnProperty.call(responseMetadata, key)) {
+        return [[key, value]];
+      }
+      return [[key, stripMediaReferences(sanitizeForDb(value))]];
     }),
   ) as T;
 }
@@ -927,6 +981,9 @@ export function sanitizeResultForJsonlArtifact<T extends object>(
   } = stripFlags;
 
   const artifactResult = serializeResultProviderRefs(result) as T & Record<string, unknown>;
+  const testCase = artifactResult.testCase
+    ? sanitizeForDbWithSecrets(artifactResult.testCase as AtomicTestCase)
+    : undefined;
   const redacted = redactSensitiveResultFieldsForDb({
     response: sanitizeForDb(artifactResult.response as ProviderResponse | null | undefined),
     gradingResult: sanitizeForDb(artifactResult.gradingResult),
@@ -939,17 +996,14 @@ export function sanitizeResultForJsonlArtifact<T extends object>(
 
   return {
     ...result,
-    ...(artifactResult.testCase
+    ...(testCase
       ? {
-          testCase: projectTestCase(
-            sanitizeForDbWithSecrets(artifactResult.testCase as AtomicTestCase),
-            {
-              stripMetadata: shouldStripMetadata,
-              stripVars: shouldStripTestVars,
-              stripOutput: shouldStripResponseOutput,
-              stripPromptText: shouldStripPromptText,
-            },
-          ),
+          testCase: projectTestCase(testCase, {
+            stripMetadata: shouldStripMetadata,
+            stripVars: shouldStripTestVars,
+            stripOutput: shouldStripResponseOutput,
+            stripPromptText: shouldStripPromptText,
+          }),
         }
       : {}),
     ...(artifactResult.vars === undefined
@@ -983,7 +1037,7 @@ export function sanitizeResultForJsonlArtifact<T extends object>(
           redacted.metadata,
           shouldStripResponseOutput,
           redacted.response?.metadata,
-          (artifactResult.testCase as AtomicTestCase | undefined)?.metadata,
+          testCase?.metadata,
         ),
   } as T;
 }
@@ -1014,19 +1068,29 @@ export default class EvalResult {
       repeatGroupId,
     } = serializeResultProviderRefs(result);
 
-    // Persist trace and repeat linkage inside a private metadata namespace so they
-    // survive EvalResult round-trips without a Drizzle schema migration.
-    const persistedMetadata = persistTraceMetadata(
-      persistRepeatMetadata(metadata, repeatIndex, repeatGroupId),
-      traceId,
-      evaluationId,
-    );
-
     const processedResponse = await extractAndStoreBinaryData(result.response, {
       evalId,
       testIdx: result.testIdx,
       promptIdx: result.promptIdx,
     });
+
+    // Persist trace and repeat linkage inside a private metadata namespace so they
+    // survive EvalResult round-trips without a Drizzle schema migration.
+    const persistedMetadata = persistTraceMetadata(
+      persistRepeatMetadata(
+        synchronizeResponseMetadata(
+          metadata,
+          result.response?.metadata,
+          metadata,
+          processedResponse?.metadata,
+          testCase.metadata,
+        ),
+        repeatIndex,
+        repeatGroupId,
+      ),
+      traceId,
+      evaluationId,
+    );
 
     // Sanitize all JSON fields to remove circular references and non-serializable values.
     // `testCase` and `prompt` can contain a resolved runtime provider under
@@ -1088,6 +1152,13 @@ export default class EvalResult {
       processedResults.push({
         ...serializeResultProviderRefs(result),
         response: processedResponse ?? undefined,
+        metadata: synchronizeResponseMetadata(
+          result.metadata,
+          result.response?.metadata,
+          result.metadata,
+          processedResponse?.metadata,
+          result.testCase.metadata,
+        ),
       });
     }
 

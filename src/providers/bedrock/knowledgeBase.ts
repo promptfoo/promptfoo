@@ -2,15 +2,26 @@ import { getCache, isCacheEnabled } from '../../cache';
 import { getEnvInt } from '../../envars';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
-import { sha256 } from '../../util/createHash';
 import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { isSamplingParamsDeprecatedClaudeModel } from '../anthropic/util';
 import { AwsBedrockGenericProvider } from './base';
 import { assertBedrockModelIsAvailable } from './index';
-import { createBedrockRequestHandler, hasProxyEnv, INFERENCE_PROFILE_PREFIX } from './util';
+import { isValidBedrockRetrievalFilter } from './retrievalFilter';
+import {
+  createBedrockRequestHandler,
+  decodeBedrockBytes,
+  hashBedrockConfig,
+  hasProxyEnv,
+  INFERENCE_PROFILE_PREFIX,
+} from './util';
 import type {
   BedrockAgentRuntimeClient,
+  GenerationConfiguration,
+  KnowledgeBaseRetrieveAndGenerateConfiguration,
   RetrieveAndGenerateCommandInput,
+  RetrieveAndGenerateCommandOutput,
+  RetrieveAndGenerateStreamCommandOutput,
+  RetrieveCommandInput,
 } from '@aws-sdk/client-bedrock-agent-runtime';
 
 import type { EnvOverrides } from '../../types/env';
@@ -23,7 +34,7 @@ interface BedrockKnowledgeBaseOptions {
   region?: string;
   secretAccessKey?: string;
   sessionToken?: string;
-  knowledgeBaseId: string;
+  knowledgeBaseId?: string;
   modelArn?: string;
   // Additional parameters that affect the response
   temperature?: number;
@@ -31,39 +42,17 @@ interface BedrockKnowledgeBaseOptions {
   top_p?: number;
   top_k?: number;
   numberOfResults?: number;
-}
-
-// Define citation types for metadata
-interface CitationReference {
-  content?: {
-    text?: string;
-    [key: string]: any;
-  };
-  location?: {
-    type?: string;
-    s3Location?: {
-      uri?: string;
-      [key: string]: any;
-    };
-    [key: string]: any;
-  };
-  [key: string]: any;
-}
-
-interface Citation {
-  retrievedReferences?: CitationReference[];
-  generatedResponsePart?: {
-    textResponsePart?: {
-      text?: string;
-      span?: {
-        start?: number;
-        end?: number;
-      };
-      [key: string]: any;
-    };
-    [key: string]: any;
-  };
-  [key: string]: any;
+  operation?: 'retrieveAndGenerate' | 'retrieve';
+  streaming?: boolean;
+  retrievalConfiguration?: KnowledgeBaseRetrieveAndGenerateConfiguration['retrievalConfiguration'];
+  generationConfiguration?: KnowledgeBaseRetrieveAndGenerateConfiguration['generationConfiguration'];
+  orchestrationConfiguration?: KnowledgeBaseRetrieveAndGenerateConfiguration['orchestrationConfiguration'];
+  retrieveAndGenerateConfiguration?: RetrieveAndGenerateCommandInput['retrieveAndGenerateConfiguration'];
+  sessionId?: RetrieveAndGenerateCommandInput['sessionId'];
+  sessionConfiguration?: RetrieveAndGenerateCommandInput['sessionConfiguration'];
+  userContext?: RetrieveAndGenerateCommandInput['userContext'];
+  guardrailConfiguration?: RetrieveCommandInput['guardrailConfiguration'];
+  nextToken?: RetrieveCommandInput['nextToken'];
 }
 
 /**
@@ -75,6 +64,7 @@ export class AwsBedrockKnowledgeBaseProvider
   implements ApiProvider
 {
   knowledgeBaseClient?: BedrockAgentRuntimeClient;
+  private singleAttemptKnowledgeBaseClient?: BedrockAgentRuntimeClient;
   kbConfig: BedrockKnowledgeBaseOptions;
 
   constructor(
@@ -82,10 +72,18 @@ export class AwsBedrockKnowledgeBaseProvider
     options: { config?: BedrockKnowledgeBaseOptions; id?: string; env?: EnvOverrides } = {},
   ) {
     super(modelName, options);
-    assertBedrockModelIsAvailable(options.config?.modelArn || modelName);
+    if (options.config?.operation !== 'retrieve') {
+      const nativeConfig = options.config?.retrieveAndGenerateConfiguration;
+      const generationModel = nativeConfig
+        ? nativeConfig.type === 'EXTERNAL_SOURCES'
+          ? nativeConfig.externalSourcesConfiguration?.modelArn
+          : nativeConfig.knowledgeBaseConfiguration?.modelArn
+        : options.config?.modelArn || modelName;
+      assertBedrockModelIsAvailable(generationModel ?? '');
+    }
 
     // Ensure we have a knowledgeBaseId
-    if (!options.config?.knowledgeBaseId) {
+    if (!options.config?.knowledgeBaseId && !options.config?.retrieveAndGenerateConfiguration) {
       throw new Error(
         'Knowledge Base ID is required. Please provide a knowledgeBaseId in the provider config.',
       );
@@ -99,33 +97,75 @@ export class AwsBedrockKnowledgeBaseProvider
     });
   }
 
+  private getNativeConfiguration() {
+    let nativeConfig = this.kbConfig.retrieveAndGenerateConfiguration;
+    if (nativeConfig?.externalSourcesConfiguration) {
+      const external = nativeConfig.externalSourcesConfiguration;
+      nativeConfig = {
+        ...nativeConfig,
+        externalSourcesConfiguration: {
+          ...external,
+          sources: external.sources?.map((source) => ({
+            ...source,
+            ...(source.byteContent
+              ? {
+                  byteContent: {
+                    ...source.byteContent,
+                    data: decodeBedrockBytes(source.byteContent.data),
+                  },
+                }
+              : {}),
+          })),
+        },
+      };
+    }
+    return nativeConfig;
+  }
+
   id(): string {
-    return `bedrock:kb:${this.kbConfig.knowledgeBaseId}`;
+    const id =
+      this.kbConfig.operation === 'retrieve' || !this.kbConfig.retrieveAndGenerateConfiguration
+        ? this.kbConfig.knowledgeBaseId
+        : this.kbConfig.retrieveAndGenerateConfiguration.knowledgeBaseConfiguration
+            ?.knowledgeBaseId;
+    if (id) {
+      return `bedrock:kb:${this.kbConfig.operation === 'retrieve' ? 'retrieve:' : ''}${id}`;
+    }
+    return `bedrock:kb:external:${hashBedrockConfig(this.getNativeConfiguration())}`;
   }
 
   toString(): string {
-    return `[Amazon Bedrock Knowledge Base Provider ${this.kbConfig.knowledgeBaseId}]`;
+    return `[Amazon Bedrock Knowledge Base Provider ${this.kbConfig.knowledgeBaseId ?? this.id()}]`;
+  }
+
+  get handlesOwnRetries(): boolean {
+    return (
+      this.kbConfig.operation !== 'retrieve' &&
+      Boolean(this.kbConfig.sessionId || this.kbConfig.streaming)
+    );
   }
 
   async getKnowledgeBaseClient() {
-    if (!this.knowledgeBaseClient) {
-      // client-bedrock-agent-runtime already defaults to HTTP/1.1, so we only
-      // need a custom handler for proxy or API key authentication.
-      const apiKey = this.getApiKey();
-      const handler =
-        hasProxyEnv() || apiKey ? await createBedrockRequestHandler({ apiKey }) : undefined;
+    const singleAttempt = this.handlesOwnRetries;
+    const clientProperty = singleAttempt
+      ? 'singleAttemptKnowledgeBaseClient'
+      : 'knowledgeBaseClient';
+    if (!this[clientProperty]) {
+      // Use a custom handler when a proxy is configured. Agent Runtime requires SigV4.
+      const handler = hasProxyEnv() ? await createBedrockRequestHandler() : undefined;
 
       try {
         const { BedrockAgentRuntimeClient } = await import('@aws-sdk/client-bedrock-agent-runtime');
-        const credentials = await this.getCredentials();
+        const credentials = await this.getCredentials(false);
         const client = new BedrockAgentRuntimeClient({
           region: this.getRegion(),
-          maxAttempts: getEnvInt('AWS_BEDROCK_MAX_RETRIES', 10),
+          // The SDK caches retry strategies; session continuations need a separate client.
+          maxAttempts: singleAttempt ? 1 : getEnvInt('AWS_BEDROCK_MAX_RETRIES', 10),
           retryMode: 'adaptive',
           ...(handler ? { requestHandler: handler } : {}),
           ...(credentials ? { credentials } : {}),
         });
-        this.knowledgeBaseClient = client;
+        this[clientProperty] = client;
       } catch (err) {
         throw new Error(
           `The @aws-sdk/client-bedrock-agent-runtime package is required as a peer dependency. Please install it in your project or globally. Error: ${err}`,
@@ -133,10 +173,10 @@ export class AwsBedrockKnowledgeBaseProvider
       }
     }
 
-    return this.knowledgeBaseClient;
+    return this[clientProperty];
   }
 
-  private buildGenerationConfiguration(modelArn: string) {
+  private buildGenerationConfiguration(modelArn: string): GenerationConfiguration | undefined {
     const { max_tokens } = this.kbConfig;
     const { temperature, top_p, top_k } = isSamplingParamsDeprecatedClaudeModel(modelArn)
       ? {}
@@ -151,161 +191,256 @@ export class AwsBedrockKnowledgeBaseProvider
       ...(max_tokens !== undefined && { maxTokens: max_tokens }),
       ...(top_p !== undefined && { topP: top_p }),
     };
-    if (Object.keys(textInferenceConfig).length > 0 || top_k !== undefined) {
+    const additionalModelRequestFields: GenerationConfiguration['additionalModelRequestFields'] =
+      top_k === undefined
+        ? undefined
+        : /(^|[/.])amazon\.nova-/.test(modelArn)
+          ? { inferenceConfig: { topK: top_k } }
+          : /(^|[/.])cohere\.command-r(?:-plus)?-v\d+(?::\d+)?$/.test(modelArn)
+            ? { k: top_k }
+            : { top_k };
+    if (Object.keys(textInferenceConfig).length > 0 || additionalModelRequestFields) {
       return {
-        ...(Object.keys(textInferenceConfig).length > 0 && {
-          inferenceConfig: { textInferenceConfig },
-        }),
-        ...(top_k !== undefined && {
-          additionalModelRequestFields: /(^|[/.])amazon\.nova-/.test(modelArn)
-            ? { inferenceConfig: { topK: top_k } }
-            : /(^|[/.])cohere\.command-r(?:-plus)?-v\d+(?::\d+)?$/.test(modelArn)
-              ? { k: top_k }
-              : { top_k },
-        }),
+        ...(Object.keys(textInferenceConfig).length > 0
+          ? { inferenceConfig: { textInferenceConfig } }
+          : {}),
+        ...(additionalModelRequestFields ? { additionalModelRequestFields } : {}),
       };
     }
 
     return undefined;
   }
 
-  async callApi(prompt: string): Promise<ProviderResponse> {
-    if (!this.kbConfig.modelArn && (!this.modelName || this.modelName === 'default')) {
+  private buildRetrievalConfiguration() {
+    const native = this.kbConfig.retrievalConfiguration;
+    if (this.kbConfig.numberOfResults === undefined) {
+      return native;
+    }
+    if (native?.managedSearchConfiguration) {
       return {
-        error:
-          'A generation model is required for Bedrock Knowledge Bases. Set bedrock:kb:<model-id> or provide config.modelArn.',
-      };
-    }
-
-    const client = await this.getKnowledgeBaseClient();
-
-    // Prepare the request parameters
-    let modelArn = this.kbConfig.modelArn;
-
-    if (!modelArn) {
-      if (/^arn:aws(?:-[^:]+)?:bedrock:/.test(this.modelName)) {
-        modelArn = this.modelName; // Already has full ARN format
-      } else if (INFERENCE_PROFILE_PREFIX.test(this.modelName)) {
-        // Preserve system-defined inference profile IDs instead of wrapping them
-        // in a foundation-model ARN.
-        modelArn = this.modelName;
-      } else {
-        // Regular foundation model
-        modelArn = `arn:aws:bedrock:${this.getRegion()}::foundation-model/${this.modelName}`;
-      }
-    }
-
-    const generationConfiguration = this.buildGenerationConfiguration(modelArn);
-    const knowledgeBaseConfiguration: any = {
-      knowledgeBaseId: this.kbConfig.knowledgeBaseId,
-      modelArn,
-      ...(generationConfiguration && { generationConfiguration }),
-    };
-
-    // Only add retrieval configuration when numberOfResults is explicitly configured
-    // This preserves backwards compatibility with AWS default behavior
-    if (this.kbConfig.numberOfResults !== undefined) {
-      knowledgeBaseConfiguration.retrievalConfiguration = {
-        vectorSearchConfiguration: {
+        ...native,
+        managedSearchConfiguration: {
+          ...native.managedSearchConfiguration,
           numberOfResults: this.kbConfig.numberOfResults,
         },
       };
     }
-
-    const params: RetrieveAndGenerateCommandInput = {
-      input: { text: prompt },
-      retrieveAndGenerateConfiguration: {
-        type: 'KNOWLEDGE_BASE',
-        knowledgeBaseConfiguration,
+    return {
+      ...native,
+      vectorSearchConfiguration: {
+        ...native?.vectorSearchConfiguration,
+        numberOfResults: this.kbConfig.numberOfResults,
       },
     };
+  }
 
-    logger.debug('Calling Amazon Bedrock Knowledge Base API', {
-      knowledgeBaseId: this.kbConfig.knowledgeBaseId,
-      modelArn: knowledgeBaseConfiguration.modelArn,
-      promptLength: prompt.length,
-      hasRetrievalConfiguration: Boolean(knowledgeBaseConfiguration.retrievalConfiguration),
-    });
-
-    const cache = await getCache();
-
-    const sensitiveKeys = ['accessKeyId', 'secretAccessKey', 'sessionToken'];
-    const cacheConfig = {
-      region: this.getRegion(),
-      modelName: this.modelName,
-      ...Object.fromEntries(
-        Object.entries(this.kbConfig).filter(([key]) => !sensitiveKeys.includes(key)),
-      ),
-    };
-
-    const configStr = JSON.stringify(cacheConfig, Object.keys(cacheConfig).sort());
-    // Earlier cached results did not apply configured generation parameters.
-    const cacheKey = `bedrock-kb:v2:${this.kbConfig.knowledgeBaseId}:${modelArn}:${this.getRegion()}:${sha256(
-      JSON.stringify({
-        configStr,
-        prompt,
+  private async retrieve(prompt: string): Promise<ProviderResponse> {
+    const { RetrieveCommand } = await import('@aws-sdk/client-bedrock-agent-runtime');
+    const client = await this.getKnowledgeBaseClient();
+    const response = await client.send(
+      new RetrieveCommand({
+        knowledgeBaseId: this.kbConfig.knowledgeBaseId,
+        retrievalQuery: { text: prompt },
+        retrievalConfiguration: this.buildRetrievalConfiguration(),
+        guardrailConfiguration: this.kbConfig.guardrailConfiguration,
+        nextToken: this.kbConfig.nextToken,
+        userContext: this.kbConfig.userContext,
       }),
-    )}`;
+    );
+    return {
+      output: JSON.stringify(response.retrievalResults ?? []),
+      metadata: {
+        retrievalResults: response.retrievalResults,
+        ...(response.nextToken ? { nextToken: response.nextToken } : {}),
+        ...(response.guardrailAction ? { guardrailAction: response.guardrailAction } : {}),
+      },
+      ...(response.guardrailAction === 'INTERVENED'
+        ? { guardrails: { flagged: true, reason: 'INTERVENED' } }
+        : {}),
+      tokenUsage: { numRequests: 1 },
+    };
+  }
 
-    if (isCacheEnabled()) {
-      const cachedResponse = await cache.get(cacheKey);
-      if (cachedResponse) {
-        logger.debug('Returning cached Bedrock Knowledge Base response');
-        const parsedResponse = JSON.parse(cachedResponse as string);
-        return {
-          output: parsedResponse.output,
-          metadata: { citations: parsedResponse.citations },
-          tokenUsage: createEmptyTokenUsage(), // TODO: Add token usage once Bedrock Knowledge Base API supports it
-          cached: true,
-        };
+  private async collectStream(
+    response: RetrieveAndGenerateStreamCommandOutput,
+  ): Promise<RetrieveAndGenerateCommandOutput> {
+    if (!response.stream) {
+      throw new Error('Bedrock returned no RetrieveAndGenerate stream');
+    }
+    const collected: RetrieveAndGenerateCommandOutput = {
+      $metadata: response.$metadata,
+      sessionId: response.sessionId,
+      output: { text: '' },
+      citations: [],
+    };
+    for await (const event of response.stream) {
+      const failure = Object.entries(event).find(([key]) => key.endsWith('Exception'));
+      if (failure) {
+        throw new Error(
+          `${failure[0]}: ${(failure[1] as { message?: string }).message ?? 'Bedrock stream failed'}`,
+        );
+      }
+      if (event.output?.text) {
+        collected.output!.text += event.output.text;
+      }
+      if (event.citation) {
+        const { citation, generatedResponsePart, retrievedReferences } = event.citation;
+        collected.citations!.push(citation ?? { generatedResponsePart, retrievedReferences });
+      }
+      if (event.guardrail?.action) {
+        collected.guardrailAction = event.guardrail.action;
       }
     }
+    return collected;
+  }
 
+  async callApi(prompt: string): Promise<ProviderResponse> {
     try {
-      const { RetrieveAndGenerateCommand } = await import('@aws-sdk/client-bedrock-agent-runtime');
-      const command = new RetrieveAndGenerateCommand(params);
-
-      const response = await client.send(command);
-
-      logger.debug('Amazon Bedrock Knowledge Base API response', {
-        hasOutput: typeof response?.output?.text === 'string',
-        outputLength: response?.output?.text?.length ?? 0,
-        citationCount: Array.isArray(response?.citations) ? response.citations.length : 0,
-      });
-
-      let output = '';
-      if (response && response.output && response.output.text) {
-        output = response.output.text;
+      const retrieval =
+        this.kbConfig.operation === 'retrieve' || !this.kbConfig.retrieveAndGenerateConfiguration
+          ? this.kbConfig.retrievalConfiguration
+          : this.kbConfig.retrieveAndGenerateConfiguration.knowledgeBaseConfiguration
+              ?.retrievalConfiguration;
+      const filters = [
+        retrieval?.vectorSearchConfiguration?.filter,
+        retrieval?.managedSearchConfiguration?.filter,
+      ];
+      if (
+        filters.some((filter) => filter !== undefined && !isValidBedrockRetrievalFilter(filter))
+      ) {
+        return {
+          error:
+            'Invalid Knowledge Base retrieval filter: use an AWS RetrievalFilter with one operator, such as equals, or andAll/orAll with at least two operands. Flat metadata maps are not supported.',
+        };
       }
-
-      let citations: Citation[] = [];
-      if (response && response.citations && Array.isArray(response.citations)) {
-        citations = response.citations;
+      if (this.kbConfig.operation === 'retrieve') {
+        if (!this.kbConfig.knowledgeBaseId) {
+          return { error: 'Retrieve requires config.knowledgeBaseId.' };
+        }
+        return await this.retrieve(prompt);
       }
+      if (retrieval?.managedSearchConfiguration) {
+        return {
+          error:
+            'Managed Knowledge Bases do not support RetrieveAndGenerate or RetrieveAndGenerateStream. Use operation: retrieve with managedSearchConfiguration.',
+        };
+      }
+      if (
+        !this.kbConfig.retrieveAndGenerateConfiguration &&
+        !this.kbConfig.modelArn &&
+        (!this.modelName || this.modelName === 'default')
+      ) {
+        return {
+          error:
+            'A generation model is required for Bedrock Knowledge Bases. Set bedrock:kb:<model-id> or provide config.modelArn.',
+        };
+      }
+      const client = await this.getKnowledgeBaseClient();
+      const region = this.getRegion();
+      const partition = region.startsWith('cn-')
+        ? 'aws-cn'
+        : region.startsWith('us-gov-')
+          ? 'aws-us-gov'
+          : 'aws';
+      const modelArn =
+        this.kbConfig.modelArn ||
+        (/^arn:aws(?:-[^:]+)?:bedrock:/.test(this.modelName) ||
+        INFERENCE_PROFILE_PREFIX.test(this.modelName)
+          ? this.modelName
+          : `arn:${partition}:bedrock:${region}::foundation-model/${this.modelName}`);
+      const generationConfiguration =
+        this.kbConfig.generationConfiguration ?? this.buildGenerationConfiguration(modelArn);
+      const retrievalConfiguration = this.buildRetrievalConfiguration();
+      const knowledgeBaseConfiguration: KnowledgeBaseRetrieveAndGenerateConfiguration = {
+        knowledgeBaseId: this.kbConfig.knowledgeBaseId,
+        modelArn,
+        ...(generationConfiguration ? { generationConfiguration } : {}),
+        ...(retrievalConfiguration ? { retrievalConfiguration } : {}),
+        ...(this.kbConfig.orchestrationConfiguration
+          ? { orchestrationConfiguration: this.kbConfig.orchestrationConfiguration }
+          : {}),
+      };
+      const nativeConfig = this.getNativeConfiguration();
+      const params: RetrieveAndGenerateCommandInput = {
+        input: { text: prompt },
+        retrieveAndGenerateConfiguration: nativeConfig ?? {
+          type: 'KNOWLEDGE_BASE',
+          knowledgeBaseConfiguration,
+        },
+        ...(this.kbConfig.sessionId ? { sessionId: this.kbConfig.sessionId } : {}),
+        ...(this.kbConfig.sessionConfiguration
+          ? { sessionConfiguration: this.kbConfig.sessionConfiguration }
+          : {}),
+        ...(this.kbConfig.userContext ? { userContext: this.kbConfig.userContext } : {}),
+      };
 
-      if (isCacheEnabled()) {
-        try {
-          await cache.set(
-            cacheKey,
-            JSON.stringify({
-              output,
-              citations,
-            }),
-          );
-        } catch (err) {
-          logger.error(`Failed to cache knowledge base response: ${String(err)}`);
+      const cache = await getCache();
+      // Explicit sessions and streaming requests must reach AWS. A cached session response
+      // cannot advance the service's conversation state.
+      const useCache = isCacheEnabled() && !this.kbConfig.sessionId && !this.kbConfig.streaming;
+      const sensitiveKeys = ['accessKeyId', 'secretAccessKey', 'sessionToken', 'apiKey'];
+      const cacheKey = useCache
+        ? `bedrock-kb:v3:${this.kbConfig.knowledgeBaseId}:${modelArn}:${region}:${hashBedrockConfig(
+            {
+              config: {
+                region,
+                modelName: this.modelName,
+                ...Object.fromEntries(
+                  Object.entries(this.kbConfig).filter(([key]) => !sensitiveKeys.includes(key)),
+                ),
+                retrieveAndGenerateConfiguration: nativeConfig,
+              },
+              prompt,
+            },
+          )}`
+        : '';
+      if (useCache) {
+        const cached = await cache.get(cacheKey);
+        if (cached) {
+          logger.debug('Returning cached Bedrock Knowledge Base response');
+          const parsed = JSON.parse(cached as string);
+          const { sessionId: _sessionId, ...cachedMetadata } = parsed.metadata ?? {
+            citations: parsed.citations,
+          };
+          return {
+            output: parsed.output,
+            metadata: cachedMetadata,
+            ...(parsed.guardrails ? { guardrails: parsed.guardrails } : {}),
+            tokenUsage: createEmptyTokenUsage(),
+            cached: true,
+          };
         }
       }
-
-      return {
-        output,
-        metadata: { citations },
-        tokenUsage: { ...createEmptyTokenUsage(), numRequests: 1 }, // TODO: Add token usage once Bedrock Knowledge Base API supports it
+      const { RetrieveAndGenerateCommand, RetrieveAndGenerateStreamCommand } = await import(
+        '@aws-sdk/client-bedrock-agent-runtime'
+      );
+      const response = this.kbConfig.streaming
+        ? await this.collectStream(await client.send(new RetrieveAndGenerateStreamCommand(params)))
+        : await client.send(new RetrieveAndGenerateCommand(params));
+      const result: ProviderResponse = {
+        output: response.output?.text ?? '',
+        metadata: {
+          citations: response.citations ?? [],
+          ...(response.sessionId ? { sessionId: response.sessionId } : {}),
+          ...(response.guardrailAction ? { guardrailAction: response.guardrailAction } : {}),
+        },
+        ...(response.guardrailAction === 'INTERVENED'
+          ? { guardrails: { flagged: true, reason: 'INTERVENED' } }
+          : {}),
+        tokenUsage: { ...createEmptyTokenUsage(), numRequests: 1 },
       };
+      if (useCache) {
+        try {
+          // Cached output is reusable, but the service session belongs to this live call.
+          const { sessionId: _sessionId, ...metadata } = result.metadata ?? {};
+          await cache.set(cacheKey, JSON.stringify({ ...result, metadata }));
+        } catch (err) {
+          logger.error('Failed to cache knowledge base response', { error: String(err) });
+        }
+      }
+      return result;
     } catch (err) {
-      return {
-        error: `Bedrock Knowledge Base API error: ${String(err)}`,
-      };
+      return { error: `Bedrock Knowledge Base API error: ${String(err)}` };
     }
   }
 }

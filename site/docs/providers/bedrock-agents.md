@@ -197,6 +197,39 @@ config:
                   value: 'widget-pro'
 ```
 
+### Native Runtime Controls and Results
+
+Agent Runtime requires AWS credentials (SigV4). Bedrock API keys are unsupported and
+do not override a configured AWS profile or the default credential chain.
+
+The provider forwards `streamingConfigurations` (`streamFinalResponse` and
+`applyGuardrailInterval`), `promptCreationConfigurations`,
+`bedrockModelConfigurations`, and `sourceArn` using the
+[InvokeAgent request shapes](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_agent-runtime_InvokeAgent.html).
+The full `sessionState` is supported, including conversation history, input files,
+Knowledge Base overrides, and return-control results. Encode input-file
+`source.byteContent.data` as canonical padded or unpadded base64 in JSON/YAML. Malformed base64 is rejected before invocation.
+
+Response metadata preserves the session and memory IDs, citations, traces,
+`returnControl` events, and generated `files`. Returned file `bytes` are base64
+strings. If the agent returns control without text, the eval output contains the
+return-control events as JSON; Promptfoo does not execute those requested actions.
+To resume, supply the same `sessionId` and the returned `invocationId` and
+`returnControlInvocationResults` in `sessionState`. Explicit session/memory calls,
+session-ending requests, tracing, and return-control results bypass the response cache. Cached
+outputs omit resumable session/memory IDs; use `--no-cache` to start a conversation
+you intend to continue. Responses that request return control are not cached.
+
+With `PROMPTFOO_STRIP_RESPONSE_OUTPUT=true`, `trace`, `citations`, `returnControl`,
+`files`, and `retrievalResults` are reserved output metadata keys and are
+removed from exports and shares even if a hook changes their values. Use a separate
+metadata key for hook annotations. Metadata explicitly supplied by a test case is preserved, including when a provider
+returns the same metadata key.
+
+All agent stream exception events become provider errors. With tracing enabled,
+a returned guardrail trace with action `INTERVENED` also sets
+`response.guardrails.flagged`.
+
 ### Action Groups (Tools)
 
 Enable agents to use tools and APIs:

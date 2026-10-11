@@ -2,9 +2,14 @@ import { getCache, isCacheEnabled } from '../../cache';
 import { getEnvInt } from '../../envars';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
-import { sha256 } from '../../util/createHash';
 import { AwsBedrockGenericProvider } from './base';
-import { createBedrockRequestHandler, hasProxyEnv } from './util';
+import { isValidBedrockRetrievalFilter } from './retrievalFilter';
+import {
+  createBedrockRequestHandler,
+  decodeBedrockBytes,
+  hashBedrockConfig,
+  hasProxyEnv,
+} from './util';
 import type {
   BedrockAgentRuntimeClient,
   InferenceConfig,
@@ -35,25 +40,11 @@ interface BedrockAgentsOptions {
 
   // Session Management
   sessionId?: string;
-  sessionState?: {
-    sessionAttributes?: Record<string, string>;
-    promptSessionAttributes?: Record<string, string>;
-    returnControlInvocationResults?: Array<{
-      functionResult?: {
-        actionGroup: string;
-        function?: string;
-        responseBody?: Record<string, any>;
-      };
-      apiResult?: {
-        actionGroup: string;
-        apiPath?: string;
-        httpMethod?: string;
-        httpStatusCode?: number;
-        responseBody?: Record<string, any>;
-      };
-    }>;
-    invocationId?: string;
-  };
+  sessionState?: SessionState;
+  bedrockModelConfigurations?: InvokeAgentCommandInput['bedrockModelConfigurations'];
+  streamingConfigurations?: InvokeAgentCommandInput['streamingConfigurations'];
+  promptCreationConfigurations?: InvokeAgentCommandInput['promptCreationConfigurations'];
+  sourceArn?: InvokeAgentCommandInput['sourceArn'];
 
   // Memory Configuration
   memoryId?: string;
@@ -221,13 +212,12 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
    */
   async getAgentRuntimeClient(): Promise<BedrockAgentRuntimeClient> {
     if (!this.agentRuntimeClient) {
-      // client-bedrock-agent-runtime already defaults to HTTP/1.1, so we only
-      // need a custom handler for proxy support.
+      // Use a custom handler when a proxy is configured.
       const handler = hasProxyEnv() ? await createBedrockRequestHandler() : undefined;
 
       try {
         const { BedrockAgentRuntimeClient } = await import('@aws-sdk/client-bedrock-agent-runtime');
-        const credentials = await this.getCredentials();
+        const credentials = await this.getCredentials(false);
 
         this.agentRuntimeClient = new BedrockAgentRuntimeClient({
           region: this.getRegion(),
@@ -247,82 +237,46 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
   }
 
   /**
-   * Check operator shapes before the SDK silently drops unknown filter keys.
-   */
-  private hasRetrievalFilterShape(filter: unknown): boolean {
-    if (!filter || typeof filter !== 'object' || Array.isArray(filter)) {
-      return false;
-    }
-    const entries = Object.entries(filter).filter(([, value]) => value !== undefined);
-    if (entries.length !== 1) {
-      return false;
-    }
-    const [operator, operand] = entries[0];
-    if (operator === 'andAll' || operator === 'orAll') {
-      return (
-        Array.isArray(operand) &&
-        operand.length >= 2 &&
-        operand.every((child) => this.hasRetrievalFilterShape(child))
-      );
-    }
-    // Preserve the SDK's explicit escape hatch for a newer union member.
-    if (operator === '$unknown') {
-      return (
-        Array.isArray(operand) &&
-        operand.length === 2 &&
-        typeof operand[0] === 'string' &&
-        operand[1] !== undefined
-      );
-    }
-    return (
-      [
-        'equals',
-        'notEquals',
-        'greaterThan',
-        'greaterThanOrEquals',
-        'lessThan',
-        'lessThanOrEquals',
-        'in',
-        'notIn',
-        'startsWith',
-        'listContains',
-        'stringContains',
-      ].includes(operator) &&
-      operand !== null &&
-      typeof operand === 'object' &&
-      !Array.isArray(operand) &&
-      typeof operand.key === 'string' &&
-      operand.value !== undefined
-    );
-  }
-
-  /**
    * Build the session state from configuration
    */
   private buildSessionState(): SessionState | undefined {
     // ID-only entries use the agent's deployed configuration. Runtime overrides
     // require retrievalConfiguration, so do not send those legacy entries.
     const knowledgeBaseConfigurations = this.config.knowledgeBaseConfigurations?.filter(
-      (configuration) => configuration.retrievalConfiguration,
+      (
+        configuration,
+      ): configuration is {
+        knowledgeBaseId: string;
+        retrievalConfiguration: KnowledgeBaseRetrievalConfiguration;
+      } => configuration.retrievalConfiguration !== undefined,
     );
     if (!this.config.sessionState && !knowledgeBaseConfigurations?.length) {
       return undefined;
     }
 
-    // Build session state according to AWS SDK types
-    // Note: Using partial typing due to AWS SDK type constraints
+    const configured = this.config.sessionState;
     const sessionState: SessionState = {
-      sessionAttributes: this.config.sessionState?.sessionAttributes,
-      promptSessionAttributes: this.config.sessionState?.promptSessionAttributes,
-      invocationId: this.config.sessionState?.invocationId,
-      ...(knowledgeBaseConfigurations?.length && { knowledgeBaseConfigurations }),
-    } as SessionState;
-
-    // Handle returnControlInvocationResults if present
-    if (this.config.sessionState?.returnControlInvocationResults) {
-      (sessionState as any).returnControlInvocationResults =
-        this.config.sessionState.returnControlInvocationResults;
-    }
+      ...configured,
+      ...(knowledgeBaseConfigurations?.length ? { knowledgeBaseConfigurations } : {}),
+      ...(configured?.files
+        ? {
+            files: configured.files.map((file) => ({
+              ...file,
+              ...(file.source?.byteContent
+                ? {
+                    source: {
+                      ...file.source,
+                      byteContent: {
+                        ...file.source.byteContent,
+                        data: decodeBedrockBytes(file.source.byteContent.data),
+                      },
+                    },
+                  }
+                : {}),
+            })),
+          }
+        : {}),
+    };
 
     return sessionState;
   }
@@ -392,42 +346,69 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
   /**
    * Process the streaming response from the agent
    */
-  private async processResponse(response: InvokeAgentCommandOutput): Promise<{
-    output: string;
-    trace?: any;
-    sessionId?: string;
-  }> {
+  private async processResponse(response: InvokeAgentCommandOutput): Promise<ProviderResponse> {
+    if (!response.completion) {
+      throw new Error('Bedrock returned no agent completion stream');
+    }
     let output = '';
-    const traces: any[] = [];
-
-    if (response.completion) {
-      const decoder = new TextDecoder();
-
-      try {
-        for await (const event of response.completion) {
-          // Process text chunks
-          if (event.chunk?.bytes) {
-            output += decoder.decode(event.chunk.bytes, { stream: true });
-          }
-
-          // Collect trace information if enabled
-          if (this.config.enableTrace && event.trace) {
-            traces.push(event.trace);
-          }
+    const traces: unknown[] = [];
+    const citations: unknown[] = [];
+    const files: unknown[] = [];
+    const returnControl: unknown[] = [];
+    let guardrailIntervened = false;
+    const decoder = new TextDecoder();
+    for await (const event of response.completion) {
+      const failure = Object.entries(event).find(([key]) => key.endsWith('Exception'));
+      if (failure) {
+        throw new Error(
+          `${failure[0]}: ${(failure[1] as { message?: string }).message ?? 'Bedrock agent stream failed'}`,
+        );
+      }
+      if (event.chunk?.bytes) {
+        output += decoder.decode(event.chunk.bytes, { stream: true });
+      }
+      if (event.chunk?.attribution?.citations) {
+        citations.push(...event.chunk.attribution.citations);
+      }
+      if (event.trace) {
+        if (this.config.enableTrace) {
+          traces.push(event.trace);
         }
-
-        // Final decode to flush any remaining bytes
-        output += decoder.decode();
-      } catch (error) {
-        logger.error(`Error processing agent response stream: ${error}`);
-        throw error;
+        guardrailIntervened ||= event.trace.trace?.guardrailTrace?.action === 'INTERVENED';
+      }
+      if (event.returnControl) {
+        returnControl.push(event.returnControl);
+      }
+      if (event.files?.files) {
+        files.push(
+          ...event.files.files.map((file) => ({
+            ...file,
+            ...(file.bytes ? { bytes: Buffer.from(file.bytes).toString('base64') } : {}),
+          })),
+        );
       }
     }
-
+    output += decoder.decode();
     return {
-      output,
-      trace: traces.length > 0 ? traces : undefined,
-      sessionId: response.sessionId,
+      output:
+        output ||
+        (returnControl.length
+          ? JSON.stringify(returnControl)
+          : files.length
+            ? JSON.stringify(files)
+            : ''),
+      metadata: {
+        ...(response.contentType ? { contentType: response.contentType } : {}),
+        ...(response.sessionId ? { sessionId: response.sessionId } : {}),
+        ...((response.memoryId ?? this.config.memoryId)
+          ? { memoryId: response.memoryId ?? this.config.memoryId }
+          : {}),
+        ...(traces.length ? { trace: traces } : {}),
+        ...(citations.length ? { citations } : {}),
+        ...(returnControl.length ? { returnControl } : {}),
+        ...(files.length ? { files } : {}),
+      },
+      ...(guardrailIntervened ? { guardrails: { flagged: true, reason: 'INTERVENED' } } : {}),
     };
   }
 
@@ -445,12 +426,42 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
     for (const [index, configuration] of (
       this.config.knowledgeBaseConfigurations ?? []
     ).entries()) {
-      const filter = configuration.retrievalConfiguration?.vectorSearchConfiguration?.filter;
-      if (filter !== undefined && !this.hasRetrievalFilterShape(filter)) {
+      const retrieval = configuration.retrievalConfiguration;
+      const filters = [
+        retrieval?.vectorSearchConfiguration?.filter,
+        retrieval?.managedSearchConfiguration?.filter,
+      ];
+      if (
+        filters.some((filter) => filter !== undefined && !isValidBedrockRetrievalFilter(filter))
+      ) {
         return {
-          error: `Invalid knowledgeBaseConfigurations[${index}].retrievalConfiguration.vectorSearchConfiguration.filter: use an AWS RetrievalFilter with one operator, such as equals, or andAll/orAll with at least two operands. Flat metadata maps are not supported.`,
+          error: `Invalid knowledgeBaseConfigurations[${index}].retrievalConfiguration filter: use an AWS RetrievalFilter with one operator, such as equals, or andAll/orAll with at least two operands. Flat metadata maps are not supported.`,
         };
       }
+    }
+
+    for (const [index, configuration] of (
+      this.config.sessionState?.knowledgeBaseConfigurations ?? []
+    ).entries()) {
+      const retrieval = configuration.retrievalConfiguration;
+      const filters = [
+        retrieval?.vectorSearchConfiguration?.filter,
+        retrieval?.managedSearchConfiguration?.filter,
+      ];
+      if (
+        filters.some((filter) => filter !== undefined && !isValidBedrockRetrievalFilter(filter))
+      ) {
+        return {
+          error: `Invalid sessionState.knowledgeBaseConfigurations[${index}].retrievalConfiguration filter: use a valid AWS RetrievalFilter operator.`,
+        };
+      }
+    }
+
+    let sessionState: SessionState | undefined;
+    try {
+      sessionState = this.buildSessionState();
+    } catch (error) {
+      return { error: String(error) };
     }
 
     const client = await this.getAgentRuntimeClient();
@@ -475,8 +486,18 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
       // Optional features
       enableTrace: this.config.enableTrace,
       endSession: this.config.endSession,
-      sessionState: this.buildSessionState(),
+      sessionState,
       memoryId: this.config.memoryId,
+      ...(this.config.bedrockModelConfigurations
+        ? { bedrockModelConfigurations: this.config.bedrockModelConfigurations }
+        : {}),
+      ...(this.config.streamingConfigurations
+        ? { streamingConfigurations: this.config.streamingConfigurations }
+        : {}),
+      ...(this.config.promptCreationConfigurations
+        ? { promptCreationConfigurations: this.config.promptCreationConfigurations }
+        : {}),
+      ...(this.config.sourceArn ? { sourceArn: this.config.sourceArn } : {}),
 
       // Legacy configuration keys are retained for compatibility, but the SDK
       // omits these control-plane settings from InvokeAgent requests.
@@ -499,26 +520,40 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
 
     // Cache key based on agent ID and prompt (excluding volatile fields)
     const cache = await getCache();
+    const useCache =
+      isCacheEnabled() &&
+      !this.config.enableTrace &&
+      !this.config.sessionId &&
+      !this.config.memoryId &&
+      !this.config.endSession &&
+      !this.config.sessionState?.returnControlInvocationResults;
+
     // Earlier cached results omitted KB overrides and could claim an unapplied guardrail.
-    const cacheKey = `bedrock-agent:v2:${this.config.agentId}:${this.config.agentAliasId}:${this.getRegion()}:${sha256(
-      JSON.stringify({
-        prompt,
-        actionGroups: this.config.actionGroups,
-        enableTrace: this.config.enableTrace,
-        endSession: this.config.endSession,
-        guardrailConfiguration: this.config.guardrailConfiguration,
-        inferenceConfig,
-        inputDataConfig: this.config.inputDataConfig,
-        knowledgeBaseConfigurations: this.config.knowledgeBaseConfigurations,
-        memoryId: this.config.memoryId,
-        promptOverrideConfiguration: this.config.promptOverrideConfiguration,
-        sessionId: this.config.sessionId,
-        sessionState: this.config.sessionState,
-      }),
-    )}`;
+    const cacheKey = useCache
+      ? `bedrock-agent:v3:${this.config.agentId}:${this.config.agentAliasId}:${this.getRegion()}:${hashBedrockConfig(
+          {
+            prompt,
+            actionGroups: this.config.actionGroups,
+            enableTrace: this.config.enableTrace,
+            endSession: this.config.endSession,
+            guardrailConfiguration: this.config.guardrailConfiguration,
+            inferenceConfig,
+            inputDataConfig: this.config.inputDataConfig,
+            knowledgeBaseConfigurations: this.config.knowledgeBaseConfigurations,
+            memoryId: this.config.memoryId,
+            promptOverrideConfiguration: this.config.promptOverrideConfiguration,
+            sessionId: this.config.sessionId,
+            sessionState: input.sessionState,
+            bedrockModelConfigurations: this.config.bedrockModelConfigurations,
+            streamingConfigurations: this.config.streamingConfigurations,
+            promptCreationConfigurations: this.config.promptCreationConfigurations,
+            sourceArn: this.config.sourceArn,
+          },
+        )}`
+      : '';
 
     // Check cache
-    if (isCacheEnabled()) {
+    if (useCache) {
       const cached = await cache.get(cacheKey);
       if (cached) {
         logger.debug('Returning cached Bedrock Agents response');
@@ -526,8 +561,14 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
           const parsed = JSON.parse(cached as string);
           // Validate the parsed cache data has expected structure
           if (parsed && typeof parsed === 'object') {
+            const {
+              sessionId: _sessionId,
+              memoryId: _memoryId,
+              ...metadata
+            } = parsed.metadata ?? {};
             return {
               ...parsed,
+              metadata,
               cached: true,
             };
           }
@@ -543,22 +584,13 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
       const response = await client.send(new InvokeAgentCommand(input));
 
       // Process the streaming response
-      const { output, trace, sessionId: responseSessionId } = await this.processResponse(response);
-
-      // Build the result
-      const result: ProviderResponse = {
-        output,
-        metadata: {
-          ...(responseSessionId && { sessionId: responseSessionId }),
-          ...(trace && { trace }),
-          ...(this.config.memoryId && { memoryId: this.config.memoryId }),
-        },
-      };
+      const result = await this.processResponse(response);
 
       // Cache the successful response
-      if (isCacheEnabled()) {
+      if (useCache && !result.metadata?.returnControl) {
         try {
-          await cache.set(cacheKey, JSON.stringify(result));
+          const { sessionId: _sessionId, memoryId: _memoryId, ...metadata } = result.metadata ?? {};
+          await cache.set(cacheKey, JSON.stringify({ ...result, metadata }));
         } catch (err) {
           logger.error(`Failed to cache response: ${err}`);
         }

@@ -1,6 +1,5 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AwsBedrockAgentsProvider } from '../../../src/providers/bedrock/agents';
-import { sha256 } from '../../../src/util/createHash';
 
 const { createNodeHttpHandlerFactory, createBedrockCacheFactory } = await vi.hoisted(
   () => import('../../factories/moduleMocks'),
@@ -45,57 +44,6 @@ vi.mock(
   '../../../src/cache',
   createBedrockCacheFactory(mockGet, mockSet, () => mockIsCacheEnabled),
 );
-
-function buildAgentCacheKey({
-  agentId,
-  agentAliasId,
-  prompt,
-  region,
-  actionGroups,
-  enableTrace,
-  endSession,
-  guardrailConfiguration,
-  inferenceConfig,
-  inputDataConfig,
-  knowledgeBaseConfigurations,
-  memoryId,
-  promptOverrideConfiguration,
-  sessionId,
-  sessionState,
-}: {
-  agentId: string;
-  agentAliasId: string;
-  prompt: string;
-  region: string;
-  actionGroups?: Array<Record<string, unknown>>;
-  enableTrace?: boolean;
-  endSession?: boolean;
-  guardrailConfiguration?: Record<string, unknown>;
-  inferenceConfig?: Record<string, unknown>;
-  inputDataConfig?: Record<string, unknown>;
-  knowledgeBaseConfigurations?: Array<Record<string, unknown>>;
-  memoryId?: string;
-  promptOverrideConfiguration?: Record<string, unknown>;
-  sessionId?: string;
-  sessionState?: Record<string, unknown>;
-}) {
-  return `bedrock-agent:v2:${agentId}:${agentAliasId}:${region}:${sha256(
-    JSON.stringify({
-      prompt,
-      actionGroups,
-      enableTrace,
-      endSession,
-      guardrailConfiguration,
-      inferenceConfig,
-      inputDataConfig,
-      knowledgeBaseConfigurations,
-      memoryId,
-      promptOverrideConfiguration,
-      sessionId,
-      sessionState,
-    }),
-  )}`;
-}
 
 function makeCompletionResponse(output: string) {
   return {
@@ -223,7 +171,7 @@ describe('AwsBedrockAgentsProvider', () => {
 
       expect(result).toEqual({
         error:
-          'Invalid knowledgeBaseConfigurations[0].retrievalConfiguration.vectorSearchConfiguration.filter: use an AWS RetrievalFilter with one operator, such as equals, or andAll/orAll with at least two operands. Flat metadata maps are not supported.',
+          'Invalid knowledgeBaseConfigurations[0].retrievalConfiguration filter: use an AWS RetrievalFilter with one operator, such as equals, or andAll/orAll with at least two operands. Flat metadata maps are not supported.',
       });
       expect(getClient).not.toHaveBeenCalled();
       expect(mockGet).not.toHaveBeenCalled();
@@ -234,7 +182,7 @@ describe('AwsBedrockAgentsProvider', () => {
   it('does not replay legacy cached guardrail claims', async () => {
     mockIsCacheEnabled.mockReturnValue(true);
     mockGet.mockImplementation(async (key: string) =>
-      key.startsWith('bedrock-agent:v2:')
+      key.startsWith('bedrock-agent:v3:')
         ? null
         : JSON.stringify({
             output: 'legacy response',
@@ -295,31 +243,7 @@ describe('AwsBedrockAgentsProvider', () => {
     const firstKey = mockGet.mock.calls[0][0];
     const secondKey = mockGet.mock.calls[1][0];
 
-    expect(firstKey).toBe(
-      buildAgentCacheKey({
-        agentId: 'agent-123',
-        agentAliasId: 'alias-456',
-        prompt,
-        region: 'us-east-1',
-        sessionState: {
-          promptSessionAttributes: {
-            tenant: 'SECRET_SESSION_ATTRIBUTE',
-          },
-        },
-        knowledgeBaseConfigurations: [
-          {
-            knowledgeBaseId: 'kb-123',
-            retrievalConfiguration: {
-              vectorSearchConfiguration: {
-                filter: {
-                  equals: { key: 'sensitiveFilter', value: 'SECRET_FILTER_VALUE' },
-                },
-              },
-            },
-          },
-        ],
-      }),
-    );
+    expect(firstKey).toMatch(/^bedrock-agent:v3:agent-123:alias-456:us-east-1:[a-f0-9]{64}$/);
     expect(firstKey).not.toContain(prompt);
     expect(firstKey).not.toContain('SECRET_FILTER_VALUE');
     expect(firstKey).not.toContain('SECRET_SESSION_ATTRIBUTE');
@@ -334,13 +258,46 @@ describe('AwsBedrockAgentsProvider', () => {
     });
     expect(secondResult).toEqual({
       output: 'cached response',
-      metadata: {
-        sessionId: 'cached-session-id',
-      },
+      metadata: {},
       cached: true,
     });
 
     mockIsCacheEnabled.mockReturnValue(false);
+  });
+
+  it('bypasses cache for traces containing resumable session handles', async () => {
+    mockIsCacheEnabled.mockReturnValue(true);
+    mockGet.mockResolvedValue(
+      JSON.stringify({
+        output: 'cached response',
+        metadata: { trace: [{ sessionId: 'cached-session-handle' }] },
+      }),
+    );
+    let invocation = 0;
+    mockSend.mockImplementation(async () => {
+      const sessionId = 'fresh-session-' + ++invocation;
+      return {
+        sessionId,
+        completion: (async function* () {
+          yield { chunk: { bytes: Buffer.from('fresh response') } };
+          yield { trace: { sessionId, trace: { orchestrationTrace: {} } } };
+        })(),
+      };
+    });
+    const provider = new AwsBedrockAgentsProvider('agent-123', {
+      config: { ...createAgentConfig().config, enableTrace: true },
+    });
+    for (let invocation = 1; invocation <= 2; invocation++) {
+      const result = await provider.callApi('same prompt');
+      expect(result.output).toBe('fresh response');
+      expect(result.cached).not.toBe(true);
+      expect(result.metadata?.trace).toEqual([
+        { sessionId: 'fresh-session-' + invocation, trace: { orchestrationTrace: {} } },
+      ]);
+    }
+    expect(mockSend).toHaveBeenCalledTimes(2);
+    expect(mockGet).not.toHaveBeenCalled();
+    expect(mockSet).not.toHaveBeenCalled();
   });
 
   it('should separate cache keys for response-shaping agent configuration', async () => {

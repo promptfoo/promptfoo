@@ -127,6 +127,10 @@ export function renderEnvOnlyInObject<T>(
       return value.map(render);
     }
 
+    if (ArrayBuffer.isView(value)) {
+      return value;
+    }
+
     if (typeof value === 'object' && value !== null) {
       const result: Record<string, unknown> = {};
       for (const key in value) {
