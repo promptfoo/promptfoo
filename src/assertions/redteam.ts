@@ -29,7 +29,10 @@ import type {
  * Returns whether some (but not all) turns have grader errors.
  * If ALL turns have errors, we should still ERROR. If only SOME have errors, we can be more lenient.
  */
-function analyzeGraderErrors(redteamHistory: Array<{ graderError?: string }> | undefined): {
+function analyzeGraderErrors(
+  redteamHistory: Array<{ graderError?: string; prompt?: string; output?: string }> | undefined,
+  coveredTurn?: { prompt: string; output: string },
+): {
   hasAnyErrors: boolean;
   allTurnsHaveErrors: boolean;
 } {
@@ -38,7 +41,15 @@ function analyzeGraderErrors(redteamHistory: Array<{ graderError?: string }> | u
   }
 
   const turnsWithErrors = redteamHistory.filter(
-    (turn) => turn.graderError && turn.graderError.length > 0,
+    (turn, index) =>
+      turn?.graderError &&
+      turn.graderError.length > 0 &&
+      !(
+        coveredTurn &&
+        index === redteamHistory.length - 1 &&
+        turn.prompt === coveredTurn.prompt &&
+        turn.output === coveredTurn.output
+      ),
   );
   const hasAnyErrors = turnsWithErrors.length > 0;
   const allTurnsHaveErrors = turnsWithErrors.length === redteamHistory.length;
@@ -323,6 +334,13 @@ export const handleRedteam = async (
       );
     }
 
+    // A fresh verdict resolves only the matching final turn, not earlier ungraded attempts.
+    const { hasAnyErrors } = analyzeGraderErrors(
+      isAttackProvider(providerId ?? '') ? providerResponse.metadata?.redteamHistory : undefined,
+      grade.metadata?.graderError === true
+        ? undefined
+        : { prompt: effectivePrompt, output: outputString },
+    );
     const gradeWithUsage = tokensUsed ? withGradingUsage(grade, tokensUsed) : grade;
     return {
       ...gradeWithUsage,
@@ -339,6 +357,7 @@ export const handleRedteam = async (
         // Pass through all test metadata for redteam
         ...test.metadata,
         ...gradeWithUsage.metadata,
+        ...(hasAnyErrors ? { gradingIncomplete: true } : {}),
       },
     };
   } catch (error) {

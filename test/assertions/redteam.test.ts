@@ -328,6 +328,42 @@ describe('redteam strategy result grading', () => {
     ).toBeUndefined();
   });
 
+  it.each([
+    { earlierError: true, currentError: false },
+    { earlierError: false, currentError: true },
+    { earlierError: true, currentError: true },
+  ])(
+    'retains only unresolved history errors after fresh grading: %j',
+    async ({ earlierError, currentError }) => {
+      const getResult = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
+        grade: { pass: true, score: 1, reason: 'Fresh verdict' },
+        rubric: 'Fresh rubric',
+      });
+      const history = [
+        ...(earlierError
+          ? [{ prompt: 'Earlier attack', output: 'Ungraded output', graderError: 'Outage' }]
+          : []),
+        { prompt: attackPrompt, output, ...(currentError && { graderError: 'Outage' }) },
+      ];
+      const result = await runAssertions({
+        prompt: originalPrompt,
+        test,
+        providerResponse: {
+          output,
+          metadata: {
+            redteamFinalPrompt: attackPrompt,
+            storedGraderResult: { ...storedResult, metadata: {} },
+            redteamHistory: history,
+          },
+        },
+      });
+      expect(getResult).toHaveBeenCalledOnce();
+      expect(result).toMatchObject({ pass: true, score: 1 });
+      expect(Boolean(result.componentResults?.[0].metadata?.gradingIncomplete)).toBe(earlierError);
+      expect(result.componentResults?.[0].metadata?.graderError).toBeUndefined();
+    },
+  );
+
   it('retains prior strategy usage when stale-grade regrading throws', async () => {
     vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockRejectedValue(
       new Error('Grader unavailable'),
