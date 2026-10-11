@@ -3570,6 +3570,7 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
       if (action === 'Rate') {
         expect(updatedOutput.gradingResult.componentResults[1].metadata).toEqual({
           originalFailureReason: previousReason,
+          originalError: null,
         });
       }
     },
@@ -3652,7 +3653,7 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
         for (const rating of [false, true, null]) {
           const onRating = Cell.mock.calls[Cell.mock.calls.length - 1][0].onRating;
           await act(async () => onRating(rating));
-          rerender(<ResultsTable {...defaultProps} />);
+          rerender(<ResultsTable {...defaultProps} key={String(rating)} />);
         }
         expect(table.body[0].outputs[0]).toMatchObject({
           ...original,
@@ -3667,6 +3668,65 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
         expect(version >= 4 ? payload : payload.table.body[0].outputs[0]).toMatchObject(original);
         unmount();
       }
+    },
+  );
+
+  it.each([
+    { version: 3, response: undefined, text: 'Opaque legacy output', originalError: 'No output' },
+    { version: 4, response: {}, text: 'No output', originalError: 'No output' },
+    {
+      version: 4,
+      response: { output: 'Partial provider output' },
+      text: 'Partial provider output',
+      originalError: 'No output',
+    },
+    { version: 3, response: {}, text: '', originalError: null },
+  ])(
+    'restores the original error without replacing provider text (version=$version, response=$response)',
+    async ({ version, response, text, originalError }) => {
+      let table = createMockTableWithHumanAssertion();
+      Object.assign(table.body[0].test, {
+        assert: [{ type: 'select-best', value: 'Choose best' }],
+      });
+      const output = table.body[0].outputs[0];
+      Object.assign(output, {
+        pass: false,
+        score: 0,
+        failureReason: 2,
+        error: originalError,
+        response,
+        text,
+      });
+      Object.assign(output.gradingResult, { pass: false, score: 0, componentResults: [] });
+      mockSetTable.mockImplementation((next) => {
+        table = next;
+      });
+      vi.mocked(useTableStore).mockImplementation(() =>
+        createTableStore({
+          version,
+          table,
+          setTable: mockSetTable,
+          isFetching: false,
+          filteredResultsCount: 1,
+        }),
+      );
+      const { rerender } = renderWithProviders(<ResultsTable {...defaultProps} />);
+      const Cell = vi.mocked((await import('./EvalOutputCell')).default);
+      await act(async () => Cell.mock.calls[Cell.mock.calls.length - 1][0].onRating(true));
+      Object.assign(table.body[0].outputs[0], {
+        pass: false,
+        failureReason: 1,
+        error: 'Output not selected',
+        text: response === undefined || 'output' in response ? text : 'Output not selected',
+      });
+      rerender(<ResultsTable {...defaultProps} key="comparison-result" />);
+      await act(async () => Cell.mock.calls[Cell.mock.calls.length - 1][0].onRating(null));
+      expect(table.body[0].outputs[0]).toMatchObject({
+        pass: false,
+        failureReason: 2,
+        error: originalError,
+        text,
+      });
     },
   );
 

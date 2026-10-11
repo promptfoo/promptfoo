@@ -23,6 +23,7 @@ import {
   getPrimaryTokenUsageLabel,
   getTokenUsageTotal,
 } from '@app/utils/tokenUsage';
+import { getTableCellText } from '@promptfoo/presentation/evalTableCells';
 import { FILE_METADATA_KEY, HUMAN_ASSERTION_TYPE } from '@promptfoo/providers/constants';
 import {
   type EvalResultsFilterMode,
@@ -884,6 +885,15 @@ function getOriginalFailureReason(output: EvaluateTableOutput) {
   return getManualGradingResult(output)?.metadata?.originalFailureReason ?? output.failureReason;
 }
 
+function getOriginalError(output: EvaluateTableOutput) {
+  const manualOverride = getManualGradingResult(output);
+  if (manualOverride) {
+    const error = manualOverride.metadata?.originalError;
+    return typeof error === 'string' || error === null ? error : undefined;
+  }
+  return output.error ?? null;
+}
+
 function getOriginalGrade(output: EvaluateTableOutput) {
   const manualOverride = getManualGradingResult(output);
   if (manualOverride) {
@@ -1059,6 +1069,7 @@ function buildManualGradingResult({
       metadata: {
         ...manualOverride.metadata,
         originalFailureReason: getOriginalFailureReason(existingOutput),
+        originalError: getOriginalError(existingOutput),
         originalGrade,
       },
     };
@@ -1100,8 +1111,25 @@ function buildRatingTableUpdate({
       (result) => result.assertion?.type === HUMAN_ASSERTION_TYPE,
     );
 
+  const originalError =
+    action === 'clear' &&
+    getOriginalFailureReason(previousOutput) === ResultFailureReason.ERROR &&
+    !previousOutput.metadata?.__promptfoo?.comparisonError
+      ? getOriginalError(previousOutput)
+      : undefined;
   updatedOutputs[promptIndex] = {
     ...previousOutput,
+    ...(originalError !== undefined && {
+      error: originalError,
+      ...(previousOutput.response != null && {
+        text: getTableCellText({
+          response: previousOutput.response,
+          testCase: previousOutput.testCase ?? updatedRow.test,
+          success: ratingUpdate.pass,
+          error: originalError,
+        }),
+      }),
+    }),
     failureReason:
       action === 'annotate'
         ? previousOutput.failureReason

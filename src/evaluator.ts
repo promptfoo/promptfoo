@@ -3495,7 +3495,7 @@ function getManualGradingResult(result: EvaluationStoreResult) {
 type ComparisonErrorState = Pick<
   EvaluationStoreResult,
   'success' | 'score' | 'failureReason' | 'error'
-> & { originalFailureReason?: ResultFailureReason };
+> & { originalFailureReason?: ResultFailureReason; originalError?: string | null };
 
 function getComparisonError(result: EvaluationStoreResult): ComparisonErrorState | undefined {
   const state = result.metadata?.[PROMPTFOO_METADATA_KEY]?.comparisonError;
@@ -3515,9 +3515,12 @@ function setComparisonError(result: EvaluationStoreResult, state?: ComparisonErr
   const fields =
     internal && typeof internal === 'object' && !Array.isArray(internal) ? { ...internal } : {};
   if (state) {
+    const manualOverride = getManualGradingResult(result);
+    const error = manualOverride?.metadata?.originalError;
     fields.comparisonError = getComparisonError(result) ?? {
       ...state,
-      originalFailureReason: getManualGradingResult(result)?.metadata?.originalFailureReason,
+      originalFailureReason: manualOverride?.metadata?.originalFailureReason,
+      originalError: typeof error === 'string' || error === null ? error : undefined,
     };
   } else {
     delete fields.comparisonError;
@@ -5525,13 +5528,16 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     metrics: CompletedPrompt['metrics'] | undefined,
   ) {
     const saved = getComparisonError(result);
+    const error =
+      saved?.originalFailureReason === undefined ? (saved?.error ?? null) : saved.originalError;
+    const originalError = typeof error === 'string' || error === null ? error : undefined;
     const manualOverride = getManualGradingResult(result);
     if (result.failureReason === ResultFailureReason.ERROR) {
       if (!saved) {
         return false;
       }
       if (saved.originalFailureReason === ResultFailureReason.ERROR && !manualOverride) {
-        result.error = saved.error;
+        result.error = originalError === undefined ? saved.error : originalError;
         setComparisonError(result);
         this.trackFinalJsonlResult(result);
         if (this.store.persisted && !this.store.hasResultPersistenceFailure(result)) {
@@ -5554,6 +5560,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         manualOverride.metadata = {
           ...manualOverride.metadata,
           originalFailureReason: saved.originalFailureReason ?? saved.failureReason,
+          originalError,
         };
       }
       result.error = saved.error;

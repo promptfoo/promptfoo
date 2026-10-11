@@ -42,6 +42,7 @@
         "src/contracts.ts",
         "src/csv.ts",
         "src/presentation/evalResults.ts",
+        "src/presentation/evalTableCells.ts",
         "src/presentation/redteamConfig.ts",
         "src/presentation/redteamMetrics.ts",
         "src/logger.ts",

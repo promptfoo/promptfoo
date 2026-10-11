@@ -761,6 +761,12 @@ evalRouter.post(
       const hasExistingManualOverride = Boolean(previousManualOverride);
       const originalFailureReason =
         previousManualOverride?.metadata?.originalFailureReason ?? result.failureReason;
+      const savedOriginalError = previousManualOverride?.metadata?.originalError;
+      const originalError = previousManualOverride
+        ? typeof savedOriginalError === 'string' || savedOriginalError === null
+          ? savedOriginalError
+          : undefined
+        : (result.error ?? null);
       const savedOriginalGrade = previousManualOverride?.metadata?.originalGrade;
       const originalGrade = previousManualOverride
         ? typeof savedOriginalGrade?.pass === 'boolean' &&
@@ -785,6 +791,7 @@ evalRouter.post(
         manualOverride.metadata = {
           ...manualOverride.metadata,
           originalFailureReason,
+          originalError,
           originalGrade,
         };
       }
@@ -812,6 +819,14 @@ evalRouter.post(
       result.success = effectivePass;
       result.score = gradingResult.score;
       result.failureReason = failureReason;
+      if (
+        action === 'clear' &&
+        originalFailureReason === ResultFailureReason.ERROR &&
+        !result.metadata?.__promptfoo?.comparisonError &&
+        originalError !== undefined
+      ) {
+        result.error = originalError;
+      }
 
       // Update the prompt metrics
       const prompt = eval_.prompts[result.promptIdx];

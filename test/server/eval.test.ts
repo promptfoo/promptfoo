@@ -462,11 +462,12 @@ describe('eval routes', () => {
                 }),
                 expect.objectContaining({
                   assertion: { type: 'human' },
-                  metadata: {
+                  metadata: expect.objectContaining({
                     originalFailureReason: ordinaryGraderError
                       ? ResultFailureReason.ERROR
                       : ResultFailureReason.NONE,
-                  },
+                    originalError: ordinaryGraderError ? 'Ordinary grader unavailable' : null,
+                  }),
                 }),
               ]),
             );
@@ -530,6 +531,9 @@ describe('eval routes', () => {
               success: false,
               failureReason: ResultFailureReason.ERROR,
             });
+            if (clearBefore) {
+              expect(response.body.error).toContain('Error grading select-best');
+            }
           }
         }
         try {
@@ -563,6 +567,7 @@ describe('eval routes', () => {
           for (const row of await saved.getResults()) {
             expect(row).toMatchObject({ success: false, failureReason: ResultFailureReason.ERROR });
             expect(row.response?.error).toBe('Target unavailable');
+            expect(row.error).toBe('Target unavailable');
             expect(row.metadata?.__promptfoo?.comparisonError).toBeUndefined();
           }
           expect(target).toHaveBeenCalledTimes(2);
@@ -737,13 +742,16 @@ describe('eval routes', () => {
               score: 1,
               reason: 'Human',
               assertion: { type: 'human' },
-              metadata: { originalGrade },
+              metadata: { originalGrade, originalError: originalGrade },
             },
           ],
         };
         await row.save();
         const payload = createManualRatingPayload(row, false);
-        payload.componentResults[0].metadata = { originalGrade: { pass: true, score: 99 } };
+        payload.componentResults[0].metadata = {
+          originalGrade: { pass: true, score: 99 },
+          originalError: 'Forged error',
+        };
         const response = await api
           .post(`/api/eval/${record.id}/results/${row.id}/rating`)
           .send(payload);
@@ -751,11 +759,68 @@ describe('eval routes', () => {
         expect(response.body.gradingResult.componentResults[0].metadata).not.toHaveProperty(
           'originalGrade',
         );
+        expect(response.body.gradingResult.componentResults[0].metadata).not.toHaveProperty(
+          'originalError',
+        );
         const cleared = await api
           .post(`/api/eval/${record.id}/results/${row.id}/rating`)
           .send({ ...response.body.gradingResult, componentResults: [], action: 'clear' });
         expect(cleared.status).toBe(200);
         expect(cleared.body.gradingResult).toMatchObject({ pass: true, score: 1 });
+      },
+    );
+
+    it.each(['No output', null])(
+      'restores original provider error text after comparison recovery: %j',
+      async (originalError) => {
+        const { suite, recover } = comparisonRecoverySuite();
+        suite.providers = [{ id: () => 'empty-target', callApi: async () => ({}) }];
+        recover();
+        const record = await Eval.create({}, suite.prompts);
+        testEvalIds.add(record.id);
+        const previousResume = cliState.resume;
+        try {
+          await evaluate(suite, record, { maxConcurrency: 1 });
+          for (const row of await record.getResults()) {
+            invariant(row instanceof EvalResult, 'Persisted result required');
+            expect(row.error).toBe('No output');
+            row.error = originalError;
+            await row.save();
+            for (const pass of [false, true]) {
+              const current = (await EvalResult.findById(row.id))!;
+              const payload = createManualRatingPayload(current, pass);
+              payload.componentResults[0].metadata = { originalError: 'Forged error' };
+              expect(
+                (await api.post(`/api/eval/${record.id}/results/${row.id}/rating`).send(payload))
+                  .status,
+              ).toBe(200);
+            }
+          }
+          cliState.resume = true;
+          const saved = await Eval.findById(record.id);
+          invariant(saved, 'Saved evaluation required');
+          await evaluate(suite, saved, { maxConcurrency: 1 });
+          for (const row of await saved.getResults()) {
+            invariant(row instanceof EvalResult, 'Persisted result required');
+            const components = row.gradingResult!.componentResults!.filter(
+              (component) => component.assertion?.type !== 'human',
+            );
+            const cleared = await api.post(`/api/eval/${record.id}/results/${row.id}/rating`).send({
+              ...row.gradingResult,
+              pass: components.every((component) => component.pass),
+              componentResults: components,
+              action: 'clear',
+            });
+            expect(cleared.status).toBe(200);
+            expect(cleared.body).toMatchObject({
+              failureReason: ResultFailureReason.ERROR,
+              error: originalError,
+            });
+            expect((await EvalResult.findById(row.id))?.error).toBe(originalError);
+          }
+        } finally {
+          cliState.resume = previousResume;
+        }
       },
     );
 
