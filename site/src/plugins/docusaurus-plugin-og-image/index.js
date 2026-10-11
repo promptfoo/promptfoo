@@ -1194,31 +1194,35 @@ async function generateSatoriTemplate(metadata = {}) {
   };
 }
 
+async function writeOgImage(template, fonts, outputPath) {
+  // Generate SVG using Satori
+  const svg = await satori(template, { width: WIDTH, height: HEIGHT, fonts });
+
+  // Convert SVG to PNG using Sharp
+  const sharp = getSharp();
+  const pngBuffer = await sharp(Buffer.from(svg))
+    .ensureAlpha()
+    .png({
+      quality: 100,
+      compressionLevel: 6,
+      palette: false,
+    })
+    .toBuffer();
+
+  // Ensure directory exists
+  await fs.mkdir(path.dirname(outputPath), { recursive: true });
+
+  // Write PNG file
+  await fs.writeFile(outputPath, pngBuffer);
+}
+
 // Generate OG image using Satori
 async function generateOgImage(metadata, outputPath) {
   try {
     const fonts = await getSatoriFonts();
     const template = await generateSatoriTemplate(metadata);
 
-    // Generate SVG using Satori
-    const svg = await satori(template, { width: WIDTH, height: HEIGHT, fonts });
-
-    // Convert SVG to PNG using Sharp
-    const sharp = getSharp();
-    const pngBuffer = await sharp(Buffer.from(svg))
-      .ensureAlpha()
-      .png({
-        quality: 100,
-        compressionLevel: 6,
-        palette: false,
-      })
-      .toBuffer();
-
-    // Ensure directory exists
-    await fs.mkdir(path.dirname(outputPath), { recursive: true });
-
-    // Write PNG file
-    await fs.writeFile(outputPath, pngBuffer);
+    await writeOgImage(template, fonts, outputPath);
 
     return true;
   } catch (error) {
@@ -1236,25 +1240,7 @@ async function generateSpecialPageOgImage(specialPage, outputPath) {
     const fonts = await getSatoriFonts();
     const template = await specialPage.templateFactory();
 
-    // Generate SVG using Satori
-    const svg = await satori(template, { width: WIDTH, height: HEIGHT, fonts });
-
-    // Convert SVG to PNG using Sharp
-    const sharp = getSharp();
-    const pngBuffer = await sharp(Buffer.from(svg))
-      .ensureAlpha()
-      .png({
-        quality: 100,
-        compressionLevel: 6,
-        palette: false,
-      })
-      .toBuffer();
-
-    // Ensure directory exists
-    await fs.mkdir(path.dirname(outputPath), { recursive: true });
-
-    // Write PNG file
-    await fs.writeFile(outputPath, pngBuffer);
+    await writeOgImage(template, fonts, outputPath);
 
     return true;
   } catch (error) {
@@ -1426,6 +1412,30 @@ async function runStandaloneTest() {
 // Run standalone test if called directly
 if (require.main === module) {
   runStandaloneTest().catch(console.error);
+}
+
+async function injectOgImageMetaTags(outDir, routePath, imageUrl, siteConfig) {
+  const htmlPath = path.join(outDir, routePath.slice(1), 'index.html');
+  try {
+    if (
+      await fs
+        .stat(htmlPath)
+        .then((stat) => stat.isFile())
+        .catch(() => false)
+    ) {
+      let html = await fs.readFile(htmlPath, 'utf8');
+      const newOgImageUrl = `${siteConfig.url}${imageUrl}`;
+      const defaultThumbnailUrl = 'https://www.promptfoo.dev/img/thumbnail.png';
+
+      // Replace all default thumbnails with the generated OG image.
+      if (html.includes(defaultThumbnailUrl)) {
+        html = html.replaceAll(defaultThumbnailUrl, newOgImageUrl);
+        await fs.writeFile(htmlPath, html);
+      }
+    }
+  } catch (error) {
+    console.warn(`Could not inject meta tags for ${routePath}:`, error.message);
+  }
 }
 
 module.exports = function (context, options) {
@@ -1622,28 +1632,7 @@ module.exports = function (context, options) {
                 successCount++;
 
                 // Inject meta tags into the HTML for this route
-                const htmlPath = path.join(outDir, routePath.slice(1), 'index.html');
-                try {
-                  if (
-                    await fs
-                      .stat(htmlPath)
-                      .then((stat) => stat.isFile())
-                      .catch(() => false)
-                  ) {
-                    let html = await fs.readFile(htmlPath, 'utf8');
-
-                    const newOgImageUrl = `${siteConfig.url}${imageUrl}`;
-                    const defaultThumbnailUrl = 'https://www.promptfoo.dev/img/thumbnail.png';
-
-                    // If HTML contains the default thumbnail URL, replace all instances
-                    if (html.includes(defaultThumbnailUrl)) {
-                      html = html.replaceAll(defaultThumbnailUrl, newOgImageUrl);
-                      await fs.writeFile(htmlPath, html);
-                    }
-                  }
-                } catch (error) {
-                  console.warn(`Could not inject meta tags for ${routePath}:`, error.message);
-                }
+                await injectOgImageMetaTags(outDir, routePath, imageUrl, siteConfig);
               } else {
                 failureCount++;
               }
@@ -1671,30 +1660,10 @@ module.exports = function (context, options) {
 
       // Inject meta tags for special pages (pricing, about, contact, press, store, events, solutions)
       console.log('🔄 Injecting OG image meta tags for special pages...');
-      const defaultThumbnailUrl = 'https://www.promptfoo.dev/img/thumbnail.png';
       for (const { route: routePath } of SPECIAL_PAGES) {
         const imageUrl = generatedImages.get(routePath);
         if (imageUrl) {
-          const htmlPath = path.join(outDir, routePath.slice(1), 'index.html');
-          try {
-            if (
-              await fs
-                .stat(htmlPath)
-                .then((stat) => stat.isFile())
-                .catch(() => false)
-            ) {
-              let html = await fs.readFile(htmlPath, 'utf8');
-              const newOgImageUrl = `${siteConfig.url}${imageUrl}`;
-
-              // Replace default thumbnail with custom OG image
-              if (html.includes(defaultThumbnailUrl)) {
-                html = html.replaceAll(defaultThumbnailUrl, newOgImageUrl);
-                await fs.writeFile(htmlPath, html);
-              }
-            }
-          } catch (error) {
-            console.warn(`Could not inject meta tags for ${routePath}:`, error.message);
-          }
+          await injectOgImageMetaTags(outDir, routePath, imageUrl, siteConfig);
         }
       }
 
