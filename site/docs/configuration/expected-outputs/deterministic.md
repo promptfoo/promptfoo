@@ -311,14 +311,14 @@ assert:
     threshold: 0.001
 ```
 
-To record the provider's cost in USD without a pass/fail limit, omit `threshold` and set a named `metric` with `weight: 0`. The measurement is reported without contributing to the aggregate quality score. Missing, negative, or non-finite costs produce an error instead of a zero measurement.
+To record the provider's cost in USD without a pass/fail limit, omit `threshold` and set a named `metric` with `metricOnly: true`. Legacy `weight: 0` measurements remain supported. Missing, negative, or non-finite costs produce an error instead of a zero measurement.
 
 ```yaml
 defaultTest:
   assert:
     - type: cost
       metric: inference_cost
-      weight: 0
+      metricOnly: true
 derivedMetrics:
   - name: average_inference_cost
     value: 'inference_cost / __count'
@@ -1669,28 +1669,21 @@ To calculate F-score, you first need to track the base classification metrics. W
 
 ```yaml
 assert:
-  # Basic JSON validation
-  - type: is-json
-
-  # Return the confusion matrix with the accuracy grade so zero-valued
-  # counters do not count as failed assertions or change the overall score.
+  # Track true positives, false positives, etc
   - type: javascript
-    value: |
-      const predicted = output.sentiment;
-      const expected = context.vars.sentiment;
-      const correct = predicted === expected;
-      return {
-        pass: correct,
-        score: Number(correct),
-        reason: correct ? 'Correct sentiment' : `Expected ${expected}, got ${predicted}`,
-        namedScores: {
-          accuracy: Number(correct),
-          true_positives: Number(predicted === 'positive' && expected === 'positive'),
-          false_positives: Number(predicted === 'positive' && expected === 'negative'),
-          false_negatives: Number(predicted === 'negative' && expected === 'positive'),
-          true_negatives: Number(predicted === 'negative' && expected === 'negative'),
-        },
-      };
+    value: "output.sentiment === 'positive' && context.vars.sentiment === 'positive' ? 1 : 0"
+    metric: true_positives
+    metricOnly: true
+
+  - type: javascript
+    value: "output.sentiment === 'positive' && context.vars.sentiment === 'negative' ? 1 : 0"
+    metric: false_positives
+    metricOnly: true
+
+  - type: javascript
+    value: "output.sentiment === 'negative' && context.vars.sentiment === 'positive' ? 1 : 0"
+    metric: false_negatives
+    metricOnly: true
 ```
 
 Then define derived metrics to calculate precision, recall and F-score:

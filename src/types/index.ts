@@ -385,7 +385,7 @@ export type ServerPromptWithMetadata = Omit<PromptWithMetadata, 'recentEvalDate'
 };
 
 // Compatibility exports for existing public and source consumers.
-export { isResultFailureReason, ResultFailureReason } from './results';
+export { countedComponentResults, isResultFailureReason, ResultFailureReason } from './results';
 
 export interface EvaluateResult {
   id?: string; // on the new version 2, this is stored per-result
@@ -573,6 +573,8 @@ export interface GradingResult {
   metadata?: {
     pluginId?: string;
     strategyId?: string;
+    // Metric-only marker for assertionless set aggregates and grader results.
+    metricOnly?: boolean;
     // Context value for context-related assertions (context-faithfulness, context-recall, context-relevance)
     context?: string | string[];
     contextUnits?: string[];
@@ -765,6 +767,8 @@ export type AssertionType = z.infer<typeof AssertionTypeSchema>;
 
 export const AssertionSetSchema = z.object({
   type: z.literal('assert-set'),
+  // Metric-only behavior belongs on child assertions; an explicitly disabled flag is allowed.
+  metricOnly: z.literal(false).optional(),
   // Sub assertions to be run for this assertion set
   assert: z.array(z.lazy(() => AssertionSchema)),
   // The weight of this assertion compared to other assertions in the test case. Defaults to 1.
@@ -784,7 +788,11 @@ export type AssertionSet = z.infer<typeof AssertionSetSchema>;
 // TODO(ian): maybe Assertion should support {type: config} to make the yaml cleaner
 export const AssertionSchema = z.object({
   // Type of assertion
-  type: AssertionTypeSchema,
+  // Keep invalid sets from falling through this branch and losing their nested fields.
+  type: AssertionTypeSchema.refine((type: string) => type !== 'assert-set', {
+    message:
+      'assert-set must use the assertion set schema; metricOnly is only supported on its child assertions',
+  }),
 
   // The expected value, if applicable
   value: z.custom<AssertionValue>().optional(),
@@ -798,6 +806,10 @@ export const AssertionSchema = z.object({
 
   // The weight of this assertion compared to other assertions in the test case. Defaults to 1.
   weight: z.number().optional(),
+
+  // If true, the assertion only emits its score as a named metric (for namedScores and
+  // derivedMetrics) and is excluded from the test's pass/fail and weighted score. Defaults to false.
+  metricOnly: z.boolean().optional(),
 
   // Some assertions (similarity, llm-rubric, agent-rubric) require a grading provider
   provider: z.custom<GradingConfig['provider']>().optional(),
@@ -1068,6 +1080,8 @@ export type AtomicTestCase = z.infer<typeof AtomicTestCaseSchema>;
 export const TestGeneratorConfigSchema = z.object({
   /** Path to the test generator function (e.g., file://path/to/tests.py:function_name) */
   path: z.string(),
+  // Invalid inline assertions must not fall through this union branch and get discarded.
+  assert: z.never().optional(),
   /**
    * Configuration object passed to the generator function
    * Common configuration options include:

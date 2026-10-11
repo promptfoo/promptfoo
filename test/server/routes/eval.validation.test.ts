@@ -15,6 +15,7 @@ import { evaluateWithSource } from '../../../src/node';
 import { loadApiProviders } from '../../../src/providers/index';
 // Import after mocking
 import { createApp } from '../../../src/server/server';
+import { evalJobService } from '../../../src/server/services/evalJobService';
 import { EVAL_TABLE_MAX_PAGE_SIZE } from '../../../src/types/api/eval';
 
 const mockedEval = vi.mocked(Eval);
@@ -470,6 +471,113 @@ describe('Eval Routes - Zod Validation', () => {
       expect(response.status).toBe(400);
       expect(response.body.error).toBeDefined();
       expect(response.body.error).toContain('promptIdx');
+    });
+  });
+
+  describe('POST /api/eval/job - metricOnly assertion sets', () => {
+    const invalidSet = {
+      type: 'assert-set',
+      metricOnly: true,
+      assert: [{ type: 'contains', value: 'hello' }],
+    };
+
+    beforeEach(() => {
+      vi.mocked(evaluateWithSource).mockResolvedValue({
+        id: 'schema-job-eval',
+        toEvaluateSummary: async () => ({ results: [] }),
+      } as unknown as Eval);
+    });
+
+    it.each([
+      ['tests', { tests: [{ assert: [invalidSet] }] }, 'metricOnly'],
+      ['defaultTest', { defaultTest: { assert: [invalidSet] } }, 'metricOnly'],
+      [
+        'scenario tests',
+        { scenarios: [{ config: [{}], tests: [{ assert: [invalidSet] }] }] },
+        'metricOnly',
+      ],
+      [
+        'scenario defaults',
+        { scenarios: [{ config: [{ assert: [invalidSet] }], tests: [{}] }] },
+        'metricOnly',
+      ],
+      [
+        'nested sets',
+        { tests: [{ assert: [{ type: 'assert-set', assert: [invalidSet] }] }] },
+        'tests',
+      ],
+      ['malformed sets', { tests: [{ assert: [{ type: 'assert-set' }] }] }, 'assert-set'],
+      [
+        'generator fallback',
+        { tests: [{ path: 'file://tests.py', assert: [invalidSet] }] },
+        'tests',
+      ],
+      [
+        'generator object fallback',
+        { tests: { path: 'file://tests.py', assert: [invalidSet] } },
+        'tests',
+      ],
+    ])(
+      'rejects invalid sets in %s before starting a job',
+      async (_location, config, errorField) => {
+        const createJob = vi.spyOn(evalJobService, 'create');
+        try {
+          const response = await api.post('/api/eval/job').send({
+            prompts: ['hello'],
+            providers: ['echo'],
+            ...config,
+          });
+
+          expect(response.status).toBe(400);
+          expect(response.body).toEqual({ error: expect.stringContaining(errorField) });
+          expect(evaluateWithSource).not.toHaveBeenCalled();
+          expect(createJob).not.toHaveBeenCalled();
+        } finally {
+          createJob.mockRestore();
+        }
+      },
+    );
+
+    it.each([undefined, false])(
+      'preserves metric-only children when the set flag is %s',
+      async (metricOnly) => {
+        const set = {
+          type: 'assert-set',
+          ...(metricOnly === undefined ? {} : { metricOnly }),
+          assert: [
+            { type: 'contains', value: 'hello', metric: 'matches', metricOnly: true, weight: 0 },
+          ],
+        };
+        const response = await api.post('/api/eval/job').send({
+          prompts: ['hello'],
+          providers: ['echo'],
+          tests: [{ assert: [set] }],
+        });
+
+        expect(response.status).toBe(200);
+        expect(response.body).toEqual({ id: expect.any(String) });
+        expect(evaluateWithSource).toHaveBeenCalledOnce();
+        expect(evaluateWithSource).toHaveBeenCalledWith(
+          expect.objectContaining({ tests: [{ assert: [set] }] }),
+          expect.anything(),
+        );
+      },
+    );
+
+    it('preserves valid test generators', async () => {
+      const tests = { path: 'file://tests.py', config: { dataset: 'validation' } };
+      const response = await api.post('/api/eval/job').send({
+        prompts: ['hello'],
+        providers: ['echo'],
+        tests,
+      });
+
+      expect(response.status).toBe(200);
+      expect(evaluateWithSource).toHaveBeenCalledOnce();
+      expect(evaluateWithSource).toHaveBeenCalledWith(
+        expect.objectContaining({ tests }),
+        expect.anything(),
+      );
     });
   });
 
