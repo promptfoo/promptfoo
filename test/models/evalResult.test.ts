@@ -1375,6 +1375,43 @@ describe('EvalResult', () => {
   });
 
   describe('toEvaluateResult', () => {
+    it.each(['content', 'trace', 'additionalModelResponseFields'])(
+      'redacts restored test-owned %s before JSONL output',
+      (key) => {
+        const ownedValue = {
+          Authorization: 'Bearer fixture-test-secret',
+          apiKey: 'fixture-api-secret',
+          note: 'keep annotation',
+        };
+        const input = createEvaluateResult({
+          testCase: createAtomicTestCase({ metadata: { [key]: ownedValue } }),
+          metadata: { [key]: { value: 'provider-output-secret' } },
+          response: {
+            output: 'provider-output-secret',
+            metadata: { [key]: { value: 'provider-output-secret' } },
+          },
+        });
+        const projected = sanitizeResultForJsonlArtifact(
+          input,
+          getStripFlags({ PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'true' }),
+        );
+        expect(projected.metadata?.[key]).toEqual({
+          Authorization: '[REDACTED]',
+          apiKey: '[REDACTED]',
+          note: 'keep annotation',
+        });
+        expect(projected.metadata?.[key]).toEqual(projected.testCase.metadata?.[key]);
+        for (const secret of [
+          'fixture-test-secret',
+          'fixture-api-secret',
+          'provider-output-secret',
+        ]) {
+          expect(JSON.stringify(projected)).not.toContain(secret);
+        }
+        expect(input.testCase.metadata?.[key]).toEqual(ownedValue);
+      },
+    );
+
     it.each(
       ['present', 'removed', 'replaced'].flatMap((canonical) =>
         [false, true].map((testOwned) => ({ canonical, testOwned })),

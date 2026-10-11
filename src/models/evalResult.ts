@@ -979,6 +979,9 @@ export function sanitizeResultForJsonlArtifact<T extends object>(
   } = stripFlags;
 
   const artifactResult = serializeResultProviderRefs(result) as T & Record<string, unknown>;
+  const testCase = artifactResult.testCase
+    ? sanitizeForDbWithSecrets(artifactResult.testCase as AtomicTestCase)
+    : undefined;
   const redacted = redactSensitiveResultFieldsForDb({
     response: sanitizeForDb(artifactResult.response as ProviderResponse | null | undefined),
     gradingResult: sanitizeForDb(artifactResult.gradingResult),
@@ -991,17 +994,14 @@ export function sanitizeResultForJsonlArtifact<T extends object>(
 
   return {
     ...result,
-    ...(artifactResult.testCase
+    ...(testCase
       ? {
-          testCase: projectTestCase(
-            sanitizeForDbWithSecrets(artifactResult.testCase as AtomicTestCase),
-            {
-              stripMetadata: shouldStripMetadata,
-              stripVars: shouldStripTestVars,
-              stripOutput: shouldStripResponseOutput,
-              stripPromptText: shouldStripPromptText,
-            },
-          ),
+          testCase: projectTestCase(testCase, {
+            stripMetadata: shouldStripMetadata,
+            stripVars: shouldStripTestVars,
+            stripOutput: shouldStripResponseOutput,
+            stripPromptText: shouldStripPromptText,
+          }),
         }
       : {}),
     ...(artifactResult.vars === undefined
@@ -1035,7 +1035,7 @@ export function sanitizeResultForJsonlArtifact<T extends object>(
           redacted.metadata,
           shouldStripResponseOutput,
           redacted.response?.metadata,
-          (artifactResult.testCase as AtomicTestCase | undefined)?.metadata,
+          testCase?.metadata,
         ),
   } as T;
 }
