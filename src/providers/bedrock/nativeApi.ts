@@ -89,7 +89,8 @@ function normalizeNumericLiteral(source: string): string {
 }
 
 async function parseNativeJson(value: string | Uint8Array): Promise<any> {
-  const text = typeof value === 'string' ? value : new TextDecoder().decode(value);
+  const text =
+    typeof value === 'string' ? value : new TextDecoder('utf-8', { fatal: true }).decode(value);
   return JSON.parse(text, (_key, number, context?: { source?: string }) => {
     const source = context?.source;
     if (typeof number !== 'number' || !source || source === String(number)) {

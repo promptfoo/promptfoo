@@ -737,6 +737,64 @@ describe('native Bedrock APIs', () => {
   });
 
   it.each(['InvokeModel', 'InvokeModelWithResponseStream'])(
+    'rejects malformed UTF-8 JSON from %s without partial output',
+    async (operation) => {
+      for (const invalid of [Buffer.from([0xff]), Buffer.from([0xf0, 0x9f])]) {
+        const bytes = Buffer.concat([Buffer.from('{"text":"'), invalid, Buffer.from('"}')]);
+        const { provider, invoke } = fixture(operation, {
+          contentType: 'application/json',
+          body:
+            operation === 'InvokeModel'
+              ? bytes
+              : events([
+                  { chunk: { bytes: Buffer.from('{"text":"first"}') } },
+                  { chunk: { bytes } },
+                ]),
+        });
+        const result = await provider.callApi('{"modelId":"test.model","body":{}}');
+        expect(result.error).toContain('encoded data was not valid');
+        expect(result.output).toBeUndefined();
+        expect(invoke).toHaveBeenCalledOnce();
+      }
+    },
+  );
+
+  it.each(['InvokeModel', 'InvokeModelWithResponseStream'])(
+    'preserves valid UTF-8 and literal replacement characters from %s',
+    async (operation) => {
+      for (const text of ['café 日本語 🚀', '\uFFFD']) {
+        const bytes = Buffer.from(JSON.stringify({ text }));
+        const { provider } = fixture(operation, {
+          contentType: 'application/json',
+          body: operation === 'InvokeModel' ? bytes : events([{ chunk: { bytes } }]),
+        });
+        const result = await provider.callApi('{"modelId":"test.model","body":{}}');
+        expect(result.error).toBeUndefined();
+        expect(JSON.parse(String(result.output)).body).toEqual(
+          operation === 'InvokeModel' ? { text } : [{ chunk: { bytes: { text } } }],
+        );
+      }
+    },
+  );
+
+  it.each(['InvokeModel', 'InvokeModelWithResponseStream'])(
+    'preserves non-UTF-8 bytes from %s for non-JSON media',
+    async (operation) => {
+      const bytes = Buffer.from([0xff, 0xf0, 0x9f]);
+      const { provider } = fixture(operation, {
+        contentType: 'application/octet-stream',
+        body: operation === 'InvokeModel' ? bytes : events([{ chunk: { bytes } }]),
+      });
+      const result = await provider.callApi('{"modelId":"test.model","body":{}}');
+      expect(result.error).toBeUndefined();
+      const expected = { $base64: '//Cf' };
+      expect(JSON.parse(String(result.output)).body).toEqual(
+        operation === 'InvokeModel' ? expected : [{ chunk: { bytes: expected } }],
+      );
+    },
+  );
+
+  it.each(['InvokeModel', 'InvokeModelWithResponseStream'])(
     'rejects an empty %s JSON body',
     async (operation) => {
       const response =
