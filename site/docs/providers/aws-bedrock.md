@@ -1633,7 +1633,7 @@ providers:
       top_p: 0.9 # Optional nucleus sampling
       stop: ['END'] # Optional stop sequences
       reasoning_effort: high # Optional; supported values depend on the model
-      showThinking: false # Strip <think>/<reasoning> blocks from the output (default: keep)
+      showThinking: false # Hide supported reasoning output (default: keep)
       tools: [...] # Optional OpenAI-format tool definitions
       tool_choice: 'auto' # Optional tool selection strategy
 ```
@@ -1647,6 +1647,10 @@ providers:
   block. By default it is returned verbatim; set `showThinking: false` to return only the
   final answer. Give reasoning models a larger `max_tokens` budget so the answer is not
   truncated by the reasoning.
+- If the response supplies a separate `message.reasoning_content` string, promptfoo
+  includes it as `Thinking: ...` before the answer or tool calls unless `showThinking: false`.
+  The [Kimi API schema](https://platform.kimi.ai/docs/api/chat.md) documents this field;
+  its availability in Bedrock responses depends on the model and API.
 - **NVIDIA Nemotron** reasons in-line without tags, so `showThinking` cannot strip it.
   Disable its reasoning with NVIDIA's `/no_think` system directive instead (add a
   `system` message of `/no_think` to your prompt) for a direct answer.
