@@ -4,6 +4,7 @@ import logger from '../../logger';
 import telemetry from '../../telemetry';
 import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { isSamplingParamsDeprecatedClaudeModel } from '../anthropic/util';
+import { shouldBustProviderCache } from '../shared';
 import { AwsBedrockGenericProvider } from './base';
 import { assertBedrockModelIsAvailable } from './index';
 import { isValidBedrockRetrievalFilter } from './retrievalFilter';
@@ -25,7 +26,7 @@ import type {
 } from '@aws-sdk/client-bedrock-agent-runtime';
 
 import type { EnvOverrides } from '../../types/env';
-import type { ApiProvider, ProviderResponse } from '../../types/providers';
+import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types/providers';
 
 interface BedrockKnowledgeBaseOptions {
   accessKeyId?: string;
@@ -299,7 +300,7 @@ export class AwsBedrockKnowledgeBaseProvider
     return collected;
   }
 
-  async callApi(prompt: string): Promise<ProviderResponse> {
+  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     try {
       const retrieval =
         this.kbConfig.operation === 'retrieve' || !this.kbConfig.retrieveAndGenerateConfiguration
@@ -382,28 +383,26 @@ export class AwsBedrockKnowledgeBaseProvider
       const cache = await getCache();
       // Explicit sessions and streaming requests must reach AWS. A cached session response
       // cannot advance the service's conversation state.
-      const useCache = isCacheEnabled() && !this.kbConfig.sessionId && !this.kbConfig.streaming;
+      const useCache =
+        isCacheEnabled() &&
+        !shouldBustProviderCache(context) &&
+        !this.kbConfig.sessionId &&
+        !this.kbConfig.streaming;
       const sensitiveKeys = ['accessKeyId', 'secretAccessKey', 'sessionToken', 'apiKey'];
       const cacheKey = useCache
-        ? nativeConfig
-          ? `bedrock-kb:native:v1:${hashBedrockConfig({
-              params,
-              region,
-              profile: this.kbConfig.profile,
-            })}`
-          : `bedrock-kb:v3:${this.kbConfig.knowledgeBaseId}:${modelArn}:${region}:${hashBedrockConfig(
-              {
-                config: {
-                  region,
-                  modelName: this.modelName,
-                  ...Object.fromEntries(
-                    Object.entries(this.kbConfig).filter(([key]) => !sensitiveKeys.includes(key)),
-                  ),
-                  retrieveAndGenerateConfiguration: nativeConfig,
-                },
-                prompt,
+        ? `bedrock-kb:v3:${this.kbConfig.knowledgeBaseId}:${modelArn}:${region}:${hashBedrockConfig(
+            {
+              config: {
+                region,
+                modelName: this.modelName,
+                ...Object.fromEntries(
+                  Object.entries(this.kbConfig).filter(([key]) => !sensitiveKeys.includes(key)),
+                ),
+                retrieveAndGenerateConfiguration: nativeConfig,
               },
-            )}`
+              prompt,
+            },
+          )}`
         : '';
       if (useCache) {
         const cached = await cache.get(cacheKey);

@@ -565,55 +565,59 @@ describe('Knowledge Base runtime features', () => {
     }
   });
 
-  it.each(['KNOWLEDGE_BASE', 'EXTERNAL_SOURCES'] as const)(
-    'caches effective %s requests independently of ignored convenience settings',
-    async (type) => {
-      cache.enabled = true;
-      const entries = new Map<string, string>();
-      cache.get.mockImplementation((key: string) => entries.get(key));
-      cache.set.mockImplementation((key: string, value: string) => entries.set(key, value));
-      const retrieveAndGenerateConfiguration: NonNullable<KBConfig>['retrieveAndGenerateConfiguration'] =
-        type === 'KNOWLEDGE_BASE'
-          ? {
-              type,
-              knowledgeBaseConfiguration: {
-                knowledgeBaseId: 'EFFECTIVE1',
-                modelArn: 'us.amazon.nova-2-lite-v1:0',
-              },
-            }
-          : {
-              type,
-              externalSourcesConfiguration: {
-                modelArn: 'us.amazon.nova-2-lite-v1:0',
-                sources: [{ sourceType: 'S3', s3Location: { uri: 's3://fixture/source' } }],
+  it('preserves native cache separation when credentials and ignored root targets differ', async () => {
+    cache.enabled = true;
+    const entries = new Map<string, string>();
+    cache.get.mockImplementation((key: string) => entries.get(key));
+    cache.set.mockImplementation((key: string, value: string) => entries.set(key, value));
+    const requests: { actor: string; body: string }[] = [];
+    const clients: BedrockAgentRuntimeClient[] = [];
+    const providers = ['A', 'B'].map((actor) => {
+      const credentials = { accessKeyId: `FIXTURE_${actor}`, secretAccessKey: 'LOCAL_FIXTURE' };
+      const { provider } = kb({
+        ...credentials,
+        knowledgeBaseId: `IGNORED00${actor}`,
+        retrieveAndGenerateConfiguration: {
+          type: 'KNOWLEDGE_BASE',
+          knowledgeBaseConfiguration: {
+            knowledgeBaseId: 'EFFECTIVE1',
+            modelArn: 'us.amazon.nova-2-lite-v1:0',
+          },
+        },
+      });
+      const client = new BedrockAgentRuntimeClient({
+        region: 'us-east-1',
+        credentials,
+        requestHandler: {
+          handle: async (request: { headers: Record<string, string>; body?: unknown }) => {
+            expect(request.headers.authorization).toContain(`Credential=FIXTURE_${actor}/`);
+            requests.push({ actor, body: String(request.body) });
+            return {
+              response: {
+                statusCode: 200,
+                headers: { 'content-type': 'application/json' },
+                body: new TextEncoder().encode(JSON.stringify({ output: { text: actor } })),
               },
             };
-      const first = kb({ retrieveAndGenerateConfiguration });
-      const second = kb({
-        retrieveAndGenerateConfiguration,
-        knowledgeBaseId: 'IGNORED002',
-        modelArn: 'anthropic.claude-v2',
-        max_tokens: 200,
-        temperature: 0.9,
-        top_p: 0.8,
-        top_k: 10,
-        numberOfResults: 99,
-        retrievalConfiguration: { vectorSearchConfiguration: { numberOfResults: 20 } },
-        generationConfiguration: { inferenceConfig: { textInferenceConfig: { maxTokens: 100 } } },
-        orchestrationConfiguration: {
-          queryTransformationConfiguration: { type: 'QUERY_DECOMPOSITION' },
+          },
         },
-        apiKey: 'ignored-bearer',
       });
-      second.provider.modelName = 'anthropic.claude-v2';
-      expect((await first.provider.callApi('question')).output).toBe('answer');
-      const cached = await second.provider.callApi('question');
-      expect(cached).toMatchObject({ output: 'answer', cached: true });
-      expect(cached.metadata).not.toHaveProperty('sessionId');
-      expect(first.send).toHaveBeenCalledOnce();
-      expect(second.send).not.toHaveBeenCalled();
-    },
-  );
+      clients.push(client);
+      vi.spyOn(provider, 'getKnowledgeBaseClient').mockResolvedValue(client);
+      return provider;
+    });
+    try {
+      for (const [index, provider] of providers.entries()) {
+        const output = index === 0 ? 'A' : 'B';
+        expect(await provider.callApi('question')).toMatchObject({ output });
+        expect(await provider.callApi('question')).toMatchObject({ output, cached: true });
+      }
+      expect(requests.map(({ actor }) => actor)).toEqual(['A', 'B']);
+      expect(requests[0].body).toBe(requests[1].body);
+    } finally {
+      clients.forEach((client) => client.destroy());
+    }
+  });
 
   it('preserves native request, region and profile cache boundaries', async () => {
     cache.enabled = true;
@@ -649,6 +653,36 @@ describe('Knowledge Base runtime features', () => {
       expect((await provider.callApi(prompt)).error).toBeUndefined();
     }
     expect(new Set(cache.get.mock.calls.map(([key]) => key)).size).toBe(cases.length);
+  });
+
+  it.each([
+    { flags: { bustCache: true }, bypass: true },
+    { flags: { debug: true }, bypass: true },
+    { flags: { bustCache: true, debug: false }, bypass: true },
+    { flags: { bustCache: false, debug: true }, bypass: false },
+  ])('honors per-call cache precedence for $flags', async ({ flags, bypass }) => {
+    cache.enabled = true;
+    cache.get.mockResolvedValue(JSON.stringify({ output: 'cached answer' }));
+    const { provider, send } = kb({
+      retrieveAndGenerateConfiguration: {
+        type: 'KNOWLEDGE_BASE',
+        knowledgeBaseConfiguration: {
+          knowledgeBaseId: 'EFFECTIVE1',
+          modelArn: 'us.amazon.nova-2-lite-v1:0',
+        },
+      },
+    });
+    const response = await provider.callApi('question', {
+      prompt: { raw: 'question', label: 'question' },
+      vars: {},
+      ...flags,
+    });
+    expect(response.output).toBe(bypass ? 'answer' : 'cached answer');
+    expect(Boolean(response.cached)).toBe(!bypass);
+    expect(cache.get).toHaveBeenCalledTimes(bypass ? 0 : 1);
+    expect(send).toHaveBeenCalledTimes(bypass ? 1 : 0);
+    // A bypassed response must not replace the reusable cached response.
+    expect(cache.set).not.toHaveBeenCalled();
   });
 
   it('distinguishes nested filters while sharing cache keys across object-key order', async () => {
