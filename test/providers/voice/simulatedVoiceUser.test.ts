@@ -20,6 +20,15 @@ import type { ProviderResponse } from '../../../src/types/providers';
 
 // Capture before each test clears the environment that Windows uses to resolve its temp root.
 const evidenceTempRoot = path.resolve(os.tmpdir());
+// Windows Node startup needs OS variables such as SYSTEMROOT even though the
+// provider fixtures deliberately clear credentials and other application settings.
+const evidenceProcessEnv = Object.fromEntries(
+  Object.entries(process.env).filter(([name]) =>
+    /^(HOMEDRIVE|HOMEPATH|LOGONSERVER|PATH|SYSTEMDRIVE|SYSTEMROOT|TEMP|TMP|TMPDIR|USERDOMAIN|USERNAME|USERPROFILE|WINDIR)$/i.test(
+      name,
+    ),
+  ),
+);
 
 interface Socket extends EventEmitter {
   readyState: number;
@@ -201,17 +210,31 @@ function exportVoiceEvidence(response: ProviderResponse) {
     }
     const portable = { results: { results: [{ response: exportResponse }] }, blobAssets };
     writeFileSync(inputPath, JSON.stringify(portable));
-    const command = spawnSync(
-      process.execPath,
-      [
-        path.resolve(__dirname, '../../../examples/simulated-voice-user/export-evidence.js'),
-        inputPath,
-        '--out',
-        outputPath,
-      ],
-      { encoding: 'utf8', timeout: 10000 },
+    const scriptPath = path.resolve(
+      __dirname,
+      '../../../examples/simulated-voice-user/export-evidence.js',
     );
-    const manifest = JSON.parse(readFileSync(path.join(outputPath, 'manifest.json'), 'utf8'));
+    const command = spawnSync(process.execPath, [scriptPath, inputPath, '--out', outputPath], {
+      encoding: 'utf8',
+      timeout: 10000,
+      env: evidenceProcessEnv,
+    });
+    const diagnostics = JSON.stringify({
+      executable: process.execPath,
+      scriptPath,
+      error: command.error?.message,
+      status: command.status,
+      signal: command.signal,
+      stdout: command.stdout,
+      stderr: command.stderr,
+    });
+    expect(command.error, diagnostics).toBeUndefined();
+    // Exit 1 is expected for partial exports, which still write their evidence bundle.
+    expect([0, 1], diagnostics).toContain(command.status);
+    expect(command.stdout, diagnostics).toContain('Exported 1 row(s);');
+    const manifestPath = path.join(outputPath, 'manifest.json');
+    expect(existsSync(manifestPath), diagnostics).toBe(true);
+    const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
     const sourcePath = path.join(outputPath, 'case-001-target-source.wav');
     return {
       command,
