@@ -1475,8 +1475,11 @@ export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
           ...(abortSignal && {
             signal: abortSignal,
             adapter: ((requestOptions, defaultAdapter) => {
-              // Gaxios can replace an aborted signal while adding its timeout after OAuth refresh.
+              // Gaxios can replace the caller signal after OAuth refresh or a timed-out retry.
               abortSignal.throwIfAborted();
+              requestOptions.signal = requestOptions.signal
+                ? AbortSignal.any([abortSignal, requestOptions.signal])
+                : abortSignal;
               const adapter = client.transporter.defaults.adapter;
               return adapter
                 ? adapter(requestOptions, defaultAdapter)
