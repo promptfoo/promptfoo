@@ -7,11 +7,9 @@ export const isValidUrl = (str: string): boolean => {
   }
 };
 
-/** Only render browser-navigable web links for untrusted evaluation metadata. */
-export const isSafeExternalUrl = (str: string): boolean => {
+export const isHttpUrl = (str: string): boolean => {
   try {
-    const url = new URL(str);
-    return url.protocol === 'https:' || url.protocol === 'http:';
+    return ['http:', 'https:'].includes(new URL(str).protocol);
   } catch {
     return false;
   }

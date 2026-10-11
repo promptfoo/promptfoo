@@ -1,6 +1,6 @@
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { HIDDEN_METADATA_KEYS } from '@app/constants';
-import { isSafeExternalUrl } from '@app/utils/isValidUrl';
+import { isHttpUrl } from '@app/utils/isValidUrl';
 import {
   determinePolicyTypeFromId,
   makeCustomPolicyCloudUrl,
@@ -94,8 +94,8 @@ export function MetadataPanel({
                 cell = <td className="p-2 whitespace-pre-wrap break-words">{stringValue}</td>;
               }
             }
-            // Is URL?
-            else if (typeof value === 'string' && isSafeExternalUrl(value)) {
+            // Is HTTP(S) URL?
+            else if (typeof value === 'string' && isHttpUrl(value)) {
               cell = (
                 <td className="p-2 whitespace-pre-wrap break-all">
                   <a
