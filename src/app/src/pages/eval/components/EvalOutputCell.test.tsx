@@ -183,6 +183,10 @@ describe('EvalOutputCell', () => {
     `promptfoo://blob/${'a'.repeat(64)}'/../../eval/private`,
     `<promptfoo://blob/${'a'.repeat(64)} /../../eval/private>`,
     'storageRef:video/%252e%252e/../eval/private',
+    '/api/media/video/safe.png/../../../eval/private',
+    '/api/MeDiA/video/safe.png/../../../eval/private',
+    '/api/media/video/%252e%252e/../../eval/private',
+    `/api/blobs/${'a'.repeat(64)}/../../eval/private`,
   ])('rejects the complete parsed Markdown media destination: %j', (destination) => {
     const { container } = renderWithProviders(
       <EvalOutputCell
@@ -201,6 +205,13 @@ describe('EvalOutputCell', () => {
     ['<STORAGEREF:video/my image.png>', '/api/media/video/my%20image.png'],
     [`PROMPTFOO://BLOB/${'a'.repeat(64)}`, `/api/blobs/${'a'.repeat(64)}`],
     ['https://example.com/image.png', 'https://example.com/image.png'],
+    [
+      '/api/media/image/safe.png?download=1#preview',
+      '/api/media/image/safe.png?download=1#preview',
+    ],
+    ['/api/MeDiA/image/my%20image.png', '/api/MeDiA/image/my%20image.png'],
+    [`/api/blobs/${'a'.repeat(64)}`, `/api/blobs/${'a'.repeat(64)}`],
+    ['/api/output/image/legacy.png', '/api/output/image/legacy.png'],
   ])('renders a complete valid Markdown media destination: %j', (destination, expected) => {
     renderWithProviders(
       <EvalOutputCell

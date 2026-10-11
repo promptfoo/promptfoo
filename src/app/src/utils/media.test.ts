@@ -11,6 +11,7 @@ import {
   getKindIcon,
   getKindLabel,
   hashToNumber,
+  isLegacyMediaPath,
   isMediaRef,
   normalizeMediaText,
   resolveAudioSource,
@@ -700,8 +701,68 @@ describe('resolveBlobUri security', () => {
   });
 
   it('should pass through /api/ paths', () => {
-    expect(resolveBlobUri('/api/blobs/abc123')).toBe('/api/blobs/abc123');
+    expect(resolveBlobUri(`/api/blobs/${'a'.repeat(64)}`)).toBe(`/api/blobs/${'a'.repeat(64)}`);
     expect(resolveBlobUri('/api/media/test.png')).toBe('/api/media/test.png');
+  });
+
+  it.each([
+    '/api/media/video/safe.mp4/../../../eval/private',
+    '/api/media/video/%2e%2e/../../eval/private',
+    '/api/media/video/%252e%252e/../../eval/private',
+    '/api/media/video%2f..%2f..%2feval/private',
+    '/api/media/video\\..\\..\\eval/private',
+    '/api/media\\..\\..\\eval/private',
+    '/api\\media\\..\\..\\eval/private',
+    '/api/media%2f..%2f..%2feval/private',
+    '/api/me\tdia/video/../../../eval/private',
+    '/API/MeDiA/video/safe.mp4/../../../eval/private',
+    '/api/media/video/safe.mp4\n/../../../eval/private',
+    '/api/media/video/../private?download=true#preview',
+    `/api/blobs/${'a'.repeat(64)}/../../eval/private`,
+    `/api/BlObS/${'a'.repeat(64)}/../../eval/private`,
+    `/api/blobs/${'a'.repeat(64)}%2f`,
+    '/api/blobs/library/../../eval/private',
+    '/api/blobs/abc123',
+    '/api/blobs/%ff',
+  ])('rejects a legacy media path before browser normalization: %j', (uri) => {
+    expect(isLegacyMediaPath(uri)).toBe(true);
+    expect(resolveBlobUri(uri)).toBeUndefined();
+    expect(resolveVideoSource({ url: uri })).toBeNull();
+    expect(resolveVideoSource({ blobRef: uri })).toBeNull();
+    expect(resolveImageSource(uri)).toBeUndefined();
+    expect(
+      resolveVideoSource({ url: '/api/output/video/safe.mp4', thumbnail: uri })?.poster,
+    ).toBeUndefined();
+  });
+
+  it.each([
+    '/api/media/video/safe.mp4?download=1&name=../other#t=0',
+    '/api/media/video/my%20clip.mp4',
+    '/api/media/video/100%25.mp4#preview',
+    '/api/MeDiA/video/safe.mp4',
+    `/api/blobs/${'a'.repeat(64)}?download=1#preview`,
+    `/api/blobs/${'a'.repeat(64)}/?download=1`,
+    `/api/BlObS/${'A'.repeat(64)}`,
+    `/api/blobs/${'%61'.repeat(64)}`,
+  ])('preserves legacy URL suffixes, encodings, and API base behavior: %s', (uri) => {
+    vi.mocked(useApiConfig.getState).mockReturnValue(mockState('https://api.example.com/proxy'));
+    expect(isLegacyMediaPath(uri)).toBe(true);
+    expect(resolveBlobUri(uri)).toBe(uri);
+    expect(resolveVideoSource({ url: uri })?.src).toBe(`https://api.example.com/proxy${uri}`);
+    expect(resolveVideoSource({ url: '/api/output/video/safe.mp4', thumbnail: uri })?.poster).toBe(
+      `https://api.example.com/proxy${uri}`,
+    );
+  });
+
+  it.each([
+    '/api/blobs/library',
+    '/api/blobs/library/evals/?limit=1',
+    '/api/media/stats',
+    '/api/output/video/legacy.mp4',
+    '/api/eval/private',
+  ])('preserves other supported API destinations: %s', (uri) => {
+    expect(resolveBlobUri(uri)).toBe(uri);
+    expect(resolveVideoSource({ url: uri })?.src).toBe(uri);
   });
 
   it('should pass through data: URIs', () => {

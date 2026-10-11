@@ -6,6 +6,7 @@ import { useShiftKey } from '@app/hooks/useShiftKey';
 import { formatDuration } from '@app/utils/date';
 import { fetchTraces, replayEvaluation } from '@app/utils/evalOperations';
 import {
+  isLegacyMediaPath,
   isMediaRef,
   normalizeMediaText,
   resolveAudioSource,
@@ -55,7 +56,7 @@ type CSSPropertiesWithCustomVars = React.CSSProperties & {
 // Resolve complete Markdown destinations after parsing, so quoted, escaped, and
 // angle-bracket links cannot append path syntax to a validated reference prefix.
 const transformMarkdownUrl = (url: string): string =>
-  isMediaRef(url) ? (resolveBlobUri(url) ?? '') : url;
+  isMediaRef(url) || isLegacyMediaPath(url) ? (resolveBlobUri(url) ?? '') : url;
 
 function scoreToString(score: number | null | undefined) {
   if (typeof score !== 'number' || score === 0 || score === 1) {

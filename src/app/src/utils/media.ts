@@ -41,7 +41,7 @@ export type BlobLike =
       hash?: string;
     };
 
-function resolveStoragePath(path: string): string | undefined {
+function encodeStoragePath(path: string): string | undefined {
   const normalized = path.replace(/^\/+/, '');
   if (!normalized) {
     return undefined;
@@ -70,7 +70,43 @@ function resolveStoragePath(path: string): string | undefined {
       return undefined;
     }
   }
-  return withApiBase(`/api/media/${segments.join('/')}`);
+  return segments.join('/');
+}
+
+function resolveStoragePath(path: string): string | undefined {
+  const encoded = encodeStoragePath(path);
+  return encoded === undefined ? undefined : withApiBase(`/api/media/${encoded}`);
+}
+
+export function isLegacyMediaPath(value: unknown): boolean {
+  if (typeof value !== 'string') {
+    return false;
+  }
+  const path = value.replace(/[\t\r\n]/g, '');
+  // Library endpoints are ordinary API links, not blob byte references.
+  if (/^\/api\/blobs\/library(?:\/evals)?\/?(?:[?#]|$)/i.test(path)) {
+    return false;
+  }
+  return /^[/\\]api[/\\](?:media|blobs)(?:[/\\]|%(?:25)*(?:2f|5c))/i.test(path);
+}
+
+function resolveLegacyMediaPath(uri: string): string | undefined {
+  // Inspect the original path before URL parsing can remove traversal segments.
+  // Query strings and fragments are URL syntax here, unlike opaque storage keys.
+  const path = uri.split(/[?#]/, 1)[0];
+  const match = /^\/api\/(media|blobs)\/([\s\S]*)$/i.exec(path);
+  if (!match) {
+    return undefined;
+  }
+  const [, kind, key] = match;
+  if (kind.toLowerCase() === 'media') {
+    return encodeStoragePath(key) === undefined ? undefined : uri;
+  }
+  try {
+    return BLOB_HASH_REGEX.test(decodeURIComponent(key.replace(/\/$/, ''))) ? uri : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function withApiBase(apiPath: string): string {
@@ -85,6 +121,11 @@ function withApiBase(apiPath: string): string {
 function resolveMediaUrl(url?: string | null): string | undefined {
   if (!url) {
     return undefined;
+  }
+
+  if (isLegacyMediaPath(url)) {
+    const resolved = resolveLegacyMediaPath(url);
+    return resolved === undefined ? undefined : withApiBase(resolved);
   }
 
   // Legacy API path - prepend base URL (check before resolveBlobUri since
@@ -127,6 +168,10 @@ export function resolveBlobUri(uri?: string | null): string | undefined {
 
   if (uri.toLowerCase().startsWith(STORAGE_REF_PREFIX.toLowerCase())) {
     return resolveStoragePath(uri.slice(STORAGE_REF_PREFIX.length));
+  }
+
+  if (isLegacyMediaPath(uri)) {
+    return resolveLegacyMediaPath(uri);
   }
 
   // Only allow safe internal paths and data URIs
