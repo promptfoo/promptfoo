@@ -335,6 +335,7 @@ async function externalizeDataUrls(
 async function externalizeMetadataAudio(
   metadata: ProviderResponse['metadata'],
   storeOnce: StoreOnce,
+  location = 'response.metadata.audio.data',
 ): Promise<{ value: ProviderResponse['metadata']; mutated: boolean }> {
   if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) {
     return { value: metadata, mutated: false };
@@ -357,7 +358,7 @@ async function externalizeMetadataAudio(
   const stored = await storeOnce(
     audioRecord.data,
     normalizeAudioMimeType(typeof audioRecord.format === 'string' ? audioRecord.format : undefined),
-    'response.metadata.audio.data',
+    location,
     'audio',
   );
   if (!stored) {
@@ -375,6 +376,23 @@ async function externalizeMetadataAudio(
     },
     mutated: true,
   };
+}
+
+/**
+ * Store only result-level metadata audio, recording its actual provenance path.
+ * Unrelated metadata is not traversed; shared references and cyclic annotations
+ * remain available to the result persistence sanitizer unchanged.
+ */
+export async function extractAndStoreResultMetadataAudio(
+  metadata: ProviderResponse['metadata'],
+  context?: BlobContext,
+): Promise<ProviderResponse['metadata']> {
+  const { value } = await externalizeMetadataAudio(
+    metadata,
+    createStoreOnce(context || {}),
+    'metadata.audio.data',
+  );
+  return value;
 }
 
 /**
