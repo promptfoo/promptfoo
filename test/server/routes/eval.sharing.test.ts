@@ -1,8 +1,7 @@
 import fs from 'node:fs';
-import type { Server } from 'node:http';
 
-import request from 'supertest';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { setupTestServer } from '../../util/testServer';
 
 // Mock dependencies BEFORE imports
 vi.mock('../../../src/node', () => ({
@@ -37,26 +36,7 @@ const mockedEvaluateWithSource = vi.mocked(evaluateWithSource);
 const mockedShouldShareResults = vi.mocked(shouldShareResults);
 
 describe('Eval Routes - Sharing behavior', () => {
-  let api: ReturnType<typeof request.agent>;
-  let server: Server;
-
-  beforeAll(async () => {
-    await new Promise<void>((resolve, reject) => {
-      server = createApp().listen(0, '127.0.0.1', (error?: Error) =>
-        error ? reject(error) : resolve(),
-      );
-    });
-    api = request.agent(server);
-  });
-
-  afterAll(async () => {
-    if (!server.listening) {
-      return;
-    }
-    await new Promise<void>((resolve, reject) => {
-      server.close((error) => (error ? reject(error) : resolve()));
-    });
-  });
+  const api = setupTestServer(createApp);
 
   beforeEach(() => {
     vi.resetAllMocks();

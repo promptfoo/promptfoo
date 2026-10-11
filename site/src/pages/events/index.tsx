@@ -3,7 +3,9 @@ import React, { useEffect, useMemo, useState } from 'react';
 import Head from '@docusaurus/Head';
 import Link from '@docusaurus/Link';
 import Layout from '@theme/Layout';
-import { EventCard, EventFilters, FeaturedEvent } from '../../components/Events';
+import EventCard from '../../components/Events/EventCard';
+import EventFilters from '../../components/Events/EventFilters';
+import FeaturedEvent from '../../components/Events/FeaturedEvent';
 import {
   type Event,
   events,
@@ -14,7 +16,7 @@ import {
 } from '../../data/events';
 import styles from './index.module.css';
 
-import type { FilterStatus, FilterYear } from '../../components/Events';
+import type { FilterStatus, FilterYear } from '../../components/Events/EventFilters';
 
 const MAX_ROLLOVER_TIMEOUT_MS = 2 ** 31 - 1;
 

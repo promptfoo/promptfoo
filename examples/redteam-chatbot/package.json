@@ -3,6 +3,9 @@
   "version": "0.0.0",
   "description": "A simple chatbot for testing multi-turn redteam scenarios in Promptfoo",
   "main": "app.js",
+  "engines": {
+    "node": ">=22.22.0"
+  },
   "scripts": {
     "start": "node app.js",
     "test": "echo \"Error: no test specified\" && exit 1"
@@ -11,6 +14,6 @@
   "license": "MIT",
   "dependencies": {
     "express": "^5.2.1",
-    "promptfoo": "^0.121.0"
+    "promptfoo": "^0.123.0"
   }
 }

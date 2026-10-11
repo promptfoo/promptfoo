@@ -8,7 +8,7 @@ import {
   withGradingUsage,
 } from '../redteam/grading/storedResult';
 import { isAttackProvider } from '../redteam/shared/attackProviders';
-import { checkExfilTracking } from '../redteam/strategies/indirectWebPwn';
+import { checkExfilTracking, getWebPageTrackingIds } from '../redteam/strategies/indirectWebPwn';
 import { isApiProvider, isProviderOptions } from '../types/providers';
 import invariant from '../util/invariant';
 import { accumulateTokenUsage, cloneTokenUsageBreakdown } from '../util/tokenUsageUtils';
@@ -29,7 +29,12 @@ import type {
  * Returns whether some (but not all) turns have grader errors.
  * If ALL turns have errors, we should still ERROR. If only SOME have errors, we can be more lenient.
  */
-function analyzeGraderErrors(redteamHistory: Array<{ graderError?: string }> | undefined): {
+function analyzeGraderErrors(
+  redteamHistory:
+    | Array<{ graderError?: string; prompt?: string; output?: string; gradingInputHash?: string }>
+    | undefined,
+  coveredTurn?: { prompt: string; output: string; gradingInputHash: string },
+): {
   hasAnyErrors: boolean;
   allTurnsHaveErrors: boolean;
 } {
@@ -38,7 +43,16 @@ function analyzeGraderErrors(redteamHistory: Array<{ graderError?: string }> | u
   }
 
   const turnsWithErrors = redteamHistory.filter(
-    (turn) => turn.graderError && turn.graderError.length > 0,
+    (turn, index) =>
+      turn?.graderError &&
+      turn.graderError.length > 0 &&
+      !(
+        coveredTurn &&
+        index === redteamHistory.length - 1 &&
+        (turn.gradingInputHash
+          ? turn.gradingInputHash === coveredTurn.gradingInputHash
+          : turn.prompt === coveredTurn.prompt && turn.output === coveredTurn.output)
+      ),
   );
   const hasAnyErrors = turnsWithErrors.length > 0;
   const allTurnsHaveErrors = turnsWithErrors.length === redteamHistory.length;
@@ -265,26 +279,22 @@ export const handleRedteam = async (
     providerResponse,
     conversationTranscript: gradesCurrentTurnOnly ? undefined : conversationTranscript,
   });
-  const webPageUuid =
-    (providerResponse.metadata?.webPageUuid as string | undefined) ||
-    (test.metadata?.webPageUuid as string | undefined);
-  if (webPageUuid) {
-    // Try to get evalId from metadata, or extract from webPageUrl
-    // URL format: /dynamic-pages/{evalId}/{uuid}
-    let evalId = test.metadata?.evaluationId as string | undefined;
-    if (!evalId) {
-      // Check both providerResponse.metadata and test.metadata for webPageUrl
-      const webPageUrl =
-        (providerResponse.metadata?.webPageUrl as string | undefined) ||
-        (test.metadata?.webPageUrl as string | undefined);
-      if (webPageUrl) {
-        const match = webPageUrl.match(/\/dynamic-pages\/([^/]+)\//);
-        if (match) {
-          evalId = match[1];
-        }
-      }
-    }
-    const tracking = await checkExfilTracking(webPageUuid, evalId);
+  const trackingIds =
+    getWebPageTrackingIds(
+      providerResponse.metadata,
+      test.metadata?.evaluationId,
+      test.metadata?.webPageUrl,
+    ) ??
+    getWebPageTrackingIds(
+      {
+        webPageUuid: test.metadata?.webPageUuid,
+        webPageUrl: providerResponse.metadata?.webPageUrl,
+      },
+      test.metadata?.evaluationId,
+      test.metadata?.webPageUrl,
+    );
+  if (trackingIds) {
+    const tracking = await checkExfilTracking(trackingIds.uuid, trackingIds.evalId);
     if (tracking) {
       gradingContext = {
         ...gradingContext,
@@ -327,6 +337,22 @@ export const handleRedteam = async (
       );
     }
 
+    // A fresh verdict resolves only the matching final turn, not earlier ungraded attempts.
+    const { hasAnyErrors } = analyzeGraderErrors(
+      isAttackProvider(providerId ?? '') ? providerResponse.metadata?.redteamHistory : undefined,
+      grade.metadata?.graderError === true
+        ? undefined
+        : {
+            prompt: effectivePrompt,
+            output: outputString,
+            gradingInputHash: getGradingInputHash(
+              effectivePrompt,
+              outputString,
+              undefined,
+              test.metadata?.pluginId,
+            ),
+          },
+    );
     const gradeWithUsage = tokensUsed ? withGradingUsage(grade, tokensUsed) : grade;
     return {
       ...gradeWithUsage,
@@ -343,9 +369,18 @@ export const handleRedteam = async (
         // Pass through all test metadata for redteam
         ...test.metadata,
         ...gradeWithUsage.metadata,
+        ...(hasAnyErrors ? { gradingIncomplete: true } : {}),
       },
     };
   } catch (error) {
+    // Required final grading must not turn a Meta, Hydra or Goblin vulnerability into a pass.
+    if (
+      providerId === 'promptfoo:redteam:iterative:meta' ||
+      providerId === 'promptfoo:redteam:hydra' ||
+      providerId === 'promptfoo:redteam:goblin'
+    ) {
+      throw error;
+    }
     // For iterative strategies, check if only SOME turns had grader errors (not all).
     // If only some failed, we can be lenient. If ALL failed, we should still ERROR.
     const redteamHistory = providerResponse.metadata?.redteamHistory as

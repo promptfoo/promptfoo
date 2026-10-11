@@ -45,6 +45,9 @@ describe('optional Slack provider module', () => {
     await expect(loadSlackProviderModule(load)).rejects.toThrow(
       'npm install promptfoo @slack/web-api@^8.1.1',
     );
+    await expect(loadSlackProviderModule(load)).rejects.toThrow(
+      'npm install -g promptfoo @slack/web-api@^8.1.1',
+    );
     expect(load).not.toHaveBeenCalled();
   });
 

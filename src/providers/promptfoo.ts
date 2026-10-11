@@ -256,6 +256,29 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
 
       const data = await response.json();
 
+      // Only Cloud's explicit upstream request classification can stop Meta iterations.
+      // Missing results and unstructured error text may be refusals or transient failures.
+      if (
+        this.options.task === 'meta-agent-decision' &&
+        response.status === 400 &&
+        data.providerError?.status === 400 &&
+        data.providerError?.type === 'invalid_request_error' &&
+        data.providerError?.code === 'invalid_json'
+      ) {
+        return {
+          error:
+            'Meta-agent request failed: the upstream provider rejected the coordination request as invalid JSON (invalid_json).',
+          metadata: {
+            remoteGenerationError: {
+              status: 400,
+              type: 'invalid_request_error',
+              code: 'invalid_json',
+            },
+          },
+          ...(data.tokenUsage ? { tokenUsage: data.tokenUsage } : {}),
+        };
+      }
+
       if (!data.result) {
         logger.debug(
           `Error from promptfoo completion provider. Status: ${response.status} ${response.statusText} ${JSON.stringify(data)} `,

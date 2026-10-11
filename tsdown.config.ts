@@ -51,7 +51,10 @@ const sharedBuildOptions = {
   },
 } as const;
 
-function esmBuildOptions(entry: UserConfig['entry'], options: Pick<UserConfig, 'treeshake'> = {}) {
+function esmBuildOptions(
+  entry: UserConfig['entry'],
+  options: Pick<UserConfig, 'treeshake' | 'dts'> = {},
+) {
   return {
     ...sharedBuildOptions,
     entry,
@@ -69,10 +72,12 @@ function esmBuildOptions(entry: UserConfig['entry'], options: Pick<UserConfig, '
 
 export default defineConfig([
   // Server (ESM only) - stable path for workflows
-  esmBuildOptions({ 'server/index': 'src/server/index.ts' }),
+  // Only public library entry points emit declarations. The server's index declaration
+  // otherwise races the library build for dist/src/index.d.ts.
+  esmBuildOptions({ 'server/index': 'src/server/index.ts' }, { dts: false }),
   // CLI binary (ESM only)
   {
-    ...esmBuildOptions(['src/entrypoint.ts', 'src/main.ts']),
+    ...esmBuildOptions(['src/entrypoint.ts', 'src/main.ts'], { dts: false }),
     outputOptions: {
       banner: '#!/usr/bin/env node',
     },

@@ -54,6 +54,7 @@ import {
   externalizeResponseForRedteamHistory,
   getGraderAssertionValue,
   getTargetResponse,
+  preserveSelectedError,
   redteamProviderManager,
   resolveStoredGraderResult,
   runRedteamGrader,
@@ -475,6 +476,9 @@ export async function runRedteamConversation({
         error: targetResponse.error,
         response: targetResponse,
       });
+      if (options?.abortSignal?.aborted) {
+        break;
+      }
       continue;
     }
     if (!Object.prototype.hasOwnProperty.call(targetResponse, 'output')) {
@@ -865,25 +869,28 @@ export async function runRedteamConversation({
     }
   }
 
-  return {
-    output: bestInjectVar === undefined ? lastResponse?.output || '' : bestResponse,
-    ...(lastResponse?.error ? { error: lastResponse.error } : {}),
-    prompt: bestInjectVar ?? lastInjectVar,
-    metadata: {
-      finalIteration,
-      highestScore,
-      redteamHistory: previousOutputs,
-      redteamFinalPrompt: bestInjectVar ?? lastInjectVar,
-      storedGraderResult: resolveStoredGraderResult(bestGraderResult, storedGraderResult),
-      stopReason: stopReason,
-      sessionIds,
-      traceSnapshots:
-        traceSnapshots.length > 0
-          ? traceSnapshots.map((snapshot) => formatTraceForMetadata(snapshot))
-          : undefined,
+  return preserveSelectedError(
+    {
+      output: bestInjectVar === undefined ? lastResponse?.output || '' : bestResponse,
+      ...(lastResponse?.error ? { error: lastResponse.error } : {}),
+      prompt: bestInjectVar ?? lastInjectVar,
+      metadata: {
+        finalIteration,
+        highestScore,
+        redteamHistory: previousOutputs,
+        redteamFinalPrompt: bestInjectVar ?? lastInjectVar,
+        storedGraderResult: resolveStoredGraderResult(bestGraderResult, storedGraderResult),
+        stopReason: stopReason,
+        sessionIds,
+        traceSnapshots:
+          traceSnapshots.length > 0
+            ? traceSnapshots.map((snapshot) => formatTraceForMetadata(snapshot))
+            : undefined,
+      },
+      tokenUsage: totalTokenUsage,
     },
-    tokenUsage: totalTokenUsage,
-  };
+    lastResponse,
+  );
 }
 
 class RedteamIterativeProvider implements ApiProvider {

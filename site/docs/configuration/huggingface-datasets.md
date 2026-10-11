@@ -70,6 +70,8 @@ tests: huggingface://datasets/rajpurkar/squad
 
 The loader uses the Hugging Face [dataset viewer `/rows` API](https://huggingface.co/docs/dataset-viewer/rows). Promptfoo manages `offset` and `length` for pagination; use `limit` to cap the total number of test cases.
 
+`limit` must be a finite, non-negative integer. Invalid values fail before fetching the dataset; `limit=0` returns no test cases without making a request.
+
 To limit the number of test cases:
 
 ```yaml

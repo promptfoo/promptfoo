@@ -5,6 +5,11 @@ on:
     branches:
       - main
   workflow_dispatch:
+    inputs:
+      coverage_base:
+        description: 'Base commit or ref for coverage ratchets (use the PR base for stacked branches)'
+        required: false
+        type: string
 
 permissions: &read-only-permissions
   contents: read
@@ -38,7 +43,8 @@ jobs:
             {"node":"22.22","os":"windows-2025-vs2026","shard":2},
             {"node":"22.22","os":"windows-2025-vs2026","shard":3}
           '
-          build_matrix='{"node":["22.22","24.x","26.x"]}'
+          # Node 24 builds the shared package in package-build below.
+          build_matrix='{"node":["22.22","26.x"]}'
 
           if [[ "$EVENT_NAME" == "pull_request" ]]; then
             # PRs: add 1 macOS version only
@@ -83,7 +89,8 @@ jobs:
         name: Checkout repo
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          fetch-depth: 2
+          # Explicit dispatch bases may be older than the shallow checkout's parents.
+          fetch-depth: ${{ inputs.coverage_base != '' && '0' || '2' }}
           persist-credentials: false
 
       - name: Use Node ${{ matrix.node }}
@@ -136,7 +143,13 @@ jobs:
         # CI. Real test/assertion failures still fail; see vitest.config.ts.
         env:
           PROMPTFOO_IGNORE_UNHANDLED_TEST_ERRORS: 'true'
-        run: npm run test${{ matrix.shard && format(' -- --shard={0}/3', matrix.shard) || '' }}${{ matrix.os == 'ubuntu-latest' && matrix.node == '22.22' && !matrix.shard && ' -- --coverage' || '' }}
+        run: npm run test${{ matrix.shard && format(' -- --shard={0}/3', matrix.shard) || '' }}${{ matrix.os == 'ubuntu-latest' && matrix.node == '22.22' && !matrix.shard && ' -- --coverage' || '' }}${{ startsWith(matrix.os, 'windows-') && ' --exclude=test/release-artifact.test.ts' || '' }}
+
+      - name: Test release artifact acceptance without parallel workers
+        # Cold npm install/rebuild fixtures need the runner's CPU and disk without
+        # competing test forks. Run the unchanged suite once per Windows Node version.
+        if: startsWith(matrix.os, 'windows-') && matrix.shard == 1
+        run: npm run test -- test/release-artifact.test.ts --maxWorkers=1
 
       - name: Run built agent skill examples
         if: matrix.os != 'ubuntu-latest' && (!matrix.shard || matrix.shard == '1')
@@ -147,7 +160,14 @@ jobs:
 
       - name: Check Backend Coverage Ratchets
         if: matrix.os == 'ubuntu-latest' && matrix.node == '22.22' && !matrix.shard
-        run: npm run test:coverage:ratchet -- --report backend
+        env:
+          COVERAGE_BASE: ${{ inputs.coverage_base }}
+        run: |
+          args=(--report backend)
+          if [[ -n "$COVERAGE_BASE" ]]; then
+            args+=(--base "$COVERAGE_BASE")
+          fi
+          npm run test:coverage:ratchet -- "${args[@]}"
 
       - name: Upload Backend Coverage to Codecov
         if: matrix.os == 'ubuntu-latest' && matrix.node == '22.22' && !matrix.shard
@@ -184,7 +204,8 @@ jobs:
         with: &no-persisted-credentials
           persist-credentials: false
 
-      - name: Use Node ${{ matrix.node }}
+      - &use-build-node
+        name: Use Node ${{ matrix.node }}
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           # Keep the matrix label at 22.22 for stable check names, but install exactly
@@ -194,32 +215,18 @@ jobs:
 
       - *use-npm-11
 
-      - name: Install Dependencies
+      - &install-build-dependencies
+        name: Install Dependencies
         # The build does not need native dependency lifecycle scripts. Skipping them
         # keeps the Node 26 build lane out of the install stall seen on hosted runners.
         run: npm ci ${{ matrix.node == '26.x' && '--ignore-scripts' || '' }} --registry=https://registry.npmjs.org/
 
-      - name: Use Python for installed wrapper acceptance
-        if: matrix.node == '24.x'
-        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
-        with: *python-3-14-8
-
-      - name: Use Ruby for installed wrapper acceptance
-        if: matrix.node == '24.x'
-        uses: ruby/setup-ruby@4c56a21280b36d862b5fc31348f463d60bdc55d5 # v1
-        with: &ruby-4-0-1
-          ruby-version: '4.0.1'
-
-      - name: Use Go for installed wrapper acceptance
-        if: matrix.node == '24.x'
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
-        with:
-          go-version-file: src/golang/go.mod
-
-      - name: Build
+      - &build-source
+        name: Build
         run: npm run build
 
-      - name: Check Telemetry
+      - &check-build-telemetry
+        name: Check Telemetry
         env:
           EVENT_NAME: ${{ github.event_name }}
           HEAD_REPO_FULL_NAME: ${{ github.event.pull_request.head.repo.full_name }}
@@ -242,13 +249,15 @@ jobs:
             echo "PostHog key replacement verified successfully"
           fi
 
-      - name: Pack Package Artifact
+      - &pack-package-artifact
+        name: Pack Package Artifact
         id: package-artifact
         run: |
           tarball="$(npm run --silent package:pack -- --destination "$RUNNER_TEMP/package-artifact")"
           echo "tarball=$tarball" >> "$GITHUB_OUTPUT"
 
-      - name: Test Package Artifact
+      - &test-package-artifact
+        name: Test Package Artifact
         env:
           PACKAGE_TARBALL: ${{ steps.package-artifact.outputs.tarball }}
           PROMPTFOO_DISABLE_TELEMETRY: 1
@@ -262,8 +271,124 @@ jobs:
           fi
           npm run test:package-artifact -- --tarball "$PACKAGE_TARBALL" --runtime-assets "$RUNTIME_ASSETS" "${browser_args[@]}"
 
+      - &built-skill-examples
+        name: Run built agent skill examples
+        env:
+          PROMPTFOO_POSTHOG_KEY: ''
+        run: npm run test:smoke -- test/smoke/agent-skill-examples.test.ts
+
+  contracts-isolation:
+    needs: ci-config
+    name: Isolated Contracts on Node ${{ matrix.node }}
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.ci-config.outputs.build-matrix) }}
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Use Node ${{ matrix.node }}
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ matrix.node == '22.22' && '22.22.0' || matrix.node }}
+
+      - name: Test Isolated Contracts
+        # The script uses only Node builtins; no root dependency install or build secrets needed.
+        # Pin npm 11 because bundled npm 10 crashes while resolving these standalone inputs.
+        run: npx --ignore-scripts --registry=https://registry.npmjs.org/ -y npm@11.18.0 run test:contracts-isolation
+
+  # Publish the Node 24 archive before Linux acceptance so platform checks can
+  # validate the same immutable upload without waiting for any other build lane.
+  package-build:
+    name: Prepare package on Node ${{ matrix.node }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions: *read-only-permissions
+    env:
+      PROMPTFOO_POSTHOG_KEY: ${{ secrets.PROMPTFOO_POSTHOG_KEY }}
+    strategy:
+      matrix:
+        node: ['24.x']
+    steps:
+      - *checkout-repo-read-only
+      - *use-build-node
+      - *use-npm-11
+      - *install-build-dependencies
+      - *build-source
+      - *check-build-telemetry
+      - *pack-package-artifact
+      - *built-skill-examples
+
+      - name: Upload package for platform acceptance
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: promptfoo-platform-package
+          path: ${{ steps.package-artifact.outputs.tarball }}
+          if-no-files-found: error
+          retention-days: 7
+
+  package-acceptance:
+    # Preserve the required check name, including failures before an upload exists.
+    name: Build on Node ${{ matrix.node }}
+    needs: package-build
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions: *read-only-permissions
+    strategy:
+      matrix:
+        node: ['24.x']
+    steps:
+      - &require-package-build
+        name: Require successful package build
+        env:
+          PACKAGE_BUILD_RESULT: ${{ needs.package-build.result }}
+        run: test "$PACKAGE_BUILD_RESULT" = success
+      - *checkout-repo-read-only
+      - *use-build-node
+      - *use-npm-11
+      - *install-build-dependencies
+
+      - name: Use Python for installed wrapper acceptance
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with: *python-3-14-8
+
+      - name: Use Ruby for installed wrapper acceptance
+        uses: ruby/setup-ruby@4c56a21280b36d862b5fc31348f463d60bdc55d5 # v1
+        with: &ruby-4-0-1
+          ruby-version: '4.0.1'
+
+      - name: Use Go for installed wrapper acceptance
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: src/golang/go.mod
+
+      - &download-platform-package
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: promptfoo-platform-package
+          path: ${{ runner.temp }}/package-artifact
+      - name: Locate downloaded package
+        id: package-artifact
+        env:
+          ARTIFACT_DIRECTORY: ${{ runner.temp }}/package-artifact
+        run: |
+          shopt -s nullglob
+          tarballs=("$ARTIFACT_DIRECTORY"/*.tgz)
+          if [ "${#tarballs[@]}" -ne 1 ]; then
+            echo "Expected exactly one downloaded package archive" >&2
+            exit 1
+          fi
+          echo "tarball=${tarballs[0]}" >> "$GITHUB_OUTPUT"
+      - *test-package-artifact
+
       - name: Upload packed consumer inventory
-        if: matrix.node == '24.x'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: sbom-runtime
@@ -272,29 +397,15 @@ jobs:
           retention-days: 30
 
       - name: Test Package Artifact Without Optional Dependencies
-        if: matrix.node == '24.x'
         env:
           PACKAGE_TARBALL: ${{ steps.package-artifact.outputs.tarball }}
           PROMPTFOO_DISABLE_TELEMETRY: 1
         run: npm run test:package-artifact -- --tarball "$PACKAGE_TARBALL" --profile omit-optional --runtime-assets all
 
-      - name: Upload package for platform acceptance
-        if: matrix.node == '24.x'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: promptfoo-platform-package
-          path: ${{ steps.package-artifact.outputs.tarball }}
-          if-no-files-found: error
-          retention-days: 7
-
-      - name: Run built agent skill examples
-        env:
-          PROMPTFOO_POSTHOG_KEY: ''
-        run: npm run test:smoke -- test/smoke/agent-skill-examples.test.ts
-
   artifact-consumer:
     name: Installed package on ${{ matrix.os }}
-    needs: build
+    needs: package-build
+    if: ${{ !cancelled() }}
     runs-on: ${{ matrix.os }}
     # Fresh Windows consumer installs can take 17m; leave time for assertions and cleanup.
     timeout-minutes: ${{ matrix.os == 'windows-2025-vs2026' && 40 || 20 }}
@@ -309,6 +420,7 @@ jobs:
     env:
       npm_config_cache: ${{ github.workspace }}/.artifact-npm-cache
     steps:
+      - *require-package-build
       - &checkout-source-read-only
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with: *no-persisted-credentials
@@ -316,10 +428,7 @@ jobs:
         with:
           node-version: '22.22.0'
       - *use-npm-11
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        with:
-          name: promptfoo-platform-package
-          path: ${{ runner.temp }}/package-artifact
+      - *download-platform-package
       - name: Prepare isolated artifact tooling
         id: prepare
         env:
@@ -400,13 +509,36 @@ jobs:
     name: Shell Format Check
     timeout-minutes: 5
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
+      - name: Install shfmt
+        run: |
+          curl --fail --location --retry 3 --connect-timeout 15 --max-time 60 \
+            https://github.com/mvdan/sh/releases/download/v3.12.0/shfmt_v3.12.0_linux_amd64 \
+            --output "$RUNNER_TEMP/shfmt"
+          printf '%s  %s\n' 'd9fbb2a9c33d13f47e7618cf362a914d029d02a6df124064fff04fd688a745ea' "$RUNNER_TEMP/shfmt" | sha256sum --check
+          chmod +x "$RUNNER_TEMP/shfmt"
+
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-      - uses: luizm/action-sh-checker@883217215b11c1fabbf00eb1a9a041f62d74c744
-        env:
-          SHFMT_OPTS: '-i 2' # 2 space indent
         with:
-          sh_checker_shellcheck_disable: true
+          persist-credentials: false
+
+      - name: Check shell formatting
+        env:
+          NO_COLOR: '1'
+        run: |
+          # shfmt 3.12.0 cannot disable EditorConfig ignore rules during discovery.
+          find . -name .git -prune -o -name .editorconfig -exec rm -f -- {} +
+          printf 'root = true\n' > .editorconfig
+          "$RUNNER_TEMP/shfmt" -f=0 . > "$RUNNER_TEMP/shell-files.txt"
+          shell_files=()
+          while IFS= read -r -d '' file; do
+            shell_files+=("$file")
+          done < "$RUNNER_TEMP/shell-files.txt"
+          if (( ${#shell_files[@]} > 0 )); then
+            "$RUNNER_TEMP/shfmt" -i 2 -d -- "${shell_files[@]/#/./}"
+          fi
 
   assets:
     name: Generate Assets
@@ -516,7 +648,7 @@ jobs:
 
   sbom-comparison:
     name: Compare shipped dependency inventories
-    needs: [build, docs]
+    needs: [build, package-acceptance, docs]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -686,7 +818,14 @@ jobs:
         run: npm run test:coverage --prefix src/app
 
       - name: Check Frontend Coverage Ratchets
-        run: npm run test:coverage:ratchet -- --report frontend
+        env:
+          COVERAGE_BASE: ${{ inputs.coverage_base }}
+        run: |
+          args=(--report frontend)
+          if [[ -n "$COVERAGE_BASE" ]]; then
+            args+=(--base "$COVERAGE_BASE")
+          fi
+          npm run test:coverage:ratchet -- "${args[@]}"
 
       - name: Upload Frontend Coverage to Codecov
         # Authentication can fail before fail_ci_if_error applies; uploads are informational.
