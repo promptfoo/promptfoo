@@ -70,6 +70,11 @@ type CsvParseOptionsWithColumns<T> = Omit<CsvOptions<T>, 'columns'> & {
   columns: Exclude<CsvOptions['columns'], undefined | false>;
 };
 
+// Drop a UTF-8 byte order mark (Excel, Windows PowerShell 5.1); JSON.parse rejects it.
+function stripBom(contents: string): string {
+  return contents.charAt(0) === '\uFEFF' ? contents.slice(1) : contents;
+}
+
 /**
  * Returns true if the path is accessible. ENOENT (and ENOTDIR, which Node
  * surfaces when a path component isn't a directory) yield false; other errors
@@ -212,7 +217,7 @@ export function maybeLoadFromExternalFile(
         throw error;
       }
       if (matchedFile.endsWith('.json')) {
-        const parsed = JSON.parse(contents);
+        const parsed = JSON.parse(stripBom(contents));
         if (Array.isArray(parsed)) {
           allContents.push(...parsed);
         } else {
@@ -230,6 +235,7 @@ export function maybeLoadFromExternalFile(
         }
       } else if (matchedFile.endsWith('.csv')) {
         const csvOptions: CsvParseOptionsWithColumns<Record<string, string>> = {
+          bom: true,
           columns: true as const,
         };
         const records = csvParse<Record<string, string>>(contents, csvOptions);
@@ -261,7 +267,7 @@ export function maybeLoadFromExternalFile(
   }
   if (finalPath.endsWith('.json')) {
     try {
-      return JSON.parse(contents);
+      return JSON.parse(stripBom(contents));
     } catch (error) {
       throw new Error(`Failed to parse JSON file ${finalPath}: ${error}`);
     }
@@ -275,6 +281,7 @@ export function maybeLoadFromExternalFile(
   }
   if (finalPath.endsWith('.csv')) {
     const csvOptions: CsvParseOptionsWithColumns<Record<string, string>> = {
+      bom: true,
       columns: true as const,
     };
     const records = csvParse<Record<string, string>>(contents, csvOptions);
