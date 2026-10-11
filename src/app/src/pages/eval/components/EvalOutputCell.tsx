@@ -2,22 +2,18 @@ import React, { useCallback, useId, useMemo } from 'react';
 
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import useCloudConfig from '@app/hooks/useCloudConfig';
-import { useEvalOperations } from '@app/hooks/useEvalOperations';
 import { useShiftKey } from '@app/hooks/useShiftKey';
 import { formatDuration } from '@app/utils/date';
+import { fetchTraces, replayEvaluation } from '@app/utils/evalOperations';
 import {
   normalizeMediaText,
   resolveAudioSource,
   resolveImageSource,
   resolveVideoSource,
 } from '@app/utils/media';
-import { getActualPrompt } from '@app/utils/providerResponse';
-import {
-  type EvaluateTableOutput,
-  type GradingResult,
-  type ImageOutput,
-  ResultFailureReason,
-} from '@promptfoo/types';
+import { type EvaluateTableOutput, type GradingResult, type ImageOutput } from '@promptfoo/types';
+import { ResultFailureReason } from '@promptfoo/types/results';
+import { getActualPrompt } from '@promptfoo/util/providerResponse';
 import { diffJson, diffSentences, diffWords } from 'diff';
 import {
   Check,
@@ -107,6 +103,7 @@ export function isImageProvider(provider: string | undefined): boolean {
  * - 'openai:video:sora-2' (OpenAI Sora)
  * - 'openai:video:sora-2-pro' (OpenAI Sora Pro)
  * - 'google:video:veo-3.1-generate-preview' (Google Veo)
+ * - 'vertex:video:veo-3.1-generate-001' (Google Veo on Vertex AI)
  * - 'google:video:veo-3.1-fast-generate-preview' (Google Veo Fast)
  * Used to skip truncation for video content.
  */
@@ -1043,8 +1040,6 @@ function renderOutputActions({
   cloudConfig,
   addFilter,
   resetFilters,
-  replayEvaluation,
-  fetchTraces,
   handleCopy,
   handleToggleHighlight,
   handleRowShareLink,
@@ -1071,8 +1066,6 @@ function renderOutputActions({
   cloudConfig: ReturnType<typeof useCloudConfig>['data'];
   addFilter: ReturnType<typeof useTableStore.getState>['addFilter'];
   resetFilters: ReturnType<typeof useTableStore.getState>['resetFilters'];
-  replayEvaluation: ReturnType<typeof useEvalOperations>['replayEvaluation'];
-  fetchTraces: ReturnType<typeof useEvalOperations>['fetchTraces'];
   handleCopy: () => void;
   handleToggleHighlight: () => void;
   handleRowShareLink: () => void;
@@ -1316,7 +1309,6 @@ function EvalOutputCell({
 
   const { shouldHighlightSearchText, addFilter, resetFilters } = useTableStore();
   const { data: cloudConfig } = useCloudConfig();
-  const { replayEvaluation, fetchTraces } = useEvalOperations();
 
   const [openPrompt, setOpen] = React.useState(false);
   const locationHash = useEvalDetailsHash();
@@ -1655,8 +1647,6 @@ function EvalOutputCell({
         cloudConfig,
         addFilter,
         resetFilters,
-        replayEvaluation,
-        fetchTraces,
         handleCopy,
         handleToggleHighlight,
         handleRowShareLink,

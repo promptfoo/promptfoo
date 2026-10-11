@@ -237,16 +237,7 @@ export function registerRedteamRunTool(server: McpServer) {
 
         // Handle timeout specifically
         if (errorMessage.includes('timed out')) {
-          return createToolResponse(
-            'redteam_run',
-            false,
-            {
-              originalError: errorMessage,
-              suggestion:
-                'The scan took too long. Try reducing the test scope, checking API credentials, or increasing timeout.',
-            },
-            'Redteam scan timed out',
-          );
+          return createToolResponse('redteam_run', false, undefined, 'Redteam scan timed out');
         }
 
         const errorData = {
@@ -256,22 +247,7 @@ export function registerRedteamRunTool(server: McpServer) {
             force: args.force,
             maxConcurrency: args.maxConcurrency,
           },
-          error: errorMessage,
           troubleshooting: {
-            commonIssues: [
-              'Configuration file not found or invalid format',
-              'No redteam configuration in config file',
-              'Provider authentication or configuration errors',
-              'Insufficient test cases generated',
-              'Network connectivity issues',
-              'API rate limiting or quota exceeded',
-            ],
-            configurationTips: [
-              'Ensure your config file has a "redteam" section with plugins and targets',
-              'Check that provider credentials are properly configured',
-              'Verify your targets/providers have proper labels',
-              'Consider running "promptfoo redteam init" to create a proper config',
-            ],
             exampleConfig: {
               basic: dedent`
                 redteam:

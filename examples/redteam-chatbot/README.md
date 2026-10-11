@@ -15,6 +15,8 @@ The example includes session ID generation using `transformVars` to ensure each 
 
 ## Setup
 
+Requires Node.js >=22.22.0 (Node.js 24 LTS recommended).
+
 ### Installation
 
 1. Install dependencies:

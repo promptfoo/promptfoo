@@ -32,8 +32,13 @@ describe('isPackagePath', () => {
     expect(isPackagePath('package:packageName:exportedClassOrFunction')).toBe(true);
   });
 
-  it('should return false for non-package paths', () => {
-    expect(isPackagePath('notAPackagePath')).toBe(false);
+  it.each([
+    'notAPackagePath',
+    'output === "Expected output"',
+    'output.length * 10',
+    'output.length < 1',
+  ])('should return false for non-package path %s', (value) => {
+    expect(isPackagePath(value)).toBe(false);
   });
 });
 
