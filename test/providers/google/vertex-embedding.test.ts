@@ -76,7 +76,11 @@ describe('Vertex embeddings request contracts', () => {
         await provider.callEmbeddingApi('task: search result | query: text', undefined, {
           abortSignal: controller.signal,
         }),
-      ).toEqual({ embedding: [0.3, 0.4], tokenUsage: { total: 3, prompt: 3, numRequests: 1 } });
+      ).toEqual({
+        embedding: [0.3, 0.4],
+        tokenUsage: { total: 3, prompt: 3, numRequests: 1 },
+        cost: expect.closeTo(0.0000006, 12),
+      });
       expect(request).toHaveBeenCalledWith(
         expect.objectContaining({
           url: `https://aiplatform.googleapis.com/v1/projects/test-project/locations/global/publishers/google/models/${model}:embedContent`,
@@ -96,6 +100,46 @@ describe('Vertex embeddings request contracts', () => {
     const result = await provider.callEmbeddingApi('text');
     expect(result.tokenUsage?.total).toBeUndefined();
     expect(request.mock.calls[0][0].data).toEqual({ content: { parts: [{ text: 'text' }] } });
+  });
+
+  it.each([
+    { name: 'prompt-only usage', usage: { promptTokenCount: 1000 }, config: {}, cost: 0.0002 },
+    {
+      name: 'input usage rather than total',
+      usage: { promptTokenCount: 1000, totalTokenCount: 9000 },
+      config: { region: 'eu' },
+      cost: 0.0002,
+    },
+    { name: 'zero usage', usage: { promptTokenCount: 0 }, config: {}, cost: 0 },
+    { name: 'unknown input usage', usage: { totalTokenCount: 1000 }, config: {}, cost: undefined },
+    { name: 'absent usage', usage: undefined, config: {}, cost: undefined },
+    {
+      name: 'input cost override',
+      usage: { promptTokenCount: 1000 },
+      config: { inputCost: 0.000001 },
+      cost: 0.001,
+    },
+    {
+      name: 'cost override',
+      usage: { promptTokenCount: 1000 },
+      config: { cost: 0.000002 },
+      cost: 0.002,
+    },
+    {
+      name: 'zero cost override',
+      usage: { promptTokenCount: 1000 },
+      config: { inputCost: 0 },
+      cost: 0,
+    },
+  ])('reports Embedding 2 cost for $name', async ({ usage, config, cost }) => {
+    const provider = new VertexEmbeddingProvider('gemini-embedding-2', { config });
+    mockRequest(provider, { embedding: { values: [0.1] }, usageMetadata: usage });
+    const result = await provider.callEmbeddingApi('text');
+    if (cost === undefined) {
+      expect(result.cost).toBeUndefined();
+    } else {
+      expect(result.cost).toBeCloseTo(cost, 12);
+    }
   });
 
   it.each([{ taskType: 'RETRIEVAL_QUERY' }, { title: 'Title' }, { autoTruncate: false }])(

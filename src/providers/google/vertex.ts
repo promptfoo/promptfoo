@@ -34,6 +34,7 @@ import { GoogleAuthManager } from './auth';
 import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
 import { getVertexApiHostForRegion } from './shared';
 import {
+  calculateGoogleCost,
   calculateGoogleCostFromUsage,
   collectGroundingMetadata,
   collectThoughtSignatures,
@@ -1487,10 +1488,17 @@ export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
       throw new Error(errorMsg);
     }
 
+    const promptTokens = embedContent ? data.usageMetadata?.promptTokenCount : undefined;
     return {
       embedding: values,
+      ...(embedContent && {
+        cost:
+          promptTokens === undefined
+            ? undefined
+            : calculateGoogleCost(this.modelName, this.config, promptTokens, 0, true),
+      }),
       tokenUsage: {
-        ...(embedContent && { prompt: data.usageMetadata?.promptTokenCount }),
+        ...(embedContent && { prompt: promptTokens }),
         total: embedContent
           ? (data.usageMetadata?.totalTokenCount ?? data.usageMetadata?.promptTokenCount)
           : (embeddingData?.statistics?.token_count ?? 0),
