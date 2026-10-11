@@ -4,16 +4,6 @@
   margin: 0 auto;
 }
 
-.header {
-  margin-bottom: 2rem;
-  text-align: center;
-}
-
-.header h3 {
-  margin: 0;
-  color: var(--ifm-heading-color);
-}
-
 .flowChart {
   display: flex;
   align-items: center;
@@ -39,11 +29,6 @@
 .flowStep:hover {
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-}
-
-.flowStep.active {
-  border-color: var(--ifm-color-primary);
-  background: var(--ifm-color-primary-lightest);
 }
 
 .stepIcon {
@@ -82,44 +67,6 @@
   padding: 0 0.25rem;
 }
 
-.details {
-  margin-top: 2rem;
-}
-
-.detailCard {
-  padding: 2rem;
-  background: var(--ifm-background-surface-color);
-  border: 2px solid var(--ifm-color-emphasis-200);
-  border-radius: 10px;
-}
-
-.detailCard h4 {
-  margin: 0 0 1rem;
-  color: var(--ifm-heading-color);
-}
-
-.detailCard p {
-  margin: 0 0 1.5rem;
-  color: var(--ifm-color-emphasis-700);
-}
-
-.stepDetails {
-  background: var(--ifm-pre-background);
-  border-radius: 8px;
-  overflow: hidden;
-}
-
-.codeExample {
-  display: block;
-  padding: 1rem;
-  margin: 0;
-  font-family: var(--ifm-font-family-monospace);
-  font-size: 0.9rem;
-  line-height: 1.5;
-  color: var(--ifm-color-emphasis-900);
-  white-space: pre;
-}
-
 /* Dark mode adjustments */
 html[data-theme='dark'] .container {
   background: var(--ifm-card-background-color);
@@ -127,16 +74,6 @@ html[data-theme='dark'] .container {
 }
 
 html[data-theme='dark'] .flowStep {
-  background: var(--ifm-background-surface-color);
-  border-color: var(--ifm-color-emphasis-300);
-}
-
-html[data-theme='dark'] .flowStep.active {
-  background: var(--ifm-color-primary-darker);
-  border-color: var(--ifm-color-primary);
-}
-
-html[data-theme='dark'] .detailCard {
   background: var(--ifm-background-surface-color);
   border-color: var(--ifm-color-emphasis-300);
 }
