@@ -1089,7 +1089,7 @@ For models that support thinking capabilities, you can configure how the model r
 
 #### Gemini 3 Models (thinkingLevel)
 
-Gemini 3 models use `thinkingLevel` instead of `thinkingBudget`:
+Gemini 3 models use `thinkingLevel` instead of `thinkingBudget`. Supported levels and defaults are [model-specific](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/thinking#supported-thinking-levels-by-model):
 
 ```yaml
 providers:
@@ -1109,7 +1109,7 @@ providers:
         thinkingConfig:
           thinkingLevel: MINIMAL # Default for low-latency agentic tasks
 
-  # Gemini 3.1 Pro supports: LOW, HIGH
+  # Gemini 3.1 Pro supports: LOW, MEDIUM, HIGH
   - id: vertex:gemini-3.1-pro-preview
     config:
       generationConfig:
@@ -1117,7 +1117,7 @@ providers:
           thinkingLevel: HIGH # Maximizes reasoning depth (default)
 ```
 
-Thinking levels for Gemini 3 Flash:
+Thinking levels for Gemini 3.6 Flash and Gemini 3.5 Flash-Lite:
 
 | Level   | Description                                                |
 | ------- | ---------------------------------------------------------- |
@@ -1128,12 +1128,13 @@ Thinking levels for Gemini 3 Flash:
 
 Gemini 3.8 Flash, 3.7 Flash, and 3.6 Flash default to `MEDIUM`; Gemini 3.5 Flash-Lite defaults to `MINIMAL`. Use `MEDIUM` or `HIGH` for Flash-Lite tool-heavy, multi-step tasks. These Flash models ignore `temperature`, `topP`, and `topK`, and Promptfoo omits those fields and `candidateCount`. Prompts must not end with a prefilled `model` turn; preserve matching function names, function-call IDs when returned, and thought signatures when evaluating multi-turn tool use. See Google's [latest-model migration guide](https://ai.google.dev/gemini-api/docs/generate-content/latest-model).
 
-Thinking levels for Gemini 3 Pro:
+Thinking levels for Gemini 3.1 Pro:
 
-| Level | Description                               |
-| ----- | ----------------------------------------- |
-| LOW   | Minimizes latency and cost. Simple tasks. |
-| HIGH  | Maximizes reasoning depth. Default.       |
+| Level  | Description                               |
+| ------ | ----------------------------------------- |
+| LOW    | Minimizes latency and cost. Simple tasks. |
+| MEDIUM | Balances reasoning quality and latency.   |
+| HIGH   | Maximizes reasoning depth. Default.       |
 
 #### Inference tiers and cached-token pricing
 

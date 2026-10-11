@@ -797,7 +797,7 @@ For models that support thinking capabilities, you can configure how the model r
 
 #### Gemini 3 Models (thinkingLevel)
 
-Gemini 3 models use `thinkingLevel` for more granular control:
+Gemini 3 models use `thinkingLevel` for more granular control. Supported levels and defaults are [model-specific](https://ai.google.dev/gemini-api/docs/generate-content/thinking#thinking-levels):
 
 ```yaml
 providers:
@@ -808,12 +808,12 @@ providers:
           thinkingLevel: MEDIUM # LOW, MEDIUM, or HIGH
 ```
 
-| Level   | Description                                                      |
-| ------- | ---------------------------------------------------------------- |
-| MINIMAL | Fewest tokens. Not supported by Gemini 3.8 Flash or its aliases. |
-| LOW     | Fewer tokens. Suitable for simpler tasks.                        |
-| MEDIUM  | Balanced approach for moderate complexity (Flash only).          |
-| HIGH    | More tokens for deep reasoning.                                  |
+| Level   | Description                                                                       |
+| ------- | --------------------------------------------------------------------------------- |
+| MINIMAL | Fewest tokens. Not supported by Gemini 3.1 Pro, Gemini 3.8 Flash, or its aliases. |
+| LOW     | Fewer tokens. Suitable for simpler tasks.                                         |
+| MEDIUM  | Balanced approach for moderate complexity.                                        |
+| HIGH    | More tokens for deep reasoning.                                                   |
 
 Defaults vary by model: Gemini 3.8 Flash, 3.7 Flash, 3.6 Flash, and 3.5 Flash default to `MEDIUM`, Gemini 3.5 Flash-Lite defaults to `MINIMAL`, and Gemini 3.1 Pro defaults to `HIGH`.
 
@@ -1070,10 +1070,10 @@ providers:
       maxOutputTokens: 4096
       generationConfig:
         thinkingConfig:
-          thinkingLevel: HIGH # LOW or HIGH (Pro only supports these two levels)
+          thinkingLevel: HIGH # LOW, MEDIUM, or HIGH (default)
 ```
 
-Thinking levels for Gemini 3.1 Pro: LOW (faster, simpler tasks), HIGH (deep reasoning, default).
+Thinking levels for Gemini 3.1 Pro: LOW (faster, simpler tasks), MEDIUM (balanced), HIGH (deep reasoning, default).
 
 ### Gemini 2.5 Pro
 
