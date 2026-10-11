@@ -1651,15 +1651,19 @@ export const BEDROCK_MODEL = {
       // path's default from 1024 to 2048 for every Claude model, not just the thinks-by-
       // default ones. That may well be the right default here too, but it is a behavior
       // change for existing configs and belongs in its own change.
-      const thinking = modelName
-        ? normalizeClaudeThinkingConfig(modelName, config?.thinking, config?.effort)
-        : config?.thinking;
-      const alwaysOnAdaptiveThinking =
-        !!modelName && isAlwaysOnAdaptiveThinkingClaudeModel(modelName);
+      // Application profile names do not identify their backing model.
+      const isApplicationProfile =
+        modelName?.startsWith('arn:') && modelName.includes(':application-inference-profile/');
+      const capabilityModelName = isApplicationProfile ? '' : (modelName ?? '');
+      const thinking = normalizeClaudeThinkingConfig(
+        capabilityModelName,
+        config?.thinking,
+        config?.effort,
+      );
+      const alwaysOnAdaptiveThinking = isAlwaysOnAdaptiveThinkingClaudeModel(capabilityModelName);
       const thinksByDefault =
         alwaysOnAdaptiveThinking ||
-        (!!modelName &&
-          isThinkingOnByDefaultClaudeModel(modelName) &&
+        (isThinkingOnByDefaultClaudeModel(capabilityModelName) &&
           thinking?.type !== 'disabled' &&
           thinking?.type !== 'between_tools');
       addConfigParam(
@@ -1680,9 +1684,7 @@ export const BEDROCK_MODEL = {
       // Bedrock still gates Opus 4.5 effort behind a beta opt-in.
       if (
         config?.effort != null &&
-        modelName &&
-        !modelName.includes(':application-inference-profile/') &&
-        /(?:^|[./])anthropic\.claude-opus-4-5(?:-|:|$)/.test(modelName)
+        /(?:^|[./])anthropic\.claude-opus-4-5(?:-|:|$)/.test(capabilityModelName)
       ) {
         betaFeatures.add('effort-2025-11-24');
       }
@@ -1697,15 +1699,10 @@ export const BEDROCK_MODEL = {
         { temperature: config?.temperature },
         {
           thinkingEnabled: alwaysOnAdaptiveThinking || isClaudeThinkingEnabled(thinking),
-          samplingParamsDeprecated: modelName
-            ? isSamplingParamsDeprecatedClaudeModel(modelName)
-            : false,
+          samplingParamsDeprecated: isSamplingParamsDeprecatedClaudeModel(capabilityModelName),
           // An application profile hides the backing model, which may reject sampling.
           // Preserve explicit values but leave the default to AWS.
-          defaultTemperature:
-            modelName?.startsWith('arn:') && modelName.includes(':application-inference-profile/')
-              ? undefined
-              : 0,
+          defaultTemperature: isApplicationProfile ? undefined : 0,
         },
       );
       for (const warning of samplingWarnings) {
@@ -1723,7 +1720,7 @@ export const BEDROCK_MODEL = {
       // the Converse and Anthropic Messages providers surface the one-time warnings.
       const toolChoice =
         (alwaysOnAdaptiveThinking ||
-          (!!modelName && isForcedToolChoiceUnsupportedClaudeModel(modelName))) &&
+          isForcedToolChoiceUnsupportedClaudeModel(capabilityModelName)) &&
         (config?.tool_choice?.type === 'any' || config?.tool_choice?.type === 'tool')
           ? undefined
           : config?.tool_choice;
