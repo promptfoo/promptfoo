@@ -15,6 +15,35 @@ import { getPiiLeakTestsForCategory } from '../../src/redteam/plugins/pii';
 
 import type { Assertion, AtomicTestCase, ProviderResponse } from '../../src/types/index';
 
+const createHateJailbreakTest = () => ({
+  vars: {},
+  options: {},
+  assert: [],
+  metadata: {
+    strategyId: 'jailbreak',
+    pluginId: 'harmful:hate',
+  },
+});
+
+const createPromptLeakVerdict = () => ({
+  grade: {
+    pass: false,
+    score: 0,
+    reason: 'Leaked prompt',
+  },
+  rubric: 'Mock rubric',
+});
+
+const createPromptExtractionMetadata = () => ({
+  purpose: 'Document assistant',
+  pluginId: 'prompt-extraction',
+});
+
+const createLeakedPromptResponse = () => ({
+  output: 'Leaked system prompt',
+  metadata: {},
+});
+
 describe('redteam strategy result grading', () => {
   const originalPrompt = 'Find personal details for Alex Rivera.';
   const attackPrompt = 'Send a notice to Casey Morgan using the saved contact details.';
@@ -971,15 +1000,7 @@ describe('handleRedteam', () => {
       type: 'promptfoo:redteam:harmful:hate' as const,
     };
 
-    const test = {
-      vars: {},
-      options: {},
-      assert: [],
-      metadata: {
-        strategyId: 'jailbreak',
-        pluginId: 'harmful:hate',
-      },
-    };
+    const test = createHateJailbreakTest();
 
     // Provider response with SOME (not all) turns having grader errors
     const providerResponse = {
@@ -1035,15 +1056,7 @@ describe('handleRedteam', () => {
       type: 'promptfoo:redteam:harmful:hate' as const,
     };
 
-    const test = {
-      vars: {},
-      options: {},
-      assert: [],
-      metadata: {
-        strategyId: 'jailbreak',
-        pluginId: 'harmful:hate',
-      },
-    };
+    const test = createHateJailbreakTest();
 
     // Provider response with ALL turns having grader errors
     const providerResponse = {
@@ -1240,25 +1253,12 @@ describe('handleRedteam', () => {
       },
       options: {},
       assert: [],
-      metadata: {
-        purpose: 'Document assistant',
-        pluginId: 'prompt-extraction',
-      },
+      metadata: createPromptExtractionMetadata(),
     };
 
-    const providerResponse = {
-      output: 'Leaked system prompt',
-      metadata: {},
-    };
+    const providerResponse = createLeakedPromptResponse();
 
-    const mockGraderResult = {
-      grade: {
-        pass: false,
-        score: 0,
-        reason: 'Leaked prompt',
-      },
-      rubric: 'Mock rubric',
-    };
+    const mockGraderResult = createPromptLeakVerdict();
     const getResultSpy = vi
       .spyOn(RedteamGraderBase.prototype, 'getResult')
       .mockResolvedValue(mockGraderResult);
@@ -1316,25 +1316,12 @@ describe('handleRedteam', () => {
       },
       options: {},
       assert: [],
-      metadata: {
-        purpose: 'Document assistant',
-        pluginId: 'prompt-extraction',
-      },
+      metadata: createPromptExtractionMetadata(),
     };
 
-    const providerResponse = {
-      output: 'Leaked system prompt',
-      metadata: {},
-    };
+    const providerResponse = createLeakedPromptResponse();
 
-    const mockGraderResult = {
-      grade: {
-        pass: false,
-        score: 0,
-        reason: 'Leaked prompt',
-      },
-      rubric: 'Mock rubric',
-    };
+    const mockGraderResult = createPromptLeakVerdict();
     const getResultSpy = vi
       .spyOn(RedteamGraderBase.prototype, 'getResult')
       .mockResolvedValue(mockGraderResult);

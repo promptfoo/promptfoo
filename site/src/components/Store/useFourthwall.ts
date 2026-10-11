@@ -322,11 +322,6 @@ export function useCart() {
     [cart, replaceBundle],
   );
 
-  const clearCart = useCallback(() => {
-    storage.removeItem(CART_STORAGE_KEY);
-    setCart(null);
-  }, []);
-
   const countedBundles = new Set<string>();
   const itemCount =
     cart?.items.reduce((sum, item) => {
@@ -346,7 +341,6 @@ export function useCart() {
     addBundleToCart,
     removeFromCart,
     updateQuantity,
-    clearCart,
   };
 }
 

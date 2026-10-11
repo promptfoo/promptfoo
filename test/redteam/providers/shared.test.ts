@@ -42,6 +42,18 @@ import type {
   Prompt,
 } from '../../../src/types/index';
 
+const createLimitedMessageContext = () => ({
+  prompt: { raw: '', label: '' },
+  vars: {},
+  test: {
+    metadata: {
+      pluginConfig: {
+        maxCharsPerMessage: 5,
+      },
+    },
+  },
+});
+
 // Hoisted mocks for class constructor and loadApiProviders
 const mockLoadApiProviders = vi.hoisted(() => vi.fn());
 const mockCheckServerFeatureSupport = vi.hoisted(() => vi.fn());
@@ -816,17 +828,7 @@ describe('shared redteam provider utilities', () => {
           tokenUsage: { numRequests: 1 },
         },
       });
-      const context = {
-        prompt: { raw: '', label: '' },
-        vars: {},
-        test: {
-          metadata: {
-            pluginConfig: {
-              maxCharsPerMessage: 5,
-            },
-          },
-        },
-      } as CallApiContextParams;
+      const context = createLimitedMessageContext() as CallApiContextParams;
 
       const result = await getTargetResponse(mockProvider, 'too long', context);
 
@@ -843,17 +845,7 @@ describe('shared redteam provider utilities', () => {
           tokenUsage: { numRequests: 1 },
         },
       });
-      const context = {
-        prompt: { raw: '', label: '' },
-        vars: {},
-        test: {
-          metadata: {
-            pluginConfig: {
-              maxCharsPerMessage: 5,
-            },
-          },
-        },
-      } as CallApiContextParams;
+      const context = createLimitedMessageContext() as CallApiContextParams;
       const prompt = JSON.stringify({
         _promptfoo_audio_hybrid: true,
         history: [
@@ -883,17 +875,7 @@ describe('shared redteam provider utilities', () => {
           tokenUsage: { numRequests: 1 },
         },
       });
-      const context = {
-        prompt: { raw: '', label: '' },
-        vars: {},
-        test: {
-          metadata: {
-            pluginConfig: {
-              maxCharsPerMessage: 5,
-            },
-          },
-        },
-      } as CallApiContextParams;
+      const context = createLimitedMessageContext() as CallApiContextParams;
       const prompt = JSON.stringify({
         _promptfoo_audio_hybrid: true,
         history: [],
@@ -1558,6 +1540,7 @@ describe('shared redteam provider utilities', () => {
   describe('grader assertion helpers', () => {
     const singleAssertion: Assertion = {
       type: 'llm-rubric',
+      metric: 'TestMetric',
       value: 'original rubric',
     };
     const assertionSet: AssertionSet = {
@@ -1568,12 +1551,19 @@ describe('shared redteam provider utilities', () => {
     it('uses grade assertion when present', () => {
       expect(
         buildGraderResultAssertion(
-          { type: 'javascript', pass: true, score: 1, reason: 'ok' } as Assertion,
+          {
+            type: 'javascript',
+            metric: 'GradeMetric',
+            pass: true,
+            score: 1,
+            reason: 'ok',
+          } as Assertion,
           singleAssertion,
           'rendered rubric',
         ),
       ).toEqual({
         type: 'javascript',
+        metric: 'GradeMetric',
         pass: true,
         score: 1,
         reason: 'ok',
@@ -1584,6 +1574,7 @@ describe('shared redteam provider utilities', () => {
     it('falls back to a single assertion and exposes its value', () => {
       expect(buildGraderResultAssertion(undefined, singleAssertion, 'rendered rubric')).toEqual({
         type: 'llm-rubric',
+        metric: 'TestMetric',
         value: 'rendered rubric',
       });
       expect(getGraderAssertionValue(singleAssertion)).toBe('original rubric');
