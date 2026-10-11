@@ -741,6 +741,8 @@ Assertions with built-in thresholds, such as `answer-relevance`, `context-recall
 `context-relevance`, and `context-faithfulness`, default to `0.5` when `threshold` is
 omitted.
 
+Grader execution failures, such as an unavailable grader or malformed response, can make a failing test an `ERROR`. A valid negative judgment is an assertion failure (`ASSERT`). Passing test results are not reclassified, and grader errors in assertions or parent assertion sets with weight `0` do not trigger this `ERROR` classification. Use `promptfoo eval --retry-errors` to retry `ERROR` rows from the latest eval.
+
 **Common issue**: Tests show PASS even when scores are low
 
 ```yaml
