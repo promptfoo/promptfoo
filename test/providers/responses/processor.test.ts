@@ -278,6 +278,118 @@ describe('ResponsesProcessor', () => {
       },
     );
 
+    it.each(['incomplete', 'in_progress'])(
+      'uses the enclosing %s response status for a status-less function call',
+      async (status) => {
+        mockFunctionCallbackHandler.processCalls.mockResolvedValue('Unexpected callback');
+        const item = { type: 'function_call', name: 'lookup', arguments: '{"value":"partial"}' };
+        const data = {
+          status,
+          output: [item],
+          usage: { input_tokens: 10, output_tokens: 8, total_tokens: 18 },
+        };
+
+        const result = await processor.processResponseOutput(data, {}, false);
+
+        expect(mockFunctionCallbackHandler.processCalls).not.toHaveBeenCalled();
+        expect(result.output).toBe(JSON.stringify(item));
+        expect(result.raw).toBe(data);
+        expect(result).toMatchObject({
+          cost: 0.001,
+          tokenUsage: { prompt: 10, completion: 8, total: 18 },
+          metadata: { responseStatus: status },
+        });
+      },
+    );
+
+    it.each([
+      {
+        type: 'function_call',
+        responseStatus: 'incomplete',
+        messageStatus: undefined,
+        callStatus: undefined,
+        execute: false,
+      },
+      {
+        type: 'tool_use',
+        responseStatus: 'incomplete',
+        messageStatus: undefined,
+        callStatus: undefined,
+        execute: false,
+      },
+      {
+        type: 'function_call',
+        responseStatus: 'in_progress',
+        messageStatus: undefined,
+        callStatus: undefined,
+        execute: false,
+      },
+      {
+        type: 'tool_use',
+        responseStatus: 'completed',
+        messageStatus: 'incomplete',
+        callStatus: undefined,
+        execute: false,
+      },
+      {
+        type: 'tool_use',
+        responseStatus: 'completed',
+        messageStatus: 'in_progress',
+        callStatus: undefined,
+        execute: false,
+      },
+      {
+        type: 'function_call',
+        responseStatus: 'incomplete',
+        messageStatus: 'completed',
+        callStatus: undefined,
+        execute: true,
+      },
+      {
+        type: 'tool_use',
+        responseStatus: 'incomplete',
+        messageStatus: 'incomplete',
+        callStatus: 'completed',
+        execute: true,
+      },
+      {
+        type: 'tool_use',
+        responseStatus: undefined,
+        messageStatus: undefined,
+        callStatus: undefined,
+        execute: true,
+      },
+    ])(
+      'uses the nearest status for $type (response: $responseStatus, message: $messageStatus, call: $callStatus)',
+      async ({ type, responseStatus, messageStatus, callStatus, execute }) => {
+        mockFunctionCallbackHandler.processCalls.mockResolvedValue('Callback output');
+        const item = {
+          type,
+          name: 'lookup',
+          arguments: '{"value":"partial"}',
+          ...(callStatus === undefined ? {} : { status: callStatus }),
+        };
+        const data = {
+          ...(responseStatus === undefined ? {} : { status: responseStatus }),
+          output: [
+            {
+              type: 'message',
+              role: 'assistant',
+              ...(messageStatus === undefined ? {} : { status: messageStatus }),
+              content: [{ type: 'output_text', text: 'Partial ' }, item],
+            },
+          ],
+        };
+
+        const result = await processor.processResponseOutput(data, {}, false);
+
+        expect(mockFunctionCallbackHandler.processCalls).toHaveBeenCalledTimes(execute ? 1 : 0);
+        expect(result.output).toBe(execute ? 'Callback output' : `Partial ${JSON.stringify(item)}`);
+        expect(result.error).toBeUndefined();
+        expect(result.raw).toBe(data);
+      },
+    );
+
     it.each([true, false])(
       'should retain partial text and execute completed siblings (unfinished first: %s)',
       async (unfinishedFirst) => {

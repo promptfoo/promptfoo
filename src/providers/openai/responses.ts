@@ -1799,7 +1799,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
 
     if (data.error?.message) {
       await deleteFromCache?.();
-      return {
+      const result = {
         error: formatOpenAiError(data as OpenAIErrorResponse),
         metadata: {
           http: {
@@ -1809,6 +1809,14 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
           },
         },
       };
+      return data.usage
+        ? this.applyBilling(
+            { ...result, tokenUsage: getResponsesTokenUsage(data, cached), cached },
+            data,
+            config,
+            cached,
+          )
+        : result;
     }
 
     // Use shared processor for consistent behavior with Azure

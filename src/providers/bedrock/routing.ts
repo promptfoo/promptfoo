@@ -29,6 +29,9 @@ export function getBedrockRuntimeModelError(
   if (foundationModel === 'zai.glm-5.3') {
     return 'GLM 5.3 on Bedrock Runtime requires a system inference profile, such as us.zai.glm-5.3 or global.zai.glm-5.3.';
   }
+  if (foundationModel === 'moonshotai.kimi-k3') {
+    return 'Kimi K3 on Bedrock Runtime requires a system inference profile, such as us.moonshotai.kimi-k3, in.moonshotai.kimi-k3, or global.moonshotai.kimi-k3.';
+  }
   if (/^xai\.grok-4\.[67]$/.test(foundationModel)) {
     return 'Grok 4.6 and 4.7 on Bedrock Runtime require a system inference profile, such as us.xai.grok-4.6 or global.xai.grok-4.7.';
   }

@@ -5,11 +5,15 @@ import {
   calculateBedrockCost,
   calculateBedrockInvokeModelCost,
 } from '../../../src/providers/bedrock/pricing';
-import { getBedrockTextRoute } from '../../../src/providers/bedrock/routing';
+import {
+  getBedrockRuntimeModelError,
+  getBedrockTextRoute,
+} from '../../../src/providers/bedrock/routing';
 import {
   BedrockRuntimeChatProvider,
   BedrockRuntimeResponsesProvider,
 } from '../../../src/providers/bedrock/runtimeOpenai';
+import { awsProviderFactories } from '../../../src/providers/families/aws';
 import { OpenAiResponsesProvider } from '../../../src/providers/openai/responses';
 import { mockProcessEnv } from '../../util/utils';
 
@@ -90,7 +94,9 @@ describe.each([
     'xai.grok-4.7',
     'arn:aws:bedrock:us-east-1::foundation-model/xai.grok-4.6',
     'arn:aws:bedrock:us-east-1::foundation-model/xai.grok-4.7',
-  ])('rejects Grok foundation model %s in the effective request', async (model) => {
+    'moonshotai.kimi-k3',
+    'arn:aws:bedrock:us-east-1::foundation-model/moonshotai.kimi-k3',
+  ])('rejects profile-only model %s in the effective request', async (model) => {
     for (const scope of ['model', 'provider', 'prompt']) {
       const provider = new Provider(scope === 'model' ? model : 'us.xai.grok-4.6', {
         config: {
@@ -105,12 +111,85 @@ describe.each([
               prompt: { raw: 'hello', label: 'hello', config: { passthrough: { model } } },
             }
           : undefined;
-      await expect(provider.getOpenAiBody('hello', context)).rejects.toThrow(
-        'require a system inference profile',
+      await expect(provider.callApi('hello', context)).rejects.toThrow(
+        'a system inference profile',
       );
       expect(fetchWithCache).not.toHaveBeenCalled();
     }
   });
+
+  const bedrockFactory = awsProviderFactories.find((factory) =>
+    factory.test('bedrock:runtime:chat:us.moonshotai.kimi-k3'),
+  )!;
+
+  it.each(['moonshotai.kimi-k3', 'arn:aws:bedrock:us-east-1::foundation-model/moonshotai.kimi-k3'])(
+    'rejects Kimi K3 factory selector or override %s before dispatch',
+    async (model) => {
+      for (const scope of ['selector', 'provider']) {
+        await expect(
+          bedrockFactory.create(
+            `bedrock:runtime:${mode}:${scope === 'selector' ? model : 'us.moonshotai.kimi-k3'}`,
+            {
+              config: {
+                apiKey: 'fixture',
+                ...(scope === 'provider' ? { passthrough: { model } } : {}),
+              },
+            },
+            {},
+          ),
+        ).rejects.toThrow('Kimi K3 on Bedrock Runtime requires a system inference profile');
+        expect(fetchWithCache).not.toHaveBeenCalled();
+      }
+    },
+  );
+
+  it.each(['us', 'global', 'in'])('preserves Kimi K3 %s profile IDs and ARNs', async (prefix) => {
+    const region = prefix === 'in' ? 'ap-south-1' : 'us-east-1';
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: reply,
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    });
+    for (const model of [
+      `${prefix}.moonshotai.kimi-k3`,
+      `arn:aws:bedrock:${region}:123456789012:inference-profile/${prefix}.moonshotai.kimi-k3`,
+    ]) {
+      for (const scope of ['selector', 'provider', 'prompt']) {
+        const provider = await bedrockFactory.create(
+          `bedrock:runtime:${mode}:${scope === 'selector' ? model : 'us.moonshotai.kimi-k3'}`,
+          {
+            config: {
+              apiKey: 'fixture',
+              region,
+              ...(scope === 'provider' ? { passthrough: { model } } : {}),
+            },
+          },
+          {},
+        );
+        const context =
+          scope === 'prompt'
+            ? {
+                vars: {},
+                prompt: { raw: 'hello', label: 'hello', config: { passthrough: { model } } },
+              }
+            : undefined;
+        const result = await provider.callApi('hello', context);
+        expect(result.error).toBeUndefined();
+        expect(result.output).toBe('READY');
+        const [url, request] = vi.mocked(fetchWithCache).mock.lastCall!;
+        expect(url).toBe(`https://bedrock-runtime.${region}.amazonaws.com/openai/v1/${path}`);
+        expect(JSON.parse(String(request?.body)).model).toBe(model);
+      }
+    }
+  });
+
+  it.each(['moonshotai.kimi-k2.5', 'moonshotai.kimi-k3-custom'])(
+    'does not apply the Kimi K3 profile requirement to similar Kimi model %s',
+    (model) => {
+      expect(getBedrockRuntimeModelError(`runtime-${mode}`, model)).toBeUndefined();
+    },
+  );
 
   it.each([
     { config: { inputCost: 0.01 }, expected: 1.000132 },

@@ -329,7 +329,8 @@ export class ResponsesProcessor {
   ): Promise<{
     content?: string;
   }> {
-    if (item.status === 'incomplete' || item.status === 'in_progress') {
+    const status = item.status ?? context.data.status;
+    if (status === 'incomplete' || status === 'in_progress') {
       return { content: JSON.stringify(item) };
     }
 
@@ -388,7 +389,8 @@ export class ResponsesProcessor {
             annotations.push(...contentItem.annotations);
           }
         } else if (contentItem.type === 'tool_use' || contentItem.type === 'function_call') {
-          if (['incomplete', 'in_progress'].includes(contentItem.status)) {
+          const status = contentItem.status ?? item.status ?? context.data.status;
+          if (['incomplete', 'in_progress'].includes(status)) {
             content += JSON.stringify(contentItem);
             continue;
           }
