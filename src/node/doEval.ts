@@ -932,6 +932,29 @@ async function doEvalWithEnv(
     // Run the evaluation!!!!!!
     let ret;
     try {
+      if (resumeRaw && !evalRecord.useOldResults()) {
+        // Older evals lack this counter. Recover it without recalculating other metrics.
+        const missingCacheCounts = evalRecord.prompts.map(({ metrics }) =>
+          metrics && metrics.testCacheHitCount === undefined ? { metrics, count: 0 } : undefined,
+        );
+        if (missingCacheCounts.some(Boolean)) {
+          for await (const batch of evalRecord.fetchResultsBatched()) {
+            for (const result of batch) {
+              const pending = missingCacheCounts[result.promptIdx];
+              if (pending && result.response?.cached) {
+                pending.count++;
+              }
+            }
+          }
+          // Publish only after every batch succeeds; a failed read must not leave partial counts.
+          for (const pending of missingCacheCounts) {
+            if (pending) {
+              pending.metrics.testCacheHitCount = pending.count;
+            }
+          }
+        }
+      }
+
       ret = await evaluate(testSuite, evalRecord, {
         ...options,
         restorePromptColumns: Boolean(resumeEval),
