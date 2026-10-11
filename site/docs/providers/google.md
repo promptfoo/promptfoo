@@ -808,12 +808,12 @@ providers:
           thinkingLevel: MEDIUM # LOW, MEDIUM, or HIGH
 ```
 
-| Level   | Description                                             |
-| ------- | ------------------------------------------------------- |
-| MINIMAL | Fewest tokens. Not supported by Gemini 3.8 Flash.       |
-| LOW     | Fewer tokens. Suitable for simpler tasks.               |
-| MEDIUM  | Balanced approach for moderate complexity (Flash only). |
-| HIGH    | More tokens for deep reasoning.                         |
+| Level   | Description                                                      |
+| ------- | ---------------------------------------------------------------- |
+| MINIMAL | Fewest tokens. Not supported by Gemini 3.8 Flash or its aliases. |
+| LOW     | Fewer tokens. Suitable for simpler tasks.                        |
+| MEDIUM  | Balanced approach for moderate complexity (Flash only).          |
+| HIGH    | More tokens for deep reasoning.                                  |
 
 Defaults vary by model: Gemini 3.8 Flash, 3.7 Flash, 3.6 Flash, and 3.5 Flash default to `MEDIUM`, Gemini 3.5 Flash-Lite defaults to `MINIMAL`, and Gemini 3.1 Pro defaults to `HIGH`.
 
