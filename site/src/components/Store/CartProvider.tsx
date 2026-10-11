@@ -71,7 +71,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       const newUrl = params.toString()
         ? `${window.location.pathname}?${params.toString()}`
         : window.location.pathname;
-      window.history.replaceState(window.history.state, '', newUrl);
+      window.history.replaceState(window.history.state, '', `${newUrl}${window.location.hash}`);
       return true;
     }
     return false;
