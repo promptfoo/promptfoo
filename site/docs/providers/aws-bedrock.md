@@ -1455,6 +1455,17 @@ same Bedrock API key or AWS credential configuration as the Mantle adapters.
 Closed OpenAI GPT models on Runtime Chat and Responses require a system inference profile,
 such as `us.openai.gpt-5.6-sol` or `global.openai.gpt-5.6-sol`, instead of a bare
 model ID or foundation-model ARN.
+[Grok 4.6](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-xai-grok-4-6.html)
+and [Grok 4.7](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-xai-grok-4-7.html)
+also require a `us.` or `global.` system profile on these Runtime APIs, such as
+`us.xai.grok-4.6` or `global.xai.grok-4.7`.
+
+[Runtime Responses permissions](https://docs.aws.amazon.com/bedrock/latest/userguide/inference-responses-api.html#bedrock-mantle-responses-runtime)
+require `bedrock:InvokeModel` on the account's default project
+(`arn:aws:bedrock:<region>:<account-id>:project/default`) as well as invocation
+permission on the inference target. That target requires `bedrock:InvokeModel`
+for non-streaming requests or `bedrock:InvokeModelWithResponseStream` for streaming;
+the project requires `bedrock:InvokeModel` in both cases.
 
 ```yaml
 providers:
