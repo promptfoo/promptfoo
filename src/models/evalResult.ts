@@ -24,6 +24,7 @@ import {
   type TraceData,
 } from '../types/index';
 import { isApiProvider, isProviderOptions } from '../types/providers';
+import { serializeBedrockProviderRef } from '../util/bedrockSerialization';
 import { GRADING_PROVIDER_TYPE_KEYS, isProviderTypeMap } from '../util/gradingProvider';
 import { safeJsonStringify } from '../util/json';
 import {
@@ -340,6 +341,7 @@ export function sanitizeProvider(
   provider: ApiProvider | ProviderOptions | string,
 ): ProviderOptions {
   try {
+    provider = serializeBedrockProviderRef(provider);
     if (isApiProvider(provider)) {
       return {
         id: provider.id(),
@@ -398,24 +400,26 @@ export function toSerializableProviderRef(provider: unknown): unknown {
   if (isProviderTypeMap(provider)) {
     let serialized: Record<string, unknown> | undefined;
     for (const type of GRADING_PROVIDER_TYPE_KEYS) {
-      if (isApiProvider(provider[type])) {
+      const reference = toSerializableProviderRef(provider[type]);
+      if (reference !== provider[type]) {
         serialized ??= { ...provider };
-        serialized[type] = toSerializableProviderRef(provider[type]);
+        serialized[type] = reference;
       }
     }
     return serialized ?? provider;
   }
-  return provider;
+  return serializeBedrockProviderRef(provider);
 }
 
 /** Snapshot live grading references before generic result serialization invokes provider toJSON. */
 function serializeResultProviderRefs<T extends object>(result: T): T {
   const record = result as Record<string, unknown>;
   const serializeProvider = (provider: unknown) => {
-    if (!isApiProvider(provider) && !isProviderTypeMap(provider)) {
+    const reference = toSerializableProviderRef(provider);
+    if (reference === provider) {
       return provider;
     }
-    return sanitizeObject(toSerializableProviderRef(provider), {
+    return sanitizeObject(reference, {
       context: 'grading provider',
       sanitizeUrls: true,
       maxDepth: Number.POSITIVE_INFINITY,

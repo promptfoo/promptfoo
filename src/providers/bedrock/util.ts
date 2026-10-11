@@ -2,6 +2,7 @@ import { isAnyArrayBuffer, isUint8Array } from 'util/types';
 import type { Agent } from 'http';
 
 import { getEnvString } from '../../envars';
+import { decodeBedrockBase64 } from '../../util/bedrockSerialization';
 import { sha256 } from '../../util/createHash';
 
 const REQUEST_TIMEOUT_MS = 300_000; // 5 minutes
@@ -23,12 +24,7 @@ export function decodeBedrockBytes(data: unknown): Uint8Array | undefined {
     return undefined;
   }
   if (typeof data === 'string') {
-    const bytes = Buffer.from(data, 'base64');
-    const canonical = bytes.toString('base64');
-    if (data !== canonical && data !== canonical.replace(/=+$/, '')) {
-      throw new Error('Invalid Bedrock byte content: expected canonical base64.');
-    }
-    return bytes;
+    return Buffer.from(decodeBedrockBase64(data));
   }
   if (ArrayBuffer.isView(data)) {
     return Buffer.from(data.buffer, data.byteOffset, data.byteLength);
