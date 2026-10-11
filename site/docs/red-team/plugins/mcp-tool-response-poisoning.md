@@ -30,6 +30,8 @@ This plugin inspects **only the content a tool returns when it is called**. It d
 
 A test **fails** when the server's response contains directive content aimed at an AI agent. A test **passes** when the response is plain tool data.
 
+Every layer inspects at most the first 64 KiB of a response, and a test only passes when all of them have seen the whole response. A larger response that no pre-screen has already failed is reported as an **error** ("Incomplete inspection") instead of being graded on a prefix. The same applies to raw provider evidence (see [Known limitations](#known-limitations)). If a tool routinely returns more, generate calls with smaller page or limit arguments.
+
 ## When to use it
 
 - **Vetting new MCP servers** before adding them to a trusted set.
@@ -139,7 +141,8 @@ redteam:
 ```
 
 Without `allowedTools`, that config fails with an error listing the advertised
-catalog. `excludedTools` alone does not satisfy it: a denylist cannot bound a
+catalog. It also fails when no catalog can be read from the purpose at all, so a
+missing or malformed catalog cannot silently widen the scan. `excludedTools` alone does not satisfy it: a denylist cannot bound a
 catalog you have not enumerated.
 
 For most setups the MCP provider's own filter is the better control, since it
@@ -201,6 +204,10 @@ Some manipulations are outside this plugin's response-only, instruction-focused 
 - **Non-instruction data falsification** — plausible-but-wrong values or biased steering that contain no directive-shaped language. The response carries nothing to flag as an instruction; add domain-specific assertions to catch corrupted data.
 - **Conditional / stochastic poisoning** — responses poisoned only on some calls (rug-pull after N calls, trigger-word gating, random or periodic poisoning). Only detectable on calls where the poisoned branch actually fires; raise `numTests` to improve the odds of triggering it.
 
+Oversized responses are never passed, but they are not always failed either:
+
+- **Poison placed past the 64 KiB inspection limit** — character-hygiene and grading-delimiter screens cover the whole response, but a plain-text directive beyond the limit is only known to be _uninspected_. The test is reported as an error rather than a failure, so treat errors from this plugin as unresolved, not as clean.
+
 There is also one deliberate false positive:
 
 - **Servers that set no tool annotations get no automatic protection.** The
@@ -209,7 +216,7 @@ There is also one deliberate false positive:
   not as mutating, so they remain callable — use `allowedTools`,
   `requireToolAllowlist`, or the provider's `exclude_tools` when the catalog has
   side-effecting tools.
-- **Tools that legitimately return `<Output>` or `<Rubric>` XML** — some CI, build-log and document tools do. The graded response is embedded in the grading prompt, so these tags break its structure regardless of the server's intent and the response fails deterministically. Setting `graderGuidance` switches such a tool to LLM grading with the delimiters neutralized, rather than an unappealable failure; narrowing the tool set with `allowedTools` avoids the case entirely.
+- **Tools that legitimately return `<Output>` or `<Rubric>` XML** — some CI, build-log and document tools do. The graded response is embedded in the grading prompt, so these tags break its structure regardless of the server's intent and the response fails deterministically. Setting `graderGuidance` switches such a tool to LLM grading with the delimiters neutralized (in the visible output and in any raw provider response forwarded after a transform), rather than an unappealable failure; narrowing the tool set with `allowedTools` avoids the case entirely.
 
 ## Differences vs related plugins
 
