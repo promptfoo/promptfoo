@@ -72,7 +72,7 @@ Per-provider state manager that:
 - Tracks rate limit headers from responses
 - Implements retry logic with exponential backoff
 - Adapts concurrency based on success/failure patterns
-- Collects latency metrics
+- Maintains request and retry counters
 
 ### SlotQueue
 
@@ -218,7 +218,7 @@ The provider state also emits `queue:timeout` and `queue:cancelled` for queue fa
 
 ## Testing
 
-256 tests covering:
+Regression tests cover:
 
 - Unit tests for each component
 - Edge cases (negative values, zero values, overflow)
@@ -229,4 +229,3 @@ The provider state also emits `queue:timeout` and `queue:cancelled` for queue fa
 
 - **Overhead**: Minimal - just slot acquisition and header parsing
 - **Memory**: O(providers) - one state object per unique rate limit key
-- **Latency buffer**: Circular buffer, last 100 requests, O(1) insertion
