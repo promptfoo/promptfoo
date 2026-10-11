@@ -4,6 +4,8 @@ import {
   ConverseStreamCommand,
 } from '@aws-sdk/client-bedrock-runtime';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import * as blobStorage from '../../../src/blobs';
+import { extractAndStoreBinaryData } from '../../../src/blobs/extractor';
 import { materializeImageOutputsForGrading } from '../../../src/matchers/rubric';
 import { getTableCellMedia } from '../../../src/presentation/evalTableCells';
 import {
@@ -51,7 +53,10 @@ beforeEach(() => {
   cache.get.mockReset();
   cache.set.mockReset();
 });
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllEnvs();
+});
 
 describe('Converse native request features', () => {
   it('omits empty OpenAI tool descriptions while preserving strict schemas', async () => {
@@ -957,9 +962,7 @@ describe('ConverseStream response parity', () => {
       });
       const response = await provider.callApi('hello');
       expect(response.error).toBeUndefined();
-      expect(response.images).toEqual(
-        [0, 1].map(() => ({ data: 'data:image/png;base64,AQID', mimeType: 'image/png' })),
-      );
+      expect(response.images).toEqual([0, 1].map(() => ({ data: 'AQID', mimeType: 'image/png' })));
       expect(response.audio).toEqual({ data: 'BAUG', format: 'wav' });
       expect(getTableCellMedia({ response })).toMatchObject({
         images: response.images,
@@ -968,6 +971,58 @@ describe('ConverseStream response parity', () => {
       expect(materializeImageOutputsForGrading(response.images).imageOutputs).toHaveLength(2);
       expect(response.metadata?.content).toHaveLength(content.length);
       expect(content[0]).toEqual(image);
+    },
+  );
+
+  it.each([false, true])(
+    'keeps large images gradeable after blob extraction (streaming=%s)',
+    async (streaming) => {
+      vi.stubEnv('PROMPTFOO_INLINE_MEDIA', 'false');
+      const bytes = Buffer.alloc(2048, 7);
+      const storeBlob = vi.spyOn(blobStorage, 'storeBlob').mockResolvedValue({
+        ref: {
+          uri: 'promptfoo://blob/image',
+          hash: 'image',
+          mimeType: 'image/png',
+          sizeBytes: bytes.length,
+          provider: 'filesystem',
+        },
+        deduplicated: false,
+      });
+      const { provider, send } = fixture({ streaming });
+      send.mockResolvedValueOnce(
+        streaming
+          ? stream([
+              { messageStart: { role: 'assistant' } },
+              { contentBlockStart: { contentBlockIndex: 0, start: { image: { format: 'png' } } } },
+              {
+                contentBlockDelta: {
+                  contentBlockIndex: 0,
+                  delta: { image: { source: { bytes } } },
+                },
+              },
+              { contentBlockStop: { contentBlockIndex: 0 } },
+              { messageStop: { stopReason: 'end_turn' } },
+              { metadata: { usage: reply.usage } },
+            ])
+          : {
+              ...reply,
+              output: {
+                message: {
+                  role: 'assistant',
+                  content: [{ image: { format: 'png', source: { bytes } } }],
+                },
+              },
+            },
+      );
+      const response = await provider.callApi('hello');
+      expect(response.error).toBeUndefined();
+      const extracted = await extractAndStoreBinaryData(response);
+      const { imageData } = materializeImageOutputsForGrading(extracted?.images);
+      expect(imageData).toHaveLength(1);
+      expect(Buffer.from(imageData[0].base64Data, 'base64')).toEqual(bytes);
+      expect(imageData[0].mimeType).toBe('image/png');
+      expect(storeBlob).not.toHaveBeenCalled();
     },
   );
 
@@ -997,9 +1052,7 @@ describe('ConverseStream response parity', () => {
     });
     const response = await provider.callApi('hello');
     expect(response.error).toContain('audio failed');
-    expect(response.images).toEqual([
-      { data: 'data:image/png;base64,AQID', mimeType: 'image/png' },
-    ]);
+    expect(response.images).toEqual([{ data: 'AQID', mimeType: 'image/png' }]);
     expect(response).not.toHaveProperty('audio');
     expect(response.tokenUsage).toMatchObject({ prompt: 3, completion: 2, total: 5 });
     expect(response.cost).toBeGreaterThan(0);

@@ -1714,7 +1714,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
         const mimeType = `image/${image.format ?? 'png'}`;
         return [
           {
-            data: `data:${mimeType};base64,${Buffer.from(image.source.bytes).toString('base64')}`,
+            data: Buffer.from(image.source.bytes).toString('base64'),
             mimeType,
           },
         ];
