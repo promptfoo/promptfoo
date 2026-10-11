@@ -4010,6 +4010,39 @@ describe('AwsBedrockCompletionProvider', () => {
     AWS_BEDROCK_MODELS['us.anthropic.claude-3-7-sonnet-20250219-v1:0'] = originalModelHandler;
   });
 
+  it.each(
+    ['arn:aws:bedrock:us-east-1', 'arn:aws-us-gov:bedrock:us-gov-west-1'].flatMap((arnPrefix) =>
+      [undefined, 0].map((temperature) => ({ arnPrefix, temperature })),
+    ),
+  )(
+    'uses only an explicit temperature for an opaque Claude profile ($arnPrefix, $temperature)',
+    async ({ arnPrefix, temperature }) => {
+      const modelName = `${arnPrefix}:123456789012:application-inference-profile/haiku-prod`;
+      const responseJson = JSON.stringify({
+        content: [{ type: 'text', text: 'READY' }],
+        usage: { input_tokens: 10, output_tokens: 1 },
+      });
+      const body = Object.assign(new TextEncoder().encode(responseJson), {
+        transformToString: () => responseJson,
+      });
+      mockInvokeModel.mockResolvedValueOnce({ body });
+      const config = { inferenceModelType: 'claude', region: 'us-east-1', temperature };
+      const provider = new AwsBedrockCompletionProvider(modelName, { config });
+
+      const response = await provider.callApi('Return READY');
+
+      expect(response.output).toBe('READY');
+      const request = mockInvokeModel.mock.calls.at(-1)?.[0];
+      expect(request.modelId).toBe(modelName);
+      const requestBody = JSON.parse(request.body);
+      if (temperature === undefined) {
+        expect(requestBody).not.toHaveProperty('temperature');
+      } else {
+        expect(requestBody.temperature).toBe(temperature);
+      }
+    },
+  );
+
   it.each([
     ['us.xai.grok-4.6', 2.2, 6.6, 0.55],
     ['global.xai.grok-4.6', 2, 6, 0.5],
@@ -4085,7 +4118,7 @@ describe('AwsBedrockCompletionProvider', () => {
   it.each([
     ['global.anthropic.claude-fable-5-1', 1000, 0.0363],
     ['global.anthropic.claude-opus-5-5', 1000, 0.01454],
-    ['global.anthropic.claude-sonnet-5-5', 1000, 0.00729],
+    ['global.anthropic.claude-sonnet-5-5', 1000, 0.00727],
     ['global.anthropic.claude-mythos-5-1', 0, 0.0263],
     ['global.anthropic.claude-fable-5', 0, 0.02645],
   ] as const)(
