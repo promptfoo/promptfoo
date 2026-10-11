@@ -9,6 +9,8 @@ description: Test voice-agent prompts with two GPT-Live sessions, simultaneous s
 
 Set `OPENAI_API_KEY` to a project key with GPT-Live access. A run creates two paid sessions. For text conversations, use [Simulated User](./simulated-user.md).
 
+For an end-to-end workflow with task-state checks, portable recordings, listening, transcription, and calibrated audio review, see [Testing GPT-Live voice agents](/docs/guides/testing-gpt-live/).
+
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: Cafe voice conversations
@@ -63,7 +65,7 @@ Keep authoritative facts and required goals in evaluator-owned configuration. Th
 
 When provided, `target` and `caller` must be objects containing [OpenAI Live options](./openai-live.md), including `apiKey`, `apiKeyEnvar`, `apiBaseUrl`, `headers`, `audio.output.voice`, delegation, and callback handlers. `target.model` and `caller.model` default to `gpt-live-1`. Credentials and endpoints remain separate. Environment overrides apply through the normal provider configuration. Prefer `apiKeyEnvar` over putting secrets in YAML.
 
-Both connections use mono PCM16 at 24 kHz, with 20 ms input frames. Playout starts with a 100 ms reserve and adapts up to 400 ms for observed arrival jitter, subject to the configured queue limit. It rebuilds reserve only between near-silent source frames; voiced source samples are preserved in order. This adds bounded buffering delay. Larger stalls can still underflow: participant `playout` metrics separate startup waits, silence replenishment, source starvation, and explicit intervention discards. Other formats are rejected. Top-level instructions and capture duration take precedence over participant `instructions` and `responseWindowMs`. The inherited `REQUEST_TIMEOUT_MS` also bounds each Live session: the slower participant's startup, capture rounded to whole frames, and each participant's finalization must fit within it. Invalid budgets are rejected before either connection opens. Increase both the overall timeout and `REQUEST_TIMEOUT_MS` for long captures.
+Both connections use mono PCM16 at 24 kHz, with 20 ms input frames. Playout starts with a 200 ms reserve and adapts up to 400 ms for observed arrival jitter, subject to the configured queue limit. It rebuilds reserve only between near-silent source frames; voiced source samples are preserved in order. This adds bounded buffering delay. Larger stalls can still underflow: participant `playout` metrics separate startup waits, silence replenishment, source starvation, and explicit intervention discards. Other formats are rejected. Top-level instructions and capture duration take precedence over participant `instructions` and `responseWindowMs`. The inherited `REQUEST_TIMEOUT_MS` also bounds each Live session: the slower participant's startup, capture rounded to whole frames, and each participant's finalization must fit within it. Invalid budgets are rejected before either connection opens. Increase both the overall timeout and `REQUEST_TIMEOUT_MS` for long captures.
 
 This provider uses the Live API, not the Realtime API. Legacy Realtime-only fields such as `maxTurns`, `turnDetectionMode`, `audioFormat`, `targetModel`, and `simulatedUserModel` are rejected with migration guidance. Set each model inside `target` or `caller`; bound conversations by duration. Live has no authoritative turn-completed event.
 

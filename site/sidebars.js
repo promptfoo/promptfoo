@@ -422,6 +422,7 @@ const sidebars = {
                 'guides/factuality-eval',
                 'guides/llm-as-a-judge',
                 'guides/testing-llm-chains',
+                'guides/testing-gpt-live',
                 'guides/evaluate-llm-temperature',
                 'guides/text-to-sql-evaluation',
                 'guides/sandboxed-code-evals',
