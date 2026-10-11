@@ -141,6 +141,11 @@ export class SsrfGrader extends RedteamGraderBase {
     let detectedSeverity: SsrfSeverity = 'none';
     const grade = result.grade;
 
+    // Grader failures carry neither a severity verdict nor mitigation suggestions.
+    if (grade.metadata?.graderError === true) {
+      return { grade, rubric: result.rubric };
+    }
+
     // Try to extract severity from reason (the LLM should include it in the JSON response)
     if (grade.reason) {
       const reasonLower = grade.reason.toLowerCase();
