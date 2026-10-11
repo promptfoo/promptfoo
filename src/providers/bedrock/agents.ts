@@ -477,45 +477,28 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
       };
     }
 
-    for (const [index, configuration] of (
-      this.config.knowledgeBaseConfigurations ?? []
-    ).entries()) {
-      const retrieval = configuration.retrievalConfiguration;
-      const filters = [
-        retrieval?.vectorSearchConfiguration?.filter,
-        retrieval?.managedSearchConfiguration?.filter,
-      ];
-      if (
-        filters.some((filter) => filter !== undefined && !isValidBedrockRetrievalFilter(filter))
-      ) {
-        return {
-          error: `Invalid knowledgeBaseConfigurations[${index}].retrievalConfiguration filter: use an AWS RetrievalFilter with one operator, such as equals, or andAll/orAll with at least two operands. Flat metadata maps are not supported.`,
-        };
-      }
-    }
-
-    for (const [index, configuration] of (
-      this.config.sessionState?.knowledgeBaseConfigurations ?? []
-    ).entries()) {
-      const retrieval = configuration.retrievalConfiguration;
-      const filters = [
-        retrieval?.vectorSearchConfiguration?.filter,
-        retrieval?.managedSearchConfiguration?.filter,
-      ];
-      if (
-        filters.some((filter) => filter !== undefined && !isValidBedrockRetrievalFilter(filter))
-      ) {
-        return {
-          error: `Invalid sessionState.knowledgeBaseConfigurations[${index}].retrievalConfiguration filter: use a valid AWS RetrievalFilter operator.`,
-        };
-      }
-    }
-
     let sessionState: SessionState | undefined;
     try {
       sessionState = this.buildSessionState();
     } catch (error) {
       return { error: String(error) };
+    }
+
+    for (const [index, configuration] of (
+      sessionState?.knowledgeBaseConfigurations ?? []
+    ).entries()) {
+      const retrieval = configuration.retrievalConfiguration;
+      const filters = [
+        retrieval?.vectorSearchConfiguration?.filter,
+        retrieval?.managedSearchConfiguration?.filter,
+      ];
+      if (
+        filters.some((filter) => filter !== undefined && !isValidBedrockRetrievalFilter(filter))
+      ) {
+        return {
+          error: `Invalid sessionState.knowledgeBaseConfigurations[${index}].retrievalConfiguration filter: use an AWS RetrievalFilter with one operator, such as equals, or andAll/orAll with at least two operands. Flat metadata maps are not supported.`,
+        };
+      }
     }
 
     const client = await this.getAgentRuntimeClient();

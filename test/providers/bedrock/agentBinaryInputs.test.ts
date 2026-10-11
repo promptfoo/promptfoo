@@ -244,7 +244,9 @@ it.each(['agent', 'knowledge-base'])(
               },
             },
           };
-    const send = vi.spyOn(BedrockAgentRuntimeClient.prototype, 'send');
+    const send = vi
+      .spyOn(BedrockAgentRuntimeClient.prototype, 'send')
+      .mockRejectedValue(new Error('Unexpected SDK dispatch'));
     await expect(async () => {
       const provider = await loadApiProvider(
         kind === 'agent' ? 'bedrock-agent:AGENT12345' : 'bedrock:kb:default',

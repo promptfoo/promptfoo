@@ -739,6 +739,59 @@ it('uses the same Agent cache key for equivalent nested configuration order', as
   expect(cache.get.mock.calls[0][0]).toBe(cache.get.mock.calls[1][0]);
 });
 
+describe.each(['vectorSearchConfiguration', 'managedSearchConfiguration'] as const)(
+  'Agent effective %s filters',
+  (search) => {
+    const invalid = {
+      knowledgeBaseId: 'NESTED1234',
+      retrievalConfiguration: { [search]: { filter: { team: 'private' } as never } },
+    };
+
+    it('validates only the root overrides selected for the request', async () => {
+      const selected = {
+        knowledgeBaseId: 'ROOT123456',
+        retrievalConfiguration: {
+          [search]: { filter: { equals: { key: 'team', value: 'public' } } },
+        },
+      };
+      const config = {
+        knowledgeBaseConfigurations: [selected, { knowledgeBaseId: 'LEGACY1234' }],
+        sessionState: {
+          sessionAttributes: { retained: 'yes' },
+          knowledgeBaseConfigurations: [invalid],
+        },
+      };
+      const original = structuredClone(config);
+      const { provider, send } = agent(config);
+      send.mockResolvedValue({
+        completion: events([{ chunk: { bytes: Buffer.from('answer') } }]),
+      });
+
+      expect((await provider.callApi('question')).output).toBe('answer');
+      expect(send).toHaveBeenCalledTimes(1);
+      expect(send.mock.calls[0][0].input.sessionState).toEqual({
+        sessionAttributes: { retained: 'yes' },
+        knowledgeBaseConfigurations: [selected],
+      });
+      expect(config).toEqual(original);
+    });
+
+    it.each([undefined, [], [{ knowledgeBaseId: 'LEGACY1234' }]])(
+      'validates the retained session list with root configuration %j',
+      async (knowledgeBaseConfigurations) => {
+        const { provider, send } = agent({
+          knowledgeBaseConfigurations,
+          sessionState: { knowledgeBaseConfigurations: [invalid] },
+        });
+        expect((await provider.callApi('question')).error).toContain(
+          'Invalid sessionState.knowledgeBaseConfigurations[0].retrievalConfiguration filter',
+        );
+        expect(send).not.toHaveBeenCalled();
+      },
+    );
+  },
+);
+
 describe('Agent runtime features', () => {
   it('rejects malformed filters in native session knowledge-base overrides', async () => {
     const { provider, send } = agent({
