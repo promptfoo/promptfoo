@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import logger from '../../src/logger';
 import { ProviderRegistry, providerRegistry } from '../../src/providers/providerRegistry';
+import { waitForPromiseWithAbort } from '../../src/providers/shared';
 import { createDeferred } from '../util/utils';
 
 vi.mock('../../src/logger');
@@ -83,6 +84,118 @@ describe('providerRegistry', () => {
   });
 
   describe('explicit resource cleanup', () => {
+    it.each(['manual', 'evaluation', 'shutdownAll'] as const)(
+      'tracks an immediate manual retry after failed %s cleanup',
+      async (initialOwner) => {
+        const registry = new ProviderRegistry(false);
+        const firstCleanup = createDeferred<void>();
+        const firstCleanupStarted = createDeferred<void>();
+        const finishRetry = createDeferred<void>();
+        let cleanup: Promise<void> | undefined;
+        let attempts = 0;
+        let retryFinished = false;
+        const provider = {
+          id: () => 'immediate-cleanup-retry',
+          retainOutsideEvaluation: true,
+          cleanup: () => {
+            if (!cleanup) {
+              const attempt = ++attempts;
+              cleanup = (attempt === 1 ? firstCleanup.promise : finishRetry.promise)
+                .then(() => {
+                  retryFinished = true;
+                  registry.unregister(provider);
+                })
+                .catch((error) => {
+                  registry.retainForProcessShutdown(provider);
+                  throw error;
+                })
+                .finally(() => {
+                  cleanup = undefined;
+                });
+              registry.trackResourceCleanup(provider, cleanup);
+              firstCleanupStarted.resolve();
+            }
+            return cleanup;
+          },
+          shutdown: vi.fn((): Promise<void> => provider.cleanup()),
+        };
+        registry.register(provider);
+        const initialRelease =
+          initialOwner === 'evaluation'
+            ? registry.withEvaluation(async () => registry.useProvider(provider))
+            : initialOwner === 'shutdownAll'
+              ? registry.shutdownAll()
+              : provider.cleanup();
+        void initialRelease.catch(() => {});
+        await firstCleanupStarted.promise;
+        const failure = new Error('first cleanup failed');
+        let observedFailure: unknown;
+        let retry: Promise<void> | undefined;
+        const immediateRetry = (async () => {
+          try {
+            await provider.cleanup();
+          } catch (error) {
+            retry = provider.cleanup();
+            observedFailure = error;
+          }
+        })();
+        let evaluation: Promise<void> | undefined;
+        let processShutdown: Promise<void> | undefined;
+        const run = vi.fn();
+        try {
+          firstCleanup.reject(failure);
+          await immediateRetry;
+          await new Promise<void>((resolve) => setImmediate(resolve));
+          expect(observedFailure).toBe(failure);
+          expect(attempts).toBe(2);
+          const controller = new AbortController();
+          const reason = new DOMException('cancel cleanup retry waiter', 'AbortError');
+          let evaluationFailure: unknown;
+          evaluation = registry.withEvaluation(() =>
+            registry.withProvider(
+              provider,
+              async () => {
+                await waitForPromiseWithAbort(retry!, controller.signal);
+                run();
+              },
+              controller.signal,
+            ),
+          );
+          void evaluation.catch((error) => {
+            evaluationFailure = error;
+          });
+          controller.abort(reason);
+          await new Promise<void>((resolve) => setImmediate(resolve));
+          expect(evaluationFailure).toBe(reason);
+          expect(retryFinished).toBe(false);
+          expect(run).not.toHaveBeenCalled();
+
+          let processShutdownFinished = false;
+          processShutdown = registry.shutdownForProcess().then(() => {
+            processShutdownFinished = true;
+          });
+          await new Promise<void>((resolve) => setImmediate(resolve));
+          expect(processShutdownFinished).toBe(false);
+          expect(attempts).toBe(2);
+          finishRetry.resolve();
+          await processShutdown;
+          expect(retryFinished).toBe(true);
+          expect(registry.has(provider)).toBe(false);
+        } finally {
+          finishRetry.resolve();
+          firstCleanup.resolve();
+          await Promise.allSettled([
+            initialRelease,
+            immediateRetry,
+            ...(retry ? [retry] : []),
+            ...(evaluation ? [evaluation] : []),
+            ...(processShutdown ? [processShutdown] : []),
+          ]);
+          await registry.shutdownAll();
+        }
+      },
+    );
+
     it('cancels a waiting evaluation without rejoining cleanup or interrupting another caller', async () => {
       const registry = new ProviderRegistry(false);
       const finishCleanup = createDeferred<void>();

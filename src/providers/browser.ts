@@ -273,14 +273,21 @@ export class BrowserProvider implements ApiProvider {
   cleanup(): Promise<void> {
     if (!this.cleanupPromise) {
       this.cleanupGeneration++;
-      this.cleanupPromise = Promise.all(
+      this.cleanupPromise = Promise.allSettled(
         [...this.sessions].map((session) => this.closeSession(session)),
       )
-        .then(() => undefined)
+        .then((results) => {
+          const failure = results.find((result) => result.status === 'rejected');
+          if (failure) {
+            throw failure.reason;
+          }
+        })
         .finally(() => {
           this.cleanupPromise = undefined;
         });
-      providerRegistry.trackResourceCleanup(this, this.cleanupPromise);
+      if (this.sessions.size > 0) {
+        providerRegistry.trackResourceCleanup(this, this.cleanupPromise);
+      }
     }
     return this.cleanupPromise;
   }

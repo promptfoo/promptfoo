@@ -277,24 +277,29 @@ export class ProviderRegistry {
 
   /** Track an already-started cleanup of the whole resource without making later scopes own it. */
   trackResourceCleanup(resource: CleanupProvider, cleanup: Promise<void>): void {
+    // A manual retry may follow a forced teardown that already removed the registration.
+    if (!this.resources.has(resource)) {
+      this.register(resource);
+    }
     const state = this.resources.get(resource);
     // shutdown() may call this while a registry-owned release already observes its result.
     if (!state || state.release) {
       return;
     }
-    const promise = cleanup
-      .catch((error) => {
-        logger.warn('Provider resource cleanup failed.', { error });
-      })
-      .finally(() => {
-        if (state.release?.promise === promise) {
-          state.release = undefined;
-        }
-        this.forgetResource(state);
-        if (this.processShuttingDown && state.registered) {
-          void this.forceResource(state);
-        }
-      });
+    const complete = () => {
+      if (state.release?.promise === promise) {
+        state.release = undefined;
+      }
+      this.forgetResource(state);
+      if (this.processShuttingDown && state.registered) {
+        void this.forceResource(state);
+      }
+    };
+    // Settle bookkeeping in the first reaction, before the owner can retry a rejected cleanup.
+    const promise = cleanup.then(complete, (error) => {
+      logger.warn('Provider resource cleanup failed.', { error });
+      complete();
+    });
     // Explicit cleanup already releases every owned handle, including pending initialization.
     state.release = { promise, start: () => promise };
     if (this.processShuttingDown) {
@@ -640,11 +645,10 @@ export class ProviderRegistry {
           } catch (error) {
             shutdown = Promise.reject(error);
           }
-          void Promise.resolve(shutdown)
-            .catch((error) => {
-              logger.warn('Error shutting down provider: ' + String(error));
-            })
-            .then(complete);
+          void Promise.resolve(shutdown).then(complete, (error) => {
+            logger.warn('Error shutting down provider: ' + String(error));
+            complete();
+          });
         }
       }
       return actual;

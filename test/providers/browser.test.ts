@@ -872,6 +872,80 @@ describe('BrowserProvider lifecycle', () => {
     expect(providerRegistry.has(provider)).toBe(false);
   });
 
+  it('waits for every session teardown before reporting a cleanup failure', async () => {
+    const { chromium } = await import('playwright-extra');
+    const { default: stealth } = await import('puppeteer-extra-plugin-stealth');
+    const dependencies = await import('../../src/providers/browserDependencies');
+    // Both concurrent launches must use the same mocked Playwright boundary.
+    const loadDependencies = vi
+      .spyOn(dependencies, 'loadBrowserProviderDependencies')
+      .mockResolvedValue({ chromium, stealth });
+    const sessions = [makePage(), makePage()].map((page) => ({
+      page,
+      browser: {
+        newContext: vi.fn(async () => ({ newPage: vi.fn(async () => page) })),
+        close: vi.fn(async () => {
+          page.isClosed.mockReturnValue(true);
+        }),
+      },
+    }));
+    const finishLaunch = createDeferred<void>();
+    for (const { browser } of sessions) {
+      vi.mocked(chromium.launch).mockImplementationOnce(async () => {
+        await finishLaunch.promise;
+        return browser as never;
+      });
+    }
+    const provider = new BrowserProvider('test', { config: { persistSession: true, steps: [] } });
+    const calls = Promise.all([provider.callApi('first'), provider.callApi('second')]);
+    let responses;
+    try {
+      await vi.waitFor(() => expect(chromium.launch).toHaveBeenCalledTimes(2));
+    } finally {
+      finishLaunch.resolve();
+      loadDependencies.mockRestore();
+      responses = await calls;
+    }
+    expect(responses.every((response) => !response.error)).toBe(true);
+
+    const failure = new Error('First browser could not close');
+    sessions[0].browser.close.mockRejectedValueOnce(failure);
+    const finishSecond = createDeferred<void>();
+    sessions[1].browser.close.mockImplementationOnce(async () => {
+      await finishSecond.promise;
+      sessions[1].page.isClosed.mockReturnValue(true);
+    });
+    let settled = false;
+    let reportedError: unknown;
+    const cleanup = provider.cleanup();
+    const observed = cleanup.then(
+      () => {
+        settled = true;
+      },
+      (error) => {
+        settled = true;
+        reportedError = error;
+      },
+    );
+    try {
+      await vi.waitFor(() => expect(sessions[1].browser.close).toHaveBeenCalledOnce());
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(settled).toBe(false);
+      expect(sessions[1].page.isClosed()).toBe(false);
+
+      finishSecond.resolve();
+      await observed;
+      expect(reportedError).toBe(failure);
+      expect(sessions[1].page.isClosed()).toBe(true);
+    } finally {
+      finishSecond.resolve();
+      await Promise.allSettled([cleanup, observed]);
+      await provider.cleanup();
+    }
+    expect(sessions[0].page.isClosed()).toBe(true);
+    expect(providerRegistry.has(provider)).toBe(false);
+  });
+
   it.each(['direct', 'evaluation', 'owned evaluation'] as const)(
     'rejects cancelled %s calls before manual cleanup finishes',
     async (mode) => {
