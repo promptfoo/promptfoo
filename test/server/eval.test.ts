@@ -82,7 +82,8 @@ describe('eval routes', () => {
   function createManualRatingPayload(originalResult: any, pass: boolean) {
     const payload = { ...originalResult.gradingResult };
     const score = pass ? 1 : 0;
-    payload.componentResults?.push({
+    payload.componentResults ||= [];
+    payload.componentResults.push({
       pass,
       score,
       reason: 'Manual result (overrides all other grading results)',
@@ -287,6 +288,15 @@ describe('eval routes', () => {
 
     function comparisonRecoverySuite(ordinaryGraderError = false) {
       let recovered = false;
+      const grader = {
+        id: () => 'annotation-recovery-grader',
+        callApi: async () => {
+          if (!recovered) {
+            throw new Error('Comparison unavailable');
+          }
+          return { output: '0' };
+        },
+      };
       const suite: TestSuite = {
         providers: [new EchoProvider()],
         prompts: [
@@ -310,15 +320,7 @@ describe('eval routes', () => {
               {
                 type: 'select-best',
                 value: 'Choose the best',
-                provider: {
-                  id: () => 'annotation-recovery-grader',
-                  callApi: async () => {
-                    if (!recovered) {
-                      throw new Error('Comparison unavailable');
-                    }
-                    return { output: '0' };
-                  },
-                },
+                provider: grader,
               },
             ],
           },
@@ -326,6 +328,7 @@ describe('eval routes', () => {
       };
       return {
         suite,
+        grader,
         recover: () => {
           recovered = true;
         },
@@ -412,10 +415,14 @@ describe('eval routes', () => {
       },
     );
 
-    it.each([false, true])(
-      'clears an approval after comparison recovery (ordinary grader error=%s)',
-      async (ordinaryGraderError) => {
-        const { suite, recover } = comparisonRecoverySuite(ordinaryGraderError);
+    it.each([
+      { ordinaryGraderError: false, abortRetry: false },
+      { ordinaryGraderError: true, abortRetry: false },
+      { ordinaryGraderError: false, abortRetry: true },
+    ])(
+      'clears an approval after comparison recovery (ordinary error=$ordinaryGraderError, aborted retry=$abortRetry)',
+      async ({ ordinaryGraderError, abortRetry }) => {
+        const { suite, grader, recover } = comparisonRecoverySuite(ordinaryGraderError);
         const record = await Eval.create({}, suite.prompts);
         testEvalIds.add(record.id);
         const previousResume = cliState.resume;
@@ -428,10 +435,21 @@ describe('eval routes', () => {
               .send(createManualRatingPayload(row, true));
             expect(approved.status).toBe(200);
           }
-          recover();
           cliState.resume = true;
           const saved = await Eval.findById(record.id);
           invariant(saved, 'Saved evaluation required');
+          if (abortRetry) {
+            const controller = new AbortController();
+            vi.spyOn(grader, 'callApi').mockImplementationOnce(async () => {
+              controller.abort();
+              throw controller.signal.reason;
+            });
+            await evaluate(suite, saved, { maxConcurrency: 1, abortSignal: controller.signal });
+            expect(
+              (await saved.getResults()).every((row) => row.error?.startsWith('Aborted:')),
+            ).toBe(true);
+          }
+          recover();
           await evaluate(suite, saved, { maxConcurrency: 1 });
           for (const row of await saved.getResults()) {
             expect(row.gradingResult?.componentResults).toEqual(
@@ -476,6 +494,75 @@ describe('eval routes', () => {
               expect(response.body.error ?? '').not.toContain('Error grading select-best');
             }
           }
+        } finally {
+          cliState.resume = previousResume;
+        }
+      },
+    );
+
+    it.each([false, true])(
+      'retains target errors across repeated comparison retries (clear before=%s)',
+      async (clearBefore) => {
+        const { suite, recover } = comparisonRecoverySuite();
+        const target = vi.fn(async () => ({ error: 'Target unavailable' }));
+        suite.providers = [{ id: () => 'failing-target', callApi: target }];
+        const record = await Eval.create({}, suite.prompts);
+        testEvalIds.add(record.id);
+        const previousResume = cliState.resume;
+        async function clearRatings(saved: Eval) {
+          for (const row of await saved.getResults()) {
+            const components = row.gradingResult!.componentResults!.filter(
+              (component) => component.assertion?.type !== 'human',
+            );
+            const response = await api
+              .post(`/api/eval/${record.id}/results/${row.id}/rating`)
+              .send({
+                ...row.gradingResult,
+                pass: components.every((component) => component.pass),
+                componentResults: components,
+                action: 'clear',
+              });
+            expect(response.status).toBe(200);
+            expect(response.body).toMatchObject({
+              success: false,
+              failureReason: ResultFailureReason.ERROR,
+            });
+          }
+        }
+        try {
+          await evaluate(suite, record, { maxConcurrency: 1 });
+          for (const row of await record.getResults()) {
+            expect(row.failureReason).toBe(ResultFailureReason.ERROR);
+            expect(
+              (
+                await api
+                  .post(`/api/eval/${record.id}/results/${row.id}/rating`)
+                  .send(createManualRatingPayload(row, true))
+              ).status,
+            ).toBe(200);
+          }
+          cliState.resume = true;
+          const saved = await Eval.findById(record.id);
+          invariant(saved, 'Saved evaluation required');
+          await evaluate(suite, saved, { maxConcurrency: 1 });
+          for (const row of await saved.getResults()) {
+            expect(row.failureReason).toBe(ResultFailureReason.ERROR);
+            expect(row.error).toContain('Error grading select-best');
+          }
+          if (clearBefore) {
+            await clearRatings(saved);
+          }
+          recover();
+          await evaluate(suite, saved, { maxConcurrency: 1 });
+          if (!clearBefore) {
+            await clearRatings(saved);
+          }
+          for (const row of await saved.getResults()) {
+            expect(row).toMatchObject({ success: false, failureReason: ResultFailureReason.ERROR });
+            expect(row.response?.error).toBe('Target unavailable');
+            expect(row.metadata?.__promptfoo?.comparisonError).toBeUndefined();
+          }
+          expect(target).toHaveBeenCalledTimes(2);
         } finally {
           cliState.resume = previousResume;
         }

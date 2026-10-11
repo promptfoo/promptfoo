@@ -918,12 +918,11 @@ function getManualRatingUpdate({
       componentResults.splice(humanResultIndex, 1);
     }
 
+    const gradingPass = componentResults.every((result) => result.pass);
+    finalPass = gradingPass;
     if (componentResults.length > 0) {
-      finalPass =
-        componentResults.filter((result) => result.pass).length === componentResults.length;
       finalScore = averageComponentResultScore(componentResults, finalScore);
     }
-    const gradingPass = componentResults.every((result) => result.pass);
     if (getOriginalFailureReason(existingOutput) === ResultFailureReason.ERROR) {
       finalPass = false;
       if (componentResults.length === 0) {

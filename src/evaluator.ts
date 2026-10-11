@@ -3481,10 +3481,21 @@ function hasCompletedComparison(
   );
 }
 
+function getManualGradingResult(result: EvaluationStoreResult) {
+  return (
+    result.gradingResult?.componentResults?.find(
+      (component) => component.assertion?.type === HUMAN_ASSERTION_TYPE,
+    ) ??
+    (result.gradingResult?.assertion?.type === HUMAN_ASSERTION_TYPE
+      ? result.gradingResult
+      : undefined)
+  );
+}
+
 type ComparisonErrorState = Pick<
   EvaluationStoreResult,
   'success' | 'score' | 'failureReason' | 'error'
->;
+> & { originalFailureReason?: ResultFailureReason };
 
 function getComparisonError(result: EvaluationStoreResult): ComparisonErrorState | undefined {
   const state = result.metadata?.[PROMPTFOO_METADATA_KEY]?.comparisonError;
@@ -3504,7 +3515,10 @@ function setComparisonError(result: EvaluationStoreResult, state?: ComparisonErr
   const fields =
     internal && typeof internal === 'object' && !Array.isArray(internal) ? { ...internal } : {};
   if (state) {
-    fields.comparisonError = state;
+    fields.comparisonError = getComparisonError(result) ?? {
+      ...state,
+      originalFailureReason: getManualGradingResult(result)?.metadata?.originalFailureReason,
+    };
   } else {
     delete fields.comparisonError;
   }
@@ -5506,13 +5520,23 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     }
   }
 
-  private restoreComparisonResult(
+  private async restoreComparisonResult(
     result: TResult,
     metrics: CompletedPrompt['metrics'] | undefined,
   ) {
     const saved = getComparisonError(result);
+    const manualOverride = getManualGradingResult(result);
     if (result.failureReason === ResultFailureReason.ERROR) {
       if (!saved) {
+        return false;
+      }
+      if (saved.originalFailureReason === ResultFailureReason.ERROR && !manualOverride) {
+        result.error = saved.error;
+        setComparisonError(result);
+        this.trackFinalJsonlResult(result);
+        if (this.store.persisted && !this.store.hasResultPersistenceFailure(result)) {
+          await this.store.saveResult(result);
+        }
         return false;
       }
       const previous = {
@@ -5526,17 +5550,10 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       this.updateComparisonResultCounts(result, previous, metrics);
     }
     if (saved) {
-      const manualOverride =
-        result.gradingResult?.componentResults?.find(
-          (component) => component.assertion?.type === HUMAN_ASSERTION_TYPE,
-        ) ??
-        (result.gradingResult?.assertion?.type === HUMAN_ASSERTION_TYPE
-          ? result.gradingResult
-          : undefined);
       if (manualOverride) {
         manualOverride.metadata = {
           ...manualOverride.metadata,
-          originalFailureReason: saved.failureReason,
+          originalFailureReason: saved.originalFailureReason ?? saved.failureReason,
         };
       }
       result.error = saved.error;
@@ -5554,7 +5571,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     metrics: CompletedPrompt['metrics'] | undefined;
     result: TResult;
   }) {
-    if (!this.restoreComparisonResult(result, metrics)) {
+    if (!(await this.restoreComparisonResult(result, metrics))) {
       return;
     }
     const wasSuccess = result.success;
@@ -5579,7 +5596,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     ) {
       return;
     }
-    if (!this.restoreComparisonResult(result, metrics)) {
+    if (!(await this.restoreComparisonResult(result, metrics))) {
       return;
     }
     const wasSuccess = result.success;
