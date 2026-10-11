@@ -763,8 +763,7 @@ describe('NovaSonic Provider', () => {
           ]),
         );
       const pending = Promise.all([provider.callApi('AA=='), provider.callApi('AQ==')]);
-      await vi.runAllTimersAsync();
-      const [first, second] = await pending;
+      const [first, second] = await vi.waitFor(() => pending);
 
       expect(first.tokenUsage).toEqual({ prompt: 20, completion: 10, total: 30, numRequests: 1 });
       expect(second.tokenUsage).toEqual({ prompt: 0, completion: 0, total: 0, numRequests: 1 });
