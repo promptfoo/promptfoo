@@ -19,7 +19,6 @@ import {
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
 import { Tabs, TabsList, TabsTrigger } from '@app/components/ui/tabs';
-import { UserProvider } from '@app/contexts/UserContext';
 import { usePageMeta } from '@app/hooks/usePageMeta';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
@@ -484,36 +483,131 @@ export default function RedTeamSetupPage() {
     return tab.label;
   };
 
+  // Root container
   return (
-    <UserProvider>
-      {/* Root container */}
-      <div className="fixed flex w-full bg-white dark:bg-zinc-900">
-        {/* Content wrapper */}
-        <div className="flex min-w-0 grow flex-col transition-[margin] duration-200 md:flex-row">
-          {/* Outer sidebar container */}
+    <div className="fixed flex w-full bg-white dark:bg-zinc-900">
+      {/* Content wrapper */}
+      <div className="flex min-w-0 grow flex-col transition-[margin] duration-200 md:flex-row">
+        {/* Outer sidebar container */}
+        <div
+          data-testid="redteam-setup-sidebar"
+          className="hidden h-full flex-col border-r border-border md:flex"
+          style={{ width: SIDEBAR_WIDTH, minWidth: SIDEBAR_WIDTH }}
+        >
+          {/* Inner sidebar (sticky) */}
           <div
-            data-testid="redteam-setup-sidebar"
-            className="hidden h-full flex-col border-r border-border md:flex"
-            style={{ width: SIDEBAR_WIDTH, minWidth: SIDEBAR_WIDTH }}
+            className="sticky flex flex-col"
+            style={{
+              top: `calc(${NAVBAR_HEIGHT}px + var(--update-banner-height, 0px))`,
+              height: `calc(100vh - ${NAVBAR_HEIGHT}px - var(--update-banner-height, 0px))`,
+            }}
           >
-            {/* Inner sidebar (sticky) */}
+            {/* Status section */}
             <div
-              className="sticky flex flex-col"
-              style={{
-                top: `calc(${NAVBAR_HEIGHT}px + var(--update-banner-height, 0px))`,
-                height: `calc(100vh - ${NAVBAR_HEIGHT}px - var(--update-banner-height, 0px))`,
-              }}
+              className="border-b border-r border-border bg-card p-4"
+              style={{ width: SIDEBAR_WIDTH, minWidth: SIDEBAR_WIDTH }}
             >
-              {/* Status section */}
-              <div
-                className="border-b border-r border-border bg-card p-4"
-                style={{ width: SIDEBAR_WIDTH, minWidth: SIDEBAR_WIDTH }}
+              <p className="mb-1 text-base font-medium text-foreground">
+                {configName ? `Config: ${configName}` : 'New Configuration'}
+              </p>
+              {hasUnsavedChanges ? (
+                <div className="flex items-center justify-between gap-2">
+                  <span className="flex items-center gap-1 text-sm text-amber-600 dark:text-amber-500">
+                    <span>●</span> Unsaved changes
+                  </span>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="min-w-0 border-amber-500 px-2 py-1 text-amber-600 hover:bg-amber-50 dark:border-amber-600 dark:text-amber-500 dark:hover:bg-amber-950/30"
+                    onClick={handleSaveConfig}
+                    disabled={!configName || Boolean(targetConfigError)}
+                  >
+                    Save now
+                  </Button>
+                </div>
+              ) : (
+                configDate && (
+                  <p className="text-sm text-muted-foreground">{formatDataGridDate(configDate)}</p>
+                )
+              )}
+            </div>
+
+            {/* Tabs container */}
+            <div className="grow overflow-y-auto">
+              <Tabs
+                value={String(value)}
+                onValueChange={handleTabChange}
+                orientation="vertical"
+                className="w-full"
               >
-                <p className="mb-1 text-base font-medium text-foreground">
+                <TabsList className="flex h-auto w-full flex-col rounded-none bg-card p-0">
+                  {TAB_CONFIG.map((tab) => {
+                    const Icon = tab.icon;
+                    return (
+                      <TabsTrigger
+                        key={tab.value}
+                        value={tab.value}
+                        className={cn(
+                          'w-full justify-start gap-2 rounded-none border-b border-border px-4 py-3 text-sm font-normal',
+                          'data-[state=active]:bg-accent data-[state=active]:shadow-none',
+                          'hover:bg-muted/50',
+                        )}
+                      >
+                        <Icon className="size-[18px]" />
+                        {getTabLabel(tab)}
+                      </TabsTrigger>
+                    );
+                  })}
+                </TabsList>
+              </Tabs>
+            </div>
+
+            {/* Sidebar buttons */}
+            <div className="flex flex-col gap-1 border-t border-border bg-card p-3">
+              <Button
+                variant="ghost"
+                className="justify-start p-2 text-sm font-normal text-muted-foreground hover:text-foreground"
+                onClick={() => setSaveDialogOpen(true)}
+              >
+                <Save className="mr-2 size-[18px]" />
+                Save Config
+              </Button>
+              <Button
+                variant="ghost"
+                className="justify-start p-2 text-sm font-normal text-muted-foreground hover:text-foreground"
+                onClick={() => {
+                  loadConfigs();
+                  setLoadDialogOpen(true);
+                }}
+              >
+                <FolderOpen className="mr-2 size-[18px]" />
+                Load Config
+              </Button>
+              <Button
+                variant="ghost"
+                className="justify-start p-2 text-sm font-normal text-muted-foreground hover:text-foreground"
+                onClick={() => setResetDialogOpen(true)}
+              >
+                <RotateCcw className="mr-2 size-[18px]" />
+                Reset Config
+              </Button>
+            </div>
+          </div>
+        </div>
+
+        {/* Tab content */}
+        <div className="relative flex min-w-0 grow flex-col transition-[margin] duration-200">
+          <div
+            data-testid="redteam-setup-mobile-actions"
+            className="border-b border-border bg-card p-4 md:hidden"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="mb-1 truncate text-base font-medium text-foreground">
                   {configName ? `Config: ${configName}` : 'New Configuration'}
                 </p>
                 {hasUnsavedChanges ? (
-                  <div className="flex items-center justify-between gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <span className="flex items-center gap-1 text-sm text-amber-600 dark:text-amber-500">
                       <span>●</span> Unsaved changes
                     </span>
@@ -536,300 +630,201 @@ export default function RedTeamSetupPage() {
                 )}
               </div>
 
-              {/* Tabs container */}
-              <div className="grow overflow-y-auto">
-                <Tabs
-                  value={String(value)}
-                  onValueChange={handleTabChange}
-                  orientation="vertical"
-                  className="w-full"
-                >
-                  <TabsList className="flex h-auto w-full flex-col rounded-none bg-card p-0">
-                    {TAB_CONFIG.map((tab) => {
-                      const Icon = tab.icon;
-                      return (
-                        <TabsTrigger
-                          key={tab.value}
-                          value={tab.value}
-                          className={cn(
-                            'w-full justify-start gap-2 rounded-none border-b border-border px-4 py-3 text-sm font-normal',
-                            'data-[state=active]:bg-accent data-[state=active]:shadow-none',
-                            'hover:bg-muted/50',
-                          )}
-                        >
-                          <Icon className="size-[18px]" />
-                          {getTabLabel(tab)}
-                        </TabsTrigger>
-                      );
-                    })}
-                  </TabsList>
-                </Tabs>
-              </div>
-
-              {/* Sidebar buttons */}
-              <div className="flex flex-col gap-1 border-t border-border bg-card p-3">
-                <Button
-                  variant="ghost"
-                  className="justify-start p-2 text-sm font-normal text-muted-foreground hover:text-foreground"
-                  onClick={() => setSaveDialogOpen(true)}
-                >
-                  <Save className="mr-2 size-[18px]" />
-                  Save Config
-                </Button>
-                <Button
-                  variant="ghost"
-                  className="justify-start p-2 text-sm font-normal text-muted-foreground hover:text-foreground"
-                  onClick={() => {
-                    loadConfigs();
-                    setLoadDialogOpen(true);
-                  }}
-                >
-                  <FolderOpen className="mr-2 size-[18px]" />
-                  Load Config
-                </Button>
-                <Button
-                  variant="ghost"
-                  className="justify-start p-2 text-sm font-normal text-muted-foreground hover:text-foreground"
-                  onClick={() => setResetDialogOpen(true)}
-                >
-                  <RotateCcw className="mr-2 size-[18px]" />
-                  Reset Config
-                </Button>
-              </div>
-            </div>
-          </div>
-
-          {/* Tab content */}
-          <div className="relative flex min-w-0 grow flex-col transition-[margin] duration-200">
-            <div
-              data-testid="redteam-setup-mobile-actions"
-              className="border-b border-border bg-card p-4 md:hidden"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="mb-1 truncate text-base font-medium text-foreground">
-                    {configName ? `Config: ${configName}` : 'New Configuration'}
-                  </p>
-                  {hasUnsavedChanges ? (
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="flex items-center gap-1 text-sm text-amber-600 dark:text-amber-500">
-                        <span>●</span> Unsaved changes
-                      </span>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="min-w-0 border-amber-500 px-2 py-1 text-amber-600 hover:bg-amber-50 dark:border-amber-600 dark:text-amber-500 dark:hover:bg-amber-950/30"
-                        onClick={handleSaveConfig}
-                        disabled={!configName || Boolean(targetConfigError)}
-                      >
-                        Save now
-                      </Button>
-                    </div>
-                  ) : (
-                    configDate && (
-                      <p className="text-sm text-muted-foreground">
-                        {formatDataGridDate(configDate)}
-                      </p>
-                    )
-                  )}
-                </div>
-
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="sm" className="shrink-0">
-                      <Settings className="mr-2 size-4" />
-                      Config
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={() => setSaveDialogOpen(true)}>
-                      <Save className="mr-2 size-4" />
-                      Save Config
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={() => {
-                        loadConfigs();
-                        setLoadDialogOpen(true);
-                      }}
-                    >
-                      <FolderOpen className="mr-2 size-4" />
-                      Load Config
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setResetDialogOpen(true)}>
-                      <RotateCcw className="mr-2 size-4" />
-                      Reset Config
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-            </div>
-
-            {value === 0 && (
-              <ErrorBoundary name="Target Type Selection Page">
-                <TargetTypeSelection onNext={handleNext} />
-              </ErrorBoundary>
-            )}
-            {value === 1 && (
-              <ErrorBoundary name="Target Configuration Page">
-                <TargetConfiguration
-                  key={targetConfigRevision}
-                  onNext={handleNext}
-                  onBack={handleBack}
-                />
-              </ErrorBoundary>
-            )}
-            {value === 2 && (
-              <ErrorBoundary name="Application Purpose Page">
-                <Purpose onNext={handleNext} onBack={handleBack} />
-              </ErrorBoundary>
-            )}
-            {value === 3 && (
-              <ErrorBoundary name="Plugins Page">
-                <TestCaseGenerationProvider redTeamConfig={config}>
-                  <Plugins onNext={handleNext} onBack={handleBack} />
-                </TestCaseGenerationProvider>
-              </ErrorBoundary>
-            )}
-            {value === 4 && (
-              <ErrorBoundary name="Strategies Page">
-                <Strategies onNext={handleNext} onBack={handleBack} />
-              </ErrorBoundary>
-            )}
-            {value === 5 && (
-              <ErrorBoundary name="Review Page">
-                <Review
-                  navigateToPlugins={navigateToPlugins}
-                  navigateToStrategies={navigateToStrategies}
-                  navigateToPurpose={navigateToPurpose}
-                />
-              </ErrorBoundary>
-            )}
-          </div>
-        </div>
-
-        {setupModalOpen ? <Setup open={setupModalOpen} onClose={closeSetupModal} /> : null}
-
-        {/* Save Dialog */}
-        <Dialog open={saveDialogOpen} onOpenChange={(open) => !open && setSaveDialogOpen(false)}>
-          <DialogContent className="sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle>Save Configuration</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="config-name">Configuration Name</Label>
-                <Input
-                  id="config-name"
-                  value={configName}
-                  onChange={(e) => setConfigName(e.target.value)}
-                  placeholder="Enter configuration name"
-                  autoFocus
-                />
-              </div>
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  onClick={handleDownloadYaml}
-                  disabled={Boolean(targetConfigError)}
-                  className="flex-1"
-                >
-                  <Download className="mr-2 size-4" />
-                  Export YAML
-                </Button>
-                <Button
-                  onClick={handleSaveConfig}
-                  disabled={!configName || Boolean(targetConfigError)}
-                  className="flex-1"
-                >
-                  <Save className="mr-2 size-4" />
-                  Save
-                </Button>
-              </div>
-              {targetConfigError && <p className="text-sm text-destructive">{targetConfigError}</p>}
-            </div>
-          </DialogContent>
-        </Dialog>
-
-        {/* Load Dialog */}
-        <Dialog open={loadDialogOpen} onOpenChange={(open) => !open && setLoadDialogOpen(false)}>
-          <DialogContent className="sm:max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>Load or Import Configuration</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              {/* Import YAML Section */}
-              <div>
-                <p className="text-sm font-medium">Import YAML File</p>
-                <p className="mb-2 text-sm text-muted-foreground">
-                  Import an existing promptfoo redteam YAML configuration. Your application details
-                  will be automatically parsed and pre-filled in the form.
-                </p>
-                <input
-                  accept=".yml,.yaml"
-                  className="hidden"
-                  id="yaml-file-upload"
-                  type="file"
-                  onChange={handleFileUpload}
-                />
-                <label htmlFor="yaml-file-upload">
-                  <Button variant="outline" className="w-full" asChild>
-                    <span>Import YAML File</span>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" className="shrink-0">
+                    <Settings className="mr-2 size-4" />
+                    Config
                   </Button>
-                </label>
-              </div>
-
-              <p className="text-sm font-medium">Or choose a saved configuration:</p>
-
-              {savedConfigs.length === 0 ? (
-                <div className="py-8 text-center">
-                  <p className="text-muted-foreground">No saved configurations found</p>
-                </div>
-              ) : (
-                <div className="max-h-[50vh] space-y-1 overflow-y-auto">
-                  {savedConfigs.map((savedConfig) => (
-                    <button
-                      key={savedConfig.id}
-                      onClick={() => handleLoadConfig(savedConfig.id)}
-                      className="w-full rounded-md border border-border bg-card px-4 py-3 text-left transition-colors hover:bg-accent"
-                    >
-                      <p className="font-medium">{savedConfig.name}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {formatDataGridDate(savedConfig.updatedAt)}
-                      </p>
-                    </button>
-                  ))}
-                </div>
-              )}
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => setSaveDialogOpen(true)}>
+                    <Save className="mr-2 size-4" />
+                    Save Config
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => {
+                      loadConfigs();
+                      setLoadDialogOpen(true);
+                    }}
+                  >
+                    <FolderOpen className="mr-2 size-4" />
+                    Load Config
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setResetDialogOpen(true)}>
+                    <RotateCcw className="mr-2 size-4" />
+                    Reset Config
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setLoadDialogOpen(false)}>
-                Cancel
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+          </div>
 
-        {/* Reset Dialog */}
-        <Dialog open={resetDialogOpen} onOpenChange={(open) => !open && setResetDialogOpen(false)}>
-          <DialogContent className="sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle>Reset Configuration</DialogTitle>
-              <DialogDescription>
-                Are you sure you want to reset the configuration to default values? This action
-                cannot be undone.
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setResetDialogOpen(false)}>
-                Cancel
-              </Button>
-              <Button variant="destructive" onClick={handleResetConfig}>
-                Reset
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+          {value === 0 && (
+            <ErrorBoundary name="Target Type Selection Page">
+              <TargetTypeSelection onNext={handleNext} />
+            </ErrorBoundary>
+          )}
+          {value === 1 && (
+            <ErrorBoundary name="Target Configuration Page">
+              <TargetConfiguration
+                key={targetConfigRevision}
+                onNext={handleNext}
+                onBack={handleBack}
+              />
+            </ErrorBoundary>
+          )}
+          {value === 2 && (
+            <ErrorBoundary name="Application Purpose Page">
+              <Purpose onNext={handleNext} onBack={handleBack} />
+            </ErrorBoundary>
+          )}
+          {value === 3 && (
+            <ErrorBoundary name="Plugins Page">
+              <TestCaseGenerationProvider redTeamConfig={config}>
+                <Plugins onNext={handleNext} onBack={handleBack} />
+              </TestCaseGenerationProvider>
+            </ErrorBoundary>
+          )}
+          {value === 4 && (
+            <ErrorBoundary name="Strategies Page">
+              <Strategies onNext={handleNext} onBack={handleBack} />
+            </ErrorBoundary>
+          )}
+          {value === 5 && (
+            <ErrorBoundary name="Review Page">
+              <Review
+                navigateToPlugins={navigateToPlugins}
+                navigateToStrategies={navigateToStrategies}
+                navigateToPurpose={navigateToPurpose}
+              />
+            </ErrorBoundary>
+          )}
+        </div>
       </div>
-    </UserProvider>
+
+      {setupModalOpen ? <Setup open={setupModalOpen} onClose={closeSetupModal} /> : null}
+
+      {/* Save Dialog */}
+      <Dialog open={saveDialogOpen} onOpenChange={(open) => !open && setSaveDialogOpen(false)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Save Configuration</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="config-name">Configuration Name</Label>
+              <Input
+                id="config-name"
+                value={configName}
+                onChange={(e) => setConfigName(e.target.value)}
+                placeholder="Enter configuration name"
+                autoFocus
+              />
+            </div>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                onClick={handleDownloadYaml}
+                disabled={Boolean(targetConfigError)}
+                className="flex-1"
+              >
+                <Download className="mr-2 size-4" />
+                Export YAML
+              </Button>
+              <Button
+                onClick={handleSaveConfig}
+                disabled={!configName || Boolean(targetConfigError)}
+                className="flex-1"
+              >
+                <Save className="mr-2 size-4" />
+                Save
+              </Button>
+            </div>
+            {targetConfigError && <p className="text-sm text-destructive">{targetConfigError}</p>}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Load Dialog */}
+      <Dialog open={loadDialogOpen} onOpenChange={(open) => !open && setLoadDialogOpen(false)}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Load or Import Configuration</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            {/* Import YAML Section */}
+            <div>
+              <p className="text-sm font-medium">Import YAML File</p>
+              <p className="mb-2 text-sm text-muted-foreground">
+                Import an existing promptfoo redteam YAML configuration. Your application details
+                will be automatically parsed and pre-filled in the form.
+              </p>
+              <input
+                accept=".yml,.yaml"
+                className="hidden"
+                id="yaml-file-upload"
+                type="file"
+                onChange={handleFileUpload}
+              />
+              <label htmlFor="yaml-file-upload">
+                <Button variant="outline" className="w-full" asChild>
+                  <span>Import YAML File</span>
+                </Button>
+              </label>
+            </div>
+
+            <p className="text-sm font-medium">Or choose a saved configuration:</p>
+
+            {savedConfigs.length === 0 ? (
+              <div className="py-8 text-center">
+                <p className="text-muted-foreground">No saved configurations found</p>
+              </div>
+            ) : (
+              <div className="max-h-[50vh] space-y-1 overflow-y-auto">
+                {savedConfigs.map((savedConfig) => (
+                  <button
+                    key={savedConfig.id}
+                    onClick={() => handleLoadConfig(savedConfig.id)}
+                    className="w-full rounded-md border border-border bg-card px-4 py-3 text-left transition-colors hover:bg-accent"
+                  >
+                    <p className="font-medium">{savedConfig.name}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {formatDataGridDate(savedConfig.updatedAt)}
+                    </p>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setLoadDialogOpen(false)}>
+              Cancel
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reset Dialog */}
+      <Dialog open={resetDialogOpen} onOpenChange={(open) => !open && setResetDialogOpen(false)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Reset Configuration</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to reset the configuration to default values? This action cannot
+              be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setResetDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleResetConfig}>
+              Reset
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 }

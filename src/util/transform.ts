@@ -5,6 +5,7 @@ import { runPython } from '../python/pythonUtils';
 import { isJavascriptFile } from './fileExtensions';
 import { safeJoin } from './pathUtils';
 import { getProcessShim } from './processShim';
+import { isSafeMode, SafeModeError } from './safeMode';
 
 import type { Vars } from '../types/index';
 import type { TransformContext, TransformFunction } from '../types/transform';
@@ -141,6 +142,11 @@ async function getFileTransformFunction(filePath: string): Promise<Function> {
  * Or assign it to a variable: const require = process.mainModule.require;
  */
 function getInlineTransformFunction(code: string, inputType: TransformInputType): Function {
+  if (isSafeMode()) {
+    throw new SafeModeError(
+      'Inline JavaScript execution is disabled in safe mode. Please use a file reference instead (e.g. "file://path/to/transform.js").',
+    );
+  }
   return new Function(
     inputType,
     'context',
