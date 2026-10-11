@@ -20,7 +20,7 @@ afterEach(() => {
 
 describeEvaluator('rating-aware evaluation finalization', () => {
   it.each([true, false])(
-    'retains the actual select-best assertion on a provider error (comparison passes: %s)',
+    'keeps provider errors ungraded through rating and clear (comparison passes: %s)',
     async (comparisonPass) => {
       vi.spyOn(comparisons, 'matchesSelectBest').mockResolvedValue([
         { pass: comparisonPass, score: comparisonPass ? 1 : 0.25, reason: 'Comparison result' },
@@ -41,8 +41,8 @@ describeEvaluator('rating-aware evaluation finalization', () => {
       await evaluate(testSuite, evalRecord, { maxConcurrency: 1 });
 
       const assertCounts = {
-        assertPassCount: Number(comparisonPass),
-        assertFailCount: Number(!comparisonPass),
+        assertPassCount: 0,
+        assertFailCount: 0,
       };
       const expectedMetrics = {
         ...assertCounts,
@@ -59,10 +59,9 @@ describeEvaluator('rating-aware evaluation finalization', () => {
         (row) => row.promptIdx === 0,
       )!;
       expect(result).toMatchObject({ success: false, failureReason: ResultFailureReason.ERROR });
-      expect(result.gradingResult).toMatchObject({
-        pass: false,
-        componentResults: [{ pass: comparisonPass, assertion: { type: 'select-best' } }],
-      });
+      // Comparisons do not grade original provider errors. A manual override and
+      // subsequent clear must preserve that error without inventing an assertion.
+      expect(result.gradingResult).toBeNull();
 
       const rated = await EvalResult.submitRating(
         evalRecord.id,
@@ -87,7 +86,7 @@ describeEvaluator('rating-aware evaluation finalization', () => {
       expect(await EvalResult.findById(result.id)).toMatchObject({
         success: false,
         failureReason: ResultFailureReason.ERROR,
-        score: comparisonPass ? 0 : 0.25,
+        score: 0,
       });
       expect((await Eval.findById(evalRecord.id))!.prompts[0].metrics).toMatchObject(
         expectedMetrics,

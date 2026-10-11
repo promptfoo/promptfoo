@@ -1,5 +1,6 @@
 import { HIDDEN_METADATA_KEYS } from '@app/constants';
 import { callApi, getApiBaseUrl } from '@app/utils/api';
+import { getRiskCategorySeverityMap } from '@promptfoo/presentation/redteamConfig';
 import { Severity } from '@promptfoo/redteam/constants';
 import {
   isPolicyMetric,
@@ -7,8 +8,6 @@ import {
   makeDefaultPolicyName,
   makeInlinePolicyId,
 } from '@promptfoo/redteam/plugins/policy/utils';
-import { getRiskCategorySeverityMap } from '@promptfoo/redteam/sharedFrontend';
-import { convertResultsToTable } from '@promptfoo/util/convertEvalResultsToTable';
 import { create } from 'zustand';
 import { persist, subscribeWithSelector } from 'zustand/middleware';
 import logger from '../../../../../logger';
@@ -18,12 +17,10 @@ import type {
   EvalResultsFilterMode,
   EvalTableDTO,
   EvaluateStats,
-  EvaluateSummaryV2,
   EvaluateTable,
   EvaluateTableOutput,
   PromptMetrics,
   RedteamPluginObject,
-  ResultsFile,
   UnifiedConfig,
 } from '@promptfoo/types';
 import type { VisibilityState } from '@tanstack/react-table';
@@ -276,7 +273,6 @@ interface TableState {
 
   table: EvaluateTable | null;
   setTable: (table: EvaluateTable | null) => void;
-  setTableFromResultsFile: (resultsFile: ResultsFile) => Promise<void>;
 
   config: Partial<UnifiedConfig> | null;
   setConfig: (config: Partial<UnifiedConfig> | null) => void;
@@ -546,6 +542,14 @@ const isFilterApplied = (filter: Partial<ResultsFilter> | ResultsFilter): boolea
   return Boolean(filter.value);
 };
 
+const clearFilters = (prevState: TableState) => ({
+  filters: {
+    ...prevState.filters,
+    values: {},
+    appliedCount: 0,
+  },
+});
+
 export const useTableStore = create<TableState>()(
   subscribeWithSelector((set, get) => ({
     evalId: null,
@@ -575,57 +579,6 @@ export const useTableStore = create<TableState>()(
       }));
     },
 
-    setTableFromResultsFile: async (resultsFile: ResultsFile) => {
-      if (resultsFile.version && resultsFile.version >= 4) {
-        const table = convertResultsToTable(resultsFile);
-
-        // Build async options
-        const [redteamOptions, policyIdToNameMap] = await Promise.all([
-          buildRedteamFilterOptions(resultsFile.config, table),
-          extractPolicyIdToNameMap(resultsFile.config.redteam?.plugins ?? []),
-        ]);
-
-        set((prevState) => ({
-          table,
-          version: resultsFile.version,
-          highlightedResultsCount: computeHighlightCount(table),
-          userRatedResultsCount: computeUserRatedCount(table),
-          filters: {
-            ...prevState.filters,
-            options: {
-              metric: computeAvailableMetrics(table),
-              metadata: [],
-              ...redteamOptions,
-            },
-            policyIdToNameMap,
-          },
-        }));
-      } else {
-        const results = resultsFile.results as EvaluateSummaryV2;
-
-        // Build async options
-        const [redteamOptions, policyIdToNameMap] = await Promise.all([
-          buildRedteamFilterOptions(resultsFile.config, results.table),
-          extractPolicyIdToNameMap(resultsFile.config.redteam?.plugins ?? []),
-        ]);
-
-        set((prevState) => ({
-          table: results.table,
-          version: resultsFile.version,
-          highlightedResultsCount: computeHighlightCount(results.table),
-          userRatedResultsCount: computeUserRatedCount(results.table),
-          filters: {
-            ...prevState.filters,
-            options: {
-              metric: computeAvailableMetrics(results.table),
-              metadata: [],
-              ...redteamOptions,
-            },
-            policyIdToNameMap,
-          },
-        }));
-      }
-    },
     config: null,
     setConfig: (config: Partial<UnifiedConfig> | null) => set(() => ({ config })),
 
@@ -964,23 +917,11 @@ export const useTableStore = create<TableState>()(
     },
 
     removeAllFilters: () => {
-      set((prevState) => ({
-        filters: {
-          ...prevState.filters,
-          values: {},
-          appliedCount: 0,
-        },
-      }));
+      set(clearFilters);
     },
 
     resetFilters: () => {
-      set((prevState) => ({
-        filters: {
-          ...prevState.filters,
-          values: {},
-          appliedCount: 0,
-        },
-      }));
+      set(clearFilters);
     },
 
     updateFilter: (filter: ResultsFilter) => {

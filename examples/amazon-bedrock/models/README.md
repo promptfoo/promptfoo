@@ -38,7 +38,7 @@ cd amazon-bedrock/models
 
 This directory contains several example configurations for different Bedrock models:
 
-- [`promptfooconfig.claude.yaml`](promptfooconfig.claude.yaml) - Claude 4.6 Opus, Claude 4.1 Opus, Claude 4 Opus/Sonnet, Claude Haiku 4.5
+- [`promptfooconfig.claude.yaml`](promptfooconfig.claude.yaml) - Claude Opus, Sonnet, and Haiku, including adaptive thinking and inference profiles
 - [`promptfooconfig.openai.yaml`](promptfooconfig.openai.yaml) - OpenAI GPT-OSS models (120B and 20B) with reasoning effort
 - [`promptfooconfig.openai-responses.yaml`](promptfooconfig.openai-responses.yaml) - OpenAI GPT-OSS 120B through the Bedrock Responses API (AWS credentials or `AWS_BEARER_TOKEN_BEDROCK`)
 - [`promptfooconfig.openai-frontier.yaml`](promptfooconfig.openai-frontier.yaml) - OpenAI GPT-6 Sol, GPT-5.6 Terra, and GPT-6 Luna with reasoning, explicit prompt caching, and streaming
@@ -64,7 +64,7 @@ The Converse API example (`promptfooconfig.converse.yaml`) demonstrates the unif
 
 ### Key Features
 
-- **Extended Thinking**: Enable Claude's reasoning capabilities with configurable token budgets
+- **Extended Thinking**: Claude Sonnet 5 uses adaptive thinking with `effort` to control reasoning depth
 - **Unified Interface**: Single API format works across Claude, Nova, Llama, Mistral, and more
 - **Show/Hide Thinking**: Control whether thinking content appears in output with `showThinking`
 
@@ -72,14 +72,18 @@ The Converse API example (`promptfooconfig.converse.yaml`) demonstrates the unif
 
 ```yaml
 providers:
-  - id: bedrock:converse:us.anthropic.claude-sonnet-4-6
-    label: Claude Sonnet 4.6 with Thinking
+  - id: bedrock:converse:us.anthropic.claude-sonnet-5
+    label: Claude Sonnet 5 with Thinking
     config:
       region: us-west-2
       maxTokens: 20000
       thinking:
-        type: enabled
-        budget_tokens: 16000
+        type: adaptive
+        display: summarized
+      # Converse has no typed `effort` option; it is passed through as a raw field.
+      additionalModelRequestFields:
+        output_config:
+          effort: high
       showThinking: true
 ```
 
@@ -97,12 +101,11 @@ The Converse MCP example (`promptfooconfig.converse-mcp.yaml`) demonstrates how 
 
 ```yaml
 providers:
-  - id: bedrock:converse:us.anthropic.claude-sonnet-4-6
-    label: Claude Sonnet 4.6 with MCP
+  - id: bedrock:converse:us.anthropic.claude-sonnet-5
+    label: Claude Sonnet 5 with MCP
     config:
       region: us-east-1
       maxTokens: 1024
-      temperature: 0
       mcp:
         enabled: true
         servers:
@@ -144,7 +147,7 @@ For this example, you'll need to:
 
 ```yaml
 providers:
-  - id: bedrock:kb:us.anthropic.claude-sonnet-4-6
+  - id: bedrock:kb:us.anthropic.claude-sonnet-5
     config:
       region: 'us-east-2' # Change to your region
       knowledgeBaseId: 'YOUR_KNOWLEDGE_BASE_ID' # Replace with your KB ID
@@ -218,7 +221,7 @@ We provide two inference profile examples:
 
    This includes:
    - Multiple inference profiles for different model families
-   - Comparison with direct model IDs
+   - Comparison with a system inference profile
    - Use of inference profiles for grading assertions
    - Various model-specific configurations
 
@@ -229,7 +232,7 @@ We provide two inference profile examples:
    This demonstrates:
    - A realistic customer support use case
    - High availability setup with failover
-   - Comparison between inference profile and direct model access
+   - Comparison between application and system inference profiles
    - Consistent grading using inference profiles
 
 **Note**: Replace the example ARNs with your actual application inference profile ARNs. To create an inference profile, visit the AWS Bedrock console and navigate to the "Application inference profiles" section.

@@ -327,14 +327,10 @@ describe('getNunjucksEngine', () => {
     expect(engine.renderString('Hello {{ name }}', { name: 'World' })).toBe('Hello {{ name }}');
   });
 
-  it('should return a nunjucks environment when isGrader is true, regardless of PROMPTFOO_DISABLE_TEMPLATING', () => {
-    mockProcessEnv({ PROMPTFOO_DISABLE_TEMPLATING: 'true' });
-    const engine = getNunjucksEngine({}, false, true);
-    expect(engine).toBeInstanceOf(nunjucks.Environment);
-    expect(engine.renderString('Hello {{ name }}', { name: 'Grader' })).toBe('Hello Grader');
-  });
-
-  it('should use nunjucks when isGrader is true, even if PROMPTFOO_DISABLE_TEMPLATING is set', () => {
+  it.each([
+    'should return a nunjucks environment when isGrader is true, regardless of PROMPTFOO_DISABLE_TEMPLATING',
+    'should use nunjucks when isGrader is true, even if PROMPTFOO_DISABLE_TEMPLATING is set',
+  ])('%s', () => {
     mockProcessEnv({ PROMPTFOO_DISABLE_TEMPLATING: 'true' });
     const engine = getNunjucksEngine({}, false, true);
     expect(engine).toBeInstanceOf(nunjucks.Environment);
@@ -406,11 +402,13 @@ describe('getNunjucksEngine', () => {
   });
 
   describe('environment variables as globals', () => {
-    it('should add environment variables as globals by default', () => {
+    const verifyEnvironmentGlobals = () => {
       mockProcessEnv({ TEST_VAR: 'test_value' });
       const engine = getNunjucksEngine();
       expect(engine.renderString('{{ env.TEST_VAR }}', {})).toBe('test_value');
-    });
+    };
+
+    it('should add environment variables as globals by default', verifyEnvironmentGlobals);
 
     it('should merge cliState.config.env with process.env', () => {
       const initialConfig = { ...cliState.config };
@@ -428,17 +426,9 @@ describe('getNunjucksEngine', () => {
       cliState.config = initialConfig;
     });
 
-    it('should handle undefined cliState.config', () => {
-      mockProcessEnv({ TEST_VAR: 'test_value' });
-      const engine = getNunjucksEngine();
-      expect(engine.renderString('{{ env.TEST_VAR }}', {})).toBe('test_value');
-    });
+    it('should handle undefined cliState.config', verifyEnvironmentGlobals);
 
-    it('should handle undefined cliState.config.env', () => {
-      mockProcessEnv({ TEST_VAR: 'test_value' });
-      const engine = getNunjucksEngine();
-      expect(engine.renderString('{{ env.TEST_VAR }}', {})).toBe('test_value');
-    });
+    it('should handle undefined cliState.config.env', verifyEnvironmentGlobals);
 
     it('should disable process.env but allow config env variables when PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS is true', () => {
       mockProcessEnv({ TEST_VAR: 'test_value' });

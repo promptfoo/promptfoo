@@ -1,9 +1,25 @@
 import { fetchWithCache } from '../cache';
+import { getEnvString } from '../envars';
 import logger from '../logger';
+import { isCallerAbortError } from '../util/fetch/requestSignal';
+import {
+  isResponseHeadersObserverError,
+  preserveResponseHeadersObserverError,
+} from '../util/fetch/responseHeadersObserver';
 import { normalizeFinishReason } from '../util/finishReason';
 import { OpenAiChatCompletionProvider } from './openai/chat';
-import { calculateOpenAICost, formatOpenAiError, getTokenUsage } from './openai/util';
-import { getRequestTimeoutMs } from './shared';
+import {
+  calculateSafeOpenAICost,
+  formatOpenAiError,
+  getChatCompletionRefusal,
+  getTokenUsageWithRequestCount,
+  isOpenAiErrorOnlyResponse,
+  parseChatCompletionJsonOutput,
+  type ValidatedChatCompletionMessage,
+  validateChatCompletionMessage,
+} from './openai/util';
+import { serializeProvider } from './serialization';
+import { getRequestTimeoutMs, throwIfAborted, waitForPromiseWithAbort } from './shared';
 import type OpenAI from 'openai';
 
 import type {
@@ -13,6 +29,24 @@ import type {
   ProviderOptions,
   ProviderResponse,
 } from '../types/providers';
+
+function getSnowflakeErrorCode(
+  data: { code?: unknown; error_code?: unknown } | null | undefined,
+): string | undefined {
+  const value = data?.code ?? data?.error_code;
+  return (typeof value === 'number' || typeof value === 'string') &&
+    /^[A-Za-z0-9_.-]{1,64}$/.test(String(value))
+    ? String(value)
+    : undefined;
+}
+
+function getSnowflakeOutput(message: ValidatedChatCompletionMessage): string | object {
+  return (
+    message.functionCall ??
+    message.toolCalls ??
+    (typeof message.content === 'string' && message.content.trim() ? message.content : '')
+  );
+}
 
 /**
  * Snowflake Cortex provider extends OpenAI chat completion provider
@@ -45,7 +79,9 @@ import type {
 export class SnowflakeCortexProvider extends OpenAiChatCompletionProvider {
   constructor(modelName: string, providerOptions: ProviderOptions) {
     const accountIdentifier =
-      providerOptions.config?.accountIdentifier || process.env.SNOWFLAKE_ACCOUNT_IDENTIFIER;
+      providerOptions.config?.accountIdentifier ||
+      (providerOptions.env?.SNOWFLAKE_ACCOUNT_IDENTIFIER ??
+        getEnvString('SNOWFLAKE_ACCOUNT_IDENTIFIER'));
 
     if (!accountIdentifier && !providerOptions.config?.apiBaseUrl) {
       throw new Error(
@@ -79,14 +115,7 @@ export class SnowflakeCortexProvider extends OpenAiChatCompletionProvider {
   }
 
   toJSON() {
-    return {
-      provider: 'snowflake',
-      model: this.modelName,
-      config: {
-        ...this.config,
-        ...(this.config.apiKey && { apiKey: undefined }),
-      },
-    };
+    return serializeProvider(this, 'snowflake');
   }
 
   async callApi(
@@ -94,8 +123,13 @@ export class SnowflakeCortexProvider extends OpenAiChatCompletionProvider {
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
+    throwIfAborted(callApiOptions?.abortSignal);
     // Get the request body and config from parent class
-    const { body, config } = await this.getOpenAiBody(prompt, context, callApiOptions);
+    const { body, config } = await waitForPromiseWithAbort(
+      this.getOpenAiBody(prompt, context, callApiOptions),
+      callApiOptions?.abortSignal,
+    );
+    throwIfAborted(callApiOptions?.abortSignal);
 
     // Make the API call to Snowflake Cortex endpoint
     logger.debug('[Snowflake Cortex] Calling API', {
@@ -112,10 +146,14 @@ export class SnowflakeCortexProvider extends OpenAiChatCompletionProvider {
     }
 
     type SnowflakeCortexResponse = OpenAI.ChatCompletion & {
+      code?: number | string;
       error?: {
         code?: string;
         message?: string;
       };
+      error_code?: number | string;
+      message?: string;
+      request_id?: string;
     };
 
     let data: SnowflakeCortexResponse;
@@ -123,9 +161,10 @@ export class SnowflakeCortexProvider extends OpenAiChatCompletionProvider {
     let statusText: string;
     let latencyMs: number | undefined;
     let cached = false;
+    let deleteFromCache: (() => Promise<void>) | undefined;
 
     try {
-      ({ data, cached, status, statusText, latencyMs } =
+      ({ data, cached, status, statusText, latencyMs, deleteFromCache } =
         await fetchWithCache<SnowflakeCortexResponse>(
           `${this.getApiUrl()}/api/v2/cortex/inference:complete`,
           {
@@ -136,86 +175,120 @@ export class SnowflakeCortexProvider extends OpenAiChatCompletionProvider {
               ...config.headers,
             },
             body: JSON.stringify(body),
+            ...(callApiOptions?.abortSignal ? { signal: callApiOptions.abortSignal } : {}),
           },
           getRequestTimeoutMs(),
           'json',
           context?.bustCache ?? context?.debug,
+          undefined,
+          (response) => {
+            if (response.status >= 200 && response.status < 300 && response.headers) {
+              callApiOptions?.onResponseHeaders?.(response.headers);
+            }
+          },
+          callApiOptions?.onResponseHeaders
+            ? (backoff) => callApiOptions.onResponseHeaders?.(backoff.headers, backoff)
+            : undefined,
         ));
-
       if (status < 200 || status >= 300) {
         return {
           error: `API error: ${status} ${statusText}\n${typeof data === 'string' ? data : JSON.stringify(data)}`,
         };
       }
+      if (isOpenAiErrorOnlyResponse(data)) {
+        return { error: formatOpenAiError(data) };
+      }
+      throwIfAborted(callApiOptions?.abortSignal);
     } catch (err) {
+      if (
+        !isResponseHeadersObserverError(callApiOptions?.onResponseHeaders, err) &&
+        isCallerAbortError(err, callApiOptions?.abortSignal)
+      ) {
+        throwIfAborted(callApiOptions?.abortSignal);
+      }
       logger.error(`[Snowflake Cortex] API call error: ${String(err)}`);
-      return {
+      return preserveResponseHeadersObserverError(callApiOptions?.onResponseHeaders, err, {
         error: `API call error: ${String(err)}`,
-      };
+      });
     }
 
-    if (data.error) {
+    if (data?.error) {
       return {
         error: formatOpenAiError(data as OpenAIErrorResponse),
       };
     }
 
-    // Guard against a 200 response with an empty or missing `choices` array
-    // (soft moderation block, upstream hiccup, or n>1 edge cases). Without this,
-    // `data.choices[0]` is undefined and `.message` throws an opaque TypeError.
-    // Mirrors the sibling OpenAI-compatible providers (mistral.ts, ai21.ts).
-    if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+    const choice = Array.isArray(data?.choices) ? data.choices[0] : undefined;
+    const finishReason = normalizeFinishReason(choice?.finish_reason);
+    const tokenUsage = getTokenUsageWithRequestCount(data, cached);
+    const cost = calculateSafeOpenAICost(this.modelName, config, data);
+
+    if (finishReason === 'error') {
+      await deleteFromCache?.();
       return {
-        error: `Malformed response data: ${JSON.stringify(data)}`,
+        error: 'API error: Snowflake provider returned a generation error',
+        tokenUsage,
         cached,
+        latencyMs,
+        cost,
+        finishReason,
+      };
+    }
+
+    const snowflakeErrorCode = getSnowflakeErrorCode(data);
+    if (!choice && typeof data?.message === 'string' && snowflakeErrorCode) {
+      await deleteFromCache?.();
+      return {
+        error: `API error: Snowflake provider returned error code ${snowflakeErrorCode}`,
+        tokenUsage,
+        cached,
+        latencyMs,
+        cost,
+        metadata: { snowflakeErrorCode },
       };
     }
 
     // Process the response (should be OpenAI-compatible)
-    const message = data.choices[0].message;
-    const finishReason = normalizeFinishReason(data.choices[0].finish_reason);
-
-    // Handle tool calls and content
-    let output: string | object = '';
-    const hasFunctionCall = !!(message.function_call && message.function_call.name);
-    const hasToolCalls = Array.isArray(message.tool_calls) && message.tool_calls.length > 0;
-
-    if (hasFunctionCall || hasToolCalls) {
-      // Tool calls always take priority
-      output = hasFunctionCall ? message.function_call! : message.tool_calls!;
-    } else if (message.content && message.content.trim()) {
-      output = message.content;
+    const message = validateChatCompletionMessage(choice?.message, { finishReason });
+    if (!message) {
+      await deleteFromCache?.();
+      return {
+        error: 'Malformed response data: expected choices[0].message',
+        tokenUsage,
+        cached,
+        latencyMs,
+        cost,
+        ...(finishReason && { finishReason }),
+      };
     }
 
-    // Handle structured output
-    if (config.response_format?.type === 'json_schema') {
-      const jsonCandidate =
-        typeof message?.content === 'string'
-          ? message.content
-          : typeof output === 'string'
-            ? output
-            : null;
+    const refusal = getChatCompletionRefusal(message, finishReason);
+    if (refusal) {
+      return {
+        ...refusal,
+        tokenUsage,
+        cached,
+        latencyMs,
+        cost,
+        ...(finishReason && { finishReason }),
+      };
+    }
 
-      if (jsonCandidate) {
-        try {
-          output = JSON.parse(jsonCandidate);
-        } catch (error) {
-          logger.warn(`[Snowflake Cortex] Failed to parse JSON output: ${String(error)}`);
-        }
-      }
+    let output = getSnowflakeOutput(message);
+    if (config.response_format?.type === 'json_schema') {
+      output = parseChatCompletionJsonOutput(
+        message,
+        output,
+        '[Snowflake Cortex] Failed to parse JSON output',
+      );
     }
 
     return {
       output,
-      tokenUsage: getTokenUsage(data, cached),
+      tokenUsage,
       cached,
       latencyMs,
-      cost: calculateOpenAICost(
-        this.modelName,
-        config,
-        data.usage?.prompt_tokens,
-        data.usage?.completion_tokens,
-      ),
+      cost,
       ...(finishReason && { finishReason }),
     };
   }

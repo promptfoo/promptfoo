@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { retryWithDeduplication, sampleArray } from '../../src/util/generation';
 
 describe('retryWithDeduplication', () => {
@@ -71,6 +71,10 @@ describe('retryWithDeduplication', () => {
 });
 
 describe('sampleArray', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it('should return n random items when n is less than array length', () => {
     const array = [1, 2, 3, 4, 5];
     const result = sampleArray(array, 3);
@@ -110,17 +114,21 @@ describe('sampleArray', () => {
     expect(array).toEqual(originalArray);
   });
 
-  it('should return random samples across multiple calls', () => {
-    const array = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
-    const samples = new Set();
+  it('samples every ordered pair equally across the random choices', () => {
+    const random = vi.spyOn(Math, 'random');
+    const samples: string[] = [];
 
-    for (let i = 0; i < 100; i++) {
-      const result = sampleArray(array, 5);
-      samples.add(result.join(','));
+    for (const first of [1 / 6, 1 / 2, 5 / 6]) {
+      for (const second of [1 / 4, 3 / 4]) {
+        random
+          .mockReset()
+          .mockReturnValue(0.5)
+          .mockReturnValueOnce(first)
+          .mockReturnValueOnce(second);
+        samples.push(sampleArray(['a', 'b', 'c'], 2).join(''));
+      }
     }
 
-    // With 100 samples, it's extremely unlikely to get the same sample every time
-    // unless the randomization is not working
-    expect(samples.size).toBeGreaterThan(1);
+    expect(samples.sort()).toEqual(['ab', 'ac', 'ba', 'bc', 'ca', 'cb']);
   });
 });

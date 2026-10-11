@@ -77,9 +77,10 @@ export function calculateWER(reference: string, hypothesis: string): WERResult {
  */
 function normalizeText(text: string): string[] {
   return text
+    .normalize('NFC')
     .toLowerCase()
     .trim()
-    .replace(/[^\w\s]/g, '') // Remove punctuation
+    .replace(/[^\p{L}\p{M}\p{N}\s_]/gu, '') // Remove punctuation, keeping non-ASCII letters
     .split(/\s+/)
     .filter((word) => word.length > 0);
 }

@@ -40,10 +40,7 @@ export function parseFileTransformReference(reference: string): FileTransformRef
 export async function loadTransformModule(
   transform: string | Function | undefined,
 ): Promise<string | Function | undefined> {
-  if (!transform) {
-    return transform;
-  }
-  if (typeof transform === 'function') {
+  if (!transform || typeof transform === 'function') {
     return transform;
   }
   if (typeof transform === 'string' && transform.startsWith('file://')) {

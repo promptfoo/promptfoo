@@ -9,11 +9,13 @@ description: Integrate Langfuse prompts with Promptfoo for LLM testing. Configur
 
 ## Setup
 
-1. Install the Langfuse client SDK:
+1. Install promptfoo and the optional Langfuse client SDK together in your project:
 
    ```bash
-   npm install @langfuse/client
+   npm install promptfoo @langfuse/client@^5.11.1
    ```
+
+   The SDK is not installed by default. Run `npx promptfoo eval` from this project so promptfoo can resolve it. For a global installation, use `npm install -g promptfoo @langfuse/client@^5.11.1`.
 
 2. Set the required environment variables:
 

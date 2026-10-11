@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { Button } from '@app/components/ui/button';
 import {
@@ -259,6 +259,16 @@ function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[]
   const [expandedValues, setExpandedValues] = useState<{ [key: string]: boolean }>({});
   const [copiedAssertions, setCopiedAssertions] = useState<{ [key: string]: boolean }>({});
   const [hoveredAssertion, setHoveredAssertion] = useState<string | null>(null);
+  const copyFeedbackTimers = useRef<Set<ReturnType<typeof setTimeout>> | null>(null);
+
+  useEffect(() => {
+    const timers = new Set<ReturnType<typeof setTimeout>>();
+    copyFeedbackTimers.current = timers;
+    return () => {
+      timers.forEach(clearTimeout);
+      copyFeedbackTimers.current = null;
+    };
+  }, []);
 
   if (!gradingResults) {
     return null;
@@ -273,12 +283,19 @@ function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[]
 
   const copyAssertionToClipboard = async (key: string, text: string, e: React.MouseEvent) => {
     e.stopPropagation();
+    const timers = copyFeedbackTimers.current;
     await navigator.clipboard.writeText(text);
+    // The clipboard write can finish after this mount has been cleaned up.
+    if (!timers || timers !== copyFeedbackTimers.current) {
+      return;
+    }
     setCopiedAssertions((prev) => ({ ...prev, [key]: true }));
 
-    setTimeout(() => {
+    const timer = setTimeout(() => {
+      timers.delete(timer);
       setCopiedAssertions((prev) => ({ ...prev, [key]: false }));
     }, COPY_FEEDBACK_DURATION_MS);
+    timers.add(timer);
   };
 
   return (

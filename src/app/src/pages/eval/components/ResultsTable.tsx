@@ -17,8 +17,13 @@ import { useToast } from '@app/hooks/useToast';
 import { cn } from '@app/lib/utils';
 import { callApi, getApiBaseUrl } from '@app/utils/api';
 import { formatDuration } from '@app/utils/date';
-import { normalizeMediaText, resolveAudioSource, resolveImageSource } from '@app/utils/media';
-import { getActualPrompt } from '@app/utils/providerResponse';
+import {
+  isMediaRef,
+  normalizeMediaText,
+  resolveAudioSource,
+  resolveBlobUri,
+  resolveImageSource,
+} from '@app/utils/media';
 import {
   getIncurredTokenAccounting,
   getPrimaryTokenUsageLabel,
@@ -35,13 +40,14 @@ import {
   type Vars,
 } from '@promptfoo/types';
 import {
-  EVAL_TABLE_MAX_PAGE_SIZE,
   type SubmitRatingAction,
   type SubmitRatingResponse,
   SubmitRatingResponseSchema,
   type SubmitRatingUpdate,
 } from '@promptfoo/types/api/eval';
+import { EVAL_TABLE_MAX_PAGE_SIZE } from '@promptfoo/types/evalConstants';
 import invariant from '@promptfoo/util/invariant';
+import { getActualPrompt } from '@promptfoo/util/providerResponse';
 import {
   createColumnHelper,
   flexRender,
@@ -59,6 +65,7 @@ import { ProviderDisplay } from './ProviderDisplay';
 import { type ProviderDef } from './providerConfig';
 import { type ResultsFilter, useResultsViewSettingsStore, useTableStore } from './store';
 import TruncatedText from './TruncatedText';
+import { useHeaderCollapse } from './useHeaderCollapse';
 import VariableMarkdownCell from './VariableMarkdownCell';
 import type {
   Cell,
@@ -73,7 +80,6 @@ import type { TruncatedTextProps } from './TruncatedText';
 import './ResultsTable.css';
 
 import { NumberInput } from '@app/components/ui/number-input';
-import { isBlobRef, isStorageRef, resolveAudioUrl } from '@app/utils/mediaStorage';
 import { isEncodingStrategy } from '@promptfoo/redteam/constants/strategies';
 import { useMetricsGetter, usePassingTestCounts, usePassRates, useTestCounts } from './hooks';
 import {
@@ -89,62 +95,19 @@ const PAGE_SIZE_OPTIONS = [10, 50, 100, 500, 1000].filter(
   (size) => size <= EVAL_TABLE_MAX_PAGE_SIZE,
 );
 
-/**
- * Renders an audio player for evaluation outputs that may be stored in different representations.
- *
- * This component accepts either:
- * - A storage/blob reference, which is resolved asynchronously, or
- * - Inline base64/data URL audio content, which is used immediately.
- *
- * @param data Audio payload or reference. Supported inputs:
- *   - storage ref/blob ref string understood by `isStorageRef` / `isBlobRef`
- *   - data URL (`data:audio/...`)
- *   - raw base64 audio data
- * @param format Audio MIME subtype used when constructing inline base64 sources and the `<source>` type.
- * Defaults to `'mp3'`. Typical values include `'mp3'`, `'wav'`, `'ogg'`, and `'webm'`.
- */
 function StorageRefAudioPlayer({ data, format = 'mp3' }: { data: string; format?: string }) {
-  const [audioUrl, setAudioUrl] = React.useState<string | null>(null);
-  const [loading, setLoading] = React.useState(isStorageRef(data) || isBlobRef(data));
-
-  React.useEffect(() => {
-    let cancelled = false;
-
-    if (isStorageRef(data) || isBlobRef(data)) {
-      setLoading(true);
-      resolveAudioUrl(data, format).then((url) => {
-        if (!cancelled) {
-          setAudioUrl(url);
-          setLoading(false);
-        }
-      });
-    } else {
-      // Inline base64
-      const url = data.startsWith('data:') ? data : `data:audio/${format};base64,${data}`;
-      setAudioUrl(url);
-      setLoading(false);
-    }
-
-    return () => {
-      cancelled = true;
-    };
-  }, [data, format]);
-
-  if (loading) {
-    return (
-      <div className="flex items-center gap-2 py-0.5">
-        <Spinner className="size-4" />
-        <span className="text-xs text-muted-foreground">Loading audio...</span>
-      </div>
-    );
-  }
+  const audioUrl = isMediaRef(data)
+    ? resolveBlobUri(data)
+    : data.startsWith('data:')
+      ? data
+      : `data:audio/${format};base64,${data}`;
 
   if (!audioUrl) {
     return <span className="text-xs text-destructive">Failed to load audio</span>;
   }
 
   return (
-    <audio controls style={{ maxWidth: '100%', height: '32px' }}>
+    <audio key={audioUrl} controls style={{ maxWidth: '100%', height: '32px' }}>
       <source src={audioUrl} type={`audio/${format}`} />
       Your browser does not support the audio element.
     </audio>
@@ -360,7 +323,7 @@ function renderMediaVariableCell({
 
   const { type: mediaType, format = '' } = mediaMetadata;
   const normalizedValue = normalizeMediaText(value);
-  const isRefValue = isBlobRef(value) || isStorageRef(value);
+  const isRefValue = isMediaRef(value);
   const audioSource =
     mediaType === 'audio'
       ? resolveAudioSource(isRefValue ? { format, blobRef: value } : { data: value, format })
@@ -453,14 +416,10 @@ function renderDecodedVariableCell({
 
   const isAudioContent =
     strategyId === 'audio' ||
-    (typeof value === 'string' &&
-      (isStorageRef(value) || isBlobRef(value)) &&
-      MEDIA_MIME_PATTERNS.audio.test(value));
+    (typeof value === 'string' && isMediaRef(value) && MEDIA_MIME_PATTERNS.audio.test(value));
   const isImageContent =
     strategyId === 'image' ||
-    (typeof value === 'string' &&
-      (isStorageRef(value) || isBlobRef(value)) &&
-      MEDIA_MIME_PATTERNS.image.test(value));
+    (typeof value === 'string' && isMediaRef(value) && MEDIA_MIME_PATTERNS.image.test(value));
 
   return (
     <div className="cell" data-capture="true">
@@ -470,7 +429,7 @@ function renderDecodedVariableCell({
         </div>
       ) : isImageContent ? (
         <div>
-          {typeof value === 'string' && (isStorageRef(value) || isBlobRef(value)) ? (
+          {typeof value === 'string' && isMediaRef(value) ? (
             <span className="text-xs text-muted-foreground">
               Image preview not yet supported for storage refs
             </span>
@@ -1093,7 +1052,7 @@ function applyPersistedRatingResult({
   });
 }
 
-class ConfirmedRatingPersistenceError extends Error {}
+class RatingPersistenceError extends Error {}
 
 function getSubmitRatingIntent(
   isPass?: boolean | null,
@@ -1155,14 +1114,24 @@ async function saveManualRating({
       );
 
   if (!response.ok) {
-    if (
-      response.status >= 400 &&
-      response.status < 500 &&
-      ![408, 425, 429].includes(response.status)
-    ) {
-      throw new ConfirmedRatingPersistenceError('Network response was not ok');
+    let detail = '';
+    try {
+      const body: unknown = await response.json();
+      if (body && typeof body === 'object') {
+        const { error, message } = body as { error?: unknown; message?: unknown };
+        const candidate = typeof error === 'string' ? error : message;
+        // Use only a short plain-text message, never an arbitrary body, HTML page, or object.
+        if (typeof candidate === 'string' && !/[<>]/.test(candidate)) {
+          detail = candidate.replace(/\s+/g, ' ').trim().slice(0, 200);
+        }
+      }
+    } catch {
+      // Proxy errors and empty or unreadable bodies must retain their HTTP metadata.
     }
-    throw new Error(`Ambiguous rating response status: ${response.status}`);
+    const status = `HTTP ${response.status}${response.statusText ? ` ${response.statusText}` : ''}`;
+    throw new RatingPersistenceError(
+      `Could not save rating (${status})${detail ? `: ${detail}` : ''}`,
+    );
   }
 
   return isVersion4 && typeof response.json === 'function'
@@ -1681,12 +1650,16 @@ function ResultsTableHeader({
   hasMinimalScrollRoom: boolean;
   zoom: number;
 }) {
+  const collapsed = useHeaderCollapse(stickyHeader);
+
   return (
     <div
       data-testid="results-table-header"
+      data-header-collapsed={collapsed}
       className={cn(
         'relative -mx-4 overflow-hidden px-4',
         stickyHeader && 'results-table-sticky',
+        stickyHeader && collapsed !== undefined && 'results-table-scroll-fallback',
         hasMinimalScrollRoom && 'minimal-scroll-room',
       )}
     >
@@ -1926,8 +1899,17 @@ function ResultsTable({
           }
         } catch (error) {
           console.error('Failed to update table:', error);
-          if (error instanceof ConfirmedRatingPersistenceError) {
-            persistedTable = replaceRatingOutput(currentTable, cellKey, existingOutput);
+          // A lost response may follow a committed write. Restore the last confirmed
+          // value until the refresh reconciles it; failed refreshes must not strand an
+          // unconfirmed optimistic rating or make it the baseline for later edits.
+          persistedTable = replaceRatingOutput(currentTable, cellKey, existingOutput);
+          if (isScopeActive()) {
+            showToast(
+              error instanceof RatingPersistenceError
+                ? error.message
+                : 'Could not confirm rating save. Refresh to check the saved value.',
+              'error',
+            );
           }
         }
         const persistedOutput =

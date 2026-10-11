@@ -5,6 +5,7 @@ You can run this example with:
 ```bash
 npx promptfoo@latest init --example claude-agent-sdk/skill-comparison
 cd claude-agent-sdk/skill-comparison
+npm install promptfoo @anthropic-ai/claude-agent-sdk@^0.3.273
 ```
 
 ## Overview

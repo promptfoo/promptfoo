@@ -1,3 +1,5 @@
+const { createLoggerModule } = await vi.hoisted(async () => import('../factories/logger'));
+
 import fs from 'fs/promises';
 import path from 'path';
 
@@ -40,14 +42,7 @@ vi.mock('../../src/util/fetch/index', async (importOriginal) => {
 });
 
 vi.mock('fs/promises');
-vi.mock('../../src/logger', () => ({
-  default: {
-    debug: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  },
-}));
+vi.mock('../../src/logger', () => createLoggerModule());
 vi.mock('path', async () => ({
   ...(await vi.importActual('path')),
   resolve: vi.fn(),
@@ -474,6 +469,22 @@ describe('init command', () => {
     });
 
     describe('alias resolution', () => {
+      it.each(['anthropic/opus-4-6-coding', 'anthropic/opus-4-8-coding'])(
+        'downloads the maintained Opus example for %s',
+        async (exampleName) => {
+          mockFetchWithProxy.mockRejectedValue(new Error('404 Not Found'));
+          vi.mocked(confirm).mockResolvedValue(false);
+
+          const result = await init.handleExampleDownload('.', exampleName);
+
+          expect(result).toBe('anthropic/opus-5-coding');
+          expect(mockFetchWithProxy).toHaveBeenCalled();
+          for (const [url] of mockFetchWithProxy.mock.calls) {
+            expect(url.toString()).toContain('/contents/examples/anthropic/opus-5-coding?ref=');
+          }
+        },
+      );
+
       it('should resolve old example name to new name via EXAMPLE_ALIASES', async () => {
         // Download will fail, but we're testing alias resolution, not download
         mockFetchWithProxy.mockRejectedValue(new Error('404 Not Found'));
@@ -504,6 +515,40 @@ describe('init command', () => {
         expect(logger.info).toHaveBeenCalledWith(
           expect.stringContaining('dbrx-benchmark was removed because DBRX is no longer available'),
         );
+      });
+
+      it('downloads the maintained Python assertions example for the removed Hermeneutic name', async () => {
+        const filename = 'promptfooconfig-external.yaml';
+        const fileUrl = `https://example.com/${filename}`;
+        const config = 'description: Python assertions';
+        mockFetchWithProxy
+          .mockResolvedValueOnce(
+            createMockResponse({
+              json: () =>
+                Promise.resolve([{ type: 'file', name: filename, download_url: fileUrl }]),
+            }),
+          )
+          .mockResolvedValueOnce(createMockResponse({ text: () => Promise.resolve(config) }));
+        vi.mocked(fs.readdir).mockResolvedValue([]);
+
+        expect(await init.handleExampleDownload('.', 'integration-hermeneutic')).toBe(
+          'eval-python-assert',
+        );
+        expect(mockFetchWithProxy).toHaveBeenCalledTimes(2);
+        expect(new URL(mockFetchWithProxy.mock.calls[0][0].toString()).pathname).toBe(
+          '/repos/promptfoo/promptfoo/contents/examples/eval-python-assert',
+        );
+        expect(mockFetchWithProxy).toHaveBeenNthCalledWith(2, fileUrl);
+        expect(fs.writeFile).toHaveBeenCalledWith(
+          path.join('eval-python-assert', filename),
+          config,
+        );
+        expect(logger.info).toHaveBeenCalledWith(
+          expect.stringContaining(
+            "The Hermeneutic integration was removed. Use the maintained Python assertion example for custom output checks. Downloading 'eval-python-assert' instead.",
+          ),
+        );
+        expect(confirm).not.toHaveBeenCalled();
       });
 
       it('should download using the resolved alias name', async () => {

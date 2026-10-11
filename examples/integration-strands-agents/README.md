@@ -6,6 +6,8 @@ This example demonstrates how to evaluate [Strands Agents SDK](https://github.co
 
 You can run this example with:
 
+On Windows (PowerShell), use `npx.cmd` instead of `npx` for the Promptfoo commands in this guide.
+
 ```bash
 npx promptfoo@latest init --example integration-strands-agents
 cd integration-strands-agents
@@ -22,26 +24,45 @@ This example showcases:
 
 ## Prerequisites
 
-- Python 3.9+
+- Python 3.10+
 - [OpenAI API key](https://platform.openai.com/api-keys) (default) or other supported provider
 
 ## Setup
 
 ### 1. Install Python dependencies
 
+On macOS/Linux:
+
 ```bash
-pip install -r requirements.txt
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
 ```
 
-This installs:
+On Windows (PowerShell):
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+$env:PROMPTFOO_PYTHON = (Resolve-Path .\.venv\Scripts\python.exe).Path
+```
+
+This installs Strands 1.56 or newer within the 1.x release series:
 
 - [`strands-agents[openai]`](https://pypi.org/project/strands-agents/) - The Strands Agents SDK with OpenAI support
-- [`pydantic`](https://docs.pydantic.dev/) - Data validation library required by Strands
 
 ### 2. Set environment variables
 
+On macOS/Linux:
+
 ```bash
 export OPENAI_API_KEY=your-api-key-here
+```
+
+On Windows (PowerShell):
+
+```powershell
+$env:OPENAI_API_KEY = "your-api-key-here"
 ```
 
 ### Alternative: use Anthropic or Bedrock
@@ -49,26 +70,30 @@ export OPENAI_API_KEY=your-api-key-here
 [Strands supports multiple model providers](https://strandsagents.com/latest/user-guide/concepts/model-providers/). To use [Anthropic](https://www.anthropic.com/):
 
 ```bash
-pip install 'strands-agents[anthropic]'
-export ANTHROPIC_API_KEY=your-key
+python -m pip install "strands-agents[anthropic]>=1.56.0,<2"
 ```
 
-Then modify `agent.py` to use [`AnthropicModel`](https://strandsagents.com/latest/user-guide/concepts/model-providers/anthropic/) instead of [`OpenAIModel`](https://strandsagents.com/latest/user-guide/concepts/model-providers/openai/).
+On Windows, run the install command with `.\.venv\Scripts\python.exe -m pip` instead of `python -m pip`. Set `ANTHROPIC_API_KEY` using the syntax for your shell shown above. Then modify `agent.py` to use [`AnthropicModel`](https://strandsagents.com/latest/user-guide/concepts/model-providers/anthropic/) instead of [`OpenAIModel`](https://strandsagents.com/latest/user-guide/concepts/model-providers/openai/).
 
-To use [Amazon Bedrock](https://strandsagents.com/latest/user-guide/concepts/model-providers/amazon-bedrock/):
+Amazon Bedrock support is included in the base SDK; no additional Python package is required. Configure AWS credentials, a region, and access to your chosen Bedrock model. In `agent.py`, replace the OpenAI import and model construction with:
 
-```bash
-pip install 'strands-agents[bedrock]'
+```python
+from strands.models import BedrockModel
+
+# Inside create_agent(): Bedrock parameters are top-level keyword arguments.
+model = BedrockModel(model_id=model_id, temperature=0.7)
 ```
+
+Set `providers[0].config.model_id` in `promptfooconfig.yaml` to a Bedrock model or inference-profile ID available in your region. Also update the `gpt-4o-mini` defaults in `agent.py` and `agent_provider.py` if you want standalone calls or calls without a configured model to use Bedrock. The optional standalone checks in those files currently require `OPENAI_API_KEY`; remove that OpenAI-specific check when adapting them for AWS credentials. See the [Strands Bedrock guide](https://strandsagents.com/docs/user-guide/sdk/model-providers/amazon-bedrock/) for AWS setup and supported model IDs.
 
 ## Running the example
 
 ```bash
 # Run evaluation
-npx promptfoo eval
+npx promptfoo@latest eval --no-cache
 
 # View results in the web UI
-npx promptfoo view
+npx promptfoo@latest view
 ```
 
 ## How it works

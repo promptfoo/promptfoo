@@ -508,7 +508,7 @@ export async function createDummyFiles(
           'anthropic:messages:claude-fable-5',
           'anthropic:messages:claude-opus-5-5',
           'anthropic:messages:claude-opus-4-8',
-          'anthropic:messages:claude-sonnet-5',
+          'anthropic:messages:claude-sonnet-5-5',
           'anthropic:messages:claude-sonnet-4-6',
           'anthropic:messages:claude-opus-4-6',
           'anthropic:messages:claude-haiku-4-5',
@@ -567,15 +567,15 @@ export async function createDummyFiles(
       },
       {
         name: '[AWS Bedrock] Claude, Llama, Titan, ...',
-        value: ['bedrock:us.anthropic.claude-sonnet-4-5-20250929-v1:0'],
+        value: ['bedrock:us.anthropic.claude-sonnet-5'],
       },
       {
-        name: '[Cohere] Command R, Command R+, ...',
-        value: ['cohere:command-r', 'cohere:command-r-plus'],
+        name: '[Cohere] Command A+, Command A, ...',
+        value: ['cohere:command-a-plus-05-2026', 'cohere:command-a-03-2025'],
       },
       {
         name: '[Ollama] Llama, Qwen, Phi, ...',
-        value: ['ollama:chat:llama3.3', 'ollama:chat:phi4'],
+        value: ['ollama:chat:llama3.2:3b', 'ollama:chat:phi4'],
       },
       {
         name: '[WatsonX] Llama, IBM Granite, ...',

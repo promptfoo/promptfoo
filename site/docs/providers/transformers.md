@@ -9,11 +9,15 @@ The Transformers.js provider runs ONNX models locally in Node.js using [Transfor
 
 ## Installation
 
-Transformers.js is an optional dependency (~200MB for ONNX runtime):
+Transformers.js and its ONNX runtimes are not included in the default install. Install the runtime alongside Promptfoo in your project:
 
 ```bash
-npm install @huggingface/transformers
+npm install promptfoo @huggingface/transformers@^4.0.0
 ```
+
+For a global installation, use `npm install -g promptfoo @huggingface/transformers@^4.0.0`.
+
+For a one-off eval, run `npx --package=promptfoo --package=@huggingface/transformers@^4.0.0 promptfoo eval -c /absolute/path/to/promptfooconfig.yaml` from an empty directory outside an existing npm project, with neither package installed locally. If either package is already installed in your project, use the project installation command above. Model files are downloaded separately on first use.
 
 ## Quick Start
 
@@ -129,14 +133,14 @@ assert:
 
 - **Caching:** Pipelines are cached after first load. Initial model download may take time, but subsequent runs are fast.
 - **Quantization:** Use `dtype: q4` or `dtype: q8` for faster inference and lower memory. Use `dtype: q4f16` for WebGPU-optimized quantization.
-- **WebGPU:** v4 includes a new WebGPU runtime written in C++ with significantly improved performance. Use `device: webgpu` on supported systems.
+- **WebGPU:** v4 includes a WebGPU runtime written in C++ with improved performance. Use `device: webgpu` on supported systems.
 - **Concurrency:** For limited RAM, use `promptfoo eval -j 1` to run serially.
 
 ## Troubleshooting
 
 | Problem                  | Solution                                                                                                                                                |
 | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Dependency not installed | Run `npm install @huggingface/transformers`                                                                                                             |
+| Dependency not installed | Follow the [installation instructions](#installation) to install the runtime alongside Promptfoo.                                                       |
 | Model not found          | Verify model exists at [HuggingFace](https://huggingface.co/models?library=transformers.js) with ONNX weights. Try `Xenova` or `onnx-community` models. |
 | Out of memory            | Use `dtype: q4`, run with `-j 1`, or try smaller models                                                                                                 |
 | Slow first run           | Models download on first use. Pre-download with `await pipeline('feature-extraction', 'model-name')`                                                    |

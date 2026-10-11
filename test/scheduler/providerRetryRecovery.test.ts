@@ -279,7 +279,7 @@ describe('scheduler recovery outside provider transport retries', () => {
     expect(send).toHaveBeenCalledTimes(2);
   });
 
-  it.each(['GET', 'PUT', 'get'])('preserves n8n %s embedded-error recovery', async (method) => {
+  it.each(['GET', 'PUT', 'get'])('does not replay n8n %s embedded errors', async (method) => {
     const fetch = vi
       .fn()
       .mockImplementation(async () =>
@@ -289,10 +289,32 @@ describe('scheduler recovery outside provider transport retries', () => {
     const result = await invoke(
       new N8nProvider('https://retry.fixture.test/n8n', { config: { method, maxRetries: 1 } }),
     );
-    expect(result.error).toBeUndefined();
-    expect(result.output).toBe('recovered');
-    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(result.error).toContain('Rate limit exceeded');
+    expect(fetch).toHaveBeenCalledOnce();
   });
+
+  it.each(['GET', 'PUT', 'POST', 'PATCH', 'get'])(
+    'does not replay n8n %s after a response body stream failure',
+    async (method) => {
+      const fetch = vi.fn().mockImplementation(
+        async () =>
+          new Response(
+            new ReadableStream({
+              start(controller) {
+                controller.error(new Error('ECONNRESET during body read'));
+              },
+            }),
+            { status: 200 },
+          ),
+      );
+      vi.stubGlobal('fetch', fetch);
+      const result = await invoke(
+        new N8nProvider('https://retry.fixture.test/n8n', { config: { method, maxRetries: 3 } }),
+      );
+      expect(result.error).toContain('ECONNRESET during body read');
+      expect(fetch).toHaveBeenCalledOnce();
+    },
+  );
 
   it('preserves a TTS throttle reported in a non-429 error body', async () => {
     const fetch = vi
@@ -379,7 +401,7 @@ describe('scheduler recovery outside provider transport retries', () => {
     },
   );
 
-  it('rechecks n8n method ownership and preserves explicit no-replay for body errors', async () => {
+  it('keeps n8n webhook retry ownership for every HTTP method', async () => {
     const fetch = vi.fn().mockImplementation(async () => Response.json(failed));
     vi.stubGlobal('fetch', fetch);
     const provider = new N8nProvider('https://retry.fixture.test/n8n', {
@@ -387,7 +409,7 @@ describe('scheduler recovery outside provider transport retries', () => {
     });
     expect(provider.handlesOwnRetries).toBe(true);
     Object.assign(provider.config, { method: 'get' });
-    expect(provider.handlesOwnRetries).toBe(false);
+    expect(provider.handlesOwnRetries).toBe(true);
     Object.assign(provider.config, { method: 'patch' });
     const result = await invoke(provider);
     expect(result.error).toContain('Rate limit exceeded');

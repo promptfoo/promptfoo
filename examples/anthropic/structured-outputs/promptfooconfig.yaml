@@ -23,7 +23,7 @@ prompts:
 
 providers:
   # JSON outputs - Inline schema
-  - id: anthropic:messages:claude-sonnet-4-6
+  - id: anthropic:messages:claude-sonnet-5
     label: inline-schema
     config:
       max_tokens: 2048
@@ -67,25 +67,27 @@ providers:
           additionalProperties: false
 
   # JSON outputs - External file
-  - id: anthropic:messages:claude-sonnet-4-6
+  - id: anthropic:messages:claude-sonnet-5
     label: external-file
     config:
       max_tokens: 2048
       output_format: file://output_format.json
 
   # JSON outputs - Nested file reference (format file references schema file)
-  - id: anthropic:messages:claude-sonnet-4-6
+  - id: anthropic:messages:claude-sonnet-5
     label: nested-file-reference
     config:
       max_tokens: 2048
       output_format: file://nested_format.json
 
   # Strict tool use - Ensure tool parameters exactly match schema
-  - id: anthropic:messages:claude-sonnet-4-6
+  - id: anthropic:messages:claude-sonnet-5
+    label: strict-tool
     config:
       max_tokens: 2048
       tool_choice:
-        type: any
+        type: tool
+        name: book_demo
       tools:
         - name: book_demo
           description: Book a demo session for a customer
@@ -145,7 +147,7 @@ providers:
             additionalProperties: false
 
 tests:
-  # Simple test that works for both providers
+  # Customer details should appear in both JSON and tool-call outputs.
   - description: Should extract customer information
     assert:
       - type: contains

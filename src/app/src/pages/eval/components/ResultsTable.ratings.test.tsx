@@ -15,7 +15,8 @@ vi.mock('@app/utils/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@app/utils/api')>()),
   callApi: vi.fn(),
 }));
-vi.mock('@app/hooks/useToast', () => ({ useToast: () => ({ showToast: vi.fn() }) }));
+const showToast = vi.hoisted(() => vi.fn());
+vi.mock('@app/hooks/useToast', () => ({ useToast: () => ({ showToast }) }));
 vi.mock('@app/hooks/useCloudConfig', () => ({ default: () => ({ data: null }) }));
 
 const initialTableState = useTableStore.getState();
@@ -48,6 +49,7 @@ const table: EvaluateTable = {
 
 beforeEach(() => {
   resetCallApiMock();
+  showToast.mockReset();
   useTableStore.setState({ ...initialTableState, ratingQueues: new Map() }, true);
   useResultsViewSettingsStore.setState(initialViewState, true);
 });
@@ -989,7 +991,7 @@ it.each(
     expect(useTableStore.getState().table?.body[0].outputs[0]).toMatchObject({
       pass: true,
       score: 1,
-      gradingResult: { comment: outcome === 'rejected' ? '' : 'Queued comment' },
+      gradingResult: { comment: '' },
     });
   },
 );
@@ -1052,5 +1054,116 @@ it('clears a queued rating on the second click after another cell rerenders the 
   expect(useTableStore.getState().table?.body[1].outputs[0]).toMatchObject({
     pass: true,
     score: 1,
+  });
+});
+
+it.each([
+  {
+    status: 403,
+    statusText: 'Forbidden',
+    body: { error: 'Rating access denied' },
+    detail: ': Rating access denied',
+  },
+  {
+    status: 500,
+    statusText: 'Internal Server Error',
+    body: { message: 'Please try again' },
+    detail: ': Please try again',
+  },
+  { status: 503, statusText: 'Service Unavailable', body: '<html>proxy error</html>', detail: '' },
+  {
+    status: 422,
+    statusText: '',
+    body: { error: { message: 'do not stringify objects' } },
+    detail: '',
+  },
+  {
+    status: 400,
+    statusText: 'Bad Request',
+    body: { error: '  first\nsecond  ' },
+    detail: ': first second',
+  },
+  {
+    status: 400,
+    statusText: 'Bad Request',
+    body: { error: 'x'.repeat(500) },
+    detail: `: ${'x'.repeat(200)}`,
+  },
+])(
+  'restores a failed rating and reports safe HTTP $status metadata when refresh also fails',
+  async ({ status, statusText, body, detail }) => {
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const user = userEvent.setup();
+    useTableStore.setState({
+      evalId: 'failed-save',
+      table: structuredClone(table),
+      config: {},
+      version: 4,
+      filteredResultsCount: 1,
+      totalResultsCount: 1,
+    });
+    mockCallApiRoutes([
+      {
+        path: '/eval/failed-save/results/result-id/rating',
+        method: 'POST',
+        status,
+        statusText,
+        response: body,
+      },
+      { path: '/eval/failed-save/table?offset=0&limit=50&filterMode=all', status: 500 },
+    ]);
+    renderRatingTable();
+    await user.click(screen.getByRole('button', { name: 'Mark test failed' }));
+    await waitFor(() => expect(callApi).toHaveBeenCalledTimes(2));
+    expect(useTableStore.getState().table?.body[0].outputs[0]).toEqual(table.body[0].outputs[0]);
+    const message = `Could not save rating (HTTP ${status}${statusText ? ` ${statusText}` : ''})${detail}`;
+    expect(showToast).toHaveBeenCalledWith(message, 'error');
+    expect(logged).toHaveBeenCalledWith(
+      'Failed to update table:',
+      expect.objectContaining({ message }),
+    );
+  },
+);
+
+it('restores the last confirmed rating after a network failure and reconciles a later successful refresh', async () => {
+  vi.spyOn(console, 'error').mockImplementation(() => {});
+  const user = userEvent.setup();
+  useTableStore.setState({
+    evalId: 'lost-response',
+    table: structuredClone(table),
+    config: {},
+    version: 4,
+    filteredResultsCount: 1,
+    totalResultsCount: 1,
+  });
+  const saved = structuredClone(table);
+  saved.body[0].outputs[0].pass = false;
+  saved.body[0].outputs[0].score = 0;
+  mockCallApiRoutes([
+    {
+      path: '/eval/lost-response/results/result-id/rating',
+      method: 'POST',
+      rejectWith: new Error('Connection lost after commit'),
+    },
+    { path: '/eval/lost-response/table?offset=0&limit=50&filterMode=all', status: 500 },
+    {
+      path: '/eval/lost-response/table?offset=0&limit=50&filterMode=all',
+      response: { table: saved, config: {}, version: 4, totalCount: 1, filteredCount: 1 },
+    },
+  ]);
+  renderRatingTable();
+  await user.click(screen.getByRole('button', { name: 'Mark test failed' }));
+  await waitFor(() => expect(callApi).toHaveBeenCalledTimes(2));
+  expect(useTableStore.getState().table?.body[0].outputs[0]).toEqual(table.body[0].outputs[0]);
+  expect(showToast).toHaveBeenCalledWith(
+    'Could not confirm rating save. Refresh to check the saved value.',
+    'error',
+  );
+  await act(async () => {
+    await useTableStore.getState().fetchEvalData('lost-response');
+  });
+  expect(useTableStore.getState().table?.body[0].outputs[0]).toMatchObject({
+    pass: false,
+    score: 0,
   });
 });

@@ -179,5 +179,4 @@ export interface McpConfigParsed extends McpRequestOptions, z.output<typeof McpC
 export const McpConfigInputJsonSchema = z.toJSONSchema(McpConfigInputSchema, {
   target: 'draft-07',
   io: 'input',
-  unrepresentable: 'throw',
 });

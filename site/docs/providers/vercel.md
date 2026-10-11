@@ -2,12 +2,13 @@
 title: Vercel AI Gateway
 sidebar_label: Vercel AI Gateway
 sidebar_position: 48
-description: Access OpenAI, Anthropic, Google, and 20+ AI providers through Vercel's unified AI Gateway. Supports text generation, streaming, structured output, and embeddings.
+description: Access language and embedding models through Vercel's unified AI Gateway
 ---
 
 # Vercel AI Gateway
 
-[Vercel AI Gateway](https://vercel.com/docs/ai-gateway) provides a unified interface to access AI models from 20+ providers through a single API. This provider uses the official [Vercel AI SDK](https://ai-sdk.dev/).
+[Vercel AI Gateway](https://vercel.com/docs/ai-gateway) provides a unified interface to access
+models through a single API. This provider uses the official [Vercel AI SDK](https://ai-sdk.dev/).
 
 When [tracing](/docs/tracing/) is enabled, Promptfoo automatically turns on the AI SDK's built-in tracing for text generation, streaming, structured output, and embeddings. SDK spans inherit the current evaluation trace, including direct provider calls that supply a `traceparent`. Prompt and response content are not recorded. If you call the SDK directly from a [`file://` custom provider](/docs/providers/custom-api/), enable `experimental_telemetry` yourself; Promptfoo's [trajectory assertions](/docs/configuration/expected-outputs/deterministic/#trajectorytool-used) can normalize its tool-call spans from `ai.toolCall.name` plus the matching `ai.toolCall.args`, `ai.toolCall.arguments`, or `ai.toolCall.input` attributes.
 
@@ -30,7 +31,7 @@ The Vercel provider uses the format: `vercel:<provider>/<model>`
 ```yaml
 providers:
   - vercel:openai/gpt-4o-mini
-  - vercel:anthropic/claude-sonnet-4.5
+  - vercel:anthropic/claude-sonnet-5
   - vercel:google/gemini-2.5-flash
 ```
 
@@ -47,7 +48,7 @@ providers:
 
 ### Basic Configuration
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: vercel:openai/gpt-4o-mini
     config:
@@ -57,9 +58,9 @@ providers:
 
 ### Full Configuration Options
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
-  - id: vercel:anthropic/claude-sonnet-4.5
+  - id: vercel:openai/gpt-4o-mini
     config:
       # Authentication
       apiKey: '{{env.VERCEL_AI_GATEWAY_API_KEY}}'
@@ -83,6 +84,8 @@ providers:
       # Streaming
       streaming: true
 ```
+
+When using Claude 5, omit `temperature`, `topP`, and `topK`.
 
 ### Configuration Parameters
 
@@ -109,6 +112,7 @@ providers:
 Generate structured JSON output by providing a JSON schema:
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: vercel:openai/gpt-4o
     config:
@@ -144,9 +148,9 @@ tests:
 
 Use Vercel's streaming API for text generation. Promptfoo collects the chunks and runs assertions on the completed response:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
-  - id: vercel:anthropic/claude-sonnet-4.5
+  - id: vercel:anthropic/claude-sonnet-5
     config:
       streaming: true
       maxTokens: 2000
@@ -156,20 +160,15 @@ The provider normalizes the AI SDK's `tool-calls` and `content-filter` finish re
 
 ## Supported Providers
 
-The Vercel AI Gateway supports models from these providers:
+Query Vercel's public model catalog for IDs, capabilities, and pricing:
 
-| Provider   | Example Models                                              |
-| ---------- | ----------------------------------------------------------- |
-| OpenAI     | `openai/gpt-5`, `openai/o3-mini`, `openai/gpt-4o-mini`      |
-| Anthropic  | `anthropic/claude-sonnet-4.5`, `anthropic/claude-haiku-4.5` |
-| Google     | `google/gemini-2.5-flash`, `google/gemini-2.5-pro`          |
-| Mistral    | `mistral/mistral-large`, `mistral/magistral-medium`         |
-| Cohere     | `cohere/command-a`                                          |
-| DeepSeek   | `deepseek/deepseek-r1`, `deepseek/deepseek-v3`              |
-| Perplexity | `perplexity/sonar-pro`, `perplexity/sonar-reasoning`        |
-| xAI        | `xai/grok-3`, `xai/grok-4`                                  |
+```bash
+curl -fsS https://ai-gateway.vercel.sh/v1/models
+```
 
-For a complete list, see the [Vercel AI Gateway documentation](https://vercel.com/docs/ai-gateway/models-and-providers).
+The endpoint requires no authentication. See the
+[Vercel AI Gateway documentation](https://vercel.com/docs/ai-gateway/models-and-providers)
+for response fields and filtering examples.
 
 ## Embedding Models
 
@@ -213,13 +212,14 @@ Supported embedding models:
 ### Multi-Provider Comparison
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: vercel:openai/gpt-4o-mini
     config:
       temperature: 0.7
-  - id: vercel:anthropic/claude-sonnet-4.5
+  - id: vercel:anthropic/claude-sonnet-5
     config:
-      temperature: 0.7
+      maxTokens: 1000
   - id: vercel:google/gemini-2.5-flash
     config:
       temperature: 0.7
@@ -238,6 +238,7 @@ tests:
 ### JSON Response with Validation
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: vercel:openai/gpt-4o
     config:

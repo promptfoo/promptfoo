@@ -1,8 +1,5 @@
-import type { Server } from 'node:http';
-
 import { eq, sql } from 'drizzle-orm';
-import request from 'supertest';
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AssertionsResult } from '../../src/assertions/assertionsResult';
 import { getDb } from '../../src/database';
 import { updateSignalFile } from '../../src/database/signal';
@@ -18,6 +15,7 @@ import { STRIPPED_TABLE_CELL_PROMPT } from '../../src/util/eval/evalTableUtils';
 import invariant from '../../src/util/invariant';
 import { createEvaluateResult } from '../factories/eval';
 import EvalFactory from '../factories/evalFactory';
+import { setupTestServer } from '../util/testServer';
 
 vi.mock('../../src/database/signal', async () => {
   const actual = await vi.importActual('../../src/database/signal');
@@ -28,28 +26,9 @@ vi.mock('../../src/database/signal', async () => {
 });
 
 describe('eval routes', () => {
-  let api: ReturnType<typeof request.agent>;
-  let server: Server;
   const testEvalIds = new Set<string>();
 
-  beforeAll(async () => {
-    await runDbMigrations();
-    await new Promise<void>((resolve, reject) => {
-      server = createApp().listen(0, '127.0.0.1', (error?: Error) =>
-        error ? reject(error) : resolve(),
-      );
-    });
-    api = request.agent(server);
-  });
-
-  afterAll(async () => {
-    if (!server.listening) {
-      return;
-    }
-    await new Promise<void>((resolve, reject) => {
-      server.close((error) => (error ? reject(error) : resolve()));
-    });
-  });
+  const api = setupTestServer(createApp, runDbMigrations);
 
   afterEach(async () => {
     vi.restoreAllMocks();
@@ -380,6 +359,83 @@ describe('eval routes', () => {
   });
 
   describe('post("/:evalId/results/:id/rating")', () => {
+    it.each(['rate', undefined] as const)(
+      'redacts credentials at the rating transaction boundary (action: %s)',
+      async (ratingAction) => {
+        const eval_ = await EvalFactory.create();
+        testEvalIds.add(eval_.id);
+        const [result] = await eval_.getResults();
+        invariant(result?.id, 'Result is required');
+        const resultId = result.id;
+        const credential = 'fixture-rating-credential';
+        const original: GradingResult = {
+          pass: true,
+          score: 1,
+          reason: 'Original automated result',
+          assertion: {
+            type: 'is-json',
+            value: { type: 'object', properties: { token: { type: 'string' } } },
+            provider: { id: 'openai:example', config: { apiKey: credential } },
+          },
+        };
+        // Exercise a historical row as well as fresh input: the private restoration
+        // snapshot must not copy credentials into another persisted field.
+        await (await getDb())
+          .update(evalResultsTable)
+          .set({ gradingResult: original, success: true, score: 1 })
+          .where(eq(evalResultsTable.id, resultId));
+        const human = {
+          pass: false,
+          score: 0,
+          reason: 'Manual rating',
+          assertion: {
+            type: 'human',
+            provider: {
+              id: `https://grader.example/check?api_key=${credential}`,
+              config: { apiKey: credential },
+            },
+            config: { headers: { Authorization: `Bearer ${credential}` } },
+          },
+        };
+        const payload = {
+          pass: false,
+          score: 0,
+          reason: 'Manual rating',
+          comment: 'Keep literal token and password words in the reviewer note',
+          componentResults: [original, human],
+          ratingAction,
+        };
+        const endpoint = `/api/eval/${eval_.id}/results/${result.id}/rating`;
+        const rated = await api.post(endpoint).send(payload);
+        expect(rated.status).toBe(200);
+        expect(JSON.stringify(rated.body)).not.toContain(credential);
+        expect(rated.body.gradingResult.comment).toBe(payload.comment);
+        expect(rated.body.gradingResult.assertion.value).toEqual(original.assertion?.value);
+        const readRow = async () =>
+          (await getDb())
+            .select()
+            .from(evalResultsTable)
+            .where(eq(evalResultsTable.id, resultId))
+            .get();
+        const stored = await readRow();
+        expect(JSON.stringify(stored)).not.toContain(credential);
+        expect(JSON.stringify(stored?.manualRatingState)).toContain('is-json');
+        const repeated = await api.post(endpoint).send(payload);
+        expect(repeated.status).toBe(200);
+        expect(repeated.body).toEqual(rated.body);
+        expect(await readRow()).toEqual(stored);
+        const cleared = await api
+          .post(endpoint)
+          .send({ pass: true, score: 1, ratingAction: 'clear' });
+        expect(cleared.status).toBe(200);
+        expect(JSON.stringify(cleared.body)).not.toContain(credential);
+        expect(cleared.body.gradingResult.assertion.value).toEqual(original.assertion?.value);
+        expect(JSON.stringify(await readRow())).not.toContain(credential);
+        // Sanitizing persistence must not modify the caller's input objects.
+        expect(human.assertion.provider.config.apiKey).toBe(credential);
+      },
+    );
+
     function outcomeCategory(pass: boolean, error = false) {
       if (error) {
         return ResultFailureReason.ERROR;
@@ -3052,11 +3108,7 @@ describe('eval routes', () => {
           expect(result.gradingResult).toBeNull();
         } else {
           expect(result.response).toBeUndefined();
-          expect(result.gradingResult?.componentResults).toHaveLength(1);
-          expect(result.gradingResult?.componentResults?.[0]).toMatchObject({
-            pass: comparisonPass,
-            assertion: { type: 'select-best' },
-          });
+          expect(result.gradingResult).toBeNull();
         }
         const originalMetrics = structuredClone(source.prompts[0].metrics);
         const rated = await api
@@ -3087,13 +3139,7 @@ describe('eval routes', () => {
             score: 0,
             failureReason: ResultFailureReason.ERROR,
           });
-          expect(cleared.body.gradingResult.componentResults).toHaveLength(gradingError ? 0 : 1);
-          if (!gradingError) {
-            expect(cleared.body.gradingResult.componentResults[0]).toMatchObject({
-              pass: comparisonPass,
-              assertion: { type: 'select-best' },
-            });
-          }
+          expect(cleared.body.gradingResult.componentResults).toHaveLength(0);
           const saved = await Eval.findById(imported.body.id);
           invariant(saved, 'Saved eval is required');
           expect(saved.prompts[0].metrics).toEqual(originalMetrics);
@@ -3102,8 +3148,8 @@ describe('eval routes', () => {
             testPassCount: 0,
             testFailCount: 0,
             testErrorCount: 1,
-            assertPassCount: gradingError ? 0 : Number(comparisonPass),
-            assertFailCount: gradingError ? 0 : Number(!comparisonPass),
+            assertPassCount: 0,
+            assertFailCount: 0,
           });
           expect(await getErrorResultIds(imported.body.id)).toEqual([importedResult.id]);
         }
@@ -4195,6 +4241,7 @@ describe('eval routes', () => {
     it('preserves config tests returned from the table endpoint when saved back', async () => {
       const eval_ = await EvalFactory.create();
       testEvalIds.add(eval_.id);
+      const originalTable = await eval_.getTable();
 
       const res = await api.get(`/api/eval/${eval_.id}/table`);
 
@@ -4203,13 +4250,19 @@ describe('eval routes', () => {
 
       const patchRes = await api
         .patch(`/api/eval/${eval_.id}`)
-        .send({ config: { ...res.body.config, description: 'renamed eval' } });
+        .send({ config: { ...res.body.config, description: 'renamed eval', otherField: 'value' } });
 
       expect(patchRes.status).toBe(200);
+      expect(patchRes.body).toEqual({ message: 'Eval updated successfully' });
 
       const updatedEval = await Eval.findById(eval_.id);
       invariant(updatedEval, 'Eval is required');
       expect(updatedEval.config.tests).toHaveLength(2);
+      expect(updatedEval.config).toMatchObject({
+        description: 'renamed eval',
+        otherField: 'value',
+      });
+      expect(await updatedEval.getTable()).toEqual(originalTable);
     });
 
     it('preserves Azure Blob SAS tokens when a redacted table config is saved back', async () => {

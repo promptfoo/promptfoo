@@ -68,7 +68,7 @@ providers:
                 location: { type: string }
               required: [location]
 
-  - id: anthropic:claude-sonnet-4-6
+  - id: anthropic:claude-sonnet-5
     config:
       tools: *tools # Alias: reuse the same tools
 
@@ -255,7 +255,7 @@ You can also use provider-native formats directly. They pass through unchanged w
 ```yaml
 # Anthropic native format - passes through as-is
 providers:
-  - id: anthropic:claude-sonnet-4-6
+  - id: anthropic:claude-sonnet-5
     config:
       tools:
         - name: get_weather
@@ -344,7 +344,7 @@ providers:
         anthropic-version: '2023-06-01'
       transformToolsFormat: anthropic # Transforms OpenAI → Anthropic format
       body:
-        model: claude-sonnet-4-6
+        model: claude-sonnet-5
         max_tokens: 1024
         messages: '{{ prompt }}'
         tools: '{{ tools }}'
@@ -380,7 +380,7 @@ providers:
         Content-Type: application/json
       # No transformToolsFormat - tools pass through as-is
       body:
-        model: claude-sonnet-4-6
+        model: claude-sonnet-5
         messages: '{{ prompt }}'
         tools: '{{ tools }}'
       tools:
