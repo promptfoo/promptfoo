@@ -373,9 +373,9 @@ export class AssertionsResult {
       (result) =>
         result?.pass === false &&
         result.metadata?.graderError === true &&
+        result.assertion?.weight !== 0 &&
         result.metadata.assertionSet?.weight !== 0,
     );
-    const hasGraderError = !pass && failedGrader !== undefined;
 
     this.result = {
       pass,
@@ -385,13 +385,12 @@ export class AssertionsResult {
       ...(hasNamedScoreWeights && { namedScoreWeights: { ...this.namedScoreWeights } }),
       tokensUsed: this.tokensUsed,
       componentResults: flattenedComponentResults,
-      ...((this._parentAssertionSet || cachedResponse || hasGraderError) && {
+      ...((this._parentAssertionSet || cachedResponse) && {
         metadata: {
           ...(this._parentAssertionSet && {
             assertionSet: buildAssertionSetMetadata(this._parentAssertionSet.assertionSet),
           }),
           ...(cachedResponse && { cachedResponse: true }),
-          ...(hasGraderError && { graderError: true as const }),
         },
       }),
     };

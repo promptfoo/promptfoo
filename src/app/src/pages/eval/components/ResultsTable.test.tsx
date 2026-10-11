@@ -3469,12 +3469,19 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
 
   it.each([
     { action: 'Rate', previousReason: 2, expectedReason: 0, graderError: true },
+    {
+      action: 'Clear rating',
+      previousReason: 0,
+      expectedReason: 2,
+      graderError: false,
+      passedComponents: true,
+    },
     { action: 'Clear rating', previousReason: 0, expectedReason: 2, graderError: true },
     { action: 'Clear rating', previousReason: 1, expectedReason: 2, graderError: false },
     { action: 'Clear rating', previousReason: 0, expectedReason: 2, graderError: false },
   ])(
     'updates the displayed error category after $action (graderError=$graderError)',
-    async ({ action, previousReason, expectedReason, graderError }) => {
+    async ({ action, previousReason, expectedReason, graderError, passedComponents }) => {
       const user = userEvent.setup();
       const table = createMockTableWithHumanAssertion();
       const output = table.body[0].outputs[0];
@@ -3497,6 +3504,8 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
       }
       if (action === 'Rate') {
         output.gradingResult.componentResults.splice(1, 1);
+      } else if (passedComponents) {
+        output.gradingResult.componentResults[0].pass = true;
       } else if (!graderError && previousReason === 0) {
         output.gradingResult.componentResults.splice(0, 1);
       }
@@ -3516,7 +3525,7 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
       expect(updatedOutput.failureReason).toBe(expectedReason);
       expect(updatedOutput.pass).toBe(expectedReason === 0);
       if (action === 'Clear rating' && !graderError && previousReason === 0) {
-        expect(updatedOutput.score).toBe(0);
+        expect(updatedOutput.score).toBe(passedComponents ? 0.5 : 0);
       }
       if (action === 'Rate') {
         expect(updatedOutput.gradingResult.componentResults[1].metadata).toEqual({

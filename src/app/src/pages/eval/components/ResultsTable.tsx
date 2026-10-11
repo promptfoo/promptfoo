@@ -921,9 +921,12 @@ function getManualRatingUpdate({
       finalPass =
         componentResults.filter((result) => result.pass).length === componentResults.length;
       finalScore = averageComponentResultScore(componentResults, finalScore);
-    } else if (getOriginalFailureReason(existingOutput) === ResultFailureReason.ERROR) {
+    }
+    if (getOriginalFailureReason(existingOutput) === ResultFailureReason.ERROR) {
       finalPass = false;
-      finalScore = 0;
+      if (componentResults.length === 0) {
+        finalScore = 0;
+      }
     }
 
     return {
