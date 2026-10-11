@@ -58,7 +58,7 @@ import {
   resolveGoogleToolConfig,
   resolveProjectId,
 } from './util';
-import type { GaxiosOptions } from 'gaxios';
+import type { gaxios } from 'google-auth-library';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -1466,7 +1466,7 @@ export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
             return adapter
               ? adapter(requestOptions, defaultAdapter)
               : defaultAdapter(requestOptions);
-          }) satisfies NonNullable<GaxiosOptions['adapter']>,
+          }) satisfies NonNullable<gaxios.GaxiosOptions['adapter']>,
         }),
       });
       data = res.data as VertexEmbeddingPredictResponse;
