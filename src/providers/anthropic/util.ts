@@ -767,7 +767,7 @@ export function parseMessages(messages: string): {
               ? msg.content
               : JSON.stringify(msg.content ?? ''),
         };
-        const previous = extractedMessages.at(-1);
+        const previous = extractedMessages[extractedMessages.length - 1];
         if (
           previous?.role === 'user' &&
           Array.isArray(previous.content) &&

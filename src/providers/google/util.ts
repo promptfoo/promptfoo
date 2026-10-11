@@ -1061,7 +1061,7 @@ export function maybeCoerceToGeminiFormat(
             response: { result: item.content ?? '' },
           },
         };
-        const previous = coercedContents.at(-1);
+        const previous = coercedContents[coercedContents.length - 1];
         if (
           previous?.role === 'user' &&
           previous.parts.length &&
