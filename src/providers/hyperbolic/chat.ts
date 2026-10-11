@@ -244,8 +244,8 @@ export class HyperbolicProvider extends OpenAiChatCompletionProvider {
         ...hyperbolicConfig,
         apiKeyEnvar: 'HYPERBOLIC_API_KEY',
         apiBaseUrl:
-          hyperbolicConfig?.apiBaseUrl ??
-          providerOptions.config?.apiBaseUrl ??
+          hyperbolicConfig?.apiBaseUrl ||
+          providerOptions.config?.apiBaseUrl ||
           'https://api.hyperbolic.xyz/v1',
       },
     });

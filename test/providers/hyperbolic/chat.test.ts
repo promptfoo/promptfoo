@@ -79,6 +79,43 @@ describe('HyperbolicProvider', () => {
     },
   );
 
+  it.each([
+    { shape: 'flat', config: { apiBaseUrl: '' } },
+    { shape: 'nested', config: { config: { apiBaseUrl: '' } } },
+    { shape: 'both', config: { apiBaseUrl: '', config: { apiBaseUrl: '' } } },
+  ])('keeps the Hyperbolic endpoint for an empty $shape URL', async ({ config }) => {
+    provider = new HyperbolicProvider(modelName, {
+      config: { ...config, apiKey: 'hyperbolic-test-key' },
+      env: { OPENAI_API_BASE_URL: 'https://unrelated-openai.invalid/v1' },
+    });
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        choices: [{ message: { content: 'answer' }, finish_reason: 'stop' }],
+        usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
+
+    expect((await provider.callApi('test prompt')).error).toBeUndefined();
+    const [url, request] = mockFetchWithCache.mock.calls[0];
+    expect(url).toBe('https://api.hyperbolic.xyz/v1/chat/completions');
+    expect(request?.headers).toMatchObject({ Authorization: 'Bearer hyperbolic-test-key' });
+  });
+
+  it('uses the flat endpoint when the nested URL is empty', () => {
+    provider = new HyperbolicProvider(modelName, {
+      config: {
+        apiBaseUrl: 'http://localhost:1234/v1',
+        config: { apiBaseUrl: '' },
+      },
+    });
+
+    expect(provider.getApiUrl()).toBe('http://localhost:1234/v1');
+  });
+
   it('prefers nested settings over flat settings', () => {
     provider = new HyperbolicProvider(modelName, {
       config: {
