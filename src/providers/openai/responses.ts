@@ -31,7 +31,11 @@ import {
 import { ResponsesProcessor } from '../responses/index';
 import { normalizeResponsesInput } from '../responses/input';
 import { getResponsesTokenUsage } from '../responses/processor';
-import { getResponsesOutputText, readResponsesStream } from '../responses/stream';
+import {
+  getResponsesOutputText,
+  IncompleteResponsesStreamError,
+  readResponsesStream,
+} from '../responses/stream';
 import { getRequestTimeoutMs, LONG_RUNNING_MODEL_TIMEOUT_MS } from '../shared';
 import { buildChatSpanContext, extractProviderResponseAttributes, withGenAISpan } from '../tracing';
 import { OpenAiGenericProvider } from '.';
@@ -862,6 +866,10 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     return this.getGenAISystem() === 'openai' && isCustomOpenAiEndpoint(this.getApiUrl());
   }
 
+  protected requiresResponsesStreamTerminalEvent(): boolean {
+    return false;
+  }
+
   protected getBillingUsage(data: any, _config: OpenAiCompletionOptions): any {
     return data.usage;
   }
@@ -1512,6 +1520,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
                 },
                 {
                   preserveFailedOutput: this.usesGatewayErrorFormat(),
+                  requireTerminalEvent: this.requiresResponsesStreamTerminalEvent(),
                   classifyError: classifyOpenAiGatewayStreamError,
                 },
               );
@@ -1575,6 +1584,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
               undefined,
               {
                 preserveFailedOutput: this.usesGatewayErrorFormat(),
+                requireTerminalEvent: this.requiresResponsesStreamTerminalEvent(),
                 classifyError: classifyOpenAiGatewayStreamError,
               },
             );
@@ -1766,7 +1776,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       if (!pollingBackground) {
         await deleteFromCache?.();
       }
-      return {
+      const result = {
         error: `API call error: ${String(err)}`,
         metadata: {
           http: {
@@ -1776,6 +1786,15 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
           },
         },
       };
+      if (err instanceof IncompleteResponsesStreamError && err.response?.usage) {
+        return this.applyBilling(
+          { ...result, tokenUsage: getResponsesTokenUsage(err.response, false), cached: false },
+          err.response,
+          config,
+          false,
+        );
+      }
+      return result;
     }
 
     if (data.error?.message) {

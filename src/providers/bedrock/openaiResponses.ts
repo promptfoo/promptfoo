@@ -242,15 +242,15 @@ export class BedrockOpenAiResponsesProvider extends OpenAiResponsesProvider {
     context?: BedrockOpenAiResponsesBodyContext,
     callApiOptions?: BedrockOpenAiResponsesCallApiOptions,
   ) {
-    if (this.usesRuntimeApi()) {
-      return super.getOpenAiBody(prompt, context, callApiOptions);
-    }
     const config = { ...this.config, ...context?.prompt?.config };
     if (config.serviceTier !== undefined || config.passthrough?.serviceTier !== undefined) {
       throw new Error(
         'Amazon Bedrock Responses uses service_tier. Replace serviceTier with service_tier ' +
           'to select an inference tier.',
       );
+    }
+    if (this.usesRuntimeApi()) {
+      return super.getOpenAiBody(prompt, context, callApiOptions);
     }
     const model = this.getRequestModelName(context);
     if (

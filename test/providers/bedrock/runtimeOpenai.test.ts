@@ -1,10 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
+import { BedrockOpenAiResponsesProvider } from '../../../src/providers/bedrock/openaiResponses';
 import { getBedrockTextRoute } from '../../../src/providers/bedrock/routing';
 import {
   BedrockRuntimeChatProvider,
   BedrockRuntimeResponsesProvider,
 } from '../../../src/providers/bedrock/runtimeOpenai';
+import { OpenAiResponsesProvider } from '../../../src/providers/openai/responses';
 import { mockProcessEnv } from '../../util/utils';
 
 vi.mock('../../../src/cache', async (importOriginal) => ({
@@ -1279,4 +1281,382 @@ it.each([
   expect(body).not.toHaveProperty('presence_penalty');
   expect(body).not.toHaveProperty('frequency_penalty');
   expect(body).not.toHaveProperty('stop');
+});
+
+describe('Runtime Responses terminal stream policy', () => {
+  const delta = { type: 'response.output_text.delta', delta: 'READY' };
+  const tool = {
+    type: 'function_call',
+    name: 'lookup',
+    call_id: 'call-fixture',
+    arguments: '{}',
+  };
+  const event = (
+    type: string,
+    status: string,
+    output = responsesReply.output,
+    reported = true,
+  ) => ({
+    type,
+    response: {
+      ...responsesReply,
+      status,
+      output,
+      usage: reported ? responsesReply.usage : undefined,
+    },
+  });
+  const sse = (events: unknown[]) =>
+    events
+      .map((item) => `data: ${item === '[DONE]' ? item : JSON.stringify(item)}\r\n\r\n`)
+      .join('');
+
+  it.each([
+    { name: 'delta-only EOF', events: [delta], reported: false },
+    { name: 'delta plus DONE', events: [delta, '[DONE]'], reported: false },
+    {
+      name: 'created response and deltas',
+      events: [event('response.created', 'in_progress', [], false), delta],
+      reported: false,
+    },
+    {
+      name: 'nonterminal text',
+      events: [event('response.in_progress', 'in_progress')],
+      reported: true,
+    },
+    {
+      name: 'nonterminal tool',
+      events: [event('response.in_progress', 'in_progress', [tool] as any)],
+      reported: true,
+    },
+    {
+      name: 'mismatched completed event',
+      events: [event('response.completed', 'in_progress', [tool] as any)],
+      reported: true,
+    },
+    {
+      name: 'mismatched failed event',
+      events: [event('response.failed', 'completed', [tool] as any)],
+      reported: true,
+    },
+    {
+      name: 'nonterminal snapshot after completion',
+      events: [
+        event('response.completed', 'completed'),
+        event('response.in_progress', 'in_progress', [tool] as any),
+      ],
+      reported: true,
+    },
+    {
+      name: 'completed event without response',
+      events: [delta, { type: 'response.completed' }],
+      reported: false,
+    },
+    {
+      name: 'nonterminal snapshot without usage',
+      events: [event('response.in_progress', 'in_progress', [tool] as any, false)],
+      reported: false,
+    },
+  ])('rejects $name before output or callbacks', async ({ events, reported }) => {
+    const callback = vi.fn().mockResolvedValue('TOOL_OK');
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: sse(events),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    });
+    const provider = new BedrockRuntimeResponsesProvider('us.xai.grok-4.6', {
+      config: {
+        apiKey: 'fixture',
+        stream: true,
+        inputCost: 0.01,
+        outputCost: 0.02,
+        functionToolCallbacks: { lookup: callback },
+      },
+    });
+    const result = await provider.callApi('hello');
+    expect(result.error).toContain('before a terminal response event');
+    expect(result.error!.length).toBeLessThan(200);
+    expect(result.output).toBeUndefined();
+    expect(result.raw).toBeUndefined();
+    expect(callback).not.toHaveBeenCalled();
+    if (reported) {
+      expect(result.tokenUsage).toMatchObject({ prompt: 100, completion: 20, total: 120 });
+      expect(result.cost).toBeCloseTo(1.4);
+      expect(result.cached).toBe(false);
+    } else {
+      expect(result.tokenUsage).toBeUndefined();
+      expect(result.cost).toBeUndefined();
+    }
+  });
+
+  it('enforces the policy when passthrough enables streaming', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: sse([delta]),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    });
+    const provider = new BedrockRuntimeResponsesProvider('us.xai.grok-4.6', {
+      config: { apiKey: 'fixture', stream: false, passthrough: { stream: true } },
+    });
+    expect((await provider.callApi('hello')).error).toContain('before a terminal response event');
+  });
+
+  it.each(['completed', 'incomplete', 'failed'] as const)(
+    'preserves valid %s terminal behavior',
+    async (status) => {
+      const callback = vi.fn().mockResolvedValue('READY');
+      const response = {
+        ...responsesReply,
+        status,
+        output: status === 'completed' ? [tool] : responsesReply.output,
+        ...(status === 'incomplete' ? { incomplete_details: { reason: 'max_output_tokens' } } : {}),
+        ...(status === 'failed'
+          ? { error: { code: 'server_error', message: 'FIXTURE_FAILED' } }
+          : {}),
+      };
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: sse([{ type: `response.${status}`, response }]),
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      });
+      const result = await new BedrockRuntimeResponsesProvider('us.xai.grok-4.6', {
+        config: {
+          apiKey: 'fixture',
+          stream: true,
+          inputCost: 0.01,
+          outputCost: 0.02,
+          functionToolCallbacks: { lookup: callback },
+        },
+      }).callApi('hello');
+      if (status === 'failed') {
+        expect(result.error).toContain('FIXTURE_FAILED');
+        expect(result.output).toBeUndefined();
+      } else {
+        expect(result.error).toBeUndefined();
+        expect(result.output).toBe('READY');
+        expect(result.tokenUsage).toMatchObject({ total: 120 });
+        expect(result.cost).toBeCloseTo(1.4);
+        expect(result.finishReason).toBe(status === 'incomplete' ? 'length' : undefined);
+      }
+      expect(callback).toHaveBeenCalledTimes(status === 'completed' ? 1 : 0);
+    },
+  );
+
+  it.each([
+    ['OpenAI', OpenAiResponsesProvider, 'gpt-4.1'],
+    ['Mantle', BedrockOpenAiResponsesProvider, 'openai.gpt-5.6-sol'],
+  ] as const)('keeps the existing %s delta fallback unchanged', async (_name, Provider, model) => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: sse([delta]),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    });
+    const result = await new Provider(model, {
+      config: { apiKey: 'fixture', stream: true },
+    }).callApi('hello');
+    expect(result.error).toBeUndefined();
+    expect(result.output).toBe('READY');
+  });
+});
+
+describe('Runtime Responses tier spelling', () => {
+  it.each(['provider', 'provider-passthrough', 'prompt', 'prompt-passthrough'])(
+    'rejects camelCase serviceTier in %s before transport',
+    async (scope) => {
+      const override = scope.endsWith('passthrough')
+        ? { passthrough: { serviceTier: { type: 'priority' } } }
+        : { serviceTier: { type: 'priority' } };
+      const provider = new BedrockRuntimeResponsesProvider('us.xai.grok-4.6', {
+        config: { apiKey: 'fixture', ...(scope.startsWith('provider') ? override : {}) },
+      });
+      const context = scope.startsWith('prompt')
+        ? { vars: {}, prompt: { raw: 'hello', label: 'hello', config: override } }
+        : undefined;
+      await expect(provider.callApi('hello', context)).rejects.toThrow(
+        'Replace serviceTier with service_tier',
+      );
+      expect(fetchWithCache).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['priority', 'flex'] as const)(
+    'retains Runtime %s through prompt passthrough',
+    async (tier) => {
+      const provider = new BedrockRuntimeResponsesProvider('us.xai.grok-4.6', {
+        config: { apiKey: 'fixture' },
+      });
+      const { body } = await provider.getOpenAiBody('hello', {
+        vars: {},
+        prompt: { raw: 'hello', label: 'hello', config: { passthrough: { service_tier: tier } } },
+      });
+      expect(body.service_tier).toBe(tier);
+    },
+  );
+});
+
+describe.each([
+  ['chat', BedrockRuntimeChatProvider],
+  ['responses', BedrockRuntimeResponsesProvider],
+] as const)('Runtime GLM %s contract', (mode, Provider) => {
+  it.each([
+    'us.zai.glm-5.3',
+    'global.zai.glm-5.3',
+    'arn:aws:bedrock:us-east-1:123456789012:inference-profile/us.zai.glm-5.3',
+    'arn:aws:bedrock:us-east-1:123456789012:inference-profile/global.zai.glm-5.3',
+  ])('preserves explicit reasoning and sampling for effective %s', async (model) => {
+    for (const scope of ['model', 'provider', 'prompt']) {
+      for (const effort of ['low', 'high', 'max'] as const) {
+        const provider = new Provider(scope === 'model' ? model : 'openai.gpt-oss-120b-1:0', {
+          config: {
+            apiKey: 'fixture',
+            reasoning_effort: effort,
+            temperature: 0,
+            top_p: 0.8,
+            ...(scope === 'provider' ? { passthrough: { model } } : {}),
+          },
+        });
+        const context =
+          scope === 'prompt'
+            ? {
+                vars: {},
+                prompt: { raw: 'hello', label: 'hello', config: { passthrough: { model } } },
+              }
+            : undefined;
+        const { body } = await provider.getOpenAiBody('hello', context);
+        expect(body).toMatchObject({ model, temperature: 0, top_p: 0.8 });
+        expect(mode === 'chat' ? body.reasoning_effort : body.reasoning?.effort).toBe(effort);
+      }
+    }
+  });
+
+  it('does not invent reasoning, sampling or token defaults', async () => {
+    const { body } = await new Provider('us.zai.glm-5.3', {
+      config: { apiKey: 'fixture' },
+    }).getOpenAiBody('hello');
+    for (const field of [
+      'reasoning',
+      'reasoning_effort',
+      'temperature',
+      'top_p',
+      'max_tokens',
+      'max_completion_tokens',
+      'max_output_tokens',
+    ]) {
+      expect(body).not.toHaveProperty(field);
+    }
+  });
+
+  it.each(['zai.glm-5.3', 'arn:aws:bedrock:us-east-1::foundation-model/zai.glm-5.3'])(
+    'rejects invalid effective selector %s without dispatch',
+    async (model) => {
+      for (const scope of ['model', 'provider', 'prompt']) {
+        const provider = new Provider(scope === 'model' ? model : 'us.zai.glm-5.3', {
+          config: {
+            apiKey: 'fixture',
+            ...(scope === 'provider' ? { passthrough: { model } } : {}),
+          },
+        });
+        const context =
+          scope === 'prompt'
+            ? {
+                vars: {},
+                prompt: { raw: 'hello', label: 'hello', config: { passthrough: { model } } },
+              }
+            : undefined;
+        await expect(provider.callApi('hello', context)).rejects.toThrow(
+          'requires a system inference profile',
+        );
+        expect(fetchWithCache).not.toHaveBeenCalled();
+      }
+    },
+  );
+});
+
+it.each([
+  { config: { max_tokens: 37 }, expected: 37 },
+  { config: { max_completion_tokens: 48 }, expected: 48 },
+  { config: { passthrough: { max_tokens: 37 } }, expected: 37 },
+  { config: { passthrough: { max_completion_tokens: 48 } }, expected: 48 },
+  { config: { max_completion_tokens: 48, passthrough: { max_tokens: 37 } }, expected: 37 },
+  { config: { max_tokens: 37, passthrough: { max_completion_tokens: 48 } }, expected: 48 },
+  { config: { max_tokens: 37, max_completion_tokens: 48 }, expected: 48 },
+  { config: { max_tokens: 37, passthrough: { max_tokens: null } }, expected: null },
+  {
+    config: { max_completion_tokens: 48, passthrough: { max_completion_tokens: null } },
+    expected: null,
+  },
+  { config: { max_tokens: 0 }, expected: 0 },
+])('preserves the explicit GLM Chat cap %j', async ({ config, expected }) => {
+  for (const scope of ['provider', 'prompt']) {
+    const provider = new BedrockRuntimeChatProvider('us.zai.glm-5.3', {
+      config: {
+        apiKey: 'fixture',
+        reasoning_effort: 'low',
+        ...(scope === 'provider' ? config : {}),
+      },
+    });
+    const context =
+      scope === 'prompt'
+        ? { vars: {}, prompt: { raw: 'hello', label: 'hello', config } }
+        : undefined;
+    const { body } = await provider.getOpenAiBody('hello', context);
+    expect(body.max_completion_tokens).toBe(expected);
+    expect(body).not.toHaveProperty('max_tokens');
+    expect(body.reasoning_effort).toBe('low');
+  }
+});
+
+it('preserves full GLM Responses reasoning settings and output cap', async () => {
+  const provider = new BedrockRuntimeResponsesProvider('global.zai.glm-5.3', {
+    config: {
+      apiKey: 'fixture',
+      reasoning: { effort: 'low', summary: 'auto' },
+      max_output_tokens: 73,
+    },
+  });
+  const { body } = await provider.getOpenAiBody('hello');
+  expect(body.reasoning).toEqual({ effort: 'low', summary: 'auto' });
+  expect(body.max_output_tokens).toBe(73);
+});
+
+it.each([
+  { completion: undefined, config: {}, expected: 37 },
+  { completion: '48', config: {}, expected: 48 },
+  { completion: '48', config: { max_tokens: 19 }, expected: 19 },
+  { completion: '48', config: { max_completion_tokens: 23 }, expected: 23 },
+  { completion: '48', config: { passthrough: { max_tokens: 29 } }, expected: 29 },
+  { completion: '48', config: { passthrough: { max_completion_tokens: null } }, expected: null },
+])('preserves GLM environment cap precedence %j', async ({ completion, config, expected }) => {
+  const restore = mockProcessEnv({
+    OPENAI_MAX_TOKENS: '37',
+    OPENAI_MAX_COMPLETION_TOKENS: completion,
+  });
+  try {
+    const { body } = await new BedrockRuntimeChatProvider('us.zai.glm-5.3', {
+      config: { apiKey: 'fixture', ...config },
+    }).getOpenAiBody('hello');
+    expect(body.max_completion_tokens).toBe(expected);
+    expect(body).not.toHaveProperty('max_tokens');
+  } finally {
+    restore();
+  }
+});
+
+it('does not apply the GLM legacy environment cap to Grok', async () => {
+  const restore = mockProcessEnv({
+    OPENAI_MAX_TOKENS: '37',
+    OPENAI_MAX_COMPLETION_TOKENS: undefined,
+  });
+  try {
+    const { body } = await new BedrockRuntimeChatProvider('us.xai.grok-4.6', {
+      config: { apiKey: 'fixture' },
+    }).getOpenAiBody('hello');
+    expect(body).not.toHaveProperty('max_completion_tokens');
+    expect(body).not.toHaveProperty('max_tokens');
+  } finally {
+    restore();
+  }
 });

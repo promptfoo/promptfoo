@@ -1164,19 +1164,23 @@ describe('FoundationModelConfiguration', () => {
     },
   );
 
-  it.each([
-    { config: { max_tokens: 512 }, expected: 512 },
-    { config: { max_tokens: 0 }, expected: 0 },
-    { config: { max_tokens: 512, max_completion_tokens: 128 }, expected: 128 },
-    { config: { max_tokens: 512, max_completion_tokens: 0 }, expected: 0 },
-    { config: { max_tokens: 512, max_completion_tokens: null }, expected: null },
-  ])(
-    'reads the effective native GPT OSS cap and removes a legacy alias on edit: %j',
-    async ({ config, expected }) => {
+  it.each(
+    ['bedrock:openai.gpt-oss-120b-1:0', 'bedrock:runtime:chat:us.openai.gpt-6-sol'].flatMap((id) =>
+      [
+        { config: { max_tokens: 512 }, expected: 512 },
+        { config: { max_tokens: 0 }, expected: 0 },
+        { config: { max_tokens: 512, max_completion_tokens: 128 }, expected: 128 },
+        { config: { max_tokens: 512, max_completion_tokens: 0 }, expected: 0 },
+        { config: { max_tokens: 512, max_completion_tokens: null }, expected: null },
+      ].map((testCase) => ({ id, ...testCase })),
+    ),
+  )(
+    'reads the effective completion cap and removes a supported alias on edit: %j',
+    async ({ id, config, expected }) => {
       const user = userEvent.setup();
       render(
         <FoundationModelConfiguration
-          selectedTarget={{ id: 'bedrock:openai.gpt-oss-120b-1:0', config }}
+          selectedTarget={{ id, config }}
           updateCustomTarget={mockUpdateCustomTarget}
           providerType="bedrock"
         />,

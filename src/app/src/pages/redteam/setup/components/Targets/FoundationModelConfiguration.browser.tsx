@@ -296,42 +296,106 @@ it('preserves Messages routing while editing the model and credential profile', 
   await expect.element(page.getByLabelText('Inference Model Type')).not.toBeInTheDocument();
 });
 
-it.each([
-  { config: { max_tokens: 512 }, expected: 512 },
-  { config: { max_tokens: 0 }, expected: 0 },
-  { config: { max_tokens: 512, max_completion_tokens: 128 }, expected: 128 },
-  { config: { max_tokens: 512, max_completion_tokens: 0 }, expected: 0 },
-  { config: { max_tokens: 512, max_completion_tokens: null }, expected: null },
-])(
-  'preserves the effective native GPT OSS cap through API changes: %j',
-  async ({ config, expected }) => {
-    const id = 'bedrock:openai.gpt-oss-120b-1:0';
-    renderEditor({ id, config });
+it.each(
+  [
+    {
+      name: 'InvokeModel GPT OSS',
+      id: 'bedrock:openai.gpt-oss-120b-1:0',
+      mode: 'invoke',
+      canonical: 'max_completion_tokens',
+      targetMode: 'responses',
+      targetId: 'bedrock:responses:openai.gpt-oss-120b',
+      targetKey: 'max_output_tokens',
+    },
+    {
+      name: 'Runtime Chat',
+      id: 'bedrock:runtime:chat:us.openai.gpt-6-sol',
+      mode: 'runtime-chat',
+      canonical: 'max_completion_tokens',
+      targetMode: 'runtime-responses',
+      targetId: 'bedrock:runtime:responses:us.openai.gpt-6-sol',
+      targetKey: 'max_output_tokens',
+    },
+    {
+      name: 'Converse',
+      id: 'bedrock:converse:openai.gpt-oss-120b-1:0',
+      mode: 'converse',
+      canonical: 'maxTokens',
+      targetMode: 'runtime-chat',
+      targetId: 'bedrock:runtime:chat:openai.gpt-oss-120b-1:0',
+      targetKey: 'max_completion_tokens',
+    },
+  ].flatMap((route) =>
+    [
+      { values: { max_tokens: 512 }, expected: 512 },
+      { values: { max_tokens: 0 }, expected: 0 },
+      { values: { max_tokens: 512, [route.canonical]: 128 }, expected: 128 },
+      { values: { max_tokens: 512, [route.canonical]: 0 }, expected: 0 },
+      { values: { max_tokens: 512, [route.canonical]: null }, expected: null },
+    ].map((testCase) => ({ ...route, ...testCase })),
+  ),
+)(
+  'preserves $name token caps across API changes: $values',
+  async ({ id, mode, canonical, targetMode, targetId, targetKey, values, expected }) => {
+    renderEditor({ id, config: values });
     await page.getByRole('button', { name: /Advanced Configuration/ }).click();
     await expect.element(page.getByLabelText('Max Tokens')).toHaveValue(expected);
     const api = page.getByLabelText('Bedrock API', { exact: false });
-    await api.selectOptions('responses');
-    await expect.element(page.getByTestId('saved-target')).toHaveTextContent(
-      JSON.stringify({
-        id: 'bedrock:responses:openai.gpt-oss-120b',
-        config: { max_output_tokens: expected },
-      }),
-    );
-    await api.selectOptions('invoke');
+    await api.selectOptions(targetMode);
     await expect
       .element(page.getByTestId('saved-target'))
-      .toHaveTextContent(JSON.stringify({ id, config: { max_completion_tokens: expected } }));
+      .toHaveTextContent(JSON.stringify({ id: targetId, config: { [targetKey]: expected } }));
+    await api.selectOptions(mode);
+    const writeKey = canonical === 'maxTokens' ? 'max_tokens' : canonical;
+    await expect
+      .element(page.getByTestId('saved-target'))
+      .toHaveTextContent(JSON.stringify({ id, config: { [writeKey]: expected } }));
     await page.getByLabelText('Max Tokens').fill('0');
     await expect.element(page.getByLabelText('Max Tokens')).toHaveValue(0);
     await expect
       .element(page.getByTestId('saved-target'))
-      .toHaveTextContent(JSON.stringify({ id, config: { max_completion_tokens: 0 } }));
+      .toHaveTextContent(JSON.stringify({ id, config: { [writeKey]: 0 } }));
     await page.getByLabelText('Max Tokens').fill('');
     await expect
       .element(page.getByTestId('saved-target'))
       .toHaveTextContent(JSON.stringify({ id, config: {} }));
   },
 );
+
+it.each([128, 0, null])(
+  'preserves the Runtime Responses output cap over unrelated cap fields: %s',
+  async (value) => {
+    renderEditor({
+      id: 'bedrock:runtime:responses:us.openai.gpt-6-sol',
+      config: { max_output_tokens: value, max_completion_tokens: 256, max_tokens: 512 },
+    });
+    await page.getByRole('button', { name: /Advanced Configuration/ }).click();
+    await expect.element(page.getByLabelText('Max Output Tokens')).toHaveValue(value);
+    await page.getByLabelText('Bedrock API', { exact: false }).selectOptions('runtime-chat');
+    await expect.element(page.getByTestId('saved-target')).toHaveTextContent(
+      JSON.stringify({
+        id: 'bedrock:runtime:chat:us.openai.gpt-6-sol',
+        config: { max_completion_tokens: value },
+      }),
+    );
+  },
+);
+
+it('preserves a non-reasoning Runtime Chat max_tokens cap when switching to InvokeModel', async () => {
+  renderEditor({
+    id: 'bedrock:runtime:chat:mistral.mistral-large-2407-v1:0',
+    config: { max_tokens: 512 },
+  });
+  await page.getByRole('button', { name: /Advanced Configuration/ }).click();
+  await expect.element(page.getByLabelText('Max Tokens')).toHaveValue(512);
+  await page.getByLabelText('Bedrock API', { exact: false }).selectOptions('invoke');
+  await expect.element(page.getByTestId('saved-target')).toHaveTextContent(
+    JSON.stringify({
+      id: 'bedrock:mistral.mistral-large-2407-v1:0',
+      config: { max_tokens: 512 },
+    }),
+  );
+});
 
 it('canonicalizes an edited legacy GPT OSS cap without retaining its stale alias', async () => {
   const id = 'bedrock:openai.gpt-oss-120b-1:0';
@@ -345,3 +409,18 @@ it('canonicalizes an edited legacy GPT OSS cap without retaining its stale alias
       JSON.stringify({ id, config: { region: 'us-west-2', max_completion_tokens: 256 } }),
     );
 });
+
+it.each([
+  { source: 'bedrock:', target: 'converse', prefix: 'bedrock:converse:', expected: 512 },
+  { source: 'bedrock:converse:', target: 'invoke', prefix: 'bedrock:', expected: 128 },
+])(
+  'uses the source cap when $source and $target share the same UI field',
+  async ({ source, target, prefix, expected }) => {
+    const model = 'mistral.mistral-large-2407-v1:0';
+    renderEditor({ id: source + model, config: { max_tokens: 512, maxTokens: 128 } });
+    await page.getByLabelText('Bedrock API', { exact: false }).selectOptions(target);
+    await expect
+      .element(page.getByTestId('saved-target'))
+      .toHaveTextContent(JSON.stringify({ id: prefix + model, config: { max_tokens: expected } }));
+  },
+);

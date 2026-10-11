@@ -1,3 +1,4 @@
+import { getEnvInt } from '../../envars';
 import { calculateOpenAIUsageCost } from '../openai/billing';
 import { isGpt6Model } from '../openai/gpt6';
 import { getOpenAICacheWriteInputTokens, getTokenUsage } from '../openai/util';
@@ -41,7 +42,8 @@ function capabilityName(model: string): string {
 }
 
 function flexibleReasoningModel(model: string): boolean {
-  return /^(?:grok-|gpt-oss-)/.test(capabilityName(model));
+  const name = capabilityName(model);
+  return name === 'zai.glm-5.3' || /^(?:grok-|gpt-oss-)/.test(name);
 }
 
 function runtimeCost(
@@ -170,6 +172,24 @@ export class BedrockRuntimeChatProvider extends BedrockMantleChatProvider {
       delete result.body.frequency_penalty;
       delete result.body.stop;
     }
+    if (capabilityName(result.body.model) === 'zai.glm-5.3') {
+      // Reasoning-model normalization removes max_tokens. Retain explicit legacy caps
+      // using the Runtime completion field, with passthrough overrides first.
+      const passthrough = result.config.passthrough as
+        | { max_tokens?: number | null; max_completion_tokens?: number | null }
+        | undefined;
+      const cap = [
+        passthrough?.max_completion_tokens,
+        passthrough?.max_tokens,
+        result.config.max_completion_tokens,
+        result.config.max_tokens,
+        result.body.max_completion_tokens,
+        getEnvInt('OPENAI_MAX_TOKENS'),
+      ].find((value) => value !== undefined);
+      if (cap !== undefined) {
+        result.body.max_completion_tokens = cap;
+      }
+    }
     // Runtime accepts the OpenAI completion cap even when a new model is not in the
     // shared reasoning catalog. Preserve an explicit cap rather than silently omit it.
     if (
@@ -233,6 +253,10 @@ export class BedrockRuntimeResponsesProvider extends BedrockOpenAiResponsesProvi
   }
 
   protected usesRuntimeApi(): boolean {
+    return true;
+  }
+
+  protected requiresResponsesStreamTerminalEvent(): boolean {
     return true;
   }
 

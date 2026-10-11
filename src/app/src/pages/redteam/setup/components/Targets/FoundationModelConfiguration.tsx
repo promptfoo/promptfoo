@@ -44,13 +44,26 @@ const BEDROCK_API_OPTIONS: { value: BedrockApiMode; label: string }[] = [
   { value: 'runtime-responses', label: 'Responses (Bedrock Runtime)' },
 ];
 
-function getBedrockTokenLimitKey(mode?: BedrockApiMode, modelId = '') {
-  if (mode === 'responses' || mode === 'runtime-responses') {
-    return 'max_output_tokens';
-  }
-  return mode === 'runtime-chat' || (mode === 'invoke' && modelId.includes('openai.gpt-oss'))
-    ? 'max_completion_tokens'
-    : 'max_tokens';
+function resolveBedrockTokenLimit(
+  mode?: BedrockApiMode,
+  modelId = '',
+  config?: ProviderOptions['config'],
+) {
+  const key =
+    mode === 'responses' || mode === 'runtime-responses'
+      ? 'max_output_tokens'
+      : mode === 'runtime-chat' || (mode === 'invoke' && modelId.includes('openai.gpt-oss'))
+        ? 'max_completion_tokens'
+        : 'max_tokens';
+  // Converse prefers its native camelCase field; the UI continues to write its supported alias.
+  const fields =
+    mode === 'converse'
+      ? ['maxTokens', 'max_tokens']
+      : key === 'max_completion_tokens'
+        ? [key, 'max_tokens']
+        : [key];
+  const source = fields.find((field) => config?.[field] !== undefined);
+  return { key, fields, value: source === undefined ? undefined : config?.[source] };
 }
 
 const BEDROCK_API_HELP: Record<BedrockApiMode, string> = {
@@ -161,17 +174,18 @@ const FoundationModelConfiguration = ({
   const isBedrock = providerType === 'bedrock';
   const bedrockRoute = isBedrock ? getBedrockTextRoute(selectedTarget.id || 'bedrock:') : undefined;
   const [bedrockApiMode, setBedrockApiMode] = useState(bedrockRoute?.apiMode);
-  const tokenLimitKey = getBedrockTokenLimitKey(
+  const {
+    key: tokenLimitKey,
+    fields: tokenLimitFields,
+    value: tokenLimit,
+  } = resolveBedrockTokenLimit(
     bedrockApiMode,
     getBedrockModelFromId(selectedTarget.id),
+    selectedTarget.config,
   );
-  // Older UI versions saved native GPT OSS limits under max_tokens.
-  const legacyTokenLimit =
-    bedrockApiMode === 'invoke' && tokenLimitKey === 'max_completion_tokens'
-      ? selectedTarget.config?.max_tokens
-      : undefined;
-  const canonicalTokenLimit = selectedTarget.config?.[tokenLimitKey];
-  const tokenLimit = canonicalTokenLimit === undefined ? legacyTokenLimit : canonicalTokenLimit;
+  const hasAlternateTokenLimit = tokenLimitFields.some(
+    (field) => field !== tokenLimitKey && selectedTarget.config?.[field] !== undefined,
+  );
   const lastEditedTarget = useRef<{ id: string; providerType: string } | undefined>(undefined);
   const isBedrockHttpApi =
     bedrockApiMode === 'responses' ||
@@ -234,17 +248,21 @@ const FoundationModelConfiguration = ({
     updateProviderId(providerId);
   };
 
+  const updateTokenLimit = (key: string, value: unknown, fields = tokenLimitFields) => {
+    const config = { ...selectedTarget.config };
+    for (const field of [...tokenLimitFields, ...fields]) {
+      delete config[field];
+    }
+    updateCustomTarget('config', { ...config, [key]: value });
+  };
+
   const updateProviderId = (id: string, apiMode = bedrockApiMode) => {
-    const destination = getBedrockTokenLimitKey(apiMode, getBedrockModelFromId(id));
-    if (
-      (tokenLimitKey !== destination || legacyTokenLimit !== undefined) &&
-      tokenLimit !== undefined
-    ) {
-      const { [tokenLimitKey]: _limit, ...config } = selectedTarget.config || {};
-      if (legacyTokenLimit !== undefined) {
-        delete config.max_tokens;
-      }
-      updateCustomTarget('config', { ...config, [destination]: tokenLimit });
+    const destination = resolveBedrockTokenLimit(apiMode, getBedrockModelFromId(id));
+    const hasCompetingLimit = [...tokenLimitFields, ...destination.fields].some(
+      (field) => field !== destination.key && selectedTarget.config?.[field] !== undefined,
+    );
+    if ((tokenLimitKey !== destination.key || hasCompetingLimit) && tokenLimit !== undefined) {
+      updateTokenLimit(destination.key, tokenLimit, destination.fields);
     }
     lastEditedTarget.current = { id, providerType };
     updateCustomTarget('id', id);
@@ -715,11 +733,10 @@ const FoundationModelConfiguration = ({
                 value={tokenLimit ?? ''}
                 onChange={(e) => {
                   const value = e.target.value === '' ? undefined : parseInt(e.target.value, 10);
-                  if (legacyTokenLimit === undefined) {
-                    updateCustomTarget(tokenLimitKey, value);
+                  if (hasAlternateTokenLimit) {
+                    updateTokenLimit(tokenLimitKey, value);
                   } else {
-                    const { max_tokens: _legacy, ...config } = selectedTarget.config || {};
-                    updateCustomTarget('config', { ...config, [tokenLimitKey]: value });
+                    updateCustomTarget(tokenLimitKey, value);
                   }
                 }}
               />
