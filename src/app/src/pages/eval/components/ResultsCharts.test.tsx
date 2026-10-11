@@ -1,6 +1,7 @@
 import { StrictMode } from 'react';
 
-import { fireEvent, render, screen } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { Chart } from 'chart.js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ResultsCharts from './ResultsCharts';
@@ -993,13 +994,14 @@ describe('scatter prompt selection', () => {
     vi.clearAllMocks();
   });
 
-  it('uses the available prompt on both axes for a single-prompt evaluation', () => {
+  it('uses the available prompt on both axes for a single-prompt evaluation', async () => {
+    const user = userEvent.setup();
     setPrompts(1);
     const { container } = render(<ResultsCharts scores={[0.5]} />);
     expect(latestScatter().data.datasets[0].data).toEqual([
       expect.objectContaining({ x: 0.5, y: 0.5 }),
     ]);
-    fireEvent.click(container.querySelectorAll('canvas')[2]);
+    await user.click(container.querySelectorAll('canvas')[2]);
     expect(screen.getAllByRole('combobox').map((select) => select.textContent)).toEqual([
       'Prompt 1',
       'Prompt 1',
