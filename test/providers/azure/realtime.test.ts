@@ -1,8 +1,20 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import cliState from '../../../src/cliState';
 import { AzureGenericProvider } from '../../../src/providers/azure/generic';
 import { AzureRealtimeProvider } from '../../../src/providers/azure/realtime';
 import { OpenAiRealtimeProvider } from '../../../src/providers/openai/realtime';
 import { mockProcessEnv } from '../../util/utils';
+
+const createImageTokenUsage = () => ({
+  input_tokens: 1_000,
+  input_token_details: { image_tokens: 1_000 },
+  output_tokens: 0,
+});
+
+const createConversationContext = () => ({
+  prompt: { id: 'prompt-a', config: {} },
+  test: { metadata: { conversationId: 'conversation-1' } },
+});
 
 const { mockCallApi, mockCleanup, mockRegister, mockUnregister } = vi.hoisted(() => ({
   mockCallApi: vi.fn(),
@@ -239,18 +251,7 @@ describe('AzureRealtimeProvider', () => {
       output: 'hello',
       tokenUsage: { prompt: 1_000, completion: 0, total: 1_000 },
       metadata: {
-        usageEvents: [
-          {
-            input_tokens: 1_000,
-            input_token_details: { image_tokens: 1_000 },
-            output_tokens: 0,
-          },
-          {
-            input_tokens: 1_000,
-            input_token_details: { image_tokens: 1_000 },
-            output_tokens: 0,
-          },
-        ],
+        usageEvents: [createImageTokenUsage(), createImageTokenUsage()],
       },
     });
     const provider = new AzureRealtimeProvider('gpt-realtime-1.5-2026-02-23', {
@@ -431,10 +432,7 @@ describe('AzureRealtimeProvider', () => {
     const provider = new AzureRealtimeProvider('gpt-realtime-1.5-2026-02-23', {
       config: { apiHost: 'example.openai.azure.com', apiKey: 'azure-key' },
     });
-    const contextA = {
-      prompt: { id: 'prompt-a', config: {} },
-      test: { metadata: { conversationId: 'conversation-1' } },
-    } as any;
+    const contextA = createConversationContext() as any;
     const contextB = {
       prompt: { id: 'prompt-b', config: {} },
       test: { metadata: { conversationId: 'conversation-1' } },
@@ -581,10 +579,7 @@ describe('AzureRealtimeProvider', () => {
     const provider = new AzureRealtimeProvider('gpt-realtime-1.5-2026-02-23', {
       config: { apiHost: 'base.openai.azure.com', apiKey: 'base-key' },
     });
-    const context = {
-      prompt: { id: 'prompt-a', config: {} },
-      test: { metadata: { conversationId: 'conversation-1' } },
-    } as any;
+    const context = createConversationContext() as any;
 
     await provider.callApi('first turn', context);
     context.prompt.config = {
@@ -636,5 +631,25 @@ describe('AzureRealtimeProvider', () => {
     } finally {
       restoreEnv();
     }
+  });
+  it('prefers provider-scoped prompt key aliases over suite values', async () => {
+    const provider = new AzureRealtimeProvider('gpt-realtime', {
+      config: { apiKey: 'base-key', apiHost: 'example.test' },
+      env: { PROMPT_AZURE_REALTIME_KEY: 'provider-key' },
+    });
+    await cliState.withEnv({ PROMPT_AZURE_REALTIME_KEY: 'suite-key' }, () =>
+      provider.callApi('hello', {
+        vars: {},
+        prompt: {
+          raw: 'hello',
+          label: 'hello',
+          config: { apiKeyEnvar: 'PROMPT_AZURE_REALTIME_KEY' },
+        },
+      }),
+    );
+    expect(OpenAiRealtimeProvider).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ config: expect.objectContaining({ apiKey: 'provider-key' }) }),
+    );
   });
 });

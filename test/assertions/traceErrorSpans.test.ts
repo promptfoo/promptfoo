@@ -5,6 +5,11 @@ import { createMockProvider, createProviderResponse } from '../factories/provide
 import type { AssertionParams, AtomicTestCase } from '../../src/types/index';
 import type { TraceData } from '../../src/types/tracing';
 
+const createNoErrorSpansAssertion = () => ({
+  type: 'trace-error-spans' as const,
+  value: { max_count: 0 },
+});
+
 const mockProvider = createMockProvider({
   id: 'mock',
   response: createProviderResponse({ output: 'mock' }),
@@ -90,10 +95,7 @@ describe('handleTraceErrorSpans', () => {
   it('should pass when no errors exist and max_count is 0', () => {
     const params: AssertionParams = {
       ...defaultParams,
-      assertion: {
-        type: 'trace-error-spans',
-        value: { max_count: 0 },
-      },
+      assertion: createNoErrorSpansAssertion(),
       renderedValue: { max_count: 0 },
       assertionValueContext: {
         ...defaultParams.assertionValueContext,
@@ -146,10 +148,7 @@ describe('handleTraceErrorSpans', () => {
   it('should detect errors by status code', () => {
     const params: AssertionParams = {
       ...defaultParams,
-      assertion: {
-        type: 'trace-error-spans',
-        value: { max_count: 0 },
-      },
+      assertion: createNoErrorSpansAssertion(),
       renderedValue: { max_count: 0 },
       assertionValueContext: {
         ...defaultParams.assertionValueContext,
@@ -179,10 +178,7 @@ describe('handleTraceErrorSpans', () => {
   it('should detect OTLP error status codes', () => {
     const params: AssertionParams = {
       ...defaultParams,
-      assertion: {
-        type: 'trace-error-spans',
-        value: { max_count: 0 },
-      },
+      assertion: createNoErrorSpansAssertion(),
       renderedValue: { max_count: 0 },
       assertionValueContext: {
         ...defaultParams.assertionValueContext,
@@ -217,10 +213,7 @@ describe('handleTraceErrorSpans', () => {
   it('should detect errors by attributes', () => {
     const params: AssertionParams = {
       ...defaultParams,
-      assertion: {
-        type: 'trace-error-spans',
-        value: { max_count: 0 },
-      },
+      assertion: createNoErrorSpansAssertion(),
       renderedValue: { max_count: 0 },
       assertionValueContext: {
         ...defaultParams.assertionValueContext,
@@ -374,10 +367,7 @@ describe('handleTraceErrorSpans', () => {
   it('should detect errors by status message', () => {
     const params: AssertionParams = {
       ...defaultParams,
-      assertion: {
-        type: 'trace-error-spans',
-        value: { max_count: 0 },
-      },
+      assertion: createNoErrorSpansAssertion(),
       renderedValue: { max_count: 0 },
       assertionValueContext: {
         ...defaultParams.assertionValueContext,
@@ -419,10 +409,7 @@ describe('handleTraceErrorSpans', () => {
   it('should fail when no trace data is available', () => {
     const params: AssertionParams = {
       ...defaultParams,
-      assertion: {
-        type: 'trace-error-spans',
-        value: { max_count: 0 },
-      },
+      assertion: createNoErrorSpansAssertion(),
       renderedValue: { max_count: 0 },
     };
 
@@ -434,10 +421,7 @@ describe('handleTraceErrorSpans', () => {
   it('should handle empty trace spans', () => {
     const params: AssertionParams = {
       ...defaultParams,
-      assertion: {
-        type: 'trace-error-spans',
-        value: { max_count: 0 },
-      },
+      assertion: createNoErrorSpansAssertion(),
       renderedValue: { max_count: 0 },
       assertionValueContext: {
         ...defaultParams.assertionValueContext,

@@ -20,16 +20,3 @@ export async function sha256(str: string): Promise<string> {
   const hashArray = Array.from(new Uint8Array(hashBuffer));
   return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
 }
-
-/**
- * Generate a random alphanumeric sequence.
- * Uses Math.random() for simplicity (same as Node version).
- */
-export function randomSequence(length: number = 3): string {
-  const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  let result = '';
-  for (let i = 0; i < length; i++) {
-    result += characters.charAt(Math.floor(Math.random() * characters.length));
-  }
-  return result;
-}

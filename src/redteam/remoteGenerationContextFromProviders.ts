@@ -1,14 +1,10 @@
-import { getCloudTargetIdFromTargetIds } from './remoteGenerationContext';
+import {
+  getCloudTargetIdFromProviderId,
+  getCloudTargetIdFromTargetIds,
+  isRecord,
+} from './remoteGenerationContext';
 
 import type { RedteamGenerationContext } from './types';
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value);
-}
-
-function getCloudTargetIdFromProviderId(providerId: unknown): string | undefined {
-  return typeof providerId === 'string' ? getCloudTargetIdFromTargetIds([providerId]) : undefined;
-}
 
 function getLinkedCloudTargetId(value: unknown): string | undefined {
   if (!isRecord(value)) {

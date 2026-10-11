@@ -1,151 +1,22 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback } from 'react';
 
 import { useResultsViewSettingsStore } from '../../store';
 
-interface SettingsState {
-  maxTextLength: number;
-  wordBreak: string;
-  showInferenceDetails: boolean;
-  renderMarkdown: boolean;
-  prettifyJson: boolean;
-  showPrompts: boolean;
-  showPassFail: boolean;
-  showPassReasons: boolean;
-  showMetricPills: boolean;
-  stickyHeader: boolean;
-  maxImageWidth: number;
-  maxImageHeight: number;
-}
-
-export const useSettingsState = (isOpen: boolean) => {
-  const store = useResultsViewSettingsStore();
+export const useSettingsState = () => {
   const {
-    maxTextLength,
     setMaxTextLength,
-    wordBreak,
     setWordBreak,
-    showInferenceDetails,
     setShowInferenceDetails,
-    renderMarkdown,
     setRenderMarkdown,
-    prettifyJson,
     setPrettifyJson,
-    showPrompts,
     setShowPrompts,
-    showPassFail,
     setShowPassFail,
-    showPassReasons,
     setShowPassReasons,
-    showMetricPills,
     setShowMetricPills,
-    stickyHeader,
     setStickyHeader,
-    maxImageWidth,
     setMaxImageWidth,
-    maxImageHeight,
     setMaxImageHeight,
-  } = store;
-
-  const sanitizedMaxTextLength =
-    maxTextLength === Number.POSITIVE_INFINITY
-      ? Number.POSITIVE_INFINITY
-      : Number.isFinite(maxTextLength) && maxTextLength >= 25
-        ? maxTextLength
-        : 500;
-  const [localMaxTextLength, setLocalMaxTextLength] = useState(
-    sanitizedMaxTextLength === Number.POSITIVE_INFINITY ? 1001 : sanitizedMaxTextLength,
-  );
-
-  const initialStateRef = useRef<SettingsState>({
-    maxTextLength,
-    wordBreak,
-    showInferenceDetails,
-    renderMarkdown,
-    prettifyJson,
-    showPrompts,
-    showPassFail,
-    showPassReasons,
-    showMetricPills,
-    stickyHeader,
-    maxImageWidth,
-    maxImageHeight,
-  });
-
-  useEffect(() => {
-    if (isOpen) {
-      initialStateRef.current = {
-        maxTextLength,
-        wordBreak,
-        showInferenceDetails,
-        renderMarkdown,
-        prettifyJson,
-        showPrompts,
-        showPassFail,
-        showPassReasons,
-        showMetricPills,
-        stickyHeader,
-        maxImageWidth,
-        maxImageHeight,
-      };
-    }
-  }, [
-    isOpen,
-    maxTextLength,
-    wordBreak,
-    showInferenceDetails,
-    renderMarkdown,
-    prettifyJson,
-    showPrompts,
-    showPassFail,
-    showPassReasons,
-    showMetricPills,
-    stickyHeader,
-    maxImageWidth,
-    maxImageHeight,
-  ]);
-
-  const hasChanges = useMemo(() => {
-    const initialState = initialStateRef.current;
-    return (
-      maxTextLength !== initialState.maxTextLength ||
-      wordBreak !== initialState.wordBreak ||
-      showInferenceDetails !== initialState.showInferenceDetails ||
-      renderMarkdown !== initialState.renderMarkdown ||
-      prettifyJson !== initialState.prettifyJson ||
-      showPrompts !== initialState.showPrompts ||
-      showPassFail !== initialState.showPassFail ||
-      showPassReasons !== initialState.showPassReasons ||
-      showMetricPills !== initialState.showMetricPills ||
-      stickyHeader !== initialState.stickyHeader ||
-      maxImageWidth !== initialState.maxImageWidth ||
-      maxImageHeight !== initialState.maxImageHeight
-    );
-  }, [
-    maxTextLength,
-    wordBreak,
-    showInferenceDetails,
-    renderMarkdown,
-    prettifyJson,
-    showPrompts,
-    showPassFail,
-    showPassReasons,
-    showMetricPills,
-    stickyHeader,
-    maxImageWidth,
-    maxImageHeight,
-  ]);
-
-  const handleSliderChange = useCallback((value: number) => {
-    setLocalMaxTextLength(value);
-  }, []);
-
-  const handleSliderChangeCommitted = useCallback(
-    (value: number) => {
-      const newValue = value === 1001 ? Number.POSITIVE_INFINITY : value;
-      setMaxTextLength(newValue);
-    },
-    [setMaxTextLength],
-  );
+  } = useResultsViewSettingsStore();
 
   const resetToDefaults = useCallback(() => {
     setStickyHeader(true);
@@ -158,7 +29,6 @@ export const useSettingsState = (isOpen: boolean) => {
     setShowMetricPills(true);
     setShowInferenceDetails(true);
     setMaxTextLength(500);
-    setLocalMaxTextLength(500);
     setMaxImageWidth(500);
     setMaxImageHeight(300);
   }, [
@@ -176,13 +46,5 @@ export const useSettingsState = (isOpen: boolean) => {
     setMaxImageHeight,
   ]);
 
-  return {
-    store,
-    localMaxTextLength,
-    setLocalMaxTextLength,
-    hasChanges,
-    resetToDefaults,
-    handleSliderChange,
-    handleSliderChangeCommitted,
-  };
+  return { resetToDefaults };
 };

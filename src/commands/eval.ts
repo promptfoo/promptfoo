@@ -93,6 +93,11 @@ export function evalCommand(
     .option('--delay <number>', 'Delay between each test (in milliseconds) (default: 0)')
     .option('--no-cache', 'Do not read or write results to disk cache')
     .option('--remote', 'Force remote inference wherever possible (used for red teams)', false)
+    .option(
+      '--safe-mode',
+      'Disable dynamic inline JavaScript execution for transforms and assertions',
+      defaultConfig?.commandLineOptions?.safeMode,
+    )
 
     // Filtering and subset selection
     .option('-n, --filter-first-n <number>', 'Only run the first N tests')
