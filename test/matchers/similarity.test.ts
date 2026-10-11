@@ -393,7 +393,7 @@ describe('matchesSimilarity', () => {
     });
   });
 
-  describe('score range', () => {
+  describe('finite score compatibility', () => {
     beforeEach(() => {
       vi.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi').mockImplementation((text) => {
         const vectors: Record<string, [number, number]> = {
@@ -401,6 +401,7 @@ describe('matchesSimilarity', () => {
           large: [6, 8],
           opposite: [-3, -4],
           huge: [1e200, 1e200],
+          negativeHuge: [-1e200, -1e200],
         };
         const vector = vectors[text];
         return vector
@@ -409,33 +410,40 @@ describe('matchesSimilarity', () => {
       });
     });
 
-    it('caps an unnormalized dot product score at 1', async () => {
+    it.each([
+      { metric: 'cosine', output: 'opposite', inverse: false, score: -1, pass: false },
+      { metric: 'cosine', output: 'opposite', inverse: true, score: 2, pass: true },
+      { metric: 'dot_product', output: 'large', inverse: false, score: 50, pass: true },
+      { metric: 'dot_product', output: 'large', inverse: true, score: -49, pass: false },
+      { metric: 'dot_product', output: 'opposite', inverse: false, score: -25, pass: false },
+      { metric: 'dot_product', output: 'opposite', inverse: true, score: 26, pass: true },
+    ] as const)('preserves the native score and inverse complement: %j', async (testCase) => {
+      const { metric, output, inverse, score, pass } = testCase;
       await expect(
-        matchesSimilarity('small', 'large', 0.75, false, undefined, 'dot_product'),
-      ).resolves.toMatchObject({ pass: true, score: 1 });
+        matchesSimilarity('small', output, 0.75, inverse, undefined, metric),
+      ).resolves.toMatchObject({ pass, score });
     });
 
-    it('does not report a negative score for opposite vectors', async () => {
-      await expect(
-        matchesSimilarity('small', 'opposite', 0.75, false, undefined, 'cosine'),
-      ).resolves.toMatchObject({ pass: false, score: 0 });
-    });
-
-    it('caps the inverse score at 1 for opposite vectors', async () => {
-      await expect(
-        matchesSimilarity('small', 'opposite', 0.75, true, undefined, 'cosine'),
-      ).resolves.toMatchObject({ pass: true, score: 1 });
-    });
-
-    it('fails instead of passing when the dot product overflows', async () => {
-      await expect(
-        matchesSimilarity('huge', 'huge', 0.75, false, undefined, 'dot_product'),
-      ).resolves.toMatchObject({
-        pass: false,
-        score: 0,
-        reason: 'Invalid similarity score: Infinity',
-      });
-    });
+    it.each([
+      { metric: 'cosine', output: 'huge', invalidScore: 'NaN' },
+      { metric: 'dot_product', output: 'huge', invalidScore: 'Infinity' },
+      { metric: 'dot_product', output: 'negativeHuge', invalidScore: '-Infinity' },
+      { metric: 'euclidean', output: 'small', invalidScore: 'Infinity' },
+    ] as const)(
+      'rejects computed non-finite values, including inverse assertions: %j',
+      async ({ metric, output, invalidScore }) => {
+        for (const inverse of [false, true]) {
+          await expect(
+            matchesSimilarity('huge', output, 0.75, inverse, undefined, metric),
+          ).resolves.toMatchObject({
+            pass: false,
+            score: 0,
+            reason: `Invalid similarity score: ${invalidScore}`,
+            tokensUsed: { total: 10, prompt: 4, completion: 6 },
+          });
+        }
+      },
+    );
   });
 
   describe('euclidean metric', () => {
@@ -472,6 +480,7 @@ describe('matchesSimilarity', () => {
         matchesSimilarity(expected, output, threshold, false, undefined, 'euclidean'),
       ).resolves.toMatchObject({
         pass: false,
+        score: 1 / (1 + Math.sqrt(2)),
         reason: expect.stringContaining('Distance 1.41 is greater than threshold 0.5'),
       });
     });
@@ -486,6 +495,7 @@ describe('matchesSimilarity', () => {
         matchesSimilarity(expected, output, threshold, true, undefined, 'euclidean'),
       ).resolves.toMatchObject({
         pass: true,
+        score: 1 - 1 / (1 + Math.sqrt(2)),
         reason: expect.stringContaining('Distance 1.41 is greater than threshold 0.5'),
       });
     });
