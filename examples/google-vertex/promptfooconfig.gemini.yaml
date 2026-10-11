@@ -17,7 +17,6 @@ providers:
   - id: vertex:gemini-3.1-pro-preview
     config:
       generationConfig:
-        temperature: 0.7
         maxOutputTokens: 1024
       toolConfig: &geminiToolConfig
         functionCallingConfig:
