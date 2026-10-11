@@ -2856,6 +2856,69 @@ describe('AIStudioChatProvider', () => {
       });
     });
 
+    it.each([
+      { date: 'Wed, 07 Oct 2026 12:00:00 GMT', now: Date.UTC(2026, 9, 9), cost: 0.006 },
+      { date: 'Fri, 09 Oct 2026 12:00:00 GMT', now: Date.UTC(2026, 9, 9), cost: 0.002625 },
+      { date: 'Thu, 31 Dec 2026 12:00:00 GMT', now: Date.UTC(2027, 0, 2), cost: 0.002625 },
+      { date: undefined, now: Date.UTC(2026, 9, 9), cost: 0.002625 },
+      { date: 'not-a-date', now: Date.UTC(2026, 9, 9), cost: 0.002625 },
+      {
+        date: 'Fri, 09 Oct 2026 12:00:00 GMT',
+        now: Date.UTC(2026, 9, 9),
+        cost: 0.002625,
+        cached: false,
+      },
+      { date: undefined, now: Date.UTC(2027, 0, 2), cost: 0.00525, cached: false },
+    ])(
+      'prices cached Gemini responses using their original HTTP date: %j',
+      async ({ date, now, cost, cached = true }) => {
+        vi.spyOn(Date, 'now').mockReturnValue(now);
+        const provider = new AIStudioChatProvider('gemini-3.5-flash', createApiKeyOptions());
+        vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+          ...createMockFetchResponse({
+            candidates: [{ content: { parts: [{ text: 'cached response' }] } }],
+            usageMetadata: {
+              promptTokenCount: 1000,
+              candidatesTokenCount: 500,
+              totalTokenCount: 1500,
+            },
+          }),
+          cached,
+          headers: date === undefined ? {} : { date },
+        });
+
+        const result = await provider.callGemini('test prompt');
+
+        expect(result.cost).toBeCloseTo(cost, 10);
+        expect(result.cached).toBe(cached);
+        expect(result.tokenUsage).toMatchObject({ total: 1500, numRequests: cached ? 0 : 1 });
+      },
+    );
+
+    it('preserves custom costs when a cached response has a historical HTTP date', async () => {
+      vi.spyOn(Date, 'now').mockReturnValue(Date.UTC(2027, 0, 2));
+      const provider = new AIStudioChatProvider('gemini-3.5-flash', {
+        config: { apiKey: 'test-key', inputCost: 0.00001, outputCost: 0.00002 },
+      });
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        ...createMockFetchResponse({
+          candidates: [{ content: { parts: [{ text: 'cached response' }] } }],
+          usageMetadata: {
+            promptTokenCount: 1000,
+            candidatesTokenCount: 500,
+            totalTokenCount: 1500,
+          },
+        }),
+        cached: true,
+        headers: { date: 'Wed, 07 Oct 2026 12:00:00 GMT' },
+      });
+
+      const result = await provider.callGemini('test prompt');
+
+      expect(result.cost).toBeCloseTo(0.02, 10);
+      expect(result.cached).toBe(true);
+    });
+
     it('should not double-count tool-use prompt tokens when pricing a standard Gemini response', async () => {
       const provider = new AIStudioChatProvider('gemini-2.5-flash', createApiKeyOptions());
       vi.mocked(cache.fetchWithCache).mockResolvedValueOnce(
@@ -2906,6 +2969,8 @@ describe('AIStudioChatProvider', () => {
       });
 
       it('should price cached and audio usage for AI Studio responses', async () => {
+        // Exercise the original 3.5 rates before the Gemini API redirected this ID.
+        vi.spyOn(Date, 'now').mockReturnValue(Date.UTC(2026, 8, 1));
         const provider = new AIStudioChatProvider('gemini-3.5-flash', {
           config: { apiKey: 'test-key', passthrough: { service_tier: 'priority' } },
         });

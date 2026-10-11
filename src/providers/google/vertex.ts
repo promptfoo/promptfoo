@@ -34,6 +34,7 @@ import { GoogleAuthManager } from './auth';
 import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
 import { getVertexApiHostForRegion } from './shared';
 import {
+  calculateGoogleCost,
   calculateGoogleCostFromUsage,
   collectGroundingMetadata,
   collectThoughtSignatures,
@@ -58,6 +59,7 @@ import {
   resolveGoogleToolConfig,
   resolveProjectId,
 } from './util';
+import type { gaxios } from 'google-auth-library';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -211,6 +213,8 @@ function applyVertexClaudeLongContextPricing(
 }
 
 type VertexEmbeddingPredictResponse = {
+  embedding?: { values?: number[] };
+  usageMetadata?: { promptTokenCount?: number; totalTokenCount?: number };
   predictions?: Array<{
     embeddings?: {
       values?: number[];
@@ -219,10 +223,6 @@ type VertexEmbeddingPredictResponse = {
       };
     };
   }>;
-};
-
-type VertexEmbeddingProviderConfig = GoogleProviderConfig & {
-  autoTruncate?: boolean;
 };
 
 function getVertexApiHost(
@@ -1371,7 +1371,7 @@ export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
   readonly supportsEmbeddingCancellation = true;
 
   modelName: string;
-  config: VertexEmbeddingProviderConfig;
+  config: GoogleProviderConfig;
   env?: EnvOverrides;
 
   constructor(modelName: string, options: GoogleProviderOptions = {}) {
@@ -1393,7 +1393,14 @@ export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
   }
 
   getRegion(): string {
+    if (this.usesEmbedContent()) {
+      return GoogleAuthManager.resolveRegion(this.config, this.env, undefined, 'global');
+    }
     return GoogleAuthManager.resolveRegion(this.config, this.env);
+  }
+
+  private usesEmbedContent(): boolean {
+    return /^gemini-embedding-2(?:$|-)/.test(this.modelName);
   }
 
   getApiVersion(): string {
@@ -1417,13 +1424,38 @@ export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
     _context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderEmbeddingResponse> {
-    // See https://cloud.google.com/vertex-ai/generative-ai/docs/embeddings/get-text-embeddings#get_text_embeddings_for_a_snippet_of_text
-    const body = {
-      instances: [{ content: input }],
-      parameters: {
-        autoTruncate: this.config.autoTruncate || false,
-      },
-    };
+    const abortSignal = options?.abortSignal;
+    const embedContent = this.usesEmbedContent();
+    if (embedContent) {
+      for (const key of ['taskType', 'title', 'autoTruncate'] as const) {
+        if (this.config[key] !== undefined) {
+          throw new Error(
+            `${this.modelName} does not support ${key}. Use instructions in the input text for embedding tasks.`,
+          );
+        }
+      }
+    }
+    const dimensions = this.config.outputDimensionality;
+    const body = embedContent
+      ? {
+          content: { parts: [{ text: input }] },
+          ...(dimensions !== undefined && {
+            embedContentConfig: { outputDimensionality: dimensions },
+          }),
+        }
+      : {
+          instances: [
+            {
+              content: input,
+              ...(this.config.taskType !== undefined && { task_type: this.config.taskType }),
+              ...(this.config.title !== undefined && { title: this.config.title }),
+            },
+          ],
+          parameters: {
+            autoTruncate: this.config.autoTruncate ?? false,
+            ...(dimensions !== undefined && { outputDimensionality: dimensions }),
+          },
+        };
 
     let data: VertexEmbeddingPredictResponse = {};
     try {
@@ -1431,16 +1463,27 @@ export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
       const projectId = await this.getProjectId();
       const url = `https://${this.getApiHost()}/${this.getApiVersion()}/projects/${projectId}/locations/${this.getRegion()}/publishers/google/models/${
         this.modelName
-      }:predict`;
+      }:${embedContent ? 'embedContent' : 'predict'}`;
       const res = await client.request({
         url,
         method: 'POST',
         data: body,
-        ...(options?.abortSignal && { signal: options.abortSignal }),
+        timeout: client.transporter.defaults.timeout ?? getRequestTimeoutMs(),
+        ...(abortSignal && {
+          signal: abortSignal,
+          adapter: ((requestOptions, defaultAdapter) => {
+            // Gaxios can replace an aborted signal while adding its timeout after OAuth refresh.
+            abortSignal.throwIfAborted();
+            const adapter = client.transporter.defaults.adapter;
+            return adapter
+              ? adapter(requestOptions, defaultAdapter)
+              : defaultAdapter(requestOptions);
+          }) satisfies NonNullable<gaxios.GaxiosOptions['adapter']>,
+        }),
       });
       data = res.data as VertexEmbeddingPredictResponse;
     } catch (err) {
-      options?.abortSignal?.throwIfAborted();
+      abortSignal?.throwIfAborted();
       logger.error(`Vertex API call error: ${err}`);
       throw err;
     }
@@ -1449,16 +1492,27 @@ export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
 
     const prediction = data.predictions?.[0];
     const embeddingData = prediction?.embeddings;
-    if (!embeddingData?.values) {
+    const values = embedContent ? data.embedding?.values : embeddingData?.values;
+    if (!values?.length) {
       const errorMsg = `No valid embeddings returned from API: ${JSON.stringify(data)}`;
       logger.error(errorMsg);
       throw new Error(errorMsg);
     }
 
+    const promptTokens = embedContent ? data.usageMetadata?.promptTokenCount : undefined;
     return {
-      embedding: embeddingData.values,
+      embedding: values,
+      ...(embedContent && {
+        cost:
+          promptTokens === undefined
+            ? undefined
+            : calculateGoogleCost(this.modelName, this.config, promptTokens, 0, true),
+      }),
       tokenUsage: {
-        total: embeddingData.statistics?.token_count ?? 0,
+        ...(embedContent && { prompt: promptTokens }),
+        total: embedContent
+          ? (data.usageMetadata?.totalTokenCount ?? data.usageMetadata?.promptTokenCount)
+          : (embeddingData?.statistics?.token_count ?? 0),
         numRequests: 1,
       },
     };

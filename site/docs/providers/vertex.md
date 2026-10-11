@@ -218,25 +218,27 @@ By default, supported Llama 3 models use Llama Guard for content safety. You can
 
 ### Embedding Models
 
-Reference Vertex embedding models with the `vertex:embedding:` prefix:
+Reference Vertex embedding models with the `vertex:embedding:` prefix. The provider accepts text strings for both API formats:
 
-- `vertex:embedding:gemini-embedding-001` - Recommended default. Multilingual plus code, up to 3,072 dimensions, 2,048 input-token limit
-- `vertex:embedding:text-embedding-005` - English and code, up to 768 dimensions, 2,048 input-token limit
-- `vertex:embedding:text-multilingual-embedding-002` - Multilingual, up to 768 dimensions, 2,048 input-token limit
-
-Pass `autoTruncate: true` in `config` to let Vertex truncate oversize inputs on the server instead of returning an error:
+- `vertex:embedding:gemini-embedding-2` uses `embedContent` and defaults to `global`. Set `region: us` or `region: eu` for a supported multi-region endpoint. Image, audio, video, and PDF embedding inputs are not yet exposed by promptfoo's embedding interface.
+- `vertex:embedding:gemini-embedding-001` remains the default for existing configurations and uses `predict`, as do `text-embedding-005` and `text-multilingual-embedding-002`.
 
 ```yaml
 defaultTest:
   options:
     provider:
       embedding:
-        id: vertex:embedding:gemini-embedding-001
+        id: vertex:embedding:gemini-embedding-2
         config:
-          autoTruncate: true
+          projectId: your-project-id
+          outputDimensionality: 768
 ```
 
-Upgrading between embedding model families changes the vector space, so re-embed any previously indexed content. See Google's [supported embedding models](https://cloud.google.com/vertex-ai/generative-ai/docs/embeddings/get-text-embeddings) reference for the current list.
+`outputDimensionality` is supported on both API paths. For the text prediction models, `taskType`, `title` (with `RETRIEVAL_DOCUMENT`), and `autoTruncate` are also forwarded to Vertex. For these text prediction models, promptfoo sets `autoTruncate` to `false` by default.
+
+For Embedding 2, this provider rejects `taskType`, `title`, and `autoTruncate` before sending a request. Include task or document instructions in the input text instead. Upgrading between embedding families changes the vector space, so re-embed previously indexed content.
+
+See Google's [text embedding guide](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/embeddings/get-text-embeddings), [Embedding 2 guide](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/embeddings/get-multimodal-embeddings), and [embedContent API reference](https://docs.cloud.google.com/gemini-enterprise-agent-platform/reference/rest/v1/projects.locations.publishers.models/embedContent) for current model limits and request fields.
 
 ### Image Generation Models
 
@@ -537,7 +539,7 @@ The following environment variables can be used to configure the Vertex AI provi
 
 †The Vertex chat provider defaults to `global` with ADC or a service account, and
 `us-central1` in express mode (API key). Choose a region supported by your model.
-Vertex embedding and Live providers default to `us-central1`.
+Vertex embedding models using `predict` and Live providers default to `us-central1`; Gemini Embedding 2 defaults to `global`.
 
 ### Region Selection
 
@@ -545,7 +547,7 @@ Different models are available in different regions. Common regions include:
 
 - `global` - Default for Vertex chat with ADC or service account credentials. Supported by Gemini 3.8 Flash, 3.7 Flash, 3.6 Flash, and 3.5 Flash-Lite
 - `us`, `eu` - Multi-region endpoints supported by Gemini 3.8 Flash, 3.7 Flash, 3.6 Flash, and 3.5 Flash-Lite (10% pricing premium)
-- `us-central1` - Default for embeddings, Live, and chat in express mode (API key); most models available
+- `us-central1` - Default for prediction-based embeddings, Live, and chat in express mode (API key); most models available
 - `us-east4` - Additional capacity
 - `us-east5` - Claude models available
 - `europe-west1` - EU region, Claude models available
@@ -807,7 +809,7 @@ defaultTest:
 | `expressMode`                      | Set to `false` to force OAuth/ADC even with API key                | auto (API key → `true`)        |
 | `streaming`                        | Use streaming API (`streamGenerateContent`)                        | `false`                        |
 
-‡For the Vertex chat provider, ADC or service account credentials default to `global` with host `aiplatform.googleapis.com`; express mode (API key) defaults to `us-central1` with host `{region}-aiplatform.googleapis.com`. Choose a region supported by your model. Vertex embedding and Live providers default to `us-central1`.
+‡For the Vertex chat provider, ADC or service account credentials default to `global` with host `aiplatform.googleapis.com`; express mode (API key) defaults to `us-central1` with host `{region}-aiplatform.googleapis.com`. Choose a region supported by your model. Vertex embedding models using `predict` and Live providers default to `us-central1`; Gemini Embedding 2 defaults to `global`.
 
 :::note
 Not all models support all parameters. See [Google's documentation](https://cloud.google.com/vertex-ai/generative-ai/docs/multimodal/overview) for model-specific details.
@@ -1424,7 +1426,7 @@ The Vertex AI provider supports core functionality for LLM evaluation:
 | Video generation         | ✅        | Use `vertex:video:` provider                                                              |
 | Image generation         | ⚠️        | [Gemini image and Imagen adapters](#image-generation-models) with `config.projectId`      |
 
-These are promptfoo provider capabilities. [Live API](#live-api) model availability varies by project and location. Embedding support here covers the [text embedding request format](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/embeddings/get-text-embeddings), not every model or modality in the cloud catalog. See [image generation models](#image-generation-models) for the Imagen adapter and native Gemini image routes.
+These are promptfoo provider capabilities. [Live API](#live-api) model availability varies by project and location. Embedding support covers text inputs through both `predict` and `embedContent`; see [embedding models](#embedding-models) for supported configuration and modality limits. See [image generation models](#image-generation-models) for the Imagen adapter and native Gemini image routes.
 
 ## See Also
 

@@ -874,6 +874,12 @@ describe('createShareableUrl', () => {
 
         await createShareableUrl(mockEval as Eval);
 
+        expect(row.response.conversationOutput).toBe(conversationOutput);
+        expect(row.response.conversationOutput[0]).toEqual({
+          text: 'native-conversation-private',
+          thoughtSignature: 'private-signature',
+        });
+
         const scans = cloud
           ? vi.mocked(uploadBlobRefsForShare).mock.calls
           : vi.mocked(inlineBlobRefsForShare).mock.calls;
@@ -899,11 +905,6 @@ describe('createShareableUrl', () => {
         });
         expect(uploaded.metadata).toEqual(uploaded.response.metadata);
         expect(row.response.metadata.blobUris).toEqual([outputUri]);
-        expect(row.response.conversationOutput).toBe(conversationOutput);
-        expect(row.response.conversationOutput[0]).toEqual({
-          text: 'native-conversation-private',
-          thoughtSignature: 'private-signature',
-        });
       },
     );
 
