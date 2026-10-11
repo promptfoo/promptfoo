@@ -399,10 +399,25 @@ function getBedrockRegionPricing(
   return undefined;
 }
 
+/** GovCloud 5.5 availability does not establish its token rates. */
+export function isGovCloudClaude55Model(modelId: string, region?: string): boolean {
+  return (
+    (isClaudeHaiku55Model(modelId) ||
+      isClaudeOpus55Model(modelId) ||
+      isClaudeSonnet55Model(modelId)) &&
+    (modelId.startsWith('us-gov.') ||
+      modelId.startsWith('arn:aws-us-gov:') ||
+      Boolean(region?.startsWith('us-gov-')))
+  );
+}
+
 export function getBedrockPricing(
   normalizedModelId: string,
   region?: string,
 ): BedrockPricing | undefined {
+  if (isGovCloudClaude55Model(normalizedModelId, region)) {
+    return undefined;
+  }
   if (normalizedModelId.includes('openai.gpt-oss-') && region) {
     const pricing = GPT_OSS_REGION_PRICING[region.toLowerCase()];
     if (!pricing) {

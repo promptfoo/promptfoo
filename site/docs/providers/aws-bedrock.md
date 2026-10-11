@@ -921,7 +921,8 @@ geo profiles, add the 10% regional premium.
 and [Opus 5.5](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-opus-5-5.html)
 support InvokeModel, Converse, and the Anthropic-compatible Messages API on Bedrock Runtime.
 Use `global.`, `us.`, `eu.`, or `au.` inference profiles; Haiku and Opus also support `jp.`.
-Check the model card for source-region availability before selecting a profile.
+Opus and Sonnet also accept `us-gov.` profiles in `us-gov-east-1` and
+`us-gov-west-1`. Check the model card for source-region availability before selecting a profile.
 
 ```yaml
 providers:
@@ -944,9 +945,11 @@ Haiku 5.5 has adaptive thinking on by default. It accepts disabled thinking at e
 `high` or below; promptfoo omits unsupported sampling parameters. Global pricing is
 $0.10/$0.50 per million input/output tokens through 100,000 total input tokens,
 and $0.50/$2.50 above that threshold. Cached input counts toward the threshold.
-Geo profiles add 10%; cache reads cost 0.1 times the applicable input rate.
+Commercial geo profiles add 10%; cache reads cost 0.1 times the applicable input rate.
 Sonnet 5.5 global cache reads cost $0.10 per million tokens (0.05 times its input rate).
-Cost accounting covers InvokeModel, Converse, and Messages. Consult
+Cost accounting covers InvokeModel, Converse, and Messages. GovCloud 5.5 costs remain
+unknown because its rates are not registered; Messages supports explicit `cost` or
+both `inputCost` and `outputCost` overrides. Consult
 [AWS pricing](https://aws.amazon.com/bedrock/pricing/) for current rates and service tiers.
 
 For InvokeModel with an opaque application inference profile ARN, promptfoo omits the

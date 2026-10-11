@@ -4010,11 +4010,14 @@ describe('AwsBedrockCompletionProvider', () => {
     AWS_BEDROCK_MODELS['us.anthropic.claude-3-7-sonnet-20250219-v1:0'] = originalModelHandler;
   });
 
-  it.each([undefined, 0])(
-    'uses only an explicit temperature for an opaque Claude application profile (%s)',
-    async (temperature) => {
-      const modelName =
-        'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/haiku-prod';
+  it.each(
+    ['arn:aws:bedrock:us-east-1', 'arn:aws-us-gov:bedrock:us-gov-west-1'].flatMap((arnPrefix) =>
+      [undefined, 0].map((temperature) => ({ arnPrefix, temperature })),
+    ),
+  )(
+    'uses only an explicit temperature for an opaque Claude profile ($arnPrefix, $temperature)',
+    async ({ arnPrefix, temperature }) => {
+      const modelName = `${arnPrefix}:123456789012:application-inference-profile/haiku-prod`;
       const responseJson = JSON.stringify({
         content: [{ type: 'text', text: 'READY' }],
         usage: { input_tokens: 10, output_tokens: 1 },

@@ -101,7 +101,7 @@ export const awsProviderFactories: ProviderFactory[] = [
       }
       if (
         anthropicModel &&
-        /^(?:(?:us|eu|au|jp|global)\.)?anthropic\.claude-/.test(anthropicModel)
+        /^(?:(?:us|us-gov|eu|au|jp|global)\.)?anthropic\.claude-/.test(anthropicModel)
       ) {
         const { createBedrockAnthropicMessagesProvider } = await import(
           '../bedrock/anthropicMessages'
