@@ -31,20 +31,23 @@ Each `assert` entry becomes its own EvalPort grader (`assert-set` groups are exp
 ```javascript
 import { evaluateSummaryToEvalPortResultSet, validateEvalPortResultSet } from 'promptfoo';
 
-const summary = JSON.parse(fs.readFileSync('results.json', 'utf8')); // promptfoo eval -o results.json
-const resultSet = evaluateSummaryToEvalPortResultSet(summary, {
+const output = JSON.parse(fs.readFileSync('results.json', 'utf8')); // promptfoo eval -o results.json
+// CLI output files nest the summary under `.results` (bare summaries work too).
+const resultSet = evaluateSummaryToEvalPortResultSet(output.results ?? output, {
   suiteId: 'my_eval',
   runId: 'run-1',
 });
 console.log(validateEvalPortResultSet(resultSet).valid); // true
 ```
 
-Each `gradingResult` (including every `componentResults` entry) becomes its own `GraderResult`, and scores are clamped to the EvalPort `[0, 1]` range. When several results share a `testIdx` (multiple prompts, providers, or repeats), repeated rows carry an `attempt` number so each stays uniquely identifiable.
+Each `gradingResult` (including every `componentResults` entry) becomes its own `GraderResult`, and scores are clamped to the EvalPort `[0, 1]` range. The original aggregate `score` and `namedScores` map are preserved in `metadata.promptfoo`, so importing the set back restores promptfoo's metrics exactly instead of re-deriving them from grader IDs. When several results share a `testIdx` (multiple prompts, providers, or repeats), repeated rows carry an `attempt` number so each stays uniquely identifiable.
+
+Suite cases map one-to-one to configured tests, while result rows reference evaluator-expanded indexes: array vars and repeats expand one test into several rows. Each suite case records its source position in `metadata.promptfoo.testIndex` so consumers can join expanded rows back to the configured test.
 
 Pass the same `suite` used for the suite export to reuse its grader IDs, so consumers can join results back to the graders that produced them:
 
 ```javascript
-const resultSet = evaluateSummaryToEvalPortResultSet(summary, {
+const resultSet = evaluateSummaryToEvalPortResultSet(output.results ?? output, {
   suiteId: 'my_eval',
   suite,
   runId: 'run-1',
