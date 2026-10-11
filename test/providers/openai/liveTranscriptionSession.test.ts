@@ -554,6 +554,71 @@ describe('independent Live transcription', () => {
     });
   });
 
+  it.each(['completed', 'failed'] as const)(
+    'redacts credential-bearing item IDs in %s recognition evidence',
+    async (status) => {
+      const fixture = setup();
+      const socket = await fixture.start();
+      fixture.frames(5);
+      delta(socket, 'gateway-fixture-key-item', 'Hello.', 'gateway-fixture-key-event');
+      if (status === 'completed') {
+        fixture.frames(15, false);
+        commit(socket, 'gateway-fixture-key-item');
+        complete(socket, 'gateway-fixture-key-item', 'Hello.');
+      } else {
+        emit(socket, { type: 'error', error: { message: 'Gateway failed: fixture-key' } });
+      }
+      const summary = await fixture.session.finish();
+      expect(summary.status).toBe(status);
+      expect(summary.turns[0].itemId).toBe('gateway-[REDACTED]-item');
+      expect(summary.transcripts.every((event) => event.itemId === 'gateway-[REDACTED]-item')).toBe(
+        true,
+      );
+      expect(JSON.stringify(summary)).not.toContain('fixture-key');
+      expect(summary.turns[0].partial).toBe('Hello.');
+    },
+  );
+
+  it('keeps raw item and event IDs distinct when redaction would make their exported values equal', async () => {
+    const fixture = setup();
+    const socket = await fixture.start();
+    fixture.frames(5);
+    delta(socket, 'fixture-key', 'Hello.', 'fixture-key');
+    fixture.frames(15, false);
+    commit(socket, 'fixture-key');
+    fixture.frames(5);
+    // These raw IDs deliberately collide only after redaction. Redacting them
+    // on receipt would lose the second event or bind its text to the first turn.
+    delta(socket, '[REDACTED]', 'Stop talking.', '[REDACTED]');
+    complete(socket, 'fixture-key', 'Hello.');
+    fixture.frames(15, false);
+    commit(socket, '[REDACTED]', 'fixture-key');
+    complete(socket, '[REDACTED]', 'Stop talking.');
+    const summary = await fixture.session.finish();
+    expect(summary.status).toBe('completed');
+    expect(summary.usageConfirmed).toBe(true);
+    expect(summary.usageSeconds).toBe(0.8);
+    expect(
+      summary.turns.map((turn) => ({
+        turnId: turn.turnId,
+        itemId: turn.itemId,
+        final: turn.final,
+      })),
+    ).toEqual([
+      { turnId: 'caller-1', itemId: '[REDACTED]', final: 'Hello.' },
+      { turnId: 'caller-2', itemId: '[REDACTED]', final: 'Stop talking.' },
+    ]);
+    expect(summary.transcripts).toHaveLength(4);
+    expect(summary.transcripts.every((event) => event.itemId === '[REDACTED]')).toBe(true);
+    expect(fixture.onStopDecision).toHaveBeenCalledOnce();
+    expect(fixture.onStopDecision.mock.calls[0][0]).toMatchObject({
+      turnId: 'caller-2',
+      recognizedText: 'Stop talking.',
+    });
+    expect(JSON.stringify(summary)).not.toContain('fixture-key');
+    expect(fixture.onError).not.toHaveBeenCalled();
+  });
+
   it('redacts API errors and malformed payloads', async () => {
     const fixture = setup();
     const socket = await fixture.start();

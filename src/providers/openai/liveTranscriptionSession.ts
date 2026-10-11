@@ -650,8 +650,16 @@ export class LiveTranscriptionSession {
       usageConfirmed,
       estimatedCost: ((usageSeconds + unconfirmedSeconds) / 60) * 0.017,
       costEstimated: !usageConfirmed,
-      turns: this.turns.map((turn) => ({ ...turn })),
-      transcripts: this.transcripts.map((event) => ({ ...event })),
+      // Provider item IDs are diagnostic metadata, not trusted identifiers to persist.
+      // Redact only these copies: raw IDs still correlate commit chains and transcripts.
+      turns: this.turns.map((turn) => ({
+        ...turn,
+        ...(turn.itemId === undefined ? {} : { itemId: this.options.redact(turn.itemId) }),
+      })),
+      transcripts: this.transcripts.map((event) => ({
+        ...event,
+        itemId: this.options.redact(event.itemId),
+      })),
     };
   }
 }
