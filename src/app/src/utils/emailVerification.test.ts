@@ -1,48 +1,25 @@
-import useApiConfig from '@app/stores/apiConfig';
 import { mockCallApiResponse, rejectCallApi, resetCallApiMock } from '@app/tests/apiMocks';
-import { callApi, fetchUserEmail } from '@app/utils/api';
-import { act, renderHook } from '@testing-library/react';
+import { callApi } from '@app/utils/api';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { useEmailVerification } from './useEmailVerification';
+import { checkEmailStatus, clearEmail, saveEmail } from './emailVerification';
+
+const createAllowedEmailExpectation = () => ({
+  canProceed: true,
+  needsEmail: false,
+  error: null,
+});
 
 vi.mock('@app/utils/api', () => ({
   callApi: vi.fn(),
-  fetchUserEmail: vi.fn(() => Promise.resolve('test@example.com')),
-  fetchUserId: vi.fn(() => Promise.resolve('test-user-id')),
-  updateEvalAuthor: vi.fn(() => Promise.resolve({})),
 }));
 
-describe('useEmailVerification', () => {
+describe('emailVerification', () => {
   const setupApiMock = (response: any, isSuccess = true) => {
     mockCallApiResponse(response, { ok: isSuccess });
   };
 
   const setupApiError = (error: Error) => {
     rejectCallApi(error);
-  };
-
-  const callCheckEmailStatus = async (hook: any) => {
-    let result;
-    await act(async () => {
-      result = await hook.current.checkEmailStatus();
-    });
-    return result;
-  };
-
-  const callSaveEmail = async (hook: any, email: string) => {
-    let result;
-    await act(async () => {
-      result = await hook.current.saveEmail(email);
-    });
-    return result;
-  };
-
-  const callClearEmail = async (hook: any) => {
-    let result;
-    await act(async () => {
-      result = await hook.current.clearEmail();
-    });
-    return result;
   };
 
   beforeEach(() => {
@@ -58,11 +35,7 @@ describe('useEmailVerification', () => {
           status: 'ok' as const,
           email: 'user@example.com',
         },
-        expected: {
-          canProceed: true,
-          needsEmail: false,
-          error: null,
-        },
+        expected: createAllowedEmailExpectation(),
       },
       {
         name: 'status: "exceeded_limit"',
@@ -111,17 +84,12 @@ describe('useEmailVerification', () => {
           message: 'This is a usage warning message.',
           email: 'user@example.com',
         },
-        expected: {
-          canProceed: true,
-          needsEmail: false,
-          error: null,
-        },
+        expected: createAllowedEmailExpectation(),
       },
     ])('should handle $name correctly', async ({ apiResponse, expected }) => {
       setupApiMock(apiResponse);
-      const { result } = renderHook(() => useEmailVerification());
 
-      const emailResult = await callCheckEmailStatus(result);
+      const emailResult = await checkEmailStatus();
 
       expect(callApi).toHaveBeenCalledWith(expect.stringContaining('/user/email/status'));
       expect(emailResult).toEqual({
@@ -130,37 +98,10 @@ describe('useEmailVerification', () => {
       });
     });
 
-    it('should set isChecking to true while checkEmailStatus is in progress and set it back to false after completion', async () => {
-      const mockApiStatus = {
-        hasEmail: true,
-        status: 'ok' as const,
-        email: 'user@example.com',
-      };
-
-      setupApiMock(mockApiStatus);
-      const { result } = renderHook(() => useEmailVerification());
-
-      expect(result.current.isChecking).toBe(false);
-
-      let promise: Promise<any> | undefined;
-      act(() => {
-        promise = result.current.checkEmailStatus();
-      });
-
-      expect(result.current.isChecking).toBe(true);
-
-      await act(async () => {
-        await promise;
-      });
-
-      expect(result.current.isChecking).toBe(false);
-    });
-
     it('should return canProceed: false, needsEmail: false, status: null, and an error message when the API call fails', async () => {
       setupApiError(new Error('Network error'));
-      const { result } = renderHook(() => useEmailVerification());
 
-      const emailResult = await callCheckEmailStatus(result);
+      const emailResult = await checkEmailStatus();
 
       expect(callApi).toHaveBeenCalledWith(expect.stringContaining('/user/email/status'));
       expect(emailResult).toEqual({
@@ -175,9 +116,8 @@ describe('useEmailVerification', () => {
   describe('saveEmail', () => {
     it('should return an empty object when the API call to /user/email returns ok: true', async () => {
       setupApiMock({}, true);
-      const { result } = renderHook(() => useEmailVerification());
 
-      const saveEmailResult = await callSaveEmail(result, 'test@example.com');
+      const saveEmailResult = await saveEmail('test@example.com');
 
       expect(callApi).toHaveBeenCalledWith('/user/email', {
         method: 'POST',
@@ -202,9 +142,8 @@ describe('useEmailVerification', () => {
       },
     ])('should return an error object with $name', async ({ apiResponse, expectedError }) => {
       setupApiMock(apiResponse, false);
-      const { result } = renderHook(() => useEmailVerification());
 
-      const saveEmailResult = await callSaveEmail(result, 'test@example.com');
+      const saveEmailResult = await saveEmail('test@example.com');
 
       expect(callApi).toHaveBeenCalledWith('/user/email', {
         method: 'POST',
@@ -219,9 +158,8 @@ describe('useEmailVerification', () => {
     it('should return an error object when callApi throws an exception', async () => {
       const mockError = new Error('Network error');
       setupApiError(mockError);
-      const { result } = renderHook(() => useEmailVerification());
 
-      const saveEmailResult = await callSaveEmail(result, 'test@example.com');
+      const saveEmailResult = await saveEmail('test@example.com');
 
       expect(saveEmailResult).toEqual({ error: `Failed to set email: ${mockError}` });
     });
@@ -230,9 +168,8 @@ describe('useEmailVerification', () => {
   describe('clearEmail', () => {
     it('should return an empty object when the API call to /user/email/clear returns ok: true', async () => {
       setupApiMock({}, true);
-      const { result } = renderHook(() => useEmailVerification());
 
-      const clearEmailResult = await callClearEmail(result);
+      const clearEmailResult = await clearEmail();
 
       expect(callApi).toHaveBeenCalledWith('/user/email/clear', {
         method: 'PUT',
@@ -243,9 +180,8 @@ describe('useEmailVerification', () => {
     it('should return an error object when the API call returns ok: false', async () => {
       const apiResponse = { error: 'Failed to clear email from database' };
       setupApiMock(apiResponse, false);
-      const { result } = renderHook(() => useEmailVerification());
 
-      const clearEmailResult = await callClearEmail(result);
+      const clearEmailResult = await clearEmail();
 
       expect(callApi).toHaveBeenCalledWith('/user/email/clear', {
         method: 'PUT',
@@ -255,9 +191,8 @@ describe('useEmailVerification', () => {
 
     it('should return a default error message when the API call returns ok: false with no error message', async () => {
       setupApiMock({}, false);
-      const { result } = renderHook(() => useEmailVerification());
 
-      const clearEmailResult = await callClearEmail(result);
+      const clearEmailResult = await clearEmail();
 
       expect(clearEmailResult).toEqual({ error: 'Failed to clear email' });
     });
@@ -265,32 +200,10 @@ describe('useEmailVerification', () => {
     it('should return an error object when callApi throws an exception', async () => {
       const mockError = new Error('Network error');
       setupApiError(mockError);
-      const { result } = renderHook(() => useEmailVerification());
 
-      const clearEmailResult = await callClearEmail(result);
+      const clearEmailResult = await clearEmail();
 
       expect(clearEmailResult).toEqual({ error: `Failed to clear email: ${mockError}` });
     });
-  });
-});
-
-describe('fetchUserEmail', () => {
-  beforeEach(() => {
-    vi.mocked(fetchUserEmail).mockClear();
-  });
-
-  it('should return null when apiBaseUrl is missing or invalid', async () => {
-    vi.mocked(fetchUserEmail).mockImplementationOnce(async () => null);
-
-    const mockGetState = vi.fn(() => ({
-      apiBaseUrl: undefined,
-      setApiBaseUrl: vi.fn(),
-      persistApiBaseUrl: false,
-      enablePersistApiBaseUrl: vi.fn(),
-    }));
-    vi.spyOn(useApiConfig, 'getState').mockImplementation(mockGetState);
-
-    const email = await fetchUserEmail();
-    expect(email).toBe(null);
   });
 });
