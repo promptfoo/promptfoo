@@ -252,7 +252,7 @@ describe('scheduler recovery outside provider transport retries', () => {
     expect(calls).toBe(2);
   });
 
-  it('recovers Bedrock Agent event-stream failures after a trace event', async () => {
+  it('does not replay a Bedrock Agent turn after a trace event', async () => {
     const config = {
       agentId: 'agent-fixture',
       agentAliasId: 'alias-fixture',
@@ -274,9 +274,16 @@ describe('scheduler recovery outside provider transport retries', () => {
     });
     vi.spyOn(provider as any, 'getAgentRuntimeClient').mockResolvedValue({ send });
     const result = await invoke(provider);
-    expect(result.error).toBeUndefined();
-    expect(result.output).toBe('recovered');
-    expect(send).toHaveBeenCalledTimes(2);
+    expect(result.error).toContain('Rate limit exceeded');
+    expect(result.output).toBeUndefined();
+    expect(send).toHaveBeenCalledOnce();
+    expect(Object.values(registry.getMetrics())[0]).toMatchObject({
+      rateLimitHits: 1,
+      retriedRequests: 0,
+      failedRequests: 1,
+      completedRequests: 0,
+      maxConcurrency: 2,
+    });
   });
 
   it.each(['GET', 'PUT', 'get'])('does not replay n8n %s embedded errors', async (method) => {

@@ -1,3 +1,5 @@
+import { runInNewContext } from 'vm';
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderEnvOnlyInObject, renderVarsInObject } from '../../src/util/render';
 import { mockProcessEnv } from './utils';
@@ -182,6 +184,25 @@ describe('renderVarsInObject', () => {
 });
 
 describe('renderEnvOnlyInObject', () => {
+  it.each([
+    new Uint8Array([0, 97, 98, 99, 0]).subarray(1, 4),
+    Buffer.from('abc'),
+    new ArrayBuffer(3),
+    new SharedArrayBuffer(3),
+    runInNewContext('new ArrayBuffer(3)'),
+    runInNewContext('new SharedArrayBuffer(3)'),
+    new DataView(new Uint8Array([0, 97, 98, 99, 0]).buffer, 1, 3),
+  ])('preserves binary leaves while rendering adjacent strings', (bytes) => {
+    const rendered = renderEnvOnlyInObject(
+      { region: '{{ env.AWS_BEDROCK_REGION }}', files: [{ bytes, prompt: '{{ vars.prompt }}' }] },
+      { AWS_BEDROCK_REGION: 'us-east-1' },
+      true,
+    );
+    expect(rendered.region).toBe('us-east-1');
+    expect(rendered.files[0].prompt).toBe('{{ vars.prompt }}');
+    expect(rendered.files[0].bytes).toBe(bytes);
+  });
+
   beforeEach(() => {
     mockProcessEnv({ TEST_ENV_VAR: undefined });
     mockProcessEnv({ AZURE_ENDPOINT: undefined });

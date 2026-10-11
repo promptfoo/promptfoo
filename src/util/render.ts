@@ -1,3 +1,5 @@
+import { isAnyArrayBuffer } from 'util/types';
+
 import { getEnvBool } from '../envars';
 import logger from '../logger';
 import { getNunjucksEngine } from './templates';
@@ -125,6 +127,10 @@ export function renderEnvOnlyInObject<T>(
 
     if (Array.isArray(value)) {
       return value.map(render);
+    }
+
+    if (ArrayBuffer.isView(value) || isAnyArrayBuffer(value)) {
+      return value;
     }
 
     if (typeof value === 'object' && value !== null) {
