@@ -1567,9 +1567,9 @@ describe('EvalResult', () => {
         for (const [key, value] of Object.entries(nativeMetadata)) {
           if (strip) {
             expect(projected.response?.metadata).not.toHaveProperty(key);
-            if (owner !== 'test') {
-              expect(projected.metadata).not.toHaveProperty(key);
-            }
+            expect(projected.metadata?.[key]).toEqual(
+              testMetadata[key as keyof typeof testMetadata],
+            );
           } else {
             expect(projected.response?.metadata?.[key]).toEqual(value);
             if (owner === 'provider') {
@@ -1582,7 +1582,7 @@ describe('EvalResult', () => {
         }
         if (owner !== 'provider') {
           expect(projected.metadata).toEqual(
-            strip && owner === 'hook' ? { annotation: 'keep hook annotation' } : ownedMetadata,
+            strip ? { ...ownedMetadata, ...testMetadata } : ownedMetadata,
           );
         }
         expect(projected.response?.metadata?.latencyMs).toBe(42);

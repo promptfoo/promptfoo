@@ -1335,7 +1335,11 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       serviceTier: this.buildServiceTier(),
       outputConfig: this.config.outputConfig,
       promptVariables: renderVarsInObject(this.config.promptVariables, context?.vars),
-      requestMetadata: this.config.requestMetadata,
+      requestMetadata: this.config.requestMetadata
+        ? Object.fromEntries(
+            Object.entries(this.config.requestMetadata).map(([key, value]) => [key, String(value)]),
+          )
+        : undefined,
     };
     if (managedPrompt) {
       const conflicting = [
@@ -1640,37 +1644,6 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
   }
 
   /**
-   * Execute MCP tool calls for the given tool_use blocks. Blocks whose name
-   * doesn't match a discovered MCP tool are skipped silently; the caller is
-   * responsible for deciding what to do with them. Returns formatted result
-   * strings and any errors encountered.
-   */
-  private async executeMcpToolCalls(
-    blocks: { name: string; input: unknown }[],
-  ): Promise<{ results: string[]; errors: string[] }> {
-    const results: string[] = [];
-    const errors: string[] = [];
-
-    if (!this.mcpClient) {
-      return { results, errors };
-    }
-    const tools = this.mcpClient.getAllTools();
-
-    for (const { name, input } of blocks) {
-      if (!name || !tools.find((tool) => tool.name === name)) {
-        continue;
-      }
-      const { output, error } = await this.dispatchMcpToolCall(name, input);
-      results.push(output);
-      if (error) {
-        errors.push(error);
-      }
-    }
-
-    return { results, errors };
-  }
-
-  /**
    * Parse the Converse API response into ProviderResponse format
    */
   private async parseResponse(
@@ -1804,22 +1777,17 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     const handledIndexes = new Set<number>();
 
     if (!toolsDisabled && response.stopReason === 'tool_use' && toolUseBlocks.length > 0) {
-      // 1) MCP for matching tool names.
-      const mcpEligible: { idx: number; name: string; input: unknown }[] = [];
-      toolUseBlocks.forEach((block, idx) => {
-        const name = block.toolUse.name;
+      // 1) MCP for matching tool names. Keep rendered results at their original indexes.
+      for (let idx = 0; idx < toolUseBlocks.length; idx++) {
+        const { name, input } = toolUseBlocks[idx].toolUse;
         if (this.mcpClient && name && mcpToolNames.has(name)) {
-          mcpEligible.push({ idx, name, input: block.toolUse.input });
-        }
-      });
-
-      if (mcpEligible.length > 0) {
-        const mcpResult = await this.executeMcpToolCalls(mcpEligible);
-        for (const { idx } of mcpEligible) {
+          const { output, error } = await this.dispatchMcpToolCall(name, input);
+          dispatchResults[idx] = output;
           handledIndexes.add(idx);
+          if (error) {
+            mcpErrors.push(error);
+          }
         }
-        dispatchResults.push(...mcpResult.results);
-        mcpErrors.push(...mcpResult.errors);
       }
 
       // 2) functionToolCallbacks for any remaining (non-MCP) tool_use blocks.
@@ -1843,7 +1811,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
               args,
               block.toolUse.toolUseId,
             );
-            dispatchResults.push(result);
+            dispatchResults[idx] = result;
             handledIndexes.add(idx);
           } catch (err) {
             logger.warn(
@@ -1862,15 +1830,11 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     // extraction path below to render text + tool_use as one combined output
     // (matching the pre-MCP contract).
     if (!toolsDisabled && toolUseBlocks.length > 0 && handledIndexes.size < toolUseBlocks.length) {
-      const fallbackText = extractTextFromContentBlocks(
-        toolUseBlocks
-          .filter((_, idx) => !handledIndexes.has(idx))
-          .map((block) => ({ toolUse: block.toolUse })) as ContentBlock[],
-        showThinking,
-      );
-      if (fallbackText) {
-        dispatchResults.push(fallbackText);
-      }
+      toolUseBlocks.forEach((block, idx) => {
+        if (!handledIndexes.has(idx)) {
+          dispatchResults[idx] = extractTextFromContentBlocks([block], showThinking);
+        }
+      });
     }
 
     if (dispatchResults.length > 0) {

@@ -367,6 +367,103 @@ describe('Converse native request features', () => {
   });
 
   it.each([false, true])(
+    'normalizes YAML metadata scalars with streaming=%s',
+    async (streaming) => {
+      const { provider, send } = fixture({
+        streaming,
+        requestMetadata: { build: 123, enabled: true, label: 'run' } as never,
+      });
+      if (streaming) {
+        send.mockResolvedValueOnce(
+          stream([
+            { messageStop: { stopReason: 'end_turn' } },
+            { metadata: { usage: reply.usage } },
+          ]),
+        );
+      }
+      expect((await provider.callApi('hello')).error).toBeUndefined();
+      expect(send.mock.calls[0][0].input.requestMetadata).toEqual({
+        build: '123',
+        enabled: 'true',
+        label: 'run',
+      });
+      expect(provider.config.requestMetadata).toEqual({ build: 123, enabled: true, label: 'run' });
+    },
+  );
+
+  it.each(
+    [false, true].flatMap((streaming) => [false, true].map((fails) => ({ streaming, fails }))),
+  )(
+    'keeps mixed tool output in response order (streaming=$streaming, failures=$fails)',
+    async ({ streaming, fails }) => {
+      const callback = fails
+        ? vi.fn().mockRejectedValue(new Error('local failed'))
+        : vi.fn().mockResolvedValue('LOCAL');
+      const mcpCall = vi
+        .fn()
+        .mockResolvedValue(
+          fails
+            ? { isError: true, error: 'remote failed', content: 'remote failed' }
+            : { content: [{ type: 'text', text: 'REMOTE' }] },
+        );
+      const { provider, send } = fixture({ streaming, functionToolCallbacks: { local: callback } });
+      Object.assign(provider, {
+        mcpClient: { getAllTools: () => [{ name: 'remote' }], callTool: mcpCall },
+      });
+      const content = ['unhandled', 'local', 'remote', 'unhandled-again'].map((name, idx) => ({
+        toolUse: { toolUseId: `call-${idx}`, name, input: { idx } },
+      }));
+      send.mockResolvedValueOnce(
+        streaming
+          ? stream([
+              ...content.flatMap(({ toolUse }, contentBlockIndex) => [
+                {
+                  contentBlockStart: {
+                    contentBlockIndex,
+                    start: { toolUse: { name: toolUse.name, toolUseId: toolUse.toolUseId } },
+                  },
+                },
+                {
+                  contentBlockDelta: {
+                    contentBlockIndex,
+                    delta: { toolUse: { input: JSON.stringify(toolUse.input) } },
+                  },
+                },
+                { contentBlockStop: { contentBlockIndex } },
+              ]),
+              { messageStop: { stopReason: 'tool_use' } },
+              { metadata: { usage: reply.usage } },
+            ])
+          : {
+              ...reply,
+              output: { message: { role: 'assistant', content } },
+              stopReason: 'tool_use',
+            },
+      );
+      const result = await provider.callApi('hello');
+      const fallback = (idx: number) =>
+        JSON.stringify({
+          type: 'tool_use',
+          id: `call-${idx}`,
+          name: content[idx].toolUse.name,
+          input: { idx },
+        });
+      expect(result.output).toBe(
+        [
+          fallback(0),
+          fails ? fallback(1) : 'LOCAL',
+          fails ? 'MCP Tool Error (remote): remote failed' : 'MCP Tool Result (remote): REMOTE',
+          fallback(3),
+        ].join('\n'),
+      );
+      expect(callback).toHaveBeenCalledTimes(1);
+      expect(mcpCall).toHaveBeenCalledTimes(1);
+      expect(result.error).toBe(fails ? 'MCP Tool Error (remote): remote failed' : undefined);
+      expect(result.tokenUsage).toMatchObject({ prompt: 3, completion: 2, total: 5 });
+    },
+  );
+
+  it.each([false, true])(
     'excludes logging metadata from cache keys with streaming=%s',
     async (streaming) => {
       cache.enabled = true;

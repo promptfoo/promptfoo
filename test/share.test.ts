@@ -930,10 +930,7 @@ describe('createShareableUrl', () => {
 
         const [uploaded] = JSON.parse(mockFetch.mock.calls[1][1].body);
         expect(uploaded.testCase.metadata).toEqual(testMetadata);
-        expect(uploaded.metadata).toEqual({
-          ...testMetadata,
-          ...(override && { audio: undefined }),
-        });
+        expect(uploaded.metadata).toEqual(testMetadata);
         expect(uploaded.response.output).toBe('[output stripped]');
         expect(row.metadata.audio).toEqual(responseMetadata?.audio ?? testMetadata.audio);
       },

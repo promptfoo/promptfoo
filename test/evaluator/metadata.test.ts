@@ -513,6 +513,8 @@ describeEvaluator('evaluator metadata', () => {
     'annotate',
     'annotate-delete',
     'test-owned',
+    'test-owned-different',
+    'test-owned-different-delete',
     'failure',
   ])('preserves metadata ownership after an in-place afterEach %s', async (mode) => {
     const outputPath = path.join(os.tmpdir(), `promptfoo-hook-metadata-${randomUUID()}.jsonl`);
@@ -544,7 +546,11 @@ describeEvaluator('evaluator metadata', () => {
         ctx.result.metadata.content = [...ctx.result.metadata.content, { text: 'hook annotation' }];
         ctx.result.metadata.trace = { ...ctx.result.metadata.trace, annotation: 'hook annotation' };
       }
-      if (mode === 'delete' || mode === 'annotate-delete') {
+      if (
+        mode === 'delete' ||
+        mode === 'annotate-delete' ||
+        mode === 'test-owned-different-delete'
+      ) {
         delete ctx.result.response.metadata;
       } else if (mode === 'delete-key') {
         delete ctx.result.response.metadata.content;
@@ -554,7 +560,7 @@ describeEvaluator('evaluator metadata', () => {
           trace: { guardrail: { modelOutput: ['updated-output-secret'] } },
           additionalModelResponseFields: { answer: 'updated-output-secret' },
         };
-      } else if (mode !== 'hook-owned' && mode !== 'annotate') {
+      } else if (mode !== 'hook-owned' && mode !== 'annotate' && mode !== 'test-owned-different') {
         ctx.result.response.metadata = { note: 'done' };
       }
       if (mode === 'failure') {
@@ -566,7 +572,10 @@ describeEvaluator('evaluator metadata', () => {
       providers: [provider],
       prompts: [toPrompt('Test prompt')],
       tests: [
-        { ...createEqualityTest(), ...(mode === 'test-owned' && { metadata: ownedMetadata }) },
+        {
+          ...createEqualityTest(),
+          ...(mode.startsWith('test-owned') && { metadata: ownedMetadata }),
+        },
       ],
       extensions: ['file://test-extension.js:afterEach'],
     };
@@ -585,7 +594,7 @@ describeEvaluator('evaluator metadata', () => {
         );
         for (const key of Object.keys(nativeMetadata)) {
           expect(row.response.metadata ?? {}).not.toHaveProperty(key);
-          if (mode === 'test-owned') {
+          if (mode.startsWith('test-owned')) {
             expect(row.metadata[key]).toEqual(ownedMetadata[key as keyof typeof ownedMetadata]);
           } else {
             expect(row.metadata).not.toHaveProperty(key);

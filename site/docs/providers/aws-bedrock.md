@@ -286,7 +286,8 @@ With `PROMPTFOO_STRIP_RESPONSE_OUTPUT=true`, `content`, `trace`, and
 `additionalModelResponseFields` are reserved output metadata: they are stripped
 even if an `afterEach` hook annotates them or removes the canonical response
 metadata. Put hook annotations in separate metadata keys to retain them. Explicit
-test metadata is preserved.
+test metadata takes precedence for these reserved keys, even if provider metadata
+overwrites it during evaluation.
 
 ```yaml
 providers:
