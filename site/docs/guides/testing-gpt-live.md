@@ -83,6 +83,12 @@ The exported measurements use declared energy thresholds and window sizes. They 
 
 The continuous-announcement example uses a declared eligibility screen: at least 300 ms of active target audio in the second before actual caller onset, including at least 20 ms in the preceding 100 ms. Activity uses 20 ms RMS frames at −40 dBFS. The exporter reports those measurements and the first subsequent 200 ms quiet window. Confirm that the announcement was unfinished too; neither an energy threshold nor a quiet window establishes semantic yielding by itself.
 
+Measure interruption delay before reducing the audio buffer. A received speech chunk can spend time waiting for playback, but the model may also continue speaking before that chunk arrives. With source packets available, match the last delivered speech samples to their received chunk and report those intervals separately. Packet arrival still includes network and server delay; it is not a model-compute measurement.
+
+The [GPT-Live prompting structure](https://developers.openai.com/api/docs/guides/live-prompting) separates interruption and backchannel policies. Test those policies rather than assuming stronger wording makes yielding faster: in the controlled experiments below, neither an immediate-yield policy nor a listen-first policy improved the measured delay, so the examples retain their original prompts. The simulator does not silently rewrite an evaluated target's policy or mute its output when the cue plays. Compare prompts with the same stimulus and inspect whether the obsolete answer actually ends, then test backchannels and unfamiliar interruption wording too. With `callerInterventions.text` and `--no-cache`, each run synthesizes a fresh clip: retain its hash and duration, and do not describe matching scripts as identical audio.
+
+Inspect `targetActivityAfterFirst200MsQuiet` too. It reports any above-threshold target activity after the first quiet window and before the prepared caller clip ends, including the last active sample window. A pause followed by more sound is not final cessation. That later sound might be speech, a listening sound, or breathing; transcribe and review the recording before assigning semantic meaning.
+
 ## Verify an actual operation
 
 The reservation case uses a fixed spoken correction from August 7 to August 6, followed by a backend tool with a two-second delay. The fixture accepts valid wrong dates too: the evaluator, rather than the application fixture, must catch a wrong booking.
@@ -127,6 +133,8 @@ Open `review/index.html` in a browser. The bundle includes the original stereo W
 
 The helper verifies recording hashes and format. Missing or corrupt media produces a partial manifest and nonzero exit; it must not become an audio-quality pass. `manual-review.json` starts as **not reviewed**. Browser playback succeeding does not mean somebody listened.
 
+When present, local playout counters are bound to each exported WAV's hash and speaker. The deterministic audio grader can use that evidence; it is not sent to the audio model. A positive underflow counter identifies a relay failure even when its acoustic boundaries are hard to distinguish from a pause. Zero underflow only means that this counter recorded none.
+
 For the continuous-announcement case, require a mechanically eligible opportunity before interpreting the interruption result:
 
 ```bash
@@ -150,6 +158,16 @@ Listen to the complete conversation at normal speed, then isolate each speaker. 
 
 ## Transcribe and review the actual audio
 
+First run the signal grader on the exported WAVs. This command makes no model requests:
+
+```bash
+node examples/simulated-voice-user/grade-audio-signal.js \
+  --tests "$VOICE_RUN_DIR/review/audio-review-tests.json" \
+  --out "$VOICE_RUN_DIR/signal-review.json"
+```
+
+It reports exact silence, clipping, repeated PCM, suspicious internal zero gaps, and any bound transport-underflow evidence. Suspicious signal findings require review; they do not establish a network cause. Ordinary pauses and active capture endings can be ambiguous. Keep the report even when the command exits nonzero.
+
 Run an independent transcription of the two delivered speaker tracks, without supplying the expected words:
 
 ```bash
@@ -171,6 +189,8 @@ node --env-file="$VOICE_ENV_FILE" dist/src/main.js eval \
 ```
 
 This uses `gpt-audio-1.5` through the existing Chat Completions provider. It returns `no_issue_flagged`, `review_required`, or `unratable`, with a transcript and observations. Invalid output fails validation. **No issue flagged is an advisory finding, not a quality certificate.** Exact silence must remain unratable even if the model invents a transcript.
+
+The eval also runs `audio_signal_integrity` independently of `audio_no_issue_flagged`. Preserve both results: a model error does not become a passing review because the signal check succeeded, and a model's clean verdict does not erase a measured defect.
 
 Direct audio-model review and human listening are different evidence. In development, the audio model recovered a short goodbye missed by ASR, but missed a packet-proven 200 ms gap. Blinded controls also exposed inconsistent judgments on identical audio and invented speech on digital silence. Retain those failures; do not replace missing acoustic evidence with a confident model explanation.
 
@@ -197,9 +217,34 @@ node examples/simulated-voice-user/score-audio-calibration.js \
 
 The generator performs no API calls. It saves the originals, opaque WAV inputs, exact edits, hashes, and a separate frozen answer key. Controls include unchanged copies, silent gaps, repeated audio, severe clipping, truncation, and silence. The expected edits are engineering controls, not human-rated acoustic ground truth. Do not send the answer key to the model.
 
+Calibration inputs also retain an independently hashed clean reference for the deterministic grader. A matching reference can prove a local erasure or missing suffix that cannot reliably be inferred from sound alone. It must be the intended original recording, not another synthesis of the same words; hashes bind the bytes but do not establish who supplied them. The audio-model prompt receives neither the reference nor expected labels. The scorer reports reference-free signal, reference-aware signal, model-only, and combined outcomes separately. Freeze the policy before testing new speakers, source clips, edit positions, and defect durations; retain clean gain-change and natural-pause controls to measure false alarms.
+
 Some calibration rows should fail the ordinary quality assertion, so that eval can exit nonzero while still producing its results. Run the scorer afterward; it also exits nonzero when calibration fails. Distinguish expected defect flags from provider errors, malformed judgments, missing results, and abstentions. Report every control and the denominator, including missed defects and clean-control false alarms. Keep the original outputs if you revise a rubric, and use new held-out cases for the revision. Recalibrate after changing the model or audio preprocessing.
 
 The text-grader controls in `promptfooconfig.calibration.yaml`, `promptfooconfig.confirmation-calibration.yaml`, and `promptfooconfig.order-calibration.yaml` test invented facts and ambiguous confirmations independently of audio. A reliable test suite needs both semantic and acoustic controls.
+
+## What the live checks found
+
+Development checks on October 10, 2026 compared two stronger target policies against the original announcement prompt. Each comparison used fresh GPT-Live sessions, unchanged 200–400 ms playout buffering, and the same verified caller PCM through a test-only speech replay fixture. The simulator preserved target output. These are small controlled experiments, not a production latency benchmark; the standard commands above still generate fresh speech clips.
+
+| Policy treatment                                                                            | Original prompt: first 200 ms quiet after caller onset | Treatment: first 200 ms quiet after caller onset |
+| ------------------------------------------------------------------------------------------- | ------------------------------------------------------ | ------------------------------------------------ |
+| Explicit immediate yielding, with a separate acknowledgment policy                          | 1,460 / 1,420 ms; median 1,440 ms                      | 1,520 / 1,460 / 1,700 ms; median 1,520 ms        |
+| Stop at first caller speech, classify the request afterward, resume after an acknowledgment | 1,300 / 1,080 / 1,740 ms; median 1,300 ms              | 1,480 / 1,440 / 1,580 ms; median 1,480 ms        |
+
+All recorded comparison cases met the declared activity screen and answered correctly. The first comparison also retained a connection failure with no recording; it contributes no latency observation. Neither prompt treatment improved the frozen quiet-window metric, so the original example prompts remain. One first-comparison recording had later target activity after its initial quiet window, which is another reason to inspect the sound instead of treating the table as exact semantic yielding latency.
+
+Packet inspection separated upstream delay from local queue time. A smaller adaptive-reserve rule saved only 60 ms in one replay and reintroduced a 20 ms speech underflow in a historical capture; it was rejected. Application playback suppression would be a separate treatment with its own lost-audio, context, and acknowledgment checks. Muting the target at the scheduled cue would not demonstrate faster native GPT-Live behavior.
+
+The frozen signal grader detected all six development mutations and all seven mutations from a different held-out source when supplied with the correct hashed reference, with zero alarms on two and four labeled negative controls respectively. Reference-free detection caught only four of six and three of seven. Natural-pause sources were retained as observations, outside those false-alarm denominators. The saved 200 ms live gap was flagged from PCM; the saved 80 ms live gap required bound playout-counter evidence. Two older 20 ms gaps remain below the generic 40 ms signal threshold and require packet reconstruction. These distinctions are part of the result, not exceptions to omit from the report.
+
+Across both comparisons and the fresh-speech, unfamiliar-wording, and acknowledgment checks, 20 live attempts produced 19 recordings. Sixteen original evals passed. The four retained failures were a connection refusal before audio, a caller requesting unsupported delegation, a target transport-underflow failure, and a malformed test assertion. The last assertion was corrected and checked against the saved response offline; its original failure was not rewritten as a successful live run. One acknowledgment occurred during target silence and therefore did not test resistance to an active backchannel.
+
+The transport failure contained two 20 ms gaps at 11.140–11.160 s and 11.860–11.880 s, before the caller's cue. Its 960 ms quiet-window delay is not a clean fast-yield result. Packet replay proved the gaps, and the new hash-bound counter check failed the audio grade even though the stereo audio model returned `no_issue_flagged`. Reducing interruption delay and eliminating all underflows remain unresolved.
+
+Independent review covered 48 unique transcription inputs, all 19 stereo recordings and 38 isolated tracks, plus one diagnostic crop. Every raw output was inspected. The 58 audio-model responses included 35 `no_issue_flagged`, 22 `review_required`, and one malformed JSON response; these are reviewer outputs, not recording-quality labels. Several concerns treated expected isolated-track silence or deliberate overlap as defects. ASR omitted a verified caller question in one track; disagreements about a later target sound remained unresolved after reviewing a lossless crop. This was manual data inspection plus direct audio-model review, not human listening.
+
+Twelve fresh held-out audio-model calls also tested the frozen controls. Excluding the observational natural-pause row, the model matched only 5 of 11 expected statuses, including invented speech on digital silence and an incorrectly completed truncated date. Reference-aware signal and combined scoring matched 11 of 11 statuses and caught all seven injected defects, with no alarms on four negative controls. The model's sole nominal defect-category hit described an ordinary date correction rather than convincingly locating the injected repetition. No reliable improvement in model-only grading was demonstrated. These small engineering-control results do not establish perceptual accuracy on arbitrary conversations.
 
 ## Report what was demonstrated
 
