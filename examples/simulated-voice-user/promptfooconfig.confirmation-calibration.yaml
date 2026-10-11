@@ -1,0 +1,8 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Voice grader held-out confirmation controls
+prompts:
+  - Grade saved listener evidence.
+providers:
+  - file://calibration-provider.js
+defaultTest: file://grading.yaml
+tests: file://calibration-confirmation-cases.yaml

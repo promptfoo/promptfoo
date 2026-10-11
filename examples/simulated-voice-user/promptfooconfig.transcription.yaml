@@ -1,0 +1,19 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Independent transcription of delivered speaker tracks
+prompts:
+  - '{{audio_path}}'
+providers:
+  - id: openai:transcription:gpt-4o-transcribe
+# Supply transcription-tests.json from export-evidence.js with --tests.
+# No reference transcript, expected answer, or vocabulary hint is sent to ASR.
+defaultTest:
+  assert:
+    - type: javascript
+      metric: transcript_available
+      value: |
+        return {
+          pass: typeof output === 'string' && output.trim().length > 0,
+          score: typeof output === 'string' && output.trim().length > 0 ? 1 : 0,
+          reason: 'A nonempty transcription is evidence to inspect, not proof of audio or task quality.',
+        };
+tests: []

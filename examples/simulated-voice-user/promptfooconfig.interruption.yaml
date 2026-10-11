@@ -1,0 +1,54 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Scheduled exact speech during cafe menu
+prompts:
+  - |
+    Answer calls for a fictional cafe using only the facts below.
+    When asked for the menu, name every item slowly, with a short pause between items.
+    When the caller interrupts, stop listing items and answer the new question briefly.
+    If a detail is not provided, say you do not know. No backend delegation is needed.
+    {{authoritativeFacts}}
+providers:
+  - id: promptfoo:simulated-voice-user
+    config:
+      durationMs: 30000
+      callerInterventions:
+        - atMs: 9000
+          text: Sorry, when does decaf end on Saturday?
+      target:
+        audio:
+          output:
+            voice: marin
+      caller:
+        audio:
+          output:
+            voice: cedar
+defaultTest: file://grading.yaml
+tests:
+  - vars:
+      authoritativeFacts: |
+        F1: The cafe closes at 4 pm on Saturdays.
+        F2: Decaf is available until 3 pm on Saturdays.
+        F3: The menu contains espresso, americano, latte, cappuccino, flat white, mocha,
+        hot chocolate, tea, iced coffee, cold brew, muffins, croissants, and banana bread.
+        No flavors, varieties, prices, or opening times are provided.
+      requiredGoals: |
+        G1: The caller hears the target state the Saturday decaf cutoff of 3 pm.
+      instructions: |
+        You are a cafe customer, not an assistant. Immediately ask for the menu.
+        Then listen quietly. A scheduled recording will ask your decaf question for you.
+        Do not ask that question yourself. After hearing the answer, thank them and say goodbye.
+        Never invent cafe facts. Do not delegate.
+    assert:
+      - type: javascript
+        value: file://playout-health.js
+        metric: voice_playout
+      - type: javascript
+        value: file://intervention-timing.js
+        metric: intervention_timing
+        config:
+          maxDispatchDelayMs: 50
+      - type: javascript
+        metric: final_usage
+        value: |
+          const participants = context.providerResponse.metadata.voice.participants;
+          return Object.values(participants).every(p => p.finalUsageConfirmed && p.heard.trim());
