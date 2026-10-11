@@ -67,6 +67,11 @@ interface NativeApiConfig extends BedrockOptions {
   maxRetries?: number | string;
 }
 
+function isJsonContentType(contentType = 'application/json'): boolean {
+  const mediaType = contentType.split(';', 1)[0].trim();
+  return /^[^/\s]+\/(?:[^/\s]+\+)?json$/i.test(mediaType);
+}
+
 /** Compare decimal values without expanding exponent notation into arbitrarily many zeros. */
 function normalizeNumericLiteral(source: string): string {
   const [mantissa, exponent = '0'] = source.toLowerCase().split('e');
@@ -387,7 +392,7 @@ export class AwsBedrockNativeApiProvider extends AwsBedrockGenericProvider {
           if (
             this.operation === 'InvokeModelWithResponseStream' &&
             event.chunk?.bytes &&
-            (native.contentType ?? 'application/json').includes('json')
+            isJsonContentType(native.contentType)
           ) {
             events.push({
               ...event,
@@ -408,7 +413,7 @@ export class AwsBedrockNativeApiProvider extends AwsBedrockGenericProvider {
         if (!(native.body instanceof Uint8Array)) {
           throw new Error('Bedrock InvokeModel returned no response body');
         }
-        native.body = (native.contentType ?? 'application/json').includes('json')
+        native.body = isJsonContentType(native.contentType)
           ? await parseNativeJson(native.body)
           : encodeBlobs(native.body);
       }
