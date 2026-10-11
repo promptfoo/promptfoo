@@ -235,7 +235,7 @@ describe('SimulatedVoiceUser', () => {
       type: 'conversation.item.input_audio_transcription.delta',
       item_id: 'item-1',
       content_index: 0,
-      delta: 'Stop talking',
+      delta: 'Stop talking.',
     });
     const redirect = target.sent.find((event) => event.type === 'session.thinking.append');
     expect(redirect?.content).toContain('was not heard');
@@ -306,6 +306,58 @@ describe('SimulatedVoiceUser', () => {
     expect(Buffer.from(response.metadata!.audio.data, 'base64').length - 44).toBe(m.sourceBytes);
     expect(response.cost).toBeUndefined();
     expect(response.tokenUsage?.numRequests).toBe(3);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('keeps delivered audio intact when a partial pause becomes an unrelated playback request', async () => {
+    const result = provider({ targetPlayback: { mode: 'app-barge-in' } }).callApi('Cafe');
+    const { recognizer, target, caller } = await connectApplication();
+    audio(target, 1200, 24000);
+    audio(caller, 3000, 4800);
+    transcript(target, 'Please pause playback of the video', 220, 'input');
+    transcript(caller, 'The announcement continues.', 820, 'input');
+    await vi.advanceTimersByTimeAsync(280);
+    emit(recognizer, {
+      type: 'conversation.item.input_audio_transcription.delta',
+      item_id: 'item-1',
+      delta: 'Please pause',
+    });
+    expect(target.sent.some((event) => event.type === 'session.thinking.append')).toBe(false);
+    emit(recognizer, {
+      type: 'conversation.item.input_audio_transcription.delta',
+      item_id: 'item-1',
+      delta: ' playback of the video',
+    });
+    await vi.advanceTimersByTimeAsync(520);
+    emit(recognizer, {
+      type: 'input_audio_buffer.committed',
+      item_id: 'item-1',
+      previous_item_id: null,
+    });
+    emit(recognizer, {
+      type: 'conversation.item.input_audio_transcription.completed',
+      item_id: 'item-1',
+      transcript: 'Please pause playback of the video',
+      usage: { type: 'duration', seconds: 0.8 },
+    });
+    await vi.advanceTimersByTimeAsync(200);
+    finalize();
+    const response = await result;
+    expect(response.error).toBeUndefined();
+    const app = response.metadata!.voice.targetPlayback;
+    expect(app.metrics).toMatchObject({
+      stops: 0,
+      discardedQueuedBytes: 0,
+      discardedSelectedBytes: 0,
+      discardedIncomingBytes: 0,
+      suppressedPlaybackMs: 0,
+    });
+    expect(app.metrics.deliveredSourceBytes).toBeGreaterThan(0);
+    expect(app.metrics.sourceBytes).toBe(
+      app.metrics.deliveredSourceBytes + app.metrics.pendingQueuedBytes,
+    );
+    expect(app.redirects).toEqual([]);
+    expect(app.recognition.turns[0].decision).toBeUndefined();
     expect(vi.getTimerCount()).toBe(0);
   });
 

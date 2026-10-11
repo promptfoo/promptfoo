@@ -139,9 +139,11 @@ export default function reservationState(_output, context) {
       /\b(?:zero|oh|one|two|three|four|five|six|seven|eight|nine)\b/g,
       (word) => DIGITS[word],
     );
+  // Keep numeric groups together, but do not consume a sentence-ending period
+  // and the next sentence's number. Do not truncate to the expected code length.
   const codes = [
     ...codeSpeech.matchAll(
-      /\b(?:confirmation\s+(?:code|number)|code)\s*(?:is\s*)?[:#-]?\s*(\d[\d\s,.-]*)/g,
+      /\b(?:confirmation\s+(?:code|number)|code)\s*(?:is\s*)?[:#-]?\s*(\d+(?:[\s,-]+\d+|\.\d+)*)/g,
     ),
   ].map((match) => match[1].replace(/\D/g, ''));
   if (mode === 'unavailable') {

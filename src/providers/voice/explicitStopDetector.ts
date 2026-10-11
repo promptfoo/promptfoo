@@ -7,38 +7,39 @@ export function detectExplicitStop(
   text: string,
   completed = false,
 ): 'explicit-command' | 'interruption-question' | undefined {
-  const normalized = text.trim().toLowerCase().replace(/\s+/g, ' ');
-  // Quotation marks and leading negation/context make an imperative ambiguous.
-  // Do not strip them and accidentally promote quoted words into a command.
-  if (!normalized || /["“”‘’]/.test(normalized)) {
+  // Keep trailing whitespace: it can confirm a word boundary in a partial delta.
+  const normalized = text.trimStart().toLowerCase().replace(/\s+/g, ' ');
+  // Word-internal apostrophes are contractions, not quotation boundaries. Keep
+  // actual quotes and leading context so quoted imperatives cannot become commands.
+  if (!normalized.trim() || /["“”]|(?:^|[^a-z0-9])['‘’]|['‘’](?:[^a-z0-9]|$)/.test(normalized)) {
     return undefined;
   }
-  // A period/exclamation completes the imperative even if ASR keeps the next
-  // sentence in the same item. Bare partial "stop" remains ambiguous. An
-  // ellipsis is not a sentence boundary: "stop... by the office" must abstain.
-  if (/^(?:please[, ]+)?stop(?:\.|!+)(?:\s|$)/.test(normalized)) {
-    return 'explicit-command';
-  }
+  // A terminal period might still become an ellipsis in the next delta. Wait
+  // for following whitespace or completion; exclamations are already distinct.
   if (
-    /^(?:please[, ]+)?(?:stop (?:talking|speaking|reading)|wait,? (?:a second|a moment)|hold on)(?:[\s,.!?]|$)/.test(
-      normalized,
-    ) ||
-    /^(?:please[, ]+)?pause(?:[,.!?]|$| (?:please|for a moment)(?:[\s,.!?]|$))/.test(normalized)
+    /^(?:please[, ]+)?(?:stop|pause)(?:\.(?=\s)|!+(?=\s|$))/.test(normalized) ||
+    /^(?:please[, ]+)?pause[,?]/.test(normalized)
   ) {
     return 'explicit-command';
   }
-  // A partial "stop" might become "stop by the cafe". Wait for the final
-  // transcript for this shortest command, at the cost of extra detection delay.
-  if (completed && /^(?:please[, ]+)?stop[.!?,]*$/.test(normalized)) {
+  // Chunk ends are not word boundaries: "hold on" can become "hold onto",
+  // and "wait a second" can become "wait a secondary concern".
+  const command = normalized.match(
+    /^(?:please[, ]+)?(?:stop (?:talking|speaking|reading)|wait,? (?:a second|a moment)|hold on|pause (?:please|for a moment))([\s,.!?]|$)/,
+  );
+  if (command && (completed || command[1])) {
     return 'explicit-command';
   }
-  // Require a question-form continuation. In particular, "what a lovely..."
-  // and "can you continue" must not turn acknowledgments into stop commands.
-  if (
-    /^sorry[, ]+(?:when (?:do|does|did|will|would|is|are|was|can|could)|what (?:time|do|does|did|is|are|was|can|could|would)|how (?:much|many|long|do|does|did|is|are|was|can|could|would)|(?:can|could) you (?:tell|explain|repeat|stop|pause|wait|answer))(?:[\s,.!?]|$)/.test(
-      normalized,
-    )
-  ) {
+  // Bare "stop" and "pause" may acquire an object or continuation. Only a
+  // completed shortest command can bypass the observed-boundary requirement.
+  if (completed && /^(?:please[, ]+)?(?:stop|pause)[.!?,]*\s*$/.test(normalized)) {
+    return 'explicit-command';
+  }
+  // Require a question-form continuation and the same observed word boundary.
+  const question = normalized.match(
+    /^sorry[, ]+(?:when (?:do|does|did|will|would|is|are|was|can|could)|what (?:time|do|does|did|is|are|was|can|could|would)|how (?:much|many|long|do|does|did|is|are|was|can|could|would)|(?:can|could) you (?:tell|explain|repeat|stop|pause|wait|answer))([\s,.!?]|$)/,
+  );
+  if (question && (completed || question[1])) {
     return 'interruption-question';
   }
   return undefined;

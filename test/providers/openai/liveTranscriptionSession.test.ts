@@ -230,6 +230,95 @@ describe('independent Live transcription', () => {
     await fixture.session.finish();
   });
 
+  it.each([
+    { prefix: 'Please pause', continuation: ' playback of the video' },
+    { prefix: 'hold on', continuation: 'to it' },
+    { prefix: 'Wait a second', continuation: 'ary concern' },
+    { prefix: 'Wait, a second', continuation: 'ary concern' },
+    { prefix: 'Stop.', continuation: '.. by the office tomorrow.' },
+  ])(
+    'never dispatches a stop for streamed $prefix + $continuation',
+    async ({ prefix, continuation }) => {
+      const fixture = setup();
+      const socket = await fixture.start();
+      fixture.frames(5);
+      delta(socket, 'item-1', prefix);
+      expect(fixture.onStopDecision).not.toHaveBeenCalled();
+      delta(socket, 'item-1', continuation);
+      expect(fixture.onStopDecision).not.toHaveBeenCalled();
+      fixture.frames(15, false);
+      commit(socket, 'item-1');
+      complete(socket, 'item-1', prefix + continuation);
+      const summary = await fixture.session.finish();
+      expect(summary.status).toBe('completed');
+      expect(summary.turns[0].decision).toBeUndefined();
+      expect(summary.turns[0].final).toBe(prefix + continuation);
+      expect(fixture.onStopDecision).not.toHaveBeenCalled();
+      expect(fixture.onError).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    'Pause',
+    'Please pause',
+    'Stop',
+    'Stop.',
+    'Hold on',
+    'Wait a second',
+    'Wait, a second',
+    'Pause for a moment',
+  ])('dispatches a genuine completed command exactly once: %s', async (text) => {
+    const fixture = setup();
+    const socket = await fixture.start();
+    fixture.frames(5);
+    delta(socket, 'item-1', text);
+    expect(fixture.onStopDecision).not.toHaveBeenCalled();
+    fixture.frames(15, false);
+    commit(socket, 'item-1');
+    complete(socket, 'item-1', text);
+    expect(fixture.onStopDecision).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        recognizedText: text,
+        trigger: 'explicit-command',
+      }),
+    );
+    expect((await fixture.session.finish()).status).toBe('completed');
+    expect(fixture.onStopDecision).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    { prefix: 'Please pause', continuation: '. ' },
+    { prefix: 'Pause', continuation: '!' },
+    { prefix: 'Pause', continuation: ',' },
+    { prefix: 'Pause', continuation: '?' },
+    { prefix: 'Pause for a moment', continuation: ' ' },
+    { prefix: 'Wait a second', continuation: ',' },
+    { prefix: 'Hold on', continuation: ' ' },
+    { prefix: 'Stop.', continuation: ' I’m changing the booking' },
+    { prefix: 'Stop.', continuation: " I'm changing the booking" },
+  ])(
+    'dispatches after an observed delimiter in $prefix + $continuation',
+    async ({ prefix, continuation }) => {
+      const fixture = setup();
+      const socket = await fixture.start();
+      fixture.frames(5);
+      delta(socket, 'item-1', prefix);
+      expect(fixture.onStopDecision).not.toHaveBeenCalled();
+      delta(socket, 'item-1', continuation);
+      expect(fixture.onStopDecision).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({
+          recognizedText: prefix + continuation,
+          trigger: 'explicit-command',
+        }),
+      );
+      fixture.frames(15, false);
+      commit(socket, 'item-1');
+      complete(socket, 'item-1', (prefix + continuation).trim());
+      expect((await fixture.session.finish()).status).toBe('completed');
+      expect(fixture.onStopDecision).toHaveBeenCalledOnce();
+    },
+  );
+
   it('does not stop acknowledgments or ordinary unrelated speech', async () => {
     const fixture = setup();
     const socket = await fixture.start();
@@ -248,7 +337,7 @@ describe('independent Live transcription', () => {
     fixture.frames(5);
     fixture.frames(15, false);
     fixture.frames(5);
-    delta(socket, 'item-1', 'Stop talking');
+    delta(socket, 'item-1', 'Stop talking.');
     expect(fixture.onStopDecision).not.toHaveBeenCalled();
     commit(socket, 'item-1');
     expect(fixture.onStopDecision).not.toHaveBeenCalled();
@@ -307,8 +396,8 @@ describe('independent Live transcription', () => {
     fixture.frames(5);
     delta(socket, 'item-1', 'stop ', 'same');
     delta(socket, 'item-1', 'stop ', 'same');
-    delta(socket, 'item-1', 'talking');
-    expect(fixture.onStopDecision.mock.calls[0][0].recognizedText).toBe('stop talking');
+    delta(socket, 'item-1', 'talking.');
+    expect(fixture.onStopDecision.mock.calls[0][0].recognizedText).toBe('stop talking.');
     fixture.session.abort();
   });
 
@@ -316,12 +405,12 @@ describe('independent Live transcription', () => {
     const fixture = setup();
     const socket = await fixture.start();
     fixture.frames(5);
-    delta(socket, 'item-1', 'Stop talking');
+    delta(socket, 'item-1', 'Stop talking.');
     fixture.frames(15, false);
     commit(socket, 'item-1');
     complete(socket, 'item-1', 'Do not stop talking');
     const summary = await fixture.session.finish();
-    expect(summary.turns[0].decision?.recognizedText).toBe('Stop talking');
+    expect(summary.turns[0].decision?.recognizedText).toBe('Stop talking.');
     expect(summary.turns[0].final).toBe('Do not stop talking');
   });
 
@@ -399,7 +488,7 @@ describe('independent Live transcription', () => {
     const socket = await fixture.start();
     fixture.frames(5);
     fixture.controller.abort();
-    delta(socket, 'item-1', 'stop talking');
+    delta(socket, 'item-1', 'stop talking.');
     expect(fixture.onStopDecision).not.toHaveBeenCalled();
     expect((await fixture.session.finish()).error).toContain('aborted');
     expect(socket.terminate).toHaveBeenCalledOnce();
@@ -424,7 +513,7 @@ describe('independent Live transcription', () => {
     const fixture = setup();
     const socket = await fixture.start();
     fixture.frames(5, false);
-    delta(socket, 'unexpected', 'stop talking');
+    delta(socket, 'unexpected', 'stop talking.');
     expect((await fixture.session.finish()).error).toContain('without caller speech');
     expect(fixture.onStopDecision).not.toHaveBeenCalled();
   });

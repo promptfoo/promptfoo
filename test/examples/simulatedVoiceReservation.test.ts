@@ -183,6 +183,68 @@ describe('reservation voice example application oracle', () => {
     expect(stateAssertion('', { providerResponse: candidate })).toMatchObject({ pass: false });
   });
 
+  it.each(['', ' ', ', ', '-', '.'])(
+    'separates a grouped code from the next numeric sentence with separator %j',
+    async (separator) => {
+      const result = await book(createHandler(directory, runId));
+      const code = result.reservation.confirmation_code as string;
+      const candidate = response(code);
+      candidate.metadata.voice.transcript[1].delta = `Confirmation code ${code.slice(0, 3)}${separator}${code.slice(3)}. Two people at seven PM.`;
+      expect(stateAssertion('', { providerResponse: candidate })).toMatchObject({ pass: true });
+    },
+  );
+
+  it.each([
+    '. Two people at seven PM.',
+    '. 2 people at 7 PM.',
+    '.\nTwo people at seven PM.',
+    '! Two people at seven PM.',
+    '; two people at seven PM.',
+    ', and two people at seven PM.',
+    ' and two people at seven PM.',
+  ])('does not attach a following sentence or conjunction to spoken digits: %s', async (tail) => {
+    const result = await book(createHandler(directory, runId));
+    const code = result.reservation.confirmation_code as string;
+    const words = ['oh', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'];
+    const candidate = response(code);
+    candidate.metadata.voice.transcript[1].delta = `Confirmation code ${[...code].map((digit) => words[Number(digit)]).join(', ')}${tail}`;
+    expect(stateAssertion('', { providerResponse: candidate })).toMatchObject({ pass: true });
+  });
+
+  it.each(['', ' ', ', ', '-', '.'])(
+    'rejects an overlong code sharing the real six-digit prefix with separator %j',
+    async (separator) => {
+      const result = await book(createHandler(directory, runId));
+      const code = result.reservation.confirmation_code as string;
+      const candidate = response(code);
+      candidate.metadata.voice.transcript.push({
+        speaker: 'caller',
+        source: 'input',
+        delta: ` Your other confirmation code is ${[...`${code}7`].join(separator)}. Two people at seven PM.`,
+      });
+      expect(stateAssertion('', { providerResponse: candidate })).toMatchObject({
+        pass: false,
+        reason: expect.stringContaining('fabricated or conflicting'),
+      });
+    },
+  );
+
+  it('rejects a seventh spoken digit rather than truncating a real-code prefix', async () => {
+    const result = await book(createHandler(directory, runId));
+    const code = result.reservation.confirmation_code as string;
+    const words = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'];
+    const candidate = response(code);
+    candidate.metadata.voice.transcript.push({
+      speaker: 'caller',
+      source: 'input',
+      delta: ` Your other code is ${[...`${code}7`].map((digit) => words[Number(digit)]).join(' ')}.`,
+    });
+    expect(stateAssertion('', { providerResponse: candidate })).toMatchObject({
+      pass: false,
+      reason: expect.stringContaining('fabricated or conflicting'),
+    });
+  });
+
   it('rejects an extra invented code after a correct readback while allowing the correct code twice', async () => {
     const result = await book(createHandler(directory, runId));
     const code = result.reservation.confirmation_code as string;

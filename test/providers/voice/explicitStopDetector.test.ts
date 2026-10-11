@@ -17,7 +17,7 @@ describe('English explicit-stop policy', () => {
     'Please stop! That is the wrong account.',
     'Stop!!! I need to change the appointment.',
   ])('recognizes a strong anchored command: %s', (text) => {
-    expect(detectExplicitStop(text)).toBe('explicit-command');
+    expect(detectExplicitStop(text, true)).toBe('explicit-command');
   });
 
   it.each([
@@ -27,7 +27,13 @@ describe('English explicit-stop policy', () => {
     'Sorry, can you repeat that',
     'Sorry, could you wait',
   ])('recognizes an interruption question prefix: %s', (text) => {
-    expect(detectExplicitStop(text)).toBe('interruption-question');
+    expect(detectExplicitStop(text, true)).toBe('interruption-question');
+  });
+
+  it('waits for a question-prefix word boundary without delaying observed whitespace', () => {
+    expect(detectExplicitStop('Sorry, could you wait')).toBeUndefined();
+    expect(detectExplicitStop('Sorry, could you wait ')).toBe('interruption-question');
+    expect(detectExplicitStop('Sorry, could you wait', true)).toBe('interruption-question');
   });
 
   it.each([
@@ -77,6 +83,50 @@ describe('English explicit-stop policy', () => {
   ])('abstains on ambiguous text or a backchannel: %s', (text) => {
     expect(detectExplicitStop(text)).toBeUndefined();
   });
+
+  it.each([
+    'Please pause playback of the video',
+    'hold onto it',
+    'Wait a secondary concern',
+    'Wait, a secondary concern',
+    'Stop... by the office tomorrow.',
+  ])('never promotes an unfinished prefix of a known non-interruption: %s', (text) => {
+    for (let length = 1; length <= text.length; length++) {
+      expect(detectExplicitStop(text.slice(0, length))).toBeUndefined();
+    }
+    expect(detectExplicitStop(text, true)).toBeUndefined();
+  });
+
+  it.each(['Pause', 'Please pause', 'Hold on', 'Wait a second', 'Please stop talking', 'Stop.'])(
+    'waits for an observed boundary or completion: %s',
+    (text) => {
+      expect(detectExplicitStop(text)).toBeUndefined();
+      expect(detectExplicitStop(text, true)).toBe('explicit-command');
+    },
+  );
+
+  it.each([
+    'Wait a second ',
+    'Wait a second,',
+    'Hold on!',
+    'Please pause. ',
+    'Pause!',
+    'Pause?',
+    'Pause,',
+    'Stop. I’m changing the booking',
+    "Stop. I'm changing the booking",
+    'Please pause. Don’t discard the booking',
+  ])('accepts observed delimiters and ordinary contractions: %s', (text) => {
+    expect(detectExplicitStop(text)).toBe('explicit-command');
+  });
+
+  it.each(['“Stop. I’m changing the booking”', '‘Please pause.’', "'Stop talking.'"])(
+    'keeps quoted commands distinct from contractions: %s',
+    (text) => {
+      expect(detectExplicitStop(text)).toBeUndefined();
+      expect(detectExplicitStop(text, true)).toBeUndefined();
+    },
+  );
 
   it('waits for completion to distinguish a bare stop command from a continuation', () => {
     expect(detectExplicitStop('Stop')).toBeUndefined();
