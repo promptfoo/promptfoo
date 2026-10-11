@@ -67,8 +67,8 @@ export function parseAudioReview(output) {
   return review;
 }
 
-/** Check model timing against actual PCM without applying the no-signal quality guard. */
-export function validateAudioReviewTimestamps(review, audio) {
+/** Check timing and localized channel claims against actual PCM, without grading audio quality. */
+export function validateAudioReviewTimestamps(review, audio, audioView) {
   const durationSeconds = audio.samples.length / audio.channels / audio.sampleRate;
   // One PCM frame only accommodates floating-point/sample-boundary rounding.
   const latestTime = durationSeconds + 1 / audio.sampleRate;
@@ -80,6 +80,47 @@ export function validateAudioReviewTimestamps(review, audio) {
     )
   ) {
     throw new Error('Finding timestamp is outside the recording duration.');
+  }
+  // The example's stereo export assigns one participant to each channel. This
+  // exact-zero check can disprove a localized claim of the two sides overlapping;
+  // nonzero samples cannot establish speech, simultaneity, or a defect. Other
+  // recording views may mix speakers in one channel, so do not apply it there.
+  if (audioView !== 'stereo_conversation' || audio.channels !== 2) {
+    return;
+  }
+  for (const finding of review.findings) {
+    if (
+      finding.type !== 'overlap' ||
+      finding.start_seconds === null ||
+      finding.end_seconds === null ||
+      finding.end_seconds <= finding.start_seconds
+    ) {
+      continue;
+    }
+    // Include every PCM frame intersecting the approximate interval. Rounding
+    // inward could turn a boundary sample into a false exact-zero rejection.
+    const startFrame = Math.floor(finding.start_seconds * audio.sampleRate);
+    const endFrame = Math.min(
+      audio.samples.length / audio.channels,
+      Math.ceil(finding.end_seconds * audio.sampleRate),
+    );
+    if (endFrame <= startFrame) {
+      continue;
+    }
+    for (let channel = 0; channel < audio.channels; channel++) {
+      let hasSignal = false;
+      for (let frame = startFrame; frame < endFrame; frame++) {
+        if (audio.samples[frame * audio.channels + channel] !== 0) {
+          hasSignal = true;
+          break;
+        }
+      }
+      if (!hasSignal) {
+        throw new Error(
+          `Overlap finding is unsupported: conversation channel ${channel + 1} is exactly zero throughout its timestamp interval.`,
+        );
+      }
+    }
   }
 }
 
@@ -101,7 +142,7 @@ export default function validateAudioReview(output, context) {
       );
     }
     review = parseAudioReview(output);
-    validateAudioReviewTimestamps(review, audio);
+    validateAudioReviewTimestamps(review, audio, context?.vars?.audio_view);
   } catch (error) {
     return {
       pass: false,

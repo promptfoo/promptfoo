@@ -1748,6 +1748,7 @@ export const providerMap: ProviderFactory[] = [
   },
   {
     test: (providerPath: string) => providerPath === 'promptfoo:simulated-voice-user',
+    capabilities: ['voice-app-barge-in-v1'],
     create: async (_providerPath: string, providerOptions: ProviderOptions) => {
       const { SimulatedVoiceUser } = await import('./voice/simulatedVoiceUser');
       return new SimulatedVoiceUser(providerOptions);

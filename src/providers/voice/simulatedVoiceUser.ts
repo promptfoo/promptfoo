@@ -1,11 +1,14 @@
 import { getNunjucksEngine } from '../../util/templates';
+import { createOpenAiCredentialRedactor } from '../openai/credentialRedaction';
 import { OpenAiLiveProvider } from '../openai/live';
 import { LIVE_FRAME_MS, LiveSession, MAX_LIVE_APPEND_BYTES } from '../openai/liveSession';
+import { LiveTranscriptionSession } from '../openai/liveTranscriptionSession';
 import { providerRegistry } from '../providerRegistry';
 import { PcmAudioPlayout } from './audioPlayout';
 import { VoiceInterventionPlayback } from './interventionPlayback';
 import { prepareVoiceInterventions } from './interventions';
 import { formatVoiceResult } from './result';
+import { TargetPlaybackController } from './targetPlaybackController';
 
 import type { EnvOverrides } from '../../contracts/env';
 import type { ProviderResponse } from '../../contracts/providers';
@@ -15,6 +18,7 @@ import type {
   CallApiOptionsParams,
   ProviderOptions,
 } from '../../types/providers';
+import type { LiveTranscriptionSummary } from '../openai/liveTranscriptionSession';
 import type { PreparedVoiceIntervention } from './interventions';
 import type {
   SimulatedVoiceUserConfig,
@@ -63,9 +67,91 @@ function validateSpeechOptions(tts: SimulatedVoiceUserConfig['interventionTts'])
   }
 }
 
+function validatePlaybackOptions(playback: SimulatedVoiceUserConfig['targetPlayback']): void {
+  if (playback !== undefined) {
+    const allowed = [
+      'mode',
+      'transcriptionDelay',
+      'sourceQuietMs',
+      'callerQuietMs',
+      'recoveryTimeoutMs',
+    ];
+    if (
+      !playback ||
+      typeof playback !== 'object' ||
+      Array.isArray(playback) ||
+      !['native', 'app-barge-in'].includes(playback.mode) ||
+      Object.keys(playback).some((key) => !allowed.includes(key)) ||
+      (playback.mode === 'native' && Object.keys(playback).length !== 1) ||
+      (playback.transcriptionDelay !== undefined &&
+        !['minimal', 'low'].includes(playback.transcriptionDelay))
+    ) {
+      throw new Error(
+        'targetPlayback requires mode native or app-barge-in and supported playback options.',
+      );
+    }
+    if (playback.sourceQuietMs !== undefined) {
+      positiveInteger(playback.sourceQuietMs, 'sourceQuietMs', 1000, 40);
+    }
+    if (playback.callerQuietMs !== undefined) {
+      positiveInteger(playback.callerQuietMs, 'callerQuietMs', 1000, 40);
+    }
+    if (playback.recoveryTimeoutMs !== undefined) {
+      positiveInteger(playback.recoveryTimeoutMs, 'recoveryTimeoutMs', 10000, 500);
+    }
+  }
+}
+
+function createTargetPlayback(
+  queue: PcmAudioPlayout,
+  index: number,
+  config: SimulatedVoiceUserConfig['targetPlayback'],
+): TargetPlaybackController | undefined {
+  return index === 0 && config?.mode === 'app-barge-in'
+    ? new TargetPlaybackController(queue, config)
+    : undefined;
+}
+
+/** Serialize application events on the recording clock only when capture actually began. */
+function applicationEvidence(
+  targetPlayback: TargetPlaybackController | undefined,
+  recognitionSummary: LiveTranscriptionSummary | undefined,
+  redirects: Array<{ epoch: number; eventId: string; sentAtMs: number }>,
+  sourceRecording: Buffer[],
+  mediaStarted: boolean,
+  mediaOffset: number,
+) {
+  return targetPlayback
+    ? {
+        targetPlayback: {
+          mode: 'app-barge-in' as const,
+          clock: mediaStarted ? ('media' as const) : ('provider' as const),
+          policy: targetPlayback.policy,
+          metrics: targetPlayback.metrics,
+          events: targetPlayback.events.map((event) => ({
+            ...event,
+            atMs: event.atMs - mediaOffset,
+            ...(event.callerOnsetAtMs === undefined
+              ? {}
+              : { callerOnsetAtMs: event.callerOnsetAtMs - mediaOffset }),
+            ...(event.lastDeliveredActiveAtMs === undefined
+              ? {}
+              : {
+                  lastDeliveredActiveAtMs: event.lastDeliveredActiveAtMs - mediaOffset,
+                }),
+          })),
+          recognition: recognitionSummary,
+          redirects,
+        },
+        ...(sourceRecording.length ? { targetSourcePcm: Buffer.concat(sourceRecording) } : {}),
+      }
+    : {};
+}
+
 /**
  * Run two GPT-Live participants on one continuous audio clock. Both connections listen while
- * speaking; transcript events describe evidence, never control when the other speaker may talk.
+ * speaking. Native transcript events describe evidence. An explicit application mode may
+ * independently recognize accepted caller audio and suppress target playback.
  */
 export class SimulatedVoiceUser implements ApiProvider {
   readonly config: SimulatedVoiceUserConfig;
@@ -190,6 +276,7 @@ export class SimulatedVoiceUser implements ApiProvider {
       }
     }
     validateSpeechOptions(this.config.interventionTts);
+    validatePlaybackOptions(this.config.targetPlayback);
     return { durationMs, timeoutMs, bufferMs, interventions };
   }
 
@@ -214,6 +301,7 @@ export class SimulatedVoiceUser implements ApiProvider {
     let endMedia: (() => void) | undefined;
     const startedAt = performance.now();
     let mediaStartedAt = startedAt;
+    let mediaStarted = false;
     const transcript: VoiceTranscriptFragment[] = [];
     const interventionsSent: VoiceIntervention[] = [];
     let scheduledAudioInterventions = 0;
@@ -224,6 +312,12 @@ export class SimulatedVoiceUser implements ApiProvider {
     const runs: Promise<void>[] = [];
     const queues: PcmAudioPlayout[] = [];
     let clipPlayback: VoiceInterventionPlayback | undefined;
+    let targetPlayback: TargetPlaybackController | undefined;
+    let recognition: LiveTranscriptionSession | undefined;
+    let recognitionSummary: LiveTranscriptionSummary | undefined;
+    const sourceRecording: Buffer[] = [];
+    let sourceRecordingBytes = 0;
+    const redirects: Array<{ epoch: number; eventId: string; sentAtMs: number }> = [];
     const deliveredAudioBytes = [0, 0];
     let frameCount = 0;
     let maximumClockLagMs = 0;
@@ -304,6 +398,7 @@ export class SimulatedVoiceUser implements ApiProvider {
       for (const [index, provider] of providers.entries()) {
         const queue = new PcmAudioPlayout((BYTES_PER_SECOND * bufferMs) / 1000);
         queues.push(queue);
+        targetPlayback ??= createTargetPlayback(queue, index, this.config.targetPlayback);
         let ready!: () => void;
         readiness.push(
           new Promise<void>((resolve, reject) => {
@@ -338,15 +433,30 @@ export class SimulatedVoiceUser implements ApiProvider {
                 }
               },
               onAudio: (audio) => {
-                if (!stopped) {
-                  const accepted =
-                    index === 1 && clipPlayback
-                      ? clipPlayback.filterCallerAudio(audio, performance.now() - mediaStartedAt)
-                      : audio;
-                  if (accepted) {
-                    queue.append(accepted);
-                  }
+                if (stopped) {
+                  return;
                 }
+                const accepted =
+                  index === 1 && clipPlayback
+                    ? clipPlayback.filterCallerAudio(audio, performance.now() - mediaStartedAt)
+                    : audio;
+                if (!accepted) {
+                  return;
+                }
+                if (index !== 0 || !targetPlayback) {
+                  queue.append(accepted);
+                  return;
+                }
+                sourceRecordingBytes += accepted.length;
+                if (sourceRecordingBytes > ((durationMs + bufferMs) * BYTES_PER_SECOND) / 1000) {
+                  throw new Error(
+                    'Target application source audio exceeded the bounded capture budget.',
+                  );
+                }
+                if (this.config.recordConversation !== false) {
+                  sourceRecording.push(Buffer.from(accepted));
+                }
+                targetPlayback.appendSource(accepted, performance.now() - startedAt);
               },
               onTranscript: (fragment) => {
                 if (stopped) {
@@ -382,6 +492,49 @@ export class SimulatedVoiceUser implements ApiProvider {
       );
       scheduledAudioInterventions = scheduled.filter((entry) => entry.audio).length;
       controller.signal.throwIfAborted();
+      if (targetPlayback) {
+        const connection = providers[0].getAppTranscriptionConnection();
+        recognition = new LiveTranscriptionSession({
+          ...connection,
+          redact: createOpenAiCredentialRedactor(connection.headers, [
+            providers[0].getApiKey() ?? '',
+          ]),
+          signal: controller.signal,
+          delay: this.config.targetPlayback?.transcriptionDelay,
+          onCallerTurn: (turn) => {
+            if (!stopped && turn.phase === 'started') {
+              targetPlayback!.beginCallerTurn(
+                turn.turnId,
+                mediaStartedAt - startedAt + turn.callerOnsetAtMs,
+              );
+            }
+          },
+          onStopDecision: (decision) => {
+            if (stopped) {
+              return;
+            }
+            try {
+              const epoch = targetPlayback!.requestStop({
+                ...decision,
+                callerOnsetAtMs: mediaStartedAt - startedAt + decision.callerOnsetAtMs,
+                decisionAtMs: mediaStartedAt - startedAt + decision.decisionAtMs,
+              });
+              if (epoch !== undefined) {
+                // No recognized words or evaluation context are injected into this trusted instruction.
+                const eventId = sessions[0].appendContext(
+                  'The application stopped playback because the caller explicitly asked to interrupt. Some generated assistant speech was withheld and was not heard by the caller. Stop the previous response, listen to the caller, and address their latest request. Do not assume the caller heard withheld speech.',
+                );
+                redirects.push({ epoch, eventId, sentAtMs: decision.decisionAtMs });
+              }
+            } catch (cause) {
+              fail(cause, 'Target application interruption failed.');
+            }
+          },
+          onError: (message) => fail(new Error(message), 'Target application recognition failed.'),
+        });
+        await recognition.start();
+        controller.signal.throwIfAborted();
+      }
       for (const [index, session] of sessions.entries()) {
         runs.push(
           session
@@ -427,6 +580,7 @@ export class SimulatedVoiceUser implements ApiProvider {
         }),
       ]);
       mediaStartedAt = performance.now();
+      mediaStarted = true;
       if (!stopped) {
         const opening = this.config.targetSpeaksFirst ? 0 : 1;
         sessions[opening].requestSpeech(
@@ -487,9 +641,15 @@ export class SimulatedVoiceUser implements ApiProvider {
           };
           const sendFrame = () => {
             const clipFrame = clipPlayback?.readFrame();
-            const frames = [queues[0].read(FRAME_BYTES), clipFrame ?? queues[1].read(FRAME_BYTES)];
+            const mediaMs = frameCount * LIVE_FRAME_MS;
+            const playbackMs = mediaStartedAt - startedAt + mediaMs;
+            const frames = [
+              targetPlayback?.readFrame(playbackMs) ?? queues[0].read(FRAME_BYTES),
+              clipFrame ?? queues[1].read(FRAME_BYTES),
+            ];
             const forwarded: Buffer[] = [Buffer.alloc(FRAME_BYTES), Buffer.alloc(FRAME_BYTES)];
             let accepted = false;
+            let targetAccepted = false;
             try {
               sessions[0].appendAudio(frames[1].frame);
               deliveredAudioBytes[1] += frames[1].audioBytes;
@@ -502,10 +662,22 @@ export class SimulatedVoiceUser implements ApiProvider {
                   performance.now() - mediaStartedAt,
                 );
               }
+              targetPlayback?.observeAcceptedCaller(frames[1].frame, playbackMs);
+              // This copy is accepted by the target even if the opposite transport then fails.
+              recognition?.appendAcceptedCaller(
+                frames[1].frame,
+                mediaMs,
+                performance.now() - mediaStartedAt,
+              );
               sessions[1].appendAudio(frames[0].frame);
               deliveredAudioBytes[0] += frames[0].audioBytes;
               forwarded[0] = frames[0].frame;
+              targetAccepted = true;
+              targetPlayback?.frameAccepted(playbackMs);
             } finally {
+              if (targetPlayback && !targetAccepted) {
+                targetPlayback.frameRejected();
+              }
               // A second-side failure still leaves real audio accepted by the first peer.
               if (accepted) {
                 if (this.config.recordConversation !== false) {
@@ -536,6 +708,7 @@ export class SimulatedVoiceUser implements ApiProvider {
                 return;
               }
               clipPlayback?.checkRecovery(elapsed);
+              targetPlayback?.checkRecovery(performance.now() - startedAt);
               sendScheduled(elapsed);
               if (elapsed >= frameCount * LIVE_FRAME_MS) {
                 sendFrame();
@@ -567,11 +740,24 @@ export class SimulatedVoiceUser implements ApiProvider {
       fail(cause, 'Simulated voice conversation failed.');
     } finally {
       stop();
+      if (targetPlayback?.active) {
+        error ??= 'Target application playback ended before recovery.';
+      }
+      targetPlayback?.close(performance.now() - startedAt);
       // Prepared sessions have no resources until run() is called.
       for (const [index, session] of sessions.slice(0, runs.length).entries()) {
         session.close({ cancelPendingSpeech: targetRefused && index === 1 });
       }
-      await Promise.allSettled(runs);
+      const finalRecognition = recognition?.finish().then(
+        (summary) => {
+          recognitionSummary = summary;
+          error ??= summary.error;
+        },
+        () => {
+          error ??= 'Target application recognition finalization failed.';
+        },
+      );
+      await Promise.allSettled([...runs, ...(finalRecognition ? [finalRecognition] : [])]);
       if (deadline) {
         clearTimeout(deadline);
       }
@@ -603,6 +789,14 @@ export class SimulatedVoiceUser implements ApiProvider {
       elapsedMs: performance.now() - startedAt,
       error,
       stopReason,
+      ...applicationEvidence(
+        targetPlayback,
+        recognitionSummary,
+        redirects,
+        sourceRecording,
+        mediaStarted,
+        mediaStartedAt - startedAt,
+      ),
     });
   }
 }

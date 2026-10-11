@@ -43,6 +43,8 @@ The live scenarios also check final usage and require zero bridge underflow afte
 
 These grades assess listener-transcript meaning. They do not measure audio smoothness, exact speech onset, barge-in, or ASR accuracy. Review the recording and raw `metadata.voice` events for those properties, and use independent transcription where recognition is uncertain.
 
+For a separate caller-validity review, use `prepare-caller-review.js` with saved results and an explicit caller-instructions variable or file, then pass its tests to `promptfooconfig.caller-review.yaml`. It checks role drift and material scenario violations without repeating the voice call. `invalid` and `inconclusive` remain distinct from an advisory `valid`; findings must quote recognized caller speech. `caller-review-calibration.json` supplies 17 synthetic controls, including harness-owned speech and capture limits. The guide includes runnable commands; original target grades remain unchanged.
+
 ## Scheduled interruption
 
 ```bash
@@ -80,6 +82,8 @@ The configured 30-second capture is a time limit, not a semantic success detecto
 `promptfooconfig.active-interruption.yaml` starts with a supplied continuous announcement. It increases the chance that the scheduled question arrives during speech. Inspect the exported activity window and unfinished announcement before treating a run as an exercised interruption; a correct answer alone does not prove fast yielding.
 
 `promptfooconfig.backchannel.yaml` asks the target to continue its menu after a brief acknowledgment. Inspect the recording for restarts or abandonment, rather than treating all overlap as a defect.
+
+`promptfooconfig.app-barge-in.yaml` explicitly adds application playback control and an independent paid `gpt-live-transcribe` connection using the target's endpoint/credentials. Native behavior stays the default. Compare the same scenario with only `targetPlayback.mode` changed; measure heard-stop timing, false stops, recovery, and useful answers separately. The controller's English lexical detector and source-silence recovery are limited policies, not guaranteed intent detection or native yielding improvements. Exported source audio and its review tests are separate from heard audio and use a different clock. See the guide for interpretation and measured results.
 
 `promptfooconfig.reservation.yaml` tests a spoken date correction, a delayed backend tool, exactly one saved reservation, and recognition of a confirmation code revealed only by the tool. Each repetition needs a fresh, empty, absolute `VOICE_EVAL_STATE_DIR` and a unique `VOICE_EVAL_RUN_ID`; use one case per process with `--max-concurrency 1`. The fixture does not contact a real booking service. Keep its ledger with the recording when regrading.
 

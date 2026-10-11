@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 
+import { validateAppPlayback } from './app-playback-health.js';
 import { analyzePcm16, readPcm16Wav, writePcm16Wav } from './audio-utils.js';
 
 const MAX_EXPORT_BYTES = 256 * 1024 * 1024;
@@ -266,6 +267,113 @@ function interventionObservations(voice, target, caller, sampleRate) {
   });
 }
 
+/** Application clocks describe heard playback; source sample order is never used as a media clock. */
+function appPlaybackObservations(playback, target, sampleRate) {
+  const active = frameActivity(target, sampleRate);
+  const durationMs = (target.length / sampleRate) * 1000;
+  return playback.events
+    .filter((event) => event.type === 'suppressed')
+    .map((stop) => {
+      const resumed = playback.events.find(
+        (event) => event.epoch === stop.epoch && event.type === 'resumed',
+      );
+      const endMs = Math.min(resumed?.atMs ?? durationMs, durationMs);
+      const onsetFrame = Math.floor(stop.callerOnsetAtMs / 20);
+      const endFrame = Math.min(active.length, Math.floor(endMs / 20));
+      let lastActiveEndMs = null;
+      let activeWhileSuppressedMs = 0;
+      for (let frame = onsetFrame; frame < endFrame; frame++) {
+        if (active[frame]) {
+          lastActiveEndMs = Math.min((frame + 1) * 20, durationMs);
+          if (frame * 20 >= Math.ceil(stop.atMs / 20) * 20) activeWhileSuppressedMs += 20;
+        }
+      }
+      let firstActivityAfterResumeAtMs = null;
+      if (resumed) {
+        for (let frame = Math.ceil(resumed.atMs / 20); frame < active.length; frame++) {
+          if (active[frame]) {
+            firstActivityAfterResumeAtMs = frame * 20;
+            break;
+          }
+        }
+      }
+      return {
+        epoch: stop.epoch,
+        callerOnsetAtMs: stop.callerOnsetAtMs,
+        decisionAtMs: stop.atMs,
+        detectionDelayMs: stop.atMs - stop.callerOnsetAtMs,
+        lastActiveTargetFrameEndBeforeResumeMs: lastActiveEndMs,
+        heardStopFrameBoundMs: Math.max(
+          0,
+          (lastActiveEndMs ?? stop.callerOnsetAtMs) - stop.callerOnsetAtMs,
+        ),
+        activeWhileSuppressedMs,
+        resumedAtMs: resumed?.atMs ?? null,
+        suppressedForMs: resumed ? resumed.atMs - stop.atMs : null,
+        firstActivityAfterResumeAtMs,
+        usefulAnswerLatencyMs: null,
+        interpretation:
+          'PCM frame bounds at -40 dBFS, not word boundaries or semantic success. Inspect whether later speech is obsolete audio or a useful answer. Source sample timestamps are unrelated to this media clock.',
+      };
+    });
+}
+
+/** Keep source audio separate from heard evidence and reject broken hash/accounting provenance. */
+async function exportTargetSource(row, assets, configDir, destination, prefix, deliveredPcmBytes) {
+  const playback = row.response?.metadata?.voice?.targetPlayback;
+  const audio = row.response?.metadata?.audio;
+  if (!playback && !audio) return null;
+  if (
+    playback?.mode !== 'app-barge-in' ||
+    audio?.role !== 'target_source' ||
+    audio?.clock !== 'source_sample_order' ||
+    audio.channels !== 1 ||
+    audio.sampleRate !== 24000
+  ) {
+    throw new Error(
+      'Application source requires target_source mono audio on the source_sample_order clock.',
+    );
+  }
+  const recording = await recordingBytes(audio, assets, configDir);
+  const wav = readPcm16Wav(recording.bytes);
+  if (
+    wav.channels !== 1 ||
+    wav.sampleRate !== 24000 ||
+    !Number.isFinite(audio.duration) ||
+    Math.abs(audio.duration - wav.samples.length / wav.sampleRate) > 1 / wav.sampleRate
+  ) {
+    throw new Error(
+      'Application source WAV does not match its channel, sample rate, or duration metadata.',
+    );
+  }
+  const accounting = validateAppPlayback(playback, {
+    sourcePcmBytes: wav.samples.length * 2,
+    deliveredPcmBytes,
+  });
+  const file = `${prefix}-target-source.wav`;
+  await writeFile(path.join(destination, file), recording.bytes);
+  return {
+    recording: {
+      role: 'target_source',
+      clock: 'source_sample_order',
+      heardEvidence: false,
+      file,
+      sha256: recording.hash,
+      sizeBytes: recording.bytes.length,
+      channels: 1,
+      sampleRate: wav.sampleRate,
+      durationMs: (wav.samples.length / wav.sampleRate) * 1000,
+      audioId: randomUUID(),
+    },
+    accounting,
+    analysis: analyzePcm16(wav.samples, wav.sampleRate),
+  };
+}
+
+function playbackScope(voice) {
+  return voice.targetPlayback ? 'application-controlled-playback' : 'native-playback';
+}
+
 function evidenceFor(row, index) {
   return {
     rowIndex: index,
@@ -352,7 +460,7 @@ function htmlReport(manifest, evidence) {
 <style>body{font:16px system-ui;max-width:1100px;margin:2rem auto;padding:0 1rem;background:#fafafa;color:#18202b}section{background:white;border:1px solid #ccd2da;border-radius:8px;padding:1rem;margin:1rem 0}audio{width:100%}pre{white-space:pre-wrap;overflow-wrap:anywhere}button{margin:.3rem;padding:.4rem}.error{color:#9e1620}small{display:block}label{display:block;margin:.5rem 0}</style>
 <h1>Voice recording review</h1>
 <p>Listen to the full stereo call, then isolate either speaker around pauses, overlaps, and cutoffs. PCM flags are candidates for review, not proof of audible defects. The text below contains untrusted conversation data. No audio review is marked complete automatically.</p>
-<p>Players share a seek position; playing one pauses the others. Target is left and caller is right in the stereo recording.</p>
+<p>Heard-track players share a seek position; playing one pauses the others. Source audio uses its own independent sample-order clock and is never synchronized with the heard tracks. Target is left and caller is right in the stereo recording.</p>
 <div id="cases"></div><script type="application/json" id="data">${data}</script>
 <script>
 const {manifest,evidence}=JSON.parse(document.getElementById('data').textContent);
@@ -362,13 +470,14 @@ for(const item of manifest.rows){
   const section=node('section',undefined,root);node('h2','Case '+(item.rowIndex+1),section);
   const detail=evidence[item.rowIndex];node('p',detail.description||'',section);
   if(item.error){node('p',item.error,section).className='error';}
-  const players=[];let synchronizing=false;
+  const players=[];const allPlayers=[];let synchronizing=false;
   function seek(time){synchronizing=true;for(const player of players){if(Number.isFinite(player.duration))player.currentTime=Math.min(time,player.duration);}synchronizing=false;}
-  for(const file of item.recordings||[]){node('h3',file.role,section);const player=node('audio',undefined,section);player.controls=true;player.preload='metadata';player.src=file.file;players.push(player);
-    player.addEventListener('play',()=>{for(const other of players){if(other!==player)other.pause();}});
+  for(const file of item.recordings||[]){node('h3',file.role,section);const player=node('audio',undefined,section);player.controls=true;player.preload='metadata';player.src=file.file;players.push(player);allPlayers.push(player);
+    player.addEventListener('play',()=>{for(const other of allPlayers){if(other!==player)other.pause();}});
     player.addEventListener('seeked',()=>{if(!synchronizing){for(const other of players){if(other!==player&&Number.isFinite(other.duration)&&Math.abs(other.currentTime-player.currentTime)>.05)other.currentTime=Math.min(player.currentTime,other.duration);}}});
     player.addEventListener('timeupdate',()=>{if(!player.paused){for(const other of players){if(other!==player&&Number.isFinite(other.duration)&&Math.abs(other.currentTime-player.currentTime)>.25)other.currentTime=Math.min(player.currentTime,other.duration);}}});
   }
+  for(const file of item.sourceRecordings||[]){node('h3','Target source — not heard evidence',section);node('p','Independent sample-order clock; includes withheld audio and excludes network gaps. Seeking this player does not seek the conversation.',section);const player=node('audio',undefined,section);player.controls=true;player.preload='metadata';player.src=file.file;allPlayers.push(player);player.addEventListener('play',()=>{for(const other of allPlayers){if(other!==player)other.pause();}});}
   for(const intervention of detail.voice?.interventions||[]){const time=intervention.firstFrameAtMs??intervention.scheduledAtMs;if(Number.isFinite(time)){const button=node('button','Review cue at '+(time/1000).toFixed(2)+' s',section);button.addEventListener('click',()=>seek(Math.max(0,time/1000-1)));}}
   const transcript=node('details',undefined,section);node('summary','Raw transcript events (listener and generated)',transcript);node('pre',JSON.stringify(detail.voice?.transcript??[],null,2),transcript);
   const grades=node('details',undefined,section);node('summary','Scenario, grades, and measured data',grades);node('pre',JSON.stringify({scenario:detail.scenario,prompt:detail.prompt,success:detail.success,error:detail.error,gradingResult:detail.gradingResult,metrics:item.metrics},null,2),grades);
@@ -376,6 +485,71 @@ for(const item of manifest.rows){
   node('small','Checklist state is not saved. Record conclusions and reviewed hashes in manual-review.json.',section);
 }
 </script></html>\n`;
+}
+
+async function addApplicationEvidence({
+  row,
+  assets,
+  configDir,
+  destination,
+  prefix,
+  target,
+  sampleRate,
+  entry,
+  sourceAudioTests,
+  sourceTranscriptionTests,
+}) {
+  const voice = row.response.metadata.voice;
+  const source = await exportTargetSource(
+    row,
+    assets,
+    configDir,
+    destination,
+    prefix,
+    target.length * 2,
+  );
+  if (source) {
+    entry.sourceRecordings = [source.recording];
+    entry.metrics ??= {};
+    entry.metrics.targetPlayback = {
+      mode: voice.targetPlayback.mode,
+      clock: voice.targetPlayback.clock,
+      policy: voice.targetPlayback.policy,
+      accounting: source.accounting,
+      stops:
+        voice.targetPlayback.clock === 'media'
+          ? appPlaybackObservations(voice.targetPlayback, target, sampleRate)
+          : null,
+      interpretation:
+        'Explicit application playback control; none of these measurements are native GPT-Live yielding. Useful-answer timing requires audio review.',
+    };
+    entry.metrics.targetSource = {
+      clock: 'source_sample_order',
+      heardEvidence: false,
+      ...source.analysis,
+    };
+    sourceAudioTests.push({
+      description: source.recording.audioId,
+      vars: {
+        audio_file: `file://${path.join(destination, source.recording.file)}`,
+        audio_id: source.recording.audioId,
+        audio_view: 'isolated_target',
+      },
+    });
+    sourceTranscriptionTests.push({
+      description: source.recording.audioId,
+      vars: { audio_path: path.join(destination, source.recording.file) },
+    });
+  }
+}
+
+async function addStartupEvidence(options) {
+  if (
+    options.row?.response?.metadata?.voice?.targetPlayback?.clock === 'provider' &&
+    !options.row.response.audio
+  ) {
+    await addApplicationEvidence({ ...options, target: new Int16Array(), sampleRate: 24000 });
+  }
 }
 
 /** Produce an offline review directory without loading credentials or fetching media. */
@@ -400,6 +574,8 @@ export async function exportEvidence(inputPath, outputPath, { configDir } = {}) 
   const evidence = [];
   const tests = [];
   const transcriptionTests = [];
+  const sourceAudioTests = [];
+  const sourceTranscriptionTests = [];
   for (const [index, row] of rows.entries()) {
     const prefix = `case-${String(index + 1).padStart(3, '0')}`;
     const detail = evidenceFor(row ?? {}, index);
@@ -414,6 +590,16 @@ export async function exportEvidence(inputPath, outputPath, { configDir } = {}) 
     manifest.rows.push(entry);
     await writeFile(path.join(destination, entry.evidenceFile), json(detail));
     try {
+      await addStartupEvidence({
+        row,
+        assets: input.blobAssets ?? [],
+        configDir,
+        destination,
+        prefix,
+        entry,
+        sourceAudioTests,
+        sourceTranscriptionTests,
+      });
       const audio = row?.response?.audio;
       const voice = row?.response?.metadata?.voice;
       const recording = await recordingBytes(audio, input.blobAssets ?? [], configDir);
@@ -487,8 +673,21 @@ export async function exportEvidence(inputPath, outputPath, { configDir } = {}) 
           target: voice.participants?.target?.playout ?? null,
           caller: voice.participants?.caller?.playout ?? null,
         },
+        interventionObservationScope: playbackScope(voice),
         interventions: interventionObservations(voice, target, caller, sampleRate),
       };
+      await addApplicationEvidence({
+        row,
+        assets: input.blobAssets ?? [],
+        configDir,
+        destination,
+        prefix,
+        target,
+        sampleRate,
+        entry,
+        sourceAudioTests,
+        sourceTranscriptionTests,
+      });
     } catch (error) {
       entry.error = error instanceof Error ? error.message : 'Recording export failed.';
       manifest.errors++;
@@ -497,6 +696,11 @@ export async function exportEvidence(inputPath, outputPath, { configDir } = {}) 
   await writeFile(path.join(destination, 'manifest.json'), json(manifest));
   await writeFile(path.join(destination, 'audio-review-tests.json'), json(tests));
   await writeFile(path.join(destination, 'transcription-tests.json'), json(transcriptionTests));
+  await writeFile(path.join(destination, 'source-audio-review-tests.json'), json(sourceAudioTests));
+  await writeFile(
+    path.join(destination, 'source-transcription-tests.json'),
+    json(sourceTranscriptionTests),
+  );
   await writeFile(
     path.join(destination, 'manual-review.json'),
     json({

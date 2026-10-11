@@ -3191,3 +3191,10 @@ describe('Provider Registry', () => {
     );
   });
 });
+
+it('advertises application barge-in capability without creating a voice provider', async () => {
+  const factory = (await getProviderFactories('promptfoo:simulated-voice-user')).find((item) =>
+    item.test('promptfoo:simulated-voice-user'),
+  );
+  expect(factory?.capabilities).toEqual(['voice-app-barge-in-v1']);
+});

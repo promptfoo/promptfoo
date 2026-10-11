@@ -8,6 +8,8 @@ import type { ApiProvider, ProviderOptions } from '../types/providers';
  * own `test` matched and should not be called otherwise.
  */
 export interface ProviderFactory {
+  /** Optional versioned features that hosts can inspect without instantiating a provider. */
+  capabilities?: readonly string[];
   test: (providerPath: string) => boolean;
   create: (
     providerPath: string,

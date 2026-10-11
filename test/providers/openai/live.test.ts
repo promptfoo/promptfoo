@@ -3602,3 +3602,41 @@ describe('OpenAiLiveProvider', () => {
     },
   );
 });
+
+describe('application transcription connection', () => {
+  it('keeps gateway credentials on the same prefixed origin and suppresses an ambient OpenAI key', () => {
+    const p = new OpenAiLiveProvider('gpt-live-1', {
+      config: {
+        apiBaseUrl: 'https://gateway.example/tenant/v1',
+        headers: { 'X-API-Key': 'gateway-fixture' },
+      },
+      env: { OPENAI_API_KEY: 'ambient-fixture' },
+    });
+    const connection = p.getAppTranscriptionConnection();
+    expect(connection.url).toBe('wss://gateway.example/tenant/v1/realtime?intent=transcription');
+    expect(connection.headers['X-API-Key']).toBe('gateway-fixture');
+    expect(connection.headers.Authorization).toBeUndefined();
+  });
+
+  it('retains explicit credentials and removes URL userinfo from diagnostics-bearing connection URLs', () => {
+    const p = new OpenAiLiveProvider('gpt-live-1', {
+      config: { apiBaseUrl: 'https://voice-user:voice-pass@gateway.example/v1' },
+      env: { OPENAI_API_KEY: 'ambient-fixture' },
+    });
+    const connection = p.getAppTranscriptionConnection();
+    expect(connection.url).toBe('wss://gateway.example/v1/realtime?intent=transcription');
+    expect(connection.headers.Authorization).toBe(
+      `Basic ${Buffer.from('voice-user:voice-pass').toString('base64')}`,
+    );
+  });
+
+  it('rejects existing query parameters instead of silently rewriting credential-bearing URLs', () => {
+    const p = new OpenAiLiveProvider('gpt-live-1', {
+      config: {
+        apiBaseUrl: 'https://gateway.example/v1?token=fixture',
+        apiKeyRequired: false,
+      },
+    });
+    expect(() => p.getAppTranscriptionConnection()).toThrow('query parameters');
+  });
+});

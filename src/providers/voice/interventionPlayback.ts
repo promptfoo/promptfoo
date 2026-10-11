@@ -8,8 +8,18 @@ const SAMPLE_RATE = 24000;
 const BYTES_PER_MS = (SAMPLE_RATE * 2) / 1000;
 const FRAME_BYTES = BYTES_PER_MS * LIVE_FRAME_MS;
 const QUIET_SAMPLES = SAMPLE_RATE / 5;
-const QUIET_SAMPLE_PEAK = 8;
+const QUIET_WINDOW_SAMPLES = (SAMPLE_RATE * LIVE_FRAME_MS) / 1000;
+const QUIET_RMS_DBFS = -55;
+const QUIET_MEAN_SQUARE = 32768 ** 2 * 10 ** (QUIET_RMS_DBFS / 10);
 const RECOVERY_TIMEOUT_MS = 3000;
+const RECOVERY_POLICY = Object.freeze({
+  sourceQuietMethod: 'rms' as const,
+  sourceQuietRmsDbfs: QUIET_RMS_DBFS,
+  sourceQuietWindowMs: LIVE_FRAME_MS,
+  sourceQuietWindowAlignment: 'intervention_start' as const,
+  sourceQuietMs: (QUIET_SAMPLES * 1000) / SAMPLE_RATE,
+  recoveryTimeoutMs: RECOVERY_TIMEOUT_MS,
+});
 
 type AudioFrame = { frame: Buffer; audioBytes: number };
 
@@ -18,13 +28,17 @@ interface Playback {
   record: VoiceIntervention;
   offset: number;
   quietSamples: number;
+  windowSamples: number;
+  windowEnergy: number;
   recoveryStartedAtMs?: number;
   proposed?: AudioFrame;
 }
 
 /**
  * Replace caller audio with a prepared clip, then suppress old caller output until an
- * observed 200 ms quiet PCM boundary. An arrival gap is never evidence of silence.
+ * observed 200 ms quiet PCM boundary. Complete 20 ms RMS windows tolerate the low
+ * noise floor found in generated pauses; this development-derived acoustic gate
+ * cannot establish a semantic turn boundary. An arrival gap is never silence.
  * Only accepted frames advance playback; proposed or rejected frames prove no delivery.
  */
 export class VoiceInterventionPlayback {
@@ -45,7 +59,15 @@ export class VoiceInterventionPlayback {
     }
     record.discardedCallerAudioBytes = (record.discardedCallerAudioBytes ?? 0) + this.queue.clear();
     record.deliveredAudioBytes = 0;
-    this.playback = { audio: prepared.audio, record, offset: 0, quietSamples: 0 };
+    record.recoveryPolicy = RECOVERY_POLICY;
+    this.playback = {
+      audio: prepared.audio,
+      record,
+      offset: 0,
+      quietSamples: 0,
+      windowSamples: 0,
+      windowEnergy: 0,
+    };
   }
 
   /** Return only the portion after a proven quiet boundary, preserving fresh speech. */
@@ -60,8 +82,20 @@ export class VoiceInterventionPlayback {
     let discarded = audio.length;
     let remainder: Buffer | undefined;
     for (let offset = 0; offset < audio.length; offset += 2) {
+      const sample = audio.readInt16LE(offset);
+      playback.windowEnergy += sample * sample;
+      playback.windowSamples++;
+      if (playback.windowSamples < QUIET_WINDOW_SAMPLES) {
+        continue;
+      }
+      // Keep complete source windows across packets; do not count local padding,
+      // stalled arrivals, or samples received before this intervention began.
       playback.quietSamples =
-        Math.abs(audio.readInt16LE(offset)) <= QUIET_SAMPLE_PEAK ? playback.quietSamples + 1 : 0;
+        playback.windowEnergy / QUIET_WINDOW_SAMPLES <= QUIET_MEAN_SQUARE
+          ? playback.quietSamples + QUIET_WINDOW_SAMPLES
+          : 0;
+      playback.windowSamples = 0;
+      playback.windowEnergy = 0;
       if (playback.offset === playback.audio.length && playback.quietSamples >= QUIET_SAMPLES) {
         discarded = offset + 2;
         remainder = discarded < audio.length ? audio.subarray(discarded) : undefined;
@@ -111,7 +145,9 @@ export class VoiceInterventionPlayback {
     if (playback.offset === playback.audio.length) {
       playback.record.completedAtMs = frameAtMs + audioBytes / BYTES_PER_MS;
       playback.recoveryStartedAtMs = sentAtMs;
-      if (playback.quietSamples >= QUIET_SAMPLES) {
+      // A later partial window may already contain new speech; wait until its
+      // energy is known instead of reusing an older quiet boundary.
+      if (playback.quietSamples >= QUIET_SAMPLES && playback.windowSamples === 0) {
         this.resume(sentAtMs);
       }
     }

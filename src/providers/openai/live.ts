@@ -143,6 +143,15 @@ export class OpenAiLiveProvider extends OpenAiGenericProvider {
     };
   }
 
+  /** Keep optional app perception on the target's origin and credential policy. */
+  getAppTranscriptionConnection(): { url: string; headers: Record<string, string> } {
+    const connection = this.getConnection(this.config);
+    const url = new URL(connection.url);
+    url.pathname = url.pathname.replace(/\/live\/sessions$/, '/realtime');
+    url.searchParams.set('intent', 'transcription');
+    return { ...connection, url: url.toString() };
+  }
+
   /**
    * Prepare a session without opening a socket. Duplex callers supply an external media clock;
    * ordinary evals leave stream unset and retain finite input replay and capture behavior.

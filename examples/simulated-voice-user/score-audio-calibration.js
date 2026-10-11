@@ -145,7 +145,7 @@ export function scoreCalibration(labels, exported) {
         review.status === 'unratable' &&
         review.intelligibility === 'no_speech' &&
         !review.transcript.trim();
-      validateAudioReviewTimestamps(review, verifiedInput.audio);
+      validateAudioReviewTimestamps(review, verifiedInput.audio, result.testCase?.vars?.audio_view);
       const category = categories[control.kind];
       const findings = review.findings.map((finding) => finding.type);
       const detected =

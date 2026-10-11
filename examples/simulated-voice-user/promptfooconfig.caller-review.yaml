@@ -1,0 +1,22 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Independent simulated caller validity review
+prompts:
+  - file://caller-review-prompt.json
+providers:
+  - id: openai:gpt-6-luna
+    config:
+      maxRetries: 0
+      store: false
+defaultTest:
+  vars:
+    scripted_caller_speech: '[]'
+    capture_status: '{"stopReason":"unknown","providerFailed":false}'
+  assert:
+    - type: is-json
+      value: file://caller-review-schema.json
+      metric: caller_review_schema
+    - type: javascript
+      value: file://validate-caller-review.js
+      metric: caller_validity
+# Prepare tests from saved results; this opens no voice sessions.
+tests: []

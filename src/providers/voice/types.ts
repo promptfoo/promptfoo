@@ -4,6 +4,15 @@ import type { OpenAiTtsOptions } from '../openai/tts';
 /** Each participant has independent OpenAI credentials, endpoint, voice, and backend settings. */
 export type VoiceParticipantOptions = OpenAiLiveOptions & { model?: string };
 
+/** An opt-in target application policy; absent or native leaves the benchmark unchanged. */
+export interface TargetPlaybackConfig {
+  mode: 'native' | 'app-barge-in';
+  transcriptionDelay?: 'minimal' | 'low';
+  sourceQuietMs?: number;
+  callerQuietMs?: number;
+  recoveryTimeoutMs?: number;
+}
+
 export interface SimulatedVoiceUserConfig {
   /** Caller persona and goal. Defaults to {{instructions}} and supports test variables. */
   instructions?: string;
@@ -19,6 +28,8 @@ export interface SimulatedVoiceUserConfig {
   maxBufferedAudioMs?: number;
   recordConversation?: boolean;
   targetSpeaksFirst?: boolean;
+  /** Explicit application playback suppression with independently streamed caller recognition. */
+  targetPlayback?: TargetPlaybackConfig;
   /** Speech rendering options; uses the caller's connection and credentials. */
   interventionTts?: Pick<OpenAiTtsOptions, 'model' | 'voice' | 'instructions' | 'speed'>;
   /** Exact text is rendered before capture; instruction-only entries are advisory steering. */
@@ -62,4 +73,13 @@ export interface VoiceIntervention {
   contextEventIds?: string[];
   deliveredAudioBytes?: number;
   discardedCallerAudioBytes?: number;
+  /** Acoustic recovery of generated caller output after a scheduled clip. */
+  recoveryPolicy?: Readonly<{
+    sourceQuietMethod: 'rms';
+    sourceQuietRmsDbfs: number;
+    sourceQuietWindowMs: number;
+    sourceQuietWindowAlignment: 'intervention_start';
+    sourceQuietMs: number;
+    recoveryTimeoutMs: number;
+  }>;
 }

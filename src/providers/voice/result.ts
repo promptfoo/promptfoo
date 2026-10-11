@@ -3,8 +3,10 @@ import { convertPcm16ToWav } from '../openai/audio';
 import { LIVE_FRAME_MS } from '../openai/liveSession';
 
 import type { ProviderResponse } from '../../contracts/providers';
+import type { LiveTranscriptionSummary } from '../openai/liveTranscriptionSession';
 import type { PcmAudioPlayout } from './audioPlayout';
 import type { PcmAudioQueue } from './audioQueue';
+import type { TargetPlaybackController } from './targetPlaybackController';
 import type { VoiceIntervention, VoiceSpeaker, VoiceTranscriptFragment } from './types';
 
 const SAMPLE_RATE = 24000;
@@ -25,6 +27,31 @@ interface VoiceResultInput {
   elapsedMs: number;
   error?: string;
   stopReason: string;
+  targetPlayback?: {
+    mode: 'app-barge-in';
+    clock: 'media' | 'provider';
+    policy: TargetPlaybackController['policy'];
+    metrics: TargetPlaybackController['metrics'];
+    events: TargetPlaybackController['events'];
+    recognition?: LiveTranscriptionSummary;
+    redirects: Array<{ epoch: number; eventId: string; sentAtMs: number }>;
+  };
+  targetSourcePcm?: Buffer;
+}
+
+function totalCost(
+  responses: Array<ProviderResponse | undefined>,
+  preparationResponses: ProviderResponse[],
+  targetPlayback: VoiceResultInput['targetPlayback'],
+): number | undefined {
+  const allCostsKnown =
+    SPEAKERS.every((_speaker, index) => typeof responses[index]?.cost === 'number') &&
+    preparationResponses.every((response) => typeof response.cost === 'number') &&
+    (!targetPlayback || targetPlayback.recognition?.usageConfirmed === true);
+  return allCostsKnown
+    ? [...responses, ...preparationResponses].reduce((sum, response) => sum + response!.cost!, 0) +
+        (targetPlayback?.recognition?.estimatedCost ?? 0)
+    : undefined;
 }
 
 /** Preserve partial evidence and separate observed duration from final, billable usage. */
@@ -42,6 +69,8 @@ export function formatVoiceResult({
   elapsedMs,
   error,
   stopReason,
+  targetPlayback,
+  targetSourcePcm,
 }: VoiceResultInput): ProviderResponse {
   const tokenUsage = createEmptyTokenUsage();
   for (const response of [...responses, ...preparationResponses]) {
@@ -139,12 +168,7 @@ export function formatVoiceResult({
       ];
     }),
   );
-  const allCostsKnown =
-    SPEAKERS.every((_speaker, index) => typeof responses[index]?.cost === 'number') &&
-    preparationResponses.every((response) => typeof response.cost === 'number');
-  const cost = allCostsKnown
-    ? [...responses, ...preparationResponses].reduce((sum, response) => sum + response!.cost!, 0)
-    : undefined;
+  const cost = totalCost(responses, preparationResponses, targetPlayback);
   const pcm = Buffer.concat(recordings);
   // Preparation failures happen before Live starts. Preserve their sanitized HTTP
   // retry hints on the outward result instead of reducing them to an error string.
@@ -172,6 +196,19 @@ export function formatVoiceResult({
         }
       : {}),
     metadata: {
+      ...(targetSourcePcm
+        ? {
+            audio: {
+              data: convertPcm16ToWav(targetSourcePcm, SAMPLE_RATE).toString('base64'),
+              format: 'wav',
+              sampleRate: SAMPLE_RATE,
+              channels: 1,
+              duration: targetSourcePcm.length / BYTES_PER_SECOND,
+              role: 'target_source',
+              clock: 'source_sample_order',
+            },
+          }
+        : {}),
       ...(preparationFailure?.http ? { http: preparationFailure.http } : {}),
       ...(preparationFailure?.rateLimitKind === undefined
         ? {}
@@ -189,6 +226,7 @@ export function formatVoiceResult({
         gradingTranscriptSource: 'listener_input',
         gradingTranscriptOrder: 'listener_event_arrival',
         interventions,
+        ...(targetPlayback ? { targetPlayback } : {}),
         ...(preparationResponses.length
           ? {
               interventionPreparation: {

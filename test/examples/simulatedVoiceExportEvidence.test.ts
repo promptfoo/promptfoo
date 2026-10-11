@@ -74,6 +74,70 @@ function fixture(bytes = wav()) {
   };
 }
 
+function appFixture() {
+  const input = fixture() as any;
+  const source = wav(1, 24000, 24000);
+  const hash = createHash('sha256').update(source).digest('hex');
+  input.blobAssets.push({
+    hash,
+    sizeBytes: source.length,
+    mimeType: 'audio/wav',
+    data: source.toString('base64'),
+  });
+  input.results.results[0].response.metadata.audio = {
+    role: 'target_source',
+    clock: 'source_sample_order',
+    channels: 1,
+    sampleRate: 24000,
+    duration: 1,
+    blobRef: { hash, sizeBytes: source.length, mimeType: 'audio/wav', provider: 'filesystem' },
+  };
+  input.results.results[0].response.metadata.voice.targetPlayback = {
+    mode: 'app-barge-in',
+    clock: 'media',
+    policy: { sourceQuietMs: 200, callerQuietMs: 200 },
+    metrics: {
+      sourceBytes: 48000,
+      deliveredSourceBytes: 9600,
+      transportRejectedSourceBytes: 0,
+      bufferingRejectedSourceBytes: 0,
+      discardedQueuedBytes: 4800,
+      discardedSelectedBytes: 0,
+      discardedIncomingBytes: 9600,
+      pendingQueuedBytes: 24000,
+      pendingSelectedBytes: 0,
+      suppressedPlaybackMs: 200,
+      stops: 1,
+      closed: true,
+      suppressed: false,
+      recoveryFailed: false,
+    },
+    events: [
+      {
+        type: 'suppressed',
+        epoch: 1,
+        atMs: 200,
+        callerOnsetAtMs: 100,
+        discardedSourceStartByte: 9600,
+        discardedSourceEndByte: 14400,
+      },
+      { type: 'redirect_acknowledged', epoch: 1, atMs: 210 },
+      {
+        type: 'resumed',
+        epoch: 1,
+        atMs: 400,
+        recovery: 'observed_source_quiet',
+        discardedSourceStartByte: 14400,
+        discardedSourceEndByte: 24000,
+      },
+      { type: 'closed', epoch: 1, atMs: 500 },
+    ],
+    recognition: { status: 'completed', usageConfirmed: true },
+    redirects: [],
+  };
+  return { input, source };
+}
+
 async function run(input: unknown, suffix = 'out', options?: { configDir?: string }) {
   const file = path.join(root, `${suffix}.json`);
   await writeFile(file, JSON.stringify(input));
@@ -429,6 +493,215 @@ describe('voice example portable evidence export', () => {
     const embedded = html.match(/id="data">([\s\S]*?)<\/script>/)?.[1];
     expect(JSON.parse(embedded!).evidence[0].description).toBe(malicious);
     expect(html).toContain('item.textContent=text');
+  });
+
+  it('exports source bytes separately without promoting unheard audio or source clocks into heard evidence', async () => {
+    const { input, source } = appFixture();
+    const manifest = await run(input);
+    expect(manifest.errors).toBe(0);
+    expect(manifest.rows[0].recordings.map((r: any) => r.role)).toEqual([
+      'stereo',
+      'target',
+      'caller',
+    ]);
+    expect(manifest.rows[0].sourceRecordings).toMatchObject([
+      {
+        role: 'target_source',
+        clock: 'source_sample_order',
+        heardEvidence: false,
+        durationMs: 1000,
+      },
+    ]);
+    expect(await readFile(path.join(root, 'out/case-001-target-source.wav'))).toEqual(source);
+    const heardTests = JSON.parse(
+      await readFile(path.join(root, 'out/audio-review-tests.json'), 'utf8'),
+    );
+    const sourceTests = JSON.parse(
+      await readFile(path.join(root, 'out/source-audio-review-tests.json'), 'utf8'),
+    );
+    expect(heardTests).toHaveLength(3);
+    expect(sourceTests).toHaveLength(1);
+    expect(heardTests.every((t: any) => !t.vars.audio_file.includes('target-source'))).toBe(true);
+    expect(Object.keys(sourceTests[0].vars).sort()).toEqual([
+      'audio_file',
+      'audio_id',
+      'audio_view',
+    ]);
+    expect(sourceTests[0].vars.audio_file).toContain('target-source.wav');
+    expect(
+      JSON.parse(await readFile(path.join(root, 'out/transcription-tests.json'), 'utf8')),
+    ).toHaveLength(2);
+    expect(
+      JSON.parse(await readFile(path.join(root, 'out/source-transcription-tests.json'), 'utf8')),
+    ).toHaveLength(1);
+    const html = await readFile(path.join(root, 'out/index.html'), 'utf8');
+    const sourcePlayer = html
+      .split('for(const file of item.sourceRecordings||[])')[1]
+      .split('for(const intervention')[0];
+    expect(sourcePlayer).not.toContain('players.push');
+    expect(sourcePlayer).not.toContain("'seeked'");
+    expect(sourcePlayer).not.toContain("'timeupdate'");
+    expect(html).toContain('Seeking this player does not seek the conversation');
+  });
+
+  it('reports application timing and accounting separately from native quiet observations', async () => {
+    const { input } = appFixture();
+    const manifest = await run(input);
+    const metrics = manifest.rows[0].metrics;
+    expect(metrics.interventionObservationScope).toBe('application-controlled-playback');
+    expect(metrics.targetPlayback.accounting).toMatchObject({
+      sourceBytes: 48000,
+      accountedBytes: 48000,
+      intentionallyDiscardedBytes: 14400,
+      pendingBytes: 24000,
+      sourceMatchesVerifiedWav: true,
+    });
+    expect(metrics.targetPlayback.stops[0]).toMatchObject({
+      detectionDelayMs: 100,
+      heardStopFrameBoundMs: 100,
+      activeWhileSuppressedMs: 0,
+      resumedAtMs: 400,
+      firstActivityAfterResumeAtMs: null,
+      usefulAnswerLatencyMs: null,
+    });
+    expect(metrics.targetSource.clock).toBe('source_sample_order');
+    const native = await run(fixture(), 'native');
+    expect(native.rows[0].metrics.interventionObservationScope).toBe('native-playback');
+    expect(native.rows[0].metrics.targetPlayback).toBeUndefined();
+  });
+
+  it('retains an audible leak inside application suppression in the measured stop bound', async () => {
+    const { input } = appFixture();
+    const heard = wav();
+    for (let frame = 7200; frame < 8160; frame++) {
+      heard.writeInt16LE(2000, 44 + frame * 4);
+    }
+    const replacement = fixture(heard);
+    input.results.results[0].response.audio = replacement.results.results[0].response.audio;
+    input.blobAssets[0] = replacement.blobAssets[0];
+    const manifest = await run(input);
+    expect(manifest.rows[0].metrics.targetPlayback.stops[0]).toMatchObject({
+      lastActiveTargetFrameEndBeforeResumeMs: 340,
+      heardStopFrameBoundMs: 240,
+      activeWhileSuppressedMs: 40,
+    });
+  });
+
+  it.each([
+    'missing',
+    'hash',
+    'clock',
+    'duration',
+    'balance',
+    'source-size',
+    'delivery-size',
+    'range',
+    'onset',
+  ] as const)(
+    'fails source/accounting provenance checks while retaining heard tracks: %s',
+    async (failure) => {
+      const { input } = appFixture();
+      const metadata = input.results.results[0].response.metadata;
+      const metrics = metadata.voice.targetPlayback.metrics;
+      if (failure === 'missing') {
+        delete metadata.audio;
+      }
+      if (failure === 'hash') {
+        input.blobAssets[1].data = wav(1, 16000, 24000).toString('base64');
+      }
+      if (failure === 'clock') {
+        metadata.audio.clock = 'media';
+      }
+      if (failure === 'duration') {
+        metadata.audio.duration = 500;
+      }
+      if (failure === 'balance') {
+        metrics.pendingQueuedBytes += 2;
+      }
+      if (failure === 'source-size') {
+        metrics.sourceBytes += 2;
+        metrics.pendingQueuedBytes += 2;
+      }
+      if (failure === 'delivery-size') {
+        metrics.deliveredSourceBytes += 15000;
+        metrics.pendingQueuedBytes -= 15000;
+      }
+      if (failure === 'range') {
+        metadata.voice.targetPlayback.events[0].discardedSourceEndByte = 48002;
+      }
+      if (failure === 'onset') {
+        metadata.voice.targetPlayback.events[0].callerOnsetAtMs = 300;
+      }
+      const manifest = await run(input);
+      expect(manifest.errors).toBe(1);
+      expect(manifest.rows[0].error).toBeTruthy();
+      expect(manifest.rows[0].recordings).toHaveLength(3);
+      expect(manifest.rows[0].sourceRecordings).toBeUndefined();
+    },
+  );
+
+  it('retains exportable evidence for failed application recovery instead of recasting it as native success', async () => {
+    const { input } = appFixture();
+    const playback = input.results.results[0].response.metadata.voice.targetPlayback;
+    playback.metrics.suppressed = true;
+    playback.metrics.recoveryFailed = true;
+    playback.events[2].type = 'recovery_timeout';
+    const manifest = await run(input);
+    expect(manifest.errors).toBe(0);
+    expect(manifest.rows[0].metrics.targetPlayback.accounting.recoveryFailed).toBe(true);
+    expect(manifest.rows[0].metrics.targetPlayback.stops[0].resumedAtMs).toBeNull();
+    expect(manifest.rows[0].evalSuccess).toBe(false);
+  });
+
+  it('grades recovery, recognition completion, and explicitly expected false stops independently of accounting', async () => {
+    const grade = (
+      await import(pathToFileURL(path.join(path.dirname(script), 'app-playback-health.js')).href)
+    ).default;
+    const { input } = appFixture();
+    const response = input.results.results[0].response;
+    expect(
+      grade('', { providerResponse: response, vars: { expectedApplicationStops: 1 } }).pass,
+    ).toBe(true);
+    expect(
+      grade('', { providerResponse: response, vars: { expectedApplicationStops: 0 } }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining('observed 1') });
+    response.metadata.voice.targetPlayback.metrics.recoveryFailed = true;
+    expect(grade('', { providerResponse: response }).reason).toContain('did not recover');
+    response.metadata.voice.targetPlayback.metrics.recoveryFailed = false;
+    response.metadata.voice.targetPlayback.recognition.usageConfirmed = false;
+    expect(grade('', { providerResponse: response })).toMatchObject({
+      pass: true,
+      reason: expect.stringContaining('billing usage is unconfirmed'),
+    });
+    response.metadata.voice.targetPlayback.recognition.status = 'failed';
+    response.metadata.voice.targetPlayback.recognition.usageConfirmed = true;
+    expect(grade('', { providerResponse: response })).toMatchObject({
+      pass: false,
+      reason: expect.stringContaining('recognition did not complete'),
+    });
+    expect(grade('', { providerResponse: {} }).pass).toBe(false);
+  });
+
+  it('preserves provider-clock source on startup failure without manufacturing a heard-stop delay', async () => {
+    const { input, source } = appFixture();
+    delete input.results.results[0].response.audio;
+    const playback = input.results.results[0].response.metadata.voice.targetPlayback;
+    playback.clock = 'provider';
+    Object.assign(playback.metrics, {
+      deliveredSourceBytes: 0,
+      discardedQueuedBytes: 0,
+      discardedIncomingBytes: 0,
+      pendingQueuedBytes: 48000,
+      stops: 0,
+      suppressedPlaybackMs: 0,
+    });
+    playback.events = [{ type: 'closed', epoch: 0, atMs: 100 }];
+    const manifest = await run(input);
+    expect(manifest.errors).toBe(1);
+    expect(manifest.rows[0].recordings).toHaveLength(0);
+    expect(await readFile(path.join(root, 'out/case-001-target-source.wav'))).toEqual(source);
+    expect(manifest.rows[0].metrics.targetPlayback.clock).toBe('provider');
+    expect(manifest.rows[0].metrics.targetPlayback.stops).toBeNull();
   });
 
   it('refuses to overwrite an existing output directory', async () => {

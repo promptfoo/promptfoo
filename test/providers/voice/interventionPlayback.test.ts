@@ -103,6 +103,7 @@ describe('VoiceInterventionPlayback', () => {
     accept(playback);
     expect(playback.filterCallerAudio(Buffer.alloc(QUIET_BYTES - 2), 150)).toBeUndefined();
     const fresh = pcm(600, 456);
+    fresh.writeInt16LE(-9876, 0);
     expect(playback.filterCallerAudio(Buffer.concat([Buffer.alloc(2), fresh]), 200)).toEqual(fresh);
     expect(record.discardedCallerAudioBytes).toBe(QUIET_BYTES);
     expect(record.callerResumedAtMs).toBe(200);
@@ -110,16 +111,112 @@ describe('VoiceInterventionPlayback', () => {
     expect(playback.readFrame()).toBeUndefined();
   });
 
-  it('resets the quiet boundary on even one active sample', () => {
+  it('resets the quiet boundary on soft speech above the declared RMS floor', () => {
     const { playback, prepared } = setup();
     playback.begin(prepared, preparedRecord());
     accept(playback);
-    playback.filterCallerAudio(Buffer.alloc(QUIET_BYTES - 2), 200);
-    playback.filterCallerAudio(pcm(1, 9), 220);
-    playback.filterCallerAudio(Buffer.alloc(QUIET_BYTES - 2), 400);
+    playback.filterCallerAudio(pcm(4320, 30), 200);
+    const softSpeech = Buffer.alloc(FRAME_BYTES);
+    for (let sample = 0; sample < 480; sample++) {
+      softSpeech.writeInt16LE(
+        Math.round(90 * Math.sin((2 * Math.PI * 300 * sample) / 24000)),
+        sample * 2,
+      );
+    }
+    playback.filterCallerAudio(softSpeech, 220);
+    playback.filterCallerAudio(pcm(4320, 30), 400);
     expect(playback.active).toBe(true);
-    playback.filterCallerAudio(pcm(1, -8), 420);
+    playback.filterCallerAudio(pcm(480, 30), 420);
     expect(playback.active).toBe(false);
+  });
+
+  it.each([0, 32, 51, 58])('recovers through complete quiet windows with DC level %s', (level) => {
+    const { playback, prepared, record } = setup();
+    playback.begin(prepared, record);
+    accept(playback);
+    const fresh = pcm(600, 1300);
+    expect(playback.filterCallerAudio(Buffer.concat([pcm(4800, level), fresh]), 500)).toEqual(
+      fresh,
+    );
+    expect(record.discardedCallerAudioBytes).toBe(QUIET_BYTES);
+    expect(record.recoveryPolicy).toEqual({
+      sourceQuietMethod: 'rms',
+      sourceQuietRmsDbfs: -55,
+      sourceQuietWindowMs: 20,
+      sourceQuietWindowAlignment: 'intervention_start',
+      sourceQuietMs: 200,
+      recoveryTimeoutMs: 3000,
+    });
+    expect(record.callerResumedAtMs).toBe(500);
+  });
+
+  it('includes DC energy when deciding whether a window is quiet', () => {
+    const { playback, prepared, record } = setup();
+    playback.begin(prepared, record);
+    accept(playback);
+    playback.filterCallerAudio(pcm(72000, 59), 3103);
+    expect(playback.active).toBe(true);
+    expect(record.discardedCallerAudioBytes).toBe(144000);
+    expect(() => playback.checkRecovery(3104)).toThrow(/observed silence/);
+  });
+
+  it('preserves noisy quiet-window state across irregular chunks and retains every fresh byte', () => {
+    const whole = setup();
+    const split = setup();
+    for (const fixture of [whole, split]) {
+      fixture.playback.begin(fixture.prepared, fixture.record);
+      accept(fixture.playback);
+    }
+    const quiet = Buffer.alloc(QUIET_BYTES);
+    for (let sample = 0; sample < 4800; sample++) {
+      quiet.writeInt16LE(sample % 2 ? 70 : -10, sample * 2); // Mean30, RMS50.
+    }
+    const fresh = pcm(600, 2100);
+    fresh.writeInt16LE(-1357, 0);
+    const source = Buffer.concat([quiet, fresh]);
+    expect(whole.playback.filterCallerAudio(source, 500)).toEqual(fresh);
+    const forwarded: Buffer[] = [];
+    let start = 0;
+    for (const end of [2, 66, 958, 1202, 7336, 9598, 9600, 9618, source.length]) {
+      const audio = split.playback.filterCallerAudio(source.subarray(start, end), 500);
+      if (audio) {
+        forwarded.push(audio);
+      }
+      start = end;
+    }
+    expect(Buffer.concat(forwarded)).toEqual(fresh);
+    expect(split.record).toEqual(whole.record);
+    expect(split.record.discardedCallerAudioBytes! + Buffer.concat(forwarded).length).toBe(
+      source.length,
+    );
+  });
+
+  it('does not complete the final quiet window during a packet stall', () => {
+    const { playback, prepared, record } = setup();
+    playback.begin(prepared, record);
+    accept(playback);
+    playback.filterCallerAudio(pcm(4799, 30), 500);
+    playback.checkRecovery(2500);
+    expect(playback.active).toBe(true);
+    expect(record).not.toHaveProperty('callerResumedAtMs');
+    playback.filterCallerAudio(pcm(1, 30), 2501);
+    expect(playback.active).toBe(false);
+    expect(record.discardedCallerAudioBytes).toBe(QUIET_BYTES);
+  });
+
+  it('waits for a partial source window at clip completion before reusing prior quiet', () => {
+    const { playback, prepared, record } = setup();
+    playback.begin(prepared, record);
+    playback.filterCallerAudio(Buffer.concat([pcm(4800, 30), pcm(240, 2000)]), 101);
+    accept(playback);
+    expect(playback.active).toBe(true);
+    playback.filterCallerAudio(pcm(240, 2000), 130);
+    playback.filterCallerAudio(pcm(4320, 30), 300);
+    expect(playback.active).toBe(true);
+    playback.filterCallerAudio(pcm(480, 30), 320);
+    expect(playback.active).toBe(false);
+    expect(record.callerResumedAtMs).toBe(320);
+    expect(record.discardedCallerAudioBytes).toBe(20160);
   });
 
   it('suppresses all source audio during the clip even after an earlier quiet boundary', () => {

@@ -28,7 +28,7 @@ let utils: {
 };
 let validate: (
   output: unknown,
-  context?: { vars: { audio_file: string } },
+  context?: { vars: { audio_file: string; audio_view?: string } },
 ) => { pass: boolean; reason: string };
 let scoring: {
   scoreCalibration: (
@@ -181,6 +181,120 @@ describe('audio model judgments fail closed', () => {
       });
     }
   });
+  describe('localized stereo overlap evidence', () => {
+    const sampleRate = 24000;
+    const review = (finding = {}) =>
+      JSON.stringify({
+        ...clear,
+        status: 'review_required',
+        findings: [
+          {
+            type: 'overlap',
+            severity: 'uncertain',
+            start_seconds: 0.2,
+            end_seconds: 0.4,
+            description: 'The two conversation sides may overlap here.',
+            ...finding,
+          },
+        ],
+      });
+    const context = (
+      samples: Int16Array,
+      audio_view: string | undefined = 'stereo_conversation',
+      channels = 2,
+    ) => ({
+      vars: {
+        audio_file: utils.writePcm16Wav({ sampleRate, channels, samples }).toString('base64'),
+        audio_view,
+      },
+    });
+    const oneQuietChannel = (channel: number) => {
+      const samples = new Int16Array(sampleRate * 2).fill(1000);
+      for (let frame = sampleRate * 0.2; frame < sampleRate * 0.4; frame++) {
+        samples[frame * 2 + channel] = 0;
+      }
+      return samples;
+    };
+
+    it.each([0, 1])(
+      'rejects a claim where channel %i is exactly zero only in the interval',
+      (channel) => {
+        expect(validate(review(), context(oneQuietChannel(channel)))).toMatchObject({
+          pass: false,
+          reason: expect.stringContaining('is exactly zero throughout its timestamp interval'),
+        });
+        expect(validate(review(), context(oneQuietChannel(channel))).reason).toContain(
+          'The recording remains unreviewed',
+        );
+      },
+    );
+    it('does not use an amplitude threshold or treat nonzero samples as a quality pass', () => {
+      const samples = oneQuietChannel(1);
+      samples[sampleRate * 0.3 * 2 + 1] = 1;
+      expect(validate(review(), context(samples))).toMatchObject({
+        pass: false,
+        reason: expect.stringContaining('Audio-model review: review_required'),
+      });
+    });
+    it('does not certify simultaneous speech when the channels are active at different times', () => {
+      const samples = new Int16Array(sampleRate * 2);
+      samples[sampleRate * 0.25 * 2] = 1000;
+      samples[sampleRate * 0.35 * 2 + 1] = 1000;
+      expect(validate(review(), context(samples))).toMatchObject({
+        pass: false,
+        reason: expect.stringContaining('Audio-model review: review_required'),
+      });
+    });
+    it('rounds fractional intervals outward to retain intersecting boundary samples', () => {
+      const samples = new Int16Array(8);
+      samples[0] = 1000;
+      samples[1] = 1;
+      expect(
+        validate(
+          review({ start_seconds: 0.5 / sampleRate, end_seconds: 1.5 / sampleRate }),
+          context(samples),
+        ),
+      ).toMatchObject({
+        pass: false,
+        reason: expect.stringContaining('Audio-model review: review_required'),
+      });
+    });
+    it.each([
+      { start_seconds: null },
+      { end_seconds: null },
+      { start_seconds: 0.2, end_seconds: 0.2 },
+    ])('leaves insufficiently localized overlap unresolved: %j', (finding) => {
+      expect(validate(review(finding), context(oneQuietChannel(1)))).toMatchObject({
+        pass: false,
+        reason: expect.stringContaining('Audio-model review: review_required'),
+      });
+    });
+    it.each(['isolated_target', 'isolated_caller', 'standalone_clip', 'unspecified', ''])(
+      'does not assume separate speakers for the %s recording view',
+      (view) => {
+        expect(validate(review(), context(oneQuietChannel(1), view))).toMatchObject({
+          pass: false,
+          reason: expect.stringContaining('Audio-model review: review_required'),
+        });
+      },
+    );
+    it('does not infer a channel contract for a missing view or a mono recording', () => {
+      const input = context(oneQuietChannel(1));
+      const vars = { audio_file: input.vars.audio_file };
+      expect(validate(review(), { vars }).reason).toContain('Audio-model review: review_required');
+      expect(
+        validate(review(), context(new Int16Array(sampleRate).fill(1000), 'stereo_conversation', 1))
+          .reason,
+      ).toContain('Audio-model review: review_required');
+    });
+    it('does not rewrite a localized non-overlap finding', () => {
+      expect(validate(review({ type: 'dropout' }), context(oneQuietChannel(1)))).toMatchObject({
+        pass: false,
+        reason: expect.stringContaining('Audio-model review: review_required'),
+      });
+    });
+  });
+
   it('rejects invented speech on an all-zero WAV independently of the model judgment', () => {
     const audio = utils.writePcm16Wav({
       sampleRate: 24000,
@@ -364,10 +478,10 @@ describe('blinded acoustic control construction', () => {
 });
 
 describe('frozen audio calibration scoring', () => {
-  function fixture(samples = new Int16Array([1000, -1000])) {
+  function fixture(samples = new Int16Array([1000, -1000]), channels = 1) {
     const audio = utils.writePcm16Wav({
       sampleRate: 24000,
-      channels: 1,
+      channels,
       samples,
     });
     const labels = {
@@ -595,6 +709,64 @@ describe('frozen audio calibration scoring', () => {
       statusMatches: true,
     });
   });
+  it('checks stereo overlap against verified rendered bytes and the redacted-file fallback', () => {
+    const samples = new Int16Array(48000);
+    for (let frame = 0; frame < 24000; frame++) {
+      samples[frame * 2] = 1000;
+    }
+    const { labels, row } = fixture(samples, 2);
+    const messages = JSON.parse(row.prompt.raw);
+    const directory = mkdtempSync(path.join(os.tmpdir(), 'voice-overlap-provenance-'));
+    temporaryDirectories.push(directory);
+    const recording = path.join(directory, 'recording.wav');
+    writeFileSync(recording, Buffer.from(messages[0].content[0].input_audio.data, 'base64'));
+    const output = JSON.stringify({
+      ...clear,
+      status: 'review_required',
+      findings: [
+        {
+          type: 'overlap',
+          severity: 'uncertain',
+          start_seconds: 0.2,
+          end_seconds: 0.4,
+          description: 'The conversation sides overlap.',
+        },
+      ],
+    });
+    for (const redacted of [false, true]) {
+      const submitted = structuredClone(messages);
+      if (redacted) {
+        submitted[0].content[0].input_audio.data = '[REDACTED]';
+      }
+      const testCase = {
+        vars: {
+          ...row.testCase.vars,
+          audio_view: 'stereo_conversation',
+          // An unrelated local path must not replace available rendered bytes.
+          audio_file: `file://${redacted ? recording : path.join(directory, 'not-submitted.wav')}`,
+        },
+      };
+      const result = scoring.scoreCalibration(labels, {
+        results: {
+          results: [
+            {
+              ...row,
+              testCase,
+              prompt: { raw: JSON.stringify(submitted) },
+              response: { output },
+            },
+          ],
+        },
+      });
+      expect(result.cases[0]).toMatchObject({
+        state: 'error',
+        inputHashVerified: true,
+        inputHashScope: redacted ? 'referenced_local_file' : 'rendered_prompt',
+        error: expect.stringContaining('is exactly zero throughout its timestamp interval'),
+      });
+    }
+  });
+
   it('rejects findings outside the verified WAV while preserving verified input provenance', () => {
     const { labels, row } = fixture(new Int16Array(24000).fill(1000));
     labels.cases.push({

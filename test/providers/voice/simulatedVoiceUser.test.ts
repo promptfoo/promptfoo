@@ -31,10 +31,15 @@ vi.mock('ws', async () => {
   return {
     default: class extends EventEmitter {
       static OPEN = 1;
+      static CLOSED = 3;
       readyState = 0;
       bufferedAmount = 0;
       sent: Record<string, any>[] = [];
       terminate = vi.fn(() => {
+        this.readyState = 3;
+        this.emit('close');
+      });
+      close = vi.fn(() => {
         this.readyState = 3;
         this.emit('close');
       });
@@ -75,6 +80,40 @@ async function connect() {
   }
   await vi.advanceTimersByTimeAsync(0);
   return sockets;
+}
+
+async function connectApplication() {
+  await vi.advanceTimersByTimeAsync(0);
+  expect(sockets).toHaveLength(1);
+  const recognizer = sockets[0];
+  expect(recognizer.url).toBe('wss://api.openai.com/v1/realtime?intent=transcription');
+  expect(recognizer.options.headers.Authorization).toBe('Bearer target-key');
+  recognizer.readyState = 1;
+  recognizer.emit('open');
+  emit(recognizer, {
+    type: 'session.updated',
+    session: {
+      type: 'transcription',
+      audio: {
+        input: {
+          format: { type: 'audio/pcm', rate: 24000 },
+          transcription: { model: 'gpt-live-transcribe' },
+          turn_detection: null,
+        },
+      },
+    },
+  });
+  await vi.advanceTimersByTimeAsync(0);
+  expect(sockets).toHaveLength(3);
+  const [target, caller] = sockets.slice(1);
+  for (const [index, socket] of [target, caller].entries()) {
+    socket.readyState = 1;
+    socket.emit('open');
+    emit(socket, { type: 'session.started', session: { id: `live_${index}` } });
+  }
+  await vi.advanceTimersByTimeAsync(0);
+  acknowledgeOpening();
+  return { recognizer, target, caller };
 }
 function transcript(socket: Socket, delta: string, start_ms: number, role = 'output') {
   emit(socket, {
@@ -140,6 +179,191 @@ describe('SimulatedVoiceUser', () => {
     const p = new SimulatedVoiceUser({ id: 'custom', label: 'Cafe' });
     expect(p.id()).toBe('promptfoo:simulated-voice-user');
     expect(p.label).toBe('Cafe');
+  });
+
+  it.each([
+    null,
+    [],
+    { mode: 'automatic' },
+    { mode: 'native', sourceQuietMs: 200 },
+    { mode: 'app-barge-in', transcriptionDelay: 'high' },
+    { mode: 'app-barge-in', sourceQuietMs: 0 },
+    { mode: 'app-barge-in', recoveryTimeoutMs: 10001 },
+    { mode: 'app-barge-in', cueAtMs: 20 },
+  ])('rejects invalid application settings before opening sockets: %j', async (targetPlayback) => {
+    const response = await provider({
+      targetPlayback,
+    } as unknown as SimulatedVoiceUserConfig).callApi('Cafe');
+    expect(response.error).toBeTruthy();
+    expect(sockets).toHaveLength(0);
+  });
+
+  it('keeps explicitly native playback on the original two-session path', async () => {
+    const result = provider({ targetPlayback: { mode: 'native' } }).callApi('Cafe');
+    const [target, caller] = await connect();
+    acknowledgeOpening();
+    audio(target, 1000);
+    audio(caller, 1000);
+    transcript(target, 'Question', 0, 'input');
+    transcript(caller, 'Answer', 20, 'input');
+    await vi.advanceTimersByTimeAsync(1000);
+    finalize();
+    const response = await result;
+    expect(response.error).toBeUndefined();
+    expect(response.metadata?.voice.targetPlayback).toBeUndefined();
+    expect(response.metadata?.audio).toBeUndefined();
+    expect(sockets).toHaveLength(2);
+  });
+
+  it('stops application playback from recognized accepted PCM and retains separate source evidence', async () => {
+    const result = provider({
+      targetPlayback: { mode: 'app-barge-in', sourceQuietMs: 40, callerQuietMs: 40 },
+    }).callApi('Cafe');
+    const { recognizer, target, caller } = await connectApplication();
+    audio(target, 1200, 24000);
+    audio(caller, 3000, 4800);
+    transcript(target, 'Stop talking', 200, 'input');
+    transcript(caller, 'Okay', 820, 'input');
+    await vi.advanceTimersByTimeAsync(280);
+    emit(recognizer, {
+      type: 'conversation.item.input_audio_transcription.delta',
+      item_id: 'item-1',
+      content_index: 0,
+      delta: 'Stop talking',
+    });
+    const redirect = target.sent.find((event) => event.type === 'session.thinking.append');
+    expect(redirect?.content).toContain('was not heard');
+    expect(redirect?.content).not.toContain('Stop talking');
+    emit(target, { type: 'session.thinking.appended', client_event_id: redirect!.event_id });
+    await vi.advanceTimersByTimeAsync(320);
+    audio(target, 0, 960);
+    audio(target, 4000, 9600);
+    await vi.advanceTimersByTimeAsync(160);
+    emit(recognizer, {
+      type: 'input_audio_buffer.committed',
+      item_id: 'item-1',
+      previous_item_id: null,
+    });
+    emit(recognizer, {
+      type: 'conversation.item.input_audio_transcription.completed',
+      item_id: 'item-1',
+      content_index: 0,
+      transcript: 'Stop talking',
+      usage: { type: 'duration', seconds: 0.7 },
+    });
+    await vi.advanceTimersByTimeAsync(240);
+    finalize();
+    const response = await result;
+    expect(response.error).toBeUndefined();
+    const app = response.metadata!.voice.targetPlayback;
+    expect(app).toMatchObject({
+      mode: 'app-barge-in',
+      clock: 'media',
+      metrics: { stops: 1, suppressed: false, transportRejectedSourceBytes: 0 },
+      recognition: {
+        status: 'completed',
+        requestedDelay: 'minimal',
+        delayAcknowledged: false,
+        usageConfirmed: false,
+      },
+    });
+    expect(app.events.find((event: any) => event.type === 'suppressed')).toMatchObject({
+      atMs: 280,
+      callerOnsetAtMs: 220,
+    });
+    expect(app.events.some((event: any) => event.type === 'resumed')).toBe(true);
+    expect(app.metrics.discardedQueuedBytes).toBeGreaterThan(0);
+    const m = app.metrics;
+    expect(m.sourceBytes).toBe(
+      m.deliveredSourceBytes +
+        m.discardedQueuedBytes +
+        m.discardedSelectedBytes +
+        m.discardedIncomingBytes +
+        m.pendingQueuedBytes +
+        m.pendingSelectedBytes +
+        m.transportRejectedSourceBytes +
+        m.bufferingRejectedSourceBytes,
+    );
+    const inputFrames = target.sent
+      .filter((event) => event.type === 'session.input_audio.append')
+      .map((event) => event.audio);
+    const recognitionFrames = recognizer.sent
+      .filter((event) => event.type === 'input_audio_buffer.append')
+      .map((event) => event.audio);
+    expect(recognitionFrames).toEqual(inputFrames);
+    expect(response.metadata?.audio).toMatchObject({
+      role: 'target_source',
+      clock: 'source_sample_order',
+      channels: 1,
+    });
+    expect(Buffer.from(response.metadata!.audio.data, 'base64').length - 44).toBe(m.sourceBytes);
+    expect(response.cost).toBeUndefined();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('fails explicit application mode before starting participants if recognition setup fails', async () => {
+    const result = provider({ targetPlayback: { mode: 'app-barge-in' } }).callApi('Cafe');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(sockets).toHaveLength(1);
+    sockets[0].readyState = 1;
+    sockets[0].emit('open');
+    emit(sockets[0], { type: 'error', error: { message: 'invalid target-key' } });
+    const response = await result;
+    expect(response.error).toContain('[REDACTED]');
+    expect(response.error).not.toContain('target-key');
+    expect(response.metadata?.voice.targetPlayback.recognition.status).toBe('failed');
+    expect(response.metadata?.voice.targetPlayback.clock).toBe('provider');
+    expect(sockets).toHaveLength(1);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('honors disabled recording for both heard and application source audio', async () => {
+    const result = provider({
+      recordConversation: false,
+      targetPlayback: { mode: 'app-barge-in' },
+    }).callApi('Cafe');
+    const { recognizer, target, caller } = await connectApplication();
+    audio(target, 1200);
+    audio(caller, 3000);
+    transcript(target, 'Hello', 220, 'input');
+    transcript(caller, 'Hi', 220, 'input');
+    await vi.advanceTimersByTimeAsync(1000);
+    emit(recognizer, {
+      type: 'input_audio_buffer.committed',
+      item_id: 'greeting',
+      previous_item_id: null,
+    });
+    emit(recognizer, {
+      type: 'conversation.item.input_audio_transcription.completed',
+      item_id: 'greeting',
+      transcript: 'Hello',
+      usage: { type: 'duration', seconds: 1 },
+    });
+    finalize();
+    const response = await result;
+    expect(response.error).toBeUndefined();
+    expect(response.audio).toBeUndefined();
+    expect(response.metadata?.audio).toBeUndefined();
+    expect(response.metadata?.voice.targetPlayback.metrics.sourceBytes).toBe(960);
+    expect(response.metadata?.voice.targetPlayback.metrics.stops).toBe(0);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('cancels recognizer setup without starting either participant and preserves the abort reason', async () => {
+    const abort = new AbortController();
+    const reason = new Error('Caller cancelled application test');
+    const result = provider({ targetPlayback: { mode: 'app-barge-in' } }).callApi(
+      'Cafe',
+      undefined,
+      { abortSignal: abort.signal },
+    );
+    const rejection = expect(result).rejects.toBe(reason);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(sockets).toHaveLength(1);
+    abort.abort(reason);
+    await rejection;
+    expect(sockets[0].terminate).toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   it('bridges both directions concurrently and records aligned stereo with listener event order', async () => {
