@@ -2,27 +2,18 @@ import React from 'react';
 
 import { strategies } from './data/strategies';
 
-type GroupedStrategies = Record<string, typeof strategies>;
-
-const categoryOrder: (typeof strategies)[number]['category'][] = [
+const groupedStrategies = [
   'Static (Single-Turn)',
   'Dynamic (Single-Turn)',
   'Multi-turn',
   'Regression',
   'Custom',
-];
-
-const groupedStrategies = strategies.reduce<GroupedStrategies>((acc, strategy) => {
-  if (!acc[strategy.category]) {
-    acc[strategy.category] = [];
-  }
-  acc[strategy.category].push(strategy);
-  return acc;
-}, {});
-
-Object.values(groupedStrategies).forEach((categoryStrategies) => {
-  categoryStrategies.sort((a, b) => a.displayName.localeCompare(b.displayName));
-});
+].map((category) => ({
+  category,
+  strategies: strategies
+    .filter((strategy) => strategy.category === category)
+    .sort((a, b) => a.displayName.localeCompare(b.displayName)),
+}));
 
 const RecommendedBadge = () => (
   <span
@@ -85,8 +76,7 @@ const StrategyTable = ({
           </tr>
         </thead>
         <tbody>
-          {categoryOrder.map((category) => {
-            const categoryStrategies = groupedStrategies[category] || [];
+          {groupedStrategies.map(({ category, strategies: categoryStrategies }) => {
             return (
               <React.Fragment key={category}>
                 {categoryStrategies.map((strategy, index) => (

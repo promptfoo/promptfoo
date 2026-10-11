@@ -1,6 +1,5 @@
 export interface Strategy {
   category: string;
-  categoryLink?: string;
   strategy: string;
   displayName: string;
   description: string;
