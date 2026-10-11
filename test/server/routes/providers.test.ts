@@ -13,7 +13,10 @@ const createGeneratedChatConfig = () => ({
 });
 
 // Mock dependencies
-vi.mock('../../../src/providers/index');
+vi.mock('../../../src/providers/index', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../src/providers/index')>()),
+  loadApiProvider: vi.fn(),
+}));
 vi.mock('../../../src/node/testProvider');
 vi.mock('../../../src/server/config/serverConfig');
 vi.mock('../../../src/redteam/commands/discover');
@@ -664,15 +667,28 @@ describe('Providers Routes', () => {
       expect(response.status).toBe(200);
     });
 
-    it('should return standardized 500 errors when session provider loading fails', async () => {
-      mockedLoadApiProvider.mockRejectedValue(new Error('provider unavailable'));
+    it('cleans up resources allocated before session provider loading fails', async () => {
+      const { session } = createPersistentSessionProvider();
+      mockedLoadApiProvider.mockImplementation(async () => {
+        providerRegistry.register(session);
+        throw new Error('provider unavailable');
+      });
 
-      const response = await api
-        .post('/api/providers/test-session')
-        .send({ provider: { id: 'http://example.com/api' } });
+      try {
+        const response = await api
+          .post('/api/providers/test-session')
+          .send({ provider: { id: 'http://example.com/api' } });
 
-      expect(response.status).toBe(500);
-      expect(response.body).toEqual({ error: 'Failed to test session' });
+        expect(response.status).toBe(500);
+        expect(response.body).toEqual({ error: 'Failed to test session' });
+        expect(mockedTestProviderSession).not.toHaveBeenCalled();
+        expect(session.shutdown).toHaveBeenCalledTimes(1);
+        expect(providerRegistry.has(session)).toBe(false);
+      } finally {
+        if (providerRegistry.has(session)) {
+          await session.shutdown();
+        }
+      }
     });
   });
 
