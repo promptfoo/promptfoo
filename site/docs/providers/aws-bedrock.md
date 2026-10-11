@@ -1525,10 +1525,11 @@ For example, use `bedrock:runtime:chat:us.moonshotai.kimi-k3` or
 `bedrock:runtime:responses:us.moonshotai.kimi-k3` with `service_tier: flex`.
 [Kimi K3](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-moonshot-ai-kimi-k3.html)
 requires a supported US, India, or global inference profile on both Runtime APIs; bare
-model IDs and foundation-model ARNs are rejected before transport. It supports Priority
-and Flex through these HTTP APIs. For US/global inference profiles,
-promptfoo estimates Priority at 1.75× Standard and Flex at 0.5× Standard. Its Converse
-and Invoke APIs remain Standard-only.
+model IDs and foundation-model ARNs are rejected before transport. Kimi supports Priority
+and Flex through these HTTP APIs; its Converse and Invoke APIs remain Standard-only.
+For US/global Kimi K3 and [Grok 4.6](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-xai-grok-4-6.html)
+inference profiles, Runtime Chat and Responses cost estimates use Priority at 1.75× Standard
+and Flex at 0.5× Standard. Unpublished Grok cache-write rates remain unknown.
 
 Runtime cost estimates for GPT-6.1 Sol US/global inference profiles include its published
 Ultrafast rates. To request Ultrafast through Responses, set `service_tier: ultrafast`; see
