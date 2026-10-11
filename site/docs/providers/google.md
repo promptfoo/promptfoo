@@ -389,9 +389,9 @@ prompts:
   - '[{"role":"user","parts":[{"text":"Have a wonderful day!","speechMetadata":{"style":"cheerful and friendly"}}]}]'
 ```
 
-For multiple speakers, set `generationConfig.speechConfig.multiSpeakerVoiceConfig.speakerVoiceConfigs` to a list of `{speaker, voiceConfig: {voice}}` objects and include the matching `speechMetadata.speaker` on each text part. Existing stored voice IDs are accepted by `voice`; creating or replicating voices is outside this provider's scope. See Google's [speech guide](https://ai.google.dev/gemini-api/docs/speech-generation).
+For two speakers on the Gemini API, set `generationConfig.speechConfig.multiSpeakerVoiceConfig.speakerVoiceConfigs` to a list of `{speaker, voiceConfig: {prebuiltVoiceConfig: {voiceName}}}` objects. Vertex uses `{speaker, voiceConfig: {voice}}`. Include the matching `speechMetadata.speaker` on each text part. For a single speaker, `voiceConfig.voice` also accepts an existing stored voice ID; creating or replicating voices is outside this provider's scope. See the [GenerateContent speech guide](https://ai.google.dev/gemini-api/docs/generate-content/speech-generation) and [Vertex speech guide](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/text-to-speech/overview).
 
-The older 2.5 and 3.1 TTS previews retire on November 17, 2026. Check the [model lifecycle page](https://ai.google.dev/gemini-api/docs/deprecations) before using them. Promptfoo's [cost estimates](https://ai.google.dev/gemini-api/docs/pricing) include the announced introductory discount through December 31, 2026 and the subsequent standard rates.
+The older 2.5 and 3.1 TTS previews have an earliest announced shutdown date of November 17, 2026. Check the [model lifecycle page](https://ai.google.dev/gemini-api/docs/deprecations) before using them. Promptfoo's [cost estimates](https://ai.google.dev/gemini-api/docs/pricing) include the announced introductory discount through December 31, 2026 and the subsequent standard rates.
 
 ### Embedding Models
 
