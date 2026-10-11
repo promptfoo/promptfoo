@@ -482,6 +482,50 @@ describe('Converse native request features', () => {
     ]);
   });
 
+  it.each([
+    ['native ID', { toolUseId: 'call-1' }, false],
+    ['legacy ID', { tool_use_id: 'call-1' }, false],
+    ['typed legacy ID', { tool_use_id: 'call-1' }, true],
+  ])('normalizes mixed shorthand tool-result parts with %s', (_label, id, typed) => {
+    const json = { image: { format: 'png', source: { bytes: 'leave unchanged' } } };
+    const toolResult = {
+      ...id,
+      status: 'success',
+      content: [
+        'note',
+        { image: { format: 'png', source: { bytes: 'YWJj' } } },
+        { document: { name: 'reference', format: 'txt', source: { bytes: 'YWJj' } } },
+        { video: { format: 'mp4', source: { bytes: 'YWJj' } } },
+        { json },
+      ],
+    };
+    const { messages } = parseConverseMessages(
+      JSON.stringify([
+        {
+          role: 'user',
+          content: [typed ? { type: 'tool_result', ...toolResult } : { toolResult }],
+        },
+      ]),
+    );
+    expect(messages[0].content).toEqual([
+      {
+        toolResult: {
+          toolUseId: 'call-1',
+          status: 'success',
+          content: [
+            { text: 'note' },
+            { image: { format: 'png', source: { bytes: Buffer.from('abc') } } },
+            {
+              document: { name: 'reference', format: 'txt', source: { bytes: Buffer.from('abc') } },
+            },
+            { video: { format: 'mp4', source: { bytes: Buffer.from('abc') } } },
+            { json },
+          ],
+        },
+      },
+    ]);
+  });
+
   it.each([false, true])(
     'normalizes YAML metadata scalars with streaming=%s',
     async (streaming) => {
@@ -1048,6 +1092,12 @@ describe('Converse native request features', () => {
       { toolAddition: { tool: { type: 'tool_reference', name: 'lookup' } } },
       { text: 'Tool set updated.' },
     ];
+    const toolResultParts = [
+      { image: { format: 'png', source: { bytes: 'YWJj' } } },
+      { document: { name: 'reference', format: 'txt', source: { bytes: 'YWJj' } } },
+      { video: { format: 'mp4', source: { bytes: 'YWJj' } } },
+      { json: { image: { source: { bytes: 'leave unchanged' } } } },
+    ];
     try {
       const result = await provider.callApi(
         JSON.stringify([
@@ -1060,8 +1110,16 @@ describe('Converse native request features', () => {
             ],
           },
           { role: 'system', content: toolChanges },
-          { role: 'assistant', content: 'Tools updated.' },
-          { role: 'user', content: 'Continue.' },
+          {
+            role: 'assistant',
+            content: [{ toolUse: { toolUseId: 'call-1', name: 'lookup', input: {} } }],
+          },
+          {
+            role: 'user',
+            content: [
+              { toolResult: { toolUseId: 'call-1', content: ['note', ...toolResultParts] } },
+            ],
+          },
         ]),
       );
       expect(result.output).toBe('READY');
@@ -1075,6 +1133,14 @@ describe('Converse native request features', () => {
         'user',
       ]);
       expect(body.messages[1].content).toEqual(toolChanges);
+      expect(body.messages[3].content).toEqual([
+        {
+          toolResult: {
+            toolUseId: 'call-1',
+            content: [{ text: 'note' }, ...toolResultParts],
+          },
+        },
+      ]);
       expect(body.outputConfig).toEqual({ effort: 'low' });
       expect(body.requestMetadata).toEqual({ suite: 'parity' });
     } finally {
@@ -1099,6 +1165,52 @@ describe('Converse native request features', () => {
       expect(input).not.toHaveProperty(key);
     }
     expect(input.promptVariables.question.text).toBe('hello');
+  });
+
+  it('preserves opaque application-profile settings through the real AWS SDK', async () => {
+    const handle = vi.fn(async (_request: { body?: Uint8Array; path: string }) => ({
+      response: {
+        statusCode: 200,
+        headers: { 'content-type': 'application/json' },
+        body: new TextEncoder().encode(JSON.stringify(reply)),
+      },
+    }));
+    const client = new BedrockRuntime({
+      region: 'us-east-1',
+      credentials: { accessKeyId: 'LOCAL_FIXTURE', secretAccessKey: 'LOCAL_FIXTURE' },
+      requestHandler: { handle },
+    });
+    const modelId =
+      'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/anthropic.claude-opus-5-5';
+    const inferenceConfig = { maxTokens: 2048, temperature: 0.5, topP: 0.9 };
+    const additionalModelRequestFields = { top_k: 50, output_config: { effort: 'max' } };
+    const thinking = { type: 'disabled' } as const;
+    const toolChoice = { tool: { name: 'lookup' } };
+    const { provider } = fixture(
+      {
+        inferenceConfig,
+        additionalModelRequestFields,
+        thinking,
+        tools: [{ name: 'lookup', input_schema: { type: 'object', properties: {} } }],
+        toolChoice,
+      },
+      modelId,
+    );
+    vi.spyOn(provider, 'getBedrockInstance').mockResolvedValue(client);
+    try {
+      expect((await provider.callApi('hello')).error).toBeUndefined();
+      const request = handle.mock.calls[0][0];
+      const body = JSON.parse(new TextDecoder().decode(request.body));
+      expect(decodeURIComponent(request.path)).toBe(`/model/${modelId}/converse`);
+      expect(body.inferenceConfig).toEqual(inferenceConfig);
+      expect(body.additionalModelRequestFields).toEqual({
+        ...additionalModelRequestFields,
+        thinking,
+      });
+      expect(body.toolConfig.toolChoice).toEqual(toolChoice);
+    } finally {
+      client.destroy();
+    }
   });
 
   it('rejects explicit overrides prohibited by Prompt management', async () => {
@@ -2192,10 +2304,14 @@ describe('native Converse configuration and cached binary parity', () => {
     },
   );
 
-  it('normalizes deprecated Claude sampling in native inferenceConfig', async () => {
+  it.each([
+    'us.anthropic.claude-opus-4-7',
+    'arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-opus-4-7',
+    'arn:aws:bedrock:us-east-1:123456789012:inference-profile/us.anthropic.claude-opus-4-7',
+  ])('normalizes deprecated Claude sampling in native inferenceConfig for %s', async (modelId) => {
     const { provider, send } = fixture(
       { inferenceConfig: { maxTokens: 100, temperature: 0.5, topP: 0.9 } },
-      'us.anthropic.claude-opus-4-7',
+      modelId,
     );
     await provider.callApi('hello');
     expect(send.mock.calls[0][0].input.inferenceConfig).toEqual({ maxTokens: 100 });
