@@ -19,7 +19,6 @@ import { callApi } from '@app/utils/api';
 import { formatDuration } from '@app/utils/date';
 import {
   isMediaRef,
-  normalizeMediaText,
   resolveAudioSource,
   resolveBlobUri,
   resolveImageSource,
@@ -314,8 +313,8 @@ function renderMediaVariableCell({
   }
 
   const { type: mediaType, format = '' } = mediaMetadata;
-  const normalizedValue = normalizeMediaText(value);
   const isRefValue = isMediaRef(value);
+  const normalizedValue = isRefValue ? resolveBlobUri(value) : value;
   const audioSource =
     mediaType === 'audio'
       ? resolveAudioSource(isRefValue ? { format, blobRef: value } : { data: value, format })
@@ -329,7 +328,7 @@ function renderMediaVariableCell({
         <source src={audioSource.src} type={audioSource.type || 'audio/mpeg'} />
         Your browser does not support the audio element.
       </audio>
-    ) : mediaType === 'video' ? (
+    ) : mediaType === 'video' && normalizedValue ? (
       <video controls style={{ maxWidth: '100%', maxHeight: '200px' }}>
         <source
           src={

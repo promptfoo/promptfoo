@@ -173,6 +173,45 @@ describe('EvalOutputCell', () => {
     resetMockStoreState();
   });
 
+  it.each([
+    "storageRef:video/a'/../../../eval/private",
+    'storageRef:video/a"/../../../eval/private',
+    'storageRef:video/a`/../../../eval/private',
+    'storageRef:video/a(b)/../../../eval/private',
+    '<storageRef:video/a /../../../eval/private>',
+    '<storageRef:video/a\t/../../../eval/private>',
+    `promptfoo://blob/${'a'.repeat(64)}'/../../eval/private`,
+    `<promptfoo://blob/${'a'.repeat(64)} /../../eval/private>`,
+    'storageRef:video/%252e%252e/../eval/private',
+  ])('rejects the complete parsed Markdown media destination: %j', (destination) => {
+    const { container } = renderWithProviders(
+      <EvalOutputCell
+        {...defaultProps}
+        maxTextLength={10000}
+        output={{ ...defaultProps.output, text: `![media](${destination})` }}
+      />,
+    );
+    const image = container.querySelector('img[alt="media"]');
+    expect(image).not.toBeNull();
+    expect(image?.getAttribute('src') || '').toBe('');
+  });
+
+  it.each([
+    ['storageRef:video/safe.png', '/api/media/video/safe.png'],
+    ['<STORAGEREF:video/my image.png>', '/api/media/video/my%20image.png'],
+    [`PROMPTFOO://BLOB/${'a'.repeat(64)}`, `/api/blobs/${'a'.repeat(64)}`],
+    ['https://example.com/image.png', 'https://example.com/image.png'],
+  ])('renders a complete valid Markdown media destination: %j', (destination, expected) => {
+    renderWithProviders(
+      <EvalOutputCell
+        {...defaultProps}
+        maxTextLength={10000}
+        output={{ ...defaultProps.output, text: `![media](${destination})` }}
+      />,
+    );
+    expect(screen.getByRole('img', { name: 'media' })).toHaveAttribute('src', expected);
+  });
+
   afterEach(() => {
     timers?.restore();
     timers = undefined;

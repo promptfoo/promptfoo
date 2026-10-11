@@ -14,6 +14,7 @@ import {
   isMediaRef,
   normalizeMediaText,
   resolveAudioSource,
+  resolveBlobRef,
   resolveBlobUri,
   resolveImageSource,
   resolveVideoSource,
@@ -269,11 +270,12 @@ describe('resolveVideoSource', () => {
   describe('blob reference resolution', () => {
     it('resolves promptfoo:// blob URI in blobRef string', () => {
       const result = resolveVideoSource({
-        blobRef: 'promptfoo://blob/abc123def456789012345678901234567890',
+        blobRef:
+          'promptfoo://blob/abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789',
       });
 
       expect(result).toEqual({
-        src: '/api/blobs/abc123def456789012345678901234567890',
+        src: '/api/blobs/abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789',
         type: 'video/mp4',
         poster: undefined,
       });
@@ -281,11 +283,11 @@ describe('resolveVideoSource', () => {
 
     it('resolves blobRef object with hash', () => {
       const result = resolveVideoSource({
-        blobRef: { hash: 'abc123def456789012345678901234567890' },
+        blobRef: { hash: 'abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789' },
       });
 
       expect(result).toEqual({
-        src: '/api/blobs/abc123def456789012345678901234567890',
+        src: '/api/blobs/abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789',
         type: 'video/mp4',
         poster: undefined,
       });
@@ -293,11 +295,13 @@ describe('resolveVideoSource', () => {
 
     it('resolves blobRef object with uri', () => {
       const result = resolveVideoSource({
-        blobRef: { uri: 'promptfoo://blob/abc123def456789012345678901234567890' },
+        blobRef: {
+          uri: 'promptfoo://blob/abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789',
+        },
       });
 
       expect(result).toEqual({
-        src: '/api/blobs/abc123def456789012345678901234567890',
+        src: '/api/blobs/abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789',
         type: 'video/mp4',
         poster: undefined,
       });
@@ -460,10 +464,13 @@ describe('resolveVideoSource', () => {
     it('should return an object with the resolved poster URL when the video object includes a thumbnail field with a blob URI, HTTP(S) URL, or legacy API path', () => {
       const videoObject1 = {
         url: 'https://example.com/test.mp4',
-        thumbnail: 'promptfoo://blob/thumbnail-blob-hash',
+        thumbnail:
+          'promptfoo://blob/fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210',
       };
       const result1 = resolveVideoSource(videoObject1);
-      expect(result1?.poster).toBe('/api/blobs/thumbnail-blob-hash');
+      expect(result1?.poster).toBe(
+        '/api/blobs/fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210',
+      );
 
       const videoObject2 = {
         url: 'https://example.com/test.mp4',
@@ -501,12 +508,15 @@ describe('resolveVideoSource', () => {
   describe('priority order', () => {
     it('prefers blobRef over storageRef', () => {
       const result = resolveVideoSource({
-        blobRef: 'promptfoo://blob/abc123def456789012345678901234567890',
+        blobRef:
+          'promptfoo://blob/abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789',
         storageRef: { key: 'video/other.mp4' },
         url: 'https://example.com/video.mp4',
       });
 
-      expect(result?.src).toBe('/api/blobs/abc123def456789012345678901234567890');
+      expect(result?.src).toBe(
+        '/api/blobs/abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789',
+      );
     });
 
     it('prefers storageRef over url', () => {
@@ -520,12 +530,14 @@ describe('resolveVideoSource', () => {
 
     it('should prioritize blobRef over storageRef and url when all are defined', () => {
       const videoObject = {
-        blobRef: { hash: 'blob-hash' },
+        blobRef: { hash: 'abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789' },
         storageRef: { key: 'storage-key' },
         url: 'http://example.com/video.mp4',
       };
       const result = resolveVideoSource(videoObject);
-      expect(result?.src).toBe('/api/blobs/blob-hash');
+      expect(result?.src).toBe(
+        '/api/blobs/abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789',
+      );
     });
   });
 
@@ -549,14 +561,14 @@ describe('resolveVideoSource', () => {
   describe('blob reference resolution (without format)', () => {
     it('should return an object with resolved blob URL as src and type video/mp4 when given a video object with valid blobRef and no format', () => {
       const videoObject = {
-        blobRef: { hash: 'mock-blob-hash' },
+        blobRef: { hash: 'abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789' },
       };
 
       const result = resolveVideoSource(videoObject);
 
       expect(result).not.toBeNull();
       expect(result).toEqual({
-        src: '/api/blobs/mock-blob-hash',
+        src: '/api/blobs/abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789',
         type: 'video/mp4',
         poster: undefined,
       });
@@ -566,7 +578,7 @@ describe('resolveVideoSource', () => {
   describe('format handling (with blobRef)', () => {
     it('should return an object with the correct type when the video object specifies a format', () => {
       const videoObject = {
-        blobRef: { hash: 'mock-blob-hash' },
+        blobRef: { hash: 'abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789' },
         format: 'webm',
       };
       const result = resolveVideoSource(videoObject);
@@ -579,11 +591,12 @@ describe('resolveVideoSource', () => {
       vi.mocked(useApiConfig.getState).mockReturnValue(mockState('https://api.example.com'));
 
       const result = resolveVideoSource({
-        blobRef: 'promptfoo://blob/abc123def456789012345678901234567890',
+        blobRef:
+          'promptfoo://blob/abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789',
       });
 
       expect(result?.src).toBe(
-        'https://api.example.com/api/blobs/abc123def456789012345678901234567890',
+        'https://api.example.com/api/blobs/abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789',
       );
     });
 
@@ -708,11 +721,110 @@ describe('resolveBlobUri security', () => {
   });
 
   it('should convert promptfoo://blob/ URIs', () => {
-    expect(resolveBlobUri('promptfoo://blob/abc123')).toBe('/api/blobs/abc123');
+    expect(resolveBlobUri(`promptfoo://blob/${'a'.repeat(64)}`)).toBe(
+      `/api/blobs/${'a'.repeat(64)}`,
+    );
   });
 
   it('should convert storageRef: URIs', () => {
     expect(resolveBlobUri('storageRef:images/test.png')).toBe('/api/media/images/test.png');
+  });
+
+  it.each([
+    '../eval/private',
+    '../../eval/private',
+    './video.mp4',
+    'video/../eval/private',
+    'video/./test.mp4',
+    'video/%2e%2e/eval/private',
+    'video/.%2E/eval/private',
+    'video/%2e./eval/private',
+    'video/%252e%252e/eval/private',
+    'video/%25252e%25252e/eval/private',
+    `video/%${'25'.repeat(1000)}2e%${'25'.repeat(1000)}2e/eval/private`,
+    'video%2f..%2f..%2feval/private',
+    'video%252f..%252f..%252feval/private',
+    'video\\..\\..\\eval/private',
+    'video/%5c../eval/private',
+    'video/%255c../eval/private',
+    'video/..\t/../eval/private',
+    'video/..\r\n/../eval/private',
+    'video/%09../eval/private',
+    'video/%250a../eval/private',
+    'video/%00.mp4',
+    'video/%ff.mp4',
+    'video/%.mp4',
+  ])('rejects unsafe storage paths across media entry points: %j', (path) => {
+    const ref = `storageRef:${path}`;
+    expect(resolveBlobUri(ref)).toBeUndefined();
+    expect(resolveBlobRef({ uri: ref })).toBeUndefined();
+    expect(resolveImageSource(ref)).toBeUndefined();
+    expect(resolveVideoSource({ storageRef: { key: path } })).toBeNull();
+    expect(resolveVideoSource({ url: ref })).toBeNull();
+    expect(
+      resolveVideoSource({ url: '/api/media/video/safe.mp4', thumbnail: ref })?.poster,
+    ).toBeUndefined();
+    expect(normalizeMediaText(`![media](${ref})`)).toBe(`![media](${ref})`);
+  });
+
+  it.each([
+    '',
+    'abc123',
+    'g'.repeat(64),
+    'a'.repeat(63),
+    'a'.repeat(65),
+    '../eval/private',
+    '%2e%2e/eval/private',
+    `${'a'.repeat(64)}/../../eval/private`,
+    `${'a'.repeat(64)}%2f..%2f..%2feval/private`,
+    `${'a'.repeat(64)}\\..\\..\\eval/private`,
+    `${'a'.repeat(64)}?download=true`,
+    `${'a'.repeat(64)}#fragment`,
+  ])('rejects invalid blob IDs without rewriting a valid prefix: %j', (hash) => {
+    const ref = `promptfoo://blob/${hash}`;
+    expect(resolveBlobUri(ref)).toBeUndefined();
+    expect(resolveBlobRef({ hash })).toBeUndefined();
+    expect(resolveImageSource({ blobRef: { hash } })).toBeUndefined();
+    expect(resolveAudioSource({ blobRef: { hash } })).toBeNull();
+    expect(resolveVideoSource({ blobRef: { hash } })).toBeNull();
+    expect(normalizeMediaText(`![media](${ref})`)).toBe(`![media](${ref})`);
+  });
+
+  it.each(['a'.repeat(64), 'ABCDEF0123456789'.repeat(4)])(
+    'preserves supported SHA-256 IDs: %s',
+    (hash) => {
+      expect(resolveBlobUri(`promptfoo://blob/${hash}`)).toBe(`/api/blobs/${hash}`);
+      expect(normalizeMediaText(`![media](PROMPTFOO://BLOB/${hash})`)).toBe(
+        `![media](/api/blobs/${hash})`,
+      );
+    },
+  );
+
+  it('rejects browser-stripped whitespace in complete references', () => {
+    for (const prefix of ['storageRef:video/safe.mp4', `promptfoo://blob/${'a'.repeat(64)}`]) {
+      expect(resolveBlobUri(`${prefix}\n/../../eval/private`)).toBeUndefined();
+      expect(resolveVideoSource({ url: `${prefix}\t/../../eval/private` })).toBeNull();
+    }
+  });
+
+  it.each([
+    ['///video/a.mp4', '/api/media/video/a.mp4'],
+    ['tenant/nested/video.mp4', '/api/media/tenant/nested/video.mp4'],
+    ['video/my clip.mp4', '/api/media/video/my%20clip.mp4'],
+    ['video/my%20clip.mp4', '/api/media/video/my%20clip.mp4'],
+    ['video/100%25.mp4', '/api/media/video/100%25.mp4'],
+    ['video/100%2525.mp4', '/api/media/video/100%2525.mp4'],
+    ['video/encoded%2520name.mp4', '/api/media/video/encoded%2520name.mp4'],
+    ['video/a?b#c&d.mp4', '/api/media/video/a%3Fb%23c%26d.mp4'],
+    ['video/caf%C3%A9.mp4', '/api/media/video/caf%C3%A9.mp4'],
+  ])('keeps legitimate storage keys within the media endpoint: %s', (key, expected) => {
+    const src = resolveBlobUri(`storageRef:${key}`);
+    expect(src).toBe(expected);
+    expect(resolveVideoSource({ storageRef: { key } })?.src).toBe(expected);
+    const parsed = new URL(src!, 'https://example.com');
+    expect(parsed.pathname).toBe(expected);
+    expect(parsed.search).toBe('');
+    expect(parsed.hash).toBe('');
   });
 });
 
@@ -740,7 +852,9 @@ describe('resolveImageSource security', () => {
   });
 
   it('should return promptfoo blob references', () => {
-    expect(resolveImageSource('promptfoo://blob/abc123')).toBe('/api/blobs/abc123');
+    expect(resolveImageSource(`promptfoo://blob/${'a'.repeat(64)}`)).toBe(
+      `/api/blobs/${'a'.repeat(64)}`,
+    );
   });
 
   it('should return storage references', () => {
@@ -759,9 +873,11 @@ describe('resolveImageSource security', () => {
 
   it('should resolve blobRef from image object', () => {
     const result = resolveImageSource({
-      blobRef: 'promptfoo://blob/abc123def456789012345678901234567890',
+      blobRef: 'promptfoo://blob/abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789',
     });
-    expect(result).toBe('/api/blobs/abc123def456789012345678901234567890');
+    expect(result).toBe(
+      '/api/blobs/abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789',
+    );
   });
 
   it('should resolve data from image object with format', () => {
@@ -817,23 +933,23 @@ describe('resolveAudioSource', () => {
 
   it('should resolve blobRef and return audio source with type', () => {
     const result = resolveAudioSource({
-      blobRef: 'promptfoo://blob/abc123def456789012345678901234567890',
+      blobRef: 'promptfoo://blob/abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789',
     });
 
     expect(result).toEqual({
-      src: '/api/blobs/abc123def456789012345678901234567890',
+      src: '/api/blobs/abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789',
       type: 'audio/mpeg',
     });
   });
 
   it('should resolve blobRef with custom format', () => {
     const result = resolveAudioSource({
-      blobRef: 'promptfoo://blob/abc123def456789012345678901234567890',
+      blobRef: 'promptfoo://blob/abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789',
       format: 'wav',
     });
 
     expect(result).toEqual({
-      src: '/api/blobs/abc123def456789012345678901234567890',
+      src: '/api/blobs/abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789',
       type: 'audio/wav',
     });
   });
@@ -904,11 +1020,13 @@ describe('resolveAudioSource', () => {
 
   it('should prefer blobRef over data', () => {
     const result = resolveAudioSource({
-      blobRef: 'promptfoo://blob/abc123def456789012345678901234567890',
+      blobRef: 'promptfoo://blob/abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789',
       data: 'SGVsbG8gV29ybGQ=',
     });
 
-    expect(result?.src).toBe('/api/blobs/abc123def456789012345678901234567890');
+    expect(result?.src).toBe(
+      '/api/blobs/abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789',
+    );
   });
 
   it('should use fallbackContent when audio.data is undefined', () => {
@@ -936,17 +1054,20 @@ describe('normalizeMediaText', () => {
   });
 
   it('should replace promptfoo://blob/ URIs with /api/blobs/', () => {
-    const text = 'Check this image: promptfoo://blob/abc123def456789012345678901234567890';
+    const text =
+      'Check this image: promptfoo://blob/abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789';
     const result = normalizeMediaText(text);
-    expect(result).toBe('Check this image: /api/blobs/abc123def456789012345678901234567890');
+    expect(result).toBe(
+      'Check this image: /api/blobs/abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789',
+    );
   });
 
   it('should replace multiple promptfoo://blob/ URIs', () => {
     const text =
-      'Image 1: promptfoo://blob/abc123def456789012345678901234567890 and Image 2: promptfoo://blob/def456abc123789012345678901234567890';
+      'Image 1: promptfoo://blob/abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789 and Image 2: promptfoo://blob/fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210';
     const result = normalizeMediaText(text);
     expect(result).toBe(
-      'Image 1: /api/blobs/abc123def456789012345678901234567890 and Image 2: /api/blobs/def456abc123789012345678901234567890',
+      'Image 1: /api/blobs/abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789 and Image 2: /api/blobs/fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210',
     );
   });
 
@@ -970,10 +1091,10 @@ describe('normalizeMediaText', () => {
 
   it('should replace both promptfoo://blob/ and storageRef: URIs in same text', () => {
     const text =
-      'Image: promptfoo://blob/abc123def456789012345678901234567890 and Video: storageRef:videos/test.mp4';
+      'Image: promptfoo://blob/abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789 and Video: storageRef:videos/test.mp4';
     const result = normalizeMediaText(text);
     expect(result).toBe(
-      'Image: /api/blobs/abc123def456789012345678901234567890 and Video: /api/media/videos/test.mp4',
+      'Image: /api/blobs/abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789 and Video: /api/media/videos/test.mp4',
     );
   });
 
@@ -987,13 +1108,27 @@ describe('normalizeMediaText', () => {
     expect(normalizeMediaText('')).toBe('');
   });
 
+  it('normalizes references separated by prose, newlines, and tabs', () => {
+    const hash = 'a'.repeat(64);
+    expect(normalizeMediaText(`promptfoo://blob/${hash}\nnext paragraph`)).toBe(
+      `/api/blobs/${hash}\nnext paragraph`,
+    );
+    expect(normalizeMediaText(`storageRef:video/a.mp4\tpromptfoo://blob/${hash}`)).toBe(
+      `/api/media/video/a.mp4\t/api/blobs/${hash}`,
+    );
+    expect(normalizeMediaText(`![media](<promptfoo://blob/${hash}>)`)).toBe(
+      `![media](</api/blobs/${hash}>)`,
+    );
+  });
+
   it('should prepend apiBaseUrl when configured', () => {
     vi.mocked(useApiConfig.getState).mockReturnValue(mockState('https://api.example.com'));
 
-    const text = 'Image: promptfoo://blob/abc123def456789012345678901234567890';
+    const text =
+      'Image: promptfoo://blob/abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789';
     const result = normalizeMediaText(text);
     expect(result).toBe(
-      'Image: https://api.example.com/api/blobs/abc123def456789012345678901234567890',
+      'Image: https://api.example.com/api/blobs/abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789',
     );
   });
 });

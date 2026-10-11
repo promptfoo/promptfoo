@@ -7,8 +7,8 @@ import { FileIcon, ImageIcon, Music, Video } from 'lucide-react';
 
 const BLOB_URI_PREFIX = 'promptfoo://blob/';
 const STORAGE_REF_PREFIX = 'storageRef:';
-const BLOB_URI_REGEX = /promptfoo:\/\/blob\/([a-f0-9]{32,64})/gi;
-const STORAGE_REF_REGEX = /storageRef:\/?([^\s)'"`]+)/gi;
+const BLOB_HASH_REGEX = /^[a-f0-9]{64}$/i;
+const MEDIA_REF_REGEX = /(?:promptfoo:\/\/blob\/|storageRef:)[^\s)'"`<>]+/gi;
 
 /** Number of items to fetch per page in the media library */
 export const MEDIA_PAGE_SIZE = 30;
@@ -41,8 +41,36 @@ export type BlobLike =
       hash?: string;
     };
 
-function normalizePath(path: string): string {
-  return path.replace(/^\/+/, '');
+function resolveStoragePath(path: string): string | undefined {
+  const normalized = path.replace(/^\/+/, '');
+  if (!normalized) {
+    return undefined;
+  }
+
+  const segments: string[] = [];
+  for (const segment of normalized.split('/')) {
+    try {
+      const decoded = decodeURIComponent(segment);
+      let candidate = decoded;
+      // Check nested URL encodings, with a fixed bound for adversarially deep inputs.
+      for (let decodePass = 0; ; decodePass++) {
+        if (candidate === '.' || candidate === '..' || /[\\/\u0000-\u001f\u007f]/.test(candidate)) {
+          return undefined;
+        }
+        if (!/%[a-f0-9]{2}/i.test(candidate)) {
+          break;
+        }
+        if (decodePass === 5) {
+          return undefined;
+        }
+        candidate = decodeURIComponent(candidate);
+      }
+      segments.push(encodeURIComponent(decoded));
+    } catch {
+      return undefined;
+    }
+  }
+  return withApiBase(`/api/media/${segments.join('/')}`);
 }
 
 function withApiBase(apiPath: string): string {
@@ -79,12 +107,11 @@ function resolveMediaUrl(url?: string | null): string | undefined {
   return undefined;
 }
 
-export function isMediaRef(
-  value: unknown,
-): value is `${typeof BLOB_URI_PREFIX}${string}` | `${typeof STORAGE_REF_PREFIX}${string}` {
+export function isMediaRef(value: unknown): boolean {
   return (
     typeof value === 'string' &&
-    (value.startsWith(BLOB_URI_PREFIX) || value.startsWith(STORAGE_REF_PREFIX))
+    (value.toLowerCase().startsWith(BLOB_URI_PREFIX) ||
+      value.toLowerCase().startsWith(STORAGE_REF_PREFIX.toLowerCase()))
   );
 }
 
@@ -93,14 +120,13 @@ export function resolveBlobUri(uri?: string | null): string | undefined {
     return undefined;
   }
 
-  if (uri.startsWith(BLOB_URI_PREFIX)) {
+  if (uri.toLowerCase().startsWith(BLOB_URI_PREFIX)) {
     const hash = uri.slice(BLOB_URI_PREFIX.length);
-    return hash && !/^\/+$/u.test(hash) ? withApiBase(`/api/blobs/${hash}`) : undefined;
+    return BLOB_HASH_REGEX.test(hash) ? withApiBase(`/api/blobs/${hash}`) : undefined;
   }
 
-  if (uri.startsWith(STORAGE_REF_PREFIX)) {
-    const path = normalizePath(uri.slice(STORAGE_REF_PREFIX.length));
-    return path ? withApiBase(`/api/media/${path}`) : undefined;
+  if (uri.toLowerCase().startsWith(STORAGE_REF_PREFIX.toLowerCase())) {
+    return resolveStoragePath(uri.slice(STORAGE_REF_PREFIX.length));
   }
 
   // Only allow safe internal paths and data URIs
@@ -207,9 +233,7 @@ export function resolveVideoSource(
   // Try blob reference first, then storage reference, then URL
   const src =
     resolveBlobRef(video.blobRef) ||
-    (video.storageRef?.key
-      ? withApiBase(`/api/media/${normalizePath(video.storageRef.key)}`)
-      : undefined) ||
+    (video.storageRef?.key ? resolveStoragePath(video.storageRef.key) : undefined) ||
     resolveMediaUrl(video.url);
 
   if (!src) {
@@ -224,10 +248,15 @@ export function resolveVideoSource(
   };
 }
 
+// For text display and comparison only. Resolve complete URL destinations with
+// resolveBlobUri after Markdown parsing before using them in href/src attributes.
 export function normalizeMediaText(text: string): string {
-  return text
-    .replace(BLOB_URI_REGEX, (_match, hash) => withApiBase(`/api/blobs/${hash}`))
-    .replace(STORAGE_REF_REGEX, (_match, path) => withApiBase(`/api/media/${normalizePath(path)}`));
+  return text.replace(MEDIA_REF_REGEX, (match) => {
+    const prefix = match.toLowerCase().startsWith(BLOB_URI_PREFIX)
+      ? BLOB_URI_PREFIX
+      : STORAGE_REF_PREFIX;
+    return resolveBlobUri(`${prefix}${match.slice(prefix.length)}`) ?? match;
+  });
 }
 
 /**
