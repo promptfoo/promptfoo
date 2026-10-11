@@ -18,6 +18,9 @@ import { mockProcessEnv } from '../../util/utils';
 import type { SimulatedVoiceUserConfig } from '../../../src/providers/voice/types';
 import type { ProviderResponse } from '../../../src/types/providers';
 
+// Capture before each test clears the environment that Windows uses to resolve its temp root.
+const evidenceTempRoot = path.resolve(os.tmpdir());
+
 interface Socket extends EventEmitter {
   readyState: number;
   bufferedAmount: number;
@@ -170,7 +173,7 @@ function acknowledgeOpening() {
 
 /** Run the shipped offline exporter against a portable copy of an actual provider response. */
 function exportVoiceEvidence(response: ProviderResponse) {
-  const directory = mkdtempSync(path.join(os.tmpdir(), 'voice-refusal-evidence-'));
+  const directory = mkdtempSync(path.join(evidenceTempRoot, 'voice-refusal-evidence-'));
   try {
     const inputPath = path.join(directory, 'result.json');
     const outputPath = path.join(directory, 'evidence');
