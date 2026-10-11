@@ -434,6 +434,7 @@ describe('runEvaluation tool', () => {
         tool: 'run_evaluation',
         success: false,
         timestamp: expect.any(String),
+        error: 'You must provide at least 1 prompt',
       });
       const logger = (await import('../../../../src/logger')).default;
       expect(logger.error).toHaveBeenCalledWith(
