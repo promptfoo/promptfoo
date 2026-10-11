@@ -1,4 +1,4 @@
-import { act, StrictMode } from 'react';
+import { act, type ComponentProps, StrictMode } from 'react';
 
 import useApiConfig from '@app/stores/apiConfig';
 import { restoreTestTimers, type TestTimers, useTestTimers } from '@app/tests/timers';
@@ -12,7 +12,8 @@ import EvalOutputCell from './EvalOutputCell';
 import * as ProviderDisplayModule from './ProviderDisplay';
 import ResultsTable from './ResultsTable';
 import { useResultsViewSettingsStore, useTableStore } from './store';
-import type { GradingResult } from '@promptfoo/types/index';
+
+type GradingResult = NonNullable<ComponentProps<typeof EvalOutputCell>['output']['gradingResult']>;
 
 function mockHeaderTable(mockTable: ReturnType<typeof createTableStore>['table']) {
   vi.mocked(useResultsViewSettingsStore).mockImplementation(() => createViewSettings());
