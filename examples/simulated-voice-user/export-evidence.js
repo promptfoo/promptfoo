@@ -267,7 +267,35 @@ function interventionObservations(voice, target, caller, sampleRate) {
   });
 }
 
-/** Application clocks describe heard playback; source sample order is never used as a media clock. */
+/** Prefer recorded frame positions; old captures only retained elapsed event times. */
+function playbackRecordingWindow(stop, resumed, durationMs) {
+  const explicit = stop.recordingAtMs !== undefined || resumed?.recordingAtMs !== undefined;
+  if (explicit) {
+    for (const event of resumed ? [stop, resumed] : [stop]) {
+      if (
+        !Number.isSafeInteger(event.recordingAtMs) ||
+        event.recordingAtMs < 0 ||
+        event.recordingAtMs % 20 !== 0 ||
+        event.recordingAtMs > durationMs
+      ) {
+        throw new Error('Application recording boundaries must be complete frames within the WAV.');
+      }
+    }
+    if (
+      stop.recordingAtMs < stop.callerOnsetAtMs ||
+      (resumed && resumed.recordingAtMs < stop.recordingAtMs)
+    ) {
+      throw new Error('Application recording boundaries must follow the caller onset and stop.');
+    }
+  }
+  return {
+    recordingClockSource: explicit ? 'explicit-event-boundaries' : 'legacy-elapsed-fallback',
+    suppressedRecordingAtMs: explicit ? stop.recordingAtMs : stop.atMs,
+    resumedRecordingAtMs: resumed ? (explicit ? resumed.recordingAtMs : resumed.atMs) : null,
+  };
+}
+
+/** Keep WAV positions separate from elapsed event times and contiguous source sample order. */
 function appPlaybackObservations(playback, target, sampleRate) {
   const active = frameActivity(target, sampleRate);
   const durationMs = (target.length / sampleRate) * 1000;
@@ -277,7 +305,8 @@ function appPlaybackObservations(playback, target, sampleRate) {
       const resumed = playback.events.find(
         (event) => event.epoch === stop.epoch && event.type === 'resumed',
       );
-      const endMs = Math.min(resumed?.atMs ?? durationMs, durationMs);
+      const window = playbackRecordingWindow(stop, resumed, durationMs);
+      const endMs = Math.min(window.resumedRecordingAtMs ?? durationMs, durationMs);
       const onsetFrame = Math.floor(stop.callerOnsetAtMs / 20);
       const endFrame = Math.min(active.length, Math.floor(endMs / 20));
       let lastActiveEndMs = null;
@@ -285,12 +314,18 @@ function appPlaybackObservations(playback, target, sampleRate) {
       for (let frame = onsetFrame; frame < endFrame; frame++) {
         if (active[frame]) {
           lastActiveEndMs = Math.min((frame + 1) * 20, durationMs);
-          if (frame * 20 >= Math.ceil(stop.atMs / 20) * 20) activeWhileSuppressedMs += 20;
+          if (frame * 20 >= Math.ceil(window.suppressedRecordingAtMs / 20) * 20) {
+            activeWhileSuppressedMs += 20;
+          }
         }
       }
       let firstActivityAfterResumeAtMs = null;
       if (resumed) {
-        for (let frame = Math.ceil(resumed.atMs / 20); frame < active.length; frame++) {
+        for (
+          let frame = Math.ceil(window.resumedRecordingAtMs / 20);
+          frame < active.length;
+          frame++
+        ) {
           if (active[frame]) {
             firstActivityAfterResumeAtMs = frame * 20;
             break;
@@ -299,6 +334,7 @@ function appPlaybackObservations(playback, target, sampleRate) {
       }
       return {
         epoch: stop.epoch,
+        ...window,
         callerOnsetAtMs: stop.callerOnsetAtMs,
         decisionAtMs: stop.atMs,
         detectionDelayMs: stop.atMs - stop.callerOnsetAtMs,
@@ -313,7 +349,7 @@ function appPlaybackObservations(playback, target, sampleRate) {
         firstActivityAfterResumeAtMs,
         usefulAnswerLatencyMs: null,
         interpretation:
-          'PCM frame bounds at -40 dBFS, not word boundaries or semantic success. Inspect whether later speech is obsolete audio or a useful answer. Source sample timestamps are unrelated to this media clock.',
+          'PCM frame bounds at -40 dBFS, not word boundaries or semantic success. Explicit recording boundaries locate suppression in the WAV; legacy elapsed fallback may misalign when dispatch lags. Decision/resume times describe elapsed events; detectionDelayMs subtracts the caller recording onset, not its acceptance timestamp. Inspect whether later speech is obsolete audio or a useful answer. Source sample timestamps are unrelated to either clock.',
       };
     });
 }

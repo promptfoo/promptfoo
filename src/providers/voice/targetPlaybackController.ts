@@ -35,6 +35,8 @@ export interface TargetPlaybackStopDecision {
   turnId: string;
   callerOnsetAtMs: number;
   decisionAtMs: number;
+  /** Global next recorded-frame position, supplied by the bridge on the WAV clock. */
+  recordingAtMs?: number;
 }
 
 interface Suppression {
@@ -51,6 +53,8 @@ export interface TargetPlaybackEvent {
   type: 'suppressed' | 'redirect_acknowledged' | 'resumed' | 'recovery_timeout' | 'closed';
   epoch: number;
   atMs: number;
+  /** WAV-frame boundary, independent of elapsed atMs; absent in legacy callers. */
+  recordingAtMs?: number;
   turnId?: string;
   callerOnsetAtMs?: number;
   lastDeliveredActiveAtMs?: number;
@@ -125,7 +129,9 @@ export class TargetPlaybackController {
   private acknowledgedEpoch = 0;
   private callerQuietSamples = 0;
   private lastCallerFrameAtMs?: number;
+  private lastCallerAcceptedAtMs?: number;
   private lastDeliveredActiveAtMs?: number;
+  private lastActiveFrameAcceptedAtMs?: number;
   private readonly counters = {
     sourceBytes: 0,
     deliveredSourceBytes: 0,
@@ -201,10 +207,11 @@ export class TargetPlaybackController {
     this.turn = { id: turnId, onsetAtMs, stopped: false };
   }
 
-  /** Only accepted caller frames contribute to end-of-speech recovery. */
-  observeAcceptedCaller(audio: Buffer, frameAtMs: number): void {
+  /** Keep sample continuity separate from elapsed transport-acceptance freshness. */
+  observeAcceptedCaller(audio: Buffer, frameAtMs: number, acceptedAtMs = frameAtMs): void {
     validatePcm(audio);
     validateTime(frameAtMs);
+    validateTime(acceptedAtMs);
     if (audio.length !== FRAME_BYTES) {
       throw new Error('Target playback requires one accepted 20 ms caller frame.');
     }
@@ -221,6 +228,7 @@ export class TargetPlaybackController {
       }
     }
     this.lastCallerFrameAtMs = frameAtMs;
+    this.lastCallerAcceptedAtMs = acceptedAtMs;
     for (let offset = 0; offset < audio.length; offset += 2) {
       this.callerQuietSamples =
         Math.abs(audio.readInt16LE(offset)) <= QUIET_SAMPLE_PEAK ? this.callerQuietSamples + 1 : 0;
@@ -231,6 +239,9 @@ export class TargetPlaybackController {
   requestStop(decision: TargetPlaybackStopDecision): number | undefined {
     validateTime(decision.decisionAtMs);
     validateTime(decision.callerOnsetAtMs);
+    if (decision.recordingAtMs !== undefined) {
+      validateTime(decision.recordingAtMs);
+    }
     if (
       this.closed ||
       this.failure ||
@@ -248,9 +259,9 @@ export class TargetPlaybackController {
       return undefined;
     }
     if (
-      this.lastDeliveredActiveAtMs === undefined ||
-      decision.decisionAtMs + FRAME_MS < this.lastDeliveredActiveAtMs ||
-      decision.decisionAtMs - this.lastDeliveredActiveAtMs > this.policy.recentTargetActivityMs
+      this.lastActiveFrameAcceptedAtMs === undefined ||
+      decision.decisionAtMs < this.lastActiveFrameAcceptedAtMs ||
+      decision.decisionAtMs - this.lastActiveFrameAcceptedAtMs > this.policy.recentTargetActivityMs
     ) {
       this.counters.decisionsWithoutOverlap++;
       return undefined;
@@ -284,6 +295,7 @@ export class TargetPlaybackController {
       type: 'suppressed',
       epoch: this.epoch,
       atMs: decision.decisionAtMs,
+      recordingAtMs: decision.recordingAtMs,
       turnId: this.turn.id,
       callerOnsetAtMs: this.turn.onsetAtMs,
       lastDeliveredActiveAtMs: this.lastDeliveredActiveAtMs,
@@ -315,9 +327,12 @@ export class TargetPlaybackController {
   }
 
   /** Ingest the exact source PCM before any application suppression or jitter buffering. */
-  appendSource(audio: Buffer, atMs: number): void {
+  appendSource(audio: Buffer, atMs: number, recordingAtMs?: number): void {
     validatePcm(audio);
     validateTime(atMs);
+    if (recordingAtMs !== undefined) {
+      validateTime(recordingAtMs);
+    }
     if (this.closed) {
       return;
     }
@@ -355,8 +370,8 @@ export class TargetPlaybackController {
       if (
         suppression.quietSamples >= (SAMPLE_RATE * this.policy.sourceQuietMs) / 1000 &&
         this.callerQuietSamples >= (SAMPLE_RATE * this.policy.callerQuietMs) / 1000 &&
-        this.lastCallerFrameAtMs !== undefined &&
-        atMs <= this.lastCallerFrameAtMs + FRAME_MS * 2
+        this.lastCallerAcceptedAtMs !== undefined &&
+        atMs <= this.lastCallerAcceptedAtMs + FRAME_MS * 2
       ) {
         discarded = offset + 2;
         // Preserve even a within-chunk first sample of new speech after the selected boundary.
@@ -371,6 +386,7 @@ export class TargetPlaybackController {
           epoch: suppression.epoch,
           turnId: suppression.turnId,
           atMs,
+          recordingAtMs,
           discardedSourceStartByte: suppression.sourceStartByte,
           discardedSourceEndByte: sourceStartByte + discarded,
           recovery: 'observed_source_quiet',
@@ -399,9 +415,10 @@ export class TargetPlaybackController {
     return this.proposed;
   }
 
-  /** Call only after the caller transport accepts the proposed target frame. */
-  frameAccepted(frameAtMs: number): void {
+  /** Recording positions locate PCM; acceptance time shares the asynchronous decision clock. */
+  frameAccepted(frameAtMs: number, acceptedAtMs = frameAtMs): void {
     validateTime(frameAtMs);
+    validateTime(acceptedAtMs);
     const proposed = this.proposed;
     if (!proposed) {
       throw new Error('Target playback acceptance requires an outstanding frame.');
@@ -413,6 +430,7 @@ export class TargetPlaybackController {
     for (let offset = proposed.audioBytes - 2; offset >= 0; offset -= 2) {
       if (Math.abs(proposed.frame.readInt16LE(offset)) > QUIET_SAMPLE_PEAK) {
         this.lastDeliveredActiveAtMs = frameAtMs + offset / BYTES_PER_MS;
+        this.lastActiveFrameAcceptedAtMs = acceptedAtMs;
         break;
       }
     }
@@ -455,8 +473,11 @@ export class TargetPlaybackController {
   }
 
   /** Fence late decisions and acknowledgments while retaining pending byte accounting. */
-  close(atMs: number): void {
+  close(atMs: number, recordingAtMs?: number): void {
     validateTime(atMs);
+    if (recordingAtMs !== undefined) {
+      validateTime(recordingAtMs);
+    }
     if (this.closed) {
       return;
     }
@@ -465,6 +486,7 @@ export class TargetPlaybackController {
       type: 'closed',
       epoch: this.epoch,
       atMs,
+      recordingAtMs,
       ...(this.suppression
         ? {
             turnId: this.suppression.turnId,

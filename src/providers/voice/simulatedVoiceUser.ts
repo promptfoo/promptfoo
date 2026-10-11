@@ -112,7 +112,7 @@ function createTargetPlayback(
     : undefined;
 }
 
-/** Serialize application events on the recording clock only when capture actually began. */
+/** Align elapsed events to capture startup while retaining explicit PCM recording boundaries. */
 function applicationEvidence(
   targetPlayback: TargetPlaybackController | undefined,
   recognitionSummary: LiveTranscriptionSummary | undefined,
@@ -457,7 +457,11 @@ export class SimulatedVoiceUser implements ApiProvider {
                 if (this.config.recordConversation !== false) {
                   sourceRecording.push(Buffer.from(accepted));
                 }
-                targetPlayback.appendSource(accepted, performance.now() - startedAt);
+                targetPlayback.appendSource(
+                  accepted,
+                  performance.now() - startedAt,
+                  frameCount * LIVE_FRAME_MS,
+                );
               },
               onTranscript: (fragment) => {
                 if (stopped) {
@@ -502,6 +506,7 @@ export class SimulatedVoiceUser implements ApiProvider {
           redact: createOpenAiCredentialRedactor(connection.headers, [String(targetApiKey ?? '')]),
           signal: controller.signal,
           delay: this.config.targetPlayback?.transcriptionDelay,
+          getElapsedMs: () => performance.now() - mediaStartedAt,
           onCallerTurn: (turn) => {
             if (!stopped && turn.phase === 'started') {
               targetPlayback!.beginCallerTurn(
@@ -519,6 +524,7 @@ export class SimulatedVoiceUser implements ApiProvider {
                 ...decision,
                 callerOnsetAtMs: mediaStartedAt - startedAt + decision.callerOnsetAtMs,
                 decisionAtMs: mediaStartedAt - startedAt + decision.decisionAtMs,
+                recordingAtMs: frameCount * LIVE_FRAME_MS,
               });
               if (epoch !== undefined) {
                 // No recognized words or evaluation context are injected into this trusted instruction.
@@ -662,7 +668,11 @@ export class SimulatedVoiceUser implements ApiProvider {
                   performance.now() - mediaStartedAt,
                 );
               }
-              targetPlayback?.observeAcceptedCaller(frames[1].frame, playbackMs);
+              targetPlayback?.observeAcceptedCaller(
+                frames[1].frame,
+                playbackMs,
+                performance.now() - startedAt,
+              );
               // This copy is accepted by the target even if the opposite transport then fails.
               recognition?.appendAcceptedCaller(
                 frames[1].frame,
@@ -673,7 +683,7 @@ export class SimulatedVoiceUser implements ApiProvider {
               deliveredAudioBytes[0] += frames[0].audioBytes;
               forwarded[0] = frames[0].frame;
               targetAccepted = true;
-              targetPlayback?.frameAccepted(playbackMs);
+              targetPlayback?.frameAccepted(playbackMs, performance.now() - startedAt);
             } finally {
               if (targetPlayback && !targetAccepted) {
                 targetPlayback.frameRejected();
@@ -740,10 +750,12 @@ export class SimulatedVoiceUser implements ApiProvider {
       fail(cause, 'Simulated voice conversation failed.');
     } finally {
       stop();
-      if (targetPlayback?.active) {
+      // A target safety refusal ends the call without requiring playback to resume.
+      // Participant, recognition, and final-usage errors remain independently preserved.
+      if (targetPlayback?.active && !targetRefused) {
         error ??= 'Target application playback ended before recovery.';
       }
-      targetPlayback?.close(performance.now() - startedAt);
+      targetPlayback?.close(performance.now() - startedAt, frameCount * LIVE_FRAME_MS);
       // Prepared sessions have no resources until run() is called.
       for (const [index, session] of sessions.slice(0, runs.length).entries()) {
         session.close({ cancelPendingSpeech: targetRefused && index === 1 });

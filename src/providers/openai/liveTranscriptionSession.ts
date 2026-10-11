@@ -35,6 +35,8 @@ interface TranscriptionOptions {
   delay?: 'minimal' | 'low';
   websocketTimeoutMs?: number;
   finalizeTimeoutMs?: number;
+  /** Elapsed time from the same media origin used by observedAtMs. */
+  getElapsedMs?: () => number;
   onCallerTurn: (event: CallerSpeechTurn) => void;
   onStopDecision: (event: ExplicitStopDecision) => void;
   onError?: (error: string) => void;
@@ -43,7 +45,10 @@ interface TranscriptionOptions {
 interface Turn {
   turnId: string;
   callerOnsetAtMs: number;
+  /** End of the last active frame in the recorded PCM timeline. */
   lastActiveAtMs: number;
+  /** Actual frame acceptance on the same elapsed clock as transcript receipt. */
+  lastActiveObservedAtMs: number;
   endedAtMs?: number;
   itemId?: string;
   committed: boolean;
@@ -247,7 +252,7 @@ export class LiveTranscriptionSession {
     }
     const active = energy / (frame.length / 2) >= 0.0001; // -40 dBFS RMS.
     try {
-      this.observeCallerActivity(active, mediaMs);
+      this.observeCallerActivity(active, mediaMs, observedAtMs);
       this.send({ type: 'input_audio_buffer.append', audio: frame.toString('base64') });
       this.sentAudioBytes += frame.length;
       this.uncommittedAudioBytes += frame.length;
@@ -263,7 +268,7 @@ export class LiveTranscriptionSession {
     }
   }
 
-  private observeCallerActivity(active: boolean, mediaMs: number): void {
+  private observeCallerActivity(active: boolean, mediaMs: number, observedAtMs: number): void {
     if (active && !this.currentTurn) {
       if (this.turns.length >= MAX_TURNS) {
         this.fail('Live transcription exceeded its caller turn limit.');
@@ -273,6 +278,7 @@ export class LiveTranscriptionSession {
         turnId: `caller-${this.turns.length + 1}`,
         callerOnsetAtMs: mediaMs,
         lastActiveAtMs: mediaMs + FRAME_MS,
+        lastActiveObservedAtMs: observedAtMs,
         committed: false,
         completed: false,
         partial: '',
@@ -287,6 +293,7 @@ export class LiveTranscriptionSession {
     }
     if (active && this.currentTurn) {
       this.currentTurn.lastActiveAtMs = mediaMs + FRAME_MS;
+      this.currentTurn.lastActiveObservedAtMs = observedAtMs;
     }
   }
 
@@ -472,8 +479,7 @@ export class LiveTranscriptionSession {
       type: completed ? 'completed' : 'delta',
       itemId: event.item_id,
       text,
-      receivedAtMs:
-        this.audioClockOffset === undefined ? 0 : performance.now() - this.audioClockOffset,
+      receivedAtMs: this.elapsedMs(),
       ...(completed &&
       usage?.type === 'duration' &&
       typeof usage.seconds === 'number' &&
@@ -545,14 +551,13 @@ export class LiveTranscriptionSession {
     }
     const text = transcript.type === 'completed' ? transcript.text : turn.partial;
     const trigger = detectExplicitStop(text, transcript.type === 'completed');
-    const decisionAtMs =
-      this.audioClockOffset === undefined ? 0 : performance.now() - this.audioClockOffset;
+    const decisionAtMs = this.elapsedMs();
     if (
       trigger &&
       !turn.decision &&
       this.phase === 'ready' &&
       turn === this.turns[this.turns.length - 1] &&
-      decisionAtMs - turn.lastActiveAtMs <= 2_000
+      decisionAtMs - turn.lastActiveObservedAtMs <= 2_000
     ) {
       turn.decision = {
         turnId: turn.turnId,
@@ -563,6 +568,17 @@ export class LiveTranscriptionSession {
       };
       this.options.onStopDecision(turn.decision);
     }
+  }
+
+  private elapsedMs(): number {
+    if (this.audioClockOffset === undefined) {
+      return 0;
+    }
+    const elapsedMs = this.options.getElapsedMs?.() ?? performance.now() - this.audioClockOffset;
+    if (!Number.isFinite(elapsedMs) || elapsedMs < 0) {
+      throw new Error('Live transcription requires a finite nonnegative elapsed clock.');
+    }
+    return elapsedMs;
   }
 
   private drained(): boolean {

@@ -251,6 +251,118 @@ describe('TargetPlaybackController', () => {
     assertAccounting(controller);
   });
 
+  it.each([150, 240])('uses actual accepted target activity with %d ms dispatch lag', (lagMs) => {
+    const { controller } = setup();
+    controller.appendSource(pcm(1000, 400), 0);
+    controller.readFrame(0);
+    controller.frameAccepted(0, lagMs);
+    controller.beginCallerTurn('turn-1', 0);
+    expect(
+      controller.requestStop({ turnId: 'turn-1', callerOnsetAtMs: 0, decisionAtMs: lagMs + 1 }),
+    ).toBe(1);
+    expect(controller.events[0]).toMatchObject({
+      atMs: lagMs + 1,
+      lastDeliveredActiveAtMs: 958 / BYTES_PER_MS,
+    });
+    expect(controller.metrics).toMatchObject({
+      stops: 1,
+      decisionsWithoutOverlap: 0,
+      deliveredSourceBytes: FRAME_BYTES,
+      discardedQueuedBytes: 380 * BYTES_PER_MS,
+    });
+    assertAccounting(controller);
+  });
+
+  it('does not refresh actual target activity when only silence is accepted', () => {
+    const { controller } = setup();
+    controller.appendSource(Buffer.concat([pcm(1000), pcm(0, 380)]), 0);
+    controller.readFrame(0);
+    controller.frameAccepted(0, 150);
+    controller.readFrame(20);
+    controller.frameAccepted(20, 300);
+    controller.beginCallerTurn('turn-1', 20);
+    expect(
+      controller.requestStop({ turnId: 'turn-1', callerOnsetAtMs: 20, decisionAtMs: 301 }),
+    ).toBeUndefined();
+    expect(controller.metrics.decisionsWithoutOverlap).toBe(1);
+    assertAccounting(controller);
+  });
+
+  it('does not accept a decision timestamp from before actual target delivery', () => {
+    const { controller } = setup();
+    controller.appendSource(pcm(1000, 400), 0);
+    controller.readFrame(0);
+    controller.frameAccepted(0, 150);
+    controller.beginCallerTurn('turn-1', 0);
+    expect(
+      controller.requestStop({ turnId: 'turn-1', callerOnsetAtMs: 0, decisionAtMs: 50 }),
+    ).toBeUndefined();
+    expect(controller.metrics.decisionsWithoutOverlap).toBe(1);
+    assertAccounting(controller);
+  });
+
+  it('recovers through recently accepted caller quiet despite recording-clock lag', () => {
+    const { controller } = startSuppression();
+    for (let frameAtMs = 20; frameAtMs <= 200; frameAtMs += 20) {
+      controller.observeAcceptedCaller(pcm(0), frameAtMs, frameAtMs + 150);
+    }
+    controller.appendSource(pcm(0, 200), 360);
+    expect(controller.active).toBe(false);
+    expect(controller.events.at(-1)).toMatchObject({ type: 'resumed', atMs: 360 });
+    assertAccounting(controller);
+  });
+
+  it('requires a fresh actual caller acceptance when recorded quiet is old', () => {
+    const { controller } = startSuppression();
+    for (let frameAtMs = 20; frameAtMs <= 200; frameAtMs += 20) {
+      controller.observeAcceptedCaller(pcm(0), frameAtMs, frameAtMs + 150);
+    }
+    controller.appendSource(pcm(0, 200), 391);
+    expect(controller.active).toBe(true);
+    controller.observeAcceptedCaller(pcm(0), 220, 400);
+    controller.appendSource(pcm(0), 401);
+    expect(controller.active).toBe(false);
+    assertAccounting(controller);
+  });
+
+  it('retains supplied global recording boundaries separately from elapsed controls', () => {
+    const { controller } = setup();
+    controller.appendSource(pcm(1000, 400), 0);
+    controller.readFrame(0);
+    controller.frameAccepted(0, 150);
+    controller.beginCallerTurn('turn-1', 0);
+    expect(
+      controller.requestStop({
+        turnId: 'turn-1',
+        callerOnsetAtMs: 0,
+        decisionAtMs: 151,
+        recordingAtMs: 20,
+      }),
+    ).toBe(1);
+    for (let frameAtMs = 20; frameAtMs <= 200; frameAtMs += 20) {
+      controller.observeAcceptedCaller(pcm(0), frameAtMs, frameAtMs + 150);
+    }
+    controller.appendSource(pcm(0, 200), 360, 220);
+    controller.close(400, 260);
+    expect(controller.events).toEqual([
+      expect.objectContaining({ type: 'suppressed', atMs: 151, recordingAtMs: 20 }),
+      expect.objectContaining({ type: 'resumed', atMs: 360, recordingAtMs: 220 }),
+      expect.objectContaining({ type: 'closed', atMs: 400, recordingAtMs: 260 }),
+    ]);
+    assertAccounting(controller);
+  });
+
+  it('does not infer global recorded length from target transport acceptance', () => {
+    const { controller } = setup();
+    controller.appendSource(pcm(1000, 400), 0);
+    controller.readFrame(0);
+    controller.frameRejected();
+    controller.close(170, 20);
+    expect(controller.events[0]).toMatchObject({ type: 'closed', atMs: 170, recordingAtMs: 20 });
+    expect(controller.metrics.deliveredSourceBytes).toBe(0);
+    assertAccounting(controller);
+  });
+
   it('counts a rejected proposed silence frame as no heard suppression', () => {
     const { controller } = startSuppression();
     controller.readFrame(20);

@@ -57,7 +57,7 @@ function pcm(active = true) {
   }
   return buffer;
 }
-function setup() {
+function setup(clockOptions: { getElapsedMs?: () => number } = {}) {
   const onCallerTurn = vi.fn();
   const onStopDecision = vi.fn();
   const onError = vi.fn();
@@ -72,6 +72,7 @@ function setup() {
     onCallerTurn,
     onStopDecision,
     onError,
+    ...clockOptions,
   });
   let mediaMs = 0;
   return {
@@ -345,6 +346,67 @@ describe('independent Live transcription', () => {
       expect(fixture.onError).not.toHaveBeenCalled();
     },
   );
+
+  it.each([
+    { lagMs: 150, ageMs: 1950, expectedDecisions: 1 },
+    { lagMs: 240, ageMs: 1950, expectedDecisions: 1 },
+    { lagMs: 150, ageMs: 2001, expectedDecisions: 0 },
+  ])(
+    'uses actual caller acceptance for the freshness fence: $lagMs ms lag, $ageMs ms age',
+    async ({ lagMs, ageMs, expectedDecisions }) => {
+      const fixture = setup();
+      const socket = await fixture.start();
+      const clock = vi.spyOn(performance, 'now');
+      clock.mockReturnValue(1000 + lagMs);
+      fixture.session.appendAcceptedCaller(pcm(), 0, lagMs);
+      for (let mediaMs = 20; mediaMs <= 300; mediaMs += 20) {
+        clock.mockReturnValue(1000 + lagMs + mediaMs);
+        fixture.session.appendAcceptedCaller(pcm(false), mediaMs, lagMs + mediaMs);
+      }
+      commit(socket, 'item-1');
+      clock.mockReturnValue(1000 + lagMs + ageMs);
+      complete(socket, 'item-1', 'Stop.');
+      expect(fixture.onStopDecision).toHaveBeenCalledTimes(expectedDecisions);
+      const summary = await fixture.session.finish();
+      expect(summary.status).toBe('completed');
+      expect(summary.turns[0]).toMatchObject({
+        callerOnsetAtMs: 0,
+        lastActiveAtMs: 20,
+        endedAtMs: 20,
+      });
+      expect(summary.sentAudioMs).toBe(320);
+      expect(fixture.onError).not.toHaveBeenCalled();
+    },
+  );
+
+  it('uses the explicit media epoch when first-append processing is delayed', async () => {
+    let nowMs = 1000;
+    vi.spyOn(performance, 'now').mockImplementation(() => nowMs);
+    const fixture = setup({ getElapsedMs: () => nowMs - 1000 });
+    const socket = await fixture.start();
+    // Target accepted the frame at150ms; a150ms processing stall follows before ASRappend.
+    nowMs = 1300;
+    fixture.session.appendAcceptedCaller(pcm(), 0, 150);
+    nowMs = 1400;
+    delta(socket, 'item-1', 'Stop!');
+    expect(fixture.onStopDecision).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ callerOnsetAtMs: 0, decisionAtMs: 400 }),
+    );
+    for (let mediaMs = 20; mediaMs <= 300; mediaMs += 20) {
+      nowMs = 1400 + mediaMs;
+      fixture.session.appendAcceptedCaller(pcm(false), mediaMs, nowMs - 1000);
+    }
+    commit(socket, 'item-1');
+    complete(socket, 'item-1', 'Stop!');
+    const summary = await fixture.session.finish();
+    expect(summary.status).toBe('completed');
+    expect(summary.transcripts[0].receivedAtMs).toBe(400);
+    expect(summary.turns[0]).toMatchObject({
+      callerOnsetAtMs: 0,
+      lastActiveAtMs: 20,
+      endedAtMs: 20,
+    });
+  });
 
   it('does not stop acknowledgments or ordinary unrelated speech', async () => {
     const fixture = setup();

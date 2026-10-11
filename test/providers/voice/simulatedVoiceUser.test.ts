@@ -7,6 +7,7 @@ import type { EventEmitter } from 'node:events';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { convertPcm16ToWav } from '../../../src/providers/openai/audio';
+import { LiveTranscriptionSession } from '../../../src/providers/openai/liveTranscriptionSession';
 import { OpenAiTtsProvider } from '../../../src/providers/openai/tts';
 import { providerRegistry } from '../../../src/providers/providerRegistry';
 import { SimulatedVoiceUser } from '../../../src/providers/voice/simulatedVoiceUser';
@@ -335,8 +336,12 @@ describe('SimulatedVoiceUser', () => {
     expect(app.events.find((event: any) => event.type === 'suppressed')).toMatchObject({
       atMs: 280,
       callerOnsetAtMs: 220,
+      recordingAtMs: 300,
     });
-    expect(app.events.some((event: any) => event.type === 'resumed')).toBe(true);
+    expect(app.events.find((event: any) => event.type === 'resumed')).toMatchObject({
+      atMs: 600,
+      recordingAtMs: 620,
+    });
     expect(app.metrics.discardedQueuedBytes).toBeGreaterThan(0);
     const m = app.metrics;
     expect(m.sourceBytes).toBe(
@@ -364,6 +369,227 @@ describe('SimulatedVoiceUser', () => {
     expect(Buffer.from(response.metadata!.audio.data, 'base64').length - 44).toBe(m.sourceBytes);
     expect(response.cost).toBeUndefined();
     expect(response.tokenUsage?.numRequests).toBe(3);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it.each([
+    'target refusal',
+    'caller refusal',
+    'target refusal followed by caller refusal',
+    'target refusal without final usage',
+    'target refusal after recognition error',
+    'ordinary target hangup',
+  ] as const)('preserves %s semantics when application playback is suppressed', async (ending) => {
+    const result = provider({ targetPlayback: { mode: 'app-barge-in' } }).callApi('Cafe');
+    const { recognizer, target, caller } = await connectApplication();
+    audio(target, 1200, 24000);
+    audio(caller, 3000, 4800);
+    transcript(target, 'Stop talking', 200, 'input');
+    transcript(caller, 'Here are the options.', 200, 'input');
+    await vi.advanceTimersByTimeAsync(280);
+    emit(recognizer, {
+      type: 'conversation.item.input_audio_transcription.delta',
+      item_id: 'item-1',
+      content_index: 0,
+      delta: 'Stop talking.',
+    });
+    const redirect = target.sent.find((event) => event.type === 'session.thinking.append');
+    expect(redirect).toBeDefined();
+    emit(target, { type: 'session.thinking.appended', client_event_id: redirect!.event_id });
+    audio(target, 2000, 480);
+    if (ending === 'target refusal after recognition error') {
+      emit(recognizer, { type: 'error', error: { message: 'Independent recognition failed' } });
+    }
+    emit(ending === 'caller refusal' ? caller : target, {
+      type: 'session.closed',
+      reason: ending === 'ordinary target hangup' ? 'remote_hangup' : 'content',
+      ...(ending === 'target refusal without final usage' ? {} : { usage: { seconds: 0.5 } }),
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    if (ending === 'target refusal followed by caller refusal') {
+      emit(caller, { type: 'session.closed', reason: 'content', usage: { seconds: 0.5 } });
+    }
+    finalize(0.5);
+    emit(recognizer, {
+      type: 'input_audio_buffer.committed',
+      item_id: 'item-1',
+      previous_item_id: null,
+    });
+    emit(recognizer, {
+      type: 'conversation.item.input_audio_transcription.completed',
+      item_id: 'item-1',
+      content_index: 0,
+      transcript: 'Stop talking.',
+      usage: { type: 'duration', seconds: 0.28 },
+    });
+    const response = await result;
+    if (ending === 'target refusal') {
+      expect(response.error).toBeUndefined();
+      expect(response.isRefusal).toBe(true);
+      expect(response.guardrails?.flagged).toBe(true);
+      expect(response.metadata?.voice.stopReason).toBe('safety');
+      expect(response.metadata?.voice.participants.target.finalUsageConfirmed).toBe(true);
+      expect(response.metadata?.voice.participants.caller.finalUsageConfirmed).toBe(true);
+    } else {
+      expect(response.error).toBeTruthy();
+      expect(response.metadata?.voice.stopReason).toBe('error');
+      if (ending === 'caller refusal') {
+        expect(response.isRefusal).toBeUndefined();
+        expect(response.metadata?.voice.participants.caller.isRefusal).toBe(true);
+      } else if (ending === 'target refusal followed by caller refusal') {
+        expect(response.isRefusal).toBe(true);
+        expect(response.metadata?.voice.participants.caller.isRefusal).toBe(true);
+        expect(response.error).toContain('simulated caller encountered a safety intervention');
+      } else if (ending === 'target refusal without final usage') {
+        expect(response.isRefusal).toBe(true);
+        expect(response.metadata?.voice.participants.target.finalUsageConfirmed).toBe(false);
+        expect(response.error).toContain('final session usage is unconfirmed');
+      } else if (ending === 'target refusal after recognition error') {
+        expect(response.isRefusal).toBe(true);
+        expect(response.error).toContain('Independent recognition failed');
+      } else {
+        expect(response.isRefusal).toBeUndefined();
+        expect(response.error).toContain('ended before recovery');
+      }
+    }
+    const playback = response.metadata!.voice.targetPlayback;
+    expect(playback.metrics).toMatchObject({
+      stops: 1,
+      suppressed: true,
+      closed: true,
+      recoveryFailed: false,
+      discardedIncomingBytes: 960,
+    });
+    expect(playback.events.some((event: any) => event.type === 'resumed')).toBe(false);
+    const metrics = playback.metrics;
+    expect(metrics.sourceBytes).toBe(
+      metrics.deliveredSourceBytes + metrics.discardedQueuedBytes + metrics.discardedIncomingBytes,
+    );
+    expect(Buffer.from(response.metadata!.audio.data, 'base64').length - 44).toBe(
+      metrics.sourceBytes,
+    );
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('keeps the ASR clock anchored to capture when the first accepted append is delayed', async () => {
+    let clockSkewMs = 0;
+    vi.mocked(performance.now).mockImplementation(() => Date.now() + clockSkewMs);
+    const startedAt = performance.now();
+    const append = LiveTranscriptionSession.prototype.appendAcceptedCaller;
+    let firstAppend = true;
+    vi.spyOn(LiveTranscriptionSession.prototype, 'appendAcceptedCaller').mockImplementation(
+      function (this: LiveTranscriptionSession, frame, mediaMs, observedAtMs) {
+        if (firstAppend) {
+          firstAppend = false;
+          // Model preemption after the bridge samples acceptance time, before ASR consumes it.
+          clockSkewMs = 150;
+        }
+        return append.call(this, frame, mediaMs, observedAtMs);
+      },
+    );
+    const result = provider({ targetPlayback: { mode: 'app-barge-in' } }).callApi('Cafe');
+    const { recognizer, target, caller } = await connectApplication();
+    audio(target, 1200, 24000);
+    audio(caller, 3000, 4800);
+    await vi.advanceTimersByTimeAsync(280);
+    const decisionAtMs = performance.now() - startedAt;
+    emit(recognizer, {
+      type: 'conversation.item.input_audio_transcription.delta',
+      item_id: 'item-1',
+      content_index: 0,
+      delta: 'Stop talking.',
+    });
+    const redirect = target.sent.find((event) => event.type === 'session.thinking.append');
+    expect(redirect).toBeDefined();
+    emit(target, { type: 'session.thinking.appended', client_event_id: redirect!.event_id });
+    emit(target, { type: 'session.closed', reason: 'content', usage: { seconds: 0.5 } });
+    await vi.advanceTimersByTimeAsync(0);
+    finalize(0.5);
+    emit(recognizer, {
+      type: 'input_audio_buffer.committed',
+      item_id: 'item-1',
+      previous_item_id: null,
+    });
+    emit(recognizer, {
+      type: 'conversation.item.input_audio_transcription.completed',
+      item_id: 'item-1',
+      content_index: 0,
+      transcript: 'Stop talking.',
+      usage: { type: 'duration', seconds: 0.42 },
+    });
+    const response = await result;
+    expect(response.error).toBeUndefined();
+    expect(response.metadata?.voice.targetPlayback.metrics.stops).toBe(1);
+    expect(response.metadata?.voice.targetPlayback.recognition.turns[0].decision.decisionAtMs).toBe(
+      decisionAtMs,
+    );
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('recognizes an interruption against recently accepted audio when the media pump is late', async () => {
+    const result = provider({ targetPlayback: { mode: 'app-barge-in' } }).callApi('Cafe');
+    const { recognizer, target, caller } = await connectApplication([0]);
+    // The recording boundary must not inherit the provider's startup offset.
+    await vi.advanceTimersByTimeAsync(100);
+    emit(caller, { type: 'session.started', session: { id: 'late-caller' } });
+    await vi.advanceTimersByTimeAsync(0);
+    acknowledgeOpening();
+    audio(target, 1200, 24000);
+    audio(caller, 3000, 4800);
+    await vi.advanceTimersByTimeAsync(200);
+    // A delayed tick is still within the existing 250 ms bridge limit. Its PCM position
+    // stays at 220 ms even though the peers accept that frame at provider time 420 ms.
+    vi.mocked(performance.now).mockImplementation(() => Date.now() + 200);
+    const send = caller.send.bind(caller);
+    let decisionSent = false;
+    vi.spyOn(caller, 'send').mockImplementation((value) => {
+      send(value);
+      if (!decisionSent && JSON.parse(value).type === 'session.input_audio.append') {
+        decisionSent = true;
+        void Promise.resolve().then(() =>
+          emit(recognizer, {
+            type: 'conversation.item.input_audio_transcription.delta',
+            item_id: 'item-1',
+            content_index: 0,
+            delta: 'Stop talking.',
+          }),
+        );
+      }
+    });
+    await vi.advanceTimersByTimeAsync(20);
+    const redirect = target.sent.find((event) => event.type === 'session.thinking.append');
+    expect(redirect).toBeDefined();
+    emit(target, { type: 'session.thinking.appended', client_event_id: redirect!.event_id });
+    emit(target, { type: 'session.closed', reason: 'content', usage: { seconds: 0.5 } });
+    await vi.advanceTimersByTimeAsync(0);
+    finalize(0.5);
+    emit(recognizer, {
+      type: 'input_audio_buffer.committed',
+      item_id: 'item-1',
+      previous_item_id: null,
+    });
+    emit(recognizer, {
+      type: 'conversation.item.input_audio_transcription.completed',
+      item_id: 'item-1',
+      content_index: 0,
+      transcript: 'Stop talking.',
+      usage: { type: 'duration', seconds: 0.42 },
+    });
+    const response = await result;
+    expect(response.error).toBeUndefined();
+    expect(response.metadata?.voice.maximumClockLagMs).toBe(200);
+    expect(response.metadata?.voice.targetPlayback.metrics.stops).toBe(1);
+    expect(response.metadata?.voice.targetPlayback.events).toContainEqual(
+      expect.objectContaining({
+        type: 'suppressed',
+        atMs: 420,
+        callerOnsetAtMs: 220,
+        recordingAtMs: 240,
+        lastDeliveredActiveAtMs: expect.closeTo(220 + 479 / 24, 5),
+      }),
+    );
+    const heard = Buffer.from(response.audio!.data!, 'base64');
+    expect(heard.readInt16LE(44 + 11 * 1920)).toBe(1200);
     expect(vi.getTimerCount()).toBe(0);
   });
 
@@ -483,6 +709,33 @@ describe('SimulatedVoiceUser', () => {
       }
     },
   );
+
+  it('retains the global recording boundary when only the first peer accepts a frame', async () => {
+    const result = provider({ targetPlayback: { mode: 'app-barge-in' } }).callApi('Cafe');
+    const { target, caller } = await connectApplication([0]);
+    audio(target, 1000, 24000);
+    await vi.advanceTimersByTimeAsync(40);
+    caller.bufferedAmount = 144001;
+    emit(caller, { type: 'session.started', session: { id: 'late-caller' } });
+    await vi.advanceTimersByTimeAsync(0);
+    finalize();
+    const response = await result;
+    expect(response.error).toContain('backpressure');
+    expect(response.metadata?.voice.durationMs).toBe(20);
+    expect(response.metadata?.voice.targetPlayback.clock).toBe('media');
+    expect(response.metadata?.voice.targetPlayback.metrics.deliveredSourceBytes).toBe(0);
+    expect(response.metadata?.voice.targetPlayback.events).toContainEqual(
+      expect.objectContaining({ type: 'closed', atMs: 0, recordingAtMs: 20 }),
+    );
+    expect(target.sent.filter((event) => event.type === 'session.input_audio.append')).toHaveLength(
+      1,
+    );
+    expect(caller.sent.filter((event) => event.type === 'session.input_audio.append')).toHaveLength(
+      0,
+    );
+    expect(Buffer.from(response.audio!.data!, 'base64').length).toBe(44 + 1920);
+    expect(vi.getTimerCount()).toBe(0);
+  });
 
   it.each(['opening speech send', 'first audio append'] as const)(
     'keeps source evidence on the provider clock when %s fails before capture',

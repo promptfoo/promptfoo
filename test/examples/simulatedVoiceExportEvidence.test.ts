@@ -557,6 +557,9 @@ describe('voice example portable evidence export', () => {
       sourceMatchesVerifiedWav: true,
     });
     expect(metrics.targetPlayback.stops[0]).toMatchObject({
+      recordingClockSource: 'legacy-elapsed-fallback',
+      suppressedRecordingAtMs: 200,
+      resumedRecordingAtMs: 400,
       detectionDelayMs: 100,
       heardStopFrameBoundMs: 100,
       activeWhileSuppressedMs: 0,
@@ -564,6 +567,9 @@ describe('voice example portable evidence export', () => {
       firstActivityAfterResumeAtMs: null,
       usefulAnswerLatencyMs: null,
     });
+    expect(metrics.targetPlayback.stops[0].interpretation).toContain(
+      'legacy elapsed fallback may misalign',
+    );
     expect(metrics.targetSource.clock).toBe('source_sample_order');
     const native = await run(fixture(), 'native');
     expect(native.rows[0].metrics.interventionObservationScope).toBe('native-playback');
@@ -586,6 +592,101 @@ describe('voice example portable evidence export', () => {
       activeWhileSuppressedMs: 40,
     });
   });
+
+  it.each([false, true])(
+    'uses recorded suppression boundaries under 150 ms dispatch lag and preserves real leaks: %s',
+    async (leak) => {
+      const { input } = appFixture();
+      const heard = wav(2, 24000, 14400);
+      for (let frame = 0; frame < 14400; frame++) {
+        const ms = frame / 24;
+        const active = ms < 200 || ms >= 400 || (leak && ms >= 300 && ms < 340);
+        heard.writeInt16LE(active ? 2000 : 0, 44 + frame * 4);
+      }
+      const replacement = fixture(heard);
+      input.results.results[0].response.audio = replacement.results.results[0].response.audio;
+      input.blobAssets[0] = replacement.blobAssets[0];
+      const playback = input.results.results[0].response.metadata.voice.targetPlayback;
+      Object.assign(playback.metrics, {
+        deliveredSourceBytes: leak ? 21120 : 19200,
+        pendingQueuedBytes: leak ? 12480 : 14400,
+      });
+      Object.assign(playback.events[0], { atMs: 350, recordingAtMs: 200 });
+      playback.events[1].atMs = 360;
+      Object.assign(playback.events[2], { atMs: 550, recordingAtMs: 400 });
+      Object.assign(playback.events[3], { atMs: 750, recordingAtMs: 600 });
+
+      const manifest = await run(input);
+      expect(manifest.errors).toBe(0);
+      expect(manifest.rows[0].evalSuccess).toBe(false);
+      expect(manifest.rows[0].metrics.targetPlayback.stops[0]).toMatchObject({
+        recordingClockSource: 'explicit-event-boundaries',
+        suppressedRecordingAtMs: 200,
+        resumedRecordingAtMs: 400,
+        decisionAtMs: 350,
+        detectionDelayMs: 250,
+        lastActiveTargetFrameEndBeforeResumeMs: leak ? 340 : 200,
+        heardStopFrameBoundMs: leak ? 240 : 100,
+        activeWhileSuppressedMs: leak ? 40 : 0,
+        resumedAtMs: 550,
+        suppressedForMs: 200,
+        firstActivityAfterResumeAtMs: 400,
+        usefulAnswerLatencyMs: null,
+      });
+    },
+  );
+
+  it('keeps measuring recorded leaks until capture end when explicit suppression never recovers', async () => {
+    const { input } = appFixture();
+    const heard = wav();
+    for (let frame = 7200; frame < 8160; frame++) {
+      heard.writeInt16LE(2000, 44 + frame * 4);
+    }
+    const replacement = fixture(heard);
+    input.results.results[0].response.audio = replacement.results.results[0].response.audio;
+    input.blobAssets[0] = replacement.blobAssets[0];
+    const playback = input.results.results[0].response.metadata.voice.targetPlayback;
+    Object.assign(playback.events[0], { atMs: 350, recordingAtMs: 200 });
+    playback.events[1].atMs = 360;
+    Object.assign(playback.events[2], { type: 'recovery_timeout', atMs: 550 });
+    Object.assign(playback.events[3], { atMs: 650, recordingAtMs: 500 });
+    playback.metrics.recoveryFailed = true;
+    const manifest = await run(input);
+    expect(manifest.errors).toBe(0);
+    expect(manifest.rows[0].metrics.targetPlayback.accounting.recoveryFailed).toBe(true);
+    expect(manifest.rows[0].metrics.targetPlayback.stops[0]).toMatchObject({
+      recordingClockSource: 'explicit-event-boundaries',
+      resumedRecordingAtMs: null,
+      heardStopFrameBoundMs: 240,
+      activeWhileSuppressedMs: 40,
+      resumedAtMs: null,
+      firstActivityAfterResumeAtMs: null,
+    });
+  });
+
+  it.each([
+    [undefined, 400],
+    [200, undefined],
+    [null, 400],
+    [-20, 400],
+    [201, 400],
+    [200, 600],
+    [200, 180],
+    [80, 400],
+  ])(
+    'rejects incomplete or invalid explicit recording boundaries %s / %s',
+    async (stop, resume) => {
+      const { input } = appFixture();
+      const playback = input.results.results[0].response.metadata.voice.targetPlayback;
+      playback.events[0].recordingAtMs = stop;
+      playback.events[2].recordingAtMs = resume;
+      const manifest = await run(input);
+      expect(manifest.errors).toBe(1);
+      expect(manifest.rows[0].error).toContain('recording boundaries');
+      expect(manifest.rows[0].recordings).toHaveLength(3);
+      expect(manifest.rows[0].metrics.targetPlayback).toBeUndefined();
+    },
+  );
 
   it.each([
     'missing',
