@@ -331,7 +331,11 @@ it.each(
       { values: { max_tokens: 0 }, expected: 0 },
       { values: { max_tokens: 512, [route.canonical]: 128 }, expected: 128 },
       { values: { max_tokens: 512, [route.canonical]: 0 }, expected: 0 },
-      { values: { max_tokens: 512, [route.canonical]: null }, expected: null },
+      {
+        values: { max_tokens: 512, [route.canonical]: null },
+        // Converse's request builder falls through null; Runtime and Invoke preserve it.
+        expected: route.mode === 'converse' ? 512 : null,
+      },
     ].map((testCase) => ({ ...route, ...testCase })),
   ),
 )(
@@ -424,3 +428,40 @@ it.each([
       .toHaveTextContent(JSON.stringify({ id: prefix + model, config: { max_tokens: expected } }));
   },
 );
+
+it.each([512, 0])(
+  'preserves the backend Converse null fallback %s across model and API edits',
+  async (cap) => {
+    renderEditor({
+      id: 'bedrock:converse:openai.gpt-oss-120b-1:0',
+      config: { maxTokens: null, max_tokens: cap, region: 'us-east-1' },
+    });
+    await page.getByRole('button', { name: /Advanced Configuration/ }).click();
+    await expect.element(page.getByLabelText('Max Tokens')).toHaveValue(cap);
+    await page.getByLabelText('Model ID', { exact: false }).fill('openai.gpt-oss-20b-1:0');
+    await expect.element(page.getByTestId('saved-target')).toHaveTextContent(
+      JSON.stringify({
+        id: 'bedrock:converse:openai.gpt-oss-20b-1:0',
+        config: { region: 'us-east-1', max_tokens: cap },
+      }),
+    );
+    await page.getByLabelText('Bedrock API', { exact: false }).selectOptions('runtime-chat');
+    await expect.element(page.getByTestId('saved-target')).toHaveTextContent(
+      JSON.stringify({
+        id: 'bedrock:runtime:chat:openai.gpt-oss-20b-1:0',
+        config: { region: 'us-east-1', max_completion_tokens: cap },
+      }),
+    );
+  },
+);
+
+it('leaves two null Converse limits unset until the user enters a cap', async () => {
+  const id = 'bedrock:converse:openai.gpt-oss-120b-1:0';
+  renderEditor({ id, config: { maxTokens: null, max_tokens: null } });
+  await page.getByRole('button', { name: /Advanced Configuration/ }).click();
+  await expect.element(page.getByLabelText('Max Tokens')).toHaveValue(null);
+  await page.getByLabelText('Max Tokens').fill('64');
+  await expect
+    .element(page.getByTestId('saved-target'))
+    .toHaveTextContent(JSON.stringify({ id, config: { max_tokens: 64 } }));
+});

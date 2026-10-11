@@ -62,7 +62,10 @@ function resolveBedrockTokenLimit(
       : key === 'max_completion_tokens'
         ? [key, 'max_tokens']
         : [key];
-  const source = fields.find((field) => config?.[field] !== undefined);
+  // Match Converse's nullish fallback without changing explicit null on the other APIs.
+  const source = fields.find((field) =>
+    mode === 'converse' ? config?.[field] != null : config?.[field] !== undefined,
+  );
   return { key, fields, value: source === undefined ? undefined : config?.[source] };
 }
 

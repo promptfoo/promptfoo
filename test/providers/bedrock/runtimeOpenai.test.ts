@@ -116,6 +116,107 @@ describe.each([
   );
 
   it.each([
+    ['us.zai.glm-5.3', 0.007656, 0.00740124],
+    ['global.zai.glm-5.3', 0.00696, 0.0067284],
+    [
+      'arn:aws:bedrock:us-east-1:123456789012:inference-profile/us.zai.glm-5.3',
+      0.007656,
+      0.00740124,
+    ],
+    [
+      'arn:aws:bedrock:us-east-1:123456789012:inference-profile/global.zai.glm-5.3',
+      0.00696,
+      0.0067284,
+    ],
+  ] as const)(
+    'uses published GLM profile prices for %s without double-counting cached input',
+    async (model, standardCost, cacheCost) => {
+      // AWS publishes separate US/global input, output, cache-read, and 30m cache-write rates:
+      // https://aws.amazon.com/bedrock/pricing/#Z_AI
+      for (const [read, write, expected] of [
+        [0, 0, standardCost],
+        [200, 100, cacheCost],
+      ]) {
+        vi.mocked(fetchWithCache).mockResolvedValue({
+          data: {
+            ...reply,
+            usage: {
+              ...(mode === 'chat'
+                ? { prompt_tokens: 1000, completion_tokens: 1000 }
+                : { input_tokens: 1000, output_tokens: 1000 }),
+              total_tokens: 2000,
+              [mode === 'chat' ? 'prompt_tokens_details' : 'input_tokens_details']: {
+                cached_tokens: read,
+                cache_write_tokens: write,
+              },
+            },
+          },
+          status: 200,
+          statusText: 'OK',
+          cached: false,
+        });
+        const result = await new Provider(model, { config: { apiKey: 'fixture' } }).callApi(
+          'hello',
+        );
+        expect(result.error).toBeUndefined();
+        expect(result.output).toBe('READY');
+        expect(result.cost).toBeCloseTo(expected, 12);
+        expect(result.tokenUsage).toMatchObject({
+          prompt: 1000,
+          completion: 1000,
+          total: 2000,
+        });
+        if (read || write) {
+          expect(result.tokenUsage?.completionDetails).toMatchObject({
+            cacheReadInputTokens: read,
+            cacheCreationInputTokens: write,
+          });
+        }
+        const [url, request] = vi.mocked(fetchWithCache).mock.calls.at(-1)!;
+        expect(url).toContain(`/openai/v1/${path}`);
+        expect(JSON.parse(String(request?.body)).model).toBe(model);
+      }
+    },
+  );
+
+  it.each([
+    ['us', { inputCost: 0.01 }, 10.005808],
+    ['global', { inputCost: 0.01 }, 10.00528],
+    ['us', { outputCost: 0.02 }, 20.00159324],
+    ['global', { outputCost: 0.02 }, 20.0014484],
+    ['us', { inputCost: 0 }, 0.005808],
+    ['global', { outputCost: 0 }, 0.0014484],
+    ['us', { inputCost: 0.01, outputCost: 0.02 }, 30],
+    ['global', { cost: 0.001 }, 2],
+    ['us', { cost: 0 }, 0],
+    ['global', { inputCost: 0, outputCost: 0 }, 0],
+  ] as const)('honors GLM manual pricing for %s %j', async (profile, costs, expected) => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: {
+        ...reply,
+        usage: {
+          ...(mode === 'chat'
+            ? { prompt_tokens: 1000, completion_tokens: 1000 }
+            : { input_tokens: 1000, output_tokens: 1000 }),
+          total_tokens: 2000,
+          [mode === 'chat' ? 'prompt_tokens_details' : 'input_tokens_details']: {
+            cached_tokens: 200,
+            cache_write_tokens: 100,
+          },
+        },
+      },
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    });
+    const result = await new Provider(`${profile}.zai.glm-5.3`, {
+      config: { apiKey: 'fixture', ...costs },
+    }).callApi('hello');
+    expect(result.error).toBeUndefined();
+    expect(result.cost).toBeCloseTo(expected, 12);
+  });
+
+  it.each([
     ['gpt-6-sol', 1000, 0.011933],
     ['gpt-6-sol', 272001, 1.10287],
     ['gpt-6-luna', 1000, 0.00059665],

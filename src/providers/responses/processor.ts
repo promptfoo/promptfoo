@@ -329,6 +329,10 @@ export class ResponsesProcessor {
   ): Promise<{
     content?: string;
   }> {
+    if (item.status === 'incomplete' || item.status === 'in_progress') {
+      return { content: JSON.stringify(item) };
+    }
+
     let functionResult: string;
 
     // Check if this is a meaningful function call or just a status update
@@ -384,6 +388,11 @@ export class ResponsesProcessor {
             annotations.push(...contentItem.annotations);
           }
         } else if (contentItem.type === 'tool_use' || contentItem.type === 'function_call') {
+          if (['incomplete', 'in_progress'].includes(contentItem.status)) {
+            content += JSON.stringify(contentItem);
+            continue;
+          }
+
           // Handle function calls within message content
           const functionResult = await this.config.functionCallbackHandler.processCalls(
             contentItem,

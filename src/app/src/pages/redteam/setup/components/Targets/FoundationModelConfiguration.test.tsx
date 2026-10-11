@@ -1198,6 +1198,26 @@ describe('FoundationModelConfiguration', () => {
     },
   );
 
+  it.each([
+    { config: { maxTokens: null, max_tokens: 512 }, expected: 512 },
+    { config: { maxTokens: null, max_tokens: 0 }, expected: 0 },
+    { config: { maxTokens: 128, max_tokens: 512 }, expected: 128 },
+    { config: { maxTokens: 0, max_tokens: 512 }, expected: 0 },
+    { config: { max_tokens: 512 }, expected: 512 },
+    { config: { maxTokens: null, max_tokens: null }, expected: null },
+  ])('matches the backend Converse token precedence: %j', async ({ config, expected }) => {
+    const user = userEvent.setup();
+    render(
+      <FoundationModelConfiguration
+        selectedTarget={{ id: 'bedrock:converse:openai.gpt-oss-120b-1:0', config }}
+        updateCustomTarget={mockUpdateCustomTarget}
+        providerType="bedrock"
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: /Advanced Configuration/ }));
+    expect(screen.getByLabelText('Max Tokens')).toHaveValue(expected);
+  });
+
   it('migrates a Responses cap when switching to Runtime Chat', async () => {
     const user = userEvent.setup();
     render(
