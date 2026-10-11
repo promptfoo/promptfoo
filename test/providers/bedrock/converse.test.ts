@@ -2170,36 +2170,50 @@ Third line`;
       expect(call?.inferenceConfig?.temperature).toBe(0);
     });
 
-    it('preserves sampling and thinking for numbered Claude inference-profile aliases', async () => {
-      const provider = new AwsBedrockConverseProvider(
-        'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/claude-prod-5',
-        {
+    it.each(
+      ['claude-prod-5', 'claude-haiku-5-5', 'anthropic.claude-opus-5-5'].flatMap((profileName) =>
+        ['direct', 'additional'].map((thinkingSource) => ({ profileName, thinkingSource })),
+      ),
+    )(
+      'preserves opaque profile $profileName settings from $thinkingSource fields',
+      async ({ profileName, thinkingSource }) => {
+        const modelId = `arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/${profileName}`;
+        const thinking = { type: 'enabled', budget_tokens: 8192 } as const;
+        const additionalModelRequestFields = { temperature: 0.5, top_p: 0.9, top_k: 50 };
+        const provider = new AwsBedrockConverseProvider(modelId, {
           config: {
             region: 'us-east-1',
             max_tokens: 10000,
             temperature: 0.5,
             topP: 0.9,
-            thinking: { type: 'enabled', budget_tokens: 8192 },
+            tools: [{ name: 'lookup', input_schema: { type: 'object', properties: {} } }],
+            toolChoice: { tool: { name: 'lookup' } },
+            ...(thinkingSource === 'direct'
+              ? { thinking, additionalModelRequestFields }
+              : { additionalModelRequestFields: { ...additionalModelRequestFields, thinking } }),
           },
-        },
-      );
+        });
 
-      mockSend.mockResolvedValueOnce(createMockConverseResponse('Test'));
+        mockSend.mockResolvedValueOnce(createMockConverseResponse('Test'));
 
-      await provider.callApi('Test');
+        await provider.callApi('Test');
 
-      const { ConverseCommand } = (await import(
-        '@aws-sdk/client-bedrock-runtime'
-      )) as unknown as MockBedrockModule;
-      expect(ConverseCommand).toHaveBeenLastCalledWith(
-        expect.objectContaining({
-          inferenceConfig: expect.objectContaining({ temperature: 0.5, topP: 0.9 }),
-          additionalModelRequestFields: {
-            thinking: { type: 'enabled', budget_tokens: 8192 },
-          },
-        }),
-      );
-    });
+        const { ConverseCommand } = (await import(
+          '@aws-sdk/client-bedrock-runtime'
+        )) as unknown as MockBedrockModule;
+        expect(ConverseCommand).toHaveBeenLastCalledWith(
+          expect.objectContaining({
+            modelId,
+            inferenceConfig: expect.objectContaining({ temperature: 0.5, topP: 0.9 }),
+            additionalModelRequestFields: {
+              ...additionalModelRequestFields,
+              thinking,
+            },
+            toolConfig: expect.objectContaining({ toolChoice: { tool: { name: 'lookup' } } }),
+          }),
+        );
+      },
+    );
   });
 
   describe('performance and service tier configuration', () => {

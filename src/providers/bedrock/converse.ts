@@ -671,7 +671,7 @@ export function parseConverseMessages(prompt: string): {
                     toolUseId: toolResultData.toolUseId || toolResultData.tool_use_id,
                     content: Array.isArray(toolResultData.content)
                       ? toolResultData.content.map((c: any) =>
-                          typeof c === 'string' ? { text: c } : c,
+                          typeof c === 'string' ? { text: c } : normalizeNativeContentBlock(c),
                         )
                       : [{ text: String(toolResultData.content) }],
                     status: toolResultData.status,
@@ -954,6 +954,14 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     return `[AWS Bedrock Converse Provider ${this.modelName}]`;
   }
 
+  private get capabilityModelName(): string {
+    // Application profile names do not identify their backing model.
+    return this.modelName.startsWith('arn:') &&
+      this.modelName.includes(':application-inference-profile/')
+      ? ''
+      : this.modelName;
+  }
+
   private async initializeMCP(): Promise<void> {
     if (!this.config.mcp) {
       return;
@@ -1094,13 +1102,15 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     // level — a request that pins `temperature` or `topP` on Bedrock returns
     // ValidationException. Drop both regardless of where they came from (config
     // or AWS_BEDROCK_TEMPERATURE / AWS_BEDROCK_TOP_P).
-    const samplingParamsDeprecated = isSamplingParamsDeprecatedClaudeModel(this.modelName);
+    const samplingParamsDeprecated = isSamplingParamsDeprecatedClaudeModel(
+      this.capabilityModelName,
+    );
     let temperature = reasoningEnabled || samplingParamsDeprecated ? undefined : temperatureValue;
     let topP = reasoningEnabled || samplingParamsDeprecated ? undefined : topPValue;
     // Converse relays Claude's own rules as ValidationExceptions: no temperature with topP,
     // and with extended thinking no temperature and a topP of at least 0.95. Other model
     // families accept both, so only Claude models go through the shared resolver.
-    if (this.modelName.includes('anthropic.claude')) {
+    if (this.capabilityModelName.includes('anthropic.claude')) {
       const rawThinking = this.config.additionalModelRequestFields?.thinking as
         | { type?: string }
         | undefined;
@@ -1211,13 +1221,16 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     const requestedToolChoice = configToolChoice
       ? convertToolChoiceToConverseFormat(configToolChoice)
       : undefined;
-    const modelRejectsForcedToolChoice = isForcedToolChoiceUnsupportedClaudeModel(this.modelName);
+    const modelRejectsForcedToolChoice = isForcedToolChoiceUnsupportedClaudeModel(
+      this.capabilityModelName,
+    );
     const dropForcedToolChoice =
-      (modelRejectsForcedToolChoice || isAlwaysOnAdaptiveThinkingClaudeModel(this.modelName)) &&
+      (modelRejectsForcedToolChoice ||
+        isAlwaysOnAdaptiveThinkingClaudeModel(this.capabilityModelName)) &&
       requestedToolChoice !== undefined &&
       ('any' in requestedToolChoice || 'tool' in requestedToolChoice);
     if (dropForcedToolChoice && !this.forcedToolChoiceRemovalWarned) {
-      const modelName = getClaudeModelWarningName(this.modelName) ?? 'this Claude model';
+      const modelName = getClaudeModelWarningName(this.capabilityModelName) ?? 'this Claude model';
       logger.warn(
         modelRejectsForcedToolChoice
           ? `Forced tool choice (any/tool) is not supported on ${modelName} and has been omitted. The model decides when to call tools; remove toolChoice to silence this warning.`
@@ -1287,7 +1300,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     // sampling-deprecated Claude model (Claude 5, Opus 4.7/4.8) rejects temperature/top_p/top_k,
     // so strip them from the raw fields too; normalizeClaudeThinkingConfig then converts enabled
     // -> adaptive and applies the model's rules for `disabled` (dropped, or `between_tools`).
-    if (isSamplingParamsDeprecatedClaudeModel(this.modelName)) {
+    if (isSamplingParamsDeprecatedClaudeModel(this.capabilityModelName)) {
       delete fields.temperature;
       delete fields.top_p;
       delete fields.top_k;
@@ -1295,7 +1308,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
         | { type: string; display?: 'summarized' | 'omitted' }
         | undefined;
       const normalizedThinking = normalizeClaudeThinkingConfig(
-        this.modelName,
+        this.capabilityModelName,
         additionalThinking,
         effort,
       );
@@ -1309,7 +1322,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     // Add thinking configuration for Claude models
     if (this.config.thinking) {
       const normalizedThinking = normalizeClaudeThinkingConfig(
-        this.modelName,
+        this.capabilityModelName,
         this.config.thinking,
         effort,
       );
