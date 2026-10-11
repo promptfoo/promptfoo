@@ -89,6 +89,26 @@ The [GPT-Live prompting structure](https://developers.openai.com/api/docs/guides
 
 Inspect `targetActivityAfterFirst200MsQuiet` too. It reports any above-threshold target activity after the first quiet window and before the prepared caller clip ends, including the last active sample window. A pause followed by more sound is not final cessation. That later sound might be speech, a listening sound, or breathing; transcribe and review the recording before assigning semantic meaning.
 
+## Compare explicit application barge-in
+
+Native yielding remains the default. `promptfooconfig.app-barge-in.yaml` adds an explicit target application controller and a separate `gpt-live-transcribe` connection. Run it using the same eval/export commands above. To compare fairly, keep the prompt, caller recording, voices, capture window, and assertions fixed, changing only `targetPlayback.mode` between `native` and `app-barge-in`.
+
+```yaml
+targetPlayback:
+  mode: app-barge-in
+  transcriptionDelay: minimal
+```
+
+The recognizer receives only caller PCM already accepted by the target. It has no access to intervention schedules, supplied text, or expected answers. A deliberately narrow English lexical policy recognizes explicit commands and selected interruption-question prefixes. Ambiguous phrases and acknowledgments abstain; this is not semantic VAD or multilingual intent detection. OpenAI's [transcription guide](https://developers.openai.com/api/docs/guides/realtime-transcription) describes the latency/accuracy setting, but it does not guarantee a delay. Retain `requestedDelay`, `delayAcknowledged`, and observed timing separately: the service may omit the delay from its configuration acknowledgment.
+
+On a recognized interruption during target playback, the controller clears queued target audio, withholds subsequent output, and tells the target that generated speech was not heard. Recovery requires actual source PCM silence and caller silence; a packet stall cannot satisfy it. This follows the application-owned [playback-control guidance](https://developers.openai.com/api/docs/guides/voice-server-controls). GPT-Live does not provide output turn IDs or a context-truncation acknowledgment, so silence-based recovery remains a heuristic. Resumed old speech, lost answers, false stops, and failure to recover must remain failures.
+
+The recorded recovery policies matter: target-source quiet uses 20 ms RMS windows at −60 dBFS, while rejoining the simulated caller after a prepared clip uses −55 dBFS. These development-derived floors tolerate the faint residual noise found in the recordings. The caller rejoin policy applies in native tests too; compare revisions using fresh native controls. Quiet speech and pauses inside an unfinished response remain limitations of an energy-based boundary.
+
+The exporter retains the delivered stereo/mono tracks and an additional target-source WAV. Source offsets follow concatenated received samples, not the delivered recording clock; its player intentionally does not synchronize with the conversation. Source speech is never evidence that the caller heard it. Source-only tests are `source-transcription-tests.json` and `source-audio-review-tests.json`; pass them to the same transcription and audio-review configurations in separate runs. `recordConversation: false` disables both recordings.
+
+Report native yielding, application detection delay, heard-stop delay, useful-answer latency, false stops, and recovery separately. The application health assertion checks recognition completion, recovery, and byte accounting. It does not prove a latency target, intelligibility, or task success. Unconfirmed recognition usage is reported as billing uncertainty, not silently counted as zero. This mode adds a paid transcription stream on the target's configured origin and credentials; gateways must support the Realtime transcription endpoint as well as Live.
+
 ## Verify an actual operation
 
 The reservation case uses a fixed spoken correction from August 7 to August 6, followed by a backend tool with a two-second delay. The fixture accepts valid wrong dates too: the evaluator, rather than the application fixture, must catch a wrong booking.
@@ -188,7 +208,7 @@ node --env-file="$VOICE_ENV_FILE" dist/src/main.js eval \
   --max-concurrency 1 --no-cache -o "$VOICE_RUN_DIR/audio-review.json"
 ```
 
-This uses `gpt-audio-1.5` through the existing Chat Completions provider. It returns `no_issue_flagged`, `review_required`, or `unratable`, with a transcript and observations. Invalid output fails validation. **No issue flagged is an advisory finding, not a quality certificate.** Exact silence must remain unratable even if the model invents a transcript.
+This uses `gpt-audio-1.5` through the existing Chat Completions provider. It returns `no_issue_flagged`, `review_required`, or `unratable`, with a transcript and observations. Invalid output fails validation. **No issue flagged is an advisory finding, not a quality certificate.** Exact silence must remain unratable even if the model invents a transcript. For exported stereo conversations with one participant per channel, a timestamped overlap claim is also rejected when either channel is exactly zero throughout that interval. This refutes that localization; nonzero channels do not prove simultaneous speech or good quality.
 
 The eval also runs `audio_signal_integrity` independently of `audio_no_issue_flagged`. Preserve both results: a model error does not become a passing review because the signal check succeeded, and a model's clean verdict does not erase a measured defect.
 
@@ -223,7 +243,50 @@ Some calibration rows should fail the ordinary quality assertion, so that eval c
 
 The text-grader controls in `promptfooconfig.calibration.yaml`, `promptfooconfig.confirmation-calibration.yaml`, and `promptfooconfig.order-calibration.yaml` test invented facts and ambiguous confirmations independently of audio. A reliable test suite needs both semantic and acoustic controls.
 
+Check the simulated caller separately too. A correct target answer can coexist with a caller that starts speaking as the service representative. The optional caller review uses saved listener evidence and makes no new voice calls:
+
+```bash
+node examples/simulated-voice-user/prepare-caller-review.js \
+  "$VOICE_RUN_DIR/portable.json" --instructions-var instructions \
+  --out "$VOICE_RUN_DIR/caller-review-tests.json"
+
+node --env-file="$VOICE_ENV_FILE" dist/src/main.js eval \
+  -c examples/simulated-voice-user/promptfooconfig.caller-review.yaml \
+  --tests "$VOICE_RUN_DIR/caller-review-tests.json" \
+  --max-concurrency 1 --no-cache -o "$VOICE_RUN_DIR/caller-review.json"
+```
+
+Here `instructions` must contain the actual caller instructions used, as it does in these examples. If the provider overrides or templates them elsewhere, supply the rendered instructions with `--instructions-file FILE` instead. Preparation refuses missing instructions and does not infer a persona. The original results remain unchanged.
+
+The preparer also identifies scripts for completely delivered harness clips. Matching speech must not be blamed on the autonomous caller for disobeying an instruction to stay quiet. A script is permission for that intervention, not proof that its exact words were audible. Capture termination is supplied separately so a missing farewell at a time limit is not automatically treated as abandonment.
+
+This adds one text-model request per row and reports `valid`, `invalid`, or `inconclusive`. Findings must quote recognized caller speech; generated answers and target-source audio cannot establish caller success. Quotes, confirmations, polite thanks, and overlapping recognition need context. Both invalid and inconclusive reviews fail the advisory validity assertion. Reconcile disagreements against delivered audio rather than interpreting a text verdict as acoustic truth. Run the same review config with `--tests examples/simulated-voice-user/caller-review-calibration.json` to check its synthetic controls; compare returned statuses with `metadata.expectedCallerReviewStatus`. Defect and inconclusive controls intentionally fail the ordinary validity assertion.
+
 ## What the live checks found
+
+An October 11 application-control follow-up retained the original 16 attempts, a two-attempt recovery experiment (including its provider failure), and a new 12-attempt cohort after fixing recovery. The final cohort used the same prepared caller PCM and included fresh native controls because the prepared-caller rejoin policy changed. These were development cases informed by observed failures, not a held-out benchmark.
+
+| Final follow-up measurement                 | Observed result                                                                                                                                                             |
+| ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Two matched “Wait a second” pairs           | Native first 200 ms quiet: **1,400 / 1,320 ms**. App heard-stop bounds: **1,000 / 940 ms**. Medians: 1,360 / 970 ms, a **28.7% reduction** in these scoped measurements.    |
+| Six intended app interruptions              | Five triggered and recovered; one bare “Stop” was missed. **0/6 met the predeclared 750 ms bound.** Other detected bounds were 820 / 760 / 760 ms.                          |
+| Three acknowledgment/ordinary-turn controls | No false application stops. A long acknowledgment still caused the target to restart its menu; a short one preceded a 1.58 s pause.                                         |
+| Original assertions                         | **77/84 passed; 6/12 evals passed.** Model-grade disputes and failures remain in the results. These assertions do not include the separate 750 ms acceptance criterion.     |
+| Transport and evidence                      | All 48,500 delivered frames matched exported channels; all 1,435 Live fragments and 258 recognition events were inspected. One native trial retained a **20 ms underflow**. |
+
+The recovery fix addressed a concrete source/heard discrepancy: faint residual noise in a pause previously kept the controller muted through a generated acknowledgment. With RMS-based recovery, one final Stop trial generated and delivered “Sure, pausing there. What do you need to know?” after suppression. Another generated no acknowledgment at all and still failed its task criterion. Separating source and delivered recordings distinguishes those failures.
+
+The missed Stop exposes the narrow policy's limit. Its final transcript arrived after a new caller speech segment began, so the conservative stale-result fences rejected it. Accepting any recent old command could instead cut off a fresh answer; GPT-Live supplies no output turn identifier to disambiguate that case. The final transcript also arrived about 967 ms after onset, so simply accepting it would not establish a sub-750 ms result.
+
+The two Wait pairs are not two wholly clean successes: one native caller later asserted an incorrect cutoff time, and that run also contained the underflow before the cue. The 20 ms insertion occurred in a low-energy region; source replay preserved every sample and did not establish audible word loss. The original transport assertion still fails. Likewise, a text judge incorrectly treated a pre-stop menu tail as a restarted announcement in an app trial. Retain raw grades and reconcile temporal claims against the recordings; neither the improved median nor a passing factual grade proves a clean conversation.
+
+Independent review of the final 12 recordings, both partial-recovery recordings, and the first Cloud recording used **41 ASR requests and 56 direct audio reviews**, without retries. The audio model returned 25 advisory no-issue judgments, 30 review-required judgments, and one malformed response that remained unreviewed. ASR omitted the recovered acknowledgment; stereo and target-only audio review recovered it, and its active PCM frames matched the delivered recording exactly. The 1.58 s pause also matched source PCM, establishing a generated pause rather than added transport silence. Source audio review caught a repeated menu that the heard-track model review and ASR missed; exact source-to-delivery matching showed the repetition was delivered. The audio model did not identify the packet-proven 20 ms underflow.
+
+A subsequent Cloud UI run completed and saved both recordings automatically, recovered after an application heard-stop bound of **740 ms**, and recorded no underflow. This was one additional run with fresh synthesized caller audio, not another matched pair. Six of seven assertions passed; the factual grader flagged listener text “the mayor” as an invented menu item. Review of the heard and source tracks instead supported an interrupted “Amer…” prefix, with the discarded source continuing “Americano.” Exact PCM matching showed an intentional interruption cutoff. The evidence therefore supports recognition disagreement rather than a demonstrated invented fact; the original failed grade remains. The complete 3 pm answer and farewell were heard afterward. This final check brings the recording review total for this follow-up to **209 requests: 92 ASR and 117 direct audio reviews**.
+
+Revalidating 57 earlier audio judgments with the stereo-channel guard rejected two falsely localized overlap claims without making another model request. Both retained their raw judgments and remained unreviewed; rejecting an invented defect did not turn either recording into a quality pass.
+
+The optional caller review caught an actual caller speaking as the cafe representative, but also invented a requirement to ask another question in a different recording. Its revised synthetic calibration matched 14/17 raw model statuses; an additional deterministic guard refuses a confident pass when conversation order is unavailable. Exact recognized quotations help ground findings but do not prove their interpretation. Treat this review as advisory and retain disagreements.
 
 Development checks on October 10, 2026 compared two stronger target policies against the original announcement prompt. Each comparison used fresh GPT-Live sessions, unchanged 200–400 ms playout buffering, and the same verified caller PCM through a test-only speech replay fixture. The simulator preserved target output. These are small controlled experiments, not a production latency benchmark; the standard commands above still generate fresh speech clips.
 
