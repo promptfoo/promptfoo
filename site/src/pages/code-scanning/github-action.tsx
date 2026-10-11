@@ -2,13 +2,14 @@ import React from 'react';
 
 import Head from '@docusaurus/Head';
 import Link from '@docusaurus/Link';
-import ArticleIcon from '@mui/icons-material/Article';
 import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
 import BiotechIcon from '@mui/icons-material/Biotech';
 import GitHubIcon from '@mui/icons-material/GitHub';
 import VolumeOffIcon from '@mui/icons-material/VolumeOff';
 import Layout from '@theme/Layout';
 import clsx from 'clsx';
+import ProofBannerSection from '../../components/CodeScanProofBanner';
+import VulnerabilityTypesSection from '../../components/CodeScanVulnerabilities';
 import LogoContainer from '../../components/LogoContainer';
 import styles from '../landing-page.module.css';
 
@@ -58,89 +59,6 @@ function GitHubActionHeader() {
       </div>
       <HeroSection />
     </header>
-  );
-}
-
-function VulnerabilityTypesSection() {
-  const vulnerabilities = [
-    {
-      severity: 'critical',
-      name: 'Prompt Injection',
-      description: 'Untrusted input reaches LLM prompts without proper sanitization or boundaries.',
-    },
-    {
-      severity: 'critical',
-      name: 'Data Exfiltration',
-      description: 'Indirect prompt injection vectors that could extract data through agent tools.',
-    },
-    {
-      severity: 'high',
-      name: 'PII Exposure',
-      description:
-        'Code that may leak sensitive user data to LLMs or log confidential information.',
-    },
-    {
-      severity: 'high',
-      name: 'Improper Output Handling',
-      description: 'LLM outputs used in dangerous contexts like SQL queries or shell commands.',
-    },
-    {
-      severity: 'medium',
-      name: 'Excessive Agency',
-      description: 'LLMs with overly broad tool access or missing approval gates for actions.',
-    },
-    {
-      severity: 'medium',
-      name: 'Jailbreak Risks',
-      description: 'Weak system prompts and guardrail bypasses that could allow harmful outputs.',
-    },
-  ];
-
-  return (
-    <section className={styles.vulnerabilitySection}>
-      <div className="container">
-        <div className={styles.vulnEyebrow}>LLM-specific vulnerabilities</div>
-        <h2 className={styles.vulnTitle}>Catch issues that other review tools miss</h2>
-        <p className={styles.vulnSubtitle}>
-          Our scanner is laser-focused on the kinds of vulnerabilities that apps built on LLMs and
-          agents are uniquely susceptible to.
-        </p>
-        <div className={styles.vulnGrid}>
-          {vulnerabilities.map((vuln) => (
-            <div key={vuln.name} className={styles.vulnCard}>
-              <div className={`${styles.vulnSeverity} ${styles[vuln.severity]}`}>
-                {vuln.severity}
-              </div>
-              <h3 className={styles.vulnName}>{vuln.name}</h3>
-              <p className={styles.vulnDescription}>{vuln.description}</p>
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function ProofBannerSection() {
-  return (
-    <section className={styles.proofBanner}>
-      <div className={clsx('container', styles.proofBannerContainer)}>
-        <ArticleIcon className={styles.proofBannerIcon} />
-        <div className={styles.proofBannerContent}>
-          <h3 className={styles.proofBannerTitle}>See it in action</h3>
-          <p className={styles.proofBannerText}>
-            We tested the scanner against real CVEs in LangChain, Vanna.AI, and LlamaIndex. Read the
-            technical deep dive to see how it catches vulnerabilities that other tools miss.
-          </p>
-        </div>
-        <Link
-          className={clsx('button button--secondary', styles.proofBannerButton)}
-          to="/blog/building-a-security-scanner-for-llm-apps"
-        >
-          Read the technical breakdown
-        </Link>
-      </div>
-    </section>
   );
 }
 
@@ -232,7 +150,13 @@ export default function GitHubAction(): React.ReactElement {
       <div className={styles.pageContainer}>
         <GitHubActionHeader />
         <main className={styles.mainContent}>
-          <VulnerabilityTypesSection />
+          <VulnerabilityTypesSection
+            eyebrow="LLM-specific vulnerabilities"
+            title="Catch issues that other review tools miss"
+          >
+            Our scanner is laser-focused on the kinds of vulnerabilities that apps built on LLMs and
+            agents are uniquely susceptible to.
+          </VulnerabilityTypesSection>
           <ProofBannerSection />
           <BenefitsSection />
           <CallToActionSection />
