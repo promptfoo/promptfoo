@@ -240,19 +240,6 @@ describe('HydraProvider', () => {
       );
     });
 
-    it('should warn when backtracking is enabled in stateful mode', () => {
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-
-      new HydraProvider({
-        injectVar: 'input',
-        stateful: true,
-        maxBacktracks: 5,
-      });
-
-      // Logger.warn should have been called
-      warnSpy.mockRestore();
-    });
-
     it('should create agent provider with correct config', () => {
       new HydraProvider({ injectVar: 'input', targetId: 'cloud-target-123' });
 
