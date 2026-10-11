@@ -1518,6 +1518,7 @@ describe('TestSuiteSchema', () => {
         'file://path/to/file.py:function_name',
         'file://./relative/path.py:function_name',
         'file:///absolute/path.py:function_name',
+        'file://C:\\proj\\hooks.py:extension_hook',
       ];
 
       validExtensions.forEach((extension) => {
@@ -1532,42 +1533,21 @@ describe('TestSuiteSchema', () => {
         'file://./relative/path.ts:function_name',
         'file:///absolute/path.mjs:function_name',
         'file://path/to/file.cjs:function_name',
-      ];
-
-      validExtensions.forEach((extension) => {
-        const result = TestSuiteSchema.safeParse({ ...baseTestSuite, extensions: [extension] });
-        expect(result.success).toBe(true);
-      });
-    });
-
-    it('should accept Windows drive-letter extension paths', () => {
-      const validExtensions = [
         'file://C:/proj/hooks.js:extensionHook',
-        'file://C:\\proj\\hooks.py:extension_hook',
         'file://D:/a/hooks.mjs:beforeAll',
-        'file://path/to/extension.js:functionName',
       ];
 
       validExtensions.forEach((extension) => {
         const result = TestSuiteSchema.safeParse({ ...baseTestSuite, extensions: [extension] });
         expect(result.success).toBe(true);
       });
-    });
-
-    it.each([
-      ['file://path/to/extension.js', 'Missing function name'],
-      ['file://C:/proj/hooks.js', 'Drive letter only, no function name'],
-      ['file://path/to/extension.txt:fn', 'Invalid file extension'],
-    ])('should still reject invalid extension path: %s (%s)', (extension, _reason) => {
-      const result = TestSuiteSchema.safeParse({ ...baseTestSuite, extensions: [extension] });
-      expect(result.success).toBe(false);
-      expect(result.error?.issues[0].message).toMatch(/Extension must/);
     });
 
     it.each([
       ['path/to/file.py:function_name', 'Missing file:// prefix'],
       ['file://path/to/file.txt:function_name', 'Invalid file extension'],
       ['file://path/to/file.py', 'Missing function name'],
+      ['file://C:/proj/hooks.js', 'Drive letter only, no function name'],
       ['file://path/to/file.py:', 'Empty function name'],
       ['file://:function_name', 'Missing file path'],
       ['file://path/to/file.py:function_name:extra_arg', 'Extra argument'],
