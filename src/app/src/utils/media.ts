@@ -82,12 +82,40 @@ export function isLegacyMediaPath(value: unknown): boolean {
   if (typeof value !== 'string') {
     return false;
   }
-  const path = value.replace(/[\t\r\n]/g, '');
   // Library endpoints are ordinary API links, not blob byte references.
-  if (/^\/api\/blobs\/library(?:\/evals)?\/?(?:[?#]|$)/i.test(path)) {
+  if (/^\/api\/blobs\/library(?:\/evals)?\/?(?:[?#]|$)/i.test(value)) {
     return false;
   }
-  return /^[/\\]api[/\\](?:media|blobs)(?:[/\\]|%(?:25)*(?:2f|5c))/i.test(path);
+  let path = value;
+  for (let decodePass = 0; decodePass <= 5; decodePass++) {
+    path = path.replace(/[\u0000-\u0020\u007f]/g, '').replace(/\\/g, '/');
+    const segments = path.split(/[?#]/, 1)[0].split('/');
+    if (
+      path.startsWith('/') &&
+      segments[1] &&
+      !segments[1].includes('%') &&
+      segments[1].toLowerCase() !== 'api'
+    ) {
+      return false;
+    }
+    const prefix = `${segments.slice(0, 3).join('/')}${segments.length > 3 ? '/' : ''}`;
+    if (/^\/api\/(?:media|blobs)\//i.test(prefix)) {
+      return true;
+    }
+    // Decode only the namespace for classification; malformed key escapes must
+    // not hide it. The resolver still requires an unambiguous original prefix.
+    const decoded = prefix.replace(/%([a-f0-9]{2})/gi, (_match, hex) =>
+      String.fromCharCode(Number.parseInt(hex, 16)),
+    );
+    if (decoded === prefix) {
+      return false;
+    }
+    if (decodePass === 5) {
+      return prefix.startsWith('/') || prefix.startsWith('%');
+    }
+    path = decoded;
+  }
+  return false;
 }
 
 function resolveLegacyMediaPath(uri: string): string | undefined {
@@ -307,7 +335,8 @@ export function normalizeMediaText(text: string): string {
       ? BLOB_URI_PREFIX
       : STORAGE_REF_PREFIX;
     const value = match.slice(prefix.length);
-    const prose = prefix === BLOB_URI_PREFIX ? /^([a-f0-9]{64})([.,:!;?]+)$/i.exec(value) : null;
+    const prose =
+      prefix === BLOB_URI_PREFIX ? /^([a-f0-9]{64})((?:(?![/\\%])\p{P})+)$/iu.exec(value) : null;
     const resolved = resolveBlobUri(`${prefix}${prose?.[1] ?? value}`);
     return resolved === undefined ? match : `${resolved}${prose?.[2] ?? ''}`;
   });

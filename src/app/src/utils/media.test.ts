@@ -678,6 +678,10 @@ describe('isMediaRef', () => {
 });
 
 describe('resolveBlobUri security', () => {
+  it('does not classify deeply encoded filenames in other site paths as legacy media', () => {
+    expect(isLegacyMediaPath(`/assets/%${'25'.repeat(20)}file.png`)).toBe(false);
+    expect(isLegacyMediaPath(`/api/eval/%${'25'.repeat(20)}id`)).toBe(false);
+  });
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(useApiConfig.getState).mockReturnValue(mockState(''));
@@ -707,6 +711,17 @@ describe('resolveBlobUri security', () => {
 
   it.each([
     '/api/media/video/safe.mp4/../../../eval/private',
+    '/api/%6dedia/video/safe.png/../../../eval/private',
+    '/api/%256Dedia/video/safe.png/../../../eval/private',
+    '/%61pi/%62lobs/safe/../../eval/private',
+    '/api%2fmedia%2fvideo/safe.png/../../../eval/private',
+    '/api/%6d%65%64%69%61/video/safe.png/../../../eval/private',
+    '/api/m%00edia/video/safe.png/../../../eval/private',
+    '/api/me%09dia\\video\\safe.png\\..\\..\\..\\eval/private',
+    '/api/%6dedia/video/%zz/../../../eval/private',
+    '/api/%62lobs/library',
+    `/api/%${'25'.repeat(30)}6dedia/video/../../../eval/private`,
+    `%${'25'.repeat(30)}2fapi/media/video/../../../eval/private`,
     '/api/media/video/%2e%2e/../../eval/private',
     '/api/media/video/%252e%252e/../../eval/private',
     '/api/media/video%2f..%2f..%2feval/private',
@@ -781,6 +796,8 @@ describe('resolveBlobUri security', () => {
     '/api/media/stats',
     '/api/output/video/legacy.mp4',
     '/api/eval/private',
+    '/api/media?key=legacy',
+    '/api/output/video/%zz',
   ])('preserves other supported API destinations: %s', (uri) => {
     expect(resolveBlobUri(uri)).toBe(uri);
     expect(resolveVideoSource({ url: uri })?.src).toBe(uri);
@@ -1195,7 +1212,7 @@ describe('normalizeMediaText', () => {
     expect(normalizeMediaText('')).toBe('');
   });
 
-  it.each(['.', ',', ':', '!', ';', '?', '...', '?!'])(
+  it.each(['.', ',', ':', '!', ';', '?', '...', '?!', ']', '}', '…', '。', '】', '”'])(
     'normalizes an exact blob hash followed by terminal prose punctuation: %s',
     (punctuation) => {
       const hash = 'ABCDEF01'.repeat(8);
@@ -1209,6 +1226,17 @@ describe('normalizeMediaText', () => {
   );
 
   it.each([
+    ['[', ']'],
+    ['{', '}'],
+    ['“', '”'],
+  ])('preserves prose delimiters around a blob reference: %s%s', (open, close) => {
+    const hash = 'a'.repeat(64);
+    expect(normalizeMediaText(`${open}promptfoo://blob/${hash}${close}`)).toBe(
+      `${open}/api/blobs/${hash}${close}`,
+    );
+  });
+
+  it.each([
     '/../eval/private',
     '../eval/private',
     '.\\..\\eval/private',
@@ -1219,6 +1247,10 @@ describe('normalizeMediaText', () => {
     ':other',
     '#fragment',
     'a.',
+    ']%2f../eval/private',
+    '}%252f../eval/private',
+    '…/../eval/private',
+    ']?download=true',
   ])('does not normalize a blob hash prefix followed by URL syntax: %s', (suffix) => {
     const ref = `promptfoo://blob/${'a'.repeat(64)}${suffix}`;
     expect(normalizeMediaText(`See ${ref}`)).toBe(`See ${ref}`);
