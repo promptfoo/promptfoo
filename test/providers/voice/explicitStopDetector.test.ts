@@ -120,6 +120,26 @@ describe('English explicit-stop policy', () => {
     expect(detectExplicitStop(text)).toBe('explicit-command');
   });
 
+  it.each([
+    'Stop. José’s booking is incorrect.',
+    'Stop. Jose\u0301’s booking is incorrect.',
+    "Stop. José's booking is incorrect.",
+    'Stop. 王’s booking is incorrect.',
+    'Stop. ５’s booking is incorrect.',
+    'Stop. The name is l’été.',
+  ])('keeps apostrophes inside Unicode words distinct from quotes: %s', (text) => {
+    expect(detectExplicitStop(text)).toBe('explicit-command');
+    expect(detectExplicitStop(text, true)).toBe('explicit-command');
+  });
+
+  it.each(['‘Stop. José’s booking is incorrect.’', 'Stop. ‘José’s booking’ is a quotation.'])(
+    'still abstains on actual quotation boundaries around Unicode words: %s',
+    (text) => {
+      expect(detectExplicitStop(text)).toBeUndefined();
+      expect(detectExplicitStop(text, true)).toBeUndefined();
+    },
+  );
+
   it.each(['“Stop. I’m changing the booking”', '‘Please pause.’', "'Stop talking.'"])(
     'keeps quoted commands distinct from contractions: %s',
     (text) => {

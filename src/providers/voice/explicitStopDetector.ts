@@ -11,7 +11,10 @@ export function detectExplicitStop(
   const normalized = text.trimStart().toLowerCase().replace(/\s+/g, ' ');
   // Word-internal apostrophes are contractions, not quotation boundaries. Keep
   // actual quotes and leading context so quoted imperatives cannot become commands.
-  if (!normalized.trim() || /["“”]|(?:^|[^a-z0-9])['‘’]|['‘’](?:[^a-z0-9]|$)/.test(normalized)) {
+  if (
+    !normalized.trim() ||
+    /["“”]|(?:^|[^\p{L}\p{M}\p{N}])['‘’]|['‘’](?:[^\p{L}\p{M}\p{N}]|$)/u.test(normalized)
+  ) {
     return undefined;
   }
   // A terminal period might still become an ellipsis in the next delta. Wait
