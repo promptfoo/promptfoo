@@ -118,8 +118,11 @@ export function exportCommand(program: Command) {
 
   exportCmd
     .command('eval <evalId>')
-    .description('Export an eval record to a JSON file')
-    .option('-o, --output [outputPath]', 'Output path for the exported file')
+    .description('Export a saved eval as JSON, HTML, CSV, or another supported format')
+    .option(
+      '-o, --output [outputPath]',
+      'Output path; extension selects format (JSON to stdout by default)',
+    )
     .option('--include-media', 'Embed referenced blob media bytes for portable imports')
     .action(async (evalId, cmdObj) => {
       try {
