@@ -131,6 +131,9 @@ async function calculateProviderSimilarity(
     if (similarityResp.similarity == null) {
       return fail('Unknown error fetching similarity', tokensUsed);
     }
+    if (!Number.isFinite(similarityResp.similarity)) {
+      return fail(`Invalid similarity score: ${similarityResp.similarity}`, tokensUsed);
+    }
     return similarityResp.similarity;
   }
 

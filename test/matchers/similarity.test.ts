@@ -510,6 +510,23 @@ describe('matchesSimilarity', () => {
   });
 
   describe('metric validation', () => {
+    it.each([NaN, Infinity, '0.9', { pass: true, score: 50 }])(
+      'rejects malformed native similarity values: %j',
+      async (similarity) => {
+        const provider = Object.assign(createMockProvider({ id: 'native-similarity' }), {
+          callSimilarityApi: vi.fn().mockResolvedValue({ similarity }),
+        });
+
+        await expect(
+          matchesSimilarity('expected', 'output', 0.8, false, { provider }),
+        ).resolves.toMatchObject({
+          pass: false,
+          score: 0,
+          reason: `Invalid similarity score: ${similarity}`,
+        });
+      },
+    );
+
     it('records native similarity providers beneath the grading trace', async () => {
       const provider = Object.assign(createMockProvider({ id: 'native-similarity' }), {
         callSimilarityApi: vi.fn().mockResolvedValue({ similarity: 0.9 }),
