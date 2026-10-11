@@ -58,6 +58,7 @@ import {
   resolveGoogleToolConfig,
   resolveProjectId,
 } from './util';
+import type { GaxiosOptions } from 'gaxios';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -1411,6 +1412,7 @@ export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
     _context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderEmbeddingResponse> {
+    const abortSignal = options?.abortSignal;
     const embedContent = this.usesEmbedContent();
     if (embedContent) {
       for (const key of ['taskType', 'title', 'autoTruncate'] as const) {
@@ -1455,11 +1457,21 @@ export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
         method: 'POST',
         data: body,
         timeout: getRequestTimeoutMs(),
-        ...(options?.abortSignal && { signal: options.abortSignal }),
+        ...(abortSignal && {
+          signal: abortSignal,
+          adapter: ((requestOptions, defaultAdapter) => {
+            // Gaxios can replace an aborted signal while adding its timeout after OAuth refresh.
+            abortSignal.throwIfAborted();
+            const adapter = client.transporter.defaults.adapter;
+            return adapter
+              ? adapter(requestOptions, defaultAdapter)
+              : defaultAdapter(requestOptions);
+          }) satisfies NonNullable<GaxiosOptions['adapter']>,
+        }),
       });
       data = res.data as VertexEmbeddingPredictResponse;
     } catch (err) {
-      options?.abortSignal?.throwIfAborted();
+      abortSignal?.throwIfAborted();
       logger.error(`Vertex API call error: ${err}`);
       throw err;
     }

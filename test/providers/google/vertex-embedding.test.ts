@@ -1,3 +1,4 @@
+import { OAuth2Client } from 'google-auth-library';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { calculateGoogleCost } from '../../../src/providers/google/util';
 import { VertexChatProvider, VertexEmbeddingProvider } from '../../../src/providers/google/vertex';
@@ -141,6 +142,132 @@ describe('Vertex embeddings request contracts', () => {
     });
     expect(explicit.getRegion()).toBe('us');
     expect(explicit.getApiHost()).toBe('custom.example.com');
+  });
+});
+
+describe('Vertex embedding SDK cancellation', () => {
+  function createSdkProvider(model = 'gemini-embedding-2') {
+    const provider = new VertexEmbeddingProvider(model);
+    const data =
+      model === 'gemini-embedding-2'
+        ? { embedding: { values: [0.1, 0.2] } }
+        : { predictions: [{ embeddings: { values: [0.1, 0.2] } }] };
+    const adapter = vi.fn().mockResolvedValue({ data, status: 200, headers: new Headers() });
+    const client = new OAuth2Client({ transporterOptions: { adapter } });
+    client.setCredentials({ access_token: 'test-token', expiry_date: Date.now() + 3_600_000 });
+    vi.spyOn(provider, 'getClientWithCredentials').mockResolvedValue(
+      client as unknown as JSONClient,
+    );
+    vi.spyOn(provider, 'getProjectId').mockResolvedValue('test-project');
+    return { provider, client, adapter };
+  }
+
+  it.each([
+    ['gemini-embedding-001', 'credential lookup'],
+    ['gemini-embedding-2', 'credential lookup'],
+    ['gemini-embedding-001', 'OAuth refresh'],
+    ['gemini-embedding-2', 'OAuth refresh'],
+  ])('does not dispatch %s when cancelled during %s', async (model, phase) => {
+    const { provider, client, adapter } = createSdkProvider(model);
+    const controller = new AbortController();
+    const reason = new Error('evaluation cancelled');
+    if (phase === 'credential lookup') {
+      vi.mocked(provider.getClientWithCredentials).mockImplementationOnce(async () => {
+        controller.abort(reason);
+        return client as unknown as JSONClient;
+      });
+    } else {
+      client.setCredentials({ access_token: 'expired-token', expiry_date: Date.now() - 1 });
+      client.refreshHandler = async () => {
+        controller.abort(reason);
+        return { access_token: 'refreshed-token', expiry_date: Date.now() + 3_600_000 };
+      };
+    }
+
+    await expect(
+      provider.callEmbeddingApi('text', undefined, { abortSignal: controller.signal }),
+    ).rejects.toBe(reason);
+    expect(adapter).not.toHaveBeenCalled();
+  });
+
+  it('preserves the configured SDK adapter for an uncancelled request', async () => {
+    const { provider, adapter } = createSdkProvider();
+    const controller = new AbortController();
+
+    const result = await provider.callEmbeddingApi('text', undefined, {
+      abortSignal: controller.signal,
+    });
+
+    expect(result.embedding).toEqual([0.1, 0.2]);
+    expect(adapter).toHaveBeenCalledOnce();
+    expect(adapter.mock.calls[0][0].headers.get('authorization')).toBe('Bearer test-token');
+  });
+
+  it('keeps cancellation isolated between requests sharing an OAuth client', async () => {
+    const { provider, client, adapter } = createSdkProvider();
+    const cancelled = new AbortController();
+    const active = new AbortController();
+    const reason = new Error('only one evaluation cancelled');
+    let entered!: () => void;
+    let release!: () => void;
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let refreshes = 0;
+    client.setCredentials({ access_token: 'expired-token', expiry_date: Date.now() - 1 });
+    client.refreshHandler = async () => {
+      if (++refreshes === 2) {
+        entered();
+      }
+      await gate;
+      return { access_token: 'refreshed-token', expiry_date: Date.now() + 3_600_000 };
+    };
+    const first = provider.callEmbeddingApi('cancelled', undefined, {
+      abortSignal: cancelled.signal,
+    });
+    const second = provider.callEmbeddingApi('active', undefined, { abortSignal: active.signal });
+    const settled = Promise.allSettled([first, second]);
+    await started;
+    cancelled.abort(reason);
+    release();
+    const results = await settled;
+
+    expect(results[0]).toEqual({ status: 'rejected', reason });
+    expect(results[1].status).toBe('fulfilled');
+    expect(adapter).toHaveBeenCalledOnce();
+    expect(adapter.mock.calls[0][0].data.content.parts[0].text).toBe('active');
+    expect(client.transporter.defaults.adapter).toBe(adapter);
+  });
+
+  it.each(['caller', 'timeout'])('preserves %s cancellation after dispatch', async (source) => {
+    const { provider, adapter } = createSdkProvider();
+    const caller = new AbortController();
+    const deadline = new AbortController();
+    const reason = new Error(`${source} cancelled`);
+    vi.spyOn(AbortSignal, 'timeout').mockReturnValue(deadline.signal);
+    let entered!: () => void;
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    adapter.mockImplementation(
+      async ({ signal }) =>
+        new Promise((_resolve, reject) => {
+          signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+          entered();
+        }),
+    );
+    const pending = provider.callEmbeddingApi('text', undefined, { abortSignal: caller.signal });
+    const rejected = expect(pending).rejects.toThrow(reason.message);
+    await started;
+    (source === 'caller' ? caller : deadline).abort(reason);
+    await rejected;
+
+    expect(adapter).toHaveBeenCalledOnce();
+    expect(AbortSignal.timeout).toHaveBeenCalledWith(expect.any(Number));
+    expect(caller.signal.aborted).toBe(source === 'caller');
   });
 });
 
