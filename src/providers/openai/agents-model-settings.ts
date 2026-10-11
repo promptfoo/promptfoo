@@ -49,29 +49,50 @@ function resolveRetryPolicy(
       case 'retryAfter':
         return retryPolicies.retryAfter();
       default:
-        return undefined;
+        throw invalidRetryPolicy(policy);
     }
   }
 
-  if ('httpStatus' in policy) {
+  if (typeof policy === 'object' && 'httpStatus' in policy) {
+    if (!Array.isArray(policy.httpStatus) || policy.httpStatus.length === 0) {
+      throw invalidRetryPolicy(policy);
+    }
     return retryPolicies.httpStatus(policy.httpStatus);
   }
 
-  if ('any' in policy) {
-    const policies = policy.any
-      .map((nestedPolicy) => resolveRetryPolicy(nestedPolicy))
-      .filter((nestedPolicy): nestedPolicy is NonNullable<typeof nestedPolicy> => !!nestedPolicy);
-
-    return policies.length ? retryPolicies.any(...policies) : undefined;
+  if (typeof policy === 'object' && 'any' in policy) {
+    return retryPolicies.any(...resolveNestedRetryPolicies(policy, policy.any));
   }
 
-  if ('all' in policy) {
-    const policies = policy.all
-      .map((nestedPolicy) => resolveRetryPolicy(nestedPolicy))
-      .filter((nestedPolicy): nestedPolicy is NonNullable<typeof nestedPolicy> => !!nestedPolicy);
-
-    return policies.length ? retryPolicies.all(...policies) : undefined;
+  if (typeof policy === 'object' && 'all' in policy) {
+    return retryPolicies.all(...resolveNestedRetryPolicies(policy, policy.all));
   }
 
-  return undefined;
+  throw invalidRetryPolicy(policy);
+}
+
+function resolveNestedRetryPolicies(
+  policy: OpenAiAgentsRetryPolicyConfig,
+  nestedPolicies: OpenAiAgentsRetryPolicyConfig[],
+) {
+  if (!Array.isArray(nestedPolicies) || nestedPolicies.length === 0) {
+    throw invalidRetryPolicy(policy);
+  }
+  // Every nested policy must resolve. Dropping an invalid one would change what `any` and
+  // `all` retry on.
+  return nestedPolicies.map((nestedPolicy) => {
+    const resolved = resolveRetryPolicy(nestedPolicy);
+    if (!resolved) {
+      throw invalidRetryPolicy(nestedPolicy);
+    }
+    return resolved;
+  });
+}
+
+function invalidRetryPolicy(policy: unknown): Error {
+  return new Error(
+    `Invalid OpenAI Agents retry policy ${JSON.stringify(policy)}. Use one of "never", ` +
+      '"providerSuggested", "networkError", "retryAfter", { httpStatus: [...] }, ' +
+      '{ any: [...] }, or { all: [...] }.',
+  );
 }
