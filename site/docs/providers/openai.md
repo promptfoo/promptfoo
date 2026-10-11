@@ -435,6 +435,8 @@ The provider response's `raw` field contains the Responses object, including `id
 
 For incomplete Responses output, `metadata.responseStatus` and `metadata.incompleteReason` expose the API status and reason. `max_output_tokens` maps to `finishReason: 'length'`, which you can check with a `finish-reason` assertion. Partial text remains available in `output`; Promptfoo does not automatically retry or continue it.
 
+A failed foreground generation returned with HTTP 200 retains reported token usage and any available cost estimate. Without reported usage, both remain unknown.
+
 </details>
 
 ### Prompt caching {#prompt-caching-and-included-tool-results}
@@ -646,7 +648,7 @@ For Chat Completions and Responses, `functionToolCallbacks` maps tool names to l
 
 Chat Completions skips function callbacks and MCP tools when `finish_reason` is `length`, preserving partial output, token usage, and any estimated cost.
 
-Responses tool calls explicitly marked `in_progress` or `incomplete` are returned as data without invoking callbacks. Partial text and completion metadata remain available for inspection.
+Responses tool calls are returned as data without callbacks when the call, or its enclosing message or response when the call has no status, is `in_progress` or `incomplete`. Completed calls and legacy calls without any status keep their normal callback behavior. Partial text and completion metadata remain available for inspection.
 
 These providers return callback results as eval output; they do not run a general model-to-tool loop that sends every result back to the model. To evaluate a complete agent loop, use the [Agents SDK provider](/docs/providers/openai-agents) or a [custom provider](/docs/providers/custom-api/).
 

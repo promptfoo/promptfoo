@@ -1523,7 +1523,9 @@ For models that support HTTP service tiers, set `service_tier` in the provider c
 For example, use `bedrock:runtime:chat:us.moonshotai.kimi-k3` or
 `bedrock:runtime:responses:us.moonshotai.kimi-k3` with `service_tier: flex`.
 [Kimi K3](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-moonshot-ai-kimi-k3.html)
-supports Priority and Flex through these HTTP APIs. For US/global inference profiles,
+requires a supported US, India, or global inference profile on both Runtime APIs; bare
+model IDs and foundation-model ARNs are rejected before transport. It supports Priority
+and Flex through these HTTP APIs. For US/global inference profiles,
 promptfoo estimates Priority at 1.75× Standard and Flex at 0.5× Standard. Its Converse
 and Invoke APIs remain Standard-only.
 
