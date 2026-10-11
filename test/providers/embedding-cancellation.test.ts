@@ -87,6 +87,7 @@ describe('embedding transport cancellation', () => {
         vi.spyOn(provider, 'getProjectId').mockResolvedValue('fixture-project');
         vi.spyOn(provider, 'getClientWithCredentials').mockResolvedValue({
           request: (options: { signal?: AbortSignal }) => rejectAborted(options.signal),
+          transporter: { defaults: {} },
         } as never);
         return provider;
       },

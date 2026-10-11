@@ -1457,7 +1457,7 @@ export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
         url,
         method: 'POST',
         data: body,
-        timeout: getRequestTimeoutMs(),
+        timeout: client.transporter.defaults.timeout ?? getRequestTimeoutMs(),
         ...(abortSignal && {
           signal: abortSignal,
           adapter: ((requestOptions, defaultAdapter) => {

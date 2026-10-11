@@ -9,6 +9,7 @@ function mockRequest(provider: VertexEmbeddingProvider, data: unknown) {
   const request = vi.fn().mockResolvedValue({ data });
   vi.spyOn(provider, 'getClientWithCredentials').mockResolvedValue({
     request,
+    transporter: { defaults: {} },
   } as unknown as JSONClient);
   vi.spyOn(provider, 'getProjectId').mockResolvedValue('test-project');
   return request;
@@ -21,6 +22,7 @@ beforeEach(() => {
     VERTEX_REGION: undefined,
     GOOGLE_CLOUD_LOCATION: undefined,
     VERTEX_API_HOST: undefined,
+    REQUEST_TIMEOUT_MS: '5000',
   });
 });
 
@@ -232,6 +234,16 @@ describe('Vertex embedding SDK cancellation', () => {
       provider.callEmbeddingApi('text', undefined, { abortSignal: controller.signal }),
     ).rejects.toBe(reason);
     expect(adapter).not.toHaveBeenCalled();
+  });
+
+  it.each([undefined, 0, 1000])('preserves SDK timeout %s before the fallback', async (timeout) => {
+    const { provider, client, adapter } = createSdkProvider();
+    client.transporter.defaults.timeout = timeout;
+
+    await provider.callEmbeddingApi('text');
+
+    expect(adapter.mock.calls[0][0].timeout).toBe(timeout ?? 5000);
+    expect(client.transporter.defaults.timeout).toBe(timeout);
   });
 
   it('preserves the configured SDK adapter for an uncancelled request', async () => {
