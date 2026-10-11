@@ -273,6 +273,17 @@ describe('config-schema.json', () => {
   describe('runtime input parity', () => {
     const baseConfig = { prompts: ['hello'], providers: ['echo'] };
 
+    it.each(['scenarios', 'defaultTest'] as const)(
+      'rejects malformed %s in the published schema and at runtime',
+      (field) => {
+        const config = { ...baseConfig, [field]: 42 };
+        const validate = ajv.compile(schema);
+
+        expect(UnifiedConfigSchema.safeParse(config).success).toBe(false);
+        expect(validate(config), JSON.stringify(validate.errors)).toBe(false);
+      },
+    );
+
     it.each([
       ['providers', { providers: ['echo'] }, true],
       ['targets', { targets: ['echo'] }, true],
