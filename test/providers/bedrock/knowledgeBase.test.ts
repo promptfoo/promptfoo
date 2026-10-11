@@ -2,7 +2,6 @@ import { NodeHttpHandler } from '@smithy/node-http-handler';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import logger from '../../../src/logger';
 import { AwsBedrockKnowledgeBaseProvider } from '../../../src/providers/bedrock/knowledgeBase';
-import { sha256 } from '../../../src/util/createHash';
 import { createEmptyTokenUsage } from '../../../src/util/tokenUsageUtils';
 import { mockProcessEnv } from '../../util/utils';
 
@@ -91,40 +90,6 @@ const mockSet = vi.hoisted(() => vi.fn());
 
 const mockIsCacheEnabled = vi.fn().mockReturnValue(false);
 
-function buildKnowledgeBaseCacheKey({
-  knowledgeBaseId,
-  modelArn,
-  modelName,
-  prompt,
-  region,
-  kbConfig,
-}: {
-  knowledgeBaseId: string;
-  modelArn?: string;
-  modelName: string;
-  prompt: string;
-  region: string;
-  kbConfig: Record<string, unknown>;
-}) {
-  const cacheConfig = {
-    region,
-    modelName,
-    ...Object.fromEntries(
-      Object.entries(kbConfig).filter(
-        ([key]) => !['accessKeyId', 'secretAccessKey', 'sessionToken'].includes(key),
-      ),
-    ),
-  };
-  const configStr = JSON.stringify(cacheConfig, Object.keys(cacheConfig).sort());
-
-  return `bedrock-kb:v2:${knowledgeBaseId}:${modelArn}:${region}:${sha256(
-    JSON.stringify({
-      configStr,
-      prompt,
-    }),
-  )}`;
-}
-
 vi.mock(
   '../../../src/cache',
   createBedrockCacheFactory(mockGet, mockSet, () => mockIsCacheEnabled),
@@ -194,8 +159,7 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
 
     await provider.getKnowledgeBaseClient();
 
-    // client-bedrock-agent-runtime already defaults to HTTP/1.1,
-    // so no custom handler is needed without proxy or apiKey
+    // Agent Runtime needs a custom handler only when a proxy is configured.
     expect(NodeHttpHandlerMock).not.toHaveBeenCalled();
     expect(BedrockAgentRuntimeClient).toHaveBeenCalledWith({
       region: 'us-east-1',
@@ -598,7 +562,7 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
   it('does not replay legacy results that ignored generation settings', async () => {
     mockIsCacheEnabled.mockReturnValue(true);
     mockGet.mockImplementation(async (key: string) =>
-      key.startsWith('bedrock-kb:v2:')
+      key.startsWith('bedrock-kb:v3:')
         ? null
         : JSON.stringify({ output: 'legacy response', citations: [] }),
     );
@@ -642,19 +606,7 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
 
     const cacheKey = mockGet.mock.calls[0][0];
 
-    expect(cacheKey).toBe(
-      buildKnowledgeBaseCacheKey({
-        knowledgeBaseId: 'kb-123',
-        modelArn: 'us.anthropic.claude-3-7-sonnet-20241022-v2:0',
-        modelName: 'us.anthropic.claude-3-7-sonnet-20241022-v2:0',
-        prompt: 'What is the capital of France?',
-        region: 'us-east-1',
-        kbConfig: {
-          knowledgeBaseId: 'kb-123',
-          region: 'us-east-1',
-        },
-      }),
-    );
+    expect(cacheKey).toMatch(/^bedrock-kb:v3:kb-123:.+:[a-f0-9]{64}$/);
     expect(cacheKey).not.toContain('What is the capital of France?');
     const cacheHitLog = vi
       .mocked(logger.debug)
@@ -710,20 +662,7 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
 
     const cacheKey = mockGet.mock.calls[0][0];
 
-    expect(cacheKey).toBe(
-      buildKnowledgeBaseCacheKey({
-        knowledgeBaseId: 'kb-123',
-        modelArn: 'custom:model:arn',
-        modelName: 'amazon.nova-lite-v1:0',
-        prompt: 'What is the capital of France?',
-        region: 'us-east-1',
-        kbConfig: {
-          knowledgeBaseId: 'kb-123',
-          region: 'us-east-1',
-          modelArn: 'custom:model:arn',
-        },
-      }),
-    );
+    expect(cacheKey).toMatch(/^bedrock-kb:v3:kb-123:custom:model:arn:us-east-1:[a-f0-9]{64}$/);
     expect(cacheKey).not.toContain('What is the capital of France?');
 
     expect(mockSet).toHaveBeenCalledWith(cacheKey, expect.any(String));
@@ -753,20 +692,13 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
 
     const cacheKey = mockGet.mock.calls[0][0];
 
-    expect(cacheKey).toBe(
-      buildKnowledgeBaseCacheKey({
-        knowledgeBaseId: 'kb-123',
-        modelArn: 'us.anthropic.claude-3-7-sonnet-20241022-v2:0',
-        modelName: 'us.anthropic.claude-3-7-sonnet-20241022-v2:0',
-        prompt: 'What is the capital of France?',
-        region: 'us-east-1',
-        kbConfig: {
-          knowledgeBaseId: 'kb-123',
-          region: 'us-east-1',
-          numberOfResults: 10,
-        },
-      }),
+    provider.kbConfig.numberOfResults = 11;
+    mockGet.mockResolvedValueOnce(null);
+    mockSend.mockResolvedValueOnce(mockResponse);
+    expect((await provider.callApi('What is the capital of France?')).output).toBe(
+      mockResponse.output.text,
     );
+    expect(mockGet.mock.calls[1][0]).not.toBe(cacheKey);
     expect(cacheKey).not.toContain('What is the capital of France?');
 
     expect(mockSet).toHaveBeenCalledWith(cacheKey, expect.any(String));
@@ -774,59 +706,53 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
     mockIsCacheEnabled.mockReturnValue(false);
   });
 
-  it('should hash prompt and config values in the cache key', async () => {
-    mockIsCacheEnabled.mockReturnValue(true);
-
-    const provider = new AwsBedrockKnowledgeBaseProvider(
-      'us.anthropic.claude-3-7-sonnet-20241022-v2:0',
-      {
-        config: {
-          knowledgeBaseId: 'kb-123',
-          region: 'us-east-1',
-          apiKey: 'SECRET_API_KEY',
-          modelArn: 'custom:model:arn',
-        },
-      },
-    );
-
-    mockGet.mockResolvedValueOnce(null);
-    mockSend.mockResolvedValueOnce({
-      output: {
-        text: 'SECRET_RESPONSE_VALUE',
-      },
-      citations: [{ retrievedReferences: [{ content: { text: 'SECRET_CITATION_VALUE' } }] }],
-    });
-
-    await provider.callApi('SECRET_PROMPT_VALUE');
-
-    const cacheKey = mockGet.mock.calls[0][0];
-    const debugLogs = JSON.stringify(vi.mocked(logger.debug).mock.calls);
-
-    expect(cacheKey).not.toContain('SECRET_PROMPT_VALUE');
-    expect(cacheKey).not.toContain('SECRET_API_KEY');
-    expect(debugLogs).not.toContain('SECRET_PROMPT_VALUE');
-    expect(debugLogs).not.toContain('SECRET_RESPONSE_VALUE');
-    expect(debugLogs).not.toContain('SECRET_CITATION_VALUE');
-    expect(cacheKey).toBe(
-      buildKnowledgeBaseCacheKey({
+  it.each(['config', 'environment'] as const)(
+    'keeps cache identity unchanged by an ignored %s API key without logging private data',
+    async (scope) => {
+      mockIsCacheEnabled.mockReturnValue(true);
+      const config = {
         knowledgeBaseId: 'kb-123',
-        modelArn: 'custom:model:arn',
-        modelName: 'us.anthropic.claude-3-7-sonnet-20241022-v2:0',
-        prompt: 'SECRET_PROMPT_VALUE',
         region: 'us-east-1',
-        kbConfig: {
-          knowledgeBaseId: 'kb-123',
-          region: 'us-east-1',
-          apiKey: 'SECRET_API_KEY',
-          modelArn: 'custom:model:arn',
-        },
-      }),
-    );
+        modelArn: 'custom:model:arn',
+        accessKeyId: 'LOCAL_FIXTURE',
+        secretAccessKey: 'LOCAL_FIXTURE_SECRET',
+      };
+      const original = new AwsBedrockKnowledgeBaseProvider('default', { config });
+      mockGet.mockResolvedValueOnce(null);
+      mockSend.mockResolvedValueOnce({
+        output: { text: 'SECRET_RESPONSE_VALUE' },
+        citations: [{ retrievedReferences: [{ content: { text: 'SECRET_CITATION_VALUE' } }] }],
+      });
+      await original.callApi('SECRET_PROMPT_VALUE');
+      const [cacheKey, cachedValue] = mockSet.mock.calls[0];
+      mockGet.mockResolvedValueOnce(cachedValue);
+      if (scope === 'environment') {
+        mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'SECRET_API_KEY' });
+      }
+      const ignoredToken = new AwsBedrockKnowledgeBaseProvider('default', {
+        config: { ...config, ...(scope === 'config' ? { apiKey: 'SECRET_API_KEY' } : {}) },
+      });
+      const result = await ignoredToken.callApi('SECRET_PROMPT_VALUE');
+      expect(result.cached).toBe(true);
+      expect(result.output).toBe('SECRET_RESPONSE_VALUE');
+      expect(mockSend).toHaveBeenCalledTimes(1);
+      expect(mockGet.mock.calls[1][0]).toBe(cacheKey);
+      expect(mockSet).toHaveBeenCalledTimes(1);
+      const persistedKeyAndLogs = JSON.stringify([cacheKey, vi.mocked(logger.debug).mock.calls]);
+      for (const secret of [
+        'SECRET_API_KEY',
+        'LOCAL_FIXTURE_SECRET',
+        'SECRET_PROMPT_VALUE',
+        'SECRET_RESPONSE_VALUE',
+        'SECRET_CITATION_VALUE',
+      ]) {
+        expect(persistedKeyAndLogs).not.toContain(secret);
+      }
+      mockIsCacheEnabled.mockReturnValue(false);
+    },
+  );
 
-    mockIsCacheEnabled.mockReturnValue(false);
-  });
-
-  it('should create knowledge base client with API key authentication from config', async () => {
+  it('should ignore unsupported API keys from config for Agent Runtime', async () => {
     const provider = new AwsBedrockKnowledgeBaseProvider(
       'us.anthropic.claude-3-7-sonnet-20241022-v2:0',
       {
@@ -844,11 +770,10 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
       region: 'us-east-1',
       retryMode: 'adaptive',
       maxAttempts: 10,
-      requestHandler: expect.any(Object),
     });
   });
 
-  it('should create knowledge base client with API key authentication from environment', async () => {
+  it('should ignore unsupported API keys from the environment for Agent Runtime', async () => {
     mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'test-env-api-key' });
 
     const provider = new AwsBedrockKnowledgeBaseProvider(
@@ -862,7 +787,6 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
       region: 'us-east-1',
       retryMode: 'adaptive',
       maxAttempts: 10,
-      requestHandler: expect.any(Object),
     });
 
     mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined });
@@ -894,7 +818,6 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
         secretAccessKey: 'test-secret-key',
         sessionToken: undefined,
       },
-      requestHandler: expect.any(Object), // Still has handler for API key scenario
     });
   });
 });

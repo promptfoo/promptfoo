@@ -255,6 +255,77 @@ and logs a warning, including the default `temperature` the InvokeModel path wou
 | `guardrailIdentifier`          | Guardrail ID for content filtering                                 |
 | `guardrailVersion`             | Guardrail version (default: DRAFT)                                 |
 
+### Native request fields and streaming
+
+Both Converse operations accept `system`, `inferenceConfig`, `toolConfig`,
+`guardrailConfig`, `outputConfig`, `promptVariables`, `requestMetadata`, and
+`additionalModelResponseFieldPaths` in provider `config`. Their shapes follow the
+[AWS Converse API reference](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_Converse.html).
+A native `inferenceConfig` replaces the convenience sampling settings and their
+defaults. Use either `toolConfig.tools` or `tools`; explicit `tools` takes precedence.
+Native tools can include strict `toolSpec` schemas, tool cache points, and system
+tools where the model supports them.
+
+Set `streaming: true` to use
+[ConverseStream](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_ConverseStream.html).
+Promptfoo collects the stream into one eval response. Both modes preserve content
+blocks in `response.metadata.content`, along with returned usage, cache counts,
+latency, guardrail traces, service tier, performance settings, and requested
+additional response fields. Text output uses compact placeholders for generated
+media; binary fields in `response.metadata.content` use base64 strings so they
+remain compact through serialization and can be passed back as native content.
+Inline images are also available in `response.images`, and the first successful
+inline audio block in `response.audio`, for media grading and display. Generated
+images in `response.images` and native base64 fields in `response.metadata.content`
+remain inline even when `PROMPTFOO_INLINE_MEDIA=false`. This preserves image
+grading and native content replay, but can increase stored eval and export sizes.
+S3-backed media remains in native metadata. Built-in tool
+failures such as `service_unavailable`, `invalid_query`, and `max_tool_invocations`
+produce eval errors and are not cached. Streaming also executes configured MCP
+tools and local `functionToolCallbacks` after a completed client tool request. Server-side tool
+blocks remain in the response and are not executed locally. Missing, interrupted,
+or failed tool streams produce an error before callbacks or cache writes.
+Failed completed streams retain collected tool arguments, including raw arguments
+when the model emits invalid JSON.
+
+With `PROMPTFOO_STRIP_RESPONSE_OUTPUT=true`, `content`, `trace`, and
+`additionalModelResponseFields` are reserved output metadata: they are stripped
+even if an `afterEach` hook annotates them or removes the canonical response
+metadata. Put hook annotations in separate metadata keys to retain them. Explicit
+test metadata takes precedence for these reserved keys, even if provider metadata
+overwrites it during evaluation.
+
+```yaml
+providers:
+  - id: bedrock:converse:us.amazon.nova-2-lite-v1:0
+    config:
+      region: us-east-1
+      streaming: true
+      maxTokens: 128
+      requestMetadata:
+        suite: smoke-test
+```
+
+For streaming guardrails, set `guardrailConfig.streamProcessingMode` to `sync` or
+`async`. A returned `guardrail_intervened` stop reason sets
+`response.guardrails.flagged` in both modes.
+
+JSON message prompts can use native Bedrock content blocks: text, image, document,
+video, audio, cache points, reasoning, tool requests/results, citations, search
+results, tool additions/removals, and guarded content. System messages accept native
+text, guard, and cache-point blocks. Binary `source.bytes` and redacted reasoning
+are base64 strings in JSON/YAML and are decoded before SDK serialization. S3 sources
+and document text/content sources retain their native shape; arbitrary tool input
+and JSON tool results are left intact. AWS model, region, and API support still
+determine which blocks and features a request can combine.
+
+To invoke a versioned Prompt management ARN, use
+`bedrock:converse:arn:aws:bedrock:REGION:ACCOUNT:prompt/PROMPT_ID:VERSION` and supply
+`promptVariables` as `{ variableName: { text: value } }`. An empty prompt sends no
+additional messages. Define system instructions, inference settings, tools, and
+model-specific fields in Prompt management: AWS prohibits overriding those fields
+at invocation time, and Promptfoo rejects those overrides instead of sending them.
+
 ### Performance Configuration
 
 Configure latency and service tier. [Latency optimization](https://docs.aws.amazon.com/bedrock/latest/userguide/latency-optimized-inference.html)
@@ -1902,7 +1973,7 @@ Bedrock reports an intervention differently by API:
 - Converse responses use `stopReason: guardrail_intervened`.
 - The standalone ApplyGuardrail API uses `action: GUARDRAIL_INTERVENED`.
 
-Promptfoo normalizes supported InvokeModel and non-streaming Converse interventions into top-level `guardrails.flagged`. Use [`not-guardrails`](/docs/configuration/expected-outputs/guardrails#inverse-assertion-not-guardrails) when a case must produce an intervention and `guardrails` for benign traffic:
+Promptfoo normalizes supported InvokeModel and Converse interventions into top-level `guardrails.flagged`. Use [`not-guardrails`](/docs/configuration/expected-outputs/guardrails#inverse-assertion-not-guardrails) when a case must produce an intervention and `guardrails` for benign traffic:
 
 ```yaml
 tests:
@@ -2079,6 +2150,9 @@ If you see this error, the cause depends on which model provider you're using:
 
 ## Knowledge Base
 
+Agent Runtime requires AWS credentials (SigV4). Bedrock API keys are unsupported and
+do not override a configured AWS profile or the default credential chain.
+
 AWS Bedrock Knowledge Bases provide Retrieval Augmented Generation (RAG) functionality, allowing you to query a knowledge base with natural language and get responses based on your data.
 
 ### Prerequisites
@@ -2133,6 +2207,53 @@ Configuration options include:
 For Claude models that no longer support sampling parameters — [Opus 4.7](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-opus-4-7.html), Opus 4.8, Opus 5, Opus 5.5, Sonnet 5, and the Fable/Mythos 5 models — the provider omits `temperature`, `top_p`, and `top_k` while preserving `max_tokens`. This check uses `config.modelArn` when supplied.
 
 [Claude Sonnet 4.5 and Haiku 4.5](https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-anthropic-claude-messages-request-response.html) accept either `temperature` or `top_p`. When both are configured, `top_p` takes precedence. The provider applies the same precedence to Sonnet 4.6. For Amazon Nova, `top_k` is mapped to its native `inferenceConfig.topK` request field; for [Cohere Command R and R+](https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-cohere-command-r-plus.html), it is mapped to `k`.
+
+### Native Knowledge Base API options
+
+Set `retrievalConfiguration`, `generationConfiguration`, and
+`orchestrationConfiguration` using the native
+[RetrieveAndGenerate shapes](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_agent-runtime_RetrieveAndGenerate.html).
+This exposes metadata filters, implicit filtering, reranking, prompt templates,
+generation guardrails, query decomposition, and model-specific request fields.
+An explicit `generationConfiguration` replaces the convenience sampling options;
+`numberOfResults` overrides the count in the top-level `retrievalConfiguration`,
+preserving its other settings. A complete `retrieveAndGenerateConfiguration`
+replaces these generated sections. For native `KNOWLEDGE_BASE` requests, set
+`vectorSearchConfiguration.numberOfResults` inside its
+`knowledgeBaseConfiguration.retrievalConfiguration` instead; convenience settings
+do not override the complete native object. Complete native configurations bypass the
+response cache, so every call reaches AWS. For other Knowledge Base configurations,
+use `--no-cache` when switching AWS identities.
+
+`sessionId`, `sessionConfiguration` (including KMS encryption), and `userContext`
+are forwarded to AWS. The response exposes `metadata.sessionId`, `metadata.citations`,
+and `metadata.guardrailAction`; an `INTERVENED` action sets `guardrails.flagged`.
+Reuse the returned session ID explicitly to continue a conversation. Calls with an
+explicit session ID bypass the cache so each turn reaches AWS. Cached results omit
+the session ID; use `--no-cache` when starting a conversation that you intend to continue.
+
+Set `streaming: true` for
+[RetrieveAndGenerateStream](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_agent-runtime_RetrieveAndGenerateStream.html).
+Promptfoo collects text and citations into one eval response and surfaces service
+exception events as errors. Streaming calls bypass the cache. Explicit-session and
+streaming generation requests use one SDK attempt and bypass scheduler retries to
+avoid replaying a turn after a connection failure or partial stream. Retrieval-only
+calls retain the configured retry limit.
+
+For [Retrieve](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_agent-runtime_Retrieve.html)
+without generation, use `bedrock:kb` with `operation: retrieve` and `knowledgeBaseId`.
+No generation model is required. `retrievalConfiguration`, `guardrailConfiguration`,
+`userContext`, and `nextToken` are supported. The output is a JSON array of retrieval
+results; `metadata.nextToken` exposes the next page when present. Pagination is
+explicit, so one eval call retrieves one page. Managed Knowledge Bases support
+`managedSearchConfiguration` with `operation: retrieve`; AWS does not support managed
+Knowledge Bases with either generation API, including streaming.
+
+To query supplied documents instead of a Knowledge Base, provide the complete
+`retrieveAndGenerateConfiguration` with `type: EXTERNAL_SOURCES`. This native object
+replaces the generated Knowledge Base configuration and removes the requirement for
+`knowledgeBaseId`. For byte-content sources, encode `byteContent.data` as base64 in
+JSON/YAML. External-source model and region restrictions are determined by AWS.
 
 ### Knowledge Base Example
 

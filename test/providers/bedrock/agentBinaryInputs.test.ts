@@ -1,0 +1,417 @@
+import { randomUUID } from 'crypto';
+import { runInNewContext } from 'vm';
+
+import { BedrockAgentRuntimeClient } from '@aws-sdk/client-bedrock-agent-runtime';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { runDbMigrations } from '../../../src/migrate';
+import Eval from '../../../src/models/eval';
+import { evaluate } from '../../../src/node';
+import { AwsBedrockAgentsProvider } from '../../../src/providers/bedrock/agents';
+import { AwsBedrockKnowledgeBaseProvider } from '../../../src/providers/bedrock/knowledgeBase';
+import { decodeBedrockBytes } from '../../../src/providers/bedrock/util';
+import { loadApiProvider } from '../../../src/providers/index';
+import { mockProcessEnv } from '../../util/utils';
+
+import type { ProviderOptions } from '../../../src/types/providers';
+
+vi.mock('../../../src/cache', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../src/cache')>()),
+  isCacheEnabled: () => false,
+}));
+
+beforeAll(async () => runDbMigrations());
+afterEach(() => vi.restoreAllMocks());
+
+function binaryConfig(kind: string, data: unknown) {
+  if (kind === 'agent') {
+    return {
+      agentAliasId: 'ALIAS12345',
+      sessionState: {
+        files: [
+          {
+            name: 'reference.txt',
+            useCase: 'CHAT',
+            source: {
+              sourceType: 'BYTE_CONTENT',
+              byteContent: { mediaType: 'text/plain', data },
+            },
+          },
+        ],
+      },
+    };
+  }
+  if (kind === 'functionResult' || kind === 'apiResult') {
+    return {
+      agentAliasId: 'ALIAS12345',
+      sessionState: {
+        invocationId: 'invocation',
+        returnControlInvocationResults: [
+          {
+            [kind]: {
+              actionGroup: 'computer',
+              function: 'screenshot',
+              apiPath: '/screenshot',
+              httpMethod: 'GET',
+              httpStatusCode: 200,
+              responseBody: {
+                IMAGES: {
+                  body: 'preserved annotation',
+                  images: [{ format: 'PNG', source: { bytes: data } }],
+                },
+              },
+            },
+          },
+        ],
+      },
+    };
+  }
+  return {
+    streaming: kind === 'knowledge-base-stream',
+    retrieveAndGenerateConfiguration: {
+      type: 'EXTERNAL_SOURCES',
+      externalSourcesConfiguration: {
+        modelArn: 'model',
+        sources: [
+          {
+            sourceType: 'BYTE_CONTENT',
+            byteContent: {
+              identifier: 'reference.txt',
+              contentType: 'text/plain',
+              data,
+            },
+          },
+        ],
+      },
+    },
+  };
+}
+
+describe.each(['Uint8Array', 'Buffer', 'base64', 'emptyUint8Array'])(
+  'Agent Runtime native %s inputs',
+  (type) => {
+    it.each(['agent', 'functionResult', 'apiResult', 'knowledge-base', 'knowledge-base-stream'])(
+      'preserves bytes and identity through persisted %s config replay',
+      async (kind) => {
+        const data =
+          type === 'emptyUint8Array'
+            ? new Uint8Array()
+            : type === 'base64'
+              ? 'YWJj'
+              : type === 'Buffer'
+                ? Buffer.from('abc')
+                : new Uint8Array([0, 97, 98, 99, 0]).subarray(1, 4);
+        const handle = vi.fn(async (_request: { body?: unknown }) => ({
+          response: {
+            statusCode: 400,
+            headers: {
+              'content-type': 'application/json',
+              'x-amzn-errortype': 'ValidationException',
+            },
+            body: Buffer.from('{"message":"fixture request captured"}'),
+          },
+        }));
+        const client = new BedrockAgentRuntimeClient({
+          region: 'us-east-1',
+          maxAttempts: 1,
+          credentials: { accessKeyId: 'LOCAL_FIXTURE', secretAccessKey: 'LOCAL_FIXTURE' },
+          requestHandler: { handle },
+        });
+        const config = binaryConfig(kind, data);
+        const isAgent = !kind.startsWith('knowledge-base');
+        try {
+          const reference = {
+            id: isAgent ? 'bedrock-agent:AGENT12345' : 'bedrock:kb:default',
+            config: { region: 'us-east-1', ...config },
+          };
+          const original = await loadApiProvider(reference.id, { options: reference });
+          const saved = await Eval.create({ providers: [reference] }, [], { id: randomUUID() });
+          const loaded = await Eval.findById(saved.id);
+          const [restoredReference] = loaded!.config.providers as ProviderOptions[];
+          const replay = await loadApiProvider(restoredReference.id!, {
+            options: restoredReference,
+          });
+          expect(replay.id()).toBe(original.id());
+          for (const provider of [original, replay]) {
+            if (isAgent) {
+              expect(provider).toBeInstanceOf(AwsBedrockAgentsProvider);
+              vi.spyOn(
+                provider as AwsBedrockAgentsProvider,
+                'getAgentRuntimeClient',
+              ).mockResolvedValue(client);
+            } else {
+              expect(provider).toBeInstanceOf(AwsBedrockKnowledgeBaseProvider);
+              vi.spyOn(
+                provider as AwsBedrockKnowledgeBaseProvider,
+                'getKnowledgeBaseClient',
+              ).mockResolvedValue(client);
+            }
+            expect((await provider.callApi('fixture')).error).toContain('fixture request captured');
+          }
+          expect(handle).toHaveBeenCalledTimes(2);
+          for (const [request] of handle.mock.calls) {
+            const raw = request.body;
+            const body = JSON.parse(
+              typeof raw === 'string' ? raw : Buffer.from(raw as Uint8Array).toString(),
+            );
+            const sent =
+              kind === 'agent'
+                ? body.sessionState.files[0].source.byteContent.data
+                : isAgent
+                  ? body.sessionState.returnControlInvocationResults[0][kind].responseBody.IMAGES
+                      .images[0].source.bytes
+                  : body.retrieveAndGenerateConfiguration.externalSourcesConfiguration.sources[0]
+                      .byteContent.data;
+            expect(sent).toBe(type === 'emptyUint8Array' ? '' : 'YWJj');
+            if (kind === 'functionResult' || kind === 'apiResult') {
+              const result = body.sessionState.returnControlInvocationResults[0][kind];
+              expect(result.actionGroup).toBe('computer');
+              expect(result.responseBody.IMAGES.body).toBe('preserved annotation');
+              expect(result.responseBody.IMAGES.images[0].format).toBe('PNG');
+            }
+          }
+        } finally {
+          client.destroy();
+        }
+      },
+    );
+  },
+);
+
+it.each([
+  { 0: 97, 2: 99 },
+  { 0: -1 },
+  { 0: 256 },
+  { 0: 0.5 },
+  { 0: '97' },
+  { type: 'Buffer', data: [97, null] },
+  { type: 'Buffer', data: [97], extra: true },
+])('rejects malformed serialized Bedrock byte content %j', (data) => {
+  expect(() => decodeBedrockBytes(data)).toThrow('Invalid Bedrock byte content');
+});
+
+it.each(['', 'AA==', 'AA', 'AAA=', 'AAA', 'AAAA'])(
+  'accepts canonical padded or unpadded base64 %j',
+  (data) => {
+    expect(decodeBedrockBytes(data)).toEqual(Buffer.from(data, 'base64'));
+  },
+);
+
+it.each(['%%%', 'not-base64!', 'A', 'AB', 'AA=A', 'AA===', ' YQ==', 'YQ==\n', '-_=='])(
+  'rejects malformed base64 %j',
+  (data) => {
+    expect(() => decodeBedrockBytes(data)).toThrow('Invalid Bedrock byte content');
+  },
+);
+
+it('validates large base64 documents without recursive regular expressions', () => {
+  const bytes = Buffer.alloc(4 * 1024 * 1024, 65);
+  const base64 = bytes.toString('base64');
+  expect(Buffer.compare(decodeBedrockBytes(base64)!, bytes)).toBe(0);
+  expect(() => decodeBedrockBytes(base64 + '%')).toThrow('Invalid Bedrock byte content');
+});
+
+it.each(['agent', 'knowledge-base'])(
+  'rejects malformed %s file bytes through the public loader before SDK dispatch',
+  async (kind) => {
+    const config =
+      kind === 'agent'
+        ? {
+            agentAliasId: 'ALIAS12345',
+            sessionState: {
+              files: [
+                {
+                  name: 'file.txt',
+                  useCase: 'CHAT',
+                  source: {
+                    sourceType: 'BYTE_CONTENT',
+                    byteContent: { mediaType: 'text/plain', data: '%%%' },
+                  },
+                },
+              ],
+            },
+          }
+        : {
+            retrieveAndGenerateConfiguration: {
+              type: 'EXTERNAL_SOURCES',
+              externalSourcesConfiguration: {
+                modelArn: 'model',
+                sources: [
+                  {
+                    sourceType: 'BYTE_CONTENT',
+                    byteContent: { identifier: 'file.txt', contentType: 'text/plain', data: '%%%' },
+                  },
+                ],
+              },
+            },
+          };
+    const send = vi
+      .spyOn(BedrockAgentRuntimeClient.prototype, 'send')
+      .mockRejectedValue(new Error('Unexpected SDK dispatch'));
+    await expect(async () => {
+      const provider = await loadApiProvider(
+        kind === 'agent' ? 'bedrock-agent:AGENT12345' : 'bedrock:kb:default',
+        { options: { config } },
+      );
+      const result = await provider.callApi('hello');
+      if (result.error) {
+        throw new Error(result.error);
+      }
+    }).rejects.toThrow('Invalid Bedrock byte content');
+    expect(send).not.toHaveBeenCalled();
+  },
+);
+
+describe.each(['agent', 'functionResult', 'apiResult', 'knowledge-base'])(
+  '%s binary input validation',
+  (kind) => {
+    it.each([
+      new DataView(new Uint8Array([97, 98, 99]).buffer),
+      new Uint16Array([97, 98, 99]),
+      new Int8Array([97]),
+      new Float32Array([1]),
+      new ArrayBuffer(3),
+      new SharedArrayBuffer(3),
+    ])(
+      'rejects unsupported native views through the public loader before persistence: %s',
+      async (data) => {
+        const save = vi.spyOn(Eval, 'create');
+        const send = vi.spyOn(BedrockAgentRuntimeClient.prototype, 'send');
+        const reference = {
+          id: kind === 'knowledge-base' ? 'bedrock:kb:default' : 'bedrock-agent:AGENT12345',
+          config: binaryConfig(kind, data),
+        };
+        await expect(async () => {
+          await loadApiProvider(reference.id, { options: reference });
+          await Eval.create({ providers: [reference] }, [], { id: randomUUID() });
+        }).rejects.toThrow('use a Uint8Array, Buffer, or base64 string');
+        expect(save).not.toHaveBeenCalled();
+        expect(send).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each([new ArrayBuffer(3), new SharedArrayBuffer(3)])(
+      'rejects visible raw array buffers',
+      async (data) => {
+        const restore = mockProcessEnv({ PROMPTFOO_DISABLE_TEMPLATING: 'true' });
+        try {
+          await expect(
+            loadApiProvider(
+              kind === 'knowledge-base' ? 'bedrock:kb:default' : 'bedrock-agent:AGENT12345',
+              {
+                options: { config: binaryConfig(kind, data) },
+              },
+            ),
+          ).rejects.toThrow('use a Uint8Array, Buffer, or base64 string');
+          expect(() => decodeBedrockBytes(data)).toThrow(
+            'use a Uint8Array, Buffer, or base64 string',
+          );
+        } finally {
+          restore();
+        }
+      },
+    );
+  },
+);
+
+it('accepts cross-realm Uint8Array and serialized empty bytes', () => {
+  expect(decodeBedrockBytes(runInNewContext('new Uint8Array([97, 98, 99])'))).toEqual(
+    Buffer.from('abc'),
+  );
+  expect(decodeBedrockBytes({})).toEqual(new Uint8Array());
+});
+
+describe.each(['agent', 'functionResult', 'apiResult', 'knowledge-base', 'knowledge-base-stream'])(
+  '%s live-provider binary persistence',
+  (kind) => {
+    it.each(['base64', 'Buffer', 'Uint8Array', 'emptyUint8Array'])(
+      'preserves %s bytes through evaluate and replay while redacting credentials',
+      async (form) => {
+        const bytes = Buffer.from(Array.from({ length: 97 }, (_, index) => index));
+        const data =
+          form === 'base64'
+            ? bytes.toString('base64')
+            : form === 'Buffer'
+              ? bytes
+              : form === 'emptyUint8Array'
+                ? new Uint8Array()
+                : new Uint8Array([255, ...bytes, 255]).subarray(1, 98);
+        const config = {
+          region: 'us-east-1',
+          ...binaryConfig(kind, data),
+          apiKey: 'synthetic-api-key',
+          secretAccessKey: 'synthetic-secret-key',
+        };
+        const originalConfig = JSON.stringify(config);
+        const isAgent = !kind.startsWith('knowledge-base');
+        const original = await loadApiProvider(
+          isAgent ? 'bedrock-agent:AGENT12345' : 'bedrock:kb:default',
+          { options: { config } },
+        );
+        const handle = vi.fn(async (_request: { body?: unknown }) => ({
+          response: {
+            statusCode: 400,
+            headers: {
+              'content-type': 'application/json',
+              'x-amzn-errortype': 'ValidationException',
+            },
+            body: Buffer.from('{"message":"fixture request captured"}'),
+          },
+        }));
+        const client = new BedrockAgentRuntimeClient({
+          region: 'us-east-1',
+          maxAttempts: 1,
+          credentials: { accessKeyId: 'LOCAL_FIXTURE', secretAccessKey: 'LOCAL_FIXTURE' },
+          requestHandler: { handle },
+        });
+        const attachClient = (provider: typeof original) => {
+          if (isAgent) {
+            vi.spyOn(
+              provider as AwsBedrockAgentsProvider,
+              'getAgentRuntimeClient',
+            ).mockResolvedValue(client);
+          } else {
+            vi.spyOn(
+              provider as AwsBedrockKnowledgeBaseProvider,
+              'getKnowledgeBaseClient',
+            ).mockResolvedValue(client);
+          }
+        };
+        attachClient(original);
+        try {
+          const evaluated = await evaluate(
+            {
+              providers: [original],
+              prompts: ['fixture'],
+              tests: [{ description: 'live binary persistence' }],
+              writeLatestResults: true,
+            },
+            { cache: false, maxConcurrency: 1 },
+          );
+          const saved = await Eval.findById(evaluated.id);
+          const [reference] = saved!.config.providers as ProviderOptions[];
+          expect(reference.config?.apiKey).toBe('[REDACTED]');
+          expect(reference.config?.secretAccessKey).toBe('[REDACTED]');
+          const replay = await loadApiProvider(reference.id!, { options: reference });
+          attachClient(replay);
+          expect((await replay.callApi('fixture')).error).toContain('fixture request captured');
+          expect(handle).toHaveBeenCalledTimes(2);
+          for (const [request] of handle.mock.calls) {
+            const body = JSON.parse(String(request.body));
+            const sent =
+              kind === 'agent'
+                ? body.sessionState.files[0].source.byteContent.data
+                : isAgent
+                  ? body.sessionState.returnControlInvocationResults[0][kind].responseBody.IMAGES
+                      .images[0].source.bytes
+                  : body.retrieveAndGenerateConfiguration.externalSourcesConfiguration.sources[0]
+                      .byteContent.data;
+            expect(sent).toBe(form === 'emptyUint8Array' ? '' : bytes.toString('base64'));
+          }
+          expect(JSON.stringify(config)).toBe(originalConfig);
+        } finally {
+          client.destroy();
+        }
+      },
+    );
+  },
+);
