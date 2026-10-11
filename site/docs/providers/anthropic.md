@@ -14,6 +14,8 @@ This provider supports the [Anthropic Claude](https://www.anthropic.com/claude) 
 For agentic evaluations that need built-in file access and skill plugins on top of the Messages API, see the [Claude Agent SDK provider](/docs/providers/claude-agent-sdk/). The Messages provider documented here speaks directly to MCP servers via the [`mcp` config](#model-context-protocol-mcp) so you can plug in your own tools without changing providers.
 :::
 
+OpenAI-style prompt history with `tool_calls` and `tool_call_id` is converted to Anthropic tool-use and result blocks. Parallel results stay together; malformed arguments and missing tool identifiers are rejected.
+
 ## Setup
 
 To use Anthropic, you need to set the `ANTHROPIC_API_KEY` environment variable or specify the `apiKey` in the provider configuration.

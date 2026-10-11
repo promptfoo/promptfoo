@@ -14,10 +14,9 @@ import { getNunjucksEngine } from '../../util/templates';
 import {
   calculateCost,
   clampCachedTokens,
-  hasOpenAIToolMessages,
-  openaiChatToGoogle,
   type ProviderConfig,
   parseChatPrompt,
+  parseToolCallArguments,
   transformToolChoice,
 } from '../shared';
 import { loadCredentials } from './auth';
@@ -1009,71 +1008,90 @@ export function maybeCoerceToGeminiFormat(
     };
   }
 
-  if (hasOpenAIToolMessages(contents)) {
-    // OpenAI-style chat history with tool calls: map to native
-    // functionCall/functionResponse parts so the model sees completed
-    // tool turns instead of re-invoking the tool.
-    coercedContents = openaiChatToGoogle(
-      contents,
-      options?.useAssistantRole,
-    ) as unknown as GeminiFormat;
-    coerced = true;
-  } else if (typeof contents === 'string') {
+  if (typeof contents === 'string') {
     coercedContents = [
       {
         parts: [{ text: contents }],
       },
     ];
     coerced = true;
-  } else if (
-    Array.isArray(contents) &&
-    contents.every((item) => typeof item.content === 'string')
-  ) {
-    // This looks like an OpenAI chat format
+  } else if (Array.isArray(contents) && contents.every((item) => item?.role)) {
     const targetRole = options?.useAssistantRole ? 'assistant' : 'model';
-    coercedContents = contents.map((item) => ({
-      role: (item.role === 'assistant' ? targetRole : item.role) as 'user' | 'model' | undefined,
-      parts: [{ text: item.content }],
-    }));
-    coerced = true;
-  } else if (Array.isArray(contents) && contents.every((item) => item.role && item.content)) {
-    // This looks like an OpenAI chat format with content that might be an array or object
-    const targetRole = options?.useAssistantRole ? 'assistant' : 'model';
-    coercedContents = contents.map((item) => {
-      const mappedRole = (item.role === 'assistant' ? targetRole : item.role) as
-        | 'user'
-        | 'model'
-        | undefined;
-      if (Array.isArray(item.content)) {
-        // Handle array content
-        const parts = item.content.map((contentItem: any) => {
-          if (typeof contentItem === 'string') {
-            return { text: contentItem };
-          } else if (contentItem.type === 'text') {
-            return { text: contentItem.text };
-          } else {
-            // Handle other content types if needed
-            return contentItem;
-          }
-        });
-        return {
-          role: mappedRole,
-          parts,
+    const toolNames = new Map<string, string>();
+    coercedContents = [];
+    for (const item of contents) {
+      const role = (
+        item.role === 'assistant' ? targetRole : item.role === 'developer' ? 'system' : item.role
+      ) as 'user' | 'model';
+      const parts: Part[] =
+        item.parts?.slice() ??
+        (Array.isArray(item.content)
+          ? item.content.map((part: any) =>
+              typeof part === 'string'
+                ? { text: part }
+                : part.type === 'text'
+                  ? { text: part.text }
+                  : part,
+            )
+          : typeof item.content === 'object' && item.content !== null
+            ? [item.content]
+            : item.content == null || (item.tool_calls?.length && item.content === '')
+              ? []
+              : [{ text: item.content }]);
+      if (item.role === 'tool' || item.tool_call_id !== undefined) {
+        const name = toolNames.get(item.tool_call_id) ?? item.name;
+        if (
+          typeof item.tool_call_id !== 'string' ||
+          !item.tool_call_id ||
+          typeof name !== 'string' ||
+          !name ||
+          (item.name && name !== item.name)
+        ) {
+          throw new Error('Tool result requires a tool_call_id and matching function name');
+        }
+        const part = {
+          functionResponse: {
+            id: item.tool_call_id,
+            name,
+            response: { result: item.content ?? '' },
+          },
         };
-      } else if (typeof item.content === 'object') {
-        // Handle object content
-        return {
-          role: mappedRole,
-          parts: [item.content],
-        };
-      } else {
-        // Handle string content
-        return {
-          role: mappedRole,
-          parts: [{ text: item.content }],
-        };
+        const previous = coercedContents.at(-1);
+        if (
+          previous?.role === 'user' &&
+          previous.parts.length &&
+          previous.parts.every((part) => part.functionResponse)
+        ) {
+          previous.parts.push(part);
+        } else {
+          coercedContents.push({ role: 'user', parts: [part] });
+        }
+        continue;
       }
-    });
+      for (const call of item.tool_calls ?? []) {
+        if (
+          typeof call?.function?.name !== 'string' ||
+          !call.function.name ||
+          (call.id !== undefined && (typeof call.id !== 'string' || !call.id))
+        ) {
+          throw new Error('Tool call requires a function name and a valid id when provided');
+        }
+        if (call.id) {
+          toolNames.set(call.id, call.function.name);
+        }
+        parts.push({
+          functionCall: {
+            ...(call.id ? { id: call.id } : {}),
+            name: call.function.name,
+            args: parseToolCallArguments(call.function.arguments),
+          },
+          // Preserve Gemini signatures, or mark imported synthetic/cross-model history.
+          thoughtSignature:
+            call.extra_content?.google?.thought_signature ?? 'skip_thought_signature_validator',
+        });
+      }
+      coercedContents.push({ role, parts });
+    }
     coerced = true;
   } else if (typeof contents === 'object' && contents !== null && 'parts' in contents) {
     // This might be a single content object
