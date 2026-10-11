@@ -14,7 +14,8 @@ interface ServerConfig {
   providers?: (string | ProviderOptions)[];
 }
 
-let cachedConfig: ServerConfig | null = null;
+// Undefined is not loaded; null means no catalog existed when configuration was loaded.
+let cachedConfig: ServerConfig | null | undefined;
 
 /**
  * Get the path to the UI providers config file
@@ -45,8 +46,8 @@ export function getServerConfigPath(): string | null {
  * @returns Server configuration object
  */
 export function loadServerConfig(): ServerConfig {
-  if (cachedConfig) {
-    return cachedConfig;
+  if (cachedConfig !== undefined) {
+    return cachedConfig ?? {};
   }
 
   const configPath = getServerConfigPath();
@@ -107,8 +108,13 @@ export function loadServerConfig(): ServerConfig {
   } else {
     logger.debug('No server config file found, using defaults');
   }
-  cachedConfig = {};
-  return cachedConfig;
+  cachedConfig = configPath ? {} : null;
+  return cachedConfig ?? {};
+}
+
+export function hasCustomProviderConfig(): boolean {
+  loadServerConfig();
+  return cachedConfig !== null;
 }
 
 /**

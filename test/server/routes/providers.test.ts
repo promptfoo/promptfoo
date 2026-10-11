@@ -35,7 +35,7 @@ import { doTargetPurposeDiscovery } from '../../../src/redteam/commands/discover
 import { neverGenerateRemote } from '../../../src/redteam/remoteGeneration';
 import {
   getAvailableProviders,
-  getServerConfigPath,
+  hasCustomProviderConfig,
 } from '../../../src/server/config/serverConfig';
 import { fetchWithProxy } from '../../../src/util/fetch/index';
 
@@ -52,7 +52,7 @@ describe('Providers Routes', () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
-    vi.mocked(getServerConfigPath).mockReturnValue(null);
+    vi.mocked(hasCustomProviderConfig).mockReturnValue(false);
     // Default to the non-cloud path so host-dependent assertions are deterministic
     // regardless of the machine's cloud-login state.
     vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
@@ -121,7 +121,7 @@ describe('Providers Routes', () => {
     });
 
     it('should return configured providers with id, label, and config preserved', async () => {
-      vi.mocked(getServerConfigPath).mockReturnValue('/fixture/ui-providers.yaml');
+      vi.mocked(hasCustomProviderConfig).mockReturnValue(true);
       mockedGetAvailableProviders.mockReturnValue([
         { id: 'openai:gpt-4o-mini' },
         {
@@ -151,7 +151,7 @@ describe('Providers Routes', () => {
     });
 
     it('keeps an empty or all-invalid catalog restricted', async () => {
-      vi.mocked(getServerConfigPath).mockReturnValue('/fixture/ui-providers.yaml');
+      vi.mocked(hasCustomProviderConfig).mockReturnValue(true);
       mockedGetAvailableProviders.mockReturnValue([]);
       const response = await api.get('/api/providers');
       expect(response.status).toBe(200);

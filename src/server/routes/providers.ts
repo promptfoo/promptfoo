@@ -13,7 +13,7 @@ import {
 import { neverGenerateRemote } from '../../redteam/remoteGeneration';
 import { ProviderSchemas } from '../../types/api/providers';
 import { fetchWithProxy } from '../../util/fetch/index';
-import { getAvailableProviders, getServerConfigPath } from '../config/serverConfig';
+import { getAvailableProviders, hasCustomProviderConfig } from '../config/serverConfig';
 import { sendError } from '../utils/errors';
 import type { Request, Response } from 'express';
 
@@ -54,7 +54,7 @@ providersRouter.get('/', (_req: Request, res: Response): void => {
         success: true,
         data: {
           providers: getAvailableProviders(),
-          hasCustomConfig: getServerConfigPath() !== null,
+          hasCustomConfig: hasCustomProviderConfig(),
         },
       }),
     );

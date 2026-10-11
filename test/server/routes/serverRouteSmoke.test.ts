@@ -227,7 +227,7 @@ vi.mock('../../../src/node/testProvider', () => ({
 
 vi.mock('../../../src/server/config/serverConfig', () => ({
   getAvailableProviders: mocks.getAvailableProviders,
-  getServerConfigPath: () => null,
+  hasCustomProviderConfig: () => false,
 }));
 
 const HTTP_METHODS = ['get', 'post', 'put', 'patch', 'delete', 'head', 'options'] as const;
