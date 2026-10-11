@@ -4,7 +4,7 @@ import logger from '../../logger';
 import telemetry from '../../telemetry';
 import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { isSamplingParamsDeprecatedClaudeModel } from '../anthropic/util';
-import { shouldBustProviderCache } from '../shared';
+import { shouldBustProviderCache, throwIfAborted } from '../shared';
 import { AwsBedrockGenericProvider } from './base';
 import { assertBedrockModelIsAvailable } from './index';
 import { isValidBedrockRetrievalFilter } from './retrievalFilter';
@@ -26,7 +26,12 @@ import type {
 } from '@aws-sdk/client-bedrock-agent-runtime';
 
 import type { EnvOverrides } from '../../types/env';
-import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types/providers';
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  CallApiOptionsParams,
+  ProviderResponse,
+} from '../../types/providers';
 
 interface BedrockKnowledgeBaseOptions {
   accessKeyId?: string;
@@ -240,7 +245,7 @@ export class AwsBedrockKnowledgeBaseProvider
     };
   }
 
-  private async retrieve(prompt: string): Promise<ProviderResponse> {
+  private async retrieve(prompt: string, abortSignal?: AbortSignal): Promise<ProviderResponse> {
     const { RetrieveCommand } = await import('@aws-sdk/client-bedrock-agent-runtime');
     const client = await this.getKnowledgeBaseClient();
     const response = await client.send(
@@ -252,7 +257,9 @@ export class AwsBedrockKnowledgeBaseProvider
         nextToken: this.kbConfig.nextToken,
         userContext: this.kbConfig.userContext,
       }),
+      { abortSignal },
     );
+    throwIfAborted(abortSignal);
     return {
       output: JSON.stringify(response.retrievalResults ?? []),
       metadata: {
@@ -300,8 +307,14 @@ export class AwsBedrockKnowledgeBaseProvider
     return collected;
   }
 
-  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+  async callApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
+    const abortSignal = options?.abortSignal;
     try {
+      throwIfAborted(abortSignal);
       const retrieval =
         this.kbConfig.operation === 'retrieve' || !this.kbConfig.retrieveAndGenerateConfiguration
           ? this.kbConfig.retrievalConfiguration
@@ -323,7 +336,7 @@ export class AwsBedrockKnowledgeBaseProvider
         if (!this.kbConfig.knowledgeBaseId) {
           return { error: 'Retrieve requires config.knowledgeBaseId.' };
         }
-        return await this.retrieve(prompt);
+        return await this.retrieve(prompt, abortSignal);
       }
       if (retrieval?.managedSearchConfiguration) {
         return {
@@ -408,6 +421,7 @@ export class AwsBedrockKnowledgeBaseProvider
       if (useCache) {
         const cached = await cache.get(cacheKey);
         if (cached) {
+          throwIfAborted(abortSignal);
           logger.debug('Returning cached Bedrock Knowledge Base response');
           const parsed = JSON.parse(cached as string);
           const { sessionId: _sessionId, ...cachedMetadata } = parsed.metadata ?? {
@@ -426,8 +440,11 @@ export class AwsBedrockKnowledgeBaseProvider
         '@aws-sdk/client-bedrock-agent-runtime'
       );
       const response = this.kbConfig.streaming
-        ? await this.collectStream(await client.send(new RetrieveAndGenerateStreamCommand(params)))
-        : await client.send(new RetrieveAndGenerateCommand(params));
+        ? await this.collectStream(
+            await client.send(new RetrieveAndGenerateStreamCommand(params), { abortSignal }),
+          )
+        : await client.send(new RetrieveAndGenerateCommand(params), { abortSignal });
+      throwIfAborted(abortSignal);
       const result: ProviderResponse = {
         output: response.output?.text ?? '',
         metadata: {

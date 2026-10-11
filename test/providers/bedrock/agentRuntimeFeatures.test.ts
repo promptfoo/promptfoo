@@ -75,6 +75,110 @@ afterEach(() => {
 });
 
 describe('Knowledge Base runtime features', () => {
+  it.each(['retrieve', 'retrieveAndGenerate', 'streaming'] as const)(
+    'does not dispatch a pre-aborted %s call',
+    async (operation) => {
+      const { provider, send } = kb({
+        operation: operation === 'retrieve' ? 'retrieve' : 'retrieveAndGenerate',
+        streaming: operation === 'streaming',
+      });
+      const controller = new AbortController();
+      controller.abort(new Error('cancelled before dispatch'));
+      const result = await provider.callApi('question', undefined, {
+        abortSignal: controller.signal,
+      });
+      expect(result.error).toContain('cancelled before dispatch');
+      expect(result.output).toBeUndefined();
+      expect(provider.getKnowledgeBaseClient).not.toHaveBeenCalled();
+      expect(send).not.toHaveBeenCalled();
+    },
+  );
+
+  it('cancels an SDK stream after output while a concurrent request succeeds', async () => {
+    let signalStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      signalStarted = resolve;
+    });
+    let cancelledBody: Readable | undefined;
+    type Handle = BedrockAgentRuntimeClient['config']['requestHandler']['handle'];
+    const client = new BedrockAgentRuntimeClient({
+      region: 'us-east-1',
+      credentials: { accessKeyId: 'LOCAL_FIXTURE', secretAccessKey: 'LOCAL_FIXTURE' },
+      maxAttempts: 1,
+      requestHandler: {
+        async handle(request: Parameters<Handle>[0], options?: { abortSignal?: AbortSignal }) {
+          const cancelled =
+            JSON.parse(Buffer.from(request.body).toString()).input.text === 'cancelled';
+          const frames: Uint8Array[] = [];
+          for await (const frame of client.config.eventStreamMarshaller.serialize(
+            events([{ text: cancelled ? 'PART' : 'READY' }]),
+            (output) => ({
+              headers: {
+                ':message-type': { type: 'string', value: 'event' },
+                ':event-type': { type: 'string', value: 'output' },
+                ':content-type': { type: 'string', value: 'application/json' },
+              },
+              body: Buffer.from(JSON.stringify(output)),
+            }),
+          )) {
+            frames.push(frame);
+          }
+          let sent = false;
+          const body = new Readable({
+            read() {
+              if (sent) {
+                return;
+              }
+              sent = true;
+              this.push(Buffer.concat(frames));
+              if (cancelled) {
+                signalStarted();
+              } else {
+                this.push(null);
+              }
+            },
+          });
+          if (cancelled) {
+            cancelledBody = body;
+          }
+          const abort = () => {
+            body.destroy(Object.assign(new Error('fixture cancelled'), { name: 'AbortError' }));
+          };
+          options?.abortSignal?.addEventListener('abort', abort, { once: true });
+          body.once('close', () => options?.abortSignal?.removeEventListener('abort', abort));
+          return {
+            response: {
+              statusCode: 200,
+              headers: { 'content-type': 'application/vnd.amazon.eventstream' },
+              body,
+            },
+          };
+        },
+      },
+    });
+    const { provider } = kb({ streaming: true });
+    vi.spyOn(provider, 'getKnowledgeBaseClient').mockResolvedValue(client);
+    const controller = new AbortController();
+    const pending = provider.callApi('cancelled', undefined, { abortSignal: controller.signal });
+    try {
+      await started;
+      controller.abort();
+      expect(cancelledBody?.destroyed).toBe(true);
+      const healthy = await provider.callApi('healthy');
+      expect(healthy.error).toBeUndefined();
+      expect(healthy.output).toBe('READY');
+      expect(healthy.tokenUsage).toMatchObject({ numRequests: 1 });
+      const cancelled = await pending;
+      expect(cancelled.error).toContain('fixture cancelled');
+      expect(cancelled.output).toBeUndefined();
+      expect(cache.set).not.toHaveBeenCalled();
+    } finally {
+      cancelledBody?.push(null);
+      await pending;
+      client.destroy();
+    }
+  });
+
   it.each([
     ['amazon.nova-lite-v1:0', 'arn:aws:bedrock:us-east-1::foundation-model/amazon.nova-lite-v1:0'],
     ['us.amazon.nova-2-lite-v1:0', 'us.amazon.nova-2-lite-v1:0'],
