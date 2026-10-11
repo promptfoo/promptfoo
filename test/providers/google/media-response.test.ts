@@ -195,7 +195,7 @@ describe('Nano Banana response contracts', () => {
     const marker = path.join(scratch, 'executed');
     fs.writeFileSync(
       executable,
-      `import fs from 'node:fs'; export function getTools() { fs.writeFileSync(${JSON.stringify(marker)}, 'executed'); return []; }`,
+      `import fs from 'node:fs'; export function getTools() { fs.writeFileSync(new URL('./executed', import.meta.url), 'executed'); return []; }`,
     );
     const provider = await loadApiProvider(id, {
       options: {
@@ -220,7 +220,7 @@ describe('Nano Banana response contracts', () => {
     fs.writeFileSync(toolsPath, JSON.stringify([{ googleSearch: {} }]));
     fs.writeFileSync(
       executable,
-      `import fs from 'node:fs'; export function getTools() { fs.writeFileSync(${JSON.stringify(marker)}, 'executed'); return []; }`,
+      `import fs from 'node:fs'; export function getTools() { fs.writeFileSync(new URL('./executed', import.meta.url), 'executed'); return []; }`,
     );
     const provider = await loadApiProvider(id, {
       options: {

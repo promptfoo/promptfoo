@@ -480,3 +480,112 @@ describe('native terminal stream chunks', () => {
     },
   );
 });
+
+describe('Vertex terminal stream chunks', () => {
+  const pcm = Buffer.from([1, 0, 2, 0]);
+  const usageMetadata = {
+    promptTokenCount: 10,
+    candidatesTokenCount: 2,
+    totalTokenCount: 12,
+    trafficType: 'ON_DEMAND',
+  };
+  const audioChunks = [0, 2].map((start) => ({
+    candidates: [
+      {
+        content: {
+          parts: [
+            {
+              inlineData: {
+                mimeType: 'audio/l16;rate=24000',
+                data: pcm.subarray(start, start + 2).toString('base64'),
+              },
+            },
+          ],
+        },
+      },
+    ],
+  }));
+
+  async function callStream(chunks: unknown[], model = 'gemini-3.8-flash-tts') {
+    const request = vi.fn().mockResolvedValue({ data: chunks });
+    vi.mocked(googleUtil.getGoogleClient).mockResolvedValue({ client: { request } } as never);
+    const provider = await loadApiProvider(`vertex:${model}`, {
+      options: {
+        config: {
+          projectId: 'fixture-project',
+          region: 'global',
+          expressMode: false,
+          streaming: true,
+        },
+      },
+    });
+    const result = await provider.callApi('Speak', { ...context({}), bustCache: true });
+    expect(request).toHaveBeenCalledOnce();
+    expect(request).toHaveBeenCalledWith(
+      expect.objectContaining({
+        url: expect.stringContaining(`/${model}:streamGenerateContent`),
+      }),
+    );
+    return result;
+  }
+
+  it.each(
+    ['gemini-3.8-flash-tts', 'gemini-3.8-flash-lite-tts'].flatMap((model) =>
+      ['STOP', 'MAX_TOKENS'].map((finishReason) => ({ model, finishReason })),
+    ),
+  )(
+    'preserves $model audio and final usage after contentless $finishReason',
+    async ({ model, finishReason }) => {
+      const result = await callStream(
+        [...audioChunks, { candidates: [{ finishReason }], usageMetadata }],
+        model,
+      );
+      expect(result.error).toBeUndefined();
+      expect(result.audio?.format).toBe('wav');
+      expect(Buffer.from(result.audio?.data ?? '', 'base64').subarray(44)).toEqual(pcm);
+      expect(result.tokenUsage).toMatchObject({ prompt: 10, completion: 2, total: 12 });
+      expect(result.metadata).toMatchObject({ trafficType: 'ON_DEMAND' });
+      expect(result.cost).toBeGreaterThan(0);
+    },
+  );
+
+  it('preserves ordinary Vertex text across a contentless STOP terminator', async () => {
+    const result = await callStream(
+      [
+        { candidates: [{ content: { parts: [{ text: 'Partial output' }] } }] },
+        { candidates: [{ finishReason: 'STOP' }], usageMetadata },
+      ],
+      'gemini-3.8-flash',
+    );
+    expect(result.error).toBeUndefined();
+    expect(result.output).toBe('Partial output');
+    expect(result.tokenUsage).toMatchObject({ prompt: 10, completion: 2, total: 12 });
+  });
+
+  it.each(['STOP', 'MAX_TOKENS'])('rejects a terminal-only %s stream', async (finishReason) => {
+    const result = await callStream([{ candidates: [{ finishReason }], usageMetadata }]);
+    expect(result.error).toContain('No output found');
+    expect(result.output).toBeUndefined();
+    expect(result.audio).toBeUndefined();
+  });
+
+  it.each(['SAFETY', 'RECITATION'])(
+    'preserves %s refusals after partial audio',
+    async (finishReason) => {
+      const result = await callStream([
+        ...audioChunks,
+        { candidates: [{ finishReason }], usageMetadata },
+      ]);
+      expect(result.error).toContain(finishReason);
+      expect(result.guardrails).toMatchObject({ flagged: true, flaggedOutput: true });
+      expect(result.output).toBeUndefined();
+      expect(result.audio).toBeUndefined();
+    },
+  );
+
+  it('keeps missing nonterminal content as an error', async () => {
+    const result = await callStream([...audioChunks, { candidates: [{}], usageMetadata }]);
+    expect(result.error).toContain('No output found');
+    expect(result.audio).toBeUndefined();
+  });
+});

@@ -994,7 +994,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
             };
           } else if (candidate.content?.parts) {
             output = mergeParts(output, formatCandidateContents(candidate));
-          } else {
+          } else if (candidate.finishReason !== 'STOP') {
             return {
               error: `No output found in response: ${JSON.stringify(data)}`,
             };
