@@ -16,6 +16,7 @@ prompts:
 providers:
   - id: vertex:gemini-3.1-pro-preview
     config:
+      expressMode: false
       generationConfig:
         maxOutputTokens: 1024
       toolConfig: &geminiToolConfig
@@ -48,6 +49,7 @@ providers:
 
   - id: vertex:gemini-3.8-flash
     config:
+      expressMode: false
       region: global
       generationConfig:
         maxOutputTokens: 2048
@@ -58,6 +60,7 @@ providers:
 
   - id: vertex:gemini-3.7-flash
     config:
+      expressMode: false
       region: global
       generationConfig:
         maxOutputTokens: 2048
@@ -68,6 +71,7 @@ providers:
 
   - id: vertex:gemini-3.6-flash
     config:
+      expressMode: false
       region: global
       generationConfig:
         maxOutputTokens: 2048
@@ -78,6 +82,7 @@ providers:
 
   - id: vertex:gemini-3.5-flash-lite
     config:
+      expressMode: false
       region: global
       generationConfig:
         maxOutputTokens: 2048
@@ -88,6 +93,7 @@ providers:
 
   - id: vertex:gemini-3.5-flash
     config:
+      expressMode: false
       region: global # Gemini 3.5 Flash is served on Vertex AI's global endpoint
       apiHost: aiplatform.googleapis.com
       generationConfig:

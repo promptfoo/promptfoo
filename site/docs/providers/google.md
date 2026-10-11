@@ -230,15 +230,16 @@ export GOOGLE_API_KEY="your_api_key_here"
 2. **Test your API key directly**:
 
    ```bash
-   curl -X POST "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=$GOOGLE_API_KEY" \
+   google_api_key="${GOOGLE_API_KEY:-${GEMINI_API_KEY:-}}"
+   curl -X POST "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=$google_api_key" \
      -H "Content-Type: application/json" \
      -d '{"contents":[{"parts":[{"text":"Hello"}]}]}'
    ```
 
 3. **Check your environment**:
    ```bash
-   # List all GOOGLE_ environment variables
-   env | cut -d= -f1 | grep '^GOOGLE_'
+   # List Google and Gemini environment variable names
+   env | cut -d= -f1 | grep -E '^(GOOGLE|GEMINI)_'
    ```
 
 ## Migration Guide

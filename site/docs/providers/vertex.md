@@ -563,7 +563,7 @@ providers:
 
 ### 1. Basic Setup
 
-The examples below use standard Vertex AI authentication with ADC or a service account. For API-key authentication, follow the [Express mode quickstart](#option-5-express-mode-api-key-quick-start) and its supported-model list.
+The examples below use standard Vertex AI authentication with ADC or a service account. Set `expressMode: false` in the provider config if an API key is also available. For API-key authentication, follow the [Express mode quickstart](#option-5-express-mode-api-key-quick-start) and its supported-model list.
 
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json

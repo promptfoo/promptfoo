@@ -49,6 +49,8 @@ cd google-vertex
    export GOOGLE_CLOUD_PROJECT=your-project-id
    ```
 
+The basic and Gemini comparison configurations set `expressMode: false` to keep using ADC or service-account credentials when a Google API key is also present.
+
 ## Configurations
 
 This example includes:
