@@ -119,39 +119,6 @@ describeEvaluator('evaluator grader-failure classification', () => {
     expect(results.find((result) => result.provider.id === 'winner')?.success).toBe(true);
   });
 
-  it('retains passed components when a comparison grader fails', async () => {
-    const suite: TestSuite = {
-      providers: [mockApiProvider],
-      prompts: [toPrompt('first'), toPrompt('second')],
-      tests: [
-        {
-          assert: [
-            { type: 'javascript', value: () => true },
-            {
-              type: 'select-best',
-              value: 'Choose the best',
-              provider: {
-                id: () => 'comparison-grader',
-                callApi: async () => {
-                  throw new Error('Comparison unavailable');
-                },
-              },
-            },
-          ],
-        },
-      ],
-    };
-    const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
-    await evaluate(suite, record, {});
-    const { results } = await record.toEvaluateSummary();
-    for (const result of results) {
-      expect(result.failureReason).toBe(ResultFailureReason.ERROR);
-      expect(result.error).toContain('Error grading select-best');
-      expect(result.gradingResult?.componentResults).toHaveLength(1);
-      expect(result.gradingResult?.componentResults?.[0].pass).toBe(true);
-    }
-  });
-
   it('marks a closed-QA grader execution failure as ERROR, not an assertion failure', async () => {
     const summary = await runClosedQaEval({ error: 'Grader provider unavailable' });
 

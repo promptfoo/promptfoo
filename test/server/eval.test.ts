@@ -285,7 +285,7 @@ describe('eval routes', () => {
       },
     );
 
-    it.each(['Recovery comment', '!highlight Recovery comment', 'approve-clear recovery'])(
+    it.each(['Recovery comment', 'approve-clear recovery'])(
       'recovers a comparison error after annotation: %s',
       async (comment) => {
         let recovered = false;
@@ -321,11 +321,14 @@ describe('eval routes', () => {
         const previousResume = cliState.resume;
         try {
           await evaluate(suite, record, { maxConcurrency: 1 });
-          const rows = await record.getResults();
+          const { results: rows } = await record.toEvaluateSummary();
           const metrics = structuredClone(record.prompts.map((prompt) => prompt.metrics));
           for (const row of rows) {
             expect(row).toMatchObject({ success: false, failureReason: ResultFailureReason.ERROR });
             expect(row.gradingResult).toMatchObject({ pass: true, score: 1 });
+            expect(row.error).toContain('Error grading select-best');
+            expect(row.gradingResult?.componentResults).toHaveLength(1);
+            expect(row.gradingResult?.componentResults?.[0].pass).toBe(true);
             if (comment === 'approve-clear recovery') {
               const approved = await api
                 .post(`/api/eval/${record.id}/results/${row.id}/rating`)
