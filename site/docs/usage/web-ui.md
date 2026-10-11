@@ -62,6 +62,8 @@ Hover to reveal actions. Hold `Shift` for more:
 
 Ratings and comments persist and are included in exports—use them to build training datasets.
 
+Comments and highlights preserve grades, error states, and metrics. Clearing a manual rating restores any underlying error while retaining the assertion results needed to retry comparison grading.
+
 ## Eval Actions
 
 ![Eval actions menu](/img/docs/web-ui-eval-actions.png)
