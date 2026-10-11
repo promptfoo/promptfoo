@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { calculateGoogleCost } from '../../../src/providers/google/util';
 import { VertexChatProvider, VertexEmbeddingProvider } from '../../../src/providers/google/vertex';
+import { mockProcessEnv } from '../../util/utils';
 import type { JSONClient } from 'google-auth-library/build/src/auth/googleauth';
 
 function mockRequest(provider: VertexEmbeddingProvider, data: unknown) {
@@ -12,14 +13,19 @@ function mockRequest(provider: VertexEmbeddingProvider, data: unknown) {
   return request;
 }
 
+let restoreEnv: () => void;
+
 beforeEach(() => {
-  vi.stubEnv('VERTEX_REGION', undefined);
-  vi.stubEnv('GOOGLE_CLOUD_LOCATION', undefined);
+  restoreEnv = mockProcessEnv({
+    VERTEX_REGION: undefined,
+    GOOGLE_CLOUD_LOCATION: undefined,
+    VERTEX_API_HOST: undefined,
+  });
 });
 
 afterEach(() => {
   vi.restoreAllMocks();
-  vi.unstubAllEnvs();
+  restoreEnv();
 });
 
 describe('Vertex embeddings request contracts', () => {

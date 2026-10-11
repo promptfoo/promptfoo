@@ -619,7 +619,7 @@ export function calculateGoogleCost(
   // Gemini API redirects 3.5 Flash to 3.6 Flash from 2026-10-08. Vertex still serves
   // the original model with its own rates. https://ai.google.dev/gemini-api/docs/changelog
   const pricingModelName =
-    !isVertexMode && modelName === 'gemini-3.5-flash' && Date.now() >= Date.UTC(2026, 9, 8)
+    !isVertexMode && modelName === 'gemini-3.5-flash' && timestamp >= Date.UTC(2026, 9, 8)
       ? 'gemini-3.6-flash'
       : modelName;
   const model = GOOGLE_MODELS.find((m) => m.id === pricingModelName);
