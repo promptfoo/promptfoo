@@ -74,13 +74,17 @@ function runtimeCost(
   const cacheWrite = getOpenAICacheWriteInputTokens(usage) ?? 0;
   const uncachedInput =
     typeof input === 'number' ? Math.max(0, input - cacheRead - cacheWrite) : undefined;
-  if (!['default', 'priority', 'flex', 'reserved'].includes(serviceTier ?? 'default')) {
+  const model = capabilityName(modelName);
+  const gpt61Ultrafast = model === 'gpt-6.1-sol' && serviceTier === 'ultrafast';
+  if (
+    !gpt61Ultrafast &&
+    !['default', 'priority', 'flex', 'reserved'].includes(serviceTier ?? 'default')
+  ) {
     return undefined;
   }
-  const model = capabilityName(modelName);
   const gpt56 = /^gpt-5\.6-(?:sol|terra|luna)$/.test(model);
   if (gpt56 || /^(?:gpt-6-(?:sol|luna)|gpt-6\.1-sol)$/.test(model)) {
-    if (serviceTier && serviceTier !== 'default') {
+    if (serviceTier && serviceTier !== 'default' && !gpt61Ultrafast) {
       return undefined;
     }
     return calculateOpenAIUsageCost(gpt56 ? `bedrock:${model}` : model, config, usage, {

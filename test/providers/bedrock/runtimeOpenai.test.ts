@@ -71,7 +71,7 @@ describe.each([
     vi.mocked(fetchWithCache).mockResolvedValue({
       data: {
         ...reply,
-        ...(serviceTier ? { service_tier: serviceTier } : {}),
+        ...(serviceTier === undefined ? {} : { service_tier: serviceTier }),
         usage: {
           ...(mode === 'chat'
             ? { prompt_tokens: 1000, completion_tokens: 1000 }
@@ -88,6 +88,162 @@ describe.each([
       cached: false,
     });
   };
+
+  describe('GPT-6.1 Sol Ultrafast billing', () => {
+    it.each([
+      ['us.openai.gpt-6.1-sol', 3.650955, 7.2689364],
+      ['global.openai.gpt-6.1-sol', 3.31905, 6.608124],
+      [
+        'arn:aws:bedrock:us-east-1:123456789012:inference-profile/us.openai.gpt-6.1-sol',
+        3.650955,
+        7.2689364,
+      ],
+      [
+        'arn:aws:bedrock:us-east-1:123456789012:inference-profile/global.openai.gpt-6.1-sol',
+        3.31905,
+        6.608124,
+      ],
+    ] as const)(
+      'uses published short and long context rates for %s',
+      async (model, short, long) => {
+        for (const [input, expected] of [
+          [272_000, short],
+          [272_001, long],
+        ]) {
+          vi.mocked(fetchWithCache).mockResolvedValue({
+            data: {
+              ...reply,
+              usage: {
+                ...(mode === 'chat'
+                  ? { prompt_tokens: input, completion_tokens: 1000 }
+                  : { input_tokens: input, output_tokens: 1000 }),
+                total_tokens: input + 1000,
+                [mode === 'chat' ? 'prompt_tokens_details' : 'input_tokens_details']: {
+                  cached_tokens: 500,
+                  cache_write_tokens: 250,
+                },
+              },
+            },
+            status: 200,
+            statusText: 'OK',
+            cached: false,
+          });
+          const result = await new Provider(model, {
+            config: { apiKey: 'fixture', service_tier: 'ultrafast' },
+          }).callApi('hello');
+          expect(result.error).toBeUndefined();
+          expect(result.cost).toBeCloseTo(expected, 10);
+          expect(result.tokenUsage).toMatchObject({ prompt: input, completion: 1000 });
+          const [, request] = vi.mocked(fetchWithCache).mock.lastCall!;
+          expect(JSON.parse(String(request?.body))).toMatchObject({
+            model,
+            service_tier: 'ultrafast',
+          });
+        }
+      },
+    );
+
+    it.each([
+      [{ inputCost: 0.000001, outputCost: 0.000002 }, 0.003],
+      [{ cost: 0 }, 0],
+      [{ inputCost: 0.000001 }, 0.061],
+      [{ outputCost: 0.000002 }, 0.01202],
+    ] as const)('preserves manual overrides %j', async (rates, expected) => {
+      mockPricingResponse(200, 100, 'ultrafast');
+      const result = await new Provider('global.openai.gpt-6.1-sol', {
+        config: { apiKey: 'fixture', service_tier: 'ultrafast', ...rates },
+      }).callApi('hello');
+      expect(result.cost).toBeCloseTo(expected, 10);
+    });
+
+    it.each([
+      ['default', 'ultrafast', 0.07002],
+      ['ultrafast', 'default', 0.01167],
+    ] as const)('prices requested %s using reported %s', async (requested, reported, expected) => {
+      mockPricingResponse(200, 100, reported);
+      const result = await new Provider('global.openai.gpt-6.1-sol', {
+        config: { apiKey: 'fixture', service_tier: requested },
+      }).callApi('hello');
+      expect(result.cost).toBeCloseTo(expected, 10);
+    });
+
+    it('prices the effective model override', async () => {
+      mockPricingResponse(200, 100, 'ultrafast');
+      const result = await new Provider('us.openai.gpt-6-sol', {
+        config: {
+          apiKey: 'fixture',
+          service_tier: 'ultrafast',
+          passthrough: { model: 'global.openai.gpt-6.1-sol' },
+        },
+      }).callApi('hello');
+      expect(result.cost).toBeCloseTo(0.07002, 10);
+    });
+
+    it.each([
+      ['us.openai.gpt-6.1-sol', 'priority'],
+      ['us.openai.gpt-6.1-sol', 'flex'],
+      ['us.openai.gpt-6.1-sol', 'reserved'],
+      ['us.openai.gpt-6.1-sol', ''],
+      ['us.openai.gpt-6.1-sol', 'unknown'],
+      ['us.openai.gpt-6-sol', 'ultrafast'],
+      ['us.openai.gpt-6-luna', 'ultrafast'],
+      ['us.openai.gpt-5.6-terra', 'ultrafast'],
+      ['us.openai.gpt-6-astra', 'ultrafast'],
+      ['us.zai.glm-5.3', 'ultrafast'],
+      ['us.moonshotai.kimi-k3', 'ultrafast'],
+    ])('does not invent rates for unsupported %s tier %s', async (model, tier) => {
+      for (const [rates, expected] of [
+        [{}, undefined],
+        [{ inputCost: 0.000001 }, undefined],
+        [{ inputCost: 0.000001, outputCost: 0.000002 }, 0.003],
+        [{ cost: 0 }, 0],
+      ] as const) {
+        mockPricingResponse(200, 100, tier);
+        const result = await new Provider(model, {
+          config: { apiKey: 'fixture', ...rates },
+        }).callApi('hello');
+        if (expected === undefined) {
+          expect(result.cost).toBeUndefined();
+        } else {
+          expect(result.cost).toBeCloseTo(expected, 10);
+        }
+      }
+    });
+
+    it.each([false, true])('retains cache accounting with local cached=%s', async (cached) => {
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: reply,
+        status: 200,
+        statusText: 'OK',
+        cached,
+      });
+      const result = await new Provider('global.openai.gpt-6.1-sol', {
+        config: { apiKey: 'fixture', service_tier: 'ultrafast' },
+      }).callApi('hello');
+      expect(result.cost).toBeCloseTo(cached ? 0 : 0.001944, 10);
+    });
+
+    it('leaves cost unknown when cache-write usage is missing', async () => {
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: {
+          ...reply,
+          usage: {
+            ...reply.usage,
+            [mode === 'chat' ? 'prompt_tokens_details' : 'input_tokens_details']: {
+              cached_tokens: 40,
+            },
+          },
+        },
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      });
+      const result = await new Provider('global.openai.gpt-6.1-sol', {
+        config: { apiKey: 'fixture', service_tier: 'ultrafast' },
+      }).callApi('hello');
+      expect(result.cost).toBeUndefined();
+    });
+  });
 
   it.each([
     'xai.grok-4.6',
