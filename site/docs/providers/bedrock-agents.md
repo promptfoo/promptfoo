@@ -207,8 +207,17 @@ The provider forwards `streamingConfigurations` (`streamFinalResponse` and
 `bedrockModelConfigurations`, and `sourceArn` using the
 [InvokeAgent request shapes](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_agent-runtime_InvokeAgent.html).
 The full `sessionState` is supported, including conversation history, input files,
-Knowledge Base overrides, and return-control results. Encode input-file
-`source.byteContent.data` as canonical padded or unpadded base64 in JSON/YAML. Malformed base64 is rejected before invocation.
+Knowledge Base overrides, and return-control results. In JSON/YAML, encode input-file
+`source.byteContent.data` and return-control `responseBody.*.images[].source.bytes`
+as canonical padded or unpadded base64. Programmatic configs may use `Buffer` or
+`Uint8Array`; other native binary types are unsupported. Supported bytes survive
+saved-eval retries. Malformed base64 is rejected before invocation.
+
+Promptfoo does not retry an Agent event stream through its scheduler, because the
+agent may have already performed actions before an error. With
+`streamingConfigurations.streamFinalResponse: true`, the AWS SDK also makes only
+one attempt. Other Agent calls retain the configured `AWS_BEDROCK_MAX_RETRIES`
+SDK budget.
 
 Response metadata preserves the session and memory IDs, citations, traces,
 `returnControl` events, and generated `files`. Returned file `bytes` are base64
