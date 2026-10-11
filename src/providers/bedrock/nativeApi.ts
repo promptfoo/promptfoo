@@ -225,8 +225,12 @@ export class AwsBedrockNativeApiProvider extends AwsBedrockGenericProvider {
       : undefined;
   }
 
-  getBedrockInstance() {
-    providerRegistry.throwIfResourceUseAborted();
+  async getBedrockInstance(signal?: AbortSignal) {
+    const release = providerRegistry.useResource(this, signal);
+    if (release) {
+      await release;
+    }
+    providerRegistry.throwIfResourceUseAborted(signal);
     if (!this.runtime) {
       providerRegistry.register(this);
       this.runtime = (async () => {
@@ -256,8 +260,12 @@ export class AwsBedrockNativeApiProvider extends AwsBedrockGenericProvider {
     return this.runtime;
   }
 
-  async getAgentRuntimeClient() {
-    providerRegistry.throwIfResourceUseAborted();
+  async getAgentRuntimeClient(signal?: AbortSignal) {
+    const release = providerRegistry.useResource(this, signal);
+    if (release) {
+      await release;
+    }
+    providerRegistry.throwIfResourceUseAborted(signal);
     if (!this.agentRuntime) {
       providerRegistry.register(this);
       this.agentRuntime = (async () => {
@@ -359,8 +367,8 @@ export class AwsBedrockNativeApiProvider extends AwsBedrockGenericProvider {
       const operation = OPERATIONS[this.operation];
       const client =
         operation.service === 'runtime'
-          ? await this.getBedrockInstance()
-          : await this.getAgentRuntimeClient();
+          ? await this.getBedrockInstance(options?.abortSignal)
+          : await this.getAgentRuntimeClient(options?.abortSignal);
       providerRegistry.throwIfResourceUseAborted();
       throwIfAborted(options?.abortSignal);
       // The operation name comes only from the fixed inference allowlist above.

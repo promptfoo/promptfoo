@@ -8,7 +8,7 @@ import { NodeHttpHandler } from '@smithy/node-http-handler';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AwsBedrockNativeApiProvider } from '../../../src/providers/bedrock/nativeApi';
 import { providerRegistry } from '../../../src/providers/providerRegistry';
-import { mockProcessEnv } from '../../util/utils';
+import { createDeferred, mockProcessEnv } from '../../util/utils';
 
 async function* events(items: unknown[]) {
   yield* items;
@@ -990,6 +990,120 @@ describe('native Bedrock APIs', () => {
         expect(destroy).toHaveBeenCalledTimes(batch + 1);
       }
       expect(handle).toHaveBeenCalledTimes(2);
+    },
+  );
+
+  it.each([
+    { operation: 'CountTokens', wrapped: false },
+    { operation: 'CountTokens', wrapped: true },
+    { operation: 'Rerank', wrapped: false },
+    { operation: 'Rerank', wrapped: true },
+  ])(
+    'waits for $operation cleanup before reuse (wrapped=$wrapped)',
+    async ({ operation, wrapped }) => {
+      const transports = new Set<NodeHttpHandler>();
+      const handle = vi
+        .spyOn(NodeHttpHandler.prototype, 'handle')
+        .mockImplementation(async function (this: NodeHttpHandler) {
+          transports.add(this);
+          return {
+            response: {
+              statusCode: 200,
+              headers: { 'content-type': 'application/json' },
+              body: Buffer.from('{}'),
+            },
+          };
+        });
+      const destroy = vi.spyOn(NodeHttpHandler.prototype, 'destroy');
+      const provider = new AwsBedrockNativeApiProvider(operation, {
+        config: { region: 'us-east-1', accessKeyId: 'synthetic', secretAccessKey: 'synthetic' },
+      });
+      const prompt =
+        operation === 'CountTokens'
+          ? '{"modelId":"test.model","input":{}}'
+          : '{"queries":[],"sources":[]}';
+      const releasing = createDeferred<void>();
+      const continueRelease = createDeferred<void>();
+      const shutdown = provider.shutdown.bind(provider);
+      vi.spyOn(provider, 'shutdown').mockImplementationOnce(async () => {
+        releasing.resolve();
+        await continueRelease.promise;
+        await shutdown();
+      });
+      const first = providerRegistry.withEvaluation(() => provider.callApi(prompt));
+      await releasing.promise;
+      const second = providerRegistry.withEvaluation(() =>
+        wrapped
+          ? providerRegistry.withProvider(provider, () => provider.callApi(prompt))
+          : provider.callApi(prompt),
+      );
+      try {
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        expect(handle).toHaveBeenCalledOnce();
+        expect(destroy).not.toHaveBeenCalled();
+        continueRelease.resolve();
+        const results = await Promise.all([first, second]);
+        expect(results.every((result) => !result.error)).toBe(true);
+        expect(handle).toHaveBeenCalledTimes(2);
+        expect(transports.size).toBe(2);
+        expect(destroy).toHaveBeenCalledTimes(2);
+        expect(providerRegistry.has(provider)).toBe(false);
+      } finally {
+        continueRelease.resolve();
+        await Promise.allSettled([first, second]);
+      }
+    },
+  );
+
+  it.each(['CountTokens', 'Rerank'])(
+    'cancels a direct %s call waiting for cleanup without dispatching',
+    async (operation) => {
+      const handle = vi.spyOn(NodeHttpHandler.prototype, 'handle').mockResolvedValue({
+        response: {
+          statusCode: 200,
+          headers: { 'content-type': 'application/json' },
+          body: Buffer.from('{}'),
+        },
+      });
+      const destroy = vi.spyOn(NodeHttpHandler.prototype, 'destroy');
+      const provider = new AwsBedrockNativeApiProvider(operation, {
+        config: { region: 'us-east-1', accessKeyId: 'synthetic', secretAccessKey: 'synthetic' },
+      });
+      const prompt =
+        operation === 'CountTokens'
+          ? '{"modelId":"test.model","input":{}}'
+          : '{"queries":[],"sources":[]}';
+      const releasing = createDeferred<void>();
+      const continueRelease = createDeferred<void>();
+      const shutdown = provider.shutdown.bind(provider);
+      vi.spyOn(provider, 'shutdown').mockImplementationOnce(async () => {
+        releasing.resolve();
+        await continueRelease.promise;
+        await shutdown();
+      });
+      const first = providerRegistry.withEvaluation(() => provider.callApi(prompt));
+      await releasing.promise;
+      const controller = new AbortController();
+      const completed = createDeferred<Awaited<ReturnType<typeof provider.callApi>>>();
+      const second = providerRegistry.withEvaluation(async () => {
+        completed.resolve(
+          await provider.callApi(prompt, undefined, { abortSignal: controller.signal }),
+        );
+      });
+      try {
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        controller.abort(new Error('cancelled while releasing'));
+        const result = await completed.promise;
+        expect(result.error).toContain('cancelled while releasing');
+        expect(result.output).toBeUndefined();
+        expect(handle).toHaveBeenCalledOnce();
+        expect(destroy).not.toHaveBeenCalled();
+      } finally {
+        continueRelease.resolve();
+        await Promise.allSettled([first, second]);
+      }
+      expect(destroy).toHaveBeenCalledOnce();
+      expect(providerRegistry.has(provider)).toBe(false);
     },
   );
 
