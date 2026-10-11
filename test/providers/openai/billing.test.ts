@@ -7,6 +7,47 @@ import {
   type OpenAIProcessingTier,
 } from '../../../src/providers/openai/billing';
 
+const createCachedResponsesUsage = () => ({
+  input_tokens: 2000,
+  output_tokens: 1000,
+  input_tokens_details: { cached_tokens: 500, cache_write_tokens: 250 },
+});
+
+const createMultimodalUsage = () => ({
+  input_tokens: 1_030,
+  output_tokens: 30,
+  input_tokens_details: {
+    text_tokens: 1_000,
+    audio_tokens: 20,
+    image_tokens: 10,
+    cached_tokens: 100,
+  },
+  output_tokens_details: createOutputTokenDetails(20, 10),
+});
+
+const createOutputTokenDetails = (textTokens: number, audioTokens: number) => ({
+  text_tokens: textTokens,
+  audio_tokens: audioTokens,
+});
+
+const createCachedChatUsage = () => ({
+  prompt_tokens: 2_000,
+  completion_tokens: 1_000,
+  prompt_tokens_details: { cached_tokens: 500 },
+});
+
+const createCachedInputUsage = () => ({
+  input_tokens: 1_000,
+  output_tokens: 100,
+  input_tokens_details: { cached_tokens: 400 },
+});
+
+const createMixedCachedTokenDetails = () => ({
+  text_tokens: 70,
+  audio_tokens: 20,
+  image_tokens: 10,
+});
+
 describe('OpenAI billing helpers', () => {
   describe('native Daybreak alias pricing', () => {
     const apiUrl = 'https://api.openai.com/v1';
@@ -171,11 +212,7 @@ describe('OpenAI billing helpers', () => {
     );
 
     it('prices regional and normalized usage while preserving custom costs', () => {
-      const usage = {
-        input_tokens: 2000,
-        output_tokens: 1000,
-        input_tokens_details: { cached_tokens: 500, cache_write_tokens: 250 },
-      };
+      const usage = createCachedResponsesUsage();
       const expected = (1250 * 2 + 500 * 0.1 + 250 * 2.5 + 1000 * 10) / 1e6;
       for (const apiUrl of ['https://us.api.openai.com/v1', 'https://eu.api.openai.com/v1']) {
         expect(calculateOpenAIUsageCost('gpt-6.1-sol', {}, usage, { apiUrl })).toBeCloseTo(
@@ -414,11 +451,7 @@ describe('OpenAI billing helpers', () => {
     );
 
     it('prices regional and normalized Codex usage while honoring explicit overrides', () => {
-      const usage = {
-        input_tokens: 2000,
-        output_tokens: 1000,
-        input_tokens_details: { cached_tokens: 500, cache_write_tokens: 250 },
-      };
+      const usage = createCachedResponsesUsage();
       const expected = (1250 * input + 500 * cached + 250 * write + 1000 * output) / 1e6;
       for (const apiUrl of ['https://us.api.openai.com/v1', 'https://eu.api.openai.com/v1']) {
         expect(calculateOpenAIUsageCost(model, {}, usage, { apiUrl })).toBeCloseTo(
@@ -696,11 +729,7 @@ describe('OpenAI billing helpers', () => {
 
   it('applies Batch pricing to fine-tuned inference and leaves unsupported Flex and Fast unset', () => {
     const model = 'ft:gpt-4.1-mini-2025-04-14:company::model';
-    const usage = {
-      prompt_tokens: 2_000,
-      completion_tokens: 1_000,
-      prompt_tokens_details: { cached_tokens: 500 },
-    };
+    const usage = createCachedChatUsage();
 
     expect(calculateOpenAIUsageCost(model, {}, usage, { serviceTier: 'batch' })).toBeCloseTo(
       ((1_500 * 0.8 + 500 * 0.2 + 1_000 * 3.2) / 1e6) * 0.5,
@@ -724,11 +753,7 @@ describe('OpenAI billing helpers', () => {
   });
 
   it('bills cached fine-tuned input at the full input rate when no cached rate is published', () => {
-    const usage = {
-      prompt_tokens: 2_000,
-      completion_tokens: 1_000,
-      prompt_tokens_details: { cached_tokens: 500 },
-    };
+    const usage = createCachedChatUsage();
 
     // ft:gpt-4o-mini publishes a cached-input discount.
     expect(calculateOpenAIUsageCost('ft:gpt-4o-mini:company::model', {}, usage)).toBeCloseTo(
@@ -928,11 +953,7 @@ describe('OpenAI billing helpers', () => {
     [{ apiBaseUrl: 'https://us.api.openai.com/v1' }, {}],
     [{}, { apiUrl: 'https://eu.api.openai.com/v1' }],
   ])('applies the GPT-5.6 regional processing uplift', (config, options) => {
-    const usage = {
-      input_tokens: 2_000,
-      output_tokens: 1_000,
-      input_tokens_details: { cached_tokens: 500, cache_write_tokens: 250 },
-    };
+    const usage = createCachedResponsesUsage();
 
     expect(calculateOpenAIUsageCost('gpt-5.6', config, usage, options)).toBeCloseTo(
       ((1_250 * 4 + 500 * 0.4 + 250 * 5 + 1_000 * 20) / 1e6) * 1.1,
@@ -946,11 +967,7 @@ describe('OpenAI billing helpers', () => {
   ])(
     'prices Bedrock GovCloud %s at its published rates',
     (model, input, output, longInput, longOutput) => {
-      const shortUsage = {
-        input_tokens: 2_000,
-        output_tokens: 1_000,
-        input_tokens_details: { cached_tokens: 500, cache_write_tokens: 250 },
-      };
+      const shortUsage = createCachedResponsesUsage();
       const shortBaseCost =
         (1_250 * input + 500 * input * 0.1 + 250 * input * 1.25 + 1_000 * output) / 1e6;
       const longUsage = {
@@ -1066,11 +1083,7 @@ describe('OpenAI billing helpers', () => {
   });
 
   it('preserves GPT-5.6 custom costs while uplifting remaining regional rates', () => {
-    const usage = {
-      input_tokens: 2_000,
-      output_tokens: 1_000,
-      input_tokens_details: { cached_tokens: 500, cache_write_tokens: 250 },
-    };
+    const usage = createCachedResponsesUsage();
 
     expect(
       calculateOpenAIUsageCost(
@@ -1087,11 +1100,7 @@ describe('OpenAI billing helpers', () => {
   it.each(['proxy.api.openai.com', 'au.api.openai.com'])(
     'does not apply the GPT-5.6 regional uplift to %s',
     (apiHost) => {
-      const usage = {
-        input_tokens: 2_000,
-        output_tokens: 1_000,
-        input_tokens_details: { cached_tokens: 500, cache_write_tokens: 250 },
-      };
+      const usage = createCachedResponsesUsage();
 
       expect(calculateOpenAIUsageCost('gpt-5.6', { apiHost }, usage)).toBeCloseTo(
         (1_250 * 4 + 500 * 0.4 + 250 * 5 + 1_000 * 20) / 1e6,
@@ -1213,11 +1222,7 @@ describe('OpenAI billing helpers', () => {
   });
 
   it('uses returned service tiers when pricing flex and fast work', () => {
-    const usage = {
-      input_tokens: 1_000,
-      output_tokens: 100,
-      input_tokens_details: { cached_tokens: 400 },
-    };
+    const usage = createCachedInputUsage();
 
     expect(calculateOpenAIUsageCost('gpt-5-mini', {}, usage, { serviceTier: 'flex' })).toBeCloseTo(
       (600 * 0.125 + 400 * 0.0125 + 100 * 1) / 1e6,
@@ -1288,11 +1293,7 @@ describe('OpenAI billing helpers', () => {
   });
 
   it('applies the Batch API discount to standard rates', () => {
-    const usage = {
-      input_tokens: 1_000,
-      output_tokens: 100,
-      input_tokens_details: { cached_tokens: 400 },
-    };
+    const usage = createCachedInputUsage();
 
     expect(calculateOpenAIUsageCost('gpt-5-mini', {}, usage, { serviceTier: 'batch' })).toBeCloseTo(
       (600 * 0.125 + 400 * 0.0125 + 100 * 1) / 1e6,
@@ -1660,14 +1661,8 @@ describe('OpenAI billing helpers', () => {
       {
         prompt_tokens: 30,
         completion_tokens: 23,
-        prompt_tokens_details: {
-          text_tokens: 21,
-          audio_tokens: 9,
-        },
-        completion_tokens_details: {
-          text_tokens: 16,
-          audio_tokens: 7,
-        },
+        prompt_tokens_details: createOutputTokenDetails(21, 9),
+        completion_tokens_details: createOutputTokenDetails(16, 7),
       },
       {},
     );
@@ -1676,25 +1671,7 @@ describe('OpenAI billing helpers', () => {
   });
 
   it('uses current gpt-realtime-mini multimodal and cached rates', () => {
-    const cost = calculateOpenAIUsageCost(
-      'gpt-realtime-mini',
-      {},
-      {
-        input_tokens: 1_030,
-        output_tokens: 30,
-        input_tokens_details: {
-          text_tokens: 1_000,
-          audio_tokens: 20,
-          image_tokens: 10,
-          cached_tokens: 100,
-        },
-        output_tokens_details: {
-          text_tokens: 20,
-          audio_tokens: 10,
-        },
-      },
-      {},
-    );
+    const cost = calculateOpenAIUsageCost('gpt-realtime-mini', {}, createMultimodalUsage(), {});
 
     expect(cost).toBeCloseTo(
       (900 * 0.6 + 100 * 0.06 + 20 * 10 + 10 * 0.8 + 20 * 2.4 + 10 * 20) / 1e6,
@@ -1725,25 +1702,7 @@ describe('OpenAI billing helpers', () => {
   });
 
   it('uses current gpt-realtime-2 multimodal and cached rates', () => {
-    const cost = calculateOpenAIUsageCost(
-      'gpt-realtime-2',
-      {},
-      {
-        input_tokens: 1_030,
-        output_tokens: 30,
-        input_tokens_details: {
-          text_tokens: 1_000,
-          audio_tokens: 20,
-          image_tokens: 10,
-          cached_tokens: 100,
-        },
-        output_tokens_details: {
-          text_tokens: 20,
-          audio_tokens: 10,
-        },
-      },
-      {},
-    );
+    const cost = calculateOpenAIUsageCost('gpt-realtime-2', {}, createMultimodalUsage(), {});
 
     expect(cost).toBeCloseTo(
       (900 * 4 + 100 * 0.4 + 20 * 32 + 10 * 5 + 20 * 24 + 10 * 64) / 1e6,
@@ -1768,16 +1727,9 @@ describe('OpenAI billing helpers', () => {
             audio_tokens: 40,
             image_tokens: 20,
             cached_tokens: 100,
-            cached_tokens_details: {
-              text_tokens: 70,
-              audio_tokens: 20,
-              image_tokens: 10,
-            },
+            cached_tokens_details: createMixedCachedTokenDetails(),
           },
-          output_token_details: {
-            text_tokens: 20,
-            audio_tokens: 10,
-          },
+          output_token_details: createOutputTokenDetails(20, 10),
         },
       );
 
@@ -1808,16 +1760,9 @@ describe('OpenAI billing helpers', () => {
           audio_tokens: 20,
           image_tokens: 10,
           cached_tokens: 100,
-          cached_tokens_details: {
-            text_tokens: 70,
-            audio_tokens: 20,
-            image_tokens: 10,
-          },
+          cached_tokens_details: createMixedCachedTokenDetails(),
         },
-        output_token_details: {
-          text_tokens: 20,
-          audio_tokens: 10,
-        },
+        output_token_details: createOutputTokenDetails(20, 10),
       },
       {},
     );
@@ -1835,14 +1780,8 @@ describe('OpenAI billing helpers', () => {
       {
         input_tokens: 30,
         output_tokens: 23,
-        input_token_details: {
-          text_tokens: 21,
-          audio_tokens: 9,
-        },
-        output_token_details: {
-          text_tokens: 16,
-          audio_tokens: 7,
-        },
+        input_token_details: createOutputTokenDetails(21, 9),
+        output_token_details: createOutputTokenDetails(16, 7),
       },
       {},
     );

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleSearchRubric } from '../../src/assertions/searchRubric';
 import { matchesSearchRubric } from '../../src/matchers/search';
+import { createPassingGrade } from '../factories/literalFixtures';
 import { createMockProvider } from '../factories/provider';
 
 import type { Assertion, AssertionParams, GradingResult } from '../../src/types/index';
@@ -266,11 +267,7 @@ describe('handleSearchRubric', () => {
       provider: mockProvider as any,
     };
 
-    const expectedResult: GradingResult = {
-      pass: true,
-      score: 1,
-      reason: 'test',
-    };
+    const expectedResult: GradingResult = createPassingGrade(1, 'test');
 
     mockMatchesSearchRubric.mockResolvedValue(expectedResult);
 
@@ -293,11 +290,7 @@ describe('handleSearchRubric', () => {
       },
     };
 
-    const expectedResult: GradingResult = {
-      pass: true,
-      score: 1,
-      reason: 'test',
-    };
+    const expectedResult: GradingResult = createPassingGrade(1, 'test');
 
     mockMatchesSearchRubric.mockResolvedValue(expectedResult);
 

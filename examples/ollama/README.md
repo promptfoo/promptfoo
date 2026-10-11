@@ -23,6 +23,23 @@ ollama pull llama2-uncensored
 ollama pull llama3.2:1b
 ```
 
+## Separate Ollama endpoints
+
+Use provider `env` overrides to compare two servers in one eval. Each provider keeps its
+own endpoint and optional `OLLAMA_API_KEY`, ahead of top-level `env` or shell values:
+
+```yaml
+providers:
+  - id: ollama:chat:llama3.2
+    label: local
+    env:
+      OLLAMA_BASE_URL: http://localhost:11434
+  - id: ollama:chat:llama3.2
+    label: alternate
+    env:
+      OLLAMA_BASE_URL: http://localhost:11435
+```
+
 ## Available Examples
 
 This directory contains two different Ollama examples:

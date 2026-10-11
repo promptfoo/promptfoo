@@ -208,6 +208,7 @@ promptfoo eval --resume <evalId>   # resumes a specific eval
 ```
 
 - On resume, promptfoo reuses the original run's effective runtime options (e.g., `--delay`, `--no-cache`, `--max-concurrency`, `--repeat`), skips completed test/prompt pairs, ignores CLI flags that change test ordering to keep indices aligned, and disables watch mode.
+- If a red-team strategy is interrupted after completing a target request, promptfoo retains its output and usage as an interrupted error result. Resume skips that result to avoid repeating completed target actions. Use `--retry-errors` to explicitly run the case again.
 
 ### Retry Errors
 

@@ -4,12 +4,9 @@ import { getEnvString, getProcessEnv } from '../../envars';
 import logger from '../../logger';
 import { validatePythonPath } from '../../python/pythonUtils';
 import { fetchWithProxy } from '../../util/fetch/index';
-import {
-  CallbackPathTraversalError,
-  loadCallbackFromFileUrl,
-  wrapError,
-} from '../../util/functions/loadFunction';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
+import { resolveProviderApiKey } from '../credentials';
+import { loadProviderCallbackFromFileUrl } from '../functionCallbackUtils';
 import { withGenAIToolSpan } from '../tracing';
 import { GOOGLE_MODELS } from './shared';
 import {
@@ -448,8 +445,8 @@ export const tryGetThenPost = async <T = unknown>(url: string, data?: unknown): 
 
 export class GoogleLiveProvider implements ApiProvider {
   config: GoogleProviderConfig;
-  env?: ProviderOptions['env'];
   modelName: string;
+  readonly env?: ProviderOptions['env'];
   protected readonly isVertex: boolean = false;
   private loadedFunctionCallbacks: Record<string, Function> = {};
 
@@ -501,13 +498,11 @@ export class GoogleLiveProvider implements ApiProvider {
   }
 
   getApiKey(): string | undefined {
-    return (
-      this.config.apiKey ||
-      this.env?.GOOGLE_API_KEY ||
-      this.env?.GEMINI_API_KEY ||
-      getEnvString('GOOGLE_API_KEY') ||
-      getEnvString('GEMINI_API_KEY')
-    );
+    // Priority aligned with Python SDK: GOOGLE_API_KEY > GEMINI_API_KEY
+    return resolveProviderApiKey({ apiKey: this.config.apiKey }, this.env, [
+      'GOOGLE_API_KEY',
+      'GEMINI_API_KEY',
+    ]);
   }
 
   private async getAccessToken(config: CompletionOptions): Promise<string | undefined> {
@@ -1866,15 +1861,8 @@ export class GoogleLiveProvider implements ApiProvider {
    * @param fileRef The file reference in the format 'file://path/to/file:functionName'
    * @returns The loaded function
    */
-  private async loadExternalFunction(fileRef: string): Promise<Function> {
-    try {
-      return await loadCallbackFromFileUrl(fileRef);
-    } catch (error) {
-      if (error instanceof CallbackPathTraversalError) {
-        throw error;
-      }
-      throw wrapError(`Error loading function from ${fileRef}: ${(error as Error).message}`, error);
-    }
+  private loadExternalFunction(fileRef: string): Promise<Function> {
+    return loadProviderCallbackFromFileUrl(fileRef);
   }
 
   /**

@@ -3,8 +3,7 @@ import * as fs from 'fs';
 import { afterEach, describe, expect, it } from 'vitest';
 import { ZodError } from 'zod';
 import { generateConfigFile } from '../../code-scan-action/src/config';
-import { ScanConfigSchema } from '../../src/types/codeScan';
-import { loadYaml } from '../../src/util/yamlLoad';
+import { loadConfig } from '../../src/codeScan/config/loader';
 
 describe('generateConfigFile', () => {
   const generatedPaths: string[] = [];
@@ -17,14 +16,14 @@ describe('generateConfigFile', () => {
     }
   });
 
-  function readGeneratedConfig(minimumSeverity: string, guidance?: string): string {
+  function readGeneratedConfig(minimumSeverity: string, guidance?: string) {
     const configPath = generateConfigFile(minimumSeverity, guidance);
     generatedPaths.push(configPath);
-    return fs.readFileSync(configPath, 'utf8');
+    return loadConfig(configPath);
   }
 
   it('writes a normalized config for full-repository scans', () => {
-    expect(ScanConfigSchema.parse(loadYaml(readGeneratedConfig(' HIGH ')))).toEqual({
+    expect(readGeneratedConfig(' HIGH ')).toEqual({
       minimumSeverity: 'high',
       diffsOnly: false,
     });
@@ -47,12 +46,12 @@ describe('generateConfigFile', () => {
     '{"nested":{"array":[true,1,null]}}',
     '  ',
   ])('preserves guidance exactly through the scanner YAML loader: %j', (guidance) => {
-    const parsed = ScanConfigSchema.parse(loadYaml(readGeneratedConfig('critical', guidance)));
+    const parsed = readGeneratedConfig('critical', guidance);
     expect(parsed).toEqual({ minimumSeverity: 'critical', diffsOnly: false, guidance });
   });
 
   it.each(['', undefined])('omits empty or absent guidance: %j', (guidance) => {
-    const parsed = ScanConfigSchema.parse(loadYaml(readGeneratedConfig('low', guidance)));
+    const parsed = readGeneratedConfig('low', guidance);
     expect(parsed).toEqual({ minimumSeverity: 'low', diffsOnly: false });
   });
 

@@ -6,6 +6,7 @@ import { GoogleAuthManager } from '../../../src/providers/google/auth';
 import * as googleUtil from '../../../src/providers/google/util';
 import { VertexChatProvider } from '../../../src/providers/google/vertex';
 import * as fetchUtil from '../../../src/util/fetch/index';
+import { createMockFetchResponse } from '../mockProviderResponses';
 
 vi.mock('../../../src/cache', async (importOriginal) => ({
   ...(await importOriginal()),
@@ -31,12 +32,7 @@ describe('Google provider factories', () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
-    vi.mocked(cache.fetchWithCache).mockResolvedValue({
-      data,
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    });
+    vi.mocked(cache.fetchWithCache).mockResolvedValue(createMockFetchResponse(data));
     vi.mocked(fetchUtil.fetchWithProxy).mockResolvedValue(Response.json(data));
   });
 

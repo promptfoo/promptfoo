@@ -20,6 +20,7 @@ import { AlertTriangle, CheckCircle, ChevronDown, Info, Sparkles } from 'lucide-
 import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import { useRedTeamTargetConfigValidation } from '../hooks/useRedTeamTargetConfigValidation';
 import PageWrapper from './PageWrapper';
+import { normalizeLocalProviders } from './Targets/helpers';
 
 import type { ApplicationDefinition } from '../types';
 
@@ -180,7 +181,7 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
       const response = await callApi('/providers/discover', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(config.target),
+        body: JSON.stringify(normalizeLocalProviders(config.target, { forRuntime: true })),
       });
 
       if (!response.ok) {
