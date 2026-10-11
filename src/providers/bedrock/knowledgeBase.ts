@@ -381,9 +381,10 @@ export class AwsBedrockKnowledgeBaseProvider
       };
 
       const cache = await getCache();
-      // Explicit sessions and streaming requests must reach AWS. A cached session response
-      // cannot advance the service's conversation state.
+      // Native configurations have no safe AWS identity namespace. Explicit sessions and
+      // streaming requests must also reach AWS to advance the conversation state.
       const useCache =
+        !nativeConfig &&
         isCacheEnabled() &&
         !shouldBustProviderCache(context) &&
         !this.kbConfig.sessionId &&

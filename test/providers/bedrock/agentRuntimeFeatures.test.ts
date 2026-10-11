@@ -565,69 +565,94 @@ describe('Knowledge Base runtime features', () => {
     }
   });
 
-  it('preserves native cache separation when credentials and ignored root targets differ', async () => {
-    cache.enabled = true;
-    const entries = new Map<string, string>();
-    cache.get.mockImplementation((key: string) => entries.get(key));
-    cache.set.mockImplementation((key: string, value: string) => entries.set(key, value));
-    const requests: { actor: string; body: string }[] = [];
-    const clients: BedrockAgentRuntimeClient[] = [];
-    const providers = ['A', 'B'].map((actor) => {
-      const credentials = { accessKeyId: `FIXTURE_${actor}`, secretAccessKey: 'LOCAL_FIXTURE' };
-      const { provider } = kb({
-        ...credentials,
-        knowledgeBaseId: `IGNORED00${actor}`,
-        retrieveAndGenerateConfiguration: {
-          type: 'KNOWLEDGE_BASE',
-          knowledgeBaseConfiguration: {
-            knowledgeBaseId: 'EFFECTIVE1',
-            modelArn: 'us.amazon.nova-2-lite-v1:0',
-          },
-        },
-      });
-      const client = new BedrockAgentRuntimeClient({
-        region: 'us-east-1',
-        credentials,
-        requestHandler: {
-          handle: async (request: { headers: Record<string, string>; body?: unknown }) => {
-            expect(request.headers.authorization).toContain(`Credential=FIXTURE_${actor}/`);
-            requests.push({ actor, body: String(request.body) });
-            return {
-              response: {
-                statusCode: 200,
-                headers: { 'content-type': 'application/json' },
-                body: new TextEncoder().encode(JSON.stringify({ output: { text: actor } })),
+  it.each(['KNOWLEDGE_BASE', 'EXTERNAL_SOURCES'] as const)(
+    'does not cache complete-native %s requests across AWS identities',
+    async (type) => {
+      cache.enabled = true;
+      const entries = new Map<string, string>();
+      cache.get.mockImplementation((key: string) => entries.get(key));
+      cache.set.mockImplementation((key: string, value: string) => entries.set(key, value));
+      const requests: { actor: string; body: string }[] = [];
+      const clients: BedrockAgentRuntimeClient[] = [];
+      const retrieveAndGenerateConfiguration =
+        type === 'KNOWLEDGE_BASE'
+          ? {
+              type,
+              knowledgeBaseConfiguration: {
+                knowledgeBaseId: 'EFFECTIVE1',
+                modelArn: 'us.amazon.nova-2-lite-v1:0',
+              },
+            }
+          : {
+              type,
+              externalSourcesConfiguration: {
+                modelArn: 'us.amazon.nova-2-lite-v1:0',
+                sources: [
+                  { sourceType: 'S3' as const, s3Location: { uri: 's3://fixture/source' } },
+                ],
               },
             };
+      const providers = ['A', 'B'].map((actor) => {
+        const credentials = { accessKeyId: `FIXTURE_${actor}`, secretAccessKey: 'LOCAL_FIXTURE' };
+        const { provider } = kb({ ...credentials, retrieveAndGenerateConfiguration });
+        const client = new BedrockAgentRuntimeClient({
+          region: 'us-east-1',
+          credentials,
+          requestHandler: {
+            handle: async (request: { headers: Record<string, string>; body?: unknown }) => {
+              expect(request.headers.authorization).toContain(`Credential=FIXTURE_${actor}/`);
+              const body =
+                typeof request.body === 'string'
+                  ? request.body
+                  : Buffer.from(request.body as Uint8Array).toString();
+              requests.push({ actor, body });
+              return {
+                response: {
+                  statusCode: 200,
+                  headers: { 'content-type': 'application/json' },
+                  body: new TextEncoder().encode(
+                    JSON.stringify({
+                      output: { text: actor },
+                      citations: [{ retrievedReferences: [{ content: { text: actor } }] }],
+                    }),
+                  ),
+                },
+              };
+            },
           },
-        },
+        });
+        clients.push(client);
+        vi.spyOn(provider, 'getKnowledgeBaseClient').mockResolvedValue(client);
+        return provider;
       });
-      clients.push(client);
-      vi.spyOn(provider, 'getKnowledgeBaseClient').mockResolvedValue(client);
-      return provider;
-    });
-    try {
-      for (const [index, provider] of providers.entries()) {
-        const output = index === 0 ? 'A' : 'B';
-        expect(await provider.callApi('question')).toMatchObject({ output });
-        expect(await provider.callApi('question')).toMatchObject({ output, cached: true });
+      try {
+        for (const [index, provider] of providers.entries()) {
+          const output = index === 0 ? 'A' : 'B';
+          for (let repeat = 0; repeat < 2; repeat++) {
+            const result = await provider.callApi('question', {
+              prompt: { raw: 'question', label: 'question' },
+              vars: {},
+              bustCache: false,
+            });
+            expect(result).toMatchObject({
+              output,
+              metadata: { citations: [{ retrievedReferences: [{ content: { text: output } }] }] },
+            });
+            expect(result.cached).not.toBe(true);
+          }
+        }
+        expect(requests.map(({ actor }) => actor)).toEqual(['A', 'A', 'B', 'B']);
+        expect(new Set(requests.map(({ body }) => body)).size).toBe(1);
+        expect(cache.get).not.toHaveBeenCalled();
+        expect(cache.set).not.toHaveBeenCalled();
+      } finally {
+        clients.forEach((client) => client.destroy());
       }
-      expect(requests.map(({ actor }) => actor)).toEqual(['A', 'B']);
-      expect(requests[0].body).toBe(requests[1].body);
-    } finally {
-      clients.forEach((client) => client.destroy());
-    }
-  });
+    },
+  );
 
-  it('preserves native request, region and profile cache boundaries', async () => {
+  it('preserves legacy request, region and profile cache boundaries', async () => {
     cache.enabled = true;
-    const native = {
-      type: 'KNOWLEDGE_BASE' as const,
-      knowledgeBaseConfiguration: {
-        knowledgeBaseId: 'EFFECTIVE1',
-        modelArn: 'us.amazon.nova-2-lite-v1:0',
-      },
-    };
     const cases: [KBConfig, string][] = [
       [{}, 'question'],
       [{}, 'different question'],
@@ -635,21 +660,10 @@ describe('Knowledge Base runtime features', () => {
       [{ sessionConfiguration: { kmsKeyArn: 'different-key' } }, 'question'],
       [{ region: 'us-west-2' }, 'question'],
       [{ profile: 'different-profile' }, 'question'],
-      [
-        {
-          retrieveAndGenerateConfiguration: {
-            ...native,
-            knowledgeBaseConfiguration: {
-              ...native.knowledgeBaseConfiguration,
-              knowledgeBaseId: 'OTHERKB123',
-            },
-          },
-        },
-        'question',
-      ],
+      [{ knowledgeBaseId: 'OTHERKB123' }, 'question'],
     ];
     for (const [config, prompt] of cases) {
-      const { provider } = kb({ retrieveAndGenerateConfiguration: native, ...config });
+      const { provider } = kb(config);
       expect((await provider.callApi(prompt)).error).toBeUndefined();
     }
     expect(new Set(cache.get.mock.calls.map(([key]) => key)).size).toBe(cases.length);
@@ -663,15 +677,7 @@ describe('Knowledge Base runtime features', () => {
   ])('honors per-call cache precedence for $flags', async ({ flags, bypass }) => {
     cache.enabled = true;
     cache.get.mockResolvedValue(JSON.stringify({ output: 'cached answer' }));
-    const { provider, send } = kb({
-      retrieveAndGenerateConfiguration: {
-        type: 'KNOWLEDGE_BASE',
-        knowledgeBaseConfiguration: {
-          knowledgeBaseId: 'EFFECTIVE1',
-          modelArn: 'us.amazon.nova-2-lite-v1:0',
-        },
-      },
-    });
+    const { provider, send } = kb();
     const response = await provider.callApi('question', {
       prompt: { raw: 'question', label: 'question' },
       vars: {},
@@ -992,7 +998,7 @@ describe('managed-search filter validation', () => {
 });
 
 describe.each(['agent', 'knowledge-base'] as const)('%s binary cache inputs', (kind) => {
-  it('shares equal binary content without enumerating bytes or invoking Buffer.toJSON', async () => {
+  it('preserves binary inputs without enumerating bytes or invoking Buffer.toJSON', async () => {
     cache.enabled = true;
     const entries = new Map<string, string>();
     cache.get.mockImplementation((key: string) => entries.get(key));
@@ -1059,15 +1065,19 @@ describe.each(['agent', 'knowledge-base'] as const)('%s binary cache inputs', (k
       const result = await provider.callApi('question');
       expect(result.error).toBeUndefined();
       expect(result.output).toBe('answer');
-      expect(send).toHaveBeenCalledTimes(index > 0 && index < 4 ? 0 : 1);
-      expect(result.cached === true).toBe(index > 0 && index < 4);
+      const cached = kind === 'agent' && index > 0 && index < 4;
+      expect(send).toHaveBeenCalledTimes(cached ? 0 : 1);
+      expect(result.cached === true).toBe(cached);
     }
-    const keys = cache.get.mock.calls.map(([key]) => key);
-    expect(new Set(keys.slice(0, 4)).size).toBe(1);
-    expect(keys[0]).not.toBe(keys[4]);
     if (kind === 'knowledge-base') {
+      expect(cache.get).not.toHaveBeenCalled();
+      expect(cache.set).not.toHaveBeenCalled();
       expect(new Set(ids.slice(0, 4)).size).toBe(1);
       expect(ids[0]).not.toBe(ids[4]);
+    } else {
+      const keys = cache.get.mock.calls.map(([key]) => key);
+      expect(new Set(keys.slice(0, 4)).size).toBe(1);
+      expect(keys[0]).not.toBe(keys[4]);
     }
   });
 
