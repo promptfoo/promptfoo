@@ -541,6 +541,9 @@ describe('RedteamIterativeMetaProvider', () => {
         expect(result.metadata.vulnerabilityAchieved).toBe(!pass);
         expect(result.metadata.finalIteration).toBe(2);
         expect(mockGrader.getResult).toHaveBeenCalledTimes(2);
+        const nextRequest = JSON.parse(mockAgentProvider.callApi.mock.calls[1][0]);
+        expect(nextRequest.lastAttempt).not.toHaveProperty('graderPassed');
+        expect(nextRequest.lastAttempt.graderReason).toBe('Grading provider returned 503');
       },
     );
 

@@ -408,7 +408,7 @@ export class HydraProvider implements ApiProvider {
         conversationHistory: conversationHistoryForCloud,
         ...(this.config.inputs && { inputs: this.config.inputs }),
         lastGraderResult:
-          turn > 1 && storedGraderResult
+          turn > 1 && storedGraderResult && storedGraderResult.metadata?.graderError !== true
             ? {
                 pass: storedGraderResult.pass,
                 score: storedGraderResult.score,

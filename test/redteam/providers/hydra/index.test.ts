@@ -488,6 +488,9 @@ describe('HydraProvider', () => {
         expect(result.metadata?.successfulAttacks ?? []).toHaveLength(pass ? 0 : 1);
         expect(getResult).toHaveBeenCalledTimes(2);
         expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(2);
+        expect(JSON.parse(mockAgentProvider.callApi.mock.calls[1][0])).not.toHaveProperty(
+          'lastGraderResult',
+        );
       },
     );
 

@@ -233,7 +233,10 @@ export async function runMetaAgentRedteam({
                 ? '[Hidden for privacy]'
                 : lastResponse.output,
               responseLength: lastResponse.output.length,
-              graderPassed: redteamHistory[i - 1].graderPassed || false,
+              graderPassed:
+                storedGraderResult?.metadata?.graderError === true
+                  ? undefined
+                  : redteamHistory[i - 1].graderPassed || false,
               graderReason: storedGraderResult?.reason,
             }
           : undefined,
