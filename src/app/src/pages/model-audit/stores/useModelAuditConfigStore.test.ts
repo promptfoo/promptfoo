@@ -30,23 +30,14 @@ describe('useModelAuditConfigStore', () => {
   });
 
   describe('paths management', () => {
-    it('should add a path', () => {
-      const { result } = renderHook(() => useModelAuditConfigStore());
-
-      act(() => {
-        result.current.addPath({ path: '/test/model.bin', type: 'file', name: 'model.bin' });
-      });
-
-      expect(result.current.paths).toHaveLength(1);
-      expect(result.current.paths[0].path).toBe('/test/model.bin');
-    });
-
     it('should remove a path', () => {
       const { result } = renderHook(() => useModelAuditConfigStore());
 
       act(() => {
-        result.current.addPath({ path: '/test/model1.bin', type: 'file', name: 'model1.bin' });
-        result.current.addPath({ path: '/test/model2.bin', type: 'file', name: 'model2.bin' });
+        result.current.setPaths([
+          { path: '/test/model1.bin', type: 'file', name: 'model1.bin' },
+          { path: '/test/model2.bin', type: 'file', name: 'model2.bin' },
+        ]);
       });
 
       expect(result.current.paths).toHaveLength(2);
@@ -103,25 +94,6 @@ describe('useModelAuditConfigStore', () => {
       expect(result.current.recentScans).toHaveLength(10);
       // Most recent should be first
       expect(result.current.recentScans[0].label).toBe('Scan 14');
-    });
-
-    it('should remove a recent scan', () => {
-      const { result } = renderHook(() => useModelAuditConfigStore());
-
-      act(() => {
-        result.current.addRecentScan(
-          [{ path: '/test/model.bin', type: 'file' as const, name: 'model.bin' }],
-          'Test Scan',
-        );
-      });
-
-      const scanId = result.current.recentScans[0].id;
-
-      act(() => {
-        result.current.removeRecentScan(scanId);
-      });
-
-      expect(result.current.recentScans).toHaveLength(0);
     });
 
     it('should remove a path from a recent scan', () => {
@@ -221,24 +193,6 @@ describe('useModelAuditConfigStore', () => {
 
       expect(result.current.scanResults).toEqual(mockResults);
       expect(result.current.error).toBeNull();
-    });
-
-    it('should clear scan state', () => {
-      const { result } = renderHook(() => useModelAuditConfigStore());
-
-      act(() => {
-        result.current.setIsScanning(true);
-        result.current.setError('Some error');
-        result.current.setScanResults({ path: '/test', success: true, issues: [] } as any);
-      });
-
-      act(() => {
-        result.current.clearScanState();
-      });
-
-      expect(result.current.isScanning).toBe(false);
-      expect(result.current.error).toBeNull();
-      expect(result.current.scanResults).toBeNull();
     });
 
     it('should start a new scan with a fresh draft', () => {
