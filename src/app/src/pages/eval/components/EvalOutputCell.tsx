@@ -58,6 +58,41 @@ type CSSPropertiesWithCustomVars = React.CSSProperties & {
 const transformMarkdownUrl = (url: string): string =>
   isMediaRef(url) || isLegacyMediaPath(url) ? (resolveBlobUri(url) ?? '') : url;
 
+type MarkdownDisplayNode = {
+  type: string;
+  value?: string;
+  alt?: string | null;
+  title?: string | null;
+  children?: MarkdownDisplayNode[];
+};
+
+function remarkNormalizeMediaText() {
+  return (tree: MarkdownDisplayNode) => {
+    const pending = [tree];
+    for (let node = pending.pop(); node; node = pending.pop()) {
+      // Preserve normalization of displayed prose and code, without modifying
+      // URL destinations or reference identifiers before urlTransform validates them.
+      if (
+        (node.type === 'text' || node.type === 'inlineCode' || node.type === 'code') &&
+        typeof node.value === 'string'
+      ) {
+        node.value = normalizeMediaText(node.value);
+      }
+      if (typeof node.alt === 'string') {
+        node.alt = normalizeMediaText(node.alt);
+      }
+      if (typeof node.title === 'string') {
+        node.title = normalizeMediaText(node.title);
+      }
+      for (const child of node.children ?? []) {
+        pending.push(child);
+      }
+    }
+  };
+}
+
+const EVAL_REMARK_PLUGINS = [...REMARK_PLUGINS, remarkNormalizeMediaText];
+
 function scoreToString(score: number | null | undefined) {
   if (typeof score !== 'number' || score === 0 || score === 1) {
     // Don't show boolean scores.
@@ -453,7 +488,7 @@ function renderMarkdownOrJsonNode({
   return {
     node: (
       <ReactMarkdown
-        remarkPlugins={REMARK_PLUGINS}
+        remarkPlugins={EVAL_REMARK_PLUGINS}
         urlTransform={transformMarkdownUrl}
         components={markdownComponents}
       >

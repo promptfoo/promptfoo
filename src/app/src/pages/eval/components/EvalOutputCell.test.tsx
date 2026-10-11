@@ -174,6 +174,75 @@ describe('EvalOutputCell', () => {
   });
 
   it.each([
+    [`See promptfoo://blob/${'A'.repeat(64)}.`, `See /api/blobs/${'a'.repeat(64)}.`],
+    ['Stored at storageRef:images/a.png', 'Stored at /api/media/images/a.png'],
+    ['**Stored at storageRef:images/a.png**', 'Stored at /api/media/images/a.png'],
+    ['`storageRef:images/a.png`', '/api/media/images/a.png'],
+    ['```text\nstorageRef:images/a.png\n```', '/api/media/images/a.png'],
+  ])(
+    'normalizes parsed Markdown display text without rewriting destinations: %j',
+    (text, expected) => {
+      const { container } = renderWithProviders(
+        <EvalOutputCell
+          {...defaultProps}
+          maxTextLength={10000}
+          output={{ ...defaultProps.output, text }}
+        />,
+      );
+      expect(container).toHaveTextContent(expected);
+      expect(container.textContent).not.toContain('storageRef:');
+      expect(container.textContent).not.toContain('promptfoo://blob/');
+    },
+  );
+
+  it('normalizes a Markdown link label while rejecting its complete unsafe destination', () => {
+    const hash = 'a'.repeat(64);
+    renderWithProviders(
+      <EvalOutputCell
+        {...defaultProps}
+        maxTextLength={10000}
+        output={{
+          ...defaultProps.output,
+          text: `[See promptfoo://blob/${hash}.](storageRef:video/a'/../../../eval/private)`,
+        }}
+      />,
+    );
+    const label = screen.getByText(`See /api/blobs/${hash}.`);
+    expect(label.closest('a')?.getAttribute('href') || '').toBe('');
+  });
+
+  it('normalizes image alternative text without changing destination validation', () => {
+    renderWithProviders(
+      <EvalOutputCell
+        {...defaultProps}
+        maxTextLength={10000}
+        output={{
+          ...defaultProps.output,
+          text: "![Stored at storageRef:images/a.png](storageRef:video/a'/../../../eval/private)",
+        }}
+      />,
+    );
+    const image = screen.getByRole('img', { name: 'Stored at /api/media/images/a.png' });
+    expect(image.getAttribute('src') || '').toBe('');
+  });
+
+  it.each([
+    '[label](storageRef:images/a.png "Stored at storageRef:images/a.png")',
+    '[label][storageRef:label]\n\n[storageRef:label]: storageRef:images/a.png "Stored at storageRef:images/a.png"',
+  ])('normalizes Markdown titles while preserving reference identifiers: %j', (text) => {
+    renderWithProviders(
+      <EvalOutputCell
+        {...defaultProps}
+        maxTextLength={10000}
+        output={{ ...defaultProps.output, text }}
+      />,
+    );
+    const link = screen.getByRole('link', { name: 'label' });
+    expect(link).toHaveAttribute('href', '/api/media/images/a.png');
+    expect(link).toHaveAttribute('title', 'Stored at /api/media/images/a.png');
+  });
+
+  it.each([
     "storageRef:video/a'/../../../eval/private",
     'storageRef:video/a"/../../../eval/private',
     'storageRef:video/a`/../../../eval/private',
