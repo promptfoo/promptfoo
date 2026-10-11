@@ -306,7 +306,10 @@ export function normalizeMediaText(text: string): string {
     const prefix = match.toLowerCase().startsWith(BLOB_URI_PREFIX)
       ? BLOB_URI_PREFIX
       : STORAGE_REF_PREFIX;
-    return resolveBlobUri(`${prefix}${match.slice(prefix.length)}`) ?? match;
+    const value = match.slice(prefix.length);
+    const prose = prefix === BLOB_URI_PREFIX ? /^([a-f0-9]{64})([.,:!;?]+)$/i.exec(value) : null;
+    const resolved = resolveBlobUri(`${prefix}${prose?.[1] ?? value}`);
+    return resolved === undefined ? match : `${resolved}${prose?.[2] ?? ''}`;
   });
 }
 

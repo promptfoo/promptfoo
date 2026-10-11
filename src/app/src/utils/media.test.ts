@@ -1195,6 +1195,36 @@ describe('normalizeMediaText', () => {
     expect(normalizeMediaText('')).toBe('');
   });
 
+  it.each(['.', ',', ':', '!', ';', '?', '...', '?!'])(
+    'normalizes an exact blob hash followed by terminal prose punctuation: %s',
+    (punctuation) => {
+      const hash = 'ABCDEF01'.repeat(8);
+      const ref = `promptfoo://blob/${hash}${punctuation}`;
+      vi.mocked(useApiConfig.getState).mockReturnValue(mockState('https://api.example.com/proxy'));
+      expect(normalizeMediaText(`See ${ref} Next sentence.`)).toBe(
+        `See https://api.example.com/proxy/api/blobs/${hash.toLowerCase()}${punctuation} Next sentence.`,
+      );
+      expect(resolveBlobUri(ref)).toBeUndefined();
+    },
+  );
+
+  it.each([
+    '/../eval/private',
+    '../eval/private',
+    '.\\..\\eval/private',
+    '.%2f..%2feval/private',
+    '.%252f..%252feval/private',
+    '?download=true',
+    '?../eval/private',
+    ':other',
+    '#fragment',
+    'a.',
+  ])('does not normalize a blob hash prefix followed by URL syntax: %s', (suffix) => {
+    const ref = `promptfoo://blob/${'a'.repeat(64)}${suffix}`;
+    expect(normalizeMediaText(`See ${ref}`)).toBe(`See ${ref}`);
+    expect(resolveBlobUri(ref)).toBeUndefined();
+  });
+
   it('normalizes references separated by prose, newlines, and tabs', () => {
     const hash = 'a'.repeat(64);
     expect(normalizeMediaText(`promptfoo://blob/${hash}\nnext paragraph`)).toBe(
