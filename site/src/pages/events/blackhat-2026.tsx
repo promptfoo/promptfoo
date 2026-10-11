@@ -2,9 +2,11 @@ import React from 'react';
 
 import Head from '@docusaurus/Head';
 import Link from '@docusaurus/Link';
+import { CalendarIcon, LocationIcon } from '@site/src/components/Events/EventIcons';
 import { useForcedTheme } from '@site/src/hooks/useForcedTheme';
 import Layout from '@theme/Layout';
 import { SITE_CONSTANTS } from '../../constants';
+import { scrollToEventSectionWithReducedMotion as handleSmoothScroll } from '../../utils/eventScroll';
 import styles from './blackhat-2026.module.css';
 
 const BOOTH = 'Booth #2967';
@@ -138,46 +140,6 @@ const STATS: Stat[] = [
   { value: `${SITE_CONSTANTS.CONTRIBUTOR_COUNT}`, label: 'Contributors' },
 ];
 
-const CalendarIcon = () => (
-  <svg
-    className={styles.detailIcon}
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    aria-hidden="true"
-  >
-    <path
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth={2}
-      d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-    />
-  </svg>
-);
-
-const PinIcon = () => (
-  <svg
-    className={styles.detailIcon}
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    aria-hidden="true"
-  >
-    <path
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth={2}
-      d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
-    />
-    <path
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth={2}
-      d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
-    />
-  </svg>
-);
-
 const BoothIcon = () => (
   <svg
     className={styles.detailIcon}
@@ -214,19 +176,6 @@ const FloorPlanIcon = () => (
 
 export default function BlackHat2026(): React.ReactElement {
   useForcedTheme('dark');
-
-  const handleSmoothScroll = (e: React.MouseEvent<HTMLAnchorElement>, targetId: string) => {
-    e.preventDefault();
-    const element = document.querySelector(targetId);
-    if (!element) {
-      return;
-    }
-    const offset = 80; // Offset for fixed header
-    const offsetPosition = element.getBoundingClientRect().top + window.scrollY - offset;
-    const prefersReducedMotion =
-      window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches ?? false;
-    window.scrollTo({ top: offsetPosition, behavior: prefersReducedMotion ? 'auto' : 'smooth' });
-  };
 
   return (
     <Layout title="Promptfoo at Black Hat USA 2026" description={DESCRIPTION}>
@@ -296,11 +245,11 @@ export default function BlackHat2026(): React.ReactElement {
               </div>
               <ul className={styles.eventDetails}>
                 <li className={styles.detail}>
-                  <CalendarIcon />
+                  <CalendarIcon className={styles.detailIcon} aria-hidden="true" />
                   <span>Conference: August 1-6, 2026</span>
                 </li>
                 <li className={styles.detail}>
-                  <PinIcon />
+                  <LocationIcon className={styles.detailIcon} aria-hidden="true" />
                   <span>Mandalay Bay, Las Vegas</span>
                 </li>
                 <li className={styles.detail}>
