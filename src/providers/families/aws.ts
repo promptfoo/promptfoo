@@ -57,6 +57,13 @@ export const awsProviderFactories: ProviderFactory[] = [
       // Runtime, including an explicit Messages route with US/global profiles.
       const isLegacyType = modelType === 'converse' || modelType === 'completion';
       const bareModelName = splits.slice(1).join(':');
+      if (textRoute && (bareModelName === 'xai.grok-4.7' || modelName === 'xai.grok-4.7')) {
+        throw new Error(
+          'Grok 4.7 requires a Bedrock Runtime inference profile. Use ' +
+            '"bedrock:converse:us.xai.grok-4.7" or "bedrock:converse:global.xai.grok-4.7" ' +
+            'with AWS credentials in a supported region.',
+        );
+      }
       const novaSonicSubtype =
         modelType === 'nova-sonic'
           ? { expectedModel: 'amazon.nova-sonic-v1:0', name: 'nova-sonic' }
@@ -194,15 +201,15 @@ export const awsProviderFactories: ProviderFactory[] = [
             ? splits[1]
             : undefined;
       // Prefixed Grok ids are never mantle ids — the mantle endpoint 404s on them. Most are
-      // simply invalid, but Grok 4.6 publishes Runtime profiles. Preserve their existing
-      // routing; recommend explicit Converse in docs because the current AWS card does not
-      // list InvokeModel. An explicit `bedrock:mantle:` request is rejected either way.
+      // simply invalid, but supported Grok Runtime profiles use InvokeModel or Converse.
+      // An explicit `bedrock:mantle:` request is rejected either way.
       const routedGrokModel = modelType === 'mantle' ? modelName : candidateResponsesModel;
       if (routedGrokModel && isRejectedPrefixedGrokId(routedGrokModel, modelType === 'mantle')) {
         throw new Error(
           `Amazon Bedrock model "${routedGrokModel}" is not a valid Grok mantle id. Use the bare ` +
             `"bedrock:xai.grok-4.3" id for mantle-served Grok models, or an inference profile ` +
-            `such as "bedrock:converse:us.xai.grok-4.6" for Grok models Bedrock serves natively.`,
+            `such as "bedrock:converse:us.xai.grok-4.6" or "bedrock:converse:us.xai.grok-4.7" ` +
+            `for Grok models Bedrock serves natively.`,
         );
       }
       // Gate the (heavy) openaiResponses import behind the lightweight routing predicate so
