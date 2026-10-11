@@ -15,17 +15,14 @@ import {
   getPersistedProviderFilterOptions,
   getProviderFilterRegexError,
 } from '../util/eval/filterProviders';
+import { createDefaultPromptMetrics, updatePromptResultCounts } from '../util/eval/promptMetrics';
 import { accumulateNamedMetric } from '../util/namedMetrics';
 import { writeMultipleOutputs } from '../util/output';
 import { getOutputFileFormat } from '../util/outputFormats';
 import { shouldShareResults } from '../util/sharing';
-import {
-  accumulateGradingTokenUsage,
-  accumulateResponseTokenUsage,
-  createEmptyTokenUsage,
-} from '../util/tokenUsageUtils';
+import { accumulateGradingTokenUsage, accumulateResponseTokenUsage } from '../util/tokenUsageUtils';
 
-import type { TokenUsage } from '../types/index';
+import type { PromptMetrics } from '../types/index';
 import type { InternalEvaluateOptions } from '../types/internal';
 
 export interface RetryCommandOptions {
@@ -181,43 +178,9 @@ export async function recalculatePromptMetrics(evalRecord: Eval): Promise<void> 
   let totalProcessed = 0;
 
   // Create a map to track metrics by promptIdx
-  const promptMetricsMap = new Map<
-    number,
-    {
-      score: number;
-      testPassCount: number;
-      testFailCount: number;
-      testErrorCount: number;
-      testCacheHitCount: number;
-      assertPassCount: number;
-      assertFailCount: number;
-      totalLatencyMs: number;
-      tokenUsage: TokenUsage;
-      namedScores: Record<string, number>;
-      namedScoresCount: Record<string, number>;
-      namedScoreWeights?: Record<string, number>;
-      cost: number;
-      incurredCost?: number;
-    }
-  >();
-
-  // Initialize metrics for each prompt
+  const promptMetricsMap = new Map<number, PromptMetrics>();
   for (const [promptIdx] of evalRecord.prompts.entries()) {
-    promptMetricsMap.set(promptIdx, {
-      score: 0,
-      testPassCount: 0,
-      testFailCount: 0,
-      testErrorCount: 0,
-      testCacheHitCount: 0,
-      assertPassCount: 0,
-      assertFailCount: 0,
-      totalLatencyMs: 0,
-      tokenUsage: createEmptyTokenUsage(),
-      namedScores: {},
-      namedScoresCount: {},
-      namedScoreWeights: {},
-      cost: 0,
-    });
+    promptMetricsMap.set(promptIdx, createDefaultPromptMetrics());
   }
 
   // Stream results in batches to avoid OOM with large evaluations
@@ -238,18 +201,7 @@ export async function recalculatePromptMetrics(evalRecord: Eval): Promise<void> 
           continue;
         }
 
-        // Update test counts
-        if (result.success) {
-          metrics.testPassCount++;
-        } else if (result.failureReason === ResultFailureReason.ERROR) {
-          metrics.testErrorCount++;
-        } else {
-          metrics.testFailCount++;
-        }
-
-        if (result.response?.cached) {
-          metrics.testCacheHitCount++;
-        }
+        updatePromptResultCounts(metrics, result);
 
         // Update scores and other metrics
         metrics.score += result.score ?? 0;
