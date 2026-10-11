@@ -45,6 +45,14 @@ describe('resolveModelSettings retry policies', () => {
     { httpStatus: 429 },
     { retryOn: [429] },
     { any: [null] },
+    { httpStatus: ['429'] },
+    { httpStatus: [null] },
+    { httpStatus: [429.5] },
+    { httpStatus: [42] },
+    null,
+    false,
+    0,
+    '',
   ])('rejects malformed policy %j', (policy) => {
     expect(() => resolvePolicy(policy)).toThrow('Invalid OpenAI Agents retry policy');
   });

@@ -30,7 +30,9 @@ function resolveRetryPolicy(
     ? TPolicy | undefined
     : undefined
   : undefined {
-  if (!policy) {
+  // Only a missing policy means "no policy". Other falsy values such as null, false, 0, or ''
+  // are configuration mistakes and are rejected below.
+  if (policy === undefined) {
     return undefined;
   }
 
@@ -53,18 +55,24 @@ function resolveRetryPolicy(
     }
   }
 
-  if (typeof policy === 'object' && 'httpStatus' in policy) {
-    if (!Array.isArray(policy.httpStatus) || policy.httpStatus.length === 0) {
+  if (policy !== null && typeof policy === 'object' && 'httpStatus' in policy) {
+    if (
+      !Array.isArray(policy.httpStatus) ||
+      policy.httpStatus.length === 0 ||
+      !policy.httpStatus.every(
+        (status) => Number.isInteger(status) && status >= 100 && status <= 599,
+      )
+    ) {
       throw invalidRetryPolicy(policy);
     }
     return retryPolicies.httpStatus(policy.httpStatus);
   }
 
-  if (typeof policy === 'object' && 'any' in policy) {
+  if (policy !== null && typeof policy === 'object' && 'any' in policy) {
     return retryPolicies.any(...resolveNestedRetryPolicies(policy, policy.any));
   }
 
-  if (typeof policy === 'object' && 'all' in policy) {
+  if (policy !== null && typeof policy === 'object' && 'all' in policy) {
     return retryPolicies.all(...resolveNestedRetryPolicies(policy, policy.all));
   }
 
