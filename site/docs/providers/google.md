@@ -270,6 +270,7 @@ providers:
 providers:
   - id: vertex:gemini-3.8-flash
     config:
+      expressMode: false
       projectId: my-project-id
       region: global
 ```

@@ -571,6 +571,7 @@ The examples below use standard Vertex AI authentication with ADC or a service a
 providers:
   - id: vertex:gemini-3.8-flash
     config:
+      expressMode: false
       region: global
 
 prompts:
@@ -605,6 +606,7 @@ providers:
   # Google models
   - id: vertex:gemini-3.8-flash
     config:
+      expressMode: false
       region: global
 
   # Claude models (set an enabled region, or `global` for Claude 5)
