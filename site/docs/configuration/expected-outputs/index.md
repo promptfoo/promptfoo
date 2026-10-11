@@ -186,7 +186,7 @@ These metrics are model-assisted, and rely on LLMs or other machine learning mod
 
 See [Model-graded evals](/docs/configuration/expected-outputs/model-graded), [classification](/docs/configuration/expected-outputs/classifier), and [similarity](/docs/configuration/expected-outputs/similar) docs for more information.
 
-See [grader errors and retries](/docs/configuration/expected-outputs/model-graded/#common-patterns-and-troubleshooting) for how grading failures differ from negative judgments and when to use `--retry-errors`.
+See [grader failure metadata](/docs/configuration/expected-outputs/model-graded/#common-patterns-and-troubleshooting) for distinguishing execution failures from negative judgments in programmatic results.
 
 | Assertion Type                                                                                       | Method                                                                           |
 | ---------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |

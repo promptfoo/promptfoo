@@ -741,7 +741,7 @@ Assertions with built-in thresholds, such as `answer-relevance`, `context-recall
 `context-relevance`, and `context-faithfulness`, default to `0.5` when `threshold` is
 omitted.
 
-Grader execution failures, such as an unavailable grader or malformed response, can make a failing test an `ERROR`. A valid negative judgment is an assertion failure (`ASSERT`). Passing test results are not reclassified, and grader errors in assertions or parent assertion sets with weight `0` do not trigger this `ERROR` classification. Use `promptfoo eval --retry-errors` to retry `ERROR` rows from the latest eval.
+Aggregated grading results preserve `metadata.graderError: true` for grader execution failures from failed components with nonzero assertion and parent-set weights. Valid negative judgments do not add this flag, and passing aggregates do not inherit it from failed components. Inspect it on `assertions.runAssertions(...)` results or `result.gradingResult` in full JSON exports. This metadata does not change row status, counters, or retry selection.
 
 **Common issue**: Tests show PASS even when scores are low
 
