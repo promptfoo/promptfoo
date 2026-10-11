@@ -7,10 +7,43 @@ import { neverGenerateRemote } from '../../src/redteam/remoteGeneration';
 import { doRemoteGrading } from '../../src/remoteGrading';
 import { ResultFailureReason } from '../../src/types/index';
 import { fetchWithProxy } from '../../src/util/fetch/index';
+import { createTestOutput } from '../factories/literalFixtures';
 import { mockGlobal } from '../util/utils';
 
 import type { EvaluateResult, EvaluateSummaryV3 } from '../../src/types/index';
 import type { ApiProvider } from '../../src/types/providers';
+
+const createSessionHeaderOptions = () => ({
+  headers: createSessionHeaders(),
+});
+
+const createSessionHeaders = () => ({
+  'X-Session-ID': '{{sessionId}}',
+});
+
+const createGreetingRawResponse = () => ({
+  output: 'Hello!',
+  raw: 'Hello!',
+});
+
+const createSuccessfulProbeResult = () => ({
+  message: 'Test passed',
+  changes_needed: false,
+});
+
+const createTransformedGreetingResponse = () => ({
+  output: 'Hello!',
+  raw: 'Hello!',
+  metadata: {
+    transformedRequest: { body: { message: 'Hello World!' } },
+  },
+});
+
+const createCustomHeaderOptions = () => ({
+  headers: {
+    'X-Custom-Header': 'test',
+  },
+});
 
 // Mock dependencies
 vi.mock('../../src/evaluator');
@@ -286,10 +319,7 @@ describe('Provider Test Functions', () => {
           provider: { id: 'test-provider' },
           prompt: { raw: 'Hello World!', label: 'Connectivity Test' },
           vars: { sessionId: 'test-uuid-1234' },
-          response: {
-            output: 'Hello!',
-            raw: 'Hello!',
-          },
+          response: createGreetingRawResponse(),
           error: null,
           failureReason: ResultFailureReason.NONE,
           success: true,
@@ -305,10 +335,7 @@ describe('Provider Test Functions', () => {
         // Mock successful agent response
         (fetchWithProxy as Mock).mockResolvedValue({
           ok: true,
-          json: vi.fn().mockResolvedValue({
-            message: 'Test passed',
-            changes_needed: false,
-          }),
+          json: vi.fn().mockResolvedValue(createSuccessfulProbeResult()),
         });
 
         const result = await testProviderConnectivity({ provider: mockProvider });
@@ -347,10 +374,7 @@ describe('Provider Test Functions', () => {
         // Mock successful agent response
         (fetchWithProxy as Mock).mockResolvedValue({
           ok: true,
-          json: vi.fn().mockResolvedValue({
-            message: 'Test passed',
-            changes_needed: false,
-          }),
+          json: vi.fn().mockResolvedValue(createSuccessfulProbeResult()),
         });
 
         const result = await testProviderConnectivity({ provider: mockProvider });
@@ -369,10 +393,7 @@ describe('Provider Test Functions', () => {
           provider: { id: 'test-provider' },
           prompt: { raw: 'Hello World!', label: 'Connectivity Test' },
           vars: { sessionId: 'test-uuid-1234' },
-          response: {
-            output: 'Hello!',
-            raw: 'Hello!',
-          },
+          response: createGreetingRawResponse(),
           error: null,
           failureReason: ResultFailureReason.NONE,
           success: true,
@@ -388,10 +409,7 @@ describe('Provider Test Functions', () => {
         // Mock successful agent response
         (fetchWithProxy as Mock).mockResolvedValue({
           ok: true,
-          json: vi.fn().mockResolvedValue({
-            message: 'Test passed',
-            changes_needed: false,
-          }),
+          json: vi.fn().mockResolvedValue(createSuccessfulProbeResult()),
         });
 
         const result = await testProviderConnectivity({ provider: mockProvider });
@@ -533,13 +551,7 @@ describe('Provider Test Functions', () => {
           provider: { id: 'test-provider' },
           prompt: { raw: 'Hello World!', label: 'Connectivity Test' },
           vars: { sessionId: 'test-uuid-1234' },
-          response: {
-            output: 'Hello!',
-            raw: 'Hello!',
-            metadata: {
-              transformedRequest: { body: { message: 'Hello World!' } },
-            },
-          },
+          response: createTransformedGreetingResponse(),
           error: null,
           failureReason: ResultFailureReason.NONE,
           success: true,
@@ -587,13 +599,7 @@ describe('Provider Test Functions', () => {
           provider: { id: 'test-provider' },
           prompt: { raw: 'Hello World!', label: 'Connectivity Test' },
           vars: { sessionId: 'test-uuid-1234' },
-          response: {
-            output: 'Hello!',
-            raw: 'Hello!',
-            metadata: {
-              transformedRequest: { body: { message: 'Hello World!' } },
-            },
-          },
+          response: createTransformedGreetingResponse(),
           error: null,
           failureReason: ResultFailureReason.NONE,
           success: true,
@@ -638,10 +644,7 @@ describe('Provider Test Functions', () => {
           provider: { id: 'test-provider' },
           prompt: { raw: 'Hello World!', label: 'Connectivity Test' },
           vars: { sessionId: 'test-uuid-1234' },
-          response: {
-            output: 'Hello!',
-            raw: 'Hello!',
-          },
+          response: createGreetingRawResponse(),
           error: null,
           failureReason: ResultFailureReason.NONE,
           success: true,
@@ -704,11 +707,7 @@ describe('Provider Test Functions', () => {
   describe('testProviderSession', () => {
     describe('successful session tests', () => {
       it('should successfully test session with client-side session ID', async () => {
-        mockProvider.config = {
-          headers: {
-            'X-Session-ID': '{{sessionId}}',
-          },
-        };
+        mockProvider.config = createSessionHeaderOptions();
 
         // Mock callApi to return successful responses
         (mockProvider.callApi as Mock)
@@ -783,9 +782,7 @@ describe('Provider Test Functions', () => {
 
       it('should successfully test session with server-side session ID', async () => {
         mockProvider.config = {
-          headers: {
-            'X-Session-ID': '{{sessionId}}',
-          },
+          headers: createSessionHeaders(),
           sessionParser: 'response.sessionId',
         };
 
@@ -856,11 +853,7 @@ describe('Provider Test Functions', () => {
       it('should handle session test with remote grading disabled', async () => {
         (neverGenerateRemote as Mock).mockReturnValue(true);
 
-        mockProvider.config = {
-          headers: {
-            'X-Session-ID': '{{sessionId}}',
-          },
-        };
+        mockProvider.config = createSessionHeaderOptions();
 
         // Mock callApi responses
         (mockProvider.callApi as Mock)
@@ -898,11 +891,7 @@ describe('Provider Test Functions', () => {
 
     describe('failed session tests', () => {
       it('should fail when session memory is not working', async () => {
-        mockProvider.config = {
-          headers: {
-            'X-Session-ID': '{{sessionId}}',
-          },
-        };
+        mockProvider.config = createSessionHeaderOptions();
 
         // Mock callApi responses
         (mockProvider.callApi as Mock)
@@ -947,20 +936,12 @@ describe('Provider Test Functions', () => {
 
       it('should warn when client session config is missing sessionId variable', async () => {
         // Config without {{sessionId}}
-        mockProvider.config = {
-          headers: {
-            'X-Custom-Header': 'test',
-          },
-        };
+        mockProvider.config = createCustomHeaderOptions();
 
         // Mock callApi responses
         (mockProvider.callApi as Mock)
-          .mockResolvedValueOnce({
-            output: 'I can help!',
-          })
-          .mockResolvedValueOnce({
-            output: 'You asked about help.',
-          });
+          .mockResolvedValueOnce(createTestOutput('I can help!'))
+          .mockResolvedValueOnce(createTestOutput('You asked about help.'));
 
         const result = await testProviderSession({ provider: mockProvider });
 
@@ -977,20 +958,12 @@ describe('Provider Test Functions', () => {
 
       it('should skip validation when skipConfigValidation is true', async () => {
         // Config without {{sessionId}}
-        mockProvider.config = {
-          headers: {
-            'X-Custom-Header': 'test',
-          },
-        };
+        mockProvider.config = createCustomHeaderOptions();
 
         // Mock callApi responses
         (mockProvider.callApi as Mock)
-          .mockResolvedValueOnce({
-            output: 'I can help!',
-          })
-          .mockResolvedValueOnce({
-            output: 'You asked about help.',
-          });
+          .mockResolvedValueOnce(createTestOutput('I can help!'))
+          .mockResolvedValueOnce(createTestOutput('You asked about help.'));
 
         const result = await testProviderSession({
           provider: mockProvider,
@@ -1006,23 +979,15 @@ describe('Provider Test Functions', () => {
       });
 
       it('should warn when server session config is missing parser', async () => {
-        mockProvider.config = {
-          headers: {
-            'X-Session-ID': '{{sessionId}}',
-          },
-        };
+        mockProvider.config = createSessionHeaderOptions();
 
         // Mock getSessionId to provide sessionId even without parser
         mockProvider.getSessionId = vi.fn(() => 'manual-session-id');
 
         // Mock callApi responses
         (mockProvider.callApi as Mock)
-          .mockResolvedValueOnce({
-            output: 'I can help!',
-          })
-          .mockResolvedValueOnce({
-            output: 'You asked about help.',
-          });
+          .mockResolvedValueOnce(createTestOutput('I can help!'))
+          .mockResolvedValueOnce(createTestOutput('You asked about help.'));
 
         await testProviderSession({
           provider: mockProvider,
@@ -1041,9 +1006,7 @@ describe('Provider Test Functions', () => {
 
       it('should fail when server session ID extraction fails', async () => {
         mockProvider.config = {
-          headers: {
-            'X-Session-ID': '{{sessionId}}',
-          },
+          headers: createSessionHeaders(),
           sessionParser: 'response.sessionId',
         };
 
@@ -1075,11 +1038,7 @@ describe('Provider Test Functions', () => {
       });
 
       it('should handle first request error', async () => {
-        mockProvider.config = {
-          headers: {
-            'X-Session-ID': '{{sessionId}}',
-          },
-        };
+        mockProvider.config = createSessionHeaderOptions();
 
         // Mock callApi to return error on first request
         (mockProvider.callApi as Mock).mockResolvedValueOnce({
@@ -1102,17 +1061,11 @@ describe('Provider Test Functions', () => {
       });
 
       it('should handle second request error', async () => {
-        mockProvider.config = {
-          headers: {
-            'X-Session-ID': '{{sessionId}}',
-          },
-        };
+        mockProvider.config = createSessionHeaderOptions();
 
         // Mock callApi - first succeeds, second fails
         (mockProvider.callApi as Mock)
-          .mockResolvedValueOnce({
-            output: 'I can help!',
-          })
+          .mockResolvedValueOnce(createTestOutput('I can help!'))
           .mockResolvedValueOnce({
             error: 'Connection timeout',
           });
@@ -1141,20 +1094,14 @@ describe('Provider Test Functions', () => {
     describe('session configuration', () => {
       it('should update provider config with session settings', () => {
         // This will be called internally during testProviderSession
-        mockProvider.config = {
-          headers: {
-            'X-Session-ID': '{{sessionId}}',
-          },
-        };
+        mockProvider.config = createSessionHeaderOptions();
 
         expect(mockProvider.config).toBeDefined();
       });
 
       it('should detect server session from sessionParser in provider config', async () => {
         mockProvider.config = {
-          headers: {
-            'X-Session-ID': '{{sessionId}}',
-          },
+          headers: createSessionHeaders(),
           sessionParser: 'response.sessionId',
         };
 
@@ -1181,11 +1128,7 @@ describe('Provider Test Functions', () => {
 
     describe('edge cases', () => {
       it('should handle empty response outputs gracefully', async () => {
-        mockProvider.config = {
-          headers: {
-            'X-Session-ID': '{{sessionId}}',
-          },
-        };
+        mockProvider.config = createSessionHeaderOptions();
 
         // Mock callApi with empty outputs
         (mockProvider.callApi as Mock)
@@ -1211,20 +1154,12 @@ describe('Provider Test Functions', () => {
       });
 
       it('should handle grading failure gracefully', async () => {
-        mockProvider.config = {
-          headers: {
-            'X-Session-ID': '{{sessionId}}',
-          },
-        };
+        mockProvider.config = createSessionHeaderOptions();
 
         // Mock callApi responses
         (mockProvider.callApi as Mock)
-          .mockResolvedValueOnce({
-            output: 'I can help!',
-          })
-          .mockResolvedValueOnce({
-            output: 'You asked about help.',
-          });
+          .mockResolvedValueOnce(createTestOutput('I can help!'))
+          .mockResolvedValueOnce(createTestOutput('You asked about help.'));
 
         // Mock doRemoteGrading to throw error
         (doRemoteGrading as Mock).mockRejectedValue(new Error('Grading service unavailable'));

@@ -414,6 +414,52 @@ describe('ResultsCharts', () => {
         }),
       ).toContain('right first output');
     });
+
+    it('renders only three equal-width charts when the evaluation has a description', () => {
+      const mockTable = {
+        head: {
+          prompts: [{ provider: 'test-provider-1' }, { provider: 'test-provider-2' }],
+          vars: [],
+        },
+        body: [
+          {
+            outputs: [
+              { score: 0.9, pass: true, text: 'test 1' },
+              { score: 0.8, pass: true, text: 'test 2' },
+            ],
+            vars: [],
+          },
+          {
+            outputs: [
+              { score: 0.7, pass: true, text: 'test 3' },
+              { score: 0.6, pass: false, text: 'test 4' },
+            ],
+            vars: [],
+          },
+        ],
+      };
+
+      // Calculate scores using the same logic as ResultsView
+      const scores = mockTable.body
+        .flatMap((row) => row.outputs.map((output) => output?.score))
+        .filter((score) => typeof score === 'number' && !Number.isNaN(score));
+
+      vi.mocked(useTableStore).mockReturnValue({
+        table: mockTable,
+        evalId: 'test-eval',
+        config: { description: 'test config' },
+        setTable: vi.fn(),
+        fetchEvalData: vi.fn(),
+      });
+
+      const { container } = render(<ResultsCharts {...defaultProps} scores={scores} />);
+
+      const canvases = container.querySelectorAll('canvas');
+      expect(canvases).toHaveLength(3);
+      for (const canvas of canvases) {
+        expect(canvas.parentElement).toHaveStyle({ width: '33%' });
+      }
+    });
   });
 
   describe('Edge Cases', () => {

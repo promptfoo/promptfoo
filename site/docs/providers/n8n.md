@@ -132,7 +132,7 @@ against tokenized webhooks. URLs remain part of your configuration and the outbo
 The provider disables automatic transport, response-body, and scheduler retries for every HTTP
 method, including `GET`, `HEAD`, and `PUT`. A webhook can start a workflow with side effects
 (sending messages, writing to a database) regardless of its HTTP method. Failures are returned
-without replaying the workflow; check its execution status before running the eval again.
+without replaying the workflow; check its execution status before running the eval again. A transient HTTP 429 still informs the adaptive scheduler: its `Retry-After` header delays later calls to the same provider without replaying the failed request.
 
 :::
 

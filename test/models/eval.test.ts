@@ -16,8 +16,14 @@ import { getCachedResultsCount } from '../../src/models/evalPerformance';
 import EvalResult from '../../src/models/evalResult';
 import { EvalEvaluationStore } from '../../src/node/evaluationStore';
 import { TraceStore } from '../../src/tracing/store';
-import { type EvaluateResult, type Prompt, ResultFailureReason } from '../../src/types/index';
+import {
+  type EvaluateResult,
+  type EvaluateSummaryV3,
+  type Prompt,
+  ResultFailureReason,
+} from '../../src/types/index';
 import { updateResult, writeResultsToDatabase } from '../../src/util/database';
+import { redactAzureBlobSasTokens } from '../../src/util/sanitizer';
 import {
   getCachedStandaloneEvals,
   getStandaloneEvalCacheKey,
@@ -25,6 +31,7 @@ import {
 } from '../../src/util/standaloneEvalCache';
 import { createEvaluateResult } from '../factories/eval';
 import EvalFactory from '../factories/evalFactory';
+import { createAccuracyFilter, createPassFailOptions } from '../factories/literalFixtures';
 
 vi.mock('../../src/globalConfig/accounts', async () => {
   const actual = await vi.importActual('../../src/globalConfig/accounts');
@@ -68,6 +75,46 @@ describe('evaluator', () => {
 
   afterEach(() => {
     vi.resetAllMocks();
+  });
+
+  describe('repeat stability export', () => {
+    it('includes final comparison verdicts for a row that failed persistence', async () => {
+      const evaluation = await Eval.create({}, [], { id: 'repeat-failed-persistence' });
+      const row = createEvaluateResult({
+        repeatGroupId: 'recovered',
+        repeatIndex: 0,
+        success: true,
+      });
+      evaluation.recordResultPersistenceFailure(row);
+      const [recovered] = await evaluation.getFailedResultsByTestIdx(row.testIdx);
+      recovered.success = false;
+      recovered.failureReason = ResultFailureReason.ASSERT;
+      const summary = await evaluation.getRepeatStability();
+      expect(summary?.groups[0]).toMatchObject({ repetitions: 1, passed: 0, failed: 1 });
+      expect(await EvalResult.findManyByEvalId(evaluation.id)).toEqual([]);
+    });
+
+    it('keeps cached grader evidence when grading details are stripped', async () => {
+      const evaluation = new Eval({ env: { PROMPTFOO_STRIP_GRADING_RESULT: 'true' } });
+      await evaluation.addResult(
+        createEvaluateResult({
+          repeatGroupId: 'repeated',
+          repeatIndex: 0,
+          response: { output: 'fresh target output' },
+          gradingResult: {
+            pass: true,
+            score: 1,
+            reason: 'cached grading',
+            metadata: { cachedResponse: true },
+          },
+        }),
+      );
+      const summary = (await evaluation.toEvaluateSummary()) as EvaluateSummaryV3;
+      expect(summary.version).toBe(3);
+      expect(summary.results[0].gradingResult).toBeNull();
+      expect(summary.repeatStability?.cachedResults).toBe(1);
+      expect(summary.repeatStability?.groups[0].passRateConfidenceInterval).toBeUndefined();
+    });
   });
 
   describe('addPrompts', () => {
@@ -219,6 +266,41 @@ describe('evaluator', () => {
       });
       expect(findResults).not.toHaveBeenCalled();
     });
+  });
+
+  it('preserves duplicate SAS signatures when saving an unchanged redacted config', async () => {
+    const config = {
+      tests: [
+        { vars: { label: 'first', file: 'az://account/container/a.yaml?sig=secret-a' } },
+        { vars: { label: 'second', file: 'az://account/container/a.yaml?sig=secret-b' } },
+      ],
+    };
+    const eval_ = await Eval.create(config, []);
+    await updateResult(eval_.id, redactAzureBlobSasTokens(config));
+    const loaded = await Eval.findById(eval_.id);
+    expect(loaded?.config).toEqual(config);
+  });
+
+  it('reloads summaries after appending to an evaluation with loaded results', async () => {
+    const eval_ = await EvalFactory.create({ numResults: 1 });
+    await eval_.loadResults();
+    const [existing] = await EvalResult.findManyByEvalId(eval_.id);
+    const appended = new EvalResult({
+      ...existing,
+      id: 'appended-result',
+      testIdx: 1,
+      response: existing.response ?? null,
+    });
+    await eval_.setResults([appended]);
+    expect((await eval_.toEvaluateSummary()).results).toHaveLength(2);
+  });
+
+  it('retains persisted rows when an empty upload chunk follows a loaded summary', async () => {
+    const eval_ = await EvalFactory.create({ numResults: 1 });
+    await eval_.loadResults();
+    await eval_.setResults([]);
+    expect((await eval_.toEvaluateSummary()).results).toHaveLength(1);
+    expect(await getCachedResultsCount(eval_.id)).toBe(1);
   });
 
   describe('fetchResultsBatched', () => {
@@ -1759,14 +1841,7 @@ describe('evaluator', () => {
     it('should filter by specific metrics', async () => {
       // This test requires setting up results with named scores in the eval factory
       const result = await evalWithResults.getTablePage({
-        filters: [
-          JSON.stringify({
-            logicOperator: 'and',
-            type: 'metric',
-            operator: 'equals',
-            value: 'accuracy',
-          }),
-        ],
+        filters: [JSON.stringify(createAccuracyFilter())],
       });
 
       // All results should have the specified metric
@@ -1776,6 +1851,21 @@ describe('evaluator', () => {
         );
         expect(hasMetric).toBe(true);
       }
+    });
+
+    it('ignores malformed filter entries while applying valid filters', async () => {
+      const validFilter = JSON.stringify({
+        logicOperator: 'and',
+        type: 'metric',
+        operator: 'equals',
+        value: 'accuracy',
+      });
+      const valid = await evalWithResults.getTablePage({ filters: [validFilter] });
+      const mixed = await evalWithResults.getTablePage({
+        filters: ['{bad json', 'null', '[]', validFilter],
+      });
+      expect(mixed.filteredCount).toBe(valid.filteredCount);
+      expect(mixed.body).toEqual(valid.body);
     });
 
     it('should combine multiple filter types', async () => {
@@ -2060,14 +2150,7 @@ describe('evaluator', () => {
         withNamedScores: true,
       });
       const { testIndices, filteredCount } = await (eval_ as any).queryTestIndices({
-        filters: [
-          JSON.stringify({
-            logicOperator: 'and',
-            type: 'metric',
-            operator: 'equals',
-            value: 'accuracy',
-          }),
-        ],
+        filters: [JSON.stringify(createAccuracyFilter())],
       });
 
       expect(testIndices.length).toBeGreaterThan(0);
@@ -2077,10 +2160,7 @@ describe('evaluator', () => {
     });
 
     it('filters by metadata equals and contains', async () => {
-      const eval_ = await EvalFactory.create({
-        numResults: 6,
-        resultTypes: ['success', 'failure'],
-      });
+      const eval_ = await EvalFactory.create(createPassFailOptions(6));
 
       const db = await getDb();
       await db.run(
@@ -2122,10 +2202,7 @@ describe('evaluator', () => {
     });
 
     it('filters by metadata not_contains without dropping missing fields', async () => {
-      const eval_ = await EvalFactory.create({
-        numResults: 4,
-        resultTypes: ['success', 'failure'],
-      });
+      const eval_ = await EvalFactory.create(createPassFailOptions(4));
 
       const db = await getDb();
       await db.run(
@@ -2155,10 +2232,7 @@ describe('evaluator', () => {
     });
 
     it('filters by metadata exists operator (non-empty values only)', async () => {
-      const eval_ = await EvalFactory.create({
-        numResults: 10,
-        resultTypes: ['success', 'failure'],
-      });
+      const eval_ = await EvalFactory.create(createPassFailOptions(10));
 
       const db = await getDb();
       // Set up test data with various field states
@@ -2201,10 +2275,7 @@ describe('evaluator', () => {
     });
 
     it('filters by metadata exists operator with various data types', async () => {
-      const eval_ = await EvalFactory.create({
-        numResults: 10,
-        resultTypes: ['success', 'failure'],
-      });
+      const eval_ = await EvalFactory.create(createPassFailOptions(10));
 
       const db = await getDb();
       // Set up test data with different data types
@@ -2393,10 +2464,7 @@ describe('evaluator', () => {
     });
 
     it('filters by metadata exists operator with empty arrays and objects', async () => {
-      const eval_ = await EvalFactory.create({
-        numResults: 6,
-        resultTypes: ['success', 'failure'],
-      });
+      const eval_ = await EvalFactory.create(createPassFailOptions(6));
 
       const db = await getDb();
       // Test empty array - should match (not empty)
@@ -2471,10 +2539,7 @@ describe('evaluator', () => {
     });
 
     it('filters by plugin and strategy', async () => {
-      const eval_ = await EvalFactory.create({
-        numResults: 6,
-        resultTypes: ['success', 'failure'],
-      });
+      const eval_ = await EvalFactory.create(createPassFailOptions(6));
       const db = await getDb();
       // Set pluginId on one row and strategyId on another
       await db.run(
@@ -2554,10 +2619,7 @@ describe('evaluator', () => {
     });
 
     it('filters by explicit severity override', async () => {
-      const eval_ = await EvalFactory.create({
-        numResults: 4,
-        resultTypes: ['success', 'failure'],
-      });
+      const eval_ = await EvalFactory.create(createPassFailOptions(4));
       const db = await getDb();
       await db.run(
         `UPDATE eval_results SET metadata = json('{"severity":"high"}') WHERE eval_id = '${eval_.id}' AND test_idx = 0`,
@@ -2575,6 +2637,38 @@ describe('evaluator', () => {
       });
       expect(filteredCount).toBe(1);
       expect(testIndices).toEqual([0]);
+    });
+
+    it('searches user metadata with filters while the unfiltered path searches responses only', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 4, withNamedScores: true });
+      const metadataRows = [
+        { model: 'metadata-scalar-needle', temperature: 0.7 },
+        { nested: { property: 'metadata-nested-needle', array: [101, 202, 303] } },
+        { __promptfoo: { traceId: 'private-only-needle' } },
+        { model: 'unrelated-model' },
+      ];
+      const db = await getDb();
+      for (const [index, metadata] of metadataRows.entries()) {
+        await db.run(
+          sql`UPDATE eval_results SET metadata = ${JSON.stringify(metadata)} WHERE eval_id = ${eval_.id} AND test_idx = ${index}`,
+        );
+      }
+      for (const [searchQuery, expected] of [
+        ['metadata-scalar-needle', [0]],
+        ['metadata-nested-needle', [1]],
+        ['[101,202,303]', [1]],
+        ['absent-needle', []],
+        ['private-only-needle', []],
+      ] as const) {
+        const unfiltered = await eval_.getTablePage({ searchQuery });
+        expect(unfiltered.body).toEqual([]);
+        const page = await eval_.getTablePage({
+          searchQuery,
+          filters: [JSON.stringify(createAccuracyFilter())],
+        });
+        expect(page.body.map((row) => row.testIdx)).toEqual(expected);
+        expect(page.filteredCount).toBe(expected.length);
+      }
     });
 
     it('searches across response, grading, named scores, metadata, and vars', async () => {

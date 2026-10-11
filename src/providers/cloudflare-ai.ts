@@ -67,18 +67,34 @@ function getApiBaseUrl(config?: CloudflareAiConfig, env?: EnvOverrides): string 
   return `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/v1`;
 }
 
-function getOpenAiConfig(providerOptions: CloudflareAiProviderOptions): OpenAiCompletionOptions {
+function getOpenAiProviderOptions(providerOptions: CloudflareAiProviderOptions) {
   const config = providerOptions.config || {};
   const apiBaseUrl = getApiBaseUrl(config, providerOptions.env);
   // Only genuine model parameters belong in the request body; promptfoo's own settings
   // (credentials, headers, cost overrides, basePath) stay local.
   const { modelParameters } = splitLocalOptions(config, ['accountId', 'accountIdEnvar']);
 
-  return {
+  const openAiConfig: OpenAiCompletionOptions = {
     ...config,
     apiKeyEnvar: 'CLOUDFLARE_API_KEY',
     apiBaseUrl,
     passthrough: { ...modelParameters, ...config.passthrough },
+  };
+  return { ...providerOptions, config: openAiConfig };
+}
+
+function cloudflareToJSON(
+  provider: OpenAiChatCompletionProvider | OpenAiCompletionProvider | OpenAiEmbeddingProvider,
+  getModelType: () => string,
+) {
+  return {
+    provider: 'cloudflare-ai',
+    model: provider.modelName,
+    modelType: getModelType(),
+    config: {
+      ...provider.config,
+      ...(provider.getApiKey() && { apiKey: undefined }),
+    },
   };
 }
 
@@ -87,12 +103,7 @@ export class CloudflareAiChatCompletionProvider extends OpenAiChatCompletionProv
   private modelType = 'chat';
 
   constructor(modelName: string, providerOptions: CloudflareAiProviderOptions) {
-    const config = getOpenAiConfig(providerOptions);
-
-    super(modelName, {
-      ...providerOptions,
-      config,
-    });
+    super(modelName, getOpenAiProviderOptions(providerOptions));
 
     this.cloudflareConfig = providerOptions.config || {};
   }
@@ -111,15 +122,7 @@ export class CloudflareAiChatCompletionProvider extends OpenAiChatCompletionProv
   }
 
   toJSON() {
-    return {
-      provider: 'cloudflare-ai',
-      model: this.modelName,
-      modelType: this.modelType,
-      config: {
-        ...this.config,
-        ...(this.getApiKey() && { apiKey: undefined }),
-      },
-    };
+    return cloudflareToJSON(this, () => this.modelType);
   }
 }
 
@@ -128,12 +131,7 @@ export class CloudflareAiCompletionProvider extends OpenAiCompletionProvider {
   private modelType = 'completion';
 
   constructor(modelName: string, providerOptions: CloudflareAiProviderOptions) {
-    const config = getOpenAiConfig(providerOptions);
-
-    super(modelName, {
-      ...providerOptions,
-      config,
-    });
+    super(modelName, getOpenAiProviderOptions(providerOptions));
 
     this.cloudflareConfig = providerOptions.config || {};
   }
@@ -152,15 +150,7 @@ export class CloudflareAiCompletionProvider extends OpenAiCompletionProvider {
   }
 
   toJSON() {
-    return {
-      provider: 'cloudflare-ai',
-      model: this.modelName,
-      modelType: this.modelType,
-      config: {
-        ...this.config,
-        ...(this.getApiKey() && { apiKey: undefined }),
-      },
-    };
+    return cloudflareToJSON(this, () => this.modelType);
   }
 }
 
@@ -169,12 +159,7 @@ export class CloudflareAiEmbeddingProvider extends OpenAiEmbeddingProvider {
   private modelType = 'embedding';
 
   constructor(modelName: string, providerOptions: CloudflareAiProviderOptions) {
-    const config = getOpenAiConfig(providerOptions);
-
-    super(modelName, {
-      ...providerOptions,
-      config,
-    });
+    super(modelName, getOpenAiProviderOptions(providerOptions));
 
     this.cloudflareConfig = providerOptions.config || {};
   }
@@ -193,15 +178,7 @@ export class CloudflareAiEmbeddingProvider extends OpenAiEmbeddingProvider {
   }
 
   toJSON() {
-    return {
-      provider: 'cloudflare-ai',
-      model: this.modelName,
-      modelType: this.modelType,
-      config: {
-        ...this.config,
-        ...(this.getApiKey() && { apiKey: undefined }),
-      },
-    };
+    return cloudflareToJSON(this, () => this.modelType);
   }
 }
 

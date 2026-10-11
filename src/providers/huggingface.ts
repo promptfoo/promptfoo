@@ -10,6 +10,7 @@ import type {
   ApiProvider,
   ApiSimilarityProvider,
   CallApiContextParams,
+  CallApiOptionsParams,
   ProviderClassificationResponse,
   ProviderEmbeddingResponse,
   ProviderOptions,
@@ -22,6 +23,13 @@ const HF_CHAT_API_BASE_URL = 'https://router.huggingface.co/v1';
 
 function singleRow(data: unknown): unknown {
   return Array.isArray(data) && data.length === 1 && Array.isArray(data[0]) ? data[0] : data;
+}
+
+function classificationResponse(ret: ProviderClassificationResponse): ProviderResponse {
+  return {
+    error: ret.error,
+    output: JSON.stringify(ret.classification),
+  };
 }
 
 interface HuggingfaceProviderOptions {
@@ -291,18 +299,16 @@ export class HuggingfaceTextGenerationProvider implements ApiProvider {
   }
 }
 
-type HuggingfaceTextClassificationOptions = HuggingfaceProviderOptions;
-
 export class HuggingfaceTextClassificationProvider implements ApiProvider {
   modelName: string;
-  config: HuggingfaceTextClassificationOptions;
+  config: HuggingfaceProviderOptions;
   env?: EnvOverrides;
 
   constructor(
     modelName: string,
     options: {
       id?: string;
-      config?: HuggingfaceTextClassificationOptions;
+      config?: HuggingfaceProviderOptions;
       env?: EnvOverrides;
     } = {},
   ) {
@@ -390,27 +396,25 @@ export class HuggingfaceTextClassificationProvider implements ApiProvider {
   }
 
   async callApi(prompt: string): Promise<ProviderResponse> {
-    const ret = await this.callClassificationApi(prompt);
-    return {
-      error: ret.error,
-      output: JSON.stringify(ret.classification),
-    };
+    return classificationResponse(await this.callClassificationApi(prompt));
   }
 }
 
-type HuggingfaceFeatureExtractionOptions = HuggingfaceProviderOptions & {
+type HuggingfaceInferenceOptions = HuggingfaceProviderOptions & {
   use_cache?: boolean;
   wait_for_model?: boolean;
 };
 
 export class HuggingfaceFeatureExtractionProvider implements ApiProvider {
+  readonly supportsEmbeddingCancellation = true;
+
   modelName: string;
-  config: HuggingfaceFeatureExtractionOptions;
+  config: HuggingfaceInferenceOptions;
   env?: EnvOverrides;
 
   constructor(
     modelName: string,
-    options: { id?: string; config?: HuggingfaceFeatureExtractionOptions; env?: EnvOverrides } = {},
+    options: { id?: string; config?: HuggingfaceInferenceOptions; env?: EnvOverrides } = {},
   ) {
     const { id, config, env } = options;
     this.env = env;
@@ -438,7 +442,11 @@ export class HuggingfaceFeatureExtractionProvider implements ApiProvider {
     throw new Error('Cannot use a feature extraction provider for text generation');
   }
 
-  async callEmbeddingApi(text: string): Promise<ProviderEmbeddingResponse> {
+  async callEmbeddingApi(
+    text: string,
+    _context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderEmbeddingResponse> {
     // https://huggingface.co/docs/api-inference/detailed_parameters#feature-extraction-task
     const params = {
       inputs: text,
@@ -463,6 +471,7 @@ export class HuggingfaceFeatureExtractionProvider implements ApiProvider {
             ...(this.getApiKey() ? { Authorization: `Bearer ${this.getApiKey()}` } : {}),
           },
           body: JSON.stringify(params),
+          ...(options?.abortSignal && { signal: options.abortSignal }),
         },
         getRequestTimeoutMs(),
       );
@@ -487,6 +496,7 @@ export class HuggingfaceFeatureExtractionProvider implements ApiProvider {
         embedding,
       };
     } catch (err) {
+      options?.abortSignal?.throwIfAborted();
       return {
         error: `API call error: ${String(err)}. Output:\n${response?.data}`,
       };
@@ -494,21 +504,16 @@ export class HuggingfaceFeatureExtractionProvider implements ApiProvider {
   }
 }
 
-type HuggingfaceSentenceSimilarityOptions = HuggingfaceProviderOptions & {
-  use_cache?: boolean;
-  wait_for_model?: boolean;
-};
-
 export class HuggingfaceSentenceSimilarityProvider implements ApiSimilarityProvider {
   modelName: string;
-  config: HuggingfaceSentenceSimilarityOptions;
+  config: HuggingfaceInferenceOptions;
   env?: EnvOverrides;
 
   constructor(
     modelName: string,
     options: {
       id?: string;
-      config?: HuggingfaceSentenceSimilarityOptions;
+      config?: HuggingfaceInferenceOptions;
       env?: EnvOverrides;
     } = {},
   ) {
@@ -702,10 +707,6 @@ export class HuggingfaceTokenExtractionProvider implements ApiProvider {
   }
 
   async callApi(prompt: string): Promise<ProviderResponse> {
-    const ret = await this.callClassificationApi(prompt);
-    return {
-      error: ret.error,
-      output: JSON.stringify(ret.classification),
-    };
+    return classificationResponse(await this.callClassificationApi(prompt));
   }
 }

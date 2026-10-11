@@ -1,3 +1,7 @@
+const { createErrorFirstLoggerModule } = await vi.hoisted(
+  async () => import('../factories/logger'),
+);
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   disableCache,
@@ -14,18 +18,25 @@ import {
 } from '../../src/providers/replicate';
 import { createEmptyTokenUsage } from '../../src/util/tokenUsageUtils';
 import { mockProcessEnv } from '../util/utils';
+import { createMockFetchResponse } from './mockProviderResponses';
+
+const createFailedPrediction = () => ({
+  id: 'test-id',
+  status: 'failed',
+  error: 'Model error',
+});
 
 vi.mock('../../src/cache');
-vi.mock('../../src/logger', () => ({
-  default: {
-    debug: vi.fn(),
-    error: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-  },
-}));
+vi.mock('../../src/logger', () => createErrorFirstLoggerModule());
 
 const mockedFetchWithCache = vi.mocked(fetchWithCache);
+
+const createMockPredictionResponse = (output: string | string[] | null = 'test response') =>
+  createMockFetchResponse({
+    id: 'test-id',
+    status: 'succeeded',
+    output: output,
+  });
 
 describe('ReplicateProvider', () => {
   const mockApiKey = 'test-api-key';
@@ -41,16 +52,7 @@ describe('ReplicateProvider', () => {
   });
 
   it('should handle successful API calls', async () => {
-    mockedFetchWithCache.mockResolvedValue({
-      data: {
-        id: 'test-id',
-        status: 'succeeded',
-        output: 'test response',
-      },
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    });
+    mockedFetchWithCache.mockResolvedValue(createMockPredictionResponse());
 
     const provider = new ReplicateProvider('test-model', {
       config: { apiKey: mockApiKey },
@@ -84,16 +86,7 @@ describe('ReplicateProvider', () => {
     mockProcessEnv({ REPLICATE_TEMPERATURE: '0.9' });
     mockProcessEnv({ REPLICATE_SEED: '123' });
 
-    mockedFetchWithCache.mockResolvedValue({
-      data: {
-        id: 'test-id',
-        status: 'succeeded',
-        output: 'test response',
-      },
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    });
+    mockedFetchWithCache.mockResolvedValue(createMockPredictionResponse());
 
     try {
       const provider = new ReplicateProvider('test-model', {
@@ -138,16 +131,7 @@ describe('ReplicateProvider', () => {
   });
 
   it('should handle prompt prefix and suffix', async () => {
-    mockedFetchWithCache.mockResolvedValue({
-      data: {
-        id: 'test-id',
-        status: 'succeeded',
-        output: 'test response',
-      },
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    });
+    mockedFetchWithCache.mockResolvedValue(createMockPredictionResponse());
 
     const provider = new ReplicateProvider('test-model', {
       config: {
@@ -186,16 +170,7 @@ describe('ReplicateProvider', () => {
       });
 
       // Second call (polling) returns completed
-      mockedFetchWithCache.mockResolvedValueOnce({
-        data: {
-          id: 'test-id',
-          status: 'succeeded',
-          output: 'test response',
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+      mockedFetchWithCache.mockResolvedValueOnce(createMockPredictionResponse());
 
       const provider = new ReplicateProvider('test-model', {
         config: { apiKey: mockApiKey },
@@ -218,16 +193,7 @@ describe('ReplicateProvider', () => {
   );
 
   it('should handle array outputs', async () => {
-    mockedFetchWithCache.mockResolvedValue({
-      data: {
-        id: 'test-id',
-        status: 'succeeded',
-        output: ['Hello', ' ', 'World'],
-      },
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    });
+    mockedFetchWithCache.mockResolvedValue(createMockPredictionResponse(['Hello', ' ', 'World']));
 
     const provider = new ReplicateProvider('test-model', {
       config: { apiKey: mockApiKey },
@@ -239,16 +205,7 @@ describe('ReplicateProvider', () => {
   });
 
   it('should handle failed predictions', async () => {
-    mockedFetchWithCache.mockResolvedValue({
-      data: {
-        id: 'test-id',
-        status: 'failed',
-        error: 'Model error',
-      },
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    });
+    mockedFetchWithCache.mockResolvedValue(createMockFetchResponse(createFailedPrediction()));
 
     const provider = new ReplicateProvider('test-model', {
       config: { apiKey: mockApiKey },
@@ -259,16 +216,9 @@ describe('ReplicateProvider', () => {
   });
 
   it('does not count a cached failed prediction as a new request', async () => {
-    mockedFetchWithCache.mockResolvedValue({
-      data: {
-        id: 'test-id',
-        status: 'failed',
-        error: 'Model error',
-      },
-      cached: true,
-      status: 200,
-      statusText: 'OK',
-    });
+    mockedFetchWithCache.mockResolvedValue(
+      createMockFetchResponse(createFailedPrediction(), { cached: true }),
+    );
 
     const provider = new ReplicateProvider('test-model', {
       config: { apiKey: mockApiKey },
@@ -283,16 +233,7 @@ describe('ReplicateProvider', () => {
   });
 
   it('should use versioned endpoint for models with version IDs', async () => {
-    mockedFetchWithCache.mockResolvedValue({
-      data: {
-        id: 'test-id',
-        status: 'succeeded',
-        output: 'test response',
-      },
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    });
+    mockedFetchWithCache.mockResolvedValue(createMockPredictionResponse());
 
     const provider = new ReplicateProvider('test-model:version123', {
       config: { apiKey: mockApiKey },
@@ -347,12 +288,9 @@ describe('ReplicateProvider', () => {
   ])(
     'does not count an inner cached prediction for output $output',
     async ({ output, expectedOutput }) => {
-      mockedFetchWithCache.mockResolvedValue({
-        data: { id: 'test-id', status: 'succeeded', output },
-        cached: true,
-        status: 200,
-        statusText: 'OK',
-      });
+      mockedFetchWithCache.mockResolvedValue(
+        createMockFetchResponse({ id: 'test-id', status: 'succeeded', output }, { cached: true }),
+      );
 
       const mockCache = {
         get: vi.fn().mockResolvedValue(null),
@@ -381,12 +319,9 @@ describe('ReplicateProvider', () => {
   it.each([{ unsupported: true }, [{ unsupported: true }]])(
     'preserves cache accounting for unsupported cached output %o',
     async (output) => {
-      mockedFetchWithCache.mockResolvedValue({
-        data: { id: 'test-id', status: 'succeeded', output },
-        cached: true,
-        status: 200,
-        statusText: 'OK',
-      });
+      mockedFetchWithCache.mockResolvedValue(
+        createMockFetchResponse({ id: 'test-id', status: 'succeeded', output }, { cached: true }),
+      );
 
       const provider = new ReplicateProvider('test-model', {
         config: { apiKey: mockApiKey },
@@ -402,16 +337,7 @@ describe('ReplicateProvider', () => {
   );
 
   it('should cache successful string responses', async () => {
-    mockedFetchWithCache.mockResolvedValue({
-      data: {
-        id: 'test-id',
-        status: 'succeeded',
-        output: 'test response',
-      },
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    });
+    mockedFetchWithCache.mockResolvedValue(createMockPredictionResponse());
 
     const mockCache = {
       get: vi.fn().mockResolvedValue(null),
@@ -444,26 +370,20 @@ describe('ReplicateProvider', () => {
 
   it('should not expose API key values in hashed cache keys', async () => {
     mockedFetchWithCache
-      .mockResolvedValueOnce({
-        data: {
+      .mockResolvedValueOnce(
+        createMockFetchResponse({
           id: 'test-id-a',
           status: 'succeeded',
           output: 'tenant a response',
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      })
-      .mockResolvedValueOnce({
-        data: {
+        }),
+      )
+      .mockResolvedValueOnce(
+        createMockFetchResponse({
           id: 'test-id-b',
           status: 'succeeded',
           output: 'tenant b response',
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+        }),
+      );
     const mockCache = {
       get: vi.fn().mockResolvedValue(null),
       set: vi.fn(),
@@ -495,16 +415,7 @@ describe('ReplicateProvider', () => {
   });
 
   it('should use a stable cache namespace for the same API key', async () => {
-    mockedFetchWithCache.mockResolvedValue({
-      data: {
-        id: 'test-id',
-        status: 'succeeded',
-        output: 'stable tenant response',
-      },
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    });
+    mockedFetchWithCache.mockResolvedValue(createMockPredictionResponse('stable tenant response'));
     const mockCache = {
       get: vi.fn().mockResolvedValue(null),
       set: vi.fn(),
@@ -531,16 +442,9 @@ describe('ReplicateProvider', () => {
   });
 
   it('should canonicalize config order when hashing cache keys', async () => {
-    mockedFetchWithCache.mockResolvedValue({
-      data: {
-        id: 'test-id',
-        status: 'succeeded',
-        output: 'canonical config response',
-      },
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    });
+    mockedFetchWithCache.mockResolvedValue(
+      createMockPredictionResponse('canonical config response'),
+    );
     const mockCache = {
       get: vi.fn().mockResolvedValue(null),
       set: vi.fn(),
@@ -562,16 +466,7 @@ describe('ReplicateProvider', () => {
   });
 
   it('should separate cache keys for env-backed generation defaults', async () => {
-    mockedFetchWithCache.mockResolvedValue({
-      data: {
-        id: 'test-id',
-        status: 'succeeded',
-        output: 'env default response',
-      },
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    });
+    mockedFetchWithCache.mockResolvedValue(createMockPredictionResponse('env default response'));
     const mockCache = {
       get: vi.fn().mockResolvedValue(null),
       set: vi.fn(),
@@ -618,16 +513,7 @@ describe('ReplicateModerationProvider', () => {
   });
 
   it('should handle safe content correctly', async () => {
-    mockedFetchWithCache.mockResolvedValue({
-      data: {
-        id: 'test-id',
-        status: 'succeeded',
-        output: 'safe\n',
-      },
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    });
+    mockedFetchWithCache.mockResolvedValue(createMockPredictionResponse('safe\n'));
 
     const provider = new ReplicateModerationProvider('test-model', {
       config: { apiKey: mockApiKey },
@@ -655,16 +541,7 @@ describe('ReplicateModerationProvider', () => {
   it('should forward token usage from the LlamaGuard completion path', async () => {
     // Exercise callApiInternal and verify the moderation wrapper preserves the
     // provider response's tokenUsage object without inferring different values.
-    mockedFetchWithCache.mockResolvedValue({
-      data: {
-        id: 'test-id',
-        status: 'succeeded',
-        output: 'unsafe\nS1',
-      },
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    });
+    mockedFetchWithCache.mockResolvedValue(createMockPredictionResponse('unsafe\nS1'));
 
     const provider = new ReplicateModerationProvider('test-model', {
       config: { apiKey: mockApiKey },
@@ -706,16 +583,7 @@ describe('ReplicateModerationProvider', () => {
   });
 
   it('should handle unsafe content with categories', async () => {
-    mockedFetchWithCache.mockResolvedValue({
-      data: {
-        id: 'test-id',
-        status: 'succeeded',
-        output: 'unsafe\nS1,S3',
-      },
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    });
+    mockedFetchWithCache.mockResolvedValue(createMockPredictionResponse('unsafe\nS1,S3'));
 
     const provider = new ReplicateModerationProvider('test-model', {
       config: { apiKey: mockApiKey },
@@ -751,16 +619,13 @@ describe('ReplicateModerationProvider', () => {
       'S12',
       'S13',
     ];
-    mockedFetchWithCache.mockResolvedValue({
-      data: {
+    mockedFetchWithCache.mockResolvedValue(
+      createMockFetchResponse({
         id: 'test-id',
         status: 'succeeded',
         output: `unsafe\n${llamaGuard3Categories.join(',')}`,
-      },
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    });
+      }),
+    );
 
     const provider = new ReplicateModerationProvider('test-model', {
       config: { apiKey: mockApiKey },
@@ -792,16 +657,13 @@ describe('ReplicateModerationProvider', () => {
       'S13',
       'S14', // LlamaGuard 4 only
     ];
-    mockedFetchWithCache.mockResolvedValue({
-      data: {
+    mockedFetchWithCache.mockResolvedValue(
+      createMockFetchResponse({
         id: 'test-id',
         status: 'succeeded',
         output: `unsafe\n${allCategories.join(',')}`,
-      },
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    });
+      }),
+    );
 
     const provider = new ReplicateModerationProvider('test-model', {
       config: { apiKey: mockApiKey },
@@ -821,16 +683,7 @@ describe('ReplicateModerationProvider', () => {
   });
 
   it('should handle malformed responses', async () => {
-    mockedFetchWithCache.mockResolvedValue({
-      data: {
-        id: 'test-id',
-        status: 'succeeded',
-        output: null,
-      },
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    });
+    mockedFetchWithCache.mockResolvedValue(createMockPredictionResponse(null));
 
     const provider = new ReplicateModerationProvider('test-model', {
       config: { apiKey: mockApiKey },
@@ -854,16 +707,9 @@ describe('ReplicateImageProvider', () => {
   });
 
   it('should handle successful image generation', async () => {
-    mockedFetchWithCache.mockResolvedValue({
-      data: {
-        id: 'test-id',
-        status: 'succeeded',
-        output: ['https://example.com/image.png'],
-      },
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    });
+    mockedFetchWithCache.mockResolvedValue(
+      createMockPredictionResponse(['https://example.com/image.png']),
+    );
 
     const provider = new ReplicateImageProvider('test-model', {
       config: { apiKey: mockApiKey },
@@ -874,16 +720,9 @@ describe('ReplicateImageProvider', () => {
   });
 
   it('should handle custom width and height', async () => {
-    mockedFetchWithCache.mockResolvedValue({
-      data: {
-        id: 'test-id',
-        status: 'succeeded',
-        output: ['https://example.com/image.png'],
-      },
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    });
+    mockedFetchWithCache.mockResolvedValue(
+      createMockPredictionResponse(['https://example.com/image.png']),
+    );
 
     const provider = new ReplicateImageProvider('test-model', {
       config: {
@@ -905,16 +744,13 @@ describe('ReplicateImageProvider', () => {
   });
 
   it('should handle failed image generation', async () => {
-    mockedFetchWithCache.mockResolvedValue({
-      data: {
+    mockedFetchWithCache.mockResolvedValue(
+      createMockFetchResponse({
         id: 'test-id',
         status: 'failed',
         error: 'Image generation failed',
-      },
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    });
+      }),
+    );
 
     const provider = new ReplicateImageProvider('test-model', {
       config: { apiKey: mockApiKey },
@@ -925,16 +761,9 @@ describe('ReplicateImageProvider', () => {
   });
 
   it('should ellipsize long prompts in markdown', async () => {
-    mockedFetchWithCache.mockResolvedValue({
-      data: {
-        id: 'test-id',
-        status: 'succeeded',
-        output: ['https://example.com/image.png'],
-      },
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    });
+    mockedFetchWithCache.mockResolvedValue(
+      createMockPredictionResponse(['https://example.com/image.png']),
+    );
 
     const provider = new ReplicateImageProvider('test-model', {
       config: { apiKey: mockApiKey },
@@ -946,16 +775,9 @@ describe('ReplicateImageProvider', () => {
   });
 
   it('should hash prompt and config values in image cache keys', async () => {
-    mockedFetchWithCache.mockResolvedValue({
-      data: {
-        id: 'test-id',
-        status: 'succeeded',
-        output: ['https://example.com/image.png'],
-      },
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    });
+    mockedFetchWithCache.mockResolvedValue(
+      createMockPredictionResponse(['https://example.com/image.png']),
+    );
 
     const mockCache = {
       get: vi.fn().mockResolvedValue(null),
@@ -985,16 +807,9 @@ describe('ReplicateImageProvider', () => {
   });
 
   it('should handle circular image context when hashing cache keys', async () => {
-    mockedFetchWithCache.mockResolvedValue({
-      data: {
-        id: 'test-id',
-        status: 'succeeded',
-        output: ['https://example.com/image.png'],
-      },
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    });
+    mockedFetchWithCache.mockResolvedValue(
+      createMockPredictionResponse(['https://example.com/image.png']),
+    );
 
     const mockCache = {
       get: vi.fn().mockResolvedValue(null),
@@ -1028,16 +843,9 @@ describe('ReplicateImageProvider', () => {
   });
 
   it('should ignore unused image context when computing cache keys', async () => {
-    mockedFetchWithCache.mockResolvedValue({
-      data: {
-        id: 'test-id',
-        status: 'succeeded',
-        output: ['https://example.com/image.png'],
-      },
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    });
+    mockedFetchWithCache.mockResolvedValue(
+      createMockPredictionResponse(['https://example.com/image.png']),
+    );
 
     const mockCache = {
       get: vi.fn().mockResolvedValue(null),

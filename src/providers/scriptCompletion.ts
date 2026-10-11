@@ -17,7 +17,7 @@ import type {
 
 const ANSI_ESCAPE = /\x1b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g;
 
-function stripText(text: string) {
+export function stripText(text: string) {
   return text.replace(ANSI_ESCAPE, '');
 }
 
@@ -27,13 +27,7 @@ export function parseScriptParts(scriptPath: string): string[] {
   const scriptParts = [];
 
   while ((match = scriptPartsRegex.exec(scriptPath)) !== null) {
-    if (match[1]) {
-      scriptParts.push(match[1]);
-    } else if (match[2]) {
-      scriptParts.push(match[2]);
-    } else {
-      scriptParts.push(match[0]);
-    }
+    scriptParts.push(match[1] || match[2] || match[0]);
   }
 
   return scriptParts;
