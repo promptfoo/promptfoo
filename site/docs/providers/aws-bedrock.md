@@ -687,8 +687,10 @@ Calls are never cached. Event streams are collected before returning, and servic
 exception events produce provider errors. Agent and Flow invocations, `RetrieveAndGenerate`,
 `RetrieveAndGenerateStream`, and `AgenticRetrieveStream` use one attempt because they can
 change server-side state. This policy also applies when a request omits session or memory
-settings. Other operations use SDK retries; set `config.maxRetries: 0` to disable them. The scheduler does not
-replay native calls after the SDK finishes. Inspect native completion events when an
+settings. Other operations use SDK retries: `config.maxRetries` counts additional retries
+(`0` disables retries) and takes precedence over `AWS_BEDROCK_MAX_RETRIES`, which counts
+total attempts, including the initial request. The scheduler does not replay native calls
+after the SDK finishes. Inspect native completion events when an
 operation has model-specific finish states. Async jobs are submitted once and are not
 polled automatically; use `GetAsyncInvoke` to check status and an existing S3 output
 bucket. Pagination, agent return-control actions, and Flow continuation requests remain
@@ -1938,7 +1940,7 @@ The following environment variables can be used to configure the Bedrock provide
 - `AWS_BEDROCK_FREQUENCY_PENALTY`: Default frequency penalty (for supported models)
 - `AWS_BEDROCK_PRESENCE_PENALTY`: Default presence penalty (for supported models)
 - `AWS_BEDROCK_STOP`: Default stop sequences (as a JSON string)
-- `AWS_BEDROCK_MAX_RETRIES`: Number of retry attempts for failed API calls (default: 10)
+- `AWS_BEDROCK_MAX_RETRIES`: Maximum total SDK attempts, including the initial request (default: 10). Values `0` and `1` disable retries.
 
 Model-specific environment variables:
 
