@@ -1,20 +1,23 @@
+import { getCallApiMock, resetCallApiMock } from '@app/tests/apiMocks';
 import { callApi } from '@app/utils/api';
-import { act, renderHook } from '@testing-library/react';
-import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
-import { useEvalOperations } from './useEvalOperations';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { fetchTraces, replayEvaluation } from './evalOperations';
 import type { Trace } from '@app/components/traces/TraceView';
 import type { ReplayEvaluationParams } from '@app/pages/eval/components/EvalOutputPromptDialog';
 
 vi.mock('@app/utils/api');
 
-describe('useEvalOperations', () => {
+describe('evalOperations', () => {
+  afterEach(() => {
+    resetCallApiMock();
+  });
+
   beforeEach(() => {
-    vi.clearAllMocks();
+    resetCallApiMock();
   });
 
   describe('replayEvaluation', () => {
     let params: ReplayEvaluationParams;
-    let result: { current: ReturnType<typeof useEvalOperations> };
 
     beforeEach(() => {
       params = {
@@ -22,12 +25,10 @@ describe('useEvalOperations', () => {
         prompt: 'Can you replay this prompt?',
         testIndex: 1,
       };
-
-      result = renderHook(() => useEvalOperations()).result;
     });
 
     const setupApiMock = (response: Partial<Response>) => {
-      vi.mocked(callApi).mockResolvedValue(response as Response);
+      getCallApiMock().mockResolvedValue(response as Response);
     };
 
     const verifyApiCall = () => {
@@ -48,10 +49,7 @@ describe('useEvalOperations', () => {
         json: async () => ({ output: mockOutput }),
       });
 
-      let replayResult;
-      await act(async () => {
-        replayResult = await result.current.replayEvaluation(params);
-      });
+      const replayResult = await replayEvaluation(params);
 
       expect(replayResult).toEqual({ output: mockOutput });
       verifyApiCall();
@@ -64,10 +62,7 @@ describe('useEvalOperations', () => {
         json: async () => ({ error: mockErrorMessage }),
       });
 
-      let replayResult;
-      await act(async () => {
-        replayResult = await result.current.replayEvaluation(params);
-      });
+      const replayResult = await replayEvaluation(params);
 
       expect(replayResult).toEqual({ error: `Provider error: ${mockErrorMessage}` });
       verifyApiCall();
@@ -79,10 +74,7 @@ describe('useEvalOperations', () => {
         text: async () => '',
       });
 
-      let replayResult;
-      await act(async () => {
-        replayResult = await result.current.replayEvaluation(params);
-      });
+      const replayResult = await replayEvaluation(params);
 
       expect(replayResult).toEqual({ error: 'Failed to replay evaluation' });
       verifyApiCall();
@@ -92,26 +84,20 @@ describe('useEvalOperations', () => {
       const abortError = new Error('The operation was aborted');
       abortError.name = 'AbortError';
 
-      vi.mocked(callApi).mockRejectedValue(abortError);
+      getCallApiMock().mockRejectedValue(abortError);
 
-      let replayResult;
-      await act(async () => {
-        replayResult = await result.current.replayEvaluation(params);
-      });
+      const replayResult = await replayEvaluation(params);
 
       expect(replayResult).toEqual({ error: 'The operation was aborted' });
       verifyApiCall();
     });
 
     it('should return an error object when evaluationId is an empty string', async () => {
-      (callApi as Mock).mockRejectedValue(new Error('Network error'));
+      getCallApiMock().mockRejectedValue(new Error('Network error'));
 
       params.evaluationId = '';
 
-      let replayResult;
-      await act(async () => {
-        replayResult = await result.current.replayEvaluation(params);
-      });
+      const replayResult = await replayEvaluation(params);
 
       expect(replayResult).toEqual({ error: 'Network error' });
     });
@@ -128,16 +114,11 @@ describe('useEvalOperations', () => {
         json: async () => ({ traces: mockTraces }),
       } as Response;
 
-      vi.mocked(callApi).mockResolvedValue(mockApiResponse);
-
-      const { result } = renderHook(() => useEvalOperations());
+      getCallApiMock().mockResolvedValue(mockApiResponse);
       const evalId = 'eval-123';
       const abortController = new AbortController();
 
-      let traces: Trace[] = [];
-      await act(async () => {
-        traces = await result.current.fetchTraces(evalId, abortController.signal);
-      });
+      const traces = await fetchTraces(evalId, abortController.signal);
 
       expect(traces).toEqual(mockTraces);
       expect(callApi).toHaveBeenCalledTimes(1);
@@ -152,15 +133,10 @@ describe('useEvalOperations', () => {
         json: async () => ({}),
       } as Response;
 
-      vi.mocked(callApi).mockResolvedValue(mockApiResponse);
-
-      const { result } = renderHook(() => useEvalOperations());
+      getCallApiMock().mockResolvedValue(mockApiResponse);
 
       const signal = new AbortController().signal;
-      let traces;
-      await act(async () => {
-        traces = await result.current.fetchTraces('eval-123', signal);
-      });
+      const traces = await fetchTraces('eval-123', signal);
 
       expect(traces).toEqual([]);
       expect(callApi).toHaveBeenCalledTimes(1);
@@ -176,12 +152,10 @@ describe('useEvalOperations', () => {
         status: mockStatus,
       } as Response;
 
-      vi.mocked(callApi).mockResolvedValue(mockApiResponse);
-
-      const { result } = renderHook(() => useEvalOperations());
+      getCallApiMock().mockResolvedValue(mockApiResponse);
 
       const signal = new AbortController().signal;
-      await expect(result.current.fetchTraces('eval-id', signal)).rejects.toThrowError(
+      await expect(fetchTraces('eval-id', signal)).rejects.toThrowError(
         `HTTP error! status: ${mockStatus}`,
       );
       expect(callApi).toHaveBeenCalledTimes(1);
@@ -193,15 +167,13 @@ describe('useEvalOperations', () => {
     it.each([400, 404, 500])(
       'should throw an error with the correct status code when the API call returns an HTTP error (status %s)',
       async (statusCode) => {
-        vi.mocked(callApi).mockResolvedValue({
+        getCallApiMock().mockResolvedValue({
           ok: false,
           status: statusCode,
         } as Response);
 
-        const { result } = renderHook(() => useEvalOperations());
-
         await expect(
-          result.current.fetchTraces('test-eval-id', new AbortController().signal),
+          fetchTraces('test-eval-id', new AbortController().signal),
         ).rejects.toThrowError(`HTTP error! status: ${statusCode}`);
         expect(callApi).toHaveBeenCalledTimes(1);
         expect(callApi).toHaveBeenCalledWith('/traces/evaluation/test-eval-id', {
@@ -215,18 +187,14 @@ describe('useEvalOperations', () => {
       const abortError = new Error('The operation was aborted');
       abortError.name = 'AbortError';
 
-      vi.mocked(callApi).mockRejectedValue(abortError);
-
-      const { result } = renderHook(() => useEvalOperations());
+      getCallApiMock().mockRejectedValue(abortError);
 
       let error;
-      await act(async () => {
-        try {
-          await result.current.fetchTraces('test-eval-id', abortController.signal);
-        } catch (e) {
-          error = e;
-        }
-      });
+      try {
+        await fetchTraces('test-eval-id', abortController.signal);
+      } catch (e) {
+        error = e;
+      }
 
       expect(callApi).toHaveBeenCalledTimes(1);
       expect(callApi).toHaveBeenCalledWith('/traces/evaluation/test-eval-id', {
