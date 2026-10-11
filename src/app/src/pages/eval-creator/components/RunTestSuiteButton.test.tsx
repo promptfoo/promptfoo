@@ -1,6 +1,7 @@
-import { EvalHistoryProvider } from '@app/contexts/EvalHistoryContext';
+import { createDefaultProvider } from '@app/pages/redteam/setup/components/Targets/providerCatalog';
 import { useStore } from '@app/stores/evalConfig';
 import {
+  createMockResponse,
   getCallApiMock,
   mockCallApiRoutes,
   rejectCallApi,
@@ -12,15 +13,26 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import RunTestSuiteButton from './RunTestSuiteButton';
 
+function createDeferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve;
+    reject = promiseReject;
+  });
+  return { promise, resolve, reject };
+}
+
 const renderWithProvider = (ui: React.ReactElement) => {
-  return render(<EvalHistoryProvider>{ui}</EvalHistoryProvider>);
+  return render(ui);
 };
 
 const mockShowToast = vi.fn();
+const mockNavigate = vi.fn();
 let sourceEvalId: string | undefined;
 
 vi.mock('react-router', () => ({
-  useNavigate: () => vi.fn(),
+  useNavigate: () => mockNavigate,
   useLocation: () => ({ state: sourceEvalId ? { sourceEvalId } : null }),
 }));
 
@@ -41,9 +53,72 @@ describe('RunTestSuiteButton', () => {
     useStore.getState().reset();
     resetCallApiMock();
     mockShowToast.mockReset();
+    mockNavigate.mockReset();
     sourceEvalId = undefined;
     timers = useTestTimers();
   });
+
+  it.each(
+    ['llamafile', 'vllm', 'text-generation-webui'].flatMap((type) =>
+      ['none', 'inline', 'selected'].map((auth) => ({ type, auth })),
+    ),
+  )(
+    'submits the rehydrated $type target with its credential policy ($auth)',
+    async ({ type, auth }) => {
+      const initial = createDefaultProvider(type)!;
+      const provider = {
+        ...initial,
+        id: 'openai:chat:tenant/private-served-model:Q4_K_M',
+        config: {
+          ...initial.config,
+          apiBaseUrl: 'https://private-inference.example.test/tenant/v1',
+          stop: ['<end>'],
+          passthrough: { chat_template_kwargs: { enable_thinking: false } },
+          ...(auth === 'inline' ? { apiKey: 'private-session-key' } : {}),
+          ...(auth === 'selected' ? { apiKeyEnvar: 'LOCAL_MODEL_KEY' } : {}),
+        },
+      };
+      act(() =>
+        useStore.getState().setConfig({
+          providers: [provider],
+          prompts: ['Hello'],
+          tests: [{}],
+        }),
+      );
+      const persisted = localStorage.getItem('promptfoo')!;
+      expect(persisted).not.toContain('private-session-key');
+      await act(async () => {
+        useStore.setState({ config: {} });
+        localStorage.setItem('promptfoo', persisted);
+        await useStore.persist.rehydrate();
+      });
+      mockCallApiRoutes([{ method: 'POST', path: '/eval/job', response: { id: 'local-job' } }]);
+      renderWithProvider(<RunTestSuiteButton />);
+      await act(async () => {
+        screen
+          .getByRole('button', { name: 'Run Eval' })
+          .dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        await Promise.resolve();
+      });
+      const [, request] = getCallApiMock().mock.calls[0] as [string, RequestInit];
+      const [submitted] = JSON.parse(request.body as string).providers;
+      expect(submitted).toMatchObject({
+        id: provider.id,
+        config: {
+          type,
+          apiBaseUrl: provider.config.apiBaseUrl,
+          apiKeyRequired: false,
+          useDefaultApiKey: false,
+          stop: ['<end>'],
+          passthrough: provider.config.passthrough,
+        },
+      });
+      expect(submitted.config).not.toHaveProperty('apiKey');
+      if (auth === 'selected') {
+        expect(submitted.config.apiKeyEnvar).toBe('LOCAL_MODEL_KEY');
+      }
+    },
+  );
 
   it('should be disabled when there are no prompts or tests', () => {
     renderWithProvider(<RunTestSuiteButton />);
@@ -205,6 +280,101 @@ describe('RunTestSuiteButton', () => {
 
     expect(screen.getByRole('button', { name: 'Run Eval' })).toBeDisabled();
   });
+
+  it.each(['request', 'body'] as const)(
+    'waits for the poll %s to settle before requesting progress again',
+    async (phase) => {
+      const pendingResponse = createDeferred<Response>();
+      const pendingBody = createDeferred<unknown>();
+      const runningProgress = { status: 'in-progress', progress: 1, total: 2 };
+      getCallApiMock()
+        .mockResolvedValueOnce(createMockResponse({ id: 'slow-job' }))
+        .mockImplementationOnce(() =>
+          phase === 'request'
+            ? pendingResponse.promise
+            : Promise.resolve({ ok: true, json: () => pendingBody.promise } as Response),
+        )
+        .mockResolvedValueOnce(createMockResponse({ status: 'complete', evalId: 'finished-eval' }));
+      useStore.getState().updateConfig({
+        prompts: ['hello'],
+        providers: ['echo'],
+        tests: [{}],
+      });
+      renderWithProvider(<RunTestSuiteButton />);
+      await act(async () => {
+        screen.getByRole('button', { name: 'Run Eval' }).click();
+      });
+      await act(async () => {
+        await timers.advanceByAsync(4000);
+      });
+
+      expect(getCallApiMock()).toHaveBeenCalledTimes(2);
+      expect(mockNavigate).not.toHaveBeenCalled();
+      await act(async () => {
+        pendingResponse.resolve(createMockResponse(runningProgress));
+        pendingBody.resolve(runningProgress);
+      });
+      expect(screen.getByRole('status')).toHaveTextContent('50% complete');
+      await act(async () => {
+        await timers.advanceByAsync(1000);
+      });
+      expect(mockNavigate).toHaveBeenCalledExactlyOnceWith('/eval/finished-eval');
+      await act(async () => {
+        await timers.advanceByAsync(3000);
+      });
+      expect(getCallApiMock()).toHaveBeenCalledTimes(3);
+      expect(mockShowToast).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['request', 'body'] as const)(
+    'aborts a stalled poll %s and allows another run without applying its late result',
+    async (phase) => {
+      const pendingResponse = createDeferred<Response>();
+      const pendingBody = createDeferred<unknown>();
+      let pollSignal: AbortSignal | undefined;
+      getCallApiMock()
+        .mockResolvedValueOnce(createMockResponse({ id: 'stalled-job' }))
+        .mockImplementationOnce((_path, options) => {
+          pollSignal = options?.signal ?? undefined;
+          pollSignal?.addEventListener('abort', () => {
+            if (phase === 'request') {
+              pendingResponse.reject(pollSignal?.reason);
+            } else {
+              pendingBody.reject(pollSignal?.reason);
+            }
+          });
+          return phase === 'request'
+            ? pendingResponse.promise
+            : Promise.resolve({ ok: true, json: () => pendingBody.promise } as Response);
+        })
+        .mockResolvedValueOnce(createMockResponse({ id: 'retry-job' }))
+        .mockResolvedValueOnce(createMockResponse({ status: 'complete', evalId: 'retry-eval' }));
+      useStore.getState().updateConfig({ prompts: ['hello'], providers: ['echo'], tests: [{}] });
+      renderWithProvider(<RunTestSuiteButton />);
+      await act(async () => {
+        screen.getByRole('button', { name: 'Run Eval' }).click();
+      });
+      await act(async () => {
+        await timers.advanceByAsync(31000);
+      });
+      expect(screen.getByRole('alert')).toHaveTextContent('Evaluation progress request timed out');
+      expect(pollSignal?.aborted).toBe(true);
+      expect(getCallApiMock()).toHaveBeenCalledTimes(2);
+      expect(screen.getByRole('button', { name: 'Run Eval' })).toBeEnabled();
+      expect(mockNavigate).not.toHaveBeenCalled();
+      await act(async () => {
+        screen.getByRole('button', { name: 'Run Eval' }).click();
+      });
+      await act(async () => {
+        await timers.advanceByAsync(1000);
+        pendingResponse.resolve(createMockResponse({ status: 'complete', evalId: 'stale-eval' }));
+        pendingBody.resolve({ status: 'complete', evalId: 'stale-eval' });
+      });
+      expect(mockNavigate).toHaveBeenCalledExactlyOnceWith('/eval/retry-eval');
+      expect(getCallApiMock()).toHaveBeenCalledTimes(4);
+    },
+  );
 
   it('should handle progress API failure after job creation', async () => {
     const mockJobId = '123';

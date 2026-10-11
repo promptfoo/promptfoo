@@ -314,6 +314,32 @@ function serializeToolAttribute(value: unknown): string | undefined {
   }
 }
 
+export function recordSpanError(span: Span, error: unknown): void {
+  span.setStatus({
+    code: SpanStatusCode.ERROR,
+    message: error instanceof Error ? error.message : String(error),
+  });
+
+  if (error instanceof Error) {
+    span.recordException(error);
+  }
+}
+
+// Extract provider token usage for response attributes on the span.
+export function extractGenAIResponse(
+  response: ProviderResponse,
+  includeFinishReason = false,
+): GenAISpanResult {
+  const result: GenAISpanResult = {};
+  if (response.tokenUsage) {
+    result.tokenUsage = { ...response.tokenUsage };
+  }
+  if (includeFinishReason && response.finishReason) {
+    result.finishReasons = [response.finishReason];
+  }
+  return result;
+}
+
 /**
  * Execute a function within a GenAI span.
  *
@@ -416,14 +442,7 @@ export async function withGenAISpan<T>(
       return value;
     } catch (error) {
       span.setAttribute('error.type', error instanceof Error ? error.name : '_OTHER');
-      span.setStatus({
-        code: SpanStatusCode.ERROR,
-        message: error instanceof Error ? error.message : String(error),
-      });
-
-      if (error instanceof Error) {
-        span.recordException(error);
-      }
+      recordSpanError(span, error);
 
       throw error;
     } finally {
@@ -693,24 +712,6 @@ export function getTraceparent(): string | undefined {
   // W3C Trace Context format: version-traceId-spanId-traceFlags
   const traceFlags = ctx.traceFlags.toString(16).padStart(2, '0');
   return `00-${ctx.traceId}-${ctx.spanId}-${traceFlags}`;
-}
-
-/**
- * Get the current trace ID from the active span.
- * Returns undefined if there is no active span.
- */
-export function getCurrentTraceId(): string | undefined {
-  const activeSpan = trace.getActiveSpan();
-  return activeSpan?.spanContext().traceId;
-}
-
-/**
- * Get the current span ID from the active span.
- * Returns undefined if there is no active span.
- */
-export function getCurrentSpanId(): string | undefined {
-  const activeSpan = trace.getActiveSpan();
-  return activeSpan?.spanContext().spanId;
 }
 
 /**

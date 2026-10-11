@@ -110,5 +110,4 @@ export type McpAuthParsed = z.output<typeof McpAuthSchema>;
 export const McpAuthInputJsonSchema = z.toJSONSchema(McpAuthInputSchema, {
   target: 'draft-07',
   io: 'input',
-  unrepresentable: 'throw',
 });

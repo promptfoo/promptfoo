@@ -5,7 +5,11 @@ import {
   DefaultEmbeddingProvider,
   DefaultGradingProvider,
 } from '../../src/providers/openai/defaults';
-import { withProviderCallTracingContext } from '../../src/scheduler/providerCallExecutionContext';
+import {
+  withProviderCallExecutionContext,
+  withProviderCallTracingContext,
+} from '../../src/scheduler/providerCallExecutionContext';
+import { createEmbeddingResult } from '../factories/literalFixtures';
 
 import type { OpenAiEmbeddingProvider } from '../../src/providers/openai/embedding';
 import type { ProviderCallTracingContext } from '../../src/scheduler/providerCallExecutionContext';
@@ -22,14 +26,47 @@ describe('matchesAnswerRelevance', () => {
       output: 'foobar',
       tokenUsage: { total: 10, prompt: 5, completion: 5 },
     });
-    vi.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi').mockResolvedValue({
-      embedding: [1, 0, 0],
-      tokenUsage: { total: 5, prompt: 2, completion: 3 },
-    });
+    vi.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi').mockResolvedValue(
+      createEmbeddingResult(1, 0),
+    );
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
+  });
+
+  it.each([
+    { tracing: false, cancellation: true },
+    { tracing: true, cancellation: false },
+    { tracing: true, cancellation: true },
+  ])('forwards embedding call context: %j', async ({ tracing, cancellation }) => {
+    const abortSignal = cancellation ? new AbortController().signal : undefined;
+    const tracedContext = tracing
+      ? {
+          prompt: { raw: 'fixture', label: 'embedding' },
+          vars: {},
+          traceparent: '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01',
+        }
+      : undefined;
+    const providerSpan = vi.fn<ProviderCallTracingContext['withProviderSpan']>(
+      async (_options, invoke) => invoke(tracedContext),
+    );
+    await withProviderCallExecutionContext({ abortSignal }, () =>
+      withProviderCallTracingContext(
+        {
+          getActiveTraceparent: () => tracedContext?.traceparent,
+          withGraderSpan: async (_options, invoke) => invoke(),
+          withProviderSpan: providerSpan,
+        },
+        () => matchesAnswerRelevance('input', 'output', 0.5),
+      ),
+    );
+    const calls = vi.mocked(DefaultEmbeddingProvider.callEmbeddingApi).mock.calls;
+    expect(calls).toHaveLength(4);
+    for (const [, context, options] of calls) {
+      expect(context).toBe(tracedContext);
+      expect(options).toEqual(abortSignal ? { abortSignal } : undefined);
+    }
   });
 
   it('should pass when the relevance score is above the threshold', async () => {
@@ -47,10 +84,7 @@ describe('matchesAnswerRelevance', () => {
 
     const mockCallEmbeddingApi = vi.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi');
     mockCallEmbeddingApi.mockImplementation(function (this: OpenAiEmbeddingProvider) {
-      return Promise.resolve({
-        embedding: [1, 0, 0],
-        tokenUsage: { total: 5, prompt: 2, completion: 3 },
-      });
+      return Promise.resolve(createEmbeddingResult(1, 0));
     });
 
     await expect(matchesAnswerRelevance(input, output, threshold)).resolves.toEqual({
@@ -130,10 +164,7 @@ describe('matchesAnswerRelevance', () => {
     const mockCallEmbeddingApi = vi.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi');
     mockCallEmbeddingApi.mockImplementation((text) => {
       if (text.includes('Input text')) {
-        return Promise.resolve({
-          embedding: [1, 0, 0],
-          tokenUsage: { total: 5, prompt: 2, completion: 3 },
-        });
+        return Promise.resolve(createEmbeddingResult(1, 0));
       } else if (text.includes('Different output')) {
         return Promise.resolve({
           embedding: [0, 1, 0],
@@ -246,10 +277,7 @@ describe('matchesAnswerRelevance', () => {
     // Mock embeddings with varying similarities
     vi.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi').mockImplementation((text) => {
       if (text === input) {
-        return Promise.resolve({
-          embedding: [1, 0, 0],
-          tokenUsage: { total: 5, prompt: 2, completion: 3 },
-        });
+        return Promise.resolve(createEmbeddingResult(1, 0));
       } else if (text.includes('capital') && text.includes('France')) {
         // Similar questions get high similarity
         return Promise.resolve({

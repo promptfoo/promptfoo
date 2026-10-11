@@ -1,4 +1,4 @@
-import { getEnvString } from '../envars';
+import { resolveProviderEnv } from './env';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 
 import type { ProviderOptions } from '../types/providers';
@@ -58,8 +58,7 @@ export class DatabricksMosaicAiChatCompletionProvider extends OpenAiChatCompleti
   constructor(modelName: string, providerOptions: DatabricksMosaicAiProviderOptions) {
     const workspaceUrl =
       providerOptions.config?.workspaceUrl ||
-      providerOptions.env?.DATABRICKS_WORKSPACE_URL ||
-      getEnvString('DATABRICKS_WORKSPACE_URL');
+      resolveProviderEnv(providerOptions.env, ['DATABRICKS_WORKSPACE_URL'])?.value;
 
     if (!workspaceUrl) {
       throw new Error(

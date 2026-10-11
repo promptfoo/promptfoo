@@ -54,6 +54,17 @@ providers:
       apiKeyEnvar: ENVOY_API_KEY
 ```
 
+Set a provider-specific URL in `env`:
+
+```yaml
+providers:
+  - id: envoy:my-model
+    env:
+      ENVOY_API_BASE_URL: 'https://your-envoy-gateway.com'
+```
+
+Provider environment values override suite and process values. An empty gateway value masks those fallbacks and requires `config.apiBaseUrl`. Omit `config.apiBaseUrl` to use an environment URL; promptfoo adds `/v1` when needed. An empty `config.apiBaseUrl` is invalid. Explicit URLs keep the API path you supply, so include `/v1` or your gateway's custom path.
+
 ### Authenticating via header
 
 If your gateway expects an `x-api-key` header, set `apiKeyRequired: false` and supply the header:
