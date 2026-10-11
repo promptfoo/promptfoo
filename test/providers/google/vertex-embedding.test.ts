@@ -27,6 +27,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
   restoreEnv();
 });
@@ -211,28 +212,60 @@ describe('Vertex embedding SDK cancellation', () => {
   it.each([
     ['gemini-embedding-001', 'credential lookup'],
     ['gemini-embedding-2', 'credential lookup'],
+    ['gemini-embedding-001', 'project lookup'],
+    ['gemini-embedding-2', 'project lookup'],
     ['gemini-embedding-001', 'OAuth refresh'],
     ['gemini-embedding-2', 'OAuth refresh'],
-  ])('does not dispatch %s when cancelled during %s', async (model, phase) => {
+  ])('stops waiting for %s during %s without late dispatch', async (model, phase) => {
+    vi.useFakeTimers();
     const { provider, client, adapter } = createSdkProvider(model);
     const controller = new AbortController();
     const reason = new Error('evaluation cancelled');
+    let entered!: () => void;
+    let release!: () => void;
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const waitForAuth = async () => {
+      entered();
+      await gate;
+    };
     if (phase === 'credential lookup') {
       vi.mocked(provider.getClientWithCredentials).mockImplementationOnce(async () => {
-        controller.abort(reason);
+        await waitForAuth();
         return client as unknown as JSONClient;
+      });
+    } else if (phase === 'project lookup') {
+      vi.mocked(provider.getProjectId).mockImplementationOnce(async () => {
+        await waitForAuth();
+        return 'test-project';
       });
     } else {
       client.setCredentials({ access_token: 'expired-token', expiry_date: Date.now() - 1 });
       client.refreshHandler = async () => {
-        controller.abort(reason);
+        await waitForAuth();
         return { access_token: 'refreshed-token', expiry_date: Date.now() + 3_600_000 };
       };
     }
 
-    await expect(
-      provider.callEmbeddingApi('text', undefined, { abortSignal: controller.signal }),
-    ).rejects.toBe(reason);
+    const rejected = vi.fn();
+    const pending = provider
+      .callEmbeddingApi('text', undefined, { abortSignal: controller.signal })
+      .catch(rejected);
+    try {
+      await started;
+      controller.abort(reason);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(rejected).toHaveBeenCalledExactlyOnceWith(reason);
+      expect(adapter).not.toHaveBeenCalled();
+    } finally {
+      release();
+      await pending;
+      await vi.advanceTimersByTimeAsync(0);
+    }
     expect(adapter).not.toHaveBeenCalled();
   });
 

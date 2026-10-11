@@ -28,6 +28,7 @@ import {
   getRequestTimeoutMs,
   parseChatPrompt,
   shouldBustProviderCache,
+  waitForPromiseWithAbort,
   withResponseCacheMetadata,
 } from '../shared';
 import { GoogleAuthManager } from './auth';
@@ -1425,6 +1426,7 @@ export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
     options?: CallApiOptionsParams,
   ): Promise<ProviderEmbeddingResponse> {
     const abortSignal = options?.abortSignal;
+    abortSignal?.throwIfAborted();
     const embedContent = this.usesEmbedContent();
     if (embedContent) {
       for (const key of ['taskType', 'title', 'autoTruncate'] as const) {
@@ -1459,29 +1461,32 @@ export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
 
     let data: VertexEmbeddingPredictResponse = {};
     try {
-      const client = await this.getClientWithCredentials();
-      const projectId = await this.getProjectId();
+      const client = await waitForPromiseWithAbort(this.getClientWithCredentials(), abortSignal);
+      const projectId = await waitForPromiseWithAbort(this.getProjectId(), abortSignal);
       const url = `https://${this.getApiHost()}/${this.getApiVersion()}/projects/${projectId}/locations/${this.getRegion()}/publishers/google/models/${
         this.modelName
       }:${embedContent ? 'embedContent' : 'predict'}`;
-      const res = await client.request({
-        url,
-        method: 'POST',
-        data: body,
-        timeout: client.transporter.defaults.timeout ?? getRequestTimeoutMs(),
-        ...(abortSignal && {
-          signal: abortSignal,
-          adapter: ((requestOptions, defaultAdapter) => {
-            // Gaxios can replace an aborted signal while adding its timeout after OAuth refresh.
-            abortSignal.throwIfAborted();
-            const adapter = client.transporter.defaults.adapter;
-            return adapter
-              ? adapter(requestOptions, defaultAdapter)
-              : defaultAdapter(requestOptions);
-          }) satisfies NonNullable<gaxios.GaxiosOptions['adapter']>,
+      const res = await waitForPromiseWithAbort<{ data: VertexEmbeddingPredictResponse }>(
+        client.request({
+          url,
+          method: 'POST',
+          data: body,
+          timeout: client.transporter.defaults.timeout ?? getRequestTimeoutMs(),
+          ...(abortSignal && {
+            signal: abortSignal,
+            adapter: ((requestOptions, defaultAdapter) => {
+              // Gaxios can replace an aborted signal while adding its timeout after OAuth refresh.
+              abortSignal.throwIfAborted();
+              const adapter = client.transporter.defaults.adapter;
+              return adapter
+                ? adapter(requestOptions, defaultAdapter)
+                : defaultAdapter(requestOptions);
+            }) satisfies NonNullable<gaxios.GaxiosOptions['adapter']>,
+          }),
         }),
-      });
-      data = res.data as VertexEmbeddingPredictResponse;
+        abortSignal,
+      );
+      data = res.data;
     } catch (err) {
       abortSignal?.throwIfAborted();
       logger.error(`Vertex API call error: ${err}`);
