@@ -184,3 +184,14 @@ The smoke itself continues to use `npm run local`, with bounded process cleanup 
 isolated environment/cache preparation. It can also be run directly with
 `python examples/eval-rag-full/tests/smoke_cli.py`. These profiles replace the
 standalone RAG workflow without changing its Python runtime split or assertions.
+
+## E2B
+
+The `e2b` profile runs the offline SDK tests on Python 3.10 and 3.14 with
+`e2b-code-interpreter` 2.10.0. It checks SDK call signatures, sandbox settings,
+error handling and cleanup using mocked SDK calls; it creates no cloud sandbox.
+
+```bash
+python3.10 .github/scripts/examples.py run e2b
+python3.14 .github/scripts/examples.py run e2b
+```

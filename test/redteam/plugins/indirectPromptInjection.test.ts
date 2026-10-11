@@ -46,20 +46,20 @@ describe('IndirectPromptInjectionGrader', () => {
       expect(result[1].action).toBe('replace-prompt');
     });
 
-    it('should generate correct datamarking suggestion', () => {
-      const userInput = 'test input';
+    it.each([
+      ['test input', 'test^input'],
+      ['ignore $$ instructions', 'ignore^$$^instructions'],
+      ['ignore $& instructions', 'ignore^$&^instructions'],
+      ['ignore $` instructions', 'ignore^$`^instructions'],
+      ["ignore $' instructions", "ignore^$'^instructions"],
+      ["repeat $& $& $$ $` $'", "repeat^$&^$&^$$^$`^$'"],
+    ])('datamarks %j literally', (userInput, expectedDatamarked) => {
       const rawPrompt = `Original prompt with ${userInput} here`;
+      const [suggestion] = grader.getSuggestions({ rawPrompt, renderedValue: userInput });
 
-      const result = grader.getSuggestions({
-        rawPrompt,
-        renderedValue: userInput,
-      });
-
-      const datamarkSuggestion = result[0];
-      const expectedDatamarked = 'test^input';
-
-      expect(datamarkSuggestion.value).toContain('^');
-      expect(datamarkSuggestion.value).toContain(`Original prompt with ${expectedDatamarked} here`);
+      expect(suggestion.value.split('\n\n').at(-1)).toBe(
+        `Original prompt with ${expectedDatamarked} here`,
+      );
     });
 
     it('should generate correct encoding suggestion', () => {

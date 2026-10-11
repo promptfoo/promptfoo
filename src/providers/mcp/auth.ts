@@ -10,10 +10,7 @@ export {
 } from '../../contracts/providerConfig/auth';
 
 export function splitOAuthScopes(value: string): string[] {
-  return value
-    .split(/[,\s]+/)
-    .map((scope) => scope.trim())
-    .filter(Boolean);
+  return value.split(/[,\s]+/).filter(Boolean);
 }
 
 export function normalizeRenderedOAuthScopes(scopes: unknown): string[] | undefined {

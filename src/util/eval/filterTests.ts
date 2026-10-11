@@ -17,7 +17,7 @@
 
 import logger from '../../logger';
 import { ResultFailureReason } from '../../types/index';
-import { getTestCaseDeduplicationKey } from '../../util/comparison';
+import { deduplicateTestCases } from '../../util/comparison';
 import { filterByRange } from '../../util/filterRange';
 import { warnEmptyFilterRange } from '../../util/filterRangeWarn';
 import { filterTestsByResults } from './filterTestsUtil';
@@ -63,6 +63,39 @@ export interface FilterOptions {
 
 type Tests = NonNullable<TestSuite['tests']>;
 type TestFilterFn = (test: TestCase) => boolean;
+
+/**
+ * Splits a metadata filter value into its alternatives. Commas separate alternatives, and
+ * `\,` stands for a comma inside one.
+ *
+ * Backslashes are only special in a run directly before a comma, where each pair stands for
+ * one backslash: `a\\,b` is the alternatives `a\` and `b`, and `a\\\,b` is the single value
+ * `a\,b`. Anywhere else they are literal, so paths such as `C:\dir` need no escaping.
+ */
+function splitMetadataFilterValue(value: string): string[] {
+  const alternatives = [''];
+  let index = 0;
+  while (index < value.length) {
+    let end = index;
+    while (value[end] === '\\') {
+      end++;
+    }
+    const backslashes = end - index;
+    if (value[end] === ',') {
+      alternatives[alternatives.length - 1] += '\\'.repeat(Math.floor(backslashes / 2));
+      if (backslashes % 2 === 1) {
+        alternatives[alternatives.length - 1] += ',';
+      } else {
+        alternatives.push('');
+      }
+    } else {
+      // Not before a comma: the backslashes and the character after them are literal.
+      alternatives[alternatives.length - 1] += value.slice(index, end + 1);
+    }
+    index = end + 1;
+  }
+  return alternatives;
+}
 
 function createSeededRandom(seed: number): () => number {
   const stringSeed = String(seed);
@@ -180,7 +213,7 @@ export async function filterTests(testSuite: TestSuite, options: FilterOptions):
         throw new Error('--filter-metadata must be specified in key=value format');
       }
       // Values within each filter use OR; separate filters use AND below.
-      const values = value.split(',');
+      const values = splitMetadataFilterValue(value);
       if (values.includes('')) {
         throw new Error(`--filter-metadata has an empty value in "${filter}"`);
       }
@@ -248,16 +281,7 @@ export async function filterTests(testSuite: TestSuite, options: FilterOptions):
     );
 
     // Create a union of both sets, deduplicating by test identity
-    const seen = new Set<string>();
-
-    tests = [...failingOnlyTests, ...errorTests].filter((test) => {
-      const key = getTestCaseDeduplicationKey(test);
-      if (seen.has(key)) {
-        return false;
-      }
-      seen.add(key);
-      return true;
-    });
+    tests = deduplicateTestCases([...failingOnlyTests, ...errorTests]);
 
     logger.debug(
       `Combined failingOnly (${failingOnlyTests.length}) and errors (${errorTests.length}) filters: ${tests.length} unique tests`,

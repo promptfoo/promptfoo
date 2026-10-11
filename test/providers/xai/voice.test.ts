@@ -1,13 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import WebSocket from 'ws';
 import {
-  calculateXAIVoiceCost,
   createXAIVoiceProvider,
-  XAI_VOICE_COST_PER_MINUTE,
   XAI_VOICE_DEFAULT_API_URL,
   XAI_VOICE_DEFAULT_MODEL,
   XAI_VOICE_DEFAULT_WS_URL,
   XAI_VOICE_DEFAULTS,
+  XAI_VOICES,
   type XAIFunctionCallOutput,
   type XAIVoiceOptions,
   XAIVoiceProvider,
@@ -51,12 +50,12 @@ describe('XAI Voice Provider', () => {
 
     it('stores configuration correctly', () => {
       const config = {
-        voice: 'Rex' as const,
+        voice: 'rex' as const,
         instructions: 'Be helpful',
         websocketTimeout: 60000,
       };
       const provider = new XAIVoiceProvider('grok-3', { config });
-      expect(provider.config.voice).toBe('Rex');
+      expect(provider.config.voice).toBe('rex');
       expect(provider.config.instructions).toBe('Be helpful');
       expect(provider.config.websocketTimeout).toBe(60000);
     });
@@ -80,10 +79,6 @@ describe('XAI Voice Provider', () => {
       expect(XAI_VOICE_DEFAULT_API_URL).toBe('https://api.x.ai/v1');
     });
 
-    it('has correct cost per minute', () => {
-      expect(XAI_VOICE_COST_PER_MINUTE).toBe(0.05);
-    });
-
     it('has the current default voice model', () => {
       expect(XAI_VOICE_DEFAULT_MODEL).toBe('grok-voice-think-fast-2.0');
     });
@@ -102,35 +97,6 @@ describe('XAI Voice Provider', () => {
 
     it('has correct default websocket timeout', () => {
       expect(XAI_VOICE_DEFAULTS.websocketTimeout).toBe(30000);
-    });
-  });
-
-  // ============================================================================
-  // Cost calculation
-  // ============================================================================
-
-  describe('Cost calculation', () => {
-    it.each(['grok-voice-think-fast-2.0', 'grok-voice-latest'])(
-      'bills %s by audio duration plus the text-input fee',
-      (model) => {
-        expect(calculateXAIVoiceCost(0, model)).toBe(0.004);
-        expect(calculateXAIVoiceCost(30_000, model)).toBeCloseTo(0.044);
-        expect(calculateXAIVoiceCost(60_000, model)).toBeCloseTo(0.084);
-      },
-    );
-
-    it.each([
-      [0, 0],
-      [30_000, 0.025],
-      [60_000, 0.05],
-      [90_000, 0.075],
-      [120_000, 0.1],
-      [600_000, 0.5],
-    ])('bills %s ms of Voice 1.0 at $%s', (durationMs, expected) => {
-      expect(calculateXAIVoiceCost(durationMs, 'grok-voice-think-fast-1.0')).toBeCloseTo(
-        expected,
-        8,
-      );
     });
   });
 
@@ -201,7 +167,7 @@ describe('XAI Voice Provider', () => {
       ]);
       await receive({ type: 'response.output_audio_transcript.delta', delta: 'Hello back' });
       await receive({ type: 'response.done' });
-      expect(await response).toMatchObject({ output: 'Hello back', cost: 0.004 });
+      expect(await response).toMatchObject({ output: 'Hello back' });
       expect(close).toHaveBeenCalledOnce();
     });
 
@@ -250,7 +216,7 @@ describe('XAI Voice Provider', () => {
       { format: { type: 'audio/pcm' as const, rate: 16000 as const }, bytes: 32000 },
       { format: { type: 'audio/pcmu' as const }, bytes: 8000 },
       { format: { type: 'audio/pcma' as const }, bytes: 8000 },
-    ])('bills generated audio duration for $format', async ({ format, bytes }) => {
+    ])('returns $format audio without inferring a complete bill', async ({ format, bytes }) => {
       const { response } = await start(format ? { audio: { output: { format } } } : {});
       vi.setSystemTime(20000);
       for (const type of ['response.output_audio.delta', 'response.audio.delta']) {
@@ -259,7 +225,7 @@ describe('XAI Voice Provider', () => {
       await receive({ type: 'response.done' });
 
       const result = await response;
-      expect(result.cost).toBeCloseTo(0.004 + 0.08 / 60, 8);
+      expect(result.cost).toBeUndefined();
       expect(result.metadata).toMatchObject({ durationMs: 20000, hasAudio: true });
     });
 
@@ -285,15 +251,15 @@ describe('XAI Voice Provider', () => {
       expect([wav.readInt16LE(44), wav.readInt16LE(46)]).toEqual(samples);
     });
 
-    it('retains connection-duration pricing for Voice 1.0', async () => {
+    it('keeps legacy cost unknown without billing duration', async () => {
       const { response } = await start({}, 'grok-voice-think-fast-1.0');
       vi.setSystemTime(15000);
       await receive({ type: 'response.done' });
 
-      expect((await response).cost).toBeCloseTo(0.0125, 8);
+      expect((await response).cost).toBeUndefined();
     });
 
-    it('does not charge a second text fee for a tool result', async () => {
+    it('sends a tool result and receives the continuation', async () => {
       const handler = vi.fn().mockResolvedValue('Sunny');
       const { response } = await start({ functionCallHandler: handler });
       await receive({
@@ -318,7 +284,6 @@ describe('XAI Voice Provider', () => {
           text: 'It is sunny.',
           functionCalls: [{ name: 'weather', arguments: { city: 'Paris' }, result: 'Sunny' }],
         },
-        cost: 0.004,
       });
     });
 
@@ -368,11 +333,28 @@ describe('XAI Voice Provider', () => {
 
   describe('Configuration options', () => {
     it('accepts all valid voices', () => {
-      const voices = ['Ara', 'Rex', 'Sal', 'Eve', 'Leo'] as const;
+      const voices = ['ara', 'rex', 'sal', 'eve', 'leo'] as const;
       for (const voice of voices) {
         const provider = new XAIVoiceProvider('grok-3', { config: { voice } });
         expect(provider.config.voice).toBe(voice);
       }
+    });
+
+    it.each(['a1b2c3d4', 'TenantVoiceA'])(
+      'preserves opaque voice ID %s in session setup',
+      async (voice) => {
+        const provider = new XAIVoiceProvider('grok-voice-think-fast-2.0', { config: { voice } });
+        const setup = await (provider as any).buildSessionConfig();
+        expect(provider.config.voice).toBe(voice);
+        expect(setup.session.voice).toBe(voice);
+      },
+    );
+
+    it('normalizes legacy title-cased voice names', () => {
+      const provider = new XAIVoiceProvider('grok-3', { config: { voice: 'Ara' } });
+
+      expect(XAI_VOICES).toEqual(['Ara', 'Rex', 'Sal', 'Eve', 'Leo']);
+      expect(provider.config.voice).toBe('ara');
     });
 
     it('accepts turn detection configuration', () => {
@@ -524,10 +506,10 @@ describe('XAI Voice Provider', () => {
 
     it('passes through options correctly', () => {
       const options = {
-        config: { voice: 'Eve' as const, instructions: 'Be friendly' },
+        config: { voice: 'eve' as const, instructions: 'Be friendly' },
       };
       const provider = createXAIVoiceProvider('xai:voice:grok-3', options);
-      expect((provider as XAIVoiceProvider).config.voice).toBe('Eve');
+      expect((provider as XAIVoiceProvider).config.voice).toBe('eve');
       expect((provider as XAIVoiceProvider).config.instructions).toBe('Be friendly');
     });
 

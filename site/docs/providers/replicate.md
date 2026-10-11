@@ -98,7 +98,8 @@ Supported environment variables:
 
 Image generators such as SDXL can be used like so:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - 'Generate an image: {{subject}}'
 
@@ -209,7 +210,7 @@ module.exports = {
 
 Then reference it in your promptfoo configuration:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 extensions:
   - file://save-images.js:hook

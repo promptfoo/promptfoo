@@ -4,7 +4,6 @@ import * as path from 'path';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { PythonProvider } from '../../src/providers/pythonCompletion';
-import * as pythonUtils from '../../src/python/pythonUtils';
 import { mockProcessEnv } from '../util/utils';
 
 import type { CallApiContextParams } from '../../src/types/index';
@@ -24,8 +23,6 @@ describeOrSkip('PythonProvider Unicode handling', () => {
 
   beforeAll(() => {
     restoreEnv = mockProcessEnv({ PROMPTFOO_CACHE_ENABLED: 'false' });
-    pythonUtils.state.cachedPythonPath = null;
-    pythonUtils.state.validationPromise = null;
 
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-unicode-test-'));
 

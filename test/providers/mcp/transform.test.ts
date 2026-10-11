@@ -10,10 +10,37 @@ import {
   validateMCPConfigForClaudeCode,
 } from '../../../src/providers/mcp/transform';
 import * as mcpUtil from '../../../src/providers/mcp/util';
+import { fetchWithProxy } from '../../../src/util/fetch/index';
 import type Anthropic from '@anthropic-ai/sdk';
 
 import type { MCPTool } from '../../../src/providers/mcp/types';
 import type { OpenAiTool } from '../../../src/providers/openai/util';
+
+vi.mock('../../../src/util/fetch/index');
+afterEach(() => vi.resetAllMocks());
+
+const createStringParameterProperties = () => ({
+  param: { type: 'string' as const },
+});
+
+const createStrictEmptyInputSchema = () => ({
+  type: 'object' as const,
+  properties: {},
+  additionalProperties: false,
+  $schema: 'http://json-schema.org/draft-07/schema#',
+});
+
+const createCollidingServerNames = () => ({
+  servers: [
+    { name: 'tools.local', command: 'first' },
+    { name: 'tools_local', command: 'second' },
+  ],
+});
+
+const createExpectedEmptyParameters = () => ({
+  type: 'object' as const,
+  properties: {},
+});
 
 describe('transformMCPToolsToOpenAi', () => {
   it('should transform MCP tools to OpenAI format', () => {
@@ -72,10 +99,7 @@ describe('transformMCPToolsToOpenAi', () => {
         function: {
           name: 'simple_tool',
           description: 'A simple tool',
-          parameters: {
-            type: 'object',
-            properties: {},
-          },
+          parameters: createExpectedEmptyParameters(),
         },
       },
     ];
@@ -99,10 +123,7 @@ describe('transformMCPToolsToOpenAi', () => {
         function: {
           name: 'empty_tool',
           description: 'A tool with empty schema',
-          parameters: {
-            type: 'object',
-            properties: {},
-          },
+          parameters: createExpectedEmptyParameters(),
         },
       },
     ];
@@ -147,9 +168,7 @@ describe('transformMCPToolsToOpenAi', () => {
         inputSchema: {
           $schema: 'http://json-schema.org/draft-07/schema#',
           type: 'object',
-          properties: {
-            param: { type: 'string' },
-          },
+          properties: createStringParameterProperties(),
         },
       },
     ];
@@ -190,12 +209,7 @@ describe('transformMCPToolsToOpenAi', () => {
       {
         name: 'mcp_sdk_tool',
         description: 'Tool with MCP SDK generated schema',
-        inputSchema: {
-          type: 'object',
-          properties: {},
-          additionalProperties: false,
-          $schema: 'http://json-schema.org/draft-07/schema#',
-        },
+        inputSchema: createStrictEmptyInputSchema(),
       },
     ];
 
@@ -215,9 +229,7 @@ describe('transformMCPToolsToOpenAi', () => {
         name: 'tool_empty_required',
         description: 'Tool with empty required array',
         inputSchema: {
-          properties: {
-            param: { type: 'string' },
-          },
+          properties: createStringParameterProperties(),
           required: [],
         },
       },
@@ -298,7 +310,10 @@ describe('transformMCPConfigToClaudeCode', () => {
   });
 
   it('rejects duplicate names before any OAuth token is fetched', async () => {
-    const tokenRequest = vi.spyOn(mcpUtil, 'getOAuthToken').mockResolvedValue('test-token');
+    const tokenRequest = vi.spyOn(mcpUtil, 'getOAuthTokenWithExpiry').mockResolvedValue({
+      accessToken: 'test-token',
+      expiresAt: Date.now() + 3_600_000,
+    });
     const oauth = {
       type: 'oauth' as const,
       grantType: 'client_credentials' as const,
@@ -364,15 +379,7 @@ describe('transformMCPConfigToClaudeCode', () => {
         ],
       },
     ],
-    [
-      'names differing only in punctuation',
-      {
-        servers: [
-          { name: 'tools.local', command: 'first' },
-          { name: 'tools_local', command: 'second' },
-        ],
-      },
-    ],
+    ['names differing only in punctuation', createCollidingServerNames()],
     [
       'an explicit name and a normalized URL',
       {
@@ -425,12 +432,7 @@ describe('transformMCPConfigToClaudeCode', () => {
       config: {
         apiKey: 'test-key',
         cache_mcp: true,
-        mcp: {
-          servers: [
-            { name: 'tools.local', command: 'first' },
-            { name: 'tools_local', command: 'second' },
-          ],
-        },
+        mcp: createCollidingServerNames(),
       },
     });
 
@@ -642,9 +644,7 @@ describe('transformMCPToolsToAnthropic', () => {
         name: 'test_tool',
         description: 'A test tool',
         inputSchema: {
-          properties: {
-            param: { type: 'string' },
-          },
+          properties: createStringParameterProperties(),
           required: ['param'],
         },
       },
@@ -676,9 +676,7 @@ describe('transformMCPToolsToAnthropic', () => {
         inputSchema: {
           $schema: 'http://json-schema.org/draft-07/schema#',
           type: 'object',
-          properties: {
-            param: { type: 'string' },
-          },
+          properties: createStringParameterProperties(),
         },
       },
     ];
@@ -698,12 +696,7 @@ describe('transformMCPToolsToAnthropic', () => {
       {
         name: 'no_input_tool',
         description: 'Tool with no input parameters',
-        inputSchema: {
-          type: 'object',
-          properties: {},
-          additionalProperties: false,
-          $schema: 'http://json-schema.org/draft-07/schema#',
-        },
+        inputSchema: createStrictEmptyInputSchema(),
       },
     ];
 
@@ -724,9 +717,7 @@ describe('transformMCPToolsToGoogle', () => {
         name: 'test_tool',
         description: 'A test tool',
         inputSchema: {
-          properties: {
-            param: { type: 'string' },
-          },
+          properties: createStringParameterProperties(),
           required: ['param'],
         },
       },
@@ -747,9 +738,7 @@ describe('transformMCPToolsToGoogle', () => {
         description: 'A test tool',
         inputSchema: {
           $schema: 'http://json-schema.org/draft-07/schema#',
-          properties: {
-            param: { type: 'string' },
-          },
+          properties: createStringParameterProperties(),
         },
       },
     ];
@@ -969,5 +958,35 @@ describe('transformMCPToolsToGoogle', () => {
 
     expect(parameters?.type).toBe('OBJECT');
     expect(parameters?.properties).toEqual({});
+  });
+});
+
+describe('Claude MCP OAuth discovery', () => {
+  it('discovers the token endpoint from the remote server URL', async () => {
+    vi.mocked(fetchWithProxy)
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ token_endpoint: 'https://claude-discovery.example.com/token' }),
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ access_token: 'fixture-token', expires_in: 3600 })),
+      );
+    const result = await transformMCPConfigToClaudeCode({
+      server: {
+        name: 'remote',
+        url: 'https://claude-discovery.example.com/mcp/',
+        auth: { type: 'oauth', clientId: 'fixture-client', clientSecret: 'fixture-secret' },
+      },
+    });
+    expect(fetchWithProxy).toHaveBeenNthCalledWith(
+      1,
+      'https://claude-discovery.example.com/mcp/.well-known/oauth-authorization-server',
+      { redirect: 'error' },
+    );
+    expect(result.remote).toMatchObject({
+      url: 'https://claude-discovery.example.com/mcp/',
+      headers: { Authorization: 'Bearer fixture-token' },
+    });
   });
 });

@@ -20,7 +20,7 @@ import {
   isSamplingParamsDeprecatedClaudeModel,
 } from '../anthropic/util';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
-import { MCPClient } from '../mcp/client';
+import { McpClientSession } from '../mcp/session';
 import { transformMCPToolsToOpenAi } from '../mcp/transform';
 import {
   applyGpt6RequestRules,
@@ -39,12 +39,14 @@ import type {
   CallApiOptionsParams,
   ProviderResponse,
 } from '../../types/index';
+import type { MCPClient } from '../mcp/client';
 import type { AzureChatResponsesOptions, AzureProviderOptions } from './types';
 
 export class AzureChatCompletionProvider extends AzureGenericProvider {
   declare config: AzureChatResponsesOptions;
 
   private mcpClient: MCPClient | null = null;
+  private mcpSession?: McpClientSession;
   private functionCallbackHandler: FunctionCallbackHandler;
 
   constructor(
@@ -56,32 +58,36 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
     // Initialize callback handler immediately (will be replaced if MCP is enabled)
     this.functionCallbackHandler = new FunctionCallbackHandler();
 
-    // Initialize MCP if enabled
-    if (this.config.mcp?.enabled) {
-      this.initializationPromise = this.initializeMCP();
-    }
+    void this.initializeMCP().catch(() => undefined);
   }
 
-  private async initializeMCP(): Promise<void> {
-    this.mcpClient = new MCPClient(this.config.mcp!);
-    await this.mcpClient.initialize();
+  private async initializeMCP(signal?: AbortSignal): Promise<void> {
+    if (!this.config.mcp?.enabled) {
+      return;
+    }
+    this.mcpSession ??= new McpClientSession(this.config.mcp);
+    this.mcpClient = await this.mcpSession.initialize(signal);
 
     // Initialize callback handler with MCP client
     this.functionCallbackHandler = new FunctionCallbackHandler(this.mcpClient);
   }
 
+  async ensureInitialized(signal?: AbortSignal): Promise<void> {
+    await Promise.all([super.ensureInitialized(), this.initializeMCP(signal)]);
+  }
+
   async cleanup(): Promise<void> {
-    if (this.mcpClient) {
-      await this.initializationPromise;
-      await this.mcpClient.cleanup();
-      this.mcpClient = null;
+    try {
+      await this.mcpSession?.cleanup();
+    } finally {
+      this.mcpClient = this.mcpSession?.client ?? null;
     }
   }
 
   /**
    * Check if the current deployment is configured as a reasoning model.
    * Reasoning models use max_completion_tokens instead of max_tokens,
-   * don't support temperature, and accept reasoning_effort parameter.
+   * don't support temperature, and may support configurable reasoning effort.
    */
   protected isReasoningModel(modelName = this.config.modelName ?? this.deploymentName): boolean {
     // Check explicit config flags first
@@ -103,6 +109,8 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       // GPT-5 series (reasoning by default)
       lowerName.startsWith('gpt-5') ||
       lowerName.includes('-gpt-5') ||
+      lowerName === 'gpt-chat-latest' ||
+      lowerName.startsWith('gpt-chat-latest-') ||
       isGpt6Model(lowerName) ||
       // DeepSeek reasoning models
       lowerName.includes('deepseek-r1') ||
@@ -211,6 +219,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
         : (config.modelName ?? this.deploymentName)
     ).toLowerCase();
     const isReasoningModel = this.isReasoningModel(capabilityModelName);
+    const isFixedReasoningModel = /^gpt-chat-latest(?:-|$)/.test(capabilityModelName);
     const gpt6Variant = getGpt6Variant(capabilityModelName);
     const useModelDefaults =
       gpt6Variant === 'sol' || gpt6Variant === 'luna' || gpt6Variant === '6.1-sol';
@@ -252,11 +261,13 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
         )
       : undefined;
     const defaultReasoningEffort = config.omitDefaults || useModelDefaults ? undefined : 'medium';
-    const reasoningEffort = gpt6Variant
-      ? configuredGpt6Effort === undefined
-        ? defaultReasoningEffort
-        : configuredGpt6Effort
-      : (config.reasoning_effort ?? defaultReasoningEffort);
+    const reasoningEffort = isFixedReasoningModel
+      ? undefined
+      : gpt6Variant
+        ? configuredGpt6Effort === undefined
+          ? defaultReasoningEffort
+          : configuredGpt6Effort
+        : (config.reasoning_effort ?? defaultReasoningEffort);
     const renderedReasoningEffort = isReasoningModel
       ? gpt6Variant
         ? reasoningEffort
@@ -336,6 +347,10 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       delete body.tool_choice;
     }
 
+    if (isFixedReasoningModel) {
+      delete body.reasoning_effort;
+    }
+
     if (gpt6Variant) {
       if (renderedReasoningEffort === undefined) {
         delete body.reasoning_effort;
@@ -370,10 +385,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    if (this.initializationPromise != null) {
-      await this.initializationPromise;
-    }
-    await this.ensureInitialized();
+    await this.ensureInitialized(callApiOptions?.abortSignal);
     invariant(this.authHeaders, 'auth headers are not initialized');
 
     if (!this.getApiBaseUrl()) {
@@ -518,6 +530,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
     // See https://learn.microsoft.com/en-us/azure/ai-foundry/openai/concepts/content-filter
     let flaggedInput = false;
     let flaggedOutput = false;
+    let isRefusal = false;
     let output = '';
     let logProbs: any;
     let finishReason: string;
@@ -553,7 +566,8 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
         finishReason = normalizeFinishReason(choice?.finish_reason) as string;
 
         // Handle structured output
-        output = message?.content;
+        isRefusal = Boolean(message?.refusal);
+        output = message?.refusal || message?.content;
 
         // Check for errors indicating that the content filters did not run on the completion.
         // Optional-chain `choice`: in dataSources mode `find(...)` can return undefined (no
@@ -593,11 +607,14 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
             );
           } else {
             // No callbacks configured, return raw tool/function calls
-            output = toolCalls ?? functionCall;
+            // A confirmed content-filter block is intentionally empty, not a
+            // missing provider response. Preserve any returned tool calls.
+            output = toolCalls ?? functionCall ?? (flaggedOutput ? '' : undefined);
           }
         } else if (
-          config.response_format?.type === 'json_schema' ||
-          config.response_format?.type === 'json_object'
+          !isRefusal &&
+          (config.response_format?.type === 'json_schema' ||
+            config.response_format?.type === 'json_object')
         ) {
           try {
             output = JSON.parse(output);
@@ -638,6 +655,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
         latencyMs,
         logProbs,
         finishReason,
+        ...(isRefusal ? { isRefusal: true } : {}),
         cost: calculateAzureCost(
           config.modelName ?? this.deploymentName,
           config,
@@ -652,7 +670,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
           data.usage?.completion_tokens_details?.image_tokens,
         ),
         guardrails: {
-          flagged: flaggedInput || flaggedOutput,
+          flagged: flaggedInput || flaggedOutput || isRefusal,
           flaggedInput,
           flaggedOutput,
         },
