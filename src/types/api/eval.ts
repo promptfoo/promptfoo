@@ -268,18 +268,8 @@ export const SubmitRatingRequestSchema = z
   .object({
     pass: z.boolean(),
     score: z.number(),
-    action: z
-      .enum(['annotate', 'clear'])
-      .optional()
-      .describe(
-        'Annotate without changing grading, or clear a human override. Omit for a full rating update.',
-      ),
   })
-  .passthrough()
-  .refine((value) => value.action !== 'annotate' || typeof value.comment === 'string', {
-    message: 'Annotation updates require a string comment',
-    path: ['comment'],
-  });
+  .passthrough();
 
 /**
  * Response is the persisted EvalResult row. The route returns the updated

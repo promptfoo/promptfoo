@@ -725,8 +725,7 @@ evalRouter.post(
     try {
       const { evalId, id } = paramsResult.data;
       // Double-cast needed: Zod's .passthrough() adds index signature that doesn't overlap with GradingResult
-      const { action, ...submittedGrade } = bodyResult.data;
-      const gradingResult = submittedGrade as unknown as GradingResult;
+      const gradingResult = bodyResult.data as unknown as GradingResult;
       const result = await EvalResult.findById(id);
       if (!result || result.evalId !== evalId) {
         res.status(404).json({ error: 'Result not found' });
@@ -739,95 +738,43 @@ evalRouter.post(
         return;
       }
 
-      if (action === 'annotate') {
-        result.gradingResult = {
-          ...(result.gradingResult ?? { pass: result.success, score: result.score, reason: '' }),
-          comment: gradingResult.comment,
-        };
-        await result.save();
-        await eval_.save();
-        res.json(EvalSchemas.SubmitRating.Response.parse(result));
-        return;
-      }
-
       // Capture the current state before we change it
-      const previousManualOverride =
-        result.gradingResult?.componentResults?.find(
+      const hasExistingManualOverride = Boolean(
+        result.gradingResult?.componentResults?.some(
           (r) => r.assertion?.type === HUMAN_ASSERTION_TYPE,
-        ) ??
-        (result.gradingResult?.assertion?.type === HUMAN_ASSERTION_TYPE
-          ? result.gradingResult
-          : undefined);
-      const hasExistingManualOverride = Boolean(previousManualOverride);
-      const originalFailureReason =
-        previousManualOverride?.metadata?.originalFailureReason ?? result.failureReason;
-      const savedOriginalError = previousManualOverride?.metadata?.originalError;
-      const originalError = previousManualOverride
-        ? typeof savedOriginalError === 'string' || savedOriginalError === null
-          ? savedOriginalError
-          : undefined
-        : (result.error ?? null);
-      const savedOriginalGrade = previousManualOverride?.metadata?.originalGrade;
-      const originalGrade = previousManualOverride
-        ? typeof savedOriginalGrade?.pass === 'boolean' &&
-          typeof savedOriginalGrade.score === 'number' &&
-          Number.isFinite(savedOriginalGrade.score)
-          ? savedOriginalGrade
-          : undefined
-        : result.gradingResult?.componentResults?.length
-          ? undefined
-          : {
-              pass: result.gradingResult?.pass ?? result.success,
-              score: result.gradingResult?.score ?? result.score,
-            };
-      const manualOverride =
-        gradingResult.componentResults?.find((r) => r.assertion?.type === HUMAN_ASSERTION_TYPE) ??
-        (gradingResult.assertion?.type === HUMAN_ASSERTION_TYPE ? gradingResult : undefined);
-      if (action === 'clear' && manualOverride) {
-        res.status(400).json({ error: 'Clear rating must remove the human override' });
-        return;
+        ),
+      );
+      const isGraderError =
+        result.failureReason === ResultFailureReason.ERROR &&
+        result.gradingResult?.metadata?.graderError === true &&
+        !result.metadata?.__promptfoo?.comparisonError;
+      const savedRatingBasis = result.gradingResult?.metadata?.graderErrorRating;
+      const graderErrorRating =
+        isGraderError &&
+        (typeof savedRatingBasis === 'boolean'
+          ? savedRatingBasis
+          : !hasExistingManualOverride &&
+            result.gradingResult?.assertion?.type !== HUMAN_ASSERTION_TYPE &&
+            !result.success);
+      if (gradingResult.metadata) {
+        delete gradingResult.metadata.graderErrorRating;
       }
-      if (manualOverride) {
-        manualOverride.metadata = {
-          ...manualOverride.metadata,
-          originalFailureReason,
-          originalError,
-          originalGrade,
+      if (isGraderError) {
+        // Legacy approvals used the fail bucket; keep that basis across full-grade replacements.
+        gradingResult.metadata = {
+          ...gradingResult.metadata,
+          graderError: true,
+          graderErrorRating,
         };
       }
-      const clearingError =
-        action === 'clear' &&
-        (originalFailureReason === ResultFailureReason.ERROR ||
-          Boolean(result.metadata?.__promptfoo?.comparisonError));
-      if (action === 'clear' && !gradingResult.componentResults?.length) {
-        gradingResult.pass = originalGrade?.pass ?? true;
-        gradingResult.score = originalGrade?.score ?? (clearingError ? 0 : 1);
-      }
+      const failureCount = graderErrorRating ? 'testErrorCount' : 'testFailCount';
+      const successChanged = result.success !== gradingResult.pass;
       const scoreChange = gradingResult.score - result.score;
-      const effectivePass = clearingError ? false : gradingResult.pass;
-      const previous = { success: result.success, failureReason: result.failureReason };
-      const successChanged = result.success !== effectivePass;
-      const failureReason = effectivePass
-        ? ResultFailureReason.NONE
-        : !manualOverride &&
-            (clearingError ||
-              gradingResult.metadata?.graderError === true ||
-              originalFailureReason === ResultFailureReason.ERROR)
-          ? ResultFailureReason.ERROR
-          : ResultFailureReason.ASSERT;
+
       // Update the result
       result.gradingResult = gradingResult;
-      result.success = effectivePass;
+      result.success = gradingResult.pass;
       result.score = gradingResult.score;
-      result.failureReason = failureReason;
-      if (
-        action === 'clear' &&
-        originalFailureReason === ResultFailureReason.ERROR &&
-        !result.metadata?.__promptfoo?.comparisonError &&
-        originalError !== undefined
-      ) {
-        result.error = originalError;
-      }
 
       // Update the prompt metrics
       const prompt = eval_.prompts[result.promptIdx];
@@ -841,19 +788,22 @@ evalRouter.post(
         return;
       }
 
-      if (action === 'clear') {
-        if (previousManualOverride) {
-          prompt.metrics[previousManualOverride.pass ? 'assertPassCount' : 'assertFailCount'] -= 1;
-        }
-      } else if (successChanged) {
+      if (successChanged) {
         if (result.success) {
+          // Result changed from fail to pass
+          prompt.metrics.testPassCount += 1;
+          prompt.metrics[failureCount] -= 1;
           prompt.metrics.assertPassCount += 1;
+          prompt.metrics.score += scoreChange;
           if (hasExistingManualOverride) {
             // If there was an existing manual override, we need to decrement the assertFailCount because it changed from fail to pass
             prompt.metrics.assertFailCount -= 1;
           }
         } else {
+          prompt.metrics.testPassCount -= 1;
+          prompt.metrics[failureCount] += 1;
           prompt.metrics.assertFailCount += 1;
+          prompt.metrics.score += scoreChange;
           if (hasExistingManualOverride) {
             // If there was an existing manual override, we need to decrement the assertPassCount because it changed from pass to fail
             prompt.metrics.assertPassCount -= 1;
@@ -868,34 +818,6 @@ evalRouter.post(
         }
       }
 
-      const { score: persistedScore, ...counts } = await eval_.getPromptGradingMetrics(
-        result.promptIdx,
-      );
-      const recordedTotal =
-        prompt.metrics.testPassCount + prompt.metrics.testFailCount + prompt.metrics.testErrorCount;
-      const persistedTotal = counts.testPassCount + counts.testFailCount + counts.testErrorCount;
-      if (recordedTotal === persistedTotal) {
-        Object.assign(prompt.metrics, counts, { score: persistedScore });
-      } else if (previous.success && previous.failureReason === ResultFailureReason.ERROR) {
-        // Preserve missing rows; remove main-era approvals' extra error and missing fail.
-        prompt.metrics.testFailCount++;
-        prompt.metrics.testErrorCount--;
-      }
-      const previousCount = previous.success
-        ? 'testPassCount'
-        : previous.failureReason === ResultFailureReason.ERROR
-          ? 'testErrorCount'
-          : 'testFailCount';
-      const nextCount = result.success
-        ? 'testPassCount'
-        : result.failureReason === ResultFailureReason.ERROR
-          ? 'testErrorCount'
-          : 'testFailCount';
-      if (previousCount !== nextCount) {
-        prompt.metrics[previousCount]--;
-        prompt.metrics[nextCount]++;
-      }
-      prompt.metrics.score += scoreChange;
       await result.save();
       await eval_.save();
 

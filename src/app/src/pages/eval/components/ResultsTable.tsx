@@ -23,7 +23,6 @@ import {
   getPrimaryTokenUsageLabel,
   getTokenUsageTotal,
 } from '@app/utils/tokenUsage';
-import { getTableCellText } from '@promptfoo/presentation/evalTableCells';
 import { FILE_METADATA_KEY, HUMAN_ASSERTION_TYPE } from '@promptfoo/providers/constants';
 import {
   type EvalResultsFilterMode,
@@ -35,7 +34,6 @@ import {
   type Vars,
 } from '@promptfoo/types';
 import { EVAL_TABLE_MAX_PAGE_SIZE } from '@promptfoo/types/evalConstants';
-import { ResultFailureReason } from '@promptfoo/types/results';
 import invariant from '@promptfoo/util/invariant';
 import { getActualPrompt } from '@promptfoo/util/providerResponse';
 import {
@@ -563,7 +561,6 @@ type PromptMetrics = ReturnType<ReturnType<typeof useMetricsGetter>>;
 type ManualRatingUpdate = {
   pass: EvaluateTableOutput['pass'];
   score: EvaluateTableOutput['score'];
-  gradingPass?: boolean;
   componentResults?: NonNullable<GradingResult['componentResults']>;
   modifiedComponentResults: boolean;
 };
@@ -870,48 +867,6 @@ function averageComponentResultScore(
   return scores.reduce((sum, resultScore) => sum + resultScore, 0) / scores.length;
 }
 
-function getManualGradingResult(output: EvaluateTableOutput) {
-  return (
-    output.gradingResult?.componentResults?.find(
-      (result) => result.assertion?.type === HUMAN_ASSERTION_TYPE,
-    ) ??
-    (output.gradingResult?.assertion?.type === HUMAN_ASSERTION_TYPE
-      ? output.gradingResult
-      : undefined)
-  );
-}
-
-function getOriginalFailureReason(output: EvaluateTableOutput) {
-  return getManualGradingResult(output)?.metadata?.originalFailureReason ?? output.failureReason;
-}
-
-function getOriginalError(output: EvaluateTableOutput) {
-  const manualOverride = getManualGradingResult(output);
-  if (manualOverride) {
-    const error = manualOverride.metadata?.originalError;
-    return typeof error === 'string' || error === null ? error : undefined;
-  }
-  return output.error ?? null;
-}
-
-function getOriginalGrade(output: EvaluateTableOutput) {
-  const manualOverride = getManualGradingResult(output);
-  if (manualOverride) {
-    const original = manualOverride.metadata?.originalGrade;
-    return typeof original?.pass === 'boolean' &&
-      typeof original.score === 'number' &&
-      Number.isFinite(original.score)
-      ? original
-      : undefined;
-  }
-  if (!output.gradingResult?.componentResults?.length) {
-    return {
-      pass: output.gradingResult?.pass ?? output.pass,
-      score: output.gradingResult?.score ?? output.score,
-    };
-  }
-}
-
 function getManualRatingUpdate({
   existingOutput,
   isPass,
@@ -950,32 +905,16 @@ function getManualRatingUpdate({
       componentResults.splice(humanResultIndex, 1);
     }
 
-    const originalGrade = getOriginalGrade(existingOutput);
-    const gradingPass =
-      componentResults.length === 0 && originalGrade
-        ? originalGrade.pass
-        : componentResults.every((result) => result.pass);
-    finalPass = gradingPass;
     if (componentResults.length > 0) {
+      finalPass =
+        componentResults.filter((result) => result.pass).length === componentResults.length;
       finalScore = averageComponentResultScore(componentResults, finalScore);
-    } else {
-      finalScore = originalGrade?.score ?? 1;
-    }
-    if (
-      getOriginalFailureReason(existingOutput) === ResultFailureReason.ERROR ||
-      existingOutput.metadata?.__promptfoo?.comparisonError
-    ) {
-      finalPass = false;
-      if (componentResults.length === 0 && !originalGrade) {
-        finalScore = 0;
-      }
     }
 
     return {
       pass: finalPass,
       score: finalScore,
       componentResults,
-      gradingPass,
       modifiedComponentResults: true,
     };
   }
@@ -1017,28 +956,20 @@ function buildManualGradingResult({
   score?: number;
   comment?: string;
 }): GradingResult {
-  if (isPass === undefined && score === undefined) {
-    return {
-      ...(existingOutput.gradingResult ?? {
-        pass: existingOutput.pass,
-        score: existingOutput.score,
-        reason: '',
-      }),
-      comment,
-    };
-  }
   const { componentResults: _, ...existingGradingResultWithoutComponents } =
     existingOutput.gradingResult || {};
 
   const gradingResult: GradingResult = {
     ...existingGradingResultWithoutComponents,
-    pass: ratingUpdate.gradingPass ?? ratingUpdate.pass,
-    score: ratingUpdate.score,
+    pass: existingOutput.gradingResult?.pass ?? ratingUpdate.pass,
+    score: existingOutput.gradingResult?.score ?? ratingUpdate.score,
     reason: existingOutput.gradingResult?.reason ?? 'Manual result',
     comment,
   };
 
   if (isPass === null) {
+    gradingResult.pass = ratingUpdate.pass;
+    gradingResult.score = ratingUpdate.score;
     if (gradingResult.reason === 'Manual result (overrides all other grading results)') {
       gradingResult.reason = ratingUpdate.componentResults?.[0]?.reason || 'Manual rating cleared';
     }
@@ -1046,6 +977,8 @@ function buildManualGradingResult({
       delete gradingResult.assertion;
     }
   } else if (typeof isPass !== 'undefined' || typeof score !== 'undefined') {
+    gradingResult.pass = ratingUpdate.pass;
+    gradingResult.score = ratingUpdate.score;
     gradingResult.reason = 'Manual result (overrides all other grading results)';
     if (existingOutput.gradingResult?.assertion) {
       gradingResult.assertion = existingOutput.gradingResult.assertion;
@@ -1058,29 +991,6 @@ function buildManualGradingResult({
     gradingResult.componentResults = existingOutput.gradingResult.componentResults;
   }
 
-  const manualOverride =
-    gradingResult.componentResults?.find(
-      (result) => result.assertion?.type === HUMAN_ASSERTION_TYPE,
-    ) ?? (gradingResult.assertion?.type === HUMAN_ASSERTION_TYPE ? gradingResult : undefined);
-  if (manualOverride) {
-    const originalGrade = getOriginalGrade(existingOutput);
-    const preservedOverride = {
-      ...manualOverride,
-      metadata: {
-        ...manualOverride.metadata,
-        originalFailureReason: getOriginalFailureReason(existingOutput),
-        originalError: getOriginalError(existingOutput),
-        originalGrade,
-      },
-    };
-    if (manualOverride === gradingResult) {
-      return preservedOverride;
-    }
-    gradingResult.componentResults = gradingResult.componentResults?.map((result) =>
-      result === manualOverride ? preservedOverride : result,
-    );
-  }
-
   return gradingResult;
 }
 
@@ -1091,7 +1001,6 @@ function buildRatingTableUpdate({
   promptIndex,
   ratingUpdate,
   gradingResult,
-  action,
 }: {
   head: EvaluateTable['head'];
   body: EvaluateTable['body'];
@@ -1099,48 +1008,13 @@ function buildRatingTableUpdate({
   promptIndex: number;
   ratingUpdate: ManualRatingUpdate;
   gradingResult: GradingResult;
-  action?: 'annotate' | 'clear';
 }): EvaluateTable {
   const updatedData = [...body];
   const updatedRow = { ...updatedData[rowIndex] };
   const updatedOutputs = [...updatedRow.outputs];
-  const previousOutput = updatedOutputs[promptIndex];
-  const hasManualOverride =
-    gradingResult.assertion?.type === HUMAN_ASSERTION_TYPE ||
-    gradingResult.componentResults?.some(
-      (result) => result.assertion?.type === HUMAN_ASSERTION_TYPE,
-    );
 
-  const originalError =
-    action === 'clear' &&
-    getOriginalFailureReason(previousOutput) === ResultFailureReason.ERROR &&
-    !previousOutput.metadata?.__promptfoo?.comparisonError
-      ? getOriginalError(previousOutput)
-      : undefined;
   updatedOutputs[promptIndex] = {
-    ...previousOutput,
-    ...(originalError !== undefined && {
-      error: originalError,
-      ...(previousOutput.response != null && {
-        text: getTableCellText({
-          response: previousOutput.response,
-          testCase: previousOutput.testCase ?? updatedRow.test,
-          success: ratingUpdate.pass,
-          error: originalError,
-        }),
-      }),
-    }),
-    failureReason:
-      action === 'annotate'
-        ? previousOutput.failureReason
-        : ratingUpdate.pass
-          ? ResultFailureReason.NONE
-          : !hasManualOverride &&
-              (gradingResult.metadata?.graderError === true ||
-                getOriginalFailureReason(previousOutput) === ResultFailureReason.ERROR ||
-                (action === 'clear' && previousOutput.metadata?.__promptfoo?.comparisonError))
-            ? ResultFailureReason.ERROR
-            : ResultFailureReason.ASSERT,
+    ...updatedOutputs[promptIndex],
     pass: ratingUpdate.pass,
     score: ratingUpdate.score,
     gradingResult,
@@ -1159,14 +1033,12 @@ async function saveManualRating({
   resultId,
   version,
   gradingResult,
-  action,
   table,
 }: {
   evalId: string | null;
   resultId: string;
   version: number | null | undefined;
   gradingResult: GradingResult;
-  action?: 'annotate' | 'clear';
   table: EvaluateTable;
 }): Promise<void> {
   invariant(evalId, 'Cannot save manual rating without an evaluation ID');
@@ -1178,7 +1050,7 @@ async function saveManualRating({
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ ...gradingResult, ...(action && { action }) }),
+          body: JSON.stringify({ ...gradingResult }),
         })
       : await callApi(EVAL_ROUTES.DETAIL(evalId), {
           method: 'PATCH',
@@ -1862,12 +1734,6 @@ function ResultsTable({
       comment?: string,
     ) => {
       const existingOutput = body[rowIndex].outputs[promptIndex];
-      const action =
-        isPass === undefined && score === undefined
-          ? 'annotate'
-          : isPass === null
-            ? 'clear'
-            : undefined;
       const ratingUpdate = getManualRatingUpdate({
         existingOutput,
         isPass,
@@ -1888,7 +1754,6 @@ function ResultsTable({
         promptIndex,
         ratingUpdate,
         gradingResult,
-        action,
       });
 
       setTable(newTable);
@@ -1901,7 +1766,6 @@ function ResultsTable({
             resultId,
             version,
             gradingResult,
-            action,
             table: newTable,
           });
         } catch (error) {

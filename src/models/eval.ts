@@ -874,23 +874,6 @@ export default class Eval {
     return getTotalResultRowCount(this.id);
   }
 
-  /** Aggregate one saved prompt without loading response or grading payloads. */
-  async getPromptGradingMetrics(promptIdx: number) {
-    const db = await getDb();
-    const metrics = await db
-      .select({
-        score: sql<number>`COALESCE(SUM(${evalResultsTable.score}), 0)`,
-        testPassCount: sql<number>`COUNT(CASE WHEN ${evalResultsTable.success} = 1 THEN 1 END)`,
-        testFailCount: sql<number>`COUNT(CASE WHEN ${evalResultsTable.success} = 0 AND ${evalResultsTable.failureReason} != ${ResultFailureReason.ERROR} THEN 1 END)`,
-        testErrorCount: sql<number>`COUNT(CASE WHEN ${evalResultsTable.success} = 0 AND ${evalResultsTable.failureReason} = ${ResultFailureReason.ERROR} THEN 1 END)`,
-      })
-      .from(evalResultsTable)
-      .where(and(eq(evalResultsTable.evalId, this.id), eq(evalResultsTable.promptIdx, promptIdx)))
-      .get();
-    invariant(metrics, 'Prompt grading metrics are required');
-    return metrics;
-  }
-
   /**
    * Find a non-transient HTTP error status from evaluation results.
    * Returns the first non-transient status (401, 403, 404, 500, 501) found, or undefined.

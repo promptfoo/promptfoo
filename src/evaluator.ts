@@ -17,7 +17,7 @@ import {
 import { extractAndStoreBinaryData } from './blobs/extractor';
 import { getCache, isCacheEnabled, withCacheEnabled, withCacheNamespace } from './cache';
 import cliState from './cliState';
-import { DEFAULT_MAX_CONCURRENCY, FILE_METADATA_KEY, HUMAN_ASSERTION_TYPE } from './constants';
+import { DEFAULT_MAX_CONCURRENCY, FILE_METADATA_KEY } from './constants';
 import { getEnvBool, getEnvInt, getEvalTimeoutMs, getMaxEvalTimeMs, isCI } from './envars';
 import { collectFileMetadata, renderPrompt, runExtensionHook } from './evaluatorHelpers';
 import logger, { globalLogCallback, isDebugEnabled, setLogCallback } from './logger';
@@ -3481,21 +3481,10 @@ function hasCompletedComparison(
   );
 }
 
-function getManualGradingResult(result: EvaluationStoreResult) {
-  return (
-    result.gradingResult?.componentResults?.find(
-      (component) => component.assertion?.type === HUMAN_ASSERTION_TYPE,
-    ) ??
-    (result.gradingResult?.assertion?.type === HUMAN_ASSERTION_TYPE
-      ? result.gradingResult
-      : undefined)
-  );
-}
-
 type ComparisonErrorState = Pick<
   EvaluationStoreResult,
   'success' | 'score' | 'failureReason' | 'error'
-> & { originalFailureReason?: ResultFailureReason; originalError?: string | null };
+>;
 
 function getComparisonError(result: EvaluationStoreResult): ComparisonErrorState | undefined {
   const state = result.metadata?.[PROMPTFOO_METADATA_KEY]?.comparisonError;
@@ -3515,13 +3504,7 @@ function setComparisonError(result: EvaluationStoreResult, state?: ComparisonErr
   const fields =
     internal && typeof internal === 'object' && !Array.isArray(internal) ? { ...internal } : {};
   if (state) {
-    const manualOverride = getManualGradingResult(result);
-    const error = manualOverride?.metadata?.originalError;
-    fields.comparisonError = getComparisonError(result) ?? {
-      ...state,
-      originalFailureReason: manualOverride?.metadata?.originalFailureReason,
-      originalError: typeof error === 'string' || error === null ? error : undefined,
-    };
+    fields.comparisonError = state;
   } else {
     delete fields.comparisonError;
   }
@@ -5523,26 +5506,13 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     }
   }
 
-  private async restoreComparisonResult(
+  private restoreComparisonResult(
     result: TResult,
     metrics: CompletedPrompt['metrics'] | undefined,
   ) {
-    const saved = getComparisonError(result);
-    const error =
-      saved?.originalFailureReason === undefined ? (saved?.error ?? null) : saved.originalError;
-    const originalError = typeof error === 'string' || error === null ? error : undefined;
-    const manualOverride = getManualGradingResult(result);
     if (result.failureReason === ResultFailureReason.ERROR) {
+      const saved = getComparisonError(result);
       if (!saved) {
-        return false;
-      }
-      if (saved.originalFailureReason === ResultFailureReason.ERROR && !manualOverride) {
-        result.error = originalError === undefined ? saved.error : originalError;
-        setComparisonError(result);
-        this.trackFinalJsonlResult(result);
-        if (this.store.persisted && !this.store.hasResultPersistenceFailure(result)) {
-          await this.store.saveResult(result);
-        }
         return false;
       }
       const previous = {
@@ -5553,18 +5523,9 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       result.success = saved.success;
       result.score = saved.score;
       result.failureReason = saved.failureReason;
-      this.updateComparisonResultCounts(result, previous, metrics);
-    }
-    if (saved) {
-      if (manualOverride) {
-        manualOverride.metadata = {
-          ...manualOverride.metadata,
-          originalFailureReason: saved.originalFailureReason ?? saved.failureReason,
-          originalError,
-        };
-      }
       result.error = saved.error;
       setComparisonError(result);
+      this.updateComparisonResultCounts(result, previous, metrics);
     }
     return true;
   }
@@ -5578,7 +5539,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     metrics: CompletedPrompt['metrics'] | undefined;
     result: TResult;
   }) {
-    if (!(await this.restoreComparisonResult(result, metrics))) {
+    if (!this.restoreComparisonResult(result, metrics)) {
       return;
     }
     const wasSuccess = result.success;
@@ -5603,7 +5564,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     ) {
       return;
     }
-    if (!(await this.restoreComparisonResult(result, metrics))) {
+    if (!this.restoreComparisonResult(result, metrics)) {
       return;
     }
     const wasSuccess = result.success;
