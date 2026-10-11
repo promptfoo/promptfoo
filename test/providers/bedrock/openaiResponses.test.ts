@@ -184,6 +184,82 @@ describe('bedrock openaiResponses helper', () => {
       },
     );
 
+    describe.each(['openai.gpt-oss-safeguard-20b', 'openai.gpt-oss-safeguard-120b'])(
+      '%s manual pricing',
+      (model) => {
+        it.each([
+          { rates: { inputCost: 0.001, outputCost: 0.002 }, expected: 0.02 },
+          { rates: { cost: 0.003 }, expected: 0.045 },
+          { rates: { inputCost: 0, outputCost: 0 }, expected: 0 },
+          { rates: { cost: 0 }, expected: 0 },
+          { rates: { inputCost: 0.001 }, expected: undefined },
+          { rates: { outputCost: 0.002 }, expected: undefined },
+          { rates: {}, expected: undefined },
+        ])('resolves provider and prompt rates $rates', async ({ rates, expected }) => {
+          for (const scope of ['provider', 'prompt']) {
+            const provider = createBedrockOpenAiResponsesProvider(model, {
+              config: { apiKey: 'fixture', ...(scope === 'provider' ? rates : {}) },
+            });
+            const result = await provider.callApi(
+              'hello',
+              scope === 'prompt'
+                ? { prompt: { raw: 'hello', label: 'fixture', config: rates }, vars: {} }
+                : undefined,
+            );
+            expect(result.error).toBeUndefined();
+            expect(result.output).toBe('hello');
+            if (expected === undefined) {
+              expect(result.cost).toBeUndefined();
+            } else {
+              expect(result.cost).toBeCloseTo(expected);
+            }
+          }
+        });
+      },
+    );
+
+    it.each([
+      { usage: undefined, cached: false, expected: undefined },
+      { usage: { input_tokens: 10 }, cached: false, expected: undefined },
+      { usage: { output_tokens: 5 }, cached: false, expected: undefined },
+      { usage: { input_tokens: 10, output_tokens: 5 }, cached: true, expected: 0 },
+    ])(
+      'preserves missing usage and response-cache semantics for $usage',
+      async ({ usage, cached, expected }) => {
+        vi.mocked(fetchWithCache).mockResolvedValue({
+          data: {
+            output: [
+              {
+                type: 'message',
+                role: 'assistant',
+                content: [{ type: 'output_text', text: 'hello' }],
+              },
+            ],
+            usage,
+          },
+          cached,
+          status: 200,
+          statusText: 'OK',
+        });
+        const provider = createBedrockOpenAiResponsesProvider('openai.gpt-oss-safeguard-20b', {
+          config: { apiKey: 'fixture', inputCost: 0.001, outputCost: 0.002 },
+        });
+        const result = await provider.callApi('hello');
+        expect(result.error).toBeUndefined();
+        expect(result.cost).toBe(expected);
+      },
+    );
+
+    it.each(['openai.gpt-oss-20b', 'openai.gpt-oss-120b'])(
+      'preserves explicit pricing for catalogued %s',
+      async (model) => {
+        const provider = createBedrockOpenAiResponsesProvider(model, {
+          config: { apiKey: 'fixture', inputCost: 0.001, outputCost: 0.002 },
+        });
+        expect((await provider.callApi('hello')).cost).toBeCloseTo(0.02);
+      },
+    );
+
     it('builds the standard /v1 mantle base URL', () => {
       expect(getBedrockMantleResponsesBaseUrl('us-east-1')).toBe(
         'https://bedrock-mantle.us-east-1.api.aws/v1',
