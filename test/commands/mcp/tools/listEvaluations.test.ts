@@ -3,9 +3,10 @@ import { randomUUID } from 'node:crypto';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { registerListEvaluationsTool } from '../../../../src/commands/mcp/tools/listEvaluations';
 import { runDbMigrations } from '../../../../src/migrate';
+import * as evalModel from '../../../../src/models/eval';
 import Eval, { getEvalSummaries } from '../../../../src/models/eval';
 
 describe('list_evaluations in a long-lived MCP session', () => {
@@ -25,6 +26,7 @@ describe('list_evaluations in a long-lived MCP session', () => {
     await client.connect(clientTransport);
   });
   afterEach(async () => {
+    vi.restoreAllMocks();
     await client.close();
     await server.close();
     for (const eval_ of created.splice(0)) {
@@ -110,6 +112,26 @@ describe('list_evaluations in a long-lived MCP session', () => {
         .map((entry: { description: string }) => entry.description)
         .sort(),
     ).toEqual(['first', 'second']);
+  });
+
+  it.each([
+    {
+      error: new Error('database is unavailable'),
+      message: 'Failed to access evaluation database. Ensure promptfoo is properly initialized.',
+    },
+    {
+      error: new Error('query interrupted'),
+      message: 'Failed to list evaluations: query interrupted',
+    },
+  ])('reports $message and retries on the next request', async ({ error, message }) => {
+    const { eval_ } = await create('available after retry');
+    vi.spyOn(evalModel, 'getEvalSummaries').mockRejectedValueOnce(error);
+    const result = await client.callTool({ name: 'list_evaluations', arguments: {} });
+    const content = result.content as { type: string; text: string }[];
+    expect(JSON.parse(content[0].text)).toMatchObject({ success: false, error: message });
+    expect((await list()).evaluations.map((entry: { evalId: string }) => entry.evalId)).toEqual([
+      eval_.id,
+    ]);
   });
 
   it('retains the cacheStats response shape while keeping no transport cache', async () => {

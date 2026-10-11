@@ -3,7 +3,11 @@ import { type GradingResult } from '../types/index';
 import invariant from '../util/invariant';
 import { getProcessShim } from '../util/processShim';
 import { isSafeMode, SafeModeError } from '../util/safeMode';
-import { asGradingResult, normalizeScriptAssertionResult } from './scriptResultNormalization';
+import {
+  appendToReason,
+  asGradingResult,
+  normalizeScriptAssertionResult,
+} from './scriptResultNormalization';
 
 import type { AssertionParams } from '../types/index';
 
@@ -198,15 +202,6 @@ function normalizeResultAssertion(
   return assertionToNormalize;
 }
 
-function appendRenderedValueToReason(
-  reason: string,
-  renderedValue?: AssertionParams['renderedValue'],
-): string {
-  return typeof renderedValue === 'string' && renderedValue
-    ? `${reason}\n${renderedValue}`
-    : reason;
-}
-
 function normalizeJavascriptAssertionResult(
   assertion: AssertionParams['assertion'],
   result: boolean | number | GradingResult,
@@ -234,7 +229,11 @@ function normalizeJavascriptAssertionResult(
       'Custom function must return a GradingResult object with a finite score.',
     );
   }
-  return normalizedResult;
+  // A GradingResult reason is explanatory prose, including an intentional empty string.
+  // Preserve it for both inverse outcomes; primitive results keep their generated reasons.
+  return typeof result === 'object'
+    ? { ...normalizedResult, reason: result.reason }
+    : normalizedResult;
 }
 
 export const handleJavascript = async ({
@@ -304,7 +303,7 @@ export const handleJavascript = async ({
     return {
       pass: false,
       score: 0,
-      reason: appendRenderedValueToReason(
+      reason: appendToReason(
         `Custom function threw error: ${(err as Error).message}
 Stack Trace: ${(err as Error).stack}`,
         err instanceof JavascriptAssertionValidationError ? undefined : renderedValue,

@@ -1,10 +1,17 @@
 import { createHmac } from 'crypto';
 
-import { fetchWithCache, getCache, getScopedCacheKey, isCacheEnabled } from '../cache';
+import {
+  fetchWithCache,
+  getAbortSignalScopedKey,
+  getCache,
+  getScopedCacheKey,
+  isCacheEnabled,
+} from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
-import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
+import { extractGenAIResponse, type GenAISpanContext, withGenAISpan } from '../tracing/genaiTracer';
 import { maybeLoadToolsFromExternalFile } from '../util';
+import { resolveProviderEnv } from './env';
 import { calculateCost, getRequestTimeoutMs, parseChatPrompt } from './shared';
 
 import type { EnvVarKey } from '../envars';
@@ -12,255 +19,201 @@ import type { EnvOverrides } from '../types/env';
 import type {
   ApiProvider,
   CallApiContextParams,
+  CallApiOptionsParams,
   ProviderEmbeddingResponse,
   ProviderResponse,
   TokenUsage,
 } from '../types/index';
 
+function modelsWithCost(ids: string[], cost: { input: number; output: number }) {
+  return ids.map((id) => ({ id, cost: { ...cost } }));
+}
+
+function getMistralApiUrl(
+  config: { apiHost?: string; apiBaseUrl?: string },
+  env: EnvOverrides | undefined,
+  defaultUrl: string,
+): string {
+  if (config.apiHost) {
+    return `https://${config.apiHost}/v1`;
+  }
+  if (config.apiBaseUrl) {
+    return config.apiBaseUrl;
+  }
+  const endpoint = resolveProviderEnv(env, ['MISTRAL_API_HOST', 'MISTRAL_API_BASE_URL']);
+  return endpoint
+    ? endpoint.name === 'MISTRAL_API_HOST'
+      ? `https://${endpoint.value}/v1`
+      : endpoint.value
+    : defaultUrl;
+}
+
 const MISTRAL_CHAT_MODELS = [
   // Z.ai GLM 5.3 hosted by Mistral: https://docs.mistral.ai/models/zai-glm-5-3
-  {
-    id: 'zai-glm-5-3',
-    cost: {
-      input: 1.4 / 1000000,
-      output: 4.4 / 1000000,
-    },
-  },
-  ...['open-mistral-7b', 'mistral-tiny', 'mistral-tiny-2312'].map((id) => ({
-    id,
-    cost: {
-      input: 0.25 / 1000000,
-      output: 0.25 / 1000000,
-    },
-  })),
+  ...modelsWithCost(['zai-glm-5-3'], {
+    input: 1.4 / 1000000,
+    output: 4.4 / 1000000,
+  }),
+  ...modelsWithCost(['open-mistral-7b', 'mistral-tiny', 'mistral-tiny-2312'], {
+    input: 0.25 / 1000000,
+    output: 0.25 / 1000000,
+  }),
   // Mistral NeMo (deprecated 2026-05-22) — retained for historical cost scoring.
-  ...[
-    'open-mistral-nemo',
-    'open-mistral-nemo-2407',
-    'mistral-tiny-2407',
-    'mistral-tiny-latest',
-  ].map((id) => ({
-    id,
-    cost: {
+  ...modelsWithCost(
+    ['open-mistral-nemo', 'open-mistral-nemo-2407', 'mistral-tiny-2407', 'mistral-tiny-latest'],
+    {
       input: 0.15 / 1000000,
       output: 0.15 / 1000000,
     },
-  })),
-  {
-    id: 'mistral-small-2402',
-    cost: {
-      input: 1 / 1000000,
-      output: 3 / 1000000,
-    },
-  },
+  ),
+  ...modelsWithCost(['mistral-small-2402'], {
+    input: 1 / 1000000,
+    output: 3 / 1000000,
+  }),
   // Mistral Small 3.2 (deprecated 2026-04-30) — historical pricing for cached results
-  {
-    id: 'mistral-small-2506',
-    cost: {
-      input: 0.1 / 1000000,
-      output: 0.3 / 1000000,
-    },
-  },
+  ...modelsWithCost(['mistral-small-2506'], {
+    input: 0.1 / 1000000,
+    output: 0.3 / 1000000,
+  }),
   // Mistral Small 4 — `mistral-small-latest` resolves to `mistral-small-2603`.
-  ...['mistral-small-2603', 'mistral-small-latest'].map((id) => ({
-    id,
-    cost: {
-      input: 0.15 / 1000000,
-      output: 0.6 / 1000000,
-    },
-  })),
+  ...modelsWithCost(['mistral-small-2603', 'mistral-small-latest'], {
+    input: 0.15 / 1000000,
+    output: 0.6 / 1000000,
+  }),
   // Mistral Medium 1 (retired) — historical pricing for cached results.
-  {
-    id: 'mistral-medium-2312',
-    cost: {
-      input: 2.7 / 1000000,
-      output: 8.1 / 1000000,
-    },
-  },
+  ...modelsWithCost(['mistral-medium-2312'], {
+    input: 2.7 / 1000000,
+    output: 8.1 / 1000000,
+  }),
   // Mistral Medium 3 / 3.1 (deprecated) — historical pricing for cached results
-  ...['mistral-medium-2505', 'mistral-medium-2508'].map((id) => ({
-    id,
-    cost: {
-      input: 0.4 / 1000000,
-      output: 2 / 1000000,
-    },
-  })),
+  ...modelsWithCost(['mistral-medium-2505', 'mistral-medium-2508'], {
+    input: 0.4 / 1000000,
+    output: 2 / 1000000,
+  }),
   // Mistral Medium 3.5 published aliases plus compatibility IDs retained from
   // live API/catalog verification for existing configs and cached-result costs.
-  ...[
-    'mistral-medium-3-5',
-    'mistral-medium-3',
-    'mistral-medium-latest',
-    'mistral-medium',
-    'mistral-medium-3.5',
-    'mistral-medium-2604',
-  ].map((id) => ({
-    id,
-    cost: {
+  ...modelsWithCost(
+    [
+      'mistral-medium-3-5',
+      'mistral-medium-3',
+      'mistral-medium-latest',
+      'mistral-medium',
+      'mistral-medium-3.5',
+      'mistral-medium-2604',
+    ],
+    {
       input: 1.5 / 1000000,
       output: 7.5 / 1000000,
     },
-  })),
-  {
-    id: 'mistral-large-2402',
-    cost: {
-      input: 4 / 1000000,
-      output: 12 / 1000000,
-    },
-  },
-  ...['mistral-large-2407'].map((id) => ({
-    id,
-    cost: {
-      input: 3 / 1000000,
-      output: 9 / 1000000,
-    },
-  })),
-  ...['mistral-large-2512', 'mistral-large-latest'].map((id) => ({
-    id,
-    cost: {
-      input: 0.5 / 1000000,
-      output: 1.5 / 1000000,
-    },
-  })),
-  {
-    id: 'codestral-2405',
-    cost: {
-      input: 1 / 1000000,
-      output: 3 / 1000000,
-    },
-  },
-  // Codestral — also aliased by the Mistral Code product ids
-  ...['codestral-2508', 'codestral-latest', 'mistral-code-latest', 'mistral-code-fim-latest'].map(
-    (id) => ({
-      id,
-      cost: {
-        input: 0.3 / 1000000,
-        output: 0.9 / 1000000,
-      },
-    }),
   ),
-  ...['codestral-mamba-2407', 'open-codestral-mamba', 'codestral-mamba-latest'].map((id) => ({
-    id,
-    cost: {
-      input: 0.25 / 1000000,
-      output: 0.25 / 1000000,
+  ...modelsWithCost(['mistral-large-2402'], {
+    input: 4 / 1000000,
+    output: 12 / 1000000,
+  }),
+  ...modelsWithCost(['mistral-large-2407'], {
+    input: 3 / 1000000,
+    output: 9 / 1000000,
+  }),
+  ...modelsWithCost(['mistral-large-2512', 'mistral-large-latest'], {
+    input: 0.5 / 1000000,
+    output: 1.5 / 1000000,
+  }),
+  ...modelsWithCost(['codestral-2405'], {
+    input: 1 / 1000000,
+    output: 3 / 1000000,
+  }),
+  // Codestral — also aliased by the Mistral Code product ids
+  ...modelsWithCost(
+    ['codestral-2508', 'codestral-latest', 'mistral-code-latest', 'mistral-code-fim-latest'],
+    {
+      input: 0.3 / 1000000,
+      output: 0.9 / 1000000,
     },
-  })),
-  ...['open-mixtral-8x7b', 'mistral-small', 'mistral-small-2312'].map((id) => ({
-    id,
-    cost: {
-      input: 0.7 / 1000000,
-      output: 0.7 / 1000000,
-    },
-  })),
-  ...['open-mixtral-8x22b', 'open-mixtral-8x22b-2404'].map((id) => ({
-    id,
-    cost: {
-      input: 2 / 1000000,
-      output: 6 / 1000000,
-    },
-  })),
+  ),
+  ...modelsWithCost(['codestral-mamba-2407', 'open-codestral-mamba', 'codestral-mamba-latest'], {
+    input: 0.25 / 1000000,
+    output: 0.25 / 1000000,
+  }),
+  ...modelsWithCost(['open-mixtral-8x7b', 'mistral-small', 'mistral-small-2312'], {
+    input: 0.7 / 1000000,
+    output: 0.7 / 1000000,
+  }),
+  ...modelsWithCost(['open-mixtral-8x22b', 'open-mixtral-8x22b-2404'], {
+    input: 2 / 1000000,
+    output: 6 / 1000000,
+  }),
   // Magistral Small standalone reasoning snapshots. The deprecated
   // `magistral-small-latest` alias still resolves to the 2509 snapshot.
-  ...[
-    'magistral-small-2506',
-    'magistral-small-2507',
-    'magistral-small-2509',
-    'magistral-small-latest',
-  ].map((id) => ({
-    id,
-    cost: {
+  ...modelsWithCost(
+    [
+      'magistral-small-2506',
+      'magistral-small-2507',
+      'magistral-small-2509',
+      'magistral-small-latest',
+    ],
+    {
       input: 0.5 / 1000000,
       output: 1.5 / 1000000,
     },
-  })),
-  ...[
-    'magistral-medium-2506',
-    'magistral-medium-2507',
-    'magistral-medium-2509',
-    'magistral-medium-latest',
-  ].map((id) => ({
-    id,
-    cost: {
+  ),
+  ...modelsWithCost(
+    [
+      'magistral-medium-2506',
+      'magistral-medium-2507',
+      'magistral-medium-2509',
+      'magistral-medium-latest',
+    ],
+    {
       input: 2 / 1000000,
       output: 5 / 1000000,
     },
-  })),
-  ...['ministral-3b-2512', 'ministral-3b-latest'].map((id) => ({
-    id,
-    cost: {
-      input: 0.1 / 1000000,
-      output: 0.1 / 1000000,
-    },
-  })),
-  ...['ministral-8b-2512', 'ministral-8b-latest'].map((id) => ({
-    id,
-    cost: {
-      input: 0.15 / 1000000,
-      output: 0.15 / 1000000,
-    },
-  })),
-  ...['ministral-14b-2512', 'ministral-14b-latest'].map((id) => ({
-    id,
-    cost: {
-      input: 0.2 / 1000000,
-      output: 0.2 / 1000000,
-    },
-  })),
+  ),
+  ...modelsWithCost(['ministral-3b-2512', 'ministral-3b-latest'], {
+    input: 0.1 / 1000000,
+    output: 0.1 / 1000000,
+  }),
+  ...modelsWithCost(['ministral-8b-2512', 'ministral-8b-latest'], {
+    input: 0.15 / 1000000,
+    output: 0.15 / 1000000,
+  }),
+  ...modelsWithCost(['ministral-14b-2512', 'ministral-14b-latest'], {
+    input: 0.2 / 1000000,
+    output: 0.2 / 1000000,
+  }),
   // Leanstral 1.5 public preview (retires 2026-09-30).
-  {
-    id: 'labs-leanstral-1-5',
-    cost: {
-      input: 0,
-      output: 0,
-    },
-  },
+  ...modelsWithCost(['labs-leanstral-1-5'], {
+    input: 0,
+    output: 0,
+  }),
   // Voxtral Small token pricing. Mistral bills audio input separately per minute.
-  {
-    id: 'voxtral-small-2507',
-    cost: {
-      input: 0.1 / 1000000,
-      output: 0.4 / 1000000,
-    },
-  },
+  ...modelsWithCost(['voxtral-small-2507'], {
+    input: 0.1 / 1000000,
+    output: 0.4 / 1000000,
+  }),
   // Devstral 2 (deprecated 2026-05-22) — retained for historical cost scoring.
-  ...[
-    'devstral-2512',
-    'devstral-latest',
-    'devstral-medium-latest',
-    'mistral-code-agent-latest',
-  ].map((id) => ({
-    id,
-    cost: {
+  ...modelsWithCost(
+    ['devstral-2512', 'devstral-latest', 'devstral-medium-latest', 'mistral-code-agent-latest'],
+    {
       input: 0.4 / 1000000,
       output: 2 / 1000000,
     },
-  })),
+  ),
   // Legacy multimodal model
-  {
-    id: 'pixtral-12b',
-    cost: {
-      input: 0.15 / 1000000,
-      output: 0.15 / 1000000,
-    },
-  },
+  ...modelsWithCost(['pixtral-12b'], {
+    input: 0.15 / 1000000,
+    output: 0.15 / 1000000,
+  }),
 ];
 
 const MISTRAL_EMBEDDING_MODELS = [
-  ...['mistral-embed', 'mistral-embed-2312'].map((id) => ({
-    id,
-    cost: {
-      input: 0.1 / 1000000,
-      output: 0.1 / 1000000,
-    },
-  })),
-  ...['codestral-embed', 'codestral-embed-2505'].map((id) => ({
-    id,
-    cost: {
-      input: 0.15 / 1000000,
-      output: 0.15 / 1000000,
-    },
-  })),
+  ...modelsWithCost(['mistral-embed', 'mistral-embed-2312'], {
+    input: 0.1 / 1000000,
+    output: 0.1 / 1000000,
+  }),
+  ...modelsWithCost(['codestral-embed', 'codestral-embed-2505'], {
+    input: 0.15 / 1000000,
+    output: 0.15 / 1000000,
+  }),
 ];
 
 interface MistralChatCompletionOptions {
@@ -325,8 +278,9 @@ function getMistralAuthCacheNamespace(apiKey: string): string {
 function fetchMistralWithDedupe(
   cacheKey: string,
   fetcher: () => Promise<MistralFetchResult>,
+  abortSignal?: AbortSignal,
 ): Promise<MistralFetchResult> {
-  const inflightCacheKey = getScopedCacheKey(cacheKey);
+  const inflightCacheKey = getAbortSignalScopedKey(getScopedCacheKey(cacheKey), abortSignal);
   let inflightRequest = MISTRAL_INFLIGHT_REQUESTS.get(inflightCacheKey);
   if (!inflightRequest) {
     inflightRequest = fetcher().finally(() => {
@@ -546,6 +500,19 @@ function calculateMistralCost(
   return tokenCost + (promptAudioSeconds / 60) * 0.004;
 }
 
+function resolveMistralApiKey(
+  provider: MistralChatCompletionProvider | MistralEmbeddingProvider,
+): string | undefined {
+  const namedKey = provider.config.apiKeyEnvar
+    ? (provider.env?.[provider.config.apiKeyEnvar] ??
+      getEnvString(provider.config.apiKeyEnvar as EnvVarKey))
+    : undefined;
+  return (
+    provider.config.apiKey ||
+    (namedKey ?? provider.env?.MISTRAL_API_KEY ?? getEnvString('MISTRAL_API_KEY'))
+  );
+}
+
 export class MistralChatCompletionProvider implements ApiProvider {
   modelName: string;
   config: MistralChatCompletionOptions;
@@ -582,17 +549,7 @@ export class MistralChatCompletionProvider implements ApiProvider {
   }
 
   getApiUrl(): string {
-    const apiHost =
-      this.config.apiHost || this.env?.MISTRAL_API_HOST || getEnvString('MISTRAL_API_HOST');
-    if (apiHost) {
-      return `https://${apiHost}/v1`;
-    }
-    return (
-      this.config.apiBaseUrl ||
-      this.env?.MISTRAL_API_BASE_URL ||
-      getEnvString('MISTRAL_API_BASE_URL') ||
-      this.getApiUrlDefault()
-    );
+    return getMistralApiUrl(this.config, this.env, this.getApiUrlDefault());
   }
 
   requiresApiKey(): boolean {
@@ -600,16 +557,7 @@ export class MistralChatCompletionProvider implements ApiProvider {
   }
 
   getApiKey(): string | undefined {
-    logger.debug(`Mistral apiKeyEnvar: ${this.config.apiKeyEnvar}`);
-    const apiKeyCandidate =
-      this.config?.apiKey ||
-      (this.config?.apiKeyEnvar
-        ? getEnvString(this.config.apiKeyEnvar as EnvVarKey) ||
-          this.env?.[this.config.apiKeyEnvar as keyof EnvOverrides]
-        : undefined) ||
-      this.env?.MISTRAL_API_KEY ||
-      getEnvString('MISTRAL_API_KEY');
-    return apiKeyCandidate;
+    return resolveMistralApiKey(this);
   }
 
   private getCacheIdentityHash(apiUrl: string): string {
@@ -640,23 +588,10 @@ export class MistralChatCompletionProvider implements ApiProvider {
       traceparent: context?.traceparent,
     };
 
-    // Result extractor to set response attributes on the span
-    const resultExtractor = (response: ProviderResponse): GenAISpanResult => {
-      const result: GenAISpanResult = {};
-      if (response.tokenUsage) {
-        result.tokenUsage = {
-          prompt: response.tokenUsage.prompt,
-          completion: response.tokenUsage.completion,
-          total: response.tokenUsage.total,
-        };
-      }
-      return result;
-    };
-
     return withGenAISpan(
       spanContext,
       () => this.callApiInternal(prompt, context, config),
-      resultExtractor,
+      extractGenAIResponse,
     );
   }
 
@@ -788,6 +723,8 @@ export class MistralChatCompletionProvider implements ApiProvider {
 }
 
 export class MistralEmbeddingProvider implements ApiProvider {
+  readonly supportsEmbeddingCancellation = true;
+
   modelName: string;
   config: MistralChatCompletionOptions;
   env?: EnvOverrides;
@@ -825,17 +762,7 @@ export class MistralEmbeddingProvider implements ApiProvider {
   }
 
   getApiUrl(): string {
-    const apiHost =
-      this.config.apiHost || this.env?.MISTRAL_API_HOST || getEnvString('MISTRAL_API_HOST');
-    if (apiHost) {
-      return `https://${apiHost}/v1`;
-    }
-    return (
-      this.config.apiBaseUrl ||
-      this.env?.MISTRAL_API_BASE_URL ||
-      getEnvString('MISTRAL_API_BASE_URL') ||
-      this.getApiUrlDefault()
-    );
+    return getMistralApiUrl(this.config, this.env, this.getApiUrlDefault());
   }
 
   requiresApiKey(): boolean {
@@ -843,16 +770,7 @@ export class MistralEmbeddingProvider implements ApiProvider {
   }
 
   getApiKey(): string | undefined {
-    logger.debug(`Mistral apiKeyEnvar: ${this.config.apiKeyEnvar}`);
-    const apiKeyCandidate =
-      this.config?.apiKey ||
-      (this.config?.apiKeyEnvar
-        ? getEnvString(this.config.apiKeyEnvar as EnvVarKey) ||
-          this.env?.[this.config.apiKeyEnvar as keyof EnvOverrides]
-        : undefined) ||
-      this.env?.MISTRAL_API_KEY ||
-      getEnvString('MISTRAL_API_KEY');
-    return apiKeyCandidate;
+    return resolveMistralApiKey(this);
   }
 
   private getCacheIdentityHash(apiUrl: string): string {
@@ -877,7 +795,11 @@ export class MistralEmbeddingProvider implements ApiProvider {
     }
   }
 
-  async callEmbeddingApi(text: string): Promise<ProviderEmbeddingResponse> {
+  async callEmbeddingApi(
+    text: string,
+    _context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderEmbeddingResponse> {
     const apiKey = this.getApiKey();
     if (!apiKey) {
       throw new Error('Mistral API key must be set for embedding');
@@ -920,24 +842,30 @@ export class MistralEmbeddingProvider implements ApiProvider {
       });
 
       try {
-        ({ data, cached } = await fetchMistralWithDedupe(cacheKey, async () => {
-          return (await fetchWithCache(
-            url,
-            {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'x-promptfoo-silent': 'true',
-                Authorization: `Bearer ${apiKey}`,
+        ({ data, cached } = await fetchMistralWithDedupe(
+          cacheKey,
+          async () => {
+            return (await fetchWithCache(
+              url,
+              {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'x-promptfoo-silent': 'true',
+                  Authorization: `Bearer ${apiKey}`,
+                },
+                body: JSON.stringify(body),
+                ...(options?.abortSignal && { signal: options.abortSignal }),
               },
-              body: JSON.stringify(body),
-            },
-            getRequestTimeoutMs(),
-            'json',
-            true,
-          )) as unknown as MistralFetchResult;
-        }));
+              getRequestTimeoutMs(),
+              'json',
+              true,
+            )) as unknown as MistralFetchResult;
+          },
+          options?.abortSignal,
+        ));
       } catch (err) {
+        options?.abortSignal?.throwIfAborted();
         logger.error(`API call error: ${err}`);
         throw err;
       }

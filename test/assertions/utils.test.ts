@@ -10,6 +10,7 @@ import {
 } from '../../src/assertions/utils';
 import cliState from '../../src/cliState';
 import { importModule } from '../../src/esm';
+import { createStringAssertion } from '../factories/literalFixtures';
 import { createMockProvider as createFactoryProvider } from '../factories/provider';
 
 import type { ApiProvider, Assertion, TestCase } from '../../src/types/index';
@@ -179,10 +180,7 @@ describe('getFinalTest', () => {
       },
     };
 
-    const assertion: Assertion = {
-      type: 'equals',
-      value: 'expected value',
-    };
+    const assertion: Assertion = createStringAssertion('equals', 'expected value');
 
     const result = getFinalTest(testCase, assertion);
     expect(result.options?.provider).toBe(testProvider);
@@ -213,10 +211,7 @@ describe('getFinalTest', () => {
       options: {},
     };
 
-    const assertion: Assertion = {
-      type: 'equals',
-      value: 'expected value',
-    };
+    const assertion: Assertion = createStringAssertion('equals', 'expected value');
 
     const result = getFinalTest(testCase, assertion);
     expect(result.options?.provider).toBeUndefined();
