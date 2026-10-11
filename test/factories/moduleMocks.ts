@@ -166,6 +166,16 @@ export const createReadFileFactory =
     };
   };
 
+export const createChildLoggerFactory = (): MockModuleFactory => () => ({
+  default: {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+    child: vi.fn().mockReturnValue({}),
+  },
+});
+
 export const createRequestLoggerFactory = (): MockModuleFactory => () => ({
   default: {
     debug: vi.fn(),
@@ -175,6 +185,17 @@ export const createRequestLoggerFactory = (): MockModuleFactory => () => ({
   },
   logRequestResponse: vi.fn(),
 });
+
+export const createGeneratorFsPromisesFactory =
+  (fsMocks: { readFileSync: Mock; writeFileSync: Mock }): MockModuleFactory =>
+  () => ({
+    default: {
+      readFile: fsMocks.readFileSync,
+      writeFile: fsMocks.writeFileSync,
+    },
+    readFile: fsMocks.readFileSync,
+    writeFile: fsMocks.writeFileSync,
+  });
 
 export const createLocalGenerationFactory = (): MockModuleFactory => async (importOriginal) => {
   return {

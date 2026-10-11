@@ -15,16 +15,6 @@ import { safeResolve } from './util/pathUtils';
 export type WrapperType = 'python' | 'ruby' | 'golang';
 
 /**
- * Mapping of wrapper types to their subdirectory names.
- * These correspond to the directory structure under src/ and dist/src/.
- */
-const WRAPPER_SUBDIRS: Record<WrapperType, string> = {
-  python: 'python',
-  ruby: 'ruby',
-  golang: 'golang',
-};
-
-/**
  * Cache for wrapper directory paths to avoid repeated path construction.
  */
 const wrapperDirCache: Partial<Record<WrapperType, string>> = {};
@@ -62,7 +52,7 @@ export function getWrapperDir(type: WrapperType): string {
   }
 
   const baseDir = getDirectory();
-  const result = path.join(baseDir, WRAPPER_SUBDIRS[type]);
+  const result = path.join(baseDir, type);
   wrapperDirCache[type] = result;
 
   logger.debug(`Resolved ${type} wrapper directory: ${result}`);

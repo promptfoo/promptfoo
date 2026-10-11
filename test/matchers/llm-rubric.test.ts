@@ -2805,3 +2805,118 @@ describe('tryParse and renderLlmRubricPrompt', () => {
     expect(result).toContain('string item');
   });
 });
+
+describe('matchesLlmRubric missing-verdict fail-closed semantics', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it.each([true, false, '', ' ', [], [1], {}, 'invalid', 'Infinity', '1e309', NaN, Infinity])(
+    'rejects an invalid score-only verdict: %j',
+    async (score) => {
+      const provider = createMockProvider({
+        response: createProviderResponse({
+          output: { score },
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        }),
+      });
+
+      const result = await matchesLlmRubric('Expected output', 'Sample output', {
+        rubricPrompt: 'Grading prompt',
+        provider,
+      });
+
+      expect(result).toMatchObject({
+        pass: false,
+        score: 0,
+        metadata: { graderError: true },
+        tokensUsed: { total: 10, prompt: 5, completion: 5 },
+      });
+    },
+  );
+
+  it('fails when the grader response omits both pass and score', async () => {
+    vi.spyOn(Grader, 'callApi').mockResolvedValue({
+      output: JSON.stringify({ reason: 'Looked fine to me' }),
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+
+    const result = await matchesLlmRubric('Expected output', 'Sample output', {
+      rubricPrompt: 'Grading prompt',
+      provider: Grader,
+    });
+
+    expect(result.pass).toBe(false);
+    expect(result.reason).toContain('neither a pass verdict nor a finite numeric score');
+  });
+
+  it('derives pass from a positive score when pass is omitted', async () => {
+    vi.spyOn(Grader, 'callApi').mockResolvedValue({
+      output: JSON.stringify({ score: 1, reason: 'Strong match' }),
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+
+    const result = await matchesLlmRubric('Expected output', 'Sample output', {
+      rubricPrompt: 'Grading prompt',
+      provider: Grader,
+    });
+
+    expect(result.pass).toBe(true);
+    expect(result.score).toBe(1);
+  });
+
+  it('fails a zero score when pass is omitted', async () => {
+    vi.spyOn(Grader, 'callApi').mockResolvedValue({
+      output: JSON.stringify({ score: 0, reason: 'Did not meet the rubric' }),
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+
+    const result = await matchesLlmRubric('Expected output', 'Sample output', {
+      rubricPrompt: 'Grading prompt',
+      provider: Grader,
+    });
+
+    expect(result.pass).toBe(false);
+    expect(result.score).toBe(0);
+  });
+
+  it('passes a score-only zero verdict when threshold is exactly 0', async () => {
+    const rubricPrompt = 'Grading prompt';
+    const llmOutput = 'Sample output';
+    const assertion: Assertion = {
+      type: 'llm-rubric',
+      value: rubricPrompt,
+      threshold: 0,
+    };
+
+    const atFloorProvider = createMockProvider({
+      response: createProviderResponse({
+        output: JSON.stringify({ score: 0, reason: 'At the floor' }),
+      }),
+    });
+
+    await expect(
+      matchesLlmRubric(
+        rubricPrompt,
+        llmOutput,
+        { rubricPrompt, provider: atFloorProvider },
+        {},
+        assertion,
+      ),
+    ).resolves.toEqual(expect.objectContaining({ assertion, pass: true }));
+  });
+
+  it('still honors an explicit pass alongside score 0', async () => {
+    vi.spyOn(Grader, 'callApi').mockResolvedValue({
+      output: JSON.stringify({ pass: true, score: 0, reason: 'Passing per rubric override' }),
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+
+    const result = await matchesLlmRubric('Expected output', 'Sample output', {
+      rubricPrompt: 'Grading prompt',
+      provider: Grader,
+    });
+
+    expect(result.pass).toBe(true);
+  });
+});
