@@ -34,6 +34,7 @@ import {
   type Vars,
 } from '@promptfoo/types';
 import { EVAL_TABLE_MAX_PAGE_SIZE } from '@promptfoo/types/evalConstants';
+import { ResultFailureReason } from '@promptfoo/types/results';
 import invariant from '@promptfoo/util/invariant';
 import { getActualPrompt } from '@promptfoo/util/providerResponse';
 import {
@@ -1012,9 +1013,22 @@ function buildRatingTableUpdate({
   const updatedData = [...body];
   const updatedRow = { ...updatedData[rowIndex] };
   const updatedOutputs = [...updatedRow.outputs];
+  const previousOutput = updatedOutputs[promptIndex];
+  const hasManualOverride =
+    gradingResult.assertion?.type === HUMAN_ASSERTION_TYPE ||
+    gradingResult.componentResults?.some(
+      (result) => result.assertion?.type === HUMAN_ASSERTION_TYPE,
+    );
 
   updatedOutputs[promptIndex] = {
-    ...updatedOutputs[promptIndex],
+    ...previousOutput,
+    failureReason: ratingUpdate.pass
+      ? ResultFailureReason.NONE
+      : !hasManualOverride &&
+          (gradingResult.metadata?.graderError === true ||
+            previousOutput.failureReason === ResultFailureReason.ERROR)
+        ? ResultFailureReason.ERROR
+        : ResultFailureReason.ASSERT,
     pass: ratingUpdate.pass,
     score: ratingUpdate.score,
     gradingResult,

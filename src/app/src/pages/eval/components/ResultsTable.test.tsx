@@ -3467,6 +3467,40 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
     expect(finalScore).toBe(0.5);
   });
 
+  it.each([
+    { action: 'Rate', previousReason: 2, expectedReason: 0 },
+    { action: 'Clear rating', previousReason: 0, expectedReason: 2 },
+  ])(
+    'updates the displayed grader-error category after $action',
+    async ({ action, previousReason, expectedReason }) => {
+      const user = userEvent.setup();
+      const table = createMockTableWithHumanAssertion();
+      const output = table.body[0].outputs[0];
+      output.failureReason = previousReason;
+      Object.assign(output.gradingResult, { metadata: { graderError: true } });
+      if (action === 'Rate') {
+        output.pass = false;
+        output.gradingResult.pass = false;
+        output.gradingResult.componentResults.splice(1, 1);
+      }
+      vi.mocked(useTableStore).mockImplementation(() =>
+        createTableStore({
+          inComparisonMode: false,
+          setTable: mockSetTable,
+          table,
+          isFetching: false,
+          filteredResultsCount: 1,
+        }),
+      );
+      renderWithProviders(<ResultsTable {...defaultProps} />);
+      await user.click(screen.getByRole('button', { name: action }));
+      expect(
+        mockSetTable.mock.calls[mockSetTable.mock.calls.length - 1]?.[0].body[0].outputs[0]
+          .failureReason,
+      ).toBe(expectedReason);
+    },
+  );
+
   it('persists a cleared human rating without manual override fields', async () => {
     const user = userEvent.setup();
     const mockTable = createMockTableWithHumanAssertion();
