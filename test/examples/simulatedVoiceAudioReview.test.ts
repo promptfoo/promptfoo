@@ -335,11 +335,11 @@ describe('blinded acoustic control construction', () => {
 });
 
 describe('frozen audio calibration scoring', () => {
-  function fixture() {
+  function fixture(samples = new Int16Array([1000, -1000])) {
     const audio = utils.writePcm16Wav({
       sampleRate: 24000,
       channels: 1,
-      samples: new Int16Array([1000, -1000]),
+      samples,
     });
     const labels = {
       version: 1,
@@ -416,6 +416,91 @@ describe('frozen audio calibration scoring', () => {
       inputHashScope: 'referenced_local_file',
       statusMatches: true,
     });
+  });
+  it('rejects findings outside the verified WAV while preserving verified input provenance', () => {
+    const { labels, row } = fixture(new Int16Array(24000).fill(1000));
+    labels.cases.push({
+      ...labels.cases[0],
+      id: 'clipping',
+      kind: 'severe_clipping',
+      requirement: 'severe_control',
+      expected: 'review_required',
+    });
+    const review = {
+      ...clear,
+      status: 'review_required',
+      findings: [
+        {
+          type: 'distortion',
+          severity: 'major',
+          start_seconds: 0.2,
+          end_seconds: 0.4,
+          description: 'Distorted speech.',
+        },
+      ],
+    };
+    const clipping = {
+      ...row,
+      testCase: { vars: { audio_id: 'clipping' } },
+      response: { output: JSON.stringify(review) },
+    };
+    expect(
+      scoring.scoreCalibration(labels, { results: { results: [row, clipping] } }).calibrationPassed,
+    ).toBe(true);
+    review.findings[0].start_seconds = 600;
+    review.findings[0].end_seconds = 601;
+    clipping.response.output = JSON.stringify(review);
+    const changed = scoring.scoreCalibration(labels, { results: { results: [row, clipping] } });
+    expect(changed).toMatchObject({ calibrationPassed: false, errors: 1 });
+    expect(changed.perDefect.distortion.truePositive).toBe(0);
+    expect(changed.cases[1]).toMatchObject({
+      state: 'error',
+      error: expect.stringContaining('outside the recording duration'),
+      inputHashVerified: true,
+      inputHashScope: 'rendered_prompt',
+      inputSha256: labels.cases[1].sha256,
+    });
+    const input = JSON.parse(row.prompt.raw)[0].content[0].input_audio.data;
+    expect(validate(clipping.response.output, { vars: { audio_file: input } })).toMatchObject({
+      pass: false,
+      reason: expect.stringContaining('outside the recording duration'),
+    });
+  });
+  it('counts false silence alarms on speech independently of a correct known-silence verdict', () => {
+    const speech = fixture(new Int16Array(24000).fill(1000));
+    const silent = fixture(new Int16Array(24000));
+    silent.labels.cases[0] = {
+      ...silent.labels.cases[0],
+      id: 'silent',
+      kind: 'silence',
+      requirement: 'severe_control',
+      expected: 'unratable',
+    };
+    silent.row.testCase.vars.audio_id = 'silent';
+    const noSpeech = JSON.stringify({
+      ...clear,
+      status: 'unratable',
+      intelligibility: 'no_speech',
+      transcript: '',
+    });
+    silent.row.response.output = noSpeech;
+    const labels = { version: 1, cases: [...speech.labels.cases, ...silent.labels.cases] };
+    const results = { results: { results: [speech.row, silent.row] } };
+    expect(scoring.scoreCalibration(labels, results)).toMatchObject({
+      calibrationPassed: true,
+      errors: 0,
+      perDefect: { silence: { truePositive: 1, trueNegative: 1, falsePositive: 0 } },
+    });
+    speech.row.response.output = noSpeech;
+    const falseAlarm = scoring.scoreCalibration(labels, results);
+    expect(falseAlarm).toMatchObject({
+      calibrationPassed: false,
+      errors: 0,
+      perDefect: { silence: { truePositive: 1, falsePositive: 1, trueNegative: 0 } },
+    });
+    expect(falseAlarm.cases[0]).toMatchObject({ predictedSilence: true });
+    const input = JSON.parse(silent.row.prompt.raw)[0].content[0].input_audio.data;
+    expect(validate(noSpeech, { vars: { audio_file: input } }).pass).toBe(false);
   });
   it('requires a severe-control verdict to be ratable even when it names the right defect', () => {
     const { labels, row } = fixture();

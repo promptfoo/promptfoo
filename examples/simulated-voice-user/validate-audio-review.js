@@ -67,6 +67,22 @@ export function parseAudioReview(output) {
   return review;
 }
 
+/** Check model timing against actual PCM without applying the no-signal quality guard. */
+export function validateAudioReviewTimestamps(review, audio) {
+  const durationSeconds = audio.samples.length / audio.channels / audio.sampleRate;
+  // One PCM frame only accommodates floating-point/sample-boundary rounding.
+  const latestTime = durationSeconds + 1 / audio.sampleRate;
+  if (
+    review.findings.some((finding) =>
+      [finding.start_seconds, finding.end_seconds].some(
+        (time) => time !== null && time > latestTime,
+      ),
+    )
+  ) {
+    throw new Error('Finding timestamp is outside the recording duration.');
+  }
+}
+
 /** An advisory acoustic no-issue result is distinct from verified task success. */
 export default function validateAudioReview(output, context) {
   let review;
@@ -85,18 +101,7 @@ export default function validateAudioReview(output, context) {
       );
     }
     review = parseAudioReview(output);
-    const durationSeconds = audio.samples.length / audio.channels / audio.sampleRate;
-    // One PCM frame only accommodates floating-point/sample-boundary rounding.
-    const latestTime = durationSeconds + 1 / audio.sampleRate;
-    if (
-      review.findings.some((finding) =>
-        [finding.start_seconds, finding.end_seconds].some(
-          (time) => time !== null && time > latestTime,
-        ),
-      )
-    ) {
-      throw new Error('Finding timestamp is outside the recording duration.');
-    }
+    validateAudioReviewTimestamps(review, audio);
   } catch (error) {
     return {
       pass: false,

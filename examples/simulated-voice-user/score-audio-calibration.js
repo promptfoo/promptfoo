@@ -5,7 +5,8 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 
-import { parseAudioReview } from './validate-audio-review.js';
+import { readPcm16Wav } from './audio-utils.js';
+import { parseAudioReview, validateAudioReviewTimestamps } from './validate-audio-review.js';
 
 const categories = {
   gap_200ms: 'dropout',
@@ -29,20 +30,20 @@ function inputHash(result) {
   ) {
     throw new Error('Expected exactly one rendered WAV input in the saved prompt.');
   }
+  let bytes;
+  let scope;
   if (audio[0].input_audio.data === '[REDACTED]') {
     const reference = result.testCase?.vars?.audio_file;
     if (typeof reference !== 'string' || !reference.startsWith('file://')) {
       throw new Error('Rendered audio is redacted and no local source reference is available.');
     }
-    return {
-      sha256: sha256(readFileSync(reference.slice('file://'.length))),
-      scope: 'referenced_local_file',
-    };
+    bytes = readFileSync(reference.slice('file://'.length));
+    scope = 'referenced_local_file';
+  } else {
+    bytes = Buffer.from(audio[0].input_audio.data, 'base64');
+    scope = 'rendered_prompt';
   }
-  return {
-    sha256: sha256(Buffer.from(audio[0].input_audio.data, 'base64')),
-    scope: 'rendered_prompt',
-  };
+  return { sha256: sha256(bytes), scope, audio: readPcm16Wav(bytes) };
 }
 
 function defectDisposition(control, category, expectedPositive) {
@@ -53,9 +54,7 @@ function defectDisposition(control, category, expectedPositive) {
     return 'unknown';
   }
   const detected =
-    category === 'silence'
-      ? control.expectedDefectDetected === true && control.kind === 'silence'
-      : control.findings.includes(category);
+    category === 'silence' ? control.predictedSilence : control.findings.includes(category);
   if (expectedPositive) {
     return detected ? 'truePositive' : 'falseNegative';
   }
@@ -112,6 +111,9 @@ export function scoreCalibration(labels, exported) {
       requirement: control.requirement,
       sourceSha256: control.sha256,
     };
+    let inputProvenance = { inputHashVerified: false };
+    let review;
+    let predictedSilence;
     try {
       if (matches.length !== 1) {
         throw new Error(matches.length === 0 ? 'Missing result.' : 'Duplicate results.');
@@ -121,26 +123,29 @@ export function scoreCalibration(labels, exported) {
         throw new Error('Provider or evaluation error.');
       }
       const verifiedInput = inputHash(result);
-      if (verifiedInput.sha256 !== control.sha256) {
+      inputProvenance = {
+        inputHashVerified: verifiedInput.sha256 === control.sha256,
+        inputSha256: verifiedInput.sha256,
+        inputHashScope: verifiedInput.scope,
+      };
+      if (!inputProvenance.inputHashVerified) {
         throw new Error('Submitted WAV differs from frozen control.');
       }
-      const review = parseAudioReview(result.response?.output);
+      review = parseAudioReview(result.response?.output);
+      predictedSilence =
+        review.status === 'unratable' &&
+        review.intelligibility === 'no_speech' &&
+        !review.transcript.trim();
+      validateAudioReviewTimestamps(review, verifiedInput.audio);
       const category = categories[control.kind];
       const findings = review.findings.map((finding) => finding.type);
       const detected =
-        category === 'silence'
-          ? review.status === 'unratable' &&
-            review.intelligibility === 'no_speech' &&
-            !review.transcript.trim()
-          : category
-            ? findings.includes(category)
-            : null;
+        category === 'silence' ? predictedSilence : category ? findings.includes(category) : null;
       return {
         ...base,
         state: review.status,
-        inputSha256: verifiedInput.sha256,
-        inputHashScope: verifiedInput.scope,
-        inputHashVerified: true,
+        ...inputProvenance,
+        predictedSilence,
         statusMatches: control.expected === null ? null : review.status === control.expected,
         defectCategory: category ?? null,
         expectedDefectDetected: detected,
@@ -156,7 +161,9 @@ export function scoreCalibration(labels, exported) {
         ...base,
         state: 'error',
         error: error.message,
-        inputHashVerified: false,
+        ...inputProvenance,
+        predictedSilence,
+        review,
         statusMatches: false,
         expectedDefectDetected: false,
       };
