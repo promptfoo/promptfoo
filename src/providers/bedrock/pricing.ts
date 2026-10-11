@@ -2,6 +2,7 @@ import {
   CLAUDE_REGIONAL_ENDPOINT_PREMIUM,
   calculateCacheInputCost,
   isClaudeFableOrMythos5Model,
+  isClaudeHaiku55Model,
   isClaudeOpus5Model,
   isClaudeOpus55Model,
   isClaudeRegionalPremiumModel,
@@ -89,6 +90,12 @@ const BEDROCK_PRICING: Record<string, BedrockPricing> = {
     input: 3,
     output: 15,
     longContext: { threshold: 200_000, input: 6, output: 22.5 },
+  },
+  // AWS Haiku 5.5 pricing: higher rates apply strictly above 100K total input tokens.
+  'anthropic.claude-haiku-5-5': {
+    input: 0.1,
+    output: 0.5,
+    longContext: { threshold: 100_000, input: 0.5, output: 2.5 },
   },
   // Claude Haiku 4.5
   'anthropic.claude-haiku-4': { input: 1, output: 5 },
@@ -392,6 +399,18 @@ function getBedrockRegionPricing(
   return undefined;
 }
 
+/** GovCloud 5.5 availability does not establish its token rates. */
+export function isGovCloudClaude55Model(modelId: string, region?: string): boolean {
+  return (
+    (isClaudeHaiku55Model(modelId) ||
+      isClaudeOpus55Model(modelId) ||
+      isClaudeSonnet55Model(modelId)) &&
+    (modelId.startsWith('us-gov.') ||
+      modelId.startsWith('arn:aws-us-gov:') ||
+      Boolean(region?.startsWith('us-gov-')))
+  );
+}
+
 export function getBedrockPricing(
   normalizedModelId: string,
   region?: string,
@@ -399,6 +418,9 @@ export function getBedrockPricing(
   // GLM 5.3 has profile-specific rates in calculateBedrockCost. Never inherit
   // GLM 5's substring match for a bare or otherwise unsupported model ID.
   if (normalizedModelId.includes('zai.glm-5.3')) {
+    return undefined;
+  }
+  if (isGovCloudClaude55Model(normalizedModelId, region)) {
     return undefined;
   }
   if (normalizedModelId.includes('openai.gpt-oss-') && region) {
@@ -550,7 +572,10 @@ export function calculateBedrockCost(
   // prompt plus any cache reads and writes (`input_tokens` excludes cached tokens).
   const totalInputTokens = promptTokens + cacheReadTokens + cacheWriteTokens;
   const tier =
-    pricing.longContext && totalInputTokens >= pricing.longContext.threshold
+    pricing.longContext &&
+    (isClaudeHaiku55Model(normalizedModelId)
+      ? totalInputTokens > pricing.longContext.threshold
+      : totalInputTokens >= pricing.longContext.threshold)
       ? pricing.longContext
       : pricing;
 
@@ -604,6 +629,7 @@ export function calculateBedrockInvokeModelCost(
   if (
     !isBedrockGrokRuntimeProfile(normalizedModelId) &&
     !isClaudeFableOrMythos5Model(normalizedModelId) &&
+    !isClaudeHaiku55Model(normalizedModelId) &&
     !isClaudeOpus5Model(normalizedModelId) &&
     !isClaudeOpus55Model(normalizedModelId) &&
     !isClaudeSonnet55Model(normalizedModelId) &&

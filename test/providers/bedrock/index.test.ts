@@ -754,10 +754,13 @@ describe('AwsBedrockGenericProvider', () => {
       'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/claude-prod-25',
       'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/claude-team-blue-12',
       'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/claude-prod-20260811',
+      'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/claude-haiku-5-5',
+      'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/claude-opus-5-5',
+      'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/claude-sonnet-5-5',
     ])(
       'preserves sampling and manual thinking for Claude inference profile %s',
       async (modelName) => {
-        // The profile hides the model, so the Claude 5 fallback must neither drop sampling
+        // The profile hides the model, so its name must neither drop sampling
         // nor convert manual thinking to adaptive.
         const sampled = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
           { region: 'us-east-1', temperature: 0.5 },
@@ -775,8 +778,25 @@ describe('AwsBedrockGenericProvider', () => {
           modelName,
         );
         expect(params.thinking).toEqual(thinking);
+        expect(params.max_tokens).toBe(9216);
         // Every Claude model rejects a non-default temperature with extended thinking.
         expect(params.temperature).toBeUndefined();
+
+        const disabled = { type: 'disabled' } as const;
+        const toolChoice = { type: 'any' } as const;
+        const explicit = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
+          { thinking: disabled, tool_choice: toolChoice, effort: 'max', temperature: 0.5 },
+          'hi',
+          undefined,
+          modelName,
+        );
+        expect(explicit).toMatchObject({
+          thinking: disabled,
+          tool_choice: toolChoice,
+          output_config: { effort: 'max' },
+          temperature: 0.5,
+          max_tokens: 1024,
+        });
       },
     );
 
@@ -4010,6 +4030,42 @@ describe('AwsBedrockCompletionProvider', () => {
     AWS_BEDROCK_MODELS['us.anthropic.claude-3-7-sonnet-20250219-v1:0'] = originalModelHandler;
   });
 
+  it.each(
+    ['arn:aws:bedrock:us-east-1', 'arn:aws-us-gov:bedrock:us-gov-west-1'].flatMap((arnPrefix) =>
+      ['haiku-prod', 'claude-haiku-5-5', 'claude-opus-5-5'].flatMap((profileName) =>
+        [undefined, 0, 0.5].map((temperature) => ({ arnPrefix, profileName, temperature })),
+      ),
+    ),
+  )(
+    'uses only an explicit temperature for an opaque Claude profile ($arnPrefix, $profileName, $temperature)',
+    async ({ arnPrefix, profileName, temperature }) => {
+      const modelName = `${arnPrefix}:123456789012:application-inference-profile/${profileName}`;
+      const responseJson = JSON.stringify({
+        content: [{ type: 'text', text: 'READY' }],
+        usage: { input_tokens: 10, output_tokens: 1 },
+      });
+      const body = Object.assign(new TextEncoder().encode(responseJson), {
+        transformToString: () => responseJson,
+      });
+      mockInvokeModel.mockResolvedValueOnce({ body });
+      const config = { inferenceModelType: 'claude', region: 'us-east-1', temperature };
+      const provider = new AwsBedrockCompletionProvider(modelName, { config });
+
+      const response = await provider.callApi('Return READY');
+
+      expect(response.output).toBe('READY');
+      const request = mockInvokeModel.mock.calls.at(-1)?.[0];
+      expect(request.modelId).toBe(modelName);
+      const requestBody = JSON.parse(request.body);
+      expect(requestBody.max_tokens).toBe(1024);
+      if (temperature === undefined) {
+        expect(requestBody).not.toHaveProperty('temperature');
+      } else {
+        expect(requestBody.temperature).toBe(temperature);
+      }
+    },
+  );
+
   it.each([
     ['us.xai.grok-4.7', 2.2, 6.6, 0.55],
     ['global.xai.grok-4.7', 2, 6, 0.5],
@@ -4143,7 +4199,7 @@ describe('AwsBedrockCompletionProvider', () => {
   it.each([
     ['global.anthropic.claude-fable-5-1', 1000, 0.0363],
     ['global.anthropic.claude-opus-5-5', 1000, 0.01454],
-    ['global.anthropic.claude-sonnet-5-5', 1000, 0.00729],
+    ['global.anthropic.claude-sonnet-5-5', 1000, 0.00727],
     ['global.anthropic.claude-mythos-5-1', 0, 0.0263],
     ['global.anthropic.claude-fable-5', 0, 0.02645],
   ] as const)(
