@@ -1,6 +1,7 @@
+import { EventEmitter } from 'events';
 import fs from 'fs/promises';
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
 import { getEnvString } from '../../src/envars';
 import logger from '../../src/logger';
@@ -53,13 +54,16 @@ vi.mock('../../src/util/secureTempFiles', () => ({
   writeSecureTempFile: vi.fn(),
 }));
 
+afterEach(() => {
+  mockExecFileAsync.mockReset();
+  vi.clearAllMocks();
+});
+
 describe('Ruby utilities', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockExecFileAsync.mockReset();
-    rubyUtils.state.cachedRubyPath = null;
-    rubyUtils.state.validationPromise = null;
-    rubyUtils.state.validatingPath = null;
+
     vi.mocked(getEnvString).mockReturnValue('');
     vi.mocked(fs.readFile).mockResolvedValue(
       JSON.stringify({ type: 'final_result', data: 'secret-result' }),
@@ -109,6 +113,34 @@ describe('Ruby utilities', () => {
     const debugMessages = vi.mocked(logger.debug).mock.calls.flat().map(String).join('\n');
     expect(debugMessages).not.toContain('secret-input');
     expect(debugMessages).not.toContain('secret-result');
+  });
+
+  it('cancels the Ruby subprocess and removes its request files', async () => {
+    const controller = new AbortController();
+    const reason = new Error('embedding cancelled');
+    const child = Object.assign(new EventEmitter(), {
+      kill: vi.fn(() => {
+        expect(removeSecureTempDirectory).not.toHaveBeenCalled();
+        queueMicrotask(() => child.emit('close'));
+        return true;
+      }),
+    });
+    mockExecFileAsync
+      .mockReset()
+      .mockResolvedValueOnce({ stdout: 'ruby 3.3.0\n', stderr: '' })
+      .mockImplementationOnce((_file, _args, options) => {
+        expect(options.signal).toBe(controller.signal);
+        controller.abort(reason);
+        return Object.assign(Promise.reject(controller.signal.reason), { child });
+      });
+    await expect(
+      rubyUtils.runRuby('/path/to/script.rb', 'call_embedding_api', [], {
+        abortSignal: controller.signal,
+      }),
+    ).rejects.toBe(reason);
+    expect(child.kill).toHaveBeenCalledWith('SIGKILL');
+    expect(removeSecureTempDirectory).toHaveBeenCalledWith('/tmp/promptfoo-ruby-test');
+    expect(fs.readFile).not.toHaveBeenCalled();
   });
 
   it('classifies routine stderr without reporting it as an error', async () => {

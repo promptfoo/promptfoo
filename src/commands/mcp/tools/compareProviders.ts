@@ -56,7 +56,7 @@ export function registerCompareProvidersTool(server: McpServer) {
           return createToolResponse(
             'compare_providers',
             false,
-            { requestedProviders: providers },
+            undefined,
             `Failed to load all providers. Loaded ${apiProviders.length} out of ${providers.length}`,
           );
         }
@@ -133,10 +133,7 @@ export function registerCompareProvidersTool(server: McpServer) {
           return createToolResponse(
             'compare_providers',
             false,
-            {
-              originalError: errorMessage,
-              suggestion: 'Check provider IDs and ensure all providers are properly configured',
-            },
+            undefined,
             'Failed to load one or more providers',
           );
         }

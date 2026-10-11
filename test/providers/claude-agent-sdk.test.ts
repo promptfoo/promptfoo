@@ -16,10 +16,13 @@ import {
   FS_READONLY_ALLOWED_TOOLS,
 } from '../../src/providers/claude-agent-sdk';
 import { transformMCPConfigToClaudeCode } from '../../src/providers/mcp/transform';
+import { wrapProviderWithRateLimiting } from '../../src/scheduler/providerWrapper';
+import { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
 import * as genaiTracer from '../../src/tracing/genaiTracer';
 import * as traceStore from '../../src/tracing/store';
 import { getPackageVersion } from '../../src/util/packageVersion';
 import { checkProviderApiKeys } from '../../src/util/provider';
+import { createAnthropicEnvOptions, createOtlpOptions } from '../factories/literalFixtures';
 import { mockProcessEnv } from '../util/utils';
 import type {
   ModelUsage,
@@ -36,6 +39,92 @@ import type { MockInstance } from 'vitest';
 import type { EnvOverrides } from '../../src/types/env';
 import type { CallApiContextParams } from '../../src/types/index';
 
+const { createFsModuleFactory } = await vi.hoisted(() => import('../factories/moduleMocks'));
+
+const createFirstOptionQuestionOptions = () => ({
+  config: {
+    ask_user_question: {
+      behavior: 'first_option' as const,
+    },
+  },
+  env: { ANTHROPIC_API_KEY: 'test-api-key' },
+});
+
+const createReadToolUse = () => ({
+  type: 'tool_use' as const,
+  id: 'tool-1',
+  name: 'Read',
+  input: { file_path: '/test/file.ts' },
+});
+
+const createReadToolResultMessage = () => ({
+  type: 'user' as const,
+  message: {
+    role: 'user' as const,
+    content: [
+      {
+        type: 'tool_result' as const,
+        tool_use_id: 'tool-1',
+        content: 'file contents here',
+        is_error: false,
+      },
+    ],
+  },
+  session_id: 'test-session',
+});
+
+const createTracedClaudeOptions = () => ({
+  env: { ANTHROPIC_API_KEY: 'test-api-key' },
+  config: { deep_tracing: true },
+});
+
+const createMinimalModelUsage = () => ({
+  inputTokens: 1,
+  outputTokens: 1,
+  cacheReadInputTokens: 0,
+  cacheCreationInputTokens: 0,
+  webSearchRequests: 0,
+  costUSD: 0,
+  contextWindow: 200000,
+  maxOutputTokens: 8192,
+});
+
+const createResumedSessionOptions = () => ({
+  config: { apiKey: 'synthetic', resume: 'session' },
+});
+
+const createWorkingDirectoryOptions = (workingDir: string) => ({
+  config: { working_dir: workingDir },
+  env: { ANTHROPIC_API_KEY: 'test-api-key' },
+});
+
+const createGlobToolUse = () => ({
+  type: 'tool_use' as const,
+  id: 'sub-1',
+  name: 'Glob',
+  input: { pattern: '**/*.ts' },
+});
+
+const createMetaGatewayEnv = () => ({
+  ANTHROPIC_BASE_URL: 'https://api.meta.ai',
+  ANTHROPIC_CUSTOM_HEADERS: '',
+});
+
+const createAllToolsOptions = () => ({
+  config: { allow_all_tools: true },
+  env: { ANTHROPIC_API_KEY: 'test-api-key' },
+});
+
+const createForwardSubagentTextOptions = () => ({
+  config: { forward_subagent_text: true },
+  env: { ANTHROPIC_API_KEY: 'test-api-key' },
+});
+
+const createCachedMcpOptions = () => ({
+  config: { cache_mcp: true },
+  env: { ANTHROPIC_API_KEY: 'test-api-key' },
+});
+
 const testBasePath = path.resolve('/test/basePath');
 const fsMocks = vi.hoisted(() => ({
   statSync: vi.fn(),
@@ -43,6 +132,19 @@ const fsMocks = vi.hoisted(() => ({
   rmSync: vi.fn(),
   readdirSync: vi.fn(),
 }));
+
+const createFsPromisesModule = vi.hoisted(() => () => () => {
+  const fsPromisesMock = {
+    stat: vi.fn((filePath: any) => fsMocks.statSync(filePath)),
+    mkdtemp: vi.fn((prefix: string) => fsMocks.mkdtempSync(prefix)),
+    rm: vi.fn((filePath: any, options?: any) => fsMocks.rmSync(filePath, options)),
+    readdir: vi.fn((filePath: any, options?: any) => fsMocks.readdirSync(filePath, options)),
+  };
+  return {
+    default: fsPromisesMock,
+    ...fsPromisesMock,
+  };
+});
 
 vi.mock('../../src/cliState', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../src/cliState')>();
@@ -61,17 +163,7 @@ vi.mock('../../src/cliState', async (importOriginal) => {
     basePath: '/test/basePath',
   };
 });
-vi.mock('fs', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('fs')>();
-  return {
-    ...actual,
-    default: {
-      ...actual,
-      ...fsMocks,
-    },
-    ...fsMocks,
-  };
-});
+vi.mock('fs', createFsModuleFactory(fsMocks));
 vi.mock('../../src/esm', async (importOriginal) => {
   return {
     ...(await importOriginal()),
@@ -92,31 +184,9 @@ vi.mock('node:module', async (importOriginal) => {
   };
 });
 
-vi.mock('node:fs/promises', () => {
-  const fsPromisesMock = {
-    stat: vi.fn((filePath: any) => fsMocks.statSync(filePath)),
-    mkdtemp: vi.fn((prefix: string) => fsMocks.mkdtempSync(prefix)),
-    rm: vi.fn((filePath: any, options?: any) => fsMocks.rmSync(filePath, options)),
-    readdir: vi.fn((filePath: any, options?: any) => fsMocks.readdirSync(filePath, options)),
-  };
-  return {
-    default: fsPromisesMock,
-    ...fsPromisesMock,
-  };
-});
+vi.mock('node:fs/promises', createFsPromisesModule());
 
-vi.mock('fs/promises', () => {
-  const fsPromisesMock = {
-    stat: vi.fn((filePath: any) => fsMocks.statSync(filePath)),
-    mkdtemp: vi.fn((prefix: string) => fsMocks.mkdtempSync(prefix)),
-    rm: vi.fn((filePath: any, options?: any) => fsMocks.rmSync(filePath, options)),
-    readdir: vi.fn((filePath: any, options?: any) => fsMocks.readdirSync(filePath, options)),
-  };
-  return {
-    default: fsPromisesMock,
-    ...fsPromisesMock,
-  };
-});
+vi.mock('fs/promises', createFsPromisesModule());
 
 const mockQuery = vi.fn();
 const mockTransformMCPConfigToClaudeCode = vi.mocked(transformMCPConfigToClaudeCode);
@@ -455,9 +525,7 @@ describe('ClaudeCodeSDKProvider', () => {
       mockStatefulQuery(
         vi.fn().mockResolvedValue({ session: { total_cost_usd: 0, model_usage: {} } }),
       );
-      const provider = new ClaudeCodeSDKProvider({
-        config: { apiKey: 'synthetic', resume: 'session' },
-      });
+      const provider = new ClaudeCodeSDKProvider(createResumedSessionOptions());
       const result = await provider.callApi('hello');
       expect(result.cost).toBe(0.202);
       expect(result.metadata?.modelUsage).toEqual(resultMessage.modelUsage);
@@ -534,9 +602,7 @@ describe('ClaudeCodeSDKProvider', () => {
         total_cost_usd: 0.001,
         modelUsage: { haiku: createMockModelUsage(5, 3) },
       });
-      const provider = new ClaudeCodeSDKProvider({
-        config: { apiKey: 'synthetic', resume: 'session' },
-      });
+      const provider = new ClaudeCodeSDKProvider(createResumedSessionOptions());
       const result = await provider.callApi('hello');
       expect(result.cost).toBe(0.001);
       expect(result.tokenUsage).toMatchObject({ prompt: 5, completion: 3, total: 8 });
@@ -549,9 +615,7 @@ describe('ClaudeCodeSDKProvider', () => {
         is_error: true,
         errors: ['turn limit'],
       });
-      const provider = new ClaudeCodeSDKProvider({
-        config: { apiKey: 'synthetic', resume: 'session' },
-      });
+      const provider = new ClaudeCodeSDKProvider(createResumedSessionOptions());
       const result = await provider.callApi('hello');
       expect(result.error).toContain('error_max_turns');
       expect(result.cost).toBeCloseTo(0.002);
@@ -566,9 +630,7 @@ describe('ClaudeCodeSDKProvider', () => {
         }),
         { ...resultMessage, total_cost_usd: 0, modelUsage: { sonnet: createMockModelUsage(5, 3) } },
       );
-      const provider = new ClaudeCodeSDKProvider({
-        config: { apiKey: 'synthetic', resume: 'session' },
-      });
+      const provider = new ClaudeCodeSDKProvider(createResumedSessionOptions());
       const result = await provider.callApi('hello');
       expect(result.cost).toBe(0);
       expect(result.tokenUsage).toMatchObject({ prompt: 5, completion: 3, total: 8 });
@@ -579,9 +641,7 @@ describe('ClaudeCodeSDKProvider', () => {
       try {
         const snapshot = mockStatefulQuery(vi.fn().mockReturnValue(new Promise(() => {})));
         const controller = new AbortController();
-        const provider = new ClaudeCodeSDKProvider({
-          config: { apiKey: 'synthetic', resume: 'session' },
-        });
+        const provider = new ClaudeCodeSDKProvider(createResumedSessionOptions());
         const pending = provider.callApi('hello', undefined, { abortSignal: controller.signal });
         await vi.waitFor(() => expect(snapshot).toHaveBeenCalledOnce());
         controller.abort();
@@ -835,6 +895,105 @@ describe('ClaudeCodeSDKProvider', () => {
     );
   });
 
+  describe('scheduler composition', () => {
+    let registry: RateLimitRegistry;
+
+    beforeEach(() => {
+      registry = new RateLimitRegistry({ maxConcurrency: 1 });
+    });
+
+    afterEach(() => {
+      registry.dispose();
+    });
+
+    it('preserves a pre-aborted caller reason before SDK dispatch', async () => {
+      const provider = new ClaudeCodeSDKProvider({ config: { apiKey: 'test-key' } });
+      const rawCall = vi.spyOn(provider, 'callApi');
+      const wrapped = wrapProviderWithRateLimiting(provider, registry);
+      const controller = new AbortController();
+      const reason = Object.freeze(new Error('caller stopped before dispatch'));
+      controller.abort(reason);
+
+      await expect(
+        wrapped.callApi('No SDK dispatch', undefined, { abortSignal: controller.signal }),
+      ).rejects.toBe(reason);
+      expect(rawCall).not.toHaveBeenCalled();
+      expect(mockQuery).not.toHaveBeenCalled();
+      expect(tempDirSpy).not.toHaveBeenCalled();
+    });
+
+    it('forwards an in-flight caller reason to the SDK controller and cleans up', async () => {
+      let started!: (signal: AbortSignal) => void;
+      const queryStarted = new Promise<AbortSignal>((resolve) => {
+        started = resolve;
+      });
+      mockQuery.mockImplementation(({ options }) => {
+        const signal: AbortSignal = options.abortController.signal;
+        return (async function* () {
+          started(signal);
+          await new Promise<never>((_resolve, reject) => {
+            signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+          });
+        })();
+      });
+      const provider = new ClaudeCodeSDKProvider({ config: { apiKey: 'test-key' } });
+      const wrapped = wrapProviderWithRateLimiting(provider, registry);
+      const controller = new AbortController();
+      const reason = Object.freeze(new Error('caller stopped during SDK query'));
+      const pending = wrapped.callApi('Held SDK query', undefined, {
+        abortSignal: controller.signal,
+      });
+      try {
+        const sdkSignal = await queryStarted;
+        expect(sdkSignal).not.toBe(controller.signal);
+        expect(sdkSignal.aborted).toBe(false);
+        controller.abort(reason);
+        expect(sdkSignal.reason).toBe(reason);
+        const result = await pending;
+        expect(result.error).toBe('Claude Agent SDK call aborted');
+        expect(mockQuery).toHaveBeenCalledOnce();
+        expect(rmSyncSpy).toHaveBeenCalledWith('/tmp/test-temp-dir', {
+          recursive: true,
+          force: true,
+        });
+        expect(Object.values(registry.getMetrics())).toMatchObject([
+          { activeRequests: 0, queueDepth: 0, failedRequests: 1, retriedRequests: 0 },
+        ]);
+      } finally {
+        controller.abort(reason);
+        await pending;
+      }
+    });
+
+    it('forwards prompt credentials without reusing a different key response', async () => {
+      vi.stubEnv('ANTHROPIC_API_KEY', undefined);
+      enableCache();
+      const provider = new ClaudeCodeSDKProvider();
+      const wrapped = wrapProviderWithRateLimiting(provider, registry);
+      for (const key of ['wrapped-key-one', 'wrapped-key-two']) {
+        mockQuery.mockReturnValue(createMockResponse(key));
+        const result = await wrapped.callApi('Same wrapped prompt', {
+          vars: {},
+          prompt: { raw: 'Same wrapped prompt', label: 'test', config: { apiKey: key } },
+        });
+        expect(result.output).toBe(key);
+        expect(result.error).toBeUndefined();
+        expect(result.cached).not.toBe(true);
+        expect(mockQuery).toHaveBeenLastCalledWith(
+          expect.objectContaining({
+            options: expect.objectContaining({
+              env: expect.objectContaining({ ANTHROPIC_API_KEY: key }),
+            }),
+          }),
+        );
+      }
+      expect(mockQuery).toHaveBeenCalledTimes(2);
+      expect(Object.values(registry.getMetrics())).toMatchObject([
+        { totalRequests: 2, completedRequests: 2, activeRequests: 0, queueDepth: 0 },
+      ]);
+    });
+  });
+
   describe('constructor', () => {
     it('should initialize with default config', () => {
       const provider = new ClaudeCodeSDKProvider();
@@ -961,9 +1120,7 @@ describe('ClaudeCodeSDKProvider', () => {
           createMockResponse('Test response', { input_tokens: 10, output_tokens: 20 }, 0.002),
         );
 
-        const provider = new ClaudeCodeSDKProvider({
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new ClaudeCodeSDKProvider(createAnthropicEnvOptions());
         const result = await provider.callApi('Test prompt');
 
         expect(result).toEqual({
@@ -1022,9 +1179,7 @@ describe('ClaudeCodeSDKProvider', () => {
           ),
         );
 
-        const provider = new ClaudeCodeSDKProvider({
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new ClaudeCodeSDKProvider(createAnthropicEnvOptions());
         const result = await provider.callApi('Test prompt');
 
         expect(result.metadata?.terminalReason).toBe('completed');
@@ -1053,9 +1208,7 @@ describe('ClaudeCodeSDKProvider', () => {
           }),
         );
 
-        const provider = new ClaudeCodeSDKProvider({
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new ClaudeCodeSDKProvider(createAnthropicEnvOptions());
         const result = await provider.callApi('Test prompt');
 
         expect(result.tokenUsage).toEqual({
@@ -1080,9 +1233,7 @@ describe('ClaudeCodeSDKProvider', () => {
               output_tokens_details: { thinking_tokens: thinkingTokens },
             }),
           );
-          const provider = new ClaudeCodeSDKProvider({
-            env: { ANTHROPIC_API_KEY: 'test-api-key' },
-          });
+          const provider = new ClaudeCodeSDKProvider(createAnthropicEnvOptions());
           const result = await provider.callApi('Test prompt');
 
           expect(result.tokenUsage).toEqual({
@@ -1117,9 +1268,7 @@ describe('ClaudeCodeSDKProvider', () => {
           } as any),
         );
 
-        const provider = new ClaudeCodeSDKProvider({
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new ClaudeCodeSDKProvider(createAnthropicEnvOptions());
         const result = await provider.callApi('Test prompt');
 
         // Zeros would be indistinguishable from a genuine zero-token call downstream.
@@ -1147,9 +1296,7 @@ describe('ClaudeCodeSDKProvider', () => {
           }),
         );
 
-        const provider = new ClaudeCodeSDKProvider({
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new ClaudeCodeSDKProvider(createAnthropicEnvOptions());
         const result = await provider.callApi('Test prompt');
 
         expect(result.error).toBe('Claude Agent SDK call failed: error_during_execution');
@@ -1186,9 +1333,7 @@ describe('ClaudeCodeSDKProvider', () => {
           }),
         );
 
-        const provider = new ClaudeCodeSDKProvider({
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new ClaudeCodeSDKProvider(createAnthropicEnvOptions());
         const result = await provider.callApi('Test prompt');
 
         expect(result.tokenUsage).toEqual({ prompt: 35, completion: 5, total: 40 });
@@ -1197,9 +1342,7 @@ describe('ClaudeCodeSDKProvider', () => {
       it('should handle SDK error response', async () => {
         mockQuery.mockReturnValue(createMockErrorResponse('error_during_execution'));
 
-        const provider = new ClaudeCodeSDKProvider({
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new ClaudeCodeSDKProvider(createAnthropicEnvOptions());
         const result = await provider.callApi('Test prompt');
 
         expect(result.error).toBe('Claude Agent SDK call failed: error_during_execution');
@@ -1219,9 +1362,7 @@ describe('ClaudeCodeSDKProvider', () => {
         const errorSpy = vi.spyOn(logger, 'error').mockImplementation(function () {});
         mockQuery.mockRejectedValue(new Error('Network error'));
 
-        const provider = new ClaudeCodeSDKProvider({
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new ClaudeCodeSDKProvider(createAnthropicEnvOptions());
         const result = await provider.callApi('Test prompt');
 
         expect(result.error).toBe('Error calling Claude Agent SDK: Error: Network error');
@@ -1270,9 +1411,7 @@ describe('ClaudeCodeSDKProvider', () => {
           createMockResponse('Plain text response', { input_tokens: 10, output_tokens: 20 }),
         );
 
-        const provider = new ClaudeCodeSDKProvider({
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new ClaudeCodeSDKProvider(createAnthropicEnvOptions());
         const result = await provider.callApi('Test prompt');
 
         expect(result.output).toBe('Plain text response');
@@ -1318,9 +1457,7 @@ describe('ClaudeCodeSDKProvider', () => {
 
         mockQuery.mockReturnValue(createMockQuery([subAgentResult, mainAgentResult]));
 
-        const provider = new ClaudeCodeSDKProvider({
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new ClaudeCodeSDKProvider(createAnthropicEnvOptions());
         const result = await provider.callApi('Test prompt');
 
         expect(result.error).toBeUndefined();
@@ -1378,9 +1515,7 @@ describe('ClaudeCodeSDKProvider', () => {
 
         mockQuery.mockReturnValue(createMockQuery([subAgentResult, mainAgentError]));
 
-        const provider = new ClaudeCodeSDKProvider({
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new ClaudeCodeSDKProvider(createAnthropicEnvOptions());
         const result = await provider.callApi('Test prompt');
 
         expect(result.error).toBe('Claude Agent SDK call failed: error_max_turns');
@@ -1428,9 +1563,7 @@ describe('ClaudeCodeSDKProvider', () => {
         const wasEnabled = isCacheEnabled();
         enableCache();
         try {
-          const provider = new ClaudeCodeSDKProvider({
-            env: { ANTHROPIC_API_KEY: 'test-api-key' },
-          });
+          const provider = new ClaudeCodeSDKProvider(createAnthropicEnvOptions());
 
           const first = await provider.callApi('Cache-once prompt');
           expect(first.output).toBe('Main agent final answer (cached)');
@@ -1492,9 +1625,7 @@ describe('ClaudeCodeSDKProvider', () => {
           createMockQuery([buildSubAgent(1), buildSubAgent(2), buildSubAgent(3), mainAgentResult]),
         );
 
-        const provider = new ClaudeCodeSDKProvider({
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new ClaudeCodeSDKProvider(createAnthropicEnvOptions());
         const result = await provider.callApi('Test prompt');
 
         expect(result.error).toBeUndefined();
@@ -1556,9 +1687,7 @@ describe('ClaudeCodeSDKProvider', () => {
 
           mockQuery.mockReturnValue(createMockQuery([subAgentResult, stragglerResult]));
 
-          const provider = new ClaudeCodeSDKProvider({
-            env: { ANTHROPIC_API_KEY: 'test-api-key' },
-          });
+          const provider = new ClaudeCodeSDKProvider(createAnthropicEnvOptions());
           const result = await provider.callApi('Test prompt');
 
           // Still returns a response (we'd rather grade against a possibly-wrong
@@ -1616,9 +1745,7 @@ describe('ClaudeCodeSDKProvider', () => {
 
           mockQuery.mockReturnValue(createMockQuery([subAgentResult, mainAgentError]));
 
-          const provider = new ClaudeCodeSDKProvider({
-            env: { ANTHROPIC_API_KEY: 'test-api-key' },
-          });
+          const provider = new ClaudeCodeSDKProvider(createAnthropicEnvOptions());
           const result = await provider.callApi('Test prompt');
 
           expect(result.error).toBe('Claude Agent SDK call failed: error_max_turns');
@@ -1637,9 +1764,7 @@ describe('ClaudeCodeSDKProvider', () => {
             createMockResponse('Plain response', { input_tokens: 1, output_tokens: 1 }),
           );
 
-          const provider = new ClaudeCodeSDKProvider({
-            env: { ANTHROPIC_API_KEY: 'test-api-key' },
-          });
+          const provider = new ClaudeCodeSDKProvider(createAnthropicEnvOptions());
           const result = await provider.callApi('Test prompt');
 
           expect(result.output).toBe('Plain response');
@@ -1691,9 +1816,7 @@ describe('ClaudeCodeSDKProvider', () => {
         // arrives after — the inverse of the position heuristic's assumption.
         mockQuery.mockReturnValue(createMockQuery([mainAgentResult, lateSubAgentResult]));
 
-        const provider = new ClaudeCodeSDKProvider({
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new ClaudeCodeSDKProvider(createAnthropicEnvOptions());
         const result = await provider.callApi('Test prompt');
 
         expect(result.error).toBeUndefined();
@@ -1742,9 +1865,7 @@ describe('ClaudeCodeSDKProvider', () => {
 
         mockQuery.mockReturnValue(createMockQuery([scheduledResult, lateSubAgentResult]));
 
-        const provider = new ClaudeCodeSDKProvider({
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new ClaudeCodeSDKProvider(createAnthropicEnvOptions());
         const result = await provider.callApi('Scheduled task prompt');
 
         expect(result.output).toBe('Scheduled task final answer');
@@ -1792,9 +1913,7 @@ describe('ClaudeCodeSDKProvider', () => {
 
         mockQuery.mockReturnValue(createMockQuery([mainResult, peerMessageResult]));
 
-        const provider = new ClaudeCodeSDKProvider({
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new ClaudeCodeSDKProvider(createAnthropicEnvOptions());
         const result = await provider.callApi('Main prompt');
 
         expect(result.output).toBe('Main agent answer');
@@ -1856,9 +1975,7 @@ describe('ClaudeCodeSDKProvider', () => {
 
           mockQuery.mockReturnValue(createMockQuery([subAgentResult, mainAgentResult]));
 
-          const provider = new ClaudeCodeSDKProvider({
-            env: { ANTHROPIC_API_KEY: 'test-api-key' },
-          });
+          const provider = new ClaudeCodeSDKProvider(createAnthropicEnvOptions());
           const result = await provider.callApi('Test prompt');
 
           expect(result.error).toBeUndefined();
@@ -1911,9 +2028,7 @@ describe('ClaudeCodeSDKProvider', () => {
 
         mockQuery.mockReturnValue(createMockQuery([subAgent1, subAgent2]));
 
-        const provider = new ClaudeCodeSDKProvider({
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new ClaudeCodeSDKProvider(createAnthropicEnvOptions());
         const result = await provider.callApi('Test prompt');
 
         expect(result.error).toBeUndefined();
@@ -1926,9 +2041,7 @@ describe('ClaudeCodeSDKProvider', () => {
         // without emitting any `result` message (origin or otherwise).
         mockQuery.mockReturnValue(createMockQuery([]));
 
-        const provider = new ClaudeCodeSDKProvider({
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new ClaudeCodeSDKProvider(createAnthropicEnvOptions());
         const result = await provider.callApi('Test prompt');
 
         expect(result.error).toBe("Claude Agent SDK call didn't return a result");
@@ -2013,9 +2126,7 @@ describe('ClaudeCodeSDKProvider', () => {
           }),
         );
 
-        const provider = new ClaudeCodeSDKProvider({
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new ClaudeCodeSDKProvider(createAnthropicEnvOptions());
         const result = await provider.callApi('Test prompt');
 
         expect(result.error).toBeUndefined();
@@ -2042,9 +2153,7 @@ describe('ClaudeCodeSDKProvider', () => {
           }),
         );
 
-        const provider = new ClaudeCodeSDKProvider({
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new ClaudeCodeSDKProvider(createAnthropicEnvOptions());
         const result = await provider.callApi('Test prompt');
 
         expect(result.metadata).toBeDefined();
@@ -2076,9 +2185,7 @@ describe('ClaudeCodeSDKProvider', () => {
           ]),
         );
 
-        const provider = new ClaudeCodeSDKProvider({
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new ClaudeCodeSDKProvider(createAnthropicEnvOptions());
         const result = await provider.callApi('Test prompt');
 
         expect(result.metadata?.assistantErrors).toEqual([
@@ -2096,9 +2203,7 @@ describe('ClaudeCodeSDKProvider', () => {
           createMockResponse('ok', { input_tokens: 10, output_tokens: 20 }),
         );
 
-        const provider = new ClaudeCodeSDKProvider({
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new ClaudeCodeSDKProvider(createAnthropicEnvOptions());
         const result = await provider.callApi('Test prompt');
 
         expect(result.metadata).toBeDefined();
@@ -2136,9 +2241,7 @@ describe('ClaudeCodeSDKProvider', () => {
             ]),
           );
 
-          const provider = new ClaudeCodeSDKProvider({
-            env: { ANTHROPIC_API_KEY: 'test-api-key' },
-          });
+          const provider = new ClaudeCodeSDKProvider(createAnthropicEnvOptions());
           const result = await provider.callApi('Test prompt');
 
           expect(result.error).toBe(
@@ -2232,15 +2335,9 @@ describe('ClaudeCodeSDKProvider', () => {
           options: {
             config: {
               apiKey: 'meta-model-api-key',
-              env: {
-                ANTHROPIC_BASE_URL: 'https://api.meta.ai',
-                ANTHROPIC_CUSTOM_HEADERS: '',
-              },
+              env: createMetaGatewayEnv(),
             },
-            env: {
-              ANTHROPIC_BASE_URL: 'https://api.meta.ai',
-              ANTHROPIC_CUSTOM_HEADERS: '',
-            } as EnvOverrides,
+            env: createMetaGatewayEnv() as EnvOverrides,
           },
           env: { ANTHROPIC_BASE_URL: 'https://anthropic-gateway.example' } as EnvOverrides,
         });
@@ -2286,9 +2383,7 @@ describe('ClaudeCodeSDKProvider', () => {
       it('preserves the previous five-level subagent nesting default', async () => {
         mockQuery.mockReturnValue(createMockResponse('ok'));
 
-        const provider = new ClaudeCodeSDKProvider({
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new ClaudeCodeSDKProvider(createAnthropicEnvOptions());
         await provider.callApi('prompt');
 
         const callArgs = mockQuery.mock.calls.at(-1)?.[0];
@@ -2396,10 +2491,7 @@ describe('ClaudeCodeSDKProvider', () => {
       it('enables native model and tool tracing only when deep tracing is requested', async () => {
         mockQuery.mockReturnValue(createMockResponse('ok'));
 
-        const provider = new ClaudeCodeSDKProvider({
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-          config: { deep_tracing: true },
-        });
+        const provider = new ClaudeCodeSDKProvider(createTracedClaudeOptions());
         await provider.callApi('prompt');
 
         const env = mockQuery.mock.calls.at(-1)?.[0].options.env;
@@ -2448,10 +2540,7 @@ describe('ClaudeCodeSDKProvider', () => {
             otlp: { http: { enabled: true, host: '127.0.0.2', port: 14318 } },
           },
           async () => {
-            const provider = new ClaudeCodeSDKProvider({
-              env: { ANTHROPIC_API_KEY: 'test-api-key' },
-              config: { deep_tracing: true },
-            });
+            const provider = new ClaudeCodeSDKProvider(createTracedClaudeOptions());
             await provider.callApi('prompt');
 
             expect(mockQuery.mock.calls.at(-1)?.[0].options.env.OTEL_EXPORTER_OTLP_ENDPOINT).toBe(
@@ -2482,10 +2571,7 @@ describe('ClaudeCodeSDKProvider', () => {
               },
             },
             async () => {
-              const provider = new ClaudeCodeSDKProvider({
-                env: { ANTHROPIC_API_KEY: 'test-api-key' },
-                config: { deep_tracing: true },
-              });
+              const provider = new ClaudeCodeSDKProvider(createTracedClaudeOptions());
               await provider.callApi('prompt');
 
               expect(mockQuery.mock.calls.at(-1)?.[0].options.env.OTEL_EXPORTER_OTLP_PROTOCOL).toBe(
@@ -2502,10 +2588,7 @@ describe('ClaudeCodeSDKProvider', () => {
         await cliState.withRequestTracingConfig(
           { enabled: true, otlp: { http: { enabled: true, host: '::1', port: 14318 } } },
           async () => {
-            const provider = new ClaudeCodeSDKProvider({
-              env: { ANTHROPIC_API_KEY: 'test-api-key' },
-              config: { deep_tracing: true },
-            });
+            const provider = new ClaudeCodeSDKProvider(createTracedClaudeOptions());
             await provider.callApi('prompt');
 
             expect(mockQuery.mock.calls.at(-1)?.[0].options.env.OTEL_EXPORTER_OTLP_ENDPOINT).toBe(
@@ -2537,9 +2620,7 @@ describe('ClaudeCodeSDKProvider', () => {
       it('should propagate context.traceparent to env.TRACEPARENT for subprocess parenting', async () => {
         mockQuery.mockReturnValue(createMockResponse('ok'));
 
-        const provider = new ClaudeCodeSDKProvider({
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new ClaudeCodeSDKProvider(createAnthropicEnvOptions());
         const traceparent = '00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01';
         await provider.callApi('prompt', {
           traceparent,
@@ -2559,9 +2640,7 @@ describe('ClaudeCodeSDKProvider', () => {
       it('should not set TRACEPARENT when no active trace context is provided', async () => {
         mockQuery.mockReturnValue(createMockResponse('ok'));
 
-        const provider = new ClaudeCodeSDKProvider({
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new ClaudeCodeSDKProvider(createAnthropicEnvOptions());
         await provider.callApi('prompt');
 
         const callArgs = mockQuery.mock.calls.at(-1)?.[0];
@@ -2574,9 +2653,7 @@ describe('ClaudeCodeSDKProvider', () => {
         try {
           mockQuery.mockImplementation(() => createMockResponse('cached-output'));
 
-          const provider = new ClaudeCodeSDKProvider({
-            env: { ANTHROPIC_API_KEY: 'test-api-key' },
-          });
+          const provider = new ClaudeCodeSDKProvider(createAnthropicEnvOptions());
 
           const first = await provider.callApi('same prompt', {
             traceparent: '00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01',
@@ -2605,9 +2682,7 @@ describe('ClaudeCodeSDKProvider', () => {
       it('injects promptfoo.trace_id and promptfoo.parent_span_id as OTEL_RESOURCE_ATTRIBUTES', async () => {
         mockQuery.mockReturnValue(createMockResponse('ok'));
 
-        const provider = new ClaudeCodeSDKProvider({
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new ClaudeCodeSDKProvider(createAnthropicEnvOptions());
         const traceId = '0af7651916cd43dd8448eb211c80319c';
         const spanId = 'b7ad6b7169203331';
         await provider.callApi('prompt', {
@@ -2665,9 +2740,7 @@ describe('ClaudeCodeSDKProvider', () => {
           const restoreEnv = mockProcessEnv({ OTEL_RESOURCE_ATTRIBUTES: 'service.name=host-app' });
           try {
             mockQuery.mockReturnValue(createMockResponse('ok'));
-            const provider = new ClaudeCodeSDKProvider({
-              env: { ANTHROPIC_API_KEY: 'test-api-key' },
-            });
+            const provider = new ClaudeCodeSDKProvider(createAnthropicEnvOptions());
 
             await provider.callApi('prompt', {
               traceparent,
@@ -2718,9 +2791,7 @@ describe('ClaudeCodeSDKProvider', () => {
       it('skips OTEL_RESOURCE_ATTRIBUTES entirely when traceparent is malformed', async () => {
         mockQuery.mockReturnValue(createMockResponse('ok'));
 
-        const provider = new ClaudeCodeSDKProvider({
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new ClaudeCodeSDKProvider(createAnthropicEnvOptions());
         await provider.callApi('prompt', {
           // Missing the span_id segment.
           traceparent: '00-0af7651916cd43dd8448eb211c80319c',
@@ -2737,9 +2808,7 @@ describe('ClaudeCodeSDKProvider', () => {
       it('should create temp directory when no working_dir specified', async () => {
         mockQuery.mockReturnValue(createMockResponse('Response'));
 
-        const provider = new ClaudeCodeSDKProvider({
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new ClaudeCodeSDKProvider(createAnthropicEnvOptions());
         await provider.callApi('Test prompt');
 
         expect(tempDirSpy).toHaveBeenCalledWith(
@@ -2754,10 +2823,7 @@ describe('ClaudeCodeSDKProvider', () => {
       it('should use custom working_dir when provided', async () => {
         mockQuery.mockReturnValue(createMockResponse('Response'));
 
-        const provider = new ClaudeCodeSDKProvider({
-          config: { working_dir: '/custom/dir' },
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new ClaudeCodeSDKProvider(createWorkingDirectoryOptions('/custom/dir'));
         await provider.callApi('Test prompt');
 
         expect(statSyncSpy).toHaveBeenCalledWith('/custom/dir');
@@ -2822,9 +2888,7 @@ describe('ClaudeCodeSDKProvider', () => {
       it('should cleanup temp dir even on error', async () => {
         mockQuery.mockRejectedValue(new Error('API error'));
 
-        const provider = new ClaudeCodeSDKProvider({
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new ClaudeCodeSDKProvider(createAnthropicEnvOptions());
         await provider.callApi('Test prompt');
 
         expect(rmSyncSpy).toHaveBeenCalledWith('/tmp/test-temp-dir', {
@@ -2838,9 +2902,7 @@ describe('ClaudeCodeSDKProvider', () => {
       it('should use no tools by default when no working directory is provided', async () => {
         mockQuery.mockReturnValue(createMockResponse('Response'));
 
-        const provider = new ClaudeCodeSDKProvider({
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new ClaudeCodeSDKProvider(createAnthropicEnvOptions());
         await provider.callApi('Test prompt');
 
         expect(mockQuery).toHaveBeenCalledWith({
@@ -2855,10 +2917,7 @@ describe('ClaudeCodeSDKProvider', () => {
       it('should use read-only tools by default when working directory is provided', async () => {
         mockQuery.mockReturnValue(createMockResponse('Response'));
 
-        const provider = new ClaudeCodeSDKProvider({
-          config: { working_dir: './test-dir' },
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new ClaudeCodeSDKProvider(createWorkingDirectoryOptions('./test-dir'));
         await provider.callApi('Test prompt');
 
         expect(mockQuery).toHaveBeenCalledWith({
@@ -2873,10 +2932,7 @@ describe('ClaudeCodeSDKProvider', () => {
       it('preserves task and todo tools when all tools are allowed', async () => {
         mockQuery.mockReturnValue(createMockResponse('Response'));
 
-        const provider = new ClaudeCodeSDKProvider({
-          config: { allow_all_tools: true },
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new ClaudeCodeSDKProvider(createAllToolsOptions());
         await provider.callApi('Test prompt');
 
         const callArgs = mockQuery.mock.calls.at(-1)?.[0];
@@ -2904,10 +2960,7 @@ describe('ClaudeCodeSDKProvider', () => {
       it('does not enable task tools for restricted tool configurations', async () => {
         mockQuery.mockReturnValue(createMockResponse('Response'));
 
-        const provider = new ClaudeCodeSDKProvider({
-          config: { working_dir: './test-dir' },
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new ClaudeCodeSDKProvider(createWorkingDirectoryOptions('./test-dir'));
         await provider.callApi('Test prompt');
 
         const callArgs = mockQuery.mock.calls.at(-1)?.[0];
@@ -2919,10 +2972,7 @@ describe('ClaudeCodeSDKProvider', () => {
         mockQuery.mockReturnValue(createMockResponse('Response'));
 
         // Test default allowed tools with working directory
-        const provider1 = new ClaudeCodeSDKProvider({
-          config: { working_dir: './test-dir' },
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider1 = new ClaudeCodeSDKProvider(createWorkingDirectoryOptions('./test-dir'));
         await provider1.callApi('Test prompt');
 
         expect(mockQuery).toHaveBeenCalledWith({
@@ -3001,10 +3051,7 @@ describe('ClaudeCodeSDKProvider', () => {
 
       it('uses the Claude Code preset as the availability set for allow_all_tools', async () => {
         mockQuery.mockReturnValue(createMockResponse('Response'));
-        const provider = new ClaudeCodeSDKProvider({
-          config: { allow_all_tools: true },
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new ClaudeCodeSDKProvider(createAllToolsOptions());
 
         await provider.callApi('Test prompt');
 
@@ -3468,9 +3515,7 @@ describe('ClaudeCodeSDKProvider', () => {
       it('should reject an aborted request instead of returning a cached response', async () => {
         mockQuery.mockImplementation(() => createMockResponse('Cached response'));
 
-        const provider = new ClaudeCodeSDKProvider({
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new ClaudeCodeSDKProvider(createAnthropicEnvOptions());
         await provider.callApi('Cached abort prompt');
 
         const abortController = new AbortController();
@@ -3493,9 +3538,7 @@ describe('ClaudeCodeSDKProvider', () => {
           return JSON.stringify({ output: 'Cached response' });
         });
 
-        const provider = new ClaudeCodeSDKProvider({
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new ClaudeCodeSDKProvider(createAnthropicEnvOptions());
         const result = await provider.callApi('Cancellation during cache lookup', undefined, {
           abortSignal: abortController.signal,
         });
@@ -3510,9 +3553,7 @@ describe('ClaudeCodeSDKProvider', () => {
         const abortController = new AbortController();
         abortController.abort();
 
-        const provider = new ClaudeCodeSDKProvider({
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new ClaudeCodeSDKProvider(createAnthropicEnvOptions());
         const result = await provider.callApi('Abort before temporary directory', undefined, {
           abortSignal: abortController.signal,
         });
@@ -3530,9 +3571,7 @@ describe('ClaudeCodeSDKProvider', () => {
           return '/tmp/test-temp-dir';
         });
 
-        const provider = new ClaudeCodeSDKProvider({
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new ClaudeCodeSDKProvider(createAnthropicEnvOptions());
         const result = await provider.callApi(
           'Abort during temporary directory creation',
           undefined,
@@ -3552,9 +3591,7 @@ describe('ClaudeCodeSDKProvider', () => {
       it('should handle abort signal scenarios', async () => {
         mockQuery.mockReturnValue(createMockResponse('Response'));
 
-        const provider = new ClaudeCodeSDKProvider({
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new ClaudeCodeSDKProvider(createAnthropicEnvOptions());
 
         // Test normal abort signal propagation - use unique prompt
         const abortController1 = new AbortController();
@@ -3848,9 +3885,7 @@ describe('ClaudeCodeSDKProvider', () => {
           async (wrappedWithMetadata) => {
             mockQuery.mockReturnValue(createMockResponse('Response'));
 
-            const provider = new ClaudeCodeSDKProvider({
-              env: { ANTHROPIC_API_KEY: 'test-api-key' },
-            });
+            const provider = new ClaudeCodeSDKProvider(createAnthropicEnvOptions());
             await provider.callApi('Test prompt');
 
             const callArgs = mockQuery.mock.calls.at(-1)?.[0];
@@ -4115,10 +4150,7 @@ describe('ClaudeCodeSDKProvider', () => {
         it('does not install transcript redaction hooks when full forwarding is enabled', async () => {
           mockQuery.mockReturnValue(createMockResponse('Response'));
 
-          const provider = new ClaudeCodeSDKProvider({
-            config: { forward_subagent_text: true },
-            env: { ANTHROPIC_API_KEY: 'test-api-key' },
-          });
+          const provider = new ClaudeCodeSDKProvider(createForwardSubagentTextOptions());
           await provider.callApi('Test prompt');
 
           const callArgs = mockQuery.mock.calls.at(-1)?.[0];
@@ -4128,14 +4160,7 @@ describe('ClaudeCodeSDKProvider', () => {
         it('with ask_user_question configuration creates canUseTool callback', async () => {
           mockQuery.mockReturnValue(createMockResponse('Response'));
 
-          const provider = new ClaudeCodeSDKProvider({
-            config: {
-              ask_user_question: {
-                behavior: 'first_option',
-              },
-            },
-            env: { ANTHROPIC_API_KEY: 'test-api-key' },
-          });
+          const provider = new ClaudeCodeSDKProvider(createFirstOptionQuestionOptions());
           await provider.callApi('Test prompt');
 
           expect(mockQuery).toHaveBeenCalledWith({
@@ -4283,12 +4308,7 @@ describe('ClaudeCodeSDKProvider', () => {
         it('with ask_user_question denies unrelated permission requests by default', async () => {
           mockQuery.mockReturnValue(createMockResponse('Response'));
 
-          const provider = new ClaudeCodeSDKProvider({
-            config: {
-              ask_user_question: { behavior: 'first_option' },
-            },
-            env: { ANTHROPIC_API_KEY: 'test-api-key' },
-          });
+          const provider = new ClaudeCodeSDKProvider(createFirstOptionQuestionOptions());
           await provider.callApi('Test prompt');
 
           const callArgs = mockQuery.mock.calls[0][0];
@@ -4358,10 +4378,7 @@ describe('ClaudeCodeSDKProvider', () => {
 
         it('denies malformed AskUserQuestion tool input', async () => {
           mockQuery.mockReturnValue(createMockResponse('Response'));
-          const provider = new ClaudeCodeSDKProvider({
-            config: { ask_user_question: { behavior: 'first_option' } },
-            env: { ANTHROPIC_API_KEY: 'test-api-key' },
-          });
+          const provider = new ClaudeCodeSDKProvider(createFirstOptionQuestionOptions());
           await provider.callApi('Test prompt');
 
           const canUseTool = mockQuery.mock.calls[0][0].options.canUseTool;
@@ -4391,10 +4408,7 @@ describe('ClaudeCodeSDKProvider', () => {
           },
         ])('denies incomplete AskUserQuestion question objects %#', async (question) => {
           mockQuery.mockReturnValue(createMockResponse('Response'));
-          const provider = new ClaudeCodeSDKProvider({
-            config: { ask_user_question: { behavior: 'first_option' } },
-            env: { ANTHROPIC_API_KEY: 'test-api-key' },
-          });
+          const provider = new ClaudeCodeSDKProvider(createFirstOptionQuestionOptions());
           await provider.callApi('Test prompt');
 
           const canUseTool = mockQuery.mock.calls[0][0].options.canUseTool;
@@ -4412,10 +4426,7 @@ describe('ClaudeCodeSDKProvider', () => {
 
         it('preserves prototype-shaped AskUserQuestion keys as own answers', async () => {
           mockQuery.mockReturnValue(createMockResponse('Response'));
-          const provider = new ClaudeCodeSDKProvider({
-            config: { ask_user_question: { behavior: 'first_option' } },
-            env: { ANTHROPIC_API_KEY: 'test-api-key' },
-          });
+          const provider = new ClaudeCodeSDKProvider(createFirstOptionQuestionOptions());
           await provider.callApi('Test prompt');
 
           const canUseTool = mockQuery.mock.calls[0][0].options.canUseTool;
@@ -5407,12 +5418,7 @@ describe('ClaudeCodeSDKProvider', () => {
         it('with forward_subagent_text configuration', async () => {
           mockQuery.mockReturnValue(createMockResponse('Response'));
 
-          const provider = new ClaudeCodeSDKProvider({
-            config: {
-              forward_subagent_text: true,
-            },
-            env: { ANTHROPIC_API_KEY: 'test-api-key' },
-          });
+          const provider = new ClaudeCodeSDKProvider(createForwardSubagentTextOptions());
           await provider.callApi('Test prompt');
 
           expect(mockQuery).toHaveBeenCalledWith({
@@ -5649,14 +5655,26 @@ describe('ClaudeCodeSDKProvider', () => {
     });
 
     describe('caching behavior', () => {
+      const createCacheBypassCheck = () => async (config: ClaudeCodeOptions) => {
+        mockQuery.mockReturnValue(createMockResponse('Response'));
+        await clearCache();
+        const provider = new ClaudeCodeSDKProvider({
+          config,
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+
+        await provider.callApi('Test prompt');
+        await provider.callApi('Test prompt');
+
+        expect(mockQuery).toHaveBeenCalledTimes(2);
+      };
+
       it('should cache responses', async () => {
         mockQuery.mockImplementation(function () {
           return createMockResponse('Cached response', { input_tokens: 10, output_tokens: 20 });
         });
 
-        const provider = new ClaudeCodeSDKProvider({
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new ClaudeCodeSDKProvider(createAnthropicEnvOptions());
 
         // First call - should hit the API
         const result1 = await provider.callApi('Test prompt');
@@ -5701,10 +5719,7 @@ describe('ClaudeCodeSDKProvider', () => {
         mockQuery
           .mockReturnValueOnce(createMockResponse('No MCP'))
           .mockReturnValueOnce(createMockResponse('Singular MCP'));
-        const provider = new ClaudeCodeSDKProvider({
-          config: { cache_mcp: true },
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new ClaudeCodeSDKProvider(createCachedMcpOptions());
         await provider.callApi('Same prompt');
 
         const result = await provider.callApi('Same prompt', {
@@ -5886,10 +5901,7 @@ describe('ClaudeCodeSDKProvider', () => {
         mockQuery
           .mockReturnValueOnce(createMockResponse('Response A'))
           .mockReturnValueOnce(createMockResponse('Response B'));
-        const provider = new ClaudeCodeSDKProvider({
-          config: { cache_mcp: true },
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new ClaudeCodeSDKProvider(createCachedMcpOptions());
         const contextFor = (name: string): CallApiContextParams => ({
           prompt: {
             raw: 'Test prompt',
@@ -5920,9 +5932,7 @@ describe('ClaudeCodeSDKProvider', () => {
           createMockResponse('Response v1', { input_tokens: 10, output_tokens: 20 }),
         );
 
-        const provider = new ClaudeCodeSDKProvider({
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new ClaudeCodeSDKProvider(createAnthropicEnvOptions());
 
         // First call - populates cache
         await provider.callApi('Test prompt');
@@ -5977,10 +5987,7 @@ describe('ClaudeCodeSDKProvider', () => {
           return originalStatSync?.(path) ?? ({} as fs.Stats);
         });
 
-        const provider = new ClaudeCodeSDKProvider({
-          config: { working_dir: '/custom/dir' },
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new ClaudeCodeSDKProvider(createWorkingDirectoryOptions('/custom/dir'));
 
         // First call with working directory
         await provider.callApi('Test prompt');
@@ -6016,10 +6023,7 @@ describe('ClaudeCodeSDKProvider', () => {
         // Clear cache to simulate new provider instance
         await clearCache();
 
-        const provider2 = new ClaudeCodeSDKProvider({
-          config: { working_dir: '/custom/dir' },
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider2 = new ClaudeCodeSDKProvider(createWorkingDirectoryOptions('/custom/dir'));
 
         // Third call with changed file - should NOT use cache
         await provider2.callApi('Test prompt');
@@ -6033,9 +6037,7 @@ describe('ClaudeCodeSDKProvider', () => {
 
         disableCache();
 
-        const provider = new ClaudeCodeSDKProvider({
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new ClaudeCodeSDKProvider(createAnthropicEnvOptions());
 
         // Even with read-only config, should not cache when disabled
         await provider.callApi('Test prompt');
@@ -6073,19 +6075,7 @@ describe('ClaudeCodeSDKProvider', () => {
         ['inline settings', { settings: { permissions: { allow: ['Read'] } } }],
         ['settings file', { settings: '/tmp/claude-settings.json' }],
         ['managed settings', { managed_settings: { permissions: { deny: ['Bash'] } } }],
-      ])('should bypass cache for %s', async (_name, config) => {
-        mockQuery.mockReturnValue(createMockResponse('Response'));
-        await clearCache();
-        const provider = new ClaudeCodeSDKProvider({
-          config,
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
-
-        await provider.callApi('Test prompt');
-        await provider.callApi('Test prompt');
-
-        expect(mockQuery).toHaveBeenCalledTimes(2);
-      });
+      ])('should bypass cache for %s', (_name, config) => createCacheBypassCheck()(config));
 
       it.each([
         { verbose: null },
@@ -6112,19 +6102,7 @@ describe('ClaudeCodeSDKProvider', () => {
         { continue: true },
         { resume: '11111111-1111-4111-8111-111111111111' },
         { session_id: '22222222-2222-4222-8222-222222222222' },
-      ])('should bypass cache for mutable session history %#', async (config) => {
-        mockQuery.mockReturnValue(createMockResponse('Response'));
-        await clearCache();
-        const provider = new ClaudeCodeSDKProvider({
-          config,
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
-
-        await provider.callApi('Test prompt');
-        await provider.callApi('Test prompt');
-
-        expect(mockQuery).toHaveBeenCalledTimes(2);
-      });
+      ])('should bypass cache for mutable session history %#', createCacheBypassCheck());
 
       it.each([
         { apiKeyRequired: false },
@@ -6148,10 +6126,7 @@ describe('ClaudeCodeSDKProvider', () => {
 
         await clearCache();
 
-        const provider = new ClaudeCodeSDKProvider({
-          config: { ask_user_question: { behavior: 'first_option' } },
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new ClaudeCodeSDKProvider(createFirstOptionQuestionOptions());
 
         const first = await provider.callApi('Test prompt');
         const denied = await provider.callApi('Test prompt', {
@@ -6198,9 +6173,7 @@ describe('ClaudeCodeSDKProvider', () => {
 
         const errorSpy = vi.spyOn(logger, 'error').mockImplementation(function () {});
 
-        const provider = new ClaudeCodeSDKProvider({
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new ClaudeCodeSDKProvider(createAnthropicEnvOptions());
 
         // Should complete successfully even if cache write fails
         const result = await provider.callApi('Test prompt');
@@ -6330,14 +6303,7 @@ describe('ClaudeCodeSDKProvider', () => {
             {
               type: 'assistant',
               parent_tool_use_id: null,
-              message: createMockBetaMessage([
-                {
-                  type: 'tool_use',
-                  id: 'tool-1',
-                  name: 'Read',
-                  input: { file_path: '/test/file.ts' },
-                },
-              ]),
+              message: createMockBetaMessage([createReadToolUse()]),
               session_id: 'test-session',
             },
             {
@@ -6371,9 +6337,7 @@ describe('ClaudeCodeSDKProvider', () => {
           ]),
         );
 
-        const provider = new ClaudeCodeSDKProvider({
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new ClaudeCodeSDKProvider(createAnthropicEnvOptions());
         const result = await provider.callApi('Read the file');
 
         expect(result.output).toBe('Done');
@@ -6440,9 +6404,7 @@ describe('ClaudeCodeSDKProvider', () => {
           ]),
         );
 
-        const provider = new ClaudeCodeSDKProvider({
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new ClaudeCodeSDKProvider(createAnthropicEnvOptions());
         const result = await provider.callApi('Check project standards');
 
         expect(result.metadata?.skillCalls).toEqual([
@@ -6507,9 +6469,7 @@ describe('ClaudeCodeSDKProvider', () => {
           ]),
         );
 
-        const provider = new ClaudeCodeSDKProvider({
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new ClaudeCodeSDKProvider(createAnthropicEnvOptions());
         const result = await provider.callApi('Check project standards');
 
         expect(result.metadata?.skillCalls).toEqual([]);
@@ -6600,9 +6560,7 @@ describe('ClaudeCodeSDKProvider', () => {
           ]),
         );
 
-        const provider = new ClaudeCodeSDKProvider({
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new ClaudeCodeSDKProvider(createAnthropicEnvOptions());
         const result = await provider.callApi('Run analysis');
 
         expect(result.metadata?.toolCalls).toHaveLength(3);
@@ -6639,9 +6597,7 @@ describe('ClaudeCodeSDKProvider', () => {
           createMockResponse('Simple response', { input_tokens: 10, output_tokens: 20 }),
         );
 
-        const provider = new ClaudeCodeSDKProvider({
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new ClaudeCodeSDKProvider(createAnthropicEnvOptions());
         const result = await provider.callApi('Simple question');
 
         expect(result.output).toBe('Simple response');
@@ -6695,9 +6651,7 @@ describe('ClaudeCodeSDKProvider', () => {
           ]),
         );
 
-        const provider = new ClaudeCodeSDKProvider({
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new ClaudeCodeSDKProvider(createAnthropicEnvOptions());
         const result = await provider.callApi('Do something dangerous');
 
         expect(result.error).toBe('Claude Agent SDK call failed: error_during_execution');
@@ -6719,14 +6673,7 @@ describe('ClaudeCodeSDKProvider', () => {
             {
               type: 'assistant',
               parent_tool_use_id: null,
-              message: createMockBetaMessage([
-                {
-                  type: 'tool_use',
-                  id: 'tool-1',
-                  name: 'Read',
-                  input: { file_path: '/test/file.ts' },
-                },
-              ]),
+              message: createMockBetaMessage([createReadToolUse()]),
               session_id: 'test-session',
             },
             // No user message with tool_result for tool-1
@@ -6747,9 +6694,7 @@ describe('ClaudeCodeSDKProvider', () => {
           ]),
         );
 
-        const provider = new ClaudeCodeSDKProvider({
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new ClaudeCodeSDKProvider(createAnthropicEnvOptions());
         const result = await provider.callApi('Read a file');
 
         expect(result.metadata?.toolCalls).toEqual([
@@ -6813,9 +6758,7 @@ describe('ClaudeCodeSDKProvider', () => {
           ]),
         );
 
-        const provider = new ClaudeCodeSDKProvider({
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new ClaudeCodeSDKProvider(createAnthropicEnvOptions());
         const result = await provider.callApi('Analyze the code');
 
         expect(result.output).toEqual(structuredData);
@@ -6909,9 +6852,7 @@ describe('ClaudeCodeSDKProvider', () => {
           ]),
         );
 
-        const provider = new ClaudeCodeSDKProvider({
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new ClaudeCodeSDKProvider(createAnthropicEnvOptions());
         const result = await provider.callApi('Run tests using a sub-agent');
 
         expect(result.metadata?.toolCalls).toHaveLength(2);
@@ -6985,12 +6926,7 @@ describe('ClaudeCodeSDKProvider', () => {
               type: 'assistant',
               parent_tool_use_id: 'task-1',
               message: createMockBetaMessage([
-                {
-                  type: 'tool_use',
-                  id: 'sub-1',
-                  name: 'Glob',
-                  input: { pattern: '**/*.ts' },
-                },
+                createGlobToolUse(),
                 {
                   type: 'tool_use',
                   id: 'sub-2',
@@ -7051,9 +6987,7 @@ describe('ClaudeCodeSDKProvider', () => {
           ]),
         );
 
-        const provider = new ClaudeCodeSDKProvider({
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new ClaudeCodeSDKProvider(createAnthropicEnvOptions());
         const result = await provider.callApi('Analyze the project');
 
         expect(result.metadata?.toolCalls).toHaveLength(4);
@@ -7112,31 +7046,10 @@ describe('ClaudeCodeSDKProvider', () => {
             {
               type: 'assistant',
               parent_tool_use_id: null,
-              message: createMockBetaMessage([
-                {
-                  type: 'tool_use',
-                  id: 'tool-1',
-                  name: 'Read',
-                  input: { file_path: '/test/file.ts' },
-                },
-              ]),
+              message: createMockBetaMessage([createReadToolUse()]),
               session_id: 'test-session',
             },
-            {
-              type: 'user',
-              message: {
-                role: 'user',
-                content: [
-                  {
-                    type: 'tool_result',
-                    tool_use_id: 'tool-1',
-                    content: 'file contents here',
-                    is_error: false,
-                  },
-                ],
-              },
-              session_id: 'test-session',
-            },
+            createReadToolResultMessage(),
             {
               type: 'result',
               subtype: 'success',
@@ -7154,9 +7067,7 @@ describe('ClaudeCodeSDKProvider', () => {
           ]),
         );
 
-        const provider = new ClaudeCodeSDKProvider({
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new ClaudeCodeSDKProvider(createAnthropicEnvOptions());
         await provider.callApi('prompt');
 
         const toolSpan = emittedSpans.find((s) => s.name === 'tool Read');
@@ -7230,31 +7141,10 @@ describe('ClaudeCodeSDKProvider', () => {
               {
                 type: 'assistant',
                 parent_tool_use_id: null,
-                message: createMockBetaMessage([
-                  {
-                    type: 'tool_use',
-                    id: 'tool-1',
-                    name: 'Read',
-                    input: { file_path: '/test/file.ts' },
-                  },
-                ]),
+                message: createMockBetaMessage([createReadToolUse()]),
                 session_id: 'test-session',
               },
-              {
-                type: 'user',
-                message: {
-                  role: 'user',
-                  content: [
-                    {
-                      type: 'tool_result',
-                      tool_use_id: 'tool-1',
-                      content: 'file contents here',
-                      is_error: false,
-                    },
-                  ],
-                },
-                session_id: 'test-session',
-              },
+              createReadToolResultMessage(),
               {
                 type: 'result',
                 subtype: 'success',
@@ -7287,11 +7177,7 @@ describe('ClaudeCodeSDKProvider', () => {
             },
           });
           if (activateReceiver) {
-            cliState.setActiveOtlpReceiver({
-              host: '127.0.0.1',
-              port: 4318,
-              acceptFormats: ['json'],
-            });
+            cliState.setActiveOtlpReceiver(createOtlpOptions());
           }
           const result = configureReceiver
             ? await cliState.withRequestTracingConfig(
@@ -7356,16 +7242,9 @@ describe('ClaudeCodeSDKProvider', () => {
             },
           ]),
         );
-        cliState.setActiveOtlpReceiver({
-          host: '127.0.0.1',
-          port: 4318,
-          acceptFormats: ['json'],
-        });
+        cliState.setActiveOtlpReceiver(createOtlpOptions());
 
-        const provider = new ClaudeCodeSDKProvider({
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-          config: { deep_tracing: true },
-        });
+        const provider = new ClaudeCodeSDKProvider(createTracedClaudeOptions());
         const result = await cliState.withRequestTracingConfig(
           { enabled: true, otlp: { http: { enabled: true, port: 4318 } } },
           () =>
@@ -7427,11 +7306,7 @@ describe('ClaudeCodeSDKProvider', () => {
             },
           ]),
         );
-        cliState.setActiveOtlpReceiver({
-          host: '127.0.0.1',
-          port: 4318,
-          acceptFormats: ['json'],
-        });
+        cliState.setActiveOtlpReceiver(createOtlpOptions());
         const warn = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
 
         const provider = new ClaudeCodeSDKProvider({
@@ -7511,9 +7386,7 @@ describe('ClaudeCodeSDKProvider', () => {
           ]),
         );
 
-        const provider = new ClaudeCodeSDKProvider({
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new ClaudeCodeSDKProvider(createAnthropicEnvOptions());
         await provider.callApi('prompt');
 
         const toolSpan = emittedSpans.find((s) => s.name === 'tool Bash');
@@ -7557,9 +7430,7 @@ describe('ClaudeCodeSDKProvider', () => {
           ]),
         );
 
-        const provider = new ClaudeCodeSDKProvider({
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new ClaudeCodeSDKProvider(createAnthropicEnvOptions());
         await provider.callApi('prompt');
 
         const toolSpan = emittedSpans.find((s) => s.name === 'tool Read');
@@ -7625,9 +7496,7 @@ describe('ClaudeCodeSDKProvider', () => {
           ]),
         );
 
-        const provider = new ClaudeCodeSDKProvider({
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new ClaudeCodeSDKProvider(createAnthropicEnvOptions());
         const result = await provider.callApi('prompt');
 
         // Main agent's result wins.
@@ -7685,9 +7554,7 @@ describe('ClaudeCodeSDKProvider', () => {
           ]),
         );
 
-        const provider = new ClaudeCodeSDKProvider({
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new ClaudeCodeSDKProvider(createAnthropicEnvOptions());
         const result = await provider.callApi('prompt');
 
         expect(result.output).toBe('main clean');
@@ -7715,25 +7582,14 @@ describe('ClaudeCodeSDKProvider', () => {
               num_turns: 2,
               permission_denials: [],
               modelUsage: {
-                'claude-haiku-4-5-20251001': {
-                  inputTokens: 1,
-                  outputTokens: 1,
-                  cacheReadInputTokens: 0,
-                  cacheCreationInputTokens: 0,
-                  webSearchRequests: 0,
-                  costUSD: 0,
-                  contextWindow: 200000,
-                  maxOutputTokens: 8192,
-                },
+                'claude-haiku-4-5-20251001': createMinimalModelUsage(),
               },
               terminal_reason: 'max_turns' as TerminalReason,
             },
           ]),
         );
 
-        const provider = new ClaudeCodeSDKProvider({
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new ClaudeCodeSDKProvider(createAnthropicEnvOptions());
         const result = await provider.callApi('prompt');
 
         // Attributes land on the wrapping provider span; exercised end-to-end in
@@ -7774,9 +7630,7 @@ describe('ClaudeCodeSDKProvider', () => {
           ]),
         );
 
-        const provider = new ClaudeCodeSDKProvider({
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new ClaudeCodeSDKProvider(createAnthropicEnvOptions());
         const result = await provider.callApi('prompt');
 
         expect(result.output).toBe('partial output');
@@ -7796,14 +7650,7 @@ describe('ClaudeCodeSDKProvider', () => {
             {
               type: 'assistant',
               parent_tool_use_id: 'task-1',
-              message: createMockBetaMessage([
-                {
-                  type: 'tool_use',
-                  id: 'sub-1',
-                  name: 'Glob',
-                  input: { pattern: '**/*.ts' },
-                },
-              ]),
+              message: createMockBetaMessage([createGlobToolUse()]),
               session_id: 'test-session',
             },
             {
@@ -7838,9 +7685,7 @@ describe('ClaudeCodeSDKProvider', () => {
           ]),
         );
 
-        const provider = new ClaudeCodeSDKProvider({
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new ClaudeCodeSDKProvider(createAnthropicEnvOptions());
         await provider.callApi('prompt');
 
         const toolSpan = emittedSpans.find((s) => s.name === 'tool Glob');
@@ -7899,9 +7744,7 @@ describe('ClaudeCodeSDKProvider', () => {
           ]),
         );
 
-        const provider = new ClaudeCodeSDKProvider({
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new ClaudeCodeSDKProvider(createAnthropicEnvOptions());
         await provider.callApi('prompt');
 
         const toolSpan = emittedSpans.find((s) => s.name === 'tool Bash');
@@ -7964,9 +7807,7 @@ describe('ClaudeCodeSDKProvider', () => {
           ]),
         );
 
-        const provider = new ClaudeCodeSDKProvider({
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new ClaudeCodeSDKProvider(createAnthropicEnvOptions());
         await provider.callApi('prompt');
 
         const toolSpan = emittedSpans.find((s) => s.name === 'tool Weird');
@@ -7992,16 +7833,7 @@ describe('ClaudeCodeSDKProvider', () => {
               permission_denials: [],
               modelUsage: {
                 // Low-usage first key would win if we used iteration order.
-                'claude-haiku-4-5': {
-                  inputTokens: 1,
-                  outputTokens: 1,
-                  cacheReadInputTokens: 0,
-                  cacheCreationInputTokens: 0,
-                  webSearchRequests: 0,
-                  costUSD: 0,
-                  contextWindow: 200000,
-                  maxOutputTokens: 8192,
-                },
+                'claude-haiku-4-5': createMinimalModelUsage(),
                 'claude-sonnet-4-5': {
                   inputTokens: 500,
                   outputTokens: 600,
@@ -8017,9 +7849,7 @@ describe('ClaudeCodeSDKProvider', () => {
           ]),
         );
 
-        const provider = new ClaudeCodeSDKProvider({
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new ClaudeCodeSDKProvider(createAnthropicEnvOptions());
         const result = await provider.callApi('prompt');
         expect(result.metadata?.modelUsage).toHaveProperty('claude-sonnet-4-5');
         // The extractor (not directly returned) uses modelUsage; this test proves
@@ -8062,9 +7892,7 @@ describe('ClaudeCodeSDKProvider', () => {
             ]),
           );
 
-          const provider = new ClaudeCodeSDKProvider({
-            env: { ANTHROPIC_API_KEY: 'test-api-key' },
-          });
+          const provider = new ClaudeCodeSDKProvider(createAnthropicEnvOptions());
           await provider.callApi('prompt');
 
           const turnSpans = emittedSpans.filter((s) => s.name.startsWith('gen_ai.turn '));
@@ -8143,9 +7971,7 @@ describe('ClaudeCodeSDKProvider', () => {
             ]),
           );
 
-          const provider = new ClaudeCodeSDKProvider({
-            env: { ANTHROPIC_API_KEY: 'test-api-key' },
-          });
+          const provider = new ClaudeCodeSDKProvider(createAnthropicEnvOptions());
           await provider.callApi('prompt');
 
           const toolSpans = emittedSpans.filter((s) => s.name.startsWith('tool '));
@@ -8184,9 +8010,7 @@ describe('ClaudeCodeSDKProvider', () => {
             ]),
           );
 
-          const provider = new ClaudeCodeSDKProvider({
-            env: { ANTHROPIC_API_KEY: 'test-api-key' },
-          });
+          const provider = new ClaudeCodeSDKProvider(createAnthropicEnvOptions());
           await provider.callApi('prompt');
 
           const turnSpan = emittedSpans.find((s) => s.name === 'gen_ai.turn 1');
@@ -8226,9 +8050,7 @@ describe('ClaudeCodeSDKProvider', () => {
             ]),
           );
 
-          const provider = new ClaudeCodeSDKProvider({
-            env: { ANTHROPIC_API_KEY: 'test-api-key' },
-          });
+          const provider = new ClaudeCodeSDKProvider(createAnthropicEnvOptions());
           await provider.callApi('prompt');
 
           const turnSpan = emittedSpans.find((s) => s.name === 'gen_ai.turn 1');
@@ -8293,9 +8115,7 @@ describe('ClaudeCodeSDKProvider', () => {
             ]),
           );
 
-          const provider = new ClaudeCodeSDKProvider({
-            env: { ANTHROPIC_API_KEY: 'test-api-key' },
-          });
+          const provider = new ClaudeCodeSDKProvider(createAnthropicEnvOptions());
           await provider.callApi('prompt');
 
           // The single subagent turn is marked as a subagent.
