@@ -103,7 +103,13 @@ function resolveLegacyMediaPath(uri: string): string | undefined {
     return encodeStoragePath(key) === undefined ? undefined : uri;
   }
   try {
-    return BLOB_HASH_REGEX.test(decodeURIComponent(key.replace(/\/$/, ''))) ? uri : undefined;
+    const hash = decodeURIComponent(key.replace(/\/$/, ''));
+    if (!BLOB_HASH_REGEX.test(hash)) {
+      return undefined;
+    }
+    const prefix = path.slice(0, path.length - key.length);
+    const trailingSlash = key.endsWith('/') ? '/' : '';
+    return `${prefix}${hash.toLowerCase()}${trailingSlash}${uri.slice(path.length)}`;
   } catch {
     return undefined;
   }
@@ -163,7 +169,7 @@ export function resolveBlobUri(uri?: string | null): string | undefined {
 
   if (uri.toLowerCase().startsWith(BLOB_URI_PREFIX)) {
     const hash = uri.slice(BLOB_URI_PREFIX.length);
-    return BLOB_HASH_REGEX.test(hash) ? withApiBase(`/api/blobs/${hash}`) : undefined;
+    return BLOB_HASH_REGEX.test(hash) ? withApiBase(`/api/blobs/${hash.toLowerCase()}`) : undefined;
   }
 
   if (uri.toLowerCase().startsWith(STORAGE_REF_PREFIX.toLowerCase())) {

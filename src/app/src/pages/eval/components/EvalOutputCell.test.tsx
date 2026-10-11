@@ -204,6 +204,11 @@ describe('EvalOutputCell', () => {
     ['storageRef:video/safe.png', '/api/media/video/safe.png'],
     ['<STORAGEREF:video/my image.png>', '/api/media/video/my%20image.png'],
     [`PROMPTFOO://BLOB/${'a'.repeat(64)}`, `/api/blobs/${'a'.repeat(64)}`],
+    [`promptfoo://blob/${'A'.repeat(64)}`, `/api/blobs/${'a'.repeat(64)}`],
+    [
+      `/api/blobs/${'%41'.repeat(64)}/?download=MyFile#Preview`,
+      `/api/blobs/${'a'.repeat(64)}/?download=MyFile#Preview`,
+    ],
     ['https://example.com/image.png', 'https://example.com/image.png'],
     [
       '/api/media/image/safe.png?download=1#preview',

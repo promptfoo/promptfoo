@@ -742,8 +742,6 @@ describe('resolveBlobUri security', () => {
     '/api/MeDiA/video/safe.mp4',
     `/api/blobs/${'a'.repeat(64)}?download=1#preview`,
     `/api/blobs/${'a'.repeat(64)}/?download=1`,
-    `/api/BlObS/${'A'.repeat(64)}`,
-    `/api/blobs/${'%61'.repeat(64)}`,
   ])('preserves legacy URL suffixes, encodings, and API base behavior: %s', (uri) => {
     vi.mocked(useApiConfig.getState).mockReturnValue(mockState('https://api.example.com/proxy'));
     expect(isLegacyMediaPath(uri)).toBe(true);
@@ -755,8 +753,31 @@ describe('resolveBlobUri security', () => {
   });
 
   it.each([
+    [`/api/BlObS/${'A'.repeat(64)}`, `/api/BlObS/${'a'.repeat(64)}`],
+    [`/api/blobs/${'%61'.repeat(64)}`, `/api/blobs/${'a'.repeat(64)}`],
+    [
+      `/api/blobs/${'%41'.repeat(64)}/?download=MyFile#Preview`,
+      `/api/blobs/${'a'.repeat(64)}/?download=MyFile#Preview`,
+    ],
+    [
+      `/api/blobs/${'AbCdEf01'.repeat(8)}?download=MyFile#Preview`,
+      `/api/blobs/${'abcdef01'.repeat(8)}?download=MyFile#Preview`,
+    ],
+  ])('canonicalizes a legacy blob hash without changing its URL suffix: %s', (uri, expected) => {
+    vi.mocked(useApiConfig.getState).mockReturnValue(mockState('https://api.example.com/proxy'));
+    expect(resolveBlobUri(uri)).toBe(expected);
+    expect(resolveBlobRef({ uri })).toBe(expected);
+    expect(resolveVideoSource({ url: uri, thumbnail: uri })).toEqual({
+      src: `https://api.example.com/proxy${expected}`,
+      poster: `https://api.example.com/proxy${expected}`,
+      type: 'video/mp4',
+    });
+  });
+
+  it.each([
     '/api/blobs/library',
     '/api/blobs/library/evals/?limit=1',
+    '/api/BlObS/LIBRARY/?hash=ABC#Preview',
     '/api/media/stats',
     '/api/output/video/legacy.mp4',
     '/api/eval/private',
@@ -852,11 +873,16 @@ describe('resolveBlobUri security', () => {
   });
 
   it.each(['a'.repeat(64), 'ABCDEF0123456789'.repeat(4)])(
-    'preserves supported SHA-256 IDs: %s',
+    'canonicalizes supported SHA-256 IDs: %s',
     (hash) => {
-      expect(resolveBlobUri(`promptfoo://blob/${hash}`)).toBe(`/api/blobs/${hash}`);
+      const expected = `/api/blobs/${hash.toLowerCase()}`;
+      expect(resolveBlobUri(`promptfoo://blob/${hash}`)).toBe(expected);
+      expect(resolveBlobRef({ hash })).toBe(expected);
+      expect(resolveBlobRef({ uri: `promptfoo://blob/${hash}` })).toBe(expected);
+      expect(resolveImageSource({ blobRef: { hash } })).toBe(expected);
+      expect(resolveAudioSource({ blobRef: { hash } })?.src).toBe(expected);
       expect(normalizeMediaText(`![media](PROMPTFOO://BLOB/${hash})`)).toBe(
-        `![media](/api/blobs/${hash})`,
+        `![media](${expected})`,
       );
     },
   );

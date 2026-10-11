@@ -1285,6 +1285,11 @@ describe('ResultsTable Metrics Display', () => {
       ['storageRef:video/safe.mp4', '/api/media/video/safe.mp4'],
       ['STORAGEREF:video/safe.mp4', '/api/media/video/safe.mp4'],
       [`PROMPTFOO://BLOB/${'a'.repeat(64)}`, `/api/blobs/${'a'.repeat(64)}`],
+      [`promptfoo://blob/${'A'.repeat(64)}`, `/api/blobs/${'a'.repeat(64)}`],
+      [
+        `/api/blobs/${'%41'.repeat(64)}/?download=MyFile#Preview`,
+        `/api/blobs/${'a'.repeat(64)}/?download=MyFile#Preview`,
+      ],
       ['/api/media/video/safe.mp4?download=1#t=0', '/api/media/video/safe.mp4?download=1#t=0'],
       ['/api/MeDiA/video/my%20clip.mp4', '/api/MeDiA/video/my%20clip.mp4'],
       [`/api/blobs/${'a'.repeat(64)}`, `/api/blobs/${'a'.repeat(64)}`],
