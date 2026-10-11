@@ -78,6 +78,97 @@ describe('native Bedrock APIs', () => {
     expect(result.cost).toBeUndefined();
   });
 
+  it.each([
+    {
+      name: 'JSON',
+      contentType: 'application/json',
+      payload: Buffer.from('{"answer":"READY"}'),
+      expected: { answer: 'READY' },
+    },
+    {
+      name: 'default JSON',
+      contentType: undefined,
+      payload: Buffer.from('{"answer":"READY"}'),
+      expected: { answer: 'READY' },
+    },
+    {
+      name: 'plain text',
+      contentType: 'text/plain',
+      payload: Buffer.from('READY'),
+      expected: { $base64: 'UkVBRFk=' },
+    },
+    {
+      name: 'JSON-looking plain text',
+      contentType: 'text/plain',
+      payload: Buffer.from('123'),
+      expected: { $base64: 'MTIz' },
+    },
+    {
+      name: 'binary data',
+      contentType: 'application/octet-stream',
+      payload: Buffer.from([0, 255, 16, 128]),
+      expected: { $base64: 'AP8QgA==' },
+    },
+    {
+      name: 'empty binary data',
+      contentType: 'application/octet-stream',
+      payload: Buffer.alloc(0),
+      expected: { $base64: '' },
+    },
+  ])('respects streamed response MIME for $name', async ({ contentType, payload, expected }) => {
+    const codec = new EventStreamCodec(
+      (bytes) => Buffer.from(bytes).toString('utf8'),
+      (text) => Buffer.from(text),
+    );
+    const encodedEvent = codec.encode({
+      headers: {
+        ':message-type': { type: 'string', value: 'event' },
+        ':event-type': { type: 'string', value: 'chunk' },
+        ':content-type': { type: 'string', value: 'application/json' },
+      },
+      body: Buffer.from(JSON.stringify({ bytes: payload.toString('base64') })),
+    });
+    const handle = vi.spyOn(NodeHttpHandler.prototype, 'handle').mockResolvedValue({
+      response: {
+        statusCode: 200,
+        headers: {
+          'content-type': 'application/vnd.amazon.eventstream',
+          ...(contentType ? { 'x-amzn-bedrock-content-type': contentType } : {}),
+        },
+        body: events([encodedEvent]),
+      },
+    });
+    const provider = new AwsBedrockNativeApiProvider('InvokeModelWithResponseStream', {
+      config: {
+        region: 'us-east-1',
+        endpoint: 'http://127.0.0.1:1',
+        accessKeyId: 'synthetic',
+        secretAccessKey: 'synthetic',
+        maxRetries: 0,
+      },
+    });
+    try {
+      const result = await provider.callApi(
+        JSON.stringify({
+          modelId: 'test.model',
+          body: {},
+          accept: contentType ?? 'application/json',
+        }),
+      );
+      expect(result.error).toBeUndefined();
+      expect(JSON.parse(String(result.output))).toMatchObject({
+        body: [{ chunk: { bytes: expected } }],
+      });
+      expect(JSON.parse(String(result.output)).contentType).toBe(contentType);
+      expect(handle).toHaveBeenCalledOnce();
+      expect(handle.mock.calls[0][0].headers['x-amzn-bedrock-accept']).toBe(
+        contentType ?? 'application/json',
+      );
+    } finally {
+      await provider.cleanup();
+    }
+  });
+
   it.each(['InvokeModel', 'InvokeModelWithResponseStream'])(
     'distinguishes literal model fields from single-key binary wrappers for %s',
     async (operation) => {

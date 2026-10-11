@@ -383,8 +383,12 @@ export class AwsBedrockNativeApiProvider extends AwsBedrockGenericProvider {
             const prefix = failure[0].toLowerCase() === 'throttlingexception' ? 'Rate limit: ' : '';
             throw new Error(`${prefix}${failure[0]}: ${JSON.stringify(failure[1])}`);
           }
-          // InvokeModel's payload chunks contain model-native JSON. Preserve each event separately.
-          if (this.operation === 'InvokeModelWithResponseStream' && event.chunk?.bytes) {
+          // Decode JSON model payloads; other chunk bytes retain their native binary wrappers.
+          if (
+            this.operation === 'InvokeModelWithResponseStream' &&
+            event.chunk?.bytes &&
+            (native.contentType ?? 'application/json').includes('json')
+          ) {
             events.push({
               ...event,
               chunk: {
