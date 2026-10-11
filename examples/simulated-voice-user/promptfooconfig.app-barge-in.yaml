@@ -26,7 +26,7 @@ providers:
         transcriptionDelay: minimal
       callerInterventions:
         - atMs: 12000
-          text: Stop. When does decaf end on Saturday?
+          text: Wait a second, when does decaf end on Saturday?
       target:
         maxRetries: 0
         audio:
@@ -39,7 +39,7 @@ providers:
             voice: cedar
 defaultTest: file://grading.yaml
 tests:
-  - description: Stop playback, then hear the decaf answer
+  - description: Wait a second, then hear the decaf answer
     vars:
       authoritativeFacts: |
         F1: On Saturdays the cafe opens at 8 am and closes at 4 pm.

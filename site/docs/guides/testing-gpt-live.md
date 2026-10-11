@@ -111,7 +111,7 @@ Open `review/index.html` in a browser. You'll find the stereo conversation, sepa
 
 Listen to the complete call at normal speed, then isolate each speaker. Revisit the correction, the answer, suspicious pauses, and the goodbye. Note the time range, speaker, observation, and uncertainty. Did the host say the wrong date, did the recognizer hear the wrong date, or did part of the spoken date never reach the caller? Those require different fixes.
 
-The helper verifies referenced recordings and accepts bounded inline WAVs, including very short recordings and `PROMPTFOO_INLINE_MEDIA=true` results. Missing or corrupt media produces a partial manifest and a nonzero exit. `manual-review.json` begins as **not reviewed**; opening the player doesn't change that into a listening result.
+The helper verifies referenced recordings and accepts bounded inline WAVs, including very short recordings and `PROMPTFOO_INLINE_MEDIA=true` results. Missing or corrupt media produces a partial manifest and a nonzero exit. Inspect that failure before running paid reviews; an empty test list is not a reviewed call. `manual-review.json` begins as **not reviewed**; opening the player doesn't change that into a listening result.
 
 ## Transcribe and review the actual audio
 
@@ -222,6 +222,8 @@ There are two useful experiments: measure how the model yields on its own, and m
 
 Native yielding is the default. `promptfooconfig.app-barge-in.yaml` adds an explicit playback controller and a paid `gpt-live-transcribe` connection. Run and export it with the same commands, substituting that configuration.
 
+The demo says “Wait a second, when does decaf end on Saturday?” The narrow detector can recognize that multiword command once a following delimiter arrives. A bare “Stop” waits for completed transcription, which can arrive after another caller segment starts or after the model has already stopped speaking. The demo must still record an actual application stop and recovery; answering the question alone does not exercise the controller, and this wording does not guarantee a particular delay.
+
 The relevant option lives under the simulated-user provider's `config`:
 
 ```yaml
@@ -259,14 +261,18 @@ The [transcription delay setting](https://developers.openai.com/api/docs/guides/
 
 Audition the judges too. If an audio grader hears a waiter on a digital-silence control, Bean There has acquired a ghost.
 
-Use an exported reservation or interruption call containing `case-001-intervention-001.wav`. That file is the delivered prepared utterance; the caller track also supplies natural pauses.
+Use an exported reservation or interruption call containing `case-001-intervention-001.wav`. The source must contain at least two seconds of mono speech with enough active audio for the mutations. The unmodified caller track used as `--pause-source` must contain at least 500 ms of quiet between speech, followed by more speech; trailing silence alone does not qualify.
 
 ```bash
 node examples/simulated-voice-user/calibrate-audio.js \
   --source "$VOICE_RUN_DIR/review/case-001-intervention-001.wav" \
   --pause-source "$VOICE_RUN_DIR/review/case-001-caller.wav" \
   --out "$VOICE_RUN_DIR/calibration"
+```
 
+The generator checks those requirements without making model requests. If it rejects an input, select another qualifying exported row and update the source paths. Run the paid review only after generation succeeds:
+
+```bash
 node --env-file="$VOICE_ENV_FILE" dist/src/main.js eval \
   -c examples/simulated-voice-user/promptfooconfig.audio-review.yaml \
   --tests "$VOICE_RUN_DIR/calibration/audio-review-tests.json" \
@@ -278,7 +284,7 @@ node examples/simulated-voice-user/score-audio-calibration.js \
   --out "$VOICE_RUN_DIR/calibration-score.json"
 ```
 
-The generator makes no API calls. It preserves the originals and creates opaque test inputs: clean copies, gaps, repetition, clipping, truncation, and silence. The answer key stays separate from the model. The deterministic grader can compare against the independently hashed original; another synthesis of the same words is not that reference.
+The generator preserves the originals and creates opaque test inputs: clean copies, gaps, repetition, clipping, truncation, and silence. The answer key stays separate from the model. The deterministic grader can compare against the independently hashed original; another synthesis of the same words is not that reference.
 
 Some controls should fail the ordinary quality assertion, so an eval may exit nonzero and still produce the results needed by the scorer. Distinguish correctly detected defects from provider errors, malformed judgments, and abstentions. Count missed defects and clean-control false alarms. Freeze the policy before testing new clips, speakers, or edit positions.
 
@@ -308,7 +314,7 @@ This adds one text-model request per row and returns `valid`, `invalid`, or `inc
 
 ## What the live checks found
 
-Bean There's audition produced useful failures. The latest development pair used the same prepared caller PCM and eligible interruption opportunities:
+Bean There's audition produced useful failures. The earlier matched development pair used the same prepared caller PCM and eligible interruption opportunities:
 
 | Check                                           | Observed result                                                                      |
 | ----------------------------------------------- | ------------------------------------------------------------------------------------ |
@@ -321,7 +327,9 @@ Bean There's audition produced useful failures. The latest development pair used
 
 The transport-backed grader caught the gap, so the app result remains a failure. Exact PCM showed speech delayed one frame without deleted or replaced source samples at that boundary; this doesn't establish that the gap was inaudible.
 
-Earlier cases exposed missed “Stop” commands, an unsolicited caller echo, invented menu details, and audio reviewers inventing defects. Across development, **247 recording-review requests—108 ASR and 139 direct audio-model requests—**were inspected alongside transcripts, PCM, and packet data. Those are review requests, not 247 independent conversations or human listening sessions.
+Earlier cases exposed missed “Stop” commands, an unsolicited caller echo, invented menu details, and audio reviewers inventing defects. Before the café walkthrough rerun, **247 recording-review requests—108 ASR and 139 direct audio-model requests—**were inspected alongside transcripts, PCM, and packet data. Those are review requests, not 247 independent conversations or human listening sessions.
+
+A [from-scratch café walkthrough check](/docs/guides/testing-gpt-live-results/#cafe-walkthrough-check-october-11-2026) then completed 14 calls and verified both booking outcomes. It exposed two app runs with no application stop, prompting the demo's “Wait a second” cue correction. Both revised runs stopped and recovered, with **840 ms and 740 ms** heard-stop bounds. The original failures remain; these differently scripted examples are not a matched native/app comparison or a latency guarantee.
 
 The [full development results](/docs/guides/testing-gpt-live-results/) retain the older cohorts, prompt experiments, calibration outcomes, and disagreements. This small development sample establishes neither reliable sub-750 ms interruption nor universally gap-free audio.
 
