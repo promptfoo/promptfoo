@@ -11,13 +11,15 @@
  * - Provider inheritance
  */
 
-import { SpanKind, SpanStatusCode } from '@opentelemetry/api';
-import { InMemorySpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
-import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
+import { SpanKind, SpanStatusCode, trace } from '@opentelemetry/api';
+import {
+  InMemorySpanExporter,
+  NodeTracerProvider,
+  SimpleSpanProcessor,
+} from '@opentelemetry/sdk-trace-node';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   GenAIAttributes,
-  getCurrentTraceId,
   getTraceparent,
   PromptfooAttributes,
   withGenAISpan,
@@ -303,7 +305,7 @@ describe('Phase 5: Provider Instrumentation Validation', () => {
       await withGenAISpan(
         { system: 'openai', operationName: 'chat', model: 'gpt-4', providerId: 'openai:gpt-4' },
         async () => {
-          capturedTraceId = getCurrentTraceId();
+          capturedTraceId = trace.getActiveSpan()?.spanContext().traceId;
           return { output: 'test' };
         },
       );
@@ -643,6 +645,23 @@ describe('Phase 5: Provider Instrumentation Validation', () => {
 
       const span = memoryExporter.getFinishedSpans()[0];
       expect(span.attributes[GenAIAttributes.RESPONSE_ID]).toBe('chatcmpl-abc123');
+    });
+
+    it('should capture the Ollama finish reason end to end', async () => {
+      const { OllamaCompletionProvider } = await import('../../src/providers/ollama');
+      const { fetchWithCache } = await import('../../src/cache');
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: '{"response":"Hi!","done":true,"done_reason":"length"}\n',
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      } as any);
+
+      await new OllamaCompletionProvider('llama3.3').callApi('test prompt');
+
+      const span = memoryExporter.getFinishedSpans()[0];
+      expect(span.attributes[GenAIAttributes.RESPONSE_FINISH_REASONS]).toEqual(['length']);
     });
 
     it('should capture finish reasons', async () => {

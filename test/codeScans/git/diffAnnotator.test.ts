@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { annotateSingleFileDiffWithLineNumbers } from '../../../src/codeScan/git/diffAnnotator';
+import { annotateDiffWithLineRanges } from '../../../src/codeScan/git/diffAnnotator';
 
-describe('annotateDiffWithLineNumbers', () => {
+describe('annotateDiffWithLineRanges', () => {
   describe('basic functionality', () => {
     it('should handle empty patch', () => {
-      expect(annotateSingleFileDiffWithLineNumbers('')).toBe('');
-      expect(annotateSingleFileDiffWithLineNumbers('   ')).toBe('   ');
+      expect(annotateDiffWithLineRanges('').annotatedDiff).toBe('');
+      expect(annotateDiffWithLineRanges('   ').annotatedDiff).toBe('   ');
     });
 
     it('should preserve file headers without annotation', () => {
@@ -14,7 +14,7 @@ index abc123..def456 100644
 --- a/test.ts
 +++ b/test.ts`;
 
-      const result = annotateSingleFileDiffWithLineNumbers(patch);
+      const result = annotateDiffWithLineRanges(patch).annotatedDiff;
       expect(result).toBe(patch);
     });
 
@@ -25,7 +25,7 @@ index abc123..def456 100644
 +new line 3
  line 4`;
 
-      const result = annotateSingleFileDiffWithLineNumbers(patch);
+      const result = annotateDiffWithLineRanges(patch).annotatedDiff;
       expect(result).toBe(`@@ -1,3 +1,4 @@
 L1:  line 1
 L2:  line 2
@@ -40,7 +40,7 @@ L4:  line 4`);
  line 2
  line 3`;
 
-      const result = annotateSingleFileDiffWithLineNumbers(patch);
+      const result = annotateDiffWithLineRanges(patch).annotatedDiff;
       expect(result).toBe(`@@ -1,4 +1,3 @@
 L1:  line 1
 -deleted line
@@ -56,7 +56,7 @@ L3:  line 3`);
 +new line 2
  context after`;
 
-      const result = annotateSingleFileDiffWithLineNumbers(patch);
+      const result = annotateDiffWithLineRanges(patch).annotatedDiff;
       expect(result).toBe(`@@ -5,5 +5,6 @@
 L5:  context before
 -old line
@@ -78,7 +78,7 @@ L8:  context after`);
 +inserted line
  line 11`;
 
-      const result = annotateSingleFileDiffWithLineNumbers(patch);
+      const result = annotateDiffWithLineRanges(patch).annotatedDiff;
       expect(result).toBe(`@@ -1,3 +1,3 @@
 L1:  line 1
 -old line 2
@@ -103,7 +103,7 @@ index abc123..def456 100644
 
  function test() {`;
 
-      const result = annotateSingleFileDiffWithLineNumbers(patch);
+      const result = annotateDiffWithLineRanges(patch).annotatedDiff;
       expect(result).toBe(`diff --git a/src/test.ts b/src/test.ts
 index abc123..def456 100644
 --- a/src/test.ts
@@ -169,7 +169,7 @@ L4:  function test() {`);
 +  requireApproval: "never",
 +});`;
 
-      const result = annotateSingleFileDiffWithLineNumbers(patch);
+      const result = annotateDiffWithLineRanges(patch).annotatedDiff;
 
       // Verify key line numbers
       expect(result).toContain('L51: +const mcp = hostedMcpTool({');
@@ -200,7 +200,7 @@ L4:  function test() {`);
 +const mcp = hostedMcpTool({
 +  serverLabel: "dropbox",`;
 
-      const result = annotateSingleFileDiffWithLineNumbers(patch);
+      const result = annotateDiffWithLineRanges(patch).annotatedDiff;
 
       // Should start numbering at 20 (the hunk start), not at 1
       expect(result).toContain('L20:      customer_id: z.string(),');
@@ -218,7 +218,7 @@ L4:  function test() {`);
 +new file line 2
 +new file line 3`;
 
-      const result = annotateSingleFileDiffWithLineNumbers(patch);
+      const result = annotateDiffWithLineRanges(patch).annotatedDiff;
       expect(result).toBe(`@@ -0,0 +1,3 @@
 L1: +new file line 1
 L2: +new file line 2
@@ -232,7 +232,7 @@ L3: +new file line 3`);
 \\ No newline at end of file
 +line 2 with newline`;
 
-      const result = annotateSingleFileDiffWithLineNumbers(patch);
+      const result = annotateDiffWithLineRanges(patch).annotatedDiff;
 
       // The marker line should be preserved
       expect(result).toContain('\\ No newline at end of file');
@@ -250,7 +250,7 @@ L3: +new file line 3`);
  line 3
 +line 4`;
 
-      const result = annotateSingleFileDiffWithLineNumbers(patch);
+      const result = annotateDiffWithLineRanges(patch).annotatedDiff;
       expect(result).toBe(`@@ -1,4 +1,4 @@
 L1:  line 1
 L2: 
@@ -266,7 +266,7 @@ L4: +line 4`);
 +added line 3
 +added line 4`;
 
-      const result = annotateSingleFileDiffWithLineNumbers(patch);
+      const result = annotateDiffWithLineRanges(patch).annotatedDiff;
       expect(result).toBe(`@@ -1,1 +1,5 @@
 L1:  existing line
 L2: +added line 1
@@ -283,7 +283,7 @@ L5: +added line 4`);
 -deleted 3
 -deleted 4`;
 
-      const result = annotateSingleFileDiffWithLineNumbers(patch);
+      const result = annotateDiffWithLineRanges(patch).annotatedDiff;
       expect(result).toBe(`@@ -1,5 +1,1 @@
 L1:  kept line
 -deleted 1
@@ -299,7 +299,7 @@ L1:  kept line
  line 1
 +line 2`;
 
-      const result = annotateSingleFileDiffWithLineNumbers(patch);
+      const result = annotateDiffWithLineRanges(patch).annotatedDiff;
       expect(result).toBe(`@@ -1 +1,2 @@
 L1:  line 1
 L2: +line 2`);
@@ -312,7 +312,7 @@ L2: +line 2`);
 +  const z = 3;
    return x + y;`;
 
-      const result = annotateSingleFileDiffWithLineNumbers(patch);
+      const result = annotateDiffWithLineRanges(patch).annotatedDiff;
       expect(result).toContain('L10:    const x = 1;');
       expect(result).toContain('L11:    const y = 2;');
       expect(result).toContain('L12: +  const z = 3;');
@@ -328,7 +328,7 @@ L2: +line 2`);
 +added line
 `;
 
-      const result = annotateSingleFileDiffWithLineNumbers(patch);
+      const result = annotateDiffWithLineRanges(patch).annotatedDiff;
 
       // The trailing blank should not be annotated
       expect(result).toBe(`@@ -1,2 +1,2 @@

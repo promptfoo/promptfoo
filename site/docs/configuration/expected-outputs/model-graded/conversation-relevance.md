@@ -176,7 +176,7 @@ Or set it globally:
 ```yaml
 defaultTest:
   options:
-    provider: anthropic:claude-sonnet-4-6
+    provider: anthropic:claude-sonnet-5
 ```
 
 ## See also
@@ -187,4 +187,4 @@ defaultTest:
 
 ## Citation
 
-This implementation is adapted from [DeepEval's Conversation Relevancy metric](https://docs.confident-ai.com/docs/metrics-conversation-relevancy).
+This implementation is adapted from DeepEval's [Turn Relevancy metric](https://deepeval.com/docs/metrics-turn-relevancy), previously called Conversation Relevancy.

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   DATA_IMAGE_ONLY_URL_TRANSFORM,
   extractRenderableMarkdownImageSources,
@@ -206,6 +206,26 @@ describe('markdown-config', () => {
       expect(isImageDataUrl('DATA:IMAGE/PNG;BASE64,AA==')).toBe(true);
       expect(isImageDataUrl(' Data:Application/Octet-Stream;Base64,AA==')).toBe(true);
       expect(isImageDataUrl('data:text/html;base64,AA==')).toBe(false);
+    });
+
+    it.each([
+      ['DATA:IMAGE/PNG;BASE64,', true],
+      [' Data:Application/Octet-Stream;Base64,', true],
+      ['data:text/html;base64,', false],
+    ])('does not normalize a large data payload when checking %s', (header, expected) => {
+      const url = `${header}${'AaBb'.repeat(512 * 1024)}`;
+      const lowercaseSpy = vi.spyOn(String.prototype, 'toLowerCase');
+      let normalizedLengths: number[];
+
+      try {
+        expect(isImageDataUrl(url)).toBe(expected);
+        normalizedLengths = lowercaseSpy.mock.contexts.map((value) => String(value).length);
+      } finally {
+        lowercaseSpy.mockRestore();
+      }
+
+      // Scheme checks may normalize a short header, but must not copy the image payload.
+      expect(normalizedLengths.every((length) => length < 100)).toBe(true);
     });
 
     it('does not treat raw HTML as Markdown', () => {

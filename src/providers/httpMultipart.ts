@@ -4,39 +4,15 @@ import { fileURLToPath } from 'url';
 
 import { z } from 'zod';
 import cliState from '../cliState';
+import {
+  HttpGeneratedDocumentSourceSchema as GeneratedDocumentSourceSchema,
+  HttpPathFileSourceSchema as PathFileSourceSchema,
+  HttpMultipartConfigSchema as PortableHttpMultipartConfigSchema,
+} from '../contracts/providerConfig/httpMultipart';
 import { getNunjucksEngine } from '../util/templates';
+import { decodeUrlComponent } from './urlEncoding';
 
-const GeneratedDocumentSourceSchema = z.object({
-  type: z.literal('generated'),
-  generator: z.literal('basic-document').optional().default('basic-document'),
-  format: z.enum(['pdf', 'png', 'jpeg', 'jpg']).optional().default('pdf'),
-  text: z.string().optional(),
-});
-
-const PathFileSourceSchema = z.object({
-  type: z.literal('path'),
-  path: z.string(),
-});
-
-const MultipartFieldPartSchema = z.object({
-  kind: z.literal('field'),
-  name: z.string(),
-  value: z.union([z.string(), z.number(), z.boolean()]),
-});
-
-const MultipartFilePartSchema = z.object({
-  kind: z.literal('file'),
-  name: z.string(),
-  filename: z.string().optional(),
-  filenameTemplate: z.string().optional(),
-  contentType: z.string().optional(),
-  source: z.union([GeneratedDocumentSourceSchema, PathFileSourceSchema]),
-});
-
-export const HttpMultipartConfigSchema = z.object({
-  parts: z.array(z.union([MultipartFieldPartSchema, MultipartFilePartSchema])).min(1),
-});
-
+export const HttpMultipartConfigSchema = PortableHttpMultipartConfigSchema;
 export type HttpMultipartConfig = z.infer<typeof HttpMultipartConfigSchema>;
 
 export interface MultipartFileDescriptor {
@@ -154,15 +130,6 @@ function createGeneratedFile(
   };
 }
 
-/** Percent-decode a URL path, leaving it alone if it is not valid encoding. */
-function decodeUrlPath(value: string): string {
-  try {
-    return decodeURIComponent(value);
-  } catch {
-    return value;
-  }
-}
-
 export function normalizeFilePath(filePath: string): string {
   if (!filePath.startsWith('file://')) {
     // Plain paths pass through untouched, which is also how a Windows UNC share is
@@ -182,7 +149,7 @@ export function normalizeFilePath(filePath: string): string {
   // and the behaviour stays deterministic in tests on every OS.
   const winDriveMatch = url.match(/^file:\/\/\/?([a-zA-Z]:[\\/].*)$/);
   if (winDriveMatch) {
-    return path.normalize(decodeUrlPath(winDriveMatch[1]));
+    return path.normalize(decodeUrlComponent(winDriveMatch[1]));
   }
 
   // A rooted URL (file:///...) is a real file URL, so percent-encoding is meaningful.
@@ -192,7 +159,7 @@ export function normalizeFilePath(filePath: string): string {
     } catch {
       // fileURLToPath rejects a driveless path on Windows (ERR_INVALID_FILE_URL_PATH), so
       // decode here too -- otherwise a %20 survives into the filename on Windows only.
-      return decodeUrlPath(url.slice('file://'.length));
+      return decodeUrlComponent(url.slice('file://'.length));
     }
   }
 

@@ -12,7 +12,7 @@ import {
 import { EVAL_ROUTES, ROUTES } from '@app/constants/routes';
 import * as yaml from 'js-yaml';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import type { TestCasesWithMetadata } from '@promptfoo/types';
 
 interface DatasetDialogProps {

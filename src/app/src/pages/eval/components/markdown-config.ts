@@ -14,6 +14,7 @@ import type { UrlTransform } from 'react-markdown';
 export const REMARK_PLUGINS = [remarkGfm];
 
 const MARKDOWN_PARSER = unified().use(remarkParse).use(remarkGfm);
+const IMAGE_DATA_URL_PREFIX = /^\s*data:(?:image\/|application\/octet-stream)/i;
 
 interface MarkdownAstNode {
   type: string;
@@ -51,11 +52,8 @@ export interface RenderableMarkdownImage {
 export const IDENTITY_URL_TRANSFORM = (url: string): string => url;
 
 export function isImageDataUrl(url: string): boolean {
-  const normalizedUrl = url.trimStart().toLowerCase();
-  return (
-    normalizedUrl.startsWith('data:image/') ||
-    normalizedUrl.startsWith('data:application/octet-stream')
-  );
+  // Inspect only the prefix without allocating a lowercase copy of the image payload.
+  return IMAGE_DATA_URL_PREFIX.test(url);
 }
 
 export function isInlineDataImage(image: RenderableMarkdownImage): boolean {
@@ -162,9 +160,14 @@ export function hasMarkdownDataImage(markdown: string): boolean {
   return extractRenderableMarkdownImages(markdown).some((image) => isImageDataUrl(image.source));
 }
 
+/** Apply the same URL policy when detecting images and rendering them with ReactMarkdown. */
+export function getMarkdownImageUrl(url: string): string {
+  return isImageDataUrl(url) ? url : defaultUrlTransform(url);
+}
+
 export const IMAGE_DATA_URL_TRANSFORM: UrlTransform = (url, key, node) => {
-  if (key === 'src' && node.tagName === 'img' && isImageDataUrl(url)) {
-    return url;
+  if (key === 'src' && node.tagName === 'img') {
+    return getMarkdownImageUrl(url);
   }
 
   return defaultUrlTransform(url);

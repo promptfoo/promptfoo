@@ -33,7 +33,7 @@ import {
   ZoomIn,
   ZoomOut,
 } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { AudioWaveform } from './AudioWaveform';
 
 import type { GraderResult, MediaItem } from '../types';

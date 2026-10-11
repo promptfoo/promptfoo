@@ -9,7 +9,7 @@ description: "Integrate JFrog's ML model management platform for artifact securi
 This documentation covers the **JFrog ML** provider for AI model inference (formerly known as Qwak). This is different from **JFrog Artifactory**, which is supported in [ModelAudit](/docs/model-audit/usage#jfrog-artifactory) for scanning models stored in artifact repositories.
 :::
 
-The JFrog ML provider (formerly known as Qwak) allows you to interact with JFrog ML's LLM Model Library using the OpenAI protocol. It supports chat completion models hosted on JFrog ML's infrastructure.
+The JFrog ML provider calls models in JFrog's LLM Model Library using the OpenAI chat protocol.
 
 ## Setup
 
@@ -29,7 +29,7 @@ export QWAK_TOKEN="your-token-here"
 
 Here's a basic example of how to use the JFrog ML provider:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: jfrog:llama_3_8b_instruct
     config:
@@ -39,22 +39,26 @@ providers:
 
 You can also use the legacy `qwak:` prefix:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: qwak:llama_3_8b_instruct
 ```
 
 ## Configuration Options
 
-The JFrog ML provider supports all the standard [OpenAI configuration options](/docs/providers/openai#configuring-parameters) plus these additional JFrog ML-specific options:
+The JFrog ML provider supports the standard [OpenAI configuration options](/docs/providers/openai#configuring-parameters) plus these additional JFrog ML-specific options.
 
-| Parameter | Description                                                                                                                                        |
-| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `baseUrl` | Optional. The full URL to your model endpoint. If not provided, it will be constructed using the model name: `https://models.qwak-prod.qwak.ai/v1` |
+By default, the provider uses `<baseUrl>/<model>` as its API base URL and reads the key from
+`QWAK_TOKEN`. Set `apiBaseUrl` to supply your own API base URL or `apiKeyEnvar` to read the key
+from a different environment variable.
+
+| Parameter | Description                                                                                                          |
+| --------- | -------------------------------------------------------------------------------------------------------------------- |
+| `baseUrl` | Defaults to `https://models.qwak-prod.qwak.ai/v1`. The provider appends the model name, so leave it out of this URL. |
 
 Example with full configuration:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: jfrog:llama_3_8b_instruct
     config:
@@ -95,6 +99,7 @@ Example chat conversation:
 ```
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - file://prompts.yaml
 

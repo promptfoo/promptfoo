@@ -86,9 +86,7 @@ describe('canGenerateRemote property and behavior', () => {
 
   describe('Remote generation behavior', () => {
     it('should not use remote generation for dataset-based plugins even when shouldGenerateRemote is true', async () => {
-      vi.mocked(shouldGenerateRemote).mockImplementation(function () {
-        return true;
-      });
+      vi.mocked(shouldGenerateRemote).mockReturnValue(true);
 
       const unsafeBenchPlugin = Plugins.find((p) => p.key === 'unsafebench');
 
@@ -105,9 +103,7 @@ describe('canGenerateRemote property and behavior', () => {
     });
 
     it('should use remote generation for LLM-based plugins when shouldGenerateRemote is true', async () => {
-      vi.mocked(shouldGenerateRemote).mockImplementation(function () {
-        return true;
-      });
+      vi.mocked(shouldGenerateRemote).mockReturnValue(true);
 
       // Force the canGenerateRemote property to be true for this test
       const originalContractPlugin = Plugins.find((p) => p.key === 'contracts');
@@ -147,9 +143,7 @@ describe('canGenerateRemote property and behavior', () => {
     });
 
     it('should use local generation for all plugins when shouldGenerateRemote is false', async () => {
-      vi.mocked(shouldGenerateRemote).mockImplementation(function () {
-        return false;
-      });
+      vi.mocked(shouldGenerateRemote).mockReturnValue(false);
 
       // Use the plugin from Plugins array directly
       const contractPlugin = Plugins.find((p) => p.key === 'contracts');

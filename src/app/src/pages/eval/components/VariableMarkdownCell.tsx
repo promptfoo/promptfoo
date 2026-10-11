@@ -6,6 +6,7 @@ import MarkdownErrorBoundary from './MarkdownErrorBoundary';
 import MarkdownImage from './MarkdownImage';
 import {
   extractRenderableMarkdownImages,
+  getMarkdownImageUrl,
   IMAGE_DATA_URL_TRANSFORM,
   isInlineDataImage,
   REMARK_PLUGINS,
@@ -59,7 +60,7 @@ const VariableMarkdownCell = React.memo(function VariableMarkdownCell({
   );
   const hasRenderedImage = dataImagesOnly
     ? dataImages.length > 0
-    : renderableMarkdownImages.length > 0;
+    : renderableMarkdownImages.some((image) => getMarkdownImageUrl(image.source));
 
   return (
     <MarkdownErrorBoundary fallback={value}>

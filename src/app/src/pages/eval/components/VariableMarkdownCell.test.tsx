@@ -1,6 +1,7 @@
 import React from 'react';
 
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import * as markdownConfig from './markdown-config';
 import VariableMarkdownCell from './VariableMarkdownCell';
@@ -67,6 +68,40 @@ describe('VariableMarkdownCell', () => {
 
       expect(screen.queryByRole('img')).not.toBeInTheDocument();
       expect(container.querySelector('.truncation-toggler')).toBeInTheDocument();
+    });
+
+    it.each([
+      '![Blocked](javascript:alert%281%29)',
+      '![Blocked](data:text/html;base64,PHNjcmlwdD4=)',
+      '![Blocked][image]\n\n[image]: javascript:alert%281%29',
+    ])('keeps truncation when Markdown rejects an image source: %s', async (markdown) => {
+      const user = userEvent.setup();
+      const diagnostic = 'Long diagnostic text. '.repeat(100);
+      const value = `${markdown}\n\n${diagnostic}`;
+      const { container } = render(<VariableMarkdownCell value={value} maxTextLength={100} />);
+
+      expect(screen.queryByRole('img')).not.toBeInTheDocument();
+      expect(container).not.toHaveTextContent(diagnostic.trim());
+      expect(container.querySelector('.truncation-toggler')).toBeInTheDocument();
+
+      await user.click(screen.getByText('...'));
+
+      expect(container).toHaveTextContent(diagnostic.trim());
+      expect(screen.queryByRole('img')).not.toBeInTheDocument();
+    });
+
+    it.each([
+      'data:image/png;base64,',
+      'https://example.com/image.png?payload=',
+      '/images/test.png?payload=',
+    ])('keeps allowed image sources intact when Markdown is enabled: %s', (prefix) => {
+      const source = `${prefix}${'AaBb'.repeat(100)}`;
+      const { container } = render(
+        <VariableMarkdownCell value={`![Preview](${source})`} maxTextLength={100} />,
+      );
+
+      expect(screen.getByRole('img', { name: 'Preview' })).toHaveAttribute('src', source);
+      expect(container.querySelector('.truncation-toggler')).not.toBeInTheDocument();
     });
 
     it('renders markdown bold text', () => {

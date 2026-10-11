@@ -82,7 +82,7 @@ targets:
     label: llama3.2-redteam
     config:
       temperature: 0.7
-      max_tokens: 150
+      num_predict: 150
 
 redteam:
   purpose: 'The system is a helpful chatbot assistant that answers questions and helps with tasks.'

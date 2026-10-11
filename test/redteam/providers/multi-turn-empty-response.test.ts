@@ -1,3 +1,7 @@
+const { createLoggerModuleWithLevel } = await vi.hoisted(
+  async () => import('../../factories/logger'),
+);
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CrescendoProvider } from '../../../src/redteam/providers/crescendo/index';
 import { CustomProvider } from '../../../src/redteam/providers/custom/index';
@@ -16,15 +20,7 @@ vi.mock('../../../src/globalConfig/accounts', async (importOriginal) => ({
   isLoggedIntoCloud: vi.fn().mockReturnValue(true),
 }));
 
-vi.mock('../../../src/logger', () => ({
-  default: {
-    debug: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  },
-  getLogLevel: vi.fn().mockReturnValue('info'),
-}));
+vi.mock('../../../src/logger', () => createLoggerModuleWithLevel());
 
 // Mock the shared module with hoisted functions
 vi.mock('../../../src/redteam/providers/shared', async (importOriginal) => {

@@ -3,7 +3,7 @@ import { PageHeader } from '@app/components/layout/PageHeader';
 import { Card } from '@app/components/ui/card';
 import { EVAL_ROUTES } from '@app/constants/routes';
 import { usePageMeta } from '@app/hooks/usePageMeta';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import EvalsTable from './components/EvalsTable';
 
 export default function EvalsIndexPage() {
