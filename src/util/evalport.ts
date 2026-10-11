@@ -131,6 +131,12 @@ export interface ToEvalPortResultSetOptions {
   completedAt?: string;
   providerModel?: string;
   runnerVersion?: string;
+  /**
+   * Suite previously produced by `promptfooTestsToEvalPortSuite`. When
+   * provided, result graders reuse the suite's grader IDs so consumers can
+   * join results to grader definitions.
+   */
+  suite?: EvalPortSuite;
   /** Passed through verbatim, e.g. `{ group_id, role, sequence }` for grouped comparisons. */
   group?: Record<string, unknown>;
 }
@@ -278,12 +284,23 @@ export function assertionToEvalPortGrader(assertion: Assertion, id: string): Eva
     ...(assertion.threshold !== undefined && { threshold: assertion.threshold }),
     ...(assertion.weight !== undefined && { weight: assertion.weight }),
   };
+  // Persist the complete original assertion on every grader (not just
+  // `custom`) so the import path restores values losslessly instead of
+  // re-deriving them from native params.
+  const storedValue = serializableAssertionValue(assertion.value);
+  const storedAssertion: Record<string, unknown> = {
+    ...promptfooMeta,
+    ...(storedValue === undefined ? {} : { value: storedValue }),
+    ...(assertion.config !== undefined && isPlainRecord(assertion.config)
+      ? { config: assertion.config }
+      : {}),
+  };
 
   if (EXACT_MATCH_TYPES.has(base)) {
     return {
       id,
       type: 'exact_match',
-      params: { expected: valueString, ignore_case: false },
+      params: { expected: valueString, ignore_case: false, promptfoo: storedAssertion },
       weight,
       description,
       metadata: { promptfoo: promptfooMeta },
@@ -293,7 +310,11 @@ export function assertionToEvalPortGrader(assertion: Assertion, id: string): Eva
     return {
       id,
       type: 'contains',
-      params: { substring: valueString, ignore_case: base === 'icontains' },
+      params: {
+        substring: valueString,
+        ignore_case: base === 'icontains',
+        promptfoo: storedAssertion,
+      },
       weight,
       description,
       metadata: { promptfoo: promptfooMeta },
@@ -305,6 +326,7 @@ export function assertionToEvalPortGrader(assertion: Assertion, id: string): Eva
       type: 'regex',
       params: {
         pattern: base === 'starts-with' ? `^${escapeRegExp(valueString)}` : valueString,
+        promptfoo: storedAssertion,
       },
       weight,
       description,
@@ -315,7 +337,7 @@ export function assertionToEvalPortGrader(assertion: Assertion, id: string): Eva
     return {
       id,
       type: 'semantic_similarity',
-      params: { threshold: assertion.threshold ?? 0.8 },
+      params: { threshold: assertion.threshold ?? 0.8, promptfoo: storedAssertion },
       weight,
       description,
       metadata: { promptfoo: promptfooMeta },
@@ -335,7 +357,7 @@ export function assertionToEvalPortGrader(assertion: Assertion, id: string): Eva
     return {
       id,
       type: 'llm_judge',
-      params: { model: providerModel, prompt },
+      params: { model: providerModel, prompt, promptfoo: storedAssertion },
       weight,
       description,
       metadata: { promptfoo: promptfooMeta },
@@ -346,13 +368,7 @@ export function assertionToEvalPortGrader(assertion: Assertion, id: string): Eva
     type: 'custom',
     params: {
       handler: `promptfoo:${original}`,
-      promptfoo: {
-        ...promptfooMeta,
-        value: serializableAssertionValue(assertion.value),
-        ...(assertion.config !== undefined && isPlainRecord(assertion.config)
-          ? { config: assertion.config }
-          : {}),
-      },
+      promptfoo: storedAssertion,
     },
     weight,
     description,
@@ -553,10 +569,14 @@ function graderToPromptfooAssertion(
       ? (grader.params.promptfoo as Record<string, unknown>)
       : undefined;
     const storedValue = params?.value;
+    const storedConfig = params?.config;
     return {
       type: promptfooMeta.assertionType as Assertion['type'],
       ...(storedValue !== undefined && storedValue !== '[function]'
         ? { value: storedValue as Assertion['value'] }
+        : {}),
+      ...(storedConfig !== undefined && isPlainRecord(storedConfig)
+        ? { config: storedConfig as Assertion['config'] }
         : {}),
       ...(typeof promptfooMeta.threshold === 'number' && { threshold: promptfooMeta.threshold }),
       ...(typeof promptfooMeta.metric === 'string' && { metric: promptfooMeta.metric }),
@@ -654,6 +674,7 @@ export function evalPortSuiteToPromptfooTests(suite: EvalPortSuite): TestCase[] 
         description: promptfooMeta.description,
       }),
       vars,
+      ...(typeof promptfooMeta?.provider === 'string' && { provider: promptfooMeta.provider }),
       ...(assertions.length > 0 && { assert: assertions }),
       ...(typeof promptfooMeta?.threshold === 'number' && { threshold: promptfooMeta.threshold }),
       ...((promptfooMeta?.testMetadata !== undefined || unmapped.length > 0) && {
@@ -683,8 +704,36 @@ interface ExpandedGradingResult {
   pass: boolean;
   score: number | null;
   reason: string;
-  assertionType?: string;
-  metric?: string;
+  assertion?: Assertion;
+}
+
+/** Key for joining a result-side grader to its suite definition (metadata excluded). */
+function graderJoinKey(draft: EvalPortGrader): string {
+  return stableKey({ type: draft.type, params: draft.params, weight: draft.weight });
+}
+
+function suiteGraderIdByKey(suite: EvalPortSuite | undefined): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const grader of suite?.graders ?? []) {
+    if (grader && typeof grader.id === 'string' && !map.has(graderJoinKey(grader))) {
+      map.set(graderJoinKey(grader), grader.id);
+    }
+  }
+  return map;
+}
+
+function expandComponent(component: {
+  pass: boolean;
+  score: number;
+  reason: string;
+  assertion?: Assertion;
+}): ExpandedGradingResult {
+  return {
+    pass: component.pass,
+    score: Number.isFinite(component.score) ? clampScore(component.score) : null,
+    reason: component.reason,
+    ...(component.assertion !== undefined && { assertion: component.assertion }),
+  };
 }
 
 /** Expands one grading result: `componentResults` become one entry each, never collapsed. */
@@ -703,41 +752,40 @@ function expandGradingResult(
   }
   const components = gradingResult.componentResults;
   if (components && components.length > 0) {
-    return components.map((component) => ({
-      pass: component.pass,
-      score: Number.isFinite(component.score) ? clampScore(component.score) : null,
-      reason: component.reason,
-      ...(component.assertion?.type !== undefined && { assertionType: component.assertion.type }),
-      ...(component.assertion?.metric !== undefined && { metric: component.assertion.metric }),
-    }));
+    return components.map((component) => expandComponent(component));
   }
-  return [
-    {
-      pass: gradingResult.pass,
-      score: Number.isFinite(gradingResult.score) ? clampScore(gradingResult.score) : null,
-      reason: gradingResult.reason,
-      ...(gradingResult.assertion?.type !== undefined && {
-        assertionType: gradingResult.assertion.type,
-      }),
-      ...(gradingResult.assertion?.metric !== undefined && {
-        metric: gradingResult.assertion.metric,
-      }),
-    },
-  ];
+  return [expandComponent(gradingResult)];
 }
 
-function expandedToGraderType(expanded: ExpandedGradingResult, graderId: string): string {
-  if (expanded.assertionType === undefined) {
-    return 'custom';
-  }
-  try {
-    return assertionToEvalPortGrader(
-      { type: expanded.assertionType as Assertion['type'] },
-      graderId,
-    ).type;
-  } catch {
-    return 'custom';
-  }
+function expandedToGraderResult(
+  item: ExpandedGradingResult,
+  fallbackId: string,
+  suiteGraderIds: Map<string, string>,
+): EvalPortGraderResult {
+  const draft =
+    item.assertion === undefined
+      ? undefined
+      : assertionToEvalPortGrader(item.assertion, fallbackId);
+  // Reuse the suite's grader ID when the assertion matches a suite definition
+  // so consumers can join results to graders; otherwise use a per-test ID.
+  const graderId =
+    draft === undefined ? fallbackId : (suiteGraderIds.get(graderJoinKey(draft)) ?? fallbackId);
+  // Per EvalPort rule 6, a null score means "not verified" and must not
+  // read as a scored failure.
+  return {
+    grader_id: graderId,
+    type: draft?.type ?? 'custom',
+    score: item.score,
+    passed: item.score === null ? false : item.pass,
+    reason: item.reason,
+    metadata: {
+      promptfoo: {
+        ...(item.assertion?.type !== undefined && { assertionType: item.assertion.type }),
+        ...(item.assertion?.metric !== undefined && { metric: item.assertion.metric }),
+        ...(item.score === null && { unverified: true }),
+      },
+    },
+  };
 }
 
 /**
@@ -749,38 +797,33 @@ export function evaluateResultsToEvalPortResultSet(
   options: ToEvalPortResultSetOptions,
 ): EvalPortResultSet {
   const startedAt = options.startedAt ?? new Date().toISOString();
+  const suiteGraderIds = suiteGraderIdByKey(options.suite);
+  // Ordinary summaries repeat a testIdx across prompts, providers, and
+  // repeats. EvalPort requires unique (test_case_id, run_id, attempt) keys,
+  // so repeated test cases carry a 1-based attempt number.
+  const totalByTestIdx = new Map<number, number>();
+  for (const result of results) {
+    totalByTestIdx.set(result.testIdx, (totalByTestIdx.get(result.testIdx) ?? 0) + 1);
+  }
+  const seenByTestIdx = new Map<number, number>();
   const evalPortResults: EvalPortResult[] = results.map((result, index) => {
     const testCaseId = `tc_${result.testIdx >= 0 ? result.testIdx + 1 : index + 1}`;
+    const occurrence = (seenByTestIdx.get(result.testIdx) ?? 0) + 1;
+    seenByTestIdx.set(result.testIdx, occurrence);
     const expanded = expandGradingResult(result.gradingResult, {
       pass: result.success,
       score: result.score,
     });
-    const graderResults: EvalPortGraderResult[] = expanded.map((item, componentIdx) => {
-      const graderId = `${testCaseId}_g${componentIdx + 1}`;
-      // Per EvalPort rule 6, a null score means "not verified" and must not
-      // read as a scored failure.
-      const passed = item.score === null ? false : item.pass;
-      return {
-        grader_id: graderId,
-        type: expandedToGraderType(item, graderId),
-        score: item.score,
-        passed,
-        reason: item.reason,
-        metadata: {
-          promptfoo: {
-            ...(item.assertionType !== undefined && { assertionType: item.assertionType }),
-            ...(item.metric !== undefined && { metric: item.metric }),
-            ...(item.score === null && { unverified: true }),
-          },
-        },
-      };
-    });
+    const graderResults = expanded.map((item, componentIdx) =>
+      expandedToGraderResult(item, `${testCaseId}_g${componentIdx + 1}`, suiteGraderIds),
+    );
 
     const actualOutput = responseToString(result.response);
     return {
       test_case_id: testCaseId,
       grader_results: graderResults,
       passed: result.success,
+      ...((totalByTestIdx.get(result.testIdx) ?? 0) > 1 && { attempt: occurrence }),
       ...(actualOutput !== undefined && { actual_output: actualOutput }),
       ...(Number.isFinite(result.latencyMs) && { duration_ms: result.latencyMs }),
       ...(typeof result.error === 'string' &&
@@ -874,6 +917,29 @@ export function evaluateSummaryToEvalPortResultSet(
 }
 
 /**
+ * Restores the exporter-recorded row identity when present; the array
+ * position and defaults below are only fallbacks for foreign data.
+ */
+function resolveImportedRowIdentity(
+  result: EvalPortResult,
+  index: number,
+  resultSet: EvalPortResultSet,
+  options?: FromEvalPortResultSetOptions,
+): { promptIdx: number; testIdx: number; providerId: string } {
+  const storedMeta = isPlainRecord(result.metadata?.promptfoo)
+    ? (result.metadata.promptfoo as Record<string, unknown>)
+    : undefined;
+  return {
+    promptIdx: typeof storedMeta?.promptIdx === 'number' ? storedMeta.promptIdx : 0,
+    testIdx: typeof storedMeta?.testIdx === 'number' ? storedMeta.testIdx : index,
+    providerId:
+      options?.providerId ??
+      (typeof storedMeta?.providerId === 'string' ? storedMeta.providerId : undefined) ??
+      (typeof resultSet.provider?.model === 'string' ? resultSet.provider.model : 'evalport'),
+  };
+}
+
+/**
  * Converts an EvalPort result set back to promptfoo `EvaluateResult`s (e.g. for
  * comparison views). Pass `suite` to restore original `vars`; otherwise vars
  * carry the test-case id for traceability.
@@ -905,18 +971,24 @@ export function evalPortResultSetToEvaluateResults(
         namedScores[graderResult.grader_id] = graderResult.score;
       }
     }
+    // Restore the exporter-recorded row identity when present; the array
+    // position and defaults below are only fallbacks for foreign data.
+    const { promptIdx, testIdx, providerId } = resolveImportedRowIdentity(
+      result,
+      index,
+      resultSet,
+      options,
+    );
     return {
-      promptIdx: 0,
-      testIdx: index,
+      promptIdx,
+      testIdx,
       testCase: {
         description: result.test_case_id,
         vars: varsByTestCaseId.get(result.test_case_id) ?? {},
       },
       promptId: `evalport:${result.test_case_id}`,
       provider: {
-        id:
-          options?.providerId ??
-          (typeof resultSet.provider?.model === 'string' ? resultSet.provider.model : 'evalport'),
+        id: providerId,
       },
       prompt: { raw: result.test_case_id, label: 'evalport-import' },
       vars: varsByTestCaseId.get(result.test_case_id) ?? {},
