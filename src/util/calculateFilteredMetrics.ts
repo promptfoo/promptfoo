@@ -100,47 +100,31 @@ function jsonUsageCached(column: SQL, usagePath: string, cachedResponsePath?: st
 
 type TokenUsageField = 'total' | 'prompt' | 'completion' | 'cached' | 'numRequests';
 
-interface FilteredBasicMetricsRow {
+type TokenUsagePrefix =
+  | ''
+  | 'attacker_'
+  | 'grading_'
+  | 'incurred_'
+  | 'incurred_attacker_'
+  | 'incurred_grading_';
+
+type FilteredBasicMetricsRow = {
   prompt_idx: number;
-  total_count: number;
   pass_count: number;
   fail_count: number;
   error_count: number;
   total_score: number;
   total_latency: number;
   total_cost: number;
-  total_tokens: number | null;
-  prompt_tokens: number | null;
-  completion_tokens: number | null;
-  cached_tokens: number | null;
+  incurred_cost: number;
+  has_incurred_cost: number;
   num_requests_with_tokens: number;
-  attacker_total_tokens: number | null;
-  attacker_prompt_tokens: number | null;
-  attacker_completion_tokens: number | null;
-  attacker_cached_tokens: number | null;
-  attacker_num_requests: number | null;
-  grading_total_tokens: number | null;
-  grading_prompt_tokens: number | null;
-  grading_completion_tokens: number | null;
-  grading_cached_tokens: number | null;
-  grading_num_requests: number | null;
   has_incurred_usage: number;
-  incurred_total_tokens: number | null;
-  incurred_prompt_tokens: number | null;
-  incurred_completion_tokens: number | null;
-  incurred_cached_tokens: number | null;
-  incurred_num_requests: number | null;
-  incurred_attacker_total_tokens: number | null;
-  incurred_attacker_prompt_tokens: number | null;
-  incurred_attacker_completion_tokens: number | null;
-  incurred_attacker_cached_tokens: number | null;
-  incurred_attacker_num_requests: number | null;
-  incurred_grading_total_tokens: number | null;
-  incurred_grading_prompt_tokens: number | null;
-  incurred_grading_completion_tokens: number | null;
-  incurred_grading_cached_tokens: number | null;
-  incurred_grading_num_requests: number | null;
-}
+} & Record<
+  | `${TokenUsagePrefix}${'total_tokens' | 'prompt_tokens' | 'completion_tokens' | 'cached_tokens'}`
+  | `${Exclude<TokenUsagePrefix, ''>}num_requests`,
+  number | null
+>;
 
 function jsonUsageField(
   column: SQL,
@@ -183,76 +167,34 @@ function jsonIncurredUsageField(
   END`;
 }
 
-function getIncurredTokenUsage(
-  row: FilteredBasicMetricsRow,
-): NonNullable<PromptMetrics['tokenUsage']['incurredTokenUsage']> {
+function getTokenUsageCounts(row: FilteredBasicMetricsRow, prefix: TokenUsagePrefix) {
   return {
-    total: row.incurred_total_tokens || 0,
-    prompt: row.incurred_prompt_tokens || 0,
-    completion: row.incurred_completion_tokens || 0,
-    cached: row.incurred_cached_tokens || 0,
-    numRequests: row.incurred_num_requests || 0,
-    attacker: {
-      total: row.incurred_attacker_total_tokens || 0,
-      prompt: row.incurred_attacker_prompt_tokens || 0,
-      completion: row.incurred_attacker_completion_tokens || 0,
-      cached: row.incurred_attacker_cached_tokens || 0,
-      numRequests: row.incurred_attacker_num_requests || 0,
-    },
-    assertions: {
-      total: row.incurred_grading_total_tokens || 0,
-      prompt: row.incurred_grading_prompt_tokens || 0,
-      completion: row.incurred_grading_completion_tokens || 0,
-      cached: row.incurred_grading_cached_tokens || 0,
-      numRequests: row.incurred_grading_num_requests || 0,
-    },
+    total: row[`${prefix}total_tokens`] || 0,
+    prompt: row[`${prefix}prompt_tokens`] || 0,
+    completion: row[`${prefix}completion_tokens`] || 0,
+    cached: row[`${prefix}cached_tokens`] || 0,
+    numRequests: (prefix ? row[`${prefix}num_requests`] : row.num_requests_with_tokens) || 0,
   };
 }
 
 function getFilteredTokenUsage(row: FilteredBasicMetricsRow): PromptMetrics['tokenUsage'] {
   return {
-    total: row.total_tokens || 0,
-    prompt: row.prompt_tokens || 0,
-    completion: row.completion_tokens || 0,
-    cached: row.cached_tokens || 0,
-    numRequests: row.num_requests_with_tokens || 0,
-    attacker: {
-      total: row.attacker_total_tokens || 0,
-      prompt: row.attacker_prompt_tokens || 0,
-      completion: row.attacker_completion_tokens || 0,
-      cached: row.attacker_cached_tokens || 0,
-      numRequests: row.attacker_num_requests || 0,
-    },
-    assertions: {
-      total: row.grading_total_tokens || 0,
-      prompt: row.grading_prompt_tokens || 0,
-      completion: row.grading_completion_tokens || 0,
-      cached: row.grading_cached_tokens || 0,
-      numRequests: row.grading_num_requests || 0,
-    },
+    ...getTokenUsageCounts(row, ''),
+    attacker: getTokenUsageCounts(row, 'attacker_'),
+    assertions: getTokenUsageCounts(row, 'grading_'),
     ...(row.has_incurred_usage > 0 && {
-      incurredTokenUsage: getIncurredTokenUsage(row),
+      incurredTokenUsage: {
+        ...getTokenUsageCounts(row, 'incurred_'),
+        attacker: getTokenUsageCounts(row, 'incurred_attacker_'),
+        assertions: getTokenUsageCounts(row, 'incurred_grading_'),
+      },
     }),
   };
 }
 
 /**
- * Calculates metrics for filtered results using optimized SQL aggregation.
- * Uses a SINGLE GROUP BY query to aggregate all prompts at once.
- *
- * SECURITY: Uses parameterized SQL queries via Drizzle's sql template strings.
- * The whereSql parameter is a SQL fragment, not a raw string, ensuring all
- * user-provided values are properly escaped.
- *
- * This is the core performance optimization - instead of making 2-3 queries
- * per prompt (which would be 30 queries for 10 prompts), we make 3-4 total queries:
- * 1. Count check (OOM protection)
- * 2. Basic metrics + token usage (GROUP BY prompt_idx)
- * 3. Named scores (GROUP BY prompt_idx, metric_name)
- * 4. Assertions (GROUP BY prompt_idx)
- *
- * @param opts - Options including WHERE clause SQL fragment
- * @returns Array of PromptMetrics, one per prompt
+ * Aggregate filtered rows across all prompts. The count limit bounds the query;
+ * three grouped queries collect row metrics, named scores, and assertion counts.
  */
 export async function calculateFilteredMetrics(
   opts: FilteredMetricsOptions,
@@ -269,10 +211,9 @@ export async function calculateFilteredMetrics(
       throw new Error(`Result count ${countResult} exceeds maximum ${MAX_RESULTS_FOR_METRICS}`);
     }
 
-    // Calculate metrics using optimized approach
     return await calculateWithOptimizedQuery(opts);
   } catch (error) {
-    logger.error('Failed to calculate filtered metrics with optimized query', { error });
+    logger.error('Failed to calculate filtered metrics', { error });
 
     // Fallback: Return empty metrics
     return createEmptyMetricsArray(numPrompts);
@@ -296,12 +237,7 @@ async function getResultCount(whereSql: SQL<unknown>): Promise<number> {
   return result?.count || 0;
 }
 
-/**
- * OPTIMIZED: Single GROUP BY query aggregating ALL prompts at once.
- * This is the key performance improvement from the audit.
- *
- * SECURITY: Uses parameterized SQL queries via Drizzle's sql template strings.
- */
+/** Aggregate all prompts together using parameterized SQL. */
 async function calculateWithOptimizedQuery(opts: FilteredMetricsOptions): Promise<PromptMetrics[]> {
   const { numPrompts, whereSql } = opts;
   const db = await getDb();
@@ -343,13 +279,16 @@ async function calculateWithOptimizedQuery(opts: FilteredMetricsOptions): Promis
   const basicMetricsQuery = sql`
     SELECT
       prompt_idx,
-      COUNT(DISTINCT test_idx) as total_count,
       SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END) as pass_count,
       SUM(CASE WHEN success = 0 AND failure_reason != ${ResultFailureReason.ERROR} THEN 1 ELSE 0 END) as fail_count,
       SUM(CASE WHEN failure_reason = ${ResultFailureReason.ERROR} THEN 1 ELSE 0 END) as error_count,
       SUM(score) as total_score,
       SUM(latency_ms) as total_latency,
       SUM(cost) as total_cost,
+      SUM(CASE WHEN json_extract(response, '$.incurredCost') IS NOT NULL
+        OR json_extract(response, '$.cached') = 1 THEN 1 ELSE 0 END) as has_incurred_cost,
+      SUM(COALESCE(json_extract(response, '$.incurredCost'),
+        CASE WHEN json_extract(response, '$.cached') = 1 THEN 0 ELSE cost END, 0)) as incurred_cost,
       -- Token usage aggregation (token usage is inside response JSON)
       SUM(${jsonUsageTotal(response, targetPath)}) as total_tokens,
       SUM(${jsonUsageNumber(response, targetPath, 'prompt')}) as prompt_tokens,
@@ -439,6 +378,7 @@ async function calculateWithOptimizedQuery(opts: FilteredMetricsOptions): Promis
       testErrorCount: row.error_count || 0,
       totalLatencyMs: row.total_latency || 0,
       cost: row.total_cost || 0,
+      ...(row.has_incurred_cost ? { incurredCost: row.incurred_cost || 0 } : {}),
       tokenUsage: getFilteredTokenUsage(row),
       namedScores: {},
       namedScoresCount: {},

@@ -5,14 +5,11 @@ import { createMockProvider } from '../factories/provider';
 
 import type { CallApiContextParams } from '../../src/types/index';
 
-vi.mock('../../src/logger', () => ({
-  default: {
-    debug: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    info: vi.fn(),
-  },
-}));
+const { createWarningOrderedLoggerFactory } = await vi.hoisted(
+  () => import('../factories/moduleMocks'),
+);
+
+vi.mock('../../src/logger', createWarningOrderedLoggerFactory());
 
 describe('sanitizeScriptContext', () => {
   beforeEach(() => {

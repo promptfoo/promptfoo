@@ -6,6 +6,7 @@ import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { createTogetherAiProvider } from '../../src/providers/togetherai';
 import { ProviderOptionsSchema } from '../../src/validators/providers';
 import { mockProcessEnv } from '../util/utils';
+import { createMockFetchResponse } from './mockProviderResponses';
 
 vi.mock('../../src/cache', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../src/cache')>()),
@@ -17,18 +18,15 @@ beforeEach(() => {
   restoreEnvironment = mockProcessEnv();
   vi.mocked(fetchWithCache)
     .mockReset()
-    .mockResolvedValue({
-      data: {
+    .mockResolvedValue(
+      createMockFetchResponse({
         choices: [
           { text: 'fixture output', message: { content: 'fixture output' }, finish_reason: 'stop' },
         ],
         data: [{ embedding: [0.1, 0.2] }],
         usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
-      },
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    });
+      }),
+    );
 });
 afterEach(() => {
   restoreEnvironment();

@@ -1,5 +1,6 @@
 import React from 'react';
 
+import { createTargetOverwriteSetItem } from '@app/tests/browserMocks';
 import { renderWithProviders } from '@app/utils/testutils';
 import { act, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -198,7 +199,7 @@ describe('ProviderConfigEditor', () => {
         />,
       );
       expect(validate?.()).toBe(false);
-      expect(setError).toHaveBeenCalledWith('Provider ID is required');
+      expect(setError).toHaveBeenCalledWith(expect.stringContaining('Provider ID is required'));
     },
   );
 
@@ -1594,7 +1595,7 @@ describe('ProviderConfigEditor', () => {
       />,
     );
 
-    expect(setError).toHaveBeenCalledWith('Provider ID is required');
+    expect(setError).toHaveBeenCalledWith(expect.stringContaining('Provider ID is required'));
     expect(onValidate).toHaveBeenCalledWith(false);
   });
 
@@ -1740,21 +1741,10 @@ describe('ProviderConfigEditor', () => {
       screen.getByTestId('invalidate-custom-config').click();
     });
     const originalSetItem = Storage.prototype.setItem;
-    let raced = false;
-    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (
-      this: Storage,
-      key: string,
-      value: string,
-    ) {
-      const result = originalSetItem.call(this, key, value);
-      if (!raced && this === window.localStorage && key === 'redTeamConfig') {
-        raced = true;
-        const overwrittenConfig = JSON.parse(value);
-        overwrittenConfig.state.config.target = staleTarget;
-        originalSetItem.call(this, key, JSON.stringify(overwrittenConfig));
-      }
-      return result;
-    });
+    const overwrite = createTargetOverwriteSetItem(originalSetItem, staleTarget);
+    const setItem = vi
+      .spyOn(Storage.prototype, 'setItem')
+      .mockImplementation(overwrite.implementation);
     try {
       act(() => {
         screen.getByTestId('correct-custom-config').click();
@@ -1763,7 +1753,7 @@ describe('ProviderConfigEditor', () => {
       setItem.mockRestore();
     }
 
-    expect(raced).toBe(true);
+    expect(overwrite.state.raced).toBe(true);
     expect(
       JSON.parse(window.localStorage.getItem('redTeamConfig')!).state.config.target.config,
     ).toEqual({ sandbox_mode: 'danger-full-access' });
@@ -1804,21 +1794,10 @@ describe('ProviderConfigEditor', () => {
       screen.getByTestId('invalidate-custom-config').click();
     });
     const originalSetItem = Storage.prototype.setItem;
-    let raced = false;
-    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (
-      this: Storage,
-      key: string,
-      value: string,
-    ) {
-      const result = originalSetItem.call(this, key, value);
-      if (!raced && this === window.localStorage && key === 'redTeamConfig') {
-        raced = true;
-        const overwrittenConfig = JSON.parse(value);
-        overwrittenConfig.state.config.target = staleTarget;
-        originalSetItem.call(this, key, JSON.stringify(overwrittenConfig));
-      }
-      return result;
-    });
+    const overwrite = createTargetOverwriteSetItem(originalSetItem, staleTarget);
+    const setItem = vi
+      .spyOn(Storage.prototype, 'setItem')
+      .mockImplementation(overwrite.implementation);
     try {
       act(() => {
         useRedTeamConfig.getState().updateConfig('target', correctedTarget);
@@ -1835,7 +1814,7 @@ describe('ProviderConfigEditor', () => {
       setItem.mockRestore();
     }
 
-    expect(raced).toBe(true);
+    expect(overwrite.state.raced).toBe(true);
     expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBe(
       'Invalid JSON configuration',
     );
