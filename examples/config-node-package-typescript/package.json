@@ -13,8 +13,8 @@
     "promptfoo": "latest"
   },
   "devDependencies": {
-    "@types/node": "^24.10.9",
-    "tsx": "^4.21.0",
-    "typescript": "^5.9.3"
+    "@types/node": "^24.13.6",
+    "tsx": "^4.23.11",
+    "typescript": "^7.0.0"
   }
 }

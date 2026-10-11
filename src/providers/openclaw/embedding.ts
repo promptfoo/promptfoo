@@ -4,6 +4,7 @@ import {
   buildOpenClawProviderOptions,
   DEFAULT_GATEWAY_HOST,
   DEFAULT_GATEWAY_PORT,
+  normalizeOpenClawAgentId,
   resolveOpenClawBillingModelName,
 } from './shared';
 
@@ -16,19 +17,23 @@ import type { ProviderOptions } from '../../types/providers';
  * optionally accepts x-openclaw-model as the backend embedding-model override.
  */
 export class OpenClawEmbeddingProvider extends OpenAiEmbeddingProvider {
-  private agentId: string;
+  private agentId: string | undefined;
 
-  constructor(agentId: string, providerOptions: ProviderOptions = {}) {
-    super(buildOpenClawModelName(agentId), buildOpenClawProviderOptions(agentId, providerOptions));
-    this.agentId = agentId;
+  constructor(agentId: string | undefined, providerOptions: ProviderOptions = {}) {
+    const normalizedAgentId = normalizeOpenClawAgentId(agentId);
+    super(
+      buildOpenClawModelName(normalizedAgentId),
+      buildOpenClawProviderOptions(normalizedAgentId, providerOptions),
+    );
+    this.agentId = normalizedAgentId;
   }
 
   id(): string {
-    return `openclaw:embedding:${this.agentId}`;
+    return this.agentId ? `openclaw:embedding:${this.agentId}` : 'openclaw:embedding';
   }
 
   toString(): string {
-    return `[OpenClaw Embedding Provider ${this.agentId}]`;
+    return `[OpenClaw Embedding Provider ${this.agentId ?? 'default'}]`;
   }
 
   getApiUrlDefault(): string {

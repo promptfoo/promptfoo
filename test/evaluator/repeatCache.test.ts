@@ -1,9 +1,11 @@
+import { createSingleAssertionTest } from '../factories/literalFixtures';
+
 import './setup';
 
 import { randomUUID } from 'crypto';
 
 import { expect, it, vi } from 'vitest';
-import { clearCache, getCache } from '../../src/cache';
+import { clearCache, disableCache, enableCache, getCache } from '../../src/cache';
 import cliState from '../../src/cliState';
 import { evaluate, runEval } from '../../src/evaluator';
 import { runExtensionHook } from '../../src/evaluatorHelpers';
@@ -71,8 +73,57 @@ describeEvaluator('evaluator repeat cache isolation', () => {
     expect(contexts[0]!.bustCache).toBeFalsy();
   });
 
-  it('isolates manual provider cache entries by repeat index', async () => {
+  it('passes bustCache to the provider when the run cache is disabled', async () => {
+    // #10787: a provider built by an extension hook importing "promptfoo"
+    // reads a different copy of the cache module, so the CLI's --no-cache
+    // flag never reaches it through module state. bustCache travels with the
+    // call context instead.
+    const contexts: Array<Record<string, any> | undefined> = [];
+    const provider: ApiProvider = {
+      id: () => 'mock-provider',
+      callApi: vi
+        .fn()
+        .mockImplementation(async (_prompt: string, context?: Record<string, any>) => {
+          contexts.push(context);
+          return {
+            output: 'result',
+            tokenUsage: createEmptyTokenUsage(),
+          };
+        }),
+    };
+
+    disableCache();
+    try {
+      await runEval({
+        provider,
+        prompt: { raw: 'Test prompt', label: 'test-label' } as Prompt,
+        delay: 0,
+        nunjucksFilters: undefined,
+        evaluateOptions: {},
+        testIdx: 0,
+        promptIdx: 0,
+        conversations: {},
+        registers: {},
+        isRedteam: false,
+        test: { assert: [] },
+        repeatIndex: 0,
+      });
+    } finally {
+      enableCache();
+    }
+
+    expect(contexts).toHaveLength(1);
+    expect(contexts[0]!.bustCache).toBe(true);
+  });
+
+  it('isolates per-test repeat provider cache entries from the default namespace', async () => {
     await clearCache();
+
+    const baselineResponse: ProviderResponse = {
+      output: 'baseline-result',
+      tokenUsage: createEmptyTokenUsage(),
+    };
+    await getCache().set('manual-provider-key', baselineResponse);
 
     let cacheMissCount = 0;
     const provider: ApiProvider = {
@@ -103,11 +154,11 @@ describeEvaluator('evaluator repeat cache isolation', () => {
     const testSuite: TestSuite = {
       providers: [provider],
       prompts: [toPrompt('Test prompt')],
-      tests: [{}],
+      tests: [{ options: { repeat: 2 } }],
     };
 
     const firstEval = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
-    await evaluate(testSuite, firstEval, { maxConcurrency: 1, repeat: 2 });
+    await evaluate(testSuite, firstEval, { maxConcurrency: 1 });
     const firstSummary = await firstEval.toEvaluateSummary();
 
     expect(cacheMissCount).toBe(2);
@@ -118,7 +169,7 @@ describeEvaluator('evaluator repeat cache isolation', () => {
     expect(firstSummary.results.map((result) => result.response?.cached)).toEqual([false, false]);
 
     const secondEval = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
-    await evaluate(testSuite, secondEval, { maxConcurrency: 1, repeat: 2 });
+    await evaluate(testSuite, secondEval, { maxConcurrency: 1 });
     const secondSummary = await secondEval.toEvaluateSummary();
 
     expect(cacheMissCount).toBe(2);
@@ -127,6 +178,7 @@ describeEvaluator('evaluator repeat cache isolation', () => {
       'result-repeat-1-miss-2',
     ]);
     expect(secondSummary.results.map((result) => result.response?.cached)).toEqual([true, true]);
+    expect(await getCache().get('manual-provider-key')).toEqual(baselineResponse);
   });
 
   it('isolates beforeEach extension cache entries by repeat index', async () => {
@@ -305,16 +357,7 @@ describeEvaluator('evaluator repeat cache isolation', () => {
     const testSuite: TestSuite = {
       providers: [provider],
       prompts: [toPrompt('Prompt A'), toPrompt('Prompt B')],
-      tests: [
-        {
-          assert: [
-            {
-              type: 'select-best',
-              value: 'choose the best one',
-            },
-          ],
-        },
-      ],
+      tests: [createSingleAssertionTest('select-best', 'choose the best one')],
     };
 
     try {
@@ -378,16 +421,7 @@ describeEvaluator('evaluator repeat cache isolation', () => {
     const testSuite: TestSuite = {
       providers: [provider],
       prompts: [toPrompt('Prompt A'), toPrompt('Prompt B')],
-      tests: [
-        {
-          assert: [
-            {
-              type: 'select-best',
-              value: 'choose the best one',
-            },
-          ],
-        },
-      ],
+      tests: [createSingleAssertionTest('select-best', 'choose the best one')],
     };
 
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });

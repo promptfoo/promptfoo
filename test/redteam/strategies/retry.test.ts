@@ -1,7 +1,11 @@
+const { createWarningLoggerModule } = await vi.hoisted(
+  async () => import('../../factories/logger'),
+);
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { addRetryTestCases } from '../../../src/redteam/strategies/retry';
 
-import type { TestCase, TestCaseWithPlugin } from '../../../src/types/index';
+import type { TestCaseWithPlugin } from '../../../src/types/index';
 
 // Mock dependencies
 vi.mock('../../../src/database/index', () => ({
@@ -18,13 +22,7 @@ vi.mock('../../../src/util/cloud', () => ({
   makeRequest: vi.fn(),
 }));
 
-vi.mock('../../../src/logger', () => ({
-  default: {
-    debug: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  },
-}));
+vi.mock('../../../src/logger', () => createWarningLoggerModule());
 
 describe('addRetryTestCases', () => {
   beforeEach(async () => {
@@ -125,8 +123,10 @@ describe('addRetryTestCases', () => {
 
     const result = await addRetryTestCases(testCases, 'prompt', {
       targetIds: ['openai:gpt-4o-mini'],
+      numTests: 7,
     });
 
+    expect(mockDb.limit).toHaveBeenLastCalledWith(7);
     expect(result).toHaveLength(1);
     expect(result[0].provider).toEqual({
       id: 'promptfoo:redteam:goat',
@@ -340,6 +340,7 @@ describe('addRetryTestCases', () => {
 
     expect(result).toHaveLength(1);
     expect(result[0].metadata?.retry).toBe(true);
+    expect(result[0].metadata?.strategyId).toBeUndefined();
   });
 
   it('should deduplicate tests from multiple targets', async () => {
@@ -386,35 +387,134 @@ describe('addRetryTestCases', () => {
       },
     ];
 
+    testCases.push(testCases[0]);
     const result = await addRetryTestCases(testCases, 'prompt', {
       targetIds: ['openai:gpt-4o-mini', 'openai:gpt-4o'],
     });
 
+    expect(mockDb.limit.mock.calls).toEqual([[1], [2], [1], [2]]);
     // Should be deduplicated to 1 test case
     expect(result).toHaveLength(1);
   });
-});
 
-// Test that validates strategyId in metadata
-describe('retry strategy metadata', () => {
-  it('should include strategyId in metadata', () => {
-    // Create a test case that simulates what would be returned by addRetryTestCases
-    const testCase: TestCase = {
-      vars: { input: 'test' },
-      assert: [{ type: 'equals', value: 'expected' }],
-      metadata: {
-        pluginId: 'test-plugin',
-        strategyId: 'retry',
-      },
-      provider: {
-        id: 'promptfoo:redteam:retry',
-        config: {
-          injectVar: 'input',
-        },
-      },
-    };
-
-    // Verify the correct strategyId is present in metadata
-    expect(testCase.metadata?.strategyId).toBe('retry');
-  });
+  it.each(['mixed', 'empty', 'http-error', 'network-error'])(
+    'combines real SQLite history with %s cloud results',
+    async (scenario) => {
+      const actualDatabase = await vi.importActual<typeof import('../../../src/database/index')>(
+        '../../../src/database/index',
+      );
+      const db = await actualDatabase.getDb();
+      const getDb = await getMockDb();
+      getDb.mockResolvedValue(db);
+      const { runDbMigrations } = await import('../../../src/migrate');
+      await runDbMigrations();
+      const { evalsTable, evalResultsTable } = await import('../../../src/database/tables');
+      const { eq } = await import('drizzle-orm');
+      const { cloudConfig } = await import('../../../src/globalConfig/cloud');
+      const { makeRequest } = await import('../../../src/util/cloud');
+      vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+      const evalId = `retry-${scenario}`;
+      const targetId = `target-${scenario}`;
+      const cloudCase: TestCaseWithPlugin = {
+        vars: { prompt: 'same attack', sessionId: 'cloud-session', _conversation: ['cloud turn'] },
+        description: 'first occurrence',
+        assert: [{ type: 'equals', value: 'expected', metric: 'Bias/base64' }],
+        metadata: { pluginId: 'bias:age', strategyConfig: { stale: true } },
+      };
+      const cloudRows = [{ testCase: cloudCase, response: {}, evalId: 'cloud-eval' }];
+      if (scenario === 'network-error') {
+        vi.mocked(makeRequest).mockRejectedValue(new Error('cloud unavailable'));
+      } else {
+        vi.mocked(makeRequest).mockResolvedValue(
+          new Response(JSON.stringify({ results: scenario === 'empty' ? [] : cloudRows }), {
+            status: scenario === 'http-error' ? 503 : 200,
+          }),
+        );
+      }
+      await db.insert(evalsTable).values({ id: evalId, config: {}, results: {} }).run();
+      try {
+        const rows = [
+          {
+            prompt: 'same attack',
+            strategyId: undefined,
+            pluginId: 'bias:age',
+            targetId,
+            success: false,
+          },
+          {
+            prompt: 'different attack',
+            strategyId: undefined,
+            pluginId: 'bias:age',
+            targetId,
+            success: false,
+          },
+          {
+            prompt: 'same attack',
+            strategyId: 'base64',
+            pluginId: 'bias:age',
+            targetId,
+            success: false,
+          },
+          { prompt: 'wrong target', pluginId: 'bias:age', targetId: 'other', success: false },
+          { prompt: 'wrong plugin', pluginId: 'pii', targetId, success: false },
+          { prompt: 'passed', pluginId: 'bias:age', targetId, success: true },
+        ];
+        await db
+          .insert(evalResultsTable)
+          .values(
+            rows.map((row, index) => ({
+              id: `${evalId}-${index}`,
+              evalId,
+              promptIdx: 0,
+              testIdx: index,
+              updatedAt: 100 - index,
+              prompt: { raw: '{{prompt}}', label: 'fixture' },
+              provider: { id: row.targetId },
+              testCase: {
+                vars: {
+                  prompt: row.prompt,
+                  sessionId: 'local-session',
+                  _conversation: ['local turn'],
+                },
+                metadata: { pluginId: row.pluginId, strategyId: row.strategyId },
+              },
+              response: {},
+              success: row.success,
+              score: row.success ? 1 : 0,
+            })),
+          )
+          .run();
+        const result = await addRetryTestCases(
+          [{ vars: { prompt: 'seed' }, metadata: { pluginId: 'bias:age' } }],
+          'prompt',
+          { targetIds: [targetId], numTests: 10 },
+        );
+        expect(makeRequest).toHaveBeenCalledExactlyOnceWith(
+          `results/failed-tests?pluginId=bias%3Aage&targetId=${targetId}&limit=10`,
+          'GET',
+        );
+        expect(result.map((test) => [test.vars?.prompt, test.metadata?.strategyId])).toEqual([
+          ['same attack', undefined],
+          ['different attack', undefined],
+          ['same attack', 'base64'],
+        ]);
+        expect(result.every((test) => test.metadata?.retry === true)).toBe(true);
+        if (scenario === 'mixed') {
+          expect(result[0]).toMatchObject({
+            vars: cloudCase.vars,
+            description: 'first occurrence',
+            assert: [{ type: 'equals', value: 'expected', metric: 'Bias' }],
+            metadata: { originalEvalId: 'cloud-eval' },
+          });
+          expect(result[0].metadata?.strategyConfig).toBeUndefined();
+          expect(cloudCase.metadata?.strategyConfig).toEqual({ stale: true });
+        } else {
+          expect(result[0].metadata?.originalEvalId).toBe(evalId);
+        }
+      } finally {
+        await db.delete(evalResultsTable).where(eq(evalResultsTable.evalId, evalId)).run();
+        await db.delete(evalsTable).where(eq(evalsTable.id, evalId)).run();
+      }
+    },
+  );
 });

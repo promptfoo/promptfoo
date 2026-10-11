@@ -153,7 +153,7 @@ strategies:
   - jailbreak # Single-shot optimization of safety bypass techniques
   - jailbreak:composite # Combines multiple jailbreak techniques for enhanced effectiveness
   - jailbreak:likert # Jailbreak technique published by Anthropic and Stanford
-  - prompt-injection # Tests for direct prompt injection vulnerabilities
+  - jailbreak-templates # Applies known static jailbreak templates (DAN, etc.)
 ```
 
 ## Scanning static foundation or fine-tuned models

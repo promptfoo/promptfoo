@@ -2,9 +2,8 @@
 // RAG/Agent provider with intricate OpenTelemetry tracing
 
 const { trace, context, SpanStatusCode } = require('@opentelemetry/api');
-const { NodeTracerProvider } = require('@opentelemetry/sdk-trace-node');
+const { BatchSpanProcessor, NodeTracerProvider } = require('@opentelemetry/sdk-trace-node');
 const { OTLPTraceExporter } = require('@opentelemetry/exporter-trace-otlp-http');
-const { BatchSpanProcessor } = require('@opentelemetry/sdk-trace-base'); // Use BatchSpanProcessor
 const { resourceFromAttributes } = require('@opentelemetry/resources');
 const { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION } = require('@opentelemetry/semantic-conventions');
 

@@ -24,6 +24,10 @@ The [Meta Agent](/docs/red-team/strategies/meta/) dynamically builds an attack t
 
 [Hydra](/docs/red-team/strategies/hydra/) runs adaptive multi-turn conversations with persistent scan-wide attacker memory. It can either replay the full transcript to a stateless target or use target-managed session memory for applications that persist prior turns.
 
+### Goblin Multi-Turn: IICL-Inspired Exploration
+
+[Goblin](/docs/red-team/strategies/goblin/) uses Hydra's multi-turn mechanics with an attacker prompt inspired by IICL-style abstract few-shot pattern completion and occasional encoding shifts. Use it as a complementary strategy when you want research-inspired exploration rather than the default general-purpose attacker.
+
 ### Quick Start
 
 For most applications, this configuration provides comprehensive red team coverage:
@@ -61,6 +65,8 @@ By default, dynamic strategies like `jailbreak` and `jailbreak:composite` will:
 ### Multi-turn Strategies
 
 Multi-turn strategies use an attacker agent to coerce the target over multiple conversation turns. They are particularly effective against stateful applications where they can convince the target to act against its purpose over time. Multi-turn strategies are more resource intensive than single-turn strategies, but they have the highest success rates.
+
+Multi-turn scans track target, attacker, and grading tokens separately. Probe counts include only requests to the target; grading request counts include one request per grading task, while cached responses do not create additional requests.
 
 ### Indirect Prompt Injection Strategies
 

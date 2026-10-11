@@ -1,5 +1,8 @@
+import { isDeepStrictEqual } from 'node:util';
+
+import { addCompletionDetails } from '../contracts/completionDetails';
 import { getEnvBool } from '../envars';
-import { isGradingResult } from '../types/index';
+import { asGradingResult } from './scriptResultNormalization';
 
 import type { AssertionSet, GradingResult, ScoringFunction } from '../types/index';
 
@@ -12,6 +15,9 @@ export const DEFAULT_TOKENS_USED = {
   cached: 0,
   numRequests: 0,
 };
+
+type AssertionTokenUsage = typeof DEFAULT_TOKENS_USED &
+  Pick<NonNullable<GradingResult['tokensUsed']>, 'completionDetails' | 'incurredTokenUsage'>;
 
 interface ParentAssertionSet {
   index: number;
@@ -43,6 +49,167 @@ function mergeMetadata(
   };
 }
 
+function normalizeAssertionTokenUsage(result: GradingResult) {
+  const tokensUsed = result.tokensUsed;
+  if (!tokensUsed) {
+    return undefined;
+  }
+
+  if (result.metadata?.cachedResponse === true) {
+    const reportedTotal =
+      tokensUsed.total ?? (tokensUsed.prompt ?? 0) + (tokensUsed.completion ?? 0);
+    const logicalTotal = reportedTotal || (tokensUsed.cached ?? 0);
+    return {
+      ...tokensUsed,
+      total: logicalTotal,
+      prompt: tokensUsed.prompt ?? 0,
+      completion: tokensUsed.completion ?? 0,
+      cached: Math.max(tokensUsed.cached ?? 0, logicalTotal),
+      numRequests: Math.max(tokensUsed.numRequests ?? 0, 1),
+      incurredTokenUsage: { ...DEFAULT_TOKENS_USED },
+    };
+  }
+
+  return {
+    ...tokensUsed,
+    ...(result.metadata?.renderedGradingPrompt !== undefined &&
+      tokensUsed.numRequests === 0 && { numRequests: 1 }),
+  };
+}
+
+function accumulateNormalizedAssertionTokenUsage(
+  target: NonNullable<GradingResult['tokensUsed']>,
+  update: NonNullable<GradingResult['tokensUsed']>,
+): void {
+  const trackIncurredUsage = Boolean(target.incurredTokenUsage || update.incurredTokenUsage);
+  if (trackIncurredUsage && !target.incurredTokenUsage) {
+    target.incurredTokenUsage = cloneAssertionTokenUsage(target);
+  }
+
+  for (const field of ['total', 'prompt', 'completion', 'cached', 'numRequests'] as const) {
+    target[field] = (target[field] ?? 0) + (update[field] ?? 0);
+  }
+
+  if (update.completionDetails) {
+    target.completionDetails = addCompletionDetails(
+      target.completionDetails,
+      update.completionDetails!,
+    );
+  }
+
+  if (trackIncurredUsage && target.incurredTokenUsage) {
+    accumulateNormalizedAssertionTokenUsage(
+      target.incurredTokenUsage,
+      update.incurredTokenUsage ?? cloneAssertionTokenUsage(update),
+    );
+  }
+}
+
+function cloneAssertionTokenUsage(
+  tokenUsage: NonNullable<GradingResult['tokensUsed']>,
+): NonNullable<NonNullable<GradingResult['tokensUsed']>['incurredTokenUsage']> {
+  const { incurredTokenUsage: _incurredTokenUsage, ...assertionUsage } = tokenUsage;
+  return {
+    ...assertionUsage,
+    ...(assertionUsage.completionDetails && {
+      completionDetails: { ...assertionUsage.completionDetails },
+    }),
+  };
+}
+
+function mergeScoringMetadata(
+  baseMetadata: GradingResult['metadata'],
+  scoringResult: GradingResult,
+  baseTokensUsed: GradingResult['tokensUsed'],
+): GradingResult['metadata'] | undefined {
+  const metadata = mergeMetadata(baseMetadata, scoringResult.metadata);
+  const tokensUsed = scoringResult.tokensUsed;
+  const scoringPerformedFreshWork =
+    scoringResult.metadata?.cachedResponse !== true &&
+    tokensUsed !== undefined &&
+    ((tokensUsed.numRequests ?? 0) > 0 ||
+      (tokensUsed.total ?? 0) > 0 ||
+      (tokensUsed.prompt ?? 0) > 0 ||
+      (tokensUsed.completion ?? 0) > 0);
+
+  const componentsPerformedFreshWork =
+    baseMetadata?.cachedResponse !== true &&
+    ((baseTokensUsed?.numRequests ?? 0) > 0 ||
+      (baseTokensUsed?.total ?? 0) > 0 ||
+      (baseTokensUsed?.prompt ?? 0) > 0 ||
+      (baseTokensUsed?.completion ?? 0) > 0);
+
+  if (
+    (!scoringPerformedFreshWork && !componentsPerformedFreshWork) ||
+    metadata?.cachedResponse !== true
+  ) {
+    return metadata;
+  }
+
+  const { cachedResponse: _cachedResponse, ...remainingMetadata } = metadata;
+  return Object.keys(remainingMetadata).length > 0 ? remainingMetadata : undefined;
+}
+
+function mergeScoringTokenUsage(
+  baseTokensUsed: GradingResult['tokensUsed'],
+  scoringResult: GradingResult,
+): GradingResult['tokensUsed'] {
+  if (!scoringResult.tokensUsed || scoringResult.tokensUsed === baseTokensUsed) {
+    return baseTokensUsed;
+  }
+
+  const scoringHasIndependentProvenance =
+    scoringResult.metadata?.cachedResponse === true ||
+    scoringResult.metadata?.renderedGradingPrompt !== undefined;
+  if (
+    baseTokensUsed &&
+    !scoringHasIndependentProvenance &&
+    isDeepStrictEqual(scoringResult.tokensUsed, baseTokensUsed)
+  ) {
+    return baseTokensUsed;
+  }
+
+  const scoringTokensUsed = normalizeAssertionTokenUsage(scoringResult);
+  if (!scoringTokensUsed) {
+    return baseTokensUsed;
+  }
+
+  const mergedTokensUsed = {
+    total: baseTokensUsed?.total ?? 0,
+    prompt: baseTokensUsed?.prompt ?? 0,
+    completion: baseTokensUsed?.completion ?? 0,
+    cached: baseTokensUsed?.cached ?? 0,
+    numRequests: baseTokensUsed?.numRequests ?? 0,
+    ...(baseTokensUsed?.completionDetails && {
+      completionDetails: { ...baseTokensUsed.completionDetails },
+    }),
+    ...(baseTokensUsed?.incurredTokenUsage && {
+      incurredTokenUsage: cloneAssertionTokenUsage(baseTokensUsed.incurredTokenUsage),
+    }),
+  };
+  const scorerUsedTokens =
+    (scoringTokensUsed.total ?? 0) > 0 ||
+    (scoringTokensUsed.prompt ?? 0) > 0 ||
+    (scoringTokensUsed.completion ?? 0) > 0;
+
+  accumulateNormalizedAssertionTokenUsage(mergedTokensUsed, {
+    ...scoringTokensUsed,
+    ...(scoringResult.metadata?.cachedResponse !== true &&
+      scorerUsedTokens &&
+      !scoringTokensUsed.numRequests && { numRequests: 1 }),
+  });
+
+  return mergedTokensUsed;
+}
+
+function normalizeWeightedScore(totalScore: number, totalWeight: number): number {
+  // An infinite denominator can hide overflow behind a finite quotient.
+  if (!Number.isFinite(totalScore) || !Number.isFinite(totalWeight)) {
+    return Number.NaN;
+  }
+  return totalWeight > 0 ? totalScore / totalWeight : 0;
+}
+
 export class AssertionsResult {
   static noAssertsResult(): GradingResult {
     return {
@@ -53,7 +220,7 @@ export class AssertionsResult {
     };
   }
 
-  private tokensUsed = {
+  private tokensUsed: AssertionTokenUsage = {
     ...DEFAULT_TOKENS_USED,
   };
   private threshold: number | undefined;
@@ -62,8 +229,8 @@ export class AssertionsResult {
   private totalWeight: number = 0;
   private failedReason: string | undefined;
   private componentResults: GradingResult[] = [];
-  private namedScores: Record<string, number> = {};
-  private namedScoreWeights: Record<string, number> = {};
+  private namedScores: Record<string, number> = Object.create(null);
+  private namedScoreWeights: Record<string, number> = Object.create(null);
   private result: GradingResult | null = null;
   private failedContentSafetyChecks: boolean = false;
 
@@ -104,30 +271,33 @@ export class AssertionsResult {
       this.failedContentSafetyChecks = true;
     }
 
+    // Zero-weight assertions collect measurements without affecting the aggregate score.
+    const metricWeight = weight === 0 ? 1 : weight;
     if (metric) {
-      this.namedScores[metric] = (this.namedScores[metric] || 0) + result.score * weight;
-      this.namedScoreWeights[metric] = (this.namedScoreWeights[metric] || 0) + weight;
+      this.namedScores[metric] = (this.namedScores[metric] ?? 0) + result.score * metricWeight;
+      this.namedScoreWeights[metric] = (this.namedScoreWeights[metric] ?? 0) + metricWeight;
     }
 
     if (result.namedScores) {
       Object.entries(result.namedScores).forEach(([metricName, score]) => {
         if (metricName !== metric) {
-          const incomingWeight = result.namedScoreWeights?.[metricName] ?? 1;
-          const weightedIncomingWeight = incomingWeight * weight;
+          const incomingWeight =
+            result.namedScoreWeights &&
+            Object.prototype.hasOwnProperty.call(result.namedScoreWeights, metricName)
+              ? (result.namedScoreWeights[metricName] ?? 1)
+              : 1;
+          const weightedIncomingWeight = incomingWeight * metricWeight;
           this.namedScores[metricName] =
-            (this.namedScores[metricName] || 0) + score * weightedIncomingWeight;
+            (this.namedScores[metricName] ?? 0) + score * weightedIncomingWeight;
           this.namedScoreWeights[metricName] =
-            (this.namedScoreWeights[metricName] || 0) + weightedIncomingWeight;
+            (this.namedScoreWeights[metricName] ?? 0) + weightedIncomingWeight;
         }
       });
     }
 
-    if (result.tokensUsed) {
-      this.tokensUsed.total += result.tokensUsed.total || 0;
-      this.tokensUsed.prompt += result.tokensUsed.prompt || 0;
-      this.tokensUsed.completion += result.tokensUsed.completion || 0;
-      this.tokensUsed.cached += result.tokensUsed.cached || 0;
-      this.tokensUsed.numRequests += result.tokensUsed.numRequests || 0;
+    const tokensUsed = normalizeAssertionTokenUsage(result);
+    if (tokensUsed) {
+      accumulateNormalizedAssertionTokenUsage(this.tokensUsed, tokensUsed);
     }
 
     if (result.pass) {
@@ -146,20 +316,22 @@ export class AssertionsResult {
       return this.result;
     }
 
-    const score = this.totalWeight > 0 ? this.totalScore / this.totalWeight : 0;
+    const score = normalizeWeightedScore(this.totalScore, this.totalWeight);
 
-    let pass = !this.failedReason;
-    let reason = this.failedReason ? this.failedReason : 'All assertions passed';
+    // An empty explanation still records a failed assertion.
+    let pass = this.failedReason === undefined;
+    let reason = this.failedReason ?? 'All assertions passed';
 
-    if (this.threshold) {
-      // Existence of a test threshold overrides the pass/fail status of individual assertions
+    if (typeof this.threshold === 'number' && !Number.isNaN(this.threshold)) {
+      // A numeric test threshold overrides the pass/fail status of individual assertions.
+      // Gate on `typeof === 'number'` (not a truthy check) so a threshold of 0 is honored —
+      // `score >= 0` is always true, i.e. "collect assertion scores but never fail on an
+      // individual failure". Guarding on the type (rather than `!== undefined`) keeps a
+      // `null`/`NaN` threshold — e.g. an empty `threshold:` in YAML — from silently
+      // force-passing every assertion via `score >= null`.
       pass = score >= this.threshold;
-
-      if (pass) {
-        reason = `Aggregate score ${score.toFixed(2)} ≥ ${this.threshold} threshold`;
-      } else {
-        reason = `Aggregate score ${score.toFixed(2)} < ${this.threshold} threshold`;
-      }
+      const comparator = pass ? '≥' : '<';
+      reason = `Aggregate score ${score.toFixed(2)} ${comparator} ${this.threshold} threshold`;
     }
 
     if (this.failedContentSafetyChecks) {
@@ -182,51 +354,103 @@ export class AssertionsResult {
       }
     });
 
-    const normalizedNamedScores: Record<string, number> = {};
-    for (const [key, value] of Object.entries(this.namedScores)) {
-      const totalWeight = this.namedScoreWeights[key] ?? 0;
-      normalizedNamedScores[key] = totalWeight > 0 ? value / totalWeight : 0;
-    }
+    const normalizedNamedScores: Record<string, number> = Object.fromEntries(
+      Object.entries(this.namedScores).map(([key, value]) => [
+        key,
+        normalizeWeightedScore(value, this.namedScoreWeights[key] ?? 0),
+      ]),
+    );
 
     const hasNamedScoreWeights = Object.keys(this.namedScoreWeights).length > 0;
+    const cachedResponse =
+      this.componentResults.length > 0 &&
+      this.componentResults.every((result) => result.metadata?.cachedResponse === true);
 
     this.result = {
       pass,
       score,
       reason,
       namedScores: normalizedNamedScores,
-      ...(hasNamedScoreWeights ? { namedScoreWeights: this.namedScoreWeights } : {}),
+      ...(hasNamedScoreWeights && { namedScoreWeights: { ...this.namedScoreWeights } }),
       tokensUsed: this.tokensUsed,
       componentResults: flattenedComponentResults,
-      ...(this._parentAssertionSet && {
+      ...((this._parentAssertionSet || cachedResponse) && {
         metadata: {
-          assertionSet: buildAssertionSetMetadata(this._parentAssertionSet.assertionSet),
+          ...(this._parentAssertionSet && {
+            assertionSet: buildAssertionSetMetadata(this._parentAssertionSet.assertionSet),
+          }),
+          ...(cachedResponse && { cachedResponse: true }),
         },
       }),
     };
 
     if (scoringFunction) {
       try {
-        const scoringResult = await scoringFunction(normalizedNamedScores, {
-          threshold: this.threshold,
-          parentAssertionSet: this._parentAssertionSet,
-          componentResults: flattenedComponentResults,
-          tokensUsed: this.tokensUsed,
-        });
-        if (!isGradingResult(scoringResult)) {
+        const scoringResult = asGradingResult(
+          await scoringFunction(normalizedNamedScores, {
+            threshold: this.threshold,
+            parentAssertionSet: this._parentAssertionSet,
+            componentResults: flattenedComponentResults,
+            tokensUsed: this.tokensUsed,
+          }),
+        );
+        if (!scoringResult) {
           throw new Error('assertion scoring function must return a GradingResult');
         }
         this.result = {
           ...this.result,
           ...scoringResult,
+          tokensUsed: mergeScoringTokenUsage(this.result.tokensUsed, scoringResult),
           ...((this.result.metadata || scoringResult.metadata) && {
-            metadata: mergeMetadata(this.result.metadata, scoringResult.metadata),
+            metadata: mergeScoringMetadata(
+              this.result.metadata,
+              scoringResult,
+              this.result.tokensUsed,
+            ),
           }),
         };
       } catch (err) {
         this.result.pass = false;
         this.result.score = 0;
         this.result.reason = `Scoring function error: ${(err as Error).message}`;
+      }
+    }
+
+    // Finite inputs can overflow when weighted or accumulated. Check the final
+    // output after custom scoring has had an opportunity to replace those values.
+    let metricEntries: Record<'namedScores' | 'namedScoreWeights', [string, number][]>;
+    try {
+      metricEntries = {
+        namedScores: Object.entries(this.result.namedScores ?? {}),
+        namedScoreWeights: Object.entries(this.result.namedScoreWeights ?? {}),
+      };
+    } catch {
+      this.result.pass = false;
+      this.result.score = 0;
+      this.result.reason = 'Assertion aggregation error: unable to read scores or weights';
+      this.result.namedScores = {};
+      this.result.namedScoreWeights = {};
+      return this.result;
+    }
+
+    const invalidMetrics = new Set<string>();
+    for (const field of ['namedScores', 'namedScoreWeights'] as const) {
+      for (const [metric, value] of metricEntries[field]) {
+        if (!Number.isFinite(value)) {
+          invalidMetrics.add(metric);
+        }
+      }
+    }
+    if (!Number.isFinite(this.result.score) || invalidMetrics.size > 0) {
+      this.result.pass = false;
+      this.result.score = 0;
+      this.result.reason = 'Assertion aggregation error: scores or weights must remain finite';
+      for (const field of ['namedScores', 'namedScoreWeights'] as const) {
+        if (this.result[field]) {
+          this.result[field] = Object.fromEntries(
+            metricEntries[field].filter(([metric]) => !invalidMetrics.has(metric)),
+          );
+        }
       }
     }
 

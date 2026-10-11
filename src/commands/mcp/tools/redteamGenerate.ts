@@ -83,7 +83,7 @@ export function registerRedteamGenerateTool(server: McpServer) {
             
             Additional plugins: ${Array.from(REDTEAM_ADDITIONAL_PLUGINS).sort().join(', ')}
             
-            Example: ["harmful", "pii", "prompt-injection"]
+            Example: ["harmful", "pii", "hijacking"]
           `,
         ),
       strategies: z
@@ -97,7 +97,7 @@ export function registerRedteamGenerateTool(server: McpServer) {
             
             Additional strategies: ${Array.from(ADDITIONAL_STRATEGIES).sort().join(', ')}
             
-            Example: ["jailbreak", "prompt-injection"]
+            Example: ["jailbreak", "jailbreak-templates"]
           `,
         ),
       numTests: z
@@ -332,11 +332,7 @@ export function registerRedteamGenerateTool(server: McpServer) {
           return createToolResponse(
             'redteam_generate',
             false,
-            {
-              originalError: errorMessage,
-              suggestion:
-                'The generation took too long. Try reducing numTests, checking API credentials, or using fewer plugins.',
-            },
+            undefined,
             'Redteam test generation timed out',
           );
         }
@@ -349,33 +345,13 @@ export function registerRedteamGenerateTool(server: McpServer) {
             plugins: args.plugins,
             numTests: args.numTests,
           },
-          error: errorMessage,
           troubleshooting: {
-            commonIssues: [
-              'Configuration file not found or invalid format',
-              'Invalid plugin or strategy names specified',
-              'Provider authentication or configuration errors',
-              'Network connectivity issues',
-              'Insufficient permissions to write output files',
-            ],
-            configurationTips: [
-              'Ensure your config file exists or use standalone generation with "purpose"',
-              'Use valid plugin names from the supported list',
-              'Check that provider credentials are properly configured',
-              'Verify write permissions for output directory',
-            ],
             supportedPlugins: Array.from(REDTEAM_DEFAULT_PLUGINS)
               .concat(Array.from(REDTEAM_ADDITIONAL_PLUGINS))
               .sort(),
             supportedStrategies: (
               [...Array.from(DEFAULT_STRATEGIES), ...Array.from(ADDITIONAL_STRATEGIES)] as string[]
             ).sort(),
-            exampleUsage: {
-              basic: '{"purpose": "Test my chatbot", "plugins": ["harmful", "pii"]}',
-              withOutput:
-                '{"purpose": "Banking chatbot", "output": "./bank-redteam.yaml", "numTests": 20}',
-              writeToConfig: '{"configPath": "./my-config.yaml", "write": true, "force": true}',
-            },
           },
         };
 

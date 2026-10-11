@@ -9,11 +9,6 @@
  */
 
 export { ElevenLabsAgentsProvider } from './agents';
-export {
-  buildCriteriaFromPresets,
-  COMMON_EVALUATION_CRITERIA,
-} from './agents/evaluation';
-export { COMMON_AGENT_TOOLS } from './agents/tools';
 export { ElevenLabsAlignmentProvider } from './alignment';
 export { ElevenLabsCache } from './cache';
 export { ElevenLabsClient } from './client';
@@ -23,33 +18,8 @@ export { ElevenLabsHistoryProvider } from './history';
 export { ElevenLabsIsolationProvider } from './isolation';
 export { ElevenLabsSTTProvider } from './stt';
 export { ElevenLabsTTSProvider } from './tts';
-export {
-  applyPronunciationDictionaries,
-  applyPronunciationDictionary,
-  COMMON_TECH_PRONUNCIATIONS,
-  createPronunciationDictionary,
-  createTechPronunciationDictionary,
-  deletePronunciationDictionary,
-  getPronunciationDictionary,
-  listPronunciationDictionaries,
-} from './tts/pronunciation';
-export {
-  cloneVoice,
-  deleteVoice,
-  designVoice,
-  designVoiceFromTemplate,
-  getVoiceGenerationStatus,
-  remixVoice,
-  VOICE_DESIGN_TEMPLATES,
-} from './tts/voice-design';
-export {
-  getAvailableVoices,
-  getPopularVoicesByCategory,
-  getRecommendedSettings,
-  getVoice,
-  POPULAR_VOICES,
-  resolveVoiceId,
-} from './tts/voices';
+export { applyPronunciationDictionary, createPronunciationDictionary } from './tts/pronunciation';
+export { designVoice, remixVoice } from './tts/voice-design';
 export { ElevenLabsWebSocketClient } from './websocket-client';
 
 export type {
@@ -77,7 +47,6 @@ export type {
 } from './history/types';
 export type { AudioIsolationConfig } from './isolation/types';
 export type {
-  AudioFileMetadata,
   AudioFormat,
   DiarizationSegment,
   ElevenLabsSTTConfig,
@@ -99,12 +68,5 @@ export type {
   VoiceSettings,
 } from './tts/types';
 export type { GeneratedVoice } from './tts/voice-design';
-export type { VoiceInfo } from './tts/voices';
-export type {
-  AudioData,
-  CostMetrics,
-  ElevenLabsBaseConfig,
-  ElevenLabsProviderOptions,
-  UsageMetrics,
-} from './types';
+export type { AudioData, ElevenLabsBaseConfig } from './types';
 export type { StreamingMessage, WebSocketClientConfig } from './websocket-client';

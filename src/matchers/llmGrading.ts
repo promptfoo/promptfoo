@@ -9,20 +9,25 @@ import {
   TRAJECTORY_GOAL_SUCCESS_PROMPT,
 } from '../prompts/index';
 import { getDefaultProviders } from '../providers/defaults';
-import { shouldGenerateRemote } from '../redteam/remoteGeneration';
 import { doRemoteGrading } from '../remoteGrading';
 import { doRemoteScoringWithPi } from '../remoteScoring';
 import invariant from '../util/invariant';
 import { extractFirstJsonObject } from '../util/json';
 import { accumulateTokenUsage } from '../util/tokenUsageUtils';
-import { callProviderWithContext, getAndCheckProvider } from './providers';
+import {
+  callProviderWithContext,
+  getAndCheckProvider,
+  getRemoteGradingContext,
+  shouldUseRemoteGrading,
+} from './providers';
 import {
   LlmRubricProviderError,
   loadRubricPrompt,
+  materializeImageOutputsForGrading,
   renderLlmRubricPrompt,
   runJsonGradingPrompt,
 } from './rubric';
-import { fail, graderFail, normalizeMatcherTokenUsage, tryParse } from './shared';
+import { graderFail, normalizeMatcherTokenUsage, tryParse } from './shared';
 
 import type {
   Assertion,
@@ -36,6 +41,9 @@ import type {
 type LlmRubricGradingConfig = GradingConfig & {
   __promptfooPreferRemote?: boolean;
 };
+
+const ATTACHED_IMAGE_OUTPUT_PLACEHOLDER =
+  '[Image output attached. Inspect the attached image directly for visual grading.]';
 
 const FACTUALITY_CATEGORY_DESCRIPTIONS: Record<string, string> = {
   A: 'The submitted answer is a subset of the expert answer and is fully consistent with it.',
@@ -120,6 +128,56 @@ function parseLegacyFactualityResponse(responseText: string): { option: string; 
   };
 }
 
+function getDataUriPayload(data: string): string | undefined {
+  const [metadata, payload] = data.trim().split(',', 2);
+  if (!payload || !metadata.toLowerCase().startsWith('data:image/')) {
+    return undefined;
+  }
+  return payload;
+}
+
+function getGradingOutputForImages(llmOutput: string, imageOutputs: ProviderResponse['images']) {
+  if (!imageOutputs?.length) {
+    return llmOutput;
+  }
+
+  const trimmedOutput = llmOutput.trim();
+  if (!trimmedOutput) {
+    return ATTACHED_IMAGE_OUTPUT_PLACEHOLDER;
+  }
+
+  if (/^data:image\/[^;,]+;base64,/i.test(trimmedOutput)) {
+    return ATTACHED_IMAGE_OUTPUT_PLACEHOLDER;
+  }
+
+  if (
+    imageOutputs.some((image) => {
+      if (!image.data) {
+        return false;
+      }
+      const imageData = image.data.trim();
+      return imageData === trimmedOutput || getDataUriPayload(imageData) === trimmedOutput;
+    })
+  ) {
+    return ATTACHED_IMAGE_OUTPUT_PLACEHOLDER;
+  }
+
+  return llmOutput;
+}
+
+function getGradingOutputForAudio(llmOutput: string, audio: ProviderResponse['audio']) {
+  if (!audio?.data) {
+    return llmOutput;
+  }
+  const outputData = llmOutput
+    .trim()
+    .replace(/^data:audio\/[^;,]+;base64,/i, '')
+    .replace(/\s/g, '');
+  return outputData === audio.data.replace(/\s/g, '')
+    ? audio.transcript || '[Audio output]'
+    : llmOutput;
+}
+
 export async function matchesLlmRubric(
   rubric: string | object,
   llmOutput: string,
@@ -129,6 +187,7 @@ export async function matchesLlmRubric(
   options?: {
     throwOnError?: boolean;
     preferRemote?: boolean;
+    providerResponse?: ProviderResponse;
   },
   providerCallContext?: CallApiContextParams,
 ): Promise<GradingResult> {
@@ -144,20 +203,28 @@ export async function matchesLlmRubric(
     options?.preferRemote ||
     (grading as LlmRubricGradingConfig).__promptfooPreferRemote ||
     !grading.provider;
+  const { imageOutputs } = materializeImageOutputsForGrading(options?.providerResponse?.images);
+  const audio = options?.providerResponse?.audio;
+  const gradingOutput = getGradingOutputForImages(
+    getGradingOutputForAudio(llmOutput, audio),
+    imageOutputs,
+  );
   if (
     !grading.rubricPrompt &&
     shouldPreferRemote &&
     !cliState.config?.redteam?.provider &&
     cliState.config?.redteam &&
-    shouldGenerateRemote({ canUseCodexDefaultProvider: true })
+    shouldUseRemoteGrading({ canUseCodexDefaultProvider: true })
   ) {
     try {
       return {
         ...(await doRemoteGrading({
           task: 'llm-rubric',
           rubric,
-          output: llmOutput,
+          output: gradingOutput,
           vars: vars || {},
+          ...(imageOutputs.length ? { images: imageOutputs } : {}),
+          ...getRemoteGradingContext(),
         })),
         assertion,
       };
@@ -178,10 +245,12 @@ export async function matchesLlmRubric(
       label: 'llm-rubric',
       providerCallContext,
       throwOnError: options?.throwOnError,
+      images: imageOutputs,
+      audio,
       vars: {
-        output: tryParse(llmOutput),
-        rubric,
         ...(vars || {}),
+        output: tryParse(gradingOutput),
+        rubric,
       },
     });
   } catch (error) {
@@ -266,7 +335,7 @@ export async function matchesFactuality(
   }
 
   const parsedOutput = tryParse(output);
-  const templateVars = { input, ideal: expected, completion: parsedOutput, ...(vars || {}) };
+  const templateVars = { ...(vars || {}), input, ideal: expected, completion: parsedOutput };
 
   const rubricPrompt = await loadRubricPrompt(grading?.rubricPrompt, PROMPTFOO_FACTUALITY_PROMPT);
   const prompt = await renderLlmRubricPrompt(rubricPrompt, templateVars);
@@ -286,7 +355,7 @@ export async function matchesFactuality(
     providerCallContext,
   );
   if (resp.error || !resp.output) {
-    return fail(resp.error || 'No output', resp.tokenUsage);
+    return graderFail(resp.error || 'No output', resp.tokenUsage);
   }
 
   invariant(typeof resp.output === 'string', 'factuality produced malformed response');
@@ -297,7 +366,7 @@ export async function matchesFactuality(
       return buildFactualityResult(parsedJson.option, parsedJson.reason, grading, resp);
     }
   } catch (err) {
-    return fail((err as Error).message, resp.tokenUsage);
+    return graderFail((err as Error).message, resp.tokenUsage);
   }
 
   // Fallback to old pattern matching format
@@ -306,7 +375,7 @@ export async function matchesFactuality(
     const parsedLegacy = parseLegacyFactualityResponse(resp.output);
     return buildFactualityResult(parsedLegacy.option, parsedLegacy.reason, grading, resp);
   } catch (err) {
-    return fail((err as Error).message, resp.tokenUsage);
+    return graderFail((err as Error).message, resp.tokenUsage);
   }
 }
 
@@ -325,7 +394,7 @@ export async function matchesClosedQa(
   }
 
   const parsedOutput = tryParse(output);
-  const templateVars = { input, criteria: expected, completion: parsedOutput, ...(vars || {}) };
+  const templateVars = { ...(vars || {}), input, criteria: expected, completion: parsedOutput };
 
   const rubricPrompt = await loadRubricPrompt(grading?.rubricPrompt, OPENAI_CLOSED_QA_PROMPT);
   const prompt = await renderLlmRubricPrompt(rubricPrompt, templateVars);
@@ -344,7 +413,7 @@ export async function matchesClosedQa(
     providerCallContext,
   );
   if (resp.error || !resp.output) {
-    return fail(resp.error || 'No output', resp.tokenUsage);
+    return graderFail(resp.error || 'No output', resp.tokenUsage);
   }
 
   invariant(typeof resp.output === 'string', 'model-graded-closedqa produced malformed response');
@@ -356,7 +425,10 @@ export async function matchesClosedQa(
     } else if (resp.output.trimEnd().endsWith('N')) {
       reason = `The submission does not meet the criterion:\n${resp.output}`;
     } else {
-      reason = `Model grader produced a malformed response:\n${resp.output}`;
+      return graderFail(
+        `Model grader produced a malformed response:\n${resp.output}`,
+        resp.tokenUsage,
+      );
     }
     return {
       pass,
@@ -365,7 +437,7 @@ export async function matchesClosedQa(
       tokensUsed: normalizeMatcherTokenUsage(resp.tokenUsage),
     };
   } catch (err) {
-    return fail(`Error parsing output: ${(err as Error).message}`, resp.tokenUsage);
+    return graderFail(`Error parsing output: ${(err as Error).message}`, resp.tokenUsage);
   }
 }
 
@@ -402,6 +474,8 @@ export async function matchesGEval(
   const tokensUsed = normalizeMatcherTokenUsage(undefined);
 
   const failWithTokens = (reason: string) => graderFail(reason, tokensUsed);
+  const failNoOutput = (phase: 'step-generation' | 'evaluation') =>
+    failWithTokens(`G-Eval ${phase} call to ${textProvider.id()} returned no output`);
 
   // Step 1: Get evaluation steps using renderLlmRubricPrompt
   const stepsRubricPrompt =
@@ -425,7 +499,7 @@ export async function matchesGEval(
     return failWithTokens(respSteps.error);
   }
   if (!respSteps.output) {
-    return failWithTokens('No output');
+    return failNoOutput('step-generation');
   }
   if (typeof respSteps.output !== 'string') {
     return failWithTokens('LLM-proposed evaluation steps response is not a string');
@@ -488,7 +562,7 @@ export async function matchesGEval(
     return failWithTokens(resp.error);
   }
   if (!resp.output) {
-    return failWithTokens('No output');
+    return failNoOutput('evaluation');
   }
   if (typeof resp.output !== 'string') {
     return failWithTokens('LLM-proposed evaluation result response is not a string');

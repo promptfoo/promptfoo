@@ -1,18 +1,26 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { runEval } from '../../../src/evaluator';
 import RedteamIterativeMetaProvider, {
   runMetaAgentRedteam,
 } from '../../../src/redteam/providers/iterativeMeta';
+import { createIterationContext } from '../../../src/redteam/providers/shared';
+import { isProviderResponseRateLimited } from '../../../src/scheduler/types';
+import { isResponseHeadersObserverErrorResponse } from '../../../src/util/fetch/responseHeadersObserver';
 import {
   createMockProvider,
   createProviderResponse,
   createTokenUsage,
   type MockApiProvider,
 } from '../../factories/provider';
+import { createMockTracingOptions } from '../../factories/tracing';
+import { createSelectedObserverErrorResponse } from '../../util/selectedObserverError';
+import { createSelectedToolErrorTarget } from '../../util/selectedToolErrorTarget';
 
 import type { AtomicTestCase, ProviderResponse } from '../../../src/types/index';
 
 const mockGetProvider = vi.hoisted(() => vi.fn<() => Promise<any>>());
-const mockGetTargetResponse = vi.hoisted(() => vi.fn<() => Promise<any>>());
+const mockGetGradingProvider = vi.hoisted(() => vi.fn<() => Promise<any>>());
+const mockGetTargetResponse = vi.hoisted(() => vi.fn<(...args: any[]) => Promise<any>>());
 
 vi.mock('../../../src/globalConfig/accounts', async (importOriginal) => ({
   ...(await importOriginal()),
@@ -25,6 +33,7 @@ vi.mock('../../../src/redteam/providers/shared', async (importOriginal) => {
 
     redteamProviderManager: {
       getProvider: mockGetProvider,
+      getGradingProvider: mockGetGradingProvider,
     },
 
     getTargetResponse: mockGetTargetResponse,
@@ -57,19 +66,7 @@ vi.mock('../../../src/redteam/remoteGeneration', async (importOriginal) => {
 });
 
 // Tracing mocks
-const mockResolveTracingOptions = vi.hoisted(() =>
-  vi.fn(() => ({
-    enabled: false,
-    includeInAttack: true,
-    includeInGrading: true,
-    includeInternalSpans: false,
-    maxSpans: 50,
-    maxDepth: 5,
-    maxRetries: 3,
-    retryDelayMs: 500,
-    sanitizeAttributes: true,
-  })),
-);
+const mockResolveTracingOptions = vi.hoisted(() => vi.fn(() => createMockTracingOptions(false)));
 
 const mockFetchTraceContext = vi.hoisted(() => vi.fn());
 const mockFormatTraceSummary = vi.hoisted(() => vi.fn(() => 'Trace summary'));
@@ -167,6 +164,270 @@ describe('RedteamIterativeMetaProvider', () => {
     });
   });
 
+  describe('callApi selected target error provenance', () => {
+    beforeEach(async () => {
+      const shared = await vi.importActual<typeof import('../../../src/redteam/providers/shared')>(
+        '../../../src/redteam/providers/shared',
+      );
+      mockGetTargetResponse.mockImplementation(shared.getTargetResponse);
+      vi.mocked(createIterationContext).mockImplementation(shared.createIterationContext);
+      mockGetGradingProvider.mockResolvedValue(mockGradingProvider);
+      mockResolveTracingOptions.mockReturnValue({
+        enabled: false,
+        includeInAttack: true,
+        includeInGrading: true,
+        includeInternalSpans: false,
+        maxSpans: 50,
+        maxDepth: 5,
+        maxRetries: 3,
+        retryDelayMs: 500,
+        sanitizeAttributes: true,
+      });
+      mockAgentProvider.callApi.mockResolvedValue({
+        output: { result: 'Say hello' },
+        tokenUsage: { total: 3, prompt: 2, completion: 1, numRequests: 1 },
+      });
+    });
+
+    it('finalizes a completed target error before canceled trace or meta iteration work', async () => {
+      const fixture = createSelectedToolErrorTarget();
+      mockAgentProvider.callApi.mockImplementation(async (_prompt, _context, options) => {
+        options?.abortSignal?.throwIfAborted();
+        return { output: { result: 'Say hello' } };
+      });
+      mockResolveTracingOptions.mockReturnValue({
+        enabled: true,
+        includeInAttack: true,
+        includeInGrading: true,
+        includeInternalSpans: false,
+        maxSpans: 50,
+        maxDepth: 5,
+        maxRetries: 3,
+        retryDelayMs: 500,
+        sanitizeAttributes: true,
+      });
+      mockFetchTraceContext.mockImplementation(async (_traceId, options) => {
+        options?.abortSignal?.throwIfAborted();
+        return null;
+      });
+      try {
+        const provider = new RedteamIterativeMetaProvider({ injectVar: 'query', numIterations: 2 });
+        const result = await fixture.run(() =>
+          provider.callApi(
+            '',
+            {
+              originalProvider: fixture.target,
+              vars: { query: 'Say hello' },
+              prompt: { raw: '{{query}}', label: 'greeting' },
+              traceparent: '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01',
+            },
+            { abortSignal: fixture.controller.signal },
+          ),
+        );
+        await fixture.expectSelected(result);
+        expect(mockAgentProvider.callApi).toHaveBeenCalledOnce();
+        expect(mockGradingProvider.callApi).not.toHaveBeenCalled();
+        expect(mockFetchTraceContext).not.toHaveBeenCalled();
+      } finally {
+        await fixture.cleanup();
+      }
+    });
+
+    it.each(['tool', 'http', 'target-local', undefined] as const)(
+      'projects only the selected tool marker from target origin %s',
+      async (errorOrigin) => {
+        // Preserve the external provider payload, including unknown markers.
+        const originMetadata: Record<string, unknown> = errorOrigin ? { errorOrigin } : {};
+        mockTargetProvider.callApi.mockResolvedValue({
+          error: 'Lookup service returned 429 rate limit',
+          tokenUsage: { total: 5, prompt: 2, completion: 3, numRequests: 1 },
+          metadata: {
+            ...originMetadata,
+            http: {
+              status: 429,
+              statusText: 'Too Many Requests',
+              headers: { 'retry-after': '60' },
+            },
+            rateLimit: { retryAfterMs: 60000 },
+            targetOnly: 'private target metadata',
+          },
+        });
+        const provider = new RedteamIterativeMetaProvider({ injectVar: 'query', numIterations: 1 });
+
+        const result: ProviderResponse = await provider.callApi('', {
+          originalProvider: mockTargetProvider,
+          vars: { query: 'Say hello' },
+          prompt: { raw: '{{query}}', label: 'greeting' },
+        });
+
+        expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(1);
+        expect(mockTargetProvider.callApi).toHaveBeenCalledWith(
+          'Say hello',
+          expect.any(Object),
+          undefined,
+        );
+        expect(result.error).toBe('Lookup service returned 429 rate limit');
+        if (errorOrigin === 'tool') {
+          expect(result.metadata?.errorOrigin).toBe('tool');
+        } else {
+          expect(result.metadata).not.toHaveProperty('errorOrigin');
+        }
+        expect(result.metadata).not.toHaveProperty('http');
+        expect(result.metadata).not.toHaveProperty('rateLimit');
+        expect(result.metadata).not.toHaveProperty('targetOnly');
+        expect(result.metadata?.redteamHistory).toEqual([]);
+        expect(result.tokenUsage).toMatchObject({ total: 5, numRequests: 1 });
+        expect(mockGradingProvider.callApi).not.toHaveBeenCalled();
+      },
+    );
+
+    it('preserves selected caller-observer provenance on the returned target error', async () => {
+      const targetResponse = createSelectedObserverErrorResponse({
+        tokenUsage: { total: 5, prompt: 2, completion: 3, numRequests: 1 },
+        metadata: { targetOnly: 'private target metadata' },
+      });
+      expect(isResponseHeadersObserverErrorResponse(targetResponse)).toBe(true);
+      mockTargetProvider.callApi.mockResolvedValue(targetResponse);
+      const provider = new RedteamIterativeMetaProvider({ injectVar: 'query', numIterations: 1 });
+
+      const result: ProviderResponse = await provider.callApi('', {
+        originalProvider: mockTargetProvider,
+        vars: { query: 'Say hello' },
+        prompt: { raw: '{{query}}', label: 'greeting' },
+      });
+
+      expect(mockTargetProvider.callApi).toHaveBeenCalledOnce();
+      expect(result.error).toBe('metrics rate limit exceeded');
+      expect(isResponseHeadersObserverErrorResponse(result)).toBe(true);
+      expect(isProviderResponseRateLimited(result, undefined)).toBe(false);
+      expect(result.metadata).not.toHaveProperty('targetOnly');
+      expect(result.metadata).not.toHaveProperty('errorOrigin');
+      expect(result.metadata?.redteamHistory).toEqual([]);
+      expect(result.tokenUsage).toMatchObject({ total: 5, numRequests: 1 });
+      expect(mockGradingProvider.callApi).not.toHaveBeenCalled();
+    });
+
+    it('clears selected caller-observer provenance when a later target response succeeds', async () => {
+      const priorResponse = createSelectedObserverErrorResponse({});
+      expect(isResponseHeadersObserverErrorResponse(priorResponse)).toBe(true);
+      mockTargetProvider.callApi
+        .mockResolvedValueOnce(priorResponse)
+        .mockResolvedValueOnce({ output: 'Hello' });
+      const provider = new RedteamIterativeMetaProvider({ injectVar: 'query', numIterations: 2 });
+
+      const result = await provider.callApi('', {
+        originalProvider: mockTargetProvider,
+        vars: { query: 'Say hello' },
+        prompt: { raw: '{{query}}', label: 'greeting' },
+      });
+
+      expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(2);
+      expect(result.output).toBe('Hello');
+      expect(result).not.toHaveProperty('error');
+      expect(isResponseHeadersObserverErrorResponse(result)).toBe(false);
+      expect(isProviderResponseRateLimited(result, undefined)).toBe(false);
+      expect(result.metadata?.redteamHistory).toHaveLength(1);
+      expect(result.tokenUsage?.numRequests).toBe(2);
+    });
+
+    it('keeps selected caller-observer provenance off an independent fail-closed error', async () => {
+      mockAgentProvider.callApi
+        .mockResolvedValueOnce({
+          output: { result: 'Say hello' },
+          materializationHandled: true,
+          materializedVars: { question: 'Say hello' },
+        })
+        .mockResolvedValueOnce({
+          output: { result: 'question: Say hello again' },
+          materializationHandled: true,
+        });
+      const priorResponse = createSelectedObserverErrorResponse({});
+      expect(isResponseHeadersObserverErrorResponse(priorResponse)).toBe(true);
+      mockTargetProvider.callApi.mockResolvedValue(priorResponse);
+      const provider = new RedteamIterativeMetaProvider({
+        injectVar: 'query',
+        inputs: { question: { description: 'A greeting request', type: 'text' } },
+        numIterations: 2,
+      });
+
+      const result: ProviderResponse = await provider.callApi('', {
+        originalProvider: mockTargetProvider,
+        vars: { query: 'Say hello' },
+        prompt: { raw: '{{question}}', label: 'greeting' },
+      });
+
+      expect(mockAgentProvider.callApi).toHaveBeenCalledTimes(2);
+      expect(mockTargetProvider.callApi).toHaveBeenCalledOnce();
+      expect(result.error).toBe(
+        'Iterative Meta remote multi-input generation returned an invalid prompt format',
+      );
+      expect(isResponseHeadersObserverErrorResponse(result)).toBe(false);
+      expect(isProviderResponseRateLimited(result, undefined)).toBe(false);
+      expect(result.metadata?.redteamHistory).toEqual([]);
+      expect(result.tokenUsage?.numRequests).toBe(1);
+    });
+
+    it('clears the prior tool marker when a later successful target response is selected', async () => {
+      mockTargetProvider.callApi
+        .mockResolvedValueOnce({
+          error: 'Lookup service returned 429 rate limit',
+          metadata: { errorOrigin: 'tool' },
+        })
+        .mockResolvedValueOnce({ output: 'Hello' });
+      const provider = new RedteamIterativeMetaProvider({ injectVar: 'query', numIterations: 2 });
+
+      const result: ProviderResponse = await provider.callApi('', {
+        originalProvider: mockTargetProvider,
+        vars: { query: 'Say hello' },
+        prompt: { raw: '{{query}}', label: 'greeting' },
+      });
+
+      expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(2);
+      expect(result.output).toBe('Hello');
+      expect(result).not.toHaveProperty('error');
+      expect(result.metadata).not.toHaveProperty('errorOrigin');
+      expect(result.metadata?.redteamHistory).toHaveLength(1);
+      expect(result.tokenUsage?.numRequests).toBe(2);
+    });
+
+    it('does not label an independent fail-closed error with the prior target tool marker', async () => {
+      mockAgentProvider.callApi
+        .mockResolvedValueOnce({
+          output: { result: 'Say hello' },
+          materializationHandled: true,
+          materializedVars: { question: 'Say hello' },
+        })
+        .mockResolvedValueOnce({
+          output: { result: 'question: Say hello again' },
+          materializationHandled: true,
+        });
+      mockTargetProvider.callApi.mockResolvedValue({
+        error: 'Lookup service returned 429 rate limit',
+        metadata: { errorOrigin: 'tool' },
+      });
+      const provider = new RedteamIterativeMetaProvider({
+        injectVar: 'query',
+        inputs: { question: { description: 'A greeting request', type: 'text' } },
+        numIterations: 2,
+      });
+
+      const result: ProviderResponse = await provider.callApi('', {
+        originalProvider: mockTargetProvider,
+        vars: { query: 'Say hello' },
+        prompt: { raw: '{{question}}', label: 'greeting' },
+      });
+
+      expect(mockAgentProvider.callApi).toHaveBeenCalledTimes(2);
+      expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(1);
+      expect(result.error).toBe(
+        'Iterative Meta remote multi-input generation returned an invalid prompt format',
+      );
+      expect(result.metadata).not.toHaveProperty('errorOrigin');
+      expect(result.metadata?.redteamHistory).toEqual([]);
+      expect(result.tokenUsage?.numRequests).toBe(1);
+    });
+  });
+
   describe('runMetaAgentRedteam', () => {
     it('should execute iterations and call cloud for decisions', async () => {
       const result = await runMetaAgentRedteam({
@@ -246,6 +507,7 @@ describe('RedteamIterativeMetaProvider', () => {
       mockGetTargetResponse.mockResolvedValue({
         output: 'Target response',
         raw: JSON.stringify({ finalResponse: 'Target response', items: [] }),
+        images: [{ data: 'data:image/png;base64,abc123', mimeType: 'image/png' }],
       });
 
       await runMetaAgentRedteam({
@@ -271,19 +533,28 @@ describe('RedteamIterativeMetaProvider', () => {
 
       expect(mockGrader.getResult).toHaveBeenCalled();
       const gradingContext = mockGrader.getResult.mock.calls[0][7] as {
+        imageOutputs?: ProviderResponse['images'];
         providerResponse?: ProviderResponse;
       };
-      const raw = JSON.parse(String(gradingContext.providerResponse?.raw ?? '{}'));
-      expect(raw).toMatchObject({ finalResponse: 'Target response' });
+      expect(gradingContext.imageOutputs).toEqual([
+        { data: 'data:image/png;base64,abc123', mimeType: 'image/png' },
+      ]);
+      expect(gradingContext.providerResponse).toMatchObject({
+        output: 'Target response',
+        raw: JSON.stringify({ finalResponse: 'Target response', items: [] }),
+      });
     });
 
     it('should handle agent provider errors gracefully', async () => {
       mockAgentProvider.callApi = vi
         .fn<() => Promise<ProviderResponse>>()
-        .mockResolvedValueOnce({ error: 'Agent error' })
+        .mockResolvedValueOnce({
+          error: 'Agent error',
+          tokenUsage: { total: 18, prompt: 11, completion: 7, numRequests: 2 },
+        })
         .mockResolvedValueOnce({
           output: { result: 'Second attempt' },
-          tokenUsage: { total: 100, prompt: 50, completion: 50 },
+          tokenUsage: { total: 100, prompt: 50, completion: 50, numRequests: 3 },
         });
 
       const result = await runMetaAgentRedteam({
@@ -307,7 +578,121 @@ describe('RedteamIterativeMetaProvider', () => {
       // Should continue after error and complete iteration 2
       expect(mockAgentProvider.callApi).toHaveBeenCalledTimes(2);
       expect(result.metadata.redteamHistory).toHaveLength(1); // Only iteration 2 succeeded
+      expect(result.tokenUsage?.attacker).toMatchObject({
+        total: 118,
+        prompt: 61,
+        completion: 57,
+        numRequests: 5,
+      });
+      expect(result.tokenUsage?.numRequests).toBe(1);
     });
+
+    it.each([0, 2])(
+      'stops on a permanent coordination request error after %i completed iterations',
+      async (completedIterations) => {
+        const error = 'Meta-agent request failed: upstream request is invalid JSON (invalid_json).';
+        mockAgentProvider.callApi.mockReset();
+        for (let i = 0; i < completedIterations; i++) {
+          mockAgentProvider.callApi.mockResolvedValueOnce({
+            output: { result: 'Test attack' },
+            tokenUsage: { total: 10, prompt: 6, completion: 4, numRequests: 1 },
+          });
+        }
+        mockAgentProvider.callApi.mockResolvedValue({
+          error,
+          metadata: {
+            remoteGenerationError: {
+              status: 400,
+              type: 'invalid_request_error',
+              code: 'invalid_json',
+            },
+          },
+          tokenUsage: { total: 18, prompt: 11, completion: 7, numRequests: 2 },
+        });
+
+        const result = await runMetaAgentRedteam({
+          context: {
+            vars: { query: 'test' },
+            prompt: { raw: '{{query}}', label: 'test' },
+            originalProvider: mockTargetProvider,
+          },
+          filters: undefined,
+          injectVar: 'query',
+          numIterations: 10,
+          prompt: { raw: '{{query}}', label: 'test' },
+          agentProvider: mockAgentProvider,
+          gradingProvider: mockGradingProvider,
+          targetProvider: mockTargetProvider,
+          vars: { query: 'test' },
+        });
+
+        expect(mockAgentProvider.callApi).toHaveBeenCalledTimes(completedIterations + 1);
+        expect(mockGetTargetResponse).toHaveBeenCalledTimes(completedIterations);
+        expect(mockGradingProvider.callApi).not.toHaveBeenCalled();
+        expect(result.error).toBe(error);
+        expect(result.output).toBe(completedIterations ? 'I cannot help with that' : '');
+        expect(result.metadata).toMatchObject({
+          finalIteration: completedIterations + 1,
+          stopReason: 'Agent request failed',
+          vulnerabilityAchieved: false,
+        });
+        expect(result.metadata.redteamHistory).toHaveLength(completedIterations);
+        expect(result.tokenUsage.attacker).toMatchObject({
+          total: 18 + completedIterations * 10,
+          numRequests: 2 + completedIterations,
+        });
+      },
+    );
+
+    it.each([
+      {
+        remoteGenerationError: {
+          status: 400,
+          type: 'invalid_request_error',
+          code: 'invalid_json',
+        },
+        isRefusal: true,
+      },
+      ...[
+        { status: 429, type: 'rate_limit_error', code: 'rate_limit_exceeded' },
+        { status: 500, type: 'server_error', code: 'invalid_json' },
+        { status: 400, type: 'invalid_request_error', code: 'invalid_prompt' },
+        { status: 400, type: 'invalid_request_error', code: 'cyber_policy_violation' },
+        { status: 400, type: 'invalid_request_error', code: 'bio_policy_violation' },
+        undefined,
+      ].map((remoteGenerationError) => ({ remoteGenerationError, isRefusal: false })),
+    ])(
+      'continues after an unclassified coordination error: %j',
+      async ({ remoteGenerationError, isRefusal }) => {
+        mockAgentProvider.callApi.mockResolvedValueOnce({
+          error: 'API error: invalid_json',
+          metadata: { remoteGenerationError },
+          isRefusal,
+        });
+
+        const result = await runMetaAgentRedteam({
+          context: {
+            vars: { query: 'test' },
+            prompt: { raw: '{{query}}', label: 'test' },
+            originalProvider: mockTargetProvider,
+          },
+          filters: undefined,
+          injectVar: 'query',
+          numIterations: 2,
+          prompt: { raw: '{{query}}', label: 'test' },
+          agentProvider: mockAgentProvider,
+          gradingProvider: mockGradingProvider,
+          targetProvider: mockTargetProvider,
+          vars: { query: 'test' },
+        });
+
+        expect(mockAgentProvider.callApi).toHaveBeenCalledTimes(2);
+        expect(mockGetTargetResponse).toHaveBeenCalledTimes(1);
+        expect(result.error).toBeUndefined();
+        expect(result.metadata.stopReason).toBe('Max iterations reached');
+        expect(result.metadata.redteamHistory).toHaveLength(1);
+      },
+    );
 
     it('should handle nunjucks template syntax in attack prompts without crashing', async () => {
       mockAgentProvider.callApi = vi.fn<() => Promise<ProviderResponse>>().mockResolvedValue({
@@ -401,6 +786,47 @@ describe('RedteamIterativeMetaProvider', () => {
   });
 
   describe('perTurnLayers configuration', () => {
+    it('grades the transformed target input', async () => {
+      const runtime = await import('../../../src/redteam/shared/runtimeTransform');
+      const transform = vi.spyOn(runtime, 'applyRuntimeTransforms').mockResolvedValue({
+        prompt: 'encoded target input',
+        originalPrompt: 'raw attack',
+      });
+      try {
+        const getResult = vi
+          .fn()
+          .mockResolvedValue({ grade: { pass: false, score: 0, reason: 'graded' } });
+        mockGetGraderById.mockReturnValue({ getResult });
+        const test = {
+          assert: [{ type: 'promptfoo:redteam:pii' }],
+          metadata: { pluginId: 'pii:social' },
+        } as AtomicTestCase;
+        const result = await runMetaAgentRedteam({
+          context: {
+            vars: { query: 'test' },
+            prompt: { raw: '{{query}}', label: 'test' },
+            originalProvider: mockTargetProvider,
+            test,
+          },
+          filters: undefined,
+          injectVar: 'query',
+          numIterations: 1,
+          options: undefined,
+          prompt: { raw: '{{query}}', label: 'test' },
+          agentProvider: mockAgentProvider,
+          gradingProvider: mockGradingProvider,
+          targetProvider: mockTargetProvider,
+          test,
+          vars: { query: 'test' },
+          perTurnLayers: ['base64'],
+        });
+        expect(getResult.mock.calls[0][0]).toBe('encoded target input');
+        expect(result.metadata.redteamFinalPrompt).toBe('encoded target input');
+      } finally {
+        transform.mockRestore();
+      }
+    });
+
     it('should accept perTurnLayers parameter (empty array for safe testing)', async () => {
       const result = await runMetaAgentRedteam({
         context: {
@@ -428,42 +854,68 @@ describe('RedteamIterativeMetaProvider', () => {
 
   describe('redteamHistory with audio/image data', () => {
     it('should include promptAudio and promptImage fields in redteamHistory entries', async () => {
-      const result = await runMetaAgentRedteam({
-        context: {
-          vars: { query: 'test' },
-          prompt: { raw: 'test', label: 'test' },
-          originalProvider: mockTargetProvider,
-        },
-        filters: undefined,
-        injectVar: 'query',
-        numIterations: 1,
-        options: undefined,
-        prompt: { raw: '{{query}}', label: 'test' },
-        agentProvider: mockAgentProvider,
-        gradingProvider: mockGradingProvider,
-        targetProvider: mockTargetProvider,
-        test: undefined,
-        vars: { query: 'test' },
+      const runtime = await import('../../../src/redteam/shared/runtimeTransform');
+      const audio = { data: 'base64-audio-fixture', format: 'mp3' };
+      const image = { data: 'base64-image-fixture', format: 'png' };
+      const transform = vi.spyOn(runtime, 'applyRuntimeTransforms').mockResolvedValue({
+        prompt: 'transformed multimodal attack',
+        originalPrompt: 'Can you help me fix this code...',
+        audio,
+        image,
       });
+      try {
+        const result = await runMetaAgentRedteam({
+          context: {
+            vars: { query: 'test' },
+            prompt: { raw: 'test', label: 'test' },
+            originalProvider: mockTargetProvider,
+          },
+          filters: undefined,
+          injectVar: 'query',
+          numIterations: 1,
+          options: undefined,
+          prompt: { raw: '{{query}}', label: 'test' },
+          agentProvider: mockAgentProvider,
+          gradingProvider: mockGradingProvider,
+          targetProvider: mockTargetProvider,
+          test: undefined,
+          vars: { query: 'test' },
+          perTurnLayers: ['audio', 'image'],
+        });
 
-      // redteamHistory should be present
-      expect(result.metadata.redteamHistory).toBeDefined();
-      expect(Array.isArray(result.metadata.redteamHistory)).toBe(true);
-
-      if (result.metadata.redteamHistory.length > 0) {
-        const entry = result.metadata.redteamHistory[0];
-        // These fields should be present (even if undefined without layers)
-        expect(entry).toHaveProperty('prompt');
-        expect(entry).toHaveProperty('output');
+        expect(transform).toHaveBeenCalledTimes(1);
+        expect(mockGetTargetResponse).toHaveBeenCalledTimes(1);
+        expect(mockGetTargetResponse.mock.calls[0].slice(0, 2)).toEqual([
+          mockTargetProvider,
+          'transformed multimodal attack',
+        ]);
+        expect(result.metadata.redteamHistory).toHaveLength(1);
+        expect(result.metadata.redteamHistory[0]).toMatchObject({
+          prompt: 'Can you help me fix this code...',
+          promptAudio: audio,
+          promptImage: image,
+          output: 'I cannot help with that',
+        });
+      } finally {
+        transform.mockRestore();
       }
     });
 
-    it('should capture outputAudio when target returns audio data', async () => {
-      // Set up mockGetTargetResponse to return audio data
-      mockGetTargetResponse.mockReset();
+    it.each([
+      {
+        mediaType: 'audio',
+        historyField: 'outputAudio',
+        media: { data: 'base64audiodata', format: 'mp3' },
+      },
+      {
+        mediaType: 'image',
+        historyField: 'outputImage',
+        media: { data: 'base64imagedata', format: 'png' },
+      },
+    ])('preserves target $mediaType in history', async ({ mediaType, historyField, media }) => {
       mockGetTargetResponse.mockResolvedValue({
-        output: 'response with audio',
-        audio: { data: 'base64audiodata', format: 'mp3' },
+        output: 'response with media',
+        [mediaType]: media,
       });
 
       const result = await runMetaAgentRedteam({
@@ -484,46 +936,8 @@ describe('RedteamIterativeMetaProvider', () => {
         vars: { query: 'test' },
       });
 
-      if (result.metadata.redteamHistory.length > 0) {
-        const entry = result.metadata.redteamHistory[0];
-        expect(entry.outputAudio).toBeDefined();
-        expect(entry.outputAudio?.data).toBe('base64audiodata');
-        expect(entry.outputAudio?.format).toBe('mp3');
-      }
-    });
-
-    it('should capture outputImage when target returns image data', async () => {
-      // Set up mockGetTargetResponse to return image data
-      mockGetTargetResponse.mockReset();
-      mockGetTargetResponse.mockResolvedValue({
-        output: 'response with image',
-        image: { data: 'base64imagedata', format: 'png' },
-      });
-
-      const result = await runMetaAgentRedteam({
-        context: {
-          vars: { query: 'test' },
-          prompt: { raw: 'test', label: 'test' },
-          originalProvider: mockTargetProvider,
-        },
-        filters: undefined,
-        injectVar: 'query',
-        numIterations: 1,
-        options: undefined,
-        prompt: { raw: '{{query}}', label: 'test' },
-        agentProvider: mockAgentProvider,
-        gradingProvider: mockGradingProvider,
-        targetProvider: mockTargetProvider,
-        test: undefined,
-        vars: { query: 'test' },
-      });
-
-      if (result.metadata.redteamHistory.length > 0) {
-        const entry = result.metadata.redteamHistory[0];
-        expect(entry.outputImage).toBeDefined();
-        expect(entry.outputImage?.data).toBe('base64imagedata');
-        expect(entry.outputImage?.format).toBe('png');
-      }
+      expect(result.metadata.redteamHistory).toHaveLength(1);
+      expect(result.metadata.redteamHistory[0]).toMatchObject({ [historyField]: media });
     });
   });
 
@@ -611,17 +1025,87 @@ describe('RedteamIterativeMetaProvider', () => {
   });
 
   describe('Token Usage Tracking', () => {
+    it.each([{}, { output: null }, { output: undefined }])(
+      'retains prior and missing target usage through the real helper and evaluator: %j',
+      async (missingResponse) => {
+        const { getTargetResponse } = await vi.importActual<
+          typeof import('../../../src/redteam/providers/shared')
+        >('../../../src/redteam/providers/shared');
+        mockGetTargetResponse.mockImplementation(() =>
+          getTargetResponse(mockTargetProvider, 'Test prompt'),
+        );
+        mockAgentProvider.callApi.mockResolvedValue({
+          output: { result: 'Attack' },
+          tokenUsage: { total: 20, prompt: 10, completion: 10, numRequests: 1 },
+        });
+        mockTargetProvider.callApi
+          .mockResolvedValueOnce({
+            output: 'A real response',
+            tokenUsage: { total: 8, prompt: 6, completion: 2, numRequests: 1 },
+          })
+          .mockResolvedValueOnce({
+            ...missingResponse,
+            tokenUsage: { total: 5, prompt: 5, completion: 0, numRequests: 1 },
+          });
+        const grade = vi.fn().mockResolvedValue({ grade: { pass: true, score: 1 } });
+        mockGetGraderById.mockReturnValue({ getResult: grade });
+        const prompt = { raw: 'Test prompt', label: 'test' };
+        const provider = {
+          id: () => 'meta-accounting-fixture',
+          callApi: () =>
+            runMetaAgentRedteam({
+              filters: undefined,
+              prompt,
+              vars: { query: 'goal' },
+              injectVar: 'query',
+              numIterations: 2,
+              agentProvider: mockAgentProvider,
+              gradingProvider: mockGradingProvider,
+              targetProvider: mockTargetProvider,
+              context: { prompt, vars: { query: 'goal' } },
+              test: {
+                metadata: { pluginId: 'ssrf' },
+                assert: [{ type: 'promptfoo:redteam:ssrf' }],
+              },
+            }),
+        };
+
+        const [result] = await runEval({
+          provider,
+          prompt,
+          test: { assert: [{ type: 'javascript', value: 'true' }] },
+          delay: 0,
+          testIdx: 0,
+          promptIdx: 0,
+          repeatIndex: 0,
+          isRedteam: true,
+        });
+
+        expect(result.success).toBe(false);
+        expect(result.error).toContain('Target returned malformed response');
+        expect(result.tokenUsage).toMatchObject({
+          total: 13,
+          prompt: 11,
+          completion: 2,
+          numRequests: 2,
+          attacker: { total: 40, numRequests: 2 },
+        });
+        expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(2);
+        expect(grade).toHaveBeenCalledOnce();
+      },
+    );
+
     it('should accumulate token usage from agent provider calls', async () => {
       // Set up agent to return token usage
       mockAgentProvider.callApi = vi
         .fn<() => Promise<ProviderResponse>>()
         .mockResolvedValueOnce({
           output: { result: 'First attack' },
-          tokenUsage: { prompt: 50, completion: 30, total: 80, numRequests: 1 },
+          tokenUsage: { prompt: 50, completion: 30, total: 80, numRequests: 3 },
         })
         .mockResolvedValueOnce({
           output: { result: 'Second attack' },
-          tokenUsage: { prompt: 60, completion: 40, total: 100, numRequests: 1 },
+          tokenUsage: { prompt: 60, completion: 40, total: 100, numRequests: 2 },
         });
 
       // Set up target to return token usage
@@ -655,8 +1139,9 @@ describe('RedteamIterativeMetaProvider', () => {
 
       // Verify token usage is accumulated
       expect(result.tokenUsage).toBeDefined();
-      // Agent (80 + 100) + Target (35 + 43) = 258 total
-      expect(result.tokenUsage?.total).toBeGreaterThanOrEqual(150);
+      expect(result.tokenUsage?.total).toBe(78);
+      expect(result.tokenUsage?.attacker).toMatchObject({ total: 180, numRequests: 5 });
+      expect(result.tokenUsage?.numRequests).toBe(2);
       expect(result.tokenUsage?.prompt).toBeGreaterThan(0);
       expect(result.tokenUsage?.completion).toBeGreaterThan(0);
     });
@@ -936,27 +1421,12 @@ describe('RedteamIterativeMetaProvider', () => {
         'Iteration 2: Password hunter2',
         'Iteration 3: Database mongodb://user:pass@host',
       ];
-      const cloudRequests: any[] = [];
-      let targetCallCount = 0;
+      for (const output of sensitiveResponses) {
+        mockGetTargetResponse.mockResolvedValueOnce({ output });
+      }
+      mockGetTargetResponse.mockResolvedValue({ output: 'Final response' });
 
-      mockAgentProvider.callApi = vi.fn().mockImplementation(async function (input: any) {
-        cloudRequests.push(JSON.parse(input as string));
-        return {
-          output: { result: 'Attack' },
-          tokenUsage: { total: 100, prompt: 50, completion: 50 },
-        };
-      }) as any;
-
-      // Mock the targetProvider.callApi directly (not mockGetTargetResponse)
-      mockTargetProvider.callApi = vi
-        .fn<() => Promise<ProviderResponse>>()
-        .mockImplementation(async function () {
-          const response = { output: sensitiveResponses[targetCallCount] || 'Default' };
-          targetCallCount++;
-          return response;
-        }) as any;
-
-      await runMetaAgentRedteam({
+      const result = await runMetaAgentRedteam({
         context: {
           vars: { query: 'test' },
           prompt: { raw: 'test', label: 'test' },
@@ -964,7 +1434,8 @@ describe('RedteamIterativeMetaProvider', () => {
         },
         filters: undefined,
         injectVar: 'query',
-        numIterations: 3,
+        // Each sensitive response needs a subsequent coordination request.
+        numIterations: sensitiveResponses.length + 1,
         options: undefined,
         prompt: { raw: 'test', label: 'test' },
         agentProvider: mockAgentProvider,
@@ -975,7 +1446,23 @@ describe('RedteamIterativeMetaProvider', () => {
         excludeTargetOutputFromAgenticAttackGeneration: true,
       });
 
-      // Check all cloud requests
+      const cloudRequests = mockAgentProvider.callApi.mock.calls.map(([input]) =>
+        JSON.parse(input),
+      );
+      expect(mockGetTargetResponse).toHaveBeenCalledTimes(sensitiveResponses.length + 1);
+      expect(cloudRequests).toHaveLength(sensitiveResponses.length + 1);
+      expect(result.metadata.redteamHistory.map((entry) => entry.output)).toEqual([
+        ...sensitiveResponses,
+        'Final response',
+      ]);
+      expect(cloudRequests[0].lastAttempt).toBeUndefined();
+      for (const [index, response] of sensitiveResponses.entries()) {
+        expect(cloudRequests[index + 1].lastAttempt).toMatchObject({
+          response: '[Hidden for privacy]',
+          responseLength: response.length,
+        });
+      }
+
       const allCloudData = JSON.stringify(cloudRequests);
 
       // NONE of the sensitive data should have leaked
@@ -1037,17 +1524,7 @@ describe('RedteamIterativeMetaProvider', () => {
 
     it('should fetch trace context when tracing is enabled', async () => {
       // Enable tracing
-      mockResolveTracingOptions.mockReturnValue({
-        enabled: true,
-        includeInAttack: true,
-        includeInGrading: true,
-        includeInternalSpans: false,
-        maxSpans: 50,
-        maxDepth: 5,
-        maxRetries: 3,
-        retryDelayMs: 500,
-        sanitizeAttributes: true,
-      });
+      mockResolveTracingOptions.mockReturnValue(createMockTracingOptions());
 
       // Mock trace context
       mockFetchTraceContext.mockResolvedValue({
@@ -1056,6 +1533,43 @@ describe('RedteamIterativeMetaProvider', () => {
         insights: ['Test insight'],
         fetchedAt: Date.now(),
       });
+
+      const abortController = new AbortController();
+      const result = await runMetaAgentRedteam({
+        context: {
+          vars: { query: 'test' },
+          prompt: { raw: 'test', label: 'test' },
+          originalProvider: mockTargetProvider,
+          traceparent: '00-trace123-span456-01',
+        },
+        filters: undefined,
+        injectVar: 'query',
+        numIterations: 1,
+        options: { abortSignal: abortController.signal },
+        prompt: { raw: 'test', label: 'test' },
+        agentProvider: mockAgentProvider,
+        gradingProvider: mockGradingProvider,
+        targetProvider: mockTargetProvider,
+        test: undefined,
+        vars: { query: 'test' },
+      });
+
+      // Should call fetchTraceContext
+      expect(mockFetchTraceContext).toHaveBeenCalledWith(
+        'test-trace-id',
+        expect.objectContaining({ abortSignal: abortController.signal }),
+      );
+
+      // Metadata should have trace data
+      expect(result.metadata.traceSnapshots).toBeDefined();
+      expect(result.metadata.traceSnapshots).toHaveLength(1);
+      expect(result.metadata.redteamHistory[0].trace).toBeDefined();
+      expect(result.metadata.redteamHistory[0].traceSummary).toBe('Trace summary');
+    });
+
+    it('skips trace retrieval when an iterative-meta target response came from cache', async () => {
+      mockResolveTracingOptions.mockReturnValue(createMockTracingOptions());
+      mockGetTargetResponse.mockResolvedValue({ output: 'Cached target response', cached: true });
 
       const result = await runMetaAgentRedteam({
         context: {
@@ -1076,29 +1590,13 @@ describe('RedteamIterativeMetaProvider', () => {
         vars: { query: 'test' },
       });
 
-      // Should call fetchTraceContext
-      expect(mockFetchTraceContext).toHaveBeenCalled();
-
-      // Metadata should have trace data
-      expect(result.metadata.traceSnapshots).toBeDefined();
-      expect(result.metadata.traceSnapshots).toHaveLength(1);
-      expect(result.metadata.redteamHistory[0].trace).toBeDefined();
-      expect(result.metadata.redteamHistory[0].traceSummary).toBe('Trace summary');
+      expect(mockFetchTraceContext).not.toHaveBeenCalled();
+      expect(result.metadata.traceSnapshots).toBeUndefined();
     });
 
     it('should NOT fetch trace context when traceparent is missing', async () => {
       // Enable tracing
-      mockResolveTracingOptions.mockReturnValue({
-        enabled: true,
-        includeInAttack: true,
-        includeInGrading: true,
-        includeInternalSpans: false,
-        maxSpans: 50,
-        maxDepth: 5,
-        maxRetries: 3,
-        retryDelayMs: 500,
-        sanitizeAttributes: true,
-      });
+      mockResolveTracingOptions.mockReturnValue(createMockTracingOptions());
 
       const result = await runMetaAgentRedteam({
         context: {
@@ -1246,17 +1744,7 @@ describe('RedteamIterativeMetaProvider', () => {
 
     it('should handle fetchTraceContext returning null gracefully', async () => {
       // Enable tracing
-      mockResolveTracingOptions.mockReturnValue({
-        enabled: true,
-        includeInAttack: true,
-        includeInGrading: true,
-        includeInternalSpans: false,
-        maxSpans: 50,
-        maxDepth: 5,
-        maxRetries: 3,
-        retryDelayMs: 500,
-        sanitizeAttributes: true,
-      });
+      mockResolveTracingOptions.mockReturnValue(createMockTracingOptions());
 
       // Return null (no trace found)
       mockFetchTraceContext.mockResolvedValue(null);

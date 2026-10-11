@@ -2,35 +2,26 @@ import React from 'react';
 
 import Head from '@docusaurus/Head';
 import Link from '@docusaurus/Link';
+import { CalendarIcon, LocationIcon } from '@site/src/components/Events/EventIcons';
 import { useForcedTheme } from '@site/src/hooks/useForcedTheme';
 import Layout from '@theme/Layout';
 import { SITE_CONSTANTS } from '../../constants';
+import { scrollToEventRecap as handleSmoothScroll } from '../../utils/eventScroll';
 import styles from './humanx-2026.module.css';
 
 export default function HumanX2026(): React.ReactElement {
   useForcedTheme('dark');
 
-  const handleSmoothScroll = (e: React.MouseEvent<HTMLAnchorElement>, targetId: string) => {
-    e.preventDefault();
-    const element = document.querySelector(targetId);
-    if (element) {
-      const offset = 80;
-      const elementPosition = element.getBoundingClientRect().top;
-      const offsetPosition = elementPosition + window.scrollY - offset;
-      window.scrollTo({ top: offsetPosition, behavior: 'smooth' });
-    }
-  };
-
   return (
     <Layout
       title="Promptfoo at HumanX 2026"
-      description="For AI leaders shipping real products: see how to evaluate and secure LLM apps and agents without slowing teams down."
+      description="Recap of Promptfoo at HumanX 2026: how AI leaders evaluate and secure LLM apps and agents without slowing teams down."
     >
       <Head>
         <meta property="og:title" content="Promptfoo at HumanX 2026 | AI Security" />
         <meta
           property="og:description"
-          content="For AI leaders shipping real products: see how to evaluate and secure LLM apps and agents without slowing teams down. Apr 6-9, Moscone Center South, SF."
+          content="Recap of Promptfoo at HumanX 2026: how AI leaders evaluate and secure LLM apps and agents without slowing teams down. Apr 6-9, Moscone Center South, SF."
         />
         <meta property="og:image" content="https://www.promptfoo.dev/img/events/humanx-2026.jpg" />
         <meta property="og:url" content="https://www.promptfoo.dev/events/humanx-2026" />
@@ -39,7 +30,7 @@ export default function HumanX2026(): React.ReactElement {
         <meta name="twitter:title" content="Promptfoo at HumanX 2026 | AI Security" />
         <meta
           name="twitter:description"
-          content="Meet Promptfoo at HumanX 2026. AI security demos, enterprise solutions, and networking with AI leaders."
+          content="Recap of Promptfoo at HumanX 2026. AI security demos, enterprise solutions, and conversations with AI leaders."
         />
         <meta name="twitter:image" content="https://www.promptfoo.dev/img/events/humanx-2026.jpg" />
         <meta
@@ -69,7 +60,7 @@ export default function HumanX2026(): React.ReactElement {
                 <span className={styles.highlight}>You Can Trust</span>
               </h1>
               <p className={styles.heroSubtitle}>
-                AI is moving fast. Security and evaluation need to keep up. Meet Promptfoo for live
+                AI is moving fast. Security and evaluation have to keep up. At HumanX we ran live
                 demos on testing and securing LLM features across copilots, RAG, and agents, before
                 launch and continuously in production.
               </p>
@@ -93,46 +84,16 @@ export default function HumanX2026(): React.ReactElement {
                   Learn More
                 </a>
                 <Link to="/contact" className={styles.secondaryButton}>
-                  Schedule a Meeting
+                  Book a Demo
                 </Link>
               </div>
               <div className={styles.eventDetails}>
                 <div className={styles.detail}>
-                  <svg
-                    className={styles.icon}
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-                    />
-                  </svg>
+                  <CalendarIcon className={styles.icon} />
                   <span>April 6-9, 2026</span>
                 </div>
                 <div className={styles.detail}>
-                  <svg
-                    className={styles.icon}
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
-                    />
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
-                    />
-                  </svg>
+                  <LocationIcon className={styles.icon} />
                   <span>Moscone Center South, San Francisco</span>
                 </div>
               </div>
@@ -185,7 +146,7 @@ export default function HumanX2026(): React.ReactElement {
                 <div className={styles.statLabel}>Developers</div>
               </div>
               <div className={styles.stat}>
-                <div className={styles.statNumber}>80+</div>
+                <div className={styles.statNumber}>{SITE_CONSTANTS.FORTUNE_500_COUNT}</div>
                 <div className={styles.statLabel}>Fortune 500 Companies</div>
               </div>
               <div className={styles.stat}>
@@ -200,7 +161,7 @@ export default function HumanX2026(): React.ReactElement {
         <section className={styles.ctaSection}>
           <div className={styles.container}>
             <div className={styles.ctaContent}>
-              <h2 className={styles.ctaTitle}>Attending HumanX?</h2>
+              <h2 className={styles.ctaTitle}>Missed us at HumanX?</h2>
               <p className={styles.ctaText}>
                 Book a short demo and we'll map a testing plan to your AI roadmap.
               </p>

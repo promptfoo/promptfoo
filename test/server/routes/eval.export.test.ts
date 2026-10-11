@@ -1,43 +1,16 @@
-import { afterEach, beforeEach, describe, expect, it, Mock, MockedFunction, vi } from 'vitest';
-import { createCompletedPrompt, createEvaluateTableOutput } from '../../factories/eval';
-import type { Request, Response } from 'express';
-
-// Mock dependencies first
-vi.mock('../../../src/database', async (importOriginal) => {
-  return {
-    ...(await importOriginal()),
-    getDb: vi.fn(),
-  };
-});
-
-vi.mock('../../../src/models/eval');
-vi.mock('../../../src/server/utils/evalTableUtils');
-vi.mock('../../../src/server/utils/downloadHelpers', async (importOriginal) => {
-  return {
-    ...(await importOriginal()),
-    setDownloadHeaders: vi.fn(),
-  };
-});
-
-// Import after mocking
+import { parse } from 'csv-parse/sync';
+import express from 'express';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Eval from '../../../src/models/eval';
-import { setDownloadHeaders } from '../../../src/server/utils/downloadHelpers';
-import { evalTableToCsv, evalTableToJson } from '../../../src/server/utils/evalTableUtils';
-
-// Setup mocked functions
-const mockedEvalFindById = vi.fn() as MockedFunction<typeof Eval.findById>;
-const mockedEvalTableToCsv = evalTableToCsv as MockedFunction<typeof evalTableToCsv>;
-const mockedEvalTableToJson = evalTableToJson as MockedFunction<typeof evalTableToJson>;
-
-// Override the mocked modules
-(Eval as any).findById = mockedEvalFindById;
+import { evalRouter } from '../../../src/server/routes/eval';
+import { EVAL_TABLE_MAX_PAGE_SIZE } from '../../../src/types/api/eval';
+import { createCompletedPrompt, createEvaluateTableOutput } from '../../factories/eval';
+import { setupTestServer } from '../../util/testServer';
 
 describe('evalRouter - GET /:id/table with export formats', () => {
-  let mockReq: Partial<Request>;
-  let mockRes: Partial<Response>;
-  let jsonMock: Mock;
-  let sendMock: Mock;
-  let statusMock: Mock;
+  const api = setupTestServer(() => express().use('/api/eval', evalRouter));
+  const getTablePage = vi.fn();
+  let mockEval: Eval;
 
   const mockTable = {
     head: {
@@ -90,34 +63,17 @@ describe('evalRouter - GET /:id/table with export formats', () => {
   };
 
   beforeEach(() => {
-    vi.clearAllMocks();
-
-    jsonMock = vi.fn();
-    sendMock = vi.fn();
-    statusMock = vi.fn().mockReturnThis();
-
-    mockRes = {
-      json: jsonMock,
-      send: sendMock,
-      status: statusMock,
-      setHeader: vi.fn(),
-    } as Partial<Response>;
-
-    mockReq = {
-      params: { id: 'test-eval-id' },
-      query: {},
-    } as Partial<Request>;
-
+    getTablePage.mockReset().mockResolvedValue(mockTable);
     // Setup Eval mock
-    const getTablePageMock = vi.fn() as any;
-    getTablePageMock.mockResolvedValue(mockTable);
-    const mockEval = {
+    mockEval = {
+      id: 'test-eval-id',
       config: mockConfig,
       author: 'test-author',
-      version: vi.fn().mockReturnValue('1.0.0'),
-      getTablePage: getTablePageMock,
+      version: () => 4,
+      getTablePage,
+      getStats: () => ({ successes: 1, failures: 0, errors: 0 }),
     } as unknown as Eval;
-    mockedEvalFindById.mockResolvedValue(mockEval);
+    vi.spyOn(Eval, 'findById').mockResolvedValue(mockEval);
   });
 
   afterEach(() => {
@@ -125,150 +81,66 @@ describe('evalRouter - GET /:id/table with export formats', () => {
   });
 
   it('should return CSV when format=csv is specified', async () => {
-    mockReq.query = { format: 'csv' };
-    const mockCsvData = 'var1,var2,[openai] prompt1\nvalue1,value2,[PASS] output text';
-    mockedEvalTableToCsv.mockReturnValue(mockCsvData);
-
-    // Simulate the route handler (simplified version)
-    const eval_ = await Eval.findById(mockReq.params!.id as string);
-    const table = await eval_!.getTablePage({
-      offset: 0,
-      limit: Number.MAX_SAFE_INTEGER,
-      filterMode: 'all',
-      searchQuery: '',
-      filters: [],
+    const response = await api.get('/api/eval/test-eval-id/table').query({ format: 'csv' });
+    expect(response.status).toBe(200);
+    expect(parse<Record<string, string>>(response.text, { columns: true })[0]).toMatchObject({
+      var1: 'value1',
+      var2: 'value2',
+      '[openai] prompt1': 'output text',
+      Status: 'PASS',
+      'Grader Reason': 'Test passed',
+      Comment: 'Good response',
     });
-
-    const csvData = mockedEvalTableToCsv(table, {
-      isRedteam: !!eval_!.config?.redteam,
-    });
-    setDownloadHeaders(mockRes as Response, 'test-eval-id-results.csv', 'text/csv');
-    (mockRes as Response).send(csvData);
-
-    expect(mockedEvalTableToCsv).toHaveBeenCalledWith(expect.anything(), expect.anything());
-    expect(sendMock).toHaveBeenCalledWith(mockCsvData);
   });
 
   it('should return JSON when format=json is specified', async () => {
-    mockReq.query = { format: 'json' };
-    const mockJsonData = { table: mockTable };
-    mockedEvalTableToJson.mockReturnValue(mockJsonData);
-
-    // Simulate the route handler (simplified version)
-    const eval_ = await Eval.findById(mockReq.params!.id as string);
-    const table = await eval_!.getTablePage({
-      offset: 0,
-      limit: Number.MAX_SAFE_INTEGER,
-      filterMode: 'all',
-      searchQuery: '',
-      filters: [],
-    });
-
-    const jsonData = mockedEvalTableToJson(table);
-    setDownloadHeaders(mockRes as Response, 'test-eval-id-results.json', 'application/json');
-    (mockRes as Response).json(jsonData);
-
-    expect(mockedEvalTableToJson).toHaveBeenCalledWith(expect.anything());
-    expect(jsonMock).toHaveBeenCalledWith(mockJsonData);
+    const response = await api.get('/api/eval/test-eval-id/table').query({ format: 'json' });
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ head: mockTable.head, body: mockTable.body });
   });
 
   it('should include red team conversation columns in CSV for red team evaluations', async () => {
-    mockReq.query = { format: 'csv' };
-
-    // Mock the CSV generation to verify red team columns are included
-    const expectedCsvWithRedteam =
-      'var1,var2,[openai] prompt1,[openai] prompt1 - Grader Reason,[openai] prompt1 - Comment,Messages,RedteamHistory\n' +
-      'value1,value2,[PASS] output text,Test passed,Good response,"[{\\"role\\":\\"user\\",\\"content\\":\\"test\\"},{\\"role\\":\\"assistant\\",\\"content\\":\\"response\\"}]","[\\"attempt1\\",\\"attempt2\\"]"';
-
-    mockedEvalTableToCsv.mockReturnValue(expectedCsvWithRedteam);
-
-    const eval_ = await Eval.findById(mockReq.params!.id as string);
-    const table = await eval_!.getTablePage({
-      offset: 0,
-      limit: Number.MAX_SAFE_INTEGER,
-      filterMode: 'all',
-      searchQuery: '',
-      filters: [],
-    });
-
-    const csvData = mockedEvalTableToCsv(table, {
-      isRedteam: !!eval_!.config?.redteam,
-    });
-
-    expect(mockedEvalTableToCsv).toHaveBeenCalledWith(expect.anything(), expect.anything());
-    expect(csvData).toContain('Messages');
-    expect(csvData).toContain('RedteamHistory');
+    const response = await api.get('/api/eval/test-eval-id/table').query({ format: 'csv' });
+    expect(response.status).toBe(200);
+    const row = parse<Record<string, string>>(response.text, { columns: true })[0];
+    expect(JSON.parse(row.Messages)).toEqual([
+      { role: 'user', content: 'test' },
+      { role: 'assistant', content: 'response' },
+    ]);
+    expect(JSON.parse(row.RedteamHistory)).toEqual(['attempt1', 'attempt2']);
   });
 
   it('should return standard table response when no format is specified', async () => {
-    mockReq.query = {}; // No format specified
-
-    const eval_ = await Eval.findById(mockReq.params!.id as string);
-    const table = await eval_!.getTablePage({
+    const response = await api.get('/api/eval/test-eval-id/table');
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      table: { head: mockTable.head, body: mockTable.body },
+      totalCount: 1,
+      filteredCount: 1,
+      config: mockConfig,
+      author: 'test-author',
+      version: 4,
+    });
+    expect(response.headers['content-disposition']).toBeUndefined();
+    expect(getTablePage).toHaveBeenCalledWith({
       offset: 0,
       limit: 50, // Default limit
       filterMode: 'all',
       searchQuery: '',
       filters: [],
     });
-
-    // Simulate standard response
-    (mockRes as Response).json({
-      table,
-      totalCount: table.totalCount,
-      filteredCount: table.filteredCount,
-      config: eval_!.config,
-      author: eval_!.author,
-      version: eval_!.version(),
-    });
-
-    expect(jsonMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        table: mockTable,
-        totalCount: 1,
-        filteredCount: 1,
-        config: mockConfig,
-        author: 'test-author',
-        version: '1.0.0',
-      }),
-    );
-    expect(sendMock).not.toHaveBeenCalled();
   });
 
   it('should handle CSV export for non-redteam evaluations', async () => {
     // Setup eval without redteam config
-    const nonRedteamConfig = { someConfig: 'value' };
-    const getTablePageMockNoRedteam = vi.fn() as any;
-    getTablePageMockNoRedteam.mockResolvedValue(mockTable);
-    const mockEvalNoRedteam = {
-      config: nonRedteamConfig,
-      author: 'test-author',
-      version: vi.fn().mockReturnValue('1.0.0'),
-      getTablePage: getTablePageMockNoRedteam,
-    } as unknown as Eval;
-    mockedEvalFindById.mockResolvedValue(mockEvalNoRedteam);
-
-    mockReq.query = { format: 'csv' };
-    const mockCsvData = 'var1,var2,[openai] prompt1\nvalue1,value2,[PASS] output text';
-    mockedEvalTableToCsv.mockReturnValue(mockCsvData);
-
-    const eval_ = await Eval.findById(mockReq.params!.id as string);
-    const table = await eval_!.getTablePage({
-      offset: 0,
-      limit: Number.MAX_SAFE_INTEGER,
-      filterMode: 'all',
-      searchQuery: '',
-      filters: [],
-    });
-
-    const csvData = mockedEvalTableToCsv(table, {
-      isRedteam: !!eval_!.config?.redteam,
-    });
-
-    expect(mockedEvalTableToCsv).toHaveBeenCalledWith(expect.anything(), expect.anything());
+    mockEval.config = {};
+    const response = await api.get('/api/eval/test-eval-id/table').query({ format: 'csv' });
+    expect(response.status).toBe(200);
+    const row = parse<Record<string, string>>(response.text, { columns: true })[0];
+    expect(row['[openai] prompt1']).toBe('output text');
     // Should not contain red team columns
-    expect(csvData).not.toContain('Messages');
-    expect(csvData).not.toContain('RedteamHistory');
+    expect(row).not.toHaveProperty('Messages');
+    expect(row).not.toHaveProperty('RedteamHistory');
   });
 
   it('should handle different red team metadata types', async () => {
@@ -321,52 +193,27 @@ describe('evalRouter - GET /:id/table with export formats', () => {
       ],
     };
 
-    const getTablePageMockWithTypes = vi.fn() as any;
-    getTablePageMockWithTypes.mockResolvedValue({
-      ...tableWithMultipleRedteamTypes,
-      id: 'test-eval-id',
-    });
-    const mockEvalWithTypes = {
-      config: mockConfig,
-      author: 'test-author',
-      version: vi.fn().mockReturnValue('1.0.0'),
-      getTablePage: getTablePageMockWithTypes,
-    } as unknown as Eval;
-    mockedEvalFindById.mockResolvedValue(mockEvalWithTypes);
-
-    mockReq.query = { format: 'csv' };
-
-    const eval_ = await Eval.findById(mockReq.params!.id as string);
-    const table = await eval_!.getTablePage({
-      offset: 0,
-      limit: Number.MAX_SAFE_INTEGER,
-      filterMode: 'all',
-      searchQuery: '',
-      filters: [],
-    });
-
-    mockedEvalTableToCsv(table, { isRedteam: !!eval_!.config?.redteam });
-
-    expect(mockedEvalTableToCsv).toHaveBeenCalledWith(expect.anything(), {
-      isRedteam: true,
-    });
+    getTablePage.mockResolvedValue(tableWithMultipleRedteamTypes);
+    const response = await api.get('/api/eval/test-eval-id/table').query({ format: 'csv' });
+    expect(response.status).toBe(200);
+    const rows = parse<Record<string, string>>(response.text, { columns: true });
+    expect(JSON.parse(rows[0].Messages)).toEqual([
+      { role: 'system', content: 'You are helpful' },
+      { role: 'user', content: 'Hello' },
+    ]);
+    expect(JSON.parse(rows[1].RedteamHistory)).toEqual(['attempt 1', 'attempt 2', 'attempt 3']);
+    expect(rows[2].RedteamTreeHistory).toBe('root->branch1->leaf1\nroot->branch2->leaf2');
   });
 
-  it('should handle pagination parameters correctly for exports', async () => {
-    mockReq.query = { format: 'csv', limit: '100', offset: '50' };
-
-    const eval_ = await Eval.findById(mockReq.params!.id as string);
-
-    // When format is specified, should ignore pagination and get all data
-    await eval_!.getTablePage({
-      offset: 0, // Should be 0 for export
-      limit: Number.MAX_SAFE_INTEGER, // Should be MAX for export
-      filterMode: 'all',
-      searchQuery: '',
-      filters: [],
+  it('should ignore pagination parameters for exports if limit exceeds the table page size', async () => {
+    const response = await api.get('/api/eval/test-eval-id/table').query({
+      format: 'csv',
+      limit: String(EVAL_TABLE_MAX_PAGE_SIZE + 1),
+      offset: '50',
     });
-
-    expect(eval_!.getTablePage).toHaveBeenCalledWith(
+    expect(response.status).toBe(200);
+    // When format is specified, should ignore pagination and get all data
+    expect(getTablePage).toHaveBeenCalledWith(
       expect.objectContaining({
         offset: 0,
         limit: Number.MAX_SAFE_INTEGER,
@@ -375,24 +222,14 @@ describe('evalRouter - GET /:id/table with export formats', () => {
   });
 
   it('should handle filter parameters in exports', async () => {
-    mockReq.query = {
+    const response = await api.get('/api/eval/test-eval-id/table').query({
       format: 'csv',
       filterMode: 'failures',
       search: 'error',
       filter: ['provider:openai', 'status:fail'],
-    };
-
-    const eval_ = await Eval.findById(mockReq.params!.id as string);
-
-    await eval_!.getTablePage({
-      offset: 0,
-      limit: Number.MAX_SAFE_INTEGER,
-      filterMode: 'failures',
-      searchQuery: 'error',
-      filters: ['provider:openai', 'status:fail'],
     });
-
-    expect(eval_!.getTablePage).toHaveBeenCalledWith(
+    expect(response.status).toBe(200);
+    expect(getTablePage).toHaveBeenCalledWith(
       expect.objectContaining({
         filterMode: 'failures',
         searchQuery: 'error',
@@ -402,15 +239,11 @@ describe('evalRouter - GET /:id/table with export formats', () => {
   });
 
   it('should return 404 when evaluation not found', async () => {
-    mockedEvalFindById.mockResolvedValue(undefined);
-
-    const eval_ = await Eval.findById(mockReq.params!.id as string);
-    if (!eval_) {
-      (mockRes as Response).status(404).json({ error: 'Eval not found' });
-    }
-
-    expect(statusMock).toHaveBeenCalledWith(404);
-    expect(jsonMock).toHaveBeenCalledWith({ error: 'Eval not found' });
+    vi.mocked(Eval.findById).mockResolvedValue(undefined);
+    const response = await api.get('/api/eval/test-eval-id/table');
+    expect(response.status).toBe(404);
+    expect(response.body).toEqual({ error: 'Eval not found' });
+    expect(getTablePage).not.toHaveBeenCalled();
   });
 
   it('should handle empty table data in CSV export', async () => {
@@ -424,36 +257,13 @@ describe('evalRouter - GET /:id/table with export formats', () => {
       filteredCount: 0,
     };
 
-    const getTablePageMockEmpty = vi.fn() as any;
-    getTablePageMockEmpty.mockResolvedValue({ ...emptyTable, id: 'test-eval-id' });
-    const mockEvalEmpty = {
-      config: mockConfig,
-      author: 'test-author',
-      version: vi.fn().mockReturnValue('1.0.0'),
-      getTablePage: getTablePageMockEmpty,
-    } as unknown as Eval;
-    mockedEvalFindById.mockResolvedValue(mockEvalEmpty);
-
-    mockReq.query = { format: 'csv' };
-    const mockCsvData = 'var1,[openai] test\n';
-    mockedEvalTableToCsv.mockReturnValue(mockCsvData);
-
-    const eval_ = await Eval.findById(mockReq.params!.id as string);
-    const table = await eval_!.getTablePage({
-      offset: 0,
-      limit: Number.MAX_SAFE_INTEGER,
-      filterMode: 'all',
-      searchQuery: '',
-      filters: [],
-    });
-
-    const csvData = mockedEvalTableToCsv(table, {
-      isRedteam: !!eval_!.config?.redteam,
-    });
-    setDownloadHeaders(mockRes as Response, 'test-eval-id-results.csv', 'text/csv');
-    (mockRes as Response).send(csvData);
-
-    expect(sendMock).toHaveBeenCalledWith(mockCsvData);
+    getTablePage.mockResolvedValue(emptyTable);
+    const response = await api.get('/api/eval/test-eval-id/table').query({ format: 'csv' });
+    expect(response.status).toBe(200);
+    const rows = parse(response.text);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toContain('var1');
+    expect(rows[0]).toContain('[openai] test');
   });
 
   it('should properly escape special characters in CSV', async () => {
@@ -477,32 +287,16 @@ describe('evalRouter - GET /:id/table with export formats', () => {
       ],
     };
 
-    const getTablePageMockSpecial = vi.fn() as any;
-    getTablePageMockSpecial.mockResolvedValue({ ...tableWithSpecialChars, id: 'test-eval-id' });
-    const mockEvalSpecial = {
-      config: mockConfig,
-      author: 'test-author',
-      version: vi.fn().mockReturnValue('1.0.0'),
-      getTablePage: getTablePageMockSpecial,
-    } as unknown as Eval;
-    mockedEvalFindById.mockResolvedValue(mockEvalSpecial);
-
-    mockReq.query = { format: 'csv' };
-
-    const eval_ = await Eval.findById(mockReq.params!.id as string);
-    const table = await eval_!.getTablePage({
-      offset: 0,
-      limit: Number.MAX_SAFE_INTEGER,
-      filterMode: 'all',
-      searchQuery: '',
-      filters: [],
-    });
-
-    mockedEvalTableToCsv(table, { isRedteam: !!eval_!.config?.redteam });
-
-    expect(mockedEvalTableToCsv).toHaveBeenCalledWith(expect.anything(), {
-      isRedteam: true,
-    });
+    getTablePage.mockResolvedValue(tableWithSpecialChars);
+    const response = await api.get('/api/eval/test-eval-id/table').query({ format: 'csv' });
+    expect(response.status).toBe(200);
+    const row = parse<Record<string, string>>(response.text, { columns: true })[0];
+    expect(row.var1).toBe('value,with,commas');
+    expect(row.var2).toBe('value"with"quotes');
+    expect(row['[openai] prompt1']).toBe('Output\nwith\nnewlines');
+    expect(JSON.parse(row.Messages)).toEqual([
+      { role: 'user', content: 'Message with "quotes" and, commas' },
+    ]);
   });
 
   it('should handle very large datasets efficiently', async () => {
@@ -529,66 +323,28 @@ describe('evalRouter - GET /:id/table with export formats', () => {
       filteredCount: 10000,
     };
 
-    const getTablePageMockLarge = vi.fn() as any;
-    getTablePageMockLarge.mockResolvedValue({ ...largeTable, id: 'test-eval-id' });
-    const mockEvalLarge = {
-      config: mockConfig,
-      author: 'test-author',
-      version: vi.fn().mockReturnValue('1.0.0'),
-      getTablePage: getTablePageMockLarge,
-    } as unknown as Eval;
-    mockedEvalFindById.mockResolvedValue(mockEvalLarge);
-
-    mockReq.query = { format: 'csv' };
-    mockedEvalTableToCsv.mockReturnValue('large csv data');
-
-    const eval_ = await Eval.findById(mockReq.params!.id as string);
-    const table = await eval_!.getTablePage({
-      offset: 0,
-      limit: Number.MAX_SAFE_INTEGER,
-      filterMode: 'all',
-      searchQuery: '',
-      filters: [],
-    });
-
-    mockedEvalTableToCsv(table, { isRedteam: !!eval_!.config?.redteam });
-
-    expect(mockedEvalTableToCsv).toHaveBeenCalledWith(expect.anything(), {
-      isRedteam: true,
-    });
+    getTablePage.mockResolvedValue(largeTable);
+    const response = await api.get('/api/eval/test-eval-id/table').query({ format: 'csv' });
+    expect(response.status).toBe(200);
+    const rows = parse<Record<string, string>>(response.text, { columns: true });
+    expect(rows).toHaveLength(10000);
+    expect(rows[0].var1).toBe('val0');
+    expect(rows[9999].var1).toBe('val9999');
+    expect(rows[9999]['[openai] prompt1']).toBe('Output 9999');
+    expect(JSON.parse(rows[9999].Messages)).toEqual([{ role: 'user', content: 'Message 9999' }]);
   });
 
   it('should set correct content-type headers for different formats', async () => {
     // Test CSV
-    mockReq.query = { format: 'csv' };
-    mockedEvalTableToCsv.mockReturnValue('csv data');
-
-    const eval_ = await Eval.findById(mockReq.params!.id as string);
-    const table = await eval_!.getTablePage({
-      offset: 0,
-      limit: Number.MAX_SAFE_INTEGER,
-      filterMode: 'all',
-      searchQuery: '',
-      filters: [],
-    });
-
-    const csvData = mockedEvalTableToCsv(table, {
-      isRedteam: !!eval_!.config?.redteam,
-    });
-
-    // Verify CSV generation
-    expect(mockedEvalTableToCsv).toHaveBeenCalled();
-    expect(csvData).toBe('csv data');
-
+    const csv = await api.get('/api/eval/test-eval-id/table').query({ format: 'csv' });
+    expect(csv.status).toBe(200);
+    expect(csv.headers['content-type']).toContain('text/csv');
+    expect(csv.headers['content-disposition']).toBe('attachment; filename="test-eval-id.csv"');
     // Test JSON
-    vi.clearAllMocks();
-    mockReq.query = { format: 'json' };
-    mockedEvalTableToJson.mockReturnValue({ data: 'json' });
-
-    const jsonData = mockedEvalTableToJson(table);
-
-    // Verify JSON generation
-    expect(mockedEvalTableToJson).toHaveBeenCalled();
-    expect(jsonData).toEqual({ data: 'json' });
+    const json = await api.get('/api/eval/test-eval-id/table').query({ format: 'json' });
+    expect(json.status).toBe(200);
+    expect(json.headers['content-type']).toContain('application/json');
+    expect(json.headers['content-disposition']).toBe('attachment; filename="test-eval-id.json"');
+    expect(json.body).toEqual({ head: mockTable.head, body: mockTable.body });
   });
 });

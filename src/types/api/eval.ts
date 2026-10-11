@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { EVAL_TABLE_MAX_PAGE_SIZE } from '../evalConstants';
 import { EvalResultsFilterMode, EvaluateOptionsSchema, TestSuiteConfigSchema } from '../index';
 import { EmailSchema, MessageResponseSchema } from './common';
 
@@ -82,22 +83,30 @@ export type CopyEvalResponse = z.infer<typeof CopyEvalResponseSchema>;
 
 // GET /api/evals/:id/table
 
+// Compatibility export for existing API schema consumers.
+export { EVAL_TABLE_MAX_PAGE_SIZE } from '../evalConstants';
+
 /** Query parameters for eval table endpoint. */
-export const EvalTableQuerySchema = z.object({
-  format: z.enum(['csv', 'json']).optional(),
-  limit: z.coerce.number().int().positive().prefault(50),
-  offset: z.coerce.number().int().nonnegative().prefault(0),
-  filterMode: EvalResultsFilterMode.prefault('all'),
-  search: z.string().prefault(''),
-  filter: z
-    .union([z.string(), z.array(z.string())])
-    .transform((v) => (Array.isArray(v) ? v : v ? [v] : []))
-    .prefault([]),
-  comparisonEvalIds: z
-    .union([z.string(), z.array(z.string())])
-    .transform((v) => (Array.isArray(v) ? v : v ? [v] : []))
-    .prefault([]),
-});
+export const EvalTableQuerySchema = z
+  .object({
+    format: z.enum(['csv', 'json']).optional(),
+    limit: z.coerce.number().int().positive().prefault(50),
+    offset: z.coerce.number().int().nonnegative().prefault(0),
+    filterMode: EvalResultsFilterMode.prefault('all'),
+    search: z.string().prefault(''),
+    filter: z
+      .union([z.string(), z.array(z.string())])
+      .transform((v) => (Array.isArray(v) ? v : v ? [v] : []))
+      .prefault([]),
+    comparisonEvalIds: z
+      .union([z.string(), z.array(z.string())])
+      .transform((v) => (Array.isArray(v) ? v : v ? [v] : []))
+      .prefault([]),
+  })
+  .refine((query) => query.format || query.limit <= EVAL_TABLE_MAX_PAGE_SIZE, {
+    message: `limit must be less than or equal to ${EVAL_TABLE_MAX_PAGE_SIZE}`,
+    path: ['limit'],
+  });
 
 export type EvalTableQuery = z.infer<typeof EvalTableQuerySchema>;
 
@@ -134,11 +143,14 @@ export type EvalTableResponse = z.infer<typeof EvalTableResponseSchema>;
  * Based on EvaluateTestSuiteWithEvaluateOptions type.
  * Note: prompts must be an array for this endpoint (evaluate() expects array).
  */
-export const CreateJobRequestSchema = TestSuiteConfigSchema.extend({
-  // Override prompts to require array - evaluate() calls .map() on prompts
-  prompts: z.array(z.union([z.string(), z.record(z.string(), z.unknown())])),
-  evaluateOptions: EvaluateOptionsSchema.optional(),
-}).passthrough();
+export const CreateJobRequestSchema = TestSuiteConfigSchema.omit({ basePath: true })
+  .extend({
+    // Override prompts to require array - evaluate() calls .map() on prompts
+    prompts: z.array(z.union([z.string(), z.record(z.string(), z.unknown())])),
+    evaluateOptions: EvaluateOptionsSchema.optional(),
+    sourceEvalId: z.string().min(1).optional(),
+  })
+  .passthrough();
 
 export const CreateJobResponseSchema = z.object({
   id: z.string().uuid(),

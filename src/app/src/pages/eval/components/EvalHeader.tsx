@@ -23,7 +23,7 @@ import { cn } from '@app/lib/utils';
 import { fetchUserEmail, updateEvalAuthor } from '@app/utils/api';
 import { formatDuration } from '@app/utils/date';
 import { ChevronDown } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { AuthorChip } from './AuthorChip';
 import { EvalIdChip } from './EvalIdChip';
 import EvalSelectorDialog from './EvalSelectorDialog';

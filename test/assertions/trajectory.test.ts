@@ -9,10 +9,164 @@ import {
   extractTrajectorySteps,
   summarizeTrajectoryForJudge,
 } from '../../src/assertions/trajectoryUtils';
+import { createStringAssertion } from '../factories/literalFixtures';
 import { createMockProvider, createProviderResponse } from '../factories/provider';
 
 import type { AssertionParams, AtomicTestCase } from '../../src/types/index';
 import type { TraceData } from '../../src/types/tracing';
+
+const createOrderIdArgs = () => ({
+  order_id: '123',
+});
+
+const createOrdersPaginationDefaultsAssertion = () => ({
+  name: 'orders',
+  mode: 'exact',
+  args: { status: 'Q' },
+  defaults: { page: 1, page_size: 5 },
+});
+
+const createOrdersPageAssertion = () => ({
+  name: 'orders',
+  mode: 'exact',
+  args: { status: 'Q' },
+  defaults: { page: 1 },
+});
+
+const createSearchHistoryAssertion = (mode: string, includeHistory: boolean) => ({
+  name: 'search_orders',
+  mode,
+  args: { order_id: '123' },
+  defaults: { include_history: includeHistory },
+});
+
+const createSearchThenReplySequence = () => ({
+  mode: 'exact',
+  steps: ['search_orders', 'compose_reply'],
+});
+
+const createFriendlyReplyAssertion = () => ({
+  pattern: 'compose_*',
+  mode: 'exact',
+  arguments: {
+    tone: 'friendly',
+    citations: ['doc_1', 'doc_2'],
+  },
+});
+
+const createToolTraceAttributes = (toolArguments: string) => ({
+  'tool.name': 'orders',
+  'tool.arguments': toolArguments,
+});
+
+const createCitedReplyAssertion = () => ({
+  name: 'compose_reply',
+  args: {
+    citations: ['doc_1', 'doc_2'],
+  },
+});
+
+const createDifferentOrderAssertion = () => ({
+  name: 'search_orders',
+  args: {
+    order_id: '999',
+  },
+});
+
+const createSearchWithoutDefaultsAssertion = () => ({
+  name: 'search_orders',
+  mode: 'exact',
+  args: { order_id: '123' },
+  defaults: {},
+});
+
+const createSortedOrdersAssertion = () => ({
+  name: 'orders',
+  mode: 'exact',
+  args: { status: 'Q' },
+  defaults: { sort: { field: 'created', order: 'desc' } },
+});
+
+const createNullCursorOrdersAssertion = () => ({
+  name: 'orders',
+  mode: 'exact',
+  args: { status: 'Q' },
+  defaults: { cursor: null },
+});
+
+const createExplicitPageOrdersAssertion = () => ({
+  name: 'orders',
+  mode: 'exact',
+  args: { status: 'Q', page: 2 },
+  defaults: { page: 1 },
+});
+
+const createLegacyArgumentsSearchAssertion = () => ({
+  name: 'search_orders',
+  mode: 'exact',
+  arguments: { order_id: '123' },
+  defaults: { include_history: false },
+});
+
+const createArrayArgumentsOrdersAssertion = () => ({
+  name: 'orders',
+  mode: 'exact',
+  args: [1, 2, 3],
+  defaults: { page: 1 },
+});
+
+const createExactSearchCountAssertion = () => ({
+  pattern: 'search*',
+  min: 2,
+  max: 2,
+});
+
+const createDefaultModeSearchAssertion = () => ({
+  name: 'search_orders',
+  args: { order_id: '123' },
+  defaults: { include_history: false },
+});
+
+const createSingleCommandCountAssertion = () => ({
+  type: 'command' as const,
+  min: 1,
+  max: 1,
+});
+
+const createSpanPatternAssertion = (pattern: string) => ({
+  pattern,
+  min: 1,
+});
+
+const createMissingToolAssertion = () => ({
+  name: 'missing_tool',
+  min: 1,
+});
+
+const createCustomerLookupAssertion = () => ({
+  name: 'lookup_customer',
+  args: { customer_id: 'cust_1234' },
+});
+
+const createMaximumToolCountAssertion = () => ({
+  type: 'tool' as const,
+  max: 3,
+});
+
+const createMinimumToolCountAssertion = () => ({
+  type: 'tool' as const,
+  min: 4,
+});
+
+const createOrdersAssertion = (): AssertionParams['assertion'] => ({
+  type: 'trajectory:tool-args-match',
+  value: createOrdersPaginationDefaultsAssertion(),
+});
+
+const createPagedOrdersAssertion = (): AssertionParams['assertion'] => ({
+  type: 'trajectory:tool-args-match',
+  value: createOrdersPageAssertion(),
+});
 
 const mockProvider = createMockProvider({
   id: 'mock',
@@ -109,6 +263,71 @@ const defaultParams = {
 };
 
 describe('trajectory utilities', () => {
+  it('treats configured shell tool names as command steps', () => {
+    const customShellTrace: TraceData = {
+      traceId: 'custom-shell',
+      evaluationId: 'eval-1',
+      testCaseId: 'tc-1',
+      metadata: {},
+      spans: [
+        {
+          spanId: 'span-1',
+          name: 'tool.call',
+          startTime: 100,
+          endTime: 200,
+          attributes: {
+            'tool.name': 'bash',
+            'tool.arguments': JSON.stringify({ cmd: 'pytest tests/' }),
+          },
+        },
+      ],
+    };
+
+    // By default, a tool named 'bash' normalizes to type:tool, not type:command.
+    expect(extractTrajectorySteps(customShellTrace)[0].type).toBe('tool');
+
+    const steps = extractTrajectorySteps({
+      ...customShellTrace,
+      metadata: { commandToolNames: ['bash'] },
+    });
+    expect(steps[0].type).toBe('command');
+    // The command argument should also be reflected in the step name.
+    expect(steps[0].name).toBe('pytest tests/');
+  });
+
+  it('matches configured command tool names case-insensitively and ignores invalid entries', () => {
+    const trace: TraceData = {
+      traceId: 'custom-shell-2',
+      evaluationId: 'eval-1',
+      testCaseId: 'tc-1',
+      metadata: {},
+      spans: [
+        {
+          spanId: 'span-1',
+          name: 'tool.call',
+          startTime: 100,
+          endTime: 200,
+          attributes: {
+            'tool.name': 'bash',
+            'tool.arguments': JSON.stringify({ cmd: 'ls -la' }),
+          },
+        },
+      ],
+    };
+
+    // An uppercase override matches the lowercase tool name.
+    const upper = extractTrajectorySteps({ ...trace, metadata: { commandToolNames: ['BASH'] } });
+    expect(upper[0].type).toBe('command');
+    expect(upper[0].name).toBe('ls -la');
+
+    // Non-string / blank entries are ignored without throwing; the valid name still applies.
+    const mixed = extractTrajectorySteps({
+      ...trace,
+      metadata: { commandToolNames: ['bash', 123, '', '  '] as any },
+    });
+    expect(mixed[0].type).toBe('command');
+  });
+
   it('extracts normalized trajectory steps from trace spans', () => {
     const steps = extractTrajectorySteps(mockTraceData);
 
@@ -129,6 +348,60 @@ describe('trajectory utilities', () => {
       tone: 'friendly',
       citations: ['doc_1', 'doc_2'],
     });
+  });
+
+  it('does not classify a chat span carrying gen_ai.tool.definitions as a tool', () => {
+    // pydantic-ai (and other GenAI-convention tracers) put the list of *available* tools on
+    // each chat span as a JSON array under gen_ai.tool.definitions; that must not be read as
+    // a tool call. Real tool calls use gen_ai.tool.name. Regression for #9523.
+    const toolDefinitions = JSON.stringify([
+      { type: 'function', name: 'orders', description: 'List orders' },
+      { type: 'function', name: 'order_rows', description: 'List order rows' },
+    ]);
+    const steps = extractTrajectorySteps({
+      ...mockTraceData,
+      spans: [
+        {
+          spanId: 'chat-1',
+          name: 'chat gpt-4o-mini',
+          startTime: 1000,
+          endTime: 1100,
+          attributes: { 'gen_ai.tool.definitions': toolDefinitions },
+        },
+        {
+          spanId: 'exec-1',
+          name: 'execute_tool',
+          startTime: 1200,
+          endTime: 1300,
+          attributes: { 'gen_ai.tool.name': 'order_rows' },
+        },
+      ],
+    });
+
+    expect(steps.map((step) => ({ type: step.type, name: step.name }))).toEqual([
+      { type: 'span', name: 'chat gpt-4o-mini' },
+      { type: 'tool', name: 'order_rows' },
+    ]);
+  });
+
+  it('still reads a plain string tool name from a generic tool attribute', () => {
+    // The structured-value guard must not break scalar tool-name fallbacks.
+    const steps = extractTrajectorySteps({
+      ...mockTraceData,
+      spans: [
+        {
+          spanId: 'custom-tool',
+          name: 'invoke',
+          startTime: 1000,
+          endTime: 1100,
+          attributes: { 'app.tool': 'lookup_customer' },
+        },
+      ],
+    });
+
+    expect(steps.map((step) => ({ type: step.type, name: step.name }))).toEqual([
+      { type: 'tool', name: 'lookup_customer' },
+    ]);
   });
 
   it('only treats a generic query attribute as search when the span looks search-like', () => {
@@ -472,10 +745,7 @@ describe('trajectory assertions', () => {
           trace: undefined,
         },
         baseType: 'trajectory:tool-used',
-        assertion: {
-          type: 'trajectory:tool-used',
-          value: 'search_orders',
-        },
+        assertion: createStringAssertion('trajectory:tool-used', 'search_orders'),
         renderedValue: 'search_orders',
       };
 
@@ -488,10 +758,7 @@ describe('trajectory assertions', () => {
       const params: AssertionParams = {
         ...defaultParams,
         baseType: 'trajectory:tool-used',
-        assertion: {
-          type: 'trajectory:tool-used',
-          value: 'search_orders',
-        },
+        assertion: createStringAssertion('trajectory:tool-used', 'search_orders'),
         renderedValue: 'search_orders',
       };
 
@@ -511,17 +778,9 @@ describe('trajectory assertions', () => {
         baseType: 'trajectory:tool-used',
         assertion: {
           type: 'trajectory:tool-used',
-          value: {
-            pattern: 'search*',
-            min: 2,
-            max: 2,
-          },
+          value: createExactSearchCountAssertion(),
         },
-        renderedValue: {
-          pattern: 'search*',
-          min: 2,
-          max: 2,
-        },
+        renderedValue: createExactSearchCountAssertion(),
       };
 
       const result = handleTrajectoryToolUsed(params);
@@ -540,15 +799,9 @@ describe('trajectory assertions', () => {
         baseType: 'trajectory:tool-used',
         assertion: {
           type: 'trajectory:tool-used',
-          value: {
-            pattern: 'search*',
-            min: 1,
-          },
+          value: createSpanPatternAssertion('search*'),
         },
-        renderedValue: {
-          pattern: 'search*',
-          min: 1,
-        },
+        renderedValue: createSpanPatternAssertion('search*'),
       };
 
       const result = handleTrajectoryToolUsed(params);
@@ -633,15 +886,9 @@ describe('trajectory assertions', () => {
         inverse: true,
         assertion: {
           type: 'not-trajectory:tool-used',
-          value: {
-            name: 'missing_tool',
-            min: 1,
-          },
+          value: createMissingToolAssertion(),
         },
-        renderedValue: {
-          name: 'missing_tool',
-          min: 1,
-        },
+        renderedValue: createMissingToolAssertion(),
       };
 
       const result = handleTrajectoryToolUsed(params);
@@ -739,15 +986,9 @@ describe('trajectory assertions', () => {
         baseType: 'trajectory:tool-sequence',
         assertion: {
           type: 'trajectory:tool-sequence',
-          value: {
-            mode: 'exact',
-            steps: ['search_orders', 'compose_reply'],
-          },
+          value: createSearchThenReplySequence(),
         },
-        renderedValue: {
-          mode: 'exact',
-          steps: ['search_orders', 'compose_reply'],
-        },
+        renderedValue: createSearchThenReplySequence(),
       };
 
       const result = handleTrajectoryToolSequence(params);
@@ -788,15 +1029,9 @@ describe('trajectory assertions', () => {
         baseType: 'trajectory:tool-sequence',
         assertion: {
           type: 'trajectory:tool-sequence',
-          value: {
-            mode: 'exact',
-            steps: ['search_orders', 'compose_reply'],
-          },
+          value: createSearchThenReplySequence(),
         },
-        renderedValue: {
-          mode: 'exact',
-          steps: ['search_orders', 'compose_reply'],
-        },
+        renderedValue: createSearchThenReplySequence(),
       };
 
       const result = handleTrajectoryToolSequence(params);
@@ -934,16 +1169,12 @@ describe('trajectory assertions', () => {
           type: 'trajectory:tool-args-match',
           value: {
             name: 'search_orders',
-            args: {
-              order_id: '123',
-            },
+            args: createOrderIdArgs(),
           },
         },
         renderedValue: {
           name: 'search_orders',
-          args: {
-            order_id: '123',
-          },
+          args: createOrderIdArgs(),
         },
       };
 
@@ -963,19 +1194,9 @@ describe('trajectory assertions', () => {
         baseType: 'trajectory:tool-args-match',
         assertion: {
           type: 'trajectory:tool-args-match',
-          value: {
-            name: 'compose_reply',
-            args: {
-              citations: ['doc_1', 'doc_2'],
-            },
-          },
+          value: createCitedReplyAssertion(),
         },
-        renderedValue: {
-          name: 'compose_reply',
-          args: {
-            citations: ['doc_1', 'doc_2'],
-          },
-        },
+        renderedValue: createCitedReplyAssertion(),
       };
 
       const result = handleTrajectoryToolArgsMatch(params);
@@ -994,23 +1215,9 @@ describe('trajectory assertions', () => {
         baseType: 'trajectory:tool-args-match',
         assertion: {
           type: 'trajectory:tool-args-match',
-          value: {
-            pattern: 'compose_*',
-            mode: 'exact',
-            arguments: {
-              tone: 'friendly',
-              citations: ['doc_1', 'doc_2'],
-            },
-          },
+          value: createFriendlyReplyAssertion(),
         },
-        renderedValue: {
-          pattern: 'compose_*',
-          mode: 'exact',
-          arguments: {
-            tone: 'friendly',
-            citations: ['doc_1', 'doc_2'],
-          },
-        },
+        renderedValue: createFriendlyReplyAssertion(),
       };
 
       const result = handleTrajectoryToolArgsMatch(params);
@@ -1046,15 +1253,9 @@ describe('trajectory assertions', () => {
         baseType: 'trajectory:tool-args-match',
         assertion: {
           type: 'trajectory:tool-args-match',
-          value: {
-            name: 'lookup_customer',
-            args: { customer_id: 'cust_1234' },
-          },
+          value: createCustomerLookupAssertion(),
         },
-        renderedValue: {
-          name: 'lookup_customer',
-          args: { customer_id: 'cust_1234' },
-        },
+        renderedValue: createCustomerLookupAssertion(),
       };
 
       const result = handleTrajectoryToolArgsMatch(params);
@@ -1068,19 +1269,9 @@ describe('trajectory assertions', () => {
         baseType: 'trajectory:tool-args-match',
         assertion: {
           type: 'trajectory:tool-args-match',
-          value: {
-            name: 'search_orders',
-            args: {
-              order_id: '999',
-            },
-          },
+          value: createDifferentOrderAssertion(),
         },
-        renderedValue: {
-          name: 'search_orders',
-          args: {
-            order_id: '999',
-          },
-        },
+        renderedValue: createDifferentOrderAssertion(),
       };
 
       const result = handleTrajectoryToolArgsMatch(params);
@@ -1101,16 +1292,12 @@ describe('trajectory assertions', () => {
           type: 'trajectory:tool-args-match',
           value: {
             name: 'missing_tool',
-            args: {
-              order_id: '123',
-            },
+            args: createOrderIdArgs(),
           },
         },
         renderedValue: {
           name: 'missing_tool',
-          args: {
-            order_id: '123',
-          },
+          args: createOrderIdArgs(),
         },
       };
 
@@ -1149,16 +1336,12 @@ describe('trajectory assertions', () => {
           type: 'trajectory:tool-args-match',
           value: {
             name: 'search_orders',
-            args: {
-              order_id: '123',
-            },
+            args: createOrderIdArgs(),
           },
         },
         renderedValue: {
           name: 'search_orders',
-          args: {
-            order_id: '123',
-          },
+          args: createOrderIdArgs(),
         },
       };
 
@@ -1181,16 +1364,12 @@ describe('trajectory assertions', () => {
           type: 'not-trajectory:tool-args-match',
           value: {
             name: 'search_orders',
-            args: {
-              order_id: '123',
-            },
+            args: createOrderIdArgs(),
           },
         },
         renderedValue: {
           name: 'search_orders',
-          args: {
-            order_id: '123',
-          },
+          args: createOrderIdArgs(),
         },
       };
 
@@ -1213,16 +1392,12 @@ describe('trajectory assertions', () => {
           type: 'not-trajectory:tool-args-match',
           value: {
             name: 'missing_tool',
-            args: {
-              order_id: '123',
-            },
+            args: createOrderIdArgs(),
           },
         },
         renderedValue: {
           name: 'missing_tool',
-          args: {
-            order_id: '123',
-          },
+          args: createOrderIdArgs(),
         },
       };
 
@@ -1265,17 +1440,13 @@ describe('trajectory assertions', () => {
           value: {
             name: 'search_orders',
             mode: 'excat',
-            args: {
-              order_id: '123',
-            },
+            args: createOrderIdArgs(),
           },
         },
         renderedValue: {
           name: 'search_orders',
           mode: 'excat',
-          args: {
-            order_id: '123',
-          },
+          args: createOrderIdArgs(),
         },
       };
 
@@ -1307,21 +1478,861 @@ describe('trajectory assertions', () => {
         assertion: {
           type: 'trajectory:tool-args-match',
           value: {
-            args: {
-              order_id: '123',
-            },
+            args: createOrderIdArgs(),
           },
         },
         renderedValue: {
-          args: {
-            order_id: '123',
-          },
+          args: createOrderIdArgs(),
         },
       };
 
       expect(() => handleTrajectoryToolArgsMatch(params)).toThrow(
         'trajectory:tool-args-match assertion object must include a name or pattern property',
       );
+    });
+
+    describe('defaults', () => {
+      it('passes in exact mode when an unexpected actual key matches a declared default', () => {
+        const params: AssertionParams = {
+          ...defaultParams,
+          baseType: 'trajectory:tool-args-match',
+          assertion: {
+            type: 'trajectory:tool-args-match',
+            value: createSearchHistoryAssertion('exact', false),
+          },
+          renderedValue: createSearchHistoryAssertion('exact', false),
+        };
+
+        const result = handleTrajectoryToolArgsMatch(params);
+        expect(result).toEqual({
+          pass: true,
+          score: 1,
+          reason:
+            'Tool "search_orders" matched expected arguments (exact) on tool:search_orders. Args: {"order_id":"123","include_history":false}. Ignored default argument(s): include_history',
+          assertion: params.assertion,
+        });
+      });
+
+      it('fails in exact mode when an actual key value differs from the declared default', () => {
+        const params: AssertionParams = {
+          ...defaultParams,
+          baseType: 'trajectory:tool-args-match',
+          assertion: {
+            type: 'trajectory:tool-args-match',
+            value: createSearchHistoryAssertion('exact', true),
+          },
+          renderedValue: createSearchHistoryAssertion('exact', true),
+        };
+
+        const result = handleTrajectoryToolArgsMatch(params);
+        expect(result.pass).toBe(false);
+        expect(result.score).toBe(0);
+        expect(result.reason).toContain(
+          'No call to tool "search_orders" matched expected arguments',
+        );
+      });
+
+      it('passes in exact mode when actual contains multiple keys all matching declared defaults', () => {
+        const allDefaultsTrace: TraceData = {
+          ...mockTraceData,
+          spans: [
+            {
+              spanId: 'span-all-defaults',
+              name: 'tool.call',
+              startTime: 1000,
+              endTime: 1100,
+              attributes: createToolTraceAttributes('{"status":"Q","page":1,"page_size":5}'),
+            },
+          ],
+        };
+        const params: AssertionParams = {
+          ...defaultParams,
+          assertionValueContext: {
+            ...defaultParams.assertionValueContext,
+            trace: allDefaultsTrace,
+          },
+          baseType: 'trajectory:tool-args-match',
+          assertion: createOrdersAssertion(),
+          renderedValue: createOrdersPaginationDefaultsAssertion(),
+        };
+
+        const result = handleTrajectoryToolArgsMatch(params);
+        expect(result.pass).toBe(true);
+      });
+
+      it('passes in exact mode when actual omits a key listed in defaults', () => {
+        const traceWithoutDefault: TraceData = {
+          ...mockTraceData,
+          spans: [
+            {
+              spanId: 'span-no-default',
+              name: 'tool.call',
+              startTime: 1000,
+              endTime: 1100,
+              attributes: {
+                'tool.name': 'orders',
+                'tool.arguments': '{"status":"Q"}',
+              },
+            },
+          ],
+        };
+        const params: AssertionParams = {
+          ...defaultParams,
+          assertionValueContext: {
+            ...defaultParams.assertionValueContext,
+            trace: traceWithoutDefault,
+          },
+          baseType: 'trajectory:tool-args-match',
+          assertion: createOrdersAssertion(),
+          renderedValue: createOrdersPaginationDefaultsAssertion(),
+        };
+
+        const result = handleTrajectoryToolArgsMatch(params);
+        expect(result.pass).toBe(true);
+      });
+
+      it('fails in exact mode when actual contains a hallucinated key not in args or defaults', () => {
+        const hallucinatedTrace: TraceData = {
+          ...mockTraceData,
+          spans: [
+            {
+              spanId: 'span-hallucinated',
+              name: 'tool.call',
+              startTime: 1000,
+              endTime: 1100,
+              attributes: {
+                'tool.name': 'orders',
+                'tool.arguments': '{"status":"Q","page":1,"delete_database":true}',
+              },
+            },
+          ],
+        };
+        const params: AssertionParams = {
+          ...defaultParams,
+          assertionValueContext: {
+            ...defaultParams.assertionValueContext,
+            trace: hallucinatedTrace,
+          },
+          baseType: 'trajectory:tool-args-match',
+          assertion: createPagedOrdersAssertion(),
+          renderedValue: createOrdersPageAssertion(),
+        };
+
+        const result = handleTrajectoryToolArgsMatch(params);
+        expect(result.pass).toBe(false);
+        expect(result.score).toBe(0);
+        expect(result.reason).toContain('delete_database');
+      });
+
+      it('treats empty defaults the same as no defaults', () => {
+        const params: AssertionParams = {
+          ...defaultParams,
+          baseType: 'trajectory:tool-args-match',
+          assertion: {
+            type: 'trajectory:tool-args-match',
+            value: createSearchWithoutDefaultsAssertion(),
+          },
+          renderedValue: createSearchWithoutDefaultsAssertion(),
+        };
+
+        const result = handleTrajectoryToolArgsMatch(params);
+        expect(result.pass).toBe(false);
+      });
+
+      it('supports defaults with structured values via deep equality', () => {
+        const structuredTrace: TraceData = {
+          ...mockTraceData,
+          spans: [
+            {
+              spanId: 'span-structured',
+              name: 'tool.call',
+              startTime: 1000,
+              endTime: 1100,
+              attributes: {
+                'tool.name': 'orders',
+                'tool.arguments': '{"status":"Q","sort":{"field":"created","order":"desc"}}',
+              },
+            },
+          ],
+        };
+        const params: AssertionParams = {
+          ...defaultParams,
+          assertionValueContext: {
+            ...defaultParams.assertionValueContext,
+            trace: structuredTrace,
+          },
+          baseType: 'trajectory:tool-args-match',
+          assertion: {
+            type: 'trajectory:tool-args-match',
+            value: createSortedOrdersAssertion(),
+          },
+          renderedValue: createSortedOrdersAssertion(),
+        };
+
+        const result = handleTrajectoryToolArgsMatch(params);
+        expect(result.pass).toBe(true);
+      });
+
+      it('still passes in partial mode when defaults are set', () => {
+        const params: AssertionParams = {
+          ...defaultParams,
+          baseType: 'trajectory:tool-args-match',
+          assertion: {
+            type: 'trajectory:tool-args-match',
+            value: createDefaultModeSearchAssertion(),
+          },
+          renderedValue: createDefaultModeSearchAssertion(),
+        };
+
+        const result = handleTrajectoryToolArgsMatch(params);
+        expect(result.pass).toBe(true);
+      });
+
+      it('rejects malformed defaults (array)', () => {
+        const params: AssertionParams = {
+          ...defaultParams,
+          baseType: 'trajectory:tool-args-match',
+          assertion: {
+            type: 'trajectory:tool-args-match',
+            value: {
+              name: 'search_orders',
+              args: { order_id: '123' },
+              defaults: ['include_history'] as unknown as Record<string, unknown>,
+            },
+          },
+          renderedValue: {
+            name: 'search_orders',
+            args: { order_id: '123' },
+            defaults: ['include_history'] as unknown as Record<string, unknown>,
+          },
+        };
+
+        expect(() => handleTrajectoryToolArgsMatch(params)).toThrow(
+          'trajectory:tool-args-match assertion defaults must be an object mapping argument names to default values',
+        );
+      });
+
+      it('matches the documented outcome table row "status:Q, page:1" using the example config', () => {
+        const docsTrace: TraceData = {
+          ...mockTraceData,
+          spans: [
+            {
+              spanId: 'span-docs-row-2',
+              name: 'tool.call',
+              startTime: 1000,
+              endTime: 1100,
+              attributes: createToolTraceAttributes('{"status":"Q","page":1}'),
+            },
+          ],
+        };
+        const params: AssertionParams = {
+          ...defaultParams,
+          assertionValueContext: { ...defaultParams.assertionValueContext, trace: docsTrace },
+          baseType: 'trajectory:tool-args-match',
+          assertion: createOrdersAssertion(),
+          renderedValue: createOrdersPaginationDefaultsAssertion(),
+        };
+
+        const result = handleTrajectoryToolArgsMatch(params);
+        expect(result.pass).toBe(true);
+      });
+
+      it('matches the documented outcome table row "status:Q, page:2" using the example config', () => {
+        const docsTrace: TraceData = {
+          ...mockTraceData,
+          spans: [
+            {
+              spanId: 'span-docs-row-4',
+              name: 'tool.call',
+              startTime: 1000,
+              endTime: 1100,
+              attributes: {
+                'tool.name': 'orders',
+                'tool.arguments': '{"status":"Q","page":2}',
+              },
+            },
+          ],
+        };
+        const params: AssertionParams = {
+          ...defaultParams,
+          assertionValueContext: { ...defaultParams.assertionValueContext, trace: docsTrace },
+          baseType: 'trajectory:tool-args-match',
+          assertion: createOrdersAssertion(),
+          renderedValue: createOrdersPaginationDefaultsAssertion(),
+        };
+
+        const result = handleTrajectoryToolArgsMatch(params);
+        expect(result.pass).toBe(false);
+      });
+
+      it('strips a null default value when actual emits null for that key', () => {
+        const nullTrace: TraceData = {
+          ...mockTraceData,
+          spans: [
+            {
+              spanId: 'span-null-default',
+              name: 'tool.call',
+              startTime: 1000,
+              endTime: 1100,
+              attributes: {
+                'tool.name': 'orders',
+                'tool.arguments': '{"status":"Q","cursor":null}',
+              },
+            },
+          ],
+        };
+        const params: AssertionParams = {
+          ...defaultParams,
+          assertionValueContext: { ...defaultParams.assertionValueContext, trace: nullTrace },
+          baseType: 'trajectory:tool-args-match',
+          assertion: {
+            type: 'trajectory:tool-args-match',
+            value: createNullCursorOrdersAssertion(),
+          },
+          renderedValue: createNullCursorOrdersAssertion(),
+        };
+
+        const result = handleTrajectoryToolArgsMatch(params);
+        expect(result.pass).toBe(true);
+      });
+
+      it('strips a key listed in defaults even when args also declares it (defaults applied first)', () => {
+        const collisionTrace: TraceData = {
+          ...mockTraceData,
+          spans: [
+            {
+              spanId: 'span-collision',
+              name: 'tool.call',
+              startTime: 1000,
+              endTime: 1100,
+              attributes: createToolTraceAttributes('{"status":"Q","page":1}'),
+            },
+          ],
+        };
+        const params: AssertionParams = {
+          ...defaultParams,
+          assertionValueContext: {
+            ...defaultParams.assertionValueContext,
+            trace: collisionTrace,
+          },
+          baseType: 'trajectory:tool-args-match',
+          assertion: {
+            type: 'trajectory:tool-args-match',
+            value: createExplicitPageOrdersAssertion(),
+          },
+          renderedValue: createExplicitPageOrdersAssertion(),
+        };
+
+        const result = handleTrajectoryToolArgsMatch(params);
+        expect(result.pass).toBe(false);
+      });
+
+      it('does not recurse into nested objects when stripping defaults (top-level only)', () => {
+        const nestedTrace: TraceData = {
+          ...mockTraceData,
+          spans: [
+            {
+              spanId: 'span-nested-default',
+              name: 'tool.call',
+              startTime: 1000,
+              endTime: 1100,
+              attributes: {
+                'tool.name': 'orders',
+                'tool.arguments': '{"status":"Q","pagination":{"page":1}}',
+              },
+            },
+          ],
+        };
+        const params: AssertionParams = {
+          ...defaultParams,
+          assertionValueContext: { ...defaultParams.assertionValueContext, trace: nestedTrace },
+          baseType: 'trajectory:tool-args-match',
+          assertion: createPagedOrdersAssertion(),
+          renderedValue: createOrdersPageAssertion(),
+        };
+
+        const result = handleTrajectoryToolArgsMatch(params);
+        expect(result.pass).toBe(false);
+      });
+
+      it('inverts correctly when defaults allow an otherwise-forbidden match', () => {
+        const params: AssertionParams = {
+          ...defaultParams,
+          inverse: true,
+          baseType: 'trajectory:tool-args-match',
+          assertion: {
+            type: 'not-trajectory:tool-args-match',
+            value: createSearchHistoryAssertion('exact', false),
+          },
+          renderedValue: createSearchHistoryAssertion('exact', false),
+        };
+
+        const result = handleTrajectoryToolArgsMatch(params);
+        expect(result.pass).toBe(false);
+        expect(result.reason).toContain('Forbidden argument match');
+      });
+
+      it('surfaces the stripped keys in the pass reason when multiple defaults are tolerated', () => {
+        const allDefaultsTrace: TraceData = {
+          ...mockTraceData,
+          spans: [
+            {
+              spanId: 'span-reason-defaults',
+              name: 'tool.call',
+              startTime: 1000,
+              endTime: 1100,
+              attributes: createToolTraceAttributes('{"status":"Q","page":1,"page_size":5}'),
+            },
+          ],
+        };
+        const params: AssertionParams = {
+          ...defaultParams,
+          assertionValueContext: {
+            ...defaultParams.assertionValueContext,
+            trace: allDefaultsTrace,
+          },
+          baseType: 'trajectory:tool-args-match',
+          assertion: createOrdersAssertion(),
+          renderedValue: createOrdersPaginationDefaultsAssertion(),
+        };
+
+        const result = handleTrajectoryToolArgsMatch(params);
+        expect(result.pass).toBe(true);
+        expect(result.reason).toContain('Ignored default argument(s): page, page_size');
+      });
+
+      it('does not append the ignored-defaults note when nothing was stripped', () => {
+        const params: AssertionParams = {
+          ...defaultParams,
+          baseType: 'trajectory:tool-args-match',
+          assertion: {
+            type: 'trajectory:tool-args-match',
+            value: createSearchHistoryAssertion('partial', true),
+          },
+          renderedValue: createSearchHistoryAssertion('partial', true),
+        };
+
+        // The observed call has include_history:false, which does not equal the
+        // declared default (true), so nothing is stripped and no note is added.
+        const result = handleTrajectoryToolArgsMatch(params);
+        expect(result.pass).toBe(true);
+        expect(result.reason).not.toContain('Ignored default');
+      });
+
+      it('does not let a hallucinated __proto__ argument escape exact matching when defaults are set', () => {
+        const protoTrace: TraceData = {
+          ...mockTraceData,
+          spans: [
+            {
+              spanId: 'span-proto-default',
+              name: 'tool.call',
+              startTime: 1000,
+              endTime: 1100,
+              attributes: {
+                'tool.name': 'orders',
+                'tool.arguments': '{"status":"Q","__proto__":{"polluted":true}}',
+              },
+            },
+          ],
+        };
+        const params: AssertionParams = {
+          ...defaultParams,
+          assertionValueContext: { ...defaultParams.assertionValueContext, trace: protoTrace },
+          baseType: 'trajectory:tool-args-match',
+          assertion: createPagedOrdersAssertion(),
+          renderedValue: createOrdersPageAssertion(),
+        };
+
+        // A non-default __proto__ key must be preserved through stripping so exact
+        // mode still rejects it as a hallucinated extra (matching no-defaults behavior).
+        const result = handleTrajectoryToolArgsMatch(params);
+        expect(result.pass).toBe(false);
+        // The prototype must not have been mutated by the stripping rebuild.
+        expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+      });
+
+      it('fails in partial mode when a key in both args and defaults is stripped to nothing', () => {
+        const collisionTrace: TraceData = {
+          ...mockTraceData,
+          spans: [
+            {
+              spanId: 'span-partial-collision',
+              name: 'tool.call',
+              startTime: 1000,
+              endTime: 1100,
+              attributes: createToolTraceAttributes('{"status":"Q","page":1}'),
+            },
+          ],
+        };
+        const params: AssertionParams = {
+          ...defaultParams,
+          assertionValueContext: { ...defaultParams.assertionValueContext, trace: collisionTrace },
+          baseType: 'trajectory:tool-args-match',
+          assertion: {
+            type: 'trajectory:tool-args-match',
+            value: {
+              name: 'orders',
+              // partial (default) mode; page is listed in BOTH args and defaults
+              args: { status: 'Q', page: 1 },
+              defaults: { page: 1 },
+            },
+          },
+          renderedValue: {
+            name: 'orders',
+            args: { status: 'Q', page: 1 },
+            defaults: { page: 1 },
+          },
+        };
+
+        // Documented footgun: stripping removes page before the subset check, so the
+        // explicitly-asserted page:1 can no longer be satisfied.
+        const result = handleTrajectoryToolArgsMatch(params);
+        expect(result.pass).toBe(false);
+      });
+
+      it('applies defaults when the expected payload uses the arguments alias', () => {
+        const params: AssertionParams = {
+          ...defaultParams,
+          baseType: 'trajectory:tool-args-match',
+          assertion: {
+            type: 'trajectory:tool-args-match',
+            value: createLegacyArgumentsSearchAssertion(),
+          },
+          renderedValue: createLegacyArgumentsSearchAssertion(),
+        };
+
+        const result = handleTrajectoryToolArgsMatch(params);
+        expect(result.pass).toBe(true);
+      });
+
+      it('treats defaults as a no-op when the actual payload is a top-level array', () => {
+        const arrayTrace: TraceData = {
+          ...mockTraceData,
+          spans: [
+            {
+              spanId: 'span-array-args',
+              name: 'tool.call',
+              startTime: 1000,
+              endTime: 1100,
+              attributes: {
+                'tool.name': 'orders',
+                'tool.arguments': '[1,2,3]',
+              },
+            },
+          ],
+        };
+        const params: AssertionParams = {
+          ...defaultParams,
+          assertionValueContext: { ...defaultParams.assertionValueContext, trace: arrayTrace },
+          baseType: 'trajectory:tool-args-match',
+          assertion: {
+            type: 'trajectory:tool-args-match',
+            value: createArrayArgumentsOrdersAssertion(),
+          },
+          renderedValue: createArrayArgumentsOrdersAssertion(),
+        };
+
+        const result = handleTrajectoryToolArgsMatch(params);
+        expect(result.pass).toBe(true);
+      });
+
+      it.each([
+        ['null', null],
+        ['string', 'include_history'],
+        ['number', 1],
+      ])('rejects malformed defaults (%s)', (_label, malformed) => {
+        const params: AssertionParams = {
+          ...defaultParams,
+          baseType: 'trajectory:tool-args-match',
+          assertion: {
+            type: 'trajectory:tool-args-match',
+            value: {
+              name: 'search_orders',
+              args: { order_id: '123' },
+              defaults: malformed as unknown as Record<string, unknown>,
+            },
+          },
+          renderedValue: {
+            name: 'search_orders',
+            args: { order_id: '123' },
+            defaults: malformed as unknown as Record<string, unknown>,
+          },
+        };
+
+        expect(() => handleTrajectoryToolArgsMatch(params)).toThrow(
+          'trajectory:tool-args-match assertion defaults must be an object mapping argument names to default values',
+        );
+      });
+
+      it('strips a literal "*" default only when the observed value is exactly "*"', () => {
+        // A default of "*" is an ordinary value compared with deep equality — it must not
+        // act as an any-value wildcard (#9842); use `ignore` to drop a key unconditionally.
+        const runWithFields = (fields: string) => {
+          const trace: TraceData = {
+            ...mockTraceData,
+            spans: [
+              {
+                spanId: 'literal-star-default',
+                name: 'tool.call',
+                startTime: 1000,
+                endTime: 1100,
+                attributes: {
+                  'tool.name': 'search_orders',
+                  'tool.arguments': JSON.stringify({ status: 'Q', fields }),
+                },
+              },
+            ],
+          };
+          const value = {
+            name: 'search_orders',
+            mode: 'exact',
+            args: { status: 'Q' },
+            defaults: { fields: '*' },
+          };
+          return handleTrajectoryToolArgsMatch({
+            ...defaultParams,
+            assertionValueContext: { ...defaultParams.assertionValueContext, trace },
+            baseType: 'trajectory:tool-args-match',
+            assertion: { type: 'trajectory:tool-args-match', value },
+            renderedValue: value,
+          } as AssertionParams);
+        };
+
+        const stripped = runWithFields('*');
+        expect(stripped.pass).toBe(true);
+        expect(stripped.reason).toContain('Ignored default argument(s): fields');
+
+        expect(runWithFields('ssn,password').pass).toBe(false);
+      });
+    });
+
+    describe('ignore', () => {
+      const makeIgnoreParams = (
+        toolArgs: Record<string, unknown> | unknown[] | string,
+        value: Record<string, unknown>,
+        inverse = false,
+      ): AssertionParams => {
+        const argsJson = typeof toolArgs === 'string' ? toolArgs : JSON.stringify(toolArgs);
+        const trace: TraceData = {
+          ...mockTraceData,
+          spans: [
+            {
+              spanId: 'ignore-tool-call',
+              name: 'tool.call',
+              startTime: 1000,
+              endTime: 1100,
+              attributes: { 'tool.name': 'search_orders', 'tool.arguments': argsJson },
+            },
+          ],
+        };
+        return {
+          ...defaultParams,
+          inverse,
+          assertionValueContext: { ...defaultParams.assertionValueContext, trace },
+          baseType: 'trajectory:tool-args-match',
+          assertion: { type: 'trajectory:tool-args-match', value },
+          renderedValue: value,
+        } as AssertionParams;
+      };
+
+      it('drops an ignored key regardless of value in exact mode', () => {
+        const value = {
+          name: 'search_orders',
+          mode: 'exact',
+          args: { status: 'Q' },
+          ignore: ['request_id'],
+        };
+
+        expect(
+          handleTrajectoryToolArgsMatch(makeIgnoreParams({ status: 'Q', request_id: 'a' }, value))
+            .pass,
+        ).toBe(true);
+        expect(
+          handleTrajectoryToolArgsMatch(makeIgnoreParams({ status: 'Q', request_id: 'z' }, value))
+            .pass,
+        ).toBe(true);
+      });
+
+      it('drops an ignored key across varying value types', () => {
+        const value = {
+          name: 'search_orders',
+          mode: 'exact',
+          args: { status: 'Q' },
+          ignore: ['cursor'],
+        };
+
+        for (const cursor of ['eyJvZmZzZXQiOjQyfQ==', null, 0, { page: 3 }]) {
+          expect(
+            handleTrajectoryToolArgsMatch(makeIgnoreParams({ status: 'Q', cursor }, value)).pass,
+          ).toBe(true);
+        }
+      });
+
+      it('accepts a bare string ignore value', () => {
+        const result = handleTrajectoryToolArgsMatch(
+          makeIgnoreParams(
+            { status: 'Q', request_id: 'abc' },
+            { name: 'search_orders', mode: 'exact', args: { status: 'Q' }, ignore: 'request_id' },
+          ),
+        );
+        expect(result.pass).toBe(true);
+      });
+
+      it('still fails on a non-ignored hallucinated argument', () => {
+        const result = handleTrajectoryToolArgsMatch(
+          makeIgnoreParams(
+            { status: 'Q', request_id: 'abc', delete_database: true },
+            { name: 'search_orders', mode: 'exact', args: { status: 'Q' }, ignore: ['request_id'] },
+          ),
+        );
+        expect(result.pass).toBe(false);
+      });
+
+      it('strips the ignored key from the expected payload too', () => {
+        // request_id is declared in args but ignored, so the agent omitting it still passes.
+        const result = handleTrajectoryToolArgsMatch(
+          makeIgnoreParams(
+            { status: 'Q' },
+            {
+              name: 'search_orders',
+              mode: 'exact',
+              args: { status: 'Q', request_id: 'expected' },
+              ignore: ['request_id'],
+            },
+          ),
+        );
+        expect(result.pass).toBe(true);
+      });
+
+      it('composes with defaults and reports both in the pass reason', () => {
+        const result = handleTrajectoryToolArgsMatch(
+          makeIgnoreParams(
+            { status: 'Q', page: 1, request_id: 'abc' },
+            {
+              name: 'search_orders',
+              mode: 'exact',
+              args: { status: 'Q' },
+              defaults: { page: 1 },
+              ignore: ['request_id'],
+            },
+          ),
+        );
+        expect(result.pass).toBe(true);
+        expect(result.reason).toContain('Ignored argument(s): request_id');
+        expect(result.reason).toContain('Ignored default argument(s): page');
+      });
+
+      it('works in partial mode', () => {
+        const result = handleTrajectoryToolArgsMatch(
+          makeIgnoreParams(
+            { status: 'Q', request_id: 'abc' },
+            {
+              name: 'search_orders',
+              mode: 'partial',
+              args: { status: 'Q' },
+              ignore: ['request_id'],
+            },
+          ),
+        );
+        expect(result.pass).toBe(true);
+      });
+
+      it('inverts correctly', () => {
+        const result = handleTrajectoryToolArgsMatch(
+          makeIgnoreParams(
+            { status: 'Q', request_id: 'abc' },
+            { name: 'search_orders', mode: 'exact', args: { status: 'Q' }, ignore: ['request_id'] },
+            true,
+          ),
+        );
+        expect(result.pass).toBe(false);
+      });
+
+      it('does not let a hallucinated __proto__ argument escape exact matching', () => {
+        const result = handleTrajectoryToolArgsMatch(
+          makeIgnoreParams('{"status":"Q","__proto__":{"polluted":true},"request_id":"abc"}', {
+            name: 'search_orders',
+            mode: 'exact',
+            args: { status: 'Q' },
+            ignore: ['request_id'],
+          }),
+        );
+        expect(result.pass).toBe(false);
+      });
+
+      it('treats ignore as a no-op when the actual payload is a top-level array', () => {
+        const result = handleTrajectoryToolArgsMatch(
+          makeIgnoreParams('["a","b"]', {
+            name: 'search_orders',
+            mode: 'exact',
+            args: ['a', 'b'],
+            ignore: ['request_id'],
+          }),
+        );
+        expect(result.pass).toBe(true);
+      });
+
+      it('treats entries containing glob characters as key patterns', () => {
+        const result = handleTrajectoryToolArgsMatch(
+          makeIgnoreParams(
+            { status: 'Q', request_id: 'a1', order_id: 'b2' },
+            { name: 'search_orders', mode: 'exact', args: { status: 'Q' }, ignore: ['*_id'] },
+          ),
+        );
+        expect(result.pass).toBe(true);
+        expect(result.reason).toContain('Ignored argument(s): request_id, order_id');
+      });
+
+      it('still fails when a glob pattern does not cover a hallucinated key', () => {
+        const result = handleTrajectoryToolArgsMatch(
+          makeIgnoreParams(
+            { status: 'Q', request_id: 'a1', delete_database: true },
+            { name: 'search_orders', mode: 'exact', args: { status: 'Q' }, ignore: ['*_id'] },
+          ),
+        );
+        expect(result.pass).toBe(false);
+      });
+
+      it('supports single-character ? glob patterns', () => {
+        const result = handleTrajectoryToolArgsMatch(
+          makeIgnoreParams(
+            { status: 'Q', v1: 'x' },
+            { name: 'search_orders', mode: 'exact', args: { status: 'Q' }, ignore: ['v?'] },
+          ),
+        );
+        expect(result.pass).toBe(true);
+      });
+
+      it('treats a plain entry as an exact match, not a substring or pattern', () => {
+        // "request" must not strip "request_id"; only an exact key or glob does.
+        const result = handleTrajectoryToolArgsMatch(
+          makeIgnoreParams(
+            { status: 'Q', request_id: 'a1' },
+            { name: 'search_orders', mode: 'exact', args: { status: 'Q' }, ignore: ['request'] },
+          ),
+        );
+        expect(result.pass).toBe(false);
+      });
+
+      it.each([
+        ['number', [5]],
+        ['empty string', ['']],
+        ['null', [null]],
+        ['object', [{ request_id: true }]],
+      ])('rejects malformed ignore entries (%s)', (_label, malformed) => {
+        const params = makeIgnoreParams(
+          { status: 'Q' },
+          {
+            name: 'search_orders',
+            mode: 'exact',
+            args: { status: 'Q' },
+            ignore: malformed as unknown as string[],
+          },
+        );
+        expect(() => handleTrajectoryToolArgsMatch(params)).toThrow(
+          'trajectory:tool-args-match assertion ignore must be a non-empty string or an array of non-empty strings',
+        );
+      });
     });
   });
 
@@ -1332,17 +2343,9 @@ describe('trajectory assertions', () => {
         baseType: 'trajectory:step-count',
         assertion: {
           type: 'trajectory:step-count',
-          value: {
-            type: 'command',
-            min: 1,
-            max: 1,
-          },
+          value: createSingleCommandCountAssertion(),
         },
-        renderedValue: {
-          type: 'command',
-          min: 1,
-          max: 1,
-        },
+        renderedValue: createSingleCommandCountAssertion(),
       };
 
       const result = handleTrajectoryStepCount(params);
@@ -1361,15 +2364,9 @@ describe('trajectory assertions', () => {
         baseType: 'trajectory:step-count',
         assertion: {
           type: 'trajectory:step-count',
-          value: {
-            pattern: 'reasoning*',
-            min: 1,
-          },
+          value: createSpanPatternAssertion('reasoning*'),
         },
-        renderedValue: {
-          pattern: 'reasoning*',
-          min: 1,
-        },
+        renderedValue: createSpanPatternAssertion('reasoning*'),
       };
 
       const result = handleTrajectoryStepCount(params);
@@ -1388,15 +2385,9 @@ describe('trajectory assertions', () => {
         baseType: 'trajectory:step-count',
         assertion: {
           type: 'trajectory:step-count',
-          value: {
-            type: 'tool',
-            max: 3,
-          },
+          value: createMaximumToolCountAssertion(),
         },
-        renderedValue: {
-          type: 'tool',
-          max: 3,
-        },
+        renderedValue: createMaximumToolCountAssertion(),
       };
 
       const result = handleTrajectoryStepCount(params);
@@ -1416,15 +2407,9 @@ describe('trajectory assertions', () => {
         baseType: 'trajectory:step-count',
         assertion: {
           type: 'not-trajectory:step-count',
-          value: {
-            type: 'tool',
-            min: 4,
-          },
+          value: createMinimumToolCountAssertion(),
         },
-        renderedValue: {
-          type: 'tool',
-          min: 4,
-        },
+        renderedValue: createMinimumToolCountAssertion(),
       };
 
       const result = handleTrajectoryStepCount(params);

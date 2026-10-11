@@ -1,14 +1,14 @@
 ---
 sidebar_position: 65
 title: Evaluate Coding Agents
-description: Evaluate Codex, Claude, OpenCode, and plain LLM coding agents with promptfoo, including provider choice, sandboxing, tracing, assertions, and QA runs.
+description: Evaluate Codex, Claude, OpenCode, Open Interpreter, and plain LLM coding agents with promptfoo, including sandboxing, tracing, and assertions.
 ---
 
 # Evaluate Coding Agents
 
 Coding agents present a different evaluation challenge than standard LLMs. A chat model transforms input to output in one step. An agent decides what to do, does it, observes the result, and iterates—often dozens of times before producing a final answer.
 
-This guide covers coding agent evals with promptfoo: [OpenAI Codex SDK](/docs/providers/openai-codex-sdk), [OpenAI Codex app-server](/docs/providers/openai-codex-app-server), [Claude Agent SDK](/docs/providers/claude-agent-sdk), [OpenCode SDK](/docs/providers/opencode-sdk), and plain LLM baselines.
+This guide covers coding agent evals with promptfoo: [OpenAI Codex SDK](/docs/providers/openai-codex-sdk), [OpenAI Codex app-server](/docs/providers/openai-codex-app-server), [Claude Agent SDK](/docs/providers/claude-agent-sdk), [OpenCode SDK](/docs/providers/opencode-sdk), [Open Interpreter](/docs/providers/openinterpreter), and plain LLM baselines.
 
 ## Why agent evals are different
 
@@ -24,11 +24,11 @@ Standard LLM evals test a function: given input X, does output Y meet criteria Z
 
 | Tier                      | Example providers                                                | Use when you need                                             | Watch for                                     |
 | ------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------- | --------------------------------------------- |
-| **0: Text**               | `openai:gpt-5.1`, `anthropic:claude-sonnet-4-6`                  | Code generation, explanation, JSON output, baseline behavior  | No file reads, shell commands, or tool traces |
+| **0: Text**               | `openai:gpt-6-sol`, `anthropic:claude-sonnet-5`                  | Code generation, explanation, JSON output, baseline behavior  | No file reads, shell commands, or tool traces |
 | **1: Coding agent SDK**   | `openai:codex-sdk`, `anthropic:claude-agent-sdk`, `opencode:sdk` | Codebase reads, refactors, command runs, CI-friendly agent QA | Side effects, tool permissions, session state |
-| **2: Rich client server** | `openai:codex-app-server`, `openai:codex-desktop`                | App-server events, approvals, skills, plugins, thread details | Experimental protocol and local child process |
+| **2: Rich client server** | `openai:codex-app-server`, `openinterpreter`                     | App-server events, approvals, skills, plugins, thread details | Experimental protocol and local child process |
 
-The same underlying model behaves differently at each tier. A plain `claude-sonnet-4-6` call can't read your files; wrap it in Claude Agent SDK and it can. Use a plain LLM baseline when you want to prove that file access, shell access, or runtime state is actually contributing to the result.
+The same underlying model behaves differently at each tier. A plain `claude-sonnet-5` call can't read your files; wrap it in Claude Agent SDK and it can. Use a plain LLM baseline when you want to prove that file access, shell access, or runtime state is actually contributing to the result.
 
 Choose the provider by the runtime boundary you need to evaluate:
 
@@ -38,6 +38,7 @@ Choose the provider by the runtime boundary you need to evaluate:
 | **OpenAI Codex app-server** | Rich-client protocol behavior, streamed items, approvals, skills, plugins, app connector events | Local `codex app-server` JSON-RPC process                | Read-only sandbox, approvals declined, ephemeral threads, minimal env               |
 | **Claude Agent SDK**        | Claude Code-compatible workflows, MCP-heavy tasks, local skills                                 | `@anthropic-ai/claude-agent-sdk` library                 | No tools by default; configured working dirs are read-only until write tools opt in |
 | **OpenCode SDK**            | Provider-agnostic coding agent comparisons                                                      | OpenCode SDK with a promptfoo-started or existing server | Temporary workspace by default; working dirs start with read-only tools             |
+| **Open Interpreter**        | Multi-backend coding agent and harness comparisons                                              | Local `interpreter app-server` JSON-RPC process          | Read-only sandbox, approvals declined, ephemeral threads, minimal env               |
 
 `openai:codex-desktop` is an alias for the app-server protocol provider. Promptfoo starts its own `codex app-server` child process; it does not attach to an already-running Codex Desktop app window or reuse Desktop UI state.
 
@@ -61,7 +62,7 @@ prompts:
 providers:
   - id: openai:codex-sdk
     config:
-      model: gpt-5.1-codex
+      model: gpt-6-sol
       working_dir: ./test-codebase
       output_schema:
         type: object
@@ -137,7 +138,7 @@ prompts:
     Explain whether the command was allowed.
 
 providers:
-  - id: openai:codex-app-server:gpt-5.4
+  - id: openai:codex-app-server:gpt-6-sol
     config:
       sandbox_mode: read-only
       approval_policy: on-request
@@ -186,8 +187,9 @@ prompts:
 providers:
   - id: anthropic:claude-agent-sdk
     config:
-      model: claude-sonnet-4-6
+      model: claude-sonnet-5
       working_dir: ./user-service
+      copy_working_dir: true
       append_allowed_tools: ['Write', 'Edit', 'MultiEdit', 'Bash']
       permission_mode: acceptEdits
 
@@ -209,7 +211,7 @@ tests:
 
 </details>
 
-The agent's output is its final text response describing what it did, not the file contents. For file-level verification, read the files after the eval or enable [tracing](/docs/tracing/).
+The agent's output is its final text response describing what it did, not the file contents. For file-level verification, check the files in its [isolated workspace](#isolated-workspaces) or enable [tracing](/docs/tracing/).
 
 When you need to verify behavior rather than the agent's self-report, tracing is the better fit. It lets you assert that the agent actually ran tests, executed commands, or took multiple reasoning steps:
 
@@ -263,7 +265,7 @@ prompts:
 providers:
   - id: anthropic:claude-agent-sdk
     config:
-      model: claude-sonnet-4-6
+      model: claude-sonnet-5
       working_dir: ./flask-api
       append_allowed_tools: ['Write', 'Edit', 'MultiEdit']
       permission_mode: acceptEdits
@@ -282,6 +284,69 @@ tests:
 ```
 
 </details>
+
+## Isolated workspaces
+
+An agent that edits files changes `working_dir` for every test, repeat, and concurrent call that comes after it. Set `copy_working_dir: true` to give each eval step a fresh copy instead:
+
+```yaml
+providers:
+  - id: anthropic:claude-agent-sdk
+    config:
+      working_dir: ./user-service
+      copy_working_dir: true
+      append_allowed_tools: ['Write', 'Edit', 'MultiEdit', 'Bash']
+      permission_mode: acceptEdits
+```
+
+`promptfoo eval` creates the workspace before each call and deletes it after that call's assertions have run. The Claude Agent SDK, OpenAI Codex SDK, and OpenCode SDK providers support it. How the workspace is made depends on the value:
+
+| Value    | Workspace                                                                                                                                                                   |
+| -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `true`   | A clone when `working_dir` is the root of a git repository whose files all match its current commit, with no untracked or ignored files. A copy of the directory otherwise. |
+| `'git'`  | A clone of the current commit. `working_dir` must be the root of a repository whose files all match that commit. Ignored files, such as `node_modules`, are left out.       |
+| `'copy'` | A copy of the directory.                                                                                                                                                    |
+
+Cloning requires Git 2.41 or newer. With older Git, `true` copies the directory and `'git'` returns an error.
+
+A clone is fast and doesn't write to your repository. It has no remote, so a push from the agent has nowhere to go. Automatic mode copies files whose materialized line endings would change during cloning. Repositories with tracked Git filter attributes, such as Git LFS, use a copy with `true` and are rejected by `'git'` mode.
+
+Assertions can read two fields from the response metadata:
+
+- `workingDir`: the workspace directory. It exists until the call's assertions have run.
+- `workspaceDiff`: for a clone, the agent's changes as a unified diff against the cloned commit, including any commits the agent made. Diffs longer than 100,000 characters are truncated.
+
+```yaml
+tests:
+  - assert:
+      - type: javascript
+        value: file://check-workspace.js
+```
+
+```js title="check-workspace.js"
+const fs = require('fs');
+const path = require('path');
+
+module.exports = (output, context) => {
+  const { workingDir, workspaceDiff } = context.providerResponse.metadata;
+  const source = fs.readFileSync(path.join(workingDir, 'user_service.py'), 'utf8');
+  const pass = source.includes('bcrypt') && !source.includes('md5');
+  return {
+    pass,
+    score: pass ? 1 : 0,
+    reason: workspaceDiff ?? 'The workspace is a copy, so there is no diff.',
+  };
+};
+```
+
+An [`agent-rubric`](/docs/configuration/expected-outputs/model-graded/agent-rubric) grader runs in the same workspace, so it can inspect the agent's changes.
+
+Workspaces have these limits:
+
+- Responses are never cached, because a cached response would come without the agent's changes.
+- Only eval steps get a workspace. When anything else calls the provider, such as a multi-turn red team strategy, the call fails instead of running in `working_dir` itself.
+- Repositories with submodules aren't supported yet. Workspaces reject unresolved links and links that point outside the workspace. Copies also reject Git metadata that points outside the copy (such as a linked worktree's `.git` file, `.git/worktrees` records, or an absolute `core.worktree`). Commit the changes so the directory can be cloned instead.
+- A workspace keeps calls from affecting each other, but it isn't a sandbox. An agent with shell access can still reach the rest of the file system, so run untrusted agents in a container.
 
 ## Evaluation techniques
 

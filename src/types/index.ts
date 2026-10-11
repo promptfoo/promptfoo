@@ -1,11 +1,25 @@
 import { z } from 'zod';
 import { ProviderEnvOverridesSchema } from '../contracts/env';
-import { BaseTokenUsageSchema } from '../contracts/shared';
+import {
+  BaseTokenUsageSchema,
+  type NormalizedTokenUsage,
+  type NunjucksFilterMap,
+  type TokenUsage,
+  type VarValue,
+} from '../contracts/shared';
+import { hasTraceCredentialPath } from '../contracts/traceProviderEndpoint';
 import { PromptConfigSchema, PromptSchema } from '../contracts/validators/prompts';
 import { NunjucksFilterMapSchema, StringOrFunctionSchema } from '../contracts/validators/shared';
-import { isJavascriptFile, JAVASCRIPT_EXTENSIONS } from '../util/fileExtensions';
-import { parseFilterRange } from '../util/filterRange';
+import { isJavascriptFile, JAVASCRIPT_EXTENSIONS } from '../validation/fileExtensions';
+import { parseFilterRange } from '../validation/filterRange';
 import { ApiProviderSchema, ProviderOptionsSchema, ProvidersSchema } from '../validators/providers';
+import {
+  CONFIG_PROVIDER_INPUT_ERROR,
+  hasValidConfigProviders,
+  normalizeConfigProviderAlias,
+} from './configAliases';
+
+import type { ResultFailureReason } from './results';
 
 export { ProvidersSchema };
 
@@ -18,10 +32,8 @@ export {
   isCliEventSource,
 } from './eventSource';
 
-import type { BlobRef } from '../blobs/types';
 import type { EnvOverrides } from '../contracts/env';
 import type { Prompt, PromptFunction } from '../contracts/prompts';
-import type { NunjucksFilterMap, TokenUsage, VarValue } from '../contracts/shared';
 import type {
   PluginConfig,
   RedteamAssertionTypes,
@@ -31,6 +43,7 @@ import type {
 import type {
   ApiProvider,
   CallApiContextParams,
+  CallApiOptionsParams,
   ImageOutput,
   ProviderOptions,
   ProviderResponse,
@@ -45,8 +58,9 @@ import type { TraceData } from './tracing';
 export interface RateLimitRegistryRef {
   execute: <T>(
     provider: ApiProvider,
-    callFn: () => Promise<T>,
+    callFn: (onResponseHeaders?: CallApiOptionsParams['onResponseHeaders']) => Promise<T>,
     options?: {
+      abortSignal?: AbortSignal;
       getHeaders?: (result: T) => Record<string, string> | undefined;
       isRateLimited?: (result: T | undefined, error?: Error) => boolean;
       getRetryAfter?: (result: T | undefined, error?: Error) => number | undefined;
@@ -59,7 +73,7 @@ export interface RateLimitRegistryRef {
  * Minimal interface for deferred provider-call queues used by serial grading orchestration.
  */
 export interface ProviderCallQueueRef {
-  enqueue: <T>(providerId: string, call: () => Promise<T>) => Promise<T>;
+  enqueue: <T>(providerId: string, call: () => Promise<T>, abortSignal?: AbortSignal) => Promise<T>;
 }
 
 export * from '../redteam/types';
@@ -118,6 +132,7 @@ export const CommandLineOptionsSchema = z.object({
   noShare: z.boolean().optional(),
   progressBar: z.boolean().optional(),
   watch: z.boolean().optional(),
+  safeMode: z.boolean().optional(),
   filterErrorsOnly: z.string().optional(),
   filterFailing: z.string().optional(),
   filterFailingOnly: z.string().optional(),
@@ -128,8 +143,10 @@ export const CommandLineOptionsSchema = z.object({
   filterProviders: z.string().optional(),
   filterRange: FilterRangeSchema,
   filterSample: z.coerce.number().int().positive().optional(),
+  filterSampleSeed: z.coerce.number().int().safe().optional(),
   filterTargets: z.string().optional(),
   var: z.record(z.string(), z.string()).optional(),
+  tags: z.record(z.string(), z.string()).optional(),
 
   generateSuggestions: z.boolean().optional(),
   suggestionsCount: z.coerce.number().int().positive().max(MAX_SUGGESTIONS_COUNT).optional(),
@@ -217,6 +234,8 @@ export interface RunEvalOptions {
   testIdx: number;
   promptIdx: number;
   repeatIndex: number;
+  /** Stable identifier shared by repeated executions of the same expanded test case. */
+  repeatGroupId?: string;
 
   conversations?: EvalConversations;
   registers?: EvalRegisters;
@@ -307,6 +326,12 @@ export type EvaluateOptions = z.infer<typeof EvaluateOptionsSchema> & {
   abortSignal?: AbortSignal;
 };
 
+/** Runtime options stored with an evaluation for reproducible resume and retry behavior. */
+export type EvalRuntimeOptions = Partial<EvaluateOptions> & {
+  /** @internal Normalized value of --filter-providers or --filter-targets. */
+  providerFilter?: string;
+};
+
 const PromptMetricsSchema = z.object({
   score: z.number(),
   testPassCount: z.number(),
@@ -328,6 +353,7 @@ const PromptMetricsSchema = z.object({
     })
     .optional(),
   cost: z.number(),
+  incurredCost: z.number().optional(),
 });
 export type PromptMetrics = z.infer<typeof PromptMetricsSchema>;
 
@@ -358,21 +384,8 @@ export type ServerPromptWithMetadata = Omit<PromptWithMetadata, 'recentEvalDate'
   recentEvalDate: string;
 };
 
-export const ResultFailureReason = {
-  // The test passed, or we don't know exactly why the test case failed.
-  NONE: 0,
-  // The test case failed because an assertion rejected it.
-  ASSERT: 1,
-  // Test case failed due to some other error.
-  ERROR: 2,
-} as const;
-export type ResultFailureReason = (typeof ResultFailureReason)[keyof typeof ResultFailureReason];
-
-const validResultFailureReasons = new Set<number>(Object.values(ResultFailureReason));
-
-export function isResultFailureReason(value: number): value is ResultFailureReason {
-  return validResultFailureReasons.has(value);
-}
+// Compatibility exports for existing public and source consumers.
+export { isResultFailureReason, ResultFailureReason } from './results';
 
 export interface EvaluateResult {
   id?: string; // on the new version 2, this is stored per-result
@@ -393,8 +406,21 @@ export interface EvaluateResult {
   gradingResult?: GradingResult | null;
   namedScores: Record<string, number>;
   cost?: number;
+  incurredCost?: number;
   metadata?: Record<string, any>;
-  tokenUsage?: Required<TokenUsage>;
+  tokenUsage?: NormalizedTokenUsage;
+  /**
+   * Eval ID this result belongs to, surfaced when tracing is enabled so consumers
+   * can pass it to `/api/traces/evaluation/:evaluationId` without re-deriving it.
+   * Absent when tracing is disabled — its presence implies a trace context exists.
+   */
+  evaluationId?: string;
+  /** W3C trace ID generated for this row when tracing is enabled. */
+  traceId?: string;
+  /** Zero-based execution index when this row is part of a repeated test. */
+  repeatIndex?: number;
+  /** Stable identifier shared by repeated executions of the same expanded test case. */
+  repeatGroupId?: string;
 }
 
 export interface EvaluateTableOutput {
@@ -414,31 +440,8 @@ export interface EvaluateTableOutput {
   text: string;
   tokenUsage?: Partial<TokenUsage>;
   error?: string | null;
-  audio?: {
-    id?: string;
-    expiresAt?: number;
-    data?: string; // base64 encoded audio data
-    blobRef?: BlobRef;
-    transcript?: string;
-    format?: string;
-    sampleRate?: number;
-    channels?: number;
-    duration?: number;
-  };
-  video?: {
-    id?: string; // Provider video ID (e.g., Sora job ID, Veo operation name)
-    blobRef?: BlobRef; // Blob storage reference for video data (Veo)
-    storageRef?: { key?: string }; // Storage reference for video file (Sora)
-    url?: string; // Storage ref URL (e.g., storageRef:video/abc123.mp4) or blob URI
-    format?: string; // 'mp4'
-    size?: string; // '1280x720', '720x1280', '1792x1024', or '1024x1792'
-    duration?: number; // Seconds
-    thumbnail?: string; // Storage ref URL for thumbnail (Sora)
-    spritesheet?: string; // Storage ref URL for spritesheet (Sora)
-    model?: string; // Model used (e.g., 'sora-2', 'veo-3.1-generate-preview')
-    aspectRatio?: string; // '16:9' or '9:16' (Veo)
-    resolution?: string; // '720p' or '1080p' (Veo)
-  };
+  audio?: ProviderResponse['audio'];
+  video?: ProviderResponse['video'];
   images?: ImageOutput[];
 }
 
@@ -462,10 +465,41 @@ export interface EvaluateStats {
   successes: number;
   failures: number;
   errors: number;
-  tokenUsage: Required<TokenUsage>;
+  tokenUsage: NormalizedTokenUsage;
   durationMs?: number;
   generationDurationMs?: number;
   evaluationDurationMs?: number;
+}
+
+export interface RepeatStabilityConfidenceInterval {
+  /** Confidence level used for this interval. */
+  confidenceLevel: 0.95;
+  lower: number;
+  upper: number;
+}
+
+export interface RepeatStabilityGroup {
+  repeatGroupId: string;
+  promptIdx: number;
+  provider: Pick<ProviderOptions, 'id' | 'label'>;
+  description?: string;
+  promptLabel?: string;
+  repetitions: number;
+  passed: number;
+  failed: number;
+  errors: number;
+  cached: number;
+  passRate?: number;
+  passRateConfidenceInterval?: RepeatStabilityConfidenceInterval;
+  unstable: boolean;
+}
+
+export interface RepeatStabilitySummary {
+  totalGroups: number;
+  unstableGroups: number;
+  groupsWithErrors: number;
+  cachedResults: number;
+  groups: RepeatStabilityGroup[];
 }
 
 export interface EvaluateSummaryV3 {
@@ -474,6 +508,7 @@ export interface EvaluateSummaryV3 {
   results: EvaluateResult[];
   prompts: CompletedPrompt[];
   stats: EvaluateStats;
+  repeatStability?: RepeatStabilitySummary;
 }
 
 export interface EvaluateSummaryV2 {
@@ -513,16 +548,16 @@ export interface GradingResult {
   reason: string;
 
   // Map of labeled metrics to values
-  namedScores?: Record<string, number>;
+  namedScores?: Record<string, number> | null;
 
   // Total weight contributing to each named score
-  namedScoreWeights?: Record<string, number>;
+  namedScoreWeights?: Record<string, number> | null;
 
   // Record of tokens usage for this assertion
   tokensUsed?: TokenUsage;
 
   // List of results for each component of the assertion
-  componentResults?: GradingResult[];
+  componentResults?: GradingResult[] | null;
 
   // The assertion that was evaluated
   // TODO(Will): Can we move to this being required?
@@ -547,6 +582,8 @@ export interface GradingResult {
     renderedAssertionValue?: string;
     // Full grading prompt sent to the grading LLM (for debugging)
     renderedGradingPrompt?: string;
+    // True when the complete grading response was reused without running a new task.
+    cachedResponse?: boolean;
     // Set by LLM-grader matchers when a transport/parse failure prevents a real
     // evaluation. Callers that support inverse semantics (e.g. `not-g-eval`)
     // must not flip such results to a pass — a grader error is not evidence
@@ -557,18 +594,29 @@ export interface GradingResult {
   };
 }
 
-export function isGradingResult(result: any): result is GradingResult {
+function isFiniteNumberRecord(value: unknown): value is Record<string, number> {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    !Array.isArray(value) &&
+    // Custom tags can disguise built-in containers as ordinary records.
+    !(Symbol.toStringTag in value) &&
+    Object.prototype.toString.call(value) === '[object Object]' &&
+    Object.values(value).every((entry) => Number.isFinite(entry))
+  );
+}
+
+function hasValidGradingResultFields(result: any): boolean {
   return (
     typeof result === 'object' &&
     result !== null &&
     typeof result.pass === 'boolean' &&
-    typeof result.score === 'number' &&
+    Number.isFinite(result.score) &&
     typeof result.reason === 'string' &&
-    (typeof result.namedScores === 'undefined' || typeof result.namedScores === 'object') &&
-    (typeof result.namedScoreWeights === 'undefined' ||
-      typeof result.namedScoreWeights === 'object') &&
+    (result.namedScores == null || isFiniteNumberRecord(result.namedScores)) &&
+    (result.namedScoreWeights == null || isFiniteNumberRecord(result.namedScoreWeights)) &&
     (typeof result.tokensUsed === 'undefined' || typeof result.tokensUsed === 'object') &&
-    (typeof result.componentResults === 'undefined' || Array.isArray(result.componentResults)) &&
+    (result.componentResults == null || Array.isArray(result.componentResults)) &&
     (typeof result.assertion === 'undefined' ||
       result.assertion === null ||
       typeof result.assertion === 'object') &&
@@ -576,7 +624,50 @@ export function isGradingResult(result: any): result is GradingResult {
   );
 }
 
+export function isGradingResult(result: any): result is GradingResult {
+  try {
+    const ancestors = new WeakSet<object>();
+    const validated = new WeakSet<object>();
+    const frames = [{ result, nextChild: -1 }];
+
+    // Traverse one indexed child at a time without consuming the JavaScript call stack.
+    while (frames.length > 0) {
+      const frame = frames[frames.length - 1];
+      const current = frame.result;
+      if (frame.nextChild === -1) {
+        if (validated.has(current)) {
+          frames.pop();
+          continue;
+        }
+        if (!hasValidGradingResultFields(current) || ancestors.has(current)) {
+          return false;
+        }
+        ancestors.add(current);
+        frame.nextChild = 0;
+      }
+
+      const components = current.componentResults;
+      if (components != null && frame.nextChild < components.length) {
+        // Ignore custom iterators and reject a sparse entry as soon as it is visited.
+        const index = frame.nextChild++;
+        if (!Object.prototype.hasOwnProperty.call(components, index)) {
+          return false;
+        }
+        frames.push({ result: components[index], nextChild: -1 });
+      } else {
+        ancestors.delete(current);
+        validated.add(current);
+        frames.pop();
+      }
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export const BaseAssertionTypesSchema = z.enum([
+  'agent-rubric',
   'answer-relevance',
   'bleu',
   'classifier',
@@ -622,7 +713,9 @@ export const BaseAssertionTypesSchema = z.enum([
   'perplexity-score',
   'python',
   'regex',
+  'rouge-l',
   'rouge-n',
+  'rouge-s',
   'ruby',
   'similar',
   'similar:cosine',
@@ -706,7 +799,7 @@ export const AssertionSchema = z.object({
   // The weight of this assertion compared to other assertions in the test case. Defaults to 1.
   weight: z.number().optional(),
 
-  // Some assertions (similarity, llm-rubric) require an LLM provider
+  // Some assertions (similarity, llm-rubric, agent-rubric) require a grading provider
   provider: z.custom<GradingConfig['provider']>().optional(),
 
   // Override the grading rubric
@@ -720,6 +813,9 @@ export const AssertionSchema = z.object({
 
   // Extract context from the output using a transform
   contextTransform: StringOrFunctionSchema.optional(),
+
+  // Opt-in string normalization for equals/contains; true selects NFC.
+  normalizeUnicode: z.union([z.boolean(), z.enum(['NFC', 'NFD', 'NFKC', 'NFKD'])]).optional(),
 });
 
 export type Assertion = z.infer<typeof AssertionSchema>;
@@ -740,6 +836,8 @@ export interface AssertionValueFunctionContext {
   provider: ApiProvider | undefined;
   providerResponse: ProviderResponse | undefined;
   trace?: TraceData;
+  /** Shortcut to providerResponse?.metadata for convenience */
+  metadata?: ProviderResponse['metadata'];
 }
 
 export type AssertionValueFunction = (
@@ -831,6 +929,9 @@ export type ScoringFunction = (
       total: number;
       prompt: number;
       completion: number;
+      cached?: number;
+      numRequests?: number;
+      completionDetails?: TokenUsage['completionDetails'];
     };
   },
 ) => Promise<GradingResult> | GradingResult;
@@ -888,6 +989,9 @@ export const TestCaseSchema = z.object({
       disableDefaultAsserts: z.boolean().optional(),
       // If true, run this without concurrency no matter what
       runSerially: z.boolean().optional(),
+
+      // Number of times to repeat this specific test case.
+      repeat: z.number().int().positive().safe().optional(),
     })
     .catchall(z.any())
     .optional(),
@@ -1009,6 +1113,64 @@ export const DerivedMetricSchema = z.object({
 });
 export type DerivedMetric = z.infer<typeof DerivedMetricSchema>;
 
+const TraceProviderEndpointSchema = z.url().refine((endpoint) => {
+  const url = new URL(endpoint);
+  const hasCredentialPath = hasTraceCredentialPath(url.pathname);
+  return (
+    (url.protocol === 'http:' || url.protocol === 'https:') &&
+    !url.username &&
+    !url.password &&
+    !url.search &&
+    !url.hash &&
+    !hasCredentialPath
+  );
+}, 'Trace provider endpoint must use HTTP or HTTPS without credentials, query parameters, or fragments');
+
+const TraceProviderAuthSchema = z
+  .object({
+    token: z.string().min(1).optional(),
+    username: z.string().min(1).optional(),
+    password: z.string().min(1).optional(),
+  })
+  .refine(
+    ({ token, username, password }) =>
+      !(token && (username || password)) && Boolean(username) === Boolean(password),
+    'Configure either a bearer token or both basic-auth credentials',
+  );
+
+const TraceProviderConfigSchema = z.discriminatedUnion('id', [
+  z.object({
+    id: z.literal('tempo'),
+    endpoint: TraceProviderEndpointSchema,
+    auth: TraceProviderAuthSchema.optional(),
+    headers: z.record(z.string(), z.string()).optional(),
+    timeout: z.number().int().positive().max(300_000).optional(),
+  }),
+  z.object({
+    id: z.literal('braintrust'),
+    endpoint: TraceProviderEndpointSchema,
+    projectId: z.uuid(),
+    auth: z.object({ token: z.string().min(1) }),
+    headers: z.record(z.string(), z.string()).optional(),
+    timeout: z.number().int().positive().max(300_000).optional(),
+  }),
+  z.object({
+    id: z.literal('langfuse'),
+    endpoint: TraceProviderEndpointSchema,
+    auth: z
+      .object({
+        username: z.string().min(1),
+        password: z.string().min(1),
+        token: z.never().optional(),
+      })
+      .strict(),
+    headers: z.record(z.string(), z.string()).optional(),
+    timeout: z.number().int().positive().max(300_000).optional(),
+  }),
+]);
+
+const TraceQueryDelaySchema = z.number().int().nonnegative().max(300_000);
+
 // The test suite defines the "knobs" that we are tuning in prompt engineering: providers and prompts
 export const TestSuiteSchema = z.object({
   // Optional tags to describe the test suite
@@ -1023,8 +1185,8 @@ export const TestSuiteSchema = z.object({
   // One or more prompt strings
   prompts: z.array(PromptSchema),
 
-  // Optional mapping of provider to prompt display strings.  If not provided,
-  // all prompts are used for all providers.
+  // Optional prompt-filter overrides keyed by provider label or ID.
+  // Otherwise each provider uses its own prompts filter, or all prompts when absent.
   providerPromptMap: ProviderPromptMapSchema.optional(),
   // Test cases
   tests: z.array(TestCaseSchema).optional(),
@@ -1092,6 +1254,8 @@ export const TestSuiteSchema = z.object({
   tracing: z
     .object({
       enabled: z.boolean(),
+      failOnReceiverStartFailure: z.boolean().optional(),
+      commandToolNames: z.array(z.string()).optional(),
       otlp: z
         .object({
           http: z
@@ -1100,6 +1264,7 @@ export const TestSuiteSchema = z.object({
               port: z.number(),
               host: z.string().optional(),
               acceptFormats: z.array(z.enum(['protobuf', 'json'])).optional(),
+              redactAttributes: z.array(z.string()).optional(),
             })
             .optional(),
           grpc: z
@@ -1112,7 +1277,11 @@ export const TestSuiteSchema = z.object({
         .optional(),
       storage: z
         .object({
-          type: z.string(),
+          // Mirror TestSuiteConfigSchema's prefault so a resolved suite that sets `storage`
+          // with `retentionDays` but omits `type` doesn't fail validation (sqlite is the
+          // only supported store). Without this the prefault on the config schema never
+          // reaches resolved-suite validation and emits a spurious error.
+          type: z.string().prefault('sqlite'),
           retentionDays: z.number(),
         })
         .optional(),
@@ -1123,8 +1292,12 @@ export const TestSuiteSchema = z.object({
           headers: z.record(z.string(), z.string()).optional(),
         })
         .optional(),
+      provider: TraceProviderConfigSchema.optional(),
+      queryDelay: TraceQueryDelaySchema.optional(),
     })
     .optional(),
+  /** Directory for local references, retained when replaying a saved evaluation. */
+  basePath: z.string().optional(),
 });
 
 export type TestSuite = z.infer<typeof TestSuiteSchema>;
@@ -1231,6 +1404,16 @@ export const TestSuiteConfigSchema = z.object({
     .object({
       enabled: z.boolean().prefault(false),
 
+      // When the OTLP receiver fails to start (e.g. port already in use),
+      // throw and fail the eval instead of silently continuing without traces.
+      failOnReceiverStartFailure: z.boolean().optional(),
+
+      // Extra tool names (case-insensitive) that should normalize spans to the
+      // `command` trajectory step type. The defaults are `shell`, `exec_command`,
+      // and `local_shell`. Add `bash`, `terminal`, etc. if your provider uses
+      // a different name for its shell tool.
+      commandToolNames: z.array(z.string()).optional(),
+
       // OTLP receiver configuration
       otlp: z
         .object({
@@ -1238,8 +1421,11 @@ export const TestSuiteConfigSchema = z.object({
             .object({
               enabled: z.boolean().prefault(true),
               port: z.number().prefault(4318),
-              host: z.string().prefault('0.0.0.0'),
+              host: z.string().prefault('127.0.0.1'),
               acceptFormats: z.array(z.enum(['protobuf', 'json'])).prefault(['json', 'protobuf']),
+              // Attribute keys (case-insensitive substring match) whose values are
+              // replaced with [REDACTED] before persistence to the trace store.
+              redactAttributes: z.array(z.string()).optional(),
             })
             .optional(),
           grpc: z
@@ -1267,45 +1453,42 @@ export const TestSuiteConfigSchema = z.object({
           headers: z.record(z.string(), z.string()).optional(),
         })
         .optional(),
+
+      provider: TraceProviderConfigSchema.optional(),
+      queryDelay: TraceQueryDelaySchema.optional(),
     })
     .optional(),
+  /** Directory for local references, retained when replaying a saved evaluation. */
+  basePath: z.string().optional(),
 });
 
 export type TestSuiteConfig = z.infer<typeof TestSuiteConfigSchema>;
 
-export const UnifiedConfigSchema = TestSuiteConfigSchema.extend({
+/** Input fields shared by complete runtime configs and incomplete editor drafts. */
+const UnifiedConfigInputSchema = TestSuiteConfigSchema.extend({
   evaluateOptions: EvaluateOptionsSchema.optional(),
   commandLineOptions: CommandLineOptionsSchema.partial().optional(),
   providers: ProvidersSchema.optional(),
   targets: ProvidersSchema.optional(),
-})
-  .refine(
-    (data) => {
-      const hasTargets = data.targets !== undefined;
-      const hasProviders = data.providers !== undefined;
-      return (hasTargets && !hasProviders) || (!hasTargets && hasProviders);
-    },
-    {
-      message: "Exactly one of 'targets' or 'providers' must be provided, but not both",
-    },
-  )
-  .transform((data) => {
-    if (data.targets && !data.providers) {
-      data.providers = data.targets;
-      delete data.targets;
-    }
+});
 
-    // Handle null extensions, undefined extensions, or empty arrays by deleting the field
-    if (
-      data.extensions === null ||
-      data.extensions === undefined ||
-      (Array.isArray(data.extensions) && data.extensions.length === 0)
-    ) {
-      delete data.extensions;
-    }
+export const UnifiedConfigSchema = UnifiedConfigInputSchema.refine(
+  (data) => hasValidConfigProviders(data),
+  { message: CONFIG_PROVIDER_INPUT_ERROR },
+).transform((data) => {
+  const config = normalizeConfigProviderAlias(data);
 
-    return data;
-  });
+  // Handle null extensions, undefined extensions, or empty arrays by deleting the field
+  if (
+    config.extensions === null ||
+    config.extensions === undefined ||
+    (Array.isArray(config.extensions) && config.extensions.length === 0)
+  ) {
+    delete config.extensions;
+  }
+
+  return config;
+});
 
 export type UnifiedConfig = z.infer<typeof UnifiedConfigSchema>;
 
@@ -1347,6 +1530,8 @@ export interface ResultsFile {
   config: Partial<UnifiedConfig>;
   author: string | null;
   prompts?: CompletedPrompt[];
+  /** Persisted display order for table variable columns. */
+  vars?: string[];
   // Included by readResult() in util.
   datasetId?: string | null;
 }
@@ -1384,6 +1569,13 @@ export interface OutputMetadata {
   author?: string;
 }
 
+export interface ExportedBlobAsset {
+  hash: string;
+  mimeType: string;
+  sizeBytes: number;
+  data: string;
+}
+
 // File exported as --output option
 export interface OutputFile {
   evalId: string | null;
@@ -1391,6 +1583,10 @@ export interface OutputFile {
   config: Partial<UnifiedConfig>;
   shareableUrl: string | null;
   metadata?: OutputMetadata;
+  vars?: string[];
+  runtimeOptions?: EvalRuntimeOptions;
+  traces?: TraceData[];
+  blobAssets?: ExportedBlobAsset[];
 }
 
 // Live eval job state

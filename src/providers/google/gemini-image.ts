@@ -1,10 +1,13 @@
 import { fetchWithCache } from '../../cache';
-import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import { toDataUri } from '../../util/dataUrl';
+import { resolveProviderApiKey } from '../credentials';
+import { resolveProviderEnv } from '../env';
 import { getRequestTimeoutMs } from '../shared';
+import { GoogleAuthManager } from './auth';
 import {
   createAuthCacheDiscriminator,
+  determineGoogleVertexMode,
   geminiFormatAndSystemInstructions,
   getGoogleClient,
   loadCredentials,
@@ -22,13 +25,64 @@ import type {
   ImageOutput,
   ProviderResponse,
 } from '../../types/index';
-import type { CompletionOptions } from './types';
+import type { GoogleProviderConfig } from './types';
 
 interface GeminiImageOptions {
-  config?: CompletionOptions;
+  config?: GoogleProviderConfig;
   id?: string;
   env?: EnvOverrides;
 }
+
+/**
+ * Per-image price (USD) by model id and output resolution, standard tier.
+ * Source: https://ai.google.dev/gemini-api/docs/pricing
+ *
+ * Models billed at a single flat per-image rate use the `default` key. Models
+ * with resolution-tiered pricing key on '0.5K' (Google's `512px`), '1K', '2K',
+ * and '4K'; the resolution comes from the request's `imageSize` (default 1K).
+ */
+// A model and its `-preview` alias share the same resolution-tiered prices.
+// The -preview aliases were shut down by Google on June 25, 2026; entries are
+// retained so historical results and stragglers still price correctly.
+const FLASH_IMAGE_PRICING = { '0.5K': 0.045, '1K': 0.067, '2K': 0.101, '4K': 0.151 }; // Nano Banana 2
+const PRO_IMAGE_PRICING = { '1K': 0.134, '2K': 0.134, '4K': 0.24 }; // Nano Banana Pro
+
+const GEMINI_IMAGE_PRICING: Record<string, Record<string, number>> = {
+  'gemini-2.5-flash-image': { default: 0.039 }, // Nano Banana
+  'gemini-2.5-flash-preview-image-generation': { default: 0.039 }, // Deprecated alias
+  'gemini-3.1-flash-lite-image': { default: 0.0336 }, // Nano Banana 2 Lite (1K only)
+  'gemini-3.1-flash-image': FLASH_IMAGE_PRICING,
+  'gemini-3.1-flash-image-preview': FLASH_IMAGE_PRICING,
+  'gemini-3-pro-image': PRO_IMAGE_PRICING,
+  'gemini-3-pro-image-preview': PRO_IMAGE_PRICING,
+};
+const DEFAULT_IMAGE_COST = 0.04;
+
+/**
+ * Token rates (USD per token) billed in addition to the per-image price.
+ * The per-image prices above cover only image-output tokens; Google bills
+ * prompt tokens and, on Gemini 3.x image models, text/thinking output tokens
+ * separately. Source: https://ai.google.dev/gemini-api/docs/pricing
+ * (gemini-2.5-flash-image lists no separate text-output rate.)
+ */
+const GEMINI_IMAGE_TOKEN_RATES: Record<string, { input: number; textOutput: number }> = {
+  'gemini-2.5-flash-image': { input: 0.3 / 1e6, textOutput: 0 },
+  'gemini-2.5-flash-preview-image-generation': { input: 0.3 / 1e6, textOutput: 0 },
+  'gemini-3.1-flash-lite-image': { input: 0.25 / 1e6, textOutput: 1.5 / 1e6 },
+  'gemini-3.1-flash-image': { input: 0.5 / 1e6, textOutput: 3 / 1e6 },
+  'gemini-3.1-flash-image-preview': { input: 0.5 / 1e6, textOutput: 3 / 1e6 },
+  'gemini-3-pro-image': { input: 2 / 1e6, textOutput: 12 / 1e6 },
+  'gemini-3-pro-image-preview': { input: 2 / 1e6, textOutput: 12 / 1e6 },
+};
+
+/**
+ * Image sizes accepted per model; models absent from this map accept every
+ * size Google documents for the family. gemini-3.1-flash-lite-image renders
+ * 1K only (2K/4K unsupported, and 512px is gemini-3.1-flash-image only).
+ */
+const MODEL_IMAGE_SIZES: Record<string, string[]> = {
+  'gemini-3.1-flash-lite-image': ['1K'],
+};
 
 /**
  * Gemini native image generation provider.
@@ -37,13 +91,17 @@ interface GeminiImageOptions {
  * This is different from Imagen models which use the :predict endpoint.
  *
  * Supported models:
- * - gemini-2.5-flash-image
- * - gemini-3-pro-image-preview (Nano Banana Pro)
- * - gemini-3.1-flash-image-preview (Nano Banana 2)
+ * - gemini-2.5-flash-image (Nano Banana)
+ * - gemini-3.1-flash-lite-image (Nano Banana 2 Lite)
+ * - gemini-3.1-flash-image (Nano Banana 2)
+ * - gemini-3-pro-image (Nano Banana Pro)
+ *
+ * The -preview aliases of the 3.x models were shut down by Google on
+ * June 25, 2026; they still route here so existing configs price correctly.
  */
 export class GeminiImageProvider implements ApiProvider {
   modelName: string;
-  config: CompletionOptions;
+  config: GoogleProviderConfig;
   env?: EnvOverrides;
 
   constructor(modelName: string, options: GeminiImageOptions = {}) {
@@ -60,16 +118,22 @@ export class GeminiImageProvider implements ApiProvider {
     return `[Google Gemini Image Generation Provider ${this.modelName}]`;
   }
 
-  private getApiKey(): string | undefined {
+  requiresApiKey(): boolean {
     return (
-      this.config.apiKey ||
-      getEnvString('GOOGLE_API_KEY') ||
-      getEnvString('GOOGLE_GENERATIVE_AI_API_KEY') ||
-      getEnvString('GEMINI_API_KEY') ||
-      this.env?.GOOGLE_API_KEY ||
-      this.env?.GOOGLE_GENERATIVE_AI_API_KEY ||
-      this.env?.GEMINI_API_KEY
+      this.config.apiKeyRequired !== false && !determineGoogleVertexMode(this.config, this.env)
     );
+  }
+
+  private getApiKey(): string | undefined {
+    return resolveProviderApiKey({ apiKey: this.config.apiKey }, this.env, [
+      'GOOGLE_API_KEY',
+      'GOOGLE_GENERATIVE_AI_API_KEY',
+      'GEMINI_API_KEY',
+    ]);
+  }
+
+  private getVertexApiKey(): string | undefined {
+    return GoogleAuthManager.getApiKey(this.config, this.env, true).apiKey;
   }
 
   /**
@@ -94,21 +158,83 @@ export class GeminiImageProvider implements ApiProvider {
       };
     }
 
-    // Check if we should use Vertex AI (when projectId is provided)
-    const projectId =
-      this.config.projectId ||
-      getEnvString('GOOGLE_CLOUD_PROJECT') ||
-      getEnvString('GOOGLE_PROJECT_ID') ||
-      this.env?.GOOGLE_CLOUD_PROJECT ||
-      this.env?.GOOGLE_PROJECT_ID;
+    const sizeError = this.validateImageSize();
+    if (sizeError) {
+      return { error: sizeError };
+    }
 
-    if (projectId) {
+    const aiStudioApiKey = this.getApiKey();
+
+    // Explicit AI Studio mode must not be overridden by ambient Vertex project configuration.
+    const isVertexMode = determineGoogleVertexMode(this.config, this.env);
+    const projectId = isVertexMode
+      ? this.config.projectId ||
+        resolveProviderEnv(this.env, [
+          'VERTEX_PROJECT_ID',
+          'GOOGLE_PROJECT_ID',
+          'GOOGLE_CLOUD_PROJECT',
+        ])?.value
+      : undefined;
+
+    const vertexApiKey = isVertexMode ? this.getVertexApiKey() : undefined;
+    const hasOAuthConfig = Boolean(
+      this.config.credentials ||
+        this.config.keyFilename ||
+        this.config.googleAuthOptions?.keyFilename ||
+        this.config.googleAuthOptions?.keyFile ||
+        this.config.googleAuthOptions?.authClient ||
+        this.config.googleAuthOptions?.credentials,
+    );
+    const providerScopedRegion =
+      this.config.region ||
+      this.env?.VERTEX_REGION ||
+      this.env?.GOOGLE_CLOUD_LOCATION ||
+      this.env?.GOOGLE_LOCATION;
+    const hasProviderScopedOAuthConfig = Boolean(
+      this.config.projectId ||
+        this.config.googleAuthOptions?.projectId ||
+        this.env?.VERTEX_PROJECT_ID ||
+        this.env?.GOOGLE_PROJECT_ID ||
+        this.env?.GOOGLE_CLOUD_PROJECT ||
+        (providerScopedRegion && providerScopedRegion !== 'global'),
+    );
+    const explicitlyRequestedExpress =
+      this.config.expressMode === true ||
+      Boolean(this.config.apiKey) ||
+      (Boolean(this.env?.VERTEX_API_KEY || this.env?.GOOGLE_API_KEY) &&
+        !hasProviderScopedOAuthConfig);
+    const effectiveRegion =
+      this.config.region ||
+      resolveProviderEnv(this.env, ['VERTEX_REGION', 'GOOGLE_CLOUD_LOCATION', 'GOOGLE_LOCATION'])
+        ?.value;
+    const hasProjectScopedOAuthConfig = Boolean(
+      projectId ||
+        this.config.googleAuthOptions?.projectId ||
+        (effectiveRegion && effectiveRegion !== 'global'),
+    );
+    const usesVertexExpress =
+      isVertexMode &&
+      Boolean(vertexApiKey) &&
+      this.config.expressMode !== false &&
+      !hasOAuthConfig &&
+      (explicitlyRequestedExpress || !hasProjectScopedOAuthConfig);
+
+    if (usesVertexExpress && vertexApiKey) {
+      const region = effectiveRegion || 'global';
+      if (region !== 'global') {
+        return {
+          error: `Vertex Express image generation supports only the global endpoint, but region ${region} was configured. Set expressMode: false and use OAuth or Application Default Credentials for a regional endpoint.`,
+        };
+      }
+      return this.callVertexExpressApi(prompt, context, vertexApiKey);
+    }
+
+    if (isVertexMode) {
       return this.callVertexApi(prompt, context);
     }
 
     // Otherwise, try Google AI Studio with API key
-    const apiKey = this.getApiKey();
-    if (apiKey) {
+    if (aiStudioApiKey || this.config.apiKeyRequired === false) {
       return this.callAIStudioApi(prompt, context);
     }
 
@@ -125,7 +251,7 @@ export class GeminiImageProvider implements ApiProvider {
     context?: CallApiContextParams,
   ): Promise<ProviderResponse> {
     const apiKey = this.getApiKey();
-    if (!apiKey) {
+    if (!apiKey && this.config.apiKeyRequired !== false) {
       return {
         error:
           'API key not found. Set GOOGLE_API_KEY, GOOGLE_GENERATIVE_AI_API_KEY, or GEMINI_API_KEY environment variable.',
@@ -144,7 +270,7 @@ export class GeminiImageProvider implements ApiProvider {
     try {
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
-        'x-goog-api-key': apiKey,
+        ...(apiKey ? { 'x-goog-api-key': apiKey } : {}),
         ...(this.config.headers || {}),
       };
       const authDiscriminator = createAuthCacheDiscriminator(headers);
@@ -171,6 +297,53 @@ export class GeminiImageProvider implements ApiProvider {
     }
   }
 
+  private async callVertexExpressApi(
+    prompt: string,
+    context: CallApiContextParams | undefined,
+    apiKey: string,
+  ): Promise<ProviderResponse> {
+    const configuredHost =
+      this.config.apiBaseUrl ||
+      this.config.apiHost ||
+      resolveProviderEnv(this.env, ['VERTEX_API_HOST'])?.value ||
+      'aiplatform.googleapis.com';
+    const apiHost = /^https?:\/\//i.test(configuredHost)
+      ? configuredHost
+      : `https://${configuredHost}`;
+    const apiVersion =
+      this.config.apiVersion || resolveProviderEnv(this.env, ['VERTEX_API_VERSION'])?.value || 'v1';
+    const endpoint = `${apiHost.replace(/\/+$/, '')}/${apiVersion}/publishers/google/models/${this.modelName}:generateContent`;
+    const { contents } = geminiFormatAndSystemInstructions(prompt, context?.vars);
+    const body = this.buildRequestBody(contents);
+
+    try {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': apiKey,
+        ...(this.config.headers || {}),
+      };
+      const startTime = Date.now();
+      const { data, cached } = (await fetchWithCache(
+        endpoint,
+        {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(body),
+        } as RequestInit,
+        getRequestTimeoutMs(),
+        'json',
+        true,
+      )) as { data: any; cached: boolean };
+      const latencyMs = Date.now() - startTime;
+
+      return this.processResponse(data, cached, latencyMs);
+    } catch (err) {
+      return {
+        error: `Vertex AI Express API call error: ${String(err)}`,
+      };
+    }
+  }
+
   private async callVertexApi(
     prompt: string,
     context?: CallApiContextParams,
@@ -180,13 +353,18 @@ export class GeminiImageProvider implements ApiProvider {
     const location = usesGlobalVertexEndpoint
       ? 'global'
       : this.config.region ||
-        getEnvString('GOOGLE_LOCATION') ||
-        this.env?.GOOGLE_LOCATION ||
+        resolveProviderEnv(this.env, ['VERTEX_REGION', 'GOOGLE_CLOUD_LOCATION', 'GOOGLE_LOCATION'])
+          ?.value ||
         'us-central1';
 
     try {
       const credentials = loadCredentials(this.config.credentials);
-      const { client } = await getGoogleClient({ credentials });
+      const { client } = await getGoogleClient({
+        credentials,
+        googleAuthOptions: this.config.googleAuthOptions,
+        scopes: this.config.scopes,
+        keyFilename: this.config.keyFilename,
+      });
       const projectId = await resolveProjectId(this.config, this.env);
 
       if (!projectId) {
@@ -198,9 +376,10 @@ export class GeminiImageProvider implements ApiProvider {
 
       const apiVersion = 'v1';
       // Global endpoint uses a different URL format (no region prefix)
-      const baseUrl = usesGlobalVertexEndpoint
-        ? 'https://aiplatform.googleapis.com'
-        : `https://${location}-aiplatform.googleapis.com`;
+      const baseUrl =
+        location === 'global'
+          ? 'https://aiplatform.googleapis.com'
+          : `https://${location}-aiplatform.googleapis.com`;
       const endpoint = `${baseUrl}/${apiVersion}/projects/${projectId}/locations/${location}/publishers/google/models/${this.modelName}:generateContent`;
 
       logger.debug(`Vertex AI Gemini Image API endpoint: ${endpoint}`);
@@ -250,14 +429,17 @@ export class GeminiImageProvider implements ApiProvider {
       },
     };
 
-    // Add image-specific configuration if provided.
-    // imageSize is supported on Gemini 3.x image models.
+    // Add image-specific configuration if provided. Top-level knobs override
+    // matching fields in a pass-through generationConfig.imageConfig without
+    // dropping its other fields. imageSize is supported on Gemini 3.x models.
     const supportsImageSize = this.supportsImageSize();
-    if (this.config.imageAspectRatio || (this.config.imageSize && supportsImageSize)) {
-      body.generationConfig.imageConfig = {
-        ...(this.config.imageAspectRatio && { aspectRatio: this.config.imageAspectRatio }),
-        ...(this.config.imageSize && supportsImageSize && { imageSize: this.config.imageSize }),
-      };
+    const imageConfig: Record<string, any> = {
+      ...(this.config.generationConfig?.imageConfig ?? {}),
+      ...(this.config.imageAspectRatio && { aspectRatio: this.config.imageAspectRatio }),
+      ...(this.config.imageSize && supportsImageSize && { imageSize: this.config.imageSize }),
+    };
+    if (Object.keys(imageConfig).length > 0) {
+      body.generationConfig.imageConfig = imageConfig;
     }
 
     // Add safety settings if provided
@@ -341,6 +523,11 @@ export class GeminiImageProvider implements ApiProvider {
     let totalCost = 0;
 
     for (const part of candidate.content.parts) {
+      // Skip interim thinking output (returned when thoughts are requested):
+      // thought images are billed as thinking tokens, not as final images.
+      if (part.thought) {
+        continue;
+      }
       if (part.text) {
         textParts.push(part.text);
       } else if (part.inlineData) {
@@ -350,6 +537,7 @@ export class GeminiImageProvider implements ApiProvider {
         totalCost += this.getCostPerImage();
       }
     }
+    totalCost += this.getTokenCost(data.usageMetadata);
 
     if (imageParts.length === 0 && textParts.length === 0) {
       return {
@@ -362,7 +550,7 @@ export class GeminiImageProvider implements ApiProvider {
       ? {
           cached: data.usageMetadata?.totalTokenCount,
           total: data.usageMetadata?.totalTokenCount,
-          numRequests: 0,
+          numRequests: 1,
         }
       : {
           prompt: data.usageMetadata?.promptTokenCount,
@@ -390,24 +578,73 @@ export class GeminiImageProvider implements ApiProvider {
       images,
       cached,
       latencyMs,
-      cost: totalCost > 0 ? totalCost : undefined,
+      // Cached responses were already paid for on the original request.
+      cost: cached || totalCost === 0 ? undefined : totalCost,
       tokenUsage,
       raw: data,
     };
   }
 
-  private getCostPerImage(): number {
-    // Pricing for Gemini native image generation
-    // Gemini 2.5 Flash Image: $0.039/image (1290 output tokens * $30/1M tokens)
-    // Gemini 3.1 Flash Image Preview: $0.067/image at 1K resolution
-    // Gemini 3 Pro Image: Pricing TBD, using estimate
-    const costMap: Record<string, number> = {
-      'gemini-2.5-flash-image': 0.039,
-      'gemini-2.5-flash-preview-image-generation': 0.039, // Deprecated alias
-      'gemini-3.1-flash-image-preview': 0.067,
-      'gemini-3-pro-image-preview': 0.05, // Estimated
-    };
+  /**
+   * The image size the request actually asks for: the top-level `imageSize`
+   * option wins, otherwise a pass-through `generationConfig.imageConfig`
+   * value applies. Mirrors the precedence used by buildRequestBody.
+   */
+  private getEffectiveImageSize(): string | undefined {
+    const topLevel = this.supportsImageSize() ? this.config.imageSize : undefined;
+    return topLevel ?? this.config.generationConfig?.imageConfig?.imageSize;
+  }
 
-    return costMap[this.modelName] || 0.04; // Default cost
+  /** Normalize Google's '512px' label to its 0.5K pricing tier. */
+  private normalizeImageSize(size: string): string {
+    const raw = size.toUpperCase();
+    return raw === '512PX' ? '0.5K' : raw;
+  }
+
+  private validateImageSize(): string | undefined {
+    const allowedSizes = MODEL_IMAGE_SIZES[this.modelName];
+    const requested = this.getEffectiveImageSize();
+    if (!allowedSizes || requested === undefined) {
+      return undefined;
+    }
+    if (!allowedSizes.includes(this.normalizeImageSize(requested))) {
+      return `Model ${this.modelName} only supports imageSize ${allowedSizes.join(', ')}; got '${requested}'`;
+    }
+    return undefined;
+  }
+
+  private getCostPerImage(): number {
+    const pricing = GEMINI_IMAGE_PRICING[this.modelName];
+    if (!pricing) {
+      return DEFAULT_IMAGE_COST;
+    }
+    // Flat-rate models (no resolution tiers).
+    if (pricing.default !== undefined) {
+      return pricing.default;
+    }
+    // Resolution-tiered models: bill by the requested imageSize (default 1K).
+    const resolution = this.normalizeImageSize(this.getEffectiveImageSize() ?? '1K');
+    return pricing[resolution] ?? pricing['1K'] ?? DEFAULT_IMAGE_COST;
+  }
+
+  /**
+   * Token charges billed on top of the per-image price: prompt tokens, plus
+   * text and thinking output tokens on models with a text-output rate. Image
+   * output tokens are covered by the per-image price and excluded here via
+   * the candidatesTokensDetails modality breakdown.
+   */
+  private getTokenCost(usageMetadata: any): number {
+    const rates = GEMINI_IMAGE_TOKEN_RATES[this.modelName];
+    if (!rates || !usageMetadata) {
+      return 0;
+    }
+    const promptTokens = usageMetadata.promptTokenCount ?? 0;
+    const textTokens = Array.isArray(usageMetadata.candidatesTokensDetails)
+      ? usageMetadata.candidatesTokensDetails
+          .filter((detail: any) => detail?.modality === 'TEXT')
+          .reduce((sum: number, detail: any) => sum + (detail.tokenCount ?? 0), 0)
+      : 0;
+    const thinkingTokens = usageMetadata.thoughtsTokenCount ?? 0;
+    return promptTokens * rates.input + (textTokens + thinkingTokens) * rates.textOutput;
   }
 }

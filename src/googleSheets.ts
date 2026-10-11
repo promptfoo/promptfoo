@@ -1,7 +1,28 @@
 import logger from './logger';
 import { fetchWithProxy } from './util/fetch/index';
+import { isMissingPackageImportError } from './util/packageImportErrors';
 
 import type { CsvRow } from './types/index';
+
+class GoogleSheetAuthenticationRequiredError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'GoogleSheetAuthenticationRequiredError';
+  }
+}
+
+async function loadGoogleSheetsApi(): Promise<typeof import('@googleapis/sheets')> {
+  try {
+    return await import('@googleapis/sheets');
+  } catch (error) {
+    if (isMissingPackageImportError(error, '@googleapis/sheets')) {
+      throw new Error(
+        'The @googleapis/sheets package is required for authenticated Google Sheets access. Install it with: npm install @googleapis/sheets',
+      );
+    }
+    throw error;
+  }
+}
 
 export async function checkGoogleSheetAccess(url: string) {
   try {
@@ -17,10 +38,36 @@ export async function checkGoogleSheetAccess(url: string) {
   }
 }
 
+function isHtmlExportResponse(
+  response: { headers?: { get(name: string): string | null } },
+  body: string,
+): boolean {
+  const contentType = response.headers?.get('content-type')?.toLowerCase() ?? '';
+  if (contentType.includes('text/html')) {
+    return true;
+  }
+  if (contentType.includes('text/csv') || contentType.includes('application/csv')) {
+    return false;
+  }
+
+  const prefix = body.trimStart().slice(0, 32).toLowerCase();
+  return prefix.startsWith('<!doctype html') || prefix.startsWith('<html');
+}
+
+/**
+ * Returns the sheet id (`gid`) a Google Sheets URL selects. The browser keeps it in the fragment
+ * (`/edit#gid=123`); newer URLs also repeat it in the query (`/edit?gid=123#gid=123`). It stays a
+ * string so that sheet id 0 is still truthy.
+ */
+function getSheetGid(url: string): string | undefined {
+  const { searchParams, hash } = new URL(url);
+  return searchParams.get('gid') || new URLSearchParams(hash.slice(1)).get('gid') || undefined;
+}
+
 export async function fetchCsvFromGoogleSheetUnauthenticated(url: string): Promise<CsvRow[]> {
   const { parse: parseCsv } = await import('csv-parse/sync');
 
-  const gid = new URL(url).searchParams.get('gid');
+  const gid = getSheetGid(url);
   const csvUrl = `${url.replace(/\/edit.*$/, '/export')}?format=csv${gid ? `&gid=${gid}` : ''}`;
 
   const response = await fetchWithProxy(csvUrl);
@@ -28,11 +75,16 @@ export async function fetchCsvFromGoogleSheetUnauthenticated(url: string): Promi
     throw new Error(`Failed to fetch CSV from Google Sheets URL: ${url}`);
   }
   const csvData = await response.text();
+  if (isHtmlExportResponse(response, csvData)) {
+    throw new GoogleSheetAuthenticationRequiredError(
+      `Failed to fetch CSV from Google Sheets URL: ${url}`,
+    );
+  }
   return parseCsv(csvData, { columns: true });
 }
 
 export async function fetchCsvFromGoogleSheetAuthenticated(url: string): Promise<CsvRow[]> {
-  const { sheets: googleSheets, auth: googleAuth } = await import('@googleapis/sheets');
+  const { sheets: googleSheets, auth: googleAuth } = await loadGoogleSheetsApi();
   const auth = new googleAuth.GoogleAuth({
     scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
   });
@@ -45,12 +97,14 @@ export async function fetchCsvFromGoogleSheetAuthenticated(url: string): Promise
   const spreadsheetId = match[1];
 
   let range: string;
-  const gid = Number(new URL(url).searchParams.get('gid'));
+  const gid = getSheetGid(url);
 
   if (gid) {
     // When gid is provided, get the specific sheet by gid
     const spreadsheet = await sheets.spreadsheets.get({ spreadsheetId, auth });
-    const sheet = spreadsheet.data.sheets?.find((sheet) => sheet.properties?.sheetId === gid);
+    const sheet = spreadsheet.data.sheets?.find(
+      (sheet) => sheet.properties?.sheetId === Number(gid),
+    );
     if (!sheet || !sheet.properties?.title) {
       throw new Error(`Sheet not found for gid: ${gid}`);
     }
@@ -88,16 +142,31 @@ export async function fetchCsvFromGoogleSheetAuthenticated(url: string): Promise
 }
 
 export async function fetchCsvFromGoogleSheet(url: string): Promise<CsvRow[]> {
-  const { public: isPublic } = await checkGoogleSheetAccess(url);
+  const access = await checkGoogleSheetAccess(url);
+  const { public: isPublic } = access;
   logger.debug(`Google Sheets URL: ${url}, isPublic: ${isPublic}`);
   if (isPublic) {
-    return fetchCsvFromGoogleSheetUnauthenticated(url);
+    try {
+      return await fetchCsvFromGoogleSheetUnauthenticated(url);
+    } catch (error) {
+      if (error instanceof GoogleSheetAuthenticationRequiredError) {
+        return fetchCsvFromGoogleSheetAuthenticated(url);
+      }
+      throw error;
+    }
+  }
+  if (!('status' in access)) {
+    try {
+      return await fetchCsvFromGoogleSheetUnauthenticated(url);
+    } catch {
+      return fetchCsvFromGoogleSheetAuthenticated(url);
+    }
   }
   return fetchCsvFromGoogleSheetAuthenticated(url);
 }
 
 export async function writeCsvToGoogleSheet(rows: CsvRow[], url: string): Promise<void> {
-  const { sheets: googleSheets, auth: googleAuth } = await import('@googleapis/sheets');
+  const { sheets: googleSheets, auth: googleAuth } = await loadGoogleSheetsApi();
   const auth = new googleAuth.GoogleAuth({
     scopes: ['https://www.googleapis.com/auth/spreadsheets'],
   });
@@ -132,12 +201,14 @@ export async function writeCsvToGoogleSheet(rows: CsvRow[], url: string): Promis
   const endColumn = getColumnLetter(numCols);
 
   let range: string;
-  const gid = Number(new URL(url).searchParams.get('gid'));
+  const gid = getSheetGid(url);
 
   if (gid) {
     // Use existing sheet with gid
     const spreadsheet = await sheets.spreadsheets.get({ spreadsheetId, auth });
-    const sheet = spreadsheet.data.sheets?.find((sheet) => sheet.properties?.sheetId === gid);
+    const sheet = spreadsheet.data.sheets?.find(
+      (sheet) => sheet.properties?.sheetId === Number(gid),
+    );
     if (!sheet || !sheet.properties?.title) {
       throw new Error(`Sheet not found for gid: ${gid}`);
     }

@@ -102,11 +102,10 @@ function getPromptMetricToggleLabel(
   metricLabel: string,
 ): string {
   const providerLabel = formatProviderLabel(prompt, index);
-  const promptLabel = `Prompt ${index + 1}`;
+  const defaultPromptLabel = `Prompt ${index + 1}`;
+  const providerSuffix = providerLabel === defaultPromptLabel ? '' : ` - ${providerLabel}`;
 
-  return providerLabel === promptLabel
-    ? `${promptLabel} - ${metricLabel}`
-    : `${promptLabel} - ${providerLabel} - ${metricLabel}`;
+  return `${defaultPromptLabel}${providerSuffix} - ${metricLabel}`;
 }
 
 function PromptMetricGroupHeader({ prompt, index }: { prompt: PromptHeader; index: number }) {
@@ -230,7 +229,6 @@ const MetricsTable = ({ onClose }: { onClose: () => void }) => {
   }, [table.head.prompts]);
 
   // Create columns for DataTable
-  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const columns: ColumnDef<MetricRow>[] = React.useMemo(() => {
     const cols: ColumnDef<MetricRow>[] = [
       {
@@ -401,13 +399,7 @@ const MetricsTable = ({ onClose }: { onClose: () => void }) => {
     });
 
     return cols;
-  }, [
-    table.head.prompts,
-    promptMetricNames,
-    policiesById,
-    renderPercentageValue,
-    handleMetricFilterClick,
-  ]);
+  }, [table.head.prompts, policiesById, renderPercentageValue, handleMetricFilterClick]);
 
   // Create rows for DataTable
   const rows: MetricRow[] = React.useMemo(() => {

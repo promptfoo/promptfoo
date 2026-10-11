@@ -3,11 +3,21 @@ import { EventEmitter } from 'events';
 import { getEnvBool, getEnvInt } from '../envars';
 import logger from '../logger';
 import { withFetchRetryContext } from '../util/fetch/retryContext';
-import { sanitizeUrl } from '../util/sanitizer';
-import { type ProviderMetrics, ProviderRateLimitState } from './providerRateLimitState';
+import { sanitizeProviderIdForLog } from '../util/provider';
+import {
+  getProviderCallExecutionContext,
+  runProviderCallWithAbort,
+  withProviderCallExecutionContext,
+} from './providerCallExecutionContext';
+import {
+  type ProviderMetrics,
+  ProviderRateLimitState,
+  RateLimitExhaustedError,
+} from './providerRateLimitState';
 import { getRateLimitKey } from './rateLimitKey';
 
-import type { ApiProvider } from '../types/providers';
+import type { ApiProvider, CallApiOptionsParams } from '../types/providers';
+import type { RateLimitExecuteOptions } from './types';
 
 export interface RateLimitRegistryOptions {
   maxConcurrency: number;
@@ -44,12 +54,8 @@ export class RateLimitRegistry extends EventEmitter {
    */
   async execute<T>(
     provider: ApiProvider,
-    callFn: () => Promise<T>,
-    options?: {
-      getHeaders?: (result: T) => Record<string, string> | undefined;
-      isRateLimited?: (result: T | undefined, error?: Error) => boolean;
-      getRetryAfter?: (result: T | undefined, error?: Error) => number | undefined;
-    },
+    callFn: (onResponseHeaders?: CallApiOptionsParams['onResponseHeaders']) => Promise<T>,
+    options?: RateLimitExecuteOptions<T>,
   ): Promise<T> {
     const providerMaxRetries = getProviderMaxRetries(provider);
 
@@ -57,52 +63,20 @@ export class RateLimitRegistry extends EventEmitter {
     // `fetchWithRetries` picks up the provider's `maxRetries` as its default
     // and `fetchWithProxy` disables transient retries when `maxRetries: 0`.
     if (!this.enabled) {
-      return withFetchRetryContext(providerMaxRetries, callFn);
+      return withFetchRetryContext(providerMaxRetries, () =>
+        runProviderCallWithAbort(callFn, options?.abortSignal),
+      );
     }
 
     const rateLimitKey = getRateLimitKey(provider);
-    const state = this.getOrCreateState(rateLimitKey);
-
-    // Generate unique request ID for metrics/logging
-    const requestId = `${rateLimitKey}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-
-    this.emit('request:started', {
-      rateLimitKey,
-      requestId,
-      queueDepth: state.getQueueDepth(),
-    });
-
-    const run = () =>
-      state.executeWithRetry(requestId, callFn, {
-        getHeaders: options?.getHeaders,
-        isRateLimited: options?.isRateLimited,
-        getRetryAfter: options?.getRetryAfter,
-        maxRetriesOverride: providerMaxRetries,
-      });
-
-    try {
-      const result = await withFetchRetryContext(providerMaxRetries, run);
-
-      this.emit('request:completed', {
-        rateLimitKey,
-        requestId,
-      });
-
-      return result;
-    } catch (error) {
-      this.emit('request:failed', {
-        rateLimitKey,
-        requestId,
-        error: String(error),
-      });
-      throw error;
+    const parentContext = getProviderCallExecutionContext();
+    if (
+      parentContext?.rateLimitProvider &&
+      getRateLimitKey(parentContext.rateLimitProvider) !== rateLimitKey
+    ) {
+      parentContext.onNestedScheduledCall?.();
     }
-  }
-
-  /**
-   * Get or create provider rate limit state for a given rate limit key.
-   */
-  private getOrCreateState(rateLimitKey: string): ProviderRateLimitState {
+    let nestedCallStarted = false;
     if (!this.states.has(rateLimitKey)) {
       const state = new ProviderRateLimitState({
         rateLimitKey,
@@ -122,7 +96,75 @@ export class RateLimitRegistry extends EventEmitter {
       this.states.set(rateLimitKey, state);
     }
 
-    return this.states.get(rateLimitKey)!;
+    const state = this.states.get(rateLimitKey)!;
+
+    // Generate unique request ID for metrics/logging
+    const requestId = `${rateLimitKey}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+    this.emit('request:started', {
+      rateLimitKey,
+      requestId,
+      queueDepth: state.getQueueDepth(),
+    });
+
+    const run = () =>
+      state.executeWithRetry(
+        requestId,
+        (onResponseHeaders) => {
+          const executionContext = getProviderCallExecutionContext();
+          // Update an existing evaluator scope only while this acquired call owns
+          // its slot. Direct registry users do not acquire evaluator orchestration.
+          return executionContext
+            ? withProviderCallExecutionContext(
+                {
+                  ...executionContext,
+                  rateLimitRegistry: this,
+                  rateLimitProvider: provider,
+                  onNestedScheduledCall: () => {
+                    nestedCallStarted = true;
+                  },
+                },
+                () => callFn(onResponseHeaders),
+              )
+            : callFn(onResponseHeaders);
+        },
+        {
+          abortSignal: options?.abortSignal,
+          // A nested provider already learned its quota and exhausted its own
+          // retry budget. Replaying the parent repeats all earlier child work.
+          getHeaders: (result) => (nestedCallStarted ? undefined : options?.getHeaders?.(result)),
+          isRateLimited: options?.isRateLimited,
+          isRetryableResult: options?.isRetryableResult,
+          finalizeResult: options?.finalizeResult,
+          onRateLimitExhausted: options?.onRateLimitExhausted,
+          canRetry: () => !nestedCallStarted,
+          getRetryAfter: options?.getRetryAfter,
+          maxRetriesOverride: provider.handlesOwnRetries ? 0 : providerMaxRetries,
+        },
+      );
+
+    try {
+      const result = await withFetchRetryContext(providerMaxRetries, () =>
+        runProviderCallWithAbort(run, options?.abortSignal),
+      );
+
+      this.emit('request:completed', {
+        rateLimitKey,
+        requestId,
+      });
+
+      return result;
+    } catch (error) {
+      this.emit('request:failed', {
+        rateLimitKey,
+        requestId,
+        error: String(error),
+      });
+      if (error instanceof RateLimitExhaustedError && options?.onRateLimitExhausted) {
+        return options.onRateLimitExhausted(error.result as T, error);
+      }
+      throw error;
+    }
   }
 
   /**
@@ -146,13 +188,6 @@ export class RateLimitRegistry extends EventEmitter {
     this.states.clear();
     this.removeAllListeners();
   }
-}
-
-/**
- * Factory function to create a registry for an evaluation.
- */
-export function createRateLimitRegistry(options: RateLimitRegistryOptions): RateLimitRegistry {
-  return new RateLimitRegistry(options);
 }
 
 /**
@@ -197,10 +232,4 @@ function getProviderMaxRetries(provider: ApiProvider): number | undefined {
     },
   );
   return undefined;
-}
-
-function sanitizeProviderIdForLog(providerId: string): string {
-  return providerId.includes('://') || providerId.startsWith('/')
-    ? sanitizeUrl(providerId)
-    : providerId;
 }

@@ -1,3 +1,7 @@
+const { createErrorFirstLoggerModule } = await vi.hoisted(
+  async () => import('../factories/logger'),
+);
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearCache } from '../../src/cache';
 import logger from '../../src/logger';
@@ -10,14 +14,7 @@ import { OpenAiEmbeddingProvider } from '../../src/providers/openai/embedding';
 
 import type { ProviderOptions } from '../../src/types/index';
 
-vi.mock('../../src/logger', () => ({
-  default: {
-    debug: vi.fn(),
-    error: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-  },
-}));
+vi.mock('../../src/logger', () => createErrorFirstLoggerModule());
 vi.mock('../../src/providers/openai/chat', async (importOriginal) => {
   return {
     ...(await importOriginal()),
@@ -62,6 +59,14 @@ describe('Alibaba Cloud Provider', () => {
       );
     });
 
+    it('uses Alibaba as its telemetry provider independently of the configured provider ID', () => {
+      const provider = new AlibabaChatCompletionProvider('qwen-max', {
+        id: 'custom:customer-label',
+      } as ProviderOptions);
+
+      expect((provider as any).getGenAISystem()).toBe('alibaba');
+    });
+
     it('should create provider for visual language models', () => {
       const provider = new AlibabaChatCompletionProvider('qwen-vl-max', {});
 
@@ -78,10 +83,25 @@ describe('Alibaba Cloud Provider', () => {
     });
 
     it.each([
+      'qwen3.8-max',
+      'qwen3.8-max-0902',
+      'qwen3.8-max-2026-09-02',
+      'qwen3.8-flash',
+      'qwen3.8-omni-flash',
+      'qwen3.7-max-2026-06-08',
+      'qwen3.7-plus',
+      'qwen3.7-plus-2026-05-26',
+      'qwen3.7-flash',
+      'qwen3.7-flash-2026-07-15',
       'qwen3.6-plus',
       'qwen3.5-flash',
       'qwen3-coder-next',
+      'deepseek-v4.1-flash',
+      'deepseek-v4-pro-0813',
       'deepseek-v3.2',
+      'kimi-k3',
+      'glm-5.2',
+      'ZHIPU/GLM-5.3',
     ])('should recognize refreshed model id %s', (modelName) => {
       new AlibabaChatCompletionProvider(modelName, {});
 
@@ -140,6 +160,17 @@ describe('Alibaba Cloud Provider', () => {
   });
 
   describe('AlibabaEmbeddingProvider', () => {
+    it('recognizes the Qwen3.7 text embedding model', () => {
+      new AlibabaEmbeddingProvider('qwen3.7-text-embedding');
+      expect(logger.warn).not.toHaveBeenCalled();
+      expect(OpenAiEmbeddingProvider).toHaveBeenCalledWith(
+        'qwen3.7-text-embedding',
+        expect.objectContaining({
+          config: expect.objectContaining({ apiKeyEnvar: 'DASHSCOPE_API_KEY' }),
+        }),
+      );
+    });
+
     it('should create provider for embedding models', () => {
       const provider = new AlibabaEmbeddingProvider('text-embedding-v3', {});
 

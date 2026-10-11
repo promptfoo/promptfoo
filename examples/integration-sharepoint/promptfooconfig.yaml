@@ -8,7 +8,7 @@ prompts:
 providers:
   - openai:chat:gpt-5.4
   - openai:chat:gpt-5.4-mini
-  - anthropic:messages:claude-sonnet-4-6
+  - anthropic:messages:claude-sonnet-5
 
 # Replace with your SharePoint URL to the CSV file
 tests: https://yourcompany.sharepoint.com/sites/yoursite/Shared%20Documents/test-cases.csv

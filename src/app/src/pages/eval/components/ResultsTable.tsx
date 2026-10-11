@@ -17,8 +17,18 @@ import { useToast } from '@app/hooks/useToast';
 import { cn } from '@app/lib/utils';
 import { callApi } from '@app/utils/api';
 import { formatDuration } from '@app/utils/date';
-import { normalizeMediaText, resolveAudioSource, resolveImageSource } from '@app/utils/media';
-import { getActualPrompt } from '@app/utils/providerResponse';
+import {
+  isMediaRef,
+  normalizeMediaText,
+  resolveAudioSource,
+  resolveBlobUri,
+  resolveImageSource,
+} from '@app/utils/media';
+import {
+  getIncurredTokenAccounting,
+  getPrimaryTokenUsageLabel,
+  getTokenUsageTotal,
+} from '@app/utils/tokenUsage';
 import { FILE_METADATA_KEY, HUMAN_ASSERTION_TYPE } from '@promptfoo/providers/constants';
 import {
   type EvalResultsFilterMode,
@@ -29,7 +39,9 @@ import {
   type ProviderOptions,
   type Vars,
 } from '@promptfoo/types';
+import { EVAL_TABLE_MAX_PAGE_SIZE } from '@promptfoo/types/evalConstants';
 import invariant from '@promptfoo/util/invariant';
+import { getActualPrompt } from '@promptfoo/util/providerResponse';
 import {
   createColumnHelper,
   flexRender,
@@ -37,7 +49,7 @@ import {
   useReactTable,
 } from '@tanstack/react-table';
 import { ArrowLeft, ArrowRight, ExternalLink, X } from 'lucide-react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router';
 import CustomMetrics from './CustomMetrics';
 import CustomMetricsDialog from './CustomMetricsDialog';
 import EvalOutputCell from './EvalOutputCell';
@@ -47,6 +59,7 @@ import { ProviderDisplay } from './ProviderDisplay';
 import { type ProviderDef } from './providerConfig';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import TruncatedText from './TruncatedText';
+import { useHeaderCollapse } from './useHeaderCollapse';
 import VariableMarkdownCell from './VariableMarkdownCell';
 import type {
   Cell,
@@ -55,62 +68,38 @@ import type {
   ColumnSizingState,
   Row,
   VisibilityState,
-} from '@tanstack/table-core';
+} from '@tanstack/react-table';
 
 import type { TruncatedTextProps } from './TruncatedText';
 import './ResultsTable.css';
 
 import { NumberInput } from '@app/components/ui/number-input';
-import { isBlobRef, isStorageRef, resolveAudioUrl } from '@app/utils/mediaStorage';
 import { isEncodingStrategy } from '@promptfoo/redteam/constants/strategies';
 import { useMetricsGetter, usePassingTestCounts, usePassRates, useTestCounts } from './hooks';
-import { getNamedMetricTotals } from './utils';
+import {
+  getNamedMetricTotals,
+  parseEvalOutputPromptHash,
+  setEvalDetailsHash,
+  useEvalDetailsHash,
+} from './utils';
 
-/**
- * Audio player component that handles both storage refs and base64 data
- */
+const PAGE_SIZE_OPTIONS = [10, 50, 100, 500, 1000].filter(
+  (size) => size <= EVAL_TABLE_MAX_PAGE_SIZE,
+);
+
 function StorageRefAudioPlayer({ data, format = 'mp3' }: { data: string; format?: string }) {
-  const [audioUrl, setAudioUrl] = React.useState<string | null>(null);
-  const [loading, setLoading] = React.useState(isStorageRef(data) || isBlobRef(data));
-
-  React.useEffect(() => {
-    let cancelled = false;
-
-    if (isStorageRef(data) || isBlobRef(data)) {
-      setLoading(true);
-      resolveAudioUrl(data, format).then((url) => {
-        if (!cancelled) {
-          setAudioUrl(url);
-          setLoading(false);
-        }
-      });
-    } else {
-      // Inline base64
-      const url = data.startsWith('data:') ? data : `data:audio/${format};base64,${data}`;
-      setAudioUrl(url);
-      setLoading(false);
-    }
-
-    return () => {
-      cancelled = true;
-    };
-  }, [data, format]);
-
-  if (loading) {
-    return (
-      <div className="flex items-center gap-2 py-0.5">
-        <Spinner className="size-4" />
-        <span className="text-xs text-muted-foreground">Loading audio...</span>
-      </div>
-    );
-  }
+  const audioUrl = isMediaRef(data)
+    ? resolveBlobUri(data)
+    : data.startsWith('data:')
+      ? data
+      : `data:audio/${format};base64,${data}`;
 
   if (!audioUrl) {
     return <span className="text-xs text-destructive">Failed to load audio</span>;
   }
 
   return (
-    <audio controls style={{ maxWidth: '100%', height: '32px' }}>
+    <audio key={audioUrl} controls style={{ maxWidth: '100%', height: '32px' }}>
       <source src={audioUrl} type={`audio/${format}`} />
       Your browser does not support the audio element.
     </audio>
@@ -123,6 +112,10 @@ const METADATA_COLUMN_HORIZONTAL_PADDING_PX = 48;
 const METADATA_COLUMN_CHARACTER_WIDTH_PX = 8;
 const METADATA_COLUMN_WIDTH_PERCENTILE = 0.8;
 const PROMPT_COLUMN_SIZE_PX = 480;
+const MEDIA_MIME_PATTERNS = {
+  audio: /(?:^|[;,\s=:])audio\/[a-z0-9.+-]+(?:$|[;,\s])/i,
+  image: /(?:^|[;,\s=:])image\/[a-z0-9.+-]+(?:$|[;,\s])/i,
+} as const;
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
@@ -322,8 +315,11 @@ function renderMediaVariableCell({
 
   const { type: mediaType, format = '' } = mediaMetadata;
   const normalizedValue = normalizeMediaText(value);
+  const isRefValue = isMediaRef(value);
   const audioSource =
-    mediaType === 'audio' ? resolveAudioSource({ data: value, format, blobRef: value }) : null;
+    mediaType === 'audio'
+      ? resolveAudioSource(isRefValue ? { format, blobRef: value } : { data: value, format })
+      : null;
   const imageSrc =
     mediaType === 'image' ? resolveImageSource({ data: value, format, blobRef: value }) : undefined;
 
@@ -412,14 +408,10 @@ function renderDecodedVariableCell({
 
   const isAudioContent =
     strategyId === 'audio' ||
-    (typeof value === 'string' &&
-      (isStorageRef(value) || isBlobRef(value)) &&
-      value.includes('audio/'));
+    (typeof value === 'string' && isMediaRef(value) && MEDIA_MIME_PATTERNS.audio.test(value));
   const isImageContent =
     strategyId === 'image' ||
-    (typeof value === 'string' &&
-      (isStorageRef(value) || isBlobRef(value)) &&
-      value.includes('image/'));
+    (typeof value === 'string' && isMediaRef(value) && MEDIA_MIME_PATTERNS.image.test(value));
 
   return (
     <div className="cell" data-capture="true">
@@ -429,7 +421,7 @@ function renderDecodedVariableCell({
         </div>
       ) : isImageContent ? (
         <div>
-          {typeof value === 'string' && (isStorageRef(value) || isBlobRef(value)) ? (
+          {typeof value === 'string' && isMediaRef(value) ? (
             <span className="text-xs text-muted-foreground">
               Image preview not yet supported for storage refs
             </span>
@@ -549,7 +541,35 @@ function formatMetricValue(
   value: number,
   options: Intl.NumberFormatOptions = { maximumFractionDigits: 0 },
 ): string {
-  return Intl.NumberFormat(undefined, options).format(value);
+  return getNumberFormatter(options).format(value);
+}
+
+const numberFormatCache = new Map<string, Intl.NumberFormat>();
+
+function getNumberFormatter(
+  options: Intl.NumberFormatOptions,
+  locale?: string | string[],
+): Intl.NumberFormat {
+  let normalizedLocale = 'default';
+  const localeArray = Array.isArray(locale) ? locale : undefined;
+  if (localeArray) {
+    normalizedLocale = localeArray.join(',');
+  } else if (typeof locale === 'string') {
+    normalizedLocale = locale;
+  }
+  const normalizedOptions = Object.entries(options)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, value]) => `${key}:${String(value)}`)
+    .join('|');
+  const cacheKey = `${normalizedLocale}|${normalizedOptions}`;
+
+  let formatter = numberFormatCache.get(cacheKey);
+  if (!formatter) {
+    formatter = new Intl.NumberFormat(locale, options);
+    numberFormatCache.set(cacheKey, formatter);
+  }
+
+  return formatter;
 }
 
 function renderFilteredSuffix(value: React.ReactNode, unit = 'filtered'): React.ReactNode {
@@ -645,32 +665,96 @@ function renderCostMetric({
 function renderTokenMetrics({
   metrics,
   filteredMetrics,
+  isRedteam,
   testCount,
 }: {
   metrics: PromptMetrics['total'];
   filteredMetrics: PromptMetrics['filtered'];
+  isRedteam: boolean;
   testCount?: PromptSummaryMetric;
-}): React.ReactNode[] {
-  if (!metrics?.tokenUsage?.total) {
-    return [];
+}): React.ReactNode {
+  const primaryTokens = getTokenUsageTotal(metrics?.tokenUsage);
+  const attackerTokens = getTokenUsageTotal(metrics?.tokenUsage?.attacker);
+  const gradingTokens = getTokenUsageTotal(metrics?.tokenUsage?.assertions);
+  const incurredAccounting = getIncurredTokenAccounting(metrics?.tokenUsage);
+
+  if (primaryTokens === 0 && attackerTokens === 0 && gradingTokens === 0) {
+    return null;
   }
 
-  const totalTokens = metrics.tokenUsage.total;
-  const filteredTokens = filteredMetrics?.tokenUsage?.total;
+  const totalTokens = primaryTokens + attackerTokens + gradingTokens;
+  const filteredPrimaryTokens = filteredMetrics?.tokenUsage
+    ? getTokenUsageTotal(filteredMetrics.tokenUsage)
+    : undefined;
+  const filteredAttackerTokens = filteredMetrics?.tokenUsage
+    ? getTokenUsageTotal(filteredMetrics.tokenUsage.attacker)
+    : undefined;
+  const filteredGradingTokens = filteredMetrics?.tokenUsage
+    ? getTokenUsageTotal(filteredMetrics.tokenUsage.assertions)
+    : undefined;
+  const filteredTokens =
+    filteredPrimaryTokens === undefined
+      ? undefined
+      : filteredPrimaryTokens + (filteredAttackerTokens ?? 0) + (filteredGradingTokens ?? 0);
   const totalAverage = testCount?.total ? totalTokens / testCount.total : 0;
   const filteredAverage =
-    filteredTokens && testCount?.filtered ? filteredTokens / testCount.filtered : undefined;
+    filteredTokens !== undefined && testCount?.filtered
+      ? filteredTokens / testCount.filtered
+      : undefined;
 
-  return [
-    <div key="total-tokens">
-      <strong>Total Tokens:</strong> {formatMetricValue(totalTokens)}
-      {filteredTokens ? renderFilteredSuffix(formatMetricValue(filteredTokens)) : null}
-    </div>,
-    <div key="avg-tokens">
-      <strong>Avg Tokens:</strong> {formatMetricValue(totalAverage)}
-      {filteredAverage ? renderFilteredSuffix(formatMetricValue(filteredAverage)) : null}
-    </div>,
-  ];
+  return (
+    <>
+      <div>
+        <strong>Total Tokens:</strong> {formatMetricValue(totalTokens)}
+        {filteredTokens === undefined
+          ? null
+          : renderFilteredSuffix(formatMetricValue(filteredTokens))}
+      </div>
+      <div>
+        <strong>{getPrimaryTokenUsageLabel(isRedteam)} Tokens:</strong>{' '}
+        {formatMetricValue(primaryTokens)}
+        {filteredPrimaryTokens === undefined
+          ? null
+          : renderFilteredSuffix(formatMetricValue(filteredPrimaryTokens))}
+      </div>
+      {attackerTokens > 0 ? (
+        <div>
+          <strong>Attacker Tokens:</strong> {formatMetricValue(attackerTokens)}
+          {filteredAttackerTokens === undefined
+            ? null
+            : renderFilteredSuffix(formatMetricValue(filteredAttackerTokens))}
+        </div>
+      ) : null}
+      {gradingTokens > 0 ? (
+        <div>
+          <strong>Grading Tokens:</strong> {formatMetricValue(gradingTokens)}
+          {filteredGradingTokens === undefined
+            ? null
+            : renderFilteredSuffix(formatMetricValue(filteredGradingTokens))}
+        </div>
+      ) : null}
+      {incurredAccounting ? (
+        <>
+          <div>
+            <strong>Incurred Tokens:</strong> {formatMetricValue(incurredAccounting.incurredTokens)}
+          </div>
+          <div>
+            <strong>Cached Savings:</strong> {formatMetricValue(incurredAccounting.cachedSavings)}
+          </div>
+          <div>
+            <strong>Actual Target Requests:</strong>{' '}
+            {formatMetricValue(incurredAccounting.actualRequests)}
+          </div>
+        </>
+      ) : null}
+      <div>
+        <strong>Avg Tokens:</strong> {formatMetricValue(totalAverage)}
+        {filteredAverage === undefined
+          ? null
+          : renderFilteredSuffix(formatMetricValue(filteredAverage))}
+      </div>
+    </>
+  );
 }
 
 function renderLatencyMetric({
@@ -976,6 +1060,7 @@ function renderPromptMetricDetails({
       {renderTokenMetrics({
         metrics,
         filteredMetrics,
+        isRedteam,
         testCount: testCounts[idx],
       })}
       {renderLatencyMetric({
@@ -1011,7 +1096,6 @@ function PromptColumnHeader({
   numGoodAsserts,
   testCounts,
   passingTestCounts,
-  metricTotals,
   config,
   filterMode,
   headPromptCount,
@@ -1031,7 +1115,6 @@ function PromptColumnHeader({
   numGoodAsserts: number[];
   testCounts: PromptSummaryMetric[];
   passingTestCounts: PromptSummaryMetric[];
-  metricTotals: Record<string, number>;
   config: ReturnType<typeof useTableStore.getState>['config'];
   filterMode: EvalResultsFilterMode;
   headPromptCount: number;
@@ -1093,8 +1176,7 @@ function PromptColumnHeader({
           <div className="collapse-hidden">
             <CustomMetrics
               lookup={metrics.namedScores}
-              counts={getNamedMetricTotals(metrics)}
-              metricTotals={metricTotals}
+              metricTotals={getNamedMetricTotals(metrics)}
               onShowMore={() => setCustomMetricsDialogOpen(true)}
             />
           </div>
@@ -1411,6 +1493,7 @@ interface ResultsTableProps {
 
 interface ExtendedEvaluateTableOutput extends EvaluateTableOutput {
   originalRowIndex?: number;
+  originalRowPositionIndex?: number;
   originalPromptIndex?: number;
 }
 
@@ -1453,12 +1536,16 @@ function ResultsTableHeader({
   hasMinimalScrollRoom: boolean;
   zoom: number;
 }) {
+  const collapsed = useHeaderCollapse(stickyHeader);
+
   return (
     <div
       data-testid="results-table-header"
+      data-header-collapsed={collapsed}
       className={cn(
         'relative -mx-4 overflow-hidden px-4',
         stickyHeader && 'results-table-sticky',
+        stickyHeader && collapsed !== undefined && 'results-table-scroll-fallback',
         hasMinimalScrollRoom && 'minimal-scroll-room',
       )}
     >
@@ -1478,7 +1565,9 @@ function ResultsTableHeader({
         className="overflow-x-auto overflow-y-hidden overscroll-x-contain"
       >
         <table
-          className={`results-table firefox-fix ${maxTextLength <= 25 ? 'compact' : ''}`}
+          className={`results-table results-table-header-table firefox-fix ${
+            maxTextLength <= 25 ? 'compact' : ''
+          }`}
           style={{
             wordBreak,
             width: `${tableWidth}px`,
@@ -1489,7 +1578,8 @@ function ResultsTableHeader({
           <thead>
             {reactTable.getHeaderGroups().map((headerGroup) => (
               <tr key={headerGroup.id} className="header">
-                {headerGroup.headers.map((header) => {
+                {headerGroup.headers.map((header, headerIndex) => {
+                  const isMetadataCol = isMetadataColumn(header.column.id);
                   const isFinalRow = headerGroup.depth === 1;
 
                   return (
@@ -1499,7 +1589,9 @@ function ResultsTableHeader({
                       colSpan={header.colSpan}
                       style={{
                         width: header.getSize(),
-                        borderBottom: 'none',
+                        borderLeft: headerIndex === 0 ? undefined : 'none',
+                        borderBottom:
+                          !isMetadataCol && isFinalRow ? '2px solid var(--border-color)' : 'none',
                         height: isFinalRow ? 'fit-content' : 'auto',
                       }}
                     >
@@ -1550,6 +1642,7 @@ function ResultsTable({
 
   const { showToast } = useToast();
   const navigate = useNavigate();
+  const locationHash = useEvalDetailsHash();
 
   invariant(table, 'Table should be defined');
   const { head, body } = table;
@@ -1643,7 +1736,9 @@ function ResultsTable({
     [body, head, setTable, evalId, inComparisonMode, showToast],
   );
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: row positions should stay paired with the loaded body until the next page payload arrives.
   const tableBody = React.useMemo(() => {
+    const rowPositionOffset = pagination.pageIndex * pagination.pageSize;
     return body.map((row, rowIndex) => ({
       ...row,
       outputs: row.outputs.map((output, promptIndex) =>
@@ -1652,6 +1747,7 @@ function ResultsTable({
           : {
               ...output,
               originalRowIndex: rowIndex,
+              originalRowPositionIndex: rowPositionOffset + rowIndex,
               originalPromptIndex: promptIndex,
             },
       ),
@@ -1735,6 +1831,26 @@ function ResultsTable({
     return Object.fromEntries(new URLSearchParams(queryString));
   };
 
+  // Clear both deep-link forms in the browser URL before synchronizing React Router.
+  // The row-jump effect below reads the live URL in this same effect cycle.
+  const clearRowDeepLink = React.useCallback(() => {
+    const url = new URL(window.location.href);
+    const hasDetailsHash = parseEvalOutputPromptHash(url.hash) !== null;
+    if (!url.searchParams.has('rowId') && !hasDetailsHash) {
+      return;
+    }
+
+    url.searchParams.delete('rowId');
+    if (hasDetailsHash) {
+      setEvalDetailsHash('');
+      url.hash = '';
+    } else {
+      window.history.replaceState(window.history.state, '', url);
+    }
+
+    navigate({ pathname: url.pathname, search: url.search, hash: url.hash }, { replace: true });
+  }, [navigate]);
+
   // Create a stable reference for applied filters to avoid unnecessary re-renders
   const appliedFiltersString = React.useMemo(() => {
     const appliedFilters = Object.values(filters.values)
@@ -1772,11 +1888,39 @@ function ResultsTable({
     );
   }, [filters.values]);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
+  const isFilteringActive =
+    Boolean(debouncedSearchText) || filterMode !== 'all' || filters.appliedCount > 0;
+
+  // Reset only when these controls change. Strict Mode replays effects in dev
+  // with the same inputs, and that replay must not clear an initial deep link.
+  const previousResultSetControlsRef = useRef({
+    failureFilter,
+    filterMode,
+    debouncedSearchText,
+    appliedFiltersString,
+  });
+
   React.useEffect(() => {
+    const previousControls = previousResultSetControlsRef.current;
+    previousResultSetControlsRef.current = {
+      failureFilter,
+      filterMode,
+      debouncedSearchText,
+      appliedFiltersString,
+    };
+    if (
+      previousControls.failureFilter === failureFilter &&
+      previousControls.filterMode === filterMode &&
+      previousControls.debouncedSearchText === debouncedSearchText &&
+      previousControls.appliedFiltersString === appliedFiltersString
+    ) {
+      return;
+    }
+
+    clearRowDeepLink();
     // Use functional update to avoid stale closure over pagination state
     setPagination((prev) => ({ ...prev, pageIndex: 0 }));
-  }, [failureFilter, filterMode, debouncedSearchText, appliedFiltersString]);
+  }, [clearRowDeepLink, failureFilter, filterMode, debouncedSearchText, appliedFiltersString]);
 
   // Add a ref to track the current evalId to compare with new values
   const previousEvalIdRef = useRef<string | null>(null);
@@ -1975,34 +2119,6 @@ function ResultsTable({
     [tableBody],
   );
 
-  const metricTotals = React.useMemo(() => {
-    // Use the backend's already-correct metric totals instead of recalculating
-    const firstProvider = table?.head?.prompts?.[0];
-    const backendTotals = getNamedMetricTotals(firstProvider?.metrics);
-
-    if (backendTotals) {
-      return backendTotals;
-    }
-
-    const totals: Record<string, number> = {};
-    table?.body.forEach((row) => {
-      row.test.assert?.forEach((assertion) => {
-        if (assertion.metric) {
-          totals[assertion.metric] = (totals[assertion.metric] || 0) + (assertion.weight ?? 1);
-        }
-        if ('assert' in assertion && Array.isArray(assertion.assert)) {
-          assertion.assert.forEach((subAssertion) => {
-            if ('metric' in subAssertion && subAssertion.metric) {
-              totals[subAssertion.metric] =
-                (totals[subAssertion.metric] || 0) + (subAssertion.weight ?? 1);
-            }
-          });
-        }
-      });
-    });
-    return totals;
-  }, [table?.head?.prompts, table?.body]);
-
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const promptColumns = React.useMemo(() => {
     return [
@@ -2025,7 +2141,6 @@ function ResultsTable({
                 numGoodAsserts={numGoodAsserts}
                 testCounts={testCounts}
                 passingTestCounts={passingTestCounts}
-                metricTotals={metricTotals}
                 config={config}
                 filterMode={filterMode}
                 headPromptCount={head.prompts.length}
@@ -2049,7 +2164,12 @@ function ResultsTable({
                   <EvalOutputCell
                     output={output}
                     maxTextLength={maxTextLength}
-                    rowIndex={info.row.index}
+                    rowIndex={
+                      info.row.original.testIdx ?? output.originalRowIndex ?? info.row.index
+                    }
+                    rowPositionIndex={
+                      output.originalRowPositionIndex ?? output.originalRowIndex ?? info.row.index
+                    }
                     promptIndex={idx}
                     onRating={handleRating.bind(
                       null,
@@ -2061,6 +2181,7 @@ function ResultsTable({
                     showDiffs={filterMode === 'different' && visiblePromptCount > 1}
                     searchText={debouncedSearchText}
                     showStats={showStats}
+                    isRedteam={isRedteam}
                     evaluationId={evalId || undefined}
                     testCaseId={info.row.original.test?.metadata?.testCaseId || output.id}
                   />
@@ -2086,8 +2207,8 @@ function ResultsTable({
     handleRating,
     head,
     head.prompts,
+    isRedteam,
     maxTextLength,
-    metricTotals,
     numAsserts,
     numGoodAsserts,
     onFailureFilterToggle,
@@ -2145,22 +2266,28 @@ function ResultsTable({
 
   const { stickyHeader, setStickyHeader } = useResultsViewSettingsStore();
 
-  const clearRowIdFromUrl = React.useCallback(() => {
-    const url = new URL(window.location.href);
-    if (url.searchParams.has('rowId')) {
-      url.searchParams.delete('rowId');
-      navigate({ pathname: url.pathname, search: url.search }, { replace: true });
-    }
-  }, [navigate]);
-
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     const params = parseQueryParams(window.location.search);
+    const detailsHashTarget = parseEvalOutputPromptHash(window.location.hash);
     const rowId = params['rowId'];
+    const rowIndexFromQuery =
+      rowId && Number.isInteger(Number(rowId)) ? Number(rowId) - 1 : undefined;
+    // Copied detail links carry both forms:
+    // - `rowId` is the filtered-table position used to resolve the correct page.
+    // - the hash keeps the stable test/prompt identity so stale rows do not open dialogs.
+    //
+    // The hash encodes the row's GLOBAL test index, not its position within the
+    // currently filtered/searched table. When a filter or search is active, that global
+    // index does not map to a filtered-table page, so paging by it would land on the
+    // wrong page. In that case require `rowId` (the explicit filtered position) for page
+    // resolution; the dialog can still open via the hash if the target row happens to be
+    // on the current page.
+    const requestedRowIndex =
+      rowIndexFromQuery ?? (isFilteringActive ? undefined : detailsHashTarget?.rowIndex);
 
-    if (rowId && Number.isInteger(Number(rowId))) {
-      const parsedRowId = Number(rowId);
-      const rowIndex = Math.max(0, Math.min(parsedRowId - 1, filteredResultsCount - 1));
+    if (requestedRowIndex !== undefined && filteredResultsCount > 0) {
+      const rowIndex = Math.max(0, Math.min(requestedRowIndex, filteredResultsCount - 1));
 
       let hasScrolled = false;
 
@@ -2196,8 +2323,7 @@ function ResultsTable({
         }
       };
 
-      const tableContainer =
-        document.querySelector('.results-table')?.parentElement || document.body;
+      const tableContainer = document.getElementById('results-table-container') || document.body;
 
       const observer = new MutationObserver(() => {
         if (hasScrolled) {
@@ -2230,7 +2356,18 @@ function ResultsTable({
         clearTimeout(timeoutId);
       };
     }
-  }, [pagination.pageIndex, pagination.pageSize, reactTable, filteredResultsCount]);
+  }, [
+    pagination.pageIndex,
+    pagination.pageSize,
+    reactTable,
+    filteredResultsCount,
+    locationHash,
+    debouncedSearchText,
+    failureFilter,
+    filterMode,
+    appliedFiltersString,
+    filters.appliedCount,
+  ]);
 
   // Use TanStack Table's built-in method to calculate total width of visible columns.
   // This automatically handles both column visibility changes and user-initiated column resizing.
@@ -2310,13 +2447,11 @@ function ResultsTable({
     // of this component. This ensures that the pagination footer is always pinned to the bottom
     // of the viewport (because the parent container is a flexbox).
     <>
-      {filteredResultsCount === 0 &&
-        !isFetching &&
-        (debouncedSearchText || filterMode !== 'all' || filters.appliedCount > 0) && (
-          <div className="p-5 text-center bg-black/[0.03] dark:bg-white/[0.03] rounded my-5">
-            <p>No results found for the current filters.</p>
-          </div>
-        )}
+      {filteredResultsCount === 0 && !isFetching && isFilteringActive && (
+        <div className="p-5 text-center bg-black/[0.03] dark:bg-white/[0.03] rounded my-5">
+          <p>No results found for the current filters.</p>
+        </div>
+      )}
       <div className="h-4" />
       <ResultsTableHeader
         reactTable={reactTable}
@@ -2333,7 +2468,9 @@ function ResultsTable({
         id="results-table-container"
         style={{
           zoom,
-          borderTop: 'none',
+          borderTopWidth: '1px',
+          borderTopStyle: 'solid',
+          borderColor: 'var(--border-color)',
           // Grow vertically into any empty space; this applies when total number of evals is so few that the table otherwise
           // won't extend to the bottom of the viewport.
           flexGrow: 1,
@@ -2422,19 +2559,15 @@ function ResultsTable({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="10">10</SelectItem>
-                <SelectItem value="50" disabled={filteredResultsCount <= 10}>
-                  50
-                </SelectItem>
-                <SelectItem value="100" disabled={filteredResultsCount <= 50}>
-                  100
-                </SelectItem>
-                <SelectItem value="500" disabled={filteredResultsCount <= 100}>
-                  500
-                </SelectItem>
-                <SelectItem value="1000" disabled={filteredResultsCount <= 500}>
-                  1000
-                </SelectItem>
+                {PAGE_SIZE_OPTIONS.map((size, idx) => (
+                  <SelectItem
+                    key={size}
+                    value={String(size)}
+                    disabled={filteredResultsCount <= (PAGE_SIZE_OPTIONS[idx - 1] ?? 0)}
+                  >
+                    {size}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
@@ -2456,7 +2589,7 @@ function ResultsTable({
                     ...prev,
                     pageIndex: Math.min(Math.max(page, 0), pageCount - 1),
                   }));
-                  clearRowIdFromUrl();
+                  clearRowDeepLink();
                 }
               }}
               className="w-[60px] h-8 text-center"
@@ -2479,7 +2612,7 @@ function ResultsTable({
                   ...prev,
                   pageIndex: Math.max(prev.pageIndex - 1, 0),
                 }));
-                clearRowIdFromUrl();
+                clearRowDeepLink();
                 window.scrollTo(0, 0);
               }}
               disabled={reactTable.getState().pagination.pageIndex === 0}
@@ -2496,7 +2629,7 @@ function ResultsTable({
                   ...prev,
                   pageIndex: Math.min(prev.pageIndex + 1, pageCount - 1),
                 }));
-                clearRowIdFromUrl();
+                clearRowDeepLink();
                 window.scrollTo(0, 0);
               }}
               disabled={reactTable.getState().pagination.pageIndex + 1 >= pageCount}

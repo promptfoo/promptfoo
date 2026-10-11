@@ -1,9 +1,13 @@
 import { createHash, randomUUID } from 'node:crypto';
 
+import { z } from 'zod';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { fetchWithRetries } from '../../util/fetch/index';
-import { getRemoteGenerationUrl } from '../remoteGeneration';
+import { getRemoteGenerationHeaders, getRemoteGenerationUrl } from '../remoteGeneration';
+import { remoteGenerationContextPayload } from '../remoteGenerationContext';
+import { WebPageTrackingIdsSchema } from '../types/webPage';
+import { appendMetricSuffix } from './assertions';
 
 import type { TestCase, TestCaseWithPlugin } from '../../types/index';
 import type {
@@ -50,16 +54,13 @@ const MAX_PAGE_STATE_ENTRIES = 1000;
  */
 function cleanupExpiredPageState(): void {
   const now = Date.now();
-  const expiredKeys: string[] = [];
+  let expiredCount = 0;
 
   for (const [key, state] of pageStateMap.entries()) {
     if (now - state.createdAt > PAGE_STATE_TTL_MS) {
-      expiredKeys.push(key);
+      pageStateMap.delete(key);
+      expiredCount++;
     }
-  }
-
-  for (const key of expiredKeys) {
-    pageStateMap.delete(key);
   }
 
   // If still over limit after TTL cleanup, remove oldest entries
@@ -73,25 +74,46 @@ function cleanupExpiredPageState(): void {
     }
   }
 
-  if (expiredKeys.length > 0) {
+  if (expiredCount > 0) {
     logger.debug('[IndirectWebPwn] Cleaned up expired page state entries', {
-      removedCount: expiredKeys.length,
+      removedCount: expiredCount,
       remainingCount: pageStateMap.size,
     });
   }
 }
 
+// Keep outgoing identifiers aligned with the Cloud tracking request contract.
+const webPageTrackingIdsSchema = WebPageTrackingIdsSchema.extend({
+  evalId: z
+    .string()
+    .transform((value) => value.replace(/^eval-/, ''))
+    .pipe(WebPageTrackingIdsSchema.shape.evalId),
+});
+
 /**
- * Get the page state for a test case (for use by grader).
- * @param testCaseId - The test case ID
- * @param evalId - The evaluation ID (optional, for namespacing)
+ * Resolve a page's tracking identifiers from runtime metadata. Metadata can come
+ * from a custom provider or a saved test, so TypeScript assertions do not validate
+ * it. A page URL supplies the evaluation ID when it is absent from the context.
  */
-export function getPageStateForTestCase(
-  testCaseId: string,
-  evalId?: string,
-): PageState | undefined {
-  const stateKey = evalId ? `${evalId}:${testCaseId}` : testCaseId;
-  return pageStateMap.get(stateKey);
+export function getWebPageTrackingIds(
+  metadata: Record<string, unknown> | undefined,
+  evaluationId: unknown,
+  fallbackWebPageUrl?: unknown,
+): { uuid: string; evalId: string } | null {
+  if (!metadata) {
+    return null;
+  }
+  const urlEvalIds = [metadata.webPageUrl, fallbackWebPageUrl].map((url) =>
+    typeof url === 'string' ? url.match(/\/dynamic-pages\/([^/]+)\//)?.[1] : undefined,
+  );
+  for (const evalId of [evaluationId, ...urlEvalIds]) {
+    const result = webPageTrackingIdsSchema.safeParse({ uuid: metadata.webPageUuid, evalId });
+    if (result.success && typeof evalId === 'string') {
+      // The request boundary strips the local eval- prefix exactly once.
+      return { uuid: result.data.uuid, evalId };
+    }
+  }
+  return null;
 }
 
 /**
@@ -102,26 +124,30 @@ export function getPageStateForTestCase(
  * @param evalId - The evaluation ID (required by server)
  */
 export async function checkExfilTracking(
-  uuid: string,
-  evalId?: string,
+  uuid: unknown,
+  evalId?: unknown,
 ): Promise<{
   wasExfiltrated: boolean;
   exfilCount: number;
   exfilRecords: WebPageTrackingResponse['exfilRecords'];
 } | null> {
+  const trackingIds = webPageTrackingIdsSchema.safeParse({ uuid, evalId });
+  if (!trackingIds.success) {
+    logger.debug('[IndirectWebPwn] Tracking unavailable: invalid page or evaluation ID', {
+      fields: trackingIds.error.issues.map((issue) => issue.path.join('.')),
+    });
+    return null;
+  }
   try {
     const url = getRemoteGenerationUrl();
-    // Strip "eval-" prefix from evalId for consistency with page creation
-    const normalizedEvalId = evalId?.replace(/^eval-/, '');
     const response = await fetchWithRetries(
       url,
       {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getRemoteGenerationHeaders(),
         body: JSON.stringify({
           task: 'get-web-page-tracking',
-          uuid,
-          evalId: normalizedEvalId,
+          ...trackingIds.data,
         }),
       },
       10000,
@@ -219,6 +245,7 @@ async function createWebPage(
   purpose?: string,
   useLlm?: boolean,
   preferSmallModel?: boolean,
+  targetId?: string,
 ): Promise<CreateWebPageResponse> {
   const url = getRemoteGenerationUrl();
   logger.debug('[IndirectWebPwn] Creating web page via task API', {
@@ -236,7 +263,7 @@ async function createWebPage(
     url,
     {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getRemoteGenerationHeaders(),
       body: JSON.stringify({
         task: 'create-web-page',
         testCaseId,
@@ -247,6 +274,7 @@ async function createWebPage(
         email: getUserEmail(),
         useLlm: useLlm ?? true,
         preferSmallModel: preferSmallModel ?? true,
+        ...remoteGenerationContextPayload(targetId),
       }),
     },
     60000, // 60s timeout for LLM generation
@@ -274,6 +302,7 @@ async function updateWebPage(
   evalId?: string,
   useLlm?: boolean,
   preferSmallModel?: boolean,
+  targetId?: string,
 ): Promise<UpdateWebPageResponse> {
   const url = getRemoteGenerationUrl();
   logger.debug('[IndirectWebPwn] Updating web page via task API', {
@@ -289,7 +318,7 @@ async function updateWebPage(
     url,
     {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getRemoteGenerationHeaders(),
       body: JSON.stringify({
         task: 'update-web-page',
         uuid,
@@ -299,6 +328,7 @@ async function updateWebPage(
         email: getUserEmail(),
         useLlm: useLlm ?? true,
         preferSmallModel: preferSmallModel ?? true,
+        ...remoteGenerationContextPayload(targetId),
       }),
     },
     60000,
@@ -384,10 +414,7 @@ function transformForStandaloneMode(
           ...config,
         },
       },
-      assert: testCase.assert?.map((assertion) => ({
-        ...assertion,
-        metric: `${assertion.metric}/${metricSuffix}`,
-      })),
+      assert: appendMetricSuffix(testCase, metricSuffix),
       metadata: {
         ...testCase.metadata,
         strategyId,
@@ -416,6 +443,7 @@ async function transformForPerTurnLayer(
   const useLlmCreate = (config.useLlm as boolean) ?? true;
   const useLlmUpdate = (config.useLlm as boolean) ?? true;
   const preferSmallModel = (config.preferSmallModel as boolean) ?? true;
+  const targetId = typeof config.targetId === 'string' ? config.targetId : undefined;
 
   const results: TestCase[] = [];
 
@@ -452,6 +480,7 @@ async function transformForPerTurnLayer(
 
     let pageState = pageStateMap.get(stateKey);
     let turnNumber: number;
+    let runtimeTokenUsage: CreateWebPageResponse['tokenUsage'];
 
     if (pageState) {
       // Subsequent turn: Update the existing page
@@ -471,7 +500,9 @@ async function transformForPerTurnLayer(
           evalId,
           useLlmUpdate,
           preferSmallModel,
+          targetId,
         );
+        runtimeTokenUsage = response.tokenUsage;
 
         // Update state with new embedding location and fetch prompt
         const previousLocation = pageState.embeddingLocation;
@@ -519,7 +550,9 @@ async function transformForPerTurnLayer(
           purpose,
           useLlmCreate,
           preferSmallModel,
+          targetId,
         );
+        runtimeTokenUsage = response.tokenUsage;
 
         // Clean up expired entries before adding new ones
         cleanupExpiredPageState();
@@ -584,16 +617,10 @@ async function transformForPerTurnLayer(
         embeddedPrompt: attackPrompt, // The prompt embedded in the page (URLs replaced)
         indirectWebPwnTurn: turnNumber,
         fetchPrompt, // The "Please visit URL..." prompt sent to the AI
+        ...(runtimeTokenUsage ? { runtimeTokenUsage } : {}),
       },
     });
   }
 
   return results;
-}
-
-/**
- * Clear page state (useful for testing).
- */
-export function clearPageState(): void {
-  pageStateMap.clear();
 }

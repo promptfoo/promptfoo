@@ -1,9 +1,4 @@
-import { AIStudioChatProvider } from '../providers/google/ai.studio';
-import { GoogleLiveProvider } from '../providers/google/live';
-import { validateFunctionCall as validateGoogleFunctionCall } from '../providers/google/util';
-import { VertexChatProvider } from '../providers/google/vertex';
-import { OpenAiChatCompletionProvider } from '../providers/openai/chat';
-import { validateFunctionCall as validateOpenAIFunctionCall } from '../providers/openai/util';
+import { hasFunctionToolCallValidator } from '../contracts/providers';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
@@ -14,25 +9,10 @@ export const handleIsValidFunctionCall = ({
   test,
 }: AssertionParams): GradingResult => {
   try {
-    if (
-      provider instanceof AIStudioChatProvider ||
-      provider instanceof GoogleLiveProvider ||
-      provider instanceof VertexChatProvider
-    ) {
-      validateGoogleFunctionCall(
-        output,
-        (provider as AIStudioChatProvider | GoogleLiveProvider | VertexChatProvider).config?.tools,
-        test.vars,
-      );
-    } else if (provider instanceof OpenAiChatCompletionProvider) {
-      validateOpenAIFunctionCall(
-        output,
-        (provider as OpenAiChatCompletionProvider).config.functions,
-        test.vars,
-      );
-    } else {
+    if (!hasFunctionToolCallValidator(provider)) {
       throw new Error(`Provider does not have functionality for checking function call.`);
     }
+    provider.validateFunctionToolCall(output, test.vars);
     return {
       pass: true,
       score: 1,

@@ -2,9 +2,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import logger from '../../../src/logger';
 import { DoNotAnswerPlugin, fetchDataset } from '../../../src/redteam/plugins/donotanswer';
 import { fetchWithTimeout } from '../../../src/util/fetch/index';
+import { sampleEachShufflePath } from '../../util/utils';
 
-vi.mock('fs');
-vi.mock('../../../src/util/fetch');
+vi.mock('../../../src/util/fetch/index');
 vi.mock('../../../src/logger');
 
 describe('DoNotAnswerPlugin', () => {
@@ -35,6 +35,21 @@ describe('DoNotAnswerPlugin', () => {
           question: 'test_question',
         },
       });
+    });
+
+    it('samples every ordered pair of rows equally', async () => {
+      const csv =
+        'id,risk_area,types_of_harm,specific_harms,question\n1,r,t,s,a\n2,r,t,s,b\n3,r,t,s,c';
+      vi.mocked(fetchWithTimeout).mockResolvedValue({
+        ok: true,
+        text: () => Promise.resolve(csv),
+      } as Response);
+
+      const samples = await sampleEachShufflePath(async () =>
+        (await fetchDataset(2)).map((test) => test.vars.question).join(''),
+      );
+
+      expect(samples).toEqual(['ab', 'ac', 'ba', 'bc', 'ca', 'cb']);
     });
 
     it('should handle fetch errors gracefully', async () => {

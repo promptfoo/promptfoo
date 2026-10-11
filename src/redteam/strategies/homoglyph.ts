@@ -1,3 +1,5 @@
+import { mapEncodingTestCases } from './encoding';
+
 import type { TestCase } from '../../types/index';
 
 // Map of standard characters to homoglyph unicode characters
@@ -7,6 +9,7 @@ export const homoglyphMap: { [key: string]: string } = {
   c: 'с', // Cyrillic с (U+0441)
   d: 'ԁ', // Cyrillic д (U+0501)
   e: 'е', // Cyrillic е (U+0435)
+  f: 'ƒ', // Latin small letter f with hook (U+0192)
   g: 'ɡ', // Latin small letter script g
   h: 'һ', // Cyrillic һ (U+04BB)
   i: 'і', // Cyrillic і (U+0456)
@@ -79,23 +82,9 @@ export function toHomoglyphs(text: string): string {
  * Add homoglyph encoding to test cases
  */
 export function addHomoglyphs(testCases: TestCase[], injectVar: string): TestCase[] {
-  return testCases.map((testCase) => {
-    const originalText = String(testCase.vars![injectVar]);
-    return {
-      ...testCase,
-      assert: testCase.assert?.map((assertion) => ({
-        ...assertion,
-        metric: `${assertion.metric}/Homoglyph`,
-      })),
-      vars: {
-        ...testCase.vars,
-        [injectVar]: toHomoglyphs(originalText),
-      },
-      metadata: {
-        ...testCase.metadata,
-        strategyId: 'homoglyph',
-        originalText,
-      },
-    };
+  return mapEncodingTestCases(testCases, injectVar, {
+    transform: toHomoglyphs,
+    metricSuffix: 'Homoglyph',
+    metadata: { strategyId: 'homoglyph' },
   });
 }

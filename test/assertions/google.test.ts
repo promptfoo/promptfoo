@@ -6,10 +6,57 @@ import { AIStudioChatProvider } from '../../src/providers/google/ai.studio';
 import { GoogleLiveProvider } from '../../src/providers/google/live';
 import { validateFunctionCall } from '../../src/providers/google/util';
 import { VertexChatProvider } from '../../src/providers/google/vertex';
+import { createGoogleSearchTool, createTypeConfig } from '../factories/literalFixtures';
 import { createMockProvider } from '../factories/provider';
 
-import type { Tool } from '../../src/providers/google//types';
+import type { Tool } from '../../src/providers/google/types';
 import type { ApiProvider, AtomicTestCase, GradingResult } from '../../src/types/index';
+
+const createCoordinateSchema = () => ({
+  type: 'OBJECT' as const,
+  properties: {
+    x: { type: 'NUMBER' as const },
+    y: { type: 'NUMBER' as const },
+  },
+  required: ['x', 'y'],
+});
+
+const createTemperatureFunctionCall = () => ({
+  name: 'getCurrentTemperature',
+  args: '{"location": "San Francisco, CA", "unit": "Fahrenheit"}',
+});
+
+const createSearchToolOptions = (): { config: { tools: Tool[] } } => ({
+  config: {
+    tools: [
+      {
+        functionDeclarations: [
+          {
+            name: 'add',
+            description: 'add numbers',
+            parameters: createCoordinateSchema(),
+          },
+        ],
+      },
+      createGoogleSearchTool(),
+    ],
+  },
+});
+
+const createAddToolOptions = (): { config: { tools: Tool[] } } => ({
+  config: {
+    tools: [
+      {
+        functionDeclarations: [
+          {
+            name: 'add',
+            parameters: createCoordinateSchema(),
+          },
+        ],
+      },
+    ],
+  },
+});
 
 // Create hoisted mocks for stable references
 const mocks = vi.hoisted(() => ({
@@ -48,9 +95,7 @@ const mockProvider = createMockProvider({
           },
         ],
       },
-      {
-        googleSearch: {},
-      },
+      createGoogleSearchTool(),
     ],
   },
   response: { output: '' },
@@ -68,10 +113,7 @@ describe('Google assertions', () => {
       const functionOutput = [
         { text: 'test text' },
         {
-          functionCall: {
-            name: 'getCurrentTemperature',
-            args: '{"location": "San Francisco, CA", "unit": "Fahrenheit"}',
-          },
+          functionCall: createTemperatureFunctionCall(),
         },
       ];
 
@@ -83,12 +125,7 @@ describe('Google assertions', () => {
     it('should pass when Live function call matches schema', () => {
       const functionOutput = {
         toolCall: {
-          functionCalls: [
-            {
-              name: 'getCurrentTemperature',
-              args: '{"location": "San Francisco, CA", "unit": "Fahrenheit"}',
-            },
-          ],
+          functionCalls: [createTemperatureFunctionCall()],
         },
       };
 
@@ -149,10 +186,7 @@ describe('Google assertions', () => {
     it('should load functions from external file', () => {
       const functionOutput = [
         {
-          functionCall: {
-            name: 'getCurrentTemperature',
-            args: '{"location": "San Francisco, CA", "unit": "Fahrenheit"}',
-          },
+          functionCall: createTemperatureFunctionCall(),
         },
       ];
 
@@ -289,38 +323,12 @@ describe('Google assertions', () => {
     it('should pass for a valid function call with correct arguments', async () => {
       const output = [{ functionCall: { args: '{"x": 10, "y": 20}', name: 'add' } }];
 
-      const provider = new AIStudioChatProvider('foo', {
-        config: {
-          tools: [
-            {
-              functionDeclarations: [
-                {
-                  name: 'add',
-                  description: 'add numbers',
-                  parameters: {
-                    type: 'OBJECT',
-                    properties: {
-                      x: { type: 'NUMBER' },
-                      y: { type: 'NUMBER' },
-                    },
-                    required: ['x', 'y'],
-                  },
-                },
-              ],
-            },
-            {
-              googleSearch: {},
-            },
-          ],
-        },
-      });
+      const provider = new AIStudioChatProvider('foo', createSearchToolOptions());
       const providerResponse = { output };
       const result: GradingResult = await runAssertion({
         prompt: 'Some prompt',
         provider,
-        assertion: {
-          type: 'is-valid-function-call',
-        },
+        assertion: createTypeConfig('is-valid-function-call'),
         test: {} as AtomicTestCase,
         providerResponse,
       });
@@ -340,30 +348,8 @@ describe('Google assertions', () => {
 
       const result: GradingResult = await runAssertion({
         prompt: 'Some prompt',
-        provider: new AIStudioChatProvider('foo', {
-          config: {
-            tools: [
-              {
-                functionDeclarations: [
-                  {
-                    name: 'add',
-                    parameters: {
-                      type: 'OBJECT',
-                      properties: {
-                        x: { type: 'NUMBER' },
-                        y: { type: 'NUMBER' },
-                      },
-                      required: ['x', 'y'],
-                    },
-                  },
-                ],
-              },
-            ],
-          },
-        }),
-        assertion: {
-          type: 'is-valid-function-call',
-        },
+        provider: new AIStudioChatProvider('foo', createAddToolOptions()),
+        assertion: createTypeConfig('is-valid-function-call'),
         test: {} as AtomicTestCase,
         providerResponse: { output },
       });
@@ -379,38 +365,12 @@ describe('Google assertions', () => {
     it('should pass for a valid function call with correct arguments', async () => {
       const output = [{ functionCall: { args: '{"x": 10, "y": 20}', name: 'add' } }];
 
-      const provider = new VertexChatProvider('foo', {
-        config: {
-          tools: [
-            {
-              functionDeclarations: [
-                {
-                  name: 'add',
-                  description: 'add numbers',
-                  parameters: {
-                    type: 'OBJECT',
-                    properties: {
-                      x: { type: 'NUMBER' },
-                      y: { type: 'NUMBER' },
-                    },
-                    required: ['x', 'y'],
-                  },
-                },
-              ],
-            },
-            {
-              googleSearch: {},
-            },
-          ],
-        },
-      });
+      const provider = new VertexChatProvider('foo', createSearchToolOptions());
       const providerResponse = { output };
       const result: GradingResult = await runAssertion({
         prompt: 'Some prompt',
         provider,
-        assertion: {
-          type: 'is-valid-function-call',
-        },
+        assertion: createTypeConfig('is-valid-function-call'),
         test: {} as AtomicTestCase,
         providerResponse,
       });
@@ -430,30 +390,8 @@ describe('Google assertions', () => {
 
       const result: GradingResult = await runAssertion({
         prompt: 'Some prompt',
-        provider: new VertexChatProvider('foo', {
-          config: {
-            tools: [
-              {
-                functionDeclarations: [
-                  {
-                    name: 'add',
-                    parameters: {
-                      type: 'OBJECT',
-                      properties: {
-                        x: { type: 'NUMBER' },
-                        y: { type: 'NUMBER' },
-                      },
-                      required: ['x', 'y'],
-                    },
-                  },
-                ],
-              },
-            ],
-          },
-        }),
-        assertion: {
-          type: 'is-valid-function-call',
-        },
+        provider: new VertexChatProvider('foo', createAddToolOptions()),
+        assertion: createTypeConfig('is-valid-function-call'),
         test: {} as AtomicTestCase,
         providerResponse: { output },
       });
@@ -471,38 +409,12 @@ describe('Google assertions', () => {
         toolCall: { functionCalls: [{ args: { x: 10, y: 20 }, name: 'add' }] },
       });
 
-      const provider = new GoogleLiveProvider('foo', {
-        config: {
-          tools: [
-            {
-              functionDeclarations: [
-                {
-                  name: 'add',
-                  description: 'add numbers',
-                  parameters: {
-                    type: 'OBJECT',
-                    properties: {
-                      x: { type: 'NUMBER' },
-                      y: { type: 'NUMBER' },
-                    },
-                    required: ['x', 'y'],
-                  },
-                },
-              ],
-            },
-            {
-              googleSearch: {},
-            },
-          ],
-        },
-      });
+      const provider = new GoogleLiveProvider('foo', createSearchToolOptions());
       const providerResponse = { output };
       const result: GradingResult = await runAssertion({
         prompt: 'Some prompt',
         provider,
-        assertion: {
-          type: 'is-valid-function-call',
-        },
+        assertion: createTypeConfig('is-valid-function-call'),
         test: {} as AtomicTestCase,
         providerResponse,
       });
@@ -520,30 +432,8 @@ describe('Google assertions', () => {
 
       const result: GradingResult = await runAssertion({
         prompt: 'Some prompt',
-        provider: new GoogleLiveProvider('foo', {
-          config: {
-            tools: [
-              {
-                functionDeclarations: [
-                  {
-                    name: 'add',
-                    parameters: {
-                      type: 'OBJECT',
-                      properties: {
-                        x: { type: 'NUMBER' },
-                        y: { type: 'NUMBER' },
-                      },
-                      required: ['x', 'y'],
-                    },
-                  },
-                ],
-              },
-            ],
-          },
-        }),
-        assertion: {
-          type: 'is-valid-function-call',
-        },
+        provider: new GoogleLiveProvider('foo', createAddToolOptions()),
+        assertion: createTypeConfig('is-valid-function-call'),
         test: {} as AtomicTestCase,
         providerResponse: { output },
       });

@@ -1,6 +1,6 @@
 ---
 sidebar_label: Wordplay
-description: Test AI systems for wordplay vulnerabilities that could lead to generating profanity or offensive language through innocent-seeming riddles and word puzzles
+description: Test AI systems for wordplay vulnerabilities, where manipulation of rhyming games, riddles, and word puzzles can steer models into generating profanity or offensive language
 ---
 
 # Wordplay Plugin

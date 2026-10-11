@@ -1,10 +1,14 @@
 import type { ProviderOptions } from '../../types/providers';
 import type { OpenAiCompletionOptions } from '../openai/types';
 
+export type GroqChatServiceTier = 'auto' | 'on_demand' | 'flex' | 'performance' | null;
+export type GroqResponsesServiceTier = 'auto' | 'default' | 'flex';
+
 /**
  * Groq-specific completion options for Chat Completions API.
  */
-export type GroqCompletionOptions = OpenAiCompletionOptions & {
+export type GroqCompletionOptions = Omit<OpenAiCompletionOptions, 'service_tier'> & {
+  service_tier?: GroqChatServiceTier;
   systemPrompt?: string;
   parallel_tool_calls?: boolean | null;
   /** Controls how reasoning is presented. Options: 'parsed', 'raw', 'hidden'. */
@@ -33,7 +37,8 @@ export type GroqCompletionOptions = OpenAiCompletionOptions & {
  * Note: Unlike Chat Completions API, does NOT support reasoning_format or include_reasoning.
  * Reasoning is controlled via reasoning.effort inherited from OpenAiCompletionOptions.
  */
-export type GroqResponsesOptions = OpenAiCompletionOptions & {
+export type GroqResponsesOptions = Omit<OpenAiCompletionOptions, 'service_tier'> & {
+  service_tier?: GroqResponsesServiceTier;
   systemPrompt?: string;
   parallel_tool_calls?: boolean | null;
 };

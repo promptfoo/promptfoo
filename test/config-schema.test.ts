@@ -4,6 +4,8 @@ import * as path from 'path';
 import Ajv from 'ajv';
 import addFormats from 'ajv-formats';
 import { beforeAll, describe, expect, it } from 'vitest';
+import { UnifiedConfigSchema } from '../src/types';
+import { normalizeConfigDraft, UnifiedConfigDraftSchema } from '../src/types/configDraft';
 
 describe('config-schema.json', () => {
   let schema: any;
@@ -25,6 +27,21 @@ describe('config-schema.json', () => {
     }
     return obj;
   };
+
+  function* walkSchema(
+    obj: any,
+    path = '',
+    skipEnums = false,
+  ): Generator<{ obj: any; path: string }> {
+    if (obj && typeof obj === 'object') {
+      yield { obj, path };
+      for (const [key, value] of Object.entries(obj)) {
+        if (!skipEnums || key !== 'enum') {
+          yield* walkSchema(value, path ? `${path}.${key}` : key, skipEnums);
+        }
+      }
+    }
+  }
 
   beforeAll(() => {
     // Read the schema file
@@ -58,31 +75,51 @@ describe('config-schema.json', () => {
     expect(schema.definitions).toHaveProperty('PromptfooConfigSchema');
   });
 
+  it('should accept provider-scoped GOOGLE_CLOUD_PROJECT in a config file', () => {
+    const validate = ajv.compile(schema);
+    const config = {
+      prompts: ['Embed this'],
+      providers: [
+        {
+          id: 'vertex:embedding:gemini-embedding-001',
+          env: { GOOGLE_CLOUD_PROJECT: 'provider-project' },
+        },
+      ],
+    };
+
+    expect(validate(config), JSON.stringify(validate.errors, null, 2)).toBe(true);
+
+    const providerEnvSchemas: any[] = [];
+    const collectProviderEnvSchemas = (node: any): void => {
+      if (!node || typeof node !== 'object') {
+        return;
+      }
+      if (node.properties?.GOOGLE_CLOUD_LOCATION) {
+        providerEnvSchemas.push(node);
+      }
+      for (const value of Object.values(node)) {
+        collectProviderEnvSchemas(value);
+      }
+    };
+    collectProviderEnvSchemas(schema);
+
+    expect(providerEnvSchemas.length).toBeGreaterThan(0);
+    for (const providerEnvSchema of providerEnvSchemas) {
+      expect(providerEnvSchema.properties).toHaveProperty('GOOGLE_CLOUD_PROJECT', {
+        type: 'string',
+      });
+    }
+  });
+
   describe('redteam plugin enums', () => {
     it('should not have duplicate entries in plugin enums', () => {
-      const findPluginEnums = (
-        obj: any,
-        path: string = '',
-      ): Array<{ path: string; values: string[] }> => {
-        const results: Array<{ path: string; values: string[] }> = [];
-
-        if (obj && typeof obj === 'object') {
-          // Check if this is an enum array that looks like a plugin list
-          if (Array.isArray(obj.enum) && obj.enum.length > 10 && obj.enum.includes('bias')) {
-            results.push({ path, values: obj.enum });
-          }
-
-          for (const [key, value] of Object.entries(obj)) {
-            if (key !== 'enum') {
-              results.push(...findPluginEnums(value, path ? `${path}.${key}` : key));
-            }
-          }
+      const pluginEnums: Array<{ path: string; values: string[] }> = [];
+      for (const { obj, path } of walkSchema(schema, '', true)) {
+        // Check if this is an enum array that looks like a plugin list
+        if (Array.isArray(obj.enum) && obj.enum.length > 10 && obj.enum.includes('bias')) {
+          pluginEnums.push({ path, values: obj.enum });
         }
-
-        return results;
-      };
-
-      const pluginEnums = findPluginEnums(schema);
+      }
 
       expect(pluginEnums.length).toBeGreaterThan(0);
 
@@ -97,23 +134,12 @@ describe('config-schema.json', () => {
     });
 
     it('should have consistent plugin lists across different locations', () => {
-      const findAllEnums = (obj: any): string[][] => {
-        const results: string[][] = [];
-
-        if (obj && typeof obj === 'object') {
-          if (Array.isArray(obj.enum) && obj.enum.length > 10 && obj.enum.includes('bias')) {
-            results.push(obj.enum);
-          }
-
-          for (const value of Object.values(obj)) {
-            results.push(...findAllEnums(value));
-          }
+      const allEnums: string[][] = [];
+      for (const { obj } of walkSchema(schema)) {
+        if (Array.isArray(obj.enum) && obj.enum.length > 10 && obj.enum.includes('bias')) {
+          allEnums.push(obj.enum);
         }
-
-        return results;
-      };
-
-      const allEnums = findAllEnums(schema);
+      }
 
       // Should find at least 2 (one for string type, one for object id)
       expect(allEnums.length).toBeGreaterThanOrEqual(2);
@@ -127,24 +153,13 @@ describe('config-schema.json', () => {
     });
 
     it('should contain expected plugin entries', () => {
-      const findPluginEnum = (obj: any): string[] | null => {
-        if (obj && typeof obj === 'object') {
-          if (Array.isArray(obj.enum) && obj.enum.includes('bias')) {
-            return obj.enum;
-          }
-
-          for (const value of Object.values(obj)) {
-            const result = findPluginEnum(value);
-            if (result) {
-              return result;
-            }
-          }
+      let pluginEnum: string[] | null = null;
+      for (const { obj } of walkSchema(schema)) {
+        if (Array.isArray(obj.enum) && obj.enum.includes('bias')) {
+          pluginEnum = obj.enum;
+          break;
         }
-
-        return null;
-      };
-
-      const pluginEnum = findPluginEnum(schema);
+      }
       expect(pluginEnum).not.toBeNull();
 
       // Use non-null assertion since we've already checked it's not null
@@ -184,24 +199,46 @@ describe('config-schema.json', () => {
       expect(redteamConfig.properties).toHaveProperty('strategies');
     });
 
+    it('documents only supported external trace backends and their required endpoint', () => {
+      const tracingConfig = resolveRef(
+        schema.definitions?.PromptfooConfigSchema?.properties?.tracing,
+      );
+      const provider = resolveRef(tracingConfig.properties.provider);
+      const providers = provider.oneOf;
+      const tempo = providers.find(
+        (option: { properties: { id: { const: string } } }) =>
+          option.properties.id.const === 'tempo',
+      );
+      const braintrust = providers.find(
+        (option: { properties: { id: { const: string } } }) =>
+          option.properties.id.const === 'braintrust',
+      );
+      const langfuse = providers.find(
+        (option: { properties: { id: { const: string } } }) =>
+          option.properties.id.const === 'langfuse',
+      );
+
+      expect(providers).toHaveLength(3);
+      expect(tempo.required).toEqual(expect.arrayContaining(['id', 'endpoint']));
+      expect(tempo.properties.timeout.exclusiveMinimum).toBe(0);
+      expect(braintrust.required).toEqual(
+        expect.arrayContaining(['id', 'endpoint', 'projectId', 'auth']),
+      );
+      expect(braintrust.properties.auth.required).toContain('token');
+      expect(langfuse.required).toEqual(expect.arrayContaining(['id', 'endpoint', 'auth']));
+      expect(langfuse.properties.auth.required).toEqual(
+        expect.arrayContaining(['username', 'password']),
+      );
+      expect(tracingConfig.properties.queryDelay.minimum).toBe(0);
+    });
+
     it('should validate that plugin patterns are properly escaped', () => {
-      const findPatterns = (obj: any): string[] => {
-        const patterns: string[] = [];
-
-        if (obj && typeof obj === 'object') {
-          if (typeof obj.pattern === 'string') {
-            patterns.push(obj.pattern);
-          }
-
-          for (const value of Object.values(obj)) {
-            patterns.push(...findPatterns(value));
-          }
+      const patterns: string[] = [];
+      for (const { obj } of walkSchema(schema)) {
+        if (typeof obj.pattern === 'string') {
+          patterns.push(obj.pattern);
         }
-
-        return patterns;
-      };
-
-      const patterns = findPatterns(schema);
+      }
 
       const filePatterns = patterns.filter((p) => p.includes('file'));
       expect(filePatterns.length).toBeGreaterThan(0);
@@ -244,6 +281,159 @@ describe('config-schema.json', () => {
       expect(properties).toHaveProperty('redteam');
       expect(properties).toHaveProperty('scenarios');
       expect(properties).toHaveProperty('defaultTest');
+    });
+  });
+
+  describe('runtime input parity', () => {
+    const baseConfig = { prompts: ['hello'], providers: ['echo'] };
+
+    it.each([
+      ['providers', { providers: ['echo'] }, true],
+      ['targets', { targets: ['echo'] }, true],
+      ['both spellings', { providers: ['echo'], targets: ['echo'] }, false],
+    ] as const)('agrees on %s for provider selection', (_name, selection, expected) => {
+      const config = { prompts: ['hello'], ...selection };
+      const validate = ajv.compile(schema);
+
+      expect(UnifiedConfigSchema.safeParse(config).success).toBe(expected);
+      expect(validate(config), JSON.stringify(validate.errors)).toBe(expected);
+    });
+
+    it('leaves provider selection optional for authoring but required for a complete evaluation', () => {
+      const config = { prompts: ['hello'] };
+      const validate = ajv.compile(schema);
+
+      expect(validate(config), JSON.stringify(validate.errors)).toBe(true);
+      expect(UnifiedConfigSchema.safeParse(config).success).toBe(false);
+    });
+
+    it.each([
+      ['defaulted nested lists may be omitted', {}, true],
+      ['boolean tracing settings', { tracing: { enabled: true, maxDepth: 2 } }, true],
+      [
+        'recursive tracing settings',
+        {
+          tracing: {
+            enabled: false,
+            strategies: {
+              fixture: { enabled: true, strategies: { nested: { enabled: false, maxDepth: 2 } } },
+            },
+          },
+        },
+        true,
+      ],
+      ['string tracing settings', { tracing: { enabled: 'yes' } }, false],
+      [
+        'string tracing settings in a recursive override',
+        { tracing: { strategies: { fixture: { enabled: 'yes' } } } },
+        false,
+      ],
+      [
+        'invalid constraints in a recursive override',
+        { tracing: { strategies: { fixture: { maxDepth: 0 } } } },
+        false,
+      ],
+    ] as const)('agrees on %s', (name, redteam, expected) => {
+      const config = {
+        ...baseConfig,
+        redteam:
+          name === 'defaulted nested lists may be omitted'
+            ? redteam
+            : { plugins: [], strategies: [], ...redteam },
+      };
+      const validate = ajv.compile(schema);
+
+      expect(UnifiedConfigSchema.safeParse(config).success).toBe(expected);
+      expect(validate(config), JSON.stringify(validate.errors)).toBe(expected);
+    });
+
+    it.each([
+      ['defaulted top-level tracing settings', { tracing: { otlp: { http: {} } } }],
+      ['scalar environment inputs before normalization', { env: { CUSTOM_RETRIES: 2 } }],
+      ['nullable extensions before normalization', { extensions: null }],
+    ] as const)('accepts %s in both validators', (_name, partialConfig) => {
+      const config = { ...baseConfig, ...partialConfig };
+      const validate = ajv.compile(schema);
+
+      expect(UnifiedConfigSchema.safeParse(config).success).toBe(true);
+      expect(validate(config), JSON.stringify(validate.errors)).toBe(true);
+    });
+  });
+
+  describe('runtime field contract for incomplete drafts', () => {
+    it('allows missing top-level evaluation inputs while preserving nested field validation', () => {
+      const draft = { description: 'Unfinished evaluation' };
+      expect(UnifiedConfigDraftSchema.safeParse(draft).success).toBe(true);
+      expect(UnifiedConfigDraftSchema.safeParse({}).success).toBe(true);
+      expect(UnifiedConfigSchema.safeParse(draft).success).toBe(false);
+      expect(UnifiedConfigDraftSchema.safeParse({ tracing: { otlp: { http: {} } } }).success).toBe(
+        true,
+      );
+
+      const invalid = UnifiedConfigDraftSchema.safeParse({ tracing: { enabled: 'yes' } });
+      expect(invalid.success).toBe(false);
+      if (!invalid.success) {
+        expect(invalid.error.issues[0].path).toEqual(['tracing', 'enabled']);
+      }
+    });
+
+    it('rejects basePath only in web drafts while retaining it in the file and runtime contracts', () => {
+      const config = { prompts: ['hello'], providers: ['echo'], basePath: '/work/config' };
+      expect(UnifiedConfigSchema.safeParse(config).success).toBe(true);
+      expect(ajv.compile(schema)(config)).toBe(true);
+
+      const webDraft = UnifiedConfigDraftSchema.safeParse(config);
+      expect(webDraft.success).toBe(false);
+      if (!webDraft.success) {
+        expect(webDraft.error.issues).toEqual([
+          expect.objectContaining({ path: ['basePath'], message: expect.stringContaining('CLI') }),
+        ]);
+      }
+    });
+
+    it('accepts either provider input but identifies conflicting aliases in a draft', () => {
+      for (const selection of [{ providers: ['echo'] }, { targets: ['echo'] }]) {
+        expect(UnifiedConfigDraftSchema.safeParse(selection).success).toBe(true);
+        expect(UnifiedConfigSchema.safeParse({ prompts: ['hello'], ...selection }).success).toBe(
+          true,
+        );
+      }
+
+      const invalid = UnifiedConfigDraftSchema.safeParse({
+        providers: ['echo'],
+        targets: ['echo'],
+      });
+      expect(invalid.success).toBe(false);
+      if (!invalid.success) {
+        expect(invalid.error.issues).toEqual([
+          expect.objectContaining({
+            path: ['providers'],
+            message: expect.stringContaining('both'),
+          }),
+        ]);
+      }
+    });
+
+    it('normalizes targets for consumers without mutating the authored draft or adding defaults', () => {
+      const draft = {
+        description: 'Authoring draft',
+        targets: ['echo'],
+        customEditorSetting: { retained: true },
+      };
+      const normalized = normalizeConfigDraft(draft);
+
+      expect(normalized).toEqual({
+        description: 'Authoring draft',
+        providers: ['echo'],
+        customEditorSetting: { retained: true },
+      });
+      expect(draft).toHaveProperty('targets', ['echo']);
+      expect(draft).not.toHaveProperty('providers');
+
+      const canonical = { providers: ['echo'] };
+      expect(normalizeConfigDraft(canonical)).toBe(canonical);
+      const partial = { description: 'No provider yet' };
+      expect(normalizeConfigDraft(partial)).toBe(partial);
     });
   });
 
@@ -349,6 +539,24 @@ describe('config-schema.json', () => {
       expect(allTransformFields.length).toBeGreaterThan(0);
       for (const field of allTransformFields) {
         expect(field).toContain('"type":"string"');
+      }
+    });
+  });
+
+  describe('per-test repeat schema', () => {
+    it('accepts positive integers and rejects invalid repeat counts', () => {
+      const validate = ajv.compile(schema);
+      const config = {
+        prompts: ['hello'],
+        providers: ['echo'],
+        tests: [{ options: { repeat: 3 } }],
+      };
+
+      expect(validate(config)).toBe(true);
+
+      for (const repeat of [0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1]) {
+        config.tests[0].options.repeat = repeat;
+        expect(validate(config), `repeat ${repeat} should be invalid`).toBe(false);
       }
     });
   });

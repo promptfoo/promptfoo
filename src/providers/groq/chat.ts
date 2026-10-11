@@ -1,29 +1,43 @@
+import { getEnvString } from '../../envars';
 import { OpenAiChatCompletionProvider } from '../openai/chat';
-import { groqSupportsTemperature, isGroqReasoningModel } from './util';
+import { serializeProvider } from '../serialization';
+import {
+  assertGroqChatServiceTier,
+  getGroqProviderOptions,
+  groqSupportsTemperature,
+  isGroqReasoningModel,
+} from './util';
 
 import type { CallApiContextParams, CallApiOptionsParams } from '../../types/index';
 import type { GroqCompletionOptions, GroqProviderOptions } from './types';
-
-const GROQ_API_BASE_URL = 'https://api.groq.com/openai/v1';
 
 /**
  * Groq Chat Completions API Provider
  *
  * Extends OpenAI Chat Completions provider with Groq-specific configuration.
- * Supports reasoning models (DeepSeek R1, GPT-OSS, Qwen) with temperature control.
+ * Supports reasoning models (GPT-OSS, Qwen) with temperature control.
  *
  * Usage:
- *   groq:llama-3.3-70b-versatile
  *   groq:openai/gpt-oss-120b
- *   groq:qwen/qwen3-32b
+ *   groq:openai/gpt-oss-20b
+ *   groq:qwen/qwen3.6-27b
  */
 export class GroqProvider extends OpenAiChatCompletionProvider {
   protected get apiKey(): string | undefined {
     return this.config?.apiKey;
   }
 
-  protected isReasoningModel(): boolean {
-    return isGroqReasoningModel(this.modelName) || super.isReasoningModel();
+  override getApiKey(): string | undefined {
+    const apiKeyEnvar = this.config.apiKeyEnvar || 'GROQ_API_KEY';
+    return this.config.apiKey || getEnvString(apiKeyEnvar) || this.env?.[apiKeyEnvar];
+  }
+
+  protected isReasoningModel(modelName = this.modelName): boolean {
+    return isGroqReasoningModel(modelName) || super.isReasoningModel(modelName);
+  }
+
+  protected override isReasoningCapabilityModel(modelName: string): boolean {
+    return isGroqReasoningModel(modelName) || super.isReasoningCapabilityModel(modelName);
   }
 
   protected supportsTemperature(): boolean {
@@ -34,15 +48,14 @@ export class GroqProvider extends OpenAiChatCompletionProvider {
     return super.supportsTemperature();
   }
 
+  protected override supportsTemperatureForCapabilityModel(modelName: string): boolean {
+    return groqSupportsTemperature(modelName)
+      ? true
+      : super.supportsTemperatureForCapabilityModel(modelName);
+  }
+
   constructor(modelName: string, providerOptions: GroqProviderOptions) {
-    super(modelName, {
-      ...providerOptions,
-      config: {
-        ...providerOptions.config,
-        apiKeyEnvar: 'GROQ_API_KEY',
-        apiBaseUrl: GROQ_API_BASE_URL,
-      },
-    });
+    super(modelName, getGroqProviderOptions(providerOptions));
   }
 
   override async getOpenAiBody(
@@ -51,6 +64,18 @@ export class GroqProvider extends OpenAiChatCompletionProvider {
     callApiOptions?: CallApiOptionsParams,
   ) {
     const { body, config } = await super.getOpenAiBody(prompt, context, callApiOptions);
+    if (typeof body.model === 'string' && this.isReasoningModel(body.model)) {
+      const maxCompletionTokens =
+        config.passthrough?.max_completion_tokens ??
+        config.max_completion_tokens ??
+        config.passthrough?.max_tokens ??
+        config.max_tokens ??
+        body.max_tokens;
+      if (maxCompletionTokens !== undefined) {
+        body.max_completion_tokens = maxCompletionTokens;
+      }
+      delete body.max_tokens;
+    }
     const groqConfig = this.config as GroqCompletionOptions;
 
     // Add Groq-specific reasoning parameters
@@ -69,6 +94,8 @@ export class GroqProvider extends OpenAiChatCompletionProvider {
       body.search_settings = groqConfig.search_settings;
     }
 
+    assertGroqChatServiceTier(body.service_tier);
+
     return { body, config };
   }
 
@@ -81,13 +108,6 @@ export class GroqProvider extends OpenAiChatCompletionProvider {
   }
 
   toJSON() {
-    return {
-      provider: 'groq',
-      model: this.modelName,
-      config: {
-        ...this.config,
-        ...(this.apiKey && { apiKey: undefined }),
-      },
-    };
+    return serializeProvider(this, 'groq', () => this.apiKey);
   }
 }

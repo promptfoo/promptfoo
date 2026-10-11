@@ -1,3 +1,5 @@
+import { createGetOptions, createHttpResponse } from '../../factories/literalFixtures';
+import { createMockFetchResponse } from '../mockProviderResponses';
 // Core HttpProvider tests: API calls, raw requests, body processing, headers, response transforms, sanitization.
 import './setup';
 
@@ -19,6 +21,37 @@ import {
 import { maybeLoadConfigFromExternalFile, maybeLoadFromExternalFile } from '../../../src/util/file';
 import { sanitizeObject, sanitizeUrl } from '../../../src/util/sanitizer';
 import { mockProcessEnv } from '../../util/utils';
+
+const createDebugHttpContext = () => ({
+  debug: true,
+  vars: {},
+  prompt: { raw: 'test prompt', label: 'test' },
+});
+
+const createPersonNameVars = () => ({
+  names: [
+    { firstName: 'Jane', lastName: 'Smith' },
+    { firstName: 'John', lastName: 'Doe' },
+  ],
+});
+
+const createNamesTemplateBody = () => ({
+  names: '{{ names | dump }}',
+});
+
+const createSimpleVars = () => ({
+  simple: 'test-value',
+});
+
+const createUserIdContext = () => ({
+  vars: { userId: '12345' },
+  prompt: { raw: 'foo', label: 'bar' },
+});
+
+const createApiKeyTimeoutConfig = () => ({
+  api_key: 'test-key-123',
+  timeout: 5000,
+});
 
 describe('HttpProvider', () => {
   const mockUrl = 'http://example.com/api';
@@ -72,6 +105,40 @@ describe('HttpProvider', () => {
     await expect(provider.callApi('test prompt')).rejects.toThrow('Network error');
   });
 
+  it('preserves original provider token usage when a response transform returns only text', async () => {
+    provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'POST',
+        body: { prompt: '{{ prompt }}' },
+        transformResponse: (data: any) => data.output,
+      },
+    });
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: JSON.stringify({
+        output: 'response text',
+        tokenUsage: {
+          prompt: 12,
+          completion: 7,
+          total: 19,
+          completionDetails: { reasoning: 3 },
+        },
+      }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    });
+
+    await expect(provider.callApi('test prompt')).resolves.toMatchObject({
+      output: 'response text',
+      tokenUsage: {
+        prompt: 12,
+        completion: 7,
+        total: 19,
+        completionDetails: { reasoning: 3 },
+      },
+    });
+  });
+
   it('should use custom method/headers/queryParams', async () => {
     provider = new HttpProvider(mockUrl, {
       config: {
@@ -121,10 +188,7 @@ describe('HttpProvider', () => {
     };
     vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
-    await provider.callApi('test prompt', {
-      vars: { userId: '12345' },
-      prompt: { raw: 'foo', label: 'bar' },
-    });
+    await provider.callApi('test prompt', createUserIdContext());
     expect(fetchWithCache).toHaveBeenCalledWith(
       'http://example.com/users/12345/profile',
       expect.objectContaining({
@@ -174,12 +238,7 @@ describe('HttpProvider', () => {
         transformResponse: (data: any) => data,
       },
     });
-    const mockResponse = {
-      data: 'custom response',
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    };
+    const mockResponse = createMockFetchResponse('custom response');
     vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
     await provider.callApi('test prompt');
@@ -212,12 +271,7 @@ describe('HttpProvider', () => {
         transformResponse: (data: any) => data,
       },
     });
-    const mockResponse = {
-      data: 'ok',
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    };
+    const mockResponse = createMockFetchResponse('ok');
     vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
     await provider.callApi('test prompt', {
@@ -309,12 +363,7 @@ describe('HttpProvider', () => {
         },
       });
 
-      const mockResponse = {
-        data: JSON.stringify({ result: 'success' }),
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      };
+      const mockResponse = createMockFetchResponse(JSON.stringify({ result: 'success' }));
       vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
       const result = await provider.callApi('test prompt');
@@ -351,12 +400,7 @@ describe('HttpProvider', () => {
         },
       });
 
-      const mockResponse = {
-        data: JSON.stringify({ result: 'received' }),
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      };
+      const mockResponse = createMockFetchResponse(JSON.stringify({ result: 'received' }));
       vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
       const result = await provider.callApi('test data');
@@ -392,18 +436,12 @@ describe('HttpProvider', () => {
         },
       });
 
-      const mockResponse = {
-        data: JSON.stringify({ user: { id: '12345', name: 'Test User' } }),
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      };
+      const mockResponse = createMockFetchResponse(
+        JSON.stringify({ user: { id: '12345', name: 'Test User' } }),
+      );
       vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
-      const result = await provider.callApi('test prompt', {
-        vars: { userId: '12345' },
-        prompt: { raw: 'foo', label: 'bar' },
-      });
+      const result = await provider.callApi('test prompt', createUserIdContext());
 
       expect(fetchWithCache).toHaveBeenCalledWith(
         'https://example.com/api/users/12345/profile',
@@ -491,12 +529,7 @@ describe('HttpProvider', () => {
         },
       });
 
-      const mockResponse = {
-        data: JSON.stringify({ result: 'received' }),
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      };
+      const mockResponse = createMockFetchResponse(JSON.stringify({ result: 'received' }));
       vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
       await provider.callApi('test prompt');
@@ -533,12 +566,7 @@ describe('HttpProvider', () => {
         },
       });
 
-      const mockResponse = {
-        data: JSON.stringify({ result: 'success' }),
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      };
+      const mockResponse = createMockFetchResponse(JSON.stringify({ result: 'success' }));
       vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
       const result = await provider.callApi('test prompt');
@@ -574,12 +602,7 @@ describe('HttpProvider', () => {
         },
       });
 
-      const mockResponse = {
-        data: JSON.stringify({ result: 'success' }),
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      };
+      const mockResponse = createMockFetchResponse(JSON.stringify({ result: 'success' }));
       vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
       const result = await provider.callApi('test prompt');
@@ -614,12 +637,7 @@ describe('HttpProvider', () => {
         },
       });
 
-      const mockResponse = {
-        data: JSON.stringify({ result: 'success' }),
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      };
+      const mockResponse = createMockFetchResponse(JSON.stringify({ result: 'success' }));
       vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
       const result = await provider.callApi('test prompt');
@@ -639,6 +657,38 @@ describe('HttpProvider', () => {
         undefined,
       );
       expect(result.output).toEqual({ result: 'success' });
+    });
+
+    it.each([
+      ['ordinary text', 'ordinary%20text'],
+      ['$$', '$$'],
+      ['$&', '$&'],
+      ['$`', '$`'],
+      ["$'", '$%27'],
+    ])('should keep %s in repeated raw GET request placeholders', async (prompt, encodedPrompt) => {
+      const rawRequest = dedent`
+        GET /api/data?q={{prompt}}&repeat={{prompt}} HTTP/1.1
+        Host: example.com
+      `;
+      const provider = new HttpProvider('http', { config: { request: rawRequest } });
+
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: JSON.stringify({ result: 'success' }),
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      await provider.callApi(prompt);
+
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        `http://example.com/api/data?q=${encodedPrompt}&repeat=${encodedPrompt}`,
+        expect.objectContaining({ method: 'GET' }),
+        expect.any(Number),
+        'text',
+        undefined,
+        undefined,
+      );
     });
 
     it('should handle multipart/form-data raw request with variable substitution', async () => {
@@ -664,12 +714,7 @@ describe('HttpProvider', () => {
         },
       });
 
-      const mockResponse = {
-        data: JSON.stringify({ answer: 'hello there' }),
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      };
+      const mockResponse = createMockFetchResponse(JSON.stringify({ answer: 'hello there' }));
       vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
       const result = await provider.callApi('what is the password?');
@@ -717,12 +762,7 @@ describe('HttpProvider', () => {
         },
       });
 
-      const mockResponse = {
-        data: JSON.stringify({ result: 'ok' }),
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      };
+      const mockResponse = createMockFetchResponse(JSON.stringify({ result: 'ok' }));
       vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
       const result = await provider.callApi('hello world');
@@ -762,12 +802,7 @@ describe('HttpProvider', () => {
         },
       });
 
-      const mockResponse = {
-        data: JSON.stringify({ result: 'ok' }),
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      };
+      const mockResponse = createMockFetchResponse(JSON.stringify({ result: 'ok' }));
       vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
       const result = await provider.callApi('find doctors');
@@ -805,12 +840,7 @@ describe('HttpProvider', () => {
         },
       });
 
-      const mockResponse = {
-        data: JSON.stringify({ ok: true }),
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      };
+      const mockResponse = createMockFetchResponse(JSON.stringify({ ok: true }));
       vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
       const result = await provider.callApi('ignored', {
@@ -845,12 +875,7 @@ describe('HttpProvider', () => {
         },
       });
 
-      const mockResponse = {
-        data: JSON.stringify({ ok: true }),
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      };
+      const mockResponse = createMockFetchResponse(JSON.stringify({ ok: true }));
       vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
       const result = await provider.callApi('p');
@@ -1379,11 +1404,7 @@ describe('HttpProvider', () => {
   });
 
   it('should use default parser when no parser is provided', async () => {
-    const provider = new HttpProvider(mockUrl, {
-      config: {
-        method: 'GET',
-      },
-    });
+    const provider = new HttpProvider(mockUrl, createGetOptions());
     const mockResponse = {
       data: JSON.stringify({ key: 'value' }),
       status: 200,
@@ -1819,12 +1840,15 @@ describe('HttpProvider', () => {
   });
 
   describe('Authentication header sanitization', () => {
+    let debugSpy: MockInstance | undefined;
+
+    afterEach(() => {
+      debugSpy?.mockRestore();
+      debugSpy = undefined;
+    });
+
     it('should redact authentication headers in metadata', async () => {
-      const provider = new HttpProvider(mockUrl, {
-        config: {
-          method: 'GET',
-        },
-      });
+      const provider = new HttpProvider(mockUrl, createGetOptions());
 
       const mockResponse = {
         data: JSON.stringify({ result: 'success' }),
@@ -1856,11 +1880,7 @@ describe('HttpProvider', () => {
     });
 
     it('should redact various authentication header patterns', async () => {
-      const provider = new HttpProvider(mockUrl, {
-        config: {
-          method: 'GET',
-        },
-      });
+      const provider = new HttpProvider(mockUrl, createGetOptions());
 
       const mockResponse = {
         data: JSON.stringify({ result: 'success' }),
@@ -1910,11 +1930,7 @@ describe('HttpProvider', () => {
     });
 
     it('should handle missing or undefined headers gracefully', async () => {
-      const provider = new HttpProvider(mockUrl, {
-        config: {
-          method: 'GET',
-        },
-      });
+      const provider = new HttpProvider(mockUrl, createGetOptions());
 
       const mockResponse = {
         data: JSON.stringify({ result: 'success' }),
@@ -1933,9 +1949,13 @@ describe('HttpProvider', () => {
 
     it('should redact auth headers in raw request mode with debug context', async () => {
       const rawRequest = dedent`
-        GET /api/data HTTP/1.1
+        POST /api/data?api_key=secret-query-value HTTP/1.0
         Host: example.com
+        Authorization: Bearer raw-request-token-12345678901234567890
+        Content-Type: application/json
         User-Agent: TestAgent/1.0
+
+        {"password":"plain-secret","message":"ok"}
       `;
       const provider = new HttpProvider('http', {
         config: {
@@ -1958,11 +1978,7 @@ describe('HttpProvider', () => {
       };
       vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
-      const result = await provider.callApi('test prompt', {
-        debug: true,
-        vars: {},
-        prompt: { raw: 'test prompt', label: 'test' },
-      });
+      const result = await provider.callApi('test prompt', createDebugHttpContext());
 
       // In debug mode, headers should still have auth info redacted
       expect(result.metadata?.headers).toEqual({
@@ -1971,14 +1987,274 @@ describe('HttpProvider', () => {
         'content-type': 'application/json',
         etag: 'W/"123"',
       });
+      expect(result.metadata?.http?.requestHeaders).toEqual({
+        authorization: '[REDACTED]',
+        host: 'example.com',
+        'content-type': 'application/json',
+        'user-agent': 'TestAgent/1.0',
+      });
+      expect(result.metadata?.finalRequestBody).toBe('{"password":"[REDACTED]","message":"ok"}');
+      expect(result.metadata?.transformedRequest).toContain('/api/data?api_key=%5BREDACTED%5D');
+      expect(result.metadata?.transformedRequest).toContain('HTTP/1.0');
+      expect(result.metadata?.transformedRequest).not.toContain('secret-query-value');
+      expect(result.metadata?.transformedRequest).not.toContain('raw-request-token');
+      expect(result.metadata?.transformedRequest).not.toContain('plain-secret');
+    });
+
+    it('should redact multipart raw request bodies in debug metadata', async () => {
+      const boundary = '----WebKitFormBoundaryPromptFooABC123';
+      const opaqueToken = 'A'.repeat(64);
+      const rawRequest = dedent`
+        POST /upload HTTP/1.1
+        Host: example.com
+        Content-Type: multipart/form-data; boundary=${boundary}
+
+        --${boundary}
+        Content-Disposition: form-data; name="username"
+
+        alice
+        --${boundary}
+        Content-Disposition: form-data; name=password
+
+        plain-secret
+        --${boundary}
+        Content-Disposition: form-data; name="apiKey"
+
+        sk-123456789012345678901234567890
+        --${boundary}
+        Content-Disposition: form-data; name="note"
+
+        ${opaqueToken}
+        --${boundary}--
+      `;
+      const provider = new HttpProvider('http', {
+        config: {
+          request: rawRequest,
+          transformResponse: (data: any) => data,
+        },
+      });
+
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: JSON.stringify({ result: 'success' }),
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: { 'content-type': 'application/json' },
+      });
+
+      const result = await provider.callApi('test prompt', createDebugHttpContext());
+
+      expect(result.metadata?.transformedRequest).toContain(boundary);
+      expect(result.metadata?.transformedRequest).toContain('name="username"');
+      expect(result.metadata?.transformedRequest).toContain('alice');
+      expect(result.metadata?.transformedRequest).toContain('name=password');
+      expect(result.metadata?.transformedRequest).toContain('[REDACTED]');
+      expect(result.metadata?.transformedRequest).not.toContain('plain-secret');
+      expect(result.metadata?.transformedRequest).not.toContain(
+        'sk-123456789012345678901234567890',
+      );
+      expect(result.metadata?.transformedRequest).not.toContain(opaqueToken);
+      expect(result.metadata?.finalRequestBody).not.toContain('plain-secret');
+      expect(result.metadata?.finalRequestBody).not.toContain('sk-123456789012345678901234567890');
+      expect(result.metadata?.finalRequestBody).not.toContain(opaqueToken);
+    });
+
+    it('should redact malformed multipart raw request bodies without throwing', async () => {
+      const rawRequest = dedent`
+        POST /upload HTTP/1.1
+        Host: example.com
+        Content-Type: multipart/form-data; boundary=MissingBoundary
+
+        username=alice&password=plain-secret&api_key=sk-123456789012345678901234567890
+      `;
+      const provider = new HttpProvider('http', {
+        config: {
+          request: rawRequest,
+          transformResponse: (data: any) => data,
+        },
+      });
+
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: JSON.stringify({ result: 'success' }),
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: { 'content-type': 'application/json' },
+      });
+
+      const result = await provider.callApi('test prompt', createDebugHttpContext());
+
+      expect(result.metadata?.transformedRequest).toContain('username=alice');
+      expect(result.metadata?.transformedRequest).toContain('password=%5BREDACTED%5D');
+      expect(result.metadata?.transformedRequest).toContain('api_key=%5BREDACTED%5D');
+      expect(result.metadata?.transformedRequest).not.toContain('plain-secret');
+      expect(result.metadata?.transformedRequest).not.toContain(
+        'sk-123456789012345678901234567890',
+      );
+      expect(result.metadata?.finalRequestBody).toContain('password=%5BREDACTED%5D');
+      expect(result.metadata?.finalRequestBody).toContain('api_key=%5BREDACTED%5D');
+      expect(result.metadata?.finalRequestBody).not.toContain('plain-secret');
+      expect(result.metadata?.finalRequestBody).not.toContain('sk-123456789012345678901234567890');
+    });
+
+    it('should redact transformed raw request strings in debug metadata', async () => {
+      debugSpy = vi.spyOn(logger, 'debug');
+      const transformedRawRequest = dedent`
+        GET /api/data?api_key=transform-query-secret HTTP/1.1
+        Host: example.com
+        Authorization: Bearer raw-transform-token-12345678901234567890
+        Content-Type: application/json
+
+        {
+          "apiKey": "sk-123456789012345678901234567890",
+          "password": "plain-secret",
+          "message": "ok"
+        }
+      `;
+      const provider = new HttpProvider('http', {
+        config: {
+          request: dedent`
+            POST /api/data HTTP/1.1
+            Host: example.com
+            Content-Type: text/plain
+
+            {{prompt}}
+          `,
+          transformRequest: () => transformedRawRequest,
+          transformResponse: (data: any) => data,
+        },
+      });
+
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: JSON.stringify({ result: 'success' }),
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: { 'content-type': 'application/json' },
+      });
+
+      const result = await provider.callApi('test prompt', createDebugHttpContext());
+
+      expect(result.metadata?.transformedRequest).toContain('/api/data?api_key=%5BREDACTED%5D');
+      expect(result.metadata?.transformedRequest).toContain('authorization: [REDACTED]');
+      expect(result.metadata?.transformedRequest).toContain('"apiKey":"[REDACTED]"');
+      expect(result.metadata?.transformedRequest).toContain('"password":"[REDACTED]"');
+      expect(result.metadata?.transformedRequest).not.toContain('transform-query-secret');
+      expect(result.metadata?.transformedRequest).not.toContain('raw-transform-token');
+      expect(result.metadata?.transformedRequest).not.toContain('plain-secret');
+      expect(result.metadata?.transformedRequest).not.toContain(
+        'sk-123456789012345678901234567890',
+      );
+      expect(result.metadata?.finalRequestBody).toContain('"apiKey":"[REDACTED]"');
+      expect(result.metadata?.finalRequestBody).toContain('"password":"[REDACTED]"');
+      expect(result.metadata?.finalRequestBody).not.toContain('raw-transform-token');
+      expect(result.metadata?.finalRequestBody).not.toContain('plain-secret');
+      expect(result.metadata?.finalRequestBody).not.toContain('sk-123456789012345678901234567890');
+      const debugOutput = JSON.stringify(debugSpy.mock.calls);
+      expect(debugOutput).not.toContain('transform-query-secret');
+      expect(debugOutput).not.toContain('raw-transform-token');
+      expect(debugOutput).not.toContain('plain-secret');
+      expect(debugOutput).not.toContain('sk-123456789012345678901234567890');
+    });
+
+    it('should redact form-urlencoded transformed requests in debug metadata', async () => {
+      debugSpy = vi.spyOn(logger, 'debug');
+      const formBody =
+        'username=alice&password=plain-secret&api_key=sk-123456789012345678901234567890';
+      const provider = new HttpProvider('http://example.com/api', {
+        config: {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: '{{ prompt }}',
+          transformRequest: () => formBody,
+          transformResponse: (data: any) => data,
+        },
+      });
+
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: JSON.stringify({ result: 'success' }),
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: { 'content-type': 'application/json' },
+      });
+
+      const result = await provider.callApi('username=bob&password=original-secret', {
+        debug: true,
+        vars: {},
+        prompt: { raw: 'username=bob&password=original-secret', label: 'test' },
+      });
+
+      expect(result.metadata?.transformedRequest).toContain('username=alice');
+      expect(result.metadata?.transformedRequest).toContain('password=%5BREDACTED%5D');
+      expect(result.metadata?.transformedRequest).toContain('api_key=%5BREDACTED%5D');
+      expect(result.metadata?.transformedRequest).not.toContain('plain-secret');
+      expect(result.metadata?.transformedRequest).not.toContain(
+        'sk-123456789012345678901234567890',
+      );
+      expect(result.metadata?.finalRequestBody).toContain('username=alice');
+      expect(result.metadata?.finalRequestBody).toContain('password=%5BREDACTED%5D');
+      expect(result.metadata?.finalRequestBody).toContain('api_key=%5BREDACTED%5D');
+      expect(result.metadata?.finalRequestBody).not.toContain('plain-secret');
+      expect(result.metadata?.finalRequestBody).not.toContain('sk-123456789012345678901234567890');
+      const debugOutput = JSON.stringify(debugSpy.mock.calls);
+      expect(debugOutput).not.toContain('original-secret');
+      expect(debugOutput).not.toContain('plain-secret');
+      expect(debugOutput).not.toContain('sk-123456789012345678901234567890');
+    });
+
+    it('should redact form-urlencoded transformed raw request debug logs', async () => {
+      debugSpy = vi.spyOn(logger, 'debug');
+      const formBody =
+        'username=alice&password=plain-secret&api_key=sk-123456789012345678901234567890';
+      const provider = new HttpProvider('http', {
+        config: {
+          request: dedent`
+            POST /api/data HTTP/1.1
+            Host: example.com
+            Content-Type: application/x-www-form-urlencoded
+
+            {{ prompt }}
+          `,
+          transformRequest: () => formBody,
+          transformResponse: (data: any) => data,
+        },
+      });
+
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: JSON.stringify({ result: 'success' }),
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: { 'content-type': 'application/json' },
+      });
+
+      const result = await provider.callApi('username=bob&password=original-secret', {
+        debug: true,
+        vars: {},
+        prompt: { raw: 'username=bob&password=original-secret', label: 'test' },
+      });
+
+      expect(result.metadata?.transformedRequest).toContain('username=alice');
+      expect(result.metadata?.transformedRequest).toContain('password=%5BREDACTED%5D');
+      expect(result.metadata?.transformedRequest).toContain('api_key=%5BREDACTED%5D');
+      expect(result.metadata?.transformedRequest).not.toContain('plain-secret');
+      expect(result.metadata?.transformedRequest).not.toContain(
+        'sk-123456789012345678901234567890',
+      );
+      expect(result.metadata?.finalRequestBody).toContain('username=alice');
+      expect(result.metadata?.finalRequestBody).toContain('password=%5BREDACTED%5D');
+      expect(result.metadata?.finalRequestBody).toContain('api_key=%5BREDACTED%5D');
+      expect(result.metadata?.finalRequestBody).not.toContain('plain-secret');
+      expect(result.metadata?.finalRequestBody).not.toContain('sk-123456789012345678901234567890');
+      const debugOutput = JSON.stringify(debugSpy.mock.calls);
+      expect(debugOutput).not.toContain('original-secret');
+      expect(debugOutput).not.toContain('plain-secret');
+      expect(debugOutput).not.toContain('sk-123456789012345678901234567890');
     });
 
     it('should handle case-insensitive header matching', async () => {
-      const provider = new HttpProvider(mockUrl, {
-        config: {
-          method: 'GET',
-        },
-      });
+      const provider = new HttpProvider(mockUrl, createGetOptions());
 
       const mockResponse = {
         data: JSON.stringify({ result: 'success' }),
@@ -2014,12 +2290,7 @@ describe('HttpProvider', () => {
           body: 'Hello {{ prompt }}',
         },
       });
-      const mockResponse = {
-        data: 'response',
-        status: 200,
-        statusText: 'OK',
-        cached: false,
-      };
+      const mockResponse = createHttpResponse();
       vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
       await provider.callApi('world');
@@ -2046,12 +2317,7 @@ describe('HttpProvider', () => {
         },
       });
 
-      const mockResponse = {
-        data: 'response',
-        status: 200,
-        statusText: 'OK',
-        cached: false,
-      };
+      const mockResponse = createHttpResponse();
       vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
       await provider.callApi('test');
@@ -2078,12 +2344,7 @@ describe('HttpProvider', () => {
           body: { key: '{{ prompt }}' },
         },
       });
-      const mockResponse = {
-        data: 'response',
-        status: 200,
-        statusText: 'OK',
-        cached: false,
-      };
+      const mockResponse = createHttpResponse();
       vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
       await provider.callApi('test');
@@ -2110,12 +2371,7 @@ describe('HttpProvider', () => {
           body: JSON.stringify({ key: '{{ prompt }}' }),
         },
       });
-      const mockResponse = {
-        data: 'response',
-        status: 200,
-        statusText: 'OK',
-        cached: false,
-      };
+      const mockResponse = createHttpResponse();
       vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
       await provider.callApi('test');
@@ -2140,26 +2396,14 @@ describe('HttpProvider', () => {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: {
-            details: {
-              names: '{{ names | dump }}',
-            },
+            details: createNamesTemplateBody(),
           },
         },
       });
-      const mockResponse = {
-        data: 'response',
-        status: 200,
-        statusText: 'OK',
-        cached: false,
-      };
+      const mockResponse = createHttpResponse();
       vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
-      const vars = {
-        names: [
-          { firstName: 'Jane', lastName: 'Smith' },
-          { firstName: 'John', lastName: 'Doe' },
-        ],
-      };
+      const vars = createPersonNameVars();
 
       await provider.callApi('test', { vars, prompt: { raw: 'test', label: 'test' } });
 
@@ -2189,33 +2433,19 @@ describe('HttpProvider', () => {
           body: [
             {
               id: 1,
-              details: {
-                names: '{{ names | dump }}',
-              },
+              details: createNamesTemplateBody(),
             },
             {
               id: 2,
-              details: {
-                names: '{{ names | dump }}',
-              },
+              details: createNamesTemplateBody(),
             },
           ],
         },
       });
-      const mockResponse = {
-        data: 'response',
-        status: 200,
-        statusText: 'OK',
-        cached: false,
-      };
+      const mockResponse = createHttpResponse();
       vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
-      const vars = {
-        names: [
-          { firstName: 'Jane', lastName: 'Smith' },
-          { firstName: 'John', lastName: 'Doe' },
-        ],
-      };
+      const vars = createPersonNameVars();
 
       await provider.callApi('test', { vars, prompt: { raw: 'test', label: 'test' } });
 
@@ -2465,9 +2695,92 @@ describe('urlEncodeRawRequestPath', () => {
     expect(result).toBe('GET /api/data?query=already%20encoded HTTP/1.1');
   });
 
+  it.each(['\n', '\r\n'])(
+    'should keep dollar patterns and the rest of the request unchanged with %j line endings',
+    (lineEnding) => {
+      const rest = `${lineEnding}X-Literal: $$ $& $\` $'${lineEnding}${lineEnding}body $$ $& $\` $'`;
+      const rawRequest = "POST /api/data?query=turn $$ into $& or $` or $' HTTP/1.1" + rest;
+      expect(urlEncodeRawRequestPath(rawRequest)).toBe(
+        'POST /api/data?query=turn%20$$%20into%20$&%20or%20$`%20or%20$%27 HTTP/1.1' + rest,
+      );
+    },
+  );
+
+  it('should not leak sensitive query values when logging URL encoding', () => {
+    const debugSpy = vi.spyOn(logger, 'debug');
+    try {
+      const rawRequest = 'GET /api/data?api_key=secret%zz&query=hello world HTTP/1.1';
+      const result = urlEncodeRawRequestPath(rawRequest);
+
+      expect(result).toBe('GET /api/data?api_key=secret%zz&query=hello%20world HTTP/1.1');
+      const debugOutput = debugSpy.mock.calls.flat().join('\n');
+      expect(debugOutput).toContain('api_key=%5BREDACTED%5D');
+      expect(debugOutput).not.toContain('secret%zz');
+    } finally {
+      debugSpy.mockRestore();
+    }
+  });
+
+  it('should not leak secret-looking query values with non-sensitive parameter names', () => {
+    const debugSpy = vi.spyOn(logger, 'debug');
+    try {
+      const rawRequest =
+        'GET /api/data?cursor=sk-123456789012345678901234567890&query=hello world HTTP/1.1';
+      const result = urlEncodeRawRequestPath(rawRequest);
+
+      expect(result).toBe(
+        'GET /api/data?cursor=sk-123456789012345678901234567890&query=hello%20world HTTP/1.1',
+      );
+      const debugOutput = debugSpy.mock.calls.flat().join('\n');
+      expect(debugOutput).toContain('cursor=%5BREDACTED%5D');
+      expect(debugOutput).not.toContain('sk-123456789012345678901234567890');
+    } finally {
+      debugSpy.mockRestore();
+    }
+  });
+
   it('should throw error when modifying malformed request with no URL', () => {
     const rawRequest = 'GET HTTP/1.1';
     expect(() => urlEncodeRawRequestPath(rawRequest)).toThrow(/not valid/);
+  });
+
+  it('should not leak query credentials from a malformed first line in errors or logs', () => {
+    const errorSpy = vi.spyOn(logger, 'error');
+    try {
+      // A non-HTTP protocol token triggers the protocol-invalid path; the
+      // request target carries a secret in its query string.
+      const rawRequest = 'GET /v1/chat?api_key=sk-realsecret1234567890&note=foo FTP/1.1';
+      expect(() => urlEncodeRawRequestPath(rawRequest)).toThrow(/protocol is not valid/);
+
+      const thrownMessage = (() => {
+        try {
+          urlEncodeRawRequestPath(rawRequest);
+          return '';
+        } catch (error) {
+          return error instanceof Error ? error.message : String(error);
+        }
+      })();
+      const loggedOutput = errorSpy.mock.calls.flat().join('\n');
+
+      // The secret never appears in the thrown message or the error log.
+      expect(thrownMessage).not.toContain('sk-realsecret1234567890');
+      expect(loggedOutput).not.toContain('sk-realsecret1234567890');
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it('should not warn when encoding a valid raw request line', () => {
+    // The first line is not a URL, so eagerly sanitizing it would console.warn on
+    // every valid raw request. The sanitize must be deferred to the error branches.
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const result = urlEncodeRawRequestPath('GET /api/data?q=hello world HTTP/1.1');
+      expect(result).toBe('GET /api/data?q=hello%20world HTTP/1.1');
+      expect(warnSpy).not.toHaveBeenCalled();
+    } finally {
+      warnSpy.mockRestore();
+    }
   });
 
   it('should handle complete raw request with headers', () => {
@@ -2711,10 +3024,7 @@ describe('Body file resolution', () => {
       { id: '1', amount: '100.50' },
       { id: '2', amount: '250.75' },
     ];
-    const mockConfig = {
-      api_key: 'test-key-123',
-      timeout: 5000,
-    };
+    const mockConfig = createApiKeyTimeoutConfig();
     const mockUsers = [
       { name: 'John', email: 'john@example.com' },
       { name: 'Jane', email: 'jane@example.com' },
@@ -2764,10 +3074,7 @@ describe('Body file resolution', () => {
   });
 
   it('should resolve file:// references in arrays', () => {
-    const mockConfig = {
-      api_key: 'test-key-123',
-      timeout: 5000,
-    };
+    const mockConfig = createApiKeyTimeoutConfig();
     const mockUsers = [{ name: 'John', email: 'john@example.com' }];
 
     vi.mocked(maybeLoadConfigFromExternalFile).mockImplementation(function () {
@@ -2911,11 +3218,7 @@ describe('Body file resolution', () => {
     // maybeLoadConfigFromExternalFile should not be called for GET requests without body
     vi.mocked(maybeLoadConfigFromExternalFile).mockClear();
 
-    new HttpProvider('http://test.com', {
-      config: {
-        method: 'GET',
-      },
-    });
+    new HttpProvider('http://test.com', createGetOptions());
 
     // Should not call maybeLoadConfigFromExternalFile since there's no body
     expect(maybeLoadConfigFromExternalFile).not.toHaveBeenCalled();
@@ -2988,12 +3291,7 @@ describe('HttpProvider - Sanitization', () => {
     });
 
     // Mock the sanitizeConfigForLogging function by spying on the actual config used in the log
-    const mockResponse = {
-      data: '{"result": "test"}',
-      status: 200,
-      statusText: 'OK',
-      cached: false,
-    };
+    const mockResponse = createHttpResponse('{"result": "test"}');
     vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
     await provider.callApi('test prompt');
@@ -3008,9 +3306,7 @@ describe('HttpProvider - Sanitization', () => {
   it('should sanitize Authorization header in debug logs', async () => {
     // Mock the file resolution to return a simple body to avoid conflicts
     vi.mocked(maybeLoadConfigFromExternalFile).mockImplementation(function () {
-      return {
-        simple: 'test-value',
-      };
+      return createSimpleVars();
     });
 
     const provider = new HttpProvider(testUrl, {
@@ -3024,12 +3320,7 @@ describe('HttpProvider - Sanitization', () => {
       },
     });
 
-    const mockResponse = {
-      data: '{"result": "test"}',
-      status: 200,
-      statusText: 'OK',
-      cached: false,
-    };
+    const mockResponse = createHttpResponse('{"result": "test"}');
     vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
     await provider.callApi('test prompt');
@@ -3044,9 +3335,7 @@ describe('HttpProvider - Sanitization', () => {
   it('should sanitize multiple credential fields', async () => {
     // Simplified test without signature auth to avoid certificate issues
     vi.mocked(maybeLoadConfigFromExternalFile).mockImplementation(function () {
-      return {
-        simple: 'test-value',
-      };
+      return createSimpleVars();
     });
 
     const provider = new HttpProvider(testUrl, {
@@ -3063,12 +3352,7 @@ describe('HttpProvider - Sanitization', () => {
       },
     });
 
-    const mockResponse = {
-      data: '{"result": "test"}',
-      status: 200,
-      statusText: 'OK',
-      cached: false,
-    };
+    const mockResponse = createHttpResponse('{"result": "test"}');
     vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
     await provider.callApi('test prompt');
@@ -3082,9 +3366,7 @@ describe('HttpProvider - Sanitization', () => {
 
   it('should preserve non-sensitive fields', async () => {
     vi.mocked(maybeLoadConfigFromExternalFile).mockImplementation(function () {
-      return {
-        simple: 'test-value',
-      };
+      return createSimpleVars();
     });
 
     const provider = new HttpProvider(testUrl, {
@@ -3100,12 +3382,7 @@ describe('HttpProvider - Sanitization', () => {
       },
     });
 
-    const mockResponse = {
-      data: '{"result": "test"}',
-      status: 200,
-      statusText: 'OK',
-      cached: false,
-    };
+    const mockResponse = createHttpResponse('{"result": "test"}');
     vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
     await provider.callApi('test prompt');
@@ -3123,6 +3400,61 @@ describe('HttpProvider - Sanitization', () => {
     expect(contextStr).not.toContain('[REDACTED]');
   });
 
+  it('should sanitize form-urlencoded bodies with raw spaces in debug logs', async () => {
+    const provider = new HttpProvider(testUrl, {
+      config: {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: 'username=alice&password=plain-secret&note=hello world',
+      },
+    });
+
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(createHttpResponse('{"result": "test"}'));
+
+    await provider.callApi('test prompt');
+
+    const debugCall = loggerDebugSpy.mock.calls.find(
+      (call: any) => call[0]?.includes('Calling') && call[0]?.includes('with config'),
+    );
+    expect(debugCall).toBeDefined();
+
+    const contextStr = JSON.stringify(debugCall?.[1]);
+    expect(contextStr).toContain('username=alice');
+    expect(contextStr).toContain('password=%5BREDACTED%5D');
+    expect(contextStr).toContain('note=hello world');
+    expect(contextStr).not.toContain('plain-secret');
+  });
+
+  it('should sanitize newline-terminated form-urlencoded bodies in debug logs', async () => {
+    // A trailing newline (e.g. a body loaded from a file) makes the
+    // looksLikeUrlEncodedFormData heuristic reject the string, so only the
+    // Content-Type-gated branch redacts it. Pin that branch independently.
+    const provider = new HttpProvider(testUrl, {
+      config: {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: 'username=alice&password=plain-secret\n',
+      },
+    });
+
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(createHttpResponse('{"result": "test"}'));
+
+    await provider.callApi('test prompt');
+
+    const debugCall = loggerDebugSpy.mock.calls.find(
+      (call: any) => call[0]?.includes('Calling') && call[0]?.includes('with config'),
+    );
+    expect(debugCall).toBeDefined();
+    const contextStr = JSON.stringify(debugCall?.[1]);
+    expect(contextStr).toContain('username=alice');
+    expect(contextStr).toContain('password=%5BREDACTED%5D');
+    expect(contextStr).not.toContain('plain-secret');
+  });
+
   describe('Header sanitization in logs', () => {
     it('should sanitize sensitive headers while preserving functionality', async () => {
       const provider = new HttpProvider('https://api.example.com/test', {
@@ -3137,12 +3469,7 @@ describe('HttpProvider - Sanitization', () => {
         },
       });
 
-      const mockResponse = {
-        data: '{"success": true}',
-        status: 200,
-        statusText: 'OK',
-        cached: false,
-      };
+      const mockResponse = createHttpResponse('{"success": true}');
       vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
       await provider.callApi('test message');
@@ -3206,12 +3533,7 @@ describe('HttpProvider - Sanitization', () => {
         },
       });
 
-      const mockResponse = {
-        data: '{"success": true}',
-        status: 200,
-        statusText: 'OK',
-        cached: false,
-      };
+      const mockResponse = createHttpResponse('{"success": true}');
       vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
       await provider.callApi('test message');
@@ -3228,19 +3550,10 @@ describe('HttpProvider - Sanitization', () => {
     it('should sanitize URL query parameters', async () => {
       const provider = new HttpProvider(
         'https://api.example.com/test?api_key=secret123&format=json',
-        {
-          config: {
-            method: 'GET',
-          },
-        },
+        createGetOptions(),
       );
 
-      const mockResponse = {
-        data: '{"success": true}',
-        status: 200,
-        statusText: 'OK',
-        cached: false,
-      };
+      const mockResponse = createHttpResponse('{"success": true}');
       vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
       await provider.callApi('test');
@@ -3294,12 +3607,7 @@ describe('HttpProvider - Sanitization', () => {
         },
       });
 
-      const mockResponse = {
-        data: '{"result": "success"}',
-        status: 200,
-        statusText: 'OK',
-        cached: false,
-      };
+      const mockResponse = createHttpResponse('{"result": "success"}');
       vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
       await provider.callApi('test data');
@@ -3322,12 +3630,7 @@ describe('HttpProvider - Sanitization', () => {
         },
       });
 
-      const mockResponse = {
-        data: '{"result": "success"}',
-        status: 200,
-        statusText: 'OK',
-        cached: false,
-      };
+      const mockResponse = createHttpResponse('{"result": "success"}');
       vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
       const startTime = Date.now();
@@ -3364,12 +3667,7 @@ describe('HttpProvider - Sanitization', () => {
         },
       });
 
-      const mockResponse = {
-        data: '{"result": "test"}',
-        status: 200,
-        statusText: 'OK',
-        cached: false,
-      };
+      const mockResponse = createHttpResponse('{"result": "test"}');
       vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
       // Should not crash
@@ -3391,6 +3689,20 @@ describe('HttpProvider - Sanitization', () => {
       // Test null/undefined separately as they return the input as-is
       expect(sanitizeUrl(null as any)).toBeNull();
       expect(sanitizeUrl(undefined as any)).toBeUndefined();
+    });
+
+    it('should not leak malformed URL secrets when sanitization fails', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      try {
+        const result = sanitizeUrl('https://[invalid-host]/api?api_key=plain-secret');
+        const warningOutput = warnSpy.mock.calls.flat().join('\n');
+
+        expect(result).toBe('[REDACTED]');
+        expect(warningOutput).not.toContain('plain-secret');
+        expect(warningOutput).not.toContain('api_key=');
+      } finally {
+        warnSpy.mockRestore();
+      }
     });
   });
 });

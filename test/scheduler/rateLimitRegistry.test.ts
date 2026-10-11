@@ -14,7 +14,8 @@ let mockStateToReturn: any = null;
 const mockStateQueue: any[] = [];
 
 // Mock dependencies before imports
-vi.mock('../../src/scheduler/providerRateLimitState', () => ({
+vi.mock('../../src/scheduler/providerRateLimitState', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/scheduler/providerRateLimitState')>()),
   ProviderRateLimitState: class extends EventEmitter {
     executeWithRetry: any;
     getMetrics: any;
@@ -83,9 +84,7 @@ vi.mock('../../src/logger', () => ({
 }));
 
 // Import after mocks are set up
-const { RateLimitRegistry, createRateLimitRegistry } = await import(
-  '../../src/scheduler/rateLimitRegistry'
-);
+const { RateLimitRegistry } = await import('../../src/scheduler/rateLimitRegistry');
 
 describe('RateLimitRegistry', () => {
   let mockProvider: ApiProvider;
@@ -145,18 +144,6 @@ describe('RateLimitRegistry', () => {
 
   afterEach(() => {
     vi.resetAllMocks();
-  });
-
-  describe('createRateLimitRegistry - factory function', () => {
-    it('should create a new RateLimitRegistry instance', () => {
-      const registry = createRateLimitRegistry({ maxConcurrency: 10 });
-      expect(registry).toBeInstanceOf(RateLimitRegistry);
-    });
-
-    it('should pass options to constructor', () => {
-      const registry = createRateLimitRegistry({ maxConcurrency: 20, minConcurrency: 2 });
-      expect(registry).toBeInstanceOf(RateLimitRegistry);
-    });
   });
 
   describe('Constructor - options handling', () => {
@@ -259,14 +246,19 @@ describe('RateLimitRegistry', () => {
 
       expect(mockState.executeWithRetry).toHaveBeenCalledWith(
         expect.stringContaining('test-provider-'),
-        callFn,
+        expect.any(Function),
         {
-          getHeaders: undefined,
+          abortSignal: undefined,
+          getHeaders: expect.any(Function),
+          canRetry: expect.any(Function),
           isRateLimited: undefined,
           getRetryAfter: undefined,
           maxRetriesOverride: undefined,
         },
       );
+      const observer = vi.fn();
+      await mockState.executeWithRetry.mock.calls[0][1](observer);
+      expect(callFn).toHaveBeenCalledExactlyOnceWith(observer);
       expect(result).toBe('state-result');
     });
 
@@ -285,34 +277,43 @@ describe('RateLimitRegistry', () => {
         getRetryAfter,
       });
 
-      expect(mockState.executeWithRetry).toHaveBeenCalledWith(expect.any(String), callFn, {
-        getHeaders,
-        isRateLimited,
-        getRetryAfter,
-        maxRetriesOverride: undefined,
-      });
+      expect(mockState.executeWithRetry).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.any(Function),
+        {
+          abortSignal: undefined,
+          getHeaders: expect.any(Function),
+          canRetry: expect.any(Function),
+          isRateLimited,
+          getRetryAfter,
+          maxRetriesOverride: undefined,
+        },
+      );
     });
 
     it.each([
       [0, 0],
       [5, 5],
       ['2', 2],
-    ])('should forward provider config.maxRetries %p as maxRetriesOverride %p', async (input, expected) => {
-      mockState.executeWithRetry.mockResolvedValue('result');
-      const registry = new RateLimitRegistry({ maxConcurrency: 10 });
-      const provider = {
-        ...mockProvider,
-        config: { ...mockProvider.config, maxRetries: input },
-      } as ApiProvider;
+    ])(
+      'should forward provider config.maxRetries %p as maxRetriesOverride %p',
+      async (input, expected) => {
+        mockState.executeWithRetry.mockResolvedValue('result');
+        const registry = new RateLimitRegistry({ maxConcurrency: 10 });
+        const provider = {
+          ...mockProvider,
+          config: { ...mockProvider.config, maxRetries: input },
+        } as ApiProvider;
 
-      await registry.execute(provider, vi.fn());
+        await registry.execute(provider, vi.fn());
 
-      expect(mockState.executeWithRetry).toHaveBeenLastCalledWith(
-        expect.any(String),
-        expect.any(Function),
-        expect.objectContaining({ maxRetriesOverride: expected }),
-      );
-    });
+        expect(mockState.executeWithRetry).toHaveBeenLastCalledWith(
+          expect.any(String),
+          expect.any(Function),
+          expect.objectContaining({ maxRetriesOverride: expected }),
+        );
+      },
+    );
 
     it.each([
       ['negative number', -1],
@@ -322,33 +323,36 @@ describe('RateLimitRegistry', () => {
       // unbounded retry loops if accepted — reject them.
       ['unsafe-integer string', '1' + '0'.repeat(400)],
       ['above MAX_SAFE_INTEGER', String(Number.MAX_SAFE_INTEGER) + '0'],
-    ])('should warn and forward maxRetriesOverride=undefined for invalid %s (%p)', async (_label, input) => {
-      mockState.executeWithRetry.mockResolvedValue('result');
-      const logger = (await import('../../src/logger')).default;
-      const warnSpy = vi.mocked(logger.warn);
-      warnSpy.mockClear();
+    ])(
+      'should warn and forward maxRetriesOverride=undefined for invalid %s (%p)',
+      async (_label, input) => {
+        mockState.executeWithRetry.mockResolvedValue('result');
+        const logger = (await import('../../src/logger')).default;
+        const warnSpy = vi.mocked(logger.warn);
+        warnSpy.mockClear();
 
-      const registry = new RateLimitRegistry({ maxConcurrency: 10 });
-      const provider = {
-        ...mockProvider,
-        config: { ...mockProvider.config, maxRetries: input },
-      } as ApiProvider;
+        const registry = new RateLimitRegistry({ maxConcurrency: 10 });
+        const provider = {
+          ...mockProvider,
+          config: { ...mockProvider.config, maxRetries: input },
+        } as ApiProvider;
 
-      await registry.execute(provider, vi.fn());
+        await registry.execute(provider, vi.fn());
 
-      expect(warnSpy).toHaveBeenCalledWith(
-        '[RateLimit] Ignoring invalid provider.config.maxRetries; expected a non-negative integer.',
-        expect.objectContaining({
-          maxRetries: input,
-          providerId: 'test-provider',
-        }),
-      );
-      expect(mockState.executeWithRetry).toHaveBeenLastCalledWith(
-        expect.any(String),
-        expect.any(Function),
-        expect.objectContaining({ maxRetriesOverride: undefined }),
-      );
-    });
+        expect(warnSpy).toHaveBeenCalledWith(
+          '[RateLimit] Ignoring invalid provider.config.maxRetries; expected a non-negative integer.',
+          expect.objectContaining({
+            maxRetries: input,
+            providerId: 'test-provider',
+          }),
+        );
+        expect(mockState.executeWithRetry).toHaveBeenLastCalledWith(
+          expect.any(String),
+          expect.any(Function),
+          expect.objectContaining({ maxRetriesOverride: undefined }),
+        );
+      },
+    );
 
     it('should not warn when provider does not set maxRetries', async () => {
       mockState.executeWithRetry.mockResolvedValue('result');
@@ -558,160 +562,111 @@ describe('RateLimitRegistry', () => {
       });
     });
 
-    it('should forward ratelimit:hit events from state', async () => {
-      mockState.executeWithRetry.mockImplementation(async function (this: any) {
-        this.emit('ratelimit:hit', {
+    it.each([
+      {
+        event: 'ratelimit:hit',
+        payload: () => ({
           rateLimitKey: 'test-provider',
           retryAfterMs: 1000,
           resetAt: Date.now() + 1000,
           concurrencyChange: { changed: true, previous: 10, current: 5, reason: 'ratelimit' },
-        });
-        return 'result';
-      });
-
-      const registry = new RateLimitRegistry({ maxConcurrency: 10 });
-      const hitListener = vi.fn();
-      registry.on('ratelimit:hit', hitListener);
-
-      const callFn = vi.fn();
-      await registry.execute(mockProvider, callFn);
-
-      expect(hitListener).toHaveBeenCalledWith({
-        rateLimitKey: 'test-provider',
-        retryAfterMs: 1000,
-        resetAt: expect.any(Number),
-        concurrencyChange: { changed: true, previous: 10, current: 5, reason: 'ratelimit' },
-      });
-    });
-
-    it('should forward concurrency:decreased events from state', async () => {
-      mockState.executeWithRetry.mockImplementation(async function (this: any) {
-        this.emit('concurrency:decreased', {
+        }),
+        expected: () => ({
+          rateLimitKey: 'test-provider',
+          retryAfterMs: 1000,
+          resetAt: expect.any(Number),
+          concurrencyChange: { changed: true, previous: 10, current: 5, reason: 'ratelimit' },
+        }),
+      },
+      {
+        event: 'concurrency:decreased',
+        payload: () => ({
           rateLimitKey: 'test-provider',
           changed: true,
           previous: 10,
           current: 5,
           reason: 'ratelimit',
-        });
-        return 'result';
-      });
-
-      const registry = new RateLimitRegistry({ maxConcurrency: 10 });
-      const decreasedListener = vi.fn();
-      registry.on('concurrency:decreased', decreasedListener);
-
-      const callFn = vi.fn();
-      await registry.execute(mockProvider, callFn);
-
-      expect(decreasedListener).toHaveBeenCalledWith({
-        rateLimitKey: 'test-provider',
-        changed: true,
-        previous: 10,
-        current: 5,
-        reason: 'ratelimit',
-      });
-    });
-
-    it('should forward concurrency:increased events from state', async () => {
-      mockState.executeWithRetry.mockImplementation(async function (this: any) {
-        this.emit('concurrency:increased', {
+        }),
+        expected: () => ({
+          rateLimitKey: 'test-provider',
+          changed: true,
+          previous: 10,
+          current: 5,
+          reason: 'ratelimit',
+        }),
+      },
+      {
+        event: 'concurrency:increased',
+        payload: () => ({
           rateLimitKey: 'test-provider',
           changed: true,
           previous: 5,
           current: 8,
           reason: 'recovery',
-        });
-        return 'result';
-      });
-
-      const registry = new RateLimitRegistry({ maxConcurrency: 10 });
-      const increasedListener = vi.fn();
-      registry.on('concurrency:increased', increasedListener);
-
-      const callFn = vi.fn();
-      await registry.execute(mockProvider, callFn);
-
-      expect(increasedListener).toHaveBeenCalledWith({
-        rateLimitKey: 'test-provider',
-        changed: true,
-        previous: 5,
-        current: 8,
-        reason: 'recovery',
-      });
-    });
-
-    it('should forward ratelimit:warning events from state', async () => {
-      mockState.executeWithRetry.mockImplementation(async function (this: any) {
-        this.emit('ratelimit:warning', {
+        }),
+        expected: () => ({
+          rateLimitKey: 'test-provider',
+          changed: true,
+          previous: 5,
+          current: 8,
+          reason: 'recovery',
+        }),
+      },
+      {
+        event: 'ratelimit:warning',
+        payload: () => ({
           rateLimitKey: 'test-provider',
           requestRatio: 0.05,
           tokenRatio: 0.08,
-        });
-        return 'result';
-      });
-
-      const registry = new RateLimitRegistry({ maxConcurrency: 10 });
-      const warningListener = vi.fn();
-      registry.on('ratelimit:warning', warningListener);
-
-      const callFn = vi.fn();
-      await registry.execute(mockProvider, callFn);
-
-      expect(warningListener).toHaveBeenCalledWith({
-        rateLimitKey: 'test-provider',
-        requestRatio: 0.05,
-        tokenRatio: 0.08,
-      });
-    });
-
-    it('should forward ratelimit:learned events from state', async () => {
-      mockState.executeWithRetry.mockImplementation(async function (this: any) {
-        this.emit('ratelimit:learned', {
+        }),
+        expected: () => ({
+          rateLimitKey: 'test-provider',
+          requestRatio: 0.05,
+          tokenRatio: 0.08,
+        }),
+      },
+      {
+        event: 'ratelimit:learned',
+        payload: () => ({
           rateLimitKey: 'test-provider',
           requestLimit: 100,
           tokenLimit: 50000,
-        });
-        return 'result';
-      });
-
-      const registry = new RateLimitRegistry({ maxConcurrency: 10 });
-      const learnedListener = vi.fn();
-      registry.on('ratelimit:learned', learnedListener);
-
-      const callFn = vi.fn();
-      await registry.execute(mockProvider, callFn);
-
-      expect(learnedListener).toHaveBeenCalledWith({
-        rateLimitKey: 'test-provider',
-        requestLimit: 100,
-        tokenLimit: 50000,
-      });
-    });
-
-    it('should forward request:retrying events from state', async () => {
-      mockState.executeWithRetry.mockImplementation(async function (this: any) {
-        this.emit('request:retrying', {
+        }),
+        expected: () => ({
+          rateLimitKey: 'test-provider',
+          requestLimit: 100,
+          tokenLimit: 50000,
+        }),
+      },
+      {
+        event: 'request:retrying',
+        payload: () => ({
           rateLimitKey: 'test-provider',
           attempt: 1,
           delayMs: 2000,
           reason: 'ratelimit',
-        });
+        }),
+        expected: () => ({
+          rateLimitKey: 'test-provider',
+          attempt: 1,
+          delayMs: 2000,
+          reason: 'ratelimit',
+        }),
+      },
+    ])('should forward $event events from state', async ({ event, payload, expected }) => {
+      mockState.executeWithRetry.mockImplementation(async function (this: any) {
+        this.emit(event, payload());
         return 'result';
       });
 
       const registry = new RateLimitRegistry({ maxConcurrency: 10 });
-      const retryingListener = vi.fn();
-      registry.on('request:retrying', retryingListener);
+      const listener = vi.fn();
+      registry.on(event, listener);
 
       const callFn = vi.fn();
       await registry.execute(mockProvider, callFn);
 
-      expect(retryingListener).toHaveBeenCalledWith({
-        rateLimitKey: 'test-provider',
-        attempt: 1,
-        delayMs: 2000,
-        reason: 'ratelimit',
-      });
+      expect(listener).toHaveBeenCalledWith(expected());
     });
   });
 

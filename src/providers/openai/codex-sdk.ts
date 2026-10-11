@@ -2,39 +2,117 @@ import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 
-import { type Span, SpanKind, SpanStatusCode, trace } from '@opentelemetry/api';
+import { type Attributes, type Span, SpanKind, SpanStatusCode, trace } from '@opentelemetry/api';
 import dedent from 'dedent';
+import semverSatisfies from 'semver/functions/satisfies.js';
 import { z } from 'zod';
-import cliState from '../../cliState';
-import { getEnvString } from '../../envars';
-import { getDirectory, importModule, resolvePackageEntryPoint } from '../../esm';
-import logger from '../../logger';
+import { getProcessEnv } from '../../envars';
 import {
+  addActiveSpanRoleAttribute,
+  closeTurnSpan,
+  GenAIAttributes,
   type GenAISpanContext,
   type GenAISpanResult,
   getTraceparent,
+  openTurnSpan,
+  PROMPTFOO_RESOURCE_ATTR_PARENT_SPAN_ID,
+  PROMPTFOO_RESOURCE_ATTR_TRACE_ID,
   withGenAISpan,
 } from '../../tracing/genaiTracer';
-import { renderVarsInObject } from '../../util/render';
+import {
+  formatRateLimitErrorMessage,
+  HARD_QUOTA_ERROR_CODES,
+  HttpRateLimitError,
+  isDefinitiveBillingCode,
+  isHardQuotaCode,
+} from '../../util/fetch/errors';
+import { getPackageVersion } from '../../util/packageVersion';
 import { normalizeFieldName, REDACTED, sanitizeObject } from '../../util/sanitizer';
 import { resolveAgenticWorkingDir } from '../agentic-utils';
+import { AgenticRunQueue, createAbortError } from '../agenticRunQueue';
+import { assertIsolatedWorkingDir, clearRepositoryEnv } from '../agentWorkspace';
+import { resolveProviderApiKey } from '../credentials';
 import { providerRegistry } from '../providerRegistry';
 import { calculateOpenAIUsageCostFromTokenUsage } from './billing';
+import {
+  cliState,
+  getDirectory,
+  importModule,
+  logger,
+  renderVarsInObject,
+  resolvePackageEntryPoint,
+} from './codex-runtime';
+import {
+  getCodexTraceEndpoint,
+  getCodexTraceProtocol,
+  withCodexTraceExporter,
+} from './codex-tracing';
+import {
+  applyApiKeyToCliEnv,
+  shouldInjectApiKey,
+  usesCustomModelProvider,
+} from './codexApiKeyGating';
+import { CodexCliCompatibilityError, checkCodexCliCompatibility } from './codexCliCompatibility';
+import {
+  COMMON_OPTIONAL_PROCESS_ENV_KEYS,
+  findGitRepositoryRoot,
+  getMinimalProcessEnv,
+} from './codexProcess';
+import {
+  buildCodexSkillMetadata,
+  extractCodexSkillPathCandidates,
+  getCodexSkillMetadataFields,
+  getCodexSkillRootPrefixes,
+} from './codexSkillMetadata';
 
-import type { EnvOverrides } from '../../types/env';
 import type {
   ApiProvider,
   CallApiContextParams,
   CallApiOptionsParams,
+  EnvOverrides,
   ProviderResponse,
-  SkillCallEntry,
 } from '../../types/index';
+
+function appendPromptfooResourceAttrs(
+  existing: string | undefined,
+  traceId: string,
+  parentSpanId: string,
+): string {
+  const traceKey = PROMPTFOO_RESOURCE_ATTR_TRACE_ID;
+  const parentSpanKey = PROMPTFOO_RESOURCE_ATTR_PARENT_SPAN_ID;
+  const incoming = `${traceKey}=${traceId},${parentSpanKey}=${parentSpanId}`;
+  if (!existing) {
+    return incoming;
+  }
+  const cleaned = existing
+    .split(',')
+    .map((pair) => pair.trim())
+    .filter(
+      (pair) =>
+        pair.length > 0 &&
+        !pair.startsWith(`${traceKey}=`) &&
+        !pair.startsWith(`${parentSpanKey}=`),
+    )
+    .join(',');
+  return cleaned.length > 0 ? `${cleaned},${incoming}` : incoming;
+}
+
+const ZERO_TRACE_ID = '00000000000000000000000000000000';
+const ZERO_SPAN_ID = '0000000000000000';
+
+function isValidTraceparent(traceparent: string | undefined): traceparent is string {
+  if (!traceparent) {
+    return false;
+  }
+  const [, traceId, spanId] = traceparent.split('-');
+  return Boolean(traceId && spanId && traceId !== ZERO_TRACE_ID && spanId !== ZERO_SPAN_ID);
+}
 
 /**
  * OpenAI Codex SDK Provider
  *
  * This provider requires the @openai/codex-sdk package to be installed separately:
- *   npm install @openai/codex-sdk
+ *   npm install promptfoo @openai/codex-sdk@^0.156.1
  *
  * Key features:
  * - Supports API key auth or existing Codex/ChatGPT login state
@@ -64,25 +142,27 @@ export type ApprovalPolicy = 'never' | 'on-request' | 'on-failure' | 'untrusted'
  * Reasoning effort levels for model reasoning intensity.
  *
  * Model support varies:
+ * - gpt-6-astra / gpt-6-sol / gpt-5.6-sol / gpt-5.6-terra: 'low', 'medium', 'high', 'xhigh', 'max', and 'ultra'
+ * - gpt-6-luna / gpt-5.6-luna: 'low', 'medium', 'high', 'xhigh', and 'max';
+ *   gpt-6-luna does not support 'ultra'
  * - gpt-5.5: 'minimal', 'low', 'medium', 'high', 'xhigh' in the Codex SDK;
  *   the OpenAI API uses 'none' instead of 'minimal'
  * - gpt-5.5-pro: 'medium', 'high', 'xhigh'
- * - gpt-5.4: 'minimal', 'low', 'medium', 'high', 'xhigh'
  * - gpt-5.4-pro: 'medium', 'high', 'xhigh'
  * - gpt-5.3-codex: 'low', 'medium', 'high', 'xhigh'
  * - gpt-5.3-codex-spark: 'low', 'medium', 'high'
- * - gpt-5.2 / gpt-5.2-codex: 'low', 'medium', 'high', 'xhigh'
- * - gpt-5.1-codex-max: 'low', 'medium', 'high', 'xhigh'
- * - gpt-5.1-codex/mini: 'low', 'medium', 'high'
+ * - gpt-5.2: 'low', 'medium', 'high', 'xhigh'
  *
  * Values:
- * - 'minimal': Minimal reasoning overhead
+ * - 'minimal': Legacy minimal reasoning setting accepted by some older models
  * - 'low': Light reasoning, faster responses
- * - 'medium': Balanced (default)
+ * - 'medium': Balanced reasoning; runtime defaults vary by model
  * - 'high': Thorough reasoning for complex tasks
- * - 'xhigh': Maximum reasoning depth (gpt-5.5, gpt-5.4, gpt-5.2, gpt-5.1-codex-max)
+ * - 'xhigh': Maximum reasoning depth (gpt-5.5, gpt-5.4, gpt-5.2)
+ * - 'max': Deepest single-agent reasoning
+ * - 'ultra': Proactive multi-agent reasoning on supported Codex models
  */
-export type ReasoningEffort = 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+export type ReasoningEffort = 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra';
 
 /**
  * Web search modes controlling how the agent accesses the web.
@@ -112,45 +192,24 @@ type CodexPromptInput = string | CodexPromptInputItem[];
 interface CodexStreamingState {
   items: any[];
   usage: any;
+  turnCompleted: boolean;
+  lastStreamError?: string;
   activeSpans: Map<string, Span>;
   itemStartTimes: Map<string, number>;
   lastEventTime: number;
   reasoningTexts: string[];
   conversationMessages: Array<{ role: string; content: string }>;
+  /**
+   * Counter for SDK turns observed in this run. A streamed provider call
+   * normally contains one `turn.started` / `turn.completed` lifecycle. This
+   * marker exposes that SDK boundary; it does not reveal hidden model rounds.
+   */
+  turnCount: number;
+  /** Active `gen_ai.turn` span, opened on `turn.started` and ended on `turn.completed`. */
+  activeTurnSpan?: Span;
+  /** 1-based index of the currently open turn, stamped on item spans for correlation. */
+  activeTurnIndex: number;
 }
-
-const MINIMAL_CLI_ENV_KEYS = [
-  'PATH',
-  'Path',
-  'HOME',
-  'USER',
-  'USERNAME',
-  'USERPROFILE',
-  'TMPDIR',
-  'TMP',
-  'TEMP',
-  'SHELL',
-  'COMSPEC',
-  'SystemRoot',
-  'PATHEXT',
-  'LANG',
-  'LC_ALL',
-  'TERM',
-] as const;
-
-const COMMON_OPTIONAL_PROCESS_ENV_KEYS = [
-  'CODEX_HOME',
-  'HTTP_PROXY',
-  'HTTPS_PROXY',
-  'ALL_PROXY',
-  'NO_PROXY',
-  'SSL_CERT_FILE',
-  'SSL_CERT_DIR',
-  'REQUESTS_CA_BUNDLE',
-  'NODE_EXTRA_CA_CERTS',
-  'SSH_AUTH_SOCK',
-  'GIT_SSH_COMMAND',
-] as const;
 
 export interface OpenAICodexSDKConfig {
   /**
@@ -176,10 +235,17 @@ export interface OpenAICodexSDKConfig {
   base_url?: string;
 
   /**
+   * Maximum scheduler retry attempts for retryable Codex SDK rate limit failures.
+   */
+  maxRetries?: number;
+
+  /**
    * Working directory for Codex to operate in
    * Defaults to process.cwd()
    */
   working_dir?: string;
+  /** Run each eval call in a fresh copy of `working_dir`, created by promptfoo eval. */
+  copy_working_dir?: boolean | 'git' | 'copy';
 
   /**
    * Additional directories the agent can access beyond the working directory.
@@ -198,9 +264,28 @@ export interface OpenAICodexSDKConfig {
   codex_path_override?: string;
 
   /**
-   * Model to use (e.g., 'gpt-5.5', 'gpt-5.4', 'gpt-5.3-codex', 'gpt-5.2-codex', 'gpt-5.1-codex-mini')
+   * Skip the custom binary's exact SDK/CLI version compatibility check.
+   */
+  skip_codex_version_check?: boolean;
+
+  /**
+   * Model to use (e.g., 'gpt-6-sol' or 'gpt-6-luna').
+   * Availability depends on authentication mode and account access; omitted models
+   * use the installed Codex SDK's default.
+   * When routing through a non-OpenAI `model_provider` (such as `amazon-bedrock`), use that
+   * provider's model id instead (e.g., 'openai.gpt-5.6-sol' for Amazon Bedrock).
    */
   model?: string;
+
+  /**
+   * Codex model provider to route through, mapped to the CLI's `model_provider` config.
+   * Defaults to OpenAI. Set to `amazon-bedrock` to run inference against OpenAI models hosted
+   * on Amazon Bedrock (combine with `model: 'openai.gpt-5.6-sol'` and AWS credentials in `cli_env`).
+   * Equivalent to setting `cli_config: { model_provider: '<value>' }`.
+   *
+   * @see https://www.promptfoo.dev/docs/providers/aws-bedrock/
+   */
+  model_provider?: string;
 
   /**
    * Sandbox access level controlling filesystem permissions
@@ -216,7 +301,7 @@ export interface OpenAICodexSDKConfig {
    * - 'low': Light reasoning, faster responses
    * - 'medium': Balanced (default)
    * - 'high': Thorough reasoning for complex tasks
-   * - 'xhigh': Maximum depth (gpt-5.2, gpt-5.1-codex-max only)
+   * - 'xhigh': Maximum depth (model-dependent)
    */
   model_reasoning_effort?: ReasoningEffort;
 
@@ -321,13 +406,19 @@ const OpenAICodexSDKConfigShape = {
   linkedTargetId: z.string().optional(),
   apiKey: z.string().min(1).optional(),
   base_url: z.string().min(1).optional(),
+  maxRetries: z.number().int().nonnegative().optional(),
   working_dir: z.string().min(1).optional(),
+  copy_working_dir: z.union([z.boolean(), z.enum(['git', 'copy'])]).optional(),
   additional_directories: z.array(z.string().min(1)).optional(),
   skip_git_repo_check: z.boolean().optional(),
   codex_path_override: z.string().min(1).optional(),
+  skip_codex_version_check: z.boolean().optional(),
   model: z.string().min(1).optional(),
+  model_provider: z.string().min(1).optional(),
   sandbox_mode: z.enum(['read-only', 'workspace-write', 'danger-full-access']).optional(),
-  model_reasoning_effort: z.enum(['minimal', 'low', 'medium', 'high', 'xhigh']).optional(),
+  model_reasoning_effort: z
+    .enum(['minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra'])
+    .optional(),
   network_access_enabled: z.boolean().optional(),
   web_search_enabled: z.boolean().optional(),
   web_search_mode: z.enum(['disabled', 'cached', 'live']).optional(),
@@ -371,22 +462,144 @@ function parseCodexConfig(
   }
 }
 
-function getMinimalProcessEnv(): Record<string, string> {
-  const env: Record<string, string> = {};
-  for (const key of MINIMAL_CLI_ENV_KEYS) {
-    const value = process.env[key];
-    if (typeof value === 'string' && value.length > 0) {
-      env[key] = value;
-    }
+// The transient throttle code plus the shared hard-quota set, so a billing code
+// added to HARD_QUOTA_ERROR_CODES (e.g. credit_balance_exhausted) is recognized
+// on the SDK path too instead of falling back to the 60s retry cycle.
+const CODEX_RATE_LIMIT_CODES: readonly string[] = [
+  'rate_limit_exceeded',
+  ...HARD_QUOTA_ERROR_CODES,
+];
+
+// Mirrors the HTTP retry path's fallback when the upstream error carries no reset hint.
+const CODEX_DEFAULT_RATE_LIMIT_WAIT_MS = 60_000;
+
+const CODEX_RATE_LIMIT_PATTERNS = [
+  /\b429\b/,
+  /\brate[\s_-]*limit(?:ed|ing| reached| exceeded)?\b/i,
+  /\btoo many requests\b/i,
+  /\btokens per (?:minute|min)\b/i,
+  /\brequests per (?:minute|min)\b/i,
+  /\bexceeded your current quota\b/i,
+];
+
+function extractCodexRateLimitCode(message: string): string | undefined {
+  const lowerMessage = message.toLowerCase();
+  // Flattened SDK messages can contain both a broad quota type and a specific
+  // billing code. Preserve the definitive billing classification.
+  const billingCode = CODEX_RATE_LIMIT_CODES.find(
+    (code) => isDefinitiveBillingCode(code) && lowerMessage.includes(code),
+  );
+  if (billingCode) {
+    return billingCode;
   }
-  return env;
+
+  if (/\bno credits remaining\b/i.test(message)) {
+    return 'credit_balance_exhausted';
+  }
+
+  const explicitCode = CODEX_RATE_LIMIT_CODES.find((code) => lowerMessage.includes(code));
+  if (explicitCode) {
+    return explicitCode;
+  }
+
+  if (
+    /\bexceeded your current quota\b/i.test(message) ||
+    /\bcheck your plan and billing details\b/i.test(message)
+  ) {
+    return 'insufficient_quota';
+  }
+
+  return undefined;
 }
 
-/**
- * Helper to load the OpenAI Codex SDK ESM module
- * Uses resolvePackageEntryPoint to handle ESM-only packages with restrictive exports
- */
-async function loadCodexSDK(): Promise<any> {
+function extractCodexRetryAfterMs(message: string): number | undefined {
+  const match = message.match(
+    /\b(?:please\s+)?(?:try\s+again\s+in|retry(?:\s+again)?\s+(?:after|in))\s+(\d+(?:\.\d+)?)\s*(milliseconds?|ms|seconds?|secs?|s|minutes?|mins?|m)\b/i,
+  );
+  if (!match) {
+    return undefined;
+  }
+
+  const amount = Number(match[1]);
+  if (!Number.isFinite(amount) || amount < 0) {
+    return undefined;
+  }
+
+  const unit = match[2].toLowerCase();
+  const multiplier =
+    unit.startsWith('m') && unit !== 'ms' && !unit.startsWith('milli')
+      ? 60_000
+      : unit.startsWith('s')
+        ? 1000
+        : 1;
+  return Math.ceil(amount * multiplier);
+}
+
+function buildCodexRateLimitResponse(
+  error: unknown,
+  message: string,
+): ProviderResponse | undefined {
+  const errorRecord =
+    typeof error === 'object' && error !== null ? (error as Record<string, unknown>) : undefined;
+  const status =
+    typeof errorRecord?.status === 'number'
+      ? errorRecord.status
+      : typeof errorRecord?.statusCode === 'number'
+        ? errorRecord.statusCode
+        : undefined;
+  const rawCode =
+    typeof errorRecord?.code === 'string' ? errorRecord.code.toLowerCase() : undefined;
+  // The SDK error's broad class (e.g. `type: "insufficient_quota"` next to a
+  // provider-specific billing code) carries the quota classification when the
+  // code itself is not recognized, exactly as on the fetch and Foundry paths.
+  const rawType =
+    typeof errorRecord?.type === 'string' ? errorRecord.type.toLowerCase() : undefined;
+  const code =
+    rawCode && CODEX_RATE_LIMIT_CODES.some((knownCode) => knownCode === rawCode)
+      ? rawCode
+      : extractCodexRateLimitCode(message);
+
+  if (
+    status !== 429 &&
+    code === undefined &&
+    !isHardQuotaCode(rawType) &&
+    !CODEX_RATE_LIMIT_PATTERNS.some((pattern) => pattern.test(message))
+  ) {
+    return undefined;
+  }
+
+  const retryAfterMs = extractCodexRetryAfterMs(message);
+  const rateLimitError = new HttpRateLimitError({
+    status: status ?? 429,
+    retryAfterMs,
+    // Keep the provider's own code for reporting when it is not one we
+    // recognize; `type` decides the quota classification in that case.
+    code: code ?? rawCode,
+    type: rawType,
+  });
+  const schedulerRetryAfterMs =
+    rateLimitError.kind === 'rate_limit'
+      ? (retryAfterMs ?? CODEX_DEFAULT_RATE_LIMIT_WAIT_MS)
+      : undefined;
+  const headers: Record<string, string> =
+    schedulerRetryAfterMs === undefined ? {} : { 'retry-after-ms': String(schedulerRetryAfterMs) };
+
+  return {
+    error: formatRateLimitErrorMessage(rateLimitError, message),
+    metadata: {
+      rateLimitKind: rateLimitError.kind,
+      http: {
+        status: rateLimitError.status,
+        statusText: rateLimitError.statusText,
+        headers,
+      },
+    },
+  };
+}
+
+export const CODEX_SDK_VERSION_RANGE = '^0.156.1';
+
+export function resolveCodexSdkPackage(): string | null {
   const basePaths = [
     cliState.basePath ? path.resolve(cliState.basePath) : undefined,
     process.cwd(),
@@ -394,29 +607,42 @@ async function loadCodexSDK(): Promise<any> {
     path.resolve(getDirectory(), '../..'),
   ].filter((candidate): candidate is string => Boolean(candidate));
 
-  let codexPath: string | null = null;
   for (const basePath of new Set(basePaths)) {
-    codexPath = resolvePackageEntryPoint('@openai/codex-sdk', basePath);
-    if (codexPath) {
-      break;
+    const entryPoint = resolvePackageEntryPoint('@openai/codex-sdk', basePath);
+    if (entryPoint) {
+      return entryPoint;
     }
   }
+  return null;
+}
 
+async function loadCodexSDK(): Promise<{ entryPoint: string; module: any }> {
+  const codexPath = resolveCodexSdkPackage();
   if (!codexPath) {
     throw new Error(
       dedent`The @openai/codex-sdk package is required but not installed.
 
       To use the OpenAI Codex SDK provider, install it with:
-        npm install @openai/codex-sdk
+        npm install promptfoo @openai/codex-sdk@${CODEX_SDK_VERSION_RANGE}
 
-      Requires Node.js ^20.20.0 or >=22.22.0.
+      Requires Node.js >=22.22.0.
 
       For more information, see: https://www.promptfoo.dev/docs/providers/openai-codex-sdk/`,
     );
   }
 
+  const version = getPackageVersion('@openai/codex-sdk', codexPath);
+  if (!version || !semverSatisfies(version, CODEX_SDK_VERSION_RANGE)) {
+    throw new Error(
+      `The OpenAI Codex SDK provider requires @openai/codex-sdk@${CODEX_SDK_VERSION_RANGE} (found ${version ?? 'unknown'}). Install it with: npm install promptfoo @openai/codex-sdk@${CODEX_SDK_VERSION_RANGE}`,
+    );
+  }
+
   try {
-    return await importModule(codexPath);
+    return {
+      entryPoint: codexPath,
+      module: await importModule(codexPath),
+    };
   } catch (err) {
     logger.error(`Failed to load OpenAI Codex SDK: ${err}`);
     if ((err as any).stack) {
@@ -426,11 +652,11 @@ async function loadCodexSDK(): Promise<any> {
       dedent`Failed to load @openai/codex-sdk.
 
       The package was found but could not be loaded. This may be due to:
-      - Incompatible Node.js version (requires Node.js ^20.20.0 or >=22.22.0)
+      - Incompatible Node.js version (requires Node.js >=22.22.0)
       - Corrupted installation
 
       Try reinstalling:
-        npm install @openai/codex-sdk
+        npm install promptfoo @openai/codex-sdk@${CODEX_SDK_VERSION_RANGE}
 
       For more information, see: https://www.promptfoo.dev/docs/providers/openai-codex-sdk/`,
     );
@@ -438,26 +664,30 @@ async function loadCodexSDK(): Promise<any> {
 }
 
 export class OpenAICodexSDKProvider implements ApiProvider {
+  private cleanupGeneration = 0;
+
   static OPENAI_MODELS = [
+    'gpt-6-astra',
+    'gpt-6-sol',
+    'gpt-6-luna',
+    // GPT-5.6 models (requires Codex 0.144.0 or later)
+    'gpt-5.6-sol',
+    'gpt-5.6-terra',
+    'gpt-5.6-luna',
     // GPT-5.5 models
     'gpt-5.5',
     'gpt-5.5-pro',
     // GPT-5.4 models
     'gpt-5.4',
     'gpt-5.4-pro',
+    'gpt-5.4-mini',
     // GPT-5.3 Codex models
     'gpt-5.3-codex',
     'gpt-5.3-codex-spark',
     // GPT-5.2 models
     // Note: gpt-5.2-pro is not currently supported via Codex SDK.
     'gpt-5.2',
-    'gpt-5.2-codex',
-    // GPT-5.1 Codex models
-    'gpt-5.1-codex',
-    'gpt-5.1-codex-max',
-    'gpt-5.1-codex-mini',
     // GPT-5 Codex models
-    'gpt-5-codex',
     'gpt-5-codex-mini',
     // GPT-5 base
     'gpt-5',
@@ -468,13 +698,15 @@ export class OpenAICodexSDKProvider implements ApiProvider {
   apiKey?: string;
 
   private providerId = 'openai:codex-sdk';
-  private codexModule?: any;
+  private codexSdk?: { module: any; entryPoint: string };
   private codexInstances: Map<string, any> = new Map();
   private threads: Map<string, any> = new Map();
-  private threadRunQueues: Map<string, Promise<void>> = new Map();
+  private threadRunQueues = new AgenticRunQueue('Codex thread turn wait aborted');
   private deepTracingWarningShown = false; // Show warning once per instance
   private ignoredProviderEnvWarningShown = false;
   private omittedProcessEnvWarningShown = false;
+  private compatibilitySkipWarningShown = false;
+  private compatibilityChecks = new Map<AbortController, Promise<void>>();
 
   constructor(
     options: {
@@ -490,7 +722,11 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     this.providerId = id ?? this.providerId;
     providerRegistry.register(this);
 
-    if (this.config.model && !OpenAICodexSDKProvider.OPENAI_MODELS.includes(this.config.model)) {
+    if (
+      this.config.model &&
+      !usesCustomModelProvider(this.config) &&
+      !OpenAICodexSDKProvider.OPENAI_MODELS.includes(this.config.model)
+    ) {
       logger.warn(`Using unknown model for OpenAI Codex SDK: ${this.config.model}`);
     }
   }
@@ -500,13 +736,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
   }
 
   getApiKey(config: OpenAICodexSDKConfig = this.config): string | undefined {
-    return (
-      config?.apiKey ||
-      this.env?.OPENAI_API_KEY ||
-      this.env?.CODEX_API_KEY ||
-      getEnvString('OPENAI_API_KEY') ||
-      getEnvString('CODEX_API_KEY')
-    );
+    return resolveProviderApiKey(config, this.env, ['OPENAI_API_KEY', 'CODEX_API_KEY']);
   }
 
   requiresApiKey(): boolean {
@@ -532,27 +762,31 @@ export class OpenAICodexSDKProvider implements ApiProvider {
   }
 
   async cleanup(): Promise<void> {
-    // Clean up threads
+    this.cleanupGeneration++;
+    providerRegistry.unregister(this);
+    const compatibilityChecks = [...this.compatibilityChecks.entries()];
+    for (const [controller] of compatibilityChecks) {
+      controller.abort(createAbortError('Codex compatibility check interrupted by cleanup'));
+    }
+    const instances = [...this.codexInstances.values()];
+    this.codexInstances.clear();
     this.threads.clear();
     this.threadRunQueues.clear();
 
-    // Clean up Codex instances to release resources (child processes, file handles)
-    for (const instance of this.codexInstances.values()) {
+    for (const instance of instances) {
       try {
         await this.destroyInstance(instance);
       } catch (error) {
         logger.warn('[CodexSDK] Error during cleanup', { error });
       }
     }
-    this.codexInstances.clear();
+    if (compatibilityChecks.length > 0) {
+      await Promise.allSettled(compatibilityChecks.map(([, pending]) => pending));
+    }
   }
 
   async shutdown(): Promise<void> {
-    try {
-      await this.cleanup();
-    } finally {
-      providerRegistry.unregister(this);
-    }
+    await this.cleanup();
   }
 
   private prepareEnvironment(
@@ -565,7 +799,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       Object.entries(config.cli_env ?? {}).map(([key, value]) => [key, String(value)]),
     );
     const env: Record<string, string> = {
-      ...(inheritProcessEnv ? (process.env as Record<string, string>) : getMinimalProcessEnv()),
+      ...(inheritProcessEnv ? (getProcessEnv() as Record<string, string>) : getMinimalProcessEnv()),
       ...cliEnv,
     };
 
@@ -606,13 +840,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       }
     }
 
-    // Inject only the resolved Codex/OpenAI API key from provider env/config.
-    // Other promptfoo env overrides should be passed explicitly via cli_env so
-    // unrelated secrets are not exposed to shell commands.
-    if (apiKey) {
-      sortedEnv.OPENAI_API_KEY = apiKey;
-      sortedEnv.CODEX_API_KEY = apiKey;
-    }
+    applyApiKeyToCliEnv(sortedEnv, config, apiKey);
 
     // Inject OpenTelemetry configuration for deep tracing
     // This allows the Codex CLI to export its internal traces to our OTLP receiver
@@ -621,10 +849,10 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     if (config.deep_tracing) {
       // Standard OTEL environment variables - use defaults only if not already set
       if (!sortedEnv.OTEL_EXPORTER_OTLP_ENDPOINT) {
-        sortedEnv.OTEL_EXPORTER_OTLP_ENDPOINT = 'http://127.0.0.1:4318';
+        sortedEnv.OTEL_EXPORTER_OTLP_ENDPOINT = getCodexTraceEndpoint();
       }
       if (!sortedEnv.OTEL_EXPORTER_OTLP_PROTOCOL) {
-        sortedEnv.OTEL_EXPORTER_OTLP_PROTOCOL = 'http/json';
+        sortedEnv.OTEL_EXPORTER_OTLP_PROTOCOL = getCodexTraceProtocol();
       }
       if (!sortedEnv.OTEL_SERVICE_NAME) {
         sortedEnv.OTEL_SERVICE_NAME = 'codex-cli';
@@ -635,6 +863,14 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       // W3C Trace Context - only set if we have a traceparent for proper parent-child linking
       if (traceparent) {
         sortedEnv.TRACEPARENT = traceparent;
+        const [, tpTraceId, tpSpanId] = traceparent.split('-');
+        if (tpTraceId && tpSpanId) {
+          sortedEnv.OTEL_RESOURCE_ATTRIBUTES = appendPromptfooResourceAttrs(
+            sortedEnv.OTEL_RESOURCE_ATTRIBUTES,
+            tpTraceId,
+            tpSpanId,
+          );
+        }
       }
       logger.debug('[CodexSDK] Injecting OTEL config for deep tracing', {
         traceparent: traceparent || '(none - CLI will start own trace)',
@@ -671,157 +907,55 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     );
   }
 
-  private getResolvedCliConfig(config: OpenAICodexSDKConfig): Record<string, unknown> | undefined {
-    if (!config.cli_config && !config.collaboration_mode) {
+  private getResolvedCliConfig(
+    config: OpenAICodexSDKConfig,
+    env: Record<string, string> = {},
+  ): Record<string, unknown> | undefined {
+    if (
+      !config.cli_config &&
+      !config.collaboration_mode &&
+      !config.model_provider &&
+      !config.deep_tracing
+    ) {
       return undefined;
     }
 
-    return {
+    const cliConfig = {
       ...(config.cli_config ?? {}),
+      // The first-class `model_provider` option takes precedence over any value
+      // supplied through raw `cli_config`.
+      ...(config.model_provider ? { model_provider: config.model_provider } : {}),
       ...(config.collaboration_mode ? { collaboration_mode: config.collaboration_mode } : {}),
     };
+
+    return withCodexTraceExporter(cliConfig, env, config.deep_tracing === true);
   }
 
   private getSkillRootPrefixes(env: Record<string, string>, workingDir?: string): string[] {
-    const prefixes = new Set<string>();
+    const resolvedWorkingDir = workingDir
+      ? path.resolve(workingDir).replace(/\\/g, '/')
+      : undefined;
 
-    const addPrefix = (candidate?: string) => {
-      if (!candidate) {
-        return;
-      }
-
-      const normalized = candidate.replace(/\\/g, '/').replace(/\/+$/g, '');
-      if (normalized) {
-        prefixes.add(normalized);
-      }
-    };
-
-    addPrefix(env.CODEX_HOME);
-    // Codex's system skill root is documented as /etc/codex/skills.
-    addPrefix('/etc/codex');
-
-    if (workingDir) {
-      const resolvedWorkingDir = path.resolve(workingDir).replace(/\\/g, '/');
-      addPrefix(path.posix.join(resolvedWorkingDir, '.agents'));
-
-      const gitRoot = this.findGitRepositoryRoot(resolvedWorkingDir);
-      if (gitRoot) {
-        addPrefix(path.posix.join(gitRoot.replace(/\\/g, '/'), '.agents'));
-      }
-    }
-
-    const homeDir = env.HOME || env.USERPROFILE || process.env.HOME || process.env.USERPROFILE;
-    if (homeDir) {
-      addPrefix(path.posix.join(homeDir.replace(/\\/g, '/'), '.codex'));
-    }
-
-    return Array.from(prefixes);
-  }
-
-  private isValidCodexSkillName(name: string): boolean {
-    return /^[A-Za-z0-9._:-]+$/.test(name);
-  }
-
-  private extractSkillPathCandidates(
-    text: string,
-    skillRootPrefixes: readonly string[] = [],
-  ): Array<{ name: string; path: string }> {
-    const matches = new Map<string, { name: string; path: string }>();
-
-    for (const rawToken of text.split(/\s+/)) {
-      const token = rawToken.replace(/^[`"'([{<]+|[`"',;:)\]}>]+$/g, '').trim();
-      if (!token) {
-        continue;
-      }
-
-      const normalizedPath = token.replace(/\\/g, '/');
-      const repoMatch = normalizedPath.match(/^\.agents\/skills\/([^/\s]+)\/SKILL\.md$/);
-      if (repoMatch) {
-        if (this.isValidCodexSkillName(repoMatch[1])) {
-          matches.set(normalizedPath, { name: repoMatch[1], path: normalizedPath });
-        }
-        continue;
-      }
-
-      const matchingRoot = skillRootPrefixes.find((prefix) =>
-        normalizedPath.startsWith(`${prefix}/skills/`),
-      );
-      if (!matchingRoot) {
-        continue;
-      }
-
-      const relativeSkillPath = normalizedPath.slice(matchingRoot.length + 1);
-      const customRootMatch = relativeSkillPath.match(/^skills\/([^/\s]+)\/SKILL\.md$/);
-      if (customRootMatch && this.isValidCodexSkillName(customRootMatch[1])) {
-        matches.set(normalizedPath, { name: customRootMatch[1], path: normalizedPath });
-      }
-    }
-
-    return Array.from(matches.values());
-  }
-
-  private extractSkillCallsFromItems(
-    items: any[],
-    skillRootPrefixes: readonly string[] = [],
-    options: { requireSuccessfulCommand?: boolean } = {},
-  ): SkillCallEntry[] {
-    const skillCalls = new Map<
-      string,
-      {
-        name: string;
-        path: string;
-      }
-    >();
-
-    for (const item of items) {
-      if (item?.type !== 'command_execution') {
-        continue;
-      }
-      if (options.requireSuccessfulCommand && !this.isSuccessfulCommandExecution(item)) {
-        continue;
-      }
-
-      const command =
-        typeof item.command === 'string' && item.command.trim() ? item.command : undefined;
-      if (!command) {
-        continue;
-      }
-
-      for (const skillPath of this.extractSkillPathCandidates(command, skillRootPrefixes)) {
-        const existing = skillCalls.get(skillPath.path) ?? {
-          name: skillPath.name,
-          path: skillPath.path,
-        };
-
-        skillCalls.set(skillPath.path, existing);
-      }
-    }
-
-    return Array.from(skillCalls.values()).map((skillCall) => ({
-      name: skillCall.name,
-      path: skillCall.path,
-      source: 'heuristic',
-    }));
-  }
-
-  private buildSkillMetadata(
-    items: any[],
-    skillRootPrefixes: readonly string[] = [],
-  ): { attemptedSkillCalls: SkillCallEntry[]; skillCalls: SkillCallEntry[] } | undefined {
-    if (!Array.isArray(items) || items.length === 0) {
-      return undefined;
-    }
-
-    const attemptedSkillCalls = this.extractSkillCallsFromItems(items, skillRootPrefixes);
-    const skillCalls = this.extractSkillCallsFromItems(items, skillRootPrefixes, {
-      requireSuccessfulCommand: true,
+    return getCodexSkillRootPrefixes({
+      codexHome: env.CODEX_HOME,
+      gitRepositoryRoot: resolvedWorkingDir
+        ? this.findGitRepositoryRoot(resolvedWorkingDir)
+        : undefined,
+      homeDir: env.HOME || env.USERPROFILE || process.env.HOME || process.env.USERPROFILE,
+      workingDir: resolvedWorkingDir,
     });
+  }
 
-    if (skillCalls.length === 0 && attemptedSkillCalls.length <= skillCalls.length) {
-      return undefined;
-    }
-
-    return { attemptedSkillCalls, skillCalls };
+  private buildSkillMetadata(items: any[], skillRootPrefixes: readonly string[] = []) {
+    return buildCodexSkillMetadata(items, skillRootPrefixes, {
+      getCommand: (item: any) =>
+        item?.type === 'command_execution' &&
+        typeof item.command === 'string' &&
+        item.command.trim()
+          ? item.command
+          : undefined,
+      isSuccessfulCommand: (item: any) => this.isSuccessfulCommandExecution(item),
+    });
   }
 
   private isSuccessfulCommandExecution(item: any): boolean {
@@ -870,19 +1004,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
   }
 
   private findGitRepositoryRoot(workingDir: string): string | undefined {
-    let currentDir = path.resolve(workingDir);
-
-    while (true) {
-      if (fs.existsSync(path.join(currentDir, '.git'))) {
-        return currentDir;
-      }
-
-      const parentDir = path.dirname(currentDir);
-      if (parentDir === currentDir) {
-        return undefined;
-      }
-      currentDir = parentDir;
-    }
+    return findGitRepositoryRoot(workingDir);
   }
 
   /**
@@ -894,11 +1016,15 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     config: OpenAICodexSDKConfig,
     apiKey: string | undefined = this.getApiKey(config),
   ): Record<string, any> {
-    const cliConfig = this.getResolvedCliConfig(config);
+    const cliConfig = this.getResolvedCliConfig(config, env);
 
+    // The Codex SDK forwards a constructor `apiKey` into the spawned CLI process as
+    // CODEX_API_KEY. Gate it with the same predicate as the env injection so an ambient
+    // OPENAI_API_KEY / CODEX_API_KEY isn't leaked to the agent shell when routing through a
+    // non-OpenAI model_provider (Bedrock authenticates via AWS credentials in cli_env).
     return {
       env,
-      ...(apiKey ? { apiKey } : {}),
+      ...(shouldInjectApiKey(config, apiKey) ? { apiKey } : {}),
       ...(config.codex_path_override ? { codexPathOverride: config.codex_path_override } : {}),
       ...(config.base_url ? { baseUrl: config.base_url } : {}),
       ...(cliConfig ? { config: cliConfig } : {}),
@@ -944,7 +1070,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
 
     // Resume specific thread
     if (config.thread_id) {
-      const threadIdCacheKey = `${instanceKey}:${config.thread_id}`;
+      const threadIdCacheKey = this.getExplicitThreadCacheKey(config, instanceKey);
       const cached = this.threads.get(threadIdCacheKey);
       if (cached) {
         return cached;
@@ -952,6 +1078,12 @@ export class OpenAICodexSDKProvider implements ApiProvider {
 
       const thread = instance.resumeThread(config.thread_id, threadOptions);
       if (config.persist_threads) {
+        const explicitThreadCachePrefix = this.getExplicitThreadCachePrefix(config);
+        for (const cacheKey of this.threads.keys()) {
+          if (cacheKey !== threadIdCacheKey && cacheKey.startsWith(explicitThreadCachePrefix)) {
+            this.threads.delete(cacheKey);
+          }
+        }
         this.threads.set(threadIdCacheKey, thread);
       }
       return thread;
@@ -999,11 +1131,22 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       for await (const event of events) {
         const eventTime = Date.now();
         if (callOptions?.abortSignal?.aborted) {
-          throw this.createAbortError('OpenAI Codex SDK call aborted');
+          throw createAbortError('OpenAI Codex SDK call aborted');
         }
 
         this.handleStreamingEvent(event, state, tracer, eventTime, skillRootPrefixes);
         state.lastEventTime = eventTime;
+      }
+
+      if (!state.turnCompleted) {
+        if (state.lastStreamError) {
+          if (!state.activeTurnSpan) {
+            this.startTurnSpan(state, tracer, state.lastEventTime);
+          }
+          this.endTurnSpan(state, state.lastEventTime, undefined, state.lastStreamError);
+          throw new Error(`Codex stream ended after error: ${state.lastStreamError}`);
+        }
+        throw new Error('Codex stream ended before turn completion');
       }
     } finally {
       this.endUnclosedStreamingSpans(state);
@@ -1016,6 +1159,8 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     return {
       items: [],
       usage: undefined,
+      turnCompleted: false,
+      lastStreamError: undefined,
       activeSpans: new Map(),
       itemStartTimes: new Map(),
       lastEventTime: Date.now(),
@@ -1026,6 +1171,9 @@ export class OpenAICodexSDKProvider implements ApiProvider {
           content: this.formatPromptInputForTrace(prompt),
         },
       ],
+      turnCount: 0,
+      activeTurnSpan: undefined,
+      activeTurnIndex: 0,
     };
   }
 
@@ -1048,21 +1196,42 @@ export class OpenAICodexSDKProvider implements ApiProvider {
         return;
       case 'turn.completed':
         state.usage = event.usage;
+        state.turnCompleted = true;
+        if (!state.activeTurnSpan) {
+          // Some Codex SDK streams emit `turn.completed` without a prior
+          // `turn.started`. Lazily synthesize a turn span so the
+          // `gen_ai.turn *` count still reflects this SDK turn.
+          this.startTurnSpan(state, tracer, state.lastEventTime);
+        }
+        this.endTurnSpan(state, eventTime, event.usage);
         logger.debug('Codex turn completed', { usage: state.usage });
         return;
       case 'turn.failed': {
         const errorMsg = event.error?.message || 'Turn failed';
+        if (!state.activeTurnSpan) {
+          this.startTurnSpan(state, tracer, state.lastEventTime);
+        }
+        this.endTurnSpan(state, eventTime, undefined, errorMsg);
         logger.error('Codex turn failed', { error: errorMsg });
-        throw new Error(`Codex turn failed: ${errorMsg}`);
+        const previousStreamError =
+          state.lastStreamError && state.lastStreamError !== errorMsg
+            ? ` Previous stream error: ${state.lastStreamError}`
+            : '';
+        throw new Error(`Codex turn failed: ${errorMsg}${previousStreamError}`);
       }
       case 'error': {
         const errorMsg =
           typeof event.message === 'string' && event.message ? event.message : 'Stream failed';
-        logger.error('Codex stream error', { error: errorMsg });
-        throw new Error(`Codex stream error: ${errorMsg}`);
+        state.lastStreamError = errorMsg;
+        logger.debug('Codex stream error event received; waiting for terminal event', {
+          error: errorMsg,
+        });
+        return;
       }
       case 'thread.started':
+        return;
       case 'turn.started':
+        this.startTurnSpan(state, tracer, eventTime);
         return;
       default:
         logger.debug('Codex unknown event type', { type: event.type });
@@ -1080,6 +1249,11 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       logger.warn('Codex item.started event missing item', { event });
       return;
     }
+    if (!state.activeTurnSpan) {
+      // Stream omitted `turn.started`; open a turn span lazily so the first
+      // item lands inside a real turn and gets a `gen_ai.turn.index` tag.
+      this.startTurnSpan(state, tracer, eventTime);
+    }
     if (!item.id) {
       logger.debug('Codex item.started without id, will create span at completion', {
         type: item.type,
@@ -1088,7 +1262,13 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     }
 
     const itemId = String(item.id);
-    const span = this.startStreamingItemSpan(tracer, item, itemId);
+    const span = this.startStreamingItemSpan(
+      tracer,
+      item,
+      itemId,
+      undefined,
+      state.activeTurnIndex > 0 ? state.activeTurnIndex : undefined,
+    );
     state.activeSpans.set(itemId, span);
     state.itemStartTimes.set(itemId, eventTime);
     logger.debug('Codex item started', { itemId, type: item.type });
@@ -1106,6 +1286,12 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       logger.warn('Codex item.completed event missing item', { event });
       return;
     }
+    if (!state.activeTurnSpan) {
+      // Same lazy-open as `handleStreamingItemStarted`: covers streams that
+      // emit only `item.completed` events without prior `turn.started` /
+      // `item.started` events.
+      this.startTurnSpan(state, tracer, state.lastEventTime);
+    }
 
     const itemId = item.id ? String(item.id) : crypto.randomUUID();
     state.items.push(item);
@@ -1113,7 +1299,13 @@ export class OpenAICodexSDKProvider implements ApiProvider {
 
     const span =
       state.activeSpans.get(itemId) ??
-      this.startStreamingItemSpan(tracer, item, itemId, state.lastEventTime);
+      this.startStreamingItemSpan(
+        tracer,
+        item,
+        itemId,
+        state.lastEventTime,
+        state.activeTurnIndex > 0 ? state.activeTurnIndex : undefined,
+      );
     const hadStartEvent = state.activeSpans.has(itemId);
     const startTime = state.itemStartTimes.get(itemId) ?? state.lastEventTime;
     const durationMs = eventTime - startTime;
@@ -1157,17 +1349,59 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     item: any,
     itemId: string,
     startTime?: number,
+    turnIndex?: number,
   ): Span {
     return tracer.startSpan(this.getSpanNameForItem(item), {
       kind: SpanKind.INTERNAL,
       ...(startTime === undefined ? {} : { startTime }),
-      attributes: {
+      attributes: addActiveSpanRoleAttribute({
         'codex.item.id': itemId,
         'codex.item.type': item.type,
         ...(startTime === undefined ? {} : { 'codex.timing.estimated': true }),
+        ...(typeof turnIndex === 'number' ? { 'gen_ai.turn.index': turnIndex } : {}),
         ...this.getAttributesForItem(item),
-      },
+      }),
     });
+  }
+
+  private startTurnSpan(
+    state: CodexStreamingState,
+    tracer: ReturnType<typeof trace.getTracer>,
+    eventTime: number,
+  ): void {
+    openTurnSpan(state, { tracer, eventTime, system: 'openai', logLabel: 'CodexSDK' });
+  }
+
+  private endTurnSpan(
+    state: CodexStreamingState,
+    eventTime: number,
+    usage?: any,
+    errorMessage?: string,
+  ): void {
+    const attributes: Attributes = {};
+    if (usage) {
+      const inputTokens = usage.input_tokens ?? usage.inputTokens;
+      const outputTokens = usage.output_tokens ?? usage.outputTokens;
+      const cachedTokens = usage.cached_input_tokens ?? usage.cachedInputTokens;
+      const cacheWriteTokens = usage.cache_write_input_tokens ?? usage.cacheWriteInputTokens;
+      const reasoningTokens = usage.reasoning_output_tokens ?? usage.reasoningOutputTokens;
+      if (typeof inputTokens === 'number') {
+        attributes['gen_ai.usage.input_tokens'] = inputTokens;
+      }
+      if (typeof outputTokens === 'number') {
+        attributes['gen_ai.usage.output_tokens'] = outputTokens;
+      }
+      if (typeof cachedTokens === 'number') {
+        attributes[GenAIAttributes.USAGE_CACHE_READ_INPUT_TOKENS] = cachedTokens;
+      }
+      if (typeof cacheWriteTokens === 'number') {
+        attributes[GenAIAttributes.USAGE_CACHE_CREATION_INPUT_TOKENS] = cacheWriteTokens;
+      }
+      if (typeof reasoningTokens === 'number') {
+        attributes[GenAIAttributes.USAGE_REASONING_OUTPUT_TOKENS] = reasoningTokens;
+      }
+    }
+    closeTurnSpan(state, { eventTime, attributes, errorMessage, logLabel: 'CodexSDK' });
   }
 
   private collectStreamingItemText(item: any, state: CodexStreamingState): void {
@@ -1277,6 +1511,10 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     }
     state.activeSpans.clear();
     state.itemStartTimes.clear();
+    closeTurnSpan(state, {
+      errorMessage: 'Turn span not properly closed',
+      logLabel: 'CodexSDK',
+    });
   }
 
   private buildStreamingTurnResult(state: CodexStreamingState): {
@@ -1426,7 +1664,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     const skillCandidates = new Map<string, { name: string; path: string }>();
 
     if (command) {
-      for (const skill of this.extractSkillPathCandidates(command, skillRootPrefixes)) {
+      for (const skill of extractCodexSkillPathCandidates(command, skillRootPrefixes)) {
         skillCandidates.set(skill.path, skill);
       }
     }
@@ -1465,6 +1703,8 @@ export class OpenAICodexSDKProvider implements ApiProvider {
           attrs['codex.mcp.server'] = item.server;
         }
         if (typeof item.tool === 'string') {
+          attrs['gen_ai.operation.name'] = 'execute_tool';
+          attrs['gen_ai.tool.name'] = item.tool;
           attrs['codex.mcp.tool'] = item.tool;
         }
         {
@@ -1483,6 +1723,8 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       // Collaboration mode attributes
       case 'collaboration_tool_call':
         if (typeof item.tool === 'string') {
+          attrs['gen_ai.operation.name'] = 'execute_tool';
+          attrs['gen_ai.tool.name'] = item.tool;
           attrs['codex.collab.tool'] = item.tool;
         }
         if (typeof item.target_thread_id === 'string') {
@@ -1670,7 +1912,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     const keyData = {
       env,
       base_url: config.base_url,
-      cli_config: this.getResolvedCliConfig(config),
+      cli_config: this.getResolvedCliConfig(config, env),
       codex_path_override: config.codex_path_override,
     };
 
@@ -1705,14 +1947,13 @@ export class OpenAICodexSDKProvider implements ApiProvider {
   private getThreadRunQueueKey(
     config: OpenAICodexSDKConfig,
     cacheKey: string | undefined,
-    instanceKey: string,
   ): string | undefined {
     if (config.deep_tracing) {
       return undefined;
     }
 
     if (config.thread_id) {
-      return `${instanceKey}:${config.thread_id}`;
+      return `explicit:${this.getExplicitThreadIdentity(config)}`;
     }
 
     if (config.persist_threads && cacheKey) {
@@ -1722,70 +1963,23 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     return undefined;
   }
 
-  private async runSerializedThreadTurn<T>(
-    queueKey: string | undefined,
-    abortSignal: AbortSignal | undefined,
-    executeTurn: () => Promise<T>,
-  ): Promise<T> {
-    if (!queueKey) {
-      return executeTurn();
-    }
-
-    const previousRun = this.threadRunQueues.get(queueKey) ?? Promise.resolve();
-    let releaseCurrentRun: () => void = () => {};
-    const currentRun = new Promise<void>((resolve) => {
-      releaseCurrentRun = resolve;
-    });
-    const queuedRun = previousRun.catch(() => undefined).then(() => currentRun);
-    this.threadRunQueues.set(queueKey, queuedRun);
-    void queuedRun.finally(() => {
-      if (this.threadRunQueues.get(queueKey) === queuedRun) {
-        this.threadRunQueues.delete(queueKey);
-      }
-    });
-
-    try {
-      await this.waitForPreviousThreadRun(previousRun, abortSignal);
-      return await executeTurn();
-    } finally {
-      releaseCurrentRun();
-    }
+  private getExplicitThreadCacheKey(config: OpenAICodexSDKConfig, instanceKey: string): string {
+    const variant = crypto
+      .createHash('sha256')
+      .update(JSON.stringify({ instanceKey, threadOptions: this.buildThreadOptions(config) }))
+      .digest('hex');
+    return `${this.getExplicitThreadCachePrefix(config)}${variant}`;
   }
 
-  private async waitForPreviousThreadRun(
-    previousRun: Promise<void>,
-    abortSignal: AbortSignal | undefined,
-  ): Promise<void> {
-    const previousRunDone = previousRun.catch(() => undefined);
-
-    if (!abortSignal) {
-      await previousRunDone;
-      return;
-    }
-
-    if (abortSignal.aborted) {
-      throw this.createAbortError('Codex thread turn wait aborted');
-    }
-
-    let onAbort: (() => void) | undefined;
-    const abortPromise = new Promise<void>((_, reject) => {
-      onAbort = () => reject(this.createAbortError('Codex thread turn wait aborted'));
-      abortSignal.addEventListener('abort', onAbort, { once: true });
-    });
-
-    try {
-      await Promise.race([previousRunDone, abortPromise]);
-    } finally {
-      if (onAbort) {
-        abortSignal.removeEventListener('abort', onAbort);
-      }
-    }
+  private getExplicitThreadCachePrefix(config: OpenAICodexSDKConfig): string {
+    return `explicit:${this.getExplicitThreadIdentity(config)}:`;
   }
 
-  private createAbortError(message: string): Error {
-    const error = new Error(message);
-    error.name = 'AbortError';
-    return error;
+  private getExplicitThreadIdentity(config: OpenAICodexSDKConfig): string {
+    return crypto
+      .createHash('sha256')
+      .update(config.thread_id ?? '')
+      .digest('hex');
   }
 
   async callApi(
@@ -1793,12 +1987,18 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     context?: CallApiContextParams,
     callOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
+    const cleanupGeneration = this.cleanupGeneration;
     // Merge configs (prompt config takes precedence)
     const mergedConfig: OpenAICodexSDKConfig = {
       ...this.config,
       ...context?.prompt?.config,
     };
+    // Promptfoo may attach the live target provider object to prompt config for
+    // generic provider workflows. Codex accepts this key for loader compatibility,
+    // but runtime variable rendering must not recurse into provider methods.
+    delete mergedConfig.provider;
     const config = renderVarsInObject(mergedConfig, context?.vars) as OpenAICodexSDKConfig;
+    const inIsolatedWorkspace = assertIsolatedWorkingDir(config);
 
     const requestedModel =
       typeof config.model === 'string' && config.model ? config.model : undefined;
@@ -1807,7 +2007,15 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     // withGenAISpan handles both exceptions and { error: ... } responses
     return withGenAISpan(
       this.buildCodexSpanContext(prompt, context, requestedModel),
-      () => this.callApiInternal(prompt, context, callOptions, config),
+      () =>
+        this.callApiInternal(
+          prompt,
+          context,
+          callOptions,
+          config,
+          inIsolatedWorkspace,
+          cleanupGeneration,
+        ),
       (response) => this.extractCodexSpanResult(response, requestedModel),
     );
   }
@@ -1819,8 +2027,9 @@ export class OpenAICodexSDKProvider implements ApiProvider {
   ): GenAISpanContext {
     return {
       system: 'openai',
-      operationName: 'chat',
-      model: requestedModel ?? 'codex',
+      operationName: 'invoke_agent',
+      model: requestedModel ?? 'Codex',
+      agentName: 'Codex',
       providerId: this.id(),
       evalId: context?.evaluationId || context?.test?.metadata?.evaluationId,
       testIndex:
@@ -1920,6 +2129,8 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     context: CallApiContextParams | undefined,
     callOptions: CallApiOptionsParams | undefined,
     rawConfig: OpenAICodexSDKConfig,
+    inIsolatedWorkspace: boolean,
+    cleanupGeneration: number,
   ): Promise<ProviderResponse> {
     let config: OpenAICodexSDKConfig;
     try {
@@ -1932,7 +2143,10 @@ export class OpenAICodexSDKProvider implements ApiProvider {
 
     // Get current trace context for deep tracing
     // This allows the Codex CLI to export its internal spans as children of our span
-    const currentTraceparent = getTraceparent();
+    const activeTraceparent = getTraceparent();
+    const currentTraceparent = isValidTraceparent(activeTraceparent)
+      ? activeTraceparent
+      : context?.traceparent;
     const apiKey = this.getApiKey(config);
     const workingDirectory =
       resolveAgenticWorkingDir(config.working_dir, cliState.basePath) ?? process.cwd();
@@ -1951,6 +2165,9 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       currentTraceparent,
       apiKey,
     );
+    if (inIsolatedWorkspace) {
+      clearRepositoryEnv(env);
+    }
     const skillRootPrefixes = this.getSkillRootPrefixes(env, resolvedConfig.working_dir);
     const promptInput = this.parsePromptInput(prompt);
 
@@ -1978,7 +2195,13 @@ export class OpenAICodexSDKProvider implements ApiProvider {
         resolvedConfig.skip_git_repo_check,
       );
 
-      const codexInstance = await this.getCodexInstanceForTurn(env, resolvedConfig, apiKey);
+      const codexInstance = await this.getCodexInstanceForTurn(
+        env,
+        resolvedConfig,
+        apiKey,
+        cleanupGeneration,
+        callOptions?.abortSignal,
+      );
       const activeInstance = codexInstance.activeInstance;
       localInstance = codexInstance.localInstance;
       useLocalInstance = codexInstance.useLocalInstance;
@@ -1995,6 +2218,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
         resolvedConfig,
         callOptions,
         skillRootPrefixes,
+        cleanupGeneration,
       );
 
       return this.buildCodexProviderResponse(turn, sessionId, skillRootPrefixes, resolvedConfig);
@@ -2008,12 +2232,18 @@ export class OpenAICodexSDKProvider implements ApiProvider {
         return { error: 'OpenAI Codex SDK call aborted' };
       }
 
+      if (error instanceof CodexCliCompatibilityError) {
+        return { error: `Error calling OpenAI Codex SDK: ${error.message}` };
+      }
+
       // Safely extract error message - error may not be an Error object
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error('Error calling OpenAI Codex SDK', { error: errorMessage });
-      return {
-        error: `Error calling OpenAI Codex SDK: ${errorMessage}`,
-      };
+      return (
+        buildCodexRateLimitResponse(error, errorMessage) ?? {
+          error: `Error calling OpenAI Codex SDK: ${errorMessage}`,
+        }
+      );
     } finally {
       await this.cleanupCodexTurn(resolvedConfig, cacheKey, useLocalInstance, localInstance);
     }
@@ -2033,22 +2263,35 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     env: Record<string, string>,
     resolvedConfig: OpenAICodexSDKConfig,
     apiKey: string | undefined,
+    cleanupGeneration: number,
+    abortSignal?: AbortSignal,
   ): Promise<{
     activeInstance: any;
     instanceKey: string;
     localInstance: any;
     useLocalInstance: boolean;
   }> {
-    if (!this.codexModule) {
-      this.codexModule = await loadCodexSDK();
+    if (!this.codexSdk) {
+      this.codexSdk = await loadCodexSDK();
     }
+    const codexSdk = this.codexSdk;
+
+    if (cleanupGeneration !== this.cleanupGeneration) {
+      throw new Error('Codex SDK call was interrupted by cleanup');
+    }
+    await this.ensureCodexCompatibility(env, resolvedConfig, codexSdk.entryPoint, abortSignal);
+
+    if (cleanupGeneration !== this.cleanupGeneration) {
+      throw new Error('Codex SDK call was interrupted by cleanup');
+    }
+    providerRegistry.register(this);
 
     const stableEnv = { ...env };
     delete stableEnv.TRACEPARENT;
     const instanceKey = this.generateInstanceKey(stableEnv, resolvedConfig);
     if (resolvedConfig.deep_tracing) {
       this.warnOnceForDeepTracingThreadOptions(resolvedConfig);
-      const localInstance = new this.codexModule.Codex(
+      const localInstance = new codexSdk.module.Codex(
         this.buildCodexOptions(env, resolvedConfig, apiKey),
       );
       return {
@@ -2061,7 +2304,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
 
     let activeInstance = this.codexInstances.get(instanceKey);
     if (!activeInstance) {
-      activeInstance = new this.codexModule.Codex(
+      activeInstance = new codexSdk.module.Codex(
         this.buildCodexOptions(env, resolvedConfig, apiKey),
       );
       this.codexInstances.set(instanceKey, activeInstance);
@@ -2073,6 +2316,61 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       localInstance: undefined,
       useLocalInstance: false,
     };
+  }
+
+  private async ensureCodexCompatibility(
+    env: Record<string, string>,
+    resolvedConfig: OpenAICodexSDKConfig,
+    sdkEntryPoint: string,
+    abortSignal?: AbortSignal,
+  ): Promise<void> {
+    const codexPathOverride = resolvedConfig.codex_path_override;
+    if (!codexPathOverride) {
+      return;
+    }
+    if (resolvedConfig.skip_codex_version_check) {
+      if (!this.compatibilitySkipWarningShown) {
+        logger.warn(
+          '[CodexSDK] Skipping custom Codex binary version compatibility check by explicit configuration.',
+          { codexPathOverride },
+        );
+        this.compatibilitySkipWarningShown = true;
+      }
+      return;
+    }
+
+    // The SDK's direct CLI dependency is its event-schema compatibility contract. The bundled
+    // CLI already satisfies it, so only a custom override needs a version probe.
+    const preflightEnv = { ...env };
+    delete preflightEnv.CODEX_API_KEY;
+    delete preflightEnv.OPENAI_API_KEY;
+    delete preflightEnv.TRACEPARENT;
+    delete preflightEnv.OTEL_RESOURCE_ATTRIBUTES;
+
+    if (abortSignal?.aborted) {
+      throw createAbortError('Codex compatibility check aborted');
+    }
+
+    const controller = new AbortController();
+    const signal = abortSignal
+      ? AbortSignal.any([abortSignal, controller.signal])
+      : controller.signal;
+    // Register ownership before the helper can spawn a process, including when
+    // cleanup or caller cancellation happens before this microtask starts.
+    const compatibilityCheck = Promise.resolve().then(() =>
+      checkCodexCliCompatibility({
+        sdkEntryPoint,
+        codexPathOverride,
+        env: preflightEnv,
+        signal,
+      }),
+    );
+    this.compatibilityChecks.set(controller, compatibilityCheck);
+    try {
+      await compatibilityCheck;
+    } finally {
+      this.compatibilityChecks.delete(controller);
+    }
   }
 
   private warnOnceForDeepTracingThreadOptions(resolvedConfig: OpenAICodexSDKConfig): void {
@@ -2100,17 +2398,24 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     resolvedConfig: OpenAICodexSDKConfig,
     callOptions: CallApiOptionsParams | undefined,
     skillRootPrefixes: readonly string[],
+    cleanupGeneration: number,
   ): Promise<{ turn: any; sessionId: string }> {
-    const queueKey = this.getThreadRunQueueKey(resolvedConfig, cacheKey, instanceKey);
+    const queueKey = this.getThreadRunQueueKey(resolvedConfig, cacheKey);
     const runOptions = this.buildCodexRunOptions(resolvedConfig, callOptions);
 
-    return this.runSerializedThreadTurn(queueKey, callOptions?.abortSignal, async () => {
+    return this.threadRunQueues.run(queueKey, callOptions?.abortSignal, async () => {
+      if (cleanupGeneration !== this.cleanupGeneration) {
+        throw new Error('Codex SDK call was interrupted by cleanup');
+      }
       const thread = await this.getOrCreateThread(
         resolvedConfig,
         cacheKey,
         instanceKey,
         activeInstance,
       );
+      if (cleanupGeneration !== this.cleanupGeneration) {
+        throw new Error('Codex SDK call was interrupted by cleanup');
+      }
       const turn = resolvedConfig.enable_streaming
         ? await this.runStreaming(thread, promptInput, runOptions, callOptions, skillRootPrefixes)
         : await thread.run(promptInput, runOptions);
@@ -2135,7 +2440,11 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     return {
       output,
       tokenUsage,
-      cost: this.calculateCodexResponseCost(tokenUsage, resolvedConfig.model),
+      cost: this.calculateCodexResponseCost(
+        tokenUsage,
+        this.getCodexBillingModelName(resolvedConfig),
+        Boolean(resolvedConfig.codex_path_override),
+      ),
       metadata: this.buildCodexResponseMetadata(turn.items, skillRootPrefixes),
       raw: JSON.stringify(turn),
       sessionId,
@@ -2151,12 +2460,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       return undefined;
     }
 
-    return {
-      ...(skillMetadata.skillCalls.length > 0 ? { skillCalls: skillMetadata.skillCalls } : {}),
-      ...(skillMetadata.attemptedSkillCalls.length > skillMetadata.skillCalls.length
-        ? { attemptedSkillCalls: skillMetadata.attemptedSkillCalls }
-        : {}),
-    };
+    return getCodexSkillMetadataFields(skillMetadata);
   }
 
   private buildCodexTokenUsage(turnUsage: any): ProviderResponse['tokenUsage'] {
@@ -2164,14 +2468,26 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       return undefined;
     }
 
+    const reasoningTokens = turnUsage.reasoning_output_tokens;
+    const cacheWriteTokens = turnUsage.cache_write_input_tokens;
+    const hasCompletionDetails =
+      typeof reasoningTokens === 'number' || typeof cacheWriteTokens === 'number';
+
     return {
       // cached_input_tokens is already included in input_tokens by the Codex SDK.
       prompt: turnUsage.input_tokens,
       completion: turnUsage.output_tokens,
       total: turnUsage.input_tokens + turnUsage.output_tokens,
       cached: turnUsage.cached_input_tokens || 0,
-      ...(typeof turnUsage.reasoning_output_tokens === 'number'
-        ? { completionDetails: { reasoning: turnUsage.reasoning_output_tokens } }
+      ...(hasCompletionDetails
+        ? {
+            completionDetails: {
+              ...(typeof reasoningTokens === 'number' ? { reasoning: reasoningTokens } : {}),
+              ...(typeof cacheWriteTokens === 'number'
+                ? { cacheCreationInputTokens: cacheWriteTokens }
+                : {}),
+            },
+          }
         : {}),
     };
   }
@@ -2179,8 +2495,40 @@ export class OpenAICodexSDKProvider implements ApiProvider {
   private calculateCodexResponseCost(
     tokenUsage: ProviderResponse['tokenUsage'],
     model: string | undefined,
+    usesCustomCodexBinary: boolean,
   ): number | undefined {
+    // SDK 0.146 fills an omitted cache-write field with zero. That is reliable for its bundled
+    // Codex binary, but a custom/older binary may omit the field (or have it normalized to zero)
+    // despite performing cache writes. A positive value reported by the binary is still usable.
+    const normalizedModel = model?.replace(/^bedrock:/, '');
+    if (usesCustomCodexBinary && normalizedModel?.startsWith('gpt-5.6')) {
+      const cacheWriteTokens = tokenUsage?.completionDetails?.cacheCreationInputTokens;
+      if (
+        typeof cacheWriteTokens !== 'number' ||
+        !Number.isFinite(cacheWriteTokens) ||
+        cacheWriteTokens <= 0
+      ) {
+        return undefined;
+      }
+    }
     return calculateOpenAIUsageCostFromTokenUsage(model, tokenUsage);
+  }
+
+  private getCodexBillingModelName(config: OpenAICodexSDKConfig): string | undefined {
+    const cliConfigProvider = config.cli_config?.model_provider;
+    const modelProvider =
+      config.model_provider ??
+      (typeof cliConfigProvider === 'string' ? cliConfigProvider : undefined);
+
+    if (
+      modelProvider?.trim().toLowerCase() === 'amazon-bedrock' &&
+      config.model !== undefined &&
+      /^openai\.gpt-5\.6(?:-|$)/.test(config.model)
+    ) {
+      return `bedrock:${config.model.slice('openai.'.length)}`;
+    }
+
+    return config.model;
   }
 
   private async cleanupCodexTurn(

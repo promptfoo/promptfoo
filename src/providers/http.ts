@@ -5,14 +5,26 @@ import https from 'https';
 import path from 'path';
 
 import httpZ from 'http-z';
-import { Agent } from 'undici';
+import { LRUCache } from 'lru-cache';
+import { Agent, type Dispatcher } from 'undici';
 import { z } from 'zod';
 import { fetchWithCache } from '../cache';
 import cliState from '../cliState';
+import {
+  HttpProviderConfigFieldsSchema,
+  HttpSessionInputSchema,
+  HttpTokenEstimationInputSchema,
+} from '../contracts/providerConfig/http';
+import { HttpAuthSchema } from '../contracts/providerConfig/httpAuth';
+import { HttpSignatureAuthSchema } from '../contracts/providerConfig/httpSignature';
+import { HttpTlsFieldsSchema } from '../contracts/providerConfig/httpTls';
 import { getEnvString } from '../envars';
 import { importModule } from '../esm';
 import logger from '../logger';
-import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
+import {
+  createDecompressionInterceptor,
+  stripDecompressionHeaders,
+} from '../util/fetch/decompress';
 import {
   maybeLoadConfigFromExternalFile,
   maybeLoadFromExternalFile,
@@ -22,7 +34,7 @@ import { loadFunction, parseFileUrl } from '../util/functions/loadFunction';
 import { renderVarsInObject } from '../util/index';
 import invariant from '../util/invariant';
 import { safeJsonStringify } from '../util/json';
-import { TOKEN_REFRESH_BUFFER_MS, type TokenRefreshLock } from '../util/oauth';
+import { TOKEN_REFRESH_BUFFER_MS } from '../util/oauth';
 import { safeResolve } from '../util/pathUtils';
 import {
   isSecretField,
@@ -30,6 +42,7 @@ import {
   REDACTED,
   sanitizeObject,
   sanitizeUrl,
+  sanitizeUrlEncodedString,
 } from '../util/sanitizer';
 import { getNunjucksEngine } from '../util/templates';
 import { createEmptyTokenUsage } from '../util/tokenUsageUtils';
@@ -49,6 +62,7 @@ import {
   transformToolChoice,
   transformTools,
 } from './shared';
+import { normalizeResponseTransformResult } from './transformResult';
 import { loadTransformModule, parseFileTransformReference } from './transformUtils';
 
 export { loadTransformModule } from './transformUtils';
@@ -61,6 +75,10 @@ import type {
   ProviderResponse,
   TokenUsage,
 } from '../types/index';
+
+const AUTH_TOKEN_CACHE_HMAC_CONTEXT = 'promptfoo:http-auth-token-cache-key';
+const AUTH_TOKEN_CACHE_HMAC_KEY = crypto.randomBytes(32);
+const MAX_AUTH_CACHE_ENTRIES = 256;
 
 /**
  * Escapes string values in variables for safe JSON template substitution.
@@ -256,55 +274,65 @@ function renderRawRequestWithNunjucks(template: string, vars: Record<string, any
 // This function is used to encode the URL in the first line of a raw request
 export function urlEncodeRawRequestPath(rawRequest: string) {
   const firstLine = rawRequest.split('\n')[0];
+  // The first line can embed credentials in the request-target query string. These
+  // error paths surface via logger.error (always on) and the thrown message (persisted
+  // to result.error), so sanitize the line before interpolating it. Computed lazily:
+  // for a valid request line sanitizeUrl would otherwise console.warn on every call
+  // (the whole line is not a URL), so only pay it when an error actually fires.
+  const safeFirstLine = () => sanitizeUrl(firstLine);
 
   const firstSpace = firstLine.indexOf(' ');
   const method = firstLine.slice(0, firstSpace);
   if (!method || !http.METHODS.includes(method)) {
-    logger.error(`[Http Provider] HTTP request method ${method} is not valid. From: ${firstLine}`);
+    logger.error(
+      `[Http Provider] HTTP request method ${method} is not valid. From: ${safeFirstLine()}`,
+    );
     throw new Error(
-      `[Http Provider] HTTP request method ${method} is not valid. From: ${firstLine}`,
+      `[Http Provider] HTTP request method ${method} is not valid. From: ${safeFirstLine()}`,
     );
   }
   const lastSpace = firstLine.lastIndexOf(' ');
   if (lastSpace === -1) {
     logger.error(
-      `[Http Provider] HTTP request URL is not valid. Protocol is missing. From: ${firstLine}`,
+      `[Http Provider] HTTP request URL is not valid. Protocol is missing. From: ${safeFirstLine()}`,
     );
     throw new Error(
-      `[Http Provider] HTTP request URL is not valid. Protocol is missing. From: ${firstLine}`,
+      `[Http Provider] HTTP request URL is not valid. Protocol is missing. From: ${safeFirstLine()}`,
     );
   }
   const url = firstLine.slice(firstSpace + 1, lastSpace);
 
   if (url.length === 0) {
-    logger.error(`[Http Provider] HTTP request URL is not valid. From: ${firstLine}`);
-    throw new Error(`[Http Provider] HTTP request URL is not valid. From: ${firstLine}`);
+    logger.error(`[Http Provider] HTTP request URL is not valid. From: ${safeFirstLine()}`);
+    throw new Error(`[Http Provider] HTTP request URL is not valid. From: ${safeFirstLine()}`);
   }
 
   const protocol = lastSpace < firstLine.length ? firstLine.slice(lastSpace + 1) : '';
 
   if (!protocol.toLowerCase().startsWith('http')) {
-    logger.error(`[Http Provider] HTTP request protocol is not valid. From: ${firstLine}`);
-    throw new Error(`[Http Provider] HTTP request protocol is not valid. From: ${firstLine}`);
+    logger.error(`[Http Provider] HTTP request protocol is not valid. From: ${safeFirstLine()}`);
+    throw new Error(`[Http Provider] HTTP request protocol is not valid. From: ${safeFirstLine()}`);
   }
 
-  logger.debug(`[Http Provider] Encoding URL: ${url} from first line of raw request: ${firstLine}`);
+  const sanitizedUrl = sanitizeUrl(url);
+  const sanitizedFirstLine = `${method} ${sanitizedUrl}${protocol ? ` ${protocol}` : ''}`;
+  logger.debug(
+    `[Http Provider] Encoding URL: ${sanitizedUrl} from first line of raw request: ${sanitizedFirstLine}`,
+  );
 
   try {
     // Use the built-in URL class to parse and encode the URL
     const parsedUrl = new URL(url, 'http://placeholder-base.com');
 
-    // Replace the original URL in the first line
-    rawRequest = rawRequest.replace(
+    // A callback preserves literal dollar patterns in the URL.
+    return rawRequest.replace(
       firstLine,
-      `${method} ${parsedUrl.pathname}${parsedUrl.search}${protocol ? ' ' + protocol : ''}`,
+      () => `${method} ${parsedUrl.pathname}${parsedUrl.search}${protocol ? ' ' + protocol : ''}`,
     );
   } catch (err) {
     logger.error(`[Http Provider] Error parsing URL in HTTP request: ${String(err)}`);
     throw new Error(`[Http Provider] Error parsing URL in HTTP request: ${String(err)}`);
   }
-
-  return rawRequest;
 }
 
 /**
@@ -318,6 +346,45 @@ function isBase64(str: string): boolean {
 }
 
 /**
+ * Explain why PEM key material cannot be used for signing, in terms of what the operator
+ * can actually see and act on.
+ *
+ * OpenSSL 3 is the reason this exists: `createSign().sign()` and `createPrivateKey()` both
+ * collapse empty, whitespace-only, malformed, truncated, and public-key-instead-of-private
+ * input into one opaque `error:1E08010C:DECODER routines::unsupported`. The distinction only
+ * survives in the PEM text, so classify that before handing it to crypto.
+ *
+ * Returns `undefined` when the material is structurally sound -- crypto then reports anything
+ * subtler (wrong curve for the algorithm, unsupported key size) with a real diagnostic.
+ *
+ * Uses plain string matching rather than regexes so no user-controlled input reaches a
+ * backtracking matcher, and never echoes key material -- only which marker was found or
+ * missing, so pointing this at the wrong file cannot leak that file's contents.
+ */
+export function diagnosePrivateKeyMaterial(material: unknown): string | undefined {
+  const text = typeof material === 'string' ? material.trim() : '';
+  if (!text) {
+    return 'it is empty';
+  }
+  if (text.includes('BEGIN CERTIFICATE')) {
+    return 'it is a certificate, not a private key';
+  }
+  if (text.includes('PUBLIC KEY-----')) {
+    return 'it is a public key, not a private key';
+  }
+  if (text.includes('ENCRYPTED PRIVATE KEY') || text.includes('Proc-Type: 4,ENCRYPTED')) {
+    return 'it is passphrase-protected; decrypt it first or supply an unencrypted key';
+  }
+  if (!text.includes('PRIVATE KEY-----')) {
+    return 'it is not PEM-encoded (no "-----BEGIN ... PRIVATE KEY-----" header)';
+  }
+  if (!text.includes('-----END')) {
+    return 'it is truncated (no "-----END ... PRIVATE KEY-----" line)';
+  }
+  return undefined;
+}
+
+/**
  * Generate signature using different certificate types
  */
 export async function generateSignature(
@@ -326,6 +393,9 @@ export async function generateSignature(
 ): Promise<string> {
   try {
     let privateKey: string;
+    // Which configured input the key came from, for error messages. Paths are already
+    // resolved; no secret material is recorded here.
+    let keySource: string;
 
     // For backward compatibility, detect type from legacy fields if not explicitly set
     let authType = signatureAuth.type;
@@ -347,11 +417,14 @@ export async function generateSignature(
         if (signatureAuth.privateKeyPath) {
           const resolvedPath = safeResolve(cliState.basePath || '', signatureAuth.privateKeyPath);
           privateKey = await fs.readFile(resolvedPath, 'utf8');
+          keySource = `privateKeyPath ${resolvedPath}`;
         } else if (signatureAuth.privateKey) {
           privateKey = signatureAuth.privateKey;
+          keySource = 'the configured privateKey';
         } else if (signatureAuth.certificateContent) {
           logger.debug(`[Signature Auth] Loading PEM from remote certificate content`);
           privateKey = Buffer.from(signatureAuth.certificateContent, 'base64').toString('utf8');
+          keySource = 'certificateContent';
         } else {
           throw new Error(
             'PEM private key is required. Provide privateKey, privateKeyPath, or certificateContent',
@@ -418,6 +491,7 @@ export async function generateSignature(
         }
 
         privateKey = entry.key;
+        keySource = `JKS alias '${targetAlias}'`;
         break;
       }
       case 'pfx': {
@@ -460,7 +534,7 @@ export async function generateSignature(
 
             const pem = pemModule.default as any;
 
-            let result: { key: string; cert: string };
+            let pfxInput: Buffer | string;
 
             if (signatureAuth.pfxContent || signatureAuth.certificateContent) {
               // Use base64 encoded content from database
@@ -472,15 +546,7 @@ export async function generateSignature(
                 `[Signature Auth][PFX] Base64 content length: ${content.length}, decoded bytes: ${pfxBuffer.byteLength}`,
               );
 
-              result = await new Promise<{ key: string; cert: string }>((resolve, reject) => {
-                pem.readPkcs12(pfxBuffer, { p12Password: pfxPassword }, (err: any, data: any) => {
-                  if (err) {
-                    reject(err);
-                  } else {
-                    resolve(data);
-                  }
-                });
-              });
+              pfxInput = pfxBuffer;
             } else {
               // Use file path (existing behavior)
               const resolvedPath = safeResolve(cliState.basePath || '', signatureAuth.pfxPath);
@@ -492,20 +558,18 @@ export async function generateSignature(
                 logger.debug(`[Signature Auth][PFX] Could not stat PFX file: ${String(e)}`);
               }
 
-              result = await new Promise<{ key: string; cert: string }>((resolve, reject) => {
-                pem.readPkcs12(
-                  resolvedPath,
-                  { p12Password: pfxPassword },
-                  (err: any, data: any) => {
-                    if (err) {
-                      reject(err);
-                    } else {
-                      resolve(data);
-                    }
-                  },
-                );
-              });
+              pfxInput = resolvedPath;
             }
+
+            const result = await new Promise<{ key: string; cert: string }>((resolve, reject) => {
+              pem.readPkcs12(pfxInput, { p12Password: pfxPassword }, (err: any, data: any) => {
+                if (err) {
+                  reject(err);
+                } else {
+                  resolve(data);
+                }
+              });
+            });
 
             if (!result.key) {
               logger.error('[Signature Auth][PFX] No private key extracted from PFX');
@@ -513,6 +577,10 @@ export async function generateSignature(
             }
 
             privateKey = result.key;
+            keySource =
+              signatureAuth.pfxContent || signatureAuth.certificateContent
+                ? 'pfxContent'
+                : `pfxPath ${safeResolve(cliState.basePath || '', signatureAuth.pfxPath)}`;
             logger.debug(
               `[Signature Auth] Successfully extracted private key from PFX using pem library`,
             );
@@ -537,6 +605,7 @@ export async function generateSignature(
               // Use base64 encoded content from database
               logger.debug(`[Signature Auth] Loading private key from base64 content`);
               privateKey = Buffer.from(signatureAuth.keyContent, 'base64').toString('utf8');
+              keySource = 'keyContent';
               logger.debug(
                 `[Signature Auth][PFX] Decoded keyContent length: ${privateKey.length} characters`,
               );
@@ -556,6 +625,7 @@ export async function generateSignature(
               try {
                 // Read the key directly — readFile surfaces ENOENT with the path.
                 privateKey = await fs.readFile(resolvedKeyPath, 'utf8');
+                keySource = `keyPath ${resolvedKeyPath}`;
               } catch (err) {
                 if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
                   throw new Error(`Key file not found: ${resolvedKeyPath}`);
@@ -584,6 +654,14 @@ export async function generateSignature(
         throw new Error(`Unsupported signature auth type: ${signatureAuth.type}`);
     }
 
+    // Fail with an actionable message before OpenSSL flattens the cause (see
+    // diagnosePrivateKeyMaterial). keySource names which configured input produced this key,
+    // because "which key did it even load?" is the operator's first question.
+    const keyProblem = diagnosePrivateKeyMaterial(privateKey);
+    if (keyProblem) {
+      throw new Error(`Private key from ${keySource} cannot be used: ${keyProblem}`);
+    }
+
     const data = getNunjucksEngine()
       .renderString(signatureAuth.signatureDataTemplate, {
         signatureTimestamp,
@@ -605,13 +683,21 @@ export async function generateSignature(
       return signature.toString('base64');
     } catch (e) {
       logger.error(
-        `[Signature Auth] Signing failed: ${String(e)}; keyLength=${privateKey?.length || 0}, algorithm=${signatureAuth.signatureAlgorithm}`,
+        `[Signature Auth] Signing failed: ${String(e)}; keyLength=${privateKey?.length ?? 0}, algorithm=${signatureAuth.signatureAlgorithm}, keyProvided=${Boolean(privateKey)}`,
       );
       throw e;
     }
   } catch (err) {
     logger.error(`Error generating signature: ${String(err)}`);
-    throw new Error(`Failed to generate signature: ${String(err)}`);
+    // Unwrap to err.message so the rethrow does not read "...: Error: Error: ...".
+    const wrapped = new Error(
+      `Failed to generate signature: ${err instanceof Error ? err.message : String(err)}`,
+    );
+    // Preserve the original for anyone catching this. Assigned rather than passed to the
+    // constructor because src/app typechecks this file under `lib: ES2020`, which predates
+    // the `ErrorOptions` overload -- `new Error(msg, { cause })` fails that build.
+    (wrapped as Error & { cause?: unknown }).cause = err;
+    throw wrapped;
   }
 }
 
@@ -622,139 +708,20 @@ function needsSignatureRefresh(timestamp: number, validityMs: number, bufferMs?:
   return timeElapsed + effectiveBufferMs >= validityMs;
 }
 
-const TokenEstimationConfigSchema = z.object({
+const TokenEstimationConfigSchema = HttpTokenEstimationInputSchema.strip().extend({
   enabled: z.boolean().prefault(false),
   multiplier: z.number().min(0.01).prefault(1.3),
 });
 
-// Base signature auth fields
-const BaseSignatureAuthSchema = z.object({
-  signatureValidityMs: z.number().prefault(300000),
-  signatureDataTemplate: z.string().prefault('{{signatureTimestamp}}'),
-  signatureAlgorithm: z.string().prefault('SHA256'),
-  signatureRefreshBufferMs: z.number().optional(),
-});
-
-// PEM signature auth schema
-const PemSignatureAuthSchema = BaseSignatureAuthSchema.extend({
-  type: z.literal('pem'),
-  privateKeyPath: z.string().optional(),
-  privateKey: z.string().optional(),
-}).refine((data) => data.privateKeyPath !== undefined || data.privateKey !== undefined, {
-  error: 'Either privateKeyPath or privateKey must be provided for PEM type',
-});
-
-// JKS signature auth schema
-const JksSignatureAuthSchema = BaseSignatureAuthSchema.extend({
-  type: z.literal('jks'),
-  keystorePath: z.string().optional(),
-  keystoreContent: z.string().optional(), // Base64 encoded JKS content
-  keystorePassword: z.string().optional(),
-  keyAlias: z.string().optional(),
-}).refine((data) => data.keystorePath !== undefined || data.keystoreContent !== undefined, {
-  error: 'Either keystorePath or keystoreContent must be provided for JKS type',
-});
-
-// PFX signature auth schema
-const PfxSignatureAuthSchema = BaseSignatureAuthSchema.extend({
-  type: z.literal('pfx'),
-  pfxPath: z.string().optional(),
-  pfxContent: z.string().optional(), // Base64 encoded PFX content
-  pfxPassword: z.string().optional(),
-  certPath: z.string().optional(),
-  keyPath: z.string().optional(),
-  certContent: z.string().optional(), // Base64 encoded certificate content
-  keyContent: z.string().optional(), // Base64 encoded private key content
-}).refine(
-  (data) => {
-    return (
-      data.pfxPath ||
-      data.pfxContent ||
-      (data.certPath && data.keyPath) ||
-      (data.certContent && data.keyContent)
-    );
-  },
-  {
-    error:
-      'Either pfxPath, pfxContent, both certPath and keyPath, or both certContent and keyContent must be provided for PFX type',
-  },
-);
-
-// Legacy signature auth schema (for backward compatibility)
-const LegacySignatureAuthSchema = z.looseObject(
-  BaseSignatureAuthSchema.extend({
-    privateKeyPath: z.string().optional(),
-    privateKey: z.string().optional(),
-    keystorePath: z.string().optional(),
-    keystorePassword: z.string().optional(),
-    keyAlias: z.string().optional(),
-    keyPassword: z.string().optional(),
-    pfxPath: z.string().optional(),
-    pfxPassword: z.string().optional(),
-    certPath: z.string().optional(),
-    keyPath: z.string().optional(),
-  }).shape,
-);
-
-// Generic certificate auth schema (for UI-based certificate uploads)
-const GenericCertificateAuthSchema = z.looseObject(
-  BaseSignatureAuthSchema.extend({
-    certificateContent: z.string().optional(),
-    certificatePassword: z.string().optional(),
-    certificateFilename: z.string().optional(),
-    type: z.enum(['pem', 'jks', 'pfx']).optional(),
-    // Include type-specific fields that might be present or added by transform
-    pfxContent: z.string().optional(),
-    pfxPassword: z.string().optional(),
-    pfxPath: z.string().optional(),
-    keystoreContent: z.string().optional(),
-    keystorePassword: z.string().optional(),
-    keystorePath: z.string().optional(),
-    privateKey: z.string().optional(),
-    privateKeyPath: z.string().optional(),
-    keyAlias: z.string().optional(),
-    certPath: z.string().optional(),
-    keyPath: z.string().optional(),
-    certContent: z.string().optional(),
-    keyContent: z.string().optional(),
-  }).shape,
-);
-
-// TLS Certificate configuration schema for HTTPS connections
-const TlsCertificateSchema = z
-  .object({
-    // CA certificate for verifying server certificates
-    ca: z.union([z.string(), z.array(z.string())]).optional(),
-    caPath: z.string().optional(),
-
-    // Client certificate for mutual TLS
-    cert: z.union([z.string(), z.array(z.string())]).optional(),
-    certPath: z.string().optional(),
-
-    // Private key for client certificate
-    key: z.union([z.string(), z.array(z.string())]).optional(),
-    keyPath: z.string().optional(),
-
-    // PFX/PKCS12 certificate bundle
-    // Supports inline content as base64-encoded string or Buffer
+const TlsCertificateSchema = HttpTlsFieldsSchema.strip()
+  .extend({
     pfx: z
       .union([z.string(), z.instanceof(Buffer)])
       .optional()
       .describe(
         'PFX/PKCS12 certificate bundle. Can be a file path via pfxPath, or inline as a base64-encoded string or Buffer',
       ),
-    pfxPath: z.string().optional().describe('Path to PFX/PKCS12 certificate file'),
-    passphrase: z.string().optional().describe('Passphrase for PFX certificate'),
-
-    // Security options
     rejectUnauthorized: z.boolean().prefault(true),
-    servername: z.string().optional(),
-
-    // Cipher configuration
-    ciphers: z.string().optional(),
-    secureProtocol: z.string().optional(),
-    minVersion: z.string().optional(),
-    maxVersion: z.string().optional(),
   })
   .refine(
     (data) => {
@@ -781,58 +748,6 @@ const TlsCertificateSchema = z
     },
   );
 
-const OAuthClientCredentialsSchema = z.object({
-  type: z.literal('oauth'),
-  grantType: z.literal('client_credentials'),
-  clientId: z.string(),
-  clientSecret: z.string(),
-  tokenUrl: z.string(),
-  scopes: z.array(z.string()).optional(),
-});
-
-const OAuthPasswordSchema = z.object({
-  type: z.literal('oauth'),
-  grantType: z.literal('password'),
-  clientId: z.string().optional(),
-  clientSecret: z.string().optional(),
-  tokenUrl: z.string(),
-  scopes: z.array(z.string()).optional(),
-  username: z.string(),
-  password: z.string(),
-});
-
-const BasicAuthSchema = z.object({
-  type: z.literal('basic'),
-  username: z.string(),
-  password: z.string(),
-});
-
-const BearerAuthSchema = z.object({
-  type: z.literal('bearer'),
-  token: z.string(),
-});
-
-const ApiKeyAuthSchema = z.object({
-  type: z.literal('api_key'),
-  value: z.string(),
-  placement: z.enum(['header', 'query']),
-  keyName: z.string(),
-});
-
-const FileAuthSchema = z.object({
-  type: z.literal('file'),
-  path: z.string().min(1),
-});
-
-const AuthSchema = z.union([
-  OAuthClientCredentialsSchema,
-  OAuthPasswordSchema,
-  BasicAuthSchema,
-  BearerAuthSchema,
-  ApiKeyAuthSchema,
-  FileAuthSchema,
-]);
-
 const FileAuthResultSchema = z.object({
   token: z.string().min(1),
   expiration: z.number().finite().nullable().optional(),
@@ -843,93 +758,65 @@ type FileAuthResult = {
   expiration?: number;
 };
 
+type CachedAuthToken = {
+  token: string;
+  expiresAt?: number;
+};
+
+type AuthTokenRefreshLock = {
+  promise: Promise<CachedAuthToken>;
+};
+
+type RequestSignature = { timestamp: number; signature: Promise<string> };
+
 /**
  * Configuration for a separate session endpoint that must be called before the main API.
  * The session endpoint returns a session ID that is then used in the main request.
  */
-export const SessionEndpointConfigSchema = z.object({
-  /** URL of the session endpoint */
-  url: z.string(),
-  /** HTTP method for the session endpoint (default: POST) */
+export const SessionEndpointConfigSchema = HttpSessionInputSchema.strip().extend({
   method: z.enum(['GET', 'POST']).optional().default('POST'),
-  /** Headers to send with the session endpoint request */
-  headers: z.record(z.string(), z.string()).optional(),
-  /** Request body for the session endpoint (for POST requests) */
   body: z.union([z.record(z.string(), z.any()), z.string()]).optional(),
-  /**
-   * Path to extract sessionId from response.
-   * Can be a JavaScript expression like 'data.body.sessionId' or 'data.headers["x-session-id"]'
-   */
-  responseParser: z.union([z.string(), z.function()]),
+  responseParser: z.union([z.string(), z.function()]).meta({
+    ...HttpSessionInputSchema.shape.responseParser.meta(),
+  }),
 });
 
-export type SessionEndpointConfig = z.infer<typeof SessionEndpointConfigSchema>;
-
-export const HttpProviderConfigSchema = z.object({
+export const HttpProviderConfigSchema = HttpProviderConfigFieldsSchema.strip().extend({
   body: z.union([z.record(z.string(), z.any()), z.string(), z.array(z.any())]).optional(),
-  headers: z.record(z.string(), z.string()).optional(),
-  maxRetries: z.number().min(0).optional(),
-  method: z.string().optional(),
   multipart: HttpMultipartConfigSchema.optional(),
-  queryParams: z.record(z.string(), z.string()).optional(),
-  request: z.string().optional(),
-  /**
-   * Tools to make available to the model, in OpenAI format.
-   * Use with `transformToolsFormat` to auto-convert to provider-specific format.
-   */
   tools: z.array(z.any()).optional(),
-  /**
-   * Tool choice configuration, in OpenAI format.
-   * Use with `transformToolsFormat` to auto-convert to provider-specific format.
-   */
   tool_choice: z.any().optional(),
-  /**
-   * Transform OpenAI-format tools/tool_choice to provider-specific format.
-   * Use 'openai' for OpenAI-compatible endpoints, 'anthropic' for Anthropic, etc.
-   */
-  transformToolsFormat: z.enum(['openai', 'anthropic', 'bedrock', 'google']).optional(),
-  useHttps: z
-    .boolean()
-    .optional()
-    .describe('Use HTTPS for the request. This only works with the raw request option'),
-  /**
-   * Configuration for a separate session endpoint.
-   * When configured, the provider will call this endpoint to get a session ID
-   * before making the main API request.
-   */
   session: SessionEndpointConfigSchema.optional(),
   sessionParser: z.union([z.string(), z.function()]).optional(),
-  sessionSource: z.enum(['client', 'server', 'endpoint']).optional(),
-  stateful: z.boolean().optional(),
   transformRequest: z.union([z.string(), z.function()]).optional(),
   transformResponse: z.union([z.string(), z.function()]).optional(),
-  url: z.string().optional(),
   validateStatus: z
     .union([z.string(), z.function({ input: [z.number()], output: z.boolean() })])
     .optional(),
-  /**
-   * @deprecated use transformResponse instead
-   */
-  responseParser: z.union([z.string(), z.function()]).optional(),
-  // Token estimation configuration
-  tokenEstimation: TokenEstimationConfigSchema.optional(),
-  auth: AuthSchema.optional(),
-  // Digital Signature Authentication with support for multiple certificate types
-  signatureAuth: z
-    .union([
-      LegacySignatureAuthSchema,
-      PemSignatureAuthSchema,
-      JksSignatureAuthSchema,
-      PfxSignatureAuthSchema,
-      GenericCertificateAuthSchema,
-    ])
+  responseParser: z
+    .union([z.string(), z.function()])
     .optional()
-    .transform(preprocessSignatureAuthConfig),
-  // TLS Certificate configuration for HTTPS connections
+    .meta({
+      ...HttpProviderConfigFieldsSchema.shape.responseParser.meta(),
+    }),
+  tokenEstimation: TokenEstimationConfigSchema.optional(),
+  auth: HttpAuthSchema.optional(),
+  signatureAuth: HttpSignatureAuthSchema.optional().transform(preprocessSignatureAuthConfig),
   tls: TlsCertificateSchema.optional(),
 });
 
-export type HttpProviderConfig = z.infer<typeof HttpProviderConfigSchema>;
+export interface HttpProviderConfig extends z.output<typeof HttpProviderConfigSchema> {
+  /** Tools in OpenAI format; transformToolsFormat converts them for other providers. */
+  tools?: z.output<typeof HttpProviderConfigSchema>['tools'];
+  /** Tool choice in OpenAI format; transformToolsFormat converts it for other providers. */
+  tool_choice?: z.output<typeof HttpProviderConfigSchema>['tool_choice'];
+  /** Convert OpenAI-format tools and tool_choice to the selected provider format. */
+  transformToolsFormat?: z.output<typeof HttpProviderConfigSchema>['transformToolsFormat'];
+  /** Call a separate endpoint to obtain a session ID before the main API request. */
+  session?: z.output<typeof HttpProviderConfigSchema>['session'];
+  /** @deprecated Use transformResponse instead. */
+  responseParser?: z.output<typeof HttpProviderConfigSchema>['responseParser'];
+}
 
 function contentTypeIsJson(headers: Record<string, string> | undefined) {
   if (!headers) {
@@ -991,6 +878,132 @@ function hasOwnProperty(obj: Record<string, any>, key: string): boolean {
 
 function parseFileAuthReference(filePath: string): { filePath: string; functionName?: string } {
   return filePath.startsWith('file://') ? parseFileUrl(filePath) : { filePath };
+}
+
+function stableSerialize(value: unknown, seen = new WeakSet<object>()): string {
+  if (value === undefined) {
+    return 'undefined';
+  }
+  if (value === null) {
+    return 'null';
+  }
+  if (typeof value === 'bigint') {
+    return JSON.stringify({ bigint: value.toString() });
+  }
+  if (typeof value === 'function') {
+    return JSON.stringify({ function: value.name || 'anonymous' });
+  }
+  if (typeof value === 'symbol') {
+    return JSON.stringify({ symbol: String(value) });
+  }
+  if (typeof value !== 'object') {
+    return JSON.stringify(value) ?? String(value);
+  }
+  if (seen.has(value)) {
+    return '"[Circular]"';
+  }
+  seen.add(value);
+
+  try {
+    if (Array.isArray(value)) {
+      return `[${value.map((item) => stableSerialize(item, seen)).join(',')}]`;
+    }
+    if (value instanceof Date) {
+      return JSON.stringify(value.toISOString());
+    }
+
+    const record = value as Record<string, unknown>;
+    return `{${Object.keys(record)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${stableSerialize(record[key], seen)}`)
+      .join(',')}}`;
+  } finally {
+    seen.delete(value);
+  }
+}
+
+function digestAuthCacheInput(value: unknown): string {
+  return crypto
+    .createHmac('sha256', AUTH_TOKEN_CACHE_HMAC_KEY)
+    .update(AUTH_TOKEN_CACHE_HMAC_CONTEXT)
+    .update('\0')
+    .update(stableSerialize(value))
+    .digest('hex');
+}
+
+function getOAuthTokenCacheKey(oauthConfig: {
+  grantType: string;
+  clientId?: string;
+  clientSecret?: string;
+  tokenUrl: string;
+  scopes?: string[];
+  username?: string;
+  password?: string;
+}): string {
+  return `oauth:${digestAuthCacheInput(oauthConfig)}`;
+}
+
+function createFileAuthContext(
+  prompt: string,
+  vars: Record<string, any>,
+  context?: CallApiContextParams,
+): CallApiContextParams {
+  return {
+    ...(context ?? {}),
+    prompt: context?.prompt ?? ({ raw: prompt, label: prompt } as CallApiContextParams['prompt']),
+    vars,
+  };
+}
+
+function getProviderCacheIdentity(provider?: ApiProvider): unknown {
+  if (!provider) {
+    return undefined;
+  }
+
+  let id: string | undefined;
+  try {
+    id = provider.id();
+  } catch (err) {
+    id = `error:${String(err)}`;
+  }
+
+  return {
+    type: provider.constructor?.name,
+    id,
+    label: (provider as { label?: unknown }).label,
+    config: (provider as { config?: unknown }).config,
+  };
+}
+
+function getFileAuthContextCacheInput(context: CallApiContextParams): Record<string, unknown> {
+  const {
+    filters,
+    getCache,
+    logger: contextLogger,
+    originalProvider,
+    ...serializableContext
+  } = context;
+
+  return {
+    ...serializableContext,
+    filters: filters
+      ? Object.fromEntries(
+          Object.keys(filters)
+            .sort()
+            .map((filterName) => [filterName, stableSerialize(filters[filterName])]),
+        )
+      : undefined,
+    getCache: getCache == null ? undefined : stableSerialize(getCache),
+    logger: contextLogger == null ? undefined : true,
+    originalProvider: getProviderCacheIdentity(originalProvider),
+  };
+}
+
+function getFileAuthTokenCacheKey(authPath: string, context: CallApiContextParams): string {
+  return `file:${digestAuthCacheInput({
+    path: authPath,
+    context: getFileAuthContextCacheInput(context),
+  })}`;
 }
 
 function formatFileAuthFreshness(expiration?: number | null): string {
@@ -1161,6 +1174,12 @@ function normalizeHttpLineEndings(input: string): string {
   return normalized.replace(/\n/g, '\r\n');
 }
 
+function getRawRequestHttpVersion(input: string): string {
+  const firstLine = normalizeHttpLineEndings(input).split('\r\n', 1)[0].trim();
+  const versionMatch = firstLine.match(/\s+(HTTP\/\d(?:\.\d)?)$/i);
+  return versionMatch ? versionMatch[1].toUpperCase() : 'HTTP/1.1';
+}
+
 function parseRawRequest(input: string) {
   const adjusted = normalizeHttpLineEndings(input) + '\r\n\r\n';
   // If the injectVar is in a query param, we need to encode the URL in the first line
@@ -1181,6 +1200,7 @@ function parseRawRequest(input: string) {
     return {
       method: requestModel.method,
       url: requestModel.target,
+      httpVersion: getRawRequestHttpVersion(input),
       headers: requestModel.headers.reduce<Record<string, string>>(
         (acc: Record<string, string>, header: { name: string; value: string }) => {
           acc[header.name.toLowerCase()] = header.value;
@@ -1211,6 +1231,213 @@ export function extractBodyFromRawRequest(rawRequest: string): string | undefine
 
   const body = adjusted.slice(separatorIndex + 4).trim();
   return body.length > 0 ? body : undefined;
+}
+
+function getHeaderValue(
+  headers: Record<string, string> | undefined,
+  headerName: string,
+): string | undefined {
+  if (!headers) {
+    return undefined;
+  }
+  const normalizedHeaderName = headerName.toLowerCase();
+  const entry = Object.entries(headers).find(([key]) => key.toLowerCase() === normalizedHeaderName);
+  return entry?.[1];
+}
+
+function getMultipartBoundary(contentType: string): string | undefined {
+  const boundaryMatch = contentType.match(/boundary=(?:"([^"]+)"|([^;]+))/i);
+  return boundaryMatch?.[1] ?? boundaryMatch?.[2]?.trim();
+}
+
+function sanitizeMultipartFallbackBody(body: string): string {
+  const trimmedBody = body.trim();
+  if (!trimmedBody) {
+    return body;
+  }
+
+  const sanitizedTrimmedBody = sanitizeUrlEncodedString(trimmedBody);
+  return sanitizedTrimmedBody === trimmedBody
+    ? body
+    : body.replace(trimmedBody, sanitizedTrimmedBody);
+}
+
+function getMultipartPartFieldName(headerBlock: string): string | undefined {
+  const fieldNameMatch = headerBlock.match(
+    /content-disposition:[^\r\n]*\bname=(?:"([^"]*)"|([^;\r\n]+))/i,
+  );
+  const fieldName = fieldNameMatch?.[1] ?? fieldNameMatch?.[2]?.trim();
+  return fieldName || undefined;
+}
+
+function sanitizeMultipartPartBody(part: string): string {
+  const separator = part.includes('\r\n\r\n') ? '\r\n\r\n' : '\n\n';
+  const separatorIndex = part.indexOf(separator);
+  if (separatorIndex === -1) {
+    return sanitizeMultipartFallbackBody(part);
+  }
+
+  const headerBlock = part.slice(0, separatorIndex);
+  const bodyStartIndex = separatorIndex + separator.length;
+  const body = part.slice(bodyStartIndex);
+  const fieldName = getMultipartPartFieldName(headerBlock);
+  const trailingNewline = body.match(/(\r?\n)$/)?.[1] ?? '';
+  const bodyWithoutTerminator = trailingNewline ? body.slice(0, -trailingNewline.length) : body;
+  const shouldRedact =
+    Boolean(fieldName && isSecretField(fieldName)) || looksLikeSecret(bodyWithoutTerminator);
+  if (!shouldRedact) {
+    return part;
+  }
+
+  return `${part.slice(0, bodyStartIndex)}${REDACTED}${trailingNewline}`;
+}
+
+function sanitizeMultipartBody(body: string, contentType: string): string {
+  const boundary = getMultipartBoundary(contentType);
+  if (!boundary) {
+    return sanitizeMultipartFallbackBody(body);
+  }
+
+  return body
+    .split(`--${boundary}`)
+    .map((part) => sanitizeMultipartPartBody(part))
+    .join(`--${boundary}`);
+}
+
+function sanitizeRequestBodyForMetadata(body: unknown, headers?: Record<string, string>): unknown {
+  const sanitizedBody = sanitizeObject(body, { context: 'request body' });
+  if (typeof sanitizedBody !== 'string' || sanitizedBody.length === 0) {
+    return sanitizedBody;
+  }
+
+  const contentType = getHeaderValue(headers, 'content-type');
+  const normalizedContentType = contentType?.toLowerCase();
+  if (contentType && normalizedContentType?.includes('multipart/form-data')) {
+    return sanitizeMultipartBody(sanitizedBody, contentType);
+  }
+  if (normalizedContentType?.includes('application/x-www-form-urlencoded')) {
+    return sanitizeUrlEncodedString(sanitizedBody);
+  }
+
+  return sanitizedBody;
+}
+
+function looksLikeRawHttpRequest(value: string): boolean {
+  const firstLine = value.split(/\r?\n/, 1)[0].trim();
+  return /^[A-Z]+\s+\S+\s+HTTP\/\d(?:\.\d)?$/i.test(firstLine);
+}
+
+function decodeEscapedStringLiteral(value: string): string | undefined {
+  if (!/[\\](?:r|n|t|"|\\)/.test(value)) {
+    return undefined;
+  }
+
+  try {
+    const decoded = JSON.parse(`"${value}"`);
+    return typeof decoded === 'string' ? decoded : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function sanitizeRawRequestStringForMetadata(value: string): string | undefined {
+  if (!looksLikeRawHttpRequest(value)) {
+    return undefined;
+  }
+
+  try {
+    const parsedRequest = parseRawRequest(value);
+    return formatRawRequestForDebugMetadata(
+      parsedRequest,
+      extractBodyFromRawRequest(value) ?? parsedRequest.body?.text,
+    );
+  } catch {
+    return undefined;
+  }
+}
+
+function sanitizeTransformedRequestForMetadata(
+  value: unknown,
+  headers?: Record<string, string>,
+): unknown {
+  const sanitizedValue = sanitizeRequestBodyForMetadata(value, headers);
+  if (typeof sanitizedValue !== 'string') {
+    return sanitizedValue;
+  }
+
+  const sanitizedRawRequest = sanitizeRawRequestStringForMetadata(sanitizedValue);
+  if (sanitizedRawRequest) {
+    return sanitizedRawRequest;
+  }
+
+  const decodedValue = decodeEscapedStringLiteral(sanitizedValue);
+  if (decodedValue) {
+    const sanitizedDecodedRawRequest = sanitizeRawRequestStringForMetadata(decodedValue);
+    if (sanitizedDecodedRawRequest) {
+      return sanitizedDecodedRawRequest;
+    }
+  }
+
+  return sanitizedValue
+    .split(/\r?\n/)
+    .map((line) => {
+      const requestLine = line.match(/^([A-Z]+)\s+(\S+)\s+(HTTP\/\d(?:\.\d)?)$/i);
+      if (requestLine) {
+        return `${requestLine[1]} ${sanitizeUrl(requestLine[2])} ${requestLine[3]}`;
+      }
+
+      const headerLine = line.match(/^([^:\s][^:]*):\s*(.*)$/);
+      if (headerLine) {
+        const [, name, value] = headerLine;
+        if (isSecretField(name) || looksLikeSecret(value)) {
+          return `${name}: ${REDACTED}`;
+        }
+      }
+
+      const sanitizedLine = sanitizeRequestBodyForMetadata(line, headers);
+      return typeof sanitizedLine === 'string'
+        ? sanitizedLine
+        : (safeJsonStringify(sanitizedLine) ?? String(sanitizedLine));
+    })
+    .join('\n');
+}
+
+function logTransformedPrompt(
+  transformedPrompt: unknown,
+  prompt: unknown,
+  headers?: Record<string, string>,
+): void {
+  const sanitizedTransformedPrompt = sanitizeTransformedRequestForMetadata(
+    transformedPrompt,
+    headers,
+  );
+  const sanitizedOriginalPrompt = sanitizeTransformedRequestForMetadata(prompt, headers);
+  logger.debug(
+    `[HTTP Provider]: Transformed prompt: ${safeJsonStringify(sanitizedTransformedPrompt)}. Original prompt: ${safeJsonStringify(sanitizedOriginalPrompt)}`,
+  );
+}
+
+function formatRawRequestForDebugMetadata(
+  parsedRequest: ReturnType<typeof parseRawRequest>,
+  bodyContent?: string,
+): string {
+  const requestLines = [
+    `${parsedRequest.method} ${sanitizeUrl(parsedRequest.url)} ${parsedRequest.httpVersion}`,
+  ];
+  const sanitizedHeaders = sanitizeObject(parsedRequest.headers, {
+    context: 'request headers',
+  }) as Record<string, string>;
+
+  for (const [key, value] of Object.entries(sanitizedHeaders)) {
+    requestLines.push(`${key}: ${value}`);
+  }
+
+  const sanitizedBody = sanitizeTransformedRequestForMetadata(bodyContent, parsedRequest.headers);
+  if (sanitizedBody !== undefined) {
+    requestLines.push('', String(sanitizedBody));
+  }
+
+  return requestLines.join('\n');
 }
 
 export function determineRequestBody(
@@ -1318,7 +1545,9 @@ export function estimateTokenCount(text: string, multiplier: number = 1.3): numb
 /**
  * Creates an HTTPS agent with TLS configuration for secure connections
  */
-async function createHttpsAgent(tlsConfig: z.infer<typeof TlsCertificateSchema>): Promise<Agent> {
+async function createHttpsAgent(
+  tlsConfig: z.infer<typeof TlsCertificateSchema>,
+): Promise<Dispatcher> {
   const tlsOptions: https.AgentOptions = {};
   const basePath = cliState.basePath || '';
   const usingJks = Boolean((tlsConfig as any).jksPath || (tlsConfig as any).jksContent);
@@ -1496,10 +1725,14 @@ async function createHttpsAgent(tlsConfig: z.infer<typeof TlsCertificateSchema>)
 
   logger.debug(`[HTTP Provider] Creating HTTPS agent with TLS configuration`);
 
-  // Create an undici Agent with the TLS options
+  // Compose the decompress interceptor like the shared pooled agents do — on
+  // Node 26 undici no longer auto-decompresses, so without this a gzip/br
+  // response body comes back to callers as raw compressed bytes.
   return new Agent({
     connect: tlsOptions,
-  });
+  })
+    .compose(createDecompressionInterceptor())
+    .compose(stripDecompressionHeaders());
 }
 
 export class HttpProvider implements ApiProvider {
@@ -1513,13 +1746,11 @@ export class HttpProvider implements ApiProvider {
     (prompt: string, vars: Record<string, any>, context?: CallApiContextParams) => any
   >;
   private validateStatus: Promise<(status: number) => boolean>;
-  private lastSignatureTimestamp?: number;
-  private lastSignature?: string;
-  private lastToken?: string;
-  private lastTokenExpiresAt?: number;
-  private tokenRefreshLock?: TokenRefreshLock;
-  private httpsAgent?: Agent;
-  private httpsAgentPromise?: Promise<Agent>;
+  private signatureCache = new LRUCache<string, RequestSignature>({ max: MAX_AUTH_CACHE_ENTRIES });
+  private authTokenCache = new Map<string, CachedAuthToken>();
+  private tokenRefreshLocks = new Map<string, AuthTokenRefreshLock>();
+  private httpsAgent?: Dispatcher;
+  private httpsAgentPromise?: Promise<Dispatcher>;
   /**
    * Tracks session IDs that were fetched from the session endpoint.
    * Used to distinguish sessions we created from client-generated UUIDs.
@@ -1617,10 +1848,12 @@ export class HttpProvider implements ApiProvider {
     }
   }
 
-  private async refreshOAuthTokenIfNeeded(vars: Record<string, any> = {}): Promise<void> {
+  private async refreshOAuthTokenIfNeeded(
+    vars: Record<string, any> = {},
+  ): Promise<CachedAuthToken> {
     if (!this.config.auth || this.config.auth.type !== 'oauth') {
       logger.debug('[HTTP Provider Auth]: No OAuth auth configured');
-      return;
+      throw new Error('OAuth auth is not configured');
     }
 
     // Render OAuth config values with template substitution
@@ -1652,24 +1885,31 @@ export class HttpProvider implements ApiProvider {
               : undefined,
           }
         : baseConfig;
-    if (this.hasValidCachedToken()) {
+    const cacheKey = getOAuthTokenCacheKey(oauthConfig);
+    const cachedToken = this.getValidCachedToken(cacheKey);
+    if (cachedToken) {
       logger.debug('[HTTP Provider Auth]: Using cached OAuth token');
-      return;
+      return cachedToken;
     }
 
     logger.debug('[HTTP Provider Auth]: Starting or waiting for OAuth token refresh');
-    await this.refreshTokenWithLock(() => this.performTokenRefresh(oauthConfig));
+    return this.refreshTokenWithLock(cacheKey, () =>
+      this.performTokenRefresh(oauthConfig, cacheKey),
+    );
   }
 
-  private async performTokenRefresh(oauthConfig: {
-    grantType: string;
-    clientId?: string;
-    clientSecret?: string;
-    tokenUrl: string;
-    scopes?: string[];
-    username?: string;
-    password?: string;
-  }): Promise<void> {
+  private async performTokenRefresh(
+    oauthConfig: {
+      grantType: string;
+      clientId?: string;
+      clientSecret?: string;
+      tokenUrl: string;
+      scopes?: string[];
+      username?: string;
+      password?: string;
+    },
+    cacheKey: string,
+  ): Promise<CachedAuthToken> {
     try {
       // Prepare the token request body
       const tokenRequestBody = new URLSearchParams();
@@ -1729,76 +1969,115 @@ export class HttpProvider implements ApiProvider {
         throw new Error('OAuth token response missing access_token');
       }
 
-      this.lastToken = tokenData.access_token;
-
       // Calculate expiration time
       // expires_in is typically in seconds, default to 3600 (1 hour) if not provided
       const expiresInSeconds = tokenData.expires_in || 3600;
-      this.lastTokenExpiresAt = Date.now() + expiresInSeconds * 1000;
+      const expiresAt = Date.now() + expiresInSeconds * 1000;
+      const cachedToken = this.cacheToken(cacheKey, tokenData.access_token, expiresAt);
 
       logger.debug('[HTTP Provider Auth]: Successfully refreshed OAuth token');
+      return cachedToken;
     } catch (err) {
       logger.error(`[HTTP Provider Auth]: Failed to refresh OAuth token: ${String(err)}`);
       throw new Error(`Failed to refresh OAuth token: ${String(err)}`);
     }
-
-    invariant(this.lastToken, 'OAuth token should be defined at this point');
   }
 
-  private hasValidCachedToken(now = Date.now()): boolean {
-    if (!this.lastToken) {
-      return false;
-    }
-
-    if (this.lastTokenExpiresAt == null) {
-      return this.config.auth?.type === 'file';
-    }
-
-    return now + TOKEN_REFRESH_BUFFER_MS < this.lastTokenExpiresAt;
+  private cacheToken(cacheKey: string, token: string, expiresAt?: number): CachedAuthToken {
+    const cachedToken = { token, expiresAt };
+    this.pruneExpiredAuthTokens();
+    this.authTokenCache.set(cacheKey, cachedToken);
+    this.enforceAuthTokenCacheLimit();
+    return cachedToken;
   }
 
-  private async waitForInFlightTokenRefresh(): Promise<boolean> {
-    const refreshPromise = this.tokenRefreshLock?.promise;
-    if (refreshPromise == null) {
-      return false;
+  private getValidCachedToken(cacheKey: string, now = Date.now()): CachedAuthToken | undefined {
+    const cachedToken = this.authTokenCache.get(cacheKey);
+    if (!cachedToken) {
+      return undefined;
+    }
+
+    if (cachedToken.expiresAt == null) {
+      this.touchCachedToken(cacheKey, cachedToken);
+      return cachedToken;
+    }
+
+    if (now + TOKEN_REFRESH_BUFFER_MS < cachedToken.expiresAt) {
+      this.touchCachedToken(cacheKey, cachedToken);
+      return cachedToken;
+    }
+
+    this.authTokenCache.delete(cacheKey);
+    return undefined;
+  }
+
+  private touchCachedToken(cacheKey: string, cachedToken: CachedAuthToken): void {
+    this.authTokenCache.delete(cacheKey);
+    this.authTokenCache.set(cacheKey, cachedToken);
+  }
+
+  private pruneExpiredAuthTokens(now = Date.now()): void {
+    for (const [cacheKey, cachedToken] of this.authTokenCache) {
+      if (cachedToken.expiresAt != null && now + TOKEN_REFRESH_BUFFER_MS >= cachedToken.expiresAt) {
+        this.authTokenCache.delete(cacheKey);
+      }
+    }
+  }
+
+  private enforceAuthTokenCacheLimit(): void {
+    while (this.authTokenCache.size > MAX_AUTH_CACHE_ENTRIES) {
+      const oldestCacheKey = this.authTokenCache.keys().next().value;
+      if (oldestCacheKey == null) {
+        return;
+      }
+      this.authTokenCache.delete(oldestCacheKey);
+    }
+  }
+
+  private async waitForInFlightTokenRefresh(
+    cacheKey: string,
+  ): Promise<CachedAuthToken | undefined> {
+    const refreshLock = this.tokenRefreshLocks.get(cacheKey);
+    if (refreshLock == null) {
+      return undefined;
     }
 
     logger.debug('[HTTP Provider Auth]: Token refresh already in progress, waiting...');
 
     try {
-      await refreshPromise;
-      if (this.hasValidCachedToken()) {
-        return true;
-      }
-      logger.debug('[HTTP Provider Auth]: Token expired while waiting, refreshing again...');
+      return await refreshLock.promise;
     } catch {
+      if (this.tokenRefreshLocks.get(cacheKey) === refreshLock) {
+        this.tokenRefreshLocks.delete(cacheKey);
+      }
       logger.debug('[HTTP Provider Auth]: Previous token refresh failed, retrying...');
     }
 
-    return false;
+    return undefined;
   }
 
   private async refreshTokenWithLock(
-    refreshToken: () => Promise<void>,
+    cacheKey: string,
+    refreshToken: () => Promise<CachedAuthToken>,
     onLockAcquired?: () => void,
-  ): Promise<void> {
-    while (this.tokenRefreshLock != null) {
-      if (await this.waitForInFlightTokenRefresh()) {
-        return;
+  ): Promise<CachedAuthToken> {
+    while (this.tokenRefreshLocks.has(cacheKey)) {
+      const refreshedToken = await this.waitForInFlightTokenRefresh(cacheKey);
+      if (refreshedToken) {
+        return refreshedToken;
       }
     }
 
-    const refreshLock = { promise: Promise.resolve() as Promise<void> };
-    this.tokenRefreshLock = refreshLock;
+    const refreshLock = { promise: Promise.resolve().then(refreshToken) };
+    this.tokenRefreshLocks.set(cacheKey, refreshLock);
     onLockAcquired?.();
-    refreshLock.promise = refreshToken();
 
     try {
-      await refreshLock.promise;
+      return await refreshLock.promise;
     } finally {
       // Only clear the lock if it's still the one we created (prevents race conditions)
-      if (this.tokenRefreshLock === refreshLock) {
-        this.tokenRefreshLock = undefined;
+      if (this.tokenRefreshLocks.get(cacheKey) === refreshLock) {
+        this.tokenRefreshLocks.delete(cacheKey);
       }
     }
   }
@@ -1807,20 +2086,24 @@ export class HttpProvider implements ApiProvider {
     prompt: string,
     vars: Record<string, any>,
     context?: CallApiContextParams,
-  ): Promise<void> {
+  ): Promise<CachedAuthToken> {
     if (!this.config.auth || this.config.auth.type !== 'file') {
       logger.debug('[HTTP Provider Auth]: No file auth configured');
-      return;
+      throw new Error('File auth is not configured');
     }
 
-    if (this.hasValidCachedToken()) {
+    const authContext = createFileAuthContext(prompt, vars, context);
+    const cacheKey = getFileAuthTokenCacheKey(this.config.auth.path, authContext);
+    const cachedToken = this.getValidCachedToken(cacheKey);
+    if (cachedToken) {
       logger.debug('[HTTP Provider Auth]: Using cached file auth token');
-      return;
+      return cachedToken;
     }
 
     logger.debug('[HTTP Provider Auth]: Starting or waiting for file auth token refresh');
-    await this.refreshTokenWithLock(
-      () => this.performFileTokenRefresh(prompt, vars, context),
+    return this.refreshTokenWithLock(
+      cacheKey,
+      () => this.performFileTokenRefresh(authContext, cacheKey),
       () => {
         logger.debug('[HTTP Provider Auth]: Acquired file auth refresh lock');
       },
@@ -1828,19 +2111,14 @@ export class HttpProvider implements ApiProvider {
   }
 
   private async performFileTokenRefresh(
-    prompt: string,
-    vars: Record<string, any>,
-    context?: CallApiContextParams,
-  ): Promise<void> {
+    authContext: CallApiContextParams,
+    cacheKey?: string,
+  ): Promise<CachedAuthToken> {
     invariant(this.config.auth?.type === 'file', 'File auth should be configured');
+    invariant(cacheKey, 'File auth cache key should be defined');
 
     const { filePath, functionName } = parseFileAuthReference(this.config.auth.path);
     const defaultFunctionName = filePath.endsWith('.py') ? 'get_auth' : 'default';
-    const authContext: CallApiContextParams = {
-      ...(context ?? {}),
-      prompt: context?.prompt ?? ({ raw: prompt, label: prompt } as CallApiContextParams['prompt']),
-      vars,
-    };
 
     try {
       logger.debug(
@@ -1854,62 +2132,51 @@ export class HttpProvider implements ApiProvider {
         defaultFunctionName,
       });
       const result = FileAuthResultSchema.parse(await authFn(authContext));
-      this.lastToken = result.token;
-      this.lastTokenExpiresAt = result.expiration ?? undefined;
+      const cachedToken = this.cacheToken(cacheKey, result.token, result.expiration ?? undefined);
       logger.info(
         `[HTTP Provider Auth]: Successfully refreshed file auth token (${formatFileAuthFreshness(result.expiration)})`,
       );
+      return cachedToken;
     } catch (err) {
       logger.error(`[HTTP Provider Auth]: Failed to refresh file auth token: ${String(err)}`);
       throw new Error(`Failed to refresh file auth token: ${String(err)}`);
     }
-
-    invariant(this.lastToken, 'File auth token should be defined at this point');
   }
 
-  private async refreshSignatureIfNeeded(vars: Record<string, any>): Promise<void> {
-    if (!this.config.signatureAuth) {
-      logger.debug('[HTTP Provider Auth]: No signature auth configured');
-      return;
-    }
-
+  private getSignature(vars: Record<string, any>): RequestSignature {
     const signatureAuth = this.config.signatureAuth;
-
+    const renderedConfig = {
+      type: 'pem',
+      ...signatureAuth,
+      privateKey: signatureAuth.privateKey
+        ? getNunjucksEngine().renderString(signatureAuth.privateKey, vars)
+        : undefined,
+    };
+    const cacheKey = digestAuthCacheInput({ signature: renderedConfig });
+    const cached = this.signatureCache.get(cacheKey);
     if (
-      !this.lastSignatureTimestamp ||
-      !this.lastSignature ||
-      needsSignatureRefresh(
-        this.lastSignatureTimestamp,
+      cached &&
+      !needsSignatureRefresh(
+        cached.timestamp,
         signatureAuth.signatureValidityMs,
         signatureAuth.signatureRefreshBufferMs,
       )
     ) {
-      logger.debug('[HTTP Provider Auth]: Generating new signature');
-      this.lastSignatureTimestamp = Date.now();
-
-      // Render privateKey with template substitution
-      const nunjucks = getNunjucksEngine();
-      const renderedConfig: any = {
-        ...signatureAuth,
-        privateKey: signatureAuth.privateKey
-          ? nunjucks.renderString(signatureAuth.privateKey, vars)
-          : undefined,
-      };
-
-      // Determine the signature auth type for legacy configurations
-      let authConfig = renderedConfig;
-      if (!('type' in renderedConfig)) {
-        authConfig = { ...renderedConfig, type: 'pem' };
-      }
-
-      this.lastSignature = await generateSignature(authConfig, this.lastSignatureTimestamp);
-      logger.debug('[HTTP Provider Auth]: Generated new signature successfully');
-    } else {
-      logger.debug('[HTTP Provider Auth]: Using cached signature');
+      return cached;
     }
 
-    invariant(this.lastSignature, 'Signature should be defined at this point');
-    invariant(this.lastSignatureTimestamp, 'Timestamp should be defined at this point');
+    const timestamp = Date.now();
+    const entry: RequestSignature = {
+      timestamp,
+      signature: generateSignature(renderedConfig, timestamp).catch((error) => {
+        if (this.signatureCache.peek(cacheKey) === entry) {
+          this.signatureCache.delete(cacheKey);
+        }
+        throw error;
+      }),
+    };
+    this.signatureCache.set(cacheKey, entry);
+    return entry;
   }
 
   /**
@@ -2045,7 +2312,7 @@ export class HttpProvider implements ApiProvider {
     return sessionId;
   }
 
-  private async getHttpsAgent(): Promise<Agent | undefined> {
+  private async getHttpsAgent(): Promise<Dispatcher | undefined> {
     if (!this.config.tls) {
       return undefined;
     }
@@ -2128,8 +2395,8 @@ export class HttpProvider implements ApiProvider {
     );
 
     // Add OAuth Bearer token if configured
-    if (this.config.auth?.type === 'oauth' && this.lastToken) {
-      allHeaders.authorization = `Bearer ${this.lastToken}`;
+    if (this.config.auth?.type === 'oauth' && typeof vars.token === 'string') {
+      allHeaders.authorization = `Bearer ${vars.token}`;
     }
 
     // Add Bearer token if configured
@@ -2161,36 +2428,7 @@ export class HttpProvider implements ApiProvider {
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    // Set up tracing context
-    const spanContext: GenAISpanContext = {
-      system: 'http',
-      operationName: 'chat',
-      model: this.url,
-      providerId: this.id(),
-      testIndex: context?.test?.vars?.__testIdx as number | undefined,
-      promptLabel: context?.prompt?.label,
-      // W3C Trace Context for linking to evaluation trace
-      traceparent: context?.traceparent,
-    };
-
-    // Result extractor to set response attributes on the span
-    const resultExtractor = (response: ProviderResponse): GenAISpanResult => {
-      const result: GenAISpanResult = {};
-      if (response.tokenUsage) {
-        result.tokenUsage = {
-          prompt: response.tokenUsage.prompt,
-          completion: response.tokenUsage.completion,
-          total: response.tokenUsage.total,
-        };
-      }
-      return result;
-    };
-
-    return withGenAISpan(
-      spanContext,
-      () => this.callApiInternal(prompt, context, options),
-      resultExtractor,
-    );
+    return this.callApiInternal(prompt, context, options);
   }
 
   private async callApiInternal(
@@ -2238,8 +2476,7 @@ export class HttpProvider implements ApiProvider {
     } as Record<string, any>;
 
     if (this.config.auth?.type === 'oauth') {
-      await this.refreshOAuthTokenIfNeeded(vars);
-      invariant(this.lastToken, 'OAuth token should be defined at this point');
+      const authToken = await this.refreshOAuthTokenIfNeeded(vars);
 
       if (hasOwnProperty(vars, 'token')) {
         logger.warn(
@@ -2247,10 +2484,9 @@ export class HttpProvider implements ApiProvider {
         );
       }
 
-      vars.token = this.lastToken;
+      vars.token = authToken.token;
     } else if (this.config.auth?.type === 'file') {
-      await this.refreshFileTokenIfNeeded(prompt, vars, context);
-      invariant(this.lastToken, 'File auth token should be defined at this point');
+      const authToken = await this.refreshFileTokenIfNeeded(prompt, vars, context);
 
       if (hasOwnProperty(vars, 'token')) {
         logger.warn(
@@ -2263,29 +2499,24 @@ export class HttpProvider implements ApiProvider {
         );
       }
 
-      vars.token = this.lastToken;
-      vars.expiration = this.lastTokenExpiresAt;
+      vars.token = authToken.token;
+      vars.expiration = authToken.expiresAt;
     }
 
-    // Add signature values to vars if signature auth is enabled
     if (this.config.signatureAuth) {
-      await this.refreshSignatureIfNeeded(vars);
-      invariant(this.lastSignature, 'Signature should be defined at this point');
-      invariant(this.lastSignatureTimestamp, 'Timestamp should be defined at this point');
+      const pending = this.getSignature(vars);
+      const signature = await pending.signature;
 
-      if (vars.signature) {
-        logger.warn(
-          '[HTTP Provider Auth]: `signature` is already defined in vars and will be overwritten',
-        );
-      }
-      if (vars.signatureTimestamp) {
-        logger.warn(
-          '[HTTP Provider Auth]: `signatureTimestamp` is already defined in vars and will be overwritten',
-        );
+      for (const key of ['signature', 'signatureTimestamp']) {
+        if (vars[key]) {
+          logger.warn(
+            `[HTTP Provider Auth]: \`${key}\` is already defined in vars and will be overwritten`,
+          );
+        }
       }
 
-      vars.signature = this.lastSignature;
-      vars.signatureTimestamp = this.lastSignatureTimestamp;
+      vars.signature = signature;
+      vars.signatureTimestamp = pending.timestamp;
     }
 
     // Resolve session ID from session endpoint if configured
@@ -2320,9 +2551,7 @@ export class HttpProvider implements ApiProvider {
 
     // Transform prompt using request transform
     const transformedPrompt = await (await this.transformRequest)(prompt, vars, context);
-    logger.debug(
-      `[HTTP Provider]: Transformed prompt: ${safeJsonStringify(transformedPrompt)}. Original prompt: ${safeJsonStringify(prompt)}`,
-    );
+    logTransformedPrompt(transformedPrompt, prompt, headers);
 
     const renderedConfig: Partial<HttpProviderConfig> = {
       url: getNunjucksEngine().renderString(this.url, vars),
@@ -2387,8 +2616,14 @@ export class HttpProvider implements ApiProvider {
       }
     }
 
+    const sanitizedRenderedConfig = sanitizeObject(renderedConfig, {
+      context: 'request config',
+    }) as Partial<HttpProviderConfig>;
+    sanitizedRenderedConfig.body = sanitizeRequestBodyForMetadata(renderedConfig.body, headers) as
+      | HttpProviderConfig['body']
+      | undefined;
     logger.debug(`[HTTP Provider]: Calling ${sanitizeUrl(url)} with config.`, {
-      config: renderedConfig,
+      config: sanitizedRenderedConfig,
     });
 
     const multipartBody: RenderedHttpMultipartBody | undefined = this.config.multipart
@@ -2480,14 +2715,20 @@ export class HttpProvider implements ApiProvider {
       },
     };
     if (context?.debug) {
-      ret.metadata.transformedRequest = transformedPrompt;
+      ret.metadata.transformedRequest = sanitizeTransformedRequestForMetadata(
+        transformedPrompt,
+        renderedConfig.headers,
+      );
       if (multipartBody) {
         ret.metadata.multipart = {
           fields: sanitizeMultipartFields(multipartBody.fields),
           files: sanitizeMultipartFiles(multipartBody.files),
         };
       } else {
-        ret.metadata.finalRequestBody = renderedConfig.body;
+        ret.metadata.finalRequestBody = sanitizeRequestBodyForMetadata(
+          renderedConfig.body,
+          renderedConfig.headers,
+        );
       }
     }
 
@@ -2529,6 +2770,7 @@ export class HttpProvider implements ApiProvider {
       rawText,
       transformedPrompt,
       prompt,
+      parsedData,
     );
   }
 
@@ -2543,9 +2785,6 @@ export class HttpProvider implements ApiProvider {
     const prompt = vars.prompt;
     const transformFn = await this.transformRequest;
     const transformedPrompt = await transformFn(prompt, vars, context);
-    logger.debug(
-      `[HTTP Provider]: Transformed prompt: ${safeJsonStringify(transformedPrompt)}. Original prompt: ${safeJsonStringify(prompt)}`,
-    );
 
     // JSON-escape all string variables for safe substitution in raw request body
     // This prevents control characters and quotes from breaking JSON strings
@@ -2556,6 +2795,7 @@ export class HttpProvider implements ApiProvider {
 
     const renderedRequest = renderRawRequestWithNunjucks(this.config.request, escapedVars);
     const parsedRequest = parseRawRequest(renderedRequest.trim());
+    logTransformedPrompt(transformedPrompt, prompt, parsedRequest.headers);
 
     const protocol = this.url.startsWith('https') || this.config.useHttps ? 'https' : 'http';
     let url = new URL(
@@ -2576,8 +2816,8 @@ export class HttpProvider implements ApiProvider {
     }
 
     // Add OAuth Bearer token if configured
-    if (this.config.auth?.type === 'oauth' && this.lastToken) {
-      parsedRequest.headers.authorization = `Bearer ${this.lastToken}`;
+    if (this.config.auth?.type === 'oauth' && typeof vars.token === 'string') {
+      parsedRequest.headers.authorization = `Bearer ${vars.token}`;
     }
 
     // Add Bearer token if configured
@@ -2628,16 +2868,6 @@ export class HttpProvider implements ApiProvider {
       }
     }
 
-    logger.debug(
-      `[HTTP Provider]: Calling ${sanitizeUrl(url)} with raw request: ${parsedRequest.method}`,
-      {
-        request: parsedRequest,
-      },
-    );
-
-    // Prepare fetch options with dispatcher if HTTPS agent is configured
-    const httpsAgent = await this.getHttpsAgent();
-
     // Determine body content:
     // - For JSON/text bodies, http-z provides body.text
     // - For multipart/form-data and x-www-form-urlencoded, http-z parses into body.params
@@ -2648,6 +2878,22 @@ export class HttpProvider implements ApiProvider {
     } else if (parsedRequest.body?.params) {
       bodyContent = extractBodyFromRawRequest(renderedRequest);
     }
+
+    logger.debug(
+      `[HTTP Provider]: Calling ${sanitizeUrl(url)} with raw request: ${parsedRequest.method}`,
+      {
+        request: {
+          method: parsedRequest.method,
+          url: sanitizeUrl(parsedRequest.url),
+          httpVersion: parsedRequest.httpVersion,
+          headers: sanitizeObject(parsedRequest.headers, { context: 'request headers' }),
+          body: sanitizeTransformedRequestForMetadata(bodyContent, parsedRequest.headers),
+        },
+      },
+    );
+
+    // Prepare fetch options with dispatcher if HTTPS agent is configured
+    const httpsAgent = await this.getHttpsAgent();
 
     const fetchOptions: any = {
       method: parsedRequest.method,
@@ -2746,9 +2992,11 @@ export class HttpProvider implements ApiProvider {
         // If no transform was applied, show the final raw request body with nunjucks applied
         // Otherwise show the transformed prompt
         transformedRequest: this.config.transformRequest
-          ? transformedPrompt
-          : parsedRequest.body?.text || renderedRequest.trim(),
-        finalRequestBody: parsedRequest.body?.text,
+          ? sanitizeTransformedRequestForMetadata(transformedPrompt, parsedRequest.headers)
+          : formatRawRequestForDebugMetadata(parsedRequest, bodyContent),
+        finalRequestBody: this.config.transformRequest
+          ? sanitizeTransformedRequestForMetadata(bodyContent, parsedRequest.headers)
+          : sanitizeRequestBodyForMetadata(bodyContent, parsedRequest.headers),
         http: {
           status,
           statusText,
@@ -2768,6 +3016,7 @@ export class HttpProvider implements ApiProvider {
       rawText,
       transformedPrompt,
       prompt,
+      parsedData,
     );
   }
 
@@ -2793,7 +3042,16 @@ export class HttpProvider implements ApiProvider {
     rawText: string,
     transformedPrompt: any,
     prompt: string,
+    originalResponse?: unknown,
   ): Promise<ProviderResponse> {
+    const originalTokenUsage =
+      originalResponse &&
+      typeof originalResponse === 'object' &&
+      'tokenUsage' in originalResponse &&
+      originalResponse.tokenUsage &&
+      typeof originalResponse.tokenUsage === 'object'
+        ? (originalResponse.tokenUsage as Partial<TokenUsage>)
+        : undefined;
     // Estimate tokens if enabled
     let estimatedTokenUsage: Partial<TokenUsage> | undefined;
     if (this.config.tokenEstimation?.enabled) {
@@ -2802,29 +3060,16 @@ export class HttpProvider implements ApiProvider {
       estimatedTokenUsage = await this.estimateTokenUsage(promptText, completionText);
     }
 
-    if (parsedOutput?.output) {
-      const result = {
-        ...ret,
-        ...parsedOutput,
-      };
-      // Add estimated token usage if available and not already present
-      if (!result.tokenUsage) {
-        if (estimatedTokenUsage) {
-          result.tokenUsage = estimatedTokenUsage;
-        } else {
-          result.tokenUsage = { ...createEmptyTokenUsage(), numRequests: 1 };
-        }
-      }
-      return result;
-    }
-
+    const normalizedOutput = normalizeResponseTransformResult(parsedOutput);
     const result = {
       ...ret,
-      output: parsedOutput,
+      ...normalizedOutput,
     };
     // Add estimated token usage if available
     if (!result.tokenUsage) {
-      if (estimatedTokenUsage) {
+      if (originalTokenUsage) {
+        result.tokenUsage = originalTokenUsage;
+      } else if (estimatedTokenUsage) {
         result.tokenUsage = estimatedTokenUsage;
       } else {
         result.tokenUsage = { ...createEmptyTokenUsage(), numRequests: 1 };

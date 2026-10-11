@@ -3,10 +3,10 @@ description: 'Bedrock Claude Eval'
 prompts:
   - 'Write a tweet about {{topic}}'
 providers:
-  - id: bedrock:arn:aws:bedrock:us-east-2::inference-profile/global.anthropic.claude-opus-4-6-v1
-    label: Claude Opus 4.6
+  # System inference-profile ARN.
+  - id: bedrock:arn:aws:bedrock:us-east-2::inference-profile/global.anthropic.claude-opus-4-7
+    label: Claude Opus 4.7 (global profile ARN)
     config:
-      temperature: 1
       max_tokens: 2048
       region: us-east-2
       inferenceModelType: claude
@@ -16,10 +16,25 @@ providers:
       temperature: 1
       max_tokens: 2048
       region: us-west-2
-  - id: bedrock:us.anthropic.claude-opus-4-20250514-v1:0
-    label: Claude Opus 4
+  # These models omit unsupported sampling controls.
+  - id: bedrock:global.anthropic.claude-opus-5-5
+    label: Claude Opus 5.5
     config:
-      temperature: 1
+      max_tokens: 2048
+      region: us-east-1
+  - id: bedrock:global.anthropic.claude-sonnet-5-5
+    label: Claude Sonnet 5.5
+    config:
+      max_tokens: 2048
+      region: us-east-1
+  - id: bedrock:global.anthropic.claude-opus-5
+    label: Claude Opus 5
+    config:
+      max_tokens: 2048
+      region: us-east-2
+  - id: bedrock:us.anthropic.claude-opus-4-8
+    label: Claude Opus 4.8
+    config:
       max_tokens: 2048
       region: us-west-2
   - id: bedrock:us.anthropic.claude-haiku-4-5-20251001-v1:0
@@ -28,16 +43,16 @@ providers:
       temperature: 1
       max_tokens: 2048
       region: us-west-2
-  - id: bedrock:us.anthropic.claude-sonnet-4-6
-    label: Claude Sonnet 4.6 with Thinking
+  # Use bedrock:converse: to set effort; InvokeModel uses the model default.
+  - id: bedrock:us.anthropic.claude-sonnet-5
+    label: Claude Sonnet 5 with Thinking
     config:
-      temperature: 1
-      max_tokens: 2048
+      max_tokens: 8192
       region: us-west-2
       showThinking: true
       thinking:
-        type: enabled
-        budget_tokens: 1024
+        type: adaptive
+        display: summarized
   - id: bedrock:us.anthropic.claude-opus-4-6-v1
     label: Claude Opus 4.6 (inference profile)
     config:

@@ -1,9 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { isResponseHeadersObserverErrorResponse } from '../../../src/util/fetch/responseHeadersObserver';
+import {
+  accumulateResponseTokenUsage,
+  createEmptyTokenUsage,
+} from '../../../src/util/tokenUsageUtils';
 import {
   createMockProvider,
   createProviderResponse,
   type MockApiProvider,
 } from '../../factories/provider';
+import { createSelectedObserverErrorResponse } from '../../util/selectedObserverError';
 
 import type { ApiProvider, CallApiContextParams } from '../../../src/types/index';
 
@@ -26,6 +32,7 @@ vi.mock('../../../src/globalConfig/accounts', () => ({
 
 vi.mock('../../../src/redteam/remoteGeneration', () => ({
   getRemoteGenerationUrl: vi.fn().mockReturnValue('http://test.api/generate'),
+  getRemoteGenerationHeaders: vi.fn((extra) => ({ 'Content-Type': 'application/json', ...extra })),
   neverGenerateRemote: vi.fn().mockReturnValue(false),
 }));
 
@@ -79,6 +86,21 @@ describe('AuthoritativeMarkupInjectionProvider', () => {
     );
   });
 
+  it('should include target context in remote generation requests', async () => {
+    const provider = new AuthoritativeMarkupInjectionProvider({
+      injectVar: 'input',
+      targetId: 'cloud-target-123',
+    });
+
+    await provider.callApi('test prompt', createMockContext(mockTargetProvider));
+
+    const request = mockFetchWithProxy.mock.calls[0]?.[1] as { body?: string } | undefined;
+    expect(JSON.parse(request?.body ?? '{}')).toMatchObject({
+      targetId: 'cloud-target-123',
+      task: 'authoritative-markup-injection',
+    });
+  });
+
   it('should pass options to target provider callApi', async () => {
     const provider = new AuthoritativeMarkupInjectionProvider({
       injectVar: 'input',
@@ -98,7 +120,104 @@ describe('AuthoritativeMarkupInjectionProvider', () => {
     );
   });
 
+  it.each([true, false])(
+    'retains only selected observer error provenance: marked=%s',
+    async (marked) => {
+      const selected = {
+        error: 'metrics rate limit exceeded',
+        tokenUsage: { prompt: 5, completion: 4, total: 9, numRequests: 1 },
+        metadata: { diagnostic: 'selected target error' },
+      };
+      mockTargetProvider.callApi.mockResolvedValueOnce(
+        marked ? createSelectedObserverErrorResponse(selected) : selected,
+      );
+      mockFetchWithProxy.mockResolvedValueOnce({
+        json: async () => ({
+          message: { role: 'user', content: 'Hello' },
+          tokenUsage: { prompt: 2, completion: 1, total: 3, numRequests: 1 },
+        }),
+      });
+      const provider = new AuthoritativeMarkupInjectionProvider({ injectVar: 'input' });
+      const response = await provider.callApi('Hello', createMockContext(mockTargetProvider));
+      expect(response.error).toBe(selected.error);
+      expect(response.metadata).toEqual(selected.metadata);
+      expect(isResponseHeadersObserverErrorResponse(response)).toBe(marked);
+      expect(response.tokenUsage).toMatchObject({
+        total: 9,
+        numRequests: 1,
+        attacker: { total: 3, numRequests: 1 },
+      });
+      expect(mockTargetProvider.callApi).toHaveBeenCalledOnce();
+      expect(mockFetchWithProxy).toHaveBeenCalledOnce();
+    },
+  );
+
   describe('Token Usage Tracking', () => {
+    it('keeps remote attack generation separate from target tokens and probes', async () => {
+      mockFetchWithProxy.mockResolvedValueOnce({
+        json: async () => ({
+          message: { role: 'assistant', content: 'injected content' },
+          tokenUsage: {
+            prompt: 20,
+            completion: 8,
+            total: 28,
+            completionDetails: { reasoning: 3 },
+          },
+        }),
+      });
+      mockTargetProvider.callApi.mockResolvedValueOnce({
+        output: 'target response',
+        tokenUsage: { prompt: 5, completion: 4, total: 9, numRequests: 1 },
+      });
+
+      const provider = new AuthoritativeMarkupInjectionProvider({ injectVar: 'input' });
+      const result = await provider.callApi('test prompt', createMockContext(mockTargetProvider));
+
+      expect(result.tokenUsage).toMatchObject({
+        total: 9,
+        numRequests: 1,
+        attacker: {
+          prompt: 20,
+          completion: 8,
+          total: 28,
+          numRequests: 1,
+          completionDetails: { reasoning: 3 },
+        },
+      });
+    });
+
+    it('retains fresh attacker tokens when the target response is reused from cache', async () => {
+      mockFetchWithProxy.mockResolvedValueOnce({
+        json: async () => ({
+          message: { role: 'assistant', content: 'injected content' },
+          tokenUsage: { prompt: 20, completion: 8, total: 28, numRequests: 1 },
+        }),
+      });
+      mockTargetProvider.callApi.mockResolvedValueOnce({
+        output: 'cached target response',
+        cached: true,
+        tokenUsage: { prompt: 50, completion: 25, total: 75, numRequests: 1 },
+      });
+
+      const provider = new AuthoritativeMarkupInjectionProvider({ injectVar: 'input' });
+      const result = await provider.callApi('test prompt', createMockContext(mockTargetProvider));
+      const normalizedUsage = createEmptyTokenUsage();
+      accumulateResponseTokenUsage(normalizedUsage, result);
+
+      expect(result.cached).toBe(true);
+      expect(normalizedUsage).toMatchObject({
+        total: 75,
+        cached: 75,
+        numRequests: 1,
+        attacker: { total: 28, prompt: 20, completion: 8, numRequests: 1 },
+        incurredTokenUsage: {
+          total: 0,
+          numRequests: 0,
+          attacker: { total: 28, prompt: 20, completion: 8, numRequests: 1 },
+        },
+      });
+    });
+
     it('should accumulate token usage from target provider', async () => {
       mockTargetProvider.callApi.mockResolvedValue({
         output: 'target response',

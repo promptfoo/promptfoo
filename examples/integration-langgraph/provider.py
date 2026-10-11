@@ -8,7 +8,7 @@ def call_api(prompt, options, context):
 
     Args:
         prompt (str): The research query or question.
-        options (dict): Additional options for future extension (currently unused).
+        options (dict): Provider configuration, including model and apiBaseUrl.
         context (dict): Contextual information (currently unused).
 
     Returns:
@@ -16,12 +16,17 @@ def call_api(prompt, options, context):
     """
     try:
         # Run the research agent and get the result
-        result = run_research_agent(prompt)
+        config = options.get("config", {})
+        result = run_research_agent(
+            prompt,
+            model=config.get("model", "gpt-4o"),
+            base_url=config.get("apiBaseUrl"),
+        )
         # Wrap and return the result inside a dictionary
         return {"output": result}
     except Exception as e:
-        # Handle any exceptions and return an error summary
-        return {"output": {"summary": f"Error: {str(e)}"}}
+        # Handle any exceptions and return a provider error
+        return {"error": str(e)}
 
 
 # If this file is run directly, execute a simple test

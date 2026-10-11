@@ -15,4 +15,4 @@ redteam:
     - politics
   strategies:
     - jailbreak
-    - prompt-injection
+    - jailbreak-templates

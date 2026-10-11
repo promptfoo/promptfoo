@@ -1,20 +1,35 @@
 import { fetchWithCache } from '../../cache';
-import { getEnvString } from '../../envars';
 import logger from '../../logger';
-import { maybeLoadFromExternalFile } from '../../util/file';
-import { renderVarsInObject } from '../../util/index';
 import { getNunjucksEngine } from '../../util/templates';
-import { getRequestTimeoutMs, parseChatPrompt } from '../shared';
+import { resolveProviderEnv } from '../env';
+import {
+  getRequestTimeoutMs,
+  parseChatPrompt,
+  shouldBustProviderCache,
+  withResponseCacheMetadata,
+} from '../shared';
 import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
 import { CHAT_MODELS } from './shared';
 import {
   calculateGoogleCost,
+  calculateGoogleCostFromUsage,
+  collectGroundingMetadata,
+  collectThoughtSignatures,
   createAuthCacheDiscriminator,
   formatCandidateContents,
   geminiFormatAndSystemInstructions,
   getCandidate,
+  getGoogleResponseServiceTier,
+  getLastPromptSafetyRatings,
+  isNonCandidateStreamChunk,
   mergeGoogleCompletionOptions,
+  mergeGoogleRequestTools,
+  mergeParts,
+  normalizeGeminiAudio,
+  normalizeGoogleServiceTier,
   normalizeSafetySettings,
+  parseConfigResponseSchema,
+  removeDeprecatedGeminiGenerationParams,
   removeGoogleFunctionDeclarations,
   resolveGoogleToolConfig,
 } from './util';
@@ -23,11 +38,12 @@ import type { EnvOverrides } from '../../types/env';
 import type {
   ApiEmbeddingProvider,
   CallApiContextParams,
+  CallApiOptionsParams,
   GuardrailResponse,
   ProviderEmbeddingResponse,
   ProviderResponse,
 } from '../../types/index';
-import type { CompletionOptions } from './types';
+import type { CompletionOptions, GoogleProviderConfig } from './types';
 import type { GeminiResponseData } from './util';
 
 const DEFAULT_API_HOST = 'generativelanguage.googleapis.com';
@@ -35,10 +51,6 @@ const GENERATE_CONTENT_MODEL_PREFIXES = ['gemini', 'gemma', 'codegemma', 'palige
 
 function usesGenerateContentApi(modelName: string): boolean {
   return GENERATE_CONTENT_MODEL_PREFIXES.some((prefix) => modelName.startsWith(prefix));
-}
-
-function shouldBustCache(context?: CallApiContextParams): boolean {
-  return context?.bustCache ?? context?.debug ?? false;
 }
 
 /**
@@ -75,19 +87,20 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
   /**
    * Get the API version.
    *
-   * Uses config.apiVersion if set, otherwise auto-detects based on model
-   * (v1alpha for thinking/gemini-3 models, v1beta for others).
+   * Uses config.apiVersion if set, otherwise defaults to v1beta — Google's
+   * primary endpoint for current Gemini models, including the Gemini 3.x
+   * family. The legacy gemini-2.0-flash-thinking-exp model only responds on
+   * v1alpha. Set config.apiVersion to 'v1alpha' to opt into preview-only
+   * features such as media_resolution.
    */
   private getApiVersion(): string {
     // Allow explicit override
     if (this.config.apiVersion) {
       return this.config.apiVersion;
     }
-    // Auto-detect based on model
-    return this.modelName === 'gemini-2.0-flash-thinking-exp' ||
-      this.modelName.startsWith('gemini-3-')
-      ? 'v1alpha'
-      : 'v1beta';
+    // gemini-2.0-flash-thinking-exp only responds on v1alpha; everything else
+    // (including Gemini 3.x) uses the stable v1beta endpoint.
+    return this.modelName === 'gemini-2.0-flash-thinking-exp' ? 'v1alpha' : 'v1beta';
   }
 
   /**
@@ -97,10 +110,7 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
   getApiHost(): string {
     const apiHost =
       this.config.apiHost ||
-      this.env?.GOOGLE_API_HOST ||
-      this.env?.PALM_API_HOST ||
-      getEnvString('GOOGLE_API_HOST') ||
-      getEnvString('PALM_API_HOST') ||
+      resolveProviderEnv(this.env, ['GOOGLE_API_HOST', 'PALM_API_HOST'])?.value ||
       DEFAULT_API_HOST;
     return getNunjucksEngine().renderString(apiHost, {});
   }
@@ -109,34 +119,21 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
    * Get the base URL for Google AI Studio API.
    */
   private getApiBaseUrl(): string {
-    // Check for apiHost first (most specific override)
-    const apiHost =
-      this.config.apiHost ||
-      this.env?.GOOGLE_API_HOST ||
-      this.env?.PALM_API_HOST ||
-      getEnvString('GOOGLE_API_HOST') ||
-      getEnvString('PALM_API_HOST');
-    if (apiHost) {
-      const renderedHost = getNunjucksEngine().renderString(apiHost, {});
-      return `https://${renderedHost}`;
+    if (this.config.apiHost) {
+      return `https://${getNunjucksEngine().renderString(this.config.apiHost, {})}`;
     }
-
-    // Check for apiBaseUrl (less specific override)
-    if (
-      this.config.apiBaseUrl ||
-      this.env?.GOOGLE_API_BASE_URL ||
-      getEnvString('GOOGLE_API_BASE_URL')
-    ) {
-      return (
-        this.config.apiBaseUrl ||
-        this.env?.GOOGLE_API_BASE_URL ||
-        getEnvString('GOOGLE_API_BASE_URL')!
-      );
+    if (this.config.apiBaseUrl) {
+      return this.config.apiBaseUrl;
     }
-
-    // Default: render the default host with Nunjucks for template variable support
-    const renderedHost = getNunjucksEngine().renderString(DEFAULT_API_HOST, {});
-    return `https://${renderedHost}`;
+    const endpoint = resolveProviderEnv(this.env, [
+      'GOOGLE_API_HOST',
+      'PALM_API_HOST',
+      'GOOGLE_API_BASE_URL',
+    ]);
+    if (endpoint?.name === 'GOOGLE_API_BASE_URL') {
+      return endpoint.value;
+    }
+    return `https://${getNunjucksEngine().renderString(endpoint?.value || DEFAULT_API_HOST, {})}`;
   }
 
   /**
@@ -160,11 +157,13 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
   /**
    * Call the Google AI Studio API.
    */
-  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+  async callApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
     // Wait for MCP initialization if pending
-    if (this.initializationPromise != null) {
-      await this.initializationPromise;
-    }
+    await this.initializeMCP(options?.abortSignal);
 
     const apiKey = this.getApiKey();
     if (!apiKey) {
@@ -212,7 +211,7 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
         } as RequestInit,
         getRequestTimeoutMs(),
         'json',
-        shouldBustCache(context),
+        shouldBustProviderCache(context),
       )) as unknown as { data: any; cached: boolean });
     } catch (err) {
       return {
@@ -228,55 +227,42 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
 
     try {
       const output = data.candidates[0].content;
-      const tokenUsage = cached
-        ? {
-            cached: data.usageMetadata?.totalTokenCount,
-            total: data.usageMetadata?.totalTokenCount,
-            numRequests: 0,
-            ...(data.usageMetadata?.thoughtsTokenCount !== undefined && {
-              completionDetails: {
-                reasoning: data.usageMetadata.thoughtsTokenCount,
-                acceptedPrediction: 0,
-                rejectedPrediction: 0,
-              },
-            }),
-          }
-        : {
-            prompt: data.usageMetadata?.promptTokenCount,
-            completion: data.usageMetadata?.candidatesTokenCount,
-            total: data.usageMetadata?.totalTokenCount,
-            numRequests: 1,
-            ...(data.usageMetadata?.thoughtsTokenCount !== undefined && {
-              completionDetails: {
-                reasoning: data.usageMetadata.thoughtsTokenCount,
-                acceptedPrediction: 0,
-                rejectedPrediction: 0,
-              },
-            }),
-          };
+      const tokenUsage = {
+        prompt:
+          data.usageMetadata?.promptTokenCount === undefined
+            ? undefined
+            : data.usageMetadata.promptTokenCount +
+              (data.usageMetadata?.toolUsePromptTokenCount ?? 0),
+        completion: data.usageMetadata?.candidatesTokenCount,
+        total: data.usageMetadata?.totalTokenCount,
+        numRequests: 1,
+        ...(data.usageMetadata?.cachedContentTokenCount !== undefined && {
+          cached: data.usageMetadata.cachedContentTokenCount,
+        }),
+        ...(data.usageMetadata?.thoughtsTokenCount !== undefined && {
+          completionDetails: {
+            reasoning: data.usageMetadata.thoughtsTokenCount,
+            acceptedPrediction: 0,
+            rejectedPrediction: 0,
+          },
+        }),
+      };
 
-      // Calculate cost (only for non-cached responses)
       // Include thinking tokens in output cost - Google bills them as output tokens
       const completionForCost =
         data.usageMetadata?.candidatesTokenCount == null
           ? undefined
           : data.usageMetadata.candidatesTokenCount + (data.usageMetadata?.thoughtsTokenCount ?? 0);
-      const cost = cached
-        ? undefined
-        : calculateGoogleCost(
-            this.modelName,
-            config,
-            data.usageMetadata?.promptTokenCount,
-            completionForCost,
-          );
+      const cost = calculateGoogleCostFromUsage(
+        this.modelName,
+        config,
+        data.usageMetadata?.promptTokenCount,
+        completionForCost,
+        false,
+        data.usageMetadata,
+      );
 
-      return {
-        output,
-        tokenUsage,
-        cost,
-        raw: data,
-        cached,
-      };
+      return withResponseCacheMetadata({ output, tokenUsage, cost, raw: data }, cached);
     } catch (err) {
       return {
         error: `API response error: ${String(err)}: ${JSON.stringify(data)}`,
@@ -296,16 +282,19 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
     }
 
     // Merge configs from the provider and the prompt
-    const config = mergeGoogleCompletionOptions(
-      this.config,
-      context?.prompt?.config as Partial<CompletionOptions> | undefined,
-    );
+    const promptConfig = context?.prompt?.config as Partial<GoogleProviderConfig> | undefined;
+    const config = mergeGoogleCompletionOptions(this.config, promptConfig);
+    const promptBasePath = promptConfig?.basePath ?? this.config.basePath;
 
     const { contents, systemInstruction } = geminiFormatAndSystemInstructions(
       prompt,
       context?.vars,
       config.systemInstruction,
-      { useAssistantRole: config.useAssistantRole },
+      {
+        basePath:
+          promptConfig?.systemInstruction === undefined ? this.config.basePath : promptBasePath,
+        useAssistantRole: config.useAssistantRole,
+      },
     );
 
     const { toolConfig, toolsDisabled } = resolveGoogleToolConfig(config);
@@ -314,6 +303,25 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
       skipExecutableToolFiles: toolsDisabled,
     });
     const requestTools = toolsDisabled ? removeGoogleFunctionDeclarations(allTools) : allTools;
+    const {
+      service_tier: passthroughServiceTier,
+      serviceTier: camelCasePassthroughServiceTier,
+      tools: passthroughTools,
+      // resolveGoogleToolConfig already folds these in; keeping them in the raw spread would
+      // let a conflicting passthrough mode overwrite a resolved NONE, so the request would
+      // carry mode ANY with the declarations already stripped.
+      toolConfig: _passthroughToolConfig,
+      tool_config: _passthroughToolConfigSnakeCase,
+      ...passthrough
+    } = config.passthrough || {};
+    const serviceTier = normalizeGoogleServiceTier(
+      passthroughServiceTier ?? camelCasePassthroughServiceTier ?? config.service_tier,
+    );
+    const requestPassthroughTools =
+      toolsDisabled && passthroughTools !== undefined
+        ? removeGoogleFunctionDeclarations(passthroughTools)
+        : passthroughTools;
+    const mergedTools = mergeGoogleRequestTools(requestTools, requestPassthroughTools);
 
     const body: Record<string, any> = {
       contents,
@@ -328,12 +336,28 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
           maxOutputTokens: config.maxOutputTokens,
         }),
         ...config.generationConfig,
+        ...(this.modelName.includes('-tts') && {
+          response_modalities: undefined,
+          responseModalities: config.generationConfig?.responseModalities ??
+            config.generationConfig?.response_modalities?.map((modality) =>
+              modality.toUpperCase(),
+            ) ?? ['AUDIO'],
+          speechConfig: config.generationConfig?.speechConfig ?? {
+            voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } },
+          },
+        }),
       },
       safetySettings: normalizeSafetySettings(config.safetySettings),
       ...(toolConfig ? { toolConfig } : {}),
-      ...(requestTools.length > 0 ? { tools: requestTools } : {}),
+      ...(mergedTools ? { tools: mergedTools } : {}),
       ...(systemInstruction ? { system_instruction: systemInstruction } : {}),
+      ...(serviceTier ? { service_tier: serviceTier } : {}),
+      ...passthrough,
     };
+    body.generationConfig = removeDeprecatedGeminiGenerationParams(
+      this.modelName,
+      body.generationConfig,
+    );
 
     if (config.responseSchema) {
       if (body.generationConfig.response_schema) {
@@ -342,8 +366,10 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
         );
       }
 
-      const schema = maybeLoadFromExternalFile(
-        renderVarsInObject(config.responseSchema, context?.vars),
+      const schema = parseConfigResponseSchema(
+        config.responseSchema,
+        context?.vars,
+        promptConfig?.responseSchema === undefined ? this.config.basePath : promptBasePath,
       );
 
       body.generationConfig.response_schema = schema;
@@ -352,11 +378,12 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
 
     let data;
     let cached = false;
+    let responseHeaders: unknown;
     try {
       const endpoint = this.getApiEndpoint('generateContent');
       const headers = await this.getAuthHeaders();
       const authDiscriminator = createAuthCacheDiscriminator(headers);
-      ({ data, cached } = (await fetchWithCache(
+      const response = await fetchWithCache(
         endpoint,
         {
           method: 'POST',
@@ -366,35 +393,60 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
         } as RequestInit,
         getRequestTimeoutMs(),
         'json',
-        shouldBustCache(context),
-      )) as {
-        data: GeminiResponseData;
-        cached: boolean;
-      });
+        shouldBustProviderCache(context),
+      );
+      data = response.data as GeminiResponseData;
+      cached = response.cached;
+      responseHeaders = response.headers;
     } catch (err) {
       return {
         error: `API call error: ${String(err)}`,
       };
     }
 
-    let output, candidate;
+    const dataWithResponse = (Array.isArray(data) ? data : [data]) as GeminiResponseData[];
+    const lastData = dataWithResponse[dataWithResponse.length - 1];
+    if (!lastData) {
+      return {
+        error: `No response data found in response: ${JSON.stringify(data)}`,
+      };
+    }
+    let output: ReturnType<typeof formatCandidateContents> | undefined;
+    let candidate: ReturnType<typeof getCandidate> | undefined;
     try {
-      candidate = getCandidate(data);
-      output = formatCandidateContents(candidate);
+      for (const datum of dataWithResponse) {
+        if (Array.isArray(data) && isNonCandidateStreamChunk(datum)) {
+          continue;
+        }
+
+        const candidateForChunk = getCandidate(datum);
+        if (candidateForChunk.finishReason === 'STOP' && !candidateForChunk.content?.parts) {
+          continue;
+        }
+
+        candidate = candidateForChunk;
+        output = mergeParts(output, formatCandidateContents(candidate));
+      }
+
+      if (output === undefined || output === '' || candidate === undefined) {
+        throw new Error(`No output found in response: ${JSON.stringify(data)}`);
+      }
     } catch (err) {
       return {
         error: `${String(err)}`,
       };
     }
+    const finalCandidate = candidate;
 
     try {
       let guardrails: GuardrailResponse | undefined;
+      const promptSafetyRatings = getLastPromptSafetyRatings(dataWithResponse);
 
-      if (data.promptFeedback?.safetyRatings || candidate.safetyRatings) {
-        const flaggedInput = data.promptFeedback?.safetyRatings?.some(
+      if (promptSafetyRatings || finalCandidate.safetyRatings) {
+        const flaggedInput = promptSafetyRatings?.some((r) => r.probability !== 'NEGLIGIBLE');
+        const flaggedOutput = finalCandidate.safetyRatings?.some(
           (r) => r.probability !== 'NEGLIGIBLE',
         );
-        const flaggedOutput = candidate.safetyRatings?.some((r) => r.probability !== 'NEGLIGIBLE');
         const flagged = flaggedInput || flaggedOutput;
 
         guardrails = {
@@ -404,62 +456,83 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
         };
       }
 
-      const tokenUsage = cached
-        ? {
-            cached: data.usageMetadata?.totalTokenCount,
-            total: data.usageMetadata?.totalTokenCount,
-            numRequests: 0,
-            ...(data.usageMetadata?.thoughtsTokenCount !== undefined && {
-              completionDetails: {
-                reasoning: data.usageMetadata.thoughtsTokenCount,
-                acceptedPrediction: 0,
-                rejectedPrediction: 0,
-              },
-            }),
-          }
-        : {
-            prompt: data.usageMetadata?.promptTokenCount,
-            completion: data.usageMetadata?.candidatesTokenCount,
-            total: data.usageMetadata?.totalTokenCount,
-            numRequests: 1,
-            ...(data.usageMetadata?.thoughtsTokenCount !== undefined && {
-              completionDetails: {
-                reasoning: data.usageMetadata.thoughtsTokenCount,
-                acceptedPrediction: 0,
-                rejectedPrediction: 0,
-              },
-            }),
-          };
+      const grounding = collectGroundingMetadata(dataWithResponse);
+      const thoughtSignatures = collectThoughtSignatures(dataWithResponse);
+      const actualServiceTier = getGoogleResponseServiceTier(
+        responseHeaders,
+        lastData.usageMetadata,
+      );
 
-      // Calculate cost (only for non-cached responses)
+      const tokenUsage = {
+        prompt:
+          lastData.usageMetadata?.promptTokenCount === undefined
+            ? undefined
+            : lastData.usageMetadata.promptTokenCount +
+              (lastData.usageMetadata?.toolUsePromptTokenCount ?? 0),
+        completion: lastData.usageMetadata?.candidatesTokenCount,
+        total: lastData.usageMetadata?.totalTokenCount,
+        numRequests: 1,
+        ...(lastData.usageMetadata?.cachedContentTokenCount !== undefined && {
+          cached: lastData.usageMetadata.cachedContentTokenCount,
+        }),
+        ...(lastData.usageMetadata?.thoughtsTokenCount !== undefined && {
+          completionDetails: {
+            reasoning: lastData.usageMetadata.thoughtsTokenCount,
+            acceptedPrediction: 0,
+            rejectedPrediction: 0,
+          },
+        }),
+      };
+
       // Include thinking tokens in output cost - Google bills them as output tokens
       const completionForCost =
-        data.usageMetadata?.candidatesTokenCount == null
+        lastData.usageMetadata?.candidatesTokenCount == null
           ? undefined
-          : data.usageMetadata.candidatesTokenCount + (data.usageMetadata?.thoughtsTokenCount ?? 0);
-      const cost = cached
-        ? undefined
-        : calculateGoogleCost(
-            this.modelName,
-            config,
-            data.usageMetadata?.promptTokenCount,
-            completionForCost,
-          );
+          : lastData.usageMetadata.candidatesTokenCount +
+            (lastData.usageMetadata?.thoughtsTokenCount ?? 0);
+      const cost = calculateGoogleCostFromUsage(
+        this.modelName,
+        config,
+        lastData.usageMetadata?.promptTokenCount,
+        completionForCost,
+        false,
+        lastData.usageMetadata,
+        actualServiceTier,
+      );
+      const audio = normalizeGeminiAudio(output);
 
-      return {
-        output,
-        tokenUsage,
-        cost,
-        raw: data,
-        cached,
-        ...(guardrails && { guardrails }),
-        metadata: {
-          ...(candidate.groundingChunks && { groundingChunks: candidate.groundingChunks }),
-          ...(candidate.groundingMetadata && { groundingMetadata: candidate.groundingMetadata }),
-          ...(candidate.groundingSupports && { groundingSupports: candidate.groundingSupports }),
-          ...(candidate.webSearchQueries && { webSearchQueries: candidate.webSearchQueries }),
+      const response = withResponseCacheMetadata(
+        {
+          output,
+          ...(audio && { audio }),
+          tokenUsage,
+          cost,
+          raw: data,
+          ...(guardrails && { guardrails }),
+          metadata: {
+            ...grounding,
+            ...(thoughtSignatures.length > 0 && { thoughtSignatures }),
+            ...(actualServiceTier && { serviceTier: actualServiceTier }),
+          },
         },
-      };
+        cached,
+      );
+      try {
+        response.output = await this.executeFunctionToolCallbacks(
+          output,
+          {
+            ...config,
+            basePath:
+              promptConfig?.functionToolCallbacks === undefined
+                ? this.config.basePath
+                : promptBasePath,
+          },
+          toolsDisabled,
+        );
+      } catch (error) {
+        return { ...response, output: undefined, error: String(error) };
+      }
+      return response;
     } catch (err) {
       return {
         error: `API response error: ${String(err)}: ${JSON.stringify(data)}`,
@@ -485,6 +558,8 @@ export class AIStudioEmbeddingProvider
   extends AIStudioChatProvider
   implements ApiEmbeddingProvider
 {
+  readonly supportsEmbeddingCancellation = true;
+
   id(): string {
     if (this.customId) {
       return this.customId();
@@ -502,7 +577,11 @@ export class AIStudioEmbeddingProvider
     };
   }
 
-  async callEmbeddingApi(text: string): Promise<ProviderEmbeddingResponse> {
+  async callEmbeddingApi(
+    text: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderEmbeddingResponse> {
     const apiKey = this.getApiKey();
     if (!apiKey) {
       return {
@@ -544,12 +623,15 @@ export class AIStudioEmbeddingProvider
           method: 'POST',
           headers,
           body: JSON.stringify(body),
+          ...(options?.abortSignal && { signal: options.abortSignal }),
           ...(authDiscriminator && { _authHash: authDiscriminator }),
         } as RequestInit,
         getRequestTimeoutMs(),
         'json',
+        shouldBustProviderCache(context),
       )) as unknown as { data: any; cached: boolean });
     } catch (err) {
+      options?.abortSignal?.throwIfAborted();
       logger.error(`Google AI Studio embedding API call error: ${String(err)}`);
       return {
         error: `API call error: ${String(err)}`,
@@ -564,17 +646,24 @@ export class AIStudioEmbeddingProvider
     }
 
     const promptTokens: number | undefined = data?.usageMetadata?.promptTokenCount;
-    return {
-      embedding: values,
-      tokenUsage: cached
-        ? { cached: promptTokens ?? 0, total: promptTokens ?? 0, numRequests: 0 }
-        : { total: promptTokens ?? 0, numRequests: 1 },
+    return withResponseCacheMetadata(
+      {
+        embedding: values,
+        tokenUsage: {
+          ...(promptTokens === undefined ? {} : { total: promptTokens }),
+          numRequests: 1,
+        },
+        cost:
+          promptTokens === undefined
+            ? undefined
+            : calculateGoogleCost(this.modelName, this.config, promptTokens, 0),
+      },
       cached,
-    };
+    );
   }
 }
 
-const DEFAULT_AI_STUDIO_MODEL = 'gemini-2.5-pro';
+const DEFAULT_AI_STUDIO_MODEL = 'gemini-3.8-flash';
 
 export function getGoogleAiStudioProviders(env?: EnvOverrides) {
   const gradingProvider = new AIStudioChatProvider(DEFAULT_AI_STUDIO_MODEL, { env });

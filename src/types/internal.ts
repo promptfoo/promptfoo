@@ -1,5 +1,6 @@
 import type { EventSource } from './eventSource';
 import type { EvaluateOptions } from './index';
+import type { TokenUsage } from './shared';
 
 /**
  * Internal orchestration metadata that should not be accepted from reusable
@@ -8,4 +9,10 @@ import type { EvaluateOptions } from './index';
  */
 export type InternalEvaluateOptions = EvaluateOptions & {
   eventSource?: EventSource;
+  /** CLI-owned graceful pause; ordinary caller cancellation retains its error rows. */
+  pauseSignal?: AbortSignal;
+  /** CLI recovery reuses saved columns; this is neither configurable nor persisted. */
+  restorePromptColumns?: boolean;
+  generationEventId?: string;
+  generationTokenUsage?: TokenUsage;
 };

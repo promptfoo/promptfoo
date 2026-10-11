@@ -17,7 +17,10 @@ function getSkillCalls(params: AssertionParams): SkillCallEntry[] {
 
   return rawSkillCalls.filter(
     (entry): entry is SkillCallEntry =>
-      Boolean(entry) && typeof entry === 'object' && typeof entry.name === 'string',
+      Boolean(entry) &&
+      typeof entry === 'object' &&
+      typeof entry.name === 'string' &&
+      entry.is_error !== true,
   );
 }
 

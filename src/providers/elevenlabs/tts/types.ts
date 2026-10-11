@@ -27,13 +27,14 @@ export interface ElevenLabsTTSConfig extends ElevenLabsBaseConfig {
 }
 
 /**
- * Available TTS models
+ * TTS model identifiers, including legacy values for compatible endpoints.
  */
 export type TTSModel =
   | 'eleven_flash_v2_5'
   | 'eleven_turbo_v2_5'
   | 'eleven_turbo_v2'
   | 'eleven_multilingual_v2'
+  // Legacy native model; ElevenLabs scheduled removal for July 9, 2026.
   | 'eleven_monolingual_v1';
 
 /**
@@ -108,6 +109,8 @@ export interface VoiceRemixConfig {
  */
 export interface TTSStreamConfig {
   modelId: string;
+  outputFormat?: OutputFormat;
+  seed?: number;
   voiceSettings?: VoiceSettings;
   baseUrl?: string;
   keepAliveInterval?: number;

@@ -22,9 +22,43 @@ interface CountCacheEntry {
 }
 
 // Simple in-memory cache for counts with 5-minute TTL
-const distinctCountCache = new Map<string, CountCacheEntry>();
-const totalRowCountCache = new Map<string, CountCacheEntry>();
+const countCache = new Map<string, CountCacheEntry>();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+async function getResultCount(evalId: string, distinct: boolean): Promise<number> {
+  const cacheKey = `${distinct ? 'distinct' : 'total'}:${evalId}`;
+  const cached = countCache.get(cacheKey);
+
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+    logger.debug(
+      `Using cached ${distinct ? 'distinct count' : 'total row count'} for eval ${evalId}: ${cached.count}`,
+    );
+    return cached.count;
+  }
+
+  const db = await getDb();
+  const start = Date.now();
+
+  // Count distinct test indices (unique test cases) - this is what the UI shows as "results"
+  // Count all result rows - use this when iterating over all results
+  const result = await db
+    .select({ count: distinct ? sql<number>`COUNT(DISTINCT test_idx)` : sql<number>`COUNT(*)` })
+    .from(evalResultsTable)
+    .where(sql`eval_id = ${evalId}`)
+    .all();
+
+  const count = Number(result[0]?.count ?? 0);
+  const duration = Date.now() - start;
+
+  logger.debug(
+    `${distinct ? 'Distinct count' : 'Total row count'} query for eval ${evalId}: ${count} in ${duration}ms`,
+  );
+
+  // Cache the result
+  countCache.set(cacheKey, { count, timestamp: Date.now() });
+
+  return count;
+}
 
 /**
  * Get the count of distinct test indices for an eval.
@@ -33,34 +67,8 @@ const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
  * Use getTotalResultRowCount() if you need the total number of result rows
  * (which may be higher when there are multiple prompts/providers per test case).
  */
-export async function getCachedResultsCount(evalId: string): Promise<number> {
-  const cacheKey = `distinct:${evalId}`;
-  const cached = distinctCountCache.get(cacheKey);
-
-  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-    logger.debug(`Using cached distinct count for eval ${evalId}: ${cached.count}`);
-    return cached.count;
-  }
-
-  const db = getDb();
-  const start = Date.now();
-
-  // Count distinct test indices (unique test cases) - this is what the UI shows as "results"
-  const result = db
-    .select({ count: sql<number>`COUNT(DISTINCT test_idx)` })
-    .from(evalResultsTable)
-    .where(sql`eval_id = ${evalId}`)
-    .all();
-
-  const count = Number(result[0]?.count ?? 0);
-  const duration = Date.now() - start;
-
-  logger.debug(`Distinct count query for eval ${evalId}: ${count} in ${duration}ms`);
-
-  // Cache the result
-  distinctCountCache.set(cacheKey, { count, timestamp: Date.now() });
-
-  return count;
+export function getCachedResultsCount(evalId: string): Promise<number> {
+  return getResultCount(evalId, true);
 }
 
 /**
@@ -70,43 +78,16 @@ export async function getCachedResultsCount(evalId: string): Promise<number> {
  *
  * Use this for progress tracking when iterating over all results (e.g., sharing).
  */
-export async function getTotalResultRowCount(evalId: string): Promise<number> {
-  const cacheKey = `total:${evalId}`;
-  const cached = totalRowCountCache.get(cacheKey);
-
-  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-    logger.debug(`Using cached total row count for eval ${evalId}: ${cached.count}`);
-    return cached.count;
-  }
-
-  const db = getDb();
-  const start = Date.now();
-
-  // Count all result rows - use this when iterating over all results
-  const result = db
-    .select({ count: sql<number>`COUNT(*)` })
-    .from(evalResultsTable)
-    .where(sql`eval_id = ${evalId}`)
-    .all();
-
-  const count = Number(result[0]?.count ?? 0);
-  const duration = Date.now() - start;
-
-  logger.debug(`Total row count query for eval ${evalId}: ${count} in ${duration}ms`);
-
-  // Cache the result
-  totalRowCountCache.set(cacheKey, { count, timestamp: Date.now() });
-
-  return count;
+export function getTotalResultRowCount(evalId: string): Promise<number> {
+  return getResultCount(evalId, false);
 }
 
 export function clearCountCache(evalId?: string) {
   if (evalId) {
-    distinctCountCache.delete(`distinct:${evalId}`);
-    totalRowCountCache.delete(`total:${evalId}`);
+    countCache.delete(`distinct:${evalId}`);
+    countCache.delete(`total:${evalId}`);
   } else {
-    distinctCountCache.clear();
-    totalRowCountCache.clear();
+    countCache.clear();
   }
 }
 
@@ -121,7 +102,7 @@ export async function queryTestIndicesOptimized(
     filters?: string[];
   },
 ): Promise<{ testIndices: number[]; filteredCount: number }> {
-  const db = getDb();
+  const db = await getDb();
   const offset = opts.offset ?? 0;
   const limit = opts.limit ?? 50;
   const mode: EvalResultsFilterMode = opts.filterMode ?? 'all';
@@ -151,9 +132,8 @@ export async function queryTestIndicesOptimized(
   // This is a compromise - we search less fields but query is faster
   let searchCondition = sql`1=1`;
   if (opts.searchQuery && opts.searchQuery.trim() !== '' && !opts.filters?.length) {
-    const sanitizedSearch = opts.searchQuery.replace(/'/g, "''");
     // Only search in response field for better performance
-    searchCondition = sql`response LIKE ${'%' + sanitizedSearch + '%'}`;
+    searchCondition = sql`response LIKE ${`%${opts.searchQuery}%`}`;
   }
 
   const whereClause = sql`${baseQuery} AND ${searchCondition}`;
@@ -166,7 +146,7 @@ export async function queryTestIndicesOptimized(
     WHERE ${whereClause}
   `;
 
-  const countResult = db.all<CountResult>(countQuery);
+  const countResult = await db.all<CountResult>(countQuery);
   const filteredCount = Number(countResult[0]?.count ?? 0);
   logger.debug(`Optimized count query took ${Date.now() - countStart}ms`);
 
@@ -181,7 +161,7 @@ export async function queryTestIndicesOptimized(
     OFFSET ${offset}
   `;
 
-  const rows = db.all<TestIndexRow>(idxQuery);
+  const rows = await db.all<TestIndexRow>(idxQuery);
   const testIndices = rows.map((row) => row.test_idx);
   logger.debug(`Optimized index query took ${Date.now() - idxStart}ms`);
 

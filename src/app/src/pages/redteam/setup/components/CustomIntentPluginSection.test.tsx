@@ -136,18 +136,17 @@ describe('CustomIntentPluginSection', () => {
 
       render(<CustomIntentPluginSection />);
 
-      // Find delete buttons by the Trash2 icon (lucide-trash-2 class)
-      const deleteIcons = document.querySelectorAll('svg.lucide-trash-2');
-      const deleteButtons = Array.from(deleteIcons).map((icon) => icon.closest('button')!);
+      const deleteButtons = screen.getAllByRole('button', { name: /^Remove intent \d+$/ });
       expect(deleteButtons).toHaveLength(3);
       expect(screen.getByRole('button', { name: 'Remove intent 1' })).toBeInTheDocument();
 
       await user.click(deleteButtons[0]);
 
-      // Should have 2 text fields after deletion
       await waitFor(() => {
         const textFields = screen.getAllByRole('textbox');
         expect(textFields).toHaveLength(2);
+        expect(textFields[0]).toHaveValue('Intent 2');
+        expect(textFields[1]).toHaveValue('Intent 3');
       });
     });
 

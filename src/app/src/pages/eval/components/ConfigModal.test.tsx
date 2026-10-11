@@ -2,7 +2,7 @@ import { mockDocumentExecCommand, mockObjectUrl } from '@app/tests/browserMocks'
 import { renderWithProviders } from '@app/utils/testutils';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ConfigModal from './ConfigModal';
 import { useTableStore } from './store';
@@ -57,6 +57,18 @@ describe('ConfigModal', () => {
     const expectedYaml = yaml.dump(sampleConfig);
 
     expect(textarea.value).toBe(expectedYaml);
+  });
+
+  it('leaves the saved base path out of the displayed config', () => {
+    vi.mocked(useTableStore).mockReturnValue({
+      config: { ...sampleConfig, basePath: '/home/user/project' },
+    } as ReturnType<typeof useTableStore>);
+
+    renderWithProviders(<ConfigModal open={true} onClose={mockOnClose} />);
+
+    const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
+    expect(textarea.value).toBe(yaml.dump(sampleConfig));
+    expect(textarea.value).not.toContain('basePath');
   });
 
   it('textarea is read-only', () => {

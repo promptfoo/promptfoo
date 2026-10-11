@@ -1,67 +1,44 @@
 import { execFile } from 'child_process';
 import fs from 'fs/promises';
-import os from 'os';
 import path from 'path';
 import { promisify } from 'util';
 
 import { PythonShell } from 'python-shell';
-import { getEnvBool, getEnvString } from '../envars';
+import cliState from '../cliState';
+import { getEnvBool, getEnvString, getProcessEnv } from '../envars';
 import { getWrapperDir } from '../esm';
 import logger from '../logger';
 import { safeJsonStringify } from '../util/json';
+import {
+  createSecureTempDirectory,
+  removeSecureTempDirectory,
+  writeSecureTempFile,
+} from '../util/secureTempFiles';
+import { PythonStderrLogger } from './stderr';
 
 const execFileAsync = promisify(execFile);
+const oneShotValidations = new WeakMap<object, Map<string, Promise<string>>>();
 
 import type { Options as PythonShellOptions } from 'python-shell';
 
 /**
- * Gets an integer value from an environment variable.
- * @param key - The environment variable name
- * @returns The parsed integer value, or undefined if not set or not a valid integer
+ * Prefer explicit config over the provider or active environment's Python path.
+ * Leave an unset path undefined so validation can distinguish a required executable
+ * from a system default that permits fallback detection.
  */
-export function getEnvInt(key: string): number | undefined {
-  const value = process.env[key];
-  if (value === undefined) {
-    return undefined;
-  }
-  const parsed = parseInt(value, 10);
-  return isNaN(parsed) ? undefined : parsed;
+export function getConfiguredPythonPath(
+  configPath?: string,
+  envPath = getEnvString('PROMPTFOO_PYTHON'),
+): string | undefined {
+  return configPath || envPath || undefined;
 }
-
-/**
- * Resolves the Python executable path from explicit config and environment.
- * This centralizes the fallback logic: configPath > PROMPTFOO_PYTHON env var.
- *
- * Note: Does NOT apply the final 'python' default - that's handled by
- * validatePythonPath. This preserves the distinction between "explicitly
- * configured" (should fail if invalid) and "using system default" (should
- * try fallback detection).
- *
- * @param configPath - Explicitly configured Python path from provider config
- * @returns The configured path, or undefined if neither config nor env var is set
- */
-export function getConfiguredPythonPath(configPath?: string): string | undefined {
-  if (configPath) {
-    return configPath;
-  }
-  const envPath = getEnvString('PROMPTFOO_PYTHON');
-  return envPath || undefined;
-}
-
-export const state: {
-  cachedPythonPath: string | null;
-  validationPromise: Promise<string> | null;
-} = {
-  cachedPythonPath: null,
-  validationPromise: null,
-};
 
 /**
  * Try to find Python using Windows 'where' command, filtering out Microsoft Store stubs.
  */
 async function tryWindowsWhere(): Promise<string | null> {
   try {
-    const result = await execFileAsync('where', ['python']);
+    const result = await execFileAsync('where', ['python'], { env: getProcessEnv() });
     const output = result.stdout.trim();
 
     // Handle empty output
@@ -104,7 +81,9 @@ async function tryWindowsWhere(): Promise<string | null> {
 async function tryPythonCommands(commands: string[]): Promise<string | null> {
   for (const cmd of commands) {
     try {
-      const result = await execFileAsync(cmd, ['-c', 'import sys; print(sys.executable)']);
+      const result = await execFileAsync(cmd, ['-c', 'import sys; print(sys.executable)'], {
+        env: getProcessEnv(),
+      });
       const executablePath = result.stdout.trim();
       if (executablePath && executablePath !== 'None') {
         // On Windows, ensure .exe suffix if missing (but only for Windows-style paths)
@@ -192,95 +171,64 @@ export async function getSysExecutable(): Promise<string | null> {
  * @returns The validated path if successful, or null if invalid.
  */
 export async function tryPath(path: string): Promise<string | null> {
-  let timeoutId: NodeJS.Timeout | undefined;
-
   try {
-    const timeoutPromise = new Promise<never>((_, reject) => {
-      timeoutId = setTimeout(() => reject(new Error('Command timed out')), 2500);
+    const result = await execFileAsync(path, ['--version'], {
+      env: getProcessEnv(),
+      timeout: 2500,
+      killSignal: 'SIGKILL',
     });
-
-    const result = await Promise.race([execFileAsync(path, ['--version']), timeoutPromise]);
-
-    if (timeoutId) {
-      clearTimeout(timeoutId);
-    }
-
-    const versionOutput = (result as { stdout: string }).stdout.trim();
-    if (versionOutput.startsWith('Python')) {
-      return path;
-    }
-    return null;
+    return result.stdout.trim().startsWith('Python') ? path : null;
   } catch {
-    if (timeoutId) {
-      clearTimeout(timeoutId);
-    }
     return null;
   }
 }
 
-/**
- * Validates and caches the Python executable path.
- *
- * @param pythonPath - Path to the Python executable.
- * @param isExplicit - If true, only tries the provided path.
- * @returns Validated Python executable path.
- * @throws {Error} If no valid Python executable is found.
- */
+/** Validate on every call; use fallback detection only for a system default. */
 export async function validatePythonPath(pythonPath: string, isExplicit: boolean): Promise<string> {
-  // Return cached result if available
-  if (state.cachedPythonPath) {
-    return state.cachedPythonPath;
+  const primaryPath = await tryPath(pythonPath);
+  if (primaryPath) {
+    return primaryPath;
   }
 
-  // Create validation promise atomically if it doesn't exist
-  // This prevents race conditions where multiple calls create separate validations
-  if (!state.validationPromise) {
-    state.validationPromise = (async () => {
-      try {
-        const primaryPath = await tryPath(pythonPath);
-        if (primaryPath) {
-          state.cachedPythonPath = primaryPath;
-          state.validationPromise = null;
-          return primaryPath;
-        }
+  const guidance =
+    `Please ensure Python 3 is installed and set the PROMPTFOO_PYTHON environment variable ` +
+    `to your Python 3 executable path (e.g., '${process.platform === 'win32' ? 'C:\\Python39\\python.exe' : '/usr/bin/python3'}').`;
 
-        if (isExplicit) {
-          const error = new Error(
-            `Python 3 not found. Tried "${pythonPath}" ` +
-              `Please ensure Python 3 is installed and set the PROMPTFOO_PYTHON environment variable ` +
-              `to your Python 3 executable path (e.g., '${process.platform === 'win32' ? 'C:\\Python39\\python.exe' : '/usr/bin/python3'}').`,
-          );
-          // Clear promise on error to allow retry
-          state.validationPromise = null;
-          throw error;
-        }
-
-        // Try to get Python executable using comprehensive detection
-        const detectedPath = await getSysExecutable();
-        if (detectedPath) {
-          state.cachedPythonPath = detectedPath;
-          state.validationPromise = null;
-          return detectedPath;
-        }
-
-        const error = new Error(
-          `Python 3 not found. Tried "${pythonPath}", sys.executable detection, and fallback commands. ` +
-            `Please ensure Python 3 is installed and set the PROMPTFOO_PYTHON environment variable ` +
-            `to your Python 3 executable path (e.g., '${process.platform === 'win32' ? 'C:\\Python39\\python.exe' : '/usr/bin/python3'}').`,
-        );
-        // Clear promise on error to allow retry
-        state.validationPromise = null;
-        throw error;
-      } catch (error) {
-        // Ensure promise is cleared on any error
-        state.validationPromise = null;
-        throw error;
-      }
-    })();
+  if (isExplicit) {
+    throw new Error(`Python 3 not found. Tried "${pythonPath}" ${guidance}`);
   }
 
-  // Return the existing or newly-created promise
-  return state.validationPromise;
+  const detectedPath = await getSysExecutable();
+  if (detectedPath) {
+    return detectedPath;
+  }
+
+  throw new Error(
+    `Python 3 not found. Tried "${pythonPath}", sys.executable detection, and fallback commands. ${guidance}`,
+  );
+}
+
+// One-shot calls share validation within an invocation; worker restarts revalidate directly.
+function validateOneShotPythonPath(pythonPath: string, isExplicit: boolean): Promise<string> {
+  const scope = cliState.envScope;
+  if (!scope) {
+    return validatePythonPath(pythonPath, isExplicit);
+  }
+  let validations = oneShotValidations.get(scope);
+  if (!validations) {
+    validations = new Map();
+    oneShotValidations.set(scope, validations);
+  }
+  const key = JSON.stringify([pythonPath, isExplicit]);
+  let validation = validations.get(key);
+  if (!validation) {
+    validation = validatePythonPath(pythonPath, isExplicit).catch((error) => {
+      validations.delete(key);
+      throw error;
+    });
+    validations.set(key, validation);
+  }
+  return validation;
 }
 
 /**
@@ -291,6 +239,7 @@ export async function validatePythonPath(pythonPath: string, isExplicit: boolean
  * @param args - An array of arguments to pass to the Python script.
  * @param options - Optional settings for running the Python script.
  * @param options.pythonExecutable - Optional path to the Python executable.
+ * @param options.abortSignal - Stops this invocation and waits for its child to close before cleanup.
  * @returns A promise that resolves to the output of the Python script.
  * @throws An error if there's an issue running the Python script or parsing its output.
  */
@@ -298,74 +247,163 @@ export async function runPython<T = unknown>(
   scriptPath: string,
   method: string,
   args: (string | number | object | undefined)[],
-  options: { pythonExecutable?: string } = {},
+  options: { pythonExecutable?: string; abortSignal?: AbortSignal } = {},
 ): Promise<T> {
+  options.abortSignal?.throwIfAborted();
   const absPath = path.resolve(scriptPath);
-  const tempJsonPath = path.join(
-    os.tmpdir(),
-    `promptfoo-python-input-json-${Date.now()}-${Math.random().toString(16).slice(2)}.json`,
-  );
-  const outputPath = path.join(
-    os.tmpdir(),
-    `promptfoo-python-output-json-${Date.now()}-${Math.random().toString(16).slice(2)}.json`,
-  );
   const customPath = getConfiguredPythonPath(options.pythonExecutable);
   let pythonPath = customPath || 'python';
+  let tempDirectory: string | undefined;
 
-  pythonPath = await validatePythonPath(pythonPath, typeof customPath === 'string');
-
-  const pythonOptions: PythonShellOptions = {
-    args: [absPath, method, tempJsonPath, outputPath],
-    env: process.env,
-    mode: 'binary',
-    pythonPath,
-    scriptPath: getWrapperDir('python'),
-    // When `inherit` is used, `import pdb; pdb.set_trace()` will work.
-    ...(getEnvBool('PROMPTFOO_PYTHON_DEBUG_ENABLED') && { stdio: 'inherit' }),
-  };
+  pythonPath = await validateOneShotPythonPath(pythonPath, typeof customPath === 'string');
+  options.abortSignal?.throwIfAborted();
 
   try {
-    await fs.writeFile(tempJsonPath, safeJsonStringify(args) as string, 'utf-8');
-    logger.debug(`Running Python wrapper with args: ${safeJsonStringify(args)}`);
+    tempDirectory = await createSecureTempDirectory('promptfoo-python-');
+    const tempJsonPath = await writeSecureTempFile(
+      tempDirectory,
+      'input.json',
+      safeJsonStringify(args) as string,
+    );
+    const outputPath = await writeSecureTempFile(tempDirectory, 'output.json', '');
+    const pythonOptions: PythonShellOptions = {
+      args: [absPath, method, tempJsonPath, outputPath],
+      env: getProcessEnv(),
+      mode: 'binary',
+      pythonPath,
+      scriptPath: getWrapperDir('python'),
+      // When `inherit` is used, `import pdb; pdb.set_trace()` will work.
+      ...(getEnvBool('PROMPTFOO_PYTHON_DEBUG_ENABLED') && { stdio: 'inherit' }),
+    };
+
+    logger.debug('[Python] Running script', { scriptPath: absPath, method });
 
     await new Promise<void>((resolve, reject) => {
+      options.abortSignal?.throwIfAborted();
+      const pyshell = new PythonShell('wrapper.py', pythonOptions);
+      const child = pyshell.childProcess;
+      const signal = options.abortSignal;
+      const stderrLogger = new PythonStderrLogger();
+      let childClosed = false;
+      let settled = false;
+      let shellEnded = false;
+      let shellFailed = false;
+      let stopRequested = false;
+      let killTimer: NodeJS.Timeout | undefined;
+      let failure: { error: unknown } | undefined;
+      let exitFailure: Error | undefined;
+
+      // Preserve whichever independent failure or caller cancellation arrived first.
+      const rememberFailure = (error: unknown) => {
+        failure ??= { error };
+      };
+      const onStdout = (chunk: Buffer) => logger.debug(chunk.toString('utf-8').trim());
+      const onStderr = (chunk: Buffer) => stderrLogger.handleData(chunk);
+      const finish = () => {
+        // SDK end/close and kill acceptance do not prove the child has closed.
+        // Spawn failure can emit error/child close without an SDK end callback.
+        if (settled || !childClosed || (!shellEnded && !shellFailed)) {
+          return;
+        }
+        settled = true;
+        signal?.removeEventListener('abort', onAbort);
+        clearTimeout(killTimer);
+        child.removeListener('close', onClose);
+        pyshell.removeListener('error', onError);
+        pyshell.stdout?.removeListener('data', onStdout);
+        pyshell.stderr?.removeListener('data', onStderr);
+        stderrLogger.flush();
+        if (failure) {
+          reject(failure.error);
+        } else if (exitFailure) {
+          reject(exitFailure);
+        } else {
+          resolve();
+        }
+      };
+      const onError = (error: Error) => {
+        shellFailed = true;
+        rememberFailure(error);
+        finish();
+      };
+      const onClose = (code: number | null, exitSignal: NodeJS.Signals | null) => {
+        childClosed = true;
+        // Stop escalation and detach the caller as soon as the owned child closes.
+        signal?.removeEventListener('abort', onAbort);
+        clearTimeout(killTimer);
+        if (exitSignal) {
+          exitFailure = new Error(`Python process exited with signal ${exitSignal}`);
+        } else if (code !== null && code !== 0) {
+          exitFailure = new Error(`Python process exited with code ${code}`);
+        }
+        finish();
+      };
+      const stopChild = () => {
+        if (childClosed || stopRequested) {
+          return;
+        }
+        stopRequested = true;
+        try {
+          child.kill('SIGTERM');
+        } catch (error) {
+          rememberFailure(error);
+        }
+        if (!childClosed) {
+          killTimer = setTimeout(() => {
+            if (!childClosed) {
+              try {
+                child.kill('SIGKILL');
+              } catch (error) {
+                rememberFailure(error);
+              }
+            }
+          }, 1000);
+          killTimer.unref();
+        }
+      };
+      const onAbort = () => {
+        if (!childClosed) {
+          rememberFailure(signal!.reason);
+          stopChild();
+        }
+      };
+
+      pyshell.on('error', onError);
+      child.once('close', onClose);
       try {
-        const pyshell = new PythonShell('wrapper.py', pythonOptions);
-
-        pyshell.stdout?.on('data', (chunk: Buffer) => {
-          logger.debug(chunk.toString('utf-8').trim());
-        });
-
-        pyshell.stderr?.on('data', (chunk: Buffer) => {
-          logger.error(chunk.toString('utf-8').trim());
-        });
-
-        pyshell.end((err) => {
-          if (err) {
-            reject(err);
-          } else {
-            resolve();
+        pyshell.stdout?.on('data', onStdout);
+        pyshell.stderr?.on('data', onStderr);
+        signal?.addEventListener('abort', onAbort, { once: true });
+        pyshell.end((error) => {
+          shellEnded = true;
+          if (error) {
+            rememberFailure(error);
           }
+          finish();
         });
+        // Covers cancellation between the initial check and listener attachment.
+        if (signal?.aborted) {
+          onAbort();
+        }
       } catch (error) {
-        reject(error);
+        shellFailed = true;
+        rememberFailure(error);
+        stopChild();
+        finish();
       }
     });
 
     const output = await fs.readFile(outputPath, 'utf-8');
-    logger.debug(`Python script ${absPath} returned: ${output}`);
+    logger.debug('[Python] Script returned a result', { scriptPath: absPath });
 
     let result: { type: 'final_result'; data: T } | undefined;
     try {
       result = JSON.parse(output);
-      logger.debug(
-        `Python script ${absPath} parsed output type: ${typeof result}, structure: ${result ? JSON.stringify(Object.keys(result)) : 'undefined'}`,
-      );
     } catch (error) {
       throw new Error(
-        `Invalid JSON: ${(error as Error).message} when parsing result: ${
-          output
-        }\nStack Trace: ${(error as Error).stack}`,
+        `Invalid JSON returned by Python script: ${(error as Error).message}\nStack Trace: ${
+          (error as Error).stack
+        }`,
       );
     }
     if (result?.type !== 'final_result') {
@@ -374,27 +412,22 @@ export async function runPython<T = unknown>(
 
     return result.data;
   } catch (error) {
-    logger.error(
-      `Error running Python script: ${(error as Error).message}\nStack Trace: ${
-        (error as Error).stack?.replace('--- Python Traceback ---', 'Python Traceback: ') ||
-        'No Python traceback available'
-      }`,
-    );
-    throw new Error(
-      `Error running Python script: ${(error as Error).message}\nStack Trace: ${
-        (error as Error).stack?.replace('--- Python Traceback ---', 'Python Traceback: ') ||
-        'No Python traceback available'
-      }`,
-    );
+    if (options.abortSignal?.aborted && error === options.abortSignal.reason) {
+      throw error;
+    }
+    const message = `Error running Python script: ${(error as Error).message}\nStack Trace: ${
+      (error as Error).stack?.replace('--- Python Traceback ---', 'Python Traceback: ') ||
+      'No Python traceback available'
+    }`;
+    logger.error(message);
+    throw new Error(message);
   } finally {
-    await Promise.all(
-      [tempJsonPath, outputPath].map(async (file) => {
-        try {
-          await fs.unlink(file);
-        } catch (error) {
-          logger.error(`Error removing ${file}: ${error}`);
-        }
-      }),
-    );
+    if (tempDirectory) {
+      try {
+        await removeSecureTempDirectory(tempDirectory);
+      } catch (error) {
+        logger.error(`Error removing temporary Python directory: ${error}`);
+      }
+    }
   }
 }

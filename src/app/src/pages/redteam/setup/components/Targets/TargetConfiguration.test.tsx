@@ -173,6 +173,26 @@ describe('TargetConfiguration', () => {
       expect(screen.getByText('WebSocket Configuration')).toBeInTheDocument();
     });
 
+    it('should not require prompts for A2A shorthand targets', () => {
+      mockUseRedTeamConfig.mockReturnValue({
+        config: {
+          target: {
+            id: 'a2a:https://agent.example.com/a2a/v1',
+            label: 'A2A Target',
+            config: {},
+          },
+          extensions: [],
+          prompts: [],
+        },
+        updateConfig: mockUpdateConfig,
+        providerType: 'a2a',
+      });
+
+      renderWithProviders(<TargetConfiguration onNext={onNextMock} onBack={onBackMock} />);
+
+      expect(screen.queryByTestId('mock-prompts')).not.toBeInTheDocument();
+    });
+
     it('should render OpenAI configuration when providerType is "openai"', () => {
       mockUseRedTeamConfig.mockReturnValue({
         config: {

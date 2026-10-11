@@ -275,6 +275,32 @@ docker build -t promptfoo:custom .
 # docker build --platform linux/amd64 -t promptfoo:custom .
 ```
 
+Images built from this Dockerfile are marked as custom containers. To apply a Promptfoo update,
+first advance the checkout to the desired release, then rebuild and redeploy. Use a Node.js
+`22.22.0` or newer base image (24 LTS recommended). Use `docker build --pull` when a
+tagged parent image must be refreshed. An unchanged build context produces the same Promptfoo
+version.
+
+Custom Dockerfiles that bake Promptfoo into another base image should identify themselves so update
+notices do not suggest a host-level `npm` or `npx` command:
+
+```dockerfile
+ENV PROMPTFOO_RUNNING_IN_DOCKER=1
+ENV PROMPTFOO_OFFICIAL_DOCKER_IMAGE=0
+```
+
+If your Dockerfile derives from the official Promptfoo image, reset the upstream-image marker while
+keeping container detection enabled. This prevents update notices from suggesting that users replace
+your customized image with the upstream image:
+
+```dockerfile
+FROM ghcr.io/promptfoo/promptfoo:latest
+ENV PROMPTFOO_OFFICIAL_DOCKER_IMAGE=0
+```
+
+Existing derived images that inherit the marker receive safe fallback guidance to refresh the
+Promptfoo base, rebuild the customized image, and then redeploy it.
+
 ### 3. Run the Custom Docker Container
 
 Use the same `docker run` command as in Method 1, but replace the image name:
@@ -348,6 +374,8 @@ By default, promptfoo stores its SQLite database (`promptfoo.db`) in `/home/prom
 
 By default, promptfoo externalizes large binary outputs (for example, images/audio) to the local filesystem under `/home/promptfoo/.promptfoo/blobs` and replaces inline base64 with lightweight references. To keep media inline (legacy behavior), set `PROMPTFOO_INLINE_MEDIA=true`. Make sure your volume mapping includes `/home/promptfoo/.promptfoo/blobs` so media persists across restarts.
 
+`PROMPTFOO_MEDIA_PATH` applies only to legacy `storageRef` media, which defaults to `/home/promptfoo/.promptfoo/media`; it does not move the `blobs` directory. Set it before media storage is first used: that location stays fixed for the process.
+
 ### Custom Config Directory
 
 You can override the default internal configuration directory (`/home/promptfoo/.promptfoo`) using the `PROMPTFOO_CONFIG_DIR` environment variable. If set, promptfoo uses this path _inside the container_ for both configuration files and the `promptfoo.db` database. You still need to map this custom path to a persistent volume.
@@ -376,8 +404,8 @@ Place a `ui-providers.yaml` file in your `.promptfoo` directory (same location a
 ```yaml title="ui-providers.yaml"
 providers:
   # Simple provider IDs
-  - openai:gpt-5.1-mini
-  - anthropic:messages:claude-sonnet-4-5-20250929
+  - openai:gpt-5.4-mini
+  - anthropic:messages:claude-sonnet-5
 
   # With labels and defaults
   - id: openai:gpt-5.1
@@ -420,7 +448,7 @@ data:
   ui-providers.yaml: |
     providers:
       - openai:gpt-5.1
-      - anthropic:messages:claude-sonnet-4-5-20250929
+      - anthropic:messages:claude-sonnet-5
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -431,7 +459,7 @@ spec:
     spec:
       containers:
         - name: promptfoo
-          image: promptfoo/promptfoo:latest
+          image: ghcr.io/promptfoo/promptfoo:latest
           volumeMounts:
             - name: config
               mountPath: /home/promptfoo/.promptfoo/ui-providers.yaml
@@ -492,9 +520,9 @@ providers:
 
 **Provider ID formats:**
 
-- **OpenAI:** `openai:gpt-5.1`, `openai:gpt-5.1-mini`
-- **Anthropic:** `anthropic:messages:claude-sonnet-4-5-20250929`
-- **AWS Bedrock:** `bedrock:us.anthropic.claude-sonnet-4-5-20250929-v1:0`
+- **OpenAI:** `openai:gpt-5.1`, `openai:gpt-5.4-mini`
+- **Anthropic:** `anthropic:messages:claude-sonnet-5`
+- **AWS Bedrock:** `bedrock:us.anthropic.claude-sonnet-5`
 - **Azure OpenAI:** `azureopenai:chat:deployment-name`
 - **Custom HTTP:** `http://your-api.com/v1` or `https://...`
 
@@ -583,7 +611,7 @@ The `VITE_PUBLIC_BASENAME` build argument configures the frontend to use the cor
 - **GPU**: Not required
 - **RAM**: 4 GB+
 - **Storage**: 10 GB+
-- **Dependencies**: Node.js `^20.20.0` or `>=22.22.0`, npm
+- **Dependencies**: Node.js `>=22.22.0`, npm
 
 ### Server Requirements (Hosting the Web UI/API)
 

@@ -79,7 +79,7 @@ And previously some hate speech tests failed against your target, the retry stra
 2. Use it in combination with other strategies for maximum coverage
 
 :::info
-Currently, the retry strategy uses only your local database. Cloud sharing of retry test cases across teams is coming soon.
+Retries use your local database and, when connected, cloud history. Cases with the same input variables and strategy are included once; runtime state such as `_conversation` and `sessionId` does not make a case distinct. Different strategies remain separate.
 :::
 
 ## Related Concepts

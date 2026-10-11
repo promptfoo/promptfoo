@@ -8,8 +8,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@app/components/ui/select';
-import { EVAL_ROUTES } from '@app/constants/routes';
-import { callApi } from '@app/utils/api';
 import {
   BarController,
   BarElement,
@@ -27,7 +25,7 @@ import {
 import { ErrorBoundary } from 'react-error-boundary';
 import { usePassRates } from './hooks';
 import { useTableStore } from './store';
-import type { EvaluateTable, UnifiedConfig } from '@promptfoo/types';
+import type { EvaluateTable } from '@promptfoo/types';
 
 interface ResultsChartsProps {
   scores: number[];
@@ -35,10 +33,14 @@ interface ResultsChartsProps {
 
 interface ChartProps {
   table: EvaluateTable;
-  evalId?: string | null;
-  config?: Partial<UnifiedConfig>;
-  datasetId?: string | null;
 }
+
+type ScatterPoint = {
+  x: number;
+  y: number;
+  backgroundColor: string;
+  rowIndex: number;
+};
 
 const COLOR_PALETTE = [
   '#fd7f6f',
@@ -90,8 +92,8 @@ function HistogramChart({ table }: ChartProps) {
     const maxScore = Math.max(...scores);
     const minScore = Math.min(...scores);
     const range = Math.ceil(maxScore) - Math.floor(minScore); // Adjust the range to be between whole numbers
-    const binSize = range / 10; // Define the size of each bin
-    const bins = Array.from({ length: 11 }, (_, i) =>
+    const binSize = range === 0 ? 1 : range / 10;
+    const bins = Array.from({ length: range === 0 ? 1 : 11 }, (_, i) =>
       Number.parseFloat((Math.floor(minScore) + i * binSize).toFixed(2)),
     );
 
@@ -243,31 +245,37 @@ function ScatterChart({ table }: ChartProps) {
     const minScore = Math.min(...scores);
     const maxScore = Math.max(...scores);
 
-    const data = table.body
-      .map((row) => {
-        const prompt1Score = row.outputs[xAxisPrompt]?.score;
-        const prompt2Score = row.outputs[yAxisPrompt]?.score;
-        let backgroundColor;
-        if (prompt2Score > prompt1Score) {
-          backgroundColor = 'green';
-        } else if (prompt2Score < prompt1Score) {
-          backgroundColor = 'red';
-        } else {
-          backgroundColor = 'gray';
-        }
-        return {
+    const data = table.body.flatMap<ScatterPoint>((row, rowIndex) => {
+      const prompt1Score = row.outputs[xAxisPrompt]?.score;
+      const prompt2Score = row.outputs[yAxisPrompt]?.score;
+
+      if (
+        typeof prompt1Score !== 'number' ||
+        Number.isNaN(prompt1Score) ||
+        typeof prompt2Score !== 'number' ||
+        Number.isNaN(prompt2Score)
+      ) {
+        return [];
+      }
+
+      let backgroundColor;
+      if (prompt2Score > prompt1Score) {
+        backgroundColor = 'green';
+      } else if (prompt2Score < prompt1Score) {
+        backgroundColor = 'red';
+      } else {
+        backgroundColor = 'gray';
+      }
+
+      return [
+        {
           x: prompt1Score,
           y: prompt2Score,
           backgroundColor,
-        };
-      })
-      .filter(
-        (point) =>
-          typeof point.x === 'number' &&
-          !Number.isNaN(point.x) &&
-          typeof point.y === 'number' &&
-          !Number.isNaN(point.y),
-      );
+          rowIndex,
+        },
+      ];
+    });
 
     scatterChartInstance.current = new Chart(scatterCanvasRef.current, {
       type: 'scatter',
@@ -301,9 +309,16 @@ function ScatterChart({ table }: ChartProps) {
           tooltip: {
             callbacks: {
               label(tooltipItem: TooltipItem<'scatter'>) {
-                const row = table.body[tooltipItem.dataIndex];
-                let prompt1Text = row.outputs[0]?.text || 'No output';
-                let prompt2Text = row.outputs[1]?.text || 'No output';
+                const point = tooltipItem.raw as Partial<ScatterPoint> | undefined;
+                const rowIndex =
+                  typeof point?.rowIndex === 'number' ? point.rowIndex : tooltipItem.dataIndex;
+                const row = table.body[rowIndex];
+                if (!row) {
+                  return '';
+                }
+
+                let prompt1Text = row.outputs[xAxisPrompt]?.text || 'No output';
+                let prompt2Text = row.outputs[yAxisPrompt]?.text || 'No output';
                 if (prompt1Text.length > 30) {
                   prompt1Text = prompt1Text.substring(0, 30) + '...';
                 }
@@ -416,13 +431,19 @@ function MetricChart({ table }: ChartProps) {
 
     const namedScoreKeys = Object.keys(table.head.prompts[0].metrics?.namedScores || {});
     const labels = namedScoreKeys;
+    // Compute each metric's normalization value once; it depends only on the key, not the prompt.
+    const normalizationValueByKey = new Map(
+      namedScoreKeys.map((key) => {
+        const values = table.head.prompts.map((p) => p.metrics?.namedScores[key] || 0);
+        const maxValue = Math.max(...values);
+        return [key, maxValue > 0 ? maxValue : Math.max(...values.map(Math.abs))];
+      }),
+    );
     const datasets = table.head.prompts.map((prompt, promptIdx) => {
       const data = namedScoreKeys.map((key) => {
         const value = prompt.metrics?.namedScores[key] || 0;
-        const maxValue = Math.max(
-          ...table.head.prompts.map((p) => p.metrics?.namedScores[key] || 0),
-        );
-        return value / maxValue;
+        const normalizationValue = normalizationValueByKey.get(key) ?? 0;
+        return normalizationValue > 0 ? value / normalizationValue : 0;
       });
       return {
         label: `${table.head.prompts[promptIdx].provider}`,
@@ -477,190 +498,7 @@ function MetricChart({ table }: ChartProps) {
   return <canvas ref={metricCanvasRef} style={{ maxHeight: '300px' }}></canvas>;
 }
 
-interface ProgressData {
-  evalId: string;
-  description: string;
-  promptId: string;
-  createdAt: number;
-  label: string;
-  provider: string;
-  metrics: {
-    testPassCount: number;
-    testFailCount: number;
-    score: number;
-  };
-}
-
-function PerformanceOverTimeChart({ evalId }: ChartProps) {
-  const { config } = useTableStore();
-  const lineCanvasRef = useRef(null);
-  const lineChartInstance = useRef<Chart | null>(null);
-  const [progressData, setProgressData] = useState<ProgressData[]>([]);
-
-  useEffect(() => {
-    const fetchProgressData = async () => {
-      if (!config?.description) {
-        return;
-      }
-
-      try {
-        const res = await callApi(`/history?description=${encodeURIComponent(config.description)}`);
-        const data = await res.json();
-        setProgressData(data.data);
-      } catch (error) {
-        console.error('Error fetching progress data:', error);
-      }
-    };
-
-    fetchProgressData();
-  }, [config?.description]);
-
-  useEffect(() => {
-    if (!lineCanvasRef.current || !evalId || progressData.length === 0) {
-      return;
-    }
-
-    if (lineChartInstance.current) {
-      lineChartInstance.current.destroy();
-    }
-
-    // Group evaluations by createdAt and assign evaluation numbers
-    const evaluationGroups = progressData.reduce<Record<string, ProgressData[]>>(
-      (groups, eval_) => {
-        const date = new Date(eval_.createdAt).toISOString();
-        if (!groups[date]) {
-          groups[date] = [];
-        }
-        groups[date].push(eval_);
-        return groups;
-      },
-      {},
-    );
-
-    const evaluations = Object.values(evaluationGroups).flatMap((group, groupIndex) =>
-      group.map((item) => ({
-        ...item,
-        evaluationNumber: groupIndex + 1,
-      })),
-    );
-
-    const datasets = evaluations.reduce<
-      Record<number, { x: number; y: number; evalData: ProgressData }[]>
-    >((acc, eval_) => {
-      const passRate =
-        (eval_.metrics.testPassCount /
-          (eval_.metrics.testPassCount + eval_.metrics.testFailCount)) *
-        100;
-
-      if (!acc[eval_.evaluationNumber]) {
-        acc[eval_.evaluationNumber] = [];
-      }
-      acc[eval_.evaluationNumber].push({
-        x: eval_.evaluationNumber,
-        y: passRate,
-        evalData: eval_,
-      });
-      return acc;
-    }, {});
-
-    const chartData = Object.values(datasets).flat();
-
-    // Find the highest pass rate for each evaluation number to connect with a line
-    const highestPassRates = Object.values(datasets).map((group) => {
-      return group.reduce((max, current) => (current.y > max.y ? current : max));
-    });
-
-    const chartOptions = {
-      responsive: true,
-      scales: {
-        x: {
-          type: 'linear' as const,
-          position: 'bottom' as const,
-          title: {
-            display: true,
-            text: 'Evaluation',
-          },
-          ticks: {
-            stepSize: 1,
-          },
-        },
-        y: {
-          title: {
-            display: true,
-            text: 'Pass Rate (%)',
-          },
-        },
-      },
-      plugins: {
-        tooltip: {
-          callbacks: {
-            title: (context: unknown) => {
-              const items = context as TooltipItem<'scatter'>[];
-              const raw = items[0].raw as { evalData: { evalId: string } };
-              return raw.evalData.evalId;
-            },
-            label: (context: unknown) => {
-              const item = (context as TooltipItem<'scatter'>).raw as {
-                x: number;
-                y: number;
-                evalData: ProgressData;
-              };
-              const { evalData } = item;
-              const passRate =
-                (evalData.metrics.testPassCount /
-                  (evalData.metrics.testPassCount + evalData.metrics.testFailCount)) *
-                100;
-              return [
-                `Label: ${evalData.label}`,
-                `Provider: ${evalData.provider}`,
-                `Pass Rate: ${passRate.toFixed(2)}%`,
-                `Score: ${evalData.metrics.score.toFixed(2)}`,
-              ];
-            },
-          },
-        },
-      },
-      onClick: (_event: unknown, elements: unknown) => {
-        if (Array.isArray(elements) && elements.length > 0) {
-          const index = (elements[0] as { index: number }).index;
-          window.open(EVAL_ROUTES.DETAIL(chartData[index].evalData.evalId), '_blank');
-        }
-      },
-    };
-
-    lineChartInstance.current = new Chart(lineCanvasRef.current, {
-      type: 'scatter',
-      data: {
-        datasets: [
-          {
-            type: 'scatter',
-            data: chartData,
-            pointBackgroundColor: chartData.map((point) =>
-              point.evalData.evalId === evalId ? '#4CAF50' : '#2196F3',
-            ),
-          },
-          {
-            type: 'line',
-            data: highestPassRates,
-            borderColor: '#2196F3AA',
-            borderWidth: 2,
-            pointRadius: 0,
-          },
-        ],
-      },
-      options: chartOptions,
-    });
-  }, [progressData, evalId]);
-
-  return <canvas ref={lineCanvasRef} style={{ maxHeight: '300px', cursor: 'pointer' }} />;
-}
-
 function ResultsCharts({ scores }: ResultsChartsProps) {
-  const [
-    showPerformanceOverTimeChart,
-    //setShowPerformanceOverTimeChart
-  ] = useState(false);
-
   // Update Chart.js defaults when theme changes
   // useLayoutEffect ensures defaults are set before charts render
   useLayoutEffect(() => {
@@ -670,42 +508,9 @@ function ResultsCharts({ scores }: ResultsChartsProps) {
 
   // NOTE: Parent component is responsible for conditionally rendering the charts based on the table being
   // non-null.
-  const { table, evalId } = useTableStore();
+  const { table } = useTableStore();
 
-  // TODO(Will): Release performance over time chart; it's been hidden for 10 months.
-  // useEffect(() => {
-  //   if (config?.description && import.meta.env.VITE_PROMPTFOO_EXPERIMENTAL) {
-  //     const filteredEvals = recentEvals.filter(
-  //       (evaluation) => evaluation.description === config.description,
-  //     );
-  //     if (filteredEvals.length > 1) {
-  //       setShowPerformanceOverTimeChart(true);
-  //     }
-  //   } else {
-  //     setShowPerformanceOverTimeChart(false);
-  //   }
-  // }, [config?.description, recentEvals]);
-
-  // if (table.head.prompts.length < 2 && showPerformanceOverTimeChart) {
-  //   return (
-  //     <ErrorBoundary fallback={null}>
-  //       <Paper sx={{ position: 'relative', padding: 3, mt: 2 }}>
-  //         <IconButton
-  //           style={{ position: 'absolute', right: 0, top: 0 }}
-  //           onClick={() => handleHideCharts()}
-  //         >
-  //           <CloseIcon />
-  //         </IconButton>
-
-  //         <div style={{ width: '100%' }}>
-  //           <PerformanceOverTimeChart table={table} evalId={evalId} />
-  //         </div>
-  //       </Paper>
-  //     </ErrorBoundary>
-  //   );
-  // }
-
-  const chartWidth = showPerformanceOverTimeChart ? '25%' : '33%';
+  const chartWidth = '33%';
 
   const scoreSet = new Set(scores);
 
@@ -727,11 +532,6 @@ function ResultsCharts({ scores }: ResultsChartsProps) {
           <div style={{ width: chartWidth }}>
             <ScatterChart table={table!} />
           </div>
-          {showPerformanceOverTimeChart && (
-            <div style={{ width: chartWidth }}>
-              <PerformanceOverTimeChart table={table!} evalId={evalId} />
-            </div>
-          )}
         </div>
       </div>
     </ErrorBoundary>

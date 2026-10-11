@@ -108,7 +108,7 @@ async function getFailedTestCases(
     }
 
     // Always also check local SQLite database
-    const db = getDb();
+    const db = await getDb();
 
     const targetResults = await db
       .select()
@@ -159,8 +159,7 @@ async function getFailedTestCases(
 
     allTestCases.push(...localTestCases);
 
-    // Deduplicate combined results from both cloud and local
-    return deduplicateTestCases(allTestCases);
+    return allTestCases;
   } catch (error) {
     logger.error(`Error retrieving failed test cases: ${error}`);
     return [];
@@ -172,18 +171,15 @@ export async function addRetryTestCases(
   _injectVar: string, // Unused - provider config (including injectVar) comes from stored test cases
   config: Record<string, unknown>,
 ): Promise<TestCase[]> {
-  // Group test cases by plugin ID
-  const testsByPlugin = new Map<string, TestCaseWithPlugin[]>();
+  // Count test cases by plugin ID
+  const testsByPlugin = new Map<string, number>();
   for (const test of testCases) {
     const pluginId = test.metadata?.pluginId;
     if (!pluginId) {
       continue;
     }
 
-    if (!testsByPlugin.has(pluginId)) {
-      testsByPlugin.set(pluginId, []);
-    }
-    testsByPlugin.get(pluginId)!.push(test);
+    testsByPlugin.set(pluginId, (testsByPlugin.get(pluginId) ?? 0) + 1);
   }
 
   const targetIds: string[] = (config?.targetIds ?? []) as string[];
@@ -196,9 +192,9 @@ export async function addRetryTestCases(
   // For each plugin, get its failed test cases
   const retryTestCases: TestCase[] = [];
   for (const targetId of targetIds) {
-    for (const [pluginId, tests] of testsByPlugin.entries()) {
+    for (const [pluginId, count] of testsByPlugin.entries()) {
       // Use configured numTests if available, otherwise use original test count
-      const maxTests = typeof config.numTests === 'number' ? config.numTests : tests.length;
+      const maxTests = typeof config.numTests === 'number' ? config.numTests : count;
 
       // Fetch only the number of tests we need for efficiency
       const failedTests = await getFailedTestCases(pluginId, targetId, maxTests);

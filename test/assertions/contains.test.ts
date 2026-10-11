@@ -68,24 +68,6 @@ describe('handleContains', () => {
     });
   });
 
-  it('should handle number values', () => {
-    const params: AssertionParams = {
-      ...defaultParams,
-      assertion: { type: 'contains', value: '42' },
-      renderedValue: '42' as AssertionValue,
-      outputString: 'The answer is 42',
-      inverse: false,
-    };
-
-    const result = handleContains(params);
-    expect(result).toEqual({
-      pass: true,
-      score: 1,
-      reason: 'Assertion passed',
-      assertion: params.assertion,
-    });
-  });
-
   it('should handle inverse assertion correctly', () => {
     const params: AssertionParams = {
       ...defaultParams,
@@ -173,6 +155,67 @@ describe('handleIContains', () => {
       reason: 'Assertion passed',
       assertion: params.assertion,
     });
+  });
+});
+
+describe.each([
+  ['contains', handleContains],
+  ['icontains', handleIContains],
+] as const)('%s numeric values', (type, handler) => {
+  it.each([
+    {
+      outputString: 'There are 0 errors',
+      pass: true,
+      reason: 'Assertion passed',
+    },
+    {
+      outputString: 'no digits here',
+      pass: false,
+      reason: 'Expected output to contain "0"',
+    },
+  ])('should return pass=$pass for 0', ({ outputString, pass, reason }) => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      baseType: type,
+      assertion: { type, value: 0 },
+      renderedValue: 0,
+      outputString,
+      inverse: false,
+    };
+
+    expect(handler(params)).toEqual({
+      pass,
+      score: pass ? 1 : 0,
+      reason,
+      assertion: params.assertion,
+    });
+  });
+
+  it('should reject NaN', () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      baseType: type,
+      assertion: { type, value: Number.NaN },
+      renderedValue: Number.NaN,
+      outputString: 'NaN',
+      inverse: false,
+    };
+
+    expect(() => handler(params)).toThrow(
+      `"${type}" assertion type must have a string or number value`,
+    );
+  });
+
+  it.each([Infinity, -Infinity])('supports %s', (value) => {
+    expect(
+      handler({
+        ...defaultParams,
+        assertion: { type },
+        renderedValue: value,
+        outputString: String(value),
+        inverse: false,
+      }).pass,
+    ).toBe(true);
   });
 });
 
@@ -919,4 +962,63 @@ describe('handleIContainsAll', () => {
       assertion: params.assertion,
     });
   });
+});
+
+it.each(
+  [handleContainsAny, handleIContainsAny].map((handler) => ({ name: handler.name, handler })),
+)('$name short-circuits and formats only failures', ({ handler }) => {
+  let coercions = 0;
+  let joins = 0;
+  const values = [
+    'hello',
+    {
+      toString: () => {
+        coercions++;
+        throw new Error('Unexpected coercion');
+      },
+    },
+  ];
+  values.join = () => {
+    joins++;
+    throw new Error('Failure formatting');
+  };
+  const params: AssertionParams = {
+    ...defaultParams,
+    assertion: { type: 'contains-any' },
+    valueFromScript: values,
+    outputString: 'hello',
+    inverse: false,
+  };
+  expect(handler(params).pass).toBe(true);
+  expect(joins).toBe(0);
+  expect(() => handler({ ...params, inverse: true })).toThrow('Failure formatting');
+  expect(joins).toBe(1);
+  expect(coercions).toBe(0);
+});
+
+it.each(
+  [handleContainsAll, handleIContainsAll].map((handler) => ({ name: handler.name, handler })),
+)('$name preserves sparse-array visits and missing order', ({ handler }) => {
+  const visits: string[] = [];
+  const tracked = (value: string) => ({
+    toString: () => {
+      visits.push(value);
+      return value;
+    },
+  });
+  const values = [, tracked('first'), , 'hello', tracked('last')];
+  const params: AssertionParams = {
+    ...defaultParams,
+    assertion: { type: 'contains-all' },
+    valueFromScript: values,
+    outputString: 'hello',
+    inverse: false,
+  };
+  expect(handler(params).reason).toBe(
+    'Expected output to contain all of [, first, , hello, last]. Missing: [first, last]',
+  );
+  expect(visits).toEqual(['first', 'last', 'first', 'last', 'first', 'last']);
+  visits.length = 0;
+  expect(handler({ ...params, inverse: true }).reason).toBe('Assertion passed');
+  expect(visits).toEqual(['first', 'last']);
 });

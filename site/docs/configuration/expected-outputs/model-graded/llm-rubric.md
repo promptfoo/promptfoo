@@ -28,7 +28,7 @@ Under the hood, `llm-rubric` uses a model to evaluate the output based on the cr
 
 - **OpenAI API key**: `gpt-5`
 - **Codex/ChatGPT login**: `openai:codex-sdk` when the Codex SDK package is installed, Codex is signed in, and no higher-priority API credentials are set
-- **Anthropic API key**: `claude-sonnet-4-5-20250929`
+- **Anthropic API key**: `claude-sonnet-5`
 - **Google AI Studio API key**: `gemini-2.5-pro` (GEMINI_API_KEY, GOOGLE_API_KEY, or PALM_API_KEY)
 - **Google Vertex credentials**: `gemini-2.5-pro` (service account credentials)
 - **Mistral API key**: `mistral-large-latest`
@@ -38,6 +38,8 @@ Under the hood, `llm-rubric` uses a model to evaluate the output based on the cr
 You can override this by setting the `provider` option (see below).
 
 Codex/ChatGPT login fallback is text-only. Assertions that need embeddings or moderation still require an API-key-backed provider override.
+
+When a judge needs to inspect files or use coding-agent tools as part of grading, use [`agent-rubric`](/docs/configuration/expected-outputs/model-graded/agent-rubric). Although an agent provider can also be supplied to `llm-rubric`, `agent-rubric` makes the capability intentional, validates that the grader is an agent runtime, and uses an agent-oriented safety prompt.
 
 It asks the model to output a JSON object that looks like this:
 
@@ -62,6 +64,26 @@ assert:
 
       Anything funny enough to be on SNL should pass, otherwise fail.
 ```
+
+## Audio output
+
+To evaluate tone, pacing, or pronunciation, choose an audio-capable OpenAI Chat Completions grader. Promptfoo attaches the target provider's `response.audio` to the grading request:
+
+```yaml
+assert:
+  - type: llm-rubric
+    value: The speaker sounds calm and speaks at a steady pace.
+    provider:
+      id: openai:chat:gpt-audio-1.5
+      config:
+        modalities: [text]
+```
+
+`modalities: [text]` requests the grader's JSON result as text. The grader listens to the attached audio and uses the transcript as supporting context. This works with audio from [OpenAI Realtime](/docs/providers/openai#realtime-api-models), audio chat, text to speech, or a custom target provider that returns the same audio fields.
+
+The target must return inline base64 audio with `format: wav` or `format: mp3`, up to 20 MiB. Blob references and other formats produce a grading error. The built-in Realtime provider converts its default PCM16 output to WAV, including in persistent conversations; use `output_audio_format: pcm16` for grading. Text-only graders retain their existing behavior and evaluate the text output or transcript.
+
+An assertion with `transform` grades the transformed text and does not attach the original audio. Successful audio grades include `renderedGradingPromptAudio: true` in assertion metadata; `renderedGradingPrompt` contains the text prompt without the attached audio bytes.
 
 ## Using variables in the rubric
 
@@ -230,13 +252,13 @@ assert:
 assert:
   - type: llm-rubric
     # German: "Responds politely and helpfully. Provide reasoning in German."
-    value: "Antwortet höflich und hilfreich. Begründung auf Deutsch geben."
+    value: 'Antwortet höflich und hilfreich. Begründung auf Deutsch geben.'
 
 # Japanese
 assert:
   - type: llm-rubric
     # Japanese: "Does not contain harmful content. Please provide evaluation reasoning in Japanese."
-    value: "有害なコンテンツを含まない。評価理由は日本語で答えてください。"
+    value: '有害なコンテンツを含まない。評価理由は日本語で答えてください。'
 ```
 
 **Note:** Option 1 works with `llm-rubric`, `g-eval`, and `model-graded-closedqa`. For other assertion types like `factuality` or `context-recall`, create assertion-specific prompts that match their expected formats.
@@ -307,28 +329,25 @@ The threshold is applied to the score returned by the LLM (which ranges from 0.0
 ## Pass vs. Score Semantics
 
 - PASS is determined by the LLM's boolean `pass` field unless you set a `threshold`.
-- If the model omits `pass`, promptfoo assumes `pass: true` by default.
-- `score` is a numeric metric that does not affect PASS/FAIL unless you set `threshold`.
+- If the model omits `pass`, a finite numeric `score` determines the verdict: it must be greater than zero, or greater than or equal to your configured `threshold`. Numeric strings are also accepted.
+- If the model omits both fields, or supplies only an invalid score, grading fails. Negating the assertion does not turn a grader error into a pass.
+- With an explicit `pass`, `score` is a numeric metric that does not affect PASS/FAIL unless you set `threshold`.
 - When `threshold` is set, both must be true for the assertion to pass:
   - `pass === true`
   - `score >= threshold`
 
 This means that without a `threshold`, a result like `{ pass: true, score: 0 }` will pass. If you want the numeric score (e.g., 0/1 rubric) to drive PASS/FAIL, set a `threshold` accordingly or have the model return explicit `pass`.
 
-:::caution
-If the model omits `pass` and you don't set `threshold`, the assertion passes even with `score: 0`.
-:::
-
 ### Common misconfiguration
 
 ```yaml
-# ❌ Problem: Returns 0/1 scores but no threshold set
+# Problem: Partial credit passes without a threshold
 assert:
   - type: llm-rubric
     value: |
-      Return 0 if the response is incorrect
-      Return 1 if the response is correct
-    # Missing threshold - always passes due to pass defaulting to true
+      Return a JSON object with a score between 0 and 1.
+      Award partial credit for a partly correct response.
+    # Any positive score passes when pass and threshold are omitted.
 ```
 
 **Fixes:**
@@ -338,8 +357,8 @@ assert:
 assert:
   - type: llm-rubric
     value: |
-      Return 0 if the response is incorrect
-      Return 1 if the response is correct
+      Return a JSON object with a score between 0 and 1.
+      Award partial credit for a partly correct response.
     threshold: 1
 
 # ✅ Option B: Control pass explicitly

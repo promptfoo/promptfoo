@@ -6,8 +6,8 @@ import zlib from 'zlib';
 import logger from '../logger';
 import Eval from '../models/eval';
 import telemetry from '../telemetry';
-import { createOutputMetadata, writeOutput } from '../util/index';
 import { getLogDirectory, getLogFiles } from '../util/logs';
+import { createOutputData, writeOutput } from '../util/output';
 import type { Command } from 'commander';
 
 /**
@@ -84,10 +84,7 @@ async function createLogArchive(logFiles: string[], outputPath: string): Promise
           header[156] = 0x30; // '0'
 
           // Calculate checksum
-          let checksum = 0;
-          for (let i = 0; i < 512; i++) {
-            checksum += header[i];
-          }
+          const checksum = header.reduce((sum, byte) => sum + byte, 0);
           const checksumOctal = checksum.toString(8).padStart(6, '0') + '\0 ';
           Buffer.from(checksumOctal).copy(header, 148);
 
@@ -123,6 +120,7 @@ export function exportCommand(program: Command) {
     .command('eval <evalId>')
     .description('Export an eval record to a JSON file')
     .option('-o, --output [outputPath]', 'Output path for the exported file')
+    .option('--include-media', 'Embed referenced blob media bytes for portable imports')
     .action(async (evalId, cmdObj) => {
       try {
         let result;
@@ -139,20 +137,16 @@ export function exportCommand(program: Command) {
         }
 
         if (cmdObj.output) {
-          await writeOutput(cmdObj.output, result, null);
+          await writeOutput(cmdObj.output, result, null, {
+            includeMedia: Boolean(cmdObj.includeMedia),
+          });
 
           logger.info(`Eval with ID ${evalId} has been successfully exported to ${cmdObj.output}.`);
         } else {
-          const summary = await result.toEvaluateSummary();
-          const metadata = createOutputMetadata(result);
           const jsonData = JSON.stringify(
-            {
-              evalId: result.id,
-              results: summary,
-              config: result.config,
-              shareableUrl: null,
-              metadata,
-            },
+            await createOutputData(result, null, {
+              includeMedia: Boolean(cmdObj.includeMedia),
+            }),
             null,
             2,
           );
@@ -213,11 +207,7 @@ export function exportCommand(program: Command) {
         // Determine output path
         let outputPath = cmdObj.output;
         if (!outputPath) {
-          const timestamp = new Date()
-            .toISOString()
-            .replace(/[:.]/g, '-')
-            .replace('T', '_')
-            .split('.')[0];
+          const timestamp = new Date().toISOString().replace(/[:.]/g, '-').replace('T', '_');
           outputPath = `promptfoo-logs-${timestamp}.gz`;
         }
 

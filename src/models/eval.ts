@@ -2,7 +2,6 @@ import { and, desc, eq, type SQL, sql } from 'drizzle-orm';
 import { DEFAULT_QUERY_LIMIT, HUMAN_ASSERTION_TYPE } from '../constants';
 import { deleteTraceRecordsForEvals } from '../database/evalDeletion';
 import { getDb } from '../database/index';
-import { updateSignalFile } from '../database/signal';
 import {
   datasetsTable,
   evalResultsTable,
@@ -13,7 +12,6 @@ import {
   promptsTable,
   tagsTable,
 } from '../database/tables';
-import { getEnvBool } from '../envars';
 import { getAuthor } from '../globalConfig/accounts';
 import logger from '../logger';
 import { hashPrompt } from '../prompts/utils';
@@ -23,6 +21,7 @@ import { getRiskCategorySeverityMap } from '../redteam/sharedFrontend';
 import { getTraceStore } from '../tracing/store';
 import {
   type CompletedPrompt,
+  type EvalRuntimeOptions,
   type EvalSummary,
   type EvaluateResult,
   type EvaluateStats,
@@ -31,6 +30,7 @@ import {
   type EvaluateTable,
   type EvaluateTableRow,
   type Prompt,
+  type RepeatStabilitySummary,
   ResultFailureReason,
   type ResultsFile,
   type UnifiedConfig,
@@ -38,17 +38,41 @@ import {
 import { calculateFilteredMetrics } from '../util/calculateFilteredMetrics';
 import { convertResultsToTable } from '../util/convertEvalResultsToTable';
 import { randomSequence, sha256 } from '../util/createHash';
+import { calculateRepeatStability, RepeatStabilityCalculator } from '../util/eval/repeatStability';
 import { convertTestResultsToTableRow } from '../util/exportToFile/index';
 import { isNonTransientHttpStatus, NON_TRANSIENT_HTTP_STATUSES } from '../util/fetch/errors';
 import invariant from '../util/invariant';
+import {
+  sanitizeConfigForOutput,
+  sanitizeRuntimeOptions,
+  sanitizeTracingConfigForPersistence,
+} from '../util/sanitizer';
 import { getCurrentTimestamp } from '../util/time';
-import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
+import {
+  accumulateGenerationTokenUsage,
+  accumulateTokenUsage,
+  createEmptyTokenUsage,
+} from '../util/tokenUsageUtils';
+import {
+  invalidateEvaluationCache,
+  notifyEvaluationChanged,
+  notifyEvaluationsDeleted,
+} from './evalMutation';
 import {
   getCachedResultsCount,
   getTotalResultRowCount,
   queryTestIndicesOptimized,
 } from './evalPerformance';
-import EvalResult from './evalResult';
+import EvalResult, {
+  getResultIndexKey,
+  getStripFlags,
+  PROMPTFOO_METADATA_KEY,
+  persistRepeatMetadata,
+  persistTraceMetadata,
+  projectPrompt,
+  projectTracesForOutput,
+  stripTraceLinkageFromMetadata,
+} from './evalResult';
 
 import type { EvalResultsFilterMode, TraceData } from '../types/index';
 
@@ -70,36 +94,6 @@ interface TestIndexRow {
 /** Result from queries selecting distinct metadata or variable keys */
 interface MetadataKeyResult {
   key: string;
-}
-
-/**
- * Sanitizes runtime options to ensure only JSON-serializable data is persisted.
- * Removes non-serializable fields like AbortSignal, functions, and symbols.
- */
-function sanitizeRuntimeOptions(
-  options?: Partial<import('../types').EvaluateOptions>,
-): Partial<import('../types').EvaluateOptions> | undefined {
-  if (!options) {
-    return undefined;
-  }
-
-  // Create a deep copy to avoid mutating the original
-  const sanitized = { ...options };
-
-  // Remove known non-serializable fields
-  delete sanitized.abortSignal;
-
-  // Remove any function or symbol values
-  for (const key in sanitized) {
-    // biome-ignore lint/suspicious/noExplicitAny: FIXME this should use Object.keys or something to keep it type safe
-    const value = (sanitized as any)[key];
-    if (typeof value === 'function' || typeof value === 'symbol') {
-      // biome-ignore lint/suspicious/noExplicitAny: FIXME this should use Object.keys or something to keep it type safe
-      delete (sanitized as any)[key];
-    }
-  }
-
-  return sanitized;
 }
 
 export function createEvalId(createdAt: Date = new Date()) {
@@ -126,25 +120,14 @@ export function escapeJsonPathKey(key: string): string {
 }
 
 /**
- * Builds a safe JSON path for use in SQLite json_extract() queries.
+ * Builds a JSON path for use as a bound SQLite json_extract() parameter.
  *
- * SECURITY NOTE: This function uses sql.raw() which is normally unsafe, but is REQUIRED here
- * because SQLite's json_extract() function only accepts JSON paths as string literals,
- * not as parameterized values.
- *
- * Safety is ensured through double escaping:
- * 1. JSON path characters are escaped (backslashes and double quotes)
- * 2. SQL single quotes are escaped using standard SQL escaping ('' for ')
- *
- * @param field - The JSON field name from user input
- * @returns A sql.raw() fragment containing the safely escaped JSON path
+ * The field name still needs JSON-path escaping so special characters remain
+ * inside the quoted key. SQL safety comes from passing the returned path through
+ * Drizzle's `sql` templates as a value, never as raw SQL.
  */
-export function buildSafeJsonPath(field: string): ReturnType<typeof sql.raw> {
-  const jsonPathContent = `$."${escapeJsonPathKey(field)}"`;
-  // Escape single quotes for SQL string literal (standard SQL escaping)
-  const sqlSafeJsonPath = jsonPathContent.replace(/'/g, "''");
-  // sql.raw() is safe here because we've fully escaped the content
-  return sql.raw(`'${sqlSafeJsonPath}'`);
+export function buildSafeJsonPath(field: string): string {
+  return `$."${escapeJsonPathKey(field)}"`;
 }
 
 /**
@@ -176,13 +159,16 @@ export function combineFilterConditions(
     if (idx === 0) {
       return cond;
     }
-    return logicOperator === 'OR' ? sql`${acc} OR ${cond}` : sql`${acc} AND ${cond}`;
+    // Filters arrive as unvalidated JSON from the query string, and the UI sends
+    // lowercase 'or'/'and'. Anything that isn't a recognized OR falls back to AND.
+    const isOr = typeof logicOperator === 'string' && logicOperator.toUpperCase() === 'OR';
+    return isOr ? sql`${acc} OR ${cond}` : sql`${acc} AND ${cond}`;
   }, filterConditions[0].condition);
 }
 
 export class EvalQueries {
   static async getVarsFromEvals(evals: Eval[]) {
-    const db = getDb();
+    const db = await getDb();
 
     // Handle empty array case to avoid SQL syntax error
     if (evals.length === 0) {
@@ -207,11 +193,16 @@ export class EvalQueries {
       acc[r.eval_id].push(r.key);
       return acc;
     }, {});
+    // Legacy evals have no persisted display order, so backfill a stable
+    // (lexicographic) order per eval; keep in sync with getVarsFromEval.
+    for (const list of Object.values(vars)) {
+      list.sort();
+    }
     return vars;
   }
 
   static async getVarsFromEval(evalId: string) {
-    const db = getDb();
+    const db = await getDb();
 
     // Use parameterized query to prevent SQL injection
     const query = sql`
@@ -224,15 +215,16 @@ export class EvalQueries {
     `;
 
     const results = await db.all<VarKeyResult>(query);
-    const vars = results.map((r) => r.key);
+    // Legacy evals have no persisted display order, so backfill a stable one.
+    const vars = results.map((r) => r.key).sort();
 
     return vars;
   }
 
   static async setVars(evalId: string, vars: string[]) {
-    const db = getDb();
+    const db = await getDb();
     try {
-      db.update(evalsTable).set({ vars }).where(eq(evalsTable.id, evalId)).run();
+      await db.update(evalsTable).set({ vars }).where(eq(evalsTable.id, evalId)).run();
     } catch (e) {
       logger.error(`Error setting vars: ${vars} for eval ${evalId}: ${e}`);
     }
@@ -242,7 +234,7 @@ export class EvalQueries {
     evalId: string,
     comparisonEvalIds: string[] = [],
   ): Promise<string[]> {
-    const db = getDb();
+    const db = await getDb();
     try {
       // Combine primary eval ID with comparison eval IDs
       const allEvalIds = [evalId, ...comparisonEvalIds];
@@ -261,7 +253,9 @@ export class EvalQueries {
         LIMIT 1000
       `;
       const results = await db.all<MetadataKeyResult>(query);
-      return results.map((r) => r.key);
+      // `__promptfoo` is a reserved internal namespace (e.g. trace linkage). Don't expose
+      // it through the metadata-keys API — pair this with the value-side filter below.
+      return results.map((r) => r.key).filter((key) => key !== PROMPTFOO_METADATA_KEY);
     } catch (error) {
       // Log error but return empty array to prevent breaking the UI
       logger.error(
@@ -277,16 +271,23 @@ export class EvalQueries {
    * @param key - The key of the metadata to get the values from.
    * @returns An array of unique metadata values.
    */
-  static getMetadataValuesFromEval(evalId: string, key: string): string[] {
-    const db = getDb();
+  static async getMetadataValuesFromEval(evalId: string, key: string): Promise<string[]> {
+    const db = await getDb();
     const trimmedKey = key.trim();
     if (!trimmedKey) {
       return [];
     }
+    // `__promptfoo` is a reserved internal namespace (e.g. trace linkage). Don't expose
+    // it through the metadata-values API even though it lives in the same JSON column.
+    if (
+      trimmedKey === PROMPTFOO_METADATA_KEY ||
+      trimmedKey.startsWith(`${PROMPTFOO_METADATA_KEY}.`)
+    ) {
+      return [];
+    }
 
     try {
-      const escapedKey = escapeJsonPathKey(trimmedKey);
-      const jsonPath = `$."${escapedKey}"`;
+      const jsonPath = buildSafeJsonPath(trimmedKey);
 
       const query = sql`
         SELECT DISTINCT
@@ -301,7 +302,7 @@ export class EvalQueries {
         LIMIT 1000
       `;
 
-      const rows = db.all<{ value: string }>(query);
+      const rows = await db.all<{ value: string }>(query);
       const values = rows
         .map(({ value }) => String(value).trim())
         .filter((value) => value.length > 0);
@@ -330,8 +331,23 @@ export default class Eval {
   persisted: boolean;
   vars: string[];
   _resultsLoaded: boolean = false;
-  runtimeOptions?: Partial<import('../types').EvaluateOptions>;
+  runtimeOptions?: EvalRuntimeOptions;
   _shared: boolean = false;
+  resultPersistenceFailed: boolean = false;
+  /**
+   * The first non-transient HTTP status among the rows added in this run. It stands in for
+   * the database when that cannot be queried afterwards.
+   */
+  private observedTargetErrorStatus?: number;
+  private failedResults = new Map<string, EvaluateResult>();
+  // Reconstructed EvalResults for rows that failed to persist, cached so comparison
+  // assertions reuse the SAME instance across passes (select-best then max-score).
+  // Persisted rows compose successive comparison grading via the DB round-trip
+  // (mutate -> save -> re-fetch); failed rows have no DB copy, so the shared in-memory
+  // instance is what lets later grading build on earlier grading instead of a stale row.
+  private failedEvalResults = new Map<string, EvalResult>();
+  private finalJsonlResults = new Map<string, EvaluateResult>();
+  private observedRepeatedResults = false;
   /** Total wall-clock duration. For redteam evals: generationDurationMs + evaluationDurationMs.
    *  For non-redteam evals: equals evaluationDurationMs (generation phase is N/A). */
   durationMs?: number;
@@ -347,7 +363,7 @@ export default class Eval {
   shareableUrl?: string;
 
   static async latest() {
-    const db = getDb();
+    const db = await getDb();
     const db_results = await db
       .select({
         id: evalsTable.id,
@@ -364,15 +380,15 @@ export default class Eval {
   }
 
   static async findById(id: string) {
-    const db = getDb();
+    const db = await getDb();
 
-    const evalData = db.select().from(evalsTable).where(eq(evalsTable.id, id)).all();
+    const evalData = await db.select().from(evalsTable).where(eq(evalsTable.id, id)).all();
 
     if (evalData.length === 0) {
       return undefined;
     }
 
-    const datasetResults = db
+    const datasetResults = await db
       .select({
         datasetId: evalsToDatasetsTable.datasetId,
       })
@@ -430,9 +446,16 @@ export default class Eval {
   }
 
   static async getMany(limit: number = DEFAULT_QUERY_LIMIT): Promise<Eval[]> {
-    const db = getDb();
+    const db = await getDb();
     const evals = await db
-      .select()
+      .select({
+        id: evalsTable.id,
+        createdAt: evalsTable.createdAt,
+        author: evalsTable.author,
+        description: evalsTable.description,
+        config: evalsTable.config,
+        prompts: evalsTable.prompts,
+      })
       .from(evalsTable)
       .limit(limit)
       .orderBy(desc(evalsTable.createdAt))
@@ -460,8 +483,11 @@ export default class Eval {
       // Be wary, this is EvalResult[] and not EvaluateResult[]
       results?: EvalResult[];
       vars?: string[];
-      runtimeOptions?: Partial<import('../types').EvaluateOptions>;
+      runtimeOptions?: EvalRuntimeOptions;
       completedPrompts?: CompletedPrompt[];
+      durationMs?: number;
+      generationDurationMs?: number;
+      evaluationDurationMs?: number;
     },
   ): Promise<Eval> {
     const createdAt = opts?.createdAt || new Date();
@@ -470,23 +496,34 @@ export default class Eval {
     // pass it explicitly — honor that value. Only fall back to the global
     // resolution chain when the caller did not provide one at all.
     const author = opts && 'author' in opts ? (opts.author ?? null) : getAuthor();
-    const db = getDb();
+    const db = await getDb();
 
     const datasetId = sha256(JSON.stringify(config.tests || []));
 
-    db.transaction(() => {
-      db.insert(evalsTable)
+    const durationResults = {
+      ...(opts?.durationMs !== undefined && { durationMs: opts.durationMs }),
+      ...(opts?.generationDurationMs !== undefined && {
+        generationDurationMs: opts.generationDurationMs,
+      }),
+      ...(opts?.evaluationDurationMs !== undefined && {
+        evaluationDurationMs: opts.evaluationDurationMs,
+      }),
+    };
+
+    await db.transaction(async (tx) => {
+      await tx
+        .insert(evalsTable)
         .values({
           id: evalId,
           createdAt: createdAt.getTime(),
           author,
           description: config.description,
-          config,
-          results: {},
+          config: sanitizeTracingConfigForPersistence(config),
+          results: durationResults,
           vars: opts?.vars || [],
           runtimeOptions: sanitizeRuntimeOptions(opts?.runtimeOptions),
           prompts: opts?.completedPrompts || [],
-          isRedteam: Boolean(config.redteam),
+          isRedteam: config.redteam !== undefined,
         })
         .run();
 
@@ -494,7 +531,8 @@ export default class Eval {
         const label = prompt.label || prompt.display || prompt.raw;
         const promptId = hashPrompt(prompt);
 
-        db.insert(promptsTable)
+        await tx
+          .insert(promptsTable)
           .values({
             id: promptId,
             prompt: label,
@@ -502,7 +540,8 @@ export default class Eval {
           .onConflictDoNothing()
           .run();
 
-        db.insert(evalsToPromptsTable)
+        await tx
+          .insert(evalsToPromptsTable)
           .values({
             evalId,
             promptId,
@@ -514,14 +553,26 @@ export default class Eval {
       }
 
       if (opts?.results && opts.results.length > 0) {
-        const res = db
+        const res = await tx
           .insert(evalResultsTable)
-          .values(opts.results?.map((r) => ({ ...r, evalId, id: crypto.randomUUID() })))
+          .values(
+            opts.results?.map((r) => ({
+              ...r,
+              metadata: persistTraceMetadata(
+                persistRepeatMetadata(r.metadata, r.repeatIndex, r.repeatGroupId),
+                r.traceId,
+                r.evaluationId,
+              ),
+              evalId,
+              id: crypto.randomUUID(),
+            })),
+          )
           .run();
-        logger.debug(`Inserted ${res.changes} eval results`);
+        logger.debug(`Inserted ${res.rowsAffected} eval results`);
       }
 
-      db.insert(datasetsTable)
+      await tx
+        .insert(datasetsTable)
         .values({
           id: datasetId,
           tests: config.tests,
@@ -529,7 +580,8 @@ export default class Eval {
         .onConflictDoNothing()
         .run();
 
-      db.insert(evalsToDatasetsTable)
+      await tx
+        .insert(evalsToDatasetsTable)
         .values({
           evalId,
           datasetId,
@@ -543,7 +595,8 @@ export default class Eval {
         for (const [tagKey, tagValue] of Object.entries(config.tags)) {
           const tagId = sha256(`${tagKey}:${tagValue}`);
 
-          db.insert(tagsTable)
+          await tx
+            .insert(tagsTable)
             .values({
               id: tagId,
               name: tagKey,
@@ -552,7 +605,8 @@ export default class Eval {
             .onConflictDoNothing()
             .run();
 
-          db.insert(evalsToTagsTable)
+          await tx
+            .insert(evalsToTagsTable)
             .values({
               evalId,
               tagId,
@@ -565,12 +619,17 @@ export default class Eval {
       }
     });
 
+    invalidateEvaluationCache(evalId);
+
     return new Eval(config, {
       id: evalId,
       author,
       createdAt,
       persisted: true,
       runtimeOptions: sanitizeRuntimeOptions(opts?.runtimeOptions),
+      durationMs: opts?.durationMs,
+      generationDurationMs: opts?.generationDurationMs,
+      evaluationDurationMs: opts?.evaluationDurationMs,
     });
   }
 
@@ -585,7 +644,7 @@ export default class Eval {
       datasetId?: string;
       persisted?: boolean;
       vars?: string[];
-      runtimeOptions?: Partial<import('../types').EvaluateOptions>;
+      runtimeOptions?: EvalRuntimeOptions;
       durationMs?: number;
       generationDurationMs?: number;
       evaluationDurationMs?: number;
@@ -611,7 +670,7 @@ export default class Eval {
   version() {
     /**
      * Version 3 is the denormalized version of where the table and results are stored on the eval object.
-     * Version 4 is the normalized version where the results are stored in another databse table and the table for vizualization is generated by the app.
+     * Version 4 is the normalized version where the results are stored in another database table and the table for visualization is generated by the app.
      */
     return this.oldResults && 'table' in this.oldResults ? 3 : 4;
   }
@@ -627,9 +686,10 @@ export default class Eval {
   }
 
   async save() {
-    const db = getDb();
+    const db = await getDb();
     const updateObj: Record<string, unknown> = {
-      config: this.config,
+      config: sanitizeTracingConfigForPersistence(this.config),
+      isRedteam: this.config.redteam !== undefined,
       prompts: this.prompts,
       description: this.config.description,
       author: this.author,
@@ -661,7 +721,8 @@ export default class Eval {
       }
       updateObj.results = expr;
     }
-    db.update(evalsTable).set(updateObj).where(eq(evalsTable.id, this.id)).run();
+    await db.update(evalsTable).set(updateObj).where(eq(evalsTable.id, this.id)).run();
+    notifyEvaluationChanged(this.id);
     this.persisted = true;
   }
 
@@ -707,6 +768,17 @@ export default class Eval {
   }
 
   async addResult(result: EvaluateResult) {
+    if (result.repeatGroupId !== undefined) {
+      this.observedRepeatedResults = true;
+    }
+    const httpStatus = result.response?.metadata?.http?.status;
+    if (
+      this.observedTargetErrorStatus === undefined &&
+      typeof httpStatus === 'number' &&
+      isNonTransientHttpStatus(httpStatus)
+    ) {
+      this.observedTargetErrorStatus = httpStatus;
+    }
     const newResult = await EvalResult.createFromEvaluateResult(this.id, result, {
       persist: this.persisted,
     });
@@ -717,11 +789,72 @@ export default class Eval {
     }
     if (this.persisted) {
       // Notify watchers that new results are available, passing the eval ID
-      updateSignalFile(this.id);
+      notifyEvaluationChanged(this.id);
     }
   }
 
+  recordFinalJsonlResult(result: EvaluateResult) {
+    this.finalJsonlResults.set(getResultIndexKey(result), result);
+    if (result.repeatGroupId !== undefined) {
+      this.observedRepeatedResults = true;
+    }
+  }
+
+  getFinalJsonlResults() {
+    return Array.from(this.finalJsonlResults.values());
+  }
+
+  async getObservedRepeatStability(): Promise<RepeatStabilitySummary | undefined> {
+    // Read final grading from the existing result store. Retaining each raw response
+    // here both defeats persisted-eval batching and reports stale comparison verdicts.
+    return this.observedRepeatedResults ? this.getRepeatStability() : undefined;
+  }
+
+  recordResultPersistenceFailure(result: EvaluateResult) {
+    this.resultPersistenceFailed = true;
+    const key = getResultIndexKey(result);
+    // Keep the row so comparison assertions (max-score / select-best) can still grade the
+    // full output set — the DB is missing this row — and the failed row receives canonical
+    // grading rather than being emitted in its stale, pre-comparison state.
+    this.failedResults.set(key, result);
+    // Drop any cached reconstruction so the next comparison rehydrates from this raw row.
+    this.failedEvalResults.delete(key);
+  }
+
+  hasResultPersistenceFailure(result: Pick<EvaluateResult, 'testIdx' | 'promptIdx'>) {
+    return this.failedResults.has(getResultIndexKey(result));
+  }
+
+  // Reconstruct in-memory EvalResults for rows that failed to persist for the given test,
+  // so the comparison input (which otherwise reads only the database) sees the full set.
+  // The reconstruction is cached and reused: when a test has both select-best and max-score,
+  // select-best mutates the instance and max-score must build on that mutation rather than
+  // re-reading the stale pre-comparison row (which would erase the earlier grading from the
+  // finalized artifact). This mirrors how persisted rows compose grading via save() + re-fetch.
+  async getFailedResultsByTestIdx(testIdx: number): Promise<EvalResult[]> {
+    const reconstructed: EvalResult[] = [];
+    for (const [key, row] of this.failedResults) {
+      if (row.testIdx !== testIdx) {
+        continue;
+      }
+      let evalResult = this.failedEvalResults.get(key);
+      if (!evalResult) {
+        evalResult = await EvalResult.createFromEvaluateResult(this.id, row, { persist: false });
+        this.failedEvalResults.set(key, evalResult);
+      }
+      reconstructed.push(evalResult);
+    }
+    return reconstructed;
+  }
+
   async *fetchResultsBatched(batchSize: number = 100) {
+    if (!this.persisted) {
+      for (let offset = 0; offset < this.results.length; offset += batchSize) {
+        yield this.results.slice(offset, offset + batchSize);
+      }
+      return;
+    }
+
     for await (const batch of EvalResult.findManyByEvalIdBatched(this.id, { batchSize })) {
       yield batch;
     }
@@ -745,13 +878,14 @@ export default class Eval {
    * Find a non-transient HTTP error status from evaluation results.
    * Returns the first non-transient status (401, 403, 404, 500, 501) found, or undefined.
    *
-   * For persisted evals: Uses efficient O(1) database query with LIMIT 1.
+   * For persisted evals: Uses efficient O(1) database query with LIMIT 1, and also scans
+   * the rows that could not be saved, which the database does not have.
    * For non-persisted evals: Falls back to scanning in-memory results.
    */
   async findTargetErrorStatus(): Promise<number | undefined> {
-    // Helper to scan in-memory results
-    const scanInMemory = (): number | undefined => {
-      for (const result of this.results) {
+    // Helper to scan results held in memory
+    const scan = (results: Iterable<Pick<EvaluateResult, 'response'>>): number | undefined => {
+      for (const result of results) {
         const status = result.response?.metadata?.http?.status;
         if (typeof status === 'number' && isNonTransientHttpStatus(status)) {
           return status;
@@ -759,19 +893,24 @@ export default class Eval {
       }
       return undefined;
     };
+    const scanInMemory = () => scan(this.results);
 
     // For non-persisted evals, scan in-memory results
     if (!this.persisted) {
       return scanInMemory();
     }
 
+    // A row that could not be saved is kept in memory instead. The row that stopped the eval
+    // can be one of them, and the query below would not find it.
+    const unsavedStatus = scan(this.failedResults.values());
+
     // For persisted evals, use efficient database query
     try {
-      const db = getDb();
+      const db = await getDb();
 
       // Query for any result with a non-transient HTTP status
       // Uses json_extract to access nested metadata.http.status field
-      const result = db
+      const result = await db
         .select({
           httpStatus: sql<number>`CAST(json_extract(${evalResultsTable.response}, '$.metadata.http.status') AS INTEGER)`,
         })
@@ -788,11 +927,11 @@ export default class Eval {
         .limit(1)
         .get();
 
-      return result?.httpStatus ?? undefined;
+      return result?.httpStatus ?? unsavedStatus;
     } catch {
-      // Fall back to in-memory scan if database query fails
-      // This handles edge cases like mocked databases in tests
-      return scanInMemory();
+      // Fall back to what is held in memory if the database query fails: loaded results,
+      // rows that could not be saved, and what the rows added in this run showed.
+      return scanInMemory() ?? unsavedStatus ?? this.observedTargetErrorStatus;
     }
   }
 
@@ -849,7 +988,31 @@ export default class Eval {
       const filterConditions: FilterConditionWithOperator[] = [];
 
       opts.filters.forEach((filter) => {
-        const { logicOperator, type, operator, value, field } = JSON.parse(filter);
+        let parsedFilter: unknown;
+        try {
+          parsedFilter = JSON.parse(filter);
+        } catch {
+          logger.warn('Ignoring malformed eval filter JSON');
+          return;
+        }
+        if (!parsedFilter || typeof parsedFilter !== 'object' || Array.isArray(parsedFilter)) {
+          logger.warn('Ignoring invalid eval filter');
+          return;
+        }
+        const { logicOperator, type, operator, value, field } = parsedFilter as Record<
+          string,
+          unknown
+        >;
+        if (
+          typeof type !== 'string' ||
+          typeof operator !== 'string' ||
+          (logicOperator !== undefined && typeof logicOperator !== 'string') ||
+          (field !== undefined && typeof field !== 'string') ||
+          (value !== undefined && typeof value !== 'string' && typeof value !== 'number')
+        ) {
+          logger.warn('Ignoring invalid eval filter fields');
+          return;
+        }
         let condition: SQL<unknown> | null = null;
 
         if (type === 'metric') {
@@ -861,30 +1024,62 @@ export default class Eval {
             return;
           }
 
-          const jsonPath = buildSafeJsonPath(metricKey);
-
           // Value must be a number
-          const numericValue = typeof value === 'number' ? value : Number.parseFloat(value);
+          const numericValue = typeof value === 'number' ? value : Number.parseFloat(String(value));
 
           if (operator === 'is_defined' || (operator === 'equals' && !field)) {
             // 'is_defined': new operator that checks if metric exists
             // 'equals' without field: old format for backward compatibility
-            condition = sql`json_extract(named_scores, ${jsonPath}) IS NOT NULL`;
+            condition = sql`EXISTS (
+              SELECT 1
+              FROM json_each(named_scores)
+              WHERE json_each.key = ${metricKey}
+            )`;
           }
           // For the numeric operators, validate that the value is a number
           else if (Number.isFinite(numericValue)) {
             if (operator === 'eq') {
-              condition = sql`CAST(json_extract(named_scores, ${jsonPath}) AS REAL) = ${numericValue}`;
+              condition = sql`EXISTS (
+                SELECT 1
+                FROM json_each(named_scores)
+                WHERE json_each.key = ${metricKey}
+                  AND CAST(json_each.value AS REAL) = ${numericValue}
+              )`;
             } else if (operator === 'neq') {
-              condition = sql`(json_extract(named_scores, ${jsonPath}) IS NOT NULL AND CAST(json_extract(named_scores, ${jsonPath}) AS REAL) != ${numericValue})`;
+              condition = sql`EXISTS (
+                SELECT 1
+                FROM json_each(named_scores)
+                WHERE json_each.key = ${metricKey}
+                  AND CAST(json_each.value AS REAL) != ${numericValue}
+              )`;
             } else if (operator === 'gt') {
-              condition = sql`CAST(json_extract(named_scores, ${jsonPath}) AS REAL) > ${numericValue}`;
+              condition = sql`EXISTS (
+                SELECT 1
+                FROM json_each(named_scores)
+                WHERE json_each.key = ${metricKey}
+                  AND CAST(json_each.value AS REAL) > ${numericValue}
+              )`;
             } else if (operator === 'gte') {
-              condition = sql`CAST(json_extract(named_scores, ${jsonPath}) AS REAL) >= ${numericValue}`;
+              condition = sql`EXISTS (
+                SELECT 1
+                FROM json_each(named_scores)
+                WHERE json_each.key = ${metricKey}
+                  AND CAST(json_each.value AS REAL) >= ${numericValue}
+              )`;
             } else if (operator === 'lt') {
-              condition = sql`CAST(json_extract(named_scores, ${jsonPath}) AS REAL) < ${numericValue}`;
+              condition = sql`EXISTS (
+                SELECT 1
+                FROM json_each(named_scores)
+                WHERE json_each.key = ${metricKey}
+                  AND CAST(json_each.value AS REAL) < ${numericValue}
+              )`;
             } else if (operator === 'lte') {
-              condition = sql`CAST(json_extract(named_scores, ${jsonPath}) AS REAL) <= ${numericValue}`;
+              condition = sql`EXISTS (
+                SELECT 1
+                FROM json_each(named_scores)
+                WHERE json_each.key = ${metricKey}
+                  AND CAST(json_each.value AS REAL) <= ${numericValue}
+              )`;
             }
           } else {
             // Invalid numeric value (NaN, Infinity, etc.)
@@ -897,19 +1092,37 @@ export default class Eval {
             return;
           }
         } else if (type === 'metadata' && field) {
-          const jsonPath = buildSafeJsonPath(field);
-
           if (operator === 'equals') {
-            condition = sql`json_extract(metadata, ${jsonPath}) = ${value}`;
+            condition = sql`EXISTS (
+              SELECT 1
+              FROM json_each(metadata)
+              WHERE json_each.key = ${field}
+                AND json_each.value = ${value}
+            )`;
           } else if (operator === 'contains') {
-            condition = sql`json_extract(metadata, ${jsonPath}) LIKE ${`%${value}%`}`;
+            condition = sql`EXISTS (
+              SELECT 1
+              FROM json_each(metadata)
+              WHERE json_each.key = ${field}
+                AND json_each.value LIKE ${`%${value}%`}
+            )`;
           } else if (operator === 'not_contains') {
-            condition = sql`(json_extract(metadata, ${jsonPath}) IS NULL OR json_extract(metadata, ${jsonPath}) NOT LIKE ${`%${value}%`})`;
+            condition = sql`NOT EXISTS (
+              SELECT 1
+              FROM json_each(metadata)
+              WHERE json_each.key = ${field}
+                AND json_each.value LIKE ${`%${value}%`}
+            )`;
           } else if (operator === 'exists') {
             // For exists, check if the field is present AND not empty
-            condition = sql`LENGTH(TRIM(COALESCE(json_extract(metadata, ${jsonPath}), ''))) > 0`;
+            condition = sql`EXISTS (
+              SELECT 1
+              FROM json_each(metadata)
+              WHERE json_each.key = ${field}
+                AND LENGTH(TRIM(COALESCE(json_each.value, ''))) > 0
+            )`;
           }
-        } else if (type === 'plugin') {
+        } else if (type === 'plugin' && typeof value === 'string') {
           const isCategory = Object.keys(PLUGIN_CATEGORIES).includes(value);
 
           if (operator === 'equals') {
@@ -987,7 +1200,9 @@ export default class Eval {
         sql`json_extract(grading_result, '$.reason') LIKE ${searchPattern}`,
         sql`json_extract(grading_result, '$.comment') LIKE ${searchPattern}`,
         sql`json_extract(named_scores, '$') LIKE ${searchPattern}`,
-        sql`json_extract(metadata, '$') LIKE ${searchPattern}`,
+        // Search user-visible metadata only — drop the reserved `__promptfoo` namespace
+        // (trace linkage) so a query can't match on internal data the UI never shows.
+        sql`json_remove(metadata, ${`$.${PROMPTFOO_METADATA_KEY}`}) LIKE ${searchPattern}`,
         sql`json_extract(test_case, '$.vars') LIKE ${searchPattern}`,
         sql`json_extract(test_case, '$.metadata') LIKE ${searchPattern}`,
       ];
@@ -1013,7 +1228,7 @@ export default class Eval {
     searchQuery?: string;
     filters?: string[];
   }): Promise<{ testIndices: number[]; filteredCount: number }> {
-    const db = getDb();
+    const db = await getDb();
     const offset = opts.offset ?? 0;
     const limit = opts.limit ?? 50;
 
@@ -1175,8 +1390,9 @@ export default class Eval {
       return (hasSessionIds || hasSessionId) && notInVars;
     });
     if (hasSessionIdInMetadata && !vars.includes('sessionId')) {
+      // Append sessionId instead of re-sorting so we preserve the variable
+      // order the user defined in their config. See #244, #1320.
       vars.push('sessionId');
-      vars.sort();
     }
 
     // Group results by test index
@@ -1205,25 +1421,46 @@ export default class Eval {
   async addPrompts(prompts: CompletedPrompt[]) {
     this.prompts = prompts;
     if (this.persisted) {
-      const db = getDb();
-      db.update(evalsTable).set({ prompts }).where(eq(evalsTable.id, this.id)).run();
+      const db = await getDb();
+      await db.update(evalsTable).set({ prompts }).where(eq(evalsTable.id, this.id)).run();
       // Notify the view server after prompt metadata changes so cached /api/prompts
       // responses and socket listeners can pick up prompts added after eval creation.
-      updateSignalFile(this.id);
+      notifyEvaluationChanged(this.id);
     }
   }
 
   async setResults(results: EvalResult[]) {
-    this.results = results;
-    if (this.persisted) {
-      const db = getDb();
-      await db.insert(evalResultsTable).values(results.map((r) => ({ ...r, evalId: this.id })));
+    if (this.persisted && results.length > 0) {
+      const db = await getDb();
+      await db
+        .insert(evalResultsTable)
+        .values(
+          results.map((r) => ({
+            ...r,
+            metadata: persistTraceMetadata(
+              persistRepeatMetadata(r.metadata, r.repeatIndex, r.repeatGroupId),
+              r.traceId,
+              r.evaluationId,
+            ),
+            evalId: this.id,
+          })),
+        )
+        .run();
+      notifyEvaluationChanged(this.id);
     }
-    this._resultsLoaded = true;
+    if (this.persisted) {
+      // Upload chunks append in storage; reload the complete set on the next read.
+      this.clearResults();
+    } else {
+      this.results = results;
+      this._resultsLoaded = true;
+    }
   }
 
   async loadResults() {
-    this.results = await EvalResult.findManyByEvalId(this.id);
+    if (this.persisted) {
+      this.results = await EvalResult.findManyByEvalId(this.id);
+    }
     this._resultsLoaded = true;
   }
 
@@ -1261,7 +1498,38 @@ export default class Eval {
       accumulateTokenUsage(stats.tokenUsage, prompt.metrics?.tokenUsage);
     }
 
+    accumulateGenerationTokenUsage(
+      stats.tokenUsage,
+      this.config.metadata?.generationAccounting?.tokenUsage,
+    );
+
     return stats;
+  }
+
+  async getRepeatStability(): Promise<RepeatStabilitySummary | undefined> {
+    if (this.useOldResults()) {
+      return calculateRepeatStability(this.oldResults?.results ?? []);
+    }
+
+    const calculator = new RepeatStabilityCalculator();
+    // Failed writes and their finalized comparisons are already retained for artifact
+    // recovery. Prefer those authoritative rows over stale or missing database rows.
+    const recovered = new Map<string, EvalResult | EvaluateResult>(this.failedResults);
+    for (const [key, result] of this.failedEvalResults) {
+      recovered.set(key, result);
+    }
+    for (const [key, result] of this.finalJsonlResults) {
+      recovered.set(key, result);
+    }
+    for await (const batch of this.fetchResultsBatched()) {
+      for (const result of batch) {
+        const key = getResultIndexKey(result);
+        calculator.addResult(recovered.get(key) ?? result);
+        recovered.delete(key);
+      }
+    }
+    calculator.addResults(recovered.values());
+    return calculator.getSummary();
   }
 
   async toEvaluateSummary(): Promise<EvaluateSummaryV3 | EvaluateSummaryV2> {
@@ -1280,21 +1548,27 @@ export default class Eval {
     }
 
     const stats = await this.getStats();
-    const shouldStripPromptText = getEnvBool('PROMPTFOO_STRIP_PROMPT_TEXT', false);
+    const stripFlags = getStripFlags(this.config.env);
 
-    const prompts = shouldStripPromptText
-      ? this.prompts.map((p) => ({
-          ...p,
-          raw: '[prompt stripped]',
-        }))
-      : this.prompts;
+    const prompts = this.prompts.map((p) => projectPrompt(p, stripFlags.shouldStripPromptText));
+
+    const calculator = new RepeatStabilityCalculator();
+    const results = this.results.map((result) => {
+      const exported = result.toEvaluateResult(stripFlags);
+      // Output stripping must not turn cached grading into independent samples.
+      // Keep projected labels in the summary while using the original cache evidence.
+      calculator.addResult({ ...exported, gradingResult: result.gradingResult });
+      return exported;
+    });
+    const repeatStability = calculator.getSummary();
 
     return {
       version: 3,
       timestamp: new Date(this.createdAt).toISOString(),
       prompts,
-      results: this.results.map((r) => r.toEvaluateResult()),
+      results,
       stats,
+      ...(repeatStability && { repeatStability }),
     };
   }
 
@@ -1345,31 +1619,38 @@ export default class Eval {
 
   async toResultsFile(): Promise<ResultsFile> {
     const traces = await this.getTraces();
+    const stripFlags = getStripFlags(this.config.env);
 
     const results: ResultsFile = {
       version: this.version(),
       createdAt: new Date(this.createdAt).toISOString(),
       results: await this.toEvaluateSummary(),
-      config: this.config,
+      config: sanitizeConfigForOutput(this.config, stripFlags),
       author: this.author || null,
-      prompts: this.getPrompts(),
+      prompts: this.getPrompts().map((prompt) =>
+        projectPrompt(prompt, stripFlags.shouldStripPromptText),
+      ),
+      ...(this.vars.length > 0 && { vars: [...this.vars] }),
       datasetId: this.datasetId || null,
-      ...(traces.length > 0 && { traces }),
+      ...(traces.length > 0 && { traces: projectTracesForOutput(traces, stripFlags) }),
     };
 
     return results;
   }
 
-  async delete() {
-    const db = getDb();
-    db.transaction(() => {
-      deleteTraceRecordsForEvals(db, [this.id]);
-      db.delete(evalsToDatasetsTable).where(eq(evalsToDatasetsTable.evalId, this.id)).run();
-      db.delete(evalsToPromptsTable).where(eq(evalsToPromptsTable.evalId, this.id)).run();
-      db.delete(evalsToTagsTable).where(eq(evalsToTagsTable.evalId, this.id)).run();
-      db.delete(evalResultsTable).where(eq(evalResultsTable.evalId, this.id)).run();
-      db.delete(evalsTable).where(eq(evalsTable.id, this.id)).run();
+  async delete({ notify = true }: { notify?: boolean } = {}) {
+    const db = await getDb();
+    await db.transaction(async (tx) => {
+      await deleteTraceRecordsForEvals(tx, [this.id]);
+      await tx.delete(evalsToDatasetsTable).where(eq(evalsToDatasetsTable.evalId, this.id)).run();
+      await tx.delete(evalsToPromptsTable).where(eq(evalsToPromptsTable.evalId, this.id)).run();
+      await tx.delete(evalsToTagsTable).where(eq(evalsToTagsTable.evalId, this.id)).run();
+      await tx.delete(evalResultsTable).where(eq(evalResultsTable.evalId, this.id)).run();
+      await tx.delete(evalsTable).where(eq(evalsTable.id, this.id)).run();
     });
+    if (notify) {
+      notifyEvaluationsDeleted([this.id]);
+    }
   }
 
   /**
@@ -1392,45 +1673,47 @@ export default class Eval {
     });
 
     // Deep clone to prevent mutation issues
-    const newConfig = structuredClone(this.config);
+    const newConfig = structuredClone(sanitizeTracingConfigForPersistence(this.config));
     newConfig.description = copyDescription;
 
     const newPrompts = structuredClone(this.prompts);
     const newVars = this.vars ? structuredClone(this.vars) : [];
     const author = getAuthor();
 
-    const db = getDb();
+    const db = await getDb();
 
     // Copy eval, results, and relationships within transaction for atomicity
     let copiedCount = 0;
-    db.transaction(() => {
+    await db.transaction(async (tx) => {
       // Create the new eval record first
-      db.insert(evalsTable)
+      await tx
+        .insert(evalsTable)
         .values({
           id: newEvalId,
           createdAt: Date.now(),
           author,
           description: copyDescription,
-          config: newConfig,
+          config: sanitizeTracingConfigForPersistence(newConfig),
           results: {},
           prompts: newPrompts,
           vars: newVars,
           runtimeOptions: sanitizeRuntimeOptions(this.runtimeOptions),
-          isRedteam: Boolean(newConfig.redteam),
+          isRedteam: newConfig.redteam !== undefined,
         })
         .run();
 
       // Copy prompts relationships
       // Note: prompts already exist in promptsTable from when the source eval was created
       // We just need to create new relationships pointing to those same prompts
-      const promptRels = db
+      const promptRels = await tx
         .select()
         .from(evalsToPromptsTable)
         .where(eq(evalsToPromptsTable.evalId, this.id))
         .all();
 
       if (promptRels.length > 0) {
-        db.insert(evalsToPromptsTable)
+        await tx
+          .insert(evalsToPromptsTable)
           .values(
             promptRels.map((rel) => ({
               evalId: newEvalId,
@@ -1446,7 +1729,8 @@ export default class Eval {
         for (const [tagKey, tagValue] of Object.entries(this.config.tags)) {
           const tagId = sha256(`${tagKey}:${tagValue}`);
 
-          db.insert(tagsTable)
+          await tx
+            .insert(tagsTable)
             .values({
               id: tagId,
               name: tagKey,
@@ -1455,7 +1739,8 @@ export default class Eval {
             .onConflictDoNothing()
             .run();
 
-          db.insert(evalsToTagsTable)
+          await tx
+            .insert(evalsToTagsTable)
             .values({
               evalId: newEvalId,
               tagId,
@@ -1466,7 +1751,7 @@ export default class Eval {
       }
 
       // Copy dataset relationship
-      const datasetRel = db
+      const datasetRel = await tx
         .select()
         .from(evalsToDatasetsTable)
         .where(eq(evalsToDatasetsTable.evalId, this.id))
@@ -1474,7 +1759,8 @@ export default class Eval {
         .all();
 
       if (datasetRel.length > 0) {
-        db.insert(evalsToDatasetsTable)
+        await tx
+          .insert(evalsToDatasetsTable)
           .values({
             evalId: newEvalId,
             datasetId: datasetRel[0].datasetId,
@@ -1489,7 +1775,7 @@ export default class Eval {
 
       while (true) {
         // Fetch batch from source eval
-        const batch = db
+        const batch = await tx
           .select()
           .from(evalResultsTable)
           .where(eq(evalResultsTable.evalId, this.id))
@@ -1509,11 +1795,12 @@ export default class Eval {
           id: crypto.randomUUID(),
           evalId: newEvalId,
           createdAt: now,
+          metadata: stripTraceLinkageFromMetadata(result.metadata),
           updatedAt: now,
         }));
 
         // Insert batch
-        db.insert(evalResultsTable).values(copiedResults).run();
+        await tx.insert(evalResultsTable).values(copiedResults).run();
 
         copiedCount += batch.length;
         offset += BATCH_SIZE;
@@ -1527,6 +1814,8 @@ export default class Eval {
         });
       }
     });
+
+    notifyEvaluationChanged(newEvalId);
 
     logger.info('Eval copy completed successfully', {
       sourceEvalId: this.id,
@@ -1560,7 +1849,7 @@ export async function getEvalSummaries(
   type?: 'redteam' | 'eval',
   includeProviders: boolean = false,
 ): Promise<EvalSummary[]> {
-  const db = getDb();
+  const db = await getDb();
 
   const whereClauses = [];
 
@@ -1570,26 +1859,28 @@ export async function getEvalSummaries(
 
   if (type) {
     if (type === 'redteam') {
-      whereClauses.push(sql<boolean>`json_type(${evalsTable.config}, '$.redteam') IS NOT NULL`);
+      whereClauses.push(eq(evalsTable.isRedteam, true));
     } else {
-      whereClauses.push(sql<boolean>`json_type(${evalsTable.config}, '$.redteam') IS NULL`);
+      whereClauses.push(eq(evalsTable.isRedteam, false));
     }
   }
 
-  const results = db
+  const results = await db
     .select({
       evalId: evalsTable.id,
       createdAt: evalsTable.createdAt,
       description: evalsTable.description,
       datasetId: evalsToDatasetsTable.datasetId,
-      isRedteam: sql<boolean>`json_type(${evalsTable.config}, '$.redteam') IS NOT NULL`,
+      isRedteam: evalsTable.isRedteam,
       prompts: evalsTable.prompts,
-      config: evalsTable.config,
+      // Configs can contain very large embedded test definitions. Only materialize them
+      // for the report surface that requests provider labels.
+      config: includeProviders ? evalsTable.config : sql<Partial<UnifiedConfig> | null>`NULL`,
     })
     .from(evalsTable)
     .leftJoin(evalsToDatasetsTable, eq(evalsTable.id, evalsToDatasetsTable.evalId))
     .where(and(...whereClauses))
-    .orderBy(desc(evalsTable.createdAt))
+    .orderBy(desc(evalsTable.createdAt), desc(evalsTable.id))
     .all();
 
   /**
@@ -1626,7 +1917,7 @@ export async function getEvalSummaries(
 
     // Construct an array of providers
     const deserializedProviders = [];
-    const providers = result.config.providers;
+    const providers = result.config?.providers;
 
     if (includeProviders) {
       if (typeof providers === 'string') {

@@ -1,23 +1,16 @@
-import fs from 'fs/promises';
-
 import { parse } from 'csv-parse/sync';
 import logger from '../../logger';
 import { getRequestTimeoutMs } from '../../providers/shared';
 import { fetchWithTimeout } from '../../util/fetch/index';
+import { sampleArray } from '../../util/generation';
 import { RedteamPluginBase } from './base';
 
 import type { Assertion, TestCase } from '../../types/index';
 
 const PLUGIN_ID = 'promptfoo:redteam:donotanswer';
 
-const PRODUCTION_DATASET_URL =
+const DATASET_URL =
   'https://raw.githubusercontent.com/promptfoo/promptfoo/refs/heads/main/examples/redteam-donotanswer/dataset/do_not_answer_data.csv';
-
-// Development URL - for local testing
-// const DEV_DATASET_URL =
-//   '/path/to/do_not_answer_data.csv';
-
-const DATASET_URL = PRODUCTION_DATASET_URL;
 
 interface DoNotAnswerRow {
   id: string;
@@ -51,24 +44,11 @@ export async function fetchDataset(limit: number): Promise<DoNotAnswerTestCase[]
   try {
     logger.debug(`[DoNotAnswer] Fetching dataset from ${DATASET_URL}`);
 
-    let csvData: string;
-
-    // Check if we're using a local file path or a URL
-    if (DATASET_URL.startsWith('http')) {
-      // Fetch from URL
-      const response = await fetchWithTimeout(DATASET_URL, {}, getRequestTimeoutMs());
-      if (!response.ok) {
-        throw new Error(`[DoNotAnswer] HTTP status: ${response.status} ${response.statusText}`);
-      }
-      csvData = await response.text();
-    } else {
-      // Read from local file
-      try {
-        csvData = await fs.readFile(DATASET_URL, 'utf8');
-      } catch (error) {
-        throw new Error(`[DoNotAnswer] Error reading local file: ${error}`);
-      }
+    const response = await fetchWithTimeout(DATASET_URL, {}, getRequestTimeoutMs());
+    if (!response.ok) {
+      throw new Error(`[DoNotAnswer] HTTP status: ${response.status} ${response.statusText}`);
     }
+    const csvData = await response.text();
 
     logger.debug(`[DoNotAnswer] Got ${csvData.length} bytes of CSV data`);
 
@@ -84,20 +64,17 @@ export async function fetchDataset(limit: number): Promise<DoNotAnswerTestCase[]
       throw new Error(`[DoNotAnswer] No data rows in CSV`);
     }
 
-    // Convert the raw data to test cases and shuffle them
-    const testCases = rows
-      .map(
-        (row): DoNotAnswerTestCase => ({
-          vars: {
-            risk_area: row.risk_area,
-            types_of_harm: row.types_of_harm,
-            specific_harms: row.specific_harms,
-            question: row.question,
-          },
-        }),
-      )
-      .sort(() => Math.random() - 0.5) // Shuffle the array
-      .slice(0, limit); // Take the first n items after shuffling
+    // Convert a random sample of the rows to test cases
+    const testCases = sampleArray(rows, limit).map(
+      (row): DoNotAnswerTestCase => ({
+        vars: {
+          risk_area: row.risk_area,
+          types_of_harm: row.types_of_harm,
+          specific_harms: row.specific_harms,
+          question: row.question,
+        },
+      }),
+    );
 
     logger.debug(`[DoNotAnswer] Generated ${testCases.length} test cases`);
     if (testCases.length === 0) {

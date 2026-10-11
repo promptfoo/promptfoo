@@ -1,11 +1,11 @@
 import fs from 'fs';
 import path from 'path';
 
-import yaml from 'js-yaml';
 import Clone from 'rfdc';
 import cliState from '../cliState';
 import { importModule } from '../esm';
 import { type Assertion, type TestCase } from '../types/index';
+import { loadYaml } from '../util/yamlLoad';
 
 const clone = Clone();
 
@@ -24,6 +24,21 @@ export function getFinalTest(test: TestCase, assertion: Assertion) {
       provider: undefined,
     }),
   });
+
+  // rfdc omits symbol keys, including loaded-media metadata used by graders.
+  // Clone their values too so assertions retain independent variable ownership.
+  if (test.vars && ret.vars) {
+    for (const key of Object.getOwnPropertySymbols(test.vars)) {
+      if (Object.prototype.propertyIsEnumerable.call(test.vars, key)) {
+        Object.defineProperty(ret.vars, key, {
+          value: clone(Reflect.get(test.vars, key)),
+          enumerable: true,
+          configurable: true,
+          writable: true,
+        });
+      }
+    }
+  }
 
   // Assertion provider overrides test provider
   ret.options = ret.options || {};
@@ -62,7 +77,7 @@ export function processFileReference(fileRef: string): object | string {
   const fileContent = fs.readFileSync(filePath, 'utf8');
   const extension = path.extname(filePath);
   if (['.json', '.yaml', '.yml'].includes(extension)) {
-    return yaml.load(fileContent) as object;
+    return loadYaml(fileContent) as object;
   } else if (extension === '.txt') {
     return fileContent.trim();
   } else {

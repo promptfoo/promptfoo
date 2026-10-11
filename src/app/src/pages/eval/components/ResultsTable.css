@@ -519,6 +519,19 @@ table.results-table,
   animation-fill-mode: both;
 }
 
+/* Reuse the expanded and collapsed keyframes when scroll timelines are unavailable. */
+.results-table-scroll-fallback {
+  animation: collapseHeader 1s paused both;
+}
+
+.results-table-scroll-fallback[data-header-collapsed='true'] {
+  animation-delay: -1s;
+}
+
+.results-table-scroll-fallback thead {
+  animation: none;
+}
+
 [data-theme='dark'] .results-table-sticky {
   background: rgb(39 39 42); /* zinc-800 */
 }
@@ -530,7 +543,7 @@ table.results-table,
   z-index: 11;
 }
 
-thead {
+.results-table-sticky:not(.results-table-scroll-fallback) thead {
   animation-name: collapseHeader;
   /** Attach scroll timeline to the root scroll container */
   animation-timeline: scroll();
@@ -606,9 +619,16 @@ thead {
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
 }
 
-/* Add these additional styles */
+/* Keep body rows on the separate-border grid, while the detached sticky-header
+ * table manages its own edge styling without doubling lines in the results body. */
 .results-table {
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.results-table-header-table {
+  border-collapse: separate;
+  border-spacing: 0;
 }
 
 .results-table thead th {

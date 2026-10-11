@@ -2,20 +2,41 @@ import { promises as fsPromises } from 'fs';
 import { join } from 'path';
 
 import { themes } from 'prism-react-renderer';
+import webpack from 'webpack';
+import browserInventoryPlugin from './src/plugins/browser-inventory';
 import type * as Preset from '@docusaurus/preset-classic';
 import type { Config, Plugin } from '@docusaurus/types';
 
 const lightCodeTheme = themes.github;
 const darkCodeTheme = themes.duotoneDark;
 
-function webpackProgressCompatibilityPlugin(): Plugin {
+/**
+ * One instant for the whole build, frozen when this config module is evaluated.
+ *
+ * Anything time-dependent on a statically generated site has to be pinned to a build-time
+ * value, otherwise the prerendered HTML and the hydrated client disagree. This constant is
+ * the single source of "now" for the site: it is handed to the client bundle via
+ * DefinePlugin below (consumed by `src/data/events.ts`). The events index refreshes its
+ * initial snapshot against the visitor's clock after hydration.
+ */
+const BUILD_TIMESTAMP = new Date().toISOString();
+
+/**
+ * Bakes `BUILD_TIMESTAMP` into both the server and the client bundle as the same string
+ * literal, so modules that need a stable "now" (event statuses) cannot produce a different
+ * answer during hydration than they did during prerendering.
+ */
+function buildTimestampPlugin(): Plugin {
   return {
-    name: 'webpack-progress-compatibility-plugin',
-    configureWebpack(config) {
-      config.plugins = config.plugins?.filter(
-        (plugin) => plugin?.constructor?.name !== 'WebpackBarPlugin',
-      );
-      return {};
+    name: 'build-timestamp-plugin',
+    configureWebpack() {
+      return {
+        plugins: [
+          new webpack.DefinePlugin({
+            __SITE_BUILD_TIMESTAMP__: JSON.stringify(BUILD_TIMESTAMP),
+          }),
+        ],
+      };
     },
   };
 }
@@ -73,6 +94,8 @@ const config: Config = {
           ],
         },
         blog: {
+          blogDescription:
+            'Learn how to test and secure AI applications with practical guides on LLM red teaming, evaluations, real-world vulnerabilities, and updates from Promptfoo.',
           showReadingTime: false,
           blogSidebarCount: 0,
           postsPerPage: 20,
@@ -90,14 +113,6 @@ const config: Config = {
   ],
 
   themeConfig: {
-    announcementBar: {
-      id: 'joined-openai',
-      content:
-        '<strong>Promptfoo is now part of OpenAI.</strong> <a href="/blog/promptfoo-joining-openai/">Read the update →</a>',
-      backgroundColor: '#dc2626',
-      textColor: '#ffffff',
-      isCloseable: false,
-    },
     image: 'img/thumbnail.png',
     colorMode: {
       defaultMode: 'light',
@@ -441,7 +456,8 @@ const config: Config = {
   } satisfies Preset.ThemeConfig,
 
   plugins: [
-    webpackProgressCompatibilityPlugin,
+    browserInventoryPlugin,
+    buildTimestampPlugin,
     require.resolve('docusaurus-plugin-image-zoom'),
     require.resolve('./src/plugins/docusaurus-plugin-og-image'),
     // GA/analytics loaded conditionally via consent.js (GDPR)
@@ -449,6 +465,10 @@ const config: Config = {
       '@docusaurus/plugin-client-redirects',
       {
         redirects: [
+          {
+            from: '/docs/write-for-promptfoo',
+            to: '/docs/contributing/',
+          },
           {
             from: '/docs/category/troubleshooting',
             to: '/docs/usage/troubleshooting/',
@@ -543,6 +563,10 @@ const config: Config = {
             to: '/docs/guides/gpt-mmlu-comparison/',
           },
           // Deleted guides redirected to guides index
+          {
+            from: '/docs/guides/lintlang-prompt-assertion',
+            to: '/docs/guides/',
+          },
           {
             from: '/docs/guides/cohere-command-r-benchmark',
             to: '/docs/guides/',

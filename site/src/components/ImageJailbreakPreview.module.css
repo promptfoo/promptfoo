@@ -1,12 +1,55 @@
 .container {
   position: relative;
-  cursor: pointer;
   margin-top: 4rem;
   transition: transform 0.3s ease-in-out;
 }
 
 .container:not(.flipped):hover {
   transform: scale(1.02);
+}
+
+/* The reveal control covers the blurred preview so the whole card is one target,
+   for a pointer and for a keyboard alike. */
+.revealButton {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+
+.revealButton:focus-visible {
+  outline: 3px solid var(--ifm-color-primary);
+  outline-offset: 4px;
+}
+
+.hideButton {
+  display: inline-block;
+  margin-bottom: 1rem;
+  padding: 0.5rem 1rem;
+  border: 1px solid var(--ifm-color-emphasis-400);
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+.hideButton:hover {
+  background: var(--ifm-color-emphasis-100);
+}
+
+.hideButton:focus-visible {
+  outline: 3px solid var(--ifm-color-primary);
+  outline-offset: 2px;
 }
 
 .imageWrapper {
@@ -24,15 +67,11 @@
 }
 
 .title {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
   font-size: 2rem;
   color: white;
   text-align: center;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.6);
   transition: opacity 0.5s ease-in-out;
-  z-index: 1;
 }
 
 @media (max-width: 600px) {
@@ -41,13 +80,21 @@
   }
 }
 
-.flipped .title {
-  opacity: 0;
-}
-
 .caption {
   background-color: #000;
   color: white;
   padding: 2rem;
   margin-top: -1rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .container,
+  .image,
+  .title {
+    transition: none;
+  }
+
+  .container:not(.flipped):hover {
+    transform: none;
+  }
 }

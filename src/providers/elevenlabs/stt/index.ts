@@ -13,8 +13,8 @@ import fs from 'fs/promises';
 import path from 'path';
 
 import { getCache, isCacheEnabled } from '../../../cache';
-import { getEnvString } from '../../../envars';
 import logger from '../../../logger';
+import { getElevenLabsApiKey } from '../auth';
 import { ElevenLabsClient } from '../client';
 import { CostTracker } from '../cost-tracker';
 import { calculateWER } from './wer';
@@ -50,7 +50,7 @@ export class ElevenLabsSTTProvider implements ApiProvider {
     this.env = options.env;
 
     this.config = {
-      modelId: config?.modelId || 'scribe_v1',
+      modelId: config?.modelId || 'scribe_v2',
       language: config?.language,
       diarization: config?.diarization || false,
       maxSpeakers: config?.maxSpeakers,
@@ -94,13 +94,7 @@ export class ElevenLabsSTTProvider implements ApiProvider {
    * Priority: config.apiKey > apiKeyEnvar in env > apiKeyEnvar in process.env > ELEVENLABS_API_KEY in env > ELEVENLABS_API_KEY in process.env
    */
   private getApiKey(): string {
-    const apiKey =
-      this.config.apiKey ||
-      (this.config.apiKeyEnvar && this.env?.[this.config.apiKeyEnvar as keyof EnvOverrides]) ||
-      (this.config.apiKeyEnvar && getEnvString(this.config.apiKeyEnvar as any)) ||
-      this.env?.ELEVENLABS_API_KEY ||
-      getEnvString('ELEVENLABS_API_KEY') ||
-      '';
+    const apiKey = getElevenLabsApiKey(this, () => this.env) || '';
 
     if (!apiKey) {
       throw new Error(
@@ -165,11 +159,14 @@ export class ElevenLabsSTTProvider implements ApiProvider {
         });
       }
 
-      // Estimate cost (based on audio duration)
-      const durationSeconds = (sttResponse.duration_ms || 0) / 1000;
-      const cost = this.costTracker.trackSTT(durationSeconds, {
-        diarization: this.config.diarization,
-      });
+      // Compatible endpoints may provide duration; native responses can omit it.
+      const durationMs = sttResponse.duration_ms;
+      const cost =
+        typeof durationMs === 'number' && Number.isFinite(durationMs) && durationMs >= 0
+          ? this.costTracker.trackSTT(durationMs / 1000, {
+              diarization: this.config.diarization,
+            })
+          : undefined;
 
       const response: ProviderResponse = {
         output: sttResponse.text,
@@ -180,7 +177,7 @@ export class ElevenLabsSTTProvider implements ApiProvider {
           latency: Date.now() - startTime,
           model: this.config.modelId,
         },
-        cost,
+        ...(cost === undefined ? {} : { cost }),
         cached: false,
       };
 
@@ -210,16 +207,7 @@ export class ElevenLabsSTTProvider implements ApiProvider {
    */
   private resolveAudioFilePath(prompt: string, context?: CallApiContextParams): string | undefined {
     // Priority: prompt (if it's a file path) > config.audioFile > vars.audioFile
-    if (
-      prompt &&
-      (prompt.endsWith('.mp3') ||
-        prompt.endsWith('.wav') ||
-        prompt.endsWith('.flac') ||
-        prompt.endsWith('.m4a') ||
-        prompt.endsWith('.ogg') ||
-        prompt.endsWith('.opus') ||
-        prompt.endsWith('.webm'))
-    ) {
+    if (prompt && /\.(mp3|mp4|mpeg|mpga|wav|flac|m4a|ogg|opus|webm)$/i.test(prompt)) {
       return prompt;
     }
 
@@ -280,11 +268,11 @@ export class ElevenLabsSTTProvider implements ApiProvider {
     };
 
     if (this.config.language) {
-      additionalFields.language = this.config.language;
+      additionalFields.language_code = this.config.language;
     }
 
     if (this.config.diarization) {
-      additionalFields.enable_diarization = true;
+      additionalFields.diarize = true;
       if (this.config.maxSpeakers) {
         additionalFields.num_speakers = this.config.maxSpeakers;
       }
@@ -308,10 +296,14 @@ export class ElevenLabsSTTProvider implements ApiProvider {
       .createHash('sha256')
       .update(
         JSON.stringify({
+          // Invalidate full responses cached with stale WER or unknown duration costs.
+          requestVersion: 3,
           modelId: this.config.modelId,
           language: this.config.language,
           diarization: this.config.diarization,
           maxSpeakers: this.config.maxSpeakers,
+          calculateWER: this.config.calculateWER,
+          referenceText: this.config.referenceText,
         }),
       )
       .digest('hex')

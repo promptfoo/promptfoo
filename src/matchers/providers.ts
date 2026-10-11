@@ -1,13 +1,22 @@
 import cliState from '../cliState';
 import logger from '../logger';
 import { loadApiProvider } from '../providers/index';
-import { getProviderCallExecutionContext } from '../scheduler/providerCallExecutionContext';
+import { providerRegistry } from '../providers/providerRegistry';
+import { shouldGenerateRemote } from '../redteam/remoteGeneration';
+import { getCloudTargetIdFromProviders } from '../redteam/remoteGenerationContextFromProviders';
+import {
+  getProviderCallExecutionContext,
+  getProviderCallTracingContext,
+  runProviderCallWithAbort,
+} from '../scheduler/providerCallExecutionContext';
 import { createProviderRateLimitOptions, isRateLimitWrapped } from '../scheduler/providerWrapper';
 import invariant from '../util/invariant';
 
 import type {
   ApiProvider,
   CallApiContextParams,
+  CallApiOptionsParams,
+  CancellableEmbeddingProvider,
   GradingConfig,
   ProviderOptions,
   ProviderResponse,
@@ -17,57 +26,141 @@ import type {
   VarValue,
 } from '../types/index';
 
+// These wrappers keep src/matchers' imports of the redteam layer confined to this file.
+// Inlining shouldGenerateRemote (or a context-payload helper) into similarity.ts and
+// llmGrading.ts adds core->redteam import statements beyond the ratchet in
+// architecture/edge-baseline.json and fails `npm run architecture:check`.
+export function getRemoteGradingContext(): { targetId?: string } {
+  const targetId = getCloudTargetIdFromProviders(
+    cliState.selectedProviderConfigs ?? cliState.config?.providers,
+  );
+  return targetId ? { targetId } : {};
+}
+
+export function shouldUseRemoteGrading(
+  options?: Parameters<typeof shouldGenerateRemote>[0],
+): boolean {
+  return shouldGenerateRemote(options);
+}
+
+export function getGradingProviderCallOptions(): CallApiOptionsParams | undefined {
+  const abortSignal = getProviderCallExecutionContext()?.abortSignal;
+  return abortSignal ? { abortSignal } : undefined;
+}
+
+export async function callEmbeddingProvider(
+  provider: ApiProvider,
+  input: string,
+  context?: CallApiContextParams,
+) {
+  const options = getGradingProviderCallOptions();
+  const result =
+    (context || options) && provider.supportsEmbeddingCancellation
+      ? await (provider as CancellableEmbeddingProvider).callEmbeddingApi(input, context, options)
+      : await provider.callEmbeddingApi!(input);
+  // A provider that cannot observe cancellation may report it as an error response.
+  if (result.error) {
+    options?.abortSignal?.throwIfAborted();
+  }
+  return result;
+}
+
 /**
- * Helper to call provider with consistent context propagation pattern.
- * Spreads the optional context and merges with prompt label and vars.
- * Also reuses evaluator scheduler context for cancellation, rate limits,
- * and grouped grading provider calls when present.
- *
- * IMPORTANT: Spread order matters - context is spread first, then prompt/vars
- * override. This ensures originalProvider from context is preserved while
- * allowing this call to specify its own prompt metadata.
+ * Apply tracing, rate limits, and grouped scheduling to every grading-provider modality.
  */
+export function callGradingProvider<T extends ProviderResponse>(
+  provider: ApiProvider,
+  label: string,
+  invoke: (
+    context: CallApiContextParams | undefined,
+    onResponseHeaders?: CallApiOptionsParams['onResponseHeaders'],
+  ) => Promise<T>,
+  options: {
+    callContext?: CallApiContextParams;
+    operationName?: 'embeddings';
+  } = {},
+): Promise<T> {
+  const { callContext, operationName } = options;
+  const executionContext = getProviderCallExecutionContext();
+  const tracingContext = getProviderCallTracingContext();
+  const callProvider = (
+    onResponseHeaders?: CallApiOptionsParams['onResponseHeaders'],
+  ): Promise<T> =>
+    providerRegistry.withProvider(
+      provider,
+      async () => {
+        const invokeProvider = (context: CallApiContextParams | undefined) =>
+          onResponseHeaders ? invoke(context, onResponseHeaders) : invoke(context);
+        return tracingContext
+          ? (tracingContext.withProviderSpan(
+              { provider, callContext, operationName, role: 'grader', promptLabel: label },
+              invokeProvider,
+            ) as Promise<T>)
+          : invokeProvider(callContext);
+      },
+      executionContext?.abortSignal,
+    );
+
+  const executeCall = async () => {
+    // Never start a grader after cancellation; queued graders check once they reach the front.
+    executionContext?.abortSignal?.throwIfAborted();
+    if (executionContext?.rateLimitRegistry && !isRateLimitWrapped(provider)) {
+      return executionContext.rateLimitRegistry.execute(
+        provider,
+        callProvider,
+        createProviderRateLimitOptions(executionContext.abortSignal),
+      );
+    }
+
+    return callProvider();
+  };
+
+  return runProviderCallWithAbort(
+    () =>
+      executionContext?.providerCallQueue
+        ? executionContext.providerCallQueue.enqueue(
+            provider.id(),
+            executeCall,
+            executionContext.abortSignal,
+          )
+        : executeCall(),
+    executionContext?.abortSignal,
+  );
+}
+
+/** Preserve evaluator context while adding this grading call's prompt metadata and cancellation. */
 export function callProviderWithContext(
   provider: ApiProvider,
   prompt: string,
   label: string,
   vars: Record<string, VarValue>,
   context?: CallApiContextParams,
+  promptConfig?: Record<string, unknown>,
 ): Promise<ProviderResponse> {
   const callApiContext = {
     ...context,
+    isGrading: true,
     prompt: {
       raw: prompt,
       label,
+      ...(promptConfig && { config: promptConfig }),
     },
     vars,
   };
-  const executionContext = getProviderCallExecutionContext();
-  const callApiOptions = executionContext?.abortSignal
-    ? { abortSignal: executionContext.abortSignal }
-    : undefined;
-  const callApi = () =>
-    callApiOptions
-      ? provider.callApi(prompt, callApiContext, callApiOptions)
-      : provider.callApi(prompt, callApiContext);
-
-  const executeCall = () => {
-    if (executionContext?.rateLimitRegistry && !isRateLimitWrapped(provider)) {
-      return executionContext.rateLimitRegistry.execute(
-        provider,
-        callApi,
-        createProviderRateLimitOptions(),
-      );
-    }
-
-    return callApi();
-  };
-
-  if (executionContext?.providerCallQueue) {
-    return executionContext.providerCallQueue.enqueue(provider.id(), executeCall);
-  }
-
-  return executeCall();
+  const contextOptions = getGradingProviderCallOptions();
+  return callGradingProvider(
+    provider,
+    label,
+    (tracedContext, onResponseHeaders) => {
+      const callApiOptions = onResponseHeaders
+        ? { ...contextOptions, onResponseHeaders }
+        : contextOptions;
+      return callApiOptions
+        ? provider.callApi(prompt, tracedContext, callApiOptions)
+        : provider.callApi(prompt, tracedContext);
+    },
+    { callContext: callApiContext },
+  );
 }
 
 async function loadFromProviderOptions(provider: ProviderOptions) {
@@ -128,8 +221,22 @@ export async function getGradingProvider(
   } else if (provider != null && typeof provider === 'object') {
     const typeValue = (provider as ProviderTypeMap)[type];
     if (typeValue) {
-      // Defined as embedding, classification, or text record
-      finalProvider = await getGradingProvider(type, typeValue, defaultProvider);
+      // Apply evaluation overrides only when the selected typed grader is loaded.
+      // Capturing them in the test config would retain credentials across later runs.
+      if (typeof typeValue === 'string') {
+        finalProvider = await loadApiProvider(typeValue, {
+          basePath: cliState.basePath,
+          env: cliState.env,
+        });
+      } else if (typeof typeValue.id === 'string') {
+        finalProvider = await loadApiProvider(typeValue.id, {
+          options: typeValue as ProviderOptions,
+          basePath: cliState.basePath,
+          env: cliState.env,
+        });
+      } else {
+        finalProvider = await getGradingProvider(type, typeValue, defaultProvider);
+      }
     } else if ((provider as ProviderOptions).id) {
       // Defined as ProviderOptions
       finalProvider = await loadFromProviderOptions(provider as ProviderOptions);

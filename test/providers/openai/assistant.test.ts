@@ -2,10 +2,50 @@ import OpenAI from 'openai';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { disableCache, enableCache } from '../../../src/cache';
 import { OpenAiAssistantProvider } from '../../../src/providers/openai/assistant';
+import { createApiKeyOptions } from '../../factories/literalFixtures';
 import { mockProcessEnv } from '../../util/utils';
 import { getOpenAiMissingApiKeyMessage } from './shared';
+import { installTracerSpy } from './tracing';
 
 import type { CallbackContext } from '../../../src/providers/openai/types';
+
+const createMessageCreationSteps = () => ({
+  data: [
+    {
+      id: 'step_1',
+      step_details: {
+        type: 'message_creation',
+        message_creation: {
+          message_id: 'msg_1',
+        },
+      },
+    },
+  ],
+});
+
+const createAssistantTextMessage = () => ({
+  role: 'assistant',
+  content: [
+    {
+      type: 'text',
+      text: {
+        value: 'Test response',
+      },
+    },
+  ],
+});
+
+const createCompletedAssistantRun = () => ({
+  id: 'run_123',
+  thread_id: 'thread_123',
+  status: 'completed',
+});
+
+const createApiErrorMessageDescriptor = () => ({
+  value: 'API Error',
+  writable: true,
+  configurable: true,
+});
 
 vi.mock('openai');
 
@@ -57,38 +97,24 @@ describe('OpenAI Provider', () => {
       },
     });
 
+    it.each(['gpt-transcribe', 'gpt-live-transcribe', 'gpt-5.3-codex-spark'])(
+      'should reject unsupported first-party model override %s in the direct constructor',
+      (modelName) => {
+        expect(
+          () =>
+            new OpenAiAssistantProvider('test-assistant-id', {
+              config: { apiKey: 'test-key', modelName },
+            }),
+        ).toThrow();
+      },
+    );
+
     it('should handle successful assistant completion', async () => {
-      const mockRun = {
-        id: 'run_123',
-        thread_id: 'thread_123',
-        status: 'completed',
-      };
+      const mockRun = createCompletedAssistantRun();
 
-      const mockSteps = {
-        data: [
-          {
-            id: 'step_1',
-            step_details: {
-              type: 'message_creation',
-              message_creation: {
-                message_id: 'msg_1',
-              },
-            },
-          },
-        ],
-      };
+      const mockSteps = createMessageCreationSteps();
 
-      const mockMessage = {
-        role: 'assistant',
-        content: [
-          {
-            type: 'text',
-            text: {
-              value: 'Test response',
-            },
-          },
-        ],
-      };
+      const mockMessage = createAssistantTextMessage();
 
       mockClient.beta.threads.createAndRun.mockResolvedValue(mockRun);
       mockClient.beta.threads.runs.retrieve.mockResolvedValue(mockRun);
@@ -97,6 +123,13 @@ describe('OpenAI Provider', () => {
 
       const result = await provider.callApi('Test prompt');
 
+      expect(OpenAI).toHaveBeenCalledWith(
+        expect.objectContaining({
+          defaultHeaders: expect.objectContaining({
+            'X-OpenAI-Originator': 'promptfoo',
+          }),
+        }),
+      );
       expect(result.output).toBe('[Assistant] Test response');
       expect(mockClient.beta.threads.createAndRun).toHaveBeenCalledTimes(1);
       expect(mockClient.beta.threads.runs.retrieve).toHaveBeenCalledTimes(1);
@@ -104,38 +137,109 @@ describe('OpenAI Provider', () => {
       expect(mockClient.beta.threads.messages.retrieve).toHaveBeenCalledTimes(1);
     });
 
+    it('drops the SDK organization option when a case-variant org header overrides it', async () => {
+      const mockRun = { id: 'run_123', thread_id: 'thread_123', status: 'completed' };
+      const mockSteps = createMessageCreationSteps();
+      const mockMessage = createAssistantTextMessage();
+      mockClient.beta.threads.createAndRun.mockResolvedValue(mockRun);
+      mockClient.beta.threads.runs.retrieve.mockResolvedValue(mockRun);
+      mockClient.beta.threads.runs.steps.list.mockResolvedValue(mockSteps);
+      mockClient.beta.threads.messages.retrieve.mockResolvedValue(mockMessage);
+
+      const overrideProvider = new OpenAiAssistantProvider('test-assistant-id', {
+        config: {
+          apiKey: 'test-key',
+          organization: 'test-org',
+          headers: { 'openai-organization': 'custom-org' },
+        },
+      });
+
+      await overrideProvider.callApi('Test prompt');
+
+      // The SDK would otherwise inject its own canonical OpenAI-Organization header
+      // from `organization`, duplicating (and beating) the custom override.
+      expect(OpenAI).toHaveBeenCalledWith(
+        expect.objectContaining({
+          organization: undefined,
+          defaultHeaders: expect.objectContaining({ 'openai-organization': 'custom-org' }),
+        }),
+      );
+      const sdkArgs = vi.mocked(OpenAI).mock.calls.at(-1)?.[0] as { defaultHeaders: object };
+      expect(sdkArgs.defaultHeaders).not.toHaveProperty('OpenAI-Organization');
+    });
+
+    it('passes custom gateway query credentials through the SDK default query', async () => {
+      const mockRun = { id: 'run_123', thread_id: 'thread_123', status: 'completed' };
+      const mockSteps = createMessageCreationSteps();
+      mockClient.beta.threads.createAndRun.mockResolvedValue(mockRun);
+      mockClient.beta.threads.runs.retrieve.mockResolvedValue(mockRun);
+      mockClient.beta.threads.runs.steps.list.mockResolvedValue(mockSteps);
+      mockClient.beta.threads.messages.retrieve.mockResolvedValue(createAssistantTextMessage());
+      const gatewayProvider = new OpenAiAssistantProvider('test-assistant-id', {
+        config: {
+          apiKey: 'test-key',
+          apiBaseUrl: 'https://gateway.example/v1?api_key=tenant-secret&region=west',
+        },
+      });
+
+      await gatewayProvider.callApi('Test prompt');
+
+      expect(OpenAI).toHaveBeenCalledWith(
+        expect.objectContaining({
+          baseURL: 'https://gateway.example/v1',
+          defaultQuery: { api_key: 'tenant-secret', region: 'west' },
+        }),
+      );
+    });
+
+    it('emits an agent invocation span around the assistant run', async () => {
+      const spans = installTracerSpy();
+      const mockRun = { id: 'run_123', thread_id: 'thread_123', status: 'completed' };
+      const mockSteps = createMessageCreationSteps();
+      const mockMessage = createAssistantTextMessage();
+      mockClient.beta.threads.createAndRun.mockResolvedValue(mockRun);
+      mockClient.beta.threads.runs.retrieve.mockResolvedValue(mockRun);
+      mockClient.beta.threads.runs.steps.list.mockResolvedValue(mockSteps);
+      mockClient.beta.threads.messages.retrieve.mockResolvedValue(mockMessage);
+
+      const localProvider = new OpenAiAssistantProvider('test-assistant-id', createApiKeyOptions());
+      await localProvider.callApi('Test prompt');
+
+      const agentSpan = spans.find((span) => span.name === 'invoke_agent');
+      expect(agentSpan).toBeDefined();
+      expect(agentSpan?.attributes).toMatchObject({
+        'gen_ai.provider.name': 'openai',
+        'gen_ai.operation.name': 'invoke_agent',
+        'gen_ai.agent.id': 'test-assistant-id',
+      });
+      expect(agentSpan?.attributes).not.toHaveProperty('gen_ai.agent.name');
+      expect(agentSpan?.attributes).not.toHaveProperty('gen_ai.request.model');
+      expect(agentSpan?.ended).toBe(true);
+      // SpanStatusCode.OK === 1
+      expect(agentSpan?.status?.code).toBe(1);
+    });
+
+    it('marks the agent invocation span ERROR when the assistant run fails', async () => {
+      const spans = installTracerSpy();
+      mockClient.beta.threads.createAndRun.mockRejectedValue(new Error('assistant boom'));
+
+      const localProvider = new OpenAiAssistantProvider('test-assistant-id', createApiKeyOptions());
+      const result = await localProvider.callApi('Test prompt');
+      expect(result.error).toBeDefined();
+
+      const agentSpan = spans.find((span) => span.name === 'invoke_agent');
+      expect(agentSpan).toBeDefined();
+      // SpanStatusCode.ERROR === 2
+      expect(agentSpan?.status?.code).toBe(2);
+      expect(agentSpan?.ended).toBe(true);
+    });
+
     it('should preserve an explicit temperature of 0', async () => {
-      const mockRun = {
-        id: 'run_123',
-        thread_id: 'thread_123',
-        status: 'completed',
-      };
+      const mockRun = createCompletedAssistantRun();
 
-      const mockSteps = {
-        data: [
-          {
-            id: 'step_1',
-            step_details: {
-              type: 'message_creation',
-              message_creation: {
-                message_id: 'msg_1',
-              },
-            },
-          },
-        ],
-      };
+      const mockSteps = createMessageCreationSteps();
 
-      const mockMessage = {
-        role: 'assistant',
-        content: [
-          {
-            type: 'text',
-            text: {
-              value: 'Test response',
-            },
-          },
-        ],
-      };
+      const mockMessage = createAssistantTextMessage();
 
       mockClient.beta.threads.createAndRun.mockResolvedValue(mockRun);
       mockClient.beta.threads.runs.retrieve.mockResolvedValue(mockRun);
@@ -247,24 +351,12 @@ describe('OpenAI Provider', () => {
 
     it('should handle API errors', async () => {
       const error = new OpenAI.APIError(500, {}, 'API Error', new Headers());
-      Object.defineProperty(error, 'type', {
-        value: 'API Error',
-        writable: true,
-        configurable: true,
-      });
-      Object.defineProperty(error, 'message', {
-        value: 'API Error',
-        writable: true,
-        configurable: true,
-      });
+      Object.defineProperty(error, 'type', createApiErrorMessageDescriptor());
+      Object.defineProperty(error, 'message', createApiErrorMessageDescriptor());
 
       mockClient.beta.threads.createAndRun.mockRejectedValueOnce(error);
 
-      const provider = new OpenAiAssistantProvider('test-assistant-id', {
-        config: {
-          apiKey: 'test-key',
-        },
-      });
+      const provider = new OpenAiAssistantProvider('test-assistant-id', createApiKeyOptions());
 
       const result = await provider.callApi('Test prompt');
 

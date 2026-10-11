@@ -28,31 +28,6 @@ vi.mock('../../src/logger', () => ({
   },
 }));
 
-// Mock other server dependencies to prevent initialization errors
-vi.mock('../../src/migrate', () => ({
-  runDbMigrations: vi.fn().mockResolvedValue(undefined),
-}));
-
-vi.mock('../../src/database/signal', () => ({
-  setupSignalWatcher: vi.fn().mockReturnValue({ close: vi.fn(), on: vi.fn() }),
-  readSignalEvalId: vi.fn().mockResolvedValue(null),
-}));
-
-vi.mock('../../src/util/server', () => ({
-  BrowserBehavior: { OPEN: 0, SKIP: 1, ASK: 2 },
-  BrowserBehaviorNames: { 0: 'OPEN', 1: 'SKIP', 2: 'ASK' },
-  openBrowser: vi.fn().mockResolvedValue(undefined),
-}));
-
-vi.mock('../../src/models/eval', () => ({
-  default: { latest: vi.fn().mockResolvedValue(null) },
-  getEvalSummaries: vi.fn().mockResolvedValue([]),
-}));
-
-vi.mock('../../src/globalConfig/cloud', () => ({
-  cloudConfig: { isEnabled: vi.fn().mockReturnValue(false) },
-}));
-
 import fs from 'node:fs';
 
 import { getDirectory } from '../../src/esm';

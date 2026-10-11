@@ -1,14 +1,18 @@
 import fs from 'fs';
 
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { disableCache } from '../../../src/cache';
 import { doGenerateDataset } from '../../../src/commands/generate/dataset';
 import telemetry from '../../../src/telemetry';
 import { synthesizeFromTestSuite } from '../../../src/testCase/synthesis';
 import { resolveConfigs } from '../../../src/util/config/load';
+import { loadYaml } from '../../../src/util/yamlLoad';
 
 import type { TestSuite, VarMapping } from '../../../src/types/index';
+
+const { createFsModuleFactory, createChildLoggerFactory, createGeneratorFsPromisesFactory } =
+  await vi.hoisted(() => import('../../factories/moduleMocks'));
 
 const fsMocks = vi.hoisted(() => ({
   readFileSync: vi.fn(),
@@ -16,27 +20,11 @@ const fsMocks = vi.hoisted(() => ({
   existsSync: vi.fn(),
 }));
 
-vi.mock('fs', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('fs')>();
-  return {
-    ...actual,
-    default: {
-      ...actual,
-      ...fsMocks,
-    },
-    ...fsMocks,
-  };
-});
+vi.mock('fs', createFsModuleFactory(fsMocks));
 
-vi.mock('fs/promises', () => ({
-  default: {
-    readFile: fsMocks.readFileSync,
-    writeFile: fsMocks.writeFileSync,
-  },
-  readFile: fsMocks.readFileSync,
-  writeFile: fsMocks.writeFileSync,
-}));
+vi.mock('fs/promises', createGeneratorFsPromisesFactory(fsMocks));
 vi.mock('js-yaml');
+vi.mock('../../../src/util/yamlLoad');
 vi.mock('../../../src/testCase/synthesis');
 vi.mock('../../../src/util/config/load', () => ({
   resolveConfigs: vi.fn(),
@@ -44,15 +32,7 @@ vi.mock('../../../src/util/config/load', () => ({
 vi.mock('../../../src/cache', () => ({
   disableCache: vi.fn(),
 }));
-vi.mock('../../../src/logger', () => ({
-  default: {
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    debug: vi.fn(),
-    child: vi.fn().mockReturnValue({}),
-  },
-}));
+vi.mock('../../../src/logger', createChildLoggerFactory());
 vi.mock('../../../src/telemetry', () => ({
   default: {
     record: vi.fn(),
@@ -104,7 +84,7 @@ describe('dataset generation', () => {
     beforeEach(() => {
       vi.mocked(synthesizeFromTestSuite).mockResolvedValue(mockResults);
       vi.mocked(yaml.dump).mockReturnValue('yaml content');
-      vi.mocked(yaml.load).mockReturnValue(mockTestSuite);
+      vi.mocked(loadYaml).mockReturnValue(mockTestSuite);
       vi.mocked(fs.readFileSync).mockReturnValue('mock config content');
       vi.mocked(fs.existsSync).mockReturnValue(true);
       vi.mocked(fs.writeFileSync).mockImplementation(() => undefined);

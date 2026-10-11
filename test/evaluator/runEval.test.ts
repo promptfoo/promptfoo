@@ -1,15 +1,50 @@
+import { createTokenOutput } from '../factories/literalFixtures';
 import './setup';
+
+import { getEventListeners } from 'node:events';
+import fs from 'fs/promises';
 
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearCache } from '../../src/cache';
 import { runEval } from '../../src/evaluator';
+import logger from '../../src/logger';
+import { geminiFormatAndSystemInstructions } from '../../src/providers/google/util';
+import { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
 import {
   type ApiProvider,
+  type CallApiContextParams,
   type Prompt,
   ResultFailureReason,
   type TestSuite,
 } from '../../src/types/index';
+import * as fileExtensions from '../../src/util/fileExtensions';
+import { sleep } from '../../src/util/time';
 import { mockGradingApiProviderPasses, resetMockProviders } from './helpers';
+
+const createEmptyEvaluationConfig = () => ({
+  providers: [],
+  prompts: [],
+});
+
+const createAsciiSmugglingMetadata = () => ({
+  pluginId: 'ascii-smuggling',
+});
+
+const createInitialRunOptions = () => ({
+  delay: 0,
+  testIdx: 0,
+  promptIdx: 0,
+  repeatIndex: 0,
+  isRedteam: false,
+});
+
+const createCappedRedteamConfig = () => ({
+  providers: [],
+  prompts: [],
+  redteam: {
+    maxCharsPerMessage: 10,
+  },
+});
 
 describe('runEval', () => {
   beforeEach(() => {
@@ -31,19 +66,10 @@ describe('runEval', () => {
 
   const mockProvider: ApiProvider = {
     id: vi.fn().mockReturnValue('test-provider'),
-    callApi: vi.fn().mockResolvedValue({
-      output: 'Test output',
-      tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-    }),
+    callApi: vi.fn().mockResolvedValue(createTokenOutput()),
   };
 
-  const defaultOptions = {
-    delay: 0,
-    testIdx: 0,
-    promptIdx: 0,
-    repeatIndex: 0,
-    isRedteam: false,
-  };
+  const defaultOptions = createInitialRunOptions();
 
   it('should handle basic prompt evaluation', async () => {
     const results = await runEval({
@@ -59,6 +85,165 @@ describe('runEval', () => {
     expect(result.response?.output).toBe('Test output');
     expect(result.prompt.label).toBe('test-label');
     expect(mockProvider.callApi).toHaveBeenCalledWith('Test prompt', expect.anything(), undefined);
+  });
+
+  it('should expose eval runtime vars to prompt and provider rendering', async () => {
+    await runEval({
+      ...defaultOptions,
+      evalId: 'eval-runtime-vars',
+      promptIdx: 4,
+      provider: mockProvider,
+      prompt: {
+        raw: '{{__evalId}} {{__evalStepId}} {{__repeatIndex}}',
+        label: 'test-label',
+      },
+      repeatIndex: 2,
+      test: {
+        vars: {
+          __evalId: 'spoofed-eval-id',
+          __evalStepId: 'spoofed-step-id',
+          __repeatIndex: 99,
+        },
+      },
+      testIdx: 3,
+      conversations: {},
+      registers: {},
+    });
+
+    expect(mockProvider.callApi).toHaveBeenCalledWith(
+      'eval-runtime-vars test-3-prompt-4-repeat-2 2',
+      expect.objectContaining({
+        vars: expect.objectContaining({
+          __evalId: 'eval-runtime-vars',
+          __evalStepId: 'test-3-prompt-4-repeat-2',
+          __repeatIndex: 2,
+        }),
+      }),
+      undefined,
+    );
+  });
+
+  it('excludes eval runtime vars from the persisted result', async () => {
+    const results = await runEval({
+      ...defaultOptions,
+      evalId: 'eval-runtime-vars',
+      promptIdx: 4,
+      provider: mockProvider,
+      prompt: {
+        raw: '{{__evalStepId}} {{topic}}',
+        label: 'test-label',
+      },
+      repeatIndex: 2,
+      test: {
+        vars: { topic: 'weather' },
+      },
+      testIdx: 3,
+      conversations: {},
+      registers: {},
+    });
+
+    // The reserved __eval* runtime vars must not be persisted on result.vars:
+    // they would pollute stored results and, being _-prefixed, be restored
+    // onto re-run test.vars by --filter-* re-runs. Real test vars are kept.
+    expect(results[0].vars).toEqual({ topic: 'weather' });
+  });
+
+  it('excludes eval runtime vars from assertion context', async () => {
+    const results = await runEval({
+      ...defaultOptions,
+      evalId: 'eval-runtime-vars',
+      provider: mockProvider,
+      prompt: { raw: '{{topic}}', label: 'test-label' },
+      test: {
+        vars: { topic: 'weather' },
+        assert: [
+          {
+            type: 'javascript',
+            value:
+              "!('__evalId' in context.vars) && !('__evalStepId' in context.vars) && !('__repeatIndex' in context.vars) && context.vars.topic === 'weather'",
+          },
+        ],
+      },
+      conversations: {},
+      registers: {},
+    });
+
+    // The assertion passes only if context.vars carries the real test var but
+    // none of the reserved __eval* runtime vars.
+    expect(results[0].gradingResult?.pass).toBe(true);
+    expect(results[0].success).toBe(true);
+  });
+
+  it.each([
+    ['isom', 'm4a', 'audio/mp4'],
+    ['mp42', 'm4a', 'audio/mp4'],
+    ['isom', 'mp4', 'video/mp4'],
+  ])('preserves loaded %s .%s media through rubric grading', async (brand, extension, mimeType) => {
+    const actualFileExtensions = await vi.importActual<typeof fileExtensions>(
+      '../../src/util/fileExtensions',
+    );
+    vi.spyOn(fileExtensions, 'isAudioFile').mockImplementation(actualFileExtensions.isAudioFile);
+    const bytes = Buffer.from(`....ftyp${brand}........`);
+    const audio = bytes.toString('base64');
+    vi.spyOn(fs, 'readFile').mockResolvedValueOnce(bytes);
+    let targetContext: CallApiContextParams | undefined;
+    let graderContext: CallApiContextParams | undefined;
+    let gradingPrompt = '';
+    const target: ApiProvider = {
+      id: () => 'media-target',
+      getAudioInputFormat: () => 'google',
+      callApi: vi.fn(async (_prompt, context) => {
+        targetContext = context;
+        return { output: 'PONG' };
+      }),
+    };
+    const grader: ApiProvider = {
+      id: () => 'media-grader',
+      getAudioInputFormat: () => 'google',
+      callApi: vi.fn(async (prompt, context) => {
+        gradingPrompt = prompt;
+        graderContext = context;
+        return { output: '{"pass":true,"score":1,"reason":"Checked media."}' };
+      }),
+    };
+    const testVars = { audio: `file://fixture.${extension}`, topic: 'ordinary media' };
+    const results = await runEval({
+      ...defaultOptions,
+      evalId: 'media-grading-eval',
+      provider: target,
+      prompt: { raw: '{{audio}}', label: 'media' },
+      test: {
+        vars: testVars,
+        assert: [
+          {
+            type: 'llm-rubric',
+            value: 'Check the media.',
+            rubricPrompt: '{{audio}}',
+            provider: grader,
+          },
+        ],
+      },
+      conversations: {},
+      registers: {},
+    });
+
+    expect(target.callApi).toHaveBeenCalledTimes(1);
+    expect(grader.callApi).toHaveBeenCalledTimes(1);
+    expect(targetContext?.vars).toMatchObject({ audio, __evalId: 'media-grading-eval' });
+    for (const key of ['__evalId', '__evalStepId', '__repeatIndex']) {
+      expect(graderContext?.vars).not.toHaveProperty(key);
+      expect(results[0].vars).not.toHaveProperty(key);
+      expect(targetContext?.vars).toHaveProperty(key);
+    }
+    expect(JSON.parse(JSON.stringify(results[0].vars))).toEqual({ audio, topic: 'ordinary media' });
+    expect(testVars).toEqual({ audio: `file://fixture.${extension}`, topic: 'ordinary media' });
+    expect(gradingPrompt).toBe(audio);
+    expect(graderContext?.vars.audio).toBe(audio);
+    expect(
+      geminiFormatAndSystemInstructions(gradingPrompt, graderContext?.vars).contents[0].parts,
+    ).toEqual([{ inlineData: { mimeType, data: audio } }]);
+    expect(results[0].success).toBe(true);
+    expect(results[0].gradingResult?.score).toBe(1);
   });
 
   it('should pass dynamic prompt config from prompt functions to the provider', async () => {
@@ -106,14 +291,14 @@ describe('runEval', () => {
       ...defaultOptions,
       provider: mockProvider,
       prompt: promptWithFunction,
-      test: { options: { temperature: 0.9 } },
+      test: { options: { repeat: 3, temperature: 0.9 } },
       conversations: {},
       registers: {},
     });
     const result = results[0];
     expect(result.success).toBe(true);
 
-    // test.options should override dynamic config
+    // Provider options should override dynamic config, while evaluator-only options stay internal.
     const callApiMock = vi.mocked(mockProvider.callApi);
     const callApiArgs = callApiMock.mock.calls[0];
     expect(callApiArgs).toBeDefined();
@@ -233,13 +418,35 @@ describe('runEval', () => {
     });
     const result = results[0];
     expect(result.success).toBe(true);
-    expect(conversations).toHaveProperty('test-provider:undefined');
-    expect(conversations['test-provider:undefined']).toHaveLength(1);
-    expect(conversations['test-provider:undefined'][0]).toEqual({
+    const conversationKey = JSON.stringify(['test-provider', null, 0, null]);
+    expect(conversations).toHaveProperty([conversationKey]);
+    expect(conversations[conversationKey]).toHaveLength(1);
+    expect(conversations[conversationKey][0]).toEqual({
       prompt: 'Hello ',
       input: 'Hello ',
       output: 'Test output',
     });
+  });
+
+  it('should not add provider errors to conversation history', async () => {
+    const conversations = {} as Record<string, any>;
+    const errorProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('error-provider'),
+      callApi: vi.fn().mockResolvedValue({ error: 'Provider failed' }),
+    };
+
+    const [result] = await runEval({
+      ...defaultOptions,
+      provider: errorProvider,
+      prompt: { raw: 'Hello {{_conversation[0].output}}', label: 'test-label' },
+      test: {},
+      conversations,
+      registers: {},
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBe('Provider failed');
+    expect(conversations).toEqual({});
   });
 
   it('should handle conversation with custom ID', async () => {
@@ -255,8 +462,57 @@ describe('runEval', () => {
     });
     const result = results[0];
     expect(result.success).toBe(true);
-    expect(conversations).toHaveProperty('test-provider:custom-id:conv1');
+    expect(conversations).toHaveProperty([
+      JSON.stringify(['test-provider', 'custom-id', 0, 'conv1']),
+    ]);
   });
+
+  it.each([
+    {
+      description: 'legacy provider, prompt, and conversation keys',
+      conversationId: '1:shared',
+      promptIdx: 0,
+    },
+    {
+      description: 'column-aware conversation keys',
+      conversationId: '0:shared',
+      promptIdx: 1,
+    },
+  ])(
+    'keeps colon-delimited identifiers from colliding for $description',
+    async ({ conversationId, promptIdx }) => {
+      const conversations = {};
+      const promptTemplate =
+        '{% if _conversation.length %}prior={{ _conversation[0].output }} {% endif %}now={{ turn }}';
+
+      await runEval({
+        ...defaultOptions,
+        provider: mockProvider,
+        prompt: { raw: promptTemplate, label: 'first prompt', id: 'prompt:1' },
+        test: { metadata: { conversationId: 'shared' }, vars: { turn: 'first' } },
+        conversations,
+        registers: {},
+      });
+
+      await runEval({
+        ...defaultOptions,
+        promptIdx,
+        provider: mockProvider,
+        prompt: { raw: promptTemplate, label: 'second prompt', id: 'prompt' },
+        test: { metadata: { conversationId }, vars: { turn: 'second' } },
+        conversations,
+        registers: {},
+      });
+
+      expect(mockProvider.callApi).toHaveBeenNthCalledWith(
+        2,
+        'now=second',
+        expect.anything(),
+        undefined,
+      );
+      expect(Object.keys(conversations)).toHaveLength(2);
+    },
+  );
 
   it('should include sessionId from response in result metadata', async () => {
     const conversations: Record<string, any[]> = {};
@@ -484,19 +740,14 @@ describe('runEval', () => {
     };
 
     // Define defaultOptions locally for this test
-    const defaultOptions = {
-      delay: 0,
-      testIdx: 0,
-      promptIdx: 0,
-      repeatIndex: 0,
-      isRedteam: false,
-    };
+    const defaultOptions = createInitialRunOptions();
 
     const results = await runEval({
       ...defaultOptions,
+      evalId: 'eval-runtime-vars',
       provider: errorProvider,
-      prompt: { raw: 'Test prompt', label: 'test-label' },
-      test: {},
+      prompt: { raw: '{{__evalStepId}} {{topic}}', label: 'test-label' },
+      test: { vars: { topic: 'weather' } },
       conversations: {},
       registers: {},
     });
@@ -504,45 +755,130 @@ describe('runEval', () => {
     expect(result.success).toBe(false);
     expect(result.error).toContain('API Error');
     expect(result.failureReason).toBe(ResultFailureReason.ERROR);
+    expect(result.vars).toEqual({ topic: 'weather' });
   });
 
-  it('should handle null output differently for red team tests', async () => {
-    const nullOutputProvider: ApiProvider = {
-      id: vi.fn().mockReturnValue('null-provider'),
-      callApi: vi.fn().mockResolvedValue({
-        output: null,
-        tokenUsage: { total: 5, prompt: 5, completion: 0, cached: 0, numRequests: 1 },
-      }),
+  it('should keep trace linkage when a traced provider call fails', async () => {
+    const errorProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('traced-error-provider'),
+      callApi: vi.fn().mockRejectedValue(new Error('Traced API Error')),
     };
 
-    // Regular test
-    const regularResults = await runEval({
+    const [result] = await runEval({
       ...defaultOptions,
-      provider: nullOutputProvider,
+      provider: errorProvider,
       prompt: { raw: 'Test prompt', label: 'test-label' },
-      test: {},
+      test: {
+        metadata: {
+          evaluationId: 'eval-provider-error-trace',
+          tracingEnabled: true,
+        },
+      },
       conversations: {},
       registers: {},
-      isRedteam: false,
     });
 
-    expect(regularResults[0].success).toBe(false);
-    expect(regularResults[0].error).toBe('No output');
+    expect(result.traceId).toMatch(/^[0-9a-f]{32}$/);
+    expect(result.evaluationId).toBe('eval-provider-error-trace');
+    expect(result.error).toContain('Traced API Error');
+    expect(result.failureReason).toBe(ResultFailureReason.ERROR);
+  });
 
-    // Red team test
-    const redTeamResults = await runEval({
+  it.each([false, true])(
+    'errors on missing provider outputs with isRedteam=%s',
+    async (isRedteam) => {
+      for (const response of [{}, { output: undefined }, { output: null }]) {
+        const provider: ApiProvider = {
+          id: () => 'missing-output-provider',
+          callApi: vi.fn().mockResolvedValue(response),
+        };
+        const assertion = vi.fn(() => true);
+        const [result] = await runEval({
+          ...defaultOptions,
+          provider,
+          prompt: { raw: 'Test prompt', label: 'test-label' },
+          test: { assert: [{ type: 'javascript', value: assertion }] },
+          conversations: {},
+          registers: {},
+          isRedteam,
+        });
+
+        expect(result.success).toBe(false);
+        expect(result.score).toBe(0);
+        expect(result.error).toBe('No output');
+        expect(result.failureReason).toBe(ResultFailureReason.ERROR);
+        expect(assertion).not.toHaveBeenCalled();
+      }
+    },
+  );
+
+  it.each([
+    { output: '' },
+    { output: 'null' },
+    { output: 'undefined' },
+    { output: '', images: [{ data: 'data:image/png;base64,aGVsbG8=', mimeType: 'image/png' }] },
+    { output: [{ type: 'function', function: { name: 'lookup', arguments: '{}' } }] },
+  ])('grades present output instead of treating it as missing: %j', async (response) => {
+    const provider: ApiProvider = {
+      id: () => 'present-output-provider',
+      callApi: vi.fn().mockResolvedValue(response),
+    };
+    const assertion = vi.fn(() => false);
+    const [result] = await runEval({
       ...defaultOptions,
-      provider: nullOutputProvider,
+      provider,
       prompt: { raw: 'Test prompt', label: 'test-label' },
-      test: {},
+      test: { assert: [{ type: 'javascript', value: assertion }] },
       conversations: {},
       registers: {},
       isRedteam: true,
     });
 
-    expect(redTeamResults[0].success).toBe(true);
-    expect(redTeamResults[0].error).toBeUndefined();
+    expect(assertion).toHaveBeenCalledOnce();
+    expect(result.success).toBe(false);
+    expect(result.failureReason).toBe(ResultFailureReason.ASSERT);
+    expect(result.error).not.toContain('No output');
   });
+
+  it.each(['provider', 'test', 'postprocess', 'assertion'] as const)(
+    'grades transformed OpenAI refusal output at the %s level',
+    async (level) => {
+      const outputs = ['The result is 42.', 'I cannot assist with that request.'];
+      const transform = 'JSON.parse(output).value';
+      for (const [index, refused] of [
+        [0, false],
+        [1, true],
+      ] as const) {
+        const provider: ApiProvider = {
+          id: () => 'openai:responses:gpt-6-luna',
+          callApi: vi.fn().mockResolvedValue({
+            output: JSON.stringify({ value: outputs[index], discarded: outputs[1 - index] }),
+            isRefusal: true,
+          }),
+          ...(level === 'provider' ? { transform } : {}),
+        };
+        for (const [type, success] of [
+          ['is-refusal', refused],
+          ['not-is-refusal', !refused],
+        ] as const) {
+          const [result] = await runEval({
+            ...defaultOptions,
+            provider,
+            prompt: { raw: 'A test prompt', label: 'test' },
+            test: {
+              assert: [{ type, ...(level === 'assertion' ? { transform } : {}) }],
+              ...(level === 'test' ? { options: { transform } } : {}),
+              ...(level === 'postprocess' ? { options: { postprocess: transform } } : {}),
+            },
+            conversations: {},
+            registers: {},
+          });
+          expect(result.success, `${level}, ${type}, ${index}`).toBe(success);
+          expect(result.score).toBe(success ? 1 : 0);
+        }
+      }
+    },
+  );
 
   it('should apply transforms in correct order', async () => {
     const providerWithTransform: ApiProvider = {
@@ -615,13 +951,7 @@ describe('runEval', () => {
           prompt: 'this is too long',
         },
       },
-      testSuite: {
-        providers: [],
-        prompts: [],
-        redteam: {
-          maxCharsPerMessage: 10,
-        },
-      } as unknown as TestSuite,
+      testSuite: createCappedRedteamConfig() as unknown as TestSuite,
       conversations: {},
       registers: {},
       isRedteam: true,
@@ -642,13 +972,7 @@ describe('runEval', () => {
       },
       prompt: { raw: 'this prompt is longer than ten chars', label: 'test-label' },
       test: {},
-      testSuite: {
-        providers: [],
-        prompts: [],
-        redteam: {
-          maxCharsPerMessage: 10,
-        },
-      } as unknown as TestSuite,
+      testSuite: createCappedRedteamConfig() as unknown as TestSuite,
       conversations: {},
       registers: {},
       isRedteam: false,
@@ -723,14 +1047,9 @@ describe('runEval', () => {
           prompt: 'Please answer in two sentences for a user whose role is "{{purpose | trim}}".',
         },
         assert: [{ type: 'promptfoo:redteam:ascii-smuggling' }],
-        metadata: {
-          pluginId: 'ascii-smuggling',
-        },
+        metadata: createAsciiSmugglingMetadata(),
       },
-      testSuite: {
-        providers: [],
-        prompts: [],
-      } as unknown as TestSuite,
+      testSuite: createEmptyEvaluationConfig() as unknown as TestSuite,
       conversations: {},
       registers: {},
       isRedteam: false,
@@ -764,10 +1083,7 @@ describe('runEval', () => {
         },
         options: { provider: mockGradingApiProviderPasses },
       },
-      testSuite: {
-        providers: [],
-        prompts: [],
-      } as unknown as TestSuite,
+      testSuite: createEmptyEvaluationConfig() as unknown as TestSuite,
       conversations: {},
       registers: {},
       isRedteam: false,
@@ -787,14 +1103,9 @@ describe('runEval', () => {
           query: 'Please answer in two sentences for a user whose role is "{{purpose | trim}}".',
         },
         assert: [{ type: 'promptfoo:redteam:ascii-smuggling' }],
-        metadata: {
-          pluginId: 'ascii-smuggling',
-        },
+        metadata: createAsciiSmugglingMetadata(),
       },
-      testSuite: {
-        providers: [],
-        prompts: [],
-      } as unknown as TestSuite,
+      testSuite: createEmptyEvaluationConfig() as unknown as TestSuite,
       conversations: {},
       registers: {},
       isRedteam: false,
@@ -819,14 +1130,9 @@ describe('runEval', () => {
           query: 'Please answer in two sentences for a user whose role is "{{purpose | trim}}".',
         },
         assert: [{ type: 'promptfoo:redteam:ascii-smuggling' }],
-        metadata: {
-          pluginId: 'ascii-smuggling',
-        },
+        metadata: createAsciiSmugglingMetadata(),
       },
-      testSuite: {
-        providers: [],
-        prompts: [],
-      } as unknown as TestSuite,
+      testSuite: createEmptyEvaluationConfig() as unknown as TestSuite,
       conversations: {},
       registers: {},
       isRedteam: false,
@@ -851,14 +1157,9 @@ describe('runEval', () => {
             assert: [{ type: 'promptfoo:redteam:ascii-smuggling' }],
           },
         ],
-        metadata: {
-          pluginId: 'ascii-smuggling',
-        },
+        metadata: createAsciiSmugglingMetadata(),
       },
-      testSuite: {
-        providers: [],
-        prompts: [],
-      } as unknown as TestSuite,
+      testSuite: createEmptyEvaluationConfig() as unknown as TestSuite,
       conversations: {},
       registers: {},
       isRedteam: false,
@@ -878,14 +1179,9 @@ describe('runEval', () => {
           name: 'Alice',
           query: 'Hello {{name}}',
         },
-        metadata: {
-          pluginId: 'ascii-smuggling',
-        },
+        metadata: createAsciiSmugglingMetadata(),
       },
-      testSuite: {
-        providers: [],
-        prompts: [],
-      } as unknown as TestSuite,
+      testSuite: createEmptyEvaluationConfig() as unknown as TestSuite,
       conversations: {},
       registers: {},
       isRedteam: false,
@@ -955,10 +1251,7 @@ describe('runEval', () => {
           // on a real timer.
           await Promise.resolve();
           vi.advanceTimersByTime(50);
-          return {
-            output: 'Test output',
-            tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-          };
+          return createTokenOutput();
         }),
       };
 
@@ -1002,5 +1295,136 @@ describe('runEval', () => {
 
       expect(results[0].latencyMs).toBe(0);
     });
+  });
+
+  it.each(['already-aborted', 'during-delay', 'ordinary', 'cached'] as const)(
+    'preserves completed provider diagnostics through %s delay handling',
+    async (phase) => {
+      const actualTime =
+        await vi.importActual<typeof import('../../src/util/time')>('../../src/util/time');
+      vi.mocked(sleep).mockImplementation(actualTime.sleep);
+      vi.useFakeTimers({
+        toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'],
+      });
+      const registry = new RateLimitRegistry({ maxConcurrency: 1 });
+      const controller = new AbortController();
+      const reason = Object.freeze(
+        Object.assign(new Error('caller stopped'), { name: 'AbortException' }),
+      );
+      const response = {
+        error: 'Completed callback diagnostic',
+        cost: 0.25,
+        tokenUsage: { prompt: 2, completion: 3, total: 5, numRequests: 1 },
+        metadata: { errorOrigin: 'tool' as const },
+        cached: phase === 'cached',
+      };
+      const provider: ApiProvider = {
+        id: () => 'completed-diagnostic',
+        delay: 60000,
+        callApi: vi.fn(async () => {
+          if (phase === 'already-aborted') {
+            controller.abort(reason);
+          }
+          return response;
+        }),
+      };
+      let outcome: { rows: Awaited<ReturnType<typeof runEval>> } | { error: unknown } | undefined;
+      const pending = runEval({
+        ...defaultOptions,
+        provider,
+        prompt: { raw: 'Test prompt', label: 'test-label' },
+        test: {},
+        abortSignal: controller.signal,
+        rateLimitRegistry: registry,
+      }).then(
+        (rows) => {
+          outcome = { rows };
+        },
+        (error: unknown) => {
+          outcome = { error };
+        },
+      );
+      try {
+        await vi.advanceTimersByTimeAsync(0);
+        expect(provider.callApi).toHaveBeenCalledOnce();
+        if (phase === 'ordinary' || phase === 'during-delay') {
+          expect(outcome).toBeUndefined();
+        }
+        if (phase === 'during-delay') {
+          controller.abort(reason);
+          await vi.advanceTimersByTimeAsync(0);
+        } else if (phase === 'ordinary') {
+          await vi.advanceTimersByTimeAsync(59999);
+          expect(outcome).toBeUndefined();
+          await vi.advanceTimersByTimeAsync(1);
+        }
+        await pending;
+        expect(outcome).toBeDefined();
+        if (!outcome || 'error' in outcome) {
+          throw new Error('runEval did not settle with a result');
+        }
+        const [row] = outcome.rows;
+        expect(row.error).toBe(response.error);
+        expect(row.response?.cost).toBe(0.25);
+        expect(row.response?.tokenUsage).toMatchObject({ prompt: 2, completion: 3, total: 5 });
+        expect(row.success).toBe(false);
+        expect(row.failureReason).toBe(ResultFailureReason.ERROR);
+        expect(provider.callApi).toHaveBeenCalledOnce();
+        expect(
+          Object.values(registry.getMetrics()).every(
+            (m) => m.activeRequests === 0 && m.queueDepth === 0,
+          ),
+        ).toBe(true);
+        // Check this evaluation's cleanup without counting unrelated worker timers.
+        expect(getEventListeners(controller.signal, 'abort')).toHaveLength(0);
+      } finally {
+        registry.dispose();
+        await vi.advanceTimersByTimeAsync(60000);
+        await pending;
+        vi.mocked(sleep).mockReset();
+      }
+    },
+  );
+
+  it.each([
+    { description: 'caller AbortException', name: 'AbortException', aborted: true, logged: false },
+    { description: 'independent SDK AbortError', name: 'AbortError', aborted: false, logged: true },
+    {
+      description: 'unrelated error during caller cancellation',
+      name: 'SyntaxError',
+      aborted: true,
+      logged: true,
+    },
+  ])('classifies provider logging for $description', async ({ name, aborted, logged }) => {
+    const controller = new AbortController();
+    const error = Object.freeze(Object.assign(new Error('Exact provider diagnostic'), { name }));
+    const errorLog = vi.spyOn(logger, 'error').mockImplementation(() => logger);
+    const provider: ApiProvider = {
+      id: () => 'logging-control',
+      callApi: vi.fn(async () => {
+        if (aborted) {
+          controller.abort(error);
+        }
+        throw error;
+      }),
+    };
+    const [row] = await runEval({
+      ...defaultOptions,
+      provider,
+      prompt: { raw: 'Test prompt', label: 'test-label' },
+      test: {},
+      abortSignal: controller.signal,
+    });
+    expect(row.error).toContain('Exact provider diagnostic');
+    expect(row.failureReason).toBe(ResultFailureReason.ERROR);
+    expect(row.success).toBe(false);
+    expect(provider.callApi).toHaveBeenCalledOnce();
+    expect(error.name).toBe(name);
+    if (aborted) {
+      expect(controller.signal.reason).toBe(error);
+    }
+    expect(
+      errorLog.mock.calls.filter(([message]) => message === 'Provider call failed during eval'),
+    ).toHaveLength(logged ? 1 : 0);
   });
 });
