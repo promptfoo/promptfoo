@@ -1,0 +1,37 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["status", "intelligibility", "transcript", "summary", "findings"],
+  "properties": {
+    "status": { "enum": ["no_issue_flagged", "review_required", "unratable"] },
+    "intelligibility": { "enum": ["clear", "partly_unclear", "unintelligible", "no_speech"] },
+    "transcript": { "type": "string", "maxLength": 20000 },
+    "summary": { "type": "string", "minLength": 1, "maxLength": 2000 },
+    "findings": {
+      "type": "array",
+      "maxItems": 30,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["type", "severity", "start_seconds", "end_seconds", "description"],
+        "properties": {
+          "type": {
+            "enum": [
+              "dropout",
+              "repetition",
+              "distortion",
+              "cutoff",
+              "unwanted_silence",
+              "overlap",
+              "other"
+            ]
+          },
+          "severity": { "enum": ["minor", "major", "uncertain"] },
+          "start_seconds": { "type": ["number", "null"], "minimum": 0 },
+          "end_seconds": { "type": ["number", "null"], "minimum": 0 },
+          "description": { "type": "string", "minLength": 1, "maxLength": 2000 }
+        }
+      }
+    }
+  }
+}
