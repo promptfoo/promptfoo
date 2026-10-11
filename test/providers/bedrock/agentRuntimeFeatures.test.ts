@@ -1,3 +1,5 @@
+import { Readable } from 'stream';
+
 import {
   BedrockAgentRuntimeClient,
   InvokeAgentCommand,
@@ -1053,5 +1055,152 @@ it.each([
       registry.dispose();
       restoreScheduler();
     }
+  },
+);
+
+function agentStreamResponse(client: BedrockAgentRuntimeClient, throttle = false) {
+  async function* messages() {
+    yield { type: 'chunk', body: { bytes: Buffer.from('answer').toString('base64') } };
+    if (throttle) {
+      yield { type: 'throttlingException', body: { message: 'fixture throttle' } };
+    }
+  }
+  return {
+    response: {
+      statusCode: 200,
+      headers: { 'content-type': 'application/vnd.amazon.eventstream' },
+      body: Readable.from(
+        client.config.eventStreamMarshaller.serialize(messages(), ({ type, body }) => ({
+          headers: {
+            ':message-type': {
+              type: 'string',
+              value: type === 'throttlingException' ? 'exception' : 'event',
+            },
+            [type === 'throttlingException' ? ':exception-type' : ':event-type']: {
+              type: 'string',
+              value: type,
+            },
+            ':content-type': { type: 'string', value: 'application/json' },
+          },
+          body: Buffer.from(JSON.stringify(body)),
+        })),
+      ),
+    },
+  };
+}
+
+describe.each([false, true])(
+  'Agent streamFinalResponse=%s retry ownership',
+  (streamFinalResponse) => {
+    it.each(['existing-session', undefined])(
+      'keeps SDK attempts bounded after client initialization (session: %s)',
+      async (sessionId) => {
+        const restore = mockProcessEnv({ AWS_BEDROCK_MAX_RETRIES: '2' });
+        const provider = new AwsBedrockAgentsProvider('AGENT12345', {
+          config: {
+            agentId: 'AGENT12345',
+            agentAliasId: 'ALIAS12345',
+            region: 'us-east-1',
+            accessKeyId: 'LOCAL_FIXTURE',
+            secretAccessKey: 'LOCAL_FIXTURE',
+            sessionId,
+          },
+        });
+        const initial = await provider.getAgentRuntimeClient();
+        vi.spyOn(initial.config.requestHandler, 'handle').mockImplementation(async () =>
+          agentStreamResponse(initial),
+        );
+        expect((await provider.callApi('first turn')).output).toBe('answer');
+        provider.config.streamingConfigurations = { streamFinalResponse };
+        const client = await provider.getAgentRuntimeClient();
+        const requests: string[] = [];
+        vi.spyOn(client.config.requestHandler, 'handle').mockImplementation(async (request) => {
+          requests.push(request.path);
+          if (requests.length === 1) {
+            throw Object.assign(new Error('connection reset after acceptance'), {
+              code: 'ECONNRESET',
+            });
+          }
+          return agentStreamResponse(client);
+        });
+        try {
+          const result = await provider.callApi('continue');
+          expect(requests).toHaveLength(streamFinalResponse ? 1 : 2);
+          if (streamFinalResponse) {
+            expect(client).not.toBe(initial);
+            expect(result.error).toContain('connection reset after acceptance');
+            expect(result.output).toBeUndefined();
+          } else {
+            expect(client).toBe(initial);
+            expect(result.error).toBeUndefined();
+            expect(result.output).toBe('answer');
+            expect(requests[0]).toBe(requests[1]);
+          }
+          if (sessionId) {
+            expect(requests[0]).toContain(`/sessions/${sessionId}/`);
+          }
+        } finally {
+          initial.destroy();
+          if (client !== initial) {
+            client.destroy();
+          }
+          restore();
+        }
+      },
+    );
+
+    it.each([
+      { sessionId: 'existing-session', disabled: false },
+      { sessionId: undefined, disabled: false },
+      { sessionId: 'existing-session', disabled: true },
+      { sessionId: undefined, disabled: true },
+    ])(
+      'does not replay a modeled SDK throttle after partial output (session: $sessionId, scheduler disabled: $disabled)',
+      async ({ sessionId, disabled }) => {
+        vi.useFakeTimers();
+        const restore = mockProcessEnv({ PROMPTFOO_DISABLE_ADAPTIVE_SCHEDULER: String(disabled) });
+        const provider = new AwsBedrockAgentsProvider('AGENT12345', {
+          config: {
+            agentId: 'AGENT12345',
+            agentAliasId: 'ALIAS12345',
+            region: 'us-east-1',
+            accessKeyId: 'LOCAL_FIXTURE',
+            secretAccessKey: 'LOCAL_FIXTURE',
+            sessionId,
+            streamingConfigurations: { streamFinalResponse },
+          },
+        });
+        const client = await provider.getAgentRuntimeClient();
+        const handle = vi
+          .spyOn(client.config.requestHandler, 'handle')
+          .mockImplementation(async () => agentStreamResponse(client, true));
+        const registry = new RateLimitRegistry({ maxConcurrency: 4, queueTimeoutMs: 0 });
+        try {
+          const pending = registry.execute(
+            provider,
+            () => provider.callApi('continue'),
+            createProviderRateLimitOptions(),
+          );
+          await vi.runAllTimersAsync();
+          const result = await pending;
+          expect(result.error).toContain('Rate limit exceeded');
+          expect(result.output).toBeUndefined();
+          expect(handle).toHaveBeenCalledOnce();
+          if (!disabled) {
+            expect(Object.values(registry.getMetrics())[0]).toMatchObject({
+              rateLimitHits: 1,
+              retriedRequests: 0,
+              failedRequests: 1,
+              completedRequests: 0,
+              maxConcurrency: 2,
+            });
+          }
+        } finally {
+          client.destroy();
+          registry.dispose();
+          restore();
+        }
+      },
+    );
   },
 );

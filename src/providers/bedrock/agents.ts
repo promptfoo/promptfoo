@@ -5,6 +5,7 @@ import telemetry from '../../telemetry';
 import { AwsBedrockGenericProvider } from './base';
 import { isValidBedrockRetrievalFilter } from './retrievalFilter';
 import {
+  assertBedrockByteView,
   createBedrockRequestHandler,
   decodeBedrockBytes,
   hashBedrockConfig,
@@ -171,6 +172,7 @@ interface BedrockAgentsOptions {
  */
 export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implements ApiProvider {
   private agentRuntimeClient?: BedrockAgentRuntimeClient;
+  private singleAttemptAgentRuntimeClient?: BedrockAgentRuntimeClient;
   config: BedrockAgentsOptions; // Make public to match base class
 
   constructor(
@@ -192,6 +194,20 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
       agentId: options.config?.agentId || agentId,
     } as BedrockAgentsOptions;
 
+    // Validate before eval persistence erases unsupported native view types.
+    for (const file of this.config.sessionState?.files ?? []) {
+      assertBedrockByteView(file.source?.byteContent?.data);
+    }
+    for (const entry of this.config.sessionState?.returnControlInvocationResults ?? []) {
+      for (const result of [entry.functionResult, entry.apiResult]) {
+        for (const body of Object.values(result?.responseBody ?? {})) {
+          for (const image of body.images ?? []) {
+            assertBedrockByteView(image.source?.bytes);
+          }
+        }
+      }
+    }
+
     // Record telemetry
     telemetry.record('feature_used', {
       feature: 'bedrock-agents',
@@ -207,11 +223,18 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
     return `[AWS Bedrock Agents Provider ${this.config.agentId}]`;
   }
 
+  get handlesOwnRetries(): boolean {
+    // Every InvokeAgent response is an event stream; replay can repeat accepted actions.
+    return true;
+  }
+
   /**
    * Get or create the Bedrock Agent Runtime client
    */
   async getAgentRuntimeClient(): Promise<BedrockAgentRuntimeClient> {
-    if (!this.agentRuntimeClient) {
+    const singleAttempt = this.config.streamingConfigurations?.streamFinalResponse === true;
+    const clientProperty = singleAttempt ? 'singleAttemptAgentRuntimeClient' : 'agentRuntimeClient';
+    if (!this[clientProperty]) {
       // Use a custom handler when a proxy is configured.
       const handler = hasProxyEnv() ? await createBedrockRequestHandler() : undefined;
 
@@ -219,9 +242,10 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
         const { BedrockAgentRuntimeClient } = await import('@aws-sdk/client-bedrock-agent-runtime');
         const credentials = await this.getCredentials(false);
 
-        this.agentRuntimeClient = new BedrockAgentRuntimeClient({
+        this[clientProperty] = new BedrockAgentRuntimeClient({
           region: this.getRegion(),
-          maxAttempts: getEnvInt('AWS_BEDROCK_MAX_RETRIES', 10),
+          // Keep a separate client because the SDK caches its retry strategy.
+          maxAttempts: singleAttempt ? 1 : getEnvInt('AWS_BEDROCK_MAX_RETRIES', 10),
           retryMode: 'adaptive',
           ...(handler ? { requestHandler: handler } : {}),
           ...(credentials ? { credentials } : {}),
@@ -233,7 +257,7 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
         );
       }
     }
-    return this.agentRuntimeClient;
+    return this[clientProperty];
   }
 
   /**
@@ -277,6 +301,41 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
           }
         : {}),
     };
+    if (configured?.returnControlInvocationResults) {
+      sessionState.returnControlInvocationResults = configured.returnControlInvocationResults.map(
+        (entry) => {
+          const normalized = { ...entry };
+          for (const key of ['functionResult', 'apiResult'] as const) {
+            const result = entry[key];
+            if (result?.responseBody) {
+              normalized[key] = {
+                ...result,
+                responseBody: Object.fromEntries(
+                  Object.entries(result.responseBody).map(([contentType, body]) => [
+                    contentType,
+                    {
+                      ...body,
+                      ...(body.images
+                        ? {
+                            images: body.images.map((image) => ({
+                              ...image,
+                              source:
+                                image.source?.bytes === undefined
+                                  ? image.source
+                                  : { bytes: decodeBedrockBytes(image.source.bytes)! },
+                            })),
+                          }
+                        : {}),
+                    },
+                  ]),
+                ),
+              };
+            }
+          }
+          return normalized;
+        },
+      );
+    }
 
     return sessionState;
   }

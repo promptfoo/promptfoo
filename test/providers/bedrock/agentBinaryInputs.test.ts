@@ -1,4 +1,5 @@
 import { randomUUID } from 'crypto';
+import { runInNewContext } from 'vm';
 
 import { BedrockAgentRuntimeClient } from '@aws-sdk/client-bedrock-agent-runtime';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -8,6 +9,7 @@ import { AwsBedrockAgentsProvider } from '../../../src/providers/bedrock/agents'
 import { AwsBedrockKnowledgeBaseProvider } from '../../../src/providers/bedrock/knowledgeBase';
 import { decodeBedrockBytes } from '../../../src/providers/bedrock/util';
 import { loadApiProvider } from '../../../src/providers/index';
+import { mockProcessEnv } from '../../util/utils';
 
 import type { ProviderOptions } from '../../../src/types/providers';
 
@@ -19,12 +21,80 @@ vi.mock('../../../src/cache', async (importOriginal) => ({
 beforeAll(async () => runDbMigrations());
 afterEach(() => vi.restoreAllMocks());
 
-describe.each(['Uint8Array', 'Buffer'])('Agent Runtime native %s inputs', (type) => {
-  it.each(['agent', 'knowledge-base', 'knowledge-base-stream'])(
+function binaryConfig(kind: string, data: unknown) {
+  if (kind === 'agent') {
+    return {
+      agentAliasId: 'ALIAS12345',
+      sessionState: {
+        files: [
+          {
+            name: 'reference.txt',
+            useCase: 'CHAT',
+            source: {
+              sourceType: 'BYTE_CONTENT',
+              byteContent: { mediaType: 'text/plain', data },
+            },
+          },
+        ],
+      },
+    };
+  }
+  if (kind === 'functionResult' || kind === 'apiResult') {
+    return {
+      agentAliasId: 'ALIAS12345',
+      sessionState: {
+        invocationId: 'invocation',
+        returnControlInvocationResults: [
+          {
+            [kind]: {
+              actionGroup: 'computer',
+              function: 'screenshot',
+              apiPath: '/screenshot',
+              httpMethod: 'GET',
+              httpStatusCode: 200,
+              responseBody: {
+                IMAGES: {
+                  body: 'preserved annotation',
+                  images: [{ format: 'PNG', source: { bytes: data } }],
+                },
+              },
+            },
+          },
+        ],
+      },
+    };
+  }
+  return {
+    streaming: kind === 'knowledge-base-stream',
+    retrieveAndGenerateConfiguration: {
+      type: 'EXTERNAL_SOURCES',
+      externalSourcesConfiguration: {
+        modelArn: 'model',
+        sources: [
+          {
+            sourceType: 'BYTE_CONTENT',
+            byteContent: {
+              identifier: 'reference.txt',
+              contentType: 'text/plain',
+              data,
+            },
+          },
+        ],
+      },
+    },
+  };
+}
+
+describe.each(['Uint8Array', 'Buffer', 'base64'])('Agent Runtime native %s inputs', (type) => {
+  it.each(['agent', 'functionResult', 'apiResult', 'knowledge-base', 'knowledge-base-stream'])(
     'preserves bytes and identity through persisted %s config replay',
     async (kind) => {
       const data =
-        type === 'Buffer' ? Buffer.from('abc') : new Uint8Array([0, 97, 98, 99, 0]).subarray(1, 4);
+        type === 'base64'
+          ? 'YWJj'
+          : type === 'Buffer'
+            ? Buffer.from('abc')
+            : new Uint8Array([0, 97, 98, 99, 0]).subarray(1, 4);
       const handle = vi.fn(async (_request: { body?: unknown }) => ({
         response: {
           statusCode: 400,
@@ -41,45 +111,11 @@ describe.each(['Uint8Array', 'Buffer'])('Agent Runtime native %s inputs', (type)
         credentials: { accessKeyId: 'LOCAL_FIXTURE', secretAccessKey: 'LOCAL_FIXTURE' },
         requestHandler: { handle },
       });
-      const config =
-        kind === 'agent'
-          ? {
-              agentAliasId: 'ALIAS12345',
-              sessionState: {
-                files: [
-                  {
-                    name: 'reference.txt',
-                    useCase: 'CHAT',
-                    source: {
-                      sourceType: 'BYTE_CONTENT',
-                      byteContent: { mediaType: 'text/plain', data },
-                    },
-                  },
-                ],
-              },
-            }
-          : {
-              streaming: kind === 'knowledge-base-stream',
-              retrieveAndGenerateConfiguration: {
-                type: 'EXTERNAL_SOURCES',
-                externalSourcesConfiguration: {
-                  modelArn: 'model',
-                  sources: [
-                    {
-                      sourceType: 'BYTE_CONTENT',
-                      byteContent: {
-                        identifier: 'reference.txt',
-                        contentType: 'text/plain',
-                        data,
-                      },
-                    },
-                  ],
-                },
-              },
-            };
+      const config = binaryConfig(kind, data);
+      const isAgent = !kind.startsWith('knowledge-base');
       try {
         const reference = {
-          id: kind === 'agent' ? 'bedrock-agent:AGENT12345' : 'bedrock:kb:default',
+          id: isAgent ? 'bedrock-agent:AGENT12345' : 'bedrock:kb:default',
           config: { region: 'us-east-1', ...config },
         };
         const original = await loadApiProvider(reference.id, { options: reference });
@@ -89,7 +125,7 @@ describe.each(['Uint8Array', 'Buffer'])('Agent Runtime native %s inputs', (type)
         const replay = await loadApiProvider(restoredReference.id!, { options: restoredReference });
         expect(replay.id()).toBe(original.id());
         for (const provider of [original, replay]) {
-          if (kind === 'agent') {
+          if (isAgent) {
             expect(provider).toBeInstanceOf(AwsBedrockAgentsProvider);
             vi.spyOn(
               provider as AwsBedrockAgentsProvider,
@@ -113,9 +149,18 @@ describe.each(['Uint8Array', 'Buffer'])('Agent Runtime native %s inputs', (type)
           const sent =
             kind === 'agent'
               ? body.sessionState.files[0].source.byteContent.data
-              : body.retrieveAndGenerateConfiguration.externalSourcesConfiguration.sources[0]
-                  .byteContent.data;
+              : isAgent
+                ? body.sessionState.returnControlInvocationResults[0][kind].responseBody.IMAGES
+                    .images[0].source.bytes
+                : body.retrieveAndGenerateConfiguration.externalSourcesConfiguration.sources[0]
+                    .byteContent.data;
           expect(sent).toBe('YWJj');
+          if (kind === 'functionResult' || kind === 'apiResult') {
+            const result = body.sessionState.returnControlInvocationResults[0][kind];
+            expect(result.actionGroup).toBe('computer');
+            expect(result.responseBody.IMAGES.body).toBe('preserved annotation');
+            expect(result.responseBody.IMAGES.images[0].format).toBe('PNG');
+          }
         }
       } finally {
         client.destroy();
@@ -205,3 +250,60 @@ it.each(['agent', 'knowledge-base'])(
     expect(send).not.toHaveBeenCalled();
   },
 );
+
+describe.each(['agent', 'functionResult', 'apiResult', 'knowledge-base'])(
+  '%s binary input validation',
+  (kind) => {
+    it.each([
+      new DataView(new Uint8Array([97, 98, 99]).buffer),
+      new Uint16Array([97, 98, 99]),
+      new Int8Array([97]),
+      new Float32Array([1]),
+    ])(
+      'rejects unsupported native views through the public loader before persistence: %s',
+      async (data) => {
+        const save = vi.spyOn(Eval, 'create');
+        const send = vi.spyOn(BedrockAgentRuntimeClient.prototype, 'send');
+        const reference = {
+          id: kind === 'knowledge-base' ? 'bedrock:kb:default' : 'bedrock-agent:AGENT12345',
+          config: binaryConfig(kind, data),
+        };
+        await expect(async () => {
+          await loadApiProvider(reference.id, { options: reference });
+          await Eval.create({ providers: [reference] }, [], { id: randomUUID() });
+        }).rejects.toThrow('use a Uint8Array, Buffer, or base64 string');
+        expect(save).not.toHaveBeenCalled();
+        expect(send).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each([new ArrayBuffer(3), new SharedArrayBuffer(3)])(
+      'rejects visible raw array buffers',
+      async (data) => {
+        const restore = mockProcessEnv({ PROMPTFOO_DISABLE_TEMPLATING: 'true' });
+        try {
+          await expect(
+            loadApiProvider(
+              kind === 'knowledge-base' ? 'bedrock:kb:default' : 'bedrock-agent:AGENT12345',
+              {
+                options: { config: binaryConfig(kind, data) },
+              },
+            ),
+          ).rejects.toThrow('use a Uint8Array, Buffer, or base64 string');
+          expect(() => decodeBedrockBytes(data)).toThrow(
+            'use a Uint8Array, Buffer, or base64 string',
+          );
+        } finally {
+          restore();
+        }
+      },
+    );
+  },
+);
+
+it('accepts cross-realm Uint8Array and serialized empty bytes', () => {
+  expect(decodeBedrockBytes(runInNewContext('new Uint8Array([97, 98, 99])'))).toEqual(
+    Buffer.from('abc'),
+  );
+  expect(decodeBedrockBytes({})).toEqual(new Uint8Array());
+});

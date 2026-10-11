@@ -1,3 +1,4 @@
+import { isAnyArrayBuffer, isUint8Array } from 'util/types';
 import type { Agent } from 'http';
 
 import { getEnvString } from '../../envars';
@@ -13,8 +14,16 @@ const REQUEST_TIMEOUT_MS = 300_000; // 5 minutes
  */
 export const INFERENCE_PROFILE_PREFIX = /^(?:us|us-gov|eu|apac|global|jp|au|ca|in)\./;
 
+/** Reject native binary types that cannot round-trip through saved eval JSON. */
+export function assertBedrockByteView(data: unknown): void {
+  if ((ArrayBuffer.isView(data) && !isUint8Array(data)) || isAnyArrayBuffer(data)) {
+    throw new Error('Invalid Bedrock byte content: use a Uint8Array, Buffer, or base64 string.');
+  }
+}
+
 /** Decode declared AWS blob fields, including the byte forms stored in eval JSON. */
 export function decodeBedrockBytes(data: unknown): Uint8Array | undefined {
+  assertBedrockByteView(data);
   if (data === undefined) {
     return undefined;
   }
@@ -30,7 +39,7 @@ export function decodeBedrockBytes(data: unknown): Uint8Array | undefined {
     return Buffer.from(data.buffer, data.byteOffset, data.byteLength);
   }
   const invalid =
-    'Invalid Bedrock byte content: expected base64 or a native/serialized byte array.';
+    'Invalid Bedrock byte content: expected base64 or a native/serialized Uint8Array or Buffer.';
   if (!data || typeof data !== 'object' || Array.isArray(data)) {
     throw new Error(invalid);
   }
