@@ -4,12 +4,40 @@ import { useState } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot, type Root } from 'react-dom/client';
 
-import { afterEach, expect, it } from 'vitest';
+import { TooltipProvider } from '@app/components/ui/tooltip';
+import { afterEach, expect, it, vi } from 'vitest';
 import { page, userEvent } from 'vitest/browser';
 import { DEFAULT_BEDROCK_TARGET_ID } from '../constants';
-import FoundationModelConfiguration from './FoundationModelConfiguration';
+import ProviderConfigEditor from './ProviderConfigEditor';
 
 import type { ProviderOptions } from '../../types';
+
+// Keep the parent editor's config updates real while isolating application services.
+vi.mock('../../hooks/useRedTeamConfig', () => ({
+  useRedTeamConfig: () => ({ config: {}, updateConfig: vi.fn() }),
+}));
+vi.mock('../../hooks/useRedTeamTargetConfigValidation', () => ({
+  useRedTeamTargetConfigValidation: () => ({
+    targetConfigError: null,
+    targetConfigDraft: null,
+    clearTargetConfigValidation: vi.fn(),
+  }),
+}));
+vi.mock('@app/utils/api', () => ({
+  callApi: vi.fn(() => {
+    throw new Error('Unexpected app API request in provider editor test');
+  }),
+  getApiBaseUrl: () => '',
+  fetchUserEmail: vi.fn(),
+  fetchUserId: vi.fn(),
+  updateEvalAuthor: vi.fn(),
+}));
+vi.mock('@app/hooks/useTelemetry', () => ({
+  useTelemetry: () => ({ recordEvent: vi.fn() }),
+}));
+vi.mock('@app/stores/userStore', () => ({
+  useUserStore: () => ({ email: null, isLoading: false, fetchEmail: vi.fn(), setEmail: vi.fn() }),
+}));
 
 let root: Root | undefined;
 let container: HTMLDivElement | undefined;
@@ -17,24 +45,10 @@ let container: HTMLDivElement | undefined;
 function Editor({ initial }: { initial: ProviderOptions }) {
   const [target, setTarget] = useState(initial);
   return (
-    <>
-      <FoundationModelConfiguration
-        selectedTarget={target}
-        providerType="bedrock"
-        updateCustomTarget={(field, value) => {
-          setTarget((previous) => {
-            if (field === 'id') {
-              return { ...previous, id: value as string };
-            }
-            if (field === 'config') {
-              return { ...previous, config: value as ProviderOptions['config'] };
-            }
-            return { ...previous, config: { ...previous.config, [field]: value } };
-          });
-        }}
-      />
+    <TooltipProvider>
+      <ProviderConfigEditor provider={target} setProvider={setTarget} providerType="bedrock" />
       <output data-testid="saved-target">{JSON.stringify(target)}</output>
-    </>
+    </TooltipProvider>
   );
 }
 
@@ -532,4 +546,104 @@ it('leaves two null Converse limits unset until the user enters a cap', async ()
   await expect
     .element(page.getByTestId('saved-target'))
     .toHaveTextContent(JSON.stringify({ id, config: { max_tokens: 64 } }));
+});
+
+const mcpConfig = {
+  enabled: true,
+  servers: [{ name: 'local-fixture', url: 'http://127.0.0.1:1/mcp' }],
+};
+
+it.each([
+  {
+    mode: 'runtime-chat',
+    id: 'bedrock:runtime:chat:qwen.qwen3-coder-next',
+    converseId: 'bedrock:converse:qwen.qwen3-coder-next',
+    capKey: 'max_completion_tokens',
+  },
+  {
+    mode: 'chat',
+    id: 'bedrock:mantle:openai.gpt-oss-120b',
+    converseId: 'bedrock:converse:openai.gpt-oss-120b-1:0',
+    capKey: 'max_tokens',
+  },
+  {
+    mode: 'messages',
+    id: 'bedrock:messages:us.anthropic.claude-fable-5-1',
+    converseId: 'bedrock:converse:us.anthropic.claude-fable-5-1',
+    capKey: 'max_tokens',
+  },
+])(
+  'keeps MCP configured across $mode and Converse switches in the parent editor',
+  async ({ mode, id, converseId, capKey }) => {
+    const config = { region: 'us-west-2', mcp: mcpConfig, [capKey]: 128 };
+    renderEditor({ id, config });
+    const serverUrl = page.getByLabelText('URL', { exact: true });
+    expect(document.getElementById('mcp-server-0-url')).not.toBeNull();
+    await expect.element(serverUrl).toHaveValue(mcpConfig.servers[0].url);
+    const api = page.getByLabelText('Bedrock API', { exact: false });
+    await api.selectOptions('converse');
+    await expect.element(api).toHaveValue('converse');
+    expect(JSON.parse(page.getByTestId('saved-target').element().textContent!)).toEqual({
+      id: converseId,
+      config: { region: 'us-west-2', mcp: mcpConfig, max_tokens: 128 },
+    });
+    await api.selectOptions(mode);
+    await expect.element(api).toHaveValue(mode);
+    expect(JSON.parse(page.getByTestId('saved-target').element().textContent!)).toEqual({
+      id,
+      config,
+    });
+    await serverUrl.fill('http://127.0.0.1:2/mcp');
+    expect(JSON.parse(page.getByTestId('saved-target').element().textContent!)).toEqual({
+      id,
+      config: {
+        ...config,
+        mcp: { enabled: true, servers: [{ name: 'local-fixture', url: 'http://127.0.0.1:2/mcp' }] },
+      },
+    });
+  },
+);
+
+it.each([
+  {
+    mode: 'invoke',
+    source: 'bedrock:runtime:chat:openai.gpt-oss-120b-1:0',
+    destination: 'bedrock:openai.gpt-oss-120b-1:0',
+  },
+  {
+    mode: 'responses',
+    source: 'bedrock:mantle:openai.gpt-oss-120b',
+    destination: 'bedrock:responses:openai.gpt-oss-120b',
+  },
+  {
+    mode: 'runtime-responses',
+    source: 'bedrock:runtime:chat:us.openai.gpt-5.6-sol',
+    destination: 'bedrock:runtime:responses:us.openai.gpt-5.6-sol',
+  },
+])(
+  'removes client MCP only when switching to unsupported $mode in the parent editor',
+  async ({ mode, source, destination }) => {
+    renderEditor({ id: source, config: { region: 'us-east-1', mcp: mcpConfig } });
+    await page.getByLabelText('Bedrock API', { exact: false }).selectOptions(mode);
+    expect(JSON.parse(page.getByTestId('saved-target').element().textContent!)).toEqual({
+      id: destination,
+      config: { region: 'us-east-1' },
+    });
+    await expect.element(page.getByRole('button', { name: /MCP Servers/ })).not.toBeInTheDocument();
+  },
+);
+
+it('preserves MCP while typing a Converse model ID', async () => {
+  const config = { region: 'us-west-2', mcp: mcpConfig, max_tokens: 128 };
+  renderEditor({ id: 'bedrock:converse:qwen.qwen3-coder-next', config });
+  const model = page.getByLabelText('Model ID', { exact: false });
+  await model.fill('');
+  await userEvent.type(model, 'openai.gpt-oss-120b-1:0');
+  await expect
+    .element(page.getByLabelText('Bedrock API', { exact: false }))
+    .toHaveValue('converse');
+  expect(JSON.parse(page.getByTestId('saved-target').element().textContent!)).toEqual({
+    id: 'bedrock:converse:openai.gpt-oss-120b-1:0',
+    config,
+  });
 });

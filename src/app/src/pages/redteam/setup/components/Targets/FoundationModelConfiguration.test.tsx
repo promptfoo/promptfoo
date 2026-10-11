@@ -426,7 +426,7 @@ describe('FoundationModelConfiguration', () => {
     );
   });
 
-  it('should switch Bedrock to Responses ids without showing Converse-only MCP settings', async () => {
+  it('should switch Bedrock to Responses ids without showing client MCP settings', async () => {
     const user = userEvent.setup();
     render(
       <FoundationModelConfiguration
@@ -809,7 +809,11 @@ describe('FoundationModelConfiguration', () => {
       expect(screen.getByLabelText(/Model ID/i)).toHaveValue(model);
       expect(screen.getByText(`Provider ID: ${id}.`, { exact: false })).toBeInTheDocument();
       expect(mockUpdateCustomTarget).not.toHaveBeenCalled();
-      expect(screen.queryByText('MCP Servers')).not.toBeInTheDocument();
+      if (mode === 'chat' || mode === 'messages') {
+        expect(screen.getByText('MCP Servers')).toBeInTheDocument();
+      } else {
+        expect(screen.queryByText('MCP Servers')).not.toBeInTheDocument();
+      }
       expect(screen.queryByLabelText('Inference Model Type')).not.toBeInTheDocument();
       expect(screen.getByText(/Configure the AWS region and authentication/)).toBeInTheDocument();
       expect(screen.getByText(/model-specific default/)).toBeInTheDocument();
@@ -935,14 +939,16 @@ describe('FoundationModelConfiguration', () => {
     expect(mockUpdateCustomTarget).not.toHaveBeenCalled();
   });
 
-  it('should render Bedrock Converse MCP configuration and save servers under config.mcp', async () => {
+  it.each([
+    'bedrock:converse:anthropic.claude-3-5-sonnet-20241022-v2:0',
+    'bedrock:runtime:chat:qwen.qwen3-coder-next',
+    'bedrock:mantle:openai.gpt-oss-120b',
+    'bedrock:messages:us.anthropic.claude-fable-5-1',
+  ])('renders MCP configuration for %s and saves servers under config.mcp', async (id) => {
     const user = userEvent.setup();
     render(
       <FoundationModelConfiguration
-        selectedTarget={{
-          id: 'bedrock:converse:anthropic.claude-3-5-sonnet-20241022-v2:0',
-          config: {},
-        }}
+        selectedTarget={{ id, config: {} }}
         updateCustomTarget={mockUpdateCustomTarget}
         providerType="bedrock"
       />,

@@ -44,6 +44,16 @@ const BEDROCK_API_OPTIONS: { value: BedrockApiMode; label: string }[] = [
   { value: 'runtime-responses', label: 'Responses (Bedrock Runtime)' },
 ];
 
+/** APIs that run client-side tools configured under config.mcp. */
+function supportsBedrockMcp(apiMode?: BedrockApiMode): boolean {
+  return (
+    apiMode === 'converse' ||
+    apiMode === 'chat' ||
+    apiMode === 'runtime-chat' ||
+    apiMode === 'messages'
+  );
+}
+
 function resolveBedrockTokenLimit(
   mode?: BedrockApiMode,
   modelId = '',
@@ -282,6 +292,15 @@ const FoundationModelConfiguration = ({
       providerId: id,
     });
     updateProviderId(id, apiMode);
+    // Only an explicit API switch removes MCP. Partially typed model IDs can
+    // resolve to another API while the user's selected API is still unchanged.
+    if (
+      selectedTarget.config?.mcp !== undefined &&
+      supportsBedrockMcp(bedrockApiMode) &&
+      !supportsBedrockMcp(apiMode)
+    ) {
+      updateCustomTarget('mcp', undefined);
+    }
   };
 
   const updateMCPServers = (servers: MCPServerConfig[]) => {
@@ -536,10 +555,10 @@ const FoundationModelConfiguration = ({
           </p>
         </div>
 
-        {isBedrock && bedrockApiMode === 'converse' && (
+        {isBedrock && supportsBedrockMcp(bedrockApiMode) && (
           <SetupSection
             title="MCP Servers"
-            description="Configure Model Context Protocol servers for Bedrock Converse tool calling"
+            description="Configure Model Context Protocol servers for Bedrock tool calling"
             isExpanded={isMcpOpen}
             onExpandedChange={setIsMcpOpen}
             className="mt-4"
