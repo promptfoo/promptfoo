@@ -1529,6 +1529,11 @@ and Flex through these HTTP APIs. For US/global inference profiles,
 promptfoo estimates Priority at 1.75× Standard and Flex at 0.5× Standard. Its Converse
 and Invoke APIs remain Standard-only.
 
+Runtime cost estimates for GPT-6.1 Sol US/global inference profiles include its published
+Ultrafast rates. To request Ultrafast through Responses, set `service_tier: ultrafast`; see
+the [AWS model card](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-openai-gpt-6-1-sol.html)
+for current API and regional availability.
+
 The adapters inherit [OpenAI provider options](./openai.md), including streaming,
 client-side functions, structured output, multimodal input, and request fields through
 `passthrough`. Support depends on the chosen model and API. Configure Bedrock Guardrails
