@@ -5,6 +5,7 @@ import { BedrockAgentRuntimeClient } from '@aws-sdk/client-bedrock-agent-runtime
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { runDbMigrations } from '../../../src/migrate';
 import Eval from '../../../src/models/eval';
+import { evaluate } from '../../../src/node';
 import { AwsBedrockAgentsProvider } from '../../../src/providers/bedrock/agents';
 import { AwsBedrockKnowledgeBaseProvider } from '../../../src/providers/bedrock/knowledgeBase';
 import { decodeBedrockBytes } from '../../../src/providers/bedrock/util';
@@ -316,3 +317,99 @@ it('accepts cross-realm Uint8Array and serialized empty bytes', () => {
   );
   expect(decodeBedrockBytes({})).toEqual(new Uint8Array());
 });
+
+describe.each(['agent', 'functionResult', 'apiResult', 'knowledge-base', 'knowledge-base-stream'])(
+  '%s live-provider binary persistence',
+  (kind) => {
+    it.each(['base64', 'Buffer', 'Uint8Array', 'emptyUint8Array'])(
+      'preserves %s bytes through evaluate and replay while redacting credentials',
+      async (form) => {
+        const bytes = Buffer.from(Array.from({ length: 97 }, (_, index) => index));
+        const data =
+          form === 'base64'
+            ? bytes.toString('base64')
+            : form === 'Buffer'
+              ? bytes
+              : form === 'emptyUint8Array'
+                ? new Uint8Array()
+                : new Uint8Array([255, ...bytes, 255]).subarray(1, 98);
+        const config = {
+          region: 'us-east-1',
+          ...binaryConfig(kind, data),
+          apiKey: 'synthetic-api-key',
+          secretAccessKey: 'synthetic-secret-key',
+        };
+        const originalConfig = JSON.stringify(config);
+        const isAgent = !kind.startsWith('knowledge-base');
+        const original = await loadApiProvider(
+          isAgent ? 'bedrock-agent:AGENT12345' : 'bedrock:kb:default',
+          { options: { config } },
+        );
+        const handle = vi.fn(async (_request: { body?: unknown }) => ({
+          response: {
+            statusCode: 400,
+            headers: {
+              'content-type': 'application/json',
+              'x-amzn-errortype': 'ValidationException',
+            },
+            body: Buffer.from('{"message":"fixture request captured"}'),
+          },
+        }));
+        const client = new BedrockAgentRuntimeClient({
+          region: 'us-east-1',
+          maxAttempts: 1,
+          credentials: { accessKeyId: 'LOCAL_FIXTURE', secretAccessKey: 'LOCAL_FIXTURE' },
+          requestHandler: { handle },
+        });
+        const attachClient = (provider: typeof original) => {
+          if (isAgent) {
+            vi.spyOn(
+              provider as AwsBedrockAgentsProvider,
+              'getAgentRuntimeClient',
+            ).mockResolvedValue(client);
+          } else {
+            vi.spyOn(
+              provider as AwsBedrockKnowledgeBaseProvider,
+              'getKnowledgeBaseClient',
+            ).mockResolvedValue(client);
+          }
+        };
+        attachClient(original);
+        try {
+          const evaluated = await evaluate(
+            {
+              providers: [original],
+              prompts: ['fixture'],
+              tests: [{ description: 'live binary persistence' }],
+              writeLatestResults: true,
+            },
+            { cache: false, maxConcurrency: 1 },
+          );
+          const saved = await Eval.findById(evaluated.id);
+          const [reference] = saved!.config.providers as ProviderOptions[];
+          expect(reference.config?.apiKey).toBe('[REDACTED]');
+          expect(reference.config?.secretAccessKey).toBe('[REDACTED]');
+          const replay = await loadApiProvider(reference.id!, { options: reference });
+          attachClient(replay);
+          expect((await replay.callApi('fixture')).error).toContain('fixture request captured');
+          expect(handle).toHaveBeenCalledTimes(2);
+          for (const [request] of handle.mock.calls) {
+            const body = JSON.parse(String(request.body));
+            const sent =
+              kind === 'agent'
+                ? body.sessionState.files[0].source.byteContent.data
+                : isAgent
+                  ? body.sessionState.returnControlInvocationResults[0][kind].responseBody.IMAGES
+                      .images[0].source.bytes
+                  : body.retrieveAndGenerateConfiguration.externalSourcesConfiguration.sources[0]
+                      .byteContent.data;
+            expect(sent).toBe(form === 'emptyUint8Array' ? '' : bytes.toString('base64'));
+          }
+          expect(JSON.stringify(config)).toBe(originalConfig);
+        } finally {
+          client.destroy();
+        }
+      },
+    );
+  },
+);

@@ -5,7 +5,6 @@ import telemetry from '../../telemetry';
 import { AwsBedrockGenericProvider } from './base';
 import { isValidBedrockRetrievalFilter } from './retrievalFilter';
 import {
-  assertBedrockByteView,
   createBedrockRequestHandler,
   decodeBedrockBytes,
   hashBedrockConfig,
@@ -194,18 +193,9 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
       agentId: options.config?.agentId || agentId,
     } as BedrockAgentsOptions;
 
-    // Validate before eval persistence erases unsupported native view types.
-    for (const file of this.config.sessionState?.files ?? []) {
-      assertBedrockByteView(file.source?.byteContent?.data);
-    }
-    for (const entry of this.config.sessionState?.returnControlInvocationResults ?? []) {
-      for (const result of [entry.functionResult, entry.apiResult]) {
-        for (const body of Object.values(result?.responseBody ?? {})) {
-          for (const image of body.images ?? []) {
-            assertBedrockByteView(image.source?.bytes);
-          }
-        }
-      }
+    // Keep declared blobs as bytes before live-provider config serialization.
+    if (this.config.sessionState) {
+      this.config.sessionState = this.normalizeSessionState(this.config.sessionState);
     }
 
     // Record telemetry
@@ -278,10 +268,15 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
       return undefined;
     }
 
-    const configured = this.config.sessionState;
+    return this.normalizeSessionState({
+      ...this.config.sessionState,
+      ...(knowledgeBaseConfigurations?.length ? { knowledgeBaseConfigurations } : {}),
+    });
+  }
+
+  private normalizeSessionState(configured: SessionState): SessionState {
     const sessionState: SessionState = {
       ...configured,
-      ...(knowledgeBaseConfigurations?.length ? { knowledgeBaseConfigurations } : {}),
       ...(configured?.files
         ? {
             files: configured.files.map((file) => ({

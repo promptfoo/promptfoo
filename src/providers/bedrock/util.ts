@@ -14,16 +14,11 @@ const REQUEST_TIMEOUT_MS = 300_000; // 5 minutes
  */
 export const INFERENCE_PROFILE_PREFIX = /^(?:us|us-gov|eu|apac|global|jp|au|ca|in)\./;
 
-/** Reject native binary types that cannot round-trip through saved eval JSON. */
-export function assertBedrockByteView(data: unknown): void {
+/** Decode declared AWS blob fields, including the byte forms stored in eval JSON. */
+export function decodeBedrockBytes(data: unknown): Uint8Array | undefined {
   if ((ArrayBuffer.isView(data) && !isUint8Array(data)) || isAnyArrayBuffer(data)) {
     throw new Error('Invalid Bedrock byte content: use a Uint8Array, Buffer, or base64 string.');
   }
-}
-
-/** Decode declared AWS blob fields, including the byte forms stored in eval JSON. */
-export function decodeBedrockBytes(data: unknown): Uint8Array | undefined {
-  assertBedrockByteView(data);
   if (data === undefined) {
     return undefined;
   }

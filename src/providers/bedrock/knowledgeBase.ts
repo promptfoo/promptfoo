@@ -8,7 +8,6 @@ import { AwsBedrockGenericProvider } from './base';
 import { assertBedrockModelIsAvailable } from './index';
 import { isValidBedrockRetrievalFilter } from './retrievalFilter';
 import {
-  assertBedrockByteView,
   createBedrockRequestHandler,
   decodeBedrockBytes,
   hashBedrockConfig,
@@ -90,11 +89,12 @@ export class AwsBedrockKnowledgeBaseProvider
       );
     }
 
-    this.kbConfig = options.config || { knowledgeBaseId: '' };
-    for (const source of this.kbConfig.retrieveAndGenerateConfiguration
-      ?.externalSourcesConfiguration?.sources ?? []) {
-      assertBedrockByteView(source.byteContent?.data);
+    this.kbConfig = { ...(options.config || { knowledgeBaseId: '' }) };
+    if (this.kbConfig.operation !== 'retrieve' && this.kbConfig.retrieveAndGenerateConfiguration) {
+      this.kbConfig.retrieveAndGenerateConfiguration = this.getNativeConfiguration();
     }
+    // Live provider snapshots serialize config; keep it aligned with the request config.
+    this.config = this.kbConfig;
 
     telemetry.record('feature_used', {
       feature: 'knowledge_base',
