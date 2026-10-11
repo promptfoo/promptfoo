@@ -540,6 +540,7 @@ const sidebars = {
       items: [
         { type: 'doc', id: 'enterprise/index' },
         { type: 'doc', id: 'enterprise/authentication' },
+        { type: 'doc', id: 'enterprise/sso' },
         { type: 'doc', id: 'enterprise/service-accounts' },
         { type: 'doc', id: 'enterprise/teams' },
         { type: 'doc', id: 'enterprise/red-teams' },

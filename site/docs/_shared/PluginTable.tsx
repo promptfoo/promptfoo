@@ -10,8 +10,6 @@ type GroupedPlugins = Record<PluginCategory, Plugin[]>;
 interface PluginTableProps {
   vulnerabilityType?: string;
   shouldRenderCategory?: boolean;
-  shouldRenderDescription?: boolean;
-  shouldRenderPluginId?: boolean;
   shouldGroupByCategory?: boolean;
   showApplicationTypes?: boolean;
   showRemoteStatus?: boolean;
@@ -61,8 +59,6 @@ const styles = {
 const PluginTable = ({
   vulnerabilityType,
   shouldRenderCategory = true,
-  shouldRenderDescription = true,
-  shouldRenderPluginId = true,
   shouldGroupByCategory = false,
   showApplicationTypes = false,
   showRemoteStatus = false,
@@ -94,12 +90,8 @@ const PluginTable = ({
             <th style={{ ...styles.th, ...styles.columns.category }}>Category</th>
           )}
           <th style={{ ...styles.th, ...styles.columns.name }}>Plugin Name</th>
-          {shouldRenderDescription && (
-            <th style={{ ...styles.th, ...styles.columns.description }}>Description</th>
-          )}
-          {shouldRenderPluginId && (
-            <th style={{ ...styles.th, ...styles.columns.pluginId }}>Plugin ID</th>
-          )}
+          <th style={{ ...styles.th, ...styles.columns.description }}>Description</th>
+          <th style={{ ...styles.th, ...styles.columns.pluginId }}>Plugin ID</th>
           {showApplicationTypes && (
             <>
               <th style={{ ...styles.th, ...styles.columns.indicator }}>RAG</th>
@@ -129,19 +121,15 @@ const PluginTable = ({
                         {plugin.name}
                       </a>
                     </td>
-                    {shouldRenderDescription && (
-                      <td style={{ ...styles.td, ...styles.columns.description }}>
-                        {plugin.description}
-                        {showRemoteStatus && plugin.isRemote && (
-                          <span title="Uses remote inference"> 🌐</span>
-                        )}
-                      </td>
-                    )}
-                    {shouldRenderPluginId && (
-                      <td style={{ ...styles.td, ...styles.columns.pluginId }}>
-                        <code style={styles.code}>{plugin.pluginId}</code>
-                      </td>
-                    )}
+                    <td style={{ ...styles.td, ...styles.columns.description }}>
+                      {plugin.description}
+                      {showRemoteStatus && plugin.isRemote && (
+                        <span title="Uses remote inference"> 🌐</span>
+                      )}
+                    </td>
+                    <td style={{ ...styles.td, ...styles.columns.pluginId }}>
+                      <code style={styles.code}>{plugin.pluginId}</code>
+                    </td>
                     {showApplicationTypes && (
                       <>
                         <td style={{ ...styles.td, ...styles.columns.indicator }}>
@@ -164,19 +152,15 @@ const PluginTable = ({
                 <td style={styles.td}>
                   <a href={plugin.link}>{plugin.name}</a>
                 </td>
-                {shouldRenderDescription && (
-                  <td style={styles.td}>
-                    {plugin.description}
-                    {showRemoteStatus && plugin.isRemote && (
-                      <span title="Uses remote inference"> 🌐</span>
-                    )}
-                  </td>
-                )}
-                {shouldRenderPluginId && (
-                  <td style={styles.td}>
-                    <code style={styles.code}>{plugin.pluginId}</code>
-                  </td>
-                )}
+                <td style={styles.td}>
+                  {plugin.description}
+                  {showRemoteStatus && plugin.isRemote && (
+                    <span title="Uses remote inference"> 🌐</span>
+                  )}
+                </td>
+                <td style={styles.td}>
+                  <code style={styles.code}>{plugin.pluginId}</code>
+                </td>
                 {showApplicationTypes && (
                   <>
                     <td style={styles.td}>{plugin.applicationTypes?.rag ? '🚨' : '✅'}</td>
