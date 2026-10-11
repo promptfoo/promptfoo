@@ -1,3 +1,4 @@
+import { createServer } from 'node:http';
 import { Readable } from 'node:stream';
 
 import { BedrockAgentRuntime } from '@aws-sdk/client-bedrock-agent-runtime';
@@ -936,6 +937,102 @@ describe('native Bedrock APIs', () => {
     const { provider } = fixture('ConverseStream', { stream });
     expect((await provider.callApi('{}')).error).toMatch(/no event stream|empty event stream/);
   });
+
+  it.each([
+    ['JSON', Buffer.from('{invalid')],
+    ['UTF-8', Buffer.from([0xff])],
+  ])(
+    'aborts malformed native %s streams without closing concurrent calls',
+    async (_name, invalid) => {
+      const codec = new EventStreamCodec(
+        (bytes) => Buffer.from(bytes).toString('utf8'),
+        (value) => Buffer.from(value),
+      );
+      const frame = (bytes: Uint8Array) =>
+        codec.encode({
+          headers: {
+            ':message-type': { type: 'string', value: 'event' },
+            ':event-type': { type: 'string', value: 'chunk' },
+            ':content-type': { type: 'string', value: 'application/json' },
+          },
+          body: Buffer.from(JSON.stringify({ bytes: Buffer.from(bytes).toString('base64') })),
+        });
+      const validFrame = frame(Buffer.from('{"text":"READY"}'));
+      let healthyStarted = false;
+      const finishHealthy = createDeferred<void>();
+      let badClosed = false;
+      let healthyClosed = false;
+      const server = createServer((request, response) => {
+        const chunks: Buffer[] = [];
+        request.on('data', (chunk) => chunks.push(chunk));
+        request.on('end', () => {
+          const { mode } = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+          response.writeHead(200, {
+            'content-type': 'application/vnd.amazon.eventstream',
+            'x-amzn-bedrock-content-type': 'application/json',
+          });
+          response.once('close', () => {
+            if (mode === 'bad') {
+              badClosed = !response.writableEnded;
+            } else if (mode === 'healthy') {
+              healthyClosed = true;
+            }
+          });
+          if (mode === 'bad') {
+            response.write(frame(invalid));
+          } else if (mode === 'healthy') {
+            response.write(validFrame);
+            healthyStarted = true;
+            void finishHealthy.promise.then(() => response.end(validFrame));
+          } else {
+            response.end(validFrame);
+          }
+        });
+      });
+      await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+      const address = server.address();
+      if (!address || typeof address === 'string') {
+        throw new Error('Fixture did not bind a TCP port');
+      }
+      const provider = new AwsBedrockNativeApiProvider('InvokeModelWithResponseStream', {
+        config: {
+          region: 'us-east-1',
+          endpoint: `http://127.0.0.1:${address.port}`,
+          accessKeyId: 'synthetic',
+          secretAccessKey: 'synthetic',
+          maxRetries: 0,
+        },
+      });
+      const client = await provider.getBedrockInstance();
+      const destroy = vi.spyOn(client, 'destroy');
+      const prompt = (mode: string) => JSON.stringify({ modelId: 'fixture.model', body: { mode } });
+      const caller = new AbortController();
+      const options = { abortSignal: caller.signal };
+      const healthy = provider.callApi(prompt('healthy'), undefined, options);
+      try {
+        await vi.waitFor(() => expect(healthyStarted).toBe(true));
+        const failed = await provider.callApi(prompt('bad'), undefined, options);
+        expect(failed.error).toBeTruthy();
+        expect(failed.output).toBeUndefined();
+        await vi.waitFor(() => expect(badClosed).toBe(true));
+        expect(healthyClosed).toBe(false);
+        expect(caller.signal.aborted).toBe(false);
+        expect(destroy).not.toHaveBeenCalled();
+        finishHealthy.resolve();
+        expect((await healthy).error).toBeUndefined();
+        expect((await provider.callApi(prompt('next'), undefined, options)).output).toContain(
+          'READY',
+        );
+        expect(destroy).not.toHaveBeenCalled();
+      } finally {
+        finishHealthy.resolve();
+        await provider.cleanup();
+        server.closeAllConnections();
+        await new Promise<void>((resolve) => server.close(() => resolve()));
+        await healthy;
+      }
+    },
+  );
 
   it('bypasses response caching and forwards cancellation', async () => {
     const { provider, invoke } = fixture('CountTokens', { inputTokens: 4 });

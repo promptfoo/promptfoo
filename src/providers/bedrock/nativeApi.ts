@@ -310,6 +310,13 @@ export class AwsBedrockNativeApiProvider extends AwsBedrockGenericProvider {
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     let responseMetadata: ResponseMetadata | undefined;
+    const operation = OPERATIONS[this.operation];
+    const streamController = 'stream' in operation ? new AbortController() : undefined;
+    const abortSignal = streamController
+      ? options?.abortSignal
+        ? AbortSignal.any([options.abortSignal, streamController.signal])
+        : streamController.signal
+      : options?.abortSignal;
     try {
       throwIfAborted(options?.abortSignal);
       const input = await parseNativeJson(prompt);
@@ -364,7 +371,6 @@ export class AwsBedrockNativeApiProvider extends AwsBedrockGenericProvider {
         );
       }
       const request = decodeBlobs(input);
-      const operation = OPERATIONS[this.operation];
       const client =
         operation.service === 'runtime'
           ? await this.getBedrockInstance(options?.abortSignal)
@@ -381,7 +387,7 @@ export class AwsBedrockNativeApiProvider extends AwsBedrockGenericProvider {
           `Installed AWS SDK does not expose ${this.operation}; update the Bedrock ${operation.service} SDK package.`,
         );
       }
-      const response = await invoke.call(client, request, { abortSignal: options?.abortSignal });
+      const response = await invoke.call(client, request, { abortSignal });
       const { $metadata, ...native } = response;
       responseMetadata = $metadata;
       if ('stream' in operation) {
@@ -391,7 +397,7 @@ export class AwsBedrockNativeApiProvider extends AwsBedrockGenericProvider {
         }
         const events: any[] = [];
         for await (const event of stream) {
-          throwIfAborted(options?.abortSignal);
+          throwIfAborted(abortSignal);
           const failure = Object.entries(event).find(([key]) => /exception$/i.test(key));
           if (failure) {
             const prefix = failure[0].toLowerCase() === 'throttlingexception' ? 'Rate limit: ' : '';
@@ -432,6 +438,8 @@ export class AwsBedrockNativeApiProvider extends AwsBedrockGenericProvider {
         metadata: { operation: this.operation, aws: $metadata },
       };
     } catch (error) {
+      // Smithy's event-stream wrapper does not close its HTTP body on early iterator exit.
+      streamController?.abort(error);
       const errorMetadata =
         error && typeof error === 'object' && '$metadata' in error
           ? (error.$metadata as ResponseMetadata | undefined)
