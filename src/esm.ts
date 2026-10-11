@@ -282,7 +282,9 @@ export async function importModule(
 
         if (functionName) {
           logger.debug(`Returning named export: ${functionName}`);
-          return mod[functionName];
+          return options?.cacheCjsFallback
+            ? Promise.resolve(mod).then((value) => value[functionName])
+            : mod[functionName];
         }
         return mod;
       } catch (cjsErr) {
@@ -516,7 +518,23 @@ function loadCjsModule(modulePath: string, cache = false): any {
   vm.runInContext(code, context, { filename: modulePath });
 
   if (cache) {
-    cjsFallbackModules.set(modulePath, moduleObj.exports);
+    // Assimilate promises and thenables while deduplicating in-flight initialization.
+    const pending = Promise.resolve(moduleObj.exports).then(
+      (value) => {
+        if (cjsFallbackModules.get(modulePath) === pending) {
+          cjsFallbackModules.set(modulePath, value);
+        }
+        return value;
+      },
+      (error) => {
+        if (cjsFallbackModules.get(modulePath) === pending) {
+          cjsFallbackModules.delete(modulePath);
+        }
+        throw error;
+      },
+    );
+    cjsFallbackModules.set(modulePath, pending);
+    return pending;
   }
   return moduleObj.exports;
 }

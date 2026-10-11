@@ -194,6 +194,64 @@ it('preserves VM fallback singleton and retry behavior in native Node', async ()
       // Stale invalidation cannot remove a newer successful module at the same path.
       clearCjsModuleCache({ path: configPath, exports: first });
       assert.equal((await loadDefaultConfig(directory)).defaultConfig.description, 'edited');
+      const writeAsyncConfig = async (name, expression) => {
+        const filename = directory + '/' + name + '.js';
+        await fs.writeFile(filename, 'require("node:fs"); module.exports = ' + expression + ';');
+        return filename;
+      };
+      const validAsyncConfig = '{ description: "async", providers: ["echo"], prompts: ["Hello"], value: {} }';
+      const asyncPath = await writeAsyncConfig('async', 'Promise.resolve(' + validAsyncConfig + ')');
+      const [asyncFirst, asyncSecond] = await Promise.all([
+        importModule(asyncPath, undefined, { cacheCjsFallback: true }),
+        importModule(asyncPath, undefined, { cacheCjsFallback: true }),
+      ]);
+      assert.equal(asyncFirst, asyncSecond);
+      assert.equal(await importModule(asyncPath, 'value', { cacheCjsFallback: true }), asyncFirst.value);
+      await writeAsyncConfig('thenable', '{ then(resolve) { resolve(' + validAsyncConfig + '); } }');
+      assert.equal((await loadDefaultConfig(directory, 'thenable')).defaultConfig.description, 'async');
+      for (const [name, expression, failure] of [
+        ['async-reject', 'Promise.reject(new Error("async initialization failed"))', /async initialization failed/],
+        ['async-invalid', 'Promise.resolve({ commandLineOptions: { filterSampleSeed: "bad" } })', /filterSampleSeed/],
+      ]) {
+        await writeAsyncConfig(name, expression);
+        await assert.rejects(loadDefaultConfig(directory, name), failure);
+        await writeAsyncConfig(name, 'Promise.resolve(' + validAsyncConfig + ')');
+        assert.equal((await loadDefaultConfig(directory, name)).defaultConfig.description, 'async');
+      }
+      for (const settlement of ['resolve', 'reject', 'invalid']) {
+        const name = 'pending-' + settlement;
+        let settle;
+        const started = new Promise((resolve) => {
+          globalThis.startPendingConfig = (fulfill, reject) => {
+            settle = { fulfill, reject };
+            resolve();
+          };
+        });
+        await writeAsyncConfig(name, 'new Promise((resolve, reject) => globalThis.startPendingConfig(resolve, reject))');
+        const previous = loadDefaultConfig(directory, name).then(
+          (value) => ({ value }),
+          (error) => ({ error }),
+        );
+        await Promise.race([started, previous.then(() => { throw new Error('initializer did not start'); })]);
+        clearCjsModuleCache();
+        await writeAsyncConfig(name, 'Promise.resolve(' + validAsyncConfig + ')');
+        assert.equal((await loadDefaultConfig(directory, name)).defaultConfig.description, 'async');
+        if (settlement === 'reject') {
+          settle.reject(new Error('late initialization failure'));
+        } else {
+          settle.fulfill(settlement === 'invalid'
+            ? { commandLineOptions: { filterSampleSeed: 'bad' } }
+            : { description: 'old', providers: ['echo'], prompts: ['Hello'] });
+        }
+        const oldResult = await previous;
+        if (settlement === 'resolve') {
+          assert.equal(oldResult.value.defaultConfig.description, 'old');
+        } else {
+          assert.match(oldResult.error.message, settlement === 'reject' ? /late initialization failure/ : /filterSampleSeed/);
+        }
+        assert.equal((await loadDefaultConfig(directory, name)).defaultConfig.description, 'async');
+        delete globalThis.startPendingConfig;
+      }
     `;
     execFileSync(process.execPath, ['--import', 'tsx', '--input-type=module', '--eval', script], {
       cwd: path.resolve(__dirname, '../../..'),
