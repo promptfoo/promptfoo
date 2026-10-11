@@ -720,6 +720,40 @@ describe('Knowledge Base runtime features', () => {
   });
 });
 
+it.each([
+  { flags: {}, bypass: false },
+  { flags: { bustCache: true }, bypass: true },
+  { flags: { debug: true }, bypass: true },
+  { flags: { bustCache: true, debug: false }, bypass: true },
+  { flags: { bustCache: false, debug: true }, bypass: false },
+  { flags: { bustCache: false }, bypass: false },
+])('honors Agent per-call cache precedence for $flags', async ({ flags, bypass }) => {
+  cache.enabled = true;
+  const entries = new Map<string, string>();
+  cache.get.mockImplementation((key: string) => entries.get(key));
+  cache.set.mockImplementation((key: string, value: string) => entries.set(key, value));
+  const { provider, send } = agent();
+  send.mockImplementation(async () => ({
+    completion: events([{ chunk: { bytes: Buffer.from(`answer-${send.mock.calls.length}`) } }]),
+  }));
+  const context = { prompt: { raw: 'question', label: 'question' }, vars: {}, ...flags };
+  const initial = await provider.callApi('warm');
+  cache.get.mockClear();
+  cache.set.mockClear();
+
+  const warm = await provider.callApi('warm', context);
+  const cold = await provider.callApi('cold', context);
+  expect(warm.cached === true).toBe(!bypass);
+  expect(cache.get).toHaveBeenCalledTimes(bypass ? 0 : 2);
+  expect(cache.set).toHaveBeenCalledTimes(bypass ? 0 : 1);
+  expect(cold.cached).not.toBe(true);
+  // A bypass cannot replace the warm entry or populate the cold entry.
+  expect(await provider.callApi('warm')).toMatchObject({ output: initial.output, cached: true });
+  const repeated = await provider.callApi('cold');
+  expect(repeated.cached === true).toBe(!bypass);
+  expect(send).toHaveBeenCalledTimes(bypass ? 4 : 2);
+});
+
 it('uses the same Agent cache key for equivalent nested configuration order', async () => {
   cache.enabled = true;
   const first = agent({

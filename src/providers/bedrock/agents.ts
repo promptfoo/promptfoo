@@ -2,6 +2,7 @@ import { getCache, isCacheEnabled } from '../../cache';
 import { getEnvInt } from '../../envars';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
+import { shouldBustProviderCache } from '../shared';
 import { AwsBedrockGenericProvider } from './base';
 import { isValidBedrockRetrievalFilter } from './retrievalFilter';
 import {
@@ -20,7 +21,7 @@ import type {
 } from '@aws-sdk/client-bedrock-agent-runtime';
 
 import type { EnvOverrides } from '../../types/env';
-import type { ApiProvider, ProviderResponse } from '../../types/providers';
+import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types/providers';
 
 /**
  * Configuration options for AWS Bedrock Agents provider
@@ -469,7 +470,7 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
   /**
    * Invoke the agent with the given prompt
    */
-  async callApi(prompt: string): Promise<ProviderResponse> {
+  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     // Validate agentAliasId is present
     if (!this.config.agentAliasId) {
       return {
@@ -559,6 +560,7 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
     const cache = await getCache();
     const useCache =
       isCacheEnabled() &&
+      !shouldBustProviderCache(context) &&
       !this.config.enableTrace &&
       !this.config.sessionId &&
       !this.config.memoryId &&
