@@ -1,4 +1,5 @@
 import confirm from '@inquirer/confirm';
+import { AbortPromptError, ExitPromptError } from '@inquirer/core';
 import { Command } from 'commander';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -558,7 +559,7 @@ describe('Share Command', () => {
       expect(process.exitCode).toBe(0);
     });
 
-    it.each(['declines', 'cancels'] as const)(
+    it.each(['declines', 'aborts', 'exits'] as const)(
       'does not upload and exits successfully when the user %s re-sharing',
       async (action) => {
         const evalRecord = {
@@ -573,7 +574,9 @@ describe('Share Command', () => {
         if (action === 'declines') {
           vi.mocked(confirm).mockResolvedValue(false);
         } else {
-          vi.mocked(confirm).mockRejectedValue(new Error('User cancelled'));
+          vi.mocked(confirm).mockRejectedValue(
+            action === 'aborts' ? new AbortPromptError() : new ExitPromptError(),
+          );
         }
 
         await program.parseAsync(['node', 'test', 'share', evalRecord.id]);
@@ -581,8 +584,30 @@ describe('Share Command', () => {
         expect(confirm).toHaveBeenCalledOnce();
         expect(createShareableUrl).not.toHaveBeenCalled();
         expect(createShareableModelAuditUrl).not.toHaveBeenCalled();
+        expect(logger.error).not.toHaveBeenCalled();
         expect(process.exitCode).toBe(0);
       },
     );
+
+    it('reports unexpected confirmation failures without uploading', async () => {
+      const evalRecord = {
+        id: 'eval-already-shared',
+        prompts: ['test prompt'],
+        config: { sharing: true },
+      } as unknown as Eval;
+      vi.spyOn(Eval, 'findById').mockResolvedValue(evalRecord);
+      vi.spyOn(cloudConfig, 'isEnabled').mockReturnValue(true);
+      vi.mocked(isSharingEnabled).mockReturnValue(true);
+      vi.mocked(hasEvalBeenShared).mockResolvedValue(true);
+      vi.mocked(confirm).mockRejectedValue(new Error('Terminal input failed'));
+
+      await program.parseAsync(['node', 'test', 'share', evalRecord.id]);
+
+      expect(confirm).toHaveBeenCalledOnce();
+      expect(createShareableUrl).not.toHaveBeenCalled();
+      expect(createShareableModelAuditUrl).not.toHaveBeenCalled();
+      expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Terminal input failed'));
+      expect(process.exitCode).toBe(1);
+    });
   });
 });
