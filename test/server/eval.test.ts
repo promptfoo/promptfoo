@@ -1,16 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { evaluate } from '../../src/evaluator';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import EvalResult from '../../src/models/evalResult';
 import { createApp } from '../../src/server/server';
-import { ResultFailureReason } from '../../src/types/results';
 import { STRIPPED_TABLE_CELL_PROMPT } from '../../src/util/eval/evalTableUtils';
 import invariant from '../../src/util/invariant';
 import EvalFactory from '../factories/evalFactory';
 import { setupTestServer } from '../util/testServer';
-
-import type { TestSuite } from '../../src/types/index';
 
 vi.mock('../../src/database/signal', async () => {
   const actual = await vi.importActual('../../src/database/signal');
@@ -119,124 +115,6 @@ describe('eval routes', () => {
   });
 
   describe('post("/:evalId/results/:id/rating")', () => {
-    it.each(['new component', 'new full', 'legacy component', 'legacy root', 'legacy full'])(
-      'preserves the rating counter basis for %s grades',
-      async (kind) => {
-        const suite: TestSuite = {
-          providers: [{ id: () => 'target', callApi: async () => ({ output: 'ok' }) }],
-          prompts: [{ raw: 'prompt', label: 'prompt' }],
-          tests: [
-            {
-              assert: [{ type: 'model-graded-closedqa', value: 'Reference' }],
-              options: {
-                provider: { id: () => 'grader', callApi: async () => ({ error: 'Unavailable' }) },
-              },
-            },
-          ],
-        };
-        const record = await Eval.create({}, suite.prompts);
-        testEvalIds.add(record.id);
-        await evaluate(suite, record, { maxConcurrency: 1 });
-        const row = (await record.getResults())[0];
-        invariant(row instanceof EvalResult, 'Persisted result required');
-        const original = structuredClone(row.gradingResult)!;
-        const legacy = kind.startsWith('legacy');
-        const payload = (pass: boolean) => ({
-          pass,
-          score: Number(pass),
-          reason: 'Manual result',
-          ...(kind.endsWith('component') && {
-            componentResults: [
-              ...original.componentResults!,
-              {
-                pass,
-                score: Number(pass),
-                reason: 'Manual result',
-                assertion: { type: 'human' as const },
-              },
-            ],
-          }),
-          ...(kind.endsWith('root') && { assertion: { type: 'human' as const } }),
-        });
-        if (legacy) {
-          // Main approved flagged ERROR rows by adding a pass and removing a fail.
-          row.success = true;
-          row.score = 1;
-          row.gradingResult = { ...payload(true), metadata: { graderError: true } };
-          record.prompts[0].metrics!.testPassCount++;
-          record.prompts[0].metrics!.testFailCount--;
-          record.prompts[0].metrics!.score++;
-          await row.save();
-          await record.save();
-        }
-        const endpoint = `/api/eval/${record.id}/results/${row.id}/rating`;
-        for (const pass of [true, false, true]) {
-          // Full API replacements may omit all metadata; caller-provided basis is ignored.
-          const response = await api.post(endpoint).send({
-            ...payload(pass),
-            ...(!pass && { metadata: { graderErrorRating: legacy } }),
-          });
-          expect(response.status).toBe(200);
-          expect(response.body.failureReason).toBe(ResultFailureReason.ERROR);
-          expect(response.body.gradingResult.metadata).toMatchObject({
-            graderError: true,
-            graderErrorRating: !legacy,
-          });
-          expect((await Eval.findById(record.id))?.prompts[0].metrics).toMatchObject({
-            testPassCount: Number(pass),
-            testFailCount: legacy && pass ? -1 : 0,
-            testErrorCount: legacy || !pass ? 1 : 0,
-          });
-        }
-        expect((await api.post(endpoint).send(original)).status).toBe(200);
-        expect((await Eval.findById(record.id))?.prompts[0].metrics).toMatchObject({
-          testPassCount: 0,
-          testFailCount: 0,
-          testErrorCount: 1,
-        });
-        expect((await api.post(endpoint).send(payload(true))).status).toBe(200);
-        expect((await Eval.findById(record.id))?.prompts[0].metrics).toMatchObject({
-          testPassCount: 1,
-          testFailCount: legacy ? -1 : 0,
-          testErrorCount: legacy ? 1 : 0,
-        });
-      },
-    );
-
-    it('does not accept a caller-supplied grader-error counter basis', async () => {
-      const record = await EvalFactory.create();
-      testEvalIds.add(record.id);
-      const row = (await record.getResults())[0];
-      invariant(row instanceof EvalResult, 'Persisted result required');
-      row.success = false;
-      row.score = 0;
-      row.failureReason = ResultFailureReason.ERROR;
-      row.gradingResult = null;
-      const metrics = record.prompts[0].metrics!;
-      metrics.testPassCount--;
-      metrics.testErrorCount++;
-      await row.save();
-      await record.save();
-      const endpoint = `/api/eval/${record.id}/results/${row.id}/rating`;
-      for (const pass of [true, false]) {
-        const response = await api.post(endpoint).send({
-          pass,
-          score: Number(pass),
-          reason: 'API rating',
-          metadata: { graderError: true, graderErrorRating: true },
-        });
-        expect(response.status).toBe(200);
-        expect(response.body.gradingResult.metadata.graderErrorRating).toBe(
-          pass ? undefined : false,
-        );
-        expect((await Eval.findById(record.id))?.prompts[0].metrics).toMatchObject({
-          testPassCount: metrics.testPassCount + Number(pass),
-          testFailCount: metrics.testFailCount - Number(pass),
-          testErrorCount: metrics.testErrorCount,
-        });
-      }
-    });
-
     it('rejects result ratings when the URL eval does not own the result', async () => {
       const evalA = await EvalFactory.create();
       const evalB = await EvalFactory.create();

@@ -7,7 +7,6 @@ import Eval, { EvalQueries } from '../../models/eval';
 import EvalResult from '../../models/evalResult';
 import { evaluateWithSource } from '../../node';
 import { EvalSchemas } from '../../types/api/eval';
-import { ResultFailureReason } from '../../types/results';
 import { deleteEval, deleteEvals, updateResult, writeResultsToDatabase } from '../../util/database';
 import {
   ComparisonEvalNotFoundError,
@@ -744,30 +743,6 @@ evalRouter.post(
           (r) => r.assertion?.type === HUMAN_ASSERTION_TYPE,
         ),
       );
-      const isGraderError =
-        result.failureReason === ResultFailureReason.ERROR &&
-        result.gradingResult?.metadata?.graderError === true &&
-        !result.metadata?.__promptfoo?.comparisonError;
-      const savedRatingBasis = result.gradingResult?.metadata?.graderErrorRating;
-      const graderErrorRating =
-        isGraderError &&
-        (typeof savedRatingBasis === 'boolean'
-          ? savedRatingBasis
-          : !hasExistingManualOverride &&
-            result.gradingResult?.assertion?.type !== HUMAN_ASSERTION_TYPE &&
-            !result.success);
-      if (gradingResult.metadata) {
-        delete gradingResult.metadata.graderErrorRating;
-      }
-      if (isGraderError) {
-        // Legacy approvals used the fail bucket; keep that basis across full-grade replacements.
-        gradingResult.metadata = {
-          ...gradingResult.metadata,
-          graderError: true,
-          graderErrorRating,
-        };
-      }
-      const failureCount = graderErrorRating ? 'testErrorCount' : 'testFailCount';
       const successChanged = result.success !== gradingResult.pass;
       const scoreChange = gradingResult.score - result.score;
 
@@ -792,7 +767,7 @@ evalRouter.post(
         if (result.success) {
           // Result changed from fail to pass
           prompt.metrics.testPassCount += 1;
-          prompt.metrics[failureCount] -= 1;
+          prompt.metrics.testFailCount -= 1;
           prompt.metrics.assertPassCount += 1;
           prompt.metrics.score += scoreChange;
           if (hasExistingManualOverride) {
@@ -801,7 +776,7 @@ evalRouter.post(
           }
         } else {
           prompt.metrics.testPassCount -= 1;
-          prompt.metrics[failureCount] += 1;
+          prompt.metrics.testFailCount += 1;
           prompt.metrics.assertFailCount += 1;
           prompt.metrics.score += scoreChange;
           if (hasExistingManualOverride) {

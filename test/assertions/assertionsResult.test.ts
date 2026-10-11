@@ -204,6 +204,14 @@ describe('AssertionsResult', () => {
       { name: 'grader failure', component: graderFailure, graderError: true },
       { name: 'ordinary failure', component: ordinaryFailure, graderError: undefined },
       {
+        name: 'zero-weight assertion',
+        component: {
+          ...graderFailure,
+          assertion: { type: 'equals' as const, value: 'x', weight: 0 },
+        },
+        graderError: undefined,
+      },
+      {
         name: 'zero-weight set',
         component: {
           ...graderFailure,
@@ -245,9 +253,7 @@ describe('AssertionsResult', () => {
       const aggregate = await result.testResult();
       expect(aggregate.pass).toBe(false);
       expect(aggregate.metadata?.graderError).toBe(threshold === 0 ? undefined : true);
-      expect(aggregate.reason).toBe(
-        threshold === 0 ? ordinaryFailure.reason : graderFailure.reason,
-      );
+      expect(aggregate.reason).toBe(ordinaryFailure.reason);
     });
 
     it('ignores force-passed metric-only grader failures', async () => {
@@ -259,38 +265,42 @@ describe('AssertionsResult', () => {
       expect(aggregate.metadata?.graderError).toBeUndefined();
     });
 
-    it('retains the grader cause when an aggregate threshold fails', async () => {
+    it('preserves the threshold reason while carrying grader failure metadata', async () => {
       const result = new AssertionsResult({ threshold: 0.6 });
       result.addResult({ index: 0, result: { pass: true, score: 1, reason: 'Criterion met' } });
       result.addResult({ index: 1, result: graderFailure });
       expect(await result.testResult()).toMatchObject({
         pass: false,
-        reason: graderFailure.reason,
+        reason: 'Aggregate score 0.50 < 0.6 threshold',
         metadata: { graderError: true },
       });
     });
 
     it.each([
-      { metricOnly: false, scorerGraderError: undefined, expected: true },
-      { metricOnly: true, scorerGraderError: true, expected: true },
-      { metricOnly: true, scorerGraderError: undefined, expected: undefined },
-    ])('preserves scorer decisions: %j', async ({ metricOnly, scorerGraderError, expected }) => {
-      const result = new AssertionsResult({ threshold: 0 });
-      result.addResult({
-        index: 0,
-        result: { ...graderFailure, pass: metricOnly },
-        weight: metricOnly ? 0 : 1,
-      });
-      const aggregate = await result.testResult(() => ({
-        pass: false,
-        score: 0,
-        reason: 'Custom scorer rejected the run',
-        ...(scorerGraderError && { metadata: { graderError: true } }),
-      }));
-      expect(aggregate.pass).toBe(false);
-      expect(aggregate.reason).toBe('Custom scorer rejected the run');
-      expect(aggregate.metadata?.graderError).toBe(expected);
-    });
+      { metricOnly: false, scorerGraderError: undefined, pass: false, expected: true },
+      { metricOnly: false, scorerGraderError: undefined, pass: true, expected: undefined },
+      { metricOnly: true, scorerGraderError: true, pass: false, expected: true },
+      { metricOnly: true, scorerGraderError: undefined, pass: false, expected: undefined },
+    ])(
+      'preserves scorer decisions: %j',
+      async ({ metricOnly, scorerGraderError, pass, expected }) => {
+        const result = new AssertionsResult({ threshold: 0 });
+        result.addResult({
+          index: 0,
+          result: { ...graderFailure, pass: metricOnly },
+          weight: metricOnly ? 0 : 1,
+        });
+        const aggregate = await result.testResult(() => ({
+          pass,
+          score: 0,
+          reason: 'Custom scorer rejected the run',
+          ...(scorerGraderError && { metadata: { graderError: true } }),
+        }));
+        expect(aggregate.pass).toBe(pass);
+        expect(aggregate.reason).toBe('Custom scorer rejected the run');
+        expect(aggregate.metadata?.graderError).toBe(expected);
+      },
+    );
 
     it('does not mark mixed fresh and cached grading responses as fully cached', async () => {
       const assertionsResult = new AssertionsResult({});
@@ -1151,10 +1161,26 @@ describe('AssertionsResult', () => {
       expect(result.reason).toBe('Scoring function error: Scoring failed');
     });
 
-    it.each(['namedScores', 'namedScoreWeights'] as const)(
-      'contains errors reading custom %s during final inspection',
-      async (field) => {
+    it.each([
+      ['namedScores', false],
+      ['namedScores', true],
+      ['namedScoreWeights', false],
+      ['namedScoreWeights', true],
+    ] as const)(
+      'contains errors reading custom %s during final inspection (grader failure=%s)',
+      async (field, graderError) => {
         const assertionsResult = new AssertionsResult({});
+        if (graderError) {
+          assertionsResult.addResult({
+            index: 0,
+            result: {
+              pass: false,
+              score: 0,
+              reason: 'Grader unavailable',
+              metadata: { graderError: true },
+            },
+          });
+        }
         let reads = 0;
         const metrics = {
           get quality() {
@@ -1179,6 +1205,7 @@ describe('AssertionsResult', () => {
           namedScores: {},
           namedScoreWeights: {},
         });
+        expect(result.metadata?.graderError).toBe(graderError || undefined);
         expect(JSON.parse(JSON.stringify(result))).toEqual(result);
         expect(await assertionsResult.testResult()).toBe(result);
       },

@@ -228,7 +228,7 @@ function getPrimaryRenderedImageSrc(text: string, inlineImageSrc?: string): stri
   return undefined;
 }
 
-export function getFailAndPassReasons(output: EvaluateTableOutput): {
+function getFailAndPassReasons(output: EvaluateTableOutput): {
   failReasons: string[];
   passReasons: string[];
 } {
@@ -246,7 +246,7 @@ export function getFailAndPassReasons(output: EvaluateTableOutput): {
 
   if (output.error && output.failureReason === ResultFailureReason.ERROR) {
     return {
-      failReasons: [output.error, ...failReasons.filter((reason) => reason !== output.error)],
+      failReasons: [output.error, ...failReasons],
       passReasons,
     };
   }

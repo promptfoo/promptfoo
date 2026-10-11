@@ -7,11 +7,7 @@ import { act, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ShiftKeyProvider } from '../../../contexts/ShiftKeyContext';
-import EvalOutputCell, {
-  getFailAndPassReasons,
-  isImageProvider,
-  isVideoProvider,
-} from './EvalOutputCell';
+import EvalOutputCell, { isImageProvider, isVideoProvider } from './EvalOutputCell';
 
 import type { EvalOutputCellProps } from './EvalOutputCell';
 
@@ -3094,26 +3090,5 @@ describe('EvalOutputCell inline image lightbox', () => {
 
     await user.click(imgElement);
     expect(container.querySelector('.lightbox')).toBeInTheDocument();
-  });
-});
-
-describe('getFailAndPassReasons', () => {
-  it.each([
-    [ResultFailureReason.ERROR, 'Grader unavailable', ['Grader unavailable']],
-    [ResultFailureReason.ERROR, 'Transport error', ['Transport error', 'Grader unavailable']],
-    [ResultFailureReason.ASSERT, 'Assertion failed', ['Grader unavailable']],
-  ])('deduplicates %s row error %s', (failureReason, error, failReasons) => {
-    const output = {
-      error,
-      failureReason,
-      gradingResult: {
-        componentResults: [
-          { pass: false, score: 0, reason: 'Grader unavailable' },
-          { pass: true, score: 1, reason: 'Criterion met' },
-        ],
-      },
-    } as unknown as EvaluateTableOutput;
-
-    expect(getFailAndPassReasons(output)).toEqual({ failReasons, passReasons: ['Criterion met'] });
   });
 });

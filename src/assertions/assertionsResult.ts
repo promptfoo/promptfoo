@@ -367,7 +367,7 @@ export class AssertionsResult {
       this.componentResults.every((result) => result.metadata?.cachedResponse === true);
 
     // Only failed direct components propagate grader errors; passed nested sets and
-    // metric-only assertions must not reclassify an unrelated failure. Comparison
+    // metric-only assertions must not mark an unrelated failure. Comparison
     // assertions can leave sparse slots, so use optional access.
     const failedGrader = this.componentResults.find(
       (result) =>
@@ -380,7 +380,7 @@ export class AssertionsResult {
     this.result = {
       pass,
       score,
-      reason: (!pass && failedGrader?.reason) || reason,
+      reason,
       namedScores: normalizedNamedScores,
       ...(hasNamedScoreWeights && { namedScoreWeights: { ...this.namedScoreWeights } }),
       tokensUsed: this.tokensUsed,
@@ -441,7 +441,7 @@ export class AssertionsResult {
       this.result.reason = 'Assertion aggregation error: unable to read scores or weights';
       this.result.namedScores = {};
       this.result.namedScoreWeights = {};
-      return this.result;
+      metricEntries = { namedScores: [], namedScoreWeights: [] };
     }
 
     const invalidMetrics = new Set<string>();
