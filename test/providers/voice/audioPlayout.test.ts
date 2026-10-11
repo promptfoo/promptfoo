@@ -14,6 +14,214 @@ function frame(value: number): Buffer {
 }
 
 describe('PcmAudioPlayout', () => {
+  it('does not spend the speech wait budget on repeated quiet-only arrivals', () => {
+    const queue = new PcmAudioPlayout(3000 * BYTES_PER_MS);
+    const initial = Buffer.concat([frame(1000), ...Array.from({ length: 11 }, () => frame(0))]);
+    queue.append(initial, 0);
+    const delivered = [queue.read(FRAME_BYTES).frame, queue.read(FRAME_BYTES).frame];
+    const arrivals: Buffer[] = [];
+    for (let tick = 0; tick < 100; tick++) {
+      if (tick % 20 === 19) {
+        const quiet = frame(0);
+        queue.append(quiet, 40 + tick * 20);
+        arrivals.push(quiet);
+      }
+      const result = queue.read(FRAME_BYTES);
+      if (result.audioBytes) {
+        delivered.push(result.frame.subarray(0, result.audioBytes));
+      }
+    }
+    const speech = frame(1234);
+    queue.append(speech, 2040);
+    const previousWait = queue.metrics.silenceReplenishmentMs;
+    for (let tick = 0; tick < 20; tick++) {
+      expect(queue.read(FRAME_BYTES).audioBytes).toBe(0);
+    }
+    expect(queue.metrics.silenceReplenishmentMs - previousWait).toBe(400);
+    for (let tick = 0; tick < 20 && queue.bytes > 0; tick++) {
+      const result = queue.read(FRAME_BYTES);
+      expect(result.audioBytes).toBe(FRAME_BYTES);
+      delivered.push(result.frame);
+    }
+    expect(Buffer.concat(delivered)).toEqual(Buffer.concat([initial, ...arrivals, speech]));
+    expect(queue.metrics.underflowMs).toBe(0);
+  });
+
+  it('releases an active partial-frame tail behind silence without dropping its final sample', () => {
+    const queue = new PcmAudioPlayout(3000 * BYTES_PER_MS);
+    const sample = Buffer.from([255, 127]);
+    const source = Buffer.concat([frame(1000), frame(0), frame(0), sample]);
+    queue.append(source, 0);
+    const delivered: Buffer[] = [];
+    for (let tick = 0; tick < 30 && queue.bytes > 0; tick++) {
+      const result = queue.read(FRAME_BYTES);
+      if (result.audioBytes) {
+        delivered.push(result.frame.subarray(0, result.audioBytes));
+      }
+    }
+    expect(Buffer.concat(delivered)).toEqual(source);
+    expect(queue.metrics.silenceReplenishmentMs).toBe(200);
+    expect(queue.metrics.underflowAfterActiveAudioMs).toBeCloseTo(958 / BYTES_PER_MS);
+  });
+
+  it.each([200, 400])(
+    'releases speech after a quiet boundary within the %i ms reserve during a source stall',
+    (reserveMs) => {
+      const queue = new PcmAudioPlayout(3000 * BYTES_PER_MS);
+      if (reserveMs === 400) {
+        queue.append(frame(9), 0);
+        queue.append(frame(9), 300);
+        queue.clear();
+      }
+      const source = Buffer.concat([
+        frame(1000),
+        frame(0),
+        frame(0),
+        ...Array.from({ length: 5 }, (_, index) => frame(2000 + index)),
+      ]);
+      queue.append(source, 1000);
+      for (let elapsed = 0; elapsed < reserveMs; elapsed += 20) {
+        expect(queue.read(FRAME_BYTES).audioBytes).toBe(0);
+      }
+      const delivered = [queue.read(FRAME_BYTES).frame, queue.read(FRAME_BYTES).frame];
+      for (let elapsed = 0; elapsed < reserveMs; elapsed += 20) {
+        expect(queue.read(FRAME_BYTES).audioBytes).toBe(0);
+      }
+      for (let index = 0; index < 6; index++) {
+        const result = queue.read(FRAME_BYTES);
+        expect(result.audioBytes).toBe(FRAME_BYTES);
+        delivered.push(result.frame);
+      }
+      expect(Buffer.concat(delivered)).toEqual(source);
+      expect(queue.bytes).toBe(0);
+      expect(queue.metrics).toMatchObject({
+        reserveMs,
+        silenceReplenishmentMs: reserveMs,
+        underflowMs: 0,
+      });
+      // Once buffered speech has drained, real starvation is observable instead
+      // of disappearing behind an indefinitely held quiet frame.
+      expect(queue.read(FRAME_BYTES).audioBytes).toBe(0);
+      expect(queue.metrics).toMatchObject({
+        underflowMs: 20,
+        underflowAfterActiveAudioMs: 20,
+        underflowEvents: 1,
+      });
+    },
+  );
+
+  it('shares one speech-hold budget across a long quiet prefix', () => {
+    const queue = new PcmAudioPlayout(3000 * BYTES_PER_MS);
+    const source = Buffer.concat([
+      frame(1000),
+      ...Array.from({ length: 15 }, () => frame(0)),
+      ...Array.from({ length: 5 }, (_, index) => frame(2000 + index)),
+    ]);
+    queue.append(source, 0);
+    const delivered: Buffer[] = [];
+    let resumedSpeechAtMs: number | undefined;
+    for (let atMs = 0; atMs < 1000 && queue.bytes > 0; atMs += 20) {
+      const result = queue.read(FRAME_BYTES);
+      if (result.audioBytes) {
+        delivered.push(result.frame.subarray(0, result.audioBytes));
+        if (result.frame.readInt16LE(0) === 2000) {
+          resumedSpeechAtMs = atMs;
+        }
+      }
+    }
+    expect(resumedSpeechAtMs).toBe(520);
+    expect(Buffer.concat(delivered)).toEqual(source);
+    expect(queue.metrics).toMatchObject({ silenceReplenishmentMs: 200, underflowMs: 0 });
+  });
+
+  it('preserves a fresh speech reserve after extended quiet-only replenishment', () => {
+    const queue = new PcmAudioPlayout(3000 * BYTES_PER_MS);
+    const quietPrefix = Buffer.concat([frame(1000), ...Array.from({ length: 11 }, () => frame(0))]);
+    queue.append(quietPrefix, 0);
+    const delivered = [queue.read(FRAME_BYTES).frame, queue.read(FRAME_BYTES).frame];
+    for (let tick = 0; tick < 100; tick++) {
+      expect(queue.read(FRAME_BYTES).audioBytes).toBe(0);
+    }
+    const speech = Buffer.concat(Array.from({ length: 5 }, (_, index) => frame(2000 + index)));
+    queue.append(speech, 2040);
+    expect(queue.metrics.reserveMs).toBe(400);
+    for (let tick = 0; tick < 20; tick++) {
+      expect(queue.read(FRAME_BYTES).audioBytes).toBe(0);
+    }
+    for (let tick = 0; tick < 15; tick++) {
+      const result = queue.read(FRAME_BYTES);
+      expect(result.audioBytes).toBe(FRAME_BYTES);
+      delivered.push(result.frame);
+    }
+    expect(Buffer.concat(delivered)).toEqual(Buffer.concat([quietPrefix, speech]));
+    expect(queue.metrics).toMatchObject({ silenceReplenishmentMs: 2400, underflowMs: 0 });
+  });
+
+  it('does not renew the speech-hold budget after a refill or another quiet frame', () => {
+    const queue = new PcmAudioPlayout(3000 * BYTES_PER_MS);
+    const source = Buffer.concat([
+      frame(1000),
+      ...Array.from({ length: 6 }, () => frame(0)),
+      ...Array.from({ length: 5 }, (_, index) => frame(2000 + index)),
+    ]);
+    queue.append(source, 0);
+    const delivered = [queue.read(FRAME_BYTES).frame, queue.read(FRAME_BYTES).frame];
+    for (let tick = 0; tick < 5; tick++) {
+      expect(queue.read(FRAME_BYTES).audioBytes).toBe(0);
+    }
+    const refill = Buffer.concat([frame(3000), frame(3001)]);
+    queue.append(refill, 140);
+    // The refill temporarily satisfies the reserve, but the same speech still
+    // sits behind source silence when the queue drops below it again.
+    for (let tick = 0; tick < 20 && queue.bytes > 0; tick++) {
+      const result = queue.read(FRAME_BYTES);
+      if (result.audioBytes) {
+        delivered.push(result.frame.subarray(0, result.audioBytes));
+      }
+    }
+    expect(Buffer.concat(delivered)).toEqual(Buffer.concat([source, refill]));
+    expect(queue.metrics).toMatchObject({ silenceReplenishmentMs: 200, underflowMs: 0 });
+  });
+
+  it('gives a later pause its own reserve after speech resumes', () => {
+    const queue = new PcmAudioPlayout(3000 * BYTES_PER_MS);
+    const source = Buffer.concat([frame(1000), frame(0), frame(0), frame(2000)]);
+    const delivered: Buffer[] = [];
+    for (let episode = 0; episode < 2; episode++) {
+      queue.append(source, episode * 80);
+      for (let tick = 0; tick < 30 && queue.bytes > 0; tick++) {
+        const result = queue.read(FRAME_BYTES);
+        if (result.audioBytes) {
+          delivered.push(result.frame.subarray(0, result.audioBytes));
+        }
+      }
+      expect(queue.bytes).toBe(0);
+    }
+    expect(Buffer.concat(delivered)).toEqual(Buffer.concat([source, source]));
+    expect(queue.metrics).toMatchObject({ silenceReplenishmentMs: 400, underflowMs: 0 });
+  });
+
+  it('clears a spent speech-hold budget when explicit intervention discards the queue', () => {
+    const queue = new PcmAudioPlayout(3000 * BYTES_PER_MS);
+    const source = Buffer.concat([frame(0), frame(0), frame(1234)]);
+    for (let episode = 0; episode < 2; episode++) {
+      queue.append(source, episode * 1000);
+      for (let tick = 0; tick < 10; tick++) {
+        expect(queue.read(FRAME_BYTES).audioBytes).toBe(0);
+      }
+      expect(queue.read(FRAME_BYTES)).toEqual({ frame: frame(0), audioBytes: FRAME_BYTES });
+      for (let tick = 0; tick < 10; tick++) {
+        expect(queue.read(FRAME_BYTES).audioBytes).toBe(0);
+      }
+      expect(queue.clear()).toBe(2 * FRAME_BYTES);
+    }
+    expect(queue.metrics).toMatchObject({
+      silenceReplenishmentMs: 400,
+      discardedBytes: 4 * FRAME_BYTES,
+      underflowMs: 0,
+    });
+  });
+
   it('absorbs an unseen startup arrival spike without losing voiced samples or exceeding 200ms startup', () => {
     // Synthetic cold-start schedule using the maximum excess delay observed in a
     // real failing run. This is not a packet replay: that run retained no arrival trace.

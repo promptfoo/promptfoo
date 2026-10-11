@@ -38,6 +38,7 @@ export class PcmAudioPlayout extends PcmAudioQueue {
   private playedSource = false;
   private lastSourceQuiet = true;
   private startupWaitMs = 0;
+  private replenishmentWaitMs = 0;
   private consecutiveUnderflowMs = 0;
   private readonly counters = {
     waitingForSourceMs: 0,
@@ -96,21 +97,17 @@ export class PcmAudioPlayout extends PcmAudioQueue {
     const quiet = next.audioBytes === size && isQuiet(next.frame, next.audioBytes);
     const needsReserve = this.bytes < this.reserveMs * BYTES_PER_MS + size;
     const canWaitForStartup = !this.bytes || this.startupWaitMs < this.reserveMs;
+    const canReplenish = needsReserve && this.playedSource && this.lastSourceQuiet && quiet;
+    // Low reserve bounds this lookahead to at most 420 ms. Waiting on quiet-only
+    // PCM does not delay speech, but a queued active tail must eventually drain.
+    const queued = canReplenish ? super.peek(this.bytes) : undefined;
+    const holdsActiveAudio = queued !== undefined && !isQuiet(queued.frame, queued.audioBytes);
     if (
       needsReserve &&
       ((!this.playedSource && canWaitForStartup) ||
-        (this.playedSource && this.lastSourceQuiet && quiet))
+        (canReplenish && (!holdsActiveAudio || this.replenishmentWaitMs < this.reserveMs)))
     ) {
-      if (this.playedSource) {
-        this.counters.silenceReplenishmentMs += FRAME_MS;
-      } else {
-        if (this.bytes) {
-          this.counters.startupBufferingMs += FRAME_MS;
-          this.startupWaitMs += FRAME_MS;
-        } else {
-          this.counters.waitingForSourceMs += FRAME_MS;
-        }
-      }
+      this.recordBuffering(holdsActiveAudio);
       this.consecutiveUnderflowMs = 0;
       return { frame: Buffer.alloc(size), audioBytes: 0 };
     }
@@ -139,8 +136,27 @@ export class PcmAudioPlayout extends PcmAudioQueue {
     if (result.audioBytes) {
       this.playedSource = true;
       this.lastSourceQuiet = sourceQuiet;
+      // Keep a single budget across quiet frames and refills. Resetting at each
+      // quiet frame could multiply the delay before the same queued speech.
+      if (!sourceQuiet) {
+        this.replenishmentWaitMs = 0;
+      }
     }
     return result;
+  }
+
+  private recordBuffering(holdsActiveAudio: boolean): void {
+    if (this.playedSource) {
+      this.counters.silenceReplenishmentMs += FRAME_MS;
+      if (holdsActiveAudio) {
+        this.replenishmentWaitMs += FRAME_MS;
+      }
+    } else if (this.bytes) {
+      this.counters.startupBufferingMs += FRAME_MS;
+      this.startupWaitMs += FRAME_MS;
+    } else {
+      this.counters.waitingForSourceMs += FRAME_MS;
+    }
   }
 
   /** Explicit intervention replacement is audited separately from transport underflow. */
@@ -150,6 +166,7 @@ export class PcmAudioPlayout extends PcmAudioQueue {
     this.playedSource = false;
     this.lastSourceQuiet = true;
     this.startupWaitMs = 0;
+    this.replenishmentWaitMs = 0;
     this.previousArrivalAtMs = undefined;
     this.previousChunkMs = 0;
     this.consecutiveUnderflowMs = 0;
