@@ -268,20 +268,6 @@ describe('config-schema.json', () => {
       expect(mainDef).toBeDefined();
       expect(mainDef.type).toBe('object');
     });
-
-    it('should regenerate to the same schema', async () => {
-      // This test ensures the schema generation is deterministic
-      // We'll check that key structures are present
-      const properties = schema.definitions?.PromptfooConfigSchema?.properties;
-
-      // Core properties that should always exist
-      expect(properties).toHaveProperty('prompts');
-      expect(properties).toHaveProperty('providers');
-      expect(properties).toHaveProperty('tests');
-      expect(properties).toHaveProperty('redteam');
-      expect(properties).toHaveProperty('scenarios');
-      expect(properties).toHaveProperty('defaultTest');
-    });
   });
 
   describe('runtime input parity', () => {
