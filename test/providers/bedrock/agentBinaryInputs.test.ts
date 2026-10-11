@@ -85,89 +85,96 @@ function binaryConfig(kind: string, data: unknown) {
   };
 }
 
-describe.each(['Uint8Array', 'Buffer', 'base64'])('Agent Runtime native %s inputs', (type) => {
-  it.each(['agent', 'functionResult', 'apiResult', 'knowledge-base', 'knowledge-base-stream'])(
-    'preserves bytes and identity through persisted %s config replay',
-    async (kind) => {
-      const data =
-        type === 'base64'
-          ? 'YWJj'
-          : type === 'Buffer'
-            ? Buffer.from('abc')
-            : new Uint8Array([0, 97, 98, 99, 0]).subarray(1, 4);
-      const handle = vi.fn(async (_request: { body?: unknown }) => ({
-        response: {
-          statusCode: 400,
-          headers: {
-            'content-type': 'application/json',
-            'x-amzn-errortype': 'ValidationException',
+describe.each(['Uint8Array', 'Buffer', 'base64', 'emptyUint8Array'])(
+  'Agent Runtime native %s inputs',
+  (type) => {
+    it.each(['agent', 'functionResult', 'apiResult', 'knowledge-base', 'knowledge-base-stream'])(
+      'preserves bytes and identity through persisted %s config replay',
+      async (kind) => {
+        const data =
+          type === 'emptyUint8Array'
+            ? new Uint8Array()
+            : type === 'base64'
+              ? 'YWJj'
+              : type === 'Buffer'
+                ? Buffer.from('abc')
+                : new Uint8Array([0, 97, 98, 99, 0]).subarray(1, 4);
+        const handle = vi.fn(async (_request: { body?: unknown }) => ({
+          response: {
+            statusCode: 400,
+            headers: {
+              'content-type': 'application/json',
+              'x-amzn-errortype': 'ValidationException',
+            },
+            body: Buffer.from('{"message":"fixture request captured"}'),
           },
-          body: Buffer.from('{"message":"fixture request captured"}'),
-        },
-      }));
-      const client = new BedrockAgentRuntimeClient({
-        region: 'us-east-1',
-        maxAttempts: 1,
-        credentials: { accessKeyId: 'LOCAL_FIXTURE', secretAccessKey: 'LOCAL_FIXTURE' },
-        requestHandler: { handle },
-      });
-      const config = binaryConfig(kind, data);
-      const isAgent = !kind.startsWith('knowledge-base');
-      try {
-        const reference = {
-          id: isAgent ? 'bedrock-agent:AGENT12345' : 'bedrock:kb:default',
-          config: { region: 'us-east-1', ...config },
-        };
-        const original = await loadApiProvider(reference.id, { options: reference });
-        const saved = await Eval.create({ providers: [reference] }, [], { id: randomUUID() });
-        const loaded = await Eval.findById(saved.id);
-        const [restoredReference] = loaded!.config.providers as ProviderOptions[];
-        const replay = await loadApiProvider(restoredReference.id!, { options: restoredReference });
-        expect(replay.id()).toBe(original.id());
-        for (const provider of [original, replay]) {
-          if (isAgent) {
-            expect(provider).toBeInstanceOf(AwsBedrockAgentsProvider);
-            vi.spyOn(
-              provider as AwsBedrockAgentsProvider,
-              'getAgentRuntimeClient',
-            ).mockResolvedValue(client);
-          } else {
-            expect(provider).toBeInstanceOf(AwsBedrockKnowledgeBaseProvider);
-            vi.spyOn(
-              provider as AwsBedrockKnowledgeBaseProvider,
-              'getKnowledgeBaseClient',
-            ).mockResolvedValue(client);
+        }));
+        const client = new BedrockAgentRuntimeClient({
+          region: 'us-east-1',
+          maxAttempts: 1,
+          credentials: { accessKeyId: 'LOCAL_FIXTURE', secretAccessKey: 'LOCAL_FIXTURE' },
+          requestHandler: { handle },
+        });
+        const config = binaryConfig(kind, data);
+        const isAgent = !kind.startsWith('knowledge-base');
+        try {
+          const reference = {
+            id: isAgent ? 'bedrock-agent:AGENT12345' : 'bedrock:kb:default',
+            config: { region: 'us-east-1', ...config },
+          };
+          const original = await loadApiProvider(reference.id, { options: reference });
+          const saved = await Eval.create({ providers: [reference] }, [], { id: randomUUID() });
+          const loaded = await Eval.findById(saved.id);
+          const [restoredReference] = loaded!.config.providers as ProviderOptions[];
+          const replay = await loadApiProvider(restoredReference.id!, {
+            options: restoredReference,
+          });
+          expect(replay.id()).toBe(original.id());
+          for (const provider of [original, replay]) {
+            if (isAgent) {
+              expect(provider).toBeInstanceOf(AwsBedrockAgentsProvider);
+              vi.spyOn(
+                provider as AwsBedrockAgentsProvider,
+                'getAgentRuntimeClient',
+              ).mockResolvedValue(client);
+            } else {
+              expect(provider).toBeInstanceOf(AwsBedrockKnowledgeBaseProvider);
+              vi.spyOn(
+                provider as AwsBedrockKnowledgeBaseProvider,
+                'getKnowledgeBaseClient',
+              ).mockResolvedValue(client);
+            }
+            expect((await provider.callApi('fixture')).error).toContain('fixture request captured');
           }
-          expect((await provider.callApi('fixture')).error).toContain('fixture request captured');
-        }
-        expect(handle).toHaveBeenCalledTimes(2);
-        for (const [request] of handle.mock.calls) {
-          const raw = request.body;
-          const body = JSON.parse(
-            typeof raw === 'string' ? raw : Buffer.from(raw as Uint8Array).toString(),
-          );
-          const sent =
-            kind === 'agent'
-              ? body.sessionState.files[0].source.byteContent.data
-              : isAgent
-                ? body.sessionState.returnControlInvocationResults[0][kind].responseBody.IMAGES
-                    .images[0].source.bytes
-                : body.retrieveAndGenerateConfiguration.externalSourcesConfiguration.sources[0]
-                    .byteContent.data;
-          expect(sent).toBe('YWJj');
-          if (kind === 'functionResult' || kind === 'apiResult') {
-            const result = body.sessionState.returnControlInvocationResults[0][kind];
-            expect(result.actionGroup).toBe('computer');
-            expect(result.responseBody.IMAGES.body).toBe('preserved annotation');
-            expect(result.responseBody.IMAGES.images[0].format).toBe('PNG');
+          expect(handle).toHaveBeenCalledTimes(2);
+          for (const [request] of handle.mock.calls) {
+            const raw = request.body;
+            const body = JSON.parse(
+              typeof raw === 'string' ? raw : Buffer.from(raw as Uint8Array).toString(),
+            );
+            const sent =
+              kind === 'agent'
+                ? body.sessionState.files[0].source.byteContent.data
+                : isAgent
+                  ? body.sessionState.returnControlInvocationResults[0][kind].responseBody.IMAGES
+                      .images[0].source.bytes
+                  : body.retrieveAndGenerateConfiguration.externalSourcesConfiguration.sources[0]
+                      .byteContent.data;
+            expect(sent).toBe(type === 'emptyUint8Array' ? '' : 'YWJj');
+            if (kind === 'functionResult' || kind === 'apiResult') {
+              const result = body.sessionState.returnControlInvocationResults[0][kind];
+              expect(result.actionGroup).toBe('computer');
+              expect(result.responseBody.IMAGES.body).toBe('preserved annotation');
+              expect(result.responseBody.IMAGES.images[0].format).toBe('PNG');
+            }
           }
+        } finally {
+          client.destroy();
         }
-      } finally {
-        client.destroy();
-      }
-    },
-  );
-});
+      },
+    );
+  },
+);
 
 it.each([
   { 0: 97, 2: 99 },
@@ -259,6 +266,8 @@ describe.each(['agent', 'functionResult', 'apiResult', 'knowledge-base'])(
       new Uint16Array([97, 98, 99]),
       new Int8Array([97]),
       new Float32Array([1]),
+      new ArrayBuffer(3),
+      new SharedArrayBuffer(3),
     ])(
       'rejects unsupported native views through the public loader before persistence: %s',
       async (data) => {
