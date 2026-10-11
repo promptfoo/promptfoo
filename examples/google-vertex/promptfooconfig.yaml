@@ -24,7 +24,9 @@ defaultTest:
   options:
     provider:
       # Text model used by model-graded assertions such as llm-rubric and factuality
-      text: vertex:gemini-3.8-flash
+      text:
+        id: vertex:gemini-3.8-flash
+        config: {}
       # Embedding model used by similar/answer-relevance assertions
       embedding: vertex:embedding:gemini-embedding-001
 

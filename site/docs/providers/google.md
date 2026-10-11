@@ -280,17 +280,17 @@ See the [Vertex AI provider documentation](/docs/providers/vertex) for detailed 
 
 A model ID selects a provider route; it does not enable every operation offered by Google. Support also depends on the chosen model and account:
 
-| API path or capability                                        | Promptfoo support                                                                                                                                       |
-| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `generateContent` / `streamGenerateContent`                   | Chat, multimodal input, structured output, thinking, tools, and speech output; use `streaming: true` to collect streamed responses into one eval result |
-| `embedContent`                                                | Text strings through `google:embedding:`; multimodal embedding inputs are not exposed                                                                   |
-| Live WebSocket API                                            | Finite text/audio eval sessions, transcripts, and function callbacks through `google:live:`                                                             |
-| Interactions API                                              | Dedicated Gemini Omni video and Robotics routes; not a general-purpose chat or managed-agent endpoint                                                   |
-| Video generation                                              | `google:video:` uses Veo's long-running prediction API; Omni uses Interactions                                                                          |
-| Native Gemini images                                          | Model-specific image provider; the legacy `google:image:` prefix instead selects Imagen's prediction format                                             |
-| Cached content                                                | Reference an existing cache with `passthrough.cachedContent`; cache creation and deletion are not provided                                              |
-| File management, Batch jobs, token counting, voice management | No dedicated provider operations; supplying an existing file URI or voice does not upload a file or create a voice                                      |
-| Lyria music and dedicated Transcribe Live events              | No dedicated adapters                                                                                                                                   |
+| API path or capability                                        | Promptfoo support                                                                                                                                         |
+| ------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `generateContent`                                             | Chat, multimodal input, structured output, thinking, tools, and [speech output](https://ai.google.dev/gemini-api/docs/generate-content/speech-generation) |
+| `embedContent`                                                | Text strings through `google:embedding:`; multimodal embedding inputs are not exposed                                                                     |
+| Live WebSocket API                                            | Finite text/audio eval sessions, transcripts, and function callbacks through `google:live:`                                                               |
+| Interactions API                                              | Dedicated Gemini Omni video and Robotics routes; not a general-purpose chat or managed-agent endpoint                                                     |
+| Video generation                                              | `google:video:` uses Veo's long-running prediction API; Omni uses Interactions                                                                            |
+| Native Gemini images                                          | Model-specific image provider; the legacy `google:image:` prefix instead selects Imagen's prediction format                                               |
+| Cached content                                                | Reference an existing cache with `passthrough.cachedContent`; cache creation and deletion are not provided                                                |
+| File management, Batch jobs, token counting, voice management | No dedicated provider operations; supplying an existing file URI or voice does not upload a file or create a voice                                        |
+| Lyria music and dedicated Transcribe Live events              | No dedicated adapters                                                                                                                                     |
 
 Use a [custom provider](/docs/providers/custom-api) when you need an operation or response format outside these routes. `passthrough` adds request fields to an existing route; it does not change the API protocol. Consult the [Gemini API reference](https://ai.google.dev/api) for upstream capabilities.
 
@@ -371,8 +371,7 @@ for Vertex deployments.
 :::
 
 Google recommends `gemini-3.8-flash-tts` or `gemini-3.8-flash-lite-tts` for new TTS work.
-The 2.5 and 3.1 TTS previews have no announced shutdown dates; check the
-[model lifecycle page](https://ai.google.dev/gemini-api/docs/deprecations) before selecting one.
+The older 2.5 and 3.1 TTS previews have an earliest announced shutdown date of November 17, 2026. Check the [model lifecycle page](https://ai.google.dev/gemini-api/docs/deprecations) before using them.
 
 This list describes current endpoints. Promptfoo may retain pricing for retired model IDs so saved
 evaluations can still be scored; historical pricing data does not mean that Google still serves an
