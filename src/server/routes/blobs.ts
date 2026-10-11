@@ -104,16 +104,8 @@ blobsRouter.get('/library', async (req: Request, res: Response): Promise<void> =
   const { type, evalId, hash, limit, offset, sortField, sortOrder } = parseResult.data;
 
   // Build ORDER BY clause based on sort parameters
-  const getSortColumn = () => {
-    switch (sortField) {
-      case 'sizeBytes':
-        return blobAssetsTable.sizeBytes;
-      case 'createdAt':
-      default:
-        return blobAssetsTable.createdAt;
-    }
-  };
-  const sortColumn = getSortColumn();
+  const sortColumn =
+    sortField === 'sizeBytes' ? blobAssetsTable.sizeBytes : blobAssetsTable.createdAt;
   const orderByFn = sortOrder === 'asc' ? asc : desc;
 
   try {

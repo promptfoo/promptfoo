@@ -7,6 +7,7 @@ import { extractFirstJsonObject } from '../../util/json';
 import { shouldGenerateRemote } from '../remoteGeneration';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { postRemoteGenerationTask } from '../remoteGenerationTask';
+import { appendMetricSuffix } from './assertions';
 import { canGenerateRemoteWithSelection, getStrategyGenerationProvider } from './types';
 
 import type { TestCase } from '../../types/index';
@@ -192,10 +193,7 @@ export async function addMathPrompt(
 
       encodedTestCases.push({
         ...testCase,
-        assert: testCase.assert?.map((assertion) => ({
-          ...assertion,
-          metric: assertion.metric ? `${assertion.metric}/MathPrompt` : assertion.metric,
-        })),
+        assert: appendMetricSuffix(testCase, 'MathPrompt'),
         vars: {
           ...testCase.vars,
           [injectVar]: encodedText,

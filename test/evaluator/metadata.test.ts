@@ -1,3 +1,4 @@
+import { createTestOutput } from '../factories/literalFixtures';
 import './setup';
 
 import { randomUUID } from 'crypto';
@@ -13,6 +14,11 @@ import Eval from '../../src/models/eval';
 import { type ApiProvider, type EvaluateSummaryV3, type TestSuite } from '../../src/types/index';
 import { mockApiProvider, toPrompt } from './helpers';
 import { describeEvaluator } from './lifecycle';
+
+const createEqualityTest = () => ({
+  vars: {},
+  assert: [{ type: 'equals' as const, value: 'Test output' }],
+});
 
 describeEvaluator('evaluator metadata', () => {
   it('evaluate with metadata passed to test transform', async () => {
@@ -258,9 +264,7 @@ describeEvaluator('evaluator metadata', () => {
   it('should maintain separate conversation histories based on metadata.conversationId', async () => {
     const mockApiProvider = {
       id: () => 'test-provider',
-      callApi: vi.fn().mockImplementation((_prompt) => ({
-        output: 'Test output',
-      })),
+      callApi: vi.fn().mockImplementation((_prompt) => createTestOutput()),
     };
 
     const testSuite: TestSuite = {
@@ -373,9 +377,7 @@ describeEvaluator('evaluator metadata', () => {
   it('should include sessionIds array from test metadata for iterative providers', async () => {
     const mockApiProvider = {
       id: () => 'test-provider',
-      callApi: vi.fn().mockResolvedValue({
-        output: 'Test output',
-      }),
+      callApi: vi.fn().mockResolvedValue(createTestOutput()),
     };
 
     const mockExtension = 'file://test-extension.js';
@@ -450,12 +452,7 @@ describeEvaluator('evaluator metadata', () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
       prompts: [toPrompt('Test prompt')],
-      tests: [
-        {
-          vars: {},
-          assert: [{ type: 'equals', value: 'Test output' }],
-        },
-      ],
+      tests: [createEqualityTest()],
       extensions: [mockExtension],
     };
 
@@ -492,12 +489,7 @@ describeEvaluator('evaluator metadata', () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
       prompts: [toPrompt('Test prompt')],
-      tests: [
-        {
-          vars: {},
-          assert: [{ type: 'equals', value: 'Test output' }],
-        },
-      ],
+      tests: [createEqualityTest()],
       extensions: [mockExtension],
     };
 

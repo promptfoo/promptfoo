@@ -1,3 +1,7 @@
+const { createWarningLoggerModule } = await vi.hoisted(
+  async () => import('../../factories/logger'),
+);
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { isProviderResponseRateLimited } from '../../../src/scheduler/types';
 import { isResponseHeadersObserverErrorResponse } from '../../../src/util/fetch/responseHeadersObserver';
@@ -13,11 +17,7 @@ import type { CallApiContextParams, ProviderResponse } from '../../../src/types/
 // Mock dependencies
 vi.mock('../../../src/logger', async (importOriginal) => ({
   ...(await importOriginal()),
-  default: {
-    debug: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  },
+  ...createWarningLoggerModule(),
 }));
 
 vi.mock('../../../src/envars', async (importOriginal) => ({
