@@ -644,6 +644,8 @@ Inline tool definitions and file-reference paths can use test variables. Promptf
 
 For Chat Completions and Responses, `functionToolCallbacks` maps tool names to local functions. A callback receives the arguments as a JSON string and should return a string or `Promise<string>`.
 
+Chat Completions skips function callbacks and MCP tools when `finish_reason` is `length`, preserving partial output, token usage, and any estimated cost.
+
 Responses tool calls explicitly marked `in_progress` or `incomplete` are returned as data without invoking callbacks. Partial text and completion metadata remain available for inspection.
 
 These providers return callback results as eval output; they do not run a general model-to-tool loop that sends every result back to the model. To evaluate a complete agent loop, use the [Agents SDK provider](/docs/providers/openai-agents) or a [custom provider](/docs/providers/custom-api/).

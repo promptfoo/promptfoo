@@ -1518,7 +1518,9 @@ For models that support HTTP service tiers, set `service_tier` in the provider c
 For example, use `bedrock:runtime:chat:us.moonshotai.kimi-k3` or
 `bedrock:runtime:responses:us.moonshotai.kimi-k3` with `service_tier: flex`.
 [Kimi K3](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-moonshot-ai-kimi-k3.html)
-supports Priority and Flex through these HTTP APIs; its Converse and Invoke APIs use Standard.
+supports Priority and Flex through these HTTP APIs. For US/global inference profiles,
+promptfoo estimates Priority at 1.75× Standard and Flex at 0.5× Standard. Its Converse
+and Invoke APIs remain Standard-only.
 
 The adapters inherit [OpenAI provider options](./openai.md), including streaming,
 client-side functions, structured output, multimodal input, and request fields through
@@ -1542,8 +1544,9 @@ but does not support `background: true`, server-side tools, or GPT OSS models. U
 Mantle Responses for GPT OSS. Neither Runtime Chat nor Responses supports application
 inference profiles. Only the account's default project is supported. Set `passthrough.store: false`
 when conversation storage is unnecessary. Keep a model ID on continuation requests.
-Automatic cost reporting requires known Bedrock rates and sufficient token usage details;
-use `inputCost` and `outputCost` for models whose rates are not yet in promptfoo.
+Automatic cost reporting requires verified Bedrock rates for the selected model/API/tier
+and sufficient token usage details; otherwise cost remains unset. Use `inputCost` and
+`outputCost` to supply explicit rates.
 
 Check AWS's [Chat Completions](https://docs.aws.amazon.com/bedrock/latest/userguide/inference-chat-completions.html)
 and [Responses](https://docs.aws.amazon.com/bedrock/latest/userguide/inference-responses-api.html)
