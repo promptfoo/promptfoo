@@ -10,11 +10,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const require = createRequire(import.meta.url);
 const { requestImage, downloadImage } = require('../../scripts/imageGeneration.cjs') as {
-  requestImage: (
-    data: string,
-    apiKey: string,
-    contentLength: number,
-  ) => Promise<{ url?: string; b64_json?: string }>;
+  requestImage: (data: string, apiKey: string) => Promise<{ url?: string; b64_json?: string }>;
   downloadImage: (url: string, filepath: string) => Promise<void>;
 };
 
@@ -85,7 +81,7 @@ describe('image generation request', () => {
       const transport = mockHttps('request');
       const data = JSON.stringify({ prompt, model: 'gpt-image-1' });
       const length = Buffer.byteLength(data);
-      const result = requestImage(data, 'test-api-key', length);
+      const result = requestImage(data, 'test-api-key');
 
       expect(transport.spy).toHaveBeenCalledWith(
         {
@@ -114,7 +110,7 @@ describe('image generation request', () => {
 
   it('returns the first generated image', async () => {
     const transport = mockHttps('request');
-    const result = requestImage('{}', 'test-api-key', 2);
+    const result = requestImage('{}', 'test-api-key');
     transport.respond();
     transport.response.emit(
       'data',
@@ -126,7 +122,7 @@ describe('image generation request', () => {
 
   it('rejects an API error response', async () => {
     const transport = mockHttps('request');
-    const result = requestImage('{}', 'test-api-key', 2);
+    const result = requestImage('{}', 'test-api-key');
     const rejected = expect(result).rejects.toThrow('Invalid API key');
     transport.response.statusCode = 401;
     transport.respond();
@@ -137,7 +133,7 @@ describe('image generation request', () => {
 
   it('rejects invalid JSON', async () => {
     const transport = mockHttps('request');
-    const result = requestImage('{}', 'test-api-key', 2);
+    const result = requestImage('{}', 'test-api-key');
     const rejected = expect(result).rejects.toBeInstanceOf(SyntaxError);
     transport.respond();
     transport.response.emit('data', '<html>Unavailable</html>');
@@ -148,7 +144,7 @@ describe('image generation request', () => {
   it('rejects request connection errors', async () => {
     const transport = mockHttps('request');
     const error = new Error('Connection reset');
-    const result = requestImage('{}', 'test-api-key', 2);
+    const result = requestImage('{}', 'test-api-key');
     const rejected = expect(result).rejects.toBe(error);
     transport.request.emit('error', error);
     await rejected;

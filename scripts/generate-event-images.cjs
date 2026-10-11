@@ -399,7 +399,7 @@ async function generateImage(prompt) {
     n: 1,
   });
 
-  return requestImage(data, OPENAI_API_KEY, Buffer.byteLength(data));
+  return requestImage(data, OPENAI_API_KEY);
 }
 
 async function processEvent(event) {
