@@ -3471,6 +3471,7 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
     { action: 'Rate', previousReason: 2, expectedReason: 0, graderError: true },
     { action: 'Clear rating', previousReason: 0, expectedReason: 2, graderError: true },
     { action: 'Clear rating', previousReason: 1, expectedReason: 2, graderError: false },
+    { action: 'Clear rating', previousReason: 0, expectedReason: 2, graderError: false },
   ])(
     'updates the displayed error category after $action (graderError=$graderError)',
     async ({ action, previousReason, expectedReason, graderError }) => {
@@ -3496,6 +3497,8 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
       }
       if (action === 'Rate') {
         output.gradingResult.componentResults.splice(1, 1);
+      } else if (!graderError && previousReason === 0) {
+        output.gradingResult.componentResults.splice(0, 1);
       }
       vi.mocked(useTableStore).mockImplementation(() =>
         createTableStore({
@@ -3511,6 +3514,10 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
       const updatedOutput =
         mockSetTable.mock.calls[mockSetTable.mock.calls.length - 1]?.[0].body[0].outputs[0];
       expect(updatedOutput.failureReason).toBe(expectedReason);
+      expect(updatedOutput.pass).toBe(expectedReason === 0);
+      if (action === 'Clear rating' && !graderError && previousReason === 0) {
+        expect(updatedOutput.score).toBe(0);
+      }
       if (action === 'Rate') {
         expect(updatedOutput.gradingResult.componentResults[1].metadata).toEqual({
           originalFailureReason: previousReason,
