@@ -1169,11 +1169,27 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       return undefined;
     }
 
-    // Bedrock rejects duplicate tool names with ValidationException. MCP-discovered
-    // tools take precedence; explicit config.tools entries with conflicting names
-    // are dropped with a warning so users can detect the collision.
+    // Reserve native system-tool names before merging MCP-generated tool specs.
+    const systemToolNames = new Set(
+      (tools || [])
+        .map((tool: BedrockConverseToolConfig) => tool.systemTool?.name)
+        .filter((name: unknown): name is string => typeof name === 'string'),
+    );
+    const availableMcpTools = mcpTools.filter((tool) => {
+      const name = tool.toolSpec?.name;
+      if (name && systemToolNames.has(name)) {
+        logger.warn(
+          '[Bedrock Converse] MCP tool conflicts with a native system tool; using the system tool.',
+          { toolName: name },
+        );
+        return false;
+      }
+      return true;
+    });
+
+    // Other MCP tools keep precedence over conflicting configured custom tools.
     const mcpToolNames = new Set(
-      mcpTools
+      availableMcpTools
         .map((tool) => tool.toolSpec?.name)
         .filter((name): name is string => typeof name === 'string'),
     );
@@ -1188,7 +1204,10 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       return true;
     });
 
-    const converseTools = convertToolsToConverseFormat([...mcpTools, ...dedupedConfigTools]);
+    const converseTools = convertToolsToConverseFormat([
+      ...availableMcpTools,
+      ...dedupedConfigTools,
+    ]);
     const requestedToolChoice = configToolChoice
       ? convertToolChoiceToConverseFormat(configToolChoice)
       : undefined;

@@ -670,6 +670,111 @@ describe('Converse native request features', () => {
       expect(system[0].guardContent.image.source.bytes).toBe('YWJj');
     },
   );
+  it.each(
+    [false, true].flatMap((streaming) =>
+      ['provider-tools', 'provider-native', 'prompt-tools', 'prompt-native'].map((source) => ({
+        streaming,
+        source,
+      })),
+    ),
+  )(
+    'reserves system-tool names against MCP ($source, streaming=$streaming)',
+    async ({ streaming, source }) => {
+      const tools = [
+        { systemTool: { name: 'nova_grounding' } },
+        {
+          toolSpec: {
+            name: 'remote_other',
+            description: 'configured custom tool',
+            inputSchema: { json: { type: 'object' } },
+          },
+        },
+        { cachePoint: { type: 'default' as const } },
+      ];
+      const selected: Partial<BedrockConverseOptions> = source.endsWith('native')
+        ? { toolConfig: { tools } }
+        : { tools };
+      const promptScoped = source.startsWith('prompt');
+      const local = vi.fn();
+      const mcpCall = vi
+        .fn()
+        .mockResolvedValue({ content: [{ type: 'text', text: 'MCP_REMOTE' }] });
+      const { provider, send } = fixture({
+        streaming,
+        ...(promptScoped ? { tools: [{ toolSpec: { name: 'provider_only' } }] } : selected),
+        functionToolCallbacks: { nova_grounding: local, remote_other: local },
+      });
+      Object.assign(provider, {
+        mcpClient: {
+          getAllTools: () =>
+            ['nova_grounding', 'remote_other'].map((name) => ({
+              name,
+              description: `MCP ${name}`,
+              inputSchema: { type: 'object' },
+            })),
+          callTool: mcpCall,
+        },
+      });
+      const content = [
+        {
+          toolUse: {
+            toolUseId: 'system',
+            name: 'nova_grounding',
+            type: 'server_tool_use',
+            input: {},
+          },
+        },
+        { toolUse: { toolUseId: 'remote', name: 'remote_other', input: {} } },
+      ];
+      send.mockResolvedValueOnce(
+        streaming
+          ? stream([
+              ...content.flatMap(({ toolUse }, contentBlockIndex) => [
+                {
+                  contentBlockStart: {
+                    contentBlockIndex,
+                    start: {
+                      toolUse: {
+                        toolUseId: toolUse.toolUseId,
+                        name: toolUse.name,
+                        ...(toolUse.type ? { type: toolUse.type } : {}),
+                      },
+                    },
+                  },
+                },
+                { contentBlockDelta: { contentBlockIndex, delta: { toolUse: { input: '{}' } } } },
+                { contentBlockStop: { contentBlockIndex } },
+              ]),
+              { messageStop: { stopReason: 'tool_use' } },
+              { metadata: { usage: reply.usage } },
+            ])
+          : {
+              ...reply,
+              output: { message: { role: 'assistant', content } },
+              stopReason: 'tool_use',
+            },
+      );
+      const response = await provider.callApi('hello', {
+        vars: {},
+        prompt: { raw: 'hello', label: 'hello', ...(promptScoped ? { config: selected } : {}) },
+      });
+      expect(response.error).toBeUndefined();
+      const sentTools = send.mock.calls[0][0].input.toolConfig.tools;
+      expect(sentTools).toHaveLength(3);
+      expect(sentTools[0].toolSpec).toMatchObject({
+        name: 'remote_other',
+        description: 'MCP remote_other',
+      });
+      expect(sentTools[1]).toEqual({ systemTool: { name: 'nova_grounding' } });
+      expect(sentTools[2]).toEqual({ cachePoint: { type: 'default' } });
+      expect(response.output).toContain('MCP_REMOTE');
+      expect(mcpCall).toHaveBeenCalledTimes(1);
+      expect(mcpCall).toHaveBeenCalledWith('remote_other', {});
+      expect(local).not.toHaveBeenCalled();
+      expect(tools[0]).toEqual({ systemTool: { name: 'nova_grounding' } });
+    },
+  );
+
   it.each([false, true])('forwards native options with streaming=%s', async (streaming) => {
     const config: BedrockConverseOptions = {
       streaming,
