@@ -1326,7 +1326,9 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
         this.config.thinking,
         effort,
       );
-      if (normalizedThinking !== undefined) {
+      if (normalizedThinking === undefined) {
+        delete fields.thinking;
+      } else {
         fields.thinking = normalizedThinking;
       }
     }
