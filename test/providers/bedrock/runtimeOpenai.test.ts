@@ -530,12 +530,15 @@ describe.each([
   });
 
   it.each([
-    { cacheWrite: 0, manual: false, expected: 0.000286 },
-    { cacheWrite: 10, manual: false, expected: undefined },
-    { cacheWrite: 10, manual: true, expected: 1.4 },
-  ])(
-    'preserves cache-write pricing uncertainty (writes: $cacheWrite, manual: $manual)',
-    async ({ cacheWrite, manual, expected }) => {
+    { tier: 'default', cacheWrite: 0, manual: false, expected: 0.000286 },
+    { tier: 'default', cacheWrite: 10, manual: false, expected: undefined },
+    { tier: 'default', cacheWrite: 10, manual: true, expected: 1.4 },
+    { tier: 'priority', cacheWrite: 0, manual: false, expected: 0.0005005 },
+    { tier: 'priority', cacheWrite: 10, manual: false, expected: undefined },
+    { tier: 'priority', cacheWrite: 10, manual: true, expected: 1.4 },
+  ] as const)(
+    'preserves cache-write pricing uncertainty (tier: $tier, writes: $cacheWrite, manual: $manual)',
+    async ({ tier, cacheWrite, manual, expected }) => {
       const detailKey = mode === 'chat' ? 'prompt_tokens_details' : 'input_tokens_details';
       vi.mocked(fetchWithCache).mockResolvedValue({
         data: {
@@ -550,7 +553,11 @@ describe.each([
         cached: false,
       });
       const provider = new Provider('us.xai.grok-4.6', {
-        config: { apiKey: 'fixture', ...(manual ? { inputCost: 0.01, outputCost: 0.02 } : {}) },
+        config: {
+          apiKey: 'fixture',
+          service_tier: tier,
+          ...(manual ? { inputCost: 0.01, outputCost: 0.02 } : {}),
+        },
       });
       const result = await provider.callApi('hello');
       expect(result.error).toBeUndefined();
@@ -564,6 +571,22 @@ describe.each([
   );
 
   it.each([
+    ['global.xai.grok-4.6', 0.0077, 0.013475, 0.00385],
+    ['us.xai.grok-4.6', 0.00847, 0.0148225, 0.004235],
+    [
+      'arn:aws:bedrock:us-east-1:123456789012:inference-profile/global.xai.grok-4.6',
+      0.0077,
+      0.013475,
+      0.00385,
+    ],
+    [
+      'arn:aws:bedrock:us-east-1:123456789012:inference-profile/us.xai.grok-4.6',
+      0.00847,
+      0.0148225,
+      0.004235,
+    ],
+    ['global.xai.grok-4.7', 0.0077, 0.013475, 0.00385],
+    ['us.xai.grok-4.7', 0.00847, 0.0148225, 0.004235],
     ['global.moonshotai.kimi-k3', 0.017535, 0.03068625, 0.0087675],
     ['us.moonshotai.kimi-k3', 0.0192885, 0.033754875, 0.00964425],
     ['in.moonshotai.kimi-k3', 0.0192885, undefined, undefined],
@@ -586,14 +609,14 @@ describe.each([
       undefined,
     ],
   ] as const)(
-    'prices only documented Kimi HTTP tiers for %s',
+    'prices only documented Runtime HTTP tiers for %s',
     async (model, standard, priority, flex) => {
       for (const [tier, expected] of [
         ['default', standard],
         ['priority', priority],
         ['flex', flex],
       ] as const) {
-        mockPricingResponse();
+        mockPricingResponse(200, model.includes('kimi-k3') ? 100 : 0);
         const result = await new Provider(model, {
           config: {
             apiKey: 'fixture',
@@ -614,26 +637,34 @@ describe.each([
   );
 
   it.each([
-    ['global', 'priority', { inputCost: 0.01 }, 10.02625],
-    ['global', 'priority', { outputCost: 0.02 }, 20.00443625],
-    ['global', 'priority', { inputCost: 0 }, 0.02625],
-    ['global', 'priority', { outputCost: 0 }, 0.00443625],
-    ['global', 'flex', { inputCost: 0.01 }, 10.0075],
-    ['global', 'flex', { outputCost: 0.02 }, 20.0012675],
-    ['us', 'priority', { inputCost: 0.01, outputCost: 0.02 }, 30],
-    ['us', 'priority', { cost: 0 }, 0],
-    ['in', 'priority', { inputCost: 0.01, outputCost: 0.02 }, 30],
-    ['in', 'priority', { cost: 0 }, 0],
-    ['in', 'priority', { inputCost: 0 }, undefined],
-    ['in', 'flex', { outputCost: 0 }, undefined],
+    ['global.xai.grok-4.6', 'priority', { inputCost: 0.01 }, 10.0105],
+    ['global.xai.grok-4.6', 'priority', { outputCost: 0.02 }, 20.002975],
+    ['global.xai.grok-4.6', 'priority', { inputCost: 0 }, 0.0105],
+    ['global.xai.grok-4.6', 'priority', { outputCost: 0 }, 0.002975],
+    ['global.xai.grok-4.6', 'flex', { inputCost: 0.01 }, 10.003],
+    ['global.xai.grok-4.6', 'flex', { outputCost: 0.02 }, 20.00085],
+    ['us.xai.grok-4.6', 'priority', { inputCost: 0.01, outputCost: 0.02 }, 30],
+    ['us.xai.grok-4.6', 'priority', { cost: 0 }, 0],
+    ['global.moonshotai.kimi-k3', 'priority', { inputCost: 0.01 }, 10.02625],
+    ['global.moonshotai.kimi-k3', 'priority', { outputCost: 0.02 }, 20.00443625],
+    ['global.moonshotai.kimi-k3', 'priority', { inputCost: 0 }, 0.02625],
+    ['global.moonshotai.kimi-k3', 'priority', { outputCost: 0 }, 0.00443625],
+    ['global.moonshotai.kimi-k3', 'flex', { inputCost: 0.01 }, 10.0075],
+    ['global.moonshotai.kimi-k3', 'flex', { outputCost: 0.02 }, 20.0012675],
+    ['us.moonshotai.kimi-k3', 'priority', { inputCost: 0.01, outputCost: 0.02 }, 30],
+    ['us.moonshotai.kimi-k3', 'priority', { cost: 0 }, 0],
+    ['in.moonshotai.kimi-k3', 'priority', { inputCost: 0.01, outputCost: 0.02 }, 30],
+    ['in.moonshotai.kimi-k3', 'priority', { cost: 0 }, 0],
+    ['in.moonshotai.kimi-k3', 'priority', { inputCost: 0 }, undefined],
+    ['in.moonshotai.kimi-k3', 'flex', { outputCost: 0 }, undefined],
   ] as const)(
-    'keeps Kimi manual rates authoritative for %s %s %j',
-    async (profile, tier, costs, expected) => {
-      mockPricingResponse();
-      const result = await new Provider(`${profile}.moonshotai.kimi-k3`, {
+    'keeps Runtime manual rates authoritative for %s %s %j',
+    async (model, tier, costs, expected) => {
+      mockPricingResponse(200, model.includes('kimi-k3') ? 100 : 0);
+      const result = await new Provider(model, {
         config: {
           apiKey: 'fixture',
-          region: profile === 'in' ? 'ap-south-1' : 'us-east-1',
+          region: model.startsWith('in.') ? 'ap-south-1' : 'us-east-1',
           service_tier: tier,
           ...costs,
         },
@@ -647,9 +678,12 @@ describe.each([
     },
   );
 
-  it('prices the reported Kimi tier and Global profile from India', async () => {
-    mockPricingResponse(200, 100, 'flex');
-    const result = await new Provider('global.moonshotai.kimi-k3', {
+  it.each([
+    ['global.moonshotai.kimi-k3', 100, 0.0087675],
+    ['global.xai.grok-4.6', 0, 0.00385],
+  ] as const)('prices the reported tier for %s from India', async (model, cacheWrite, expected) => {
+    mockPricingResponse(200, cacheWrite, 'flex');
+    const result = await new Provider(model, {
       config: {
         apiKey: 'fixture',
         region: 'ap-south-1',
@@ -657,7 +691,7 @@ describe.each([
       },
     }).callApi('hello');
     expect(result.error).toBeUndefined();
-    expect(result.cost).toBeCloseTo(0.0087675, 12);
+    expect(result.cost).toBeCloseTo(expected, 12);
     const request = vi.mocked(fetchWithCache).mock.calls.at(-1)?.[1];
     expect(JSON.parse(String(request?.body)).service_tier).toBe('priority');
   });
@@ -670,6 +704,22 @@ describe.each([
     expect(result.error).toBeUndefined();
     expect(result.cost).toBeUndefined();
   });
+
+  it.each(['global.xai.grok-4.6', 'global.moonshotai.kimi-k3'])(
+    'keeps HTTP tier cost unknown without usage for %s',
+    async (model) => {
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: { ...reply, usage: undefined, service_tier: 'priority' },
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      });
+      const result = await new Provider(model, { config: { apiKey: 'fixture' } }).callApi('hello');
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('READY');
+      expect(result.cost).toBeUndefined();
+    },
+  );
 
   if (mode === 'chat') {
     it.each([

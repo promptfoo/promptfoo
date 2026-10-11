@@ -124,12 +124,14 @@ function runtimeCost(
   ) {
     return undefined;
   }
-  // Kimi's published US/global tier multipliers apply only to the HTTP APIs.
-  // India non-default tiers retain unknown pricing until their rates are established.
-  const kimiHttpTier =
-    /(?:^|:inference-profile\/)(?:us|global)\.moonshotai\.kimi-k3$/i.test(modelName) &&
+  // These Runtime HTTP adapters apply published US/global tier multipliers over Standard rates.
+  // Kimi's India non-default tiers retain unknown pricing until their rates are established.
+  const httpTier =
+    /(?:^|:inference-profile\/)(?:us|global)\.(?:moonshotai\.kimi-k3|xai\.grok-4\.6)$/i.test(
+      modelName,
+    ) &&
     (serviceTier === 'priority' || serviceTier === 'flex');
-  const tierMultiplier = kimiHttpTier ? (serviceTier === 'priority' ? 1.75 : 0.5) : 1;
+  const tierMultiplier = httpTier ? (serviceTier === 'priority' ? 1.75 : 0.5) : 1;
   const catalogCost = (completionTokens?: number) => {
     const cost = calculateBedrockCost(
       modelName,
@@ -139,7 +141,7 @@ function runtimeCost(
       catalogWrite,
       region,
       {
-        type: (kimiHttpTier ? 'default' : (serviceTier ?? 'default')) as
+        type: (httpTier ? 'default' : (serviceTier ?? 'default')) as
           | 'default'
           | 'priority'
           | 'flex'
