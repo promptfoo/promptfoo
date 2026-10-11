@@ -897,6 +897,164 @@ describe('Converse native request features', () => {
   });
 });
 
+describe('ConverseStream terminal event validation', () => {
+  const stop = {
+    messageStop: { stopReason: 'tool_use', additionalModelResponseFields: { terminal: 'first' } },
+  };
+  const metadata = { metadata: { usage: reply.usage, metrics: { latencyMs: 7 } } };
+  const toolEvents = (index: number) => [
+    {
+      contentBlockStart: {
+        contentBlockIndex: index,
+        start: { toolUse: { name: 'lookup', toolUseId: `id-${index}` } },
+      },
+    },
+    { contentBlockDelta: { contentBlockIndex: index, delta: { toolUse: { input: '{}' } } } },
+    { contentBlockStop: { contentBlockIndex: index } },
+  ];
+  const content = [
+    { messageStart: { role: 'assistant' } },
+    { contentBlockDelta: { contentBlockIndex: 0, delta: { text: 'SAFE' } } },
+    { contentBlockStop: { contentBlockIndex: 0 } },
+    ...toolEvents(1),
+  ];
+  const lateEvents = {
+    content: [
+      { contentBlockDelta: { contentBlockIndex: 2, delta: { text: 'LATE' } } },
+      { contentBlockStop: { contentBlockIndex: 2 } },
+    ],
+    tool: toolEvents(2),
+    messageStart: [{ messageStart: { role: 'assistant' } }],
+    messageStop: [
+      {
+        messageStop: {
+          stopReason: 'tool_use',
+          additionalModelResponseFields: { terminal: 'second' },
+        },
+      },
+    ],
+    metadata: [{ metadata: { usage: { inputTokens: 999, outputTokens: 999, totalTokens: 1998 } } }],
+  };
+
+  it.each(
+    (['messageStop', 'metadata'] as const).flatMap((phase) =>
+      (Object.keys(lateEvents) as Array<keyof typeof lateEvents>)
+        .filter((event) => phase === 'metadata' || event !== 'metadata')
+        .map((event) => ({ phase, event })),
+    ),
+  )(
+    'rejects $event after $phase without changing terminal output or billing',
+    async ({ phase, event }) => {
+      cache.enabled = true;
+      const callback = vi.fn().mockResolvedValue('DISPATCHED');
+      const { provider, send } = fixture({
+        streaming: true,
+        functionToolCallbacks: { lookup: callback },
+      });
+      send.mockResolvedValueOnce(
+        stream([
+          ...content,
+          stop,
+          ...(phase === 'metadata' ? [metadata] : []),
+          ...lateEvents[event],
+          ...(phase === 'messageStop' ? [metadata] : []),
+        ]),
+      );
+      const response = await provider.callApi('hello');
+      expect(response.error).toContain(
+        `after ${phase === 'metadata' ? 'terminal metadata' : 'messageStop'}`,
+      );
+      expect(response.output).toContain('SAFE');
+      expect(response.output).not.toContain('LATE');
+      expect(response.metadata?.content).toHaveLength(2);
+      expect(response.metadata?.additionalModelResponseFields).toEqual({ terminal: 'first' });
+      expect(response.metadata?.stopReason).toBe('tool_use');
+      expect(response.metadata?.latencyMs).toBe(7);
+      expect(response.tokenUsage).toMatchObject({ prompt: 3, completion: 2, total: 5 });
+      expect(response.cost).toBeGreaterThan(0);
+      expect(callback).not.toHaveBeenCalled();
+      expect(cache.set).not.toHaveBeenCalled();
+    },
+  );
+
+  it('does not replace an unsuccessful terminal stop with a later tool_use stop', async () => {
+    cache.enabled = true;
+    const callback = vi.fn();
+    const { provider, send } = fixture({
+      streaming: true,
+      functionToolCallbacks: { lookup: callback },
+    });
+    send.mockResolvedValueOnce(
+      stream([...content, { messageStop: { stopReason: 'malformed_tool_use' } }, stop, metadata]),
+    );
+    const response = await provider.callApi('hello');
+    expect(response.error).toContain('malformed_tool_use');
+    expect(response.metadata?.stopReason).toBe('malformed_tool_use');
+    expect(response.tokenUsage).toMatchObject({ total: 5 });
+    expect(callback).not.toHaveBeenCalled();
+    expect(cache.set).not.toHaveBeenCalled();
+  });
+
+  it.each(['beforeStop', 'afterStop', 'afterMetadata'] as const)(
+    'preserves SDK iterator failures with known billing only at %s',
+    async (position) => {
+      cache.enabled = true;
+      const callback = vi.fn();
+      const { provider, send } = fixture({
+        streaming: true,
+        functionToolCallbacks: { lookup: callback },
+      });
+      send.mockResolvedValueOnce({
+        stream: (async function* () {
+          yield* content;
+          if (position !== 'beforeStop') {
+            yield stop;
+          }
+          if (position === 'afterMetadata') {
+            yield metadata;
+          }
+          throw new Error('fixture SDK exception');
+        })(),
+      });
+      const response = await provider.callApi('hello');
+      expect(response.error).toContain('fixture SDK exception');
+      if (position === 'afterMetadata') {
+        expect(response.output).toContain('SAFE');
+        expect(response.tokenUsage).toMatchObject({ total: 5 });
+        expect(response.cost).toBeGreaterThan(0);
+      } else {
+        expect(response.output).toBeUndefined();
+        expect(response.tokenUsage).toBeUndefined();
+        expect(response.cost).toBeUndefined();
+      }
+      expect(callback).not.toHaveBeenCalled();
+      expect(cache.set).not.toHaveBeenCalled();
+    },
+  );
+
+  it('preserves explicit stream exception events after terminal metadata', async () => {
+    cache.enabled = true;
+    const callback = vi.fn();
+    const { provider, send } = fixture({
+      streaming: true,
+      functionToolCallbacks: { lookup: callback },
+    });
+    send.mockResolvedValueOnce(
+      stream([
+        ...content,
+        stop,
+        metadata,
+        { serviceUnavailableException: { message: 'fixture terminal failure' } },
+      ]),
+    );
+    const response = await provider.callApi('hello');
+    expect(response.error).toContain('serviceUnavailableException: fixture terminal failure');
+    expect(response.tokenUsage).toMatchObject({ total: 5 });
+    expect(callback).not.toHaveBeenCalled();
+    expect(cache.set).not.toHaveBeenCalled();
+  });
+});
+
 describe('ConverseStream response parity', () => {
   it.each([true, false])(
     'preserves interleaved streamed text, reasoning and tool results (thinking=%s)',

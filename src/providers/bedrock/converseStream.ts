@@ -63,7 +63,8 @@ export async function collectConverseStream(
   const imageChunks = new Map<number, Uint8Array[]>();
   const redactedChunks = new Map<number, Uint8Array[]>();
   const openBlocks = new Set<number>();
-  let receivedMetadata = false;
+  let phase: 'content' | 'stopped' | 'complete' = 'content';
+  let terminalError: string | undefined;
   const result: ConverseCommandOutput = {
     $metadata: response.$metadata,
     output: undefined,
@@ -71,157 +72,175 @@ export async function collectConverseStream(
     usage: undefined,
     metrics: undefined,
   };
-  for await (const event of response.stream) {
-    for (const key of [
-      'internalServerException',
-      'modelStreamErrorException',
-      'serviceUnavailableException',
-      'throttlingException',
-      'validationException',
-    ] as const) {
-      if (event[key]) {
-        throw new Error(`${key}: ${event[key].message ?? 'Bedrock stream failed'}`);
-      }
-    }
-    if (event.contentBlockStart) {
-      const { contentBlockIndex, start } = event.contentBlockStart;
-      const index = contentBlockIndex ?? 0;
-      openBlocks.add(index);
-      if (start?.toolUse) {
-        blocks.set(index, { toolUse: { ...start.toolUse, input: {} } });
-        toolInputs.set(index, '');
-      } else if (start?.toolResult) {
-        blocks.set(index, { toolResult: { ...start.toolResult, content: [] } });
-      } else if (start?.image) {
-        blocks.set(index, { image: { ...start.image, source: undefined } });
-      }
-    }
-    if (event.contentBlockDelta?.delta) {
-      const { delta, contentBlockIndex } = event.contentBlockDelta;
-      const index = contentBlockIndex ?? 0;
-      openBlocks.add(index);
-      const block = blocks.get(index);
-      if (delta.text !== undefined) {
-        if (block?.citationsContent) {
-          const text =
-            block.citationsContent.content?.map((part) => part.text ?? '').join('') ?? '';
-          block.citationsContent.content = [{ text: text + delta.text }];
-        } else {
-          blocks.set(index, { text: (block?.text ?? '') + delta.text });
+  try {
+    for await (const event of response.stream) {
+      for (const key of [
+        'internalServerException',
+        'modelStreamErrorException',
+        'serviceUnavailableException',
+        'throttlingException',
+        'validationException',
+      ] as const) {
+        if (event[key]) {
+          throw new Error(`${key}: ${event[key].message ?? 'Bedrock stream failed'}`);
         }
-      } else if (delta.toolUse) {
-        if (!block?.toolUse) {
-          throw new Error('Bedrock streamed tool arguments without a tool start');
+      }
+      if (phase === 'complete') {
+        terminalError ??= 'Bedrock response stream returned an event after terminal metadata';
+        break;
+      }
+      if (phase === 'stopped' && !event.metadata) {
+        // Ignore late content, but drain the first terminal metadata for billing.
+        terminalError ??= 'Bedrock response stream returned an event after messageStop';
+        continue;
+      }
+      if (event.contentBlockStart) {
+        const { contentBlockIndex, start } = event.contentBlockStart;
+        const index = contentBlockIndex ?? 0;
+        openBlocks.add(index);
+        if (start?.toolUse) {
+          blocks.set(index, { toolUse: { ...start.toolUse, input: {} } });
+          toolInputs.set(index, '');
+        } else if (start?.toolResult) {
+          blocks.set(index, { toolResult: { ...start.toolResult, content: [] } });
+        } else if (start?.image) {
+          blocks.set(index, { image: { ...start.image, source: undefined } });
         }
-        toolInputs.set(index, (toolInputs.get(index) ?? '') + (delta.toolUse.input ?? ''));
-      } else if (delta.reasoningContent) {
-        const reasoning = delta.reasoningContent;
-        if (reasoning.redactedContent) {
-          const chunks = redactedChunks.get(index) ?? [];
-          chunks.push(reasoning.redactedContent);
-          redactedChunks.set(index, chunks);
-          blocks.set(index, {
-            reasoningContent: { redactedContent: reasoning.redactedContent },
-          });
-        } else {
-          const previous = block?.reasoningContent?.reasoningText;
-          blocks.set(index, {
-            reasoningContent: {
-              reasoningText: {
-                text: (previous?.text ?? '') + (reasoning.text ?? ''),
-                ...(previous?.signature || reasoning.signature
-                  ? { signature: (previous?.signature ?? '') + (reasoning.signature ?? '') }
-                  : {}),
+      }
+      if (event.contentBlockDelta?.delta) {
+        const { delta, contentBlockIndex } = event.contentBlockDelta;
+        const index = contentBlockIndex ?? 0;
+        openBlocks.add(index);
+        const block = blocks.get(index);
+        if (delta.text !== undefined) {
+          if (block?.citationsContent) {
+            const text =
+              block.citationsContent.content?.map((part) => part.text ?? '').join('') ?? '';
+            block.citationsContent.content = [{ text: text + delta.text }];
+          } else {
+            blocks.set(index, { text: (block?.text ?? '') + delta.text });
+          }
+        } else if (delta.toolUse) {
+          if (!block?.toolUse) {
+            throw new Error('Bedrock streamed tool arguments without a tool start');
+          }
+          toolInputs.set(index, (toolInputs.get(index) ?? '') + (delta.toolUse.input ?? ''));
+        } else if (delta.reasoningContent) {
+          const reasoning = delta.reasoningContent;
+          if (reasoning.redactedContent) {
+            const chunks = redactedChunks.get(index) ?? [];
+            chunks.push(reasoning.redactedContent);
+            redactedChunks.set(index, chunks);
+            blocks.set(index, {
+              reasoningContent: { redactedContent: reasoning.redactedContent },
+            });
+          } else {
+            const previous = block?.reasoningContent?.reasoningText;
+            blocks.set(index, {
+              reasoningContent: {
+                reasoningText: {
+                  text: (previous?.text ?? '') + (reasoning.text ?? ''),
+                  ...(previous?.signature || reasoning.signature
+                    ? { signature: (previous?.signature ?? '') + (reasoning.signature ?? '') }
+                    : {}),
+                },
               },
+            });
+          }
+        } else if (delta.citation) {
+          blocks.set(index, {
+            citationsContent: {
+              content:
+                block?.citationsContent?.content ?? (block?.text ? [{ text: block.text }] : []),
+              citations: [
+                ...(block?.citationsContent?.citations ?? []),
+                {
+                  ...delta.citation,
+                  sourceContent: delta.citation.sourceContent?.flatMap((part) =>
+                    part.text === undefined ? [] : [{ text: part.text }],
+                  ),
+                },
+              ],
             },
           });
-        }
-      } else if (delta.citation) {
-        blocks.set(index, {
-          citationsContent: {
-            content:
-              block?.citationsContent?.content ?? (block?.text ? [{ text: block.text }] : []),
-            citations: [
-              ...(block?.citationsContent?.citations ?? []),
-              {
-                ...delta.citation,
-                sourceContent: delta.citation.sourceContent?.flatMap((part) =>
-                  part.text === undefined ? [] : [{ text: part.text }],
-                ),
-              },
-            ],
-          },
-        });
-      } else if (delta.image) {
-        if (!block?.image) {
-          throw new Error('Bedrock streamed image data without an image start');
-        }
-        if (delta.image.error) {
-          // A failed image can still be followed by billable terminal metadata.
-          block.image.error = delta.image.error;
-        }
-        const source = delta.image.source;
-        if (source?.bytes) {
-          const chunks = imageChunks.get(index) ?? [];
-          chunks.push(source.bytes);
-          imageChunks.set(index, chunks);
-        } else if (source) {
-          imageChunks.delete(index);
-          block.image.source = source;
-        }
-      } else if (delta.toolResult) {
-        if (!block?.toolResult) {
-          throw new Error('Bedrock streamed a tool result without a tool result start');
-        }
-        for (const part of delta.toolResult) {
-          if (part.text !== undefined) {
-            const content = block.toolResult.content ?? (block.toolResult.content = []);
-            const last = content[content.length - 1];
-            if (last?.text === undefined) {
-              content.push({ text: part.text });
-            } else {
-              last.text += part.text;
+        } else if (delta.image) {
+          if (!block?.image) {
+            throw new Error('Bedrock streamed image data without an image start');
+          }
+          if (delta.image.error) {
+            // A failed image can still be followed by billable terminal metadata.
+            block.image.error = delta.image.error;
+          }
+          const source = delta.image.source;
+          if (source?.bytes) {
+            const chunks = imageChunks.get(index) ?? [];
+            chunks.push(source.bytes);
+            imageChunks.set(index, chunks);
+          } else if (source) {
+            imageChunks.delete(index);
+            block.image.source = source;
+          }
+        } else if (delta.toolResult) {
+          if (!block?.toolResult) {
+            throw new Error('Bedrock streamed a tool result without a tool result start');
+          }
+          for (const part of delta.toolResult) {
+            if (part.text !== undefined) {
+              const content = block.toolResult.content ?? (block.toolResult.content = []);
+              const last = content[content.length - 1];
+              if (last?.text === undefined) {
+                content.push({ text: part.text });
+              } else {
+                last.text += part.text;
+              }
+            } else if (part.json !== undefined) {
+              block.toolResult.content?.push({ json: part.json });
             }
-          } else if (part.json !== undefined) {
-            block.toolResult.content?.push({ json: part.json });
           }
         }
       }
-    }
-    if (event.contentBlockStop) {
-      const index = event.contentBlockStop.contentBlockIndex ?? 0;
-      const block = blocks.get(index);
-      const chunks = imageChunks.get(index);
-      if (block?.image && chunks) {
-        block.image.source = { bytes: Buffer.concat(chunks) };
+      if (event.contentBlockStop) {
+        const index = event.contentBlockStop.contentBlockIndex ?? 0;
+        const block = blocks.get(index);
+        const chunks = imageChunks.get(index);
+        if (block?.image && chunks) {
+          block.image.source = { bytes: Buffer.concat(chunks) };
+        }
+        imageChunks.delete(index);
+        const reasoningChunks = redactedChunks.get(index);
+        if (block?.reasoningContent?.redactedContent && reasoningChunks) {
+          block.reasoningContent.redactedContent = Buffer.concat(reasoningChunks);
+        }
+        redactedChunks.delete(index);
+        openBlocks.delete(index);
       }
-      imageChunks.delete(index);
-      const reasoningChunks = redactedChunks.get(index);
-      if (block?.reasoningContent?.redactedContent && reasoningChunks) {
-        block.reasoningContent.redactedContent = Buffer.concat(reasoningChunks);
+      if (event.messageStop) {
+        if (openBlocks.size) {
+          throw new Error('Bedrock response stream ended before contentBlockStop');
+        }
+        phase = 'stopped';
+        result.stopReason = event.messageStop.stopReason;
+        result.additionalModelResponseFields = event.messageStop.additionalModelResponseFields;
       }
-      redactedChunks.delete(index);
-      openBlocks.delete(index);
-    }
-    if (event.messageStop) {
-      if (openBlocks.size) {
-        throw new Error('Bedrock response stream ended before contentBlockStop');
+      if (event.metadata) {
+        if (!result.stopReason) {
+          throw new Error('Bedrock response stream returned metadata before messageStop');
+        }
+        phase = 'complete';
+        Object.assign(result, event.metadata);
       }
-      result.stopReason = event.messageStop.stopReason;
-      result.additionalModelResponseFields = event.messageStop.additionalModelResponseFields;
     }
-    if (event.metadata) {
-      if (!result.stopReason) {
-        throw new Error('Bedrock response stream returned metadata before messageStop');
-      }
-      receivedMetadata = true;
-      Object.assign(result, event.metadata);
+  } catch (error) {
+    if (phase !== 'complete') {
+      throw error;
     }
+    // The SDK throws exception frames from the iterator; keep already-reported usage.
+    terminalError ??= error instanceof Error ? error.message : String(error);
   }
   if (!result.stopReason) {
     throw new Error('Bedrock response stream ended before messageStop');
   }
-  if (!receivedMetadata || openBlocks.size) {
+  if (phase !== 'complete' || openBlocks.size) {
     throw new Error('Bedrock response stream ended before terminal metadata or contentBlockStop');
   }
   let invalidToolInput = false;
@@ -253,6 +272,9 @@ export async function collectConverseStream(
         : responseError,
       result,
     );
+  }
+  if (terminalError) {
+    throw new ConverseStreamValidationError(terminalError, result);
   }
   if (result.stopReason === 'tool_use' && toolInputs.size === 0) {
     throw new ConverseStreamValidationError(
