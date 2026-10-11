@@ -57,7 +57,7 @@ targets:
   - {{ provider }}
   {% else -%}
   - id: {{ provider.id }}
-    label: {{ provider.label }}
+    label: {{ provider.label | dump }}
     config:
       {% for k, v in provider.config -%}
       {{ k }}: {{ v | dump }}
@@ -116,7 +116,7 @@ import urllib.parse
 import json
 
 def call_api(prompt, options, context):
-    parsed_url = urllib.parse.urlparse('https://example.com/api/chat)
+    parsed_url = urllib.parse.urlparse('https://example.com/api/chat')
     conn = http.client.HTTPSConnection(parsed_url.netloc)
 
     headers = {'Content-Type': 'application/json'}

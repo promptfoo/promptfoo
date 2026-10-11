@@ -14,6 +14,14 @@ const nodeHttp2HandlerFactory = vi.hoisted(() => ({
   handle: vi.fn(),
 }));
 
+const createEndTurnEvent = () => ({
+  event: {
+    contentEnd: {
+      stopReason: 'END_TURN',
+    },
+  },
+});
+
 vi.mock('@smithy/node-http-handler', async (importOriginal) => {
   return {
     ...(await importOriginal()),
@@ -124,13 +132,7 @@ const standardTextResponse = [
       },
     },
   },
-  {
-    event: {
-      contentEnd: {
-        stopReason: 'END_TURN',
-      },
-    },
-  },
+  createEndTurnEvent(),
 ];
 
 const inferenceCases: {
@@ -232,13 +234,7 @@ const _audioResponse = [
       },
     },
   },
-  {
-    event: {
-      contentEnd: {
-        stopReason: 'END_TURN',
-      },
-    },
-  },
+  createEndTurnEvent(),
 ];
 
 describe('NovaSonic Provider', () => {

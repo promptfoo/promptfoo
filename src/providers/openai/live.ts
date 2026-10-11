@@ -1,6 +1,7 @@
 import { loadCallbackFromFileUrl } from '../../util/functions/loadFunction';
 import { providerRegistry } from '../providerRegistry';
 import { getRequestTimeoutMs } from '../shared';
+import { decodeUrlComponent } from '../urlEncoding';
 import { hasHeaderOverride, OpenAiGenericProvider } from './index';
 import { getLiveBytesPerSecond, LIVE_MAX_CAPTURE_MS, prepareLiveInput } from './liveInput';
 import { isLiveCredentialHeader, LIVE_FRAME_MS, LiveSession } from './liveSession';
@@ -32,15 +33,6 @@ function positiveTimeout(value: number, name: string): number {
     throw new Error(`${name} must be a positive integer no greater than 300000 ms.`);
   }
   return value;
-}
-
-/** Decode URL userinfo as Node's HTTP client does, keeping a malformed escape as written. */
-function decodeUserinfo(value: string): string {
-  try {
-    return decodeURIComponent(value);
-  } catch {
-    return value;
-  }
 }
 
 /** One independent, finite capture per eval. Live has no authoritative voice-turn-done event. */
@@ -105,9 +97,10 @@ export class OpenAiLiveProvider extends OpenAiGenericProvider {
     }
     // Send URL userinfo as an explicit Basic credential, which diagnostics redact, instead of
     // leaving it in the socket URL.
+    // Decode URL userinfo as Node's HTTP client does, keeping a malformed escape as written.
     const userinfo =
       url.username || url.password
-        ? `${decodeUserinfo(url.username)}:${decodeUserinfo(url.password)}`
+        ? `${decodeUrlComponent(url.username)}:${decodeUrlComponent(url.password)}`
         : undefined;
     url.username = '';
     url.password = '';

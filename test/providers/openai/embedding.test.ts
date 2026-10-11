@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { disableCache, enableCache, fetchWithCache } from '../../../src/cache';
 import { OpenAiEmbeddingProvider } from '../../../src/providers/openai/embedding';
 import { mockProcessEnv } from '../../util/utils';
+import { createMockFetchResponse } from '../mockProviderResponses';
 import { getOpenAiMissingApiKeyMessage } from './shared';
 
 vi.mock('../../../src/cache');
@@ -50,12 +51,7 @@ describe('OpenAI Provider', () => {
         },
       };
 
-      vi.mocked(fetchWithCache).mockResolvedValue({
-        data: mockResponse,
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+      vi.mocked(fetchWithCache).mockResolvedValue(createMockFetchResponse(mockResponse));
 
       const result = await provider.callEmbeddingApi('test text');
       const expectedCost = 10 * provider.config.cost!;
@@ -89,12 +85,7 @@ describe('OpenAI Provider', () => {
         },
       };
 
-      vi.mocked(fetchWithCache).mockResolvedValue({
-        data: mockEmbeddingResponse,
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+      vi.mocked(fetchWithCache).mockResolvedValue(createMockFetchResponse(mockEmbeddingResponse));
 
       const result = await passthroughProvider.callEmbeddingApi('test text');
       expect(result.error).toBeUndefined();
@@ -165,10 +156,18 @@ describe('OpenAI Provider', () => {
 
       expect(result.embedding).toEqual([0.25, -0.5, 1]);
       expect(result.latencyMs).toBe(15);
-      expect(result.cost).toBeCloseTo(cached ? 0 : 10 * configuredEmbeddingCostPerToken, 12);
+      expect(result.cost).toBeCloseTo(10 * configuredEmbeddingCostPerToken, 12);
+      expect(result.cached).toBe(cached);
       expect(result.tokenUsage).toEqual(
         cached
-          ? { total: 10, cached: 10 }
+          ? {
+              total: 10,
+              prompt: 10,
+              completion: 0,
+              cached: 10,
+              numRequests: 0,
+              incurredTokenUsage: {},
+            }
           : { total: 10, prompt: 10, completion: 0, numRequests: 1 },
       );
     });
