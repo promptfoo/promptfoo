@@ -496,11 +496,11 @@ export class SimulatedVoiceUser implements ApiProvider {
       controller.signal.throwIfAborted();
       if (targetPlayback) {
         const connection = providers[0].getAppTranscriptionConnection();
+        // YAML can supply scalar credentials despite the provider's string return type.
+        const targetApiKey: unknown = providers[0].getApiKey();
         recognition = new LiveTranscriptionSession({
           ...connection,
-          redact: createOpenAiCredentialRedactor(connection.headers, [
-            providers[0].getApiKey() ?? '',
-          ]),
+          redact: createOpenAiCredentialRedactor(connection.headers, [String(targetApiKey ?? '')]),
           signal: controller.signal,
           delay: this.config.targetPlayback?.transcriptionDelay,
           onCallerTurn: (turn) => {

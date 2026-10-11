@@ -6,6 +6,7 @@ import { OpenAiTtsProvider } from '../../../src/providers/openai/tts';
 import { providerRegistry } from '../../../src/providers/providerRegistry';
 import { SimulatedVoiceUser } from '../../../src/providers/voice/simulatedVoiceUser';
 import { createProviderRateLimitOptions } from '../../../src/scheduler/providerWrapper';
+import { loadYaml } from '../../../src/util/yamlLoad';
 import { mockProcessEnv } from '../../util/utils';
 
 import type { SimulatedVoiceUserConfig } from '../../../src/providers/voice/types';
@@ -325,6 +326,72 @@ describe('SimulatedVoiceUser', () => {
     expect(response.tokenUsage).toMatchObject({ numRequests: 1, total: 0 });
     expect(response.metadata?.voice.targetPlayback.clock).toBe('provider');
     expect(sockets).toHaveLength(1);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it.each(['native', 'app-barge-in'] as const)(
+    'normalizes a numeric YAML target API key before %s transport error redaction',
+    async (mode) => {
+      const yamlConfig = loadYaml('target:\n  apiKey: 12345678') as SimulatedVoiceUserConfig;
+      expect(typeof yamlConfig.target?.apiKey).toBe('number');
+      const result = provider({
+        target: { ...participant('target-key'), ...yamlConfig.target },
+        targetPlayback: { mode },
+      }).callApi('Cafe');
+      let earlyError: string | undefined;
+      void result.then((response) => {
+        earlyError = response.error;
+      });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(sockets, earlyError).toHaveLength(mode === 'native' ? 2 : 1);
+      const socket = sockets[0];
+      expect(socket.options.headers.Authorization).toBe('Bearer 12345678');
+      socket.readyState = 1;
+      socket.emit('open');
+      emit(socket, {
+        type: 'error',
+        error: { message: 'Rejected 12345678. Keep diagnostic marker.' },
+      });
+      await vi.advanceTimersByTimeAsync(0);
+      const response = await result;
+      expect(response.error).toContain('Rejected [REDACTED]. Keep diagnostic marker.');
+      expect(JSON.stringify(response)).not.toContain('12345678');
+      expect(response.metadata?.voice.stopReason).toBe('error');
+      expect(response.tokenUsage?.numRequests).toBe(mode === 'native' ? 2 : 1);
+      expect(sockets.every((entry) => entry.terminate.mock.calls.length === 1)).toBe(true);
+      expect(vi.getTimerCount()).toBe(0);
+    },
+  );
+
+  it('redacts both a numeric YAML target key and an overriding app Authorization credential', async () => {
+    const yamlConfig = loadYaml(
+      'target:\n  apiKey: 12345678\n  headers:\n    Authorization: Bearer gateway-private-key',
+    ) as SimulatedVoiceUserConfig;
+    const result = provider({
+      target: { ...participant('target-key'), ...yamlConfig.target },
+      targetPlayback: { mode: 'app-barge-in' },
+    }).callApi('Cafe');
+    let earlyError: string | undefined;
+    void result.then((response) => {
+      earlyError = response.error;
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(sockets, earlyError).toHaveLength(1);
+    const recognizer = sockets[0];
+    expect(recognizer.options.headers.Authorization).toBe('Bearer gateway-private-key');
+    recognizer.readyState = 1;
+    recognizer.emit('open');
+    emit(recognizer, {
+      type: 'error',
+      error: { message: 'Rejected 12345678 and gateway-private-key. Keep diagnostic marker.' },
+    });
+    const response = await result;
+    expect(response.error).toBe(
+      'Live transcription API failed: Rejected [REDACTED] and [REDACTED]. Keep diagnostic marker.',
+    );
+    expect(JSON.stringify(response)).not.toContain('12345678');
+    expect(JSON.stringify(response)).not.toContain('gateway-private-key');
+    expect(recognizer.terminate).toHaveBeenCalledOnce();
     expect(vi.getTimerCount()).toBe(0);
   });
 
