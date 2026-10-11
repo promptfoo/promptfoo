@@ -81,7 +81,7 @@ function ErrorFallback({
 const EvaluateTestSuiteCreator = () => {
   const { showToast } = useToast();
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
-  const [availableProviders, setAvailableProviders] = useState<ProviderOptions[] | null>(null);
+  const [availableProviders, setAvailableProviders] = useState<ProviderOptions[] | null>([]);
   const hasCustomConfig = availableProviders !== null;
   const [activeStep, setActiveStep] = useState<SetupStepId>(1);
   const [editorTab, setEditorTab] = useState<EditorTab>('ui');
@@ -105,19 +105,20 @@ const EvaluateTestSuiteCreator = () => {
     const fetchProviderCatalog = async () => {
       try {
         const response = await callApi('/providers');
-        if (response.ok) {
-          const data = await response.json();
-          const payload = data?.data;
-          if (isMounted) {
-            setAvailableProviders(payload?.hasCustomConfig ? payload.providers : null);
-          }
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        const data = await response.json();
+        const payload = data?.data;
+        if (isMounted) {
+          setAvailableProviders(payload?.hasCustomConfig ? (payload.providers ?? []) : null);
         }
       } catch (err) {
         console.error('Failed to fetch provider config status:', err);
         const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred';
         showToast(`Failed to load configuration status: ${errorMessage}`, 'error');
         if (isMounted) {
-          setAvailableProviders(null);
+          setAvailableProviders([]);
         }
       }
     };

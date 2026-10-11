@@ -2,7 +2,7 @@ import { DEFAULT_CONFIG, useStore } from '@app/stores/evalConfig';
 import { callApi } from '@app/utils/api';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import EvaluateTestSuiteCreator from './EvaluateTestSuiteCreator';
 import type {
   DerivedMetric,
@@ -84,6 +84,10 @@ vi.mock('@app/utils/api', () => ({
 }));
 
 describe('EvaluateTestSuiteCreator', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     // Reset store to its default state before each test
@@ -597,7 +601,7 @@ describe('EvaluateTestSuiteCreator', () => {
     expect(screen.queryByTestId('mock-configure-env-button')).toBeNull();
   });
 
-  it('should leave the provider picker unrestricted when the catalog fetch fails', async () => {
+  it('keeps the provider picker restricted when the catalog fetch fails', async () => {
     vi.mocked(callApi).mockRejectedValueOnce(new Error('offline'));
 
     render(<EvaluateTestSuiteCreator />);
@@ -609,8 +613,24 @@ describe('EvaluateTestSuiteCreator', () => {
       );
     });
 
-    expect(screen.getByTestId('mock-configure-env-button')).toBeInTheDocument();
-    expect(screen.getByTestId('mock-available-providers')).toHaveTextContent('unrestricted');
+    expect(screen.queryByTestId('mock-configure-env-button')).toBeNull();
+    expect(screen.getByTestId('mock-available-providers')).toHaveTextContent('0 catalog');
+  });
+
+  it('keeps the provider picker restricted when the catalog response is unsuccessful', async () => {
+    vi.mocked(callApi).mockResolvedValueOnce({ ok: false, status: 503 } as Response);
+    render(<EvaluateTestSuiteCreator />);
+    await waitFor(() =>
+      expect(showToastMock).toHaveBeenCalledWith(expect.stringContaining('503'), 'error'),
+    );
+    expect(screen.getByTestId('mock-available-providers')).toHaveTextContent('0 catalog');
+    expect(screen.queryByTestId('mock-configure-env-button')).toBeNull();
+  });
+
+  it('does not offer unrestricted providers while the catalog is loading', () => {
+    vi.mocked(callApi).mockReturnValueOnce(new Promise<Response>(() => {}));
+    render(<EvaluateTestSuiteCreator />);
+    expect(screen.getByTestId('mock-available-providers')).toHaveTextContent('0 catalog');
   });
 
   // Future test scenarios will be added here
