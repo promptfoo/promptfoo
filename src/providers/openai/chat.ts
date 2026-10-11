@@ -1225,7 +1225,11 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       const functionCalls: any = message.function_call
         ? [message.function_call]
         : message.tool_calls;
-      if (functionCalls && (config.functionToolCallbacks || this.mcpClient)) {
+      if (
+        functionCalls &&
+        finishReason !== FINISH_REASON_MAP.length &&
+        (config.functionToolCallbacks || this.mcpClient)
+      ) {
         const results = [];
         let hasSuccessfulCallback = false;
         for (const functionCall of functionCalls) {

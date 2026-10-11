@@ -1972,6 +1972,133 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       expect(mockFetchWithCache).toHaveBeenCalledTimes(2);
     });
 
+    it.each([
+      { format: 'legacy', args: '{"location":' },
+      { format: 'legacy', args: '{"location":"New York"}' },
+      { format: 'tools', args: '{"location":' },
+      { format: 'tools', args: '{"location":"New York"}' },
+    ])('should retain length-truncated $format calls with args $args', async ({ format, args }) => {
+      const call = { name: 'get_weather', arguments: args };
+      const message = {
+        role: 'assistant',
+        content: 'Partial answer',
+        ...(format === 'legacy'
+          ? { function_call: call }
+          : { tool_calls: [{ id: 'call_weather', type: 'function', function: call }] }),
+      };
+      mockFetchWithCache.mockResolvedValue(
+        createMockFetchResponse({
+          choices: [
+            {
+              message,
+              finish_reason: 'length',
+              logprobs: { content: [{ token: 'Partial', logprob: -0.5 }] },
+            },
+          ],
+          usage: { prompt_tokens: 100, completion_tokens: 20, total_tokens: 120 },
+        }),
+      );
+      const callback = vi.fn().mockResolvedValue('Unexpected callback');
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+        config: {
+          inputCost: 0.01,
+          outputCost: 0.02,
+          functionToolCallbacks: { get_weather: callback },
+        },
+      });
+
+      const result = await provider.callApi('What is the weather?');
+
+      expect(callback).not.toHaveBeenCalled();
+      expect(result.output).toEqual(message);
+      expect(result.error).toBeUndefined();
+      expect(result.cost).toBeCloseTo(1.4);
+      expect(result).toMatchObject({
+        finishReason: 'length',
+        tokenUsage: { prompt: 100, completion: 20, total: 120 },
+        cached: false,
+        logProbs: [-0.5],
+        metadata: { http: { status: 200 } },
+      });
+    });
+
+    it.each([
+      { format: 'legacy', finishReason: 'function_call' },
+      { format: 'tools', finishReason: 'tool_calls' },
+      { format: 'legacy', finishReason: 'stop' },
+      { format: 'tools', finishReason: 'stop' },
+      { format: 'legacy', finishReason: undefined },
+      { format: 'tools', finishReason: undefined },
+    ])(
+      'should dispatch $format calls with finish reason $finishReason',
+      async ({ format, finishReason }) => {
+        const call = { name: 'get_weather', arguments: '{"location":"New York"}' };
+        mockFetchWithCache.mockResolvedValue(
+          createMockFetchResponse({
+            choices: [
+              {
+                message: {
+                  content: null,
+                  ...(format === 'legacy'
+                    ? { function_call: call }
+                    : { tool_calls: [{ function: call }] }),
+                },
+                ...(finishReason === undefined ? {} : { finish_reason: finishReason }),
+              },
+            ],
+            usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+          }),
+        );
+        const callback = vi.fn().mockResolvedValue('Sunny');
+        const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+          config: { functionToolCallbacks: { get_weather: callback } },
+        });
+
+        const result = await provider.callApi('What is the weather?');
+
+        expect(callback).toHaveBeenCalledExactlyOnceWith('{"location":"New York"}');
+        expect(result.output).toBe('Sunny');
+        expect(result.error).toBeUndefined();
+        expect(result.tokenUsage).toMatchObject({ prompt: 10, completion: 5, total: 15 });
+      },
+    );
+
+    it.each(['length', 'content_filter'])(
+      'should not dispatch MCP or function callbacks after %s',
+      async (finishReason) => {
+        const message = {
+          content: 'Partial answer',
+          tool_calls: [{ function: { name: 'get_weather', arguments: '{"location":"New York"}' } }],
+        };
+        mockFetchWithCache.mockResolvedValue(
+          createMockFetchResponse({
+            choices: [{ message, finish_reason: finishReason }],
+            usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+          }),
+        );
+        const callback = vi.fn().mockResolvedValue('Unexpected callback');
+        const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+          config: { functionToolCallbacks: { get_weather: callback } },
+        });
+        const mcpClient = {
+          getAllTools: vi.fn().mockReturnValue([{ name: 'get_weather' }]),
+          callTool: vi.fn().mockResolvedValue({ content: 'Unexpected MCP call' }),
+        };
+        (provider as any).mcpClient = mcpClient;
+
+        const result = await provider.callApi('What is the weather?');
+
+        expect(mcpClient.callTool).not.toHaveBeenCalled();
+        expect(callback).not.toHaveBeenCalled();
+        expect(result.metadata?.toolCalls).toBeUndefined();
+        expect(result.output).toEqual(finishReason === 'length' ? message : 'Partial answer');
+        expect(result.error).toBeUndefined();
+        expect(result.finishReason).toBe(finishReason);
+        expect(result.isRefusal).toBe(finishReason === 'content_filter' ? true : undefined);
+        expect(result.tokenUsage).toMatchObject({ prompt: 10, completion: 5, total: 15 });
+      },
+    );
+
     it('should handle function tool callbacks correctly', async () => {
       const mockResponse = createMockFetchResponse({
         choices: [

@@ -7,7 +7,7 @@ import { BedrockChatStreamError, collectBedrockChatStream } from './chatStream';
 import { resolveBedrockMantleRegion } from './mantle';
 import { BedrockMantleChatProvider } from './mantleChat';
 import { BedrockOpenAiResponsesProvider } from './openaiResponses';
-import { calculateBedrockCost } from './pricing';
+import { calculateBedrockCost, calculateBedrockInvokeModelCost } from './pricing';
 import { getBedrockRuntimeModelError } from './routing';
 
 import type { ProviderResponse } from '../../types/providers';
@@ -104,27 +104,49 @@ function runtimeCost(
   const catalogInput = config.inputCost === undefined ? uncachedInput : input;
   const catalogRead = config.inputCost === undefined ? cacheRead : 0;
   const catalogWrite = config.inputCost === undefined ? cacheWrite : 0;
-  let cost = calculateBedrockCost(
-    modelName,
-    catalogInput,
-    output,
-    catalogRead,
-    catalogWrite,
-    region,
-    {
-      type: (serviceTier ?? 'default') as 'default' | 'priority' | 'flex' | 'reserved',
-    },
-  );
-  if (cost !== undefined && (config.inputCost !== undefined || config.outputCost !== undefined)) {
-    const catalogInputCost = calculateBedrockCost(
+  // These profiles have verified cache rates that the native Invoke path cannot normalize yet.
+  // Other models must pass its verified-rate gate instead of using stale legacy catalog matches.
+  if (
+    model !== 'zai.glm-5.3' &&
+    model !== 'moonshotai.kimi-k3' &&
+    calculateBedrockInvokeModelCost(
       modelName,
       catalogInput,
-      0,
+      output,
       catalogRead,
       catalogWrite,
       region,
-      { type: (serviceTier ?? 'default') as 'default' | 'priority' | 'flex' | 'reserved' },
+    ) === undefined
+  ) {
+    return undefined;
+  }
+  // Kimi's published US/global tier multipliers apply only to the HTTP APIs.
+  // India non-default tiers retain unknown pricing until their rates are established.
+  const kimiHttpTier =
+    /(?:^|:inference-profile\/)(?:us|global)\.moonshotai\.kimi-k3$/i.test(modelName) &&
+    (serviceTier === 'priority' || serviceTier === 'flex');
+  const tierMultiplier = kimiHttpTier ? (serviceTier === 'priority' ? 1.75 : 0.5) : 1;
+  const catalogCost = (completionTokens?: number) => {
+    const cost = calculateBedrockCost(
+      modelName,
+      catalogInput,
+      completionTokens,
+      catalogRead,
+      catalogWrite,
+      region,
+      {
+        type: (kimiHttpTier ? 'default' : (serviceTier ?? 'default')) as
+          | 'default'
+          | 'priority'
+          | 'flex'
+          | 'reserved',
+      },
     );
+    return cost === undefined ? undefined : cost * tierMultiplier;
+  };
+  let cost = catalogCost(output);
+  if (cost !== undefined && (config.inputCost !== undefined || config.outputCost !== undefined)) {
+    const catalogInputCost = catalogCost(0);
     if (catalogInputCost === undefined) {
       return undefined;
     }

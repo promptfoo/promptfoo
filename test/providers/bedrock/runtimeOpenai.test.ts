@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import { BedrockOpenAiResponsesProvider } from '../../../src/providers/bedrock/openaiResponses';
+import {
+  calculateBedrockCost,
+  calculateBedrockInvokeModelCost,
+} from '../../../src/providers/bedrock/pricing';
 import { getBedrockTextRoute } from '../../../src/providers/bedrock/routing';
 import {
   BedrockRuntimeChatProvider,
@@ -59,6 +63,28 @@ describe.each([
   ['chat', BedrockRuntimeChatProvider, chatReply, 'chat/completions'],
   ['responses', BedrockRuntimeResponsesProvider, responsesReply, 'responses'],
 ] as const)('Bedrock Runtime %s', (mode, Provider, reply, path) => {
+  const mockPricingResponse = (read = 200, write = 100, serviceTier?: string) => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: {
+        ...reply,
+        ...(serviceTier ? { service_tier: serviceTier } : {}),
+        usage: {
+          ...(mode === 'chat'
+            ? { prompt_tokens: 1000, completion_tokens: 1000 }
+            : { input_tokens: 1000, output_tokens: 1000 }),
+          total_tokens: 2000,
+          [mode === 'chat' ? 'prompt_tokens_details' : 'input_tokens_details']: {
+            cached_tokens: read,
+            cache_write_tokens: write,
+          },
+        },
+      },
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    });
+  };
+
   it.each([
     'xai.grok-4.6',
     'xai.grok-4.7',
@@ -137,24 +163,7 @@ describe.each([
         [0, 0, standardCost],
         [200, 100, cacheCost],
       ]) {
-        vi.mocked(fetchWithCache).mockResolvedValue({
-          data: {
-            ...reply,
-            usage: {
-              ...(mode === 'chat'
-                ? { prompt_tokens: 1000, completion_tokens: 1000 }
-                : { input_tokens: 1000, output_tokens: 1000 }),
-              total_tokens: 2000,
-              [mode === 'chat' ? 'prompt_tokens_details' : 'input_tokens_details']: {
-                cached_tokens: read,
-                cache_write_tokens: write,
-              },
-            },
-          },
-          status: 200,
-          statusText: 'OK',
-          cached: false,
-        });
+        mockPricingResponse(read, write);
         const result = await new Provider(model, { config: { apiKey: 'fixture' } }).callApi(
           'hello',
         );
@@ -191,24 +200,7 @@ describe.each([
     ['us', { cost: 0 }, 0],
     ['global', { inputCost: 0, outputCost: 0 }, 0],
   ] as const)('honors GLM manual pricing for %s %j', async (profile, costs, expected) => {
-    vi.mocked(fetchWithCache).mockResolvedValue({
-      data: {
-        ...reply,
-        usage: {
-          ...(mode === 'chat'
-            ? { prompt_tokens: 1000, completion_tokens: 1000 }
-            : { input_tokens: 1000, output_tokens: 1000 }),
-          total_tokens: 2000,
-          [mode === 'chat' ? 'prompt_tokens_details' : 'input_tokens_details']: {
-            cached_tokens: 200,
-            cache_write_tokens: 100,
-          },
-        },
-      },
-      status: 200,
-      statusText: 'OK',
-      cached: false,
-    });
+    mockPricingResponse();
     const result = await new Provider(`${profile}.zai.glm-5.3`, {
       config: { apiKey: 'fixture', ...costs },
     }).callApi('hello');
@@ -336,15 +328,139 @@ describe.each([
     },
   );
 
-  it('forwards the Kimi K3 profile and HTTP service tier', async () => {
-    const provider = new Provider('us.moonshotai.kimi-k3', {
-      config: { apiKey: 'fixture', service_tier: 'flex' },
-    });
-    expect((await provider.getOpenAiBody('hello')).body).toMatchObject({
-      model: 'us.moonshotai.kimi-k3',
-      service_tier: 'flex',
-    });
+  it.each([
+    ['global.moonshotai.kimi-k3', 0.017535, 0.03068625, 0.0087675],
+    ['us.moonshotai.kimi-k3', 0.0192885, 0.033754875, 0.00964425],
+    ['in.moonshotai.kimi-k3', 0.0192885, undefined, undefined],
+    [
+      'arn:aws:bedrock:us-east-1:123456789012:inference-profile/global.moonshotai.kimi-k3',
+      0.017535,
+      0.03068625,
+      0.0087675,
+    ],
+    [
+      'arn:aws:bedrock:us-east-1:123456789012:inference-profile/us.moonshotai.kimi-k3',
+      0.0192885,
+      0.033754875,
+      0.00964425,
+    ],
+    [
+      'arn:aws:bedrock:ap-south-1:123456789012:inference-profile/in.moonshotai.kimi-k3',
+      0.0192885,
+      undefined,
+      undefined,
+    ],
+  ] as const)(
+    'prices only documented Kimi HTTP tiers for %s',
+    async (model, standard, priority, flex) => {
+      for (const [tier, expected] of [
+        ['default', standard],
+        ['priority', priority],
+        ['flex', flex],
+      ] as const) {
+        mockPricingResponse();
+        const result = await new Provider(model, {
+          config: {
+            apiKey: 'fixture',
+            region: model.includes('in.moonshotai.kimi-k3') ? 'ap-south-1' : 'us-east-1',
+            service_tier: tier,
+          },
+        }).callApi('hello');
+        expect(result.error).toBeUndefined();
+        if (expected === undefined) {
+          expect(result.cost).toBeUndefined();
+        } else {
+          expect(result.cost).toBeCloseTo(expected, 12);
+        }
+        const request = vi.mocked(fetchWithCache).mock.calls.at(-1)?.[1];
+        expect(JSON.parse(String(request?.body))).toMatchObject({ model, service_tier: tier });
+      }
+    },
+  );
+
+  it.each([
+    ['global', 'priority', { inputCost: 0.01 }, 10.02625],
+    ['global', 'priority', { outputCost: 0.02 }, 20.00443625],
+    ['global', 'priority', { inputCost: 0 }, 0.02625],
+    ['global', 'priority', { outputCost: 0 }, 0.00443625],
+    ['global', 'flex', { inputCost: 0.01 }, 10.0075],
+    ['global', 'flex', { outputCost: 0.02 }, 20.0012675],
+    ['us', 'priority', { inputCost: 0.01, outputCost: 0.02 }, 30],
+    ['us', 'priority', { cost: 0 }, 0],
+    ['in', 'priority', { inputCost: 0.01, outputCost: 0.02 }, 30],
+    ['in', 'priority', { cost: 0 }, 0],
+    ['in', 'priority', { inputCost: 0 }, undefined],
+    ['in', 'flex', { outputCost: 0 }, undefined],
+  ] as const)(
+    'keeps Kimi manual rates authoritative for %s %s %j',
+    async (profile, tier, costs, expected) => {
+      mockPricingResponse();
+      const result = await new Provider(`${profile}.moonshotai.kimi-k3`, {
+        config: {
+          apiKey: 'fixture',
+          region: profile === 'in' ? 'ap-south-1' : 'us-east-1',
+          service_tier: tier,
+          ...costs,
+        },
+      }).callApi('hello');
+      expect(result.error).toBeUndefined();
+      if (expected === undefined) {
+        expect(result.cost).toBeUndefined();
+      } else {
+        expect(result.cost).toBeCloseTo(expected, 12);
+      }
+    },
+  );
+
+  it('prices the reported Kimi tier and Global profile from India', async () => {
+    mockPricingResponse(200, 100, 'flex');
+    const result = await new Provider('global.moonshotai.kimi-k3', {
+      config: {
+        apiKey: 'fixture',
+        region: 'ap-south-1',
+        passthrough: { service_tier: 'priority' },
+      },
+    }).callApi('hello');
+    expect(result.error).toBeUndefined();
+    expect(result.cost).toBeCloseTo(0.0087675, 12);
+    const request = vi.mocked(fetchWithCache).mock.calls.at(-1)?.[1];
+    expect(JSON.parse(String(request?.body)).service_tier).toBe('priority');
   });
+
+  it('does not invent a price for a reported Kimi Reserved tier', async () => {
+    mockPricingResponse(200, 100, 'reserved');
+    const result = await new Provider('global.moonshotai.kimi-k3', {
+      config: { apiKey: 'fixture' },
+    }).callApi('hello');
+    expect(result.error).toBeUndefined();
+    expect(result.cost).toBeUndefined();
+  });
+
+  if (mode === 'chat') {
+    it.each([
+      'qwen.qwen3-coder-next',
+      'arn:aws:bedrock:us-east-1::foundation-model/qwen.qwen3-coder-next',
+    ])('does not borrow legacy Qwen prices for %s', async (model) => {
+      for (const [costs, expected] of [
+        [{}, undefined],
+        [{ inputCost: 0 }, undefined],
+        [{ outputCost: 0 }, undefined],
+        [{ inputCost: 0.0000005, outputCost: 0.0000012 }, 0.0017],
+        [{ cost: 0 }, 0],
+      ] as const) {
+        mockPricingResponse(0, 0);
+        const result = await new Provider(model, {
+          config: { apiKey: 'fixture', ...costs },
+        }).callApi('hello');
+        expect(result.error).toBeUndefined();
+        if (expected === undefined) {
+          expect(result.cost).toBeUndefined();
+        } else {
+          expect(result.cost).toBeCloseTo(expected, 12);
+        }
+      }
+    });
+  }
 
   it('pins the Runtime endpoint and preserves profile IDs and Bedrock authentication', async () => {
     vi.mocked(fetchWithCache).mockResolvedValue({
@@ -485,6 +601,23 @@ describe.each([
     ).toThrow('Invalid AWS region');
   });
 });
+
+it.each(['us', 'global', 'in'])(
+  'keeps native Kimi pricing restrictions separate from HTTP tiers (%s)',
+  (profile) => {
+    const region = profile === 'in' ? 'ap-south-1' : 'us-east-1';
+    for (const tier of ['priority', 'flex'] as const) {
+      expect(
+        calculateBedrockCost(`${profile}.moonshotai.kimi-k3`, 700, 1000, 200, 100, region, {
+          type: tier,
+        }),
+      ).toBeUndefined();
+    }
+    expect(
+      calculateBedrockInvokeModelCost(`${profile}.moonshotai.kimi-k3`, 700, 1000, 200, 100, region),
+    ).toBeUndefined();
+  },
+);
 
 describe('Runtime Responses restrictions and state', () => {
   it('preserves stored conversation controls and Runtime service tiers', async () => {
