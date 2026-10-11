@@ -307,36 +307,41 @@ describe('matchesAnswerRelevance', () => {
     expect(result.pass).toBe(true);
   });
 
-  it('caches three independent question samples and reuses them on later runs', async () => {
-    const cacheKey = randomUUID();
-    const questions = [
-      'How long do refunds take?',
-      'What is the capital of France?',
-      'Which planet is the largest?',
-    ];
-    let generated = 0;
-    vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(async (prompt) => {
-      const cache = getCache();
-      const key = `${cacheKey}:${prompt}`;
-      const cached = await cache.get<string>(key);
-      if (cached) {
-        return { output: cached, cached: true };
-      }
-      const question = questions[generated++];
-      await cache.set(key, question);
-      return { output: question };
-    });
+  it.each([false, true])(
+    'caches three independent samples (deterministic: %s)',
+    async (deterministic) => {
+      const cacheKey = randomUUID();
+      const questions = deterministic
+        ? Array.from({ length: 3 }, () => 'How long do refunds take?')
+        : [
+            'How long do refunds take?',
+            'What is the capital of France?',
+            'Which planet is the largest?',
+          ];
+      let generated = 0;
+      vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(async (prompt) => {
+        const cache = getCache();
+        const key = `${cacheKey}:${prompt}`;
+        const cached = await cache.get<string>(key);
+        if (cached) {
+          return { output: cached, cached: true };
+        }
+        const question = questions[generated++];
+        await cache.set(key, question);
+        return { output: question };
+      });
 
-    for (let run = 0; run < 2; run++) {
-      const result = await matchesAnswerRelevance(
-        'How long do refunds take?',
-        'Refunds are processed within 5 business days.',
-        0.5,
-      );
-      expect(generated).toBe(3);
-      expect(
-        result.metadata?.generatedQuestions.map(({ question }: { question: string }) => question),
-      ).toEqual(questions);
-    }
-  });
+      for (let run = 0; run < 2; run++) {
+        const result = await matchesAnswerRelevance(
+          'How long do refunds take?',
+          'Refunds are processed within 5 business days.',
+          0.5,
+        );
+        expect(generated).toBe(3);
+        expect(
+          result.metadata?.generatedQuestions.map(({ question }: { question: string }) => question),
+        ).toEqual(questions);
+      }
+    },
+  );
 });
