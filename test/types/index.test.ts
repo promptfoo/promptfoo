@@ -938,7 +938,7 @@ describe('JSON Schema validation (AJV)', () => {
 });
 
 describe('CommandLineOptionsSchema', () => {
-  const verifyErrorFilterOptions = () => {
+  it('should validate options with filterErrorsOnly string', () => {
     const options = {
       providers: ['provider1'],
       output: ['output1'],
@@ -947,9 +947,7 @@ describe('CommandLineOptionsSchema', () => {
     expect(() => CommandLineOptionsSchema.parse(options)).not.toThrow(
       'Invalid command line options',
     );
-  };
-
-  it('should validate options with filterErrorsOnly string', verifyErrorFilterOptions);
+  });
 
   it('should validate runtime tags', () => {
     const options = {
@@ -1025,11 +1023,6 @@ describe('CommandLineOptionsSchema', () => {
       'Invalid command line options',
     );
   });
-
-  it(
-    'should validate options with filterErrorsOnly and minimal required fields',
-    verifyErrorFilterOptions,
-  );
 
   it('should validate options with all possible filter combinations', () => {
     const options = {

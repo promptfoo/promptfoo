@@ -3791,17 +3791,6 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       expect(result.output).toBe('DeepSeek response');
     });
 
-    it.each([
-      'should log generic API call message using getApiUrl',
-      'should log generic completions API response message',
-    ])('%s', async () => {
-      const mockResponse = createMockChatResponse();
-      mockFetchWithCache.mockResolvedValue(mockResponse);
-
-      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
-      await provider.callApi('Test prompt');
-    });
-
     it('should log generic message for unknown chat models', async () => {
       new OpenAiChatCompletionProvider('unknown-model');
 

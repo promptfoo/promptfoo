@@ -305,33 +305,32 @@ describe('BrowserProvider', () => {
   });
 
   it('should handle cookies as array', async () => {
+    const cookies = [{ name: 'foo', value: 'bar', url: 'https://example.com' }];
     const provider = new BrowserProvider('test', {
-      config: {
-        steps: [createNavigateStep()],
-        cookies: [{ name: 'foo', value: 'bar' }],
-      },
+      config: { steps: [createNavigateStep()], cookies },
     });
 
-    await provider.callApi('test');
-    expect(true).toBe(true);
+    const result = await provider.callApi('test');
+    const context = await mockBrowser.newContext.mock.results[0].value;
+    expect(context.addCookies).toHaveBeenCalledExactlyOnceWith(cookies);
+    expect(result.error).toBeUndefined();
   });
 
   it('should handle cookies as string', async () => {
-    vi.resetModules();
-    vi.doMock('../../src/util/file', () => ({
-      maybeLoadFromExternalFile: vi.fn().mockReturnValue('foo=bar;baz=qux'),
-    }));
-    const { BrowserProvider: MockedBrowserProvider } = await import('../../src/providers/browser');
-    const provider = new MockedBrowserProvider('test', {
+    const provider = new BrowserProvider('test', {
       config: {
         steps: [createNavigateStep()],
-        cookies: 'mock-file.txt',
+        cookies: 'foo=bar; baz=qux',
       },
     });
-    await provider.callApi('test');
-    expect(mockPage.fill).toHaveBeenCalledTimes(0);
-    expect(mockPage.press).toHaveBeenCalledTimes(0);
-    vi.doUnmock('../../src/util/file');
+
+    const result = await provider.callApi('test');
+    const context = await mockBrowser.newContext.mock.results[0].value;
+    expect(context.addCookies).toHaveBeenCalledExactlyOnceWith([
+      { name: 'foo', value: 'bar' },
+      { name: 'baz', value: 'qux' },
+    ]);
+    expect(result.error).toBeUndefined();
   });
 
   it('should throw error if extract action missing name', async () => {
@@ -496,18 +495,16 @@ describe('BrowserProvider - Multi-turn Session Persistence', () => {
       },
     });
 
-    // First call - should navigate
-    await provider.callApi('first prompt');
-    expect(mockPage.goto).toHaveBeenCalledWith('https://example.com');
-    expect(mockPage.fill).toHaveBeenCalledWith('#input', 'first prompt');
-
-    // Reset mocks to track second call
-    vi.clearAllMocks();
-
-    // Second call - should reuse page (navigate still called since runOnce not set)
-    await provider.callApi('second prompt');
-    expect(mockPage.goto).toHaveBeenCalledWith('https://example.com');
-    expect(mockPage.fill).toHaveBeenCalledWith('#input', 'second prompt');
+    const first = await provider.callApi('first prompt');
+    const second = await provider.callApi('second prompt');
+    expect(first.error).toBeUndefined();
+    expect(second.error).toBeUndefined();
+    expect(mockBrowser.newContext).toHaveBeenCalledTimes(1);
+    const context = await mockBrowser.newContext.mock.results[0].value;
+    expect(context.newPage).toHaveBeenCalledTimes(1);
+    expect(mockPage.fill).toHaveBeenNthCalledWith(1, '#input', 'first prompt');
+    expect(mockPage.fill).toHaveBeenNthCalledWith(2, '#input', 'second prompt');
+    expect(mockPage.close).not.toHaveBeenCalled();
   });
 
   it('should skip runOnce steps on subsequent calls', async () => {
@@ -596,19 +593,26 @@ describe('BrowserProvider - Multi-turn Session Persistence', () => {
       },
     });
 
-    // First call
-    await provider.callApi('first');
-    expect(mockPage.goto).toHaveBeenCalledTimes(1);
+    const originalPage = mockPage;
+    const first = await provider.callApi('first');
+    originalPage.isClosed.mockReturnValue(true);
+    mockPage = {
+      ...originalPage,
+      goto: vi.fn(),
+      content: vi.fn().mockResolvedValue('<html>replacement</html>'),
+      close: vi.fn(),
+      isClosed: vi.fn().mockReturnValue(false),
+    };
 
-    // Simulate page being closed
-    mockPage.isClosed.mockReturnValue(true);
-
-    // Reset and make second call
-    vi.clearAllMocks();
-    await provider.callApi('second');
-
-    // Should create new page and navigate again
-    expect(mockPage.goto).toHaveBeenCalledTimes(1);
+    const second = await provider.callApi('second');
+    expect(first.error).toBeUndefined();
+    expect(second).toEqual({ output: '<html>replacement</html>' });
+    expect(mockBrowser.newContext).toHaveBeenCalledTimes(2);
+    for (const call of mockBrowser.newContext.mock.results) {
+      expect((await call.value).newPage).toHaveBeenCalledTimes(1);
+    }
+    expect(originalPage.goto).toHaveBeenCalledExactlyOnceWith('https://example.com');
+    expect(mockPage.goto).toHaveBeenCalledExactlyOnceWith('https://example.com');
   });
 });
 
