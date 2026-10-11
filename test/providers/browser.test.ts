@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BrowserProvider, createTransformResponse } from '../../src/providers/browser';
+import { providerRegistry } from '../../src/providers/providerRegistry';
+import { createDeferred } from '../util/utils';
 import type { Page } from 'playwright';
 import type { Mock, Mocked } from 'vitest';
 
@@ -24,17 +26,57 @@ const createPromptTypingStep = () => ({
 
 let mockPage: Mocked<Page>;
 
+const openPages = new Set<Mocked<Page>>();
 const mockBrowser = {
   contexts: vi.fn(() => []),
-  newContext: vi.fn(() =>
-    Promise.resolve({
-      newPage: vi.fn(() => Promise.resolve(mockPage)),
-      addCookies: vi.fn(),
-      close: vi.fn(),
-    }),
-  ),
-  close: vi.fn(),
+  newContext: vi.fn(async () => {
+    const pages: Mocked<Page>[] = [];
+    return {
+      newPage: vi.fn(async () => {
+        const page = mockPage;
+        page.isClosed ||= vi.fn();
+        page.isClosed.mockReturnValue(false);
+        page.close.mockImplementation(async () => {
+          page.isClosed.mockReturnValue(true);
+          openPages.delete(page);
+        });
+        pages.push(page);
+        openPages.add(page);
+        return page;
+      }),
+      addCookies: vi.fn(
+        async (
+          cookies: { name: string; value: string; url?: string; domain?: string; path?: string }[],
+        ) => {
+          for (const cookie of cookies) {
+            if (!(cookie.url || (cookie.domain && cookie.path))) {
+              throw new Error('Cookie should have a url or a domain/path pair');
+            }
+            if (cookie.url && (cookie.domain || cookie.path)) {
+              throw new Error('Cookie should have either url or domain/path');
+            }
+          }
+        },
+      ),
+      close: vi.fn(async () => {
+        await Promise.all(pages.map((page) => page.close()));
+      }),
+    };
+  }),
+  close: vi.fn(async () => {
+    await Promise.all([...openPages].map((page) => page.close()));
+  }),
 };
+
+beforeEach(() => {
+  vi.clearAllMocks();
+});
+
+afterEach(async () => {
+  await providerRegistry.shutdownAll();
+  openPages.clear();
+  vi.clearAllMocks();
+});
 
 vi.mock('playwright-extra', async (importOriginal) => {
   return {
@@ -320,17 +362,95 @@ describe('BrowserProvider', () => {
     const provider = new BrowserProvider('test', {
       config: {
         steps: [createNavigateStep()],
-        cookies: 'foo=bar; baz=qux',
+        cookies: 'foo=bar==; baz=qux;',
       },
     });
 
     const result = await provider.callApi('test');
     const context = await mockBrowser.newContext.mock.results[0].value;
     expect(context.addCookies).toHaveBeenCalledExactlyOnceWith([
-      { name: 'foo', value: 'bar' },
-      { name: 'baz', value: 'qux' },
+      { name: 'foo', value: 'bar==', url: 'https://example.com/' },
+      { name: 'baz', value: 'qux', url: 'https://example.com/' },
     ]);
     expect(result.error).toBeUndefined();
+  });
+
+  it('scopes string cookies to the rendered first navigation URL', async () => {
+    const provider = new BrowserProvider('test', {
+      config: {
+        cookies: 'session=abc==',
+        steps: [
+          {
+            action: 'navigate',
+            args: { url: 'https://{{host}}/chat/start?secret=unused#fragment' },
+          },
+        ],
+      },
+    });
+    const result = await provider.callApi('test', {
+      prompt: { raw: '', label: '' },
+      vars: { host: 'tenant.example.com' },
+    });
+    const context = await mockBrowser.newContext.mock.results[0].value;
+    expect(result.error).toBeUndefined();
+    expect(context.addCookies).toHaveBeenCalledExactlyOnceWith([
+      { name: 'session', value: 'abc==', url: 'https://tenant.example.com/chat/start' },
+    ]);
+  });
+
+  it.each([undefined, '/relative', 'ftp://example.com', 'data:text/html,hello'])(
+    'rejects unscoped string cookies for navigation %s',
+    async (url) => {
+      const provider = new BrowserProvider('test', {
+        config: {
+          cookies: 'secret=value',
+          steps: url ? [{ action: 'navigate', args: { url } }] : [],
+        },
+      });
+      const result = await provider.callApi('test');
+      const context = await mockBrowser.newContext.mock.results[0].value;
+      expect(result.error).toContain(
+        'String browser cookies require a first navigate step with an absolute HTTP(S) URL',
+      );
+      expect(result.error).not.toContain('secret=value');
+      expect(context.addCookies).not.toHaveBeenCalled();
+      expect(context.newPage).not.toHaveBeenCalled();
+      expect(mockBrowser.close).toHaveBeenCalledOnce();
+    },
+  );
+
+  it.each(['missing-value', '=secret'])(
+    'rejects malformed cookie pairs without exposing their contents',
+    async (cookies) => {
+      const provider = new BrowserProvider('test', {
+        config: { cookies, steps: [createNavigateStep()] },
+      });
+      const result = await provider.callApi('test');
+      expect(result.error).toContain('Invalid browser cookie: expected name=value');
+      expect(result.error).not.toContain(cookies);
+      expect(mockBrowser.close).toHaveBeenCalledOnce();
+    },
+  );
+
+  it('reports Playwright rejection of cookie objects without an explicit scope', async () => {
+    const provider = new BrowserProvider('test', {
+      config: { cookies: [{ name: 'session', value: 'abc' }], steps: [createNavigateStep()] },
+    });
+    expect((await provider.callApi('test')).error).toContain(
+      'Cookie should have a url or a domain/path pair',
+    );
+    expect(mockBrowser.close).toHaveBeenCalledOnce();
+  });
+
+  it('preserves explicit domain and path cookie scopes', async () => {
+    const cookies = [{ name: 'session', value: 'abc=', domain: 'example.com', path: '/chat' }];
+    const provider = new BrowserProvider('test', {
+      config: { cookies, steps: [createNavigateStep()] },
+    });
+    const result = await provider.callApi('test');
+    const context = await mockBrowser.newContext.mock.results[0].value;
+    expect(result.error).toBeUndefined();
+    expect(context.addCookies).toHaveBeenCalledExactlyOnceWith(cookies);
   });
 
   it('should throw error if extract action missing name', async () => {
@@ -505,6 +625,11 @@ describe('BrowserProvider - Multi-turn Session Persistence', () => {
     expect(mockPage.fill).toHaveBeenNthCalledWith(1, '#input', 'first prompt');
     expect(mockPage.fill).toHaveBeenNthCalledWith(2, '#input', 'second prompt');
     expect(mockPage.close).not.toHaveBeenCalled();
+    expect(mockBrowser.close).not.toHaveBeenCalled();
+    await provider.cleanup();
+    expect(mockBrowser.close).toHaveBeenCalledOnce();
+    expect(mockPage.isClosed()).toBe(true);
+    expect(providerRegistry.has(provider)).toBe(false);
   });
 
   it('should skip runOnce steps on subsequent calls', async () => {
@@ -589,7 +714,7 @@ describe('BrowserProvider - Multi-turn Session Persistence', () => {
     const provider = new BrowserProvider('test', {
       config: {
         persistSession: true,
-        steps: [createNavigateStep()],
+        steps: [{ ...createNavigateStep(), runOnce: true }],
       },
     });
 
@@ -607,6 +732,7 @@ describe('BrowserProvider - Multi-turn Session Persistence', () => {
     const second = await provider.callApi('second');
     expect(first.error).toBeUndefined();
     expect(second).toEqual({ output: '<html>replacement</html>' });
+    expect(mockBrowser.close).toHaveBeenCalledOnce();
     expect(mockBrowser.newContext).toHaveBeenCalledTimes(2);
     for (const call of mockBrowser.newContext.mock.results) {
       expect((await call.value).newPage).toHaveBeenCalledTimes(1);
@@ -614,6 +740,166 @@ describe('BrowserProvider - Multi-turn Session Persistence', () => {
     expect(originalPage.goto).toHaveBeenCalledExactlyOnceWith('https://example.com');
     expect(mockPage.goto).toHaveBeenCalledExactlyOnceWith('https://example.com');
   });
+});
+
+describe('BrowserProvider lifecycle', () => {
+  const makePage = () =>
+    ({
+      goto: vi.fn(),
+      fill: vi.fn(),
+      waitForSelector: vi.fn().mockResolvedValue({}),
+      content: vi.fn().mockResolvedValue('<html>session</html>'),
+      close: vi.fn(),
+      isClosed: vi.fn().mockReturnValue(false),
+    }) as unknown as Mocked<Page>;
+
+  beforeEach(() => {
+    mockPage = makePage();
+  });
+
+  it('cleans up after an evaluation and reruns initialization on reuse', async () => {
+    const provider = new BrowserProvider('test', {
+      config: { persistSession: true, steps: [{ ...createNavigateStep(), runOnce: true }] },
+    });
+    await providerRegistry.withEvaluation(async () => {
+      expect((await provider.callApi('one')).error).toBeUndefined();
+      expect((await provider.callApi('two')).error).toBeUndefined();
+      expect(mockBrowser.close).not.toHaveBeenCalled();
+      expect(mockPage.goto).toHaveBeenCalledOnce();
+    });
+    expect(mockBrowser.close).toHaveBeenCalledOnce();
+    expect(mockPage.isClosed()).toBe(true);
+    expect(providerRegistry.has(provider)).toBe(false);
+
+    mockPage = makePage();
+    await providerRegistry.withEvaluation(async () => {
+      expect((await provider.callApi('new eval')).error).toBeUndefined();
+      expect(mockPage.goto).toHaveBeenCalledOnce();
+    });
+    expect(mockBrowser.close).toHaveBeenCalledTimes(2);
+  });
+
+  it.each(['first turn', 'reused turn'])(
+    'resets the session after a %s action error',
+    async (turn) => {
+      const provider = new BrowserProvider('test', {
+        config: {
+          persistSession: true,
+          steps: [{ ...createNavigateStep(), runOnce: true }, createPromptTypingStep()],
+        },
+      });
+      if (turn === 'reused turn') {
+        expect((await provider.callApi('one')).error).toBeUndefined();
+      }
+      mockPage.fill.mockRejectedValueOnce(new Error('Page action failed'));
+      const failed = await provider.callApi('broken');
+      expect(failed.error).toContain('Page action failed');
+      expect(mockBrowser.close).toHaveBeenCalledOnce();
+      expect(mockPage.isClosed()).toBe(true);
+
+      mockPage = makePage();
+      expect((await provider.callApi('retry')).error).toBeUndefined();
+      expect(mockPage.goto).toHaveBeenCalledOnce();
+      expect(mockPage.fill).toHaveBeenCalledWith('#input', 'retry');
+    },
+  );
+
+  it('resets the session when the response transform returns an error', async () => {
+    const transformResponse = vi
+      .fn()
+      .mockReturnValueOnce({ error: 'Response was rejected' })
+      .mockReturnValueOnce({ output: 'recovered' });
+    const provider = new BrowserProvider('test', {
+      config: {
+        persistSession: true,
+        steps: [{ ...createNavigateStep(), runOnce: true }],
+        transformResponse,
+      },
+    });
+    expect(await provider.callApi('one')).toEqual({ error: 'Response was rejected' });
+    expect(mockBrowser.close).toHaveBeenCalledOnce();
+    mockPage = makePage();
+    expect(await provider.callApi('two')).toEqual({ output: 'recovered' });
+    expect(mockPage.goto).toHaveBeenCalledOnce();
+  });
+
+  it('includes a just-started call in immediate cleanup', async () => {
+    const { chromium } = await import('playwright-extra');
+    const provider = new BrowserProvider('test', { config: { persistSession: true, steps: [] } });
+    const pending = provider.callApi('test');
+    await provider.cleanup();
+    expect((await pending).error).toContain('Browser session was closed during initialization');
+    expect(chromium.launch).not.toHaveBeenCalled();
+    expect(providerRegistry.has(provider)).toBe(false);
+  });
+
+  it('closes a browser that finishes launching during cleanup', async () => {
+    const { chromium } = await import('playwright-extra');
+    const launch = createDeferred<Awaited<ReturnType<typeof chromium.launch>>>();
+    vi.mocked(chromium.launch).mockReturnValueOnce(launch.promise);
+    const provider = new BrowserProvider('test', { config: { persistSession: true, steps: [] } });
+    const pending = provider.callApi('test');
+    await vi.waitFor(() => expect(chromium.launch).toHaveBeenCalled());
+    expect(providerRegistry.has(provider)).toBe(true);
+    const cleanup = provider.cleanup();
+    launch.resolve(mockBrowser as unknown as Awaited<ReturnType<typeof chromium.launch>>);
+    await cleanup;
+    expect((await pending).error).toContain('Browser session was closed during initialization');
+    expect(mockBrowser.close).toHaveBeenCalledOnce();
+    expect(mockBrowser.newContext).not.toHaveBeenCalled();
+    expect(providerRegistry.has(provider)).toBe(false);
+  });
+
+  it('closes an owned context when page creation fails in a connected browser', async () => {
+    const context = await mockBrowser.newContext();
+    context.newPage.mockRejectedValueOnce(new Error('Cannot create page'));
+    const { chromium } = await import('playwright-extra');
+    const connected = {
+      contexts: vi.fn(() => []),
+      newContext: vi.fn().mockResolvedValue(context),
+      close: vi.fn(),
+    };
+    vi.mocked(chromium.connect).mockResolvedValueOnce(connected as never);
+    const provider = new BrowserProvider('test', {
+      config: {
+        persistSession: true,
+        steps: [],
+        connectOptions: { mode: 'websocket', wsEndpoint: 'ws://localhost:9222' },
+      },
+    });
+    expect((await provider.callApi('test')).error).toContain('Cannot create page');
+    expect(context.close).toHaveBeenCalledOnce();
+    expect(connected.close).not.toHaveBeenCalled();
+    expect(providerRegistry.has(provider)).toBe(false);
+  });
+
+  it.each([true, false])(
+    'cleans up only owned resources in a connected browser (existing context: %s)',
+    async (existing) => {
+      const context = await mockBrowser.newContext();
+      mockBrowser.newContext.mockClear();
+      const { chromium } = await import('playwright-extra');
+      const connected = {
+        contexts: vi.fn(() => (existing ? [context] : [])),
+        newContext: vi.fn().mockResolvedValue(context),
+        close: vi.fn(),
+      };
+      vi.mocked(chromium.connect).mockResolvedValueOnce(connected as never);
+      const provider = new BrowserProvider('test', {
+        config: {
+          persistSession: true,
+          steps: [],
+          connectOptions: { mode: 'websocket', wsEndpoint: 'ws://localhost:9222' },
+        },
+      });
+      expect((await provider.callApi('one')).error).toBeUndefined();
+      await provider.cleanup();
+      expect(connected.close).not.toHaveBeenCalled();
+      expect(context.close).toHaveBeenCalledTimes(existing ? 0 : 1);
+      expect(mockPage.close).toHaveBeenCalledOnce();
+      expect(mockPage.isClosed()).toBe(true);
+    },
+  );
 });
 
 describe('BrowserProvider - Connect to Existing Session', () => {
