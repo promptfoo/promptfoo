@@ -5,8 +5,8 @@ import { join } from 'path';
 import * as yaml from 'js-yaml';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
+import { JsonProviderOptionsWithIdSchema } from '../../types/api/providers';
 import { loadYaml } from '../../util/yamlLoad';
-import { ProviderOptionsSchema } from '../../validators/providers';
 
 import type { ProviderOptions } from '../../types/providers';
 
@@ -132,7 +132,7 @@ export function getAvailableProviders(): ProviderOptions[] {
     const normalized = typeof p === 'string' ? { id: p } : p;
 
     // Validate against schema
-    const result = ProviderOptionsSchema.safeParse(normalized);
+    const result = JsonProviderOptionsWithIdSchema.safeParse(normalized);
 
     if (!result.success) {
       logger.warn('Invalid provider configuration in ui-providers.yaml, skipping', {
@@ -141,26 +141,6 @@ export function getAvailableProviders(): ProviderOptions[] {
         validationErrors: result.error.issues,
       });
       continue;
-    }
-
-    // Ensure id is a non-empty string (required for providers even though the
-    // schema allows other shapes) so one bad entry cannot 500 the catalog route.
-    if (typeof result.data.id !== 'string' || !result.data.id) {
-      logger.warn('Provider missing required "id" field in ui-providers.yaml, skipping', {
-        providerIndex: i,
-        provider: normalized,
-      });
-      continue;
-    }
-
-    // Labels render directly in the UI; drop non-string labels instead of
-    // serving a value React cannot render.
-    if (result.data.label !== undefined && typeof result.data.label !== 'string') {
-      logger.warn('Provider has non-string "label" in ui-providers.yaml, dropping label', {
-        providerIndex: i,
-        provider: normalized,
-      });
-      result.data.label = undefined;
     }
 
     validatedProviders.push(result.data);

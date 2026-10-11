@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   existsSync: vi.fn(),
@@ -15,12 +15,16 @@ vi.mock('../../../src/util/yamlLoad', () => ({
   loadYaml: mocks.loadYaml,
 }));
 
-describe('getAvailableProviders ui-providers.yaml hardening', () => {
+describe('getAvailableProviders configured provider catalog', () => {
   beforeEach(async () => {
     vi.resetModules();
-    vi.clearAllMocks();
+    vi.resetAllMocks();
     mocks.existsSync.mockReturnValue(true);
     mocks.readFileSync.mockReturnValue('providers: []');
+  });
+
+  afterEach(() => {
+    vi.resetAllMocks();
   });
 
   async function loadWith(config: unknown) {
@@ -41,10 +45,19 @@ describe('getAvailableProviders ui-providers.yaml hardening', () => {
     expect(providers).toEqual([{ id: 'openai:gpt-4o-mini' }]);
   });
 
-  it('drops non-string labels instead of serving an unrenderable value', async () => {
+  it('preserves arbitrary string environment overrides from configured providers', async () => {
+    const provider = {
+      id: 'openai:chat:internal',
+      config: { apiKeyEnvar: 'TEAM_KEY' },
+      env: { TEAM_KEY: 'fixture' },
+    };
+    expect(await loadWith({ providers: [provider] })).toEqual([provider]);
+  });
+
+  it('skips entries with labels the UI cannot render', async () => {
     const providers = await loadWith({
       providers: [{ id: 'openai:gpt-4o-mini', label: { name: 'Internal' } }],
     });
-    expect(providers).toEqual([{ id: 'openai:gpt-4o-mini', label: undefined }]);
+    expect(providers).toEqual([]);
   });
 });

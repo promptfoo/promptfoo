@@ -33,7 +33,10 @@ import { testProviderConnectivity, testProviderSession } from '../../../src/node
 import { loadApiProvider } from '../../../src/providers/index';
 import { doTargetPurposeDiscovery } from '../../../src/redteam/commands/discover';
 import { neverGenerateRemote } from '../../../src/redteam/remoteGeneration';
-import { getAvailableProviders } from '../../../src/server/config/serverConfig';
+import {
+  getAvailableProviders,
+  getServerConfigPath,
+} from '../../../src/server/config/serverConfig';
 import { fetchWithProxy } from '../../../src/util/fetch/index';
 
 const mockedLoadApiProvider = vi.mocked(loadApiProvider);
@@ -49,6 +52,7 @@ describe('Providers Routes', () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
+    vi.mocked(getServerConfigPath).mockReturnValue(null);
     // Default to the non-cloud path so host-dependent assertions are deterministic
     // regardless of the machine's cloud-login state.
     vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
@@ -117,6 +121,7 @@ describe('Providers Routes', () => {
     });
 
     it('should return configured providers with id, label, and config preserved', async () => {
+      vi.mocked(getServerConfigPath).mockReturnValue('/fixture/ui-providers.yaml');
       mockedGetAvailableProviders.mockReturnValue([
         { id: 'openai:gpt-4o-mini' },
         {
@@ -145,17 +150,12 @@ describe('Providers Routes', () => {
       });
     });
 
-    it('should skip entries with non-string ids instead of returning 500', async () => {
-      mockedGetAvailableProviders.mockReturnValue([
-        { id: 123 },
-        { id: 'openai:gpt-4o-mini' },
-      ] as any);
-
+    it('keeps an empty or all-invalid catalog restricted', async () => {
+      vi.mocked(getServerConfigPath).mockReturnValue('/fixture/ui-providers.yaml');
+      mockedGetAvailableProviders.mockReturnValue([]);
       const response = await api.get('/api/providers');
-
       expect(response.status).toBe(200);
-      expect(response.body.data.providers).toEqual([{ id: 'openai:gpt-4o-mini' }]);
-      expect(response.body.data.hasCustomConfig).toBe(true);
+      expect(response.body.data).toEqual({ providers: [], hasCustomConfig: true });
     });
 
     it('should return standardized 500 errors when catalog loading fails', async () => {
