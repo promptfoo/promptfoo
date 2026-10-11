@@ -3648,6 +3648,7 @@ Third line`;
       const streamEvents = [
         { contentBlockDelta: { contentBlockIndex: 0, delta: { text: 'Hello ' } } },
         { contentBlockDelta: { contentBlockIndex: 0, delta: { text: 'World' } } },
+        { contentBlockStop: { contentBlockIndex: 0 } },
         { messageStop: { stopReason: 'end_turn' } },
         { metadata: { usage: { inputTokens: 10, outputTokens: 5 } } },
       ];
@@ -3670,6 +3671,7 @@ Third line`;
       });
       const streamEvents = [
         { contentBlockDelta: { contentBlockIndex: 0, delta: { text: 'Hello' } } },
+        { contentBlockStop: { contentBlockIndex: 0 } },
         { messageStop: { stopReason: 'end_turn' } },
         {
           metadata: {
@@ -3696,6 +3698,7 @@ Third line`;
       });
       const streamEvents = [
         { contentBlockDelta: { contentBlockIndex: 0, delta: { text: 'Hello' } } },
+        { contentBlockStop: { contentBlockIndex: 0 } },
         { messageStop: { stopReason: 'end_turn' } },
         {
           metadata: {
@@ -3759,6 +3762,7 @@ Third line`;
             },
           },
         },
+        { contentBlockStop: { contentBlockIndex: 0 } },
         { messageStop: { stopReason: 'tool_use' } },
         { metadata: { usage: { inputTokens: 20, outputTokens: 15 } } },
       ];
@@ -3793,6 +3797,7 @@ Third line`;
             delta: { toolUse: { input: '{"resourceType":"docs"}' } },
           },
         },
+        { contentBlockStop: { contentBlockIndex: 0 } },
         { messageStop: { stopReason: 'tool_use' } },
         { metadata: { usage: { inputTokens: 20, outputTokens: 15 } } },
       ];
@@ -3825,7 +3830,9 @@ Third line`;
       const streamEvents = [
         createToolUseStartedEvent(),
         { contentBlockDelta: { contentBlockIndex: 0, delta: { toolUse: { input: '{}' } } } },
+        { contentBlockStop: { contentBlockIndex: 0 } },
         { messageStop: { stopReason: 'tool_use' } },
+        { metadata: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } } },
       ];
 
       mockSend.mockResolvedValueOnce({
@@ -3852,7 +3859,9 @@ Third line`;
       const streamEvents = [
         createToolUseStartedEvent(),
         { contentBlockDelta: { contentBlockIndex: 0, delta: { toolUse: { input: '{}' } } } },
+        { contentBlockStop: { contentBlockIndex: 0 } },
         { messageStop: { stopReason: 'tool_use' } },
+        { metadata: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } } },
       ];
 
       mockSend.mockResolvedValueOnce({ stream: createMockStream(streamEvents) });
@@ -3873,7 +3882,9 @@ Third line`;
       const streamEvents = [
         createToolUseStartedEvent(),
         { contentBlockDelta: { contentBlockIndex: 0, delta: { toolUse: { input: '{broken' } } } },
+        { contentBlockStop: { contentBlockIndex: 0 } },
         { messageStop: { stopReason: 'tool_use' } },
+        { metadata: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } } },
       ];
 
       mockSend.mockResolvedValueOnce({ stream: createMockStream(streamEvents) });
@@ -3900,7 +3911,10 @@ Third line`;
           },
         },
         { contentBlockDelta: { contentBlockIndex: 1, delta: { toolUse: { input: '{}' } } } },
+        { contentBlockStop: { contentBlockIndex: 0 } },
+        { contentBlockStop: { contentBlockIndex: 1 } },
         { messageStop: { stopReason: 'tool_use' } },
+        { metadata: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } } },
       ];
 
       mockSend.mockResolvedValueOnce({
@@ -3948,6 +3962,8 @@ Third line`;
             delta: { toolUse: { input: '{"city":"NYC"}' } },
           },
         },
+        { contentBlockStop: { contentBlockIndex: 0 } },
+        { contentBlockStop: { contentBlockIndex: 1 } },
         { messageStop: { stopReason: 'tool_use' } },
         { metadata: { usage: { inputTokens: 30, outputTokens: 25 } } },
       ];
@@ -3988,6 +4004,8 @@ Third line`;
             delta: { toolUse: { input: '{"loc":"LA"}' } },
           },
         },
+        { contentBlockStop: { contentBlockIndex: 0 } },
+        { contentBlockStop: { contentBlockIndex: 1 } },
         { messageStop: { stopReason: 'tool_use' } },
         { metadata: { usage: { inputTokens: 15, outputTokens: 10 } } },
       ];
@@ -4018,6 +4036,8 @@ Third line`;
           },
         },
         { contentBlockDelta: { contentBlockIndex: 1, delta: { text: 'The answer is 42.' } } },
+        { contentBlockStop: { contentBlockIndex: 0 } },
+        { contentBlockStop: { contentBlockIndex: 1 } },
         { messageStop: { stopReason: 'end_turn' } },
         { metadata: { usage: { inputTokens: 20, outputTokens: 30 } } },
       ];
