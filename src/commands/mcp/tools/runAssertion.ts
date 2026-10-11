@@ -152,36 +152,11 @@ export function registerRunAssertionTool(server: McpServer) {
             type: args.assertion?.type || 'unknown',
             value: args.assertion?.value,
           },
-          error: errorMessage,
           input: {
             output:
               args.output?.slice(0, 100) + (args.output && args.output.length > 100 ? '...' : ''),
             prompt:
               args.prompt?.slice(0, 100) + (args.prompt && args.prompt.length > 100 ? '...' : ''),
-          },
-          troubleshooting: {
-            commonIssues: [
-              'Invalid assertion type - check spelling and supported types',
-              'Missing required assertion value or configuration',
-              'Provider required for model-graded assertions (llm-rubric, factuality, etc.)',
-              'Transform script errors - check syntax and file paths',
-            ],
-            supportedTypes: [
-              'contains',
-              'equals',
-              'regex',
-              'starts-with',
-              'llm-rubric',
-              'factuality',
-              'answer-relevance',
-              'is-json',
-              'is-xml',
-              'is-sql',
-              'similar',
-              'javascript',
-              'python',
-              'webhook',
-            ],
           },
         };
 
