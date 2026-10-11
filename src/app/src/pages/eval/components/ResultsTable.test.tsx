@@ -1123,6 +1123,8 @@ describe('ResultsTable Metrics Display', () => {
         ['file path', 'file://sample.mp3', 'data:audio/mp3;base64,file://sample.mp3'],
         ['empty inline value', '', 'data:audio/mp3;base64,'],
         ['empty blob reference', 'promptfoo://blob/', null],
+        ['slash-only blob reference', 'promptfoo://blob//', null],
+        ['multiple-slash blob reference', 'promptfoo://blob////', null],
         ['empty storage reference', 'storageRef:', null],
         ['slash-only storage reference', 'storageRef:/', null],
         ['multiple-slash storage reference', 'storageRef:////', null],

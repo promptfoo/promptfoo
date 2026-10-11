@@ -95,7 +95,7 @@ export function resolveBlobUri(uri?: string | null): string | undefined {
 
   if (uri.startsWith(BLOB_URI_PREFIX)) {
     const hash = uri.slice(BLOB_URI_PREFIX.length);
-    return hash ? withApiBase(`/api/blobs/${hash}`) : undefined;
+    return hash && !/^\/+$/u.test(hash) ? withApiBase(`/api/blobs/${hash}`) : undefined;
   }
 
   if (uri.startsWith(STORAGE_REF_PREFIX)) {

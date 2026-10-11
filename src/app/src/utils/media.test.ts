@@ -696,12 +696,16 @@ describe('resolveBlobUri security', () => {
     expect(resolveBlobUri(dataUri)).toBe(dataUri);
   });
 
-  it.each(['promptfoo://blob/', 'storageRef:', 'storageRef:/', 'storageRef:////'])(
-    'does not resolve an empty reference %s',
-    (value) => {
-      expect(resolveBlobUri(value)).toBeUndefined();
-    },
-  );
+  it.each([
+    'promptfoo://blob/',
+    'promptfoo://blob//',
+    'promptfoo://blob////',
+    'storageRef:',
+    'storageRef:/',
+    'storageRef:////',
+  ])('does not resolve an empty reference %s', (value) => {
+    expect(resolveBlobUri(value)).toBeUndefined();
+  });
 
   it('should convert promptfoo://blob/ URIs', () => {
     expect(resolveBlobUri('promptfoo://blob/abc123')).toBe('/api/blobs/abc123');
