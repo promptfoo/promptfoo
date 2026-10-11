@@ -3572,6 +3572,7 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
       rerender(<ResultsTable {...defaultProps} />);
       await user.click(screen.getByRole('button', { name: 'Clear rating' }));
       expect(table.body[0].outputs[0]).toMatchObject({ pass: false, score: 0, failureReason: 2 });
+      expect(table.body[0].outputs[0].gradingResult.pass).toBe(true);
     },
   );
 

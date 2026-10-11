@@ -285,37 +285,57 @@ describe('eval routes', () => {
       },
     );
 
+    function comparisonRecoverySuite(ordinaryGraderError = false) {
+      let recovered = false;
+      const suite: TestSuite = {
+        providers: [new EchoProvider()],
+        prompts: [
+          { raw: 'candidate one', label: 'first' },
+          { raw: 'candidate two', label: 'second' },
+        ],
+        tests: [
+          {
+            assert: [
+              ordinaryGraderError
+                ? {
+                    type: 'javascript',
+                    value: () => ({
+                      pass: false,
+                      score: 0.25,
+                      reason: 'Ordinary grader unavailable',
+                      metadata: { graderError: true },
+                    }),
+                  }
+                : { type: 'contains', value: 'candidate' },
+              {
+                type: 'select-best',
+                value: 'Choose the best',
+                provider: {
+                  id: () => 'annotation-recovery-grader',
+                  callApi: async () => {
+                    if (!recovered) {
+                      throw new Error('Comparison unavailable');
+                    }
+                    return { output: '0' };
+                  },
+                },
+              },
+            ],
+          },
+        ],
+      };
+      return {
+        suite,
+        recover: () => {
+          recovered = true;
+        },
+      };
+    }
+
     it.each(['Recovery comment', 'approve-clear recovery'])(
       'recovers a comparison error after annotation: %s',
       async (comment) => {
-        let recovered = false;
-        const suite: TestSuite = {
-          providers: [new EchoProvider()],
-          prompts: [
-            { raw: 'candidate one', label: 'first' },
-            { raw: 'candidate two', label: 'second' },
-          ],
-          tests: [
-            {
-              assert: [
-                { type: 'contains', value: 'candidate' },
-                {
-                  type: 'select-best',
-                  value: 'Choose the best',
-                  provider: {
-                    id: () => 'annotation-recovery-grader',
-                    callApi: async () => {
-                      if (!recovered) {
-                        throw new Error('Comparison unavailable');
-                      }
-                      return { output: '0' };
-                    },
-                  },
-                },
-              ],
-            },
-          ],
-        };
+        const { suite, recover } = comparisonRecoverySuite();
         const record = await Eval.create({}, suite.prompts);
         testEvalIds.add(record.id);
         const previousResume = cliState.resume;
@@ -376,7 +396,7 @@ describe('eval routes', () => {
             expect(row.gradingResult).not.toHaveProperty('action');
           }
           // Successful retry must combine with the preserved ordinary assertion verdict.
-          recovered = true;
+          recover();
           cliState.resume = true;
           await evaluate(suite, saved, { maxConcurrency: 1 });
           const resumed = (await saved.getResults()).sort((a, b) => a.promptIdx - b.promptIdx);
@@ -386,6 +406,76 @@ describe('eval routes', () => {
             ResultFailureReason.ASSERT,
           ]);
           expect(resumed.every((row) => row.gradingResult?.comment === comment)).toBe(true);
+        } finally {
+          cliState.resume = previousResume;
+        }
+      },
+    );
+
+    it.each([false, true])(
+      'clears an approval after comparison recovery (ordinary grader error=%s)',
+      async (ordinaryGraderError) => {
+        const { suite, recover } = comparisonRecoverySuite(ordinaryGraderError);
+        const record = await Eval.create({}, suite.prompts);
+        testEvalIds.add(record.id);
+        const previousResume = cliState.resume;
+        try {
+          await evaluate(suite, record, { maxConcurrency: 1 });
+          for (const row of await record.getResults()) {
+            expect(row.failureReason).toBe(ResultFailureReason.ERROR);
+            const approved = await api
+              .post(`/api/eval/${record.id}/results/${row.id}/rating`)
+              .send(createManualRatingPayload(row, true));
+            expect(approved.status).toBe(200);
+          }
+          recover();
+          cliState.resume = true;
+          const saved = await Eval.findById(record.id);
+          invariant(saved, 'Saved evaluation required');
+          await evaluate(suite, saved, { maxConcurrency: 1 });
+          for (const row of await saved.getResults()) {
+            expect(row.gradingResult?.componentResults).toEqual(
+              expect.arrayContaining([
+                expect.objectContaining({
+                  assertion: expect.objectContaining({ type: 'select-best' }),
+                }),
+                expect.objectContaining({
+                  assertion: { type: 'human' },
+                  metadata: {
+                    originalFailureReason: ordinaryGraderError
+                      ? ResultFailureReason.ERROR
+                      : ResultFailureReason.NONE,
+                  },
+                }),
+              ]),
+            );
+            const components = row.gradingResult!.componentResults!.filter(
+              (component) => component.assertion?.type !== 'human',
+            );
+            const response = await api
+              .post(`/api/eval/${record.id}/results/${row.id}/rating`)
+              .send({
+                ...row.gradingResult,
+                pass: components.every((component) => component.pass),
+                score: ordinaryGraderError ? 0.25 : row.score,
+                componentResults: components,
+                action: 'clear',
+              });
+            expect(response.status).toBe(200);
+            expect(response.body).toMatchObject({
+              success: !ordinaryGraderError && row.promptIdx === 0,
+              failureReason: ordinaryGraderError
+                ? ResultFailureReason.ERROR
+                : row.promptIdx === 0
+                  ? ResultFailureReason.NONE
+                  : ResultFailureReason.ASSERT,
+            });
+            if (ordinaryGraderError) {
+              expect(response.body.score).toBe(0.25);
+            } else {
+              expect(response.body.error ?? '').not.toContain('Error grading select-best');
+            }
+          }
         } finally {
           cliState.resume = previousResume;
         }

@@ -17,7 +17,7 @@ import {
 import { extractAndStoreBinaryData } from './blobs/extractor';
 import { getCache, isCacheEnabled, withCacheEnabled, withCacheNamespace } from './cache';
 import cliState from './cliState';
-import { DEFAULT_MAX_CONCURRENCY, FILE_METADATA_KEY } from './constants';
+import { DEFAULT_MAX_CONCURRENCY, FILE_METADATA_KEY, HUMAN_ASSERTION_TYPE } from './constants';
 import { getEnvBool, getEnvInt, getEvalTimeoutMs, getMaxEvalTimeMs, isCI } from './envars';
 import { collectFileMetadata, renderPrompt, runExtensionHook } from './evaluatorHelpers';
 import logger, { globalLogCallback, isDebugEnabled, setLogCallback } from './logger';
@@ -5510,8 +5510,8 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     result: TResult,
     metrics: CompletedPrompt['metrics'] | undefined,
   ) {
+    const saved = getComparisonError(result);
     if (result.failureReason === ResultFailureReason.ERROR) {
-      const saved = getComparisonError(result);
       if (!saved) {
         return false;
       }
@@ -5523,9 +5523,24 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       result.success = saved.success;
       result.score = saved.score;
       result.failureReason = saved.failureReason;
+      this.updateComparisonResultCounts(result, previous, metrics);
+    }
+    if (saved) {
+      const manualOverride =
+        result.gradingResult?.componentResults?.find(
+          (component) => component.assertion?.type === HUMAN_ASSERTION_TYPE,
+        ) ??
+        (result.gradingResult?.assertion?.type === HUMAN_ASSERTION_TYPE
+          ? result.gradingResult
+          : undefined);
+      if (manualOverride) {
+        manualOverride.metadata = {
+          ...manualOverride.metadata,
+          originalFailureReason: saved.failureReason,
+        };
+      }
       result.error = saved.error;
       setComparisonError(result);
-      this.updateComparisonResultCounts(result, previous, metrics);
     }
     return true;
   }
