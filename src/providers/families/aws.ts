@@ -180,7 +180,8 @@ export const awsProviderFactories: ProviderFactory[] = [
         throw new Error(
           `Amazon Bedrock model "${routedGrokModel}" is not a valid Grok mantle id. Use the bare ` +
             `"bedrock:xai.grok-4.3" id for mantle-served Grok models, or an inference profile ` +
-            `such as "bedrock:converse:us.xai.grok-4.6" for Grok models Bedrock serves natively.`,
+            `such as "bedrock:converse:us.xai.grok-4.6" or "bedrock:converse:us.xai.grok-4.7" ` +
+            `for Grok models Bedrock serves natively.`,
         );
       }
       // Gate the (heavy) openaiResponses import behind the lightweight routing predicate so

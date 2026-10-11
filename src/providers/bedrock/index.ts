@@ -2601,7 +2601,7 @@ export function assertBedrockModelIsAvailable(modelName: string): void {
   if (RETIRED_BEDROCK_MODELS.has(modelId.replace(INFERENCE_PROFILE_PREFIX, ''))) {
     throw new Error(`Unknown Amazon Bedrock model: ${modelName}`);
   }
-  if (modelId === 'zai.glm-5.3' || modelId === 'moonshotai.kimi-k3') {
+  if (modelId === 'xai.grok-4.7' || modelId === 'zai.glm-5.3' || modelId === 'moonshotai.kimi-k3') {
     throw new Error(
       `Amazon Bedrock model "${modelId}" requires a cross-region inference profile. ` +
         `Use "bedrock:us.${modelId}" or "bedrock:global.${modelId}"` +
@@ -2786,7 +2786,8 @@ export function getHandlerForModel(
     throw new Error(
       `xAI model "${modelName}" is not served by Bedrock's InvokeModel API under that id. ` +
         `Grok 4.6 and 4.7 support Runtime InvokeModel and Converse through an inference profile — use ` +
-        `"bedrock:converse:us.xai.grok-4.6" or "bedrock:converse:global.xai.grok-4.6" ` +
+        `"bedrock:converse:us.xai.grok-4.6", "bedrock:converse:global.xai.grok-4.6", ` +
+        `or "bedrock:converse:us.xai.grok-4.7" ` +
         `with AWS credentials. Mantle-served Grok models use ` +
         `the OpenAI-compatible Responses API (mantle endpoint) — use the bare id such as ` +
         `"bedrock:xai.grok-4.3" and set AWS_BEARER_TOKEN_BEDROCK. See ` +

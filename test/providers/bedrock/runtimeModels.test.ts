@@ -26,7 +26,7 @@ describe('Bedrock Runtime model compatibility', () => {
     },
   );
 
-  it.each(['zai.glm-5.3', 'moonshotai.kimi-k3'])(
+  it.each(['xai.grok-4.7', 'zai.glm-5.3', 'moonshotai.kimi-k3'])(
     'keeps application profile resources opaque for %s',
     (model) => {
       const prefix = 'arn:aws:bedrock:us-east-1:123456789012:';
@@ -38,6 +38,29 @@ describe('Bedrock Runtime model compatibility', () => {
       );
     },
   );
+
+  it.each(['xai.grok-4.7', 'zai.glm-5.3', 'moonshotai.kimi-k3'])(
+    'rejects the foundation-model ARN for %s before constructing a Converse provider',
+    async (model) => {
+      const arn = `arn:aws:bedrock:us-east-1::foundation-model/${model}`;
+      await expect(factory.create(`bedrock:converse:${arn}`, {}, {} as never)).rejects.toThrow(
+        `bedrock:us.${model}`,
+      );
+    },
+  );
+
+  it.each(['', 'completion:', 'converse:'])(
+    'offers a Grok 4.7 profile for the unsupported %s prefixed selector',
+    async (selector) => {
+      await expect(
+        factory.create(`bedrock:${selector}eu.xai.grok-4.7`, {}, {} as never),
+      ).rejects.toThrow('bedrock:converse:us.xai.grok-4.7');
+    },
+  );
+
+  it('offers a Grok 4.7 profile when the native handler rejects an unsupported prefix', () => {
+    expect(() => getHandlerForModel('eu.xai.grok-4.7')).toThrow('bedrock:converse:us.xai.grok-4.7');
+  });
 
   it.each([
     'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/grok-eval',
