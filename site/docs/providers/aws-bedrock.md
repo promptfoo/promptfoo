@@ -280,6 +280,9 @@ as the source of truth for current support.
 
 ### Model Context Protocol (MCP) Servers
 
+Client-side [`config.mcp`](/docs/integrations/mcp) is supported by Converse, Messages,
+Mantle Chat, and Runtime Chat. InvokeModel and both Responses modes do not support it.
+
 The Converse provider can attach [Model Context Protocol](https://modelcontextprotocol.io)
 servers and surface their tools to the model alongside any `tools` you configure
 manually. MCP tool definitions are discovered at provider startup, converted to
@@ -1535,6 +1538,10 @@ Runtime cost estimates for GPT-6.1 Sol US/global inference profiles include its 
 Ultrafast rates. To request Ultrafast through Responses, set `service_tier: ultrafast`; see
 the [AWS model card](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-openai-gpt-6-1-sol.html)
 for current API and regional availability.
+
+Runtime Chat supports client-side [`config.mcp`](#model-context-protocol-mcp-servers);
+Runtime Responses does not. Chat routes return the MCP tool result directly, without
+another model turn.
 
 The adapters inherit [OpenAI provider options](./openai.md), including streaming,
 client-side functions, structured output, multimodal input, and request fields through
