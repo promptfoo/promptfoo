@@ -415,10 +415,15 @@ function parseJsonOrThrow(text: string, context: string): unknown {
   }
 }
 
+// Strip a UTF-8 BOM saved by Windows tools so JSON.parse accepts the file.
+function stripUtf8Bom(text: string): string {
+  return text.startsWith('\uFEFF') ? text.slice(1) : text;
+}
+
 /** Parse the non-empty lines of a JSONL file into raw test cases. */
 function parseJsonlLines(fileContent: string, filePath: string): TestCase[] {
   const rows: TestCase[] = [];
-  for (const [lineIndex, line] of fileContent.split('\n').entries()) {
+  for (const [lineIndex, line] of stripUtf8Bom(fileContent).split('\n').entries()) {
     if (!line.trim()) {
       continue;
     }
@@ -721,7 +726,7 @@ async function loadTestsFromGlobWithEnv(
     } else if (testFile.endsWith('.json')) {
       const fileContent = await fsPromises.readFile(testFile, 'utf8');
       const rawContent = parseJsonOrThrow(
-        fileContent,
+        stripUtf8Bom(fileContent),
         `Failed to parse JSON test file ${testFile}`,
       );
       testCases = maybeLoadConfigFromExternalFile(rawContent) as TestCase[];
@@ -994,7 +999,7 @@ function collectNestedFileReferences(
     const raw = fs.readFileSync(testsFile, 'utf-8');
     const parsed =
       ext === 'json'
-        ? JSON.parse(raw)
+        ? JSON.parse(stripUtf8Bom(raw))
         : ext === 'jsonl'
           ? parseJsonlLines(raw, testsFile)
           : loadYaml(raw);
