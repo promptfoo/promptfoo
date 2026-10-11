@@ -984,10 +984,7 @@ export class HydraProvider implements ApiProvider {
         inputVars: currentRenderInputVars,
       });
 
-      // Check if vulnerability was achieved. A grader error is not a verdict: the
-      // matchers tag those with `metadata.graderError` precisely so a transport or
-      // parse failure cannot be reported as a demonstrated vulnerability, and
-      // `iterative` already guards this the same way.
+      // Only a valid grader verdict can establish a vulnerability.
       if (graderResult?.pass === false && graderResult.metadata?.graderError !== true) {
         vulnerabilityAchieved = true;
         successfulAttacks.push({
