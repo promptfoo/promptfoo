@@ -5098,6 +5098,77 @@ describe('BEDROCK_MODEL OPENAI_COMPAT', () => {
       );
     });
 
+    it.each([undefined, true, false])(
+      'renders separate reasoning with showThinking=%s',
+      (showThinking) => {
+        const response = {
+          choices: [{ message: { content: 'answer', reasoning_content: 'steps' } }],
+        };
+        expect(modelHandler.output({ showThinking }, response)).toBe(
+          showThinking === false ? 'answer' : 'Thinking: steps\n\nanswer',
+        );
+      },
+    );
+
+    it.each([null, undefined, ''])(
+      'preserves separate reasoning without an answer (%s)',
+      (content) => {
+        const response = { choices: [{ message: { content, reasoning_content: 'steps' } }] };
+        expect(modelHandler.output({}, response)).toBe('Thinking: steps');
+        expect(modelHandler.output({ showThinking: true }, response)).toBe('Thinking: steps');
+        expect(modelHandler.output({ showThinking: false }, response)).toBe(content);
+      },
+    );
+
+    it.each([undefined, true, false])(
+      'preserves tool-only and mixed output with separate reasoning and showThinking=%s',
+      (showThinking) => {
+        for (const content of [null, 'Let me check.']) {
+          const response = {
+            choices: [
+              {
+                message: {
+                  content,
+                  reasoning_content: 'steps',
+                  tool_calls: [{ function: { name: 'calc', arguments: '{"x":1}' } }],
+                },
+              },
+            ],
+          };
+          const parts = [
+            ...(showThinking === false ? [] : ['Thinking: steps']),
+            ...(content ? [content] : []),
+            'Called function calc with arguments: {"x":1}',
+          ];
+          expect(modelHandler.output({ showThinking }, response)).toBe(parts.join('\n\n'));
+        }
+      },
+    );
+
+    it.each([undefined, null, '', 42, {}, []])(
+      'leaves content unchanged for empty or non-string reasoning (%s)',
+      (reasoning_content) => {
+        expect(
+          modelHandler.output(
+            {},
+            { choices: [{ message: { content: 'answer', reasoning_content } }] },
+          ),
+        ).toBe('answer');
+      },
+    );
+
+    it('preserves inline reasoning when a separate reasoning field is also supplied', () => {
+      const response = {
+        choices: [
+          { message: { content: '<think>inline steps</think>answer', reasoning_content: 'steps' } },
+        ],
+      };
+      expect(modelHandler.output({}, response)).toBe(
+        'Thinking: steps\n\n<think>inline steps</think>answer',
+      );
+      expect(modelHandler.output({ showThinking: false }, response)).toBe('answer');
+    });
+
     it('returns reasoning verbatim by default and strips it when showThinking is false', () => {
       const withThink = { choices: [{ message: { content: '<think>steps</think>answer' } }] };
       const withReasoning = {
@@ -5142,7 +5213,12 @@ describe('BEDROCK_MODEL OPENAI_COMPAT', () => {
 
     it('returns non-string content (e.g. multimodal blocks) unchanged', () => {
       const blocks = [{ type: 'text', text: 'hi' }];
-      expect(modelHandler.output({}, { choices: [{ message: { content: blocks } }] })).toBe(blocks);
+      expect(
+        modelHandler.output(
+          {},
+          { choices: [{ message: { content: blocks, reasoning_content: 'steps' } }] },
+        ),
+      ).toBe(blocks);
     });
 
     it('returns undefined when the response has no choices', () => {

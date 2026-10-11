@@ -2249,25 +2249,34 @@ ${prompt}
       }
 
       const choice = responseJson.choices?.[0];
+      let content = choice?.message?.content;
+      const reasoning = choice?.message?.reasoning_content;
+      if (
+        config.showThinking !== false &&
+        typeof reasoning === 'string' &&
+        reasoning &&
+        (typeof content === 'string' || content == null)
+      ) {
+        content = `Thinking: ${reasoning}${content ? `\n\n${content}` : ''}`;
+      }
 
       // Surface tool calls (OpenAI format) the same way the Qwen handler does. Use optional
       // chaining so a malformed tool_call entry (missing `.function`) degrades gracefully
       // instead of throwing inside output().
       if (Array.isArray(choice?.message?.tool_calls) && choice.message.tool_calls.length > 0) {
-        const content =
-          typeof choice.message.content === 'string' && config?.showThinking === false
-            ? choice.message.content.replace(/^\s*<(think|reasoning)>[\s\S]*?<\/\1>\s*/i, '')
-            : choice.message.content;
+        const visibleContent =
+          typeof content === 'string' && config?.showThinking === false
+            ? content.replace(/^\s*<(think|reasoning)>[\s\S]*?<\/\1>\s*/i, '')
+            : content;
         const toolCalls = choice.message.tool_calls
           .map(
             (toolCall: any) =>
               `Called function ${toolCall.function?.name} with arguments: ${toolCall.function?.arguments}`,
           )
           .join('\n');
-        return content ? `${content}\n\n${toolCalls}` : toolCalls;
+        return visibleContent ? `${visibleContent}\n\n${toolCalls}` : toolCalls;
       }
 
-      const content = choice?.message?.content;
       if (typeof content !== 'string') {
         return content;
       }
