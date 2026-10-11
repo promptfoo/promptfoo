@@ -120,6 +120,7 @@ describe('Google example provider contracts', () => {
     // it through a native import as well as Vitest's transformed module graph.
     vi.spyOn(GoogleAuth.prototype, 'getClient').mockResolvedValue({
       request: oauthRequest,
+      transporter: { defaults: {} },
     } as unknown as Awaited<ReturnType<GoogleAuth['getClient']>>);
     vi.spyOn(GoogleAuth.prototype, 'getProjectId').mockImplementation(
       async () => 'sdk-detected-project',

@@ -1318,7 +1318,7 @@ function updateConversationHistory({
   conversations[conversationKey].push({
     prompt: renderedJson || renderedPrompt,
     input: conversationLastInput || renderedJson || renderedPrompt,
-    output: response.output || '',
+    output: response.conversationOutput ?? (response.output || ''),
     metadata: response.metadata,
   });
 }

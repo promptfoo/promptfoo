@@ -21,20 +21,14 @@ import {
   resolveCallbackPath,
   wrapError,
 } from '../../util/functions/loadFunction';
-import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { getNunjucksEngine } from '../../util/templates';
 import { McpClientSession } from '../mcp/session';
 import { transformMCPToolsToGoogle } from '../mcp/transform';
-import { getRequestTimeoutMs, transformTools } from '../shared';
+import { getRequestTimeoutMs } from '../shared';
 import { withGenAIToolSpan } from '../tracing';
 import { GoogleAuthManager } from './auth';
 import { getVertexModelDefaultRegion } from './shared';
-import {
-  normalizeTools,
-  resolveGoogleToolConfig,
-  stripExecutableToolFileReferences,
-  validateFunctionCall,
-} from './util';
+import { loadGoogleTools, resolveGoogleToolConfig, validateFunctionCall } from './util';
 
 import type { EnvOverrides } from '../../types/env';
 import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types/index';
@@ -525,20 +519,7 @@ export abstract class GoogleGenericProvider implements ApiProvider {
     // This allows per-prompt tool overrides in test cases
     const promptConfig = context?.prompt?.config as CompletionOptions | undefined;
     const configTools = promptConfig?.tools ?? this.config.tools;
-    const requestTools = options.skipExecutableToolFiles
-      ? stripExecutableToolFileReferences(configTools, context?.vars)
-      : configTools;
-    const loadedTools = requestTools
-      ? await maybeLoadToolsFromExternalFile(requestTools, context?.vars)
-      : [];
-
-    // Transform tools to Google format if needed
-    const transformedTools = Array.isArray(loadedTools)
-      ? (transformTools(loadedTools, 'google') as Tool[])
-      : loadedTools
-        ? [loadedTools]
-        : [];
-    const normalizedTools = normalizeTools(transformedTools);
+    const normalizedTools = await loadGoogleTools(configTools, context?.vars, options);
 
     // Combine all tools
     const allTools = [...mcpTools, ...normalizedTools];

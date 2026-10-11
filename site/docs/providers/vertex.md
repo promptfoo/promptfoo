@@ -14,6 +14,10 @@ Use `vertex:` for the supported Vertex inference paths listed below. Use `google
 
 ## Available Models
 
+For Gemini speech generation, use `vertex:gemini-3.8-flash-tts` or `vertex:gemini-3.8-flash-lite-tts` with `config.region: global`. These models use `generateContent` (or `streamGenerateContent` with `streaming: true`) and return audio in `providerResponse.audio`. See [speech configuration](/docs/providers/google#text-to-speech) for single- and two-speaker voices. System instructions are unsupported; put delivery instructions in `speechMetadata.style`. They are [Preview on Vertex](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/gemini/3-8-flash-tts); check project access before use.
+
+TTS cost estimates include the [published promotional credits](https://cloud.google.com/gemini-enterprise-agent-platform/generative-ai/pricing) through December 31, 2026, followed by the standard rates.
+
 ### Gemini Models
 
 **Gemini 3.8:**
@@ -222,25 +226,27 @@ For [Gemma deployed from Model Garden](https://docs.cloud.google.com/gemini-ente
 
 ### Embedding Models
 
-Reference Vertex embedding models with the `vertex:embedding:` prefix:
+Reference Vertex embedding models with the `vertex:embedding:` prefix. The provider accepts text strings for both API formats:
 
-- `vertex:embedding:gemini-embedding-001` - Recommended default. Multilingual plus code, up to 3,072 dimensions, 2,048 input-token limit
-- `vertex:embedding:text-embedding-005` - English and code, up to 768 dimensions, 2,048 input-token limit
-- `vertex:embedding:text-multilingual-embedding-002` - Multilingual, up to 768 dimensions, 2,048 input-token limit
-
-Pass `autoTruncate: true` in `config` to let Vertex truncate oversize inputs on the server instead of returning an error:
+- `vertex:embedding:gemini-embedding-2` uses `embedContent` and defaults to `global`. Set `region: us` or `region: eu` for a supported multi-region endpoint. Image, audio, video, and PDF embedding inputs are not yet exposed by promptfoo's embedding interface.
+- `vertex:embedding:gemini-embedding-001` remains the default for existing configurations and uses `predict`, as do `text-embedding-005` and `text-multilingual-embedding-002`.
 
 ```yaml
 defaultTest:
   options:
     provider:
       embedding:
-        id: vertex:embedding:gemini-embedding-001
+        id: vertex:embedding:gemini-embedding-2
         config:
-          autoTruncate: true
+          projectId: your-project-id
+          outputDimensionality: 768
 ```
 
-Upgrading between embedding model families changes the vector space, so re-embed any previously indexed content. See Google's [supported embedding models](https://cloud.google.com/vertex-ai/generative-ai/docs/embeddings/get-text-embeddings) reference for the current list.
+`outputDimensionality` is supported on both API paths. For the text prediction models, `taskType`, `title` (with `RETRIEVAL_DOCUMENT`), and `autoTruncate` are also forwarded to Vertex. For these text prediction models, promptfoo sets `autoTruncate` to `false` by default.
+
+For Embedding 2, this provider rejects `taskType`, `title`, and `autoTruncate` before sending a request. Include task or document instructions in the input text instead. Upgrading between embedding families changes the vector space, so re-embed previously indexed content.
+
+See Google's [text embedding guide](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/embeddings/get-text-embeddings), [Embedding 2 guide](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/embeddings/get-multimodal-embeddings), and [embedContent API reference](https://docs.cloud.google.com/gemini-enterprise-agent-platform/reference/rest/v1/projects.locations.publishers.models/embedContent) for current model limits and request fields.
 
 ### Image Generation Models
 
@@ -532,7 +538,7 @@ The following environment variables can be used to configure the Vertex AI provi
 †The Vertex chat provider applies model-specific defaults before authentication defaults.
 Gemini 3 chat models default to `global` with either OAuth or an API key. Choose a
 region supported by your model. Prediction-based text embeddings and Vertex Live
-default to `us-central1`.
+default to `us-central1`. Gemini Embedding 2 defaults to `global`.
 
 ### Region Selection
 
@@ -806,7 +812,7 @@ defaultTest:
 | `expressMode`                      | Set to `false` to force OAuth/ADC even with API key                | auto (API key → `true`)        |
 | `streaming`                        | Use streaming API (`streamGenerateContent`)                        | `false`                        |
 
-‡The chat provider uses model-specific region defaults; Gemini 3 chat models use `global` with either authentication method. The `global` host is `aiplatform.googleapis.com`, including for Express mode. Regional overrides use `{region}-aiplatform.googleapis.com`; see [Region Selection](#region-selection) for multi-region hosts. Prediction-based text embeddings and Vertex Live default to `us-central1`.
+‡The chat provider uses model-specific region defaults; Gemini 3 chat models use `global` with either authentication method. The `global` host is `aiplatform.googleapis.com`, including for Express mode. Regional overrides use `{region}-aiplatform.googleapis.com`; see [Region Selection](#region-selection) for multi-region hosts. Prediction-based text embeddings and Vertex Live default to `us-central1`. Gemini Embedding 2 defaults to `global`.
 
 :::note
 Not all models support all parameters. See [Google's documentation](https://cloud.google.com/vertex-ai/generative-ai/docs/multimodal/overview) for model-specific details.
@@ -1434,7 +1440,7 @@ The table describes provider features, not a promise that every model supports e
 | Video generation         | ✅        | Use `vertex:video:` provider                                                              |
 | Image generation         | ⚠️        | [Gemini image and Imagen adapters](#image-generation-models) with `config.projectId`      |
 
-These are promptfoo provider capabilities. [Live API](#live-api) model availability varies by project and location. Embedding support here covers the [text embedding request format](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/embeddings/get-text-embeddings), not every model or modality in the cloud catalog. See [image generation models](#image-generation-models) for the Imagen adapter and native Gemini image routes.
+These are promptfoo provider capabilities. [Live API](#live-api) model availability varies by project and location. Embedding support covers text inputs through both `predict` and `embedContent`; see [embedding models](#embedding-models) for supported configuration and modality limits. See [image generation models](#image-generation-models) for the Imagen adapter and native Gemini image routes.
 
 Batch prediction jobs, `countTokens`, cache management, tuning, voice management, and managed-agent lifecycle operations are not implemented as Vertex provider operations. `passthrough` adds fields to the selected inference request; it does not invoke another endpoint. Use a [custom provider](/docs/providers/custom-api) for these workflows.
 
