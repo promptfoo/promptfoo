@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../src/cache';
 import { cloudConfig } from '../src/globalConfig/cloud';
 import guardrails, { type AdaptiveRequest } from '../src/guardrails';
+import { createMockFetchResponse } from './providers/mockProviderResponses';
 
 vi.mock('../src/cache', () => ({
   fetchWithCache: vi.fn(),
@@ -85,12 +86,7 @@ describe('guardrails', () => {
     });
 
     it('should handle empty API response', async () => {
-      vi.mocked(fetchWithCache).mockResolvedValue({
-        data: null,
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+      vi.mocked(fetchWithCache).mockResolvedValue(createMockFetchResponse(null));
 
       await expect(guardrails.guard('test input')).rejects.toThrow('No data returned from API');
     });
@@ -236,8 +232,8 @@ describe('guardrails', () => {
     });
 
     it('should have correct PII result structure with payload', async () => {
-      vi.mocked(fetchWithCache).mockResolvedValue({
-        data: {
+      vi.mocked(fetchWithCache).mockResolvedValue(
+        createMockFetchResponse({
           model: 'test-model',
           results: [
             {
@@ -260,11 +256,8 @@ describe('guardrails', () => {
               },
             },
           ],
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+        }),
+      );
 
       const result = await guardrails.pii('test input');
       expect(result).toHaveProperty('model');
@@ -399,12 +392,9 @@ describe('guardrails', () => {
     });
 
     it('routes adaptive requests to the configured cloud host with a bearer token', async () => {
-      vi.mocked(fetchWithCache).mockResolvedValue({
-        data: { model: 'm', adaptedPrompt: 'a', modifications: [] },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+      vi.mocked(fetchWithCache).mockResolvedValue(
+        createMockFetchResponse({ model: 'm', adaptedPrompt: 'a', modifications: [] }),
+      );
 
       await guardrails.adaptive({ prompt: 'test input', policies: ['No harmful content'] });
 

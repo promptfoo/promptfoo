@@ -129,6 +129,17 @@ describe('Google Sheets Integration', () => {
       expect(fetchWithProxy).toHaveBeenCalledWith(expectedUrl);
     });
 
+    it('should read the gid from the URL fragment', async () => {
+      vi.mocked(fetchWithProxy).mockResolvedValue(
+        createMockResponse({ text: () => Promise.resolve('header\nvalue') }),
+      );
+
+      await fetchCsvFromGoogleSheetUnauthenticated(`${TEST_SHEET_URL}#gid=98765`);
+      expect(fetchWithProxy).toHaveBeenCalledWith(
+        'https://docs.google.com/spreadsheets/d/1234567890/export?format=csv&gid=98765',
+      );
+    });
+
     it('should throw error on non-200 response', async () => {
       vi.mocked(fetchWithProxy).mockResolvedValue(createMockResponse({ status: 403 }));
 
@@ -203,6 +214,36 @@ describe('Google Sheets Integration', () => {
       expect(spreadsheets.values.get).toHaveBeenCalledWith({
         spreadsheetId: '1234567890',
         range: 'TestSheet',
+        auth: mockAuthClient,
+      });
+    });
+
+    it('should read the gid from the URL fragment', async () => {
+      spreadsheets.values.get.mockResolvedValue({ data: { values: [['header'], ['value']] } });
+
+      await fetchCsvFromGoogleSheetAuthenticated(`${TEST_SHEET_URL}#gid=98765`);
+      expect(spreadsheets.values.get).toHaveBeenCalledWith({
+        spreadsheetId: '1234567890',
+        range: 'TestSheet',
+        auth: mockAuthClient,
+      });
+    });
+
+    it('should select gid 0 even when it is not the first sheet', async () => {
+      spreadsheets.get.mockResolvedValue({
+        data: {
+          sheets: [
+            { properties: { sheetId: 98765, title: 'TestSheet' } },
+            { properties: { sheetId: 0, title: 'Sheet1' } },
+          ],
+        },
+      });
+      spreadsheets.values.get.mockResolvedValue({ data: { values: [['header'], ['value']] } });
+
+      await fetchCsvFromGoogleSheetAuthenticated(`${TEST_SHEET_URL}?gid=0`);
+      expect(spreadsheets.values.get).toHaveBeenCalledWith({
+        spreadsheetId: '1234567890',
+        range: 'Sheet1',
         auth: mockAuthClient,
       });
     });
@@ -419,6 +460,33 @@ describe('Google Sheets Integration', () => {
 
         expect(endColumn).toBe(expected);
       }
+    });
+  });
+
+  describe('writeCsvToGoogleSheet', () => {
+    const spreadsheets = mockSpreadsheetsApi as MockSpreadsheets;
+
+    it('should write to the sheet a fragment gid selects instead of adding one', async () => {
+      spreadsheets.get.mockResolvedValue({
+        data: { sheets: [{ properties: { sheetId: 0, title: 'Results' } }] },
+      });
+      spreadsheets.values.update.mockResolvedValue({});
+
+      await writeCsvToGoogleSheet([{ input: 'hi', output: 'hello' }], `${TEST_SHEET_URL}#gid=0`);
+
+      expect(spreadsheets.batchUpdate).not.toHaveBeenCalled();
+      expect(spreadsheets.values.update).toHaveBeenCalledWith({
+        spreadsheetId: '1234567890',
+        range: 'Results!A1:B2',
+        valueInputOption: 'USER_ENTERED',
+        auth: mockAuthClient,
+        requestBody: {
+          values: [
+            ['input', 'output'],
+            ['hi', 'hello'],
+          ],
+        },
+      });
     });
   });
 });

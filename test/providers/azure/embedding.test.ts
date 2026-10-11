@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import { AzureEmbeddingProvider } from '../../../src/providers/azure/embedding';
+import { createMockFetchResponse } from '../mockProviderResponses';
 
 vi.mock('../../../src/cache');
 
@@ -61,12 +62,9 @@ describe('AzureEmbeddingProvider', () => {
     'preserves the deployment and forwards dimensions %s',
     async (dimensions) => {
       provider.config.dimensions = dimensions;
-      vi.mocked(fetchWithCache).mockResolvedValueOnce({
-        data: { data: [{ embedding: [0.1, 0.2] }], usage: { total_tokens: 2 } },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(
+        createMockFetchResponse({ data: [{ embedding: [0.1, 0.2] }], usage: { total_tokens: 2 } }),
+      );
 
       const result = await provider.callEmbeddingApi('A small sample');
 

@@ -104,6 +104,9 @@ def run_smoke(repo, output):
         PROMPTFOO_DISABLE_TELEMETRY="1",
         PROMPTFOO_DISABLE_REMOTE_GENERATION="true",
         MLFLOW_GATEWAY_URL=uri,
+        # Only this isolated test server routes to the loopback HTTP model fixture.
+        MLFLOW_GATEWAY_API_BASE_ALLOWED_SCHEMES="http,https",
+        MLFLOW_GATEWAY_API_BASE_ALLOW_PRIVATE_IPS="true",
         OPENBLAS_NUM_THREADS="1",
         OMP_NUM_THREADS="1",
     )

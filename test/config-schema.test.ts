@@ -28,6 +28,21 @@ describe('config-schema.json', () => {
     return obj;
   };
 
+  function* walkSchema(
+    obj: any,
+    path = '',
+    skipEnums = false,
+  ): Generator<{ obj: any; path: string }> {
+    if (obj && typeof obj === 'object') {
+      yield { obj, path };
+      for (const [key, value] of Object.entries(obj)) {
+        if (!skipEnums || key !== 'enum') {
+          yield* walkSchema(value, path ? `${path}.${key}` : key, skipEnums);
+        }
+      }
+    }
+  }
+
   beforeAll(() => {
     // Read the schema file
     const schemaPath = path.join(__dirname, '..', 'site', 'static', 'config-schema.json');
@@ -60,31 +75,51 @@ describe('config-schema.json', () => {
     expect(schema.definitions).toHaveProperty('PromptfooConfigSchema');
   });
 
+  it('should accept provider-scoped GOOGLE_CLOUD_PROJECT in a config file', () => {
+    const validate = ajv.compile(schema);
+    const config = {
+      prompts: ['Embed this'],
+      providers: [
+        {
+          id: 'vertex:embedding:gemini-embedding-001',
+          env: { GOOGLE_CLOUD_PROJECT: 'provider-project' },
+        },
+      ],
+    };
+
+    expect(validate(config), JSON.stringify(validate.errors, null, 2)).toBe(true);
+
+    const providerEnvSchemas: any[] = [];
+    const collectProviderEnvSchemas = (node: any): void => {
+      if (!node || typeof node !== 'object') {
+        return;
+      }
+      if (node.properties?.GOOGLE_CLOUD_LOCATION) {
+        providerEnvSchemas.push(node);
+      }
+      for (const value of Object.values(node)) {
+        collectProviderEnvSchemas(value);
+      }
+    };
+    collectProviderEnvSchemas(schema);
+
+    expect(providerEnvSchemas.length).toBeGreaterThan(0);
+    for (const providerEnvSchema of providerEnvSchemas) {
+      expect(providerEnvSchema.properties).toHaveProperty('GOOGLE_CLOUD_PROJECT', {
+        type: 'string',
+      });
+    }
+  });
+
   describe('redteam plugin enums', () => {
     it('should not have duplicate entries in plugin enums', () => {
-      const findPluginEnums = (
-        obj: any,
-        path: string = '',
-      ): Array<{ path: string; values: string[] }> => {
-        const results: Array<{ path: string; values: string[] }> = [];
-
-        if (obj && typeof obj === 'object') {
-          // Check if this is an enum array that looks like a plugin list
-          if (Array.isArray(obj.enum) && obj.enum.length > 10 && obj.enum.includes('bias')) {
-            results.push({ path, values: obj.enum });
-          }
-
-          for (const [key, value] of Object.entries(obj)) {
-            if (key !== 'enum') {
-              results.push(...findPluginEnums(value, path ? `${path}.${key}` : key));
-            }
-          }
+      const pluginEnums: Array<{ path: string; values: string[] }> = [];
+      for (const { obj, path } of walkSchema(schema, '', true)) {
+        // Check if this is an enum array that looks like a plugin list
+        if (Array.isArray(obj.enum) && obj.enum.length > 10 && obj.enum.includes('bias')) {
+          pluginEnums.push({ path, values: obj.enum });
         }
-
-        return results;
-      };
-
-      const pluginEnums = findPluginEnums(schema);
+      }
 
       expect(pluginEnums.length).toBeGreaterThan(0);
 
@@ -99,23 +134,12 @@ describe('config-schema.json', () => {
     });
 
     it('should have consistent plugin lists across different locations', () => {
-      const findAllEnums = (obj: any): string[][] => {
-        const results: string[][] = [];
-
-        if (obj && typeof obj === 'object') {
-          if (Array.isArray(obj.enum) && obj.enum.length > 10 && obj.enum.includes('bias')) {
-            results.push(obj.enum);
-          }
-
-          for (const value of Object.values(obj)) {
-            results.push(...findAllEnums(value));
-          }
+      const allEnums: string[][] = [];
+      for (const { obj } of walkSchema(schema)) {
+        if (Array.isArray(obj.enum) && obj.enum.length > 10 && obj.enum.includes('bias')) {
+          allEnums.push(obj.enum);
         }
-
-        return results;
-      };
-
-      const allEnums = findAllEnums(schema);
+      }
 
       // Should find at least 2 (one for string type, one for object id)
       expect(allEnums.length).toBeGreaterThanOrEqual(2);
@@ -129,24 +153,13 @@ describe('config-schema.json', () => {
     });
 
     it('should contain expected plugin entries', () => {
-      const findPluginEnum = (obj: any): string[] | null => {
-        if (obj && typeof obj === 'object') {
-          if (Array.isArray(obj.enum) && obj.enum.includes('bias')) {
-            return obj.enum;
-          }
-
-          for (const value of Object.values(obj)) {
-            const result = findPluginEnum(value);
-            if (result) {
-              return result;
-            }
-          }
+      let pluginEnum: string[] | null = null;
+      for (const { obj } of walkSchema(schema)) {
+        if (Array.isArray(obj.enum) && obj.enum.includes('bias')) {
+          pluginEnum = obj.enum;
+          break;
         }
-
-        return null;
-      };
-
-      const pluginEnum = findPluginEnum(schema);
+      }
       expect(pluginEnum).not.toBeNull();
 
       // Use non-null assertion since we've already checked it's not null
@@ -220,23 +233,12 @@ describe('config-schema.json', () => {
     });
 
     it('should validate that plugin patterns are properly escaped', () => {
-      const findPatterns = (obj: any): string[] => {
-        const patterns: string[] = [];
-
-        if (obj && typeof obj === 'object') {
-          if (typeof obj.pattern === 'string') {
-            patterns.push(obj.pattern);
-          }
-
-          for (const value of Object.values(obj)) {
-            patterns.push(...findPatterns(value));
-          }
+      const patterns: string[] = [];
+      for (const { obj } of walkSchema(schema)) {
+        if (typeof obj.pattern === 'string') {
+          patterns.push(obj.pattern);
         }
-
-        return patterns;
-      };
-
-      const patterns = findPatterns(schema);
+      }
 
       const filePatterns = patterns.filter((p) => p.includes('file'));
       expect(filePatterns.length).toBeGreaterThan(0);

@@ -76,7 +76,6 @@ interface PrintOptions {
   head?: number;
   grep?: RegExp;
   noColor: boolean;
-  noHeader?: boolean;
 }
 
 /**
