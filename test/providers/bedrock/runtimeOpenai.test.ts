@@ -448,6 +448,135 @@ describe('Runtime Chat streaming', () => {
     chunks.map((chunk) => `data: ${JSON.stringify(chunk)}\r\n\r\n`).join('') +
     (done ? 'data: [DONE]\r\n\r\n' : '');
 
+  it.each([
+    'unfinished',
+    'missing-finish',
+    'other-unfinished',
+    'empty',
+    'missing',
+    'no-usage',
+    'type-only-error',
+    'mixed-error',
+    'empty-error',
+  ])('rejects incomplete JSON fallback %s before tool callbacks', async (failure) => {
+    const callback = vi.fn(async () => 'TOOL_OK');
+    const choice = {
+      index: 0,
+      message: {
+        role: 'assistant',
+        tool_calls: [
+          { id: 'call-1', type: 'function', function: { name: 'lookup', arguments: '{}' } },
+        ],
+      },
+      finish_reason: failure === 'other-unfinished' ? 'tool_calls' : null,
+    };
+    const data = JSON.stringify({
+      ...(failure === 'type-only-error' ? { type: 'error' } : {}),
+      ...(failure === 'mixed-error' ? { error: { message: 'fixture upstream error' } } : {}),
+      ...(failure === 'empty-error' ? { error: {} } : {}),
+      choices:
+        failure === 'empty'
+          ? []
+          : failure === 'missing'
+            ? undefined
+            : failure === 'other-unfinished'
+              ? [choice, { index: 1, message: { content: 'partial' }, finish_reason: null }]
+              : [
+                  {
+                    ...choice,
+                    finish_reason: failure === 'missing-finish' ? undefined : null,
+                  },
+                ],
+      ...(failure === 'no-usage' ? {} : { usage: chatReply.usage, service_tier: 'default' }),
+    });
+    const published = vi.fn();
+    vi.mocked(fetchWithCache).mockImplementation(async (...args) => {
+      const response = { data, status: 200, statusText: 'OK', cached: false };
+      await args[6]?.(response);
+      published();
+      return response;
+    });
+    const provider = new BedrockRuntimeChatProvider('us.xai.grok-4.6', {
+      config: {
+        apiKey: 'fixture',
+        stream: true,
+        inputCost: 0.01,
+        outputCost: 0.02,
+        functionToolCallbacks: { lookup: callback },
+      },
+    });
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const result = await provider.callApi('hello');
+      expect(result.error).toContain('before a complete response');
+      expect(result.error!.length).toBeLessThan(500);
+      expect(result.output).toBeUndefined();
+      expect(result.cached).not.toBe(true);
+      if (failure === 'no-usage') {
+        expect(result.tokenUsage).toBeUndefined();
+        expect(result.cost).toBeUndefined();
+      } else {
+        expect(result.tokenUsage).toMatchObject({ prompt: 100, completion: 20, total: 120 });
+        expect(result.cost).toBeCloseTo(1.4);
+      }
+    }
+    expect(callback).not.toHaveBeenCalled();
+    expect(published).not.toHaveBeenCalled();
+    expect(fetchWithCache).toHaveBeenCalledTimes(2);
+  });
+
+  it.each(['text', 'tool', 'error', 'mixed-complete'])(
+    'preserves the complete JSON fallback or error envelope (%s)',
+    async (kind) => {
+      const toolResponse = kind === 'tool' || kind === 'mixed-complete';
+      const callback = vi.fn(async () => 'TOOL_OK');
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: JSON.stringify(
+          kind === 'error'
+            ? { error: { message: 'fixture service error' } }
+            : {
+                ...chatReply,
+                ...(kind === 'mixed-complete' ? { error: { message: 'ignored error' } } : {}),
+                choices: [
+                  {
+                    index: 0,
+                    message: {
+                      role: 'assistant',
+                      ...(toolResponse
+                        ? {
+                            tool_calls: [
+                              {
+                                id: 'call-1',
+                                type: 'function',
+                                function: { name: 'lookup', arguments: '{}' },
+                              },
+                            ],
+                          }
+                        : { content: 'READY' }),
+                    },
+                    finish_reason: toolResponse ? 'tool_calls' : 'stop',
+                  },
+                ],
+              },
+        ),
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      });
+      const result = await new BedrockRuntimeChatProvider('us.xai.grok-4.6', {
+        config: { apiKey: 'fixture', stream: true, functionToolCallbacks: { lookup: callback } },
+      }).callApi('hello');
+      if (kind === 'error') {
+        expect(result.error).toContain('fixture service error');
+        expect(result.output).toBeUndefined();
+      } else {
+        expect(result.error).toBeUndefined();
+        expect(result.output).toBe(toolResponse ? 'TOOL_OK' : 'READY');
+        expect(result.tokenUsage).toMatchObject({ prompt: 100, completion: 20, total: 120 });
+      }
+      expect(callback).toHaveBeenCalledTimes(toolResponse ? 1 : 0);
+    },
+  );
+
   it('collects reasoning, text, usage and actual service tier before shared normalization', async () => {
     vi.mocked(fetchWithCache).mockResolvedValue({
       data: sse([

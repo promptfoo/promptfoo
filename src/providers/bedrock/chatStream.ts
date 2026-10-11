@@ -1,3 +1,5 @@
+import { isOpenAiErrorOnlyResponse } from '../openai/util';
+
 export class BedrockChatStreamError extends Error {
   constructor(
     cause: unknown,
@@ -10,14 +12,25 @@ export class BedrockChatStreamError extends Error {
 
 /** Collect SSE before dispatching any client tools. A failed/truncated stream is never a completion. */
 export function collectBedrockChatStream(body: string): Record<string, any> {
-  // HTTP errors on the streaming route still use the ordinary JSON error envelope.
-  if (body.trimStart().startsWith('{')) {
-    return JSON.parse(body);
-  }
   const result: Record<string, any> = { choices: [] };
   const choices = new Map<number, Record<string, any>>();
   let done = false;
   try {
+    if (body.trimStart().startsWith('{')) {
+      const data = JSON.parse(body);
+      // Preserve complete JSON fallbacks and ordinary error envelopes.
+      if (
+        !isOpenAiErrorOnlyResponse(data) &&
+        (!Array.isArray(data.choices) ||
+          !data.choices.length ||
+          data.choices.some((choice: any) => !choice?.finish_reason))
+      ) {
+        result.usage = data.usage;
+        result.service_tier = data.service_tier;
+        throw new Error('Bedrock chat stream ended before a complete response');
+      }
+      return data;
+    }
     for (const event of body.replace(/\r\n/g, '\n').split('\n\n')) {
       const payload = event
         .split('\n')
