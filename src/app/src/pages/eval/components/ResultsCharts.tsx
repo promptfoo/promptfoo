@@ -212,8 +212,14 @@ function PassRateChart({ table }: ChartProps) {
 
 function ScatterChart({ table }: ChartProps) {
   const scatterCanvasRef = useRef(null);
-  const [xAxisPrompt, setXAxisPrompt] = useState(0);
-  const [yAxisPrompt, setYAxisPrompt] = useState(1);
+  const [selectedXAxisPrompt, setXAxisPrompt] = useState(0);
+  const [selectedYAxisPrompt, setYAxisPrompt] = useState(1);
+  const promptCount = table.head.prompts.length;
+  const xAxisPrompt = selectedXAxisPrompt < promptCount ? selectedXAxisPrompt : 0;
+  const yAxisPrompt =
+    selectedYAxisPrompt < promptCount
+      ? selectedYAxisPrompt
+      : Math.max(0, Math.min(1, promptCount - 1));
   const [open, setOpen] = useState(false);
 
   useEffect(() => {

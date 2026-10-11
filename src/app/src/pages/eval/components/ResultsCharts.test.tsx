@@ -1,6 +1,6 @@
 import { StrictMode } from 'react';
 
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { Chart } from 'chart.js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ResultsCharts from './ResultsCharts';
@@ -958,5 +958,74 @@ describe('active chart resource cleanup', () => {
     for (const chart of createdCharts()) {
       expect(chart.destroy).toHaveBeenCalledOnce();
     }
+  });
+});
+
+describe('scatter prompt selection', () => {
+  function setPrompts(count: number) {
+    const table = {
+      head: {
+        prompts: Array.from({ length: count }, (_, index) => ({
+          provider: `provider-${index}`,
+          metrics: { namedScores: {} },
+        })),
+        vars: [],
+      },
+      body: [
+        {
+          outputs: Array.from({ length: count }, (_, index) => ({ score: 0.5 + index * 0.25 })),
+          vars: [],
+        },
+      ],
+    };
+    vi.mocked(useTableStore).mockReturnValue({ table, filteredMetrics: undefined });
+  }
+
+  function latestScatter() {
+    return vi
+      .mocked(Chart)
+      .mock.calls.map(([, config]) => config)
+      .reverse()
+      .find((config) => 'type' in config && config.type === 'scatter')!;
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('uses the available prompt on both axes for a single-prompt evaluation', () => {
+    setPrompts(1);
+    const { container } = render(<ResultsCharts scores={[0.5]} />);
+    expect(latestScatter().data.datasets[0].data).toEqual([
+      expect.objectContaining({ x: 0.5, y: 0.5 }),
+    ]);
+    fireEvent.click(container.querySelectorAll('canvas')[2]);
+    expect(screen.getAllByRole('combobox').map((select) => select.textContent)).toEqual([
+      'Prompt 1',
+      'Prompt 1',
+    ]);
+  });
+
+  it('uses an available axis after the prompt count shrinks', () => {
+    setPrompts(2);
+    const view = render(<ResultsCharts scores={[0.5, 0.75]} />);
+    expect(latestScatter().data.datasets[0].data).toEqual([
+      expect.objectContaining({ x: 0.5, y: 0.75 }),
+    ]);
+    setPrompts(1);
+    view.rerender(<ResultsCharts scores={[0.5]} />);
+    expect(latestScatter().data.datasets[0].data).toEqual([
+      expect.objectContaining({ x: 0.5, y: 0.5 }),
+    ]);
+  });
+
+  it('defaults to comparing two prompts when a second prompt becomes available', () => {
+    setPrompts(1);
+    const view = render(<ResultsCharts scores={[0.5]} />);
+    setPrompts(2);
+    view.rerender(<ResultsCharts scores={[0.5, 0.75]} />);
+    expect(latestScatter().data.datasets[0].data).toEqual([
+      expect.objectContaining({ x: 0.5, y: 0.75 }),
+    ]);
   });
 });
