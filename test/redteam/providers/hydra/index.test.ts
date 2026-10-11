@@ -23,7 +23,11 @@ import { createMockTracingOptions } from '../../../factories/tracing';
 import { createSelectedObserverErrorResponse } from '../../../util/selectedObserverError';
 import { createSelectedToolErrorTarget } from '../../../util/selectedToolErrorTarget';
 
-import type { CallApiContextParams, GradingResult } from '../../../../src/types/index';
+import type {
+  AtomicTestCase,
+  CallApiContextParams,
+  GradingResult,
+} from '../../../../src/types/index';
 
 const createDocumentInputVars = (): ConstructorParameters<typeof HydraProvider>[0]['inputs'] => ({
   document: {
@@ -503,6 +507,45 @@ describe('HydraProvider', () => {
         expect(JSON.parse(mockAgentProvider.callApi.mock.calls[1][0])).not.toHaveProperty(
           'lastGraderResult',
         );
+      },
+    );
+
+    it.each([1, 2])(
+      'resolves only the last tagged-prompt grading error after %i turns',
+      async (turns) => {
+        mockAgentProvider.callApi.mockResolvedValue({ output: '<Prompt>attack</Prompt>' });
+        mockTargetProvider.callApi.mockResolvedValue({ output: 'Target response' });
+        let calls = 0;
+        const getResult = vi.fn(async () => ({
+          grade:
+            ++calls <= turns
+              ? { pass: false, score: 0, reason: 'Outage', metadata: { graderError: true } }
+              : { pass: true, score: 1, reason: 'Recovered' },
+        }));
+        mockGetGraderById.mockReturnValue({ getResult });
+        const provider = new HydraProvider({ injectVar: 'input', maxTurns: turns });
+        const test: AtomicTestCase = {
+          assert: [{ type: 'promptfoo:redteam:pii', transform: (output) => output }],
+          metadata: { pluginId: 'pii', strategyId: 'jailbreak:hydra' },
+          provider: 'promptfoo:redteam:hydra',
+        };
+        const context: CallApiContextParams = {
+          originalProvider: mockTargetProvider,
+          vars: { input: 'test goal' },
+          prompt: { raw: '{{input}}', label: 'test' },
+          test,
+        };
+        const result = await provider.callApi('', context);
+        expect(result.metadata?.redteamHistory[0].prompt).toBe('<Prompt>attack</Prompt>');
+        expect(result.metadata?.redteamFinalPrompt).toBe('attack');
+        const grading = await runAssertions({
+          prompt: 'test',
+          test: context.test!,
+          providerResponse: result,
+        });
+        expect(getResult).toHaveBeenCalledTimes(turns + 1);
+        expect(grading).toMatchObject({ pass: true, score: 1 });
+        expect(Boolean(grading.componentResults?.[0].metadata?.gradingIncomplete)).toBe(turns > 1);
       },
     );
 

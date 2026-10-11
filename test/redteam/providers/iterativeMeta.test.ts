@@ -557,6 +557,51 @@ describe('RedteamIterativeMetaProvider', () => {
       },
     );
 
+    it.each([1, 2])(
+      'resolves only the last layered grading error after %i turns',
+      async (turns) => {
+        let calls = 0;
+        const getResult = vi.fn(async () => ({
+          grade:
+            ++calls <= turns
+              ? { pass: false, score: 0, reason: 'Outage', metadata: { graderError: true } }
+              : { pass: true, score: 1, reason: 'Recovered' },
+        }));
+        mockGetGraderById.mockReturnValue({ getResult });
+        const test: AtomicTestCase = {
+          vars: { query: 'test' },
+          assert: [{ type: 'promptfoo:redteam:pii', transform: (output) => output }],
+          metadata: { pluginId: 'pii', strategyId: 'jailbreak:meta' },
+          provider: 'promptfoo:redteam:iterative:meta',
+        };
+        const result = await runMetaAgentRedteam({
+          context: {
+            vars: test.vars!,
+            prompt: { raw: '{{query}}', label: 'test' },
+            originalProvider: mockTargetProvider,
+            test,
+          },
+          injectVar: 'query',
+          numIterations: turns,
+          filters: undefined,
+          prompt: { raw: '{{query}}', label: 'test' },
+          agentProvider: mockAgentProvider,
+          gradingProvider: mockGradingProvider,
+          targetProvider: mockTargetProvider,
+          test,
+          vars: test.vars!,
+          perTurnLayers: ['base64'],
+        });
+        expect(result.metadata.redteamFinalPrompt).not.toBe(
+          result.metadata.redteamHistory[0].prompt,
+        );
+        const grading = await runAssertions({ prompt: 'test', test, providerResponse: result });
+        expect(getResult).toHaveBeenCalledTimes(turns + 1);
+        expect(grading).toMatchObject({ pass: true, score: 1 });
+        expect(Boolean(grading.componentResults?.[0].metadata?.gradingIncomplete)).toBe(turns > 1);
+      },
+    );
+
     it('passes target provider raw response into the grader', async () => {
       const mockGrader = {
         getResult: vi.fn<any>().mockResolvedValue({

@@ -328,13 +328,19 @@ describe('redteam strategy result grading', () => {
     ).toBeUndefined();
   });
 
-  it.each([
-    { earlierError: true, currentError: false },
-    { earlierError: false, currentError: true },
-    { earlierError: true, currentError: true },
-  ])(
+  it.each(
+    [
+      { earlierError: true, currentError: false },
+      { earlierError: false, currentError: true },
+      { earlierError: true, currentError: true },
+      { earlierError: false, currentError: true, historyOutput: 'A different response' },
+    ].flatMap((scenario) => [
+      { ...scenario, useInputHash: false },
+      { ...scenario, useInputHash: true },
+    ]),
+  )(
     'retains only unresolved history errors after fresh grading: %j',
-    async ({ earlierError, currentError }) => {
+    async ({ earlierError, currentError, historyOutput = output, useInputHash }) => {
       const getResult = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
         grade: { pass: true, score: 1, reason: 'Fresh verdict' },
         rubric: 'Fresh rubric',
@@ -343,7 +349,14 @@ describe('redteam strategy result grading', () => {
         ...(earlierError
           ? [{ prompt: 'Earlier attack', output: 'Ungraded output', graderError: 'Outage' }]
           : []),
-        { prompt: attackPrompt, output, ...(currentError && { graderError: 'Outage' }) },
+        {
+          prompt: attackPrompt,
+          output: historyOutput,
+          gradingInputHash: useInputHash
+            ? getGradingInputHash(attackPrompt, historyOutput, undefined, 'pii:social')
+            : undefined,
+          ...(currentError && { graderError: 'Outage' }),
+        },
       ];
       const result = await runAssertions({
         prompt: originalPrompt,
@@ -359,7 +372,9 @@ describe('redteam strategy result grading', () => {
       });
       expect(getResult).toHaveBeenCalledOnce();
       expect(result).toMatchObject({ pass: true, score: 1 });
-      expect(Boolean(result.componentResults?.[0].metadata?.gradingIncomplete)).toBe(earlierError);
+      expect(Boolean(result.componentResults?.[0].metadata?.gradingIncomplete)).toBe(
+        earlierError || historyOutput !== output,
+      );
       expect(result.componentResults?.[0].metadata?.graderError).toBeUndefined();
     },
   );

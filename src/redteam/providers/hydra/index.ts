@@ -104,6 +104,7 @@ interface HydraMetadata extends BaseRedteamMetadata {
     outputImage?: MediaData;
     graderPassed: boolean | undefined;
     graderError?: string;
+    gradingInputHash?: string;
     trace?: Record<string, unknown>;
     traceSummary?: string;
     inputVars?: Record<string, string>;
@@ -976,6 +977,9 @@ export class HydraProvider implements ApiProvider {
         // Note: outputImage would come from provider if model responds with image
         graderPassed: graderError ? undefined : graderResult?.pass,
         graderError,
+        gradingInputHash: graderError
+          ? storedGraderResult?.metadata?.redteamGradingInputHash
+          : undefined,
         trace: traceContext ? formatTraceForMetadata(traceContext) : undefined,
         traceSummary: computedTraceSummary,
         // Include input vars for multi-input mode (extracted from current prompt)

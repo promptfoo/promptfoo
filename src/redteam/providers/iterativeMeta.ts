@@ -91,6 +91,7 @@ interface IterativeMetaMetadata {
     score: number;
     graderPassed: boolean | undefined;
     graderError?: string;
+    gradingInputHash?: string;
     guardrails: GuardrailResponse | undefined;
     trace?: Record<string, unknown>;
     traceSummary?: string;
@@ -678,6 +679,9 @@ export async function runMetaAgentRedteam({
       score: 0, // Not used in meta strategy
       graderPassed: graderError ? undefined : graderResult?.pass,
       graderError,
+      gradingInputHash: graderError
+        ? storedGraderResult?.metadata?.redteamGradingInputHash
+        : undefined,
       guardrails: undefined,
       trace: traceContext ? formatTraceForMetadata(traceContext) : undefined,
       traceSummary: computedTraceSummary,
