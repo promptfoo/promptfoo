@@ -767,7 +767,9 @@ sample rate, bit depth, and channel count. A WAV file includes a container heade
 must be decoded/resampled first. The [Nova 2.5 Sonic example](https://github.com/promptfoo/promptfoo/tree/main/examples/amazon-bedrock/models)
 uses FFmpeg to convert its WAV fixture to mono PCM16 at 16 kHz. Sonic responses include
 final spoken transcripts and audio, excluding speculative text and interruption notifications.
-Token-level usage and cost estimates are not currently reported.
+Reported cumulative input, output, and total token counts are retained, including usage
+received before a stream error. The provider leaves counts unset when Bedrock sends no usage event.
+Cost estimates are not reported.
 
 `toolConfig` declares tools the model can request. Promptfoo does not execute Nova Sonic tools: when a tool is requested, the provider stops the response, closes the session, and returns an unsupported-execution error without sending a tool result. The requested tool ID, name, and original JSON arguments are retained in `metadata.toolCalls` as `toolUseId`, `toolName`, and `content`.
 
