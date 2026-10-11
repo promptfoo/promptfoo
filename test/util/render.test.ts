@@ -206,6 +206,31 @@ describe('renderEnvOnlyInObject', () => {
     mockProcessEnv({ PROMPTFOO_DISABLE_TEMPLATING: undefined });
   });
 
+  it('renders only own properties without reading inherited getters', () => {
+    const inherited = vi.fn(() => 'inherited value');
+    const prototype = Object.defineProperty({}, 'inherited', {
+      enumerable: true,
+      get: inherited,
+    });
+    const object = Object.assign(Object.create(prototype), { own: '{{ env.TEST_ENV_VAR }}' });
+
+    const rendered = renderEnvOnlyInObject(object, { TEST_ENV_VAR: 'own value' });
+
+    expect(rendered).toEqual({ own: 'own value' });
+    expect(inherited).not.toHaveBeenCalled();
+  });
+
+  it('preserves an own __proto__ key as data while rendering nested values', () => {
+    const object = JSON.parse('{"__proto__":{"value":"{{ env.TEST_ENV_VAR }}"}}');
+
+    const rendered = renderEnvOnlyInObject(object, { TEST_ENV_VAR: 'rendered value' });
+
+    expect(Object.hasOwn(rendered, '__proto__')).toBe(true);
+    expect(rendered.__proto__).toEqual({ value: 'rendered value' });
+    expect(Object.getPrototypeOf(rendered)).toBe(Object.prototype);
+    expect(object.__proto__.value).toBe('{{ env.TEST_ENV_VAR }}');
+  });
+
   describe('Basic rendering', () => {
     it('should render simple dot notation env vars', async () => {
       mockProcessEnv({ TEST_ENV_VAR: 'env_value' });
