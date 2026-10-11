@@ -447,13 +447,14 @@ describe('HydraProvider', () => {
     });
 
     it.each(
-      [true, false].flatMap((pass) => [
-        { pass, freshGradingFails: false },
-        { pass, freshGradingFails: true },
-      ]),
+      [true, false].flatMap((pass) =>
+        [false, true].flatMap((freshGradingFails) =>
+          ['hydra', 'goblin'].map((strategy) => ({ pass, freshGradingFails, strategy })),
+        ),
+      ),
     )(
       'preserves the next valid verdict or final grading error: %j',
-      async ({ pass, freshGradingFails }) => {
+      async ({ pass, freshGradingFails, strategy }) => {
         mockAgentProvider.callApi.mockResolvedValue({
           output: 'Successful attack message',
           tokenUsage: { total: 100, prompt: 50, completion: 50 },
@@ -478,7 +479,11 @@ describe('HydraProvider', () => {
           .mockRejectedValue(new Error('Final grading failed'));
         mockGetGraderById.mockReturnValue({ getResult } as any);
 
-        const provider = new HydraProvider({
+        const Provider =
+          strategy === 'goblin'
+            ? (await import('../../../../src/redteam/providers/goblin/index')).GoblinProvider
+            : HydraProvider;
+        const provider = new Provider({
           injectVar: 'input',
           maxTurns: 2,
         });
@@ -494,8 +499,8 @@ describe('HydraProvider', () => {
                 ...(freshGradingFails && { transform: (output: unknown) => output }),
               },
             ],
-            metadata: { goal: 'test goal', pluginId: 'pii', strategyId: 'jailbreak:hydra' },
-            provider: 'promptfoo:redteam:hydra',
+            metadata: { goal: 'test goal', pluginId: 'pii', strategyId: `jailbreak:${strategy}` },
+            provider: `promptfoo:redteam:${strategy}`,
           } as any,
         };
 
@@ -515,7 +520,7 @@ describe('HydraProvider', () => {
         } else {
           expect((await grading).componentResults?.[0].metadata?.gradingIncomplete).toBe(true);
         }
-        expect(result.metadata?.hydraResult).toBe(!pass);
+        expect(result.metadata).toHaveProperty(`${strategy}Result`, !pass);
         expect(result.metadata?.successfulAttacks ?? []).toHaveLength(pass ? 0 : 1);
         expect(getResult).toHaveBeenCalledTimes(freshGradingFails ? 3 : 2);
         expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(2);
@@ -525,44 +530,47 @@ describe('HydraProvider', () => {
       },
     );
 
-    it.each([1, 2])(
-      'resolves only the last tagged-prompt grading error after %i turns',
-      async (turns) => {
-        mockAgentProvider.callApi.mockResolvedValue({ output: '<Prompt>attack</Prompt>' });
-        mockTargetProvider.callApi.mockResolvedValue({ output: 'Target response' });
-        let calls = 0;
-        const getResult = vi.fn(async () => ({
-          grade:
-            ++calls <= turns
-              ? { pass: false, score: 0, reason: 'Outage', metadata: { graderError: true } }
-              : { pass: true, score: 1, reason: 'Recovered' },
-        }));
-        mockGetGraderById.mockReturnValue({ getResult });
-        const provider = new HydraProvider({ injectVar: 'input', maxTurns: turns });
-        const test: AtomicTestCase = {
-          assert: [{ type: 'promptfoo:redteam:pii', transform: (output) => output }],
-          metadata: { pluginId: 'pii', strategyId: 'jailbreak:hydra' },
-          provider: 'promptfoo:redteam:hydra',
-        };
-        const context: CallApiContextParams = {
-          originalProvider: mockTargetProvider,
-          vars: { input: 'test goal' },
-          prompt: { raw: '{{input}}', label: 'test' },
-          test,
-        };
-        const result = await provider.callApi('', context);
-        expect(result.metadata?.redteamHistory[0].prompt).toBe('<Prompt>attack</Prompt>');
-        expect(result.metadata?.redteamFinalPrompt).toBe('attack');
-        const grading = await runAssertions({
-          prompt: 'test',
-          test: context.test!,
-          providerResponse: result,
-        });
-        expect(getResult).toHaveBeenCalledTimes(turns + 1);
-        expect(grading).toMatchObject({ pass: true, score: 1 });
-        expect(Boolean(grading.componentResults?.[0].metadata?.gradingIncomplete)).toBe(turns > 1);
-      },
-    );
+    it.each(
+      [1, 2].flatMap((turns) => ['hydra', 'goblin'].map((strategy) => ({ turns, strategy }))),
+    )('resolves only the last tagged-prompt grading error: %j', async ({ turns, strategy }) => {
+      mockAgentProvider.callApi.mockResolvedValue({ output: '<Prompt>attack</Prompt>' });
+      mockTargetProvider.callApi.mockResolvedValue({ output: 'Target response' });
+      let calls = 0;
+      const getResult = vi.fn(async () => ({
+        grade:
+          ++calls <= turns
+            ? { pass: false, score: 0, reason: 'Outage', metadata: { graderError: true } }
+            : { pass: true, score: 1, reason: 'Recovered' },
+      }));
+      mockGetGraderById.mockReturnValue({ getResult });
+      const Provider =
+        strategy === 'goblin'
+          ? (await import('../../../../src/redteam/providers/goblin/index')).GoblinProvider
+          : HydraProvider;
+      const provider = new Provider({ injectVar: 'input', maxTurns: turns });
+      const test: AtomicTestCase = {
+        assert: [{ type: 'promptfoo:redteam:pii', transform: (output) => output }],
+        metadata: { pluginId: 'pii', strategyId: `jailbreak:${strategy}` },
+        provider: `promptfoo:redteam:${strategy}`,
+      };
+      const context: CallApiContextParams = {
+        originalProvider: mockTargetProvider,
+        vars: { input: 'test goal' },
+        prompt: { raw: '{{input}}', label: 'test' },
+        test,
+      };
+      const result = await provider.callApi('', context);
+      expect(result.metadata?.redteamHistory[0].prompt).toBe('<Prompt>attack</Prompt>');
+      expect(result.metadata?.redteamFinalPrompt).toBe('attack');
+      const grading = await runAssertions({
+        prompt: 'test',
+        test: context.test!,
+        providerResponse: result,
+      });
+      expect(getResult).toHaveBeenCalledTimes(turns + 1);
+      expect(grading).toMatchObject({ pass: true, score: 1 });
+      expect(Boolean(grading.componentResults?.[0].metadata?.gradingIncomplete)).toBe(turns > 1);
+    });
 
     it('should handle multiple turns until max turns reached', async () => {
       let callCount = 0;

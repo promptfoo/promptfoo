@@ -373,10 +373,11 @@ export const handleRedteam = async (
       },
     };
   } catch (error) {
-    // Required final grading must not turn a Meta/Hydra vulnerability into a pass.
+    // Required final grading must not turn a Meta, Hydra or Goblin vulnerability into a pass.
     if (
       providerId === 'promptfoo:redteam:iterative:meta' ||
-      providerId === 'promptfoo:redteam:hydra'
+      providerId === 'promptfoo:redteam:hydra' ||
+      providerId === 'promptfoo:redteam:goblin'
     ) {
       throw error;
     }
