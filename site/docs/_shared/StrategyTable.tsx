@@ -33,9 +33,7 @@ const RecommendedBadge = () => (
 
 interface StrategyTableProps {
   shouldRenderCategory?: boolean;
-  shouldRenderStrategy?: boolean;
   shouldRenderDescription?: boolean;
-  shouldRenderLongDescription?: boolean;
   shouldRenderCost?: boolean;
   shouldRenderAsrIncrease?: boolean;
   showRemoteStatus?: boolean;
@@ -43,9 +41,7 @@ interface StrategyTableProps {
 
 const StrategyTable = ({
   shouldRenderCategory = true,
-  shouldRenderStrategy = true,
   shouldRenderDescription = true,
-  shouldRenderLongDescription = true,
   shouldRenderCost = true,
   shouldRenderAsrIncrease = true,
   showRemoteStatus = false,
@@ -58,9 +54,9 @@ const StrategyTable = ({
             {shouldRenderCategory && (
               <th style={{ verticalAlign: 'top', textAlign: 'left' }}>Category</th>
             )}
-            {shouldRenderStrategy && <th>Strategy</th>}
+            <th>Strategy</th>
             {shouldRenderDescription && <th>Description</th>}
-            {shouldRenderLongDescription && <th>Details</th>}
+            <th>Details</th>
             {shouldRenderCost && <th>Cost</th>}
             {shouldRenderAsrIncrease && (
               <th>
@@ -90,21 +86,12 @@ const StrategyTable = ({
                         {category}
                       </td>
                     )}
-                    {shouldRenderStrategy && (
-                      <td className="strategy-cell">
-                        {strategy.link ? (
-                          <a href={strategy.link} className="strategy-link">
-                            {strategy.displayName}
-                            {strategy.recommended && <RecommendedBadge />}
-                          </a>
-                        ) : (
-                          <>
-                            {strategy.displayName}
-                            {strategy.recommended && <RecommendedBadge />}
-                          </>
-                        )}
-                      </td>
-                    )}
+                    <td className="strategy-cell">
+                      <a href={strategy.link} className="strategy-link">
+                        {strategy.displayName}
+                        {strategy.recommended && <RecommendedBadge />}
+                      </a>
+                    </td>
                     {shouldRenderDescription && (
                       <td>
                         {strategy.description}
@@ -113,9 +100,7 @@ const StrategyTable = ({
                         )}
                       </td>
                     )}
-                    {shouldRenderLongDescription && (
-                      <td className="details-cell">{strategy.longDescription}</td>
-                    )}
+                    <td className="details-cell">{strategy.longDescription}</td>
                     {shouldRenderCost && <td className="metric-cell">{strategy.cost}</td>}
                     {shouldRenderAsrIncrease && (
                       <td className="metric-cell">{strategy.asrIncrease}</td>

@@ -6,7 +6,7 @@ export interface Strategy {
   longDescription: string;
   cost: string;
   asrIncrease: string;
-  link?: string;
+  link: string;
   recommended?: boolean;
   isRemote?: boolean;
 }
