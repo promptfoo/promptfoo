@@ -1,3 +1,7 @@
+const { createWarningLoggerModule } = await vi.hoisted(
+  async () => import('../../factories/logger'),
+);
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { addRetryTestCases, deduplicateTests } from '../../../src/redteam/strategies/retry';
 
@@ -18,13 +22,7 @@ vi.mock('../../../src/util/cloud', () => ({
   makeRequest: vi.fn(),
 }));
 
-vi.mock('../../../src/logger', () => ({
-  default: {
-    debug: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  },
-}));
+vi.mock('../../../src/logger', () => createWarningLoggerModule());
 
 describe('deduplicateTests', () => {
   it('should deduplicate test cases based on vars', () => {
@@ -252,8 +250,10 @@ describe('addRetryTestCases', () => {
 
     const result = await addRetryTestCases(testCases, 'prompt', {
       targetIds: ['openai:gpt-4o-mini'],
+      numTests: 7,
     });
 
+    expect(mockDb.limit).toHaveBeenLastCalledWith(7);
     expect(result).toHaveLength(1);
     expect(result[0].provider).toEqual({
       id: 'promptfoo:redteam:goat',
@@ -467,6 +467,7 @@ describe('addRetryTestCases', () => {
 
     expect(result).toHaveLength(1);
     expect(result[0].metadata?.retry).toBe(true);
+    expect(result[0].metadata?.strategyId).toBeUndefined();
   });
 
   it('should deduplicate tests from multiple targets', async () => {
@@ -513,35 +514,13 @@ describe('addRetryTestCases', () => {
       },
     ];
 
+    testCases.push(testCases[0]);
     const result = await addRetryTestCases(testCases, 'prompt', {
       targetIds: ['openai:gpt-4o-mini', 'openai:gpt-4o'],
     });
 
+    expect(mockDb.limit.mock.calls).toEqual([[1], [2], [1], [2]]);
     // Should be deduplicated to 1 test case
     expect(result).toHaveLength(1);
-  });
-});
-
-// Test that validates strategyId in metadata
-describe('retry strategy metadata', () => {
-  it('should include strategyId in metadata', () => {
-    // Create a test case that simulates what would be returned by addRetryTestCases
-    const testCase: TestCase = {
-      vars: { input: 'test' },
-      assert: [{ type: 'equals', value: 'expected' }],
-      metadata: {
-        pluginId: 'test-plugin',
-        strategyId: 'retry',
-      },
-      provider: {
-        id: 'promptfoo:redteam:retry',
-        config: {
-          injectVar: 'input',
-        },
-      },
-    };
-
-    // Verify the correct strategyId is present in metadata
-    expect(testCase.metadata?.strategyId).toBe('retry');
   });
 });

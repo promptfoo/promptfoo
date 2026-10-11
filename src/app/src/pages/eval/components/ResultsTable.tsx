@@ -24,7 +24,6 @@ import {
   resolveBlobUri,
   resolveImageSource,
 } from '@app/utils/media';
-import { getActualPrompt } from '@app/utils/providerResponse';
 import {
   getIncurredTokenAccounting,
   getPrimaryTokenUsageLabel,
@@ -40,8 +39,9 @@ import {
   type ProviderOptions,
   type Vars,
 } from '@promptfoo/types';
-import { EVAL_TABLE_MAX_PAGE_SIZE } from '@promptfoo/types/api/eval';
+import { EVAL_TABLE_MAX_PAGE_SIZE } from '@promptfoo/types/evalConstants';
 import invariant from '@promptfoo/util/invariant';
+import { getActualPrompt } from '@promptfoo/util/providerResponse';
 import {
   createColumnHelper,
   flexRender,
@@ -59,6 +59,7 @@ import { ProviderDisplay } from './ProviderDisplay';
 import { type ProviderDef } from './providerConfig';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import TruncatedText from './TruncatedText';
+import { useHeaderCollapse } from './useHeaderCollapse';
 import VariableMarkdownCell from './VariableMarkdownCell';
 import type {
   Cell,
@@ -1535,12 +1536,16 @@ function ResultsTableHeader({
   hasMinimalScrollRoom: boolean;
   zoom: number;
 }) {
+  const collapsed = useHeaderCollapse(stickyHeader);
+
   return (
     <div
       data-testid="results-table-header"
+      data-header-collapsed={collapsed}
       className={cn(
         'relative -mx-4 overflow-hidden px-4',
         stickyHeader && 'results-table-sticky',
+        stickyHeader && collapsed !== undefined && 'results-table-scroll-fallback',
         hasMinimalScrollRoom && 'minimal-scroll-room',
       )}
     >

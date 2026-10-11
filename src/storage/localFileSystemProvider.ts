@@ -5,7 +5,6 @@
  * Uses content-based hashing for deduplication.
  */
 
-import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as fsPromises from 'fs/promises';
 import * as path from 'path';
@@ -14,6 +13,7 @@ import { pathToFileURL } from 'url';
 import { FilesystemBlobStorageProvider } from '../blobs/filesystemProvider';
 import logger from '../logger';
 import { getConfigDirectoryPath } from '../util/config/manage';
+import { sha256 } from '../util/createHash';
 
 import type {
   LocalStorageConfig,
@@ -25,13 +25,6 @@ import type {
 
 const MEDIA_SUBDIR = 'media';
 const HASH_INDEX_FILE = 'hash-index.json';
-
-/**
- * Compute SHA-256 hash of data
- */
-function computeHash(data: Buffer): string {
-  return crypto.createHash('sha256').update(data).digest('hex');
-}
 
 /**
  * Local filesystem storage provider
@@ -130,7 +123,8 @@ export class LocalFileSystemProvider implements MediaStorageProvider {
   }
 
   async store(data: Buffer, metadata: MediaMetadata): Promise<StoreResult> {
-    const contentHash = computeHash(data);
+    // Compute SHA-256 hash of data.
+    const contentHash = sha256(data);
 
     // Check for existing file with same hash (deduplication)
     const existingKey = await this.findByHash(contentHash);

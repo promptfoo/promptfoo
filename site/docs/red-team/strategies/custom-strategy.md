@@ -193,6 +193,8 @@ There's also a global red team configuration option `excludeTargetOutputFromAgen
 
 :::
 
+An explicit `redteamProvider` in the strategy config is used for both the attacker and conversation scoring, even when remote generation is enabled. Without one, the strategy uses remote generation when available.
+
 ## Stateful vs Stateless Mode
 
 In both modes, the target receives the current message in the configured prompt variable. Other test variables, including a session ID if provided, are preserved.

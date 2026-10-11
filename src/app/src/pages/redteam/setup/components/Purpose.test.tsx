@@ -75,6 +75,49 @@ describe('Purpose Component', () => {
     });
   });
 
+  it.each(['llamafile', 'vllm', 'text-generation-webui'])(
+    'normalizes %s local discovery requests without changing editable references',
+    async (type) => {
+      const target = {
+        id: 'openai:chat',
+        label: 'Local target',
+        config: {
+          type,
+          model: 'tenant/model:Q4',
+          apiBaseUrl: 'https://local.example.test/v1',
+          apiKeyEnvar: 'LOCAL_MODEL_KEY',
+          useDefaultApiKey: '{{ env.LOCAL_SOURCE }}',
+          stop: ['<end>'],
+        },
+      };
+
+      const user = userEvent.setup();
+      const original = JSON.parse(JSON.stringify(target));
+      mockUseRedTeamConfig.mockReturnValue({
+        config: {
+          applicationDefinition: { purpose: 'Ordinary purpose' },
+          target,
+          testGenerationInstructions: '',
+        },
+        updateApplicationDefinition: mockUpdateApplicationDefinition,
+        updateConfig: mockUpdateConfig,
+      });
+      renderComponent({ onNext: vi.fn() });
+      await user.click(screen.getByRole('button', { name: /discover/i }));
+      await waitFor(() =>
+        expect(callApi).toHaveBeenCalledWith('/providers/discover', expect.anything()),
+      );
+      const request = vi
+        .mocked(callApi)
+        .mock.calls.find(([path]) => path === '/providers/discover')![1]!;
+      expect(JSON.parse(request.body as string)).toEqual({
+        ...target,
+        config: { ...target.config, apiKeyRequired: false, useDefaultApiKey: false },
+      });
+      expect(target).toEqual(original);
+    },
+  );
+
   describe('Navigation', () => {
     it("should render a 'Back' button and call the provided onBack callback when clicked", async () => {
       const user = userEvent.setup();
