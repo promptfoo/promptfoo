@@ -42,6 +42,18 @@ describe('isPathWithinDir', () => {
   it('should block files outside directory using relative paths', async () => {
     await expect(isPathWithinDir('../outside/external.txt', workspace)).resolves.toBe(false);
     await expect(isPathWithinDir('../../external.txt', workspace)).resolves.toBe(false);
+
+    const nestedWorkspace = path.join(testRoot, 'container', 'workspace');
+    await fs.mkdir(nestedWorkspace, { recursive: true });
+    await fs.writeFile(path.join(nestedWorkspace, 'file.txt'), 'test');
+    const link = path.join(testRoot, 'workspace-link');
+    await fs.symlink(nestedWorkspace, link, 'dir');
+    await expect(isPathWithinDir('../workspace/file.txt', link)).resolves.toBe(false);
+  });
+
+  it('allows filenames beginning with two dots inside the directory', async () => {
+    await fs.writeFile(path.join(workspace, '..notes.txt'), 'test');
+    await expect(isPathWithinDir('..notes.txt', workspace)).resolves.toBe(true);
   });
 
   it('should block files outside directory using absolute paths', async () => {

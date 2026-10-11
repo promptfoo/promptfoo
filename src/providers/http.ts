@@ -346,20 +346,8 @@ function isBase64(str: string): boolean {
 }
 
 /**
- * Explain why PEM key material cannot be used for signing, in terms of what the operator
- * can actually see and act on.
- *
- * OpenSSL 3 is the reason this exists: `createSign().sign()` and `createPrivateKey()` both
- * collapse empty, whitespace-only, malformed, truncated, and public-key-instead-of-private
- * input into one opaque `error:1E08010C:DECODER routines::unsupported`. The distinction only
- * survives in the PEM text, so classify that before handing it to crypto.
- *
- * Returns `undefined` when the material is structurally sound -- crypto then reports anything
- * subtler (wrong curve for the algorithm, unsupported key size) with a real diagnostic.
- *
- * Uses plain string matching rather than regexes so no user-controlled input reaches a
- * backtracking matcher, and never echoes key material -- only which marker was found or
- * missing, so pointing this at the wrong file cannot leak that file's contents.
+ * Classify common PEM mistakes without including key material in diagnostics.
+ * Crypto validates the key body and algorithm.
  */
 export function diagnosePrivateKeyMaterial(material: unknown): string | undefined {
   const text = typeof material === 'string' ? material.trim() : '';
@@ -375,10 +363,11 @@ export function diagnosePrivateKeyMaterial(material: unknown): string | undefine
   if (text.includes('ENCRYPTED PRIVATE KEY') || text.includes('Proc-Type: 4,ENCRYPTED')) {
     return 'it is passphrase-protected; decrypt it first or supply an unencrypted key';
   }
-  if (!text.includes('PRIVATE KEY-----')) {
+  const keyType = text.match(/-----BEGIN ([A-Z ]*PRIVATE KEY)-----/)?.[1];
+  if (!keyType) {
     return 'it is not PEM-encoded (no "-----BEGIN ... PRIVATE KEY-----" header)';
   }
-  if (!text.includes('-----END')) {
+  if (!text.includes(`-----END ${keyType}-----`)) {
     return 'it is truncated (no "-----END ... PRIVATE KEY-----" line)';
   }
   return undefined;
