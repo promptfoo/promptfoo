@@ -113,4 +113,65 @@ describe('Bedrock Agents examples', () => {
       }
     }
   });
+
+  it('rejects specialist answers for the wrong role', async () => {
+    const { config, testSuite } = await resolveConfigs(
+      {
+        config: [
+          path.resolve(
+            __dirname,
+            '../../examples/amazon-bedrock/agents/promptfooconfig.multi-agent.yaml',
+          ),
+        ],
+      },
+      {},
+    );
+    testSuite.tests = testSuite.tests?.filter((test) =>
+      String(test.vars?.query).startsWith('I upgraded my plan'),
+    );
+    const responses: Record<string, string> = {
+      TECH_AGENT_ID: 'Check the payment for your plan upgrade.',
+      BILLING_AGENT_ID: 'Check your authorization permissions for 403 errors.',
+    };
+    const send = vi.fn(async (command: InvokeAgentCommand) => {
+      const output = responses[command.input.agentId!];
+      expect(output).toBeTruthy();
+      return {
+        completion: (async function* () {
+          yield { chunk: { bytes: new TextEncoder().encode(output) } };
+        })(),
+        sessionId: command.input.sessionId,
+      };
+    });
+    vi.spyOn(AwsBedrockAgentsProvider.prototype, 'getAgentRuntimeClient').mockResolvedValue({
+      send,
+    } as unknown as BedrockAgentRuntimeClient);
+
+    cliState.safeMode = true;
+    const evaluation = new Eval(config);
+    await withCacheEnabled(false, () =>
+      evaluate(testSuite, evaluation, config.evaluateOptions ?? {}),
+    );
+    const summary = await evaluation.toEvaluateSummary();
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(summary.results.map((result) => result.provider.label).sort()).toEqual([
+      'billing-agent',
+      'tech-agent',
+    ]);
+    expect(summary.stats).toMatchObject({ successes: 0, failures: 2, errors: 0 });
+    for (const result of summary.results) {
+      expect(result.success).toBe(false);
+      expect(result.gradingResult?.componentResults).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            pass: false,
+            score: 0,
+            assertion: expect.objectContaining({ type: 'icontains-any' }),
+          }),
+        ]),
+      );
+      expect(result.response?.output).toBeTruthy();
+      expect(result.response?.error).toBeUndefined();
+    }
+  });
 });

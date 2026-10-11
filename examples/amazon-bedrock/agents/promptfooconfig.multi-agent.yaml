@@ -58,14 +58,20 @@ tests:
     assert:
       - type: icontains-any
         value: [stream, kafka, kinesis, throughput, real-time]
-  - description: Technical and billing agents address a plan upgrade
+  - description: Technical agent diagnoses access after a plan upgrade
     vars:
       query: I upgraded my plan but still see old limits and 403 errors. What should I check?
-    providers: [tech-agent, billing-agent]
+    providers: [tech-agent]
     assert:
-      # Each output is graded separately; there is no cross-provider outputs object.
       - type: icontains-any
-        value: ['403', permission, authorization, payment, plan, upgrade]
+        value: ['403', permission, authorization]
+  - description: Billing agent checks the plan upgrade
+    vars:
+      query: I upgraded my plan but still see old limits and 403 errors. What should I check?
+    providers: [billing-agent]
+    assert:
+      - type: icontains-any
+        value: [payment, plan, upgrade]
   - description: Supervisor handles escalation
     vars:
       query: This is my third contact about the same issue. Please escalate to a manager.
