@@ -1,6 +1,59 @@
 // Pure routing helpers shared by the provider factory and browser configuration UI.
 // Keep this module free of SDK, environment, and other server-only imports.
-export type BedrockApiMode = 'invoke' | 'converse' | 'responses' | 'chat' | 'messages';
+export type BedrockApiMode =
+  | 'invoke'
+  | 'converse'
+  | 'responses'
+  | 'chat'
+  | 'messages'
+  | 'runtime-chat'
+  | 'runtime-responses';
+
+export function getBedrockRuntimeModelError(
+  mode: 'runtime-chat' | 'runtime-responses',
+  modelName: string,
+): string | undefined {
+  if (modelName.includes(':application-inference-profile/')) {
+    return 'Bedrock Runtime Chat and Responses do not support application inference profiles. Use a foundation model or system inference profile.';
+  }
+  if (
+    mode === 'runtime-responses' &&
+    /(?:^|[/.])openai\.gpt-oss-(?:safeguard-)?(?:20b|120b)(?:-1:0)?$/.test(modelName)
+  ) {
+    return 'GPT OSS does not support Bedrock Runtime Responses. Use Runtime Chat or Mantle Responses.';
+  }
+  const foundationModel = modelName.replace(
+    /^arn:[^:]+:bedrock:[^:]+:[^:]*:foundation-model\//,
+    '',
+  );
+  const profileModel = foundationModel.replace(
+    /^arn:[^:]+:bedrock:[^:]+:[^:]*:inference-profile\//,
+    '',
+  );
+  const isFoundationModelArn = foundationModel !== modelName;
+  if (
+    /^(?:[^:/]+\.)?zai\.glm-5\.3$/.test(profileModel) &&
+    (isFoundationModelArn || !/^(?:us|global)\.zai\.glm-5\.3$/.test(profileModel))
+  ) {
+    return 'GLM 5.3 on Bedrock Runtime requires a system inference profile, such as us.zai.glm-5.3 or global.zai.glm-5.3.';
+  }
+  if (
+    /^(?:[^:/]+\.)?moonshotai\.kimi-k3$/.test(profileModel) &&
+    (isFoundationModelArn || !/^(?:us|in|global)\.moonshotai\.kimi-k3$/.test(profileModel))
+  ) {
+    return 'Kimi K3 on Bedrock Runtime requires a system inference profile, such as us.moonshotai.kimi-k3, in.moonshotai.kimi-k3, or global.moonshotai.kimi-k3.';
+  }
+  if (
+    /^(?:[^:/]+\.)?xai\.grok-4\.[67]$/.test(profileModel) &&
+    (isFoundationModelArn || !NATIVE_GROK_PROFILE_MODELS.has(profileModel))
+  ) {
+    return 'Grok 4.6 and 4.7 on Bedrock Runtime require a system inference profile, such as us.xai.grok-4.6 or global.xai.grok-4.7.';
+  }
+  if (/^(?:openai\.)?gpt-\d/.test(foundationModel)) {
+    return 'Closed OpenAI GPT models on Bedrock Runtime require a system inference profile, such as us.openai.gpt-5.6-sol or global.openai.gpt-5.6-sol.';
+  }
+  return undefined;
+}
 
 export function isRejectedPrefixedMythosId(modelName: string): boolean {
   return /^[^.]+\.(anthropic\.claude-mythos-(?:5|preview))$/.test(modelName);
@@ -59,7 +112,7 @@ export function isBedrockOpenAiResponsesModel(modelName: string): boolean {
 }
 
 export function isBedrockGptOssResponsesModel(modelName: string): boolean {
-  return /^openai\.gpt-oss-(?:20b|120b)$/.test(modelName);
+  return /^openai\.gpt-oss-(?:safeguard-)?(?:20b|120b)$/.test(modelName);
 }
 
 export function isBedrockGrokModel(modelName: string): boolean {
@@ -87,6 +140,12 @@ export function getBedrockTextRoute(id: string):
     return undefined;
   }
   const [subtype, ...parts] = id.slice('bedrock:'.length).split(':');
+  if (subtype === 'runtime') {
+    const [api, ...model] = parts;
+    return api === 'chat' || api === 'responses'
+      ? { apiMode: api === 'chat' ? 'runtime-chat' : 'runtime-responses', modelId: model.join(':') }
+      : undefined;
+  }
   const explicitModes: Record<string, BedrockApiMode> = {
     completion: 'invoke',
     converse: 'converse',

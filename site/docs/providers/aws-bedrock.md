@@ -280,6 +280,9 @@ as the source of truth for current support.
 
 ### Model Context Protocol (MCP) Servers
 
+Client-side [`config.mcp`](/docs/integrations/mcp) is supported by Converse, Messages,
+Mantle Chat, and Runtime Chat. InvokeModel and both Responses modes do not support it.
+
 The Converse provider can attach [Model Context Protocol](https://modelcontextprotocol.io)
 servers and surface their tools to the model alongside any `tools` you configure
 manually. MCP tool definitions are discovered at provider startup, converted to
@@ -1401,9 +1404,9 @@ providers:
 ```
 
 This route uses the AWS credential chain. A bare `bedrock:us.openai.gpt-5.6-sol` selects
-InvokeModel, which does not support GPT-5.6. The Bedrock provider does not implement Runtime's
-HTTP Chat Completions or Responses endpoints; use the explicit Converse route above or the
-Mantle selectors documented here.
+InvokeModel, which does not support GPT-5.6. For Runtime's HTTP endpoints, use
+`bedrock:runtime:chat:us.openai.gpt-5.6-sol` or
+`bedrock:runtime:responses:us.openai.gpt-5.6-sol`, as described below.
 
 ### xAI Grok Models
 
@@ -1476,6 +1479,101 @@ providers:
   publish those rates.
 
 :::
+
+### Runtime Chat Completions and Responses
+
+Use `bedrock:runtime:chat:<model-id>` or `bedrock:runtime:responses:<model-id>` to
+select the OpenAI-compatible APIs on `bedrock-runtime`. These routes preserve Runtime
+model IDs, including supported geographic/global inference profiles and model ARNs.
+They use `https://bedrock-runtime.<region>.amazonaws.com/openai/v1` and accept the
+same Bedrock API key or AWS credential configuration as the Mantle adapters.
+
+The endpoint region is not inferred from a model ARN. Select the intended source region
+with `config.region` or the AWS region environment settings; without either, these routes
+use `us-east-1`.
+
+Closed OpenAI GPT models on Runtime Chat and Responses require a system inference profile,
+such as `us.openai.gpt-5.6-sol` or `global.openai.gpt-5.6-sol`, instead of a bare
+model ID or foundation-model ARN.
+[Grok 4.6](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-xai-grok-4-6.html)
+and [Grok 4.7](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-xai-grok-4-7.html)
+also require a `us.` or `global.` system profile on these Runtime APIs, such as
+`us.xai.grok-4.6` or `global.xai.grok-4.7`.
+
+[Runtime Responses permissions](https://docs.aws.amazon.com/bedrock/latest/userguide/inference-responses-api.html#bedrock-mantle-responses-runtime)
+require `bedrock:InvokeModel` on the account's default project
+(`arn:aws:bedrock:<region>:<account-id>:project/default`) as well as invocation
+permission on the inference target. That target requires `bedrock:InvokeModel`
+for non-streaming requests or `bedrock:InvokeModelWithResponseStream` for streaming;
+the project requires `bedrock:InvokeModel` in both cases.
+
+```yaml
+providers:
+  - id: bedrock:runtime:chat:openai.gpt-oss-120b-1:0
+    config:
+      region: us-east-1
+      max_completion_tokens: 256
+  - id: bedrock:runtime:responses:us.openai.gpt-5.6-sol
+    config:
+      region: us-east-1
+      max_output_tokens: 256
+      reasoning_effort: low
+      passthrough:
+        store: false
+```
+
+For models that support HTTP service tiers, set `service_tier` in the provider config.
+Both Runtime APIs reject the Converse-style `serviceTier` field.
+For example, use `bedrock:runtime:chat:us.moonshotai.kimi-k3` or
+`bedrock:runtime:responses:us.moonshotai.kimi-k3` with `service_tier: flex`.
+[Kimi K3](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-moonshot-ai-kimi-k3.html)
+requires a supported US, India, or global inference profile on both Runtime APIs; bare
+model IDs and foundation-model ARNs are rejected before transport. Kimi supports Priority
+and Flex through these HTTP APIs; its Converse and Invoke APIs remain Standard-only.
+For US/global Kimi K3 and [Grok 4.6](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-xai-grok-4-6.html)
+inference profiles, Runtime Chat and Responses cost estimates use Priority at 1.75× Standard
+and Flex at 0.5× Standard. Unpublished Grok cache-write rates remain unknown.
+
+Runtime cost estimates for GPT-6.1 Sol US/global inference profiles include its published
+Ultrafast rates. To request Ultrafast through Responses, set `service_tier: ultrafast`; see
+the [AWS model card](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-openai-gpt-6-1-sol.html)
+for current API and regional availability.
+
+Runtime Chat supports client-side [`config.mcp`](#model-context-protocol-mcp-servers);
+Runtime Responses does not. Chat routes return the MCP tool result directly, without
+another model turn.
+
+The adapters inherit [OpenAI provider options](./openai.md), including streaming,
+client-side functions, structured output, multimodal input, and request fields through
+`passthrough`. Support depends on the chosen model and API. Configure Bedrock Guardrails
+for [Runtime Chat](https://docs.aws.amazon.com/bedrock/latest/userguide/inference-chat-completions.html)
+and [Runtime Responses](https://docs.aws.amazon.com/bedrock/latest/userguide/inference-responses-api.html#bedrock-mantle-responses-runtime)
+through request headers:
+
+```yaml
+config:
+  headers:
+    X-Amzn-Bedrock-GuardrailIdentifier: your-guardrail-id
+    X-Amzn-Bedrock-GuardrailVersion: '1'
+```
+
+Use `passthrough` for additional body fields. Do not put SDK `extra_headers` or
+`extra_body` wrappers inside the request body.
+
+Runtime Responses supports stored conversations (`previous_response_id`) and streaming,
+but does not support `background: true`, server-side tools, or GPT OSS models. Use
+Mantle Responses for GPT OSS. Neither Runtime Chat nor Responses supports application
+inference profiles. Only the account's default project is supported. Set `passthrough.store: false`
+when conversation storage is unnecessary. Keep a model ID on continuation requests.
+Automatic cost reporting requires verified Bedrock rates for the selected model/API/tier
+and sufficient token usage details; otherwise cost remains unset. Use `inputCost` and
+`outputCost` to supply explicit rates.
+
+Check AWS's [Chat Completions](https://docs.aws.amazon.com/bedrock/latest/userguide/inference-chat-completions.html)
+and [Responses](https://docs.aws.amazon.com/bedrock/latest/userguide/inference-responses-api.html)
+references for current endpoint and model support. Runtime does not expose `GET /models`;
+use `aws bedrock list-foundation-models` and `aws bedrock list-inference-profiles`.
+Existing `bedrock:mantle:<id>` and bare frontier-model selectors continue to use Mantle.
 
 ### Mantle Chat Completions (`bedrock:mantle:`) {#mantle-chat-completions}
 

@@ -44,6 +44,7 @@ describe('FoundationModelConfiguration', () => {
 
     expect(temperatureInput).toHaveValue(0.7);
     expect(maxTokensInput).toHaveValue(1024);
+    expect(maxTokensInput).toHaveAttribute('min', '1');
     expect(topPInput).toHaveValue(0.9);
     expect(apiKeyInput).toHaveValue('test-key-123');
     expect(apiBaseUrlInput).toHaveValue('https://custom.api.example.com/v1');
@@ -425,7 +426,7 @@ describe('FoundationModelConfiguration', () => {
     );
   });
 
-  it('should switch Bedrock to Responses ids without showing Converse-only MCP settings', async () => {
+  it('should switch Bedrock to Responses ids without showing client MCP settings', async () => {
     const user = userEvent.setup();
     render(
       <FoundationModelConfiguration
@@ -507,6 +508,28 @@ describe('FoundationModelConfiguration', () => {
     expect(screen.getByRole('alert')).toBeInTheDocument();
     expect(mockUpdateCustomTarget).not.toHaveBeenCalled();
   });
+
+  it.each(['chat', 'responses'] as const)(
+    'preserves Runtime %s routing when editing a model',
+    async (api) => {
+      const user = userEvent.setup();
+      render(
+        <FoundationModelConfiguration
+          selectedTarget={{ id: `bedrock:runtime:${api}:us.openai.gpt-5.6-sol`, config: {} }}
+          updateCustomTarget={mockUpdateCustomTarget}
+          providerType="bedrock"
+        />,
+      );
+      expect(screen.getByLabelText(/Bedrock API/i)).toHaveValue(`runtime-${api}`);
+      const field = screen.getByLabelText(/Model ID/i);
+      await user.clear(field);
+      await user.type(field, 'global.openai.gpt-5.6-luna');
+      expect(mockUpdateCustomTarget).toHaveBeenLastCalledWith(
+        'id',
+        `bedrock:runtime:${api}:global.openai.gpt-5.6-luna`,
+      );
+    },
+  );
 
   it.each([
     ['bedrock:amazon.nova-pro-v1:0', 'model-specific InvokeModel API on Bedrock Runtime'],
@@ -700,7 +723,7 @@ describe('FoundationModelConfiguration', () => {
       'bedrock:openai.gpt-oss-120b-1:0',
       'responses',
       'bedrock:responses:openai.gpt-oss-120b',
-      'max_tokens',
+      'max_completion_tokens',
       'max_output_tokens',
     ],
     [
@@ -708,7 +731,7 @@ describe('FoundationModelConfiguration', () => {
       'invoke',
       'bedrock:openai.gpt-oss-20b-1:0',
       'max_output_tokens',
-      'max_tokens',
+      'max_completion_tokens',
     ],
     [
       'bedrock:responses:openai.gpt-oss-120b',
@@ -786,7 +809,11 @@ describe('FoundationModelConfiguration', () => {
       expect(screen.getByLabelText(/Model ID/i)).toHaveValue(model);
       expect(screen.getByText(`Provider ID: ${id}.`, { exact: false })).toBeInTheDocument();
       expect(mockUpdateCustomTarget).not.toHaveBeenCalled();
-      expect(screen.queryByText('MCP Servers')).not.toBeInTheDocument();
+      if (mode === 'chat' || mode === 'messages') {
+        expect(screen.getByText('MCP Servers')).toBeInTheDocument();
+      } else {
+        expect(screen.queryByText('MCP Servers')).not.toBeInTheDocument();
+      }
       expect(screen.queryByLabelText('Inference Model Type')).not.toBeInTheDocument();
       expect(screen.getByText(/Configure the AWS region and authentication/)).toBeInTheDocument();
       expect(screen.getByText(/model-specific default/)).toBeInTheDocument();
@@ -912,14 +939,16 @@ describe('FoundationModelConfiguration', () => {
     expect(mockUpdateCustomTarget).not.toHaveBeenCalled();
   });
 
-  it('should render Bedrock Converse MCP configuration and save servers under config.mcp', async () => {
+  it.each([
+    'bedrock:converse:anthropic.claude-3-5-sonnet-20241022-v2:0',
+    'bedrock:runtime:chat:qwen.qwen3-coder-next',
+    'bedrock:mantle:openai.gpt-oss-120b',
+    'bedrock:messages:us.anthropic.claude-fable-5-1',
+  ])('renders MCP configuration for %s and saves servers under config.mcp', async (id) => {
     const user = userEvent.setup();
     render(
       <FoundationModelConfiguration
-        selectedTarget={{
-          id: 'bedrock:converse:anthropic.claude-3-5-sonnet-20241022-v2:0',
-          config: {},
-        }}
+        selectedTarget={{ id, config: {} }}
         updateCustomTarget={mockUpdateCustomTarget}
         providerType="bedrock"
       />,
@@ -1031,5 +1060,281 @@ describe('FoundationModelConfiguration', () => {
       'id',
       'bedrock:converse:amazon.nova-pro-v1:0',
     );
+  });
+  it('edits Runtime Chat output caps using max_completion_tokens and identifies Runtime', async () => {
+    const user = userEvent.setup();
+    render(
+      <FoundationModelConfiguration
+        selectedTarget={{
+          id: 'bedrock:runtime:chat:us.openai.gpt-5.6-sol',
+          config: { max_completion_tokens: 512 },
+        }}
+        updateCustomTarget={mockUpdateCustomTarget}
+        providerType="bedrock"
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: /Advanced Configuration/ }));
+    expect(screen.getByLabelText('Max Tokens')).toHaveValue(512);
+    await user.click(screen.getByLabelText('Max Tokens'));
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste('256');
+    expect(mockUpdateCustomTarget).toHaveBeenLastCalledWith('max_completion_tokens', 256);
+    expect(screen.getByText(/Promptfoo uses the Bedrock Runtime endpoint/)).toBeInTheDocument();
+    expect(screen.queryByText(/defaults to the Bedrock Mantle endpoint/)).not.toBeInTheDocument();
+  });
+
+  it('preserves a Runtime Chat GPT OSS cap when switching to InvokeModel', async () => {
+    const user = userEvent.setup();
+    render(
+      <FoundationModelConfiguration
+        selectedTarget={{
+          id: 'bedrock:runtime:chat:openai.gpt-oss-120b-1:0',
+          config: { max_completion_tokens: 256 },
+        }}
+        updateCustomTarget={mockUpdateCustomTarget}
+        providerType="bedrock"
+      />,
+    );
+    await user.selectOptions(screen.getByLabelText(/Bedrock API/), 'invoke');
+    expect(mockUpdateCustomTarget).toHaveBeenCalledExactlyOnceWith(
+      'id',
+      'bedrock:openai.gpt-oss-120b-1:0',
+    );
+    await user.click(screen.getByRole('button', { name: /Advanced Configuration/ }));
+    expect(screen.getByLabelText('Max Tokens')).toHaveValue(256);
+  });
+
+  it('migrates an InvokeModel GPT OSS cap when switching to Converse', async () => {
+    const user = userEvent.setup();
+    render(
+      <FoundationModelConfiguration
+        selectedTarget={{
+          id: 'bedrock:openai.gpt-oss-120b-1:0',
+          config: { max_completion_tokens: 256 },
+        }}
+        updateCustomTarget={mockUpdateCustomTarget}
+        providerType="bedrock"
+      />,
+    );
+    await user.selectOptions(screen.getByLabelText(/Bedrock API/), 'converse');
+    expect(mockUpdateCustomTarget).toHaveBeenCalledWith('config', { max_tokens: 256 });
+    expect(mockUpdateCustomTarget).toHaveBeenLastCalledWith(
+      'id',
+      'bedrock:converse:openai.gpt-oss-120b-1:0',
+    );
+  });
+
+  it.each([
+    'openai.gpt-oss-120b-1:0',
+    'openai.gpt-oss-safeguard-20b',
+    'arn:aws:bedrock:us-east-1::foundation-model/openai.gpt-oss-120b-1:0',
+  ])('reads and edits the InvokeModel token cap for %s', async (model) => {
+    const user = userEvent.setup();
+    render(
+      <FoundationModelConfiguration
+        selectedTarget={{ id: `bedrock:${model}`, config: { max_completion_tokens: 512 } }}
+        updateCustomTarget={mockUpdateCustomTarget}
+        providerType="bedrock"
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: /Advanced Configuration/ }));
+    const input = screen.getByLabelText('Max Tokens');
+    expect(input).toHaveValue(512);
+    await user.click(input);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste('256');
+    expect(mockUpdateCustomTarget).toHaveBeenLastCalledWith('max_completion_tokens', 256);
+  });
+
+  it.each([
+    ['openai.gpt-oss-120b-1:0', 'amazon.nova-pro-v1:0', 'max_completion_tokens', 'max_tokens'],
+    ['amazon.nova-pro-v1:0', 'openai.gpt-oss-120b-1:0', 'max_tokens', 'max_completion_tokens'],
+  ])(
+    'migrates the token cap when changing InvokeModel from %s to %s',
+    async (from, to, source, destination) => {
+      const user = userEvent.setup();
+      render(
+        <FoundationModelConfiguration
+          selectedTarget={{ id: `bedrock:${from}`, config: { [source]: 256, region: 'us-east-1' } }}
+          updateCustomTarget={mockUpdateCustomTarget}
+          providerType="bedrock"
+        />,
+      );
+      const input = screen.getByRole('textbox', { name: /Model ID/ });
+      await user.clear(input);
+      await user.paste(to);
+      expect(mockUpdateCustomTarget).toHaveBeenCalledWith('config', {
+        [destination]: 256,
+        region: 'us-east-1',
+      });
+      expect(mockUpdateCustomTarget).toHaveBeenLastCalledWith('id', `bedrock:${to}`);
+    },
+  );
+
+  it.each(
+    ['bedrock:openai.gpt-oss-120b-1:0', 'bedrock:runtime:chat:us.openai.gpt-6-sol'].flatMap((id) =>
+      [
+        { config: { max_tokens: 512 }, expected: 512 },
+        { config: { max_tokens: 0 }, expected: 0 },
+        { config: { max_tokens: 512, max_completion_tokens: 128 }, expected: 128 },
+        { config: { max_tokens: 512, max_completion_tokens: 0 }, expected: 0 },
+        { config: { max_tokens: 512, max_completion_tokens: null }, expected: null },
+      ].map((testCase) => ({ id, ...testCase })),
+    ),
+  )(
+    'reads the effective completion cap and removes a supported alias on edit: %j',
+    async ({ id, config, expected }) => {
+      const user = userEvent.setup();
+      render(
+        <FoundationModelConfiguration
+          selectedTarget={{ id, config }}
+          updateCustomTarget={mockUpdateCustomTarget}
+          providerType="bedrock"
+        />,
+      );
+      await user.click(screen.getByRole('button', { name: /Advanced Configuration/ }));
+      const input = screen.getByLabelText('Max Tokens');
+      expect(input).toHaveValue(expected);
+      expect(input).toBeValid();
+      await user.click(input);
+      await user.keyboard('{Control>}a{/Control}');
+      const edited = expected === 0 ? 256 : 0;
+      await user.paste(String(edited));
+      expect(mockUpdateCustomTarget).toHaveBeenLastCalledWith('config', {
+        max_completion_tokens: edited,
+      });
+    },
+  );
+
+  it.each([
+    { config: { maxTokens: null, max_tokens: 512 }, expected: 512 },
+    { config: { maxTokens: null, max_tokens: 0 }, expected: 0 },
+    { config: { maxTokens: 128, max_tokens: 512 }, expected: 128 },
+    { config: { maxTokens: 0, max_tokens: 512 }, expected: 0 },
+    { config: { max_tokens: 512 }, expected: 512 },
+    { config: { maxTokens: null, max_tokens: null }, expected: null },
+  ])('matches the backend Converse token precedence: %j', async ({ config, expected }) => {
+    const user = userEvent.setup();
+    render(
+      <FoundationModelConfiguration
+        selectedTarget={{ id: 'bedrock:converse:openai.gpt-oss-120b-1:0', config }}
+        updateCustomTarget={mockUpdateCustomTarget}
+        providerType="bedrock"
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: /Advanced Configuration/ }));
+    expect(screen.getByLabelText('Max Tokens')).toHaveValue(expected);
+  });
+
+  it.each([256, 0, null, undefined])(
+    'migrates a Responses cap when switching to Runtime Chat: %s',
+    async (value) => {
+      const user = userEvent.setup();
+      render(
+        <FoundationModelConfiguration
+          selectedTarget={{
+            id: 'bedrock:runtime:responses:us.openai.gpt-5.6-sol',
+            config: {
+              max_output_tokens: value,
+              max_completion_tokens: 512,
+              max_tokens: 1024,
+              region: 'us-east-1',
+            },
+          }}
+          updateCustomTarget={mockUpdateCustomTarget}
+          providerType="bedrock"
+        />,
+      );
+      await user.selectOptions(screen.getByLabelText(/Bedrock API/), 'runtime-chat');
+      expect(mockUpdateCustomTarget).toHaveBeenCalledWith('config', {
+        max_completion_tokens: value,
+        region: 'us-east-1',
+      });
+    },
+  );
+  it('restores the Runtime GPT OSS suffix when switching from Mantle Responses', async () => {
+    const user = userEvent.setup();
+    render(
+      <FoundationModelConfiguration
+        selectedTarget={{ id: 'bedrock:responses:openai.gpt-oss-120b', config: {} }}
+        updateCustomTarget={mockUpdateCustomTarget}
+        providerType="bedrock"
+      />,
+    );
+    await user.selectOptions(screen.getByLabelText(/Bedrock API/), 'runtime-chat');
+    expect(mockUpdateCustomTarget).toHaveBeenCalledWith(
+      'id',
+      'bedrock:runtime:chat:openai.gpt-oss-120b-1:0',
+    );
+  });
+
+  it.each([
+    [
+      'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/fixture',
+      'application inference profiles',
+    ],
+    ['openai.gpt-oss-120b-1:0', 'GPT OSS'],
+    ['openai.gpt-oss-safeguard-20b', 'GPT OSS'],
+    ['openai.gpt-oss-safeguard-120b', 'GPT OSS'],
+    ['openai.gpt-5.6-sol', 'require a system inference profile'],
+    ['xai.grok-4.6', 'require a system inference profile'],
+    ['xai.grok-4.7', 'require a system inference profile'],
+    [
+      'arn:aws:bedrock:us-east-1::foundation-model/openai.gpt-5.6-sol',
+      'require a system inference profile',
+    ],
+  ])('shows a Runtime Responses model error for %s', (model, message) => {
+    render(
+      <FoundationModelConfiguration
+        selectedTarget={{ id: `bedrock:runtime:responses:${model}`, config: {} }}
+        updateCustomTarget={mockUpdateCustomTarget}
+        providerType="bedrock"
+      />,
+    );
+    expect(screen.getByRole('alert')).toHaveTextContent(message);
+    expect(screen.getByRole('textbox', { name: /Model ID/ })).toHaveAttribute(
+      'aria-invalid',
+      'true',
+    );
+  });
+
+  it.each([
+    'openai.gpt-5.6-sol',
+    'arn:aws:bedrock:us-east-1::foundation-model/openai.gpt-6-sol',
+    'xai.grok-4.6',
+    'xai.grok-4.7',
+  ])('requires a system profile for Runtime Chat model %s', (model) => {
+    render(
+      <FoundationModelConfiguration
+        selectedTarget={{ id: 'bedrock:runtime:chat:' + model, config: {} }}
+        updateCustomTarget={mockUpdateCustomTarget}
+        providerType="bedrock"
+      />,
+    );
+    expect(screen.getByRole('alert')).toHaveTextContent('require a system inference profile');
+    expect(screen.getByRole('textbox', { name: /Model ID/ })).toHaveAttribute(
+      'placeholder',
+      'us.openai.gpt-5.6-sol',
+    );
+    expect(screen.getByText(/Other models use their Runtime model IDs/)).toBeInTheDocument();
+  });
+
+  it('accepts account-scoped system inference profiles in Runtime Responses', () => {
+    render(
+      <FoundationModelConfiguration
+        selectedTarget={{
+          id: 'bedrock:runtime:responses:arn:aws:bedrock:us-east-1:123456789012:inference-profile/us.openai.gpt-5.6-sol',
+          config: {},
+        }}
+        updateCustomTarget={mockUpdateCustomTarget}
+        providerType="bedrock"
+      />,
+    );
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: /Model ID/ })).toHaveAttribute(
+      'placeholder',
+      'us.openai.gpt-5.6-sol',
+    );
+    expect(screen.getByText(/Other models use their Runtime model IDs/)).toBeInTheDocument();
   });
 });

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  getBedrockRuntimeModelError,
   getBedrockTextRoute,
   isRejectedPrefixedGrokId,
   isRejectedPrefixedMythosId,
@@ -27,6 +28,65 @@ describe('Bedrock inference-profile compatibility', () => {
     ['us.anthropic.claude-mythos-5-1', false],
   ])('checks Mythos ID %s', (id, rejected) => {
     expect(isRejectedPrefixedMythosId(id)).toBe(rejected);
+  });
+});
+
+describe.each(['runtime-chat', 'runtime-responses'] as const)('%s profile validation', (mode) => {
+  it.each(['zai.glm-5.3', 'moonshotai.kimi-k3', 'xai.grok-4.6', 'xai.grok-4.7'])(
+    'rejects unsupported profiles for the known model %s',
+    (model) => {
+      for (const prefix of ['eu.', 'fabricated.', 'us.eu.', '']) {
+        const id = `${prefix}${model}`;
+        for (const selector of [
+          id,
+          `arn:aws:bedrock:us-east-1:123456789012:inference-profile/${id}`,
+        ]) {
+          expect(getBedrockRuntimeModelError(mode, selector)).toContain(
+            'a system inference profile',
+          );
+        }
+      }
+      for (const id of [model, `us.${model}`]) {
+        expect(
+          getBedrockRuntimeModelError(mode, `arn:aws:bedrock:us-east-1::foundation-model/${id}`),
+        ).toContain('a system inference profile');
+      }
+    },
+  );
+
+  it.each([
+    'us.zai.glm-5.3',
+    'global.zai.glm-5.3',
+    'us.moonshotai.kimi-k3',
+    'in.moonshotai.kimi-k3',
+    'global.moonshotai.kimi-k3',
+    'us.xai.grok-4.6',
+    'global.xai.grok-4.6',
+    'us.xai.grok-4.7',
+    'global.xai.grok-4.7',
+  ])('accepts supported profile %s and its system ARN', (model) => {
+    const region = model.startsWith('in.') ? 'ap-south-1' : 'us-east-1';
+    expect(getBedrockRuntimeModelError(mode, model)).toBeUndefined();
+    expect(
+      getBedrockRuntimeModelError(
+        mode,
+        `arn:aws:bedrock:${region}:123456789012:inference-profile/${model}`,
+      ),
+    ).toBeUndefined();
+  });
+
+  it.each([
+    'eu.zai.glm-5.4',
+    'eu.moonshotai.kimi-k4',
+    'eu.xai.grok-4.8',
+    'vendor.future-model',
+    'moonshotai.kimi-k3-custom',
+    'arn:aws:bedrock:us-east-1:123456789012:inference-profile/eu.vendor.future-model',
+    'arn:aws:bedrock:us-east-1:123456789012:custom-model/my.eu.zai.glm-5.3',
+    'arn:aws:bedrock:us-east-1:123456789012:custom-model/my.eu.moonshotai.kimi-k3',
+    'arn:aws:bedrock:us-east-1:123456789012:custom-model/my.eu.xai.grok-4.7',
+  ])('leaves unknown or opaque model %s to the service', (model) => {
+    expect(getBedrockRuntimeModelError(mode, model)).toBeUndefined();
   });
 });
 
