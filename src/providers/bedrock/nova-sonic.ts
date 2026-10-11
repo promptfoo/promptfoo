@@ -2,7 +2,6 @@ import { Buffer } from 'node:buffer';
 import { Readable } from 'node:stream';
 
 import logger from '../../logger';
-import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { AwsBedrockGenericProvider } from './base';
 import type { BedrockRuntimeClient } from '@aws-sdk/client-bedrock-runtime';
 import type { AwsCredentialIdentity, AwsCredentialIdentityProvider } from '@smithy/types';
@@ -13,6 +12,7 @@ import type {
   CallApiContextParams,
   ProviderOptions,
   ProviderResponse,
+  TokenUsage,
 } from '../../types/providers';
 
 // Error categorization for Nova Sonic (added for better error handling)
@@ -348,6 +348,7 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
     let assistantTranscript = '';
     let userTranscript = '';
     const audioChunks: Buffer[] = [];
+    const tokenUsage: TokenUsage = { numRequests: 1 };
     let hasCompletionStart = false;
     const textBlocks = new Map<string, { role: string; stage?: string; text: string }>();
     const toolCalls: { toolUseId: string; toolName: string; content: string }[] = [];
@@ -356,6 +357,18 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
     // Set up event handlers
     session.responseHandlers.set('completionStart', () => {
       hasCompletionStart = true;
+    });
+    session.responseHandlers.set('usageEvent', (data) => {
+      // Nova reports session-wide cumulative totals, not per-event increments.
+      for (const [key, value] of [
+        ['prompt', data.totalInputTokens],
+        ['completion', data.totalOutputTokens],
+        ['total', data.totalTokens],
+      ] as const) {
+        if (typeof value === 'number' && Number.isFinite(value) && value >= 0) {
+          tokenUsage[key] = value;
+        }
+      }
     });
     session.responseHandlers.set('contentStart', (data) => {
       if (data.type === 'TEXT') {
@@ -590,8 +603,7 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
         ...(toolCalls.length > 0 ? { error: TOOL_EXECUTION_UNSUPPORTED_ERROR } : {}),
         output: assistantTranscript || '[No response received from API]',
         ...audioOutput,
-        // TODO: Add proper token usage tracking
-        tokenUsage: { ...createEmptyTokenUsage(), numRequests: 1 },
+        tokenUsage,
         cached: false,
         metadata: {
           ...audioOutput,
@@ -607,6 +619,7 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
       });
       return {
         error: categorized.message,
+        tokenUsage,
         metadata: {
           errorType: categorized.type,
           ...(toolCalls.length > 0 ? { functionCallOccurred: true, toolCalls } : {}),

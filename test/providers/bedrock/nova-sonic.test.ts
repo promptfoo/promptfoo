@@ -645,13 +645,139 @@ describe('NovaSonic Provider', () => {
       expect(mockSend).not.toHaveBeenCalled();
     });
 
+    it.each(['amazon.nova-2-sonic-v1:0', 'amazon.nova-2-5-sonic'])(
+      'retains the latest cumulative usage without summing duplicate events for %s',
+      async (model) => {
+        vi.spyOn(NovaSonicProvider.prototype, 'callApi').mockRestore();
+        vi.spyOn(NovaSonicProvider.prototype, 'endSession').mockRestore();
+        vi.useFakeTimers();
+        const latest = {
+          totalInputTokens: 20,
+          totalOutputTokens: 10,
+          totalTokens: 30,
+          details: {
+            delta: {
+              input: { speechTokens: 5, textTokens: 5 },
+              output: { speechTokens: 6, textTokens: 2 },
+            },
+            total: {
+              input: { speechTokens: 15, textTokens: 5 },
+              output: { speechTokens: 8, textTokens: 2 },
+            },
+          },
+        };
+        const capture = captureSonicRequest(mockSend, [
+          {
+            event: { usageEvent: { totalInputTokens: 10, totalOutputTokens: 2, totalTokens: 12 } },
+          },
+          { event: { usageEvent: latest } },
+          { event: { usageEvent: latest } },
+          {
+            event: {
+              usageEvent: { totalInputTokens: -1, totalOutputTokens: 'invalid', totalTokens: null },
+            },
+          },
+          ...standardTextResponse,
+        ]);
+        const configuredProvider = new NovaSonicProvider(model, {
+          config: { region: 'us-east-1' },
+        });
+        const pending = configuredProvider.callApi('AA==');
+        await vi.runAllTimersAsync();
+        const result = await pending;
+        await capture.waitForCompletion();
+
+        expect(result.error).toBeUndefined();
+        expect(result.tokenUsage).toEqual({
+          prompt: 20,
+          completion: 10,
+          total: 30,
+          numRequests: 1,
+        });
+        expect(result.cost).toBeUndefined();
+        expect(capture.events.filter((event) => event.sessionEnd)).toHaveLength(1);
+      },
+    );
+
+    it.each([true, false])(
+      'preserves reported usage on a failed stream (usage reported: %s)',
+      async (reported) => {
+        vi.spyOn(NovaSonicProvider.prototype, 'callApi').mockRestore();
+        vi.spyOn(NovaSonicProvider.prototype, 'endSession').mockRestore();
+        vi.useFakeTimers();
+        const capture = captureSonicRequest(
+          mockSend,
+          [
+            ...(reported
+              ? [
+                  {
+                    event: {
+                      usageEvent: { totalInputTokens: 20, totalOutputTokens: 10, totalTokens: 30 },
+                    },
+                  },
+                ]
+              : []),
+            { event: { fixtureFailure: {} } },
+          ],
+          (event) => {
+            if (event.event.fixtureFailure) {
+              throw new Error('fixture stream failed');
+            }
+          },
+        );
+        const pending = provider.callApi('AA==');
+        await vi.runAllTimersAsync();
+        const result = await pending;
+        await capture.waitForCompletion();
+
+        expect(result.error).toBe('fixture stream failed');
+        expect(result.output).toBeUndefined();
+        expect(result.tokenUsage).toEqual(
+          reported ? { prompt: 20, completion: 10, total: 30, numRequests: 1 } : { numRequests: 1 },
+        );
+        expect(result.cost).toBeUndefined();
+        expect((provider as any).sessions.size).toBe(0);
+      },
+    );
+
+    it('keeps cumulative usage isolated between concurrent calls and preserves reported zero counts', async () => {
+      vi.spyOn(NovaSonicProvider.prototype, 'callApi').mockRestore();
+      vi.useFakeTimers();
+      mockSend
+        .mockImplementationOnce(() =>
+          createMockStreamResponse([
+            {
+              event: {
+                usageEvent: { totalInputTokens: 20, totalOutputTokens: 10, totalTokens: 30 },
+              },
+            },
+            ...standardTextResponse,
+          ]),
+        )
+        .mockImplementationOnce(() =>
+          createMockStreamResponse([
+            {
+              event: { usageEvent: { totalInputTokens: 0, totalOutputTokens: 0, totalTokens: 0 } },
+            },
+            ...standardTextResponse,
+          ]),
+        );
+      const pending = Promise.all([provider.callApi('AA=='), provider.callApi('AQ==')]);
+      await vi.runAllTimersAsync();
+      const [first, second] = await pending;
+
+      expect(first.tokenUsage).toEqual({ prompt: 20, completion: 10, total: 30, numRequests: 1 });
+      expect(second.tokenUsage).toEqual({ prompt: 0, completion: 0, total: 0, numRequests: 1 });
+      expect((provider as any).sessions.size).toBe(0);
+    });
+
     it('counts the request when a successful stream does not report token usage', async () => {
       vi.spyOn(NovaSonicProvider.prototype, 'callApi').mockRestore();
 
       const result = await provider.callApi('Test prompt');
 
       expect(mockSend).toHaveBeenCalledTimes(1);
-      expect(result.tokenUsage).toMatchObject({ total: 0, numRequests: 1 });
+      expect(result.tokenUsage).toEqual({ numRequests: 1 });
     });
 
     it('should successfully call API and handle text response', async () => {
@@ -779,7 +905,7 @@ describe('NovaSonic Provider', () => {
             expect(events[9]).toEqual({ sessionEnd: {} });
             expect(result).toMatchObject({
               output: 'This is a test response\n',
-              tokenUsage: { total: 0, numRequests: 1 },
+              tokenUsage: { numRequests: 1 },
               cached: false,
               metadata: { functionCallOccurred: false },
             });
