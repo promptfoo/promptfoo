@@ -3468,19 +3468,33 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
   });
 
   it.each([
-    { action: 'Rate', previousReason: 2, expectedReason: 0 },
-    { action: 'Clear rating', previousReason: 0, expectedReason: 2 },
+    { action: 'Rate', previousReason: 2, expectedReason: 0, graderError: true },
+    { action: 'Clear rating', previousReason: 0, expectedReason: 2, graderError: true },
+    { action: 'Clear rating', previousReason: 1, expectedReason: 2, graderError: false },
   ])(
-    'updates the displayed grader-error category after $action',
-    async ({ action, previousReason, expectedReason }) => {
+    'updates the displayed error category after $action (graderError=$graderError)',
+    async ({ action, previousReason, expectedReason, graderError }) => {
       const user = userEvent.setup();
       const table = createMockTableWithHumanAssertion();
       const output = table.body[0].outputs[0];
       output.failureReason = previousReason;
-      Object.assign(output.gradingResult, { metadata: { graderError: true } });
+      output.pass = previousReason === 0;
+      output.score = output.pass ? 1 : 0;
+      Object.assign(output.gradingResult, {
+        pass: output.pass,
+        score: output.score,
+        metadata: graderError ? { graderError: true } : undefined,
+      });
+      Object.assign(output.gradingResult.componentResults[1], {
+        pass: output.pass,
+        score: output.score,
+      });
+      if (!graderError) {
+        Object.assign(output.gradingResult.componentResults[1], {
+          metadata: { originalFailureReason: 2 },
+        });
+      }
       if (action === 'Rate') {
-        output.pass = false;
-        output.gradingResult.pass = false;
         output.gradingResult.componentResults.splice(1, 1);
       }
       vi.mocked(useTableStore).mockImplementation(() =>
@@ -3494,10 +3508,14 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
       );
       renderWithProviders(<ResultsTable {...defaultProps} />);
       await user.click(screen.getByRole('button', { name: action }));
-      expect(
-        mockSetTable.mock.calls[mockSetTable.mock.calls.length - 1]?.[0].body[0].outputs[0]
-          .failureReason,
-      ).toBe(expectedReason);
+      const updatedOutput =
+        mockSetTable.mock.calls[mockSetTable.mock.calls.length - 1]?.[0].body[0].outputs[0];
+      expect(updatedOutput.failureReason).toBe(expectedReason);
+      if (action === 'Rate') {
+        expect(updatedOutput.gradingResult.componentResults[1].metadata).toEqual({
+          originalFailureReason: previousReason,
+        });
+      }
     },
   );
 

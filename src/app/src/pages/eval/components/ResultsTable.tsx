@@ -868,6 +868,17 @@ function averageComponentResultScore(
   return scores.reduce((sum, resultScore) => sum + resultScore, 0) / scores.length;
 }
 
+function getOriginalFailureReason(output: EvaluateTableOutput) {
+  const manualOverride =
+    output.gradingResult?.componentResults?.find(
+      (result) => result.assertion?.type === HUMAN_ASSERTION_TYPE,
+    ) ??
+    (output.gradingResult?.assertion?.type === HUMAN_ASSERTION_TYPE
+      ? output.gradingResult
+      : undefined);
+  return manualOverride?.metadata?.originalFailureReason ?? output.failureReason;
+}
+
 function getManualRatingUpdate({
   existingOutput,
   isPass,
@@ -928,6 +939,7 @@ function getManualRatingUpdate({
     reason: 'Manual result (overrides all other grading results)',
     comment,
     assertion: { type: HUMAN_ASSERTION_TYPE },
+    metadata: { originalFailureReason: getOriginalFailureReason(existingOutput) },
   };
 
   if (humanResultIndex === -1) {
@@ -1026,7 +1038,7 @@ function buildRatingTableUpdate({
       ? ResultFailureReason.NONE
       : !hasManualOverride &&
           (gradingResult.metadata?.graderError === true ||
-            previousOutput.failureReason === ResultFailureReason.ERROR)
+            getOriginalFailureReason(previousOutput) === ResultFailureReason.ERROR)
         ? ResultFailureReason.ERROR
         : ResultFailureReason.ASSERT,
     pass: ratingUpdate.pass,

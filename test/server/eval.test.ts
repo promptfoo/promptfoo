@@ -220,54 +220,65 @@ describe('eval routes', () => {
       );
     });
 
-    it('moves grader-error rows between error, approval, and explicit-failure buckets', async () => {
-      const eval_ = await EvalFactory.create();
-      testEvalIds.add(eval_.id);
-      const results = await eval_.getResults();
-      invariant(results[1].id, 'Result ID is required');
-      const result = await EvalResult.findById(results[1].id);
-      invariant(result?.gradingResult, 'Persisted grading result is required');
-      result.failureReason = ResultFailureReason.ERROR;
-      result.gradingResult.metadata = { graderError: true };
-      const originalGrade = structuredClone(result.gradingResult);
-      await result.save();
-      const metrics = eval_.prompts[result.promptIdx].metrics;
-      invariant(metrics, 'Prompt metrics are required');
-      metrics.testFailCount -= 1;
-      metrics.testErrorCount += 1;
-      await eval_.save();
+    it.each([true, false])(
+      'restores error categories after ratings (graderError=%s)',
+      async (graderError) => {
+        const eval_ = await EvalFactory.create();
+        testEvalIds.add(eval_.id);
+        const results = await eval_.getResults();
+        invariant(results[1].id, 'Result ID is required');
+        const result = await EvalResult.findById(results[1].id);
+        invariant(result?.gradingResult, 'Persisted grading result is required');
+        result.failureReason = ResultFailureReason.ERROR;
+        result.gradingResult.metadata = graderError ? { graderError: true } : undefined;
+        const originalGrade = structuredClone(result.gradingResult);
+        await result.save();
+        const metrics = eval_.prompts[result.promptIdx].metrics;
+        invariant(metrics, 'Prompt metrics are required');
+        metrics.testFailCount -= 1;
+        metrics.testErrorCount += 1;
+        await eval_.save();
 
-      for (const [grade, reason] of [
-        [
-          { ...originalGrade, metadata: undefined, comment: 'Preserve an existing error' },
-          ResultFailureReason.ERROR,
-        ],
-        [
-          createManualRatingPayload({ gradingResult: structuredClone(originalGrade) }, true),
-          ResultFailureReason.NONE,
-        ],
-        [originalGrade, ResultFailureReason.ERROR],
-        [
-          createManualRatingPayload({ gradingResult: structuredClone(originalGrade) }, false),
-          ResultFailureReason.ASSERT,
-        ],
-        [originalGrade, ResultFailureReason.ERROR],
-      ] as const) {
-        const response = await api
-          .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
-          .send(grade);
-        expect(response.status).toBe(200);
-        const updated = await EvalResult.findById(result.id);
-        expect(updated?.success).toBe(reason === ResultFailureReason.NONE);
-        expect(updated?.failureReason).toBe(reason);
-        const updatedEval = await Eval.findById(eval_.id);
-        expect(updatedEval?.prompts[result.promptIdx].metrics).toMatchObject({
-          testPassCount: metrics.testPassCount + Number(reason === ResultFailureReason.NONE),
-          testFailCount: metrics.testFailCount + Number(reason === ResultFailureReason.ASSERT),
-          testErrorCount: metrics.testErrorCount - Number(reason !== ResultFailureReason.ERROR),
-        });
-      }
-    });
+        for (const [grade, reason] of [
+          [
+            { ...originalGrade, metadata: undefined, comment: 'Preserve an existing error' },
+            ResultFailureReason.ERROR,
+          ],
+          [
+            createManualRatingPayload({ gradingResult: structuredClone(originalGrade) }, true),
+            ResultFailureReason.NONE,
+          ],
+          [
+            createManualRatingPayload({ gradingResult: structuredClone(originalGrade) }, false),
+            ResultFailureReason.ASSERT,
+          ],
+          [originalGrade, ResultFailureReason.ERROR],
+          [
+            createManualRatingPayload({ gradingResult: structuredClone(originalGrade) }, false),
+            ResultFailureReason.ASSERT,
+          ],
+          [
+            createManualRatingPayload({ gradingResult: structuredClone(originalGrade) }, true),
+            ResultFailureReason.NONE,
+          ],
+          [originalGrade, ResultFailureReason.ERROR],
+        ] as const) {
+          const response = await api
+            .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+            .send(grade);
+          expect(response.status).toBe(200);
+          const updated = await EvalResult.findById(result.id);
+          expect(updated?.success).toBe(reason === ResultFailureReason.NONE);
+          expect(updated?.failureReason).toBe(reason);
+          const updatedEval = await Eval.findById(eval_.id);
+          expect(updatedEval?.prompts[result.promptIdx].metrics).toMatchObject({
+            testPassCount: metrics.testPassCount + Number(reason === ResultFailureReason.NONE),
+            testFailCount: metrics.testFailCount + Number(reason === ResultFailureReason.ASSERT),
+            testErrorCount: metrics.testErrorCount - Number(reason !== ResultFailureReason.ERROR),
+          });
+        }
+      },
+    );
 
     it('Passing test and the user marked it as passing (no change)', async () => {
       const eval_ = await EvalFactory.create();

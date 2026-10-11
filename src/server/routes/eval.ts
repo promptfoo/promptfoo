@@ -739,11 +739,16 @@ evalRouter.post(
       }
 
       // Capture the current state before we change it
-      const hasExistingManualOverride = Boolean(
-        result.gradingResult?.componentResults?.some(
+      const previousManualOverride =
+        result.gradingResult?.componentResults?.find(
           (r) => r.assertion?.type === HUMAN_ASSERTION_TYPE,
-        ),
-      );
+        ) ??
+        (result.gradingResult?.assertion?.type === HUMAN_ASSERTION_TYPE
+          ? result.gradingResult
+          : undefined);
+      const hasExistingManualOverride = Boolean(previousManualOverride);
+      const originalFailureReason =
+        previousManualOverride?.metadata?.originalFailureReason ?? result.failureReason;
       const successChanged = result.success !== gradingResult.pass;
       const scoreChange = gradingResult.score - result.score;
       const previousCount = result.success
@@ -751,14 +756,17 @@ evalRouter.post(
         : result.failureReason === ResultFailureReason.ERROR
           ? 'testErrorCount'
           : 'testFailCount';
-      const hasManualOverride =
-        gradingResult.assertion?.type === HUMAN_ASSERTION_TYPE ||
-        gradingResult.componentResults?.some((r) => r.assertion?.type === HUMAN_ASSERTION_TYPE);
+      const manualOverride =
+        gradingResult.componentResults?.find((r) => r.assertion?.type === HUMAN_ASSERTION_TYPE) ??
+        (gradingResult.assertion?.type === HUMAN_ASSERTION_TYPE ? gradingResult : undefined);
+      if (manualOverride) {
+        manualOverride.metadata = { ...manualOverride.metadata, originalFailureReason };
+      }
       const failureReason = gradingResult.pass
         ? ResultFailureReason.NONE
-        : !hasManualOverride &&
+        : !manualOverride &&
             (gradingResult.metadata?.graderError === true ||
-              result.failureReason === ResultFailureReason.ERROR)
+              originalFailureReason === ResultFailureReason.ERROR)
           ? ResultFailureReason.ERROR
           : ResultFailureReason.ASSERT;
       const nextCount = gradingResult.pass
