@@ -128,7 +128,10 @@ export function asGradingResult(result: unknown): GradingResult | undefined {
   }
 }
 
-function appendToReason(reason: string, suffix: AssertionParams['assertion']['value']): string {
+export function appendToReason(
+  reason: string,
+  suffix: AssertionParams['assertion']['value'],
+): string {
   return typeof suffix === 'string' && suffix ? `${reason}\n${suffix}` : reason;
 }
 
