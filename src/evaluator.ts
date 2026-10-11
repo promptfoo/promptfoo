@@ -23,6 +23,7 @@ import { collectFileMetadata, renderPrompt, runExtensionHook } from './evaluator
 import logger, { globalLogCallback, isDebugEnabled, setLogCallback } from './logger';
 import { selectMaxScore } from './matchers/comparison';
 import {
+  externalizeResultMetadata,
   getResultIndexKey,
   PROMPTFOO_METADATA_KEY,
   sanitizeResultForJsonlArtifact,
@@ -4273,6 +4274,8 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       };
     }
     try {
+      // Also canonicalize the streamed JSONL row, not only the model stored below.
+      row.metadata = await externalizeResultMetadata(row, this.store.id);
       await this.store.appendResult(row);
     } catch (error) {
       this.store.recordResultPersistenceFailure(row);

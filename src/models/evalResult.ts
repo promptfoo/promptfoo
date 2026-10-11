@@ -988,6 +988,28 @@ export function sanitizeResultForJsonlArtifact<T extends object>(
   } as T;
 }
 
+/**
+ * Externalize the legacy result-level audio mirror before storing or streaming a
+ * row. Provider metadata is copied before response media extraction, so processing
+ * only `response.metadata.audio` otherwise leaves a second inline recording in
+ * `metadata.audio`. Keep unrelated metadata and the caller's input unchanged.
+ */
+export async function externalizeResultMetadata(
+  result: Pick<EvaluateResult, 'metadata' | 'testIdx' | 'promptIdx'>,
+  evalId: string,
+): Promise<EvaluateResult['metadata']> {
+  if (typeof result.metadata?.audio?.data !== 'string') {
+    return result.metadata;
+  }
+  const processed = await extractAndStoreBinaryData(
+    { audio: result.metadata.audio },
+    { evalId, testIdx: result.testIdx, promptIdx: result.promptIdx },
+  );
+  return processed?.audio && processed.audio !== result.metadata.audio
+    ? { ...result.metadata, audio: processed.audio }
+    : result.metadata;
+}
+
 export default class EvalResult {
   static async createFromEvaluateResult(
     evalId: string,
@@ -1017,7 +1039,11 @@ export default class EvalResult {
     // Persist trace and repeat linkage inside a private metadata namespace so they
     // survive EvalResult round-trips without a Drizzle schema migration.
     const persistedMetadata = persistTraceMetadata(
-      persistRepeatMetadata(metadata, repeatIndex, repeatGroupId),
+      persistRepeatMetadata(
+        await externalizeResultMetadata({ ...result, metadata }, evalId),
+        repeatIndex,
+        repeatGroupId,
+      ),
       traceId,
       evaluationId,
     );
@@ -1088,6 +1114,7 @@ export default class EvalResult {
       processedResults.push({
         ...serializeResultProviderRefs(result),
         response: processedResponse ?? undefined,
+        metadata: await externalizeResultMetadata(result, evalId),
       });
     }
 
