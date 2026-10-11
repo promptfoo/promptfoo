@@ -20,6 +20,7 @@ import {
   geminiFormatAndSystemInstructions,
   getCandidate,
   getGoogleApiBaseUrl,
+  getGoogleGuardrails,
   getGoogleResponseServiceTier,
   getLastPromptSafetyRatings,
   isNonCandidateStreamChunk,
@@ -40,7 +41,6 @@ import type {
   ApiEmbeddingProvider,
   CallApiContextParams,
   CallApiOptionsParams,
-  GuardrailResponse,
   ProviderEmbeddingResponse,
   ProviderResponse,
 } from '../../types/index';
@@ -437,22 +437,10 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
     const finalCandidate = candidate;
 
     try {
-      let guardrails: GuardrailResponse | undefined;
-      const promptSafetyRatings = getLastPromptSafetyRatings(dataWithResponse);
-
-      if (promptSafetyRatings || finalCandidate.safetyRatings) {
-        const flaggedInput = promptSafetyRatings?.some((r) => r.probability !== 'NEGLIGIBLE');
-        const flaggedOutput = finalCandidate.safetyRatings?.some(
-          (r) => r.probability !== 'NEGLIGIBLE',
-        );
-        const flagged = flaggedInput || flaggedOutput;
-
-        guardrails = {
-          flaggedInput,
-          flaggedOutput,
-          flagged,
-        };
-      }
+      const guardrails = getGoogleGuardrails(
+        getLastPromptSafetyRatings(dataWithResponse),
+        finalCandidate.safetyRatings,
+      );
 
       const grounding = collectGroundingMetadata(dataWithResponse);
       const thoughtSignatures = collectThoughtSignatures(dataWithResponse);

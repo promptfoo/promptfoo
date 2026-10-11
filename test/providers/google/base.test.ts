@@ -33,9 +33,6 @@ vi.mock('../../../src/esm', () => ({
 
 vi.mock('../../../src/util/file', () => ({
   maybeLoadFromExternalFile: vi.fn(),
-}));
-
-vi.mock('../../../src/util/index', () => ({
   maybeLoadToolsFromExternalFile: vi.fn().mockResolvedValue([]),
 }));
 
@@ -97,7 +94,7 @@ import { importModule } from '../../../src/esm';
 import { GoogleAuthManager } from '../../../src/providers/google/auth';
 import { GoogleGenericProvider } from '../../../src/providers/google/base';
 import { withGenAIToolSpan } from '../../../src/providers/tracing';
-import { maybeLoadToolsFromExternalFile } from '../../../src/util/index';
+import { maybeLoadToolsFromExternalFile } from '../../../src/util/file';
 
 import type { CallApiContextParams, ProviderResponse } from '../../../src/types/index';
 
@@ -306,7 +303,11 @@ describe('GoogleGenericProvider', () => {
 
       const tools = await provider['getAllTools']();
 
-      expect(maybeLoadToolsFromExternalFile).toHaveBeenCalledWith(configTools, undefined);
+      expect(maybeLoadToolsFromExternalFile).toHaveBeenCalledWith(
+        configTools,
+        undefined,
+        undefined,
+      );
       expect(tools).toEqual(configTools);
     });
 

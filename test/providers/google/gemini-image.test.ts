@@ -1438,7 +1438,7 @@ describe('GeminiImageProvider', () => {
       });
     });
 
-    it('should count cached responses as one logical request', async () => {
+    it('preserves cached token counts without reporting an incurred request', async () => {
       const provider = new GeminiImageProvider('gemini-3-pro-image-preview');
 
       mockFetchWithCache.mockResolvedValueOnce({
@@ -1465,9 +1465,12 @@ describe('GeminiImageProvider', () => {
       const result = await provider.callApi('Generate a picture of a cat');
 
       expect(result.tokenUsage).toEqual({
+        prompt: 4,
+        completion: 6,
         cached: 10,
         total: 10,
-        numRequests: 1,
+        numRequests: 0,
+        incurredTokenUsage: {},
       });
     });
   });
@@ -1657,7 +1660,7 @@ describe('GeminiImageProvider', () => {
       expect(result.cost).toBe(0.067);
     });
 
-    it('should not report cost for cached responses', async () => {
+    it('preserves the reported estimate on cached responses', async () => {
       const provider = new GeminiImageProvider('gemini-3.1-flash-image');
 
       mockFetchWithCache.mockResolvedValueOnce({
@@ -1673,7 +1676,8 @@ describe('GeminiImageProvider', () => {
       const result = await provider.callApi('Test prompt');
 
       expect(result.cached).toBe(true);
-      expect(result.cost).toBeUndefined();
+      expect(result.cost).toBe(0.067);
+      expect(result.tokenUsage?.numRequests).toBe(0);
     });
 
     it('should bill prompt and text/thinking tokens on top of the per-image price', async () => {

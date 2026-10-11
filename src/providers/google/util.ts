@@ -5,7 +5,11 @@ import Clone from 'rfdc';
 import { z } from 'zod';
 import logger from '../../logger';
 import { extractBase64FromDataUrl, isDataUrl, parseDataUrl } from '../../util/dataUrl';
-import { getLoadedFileMimeType, maybeLoadFromExternalFile } from '../../util/file';
+import {
+  getLoadedFileMimeType,
+  maybeLoadFromExternalFile,
+  maybeLoadToolsFromExternalFile,
+} from '../../util/file';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { parseFileUrl } from '../../util/functions/loadFunction';
 import { renderVarsInObject } from '../../util/index';
@@ -18,6 +22,7 @@ import {
   type ProviderConfig,
   parseChatPrompt,
   transformToolChoice,
+  transformTools,
 } from '../shared';
 import { loadCredentials } from './auth';
 import {
@@ -472,6 +477,26 @@ export function stripExecutableToolFileReferences(
   vars?: Record<string, VarValue>,
 ): unknown {
   return stripExecutableToolFileReferencesFromValue(renderVarsInObject(tools, vars));
+}
+
+/** Load and normalize configured tools using the shared file and variable handling. */
+export async function loadGoogleTools(
+  tools: unknown,
+  vars?: Record<string, VarValue>,
+  options: { skipExecutableToolFiles?: boolean; abortSignal?: AbortSignal } = {},
+): Promise<Tool[]> {
+  const requestTools = options.skipExecutableToolFiles
+    ? stripExecutableToolFileReferences(tools, vars)
+    : tools;
+  const loadedTools = requestTools
+    ? await maybeLoadToolsFromExternalFile(requestTools, vars, options.abortSignal)
+    : [];
+  const transformedTools = Array.isArray(loadedTools)
+    ? (transformTools(loadedTools, 'google') as Tool[])
+    : loadedTools
+      ? [loadedTools]
+      : [];
+  return normalizeTools(transformedTools);
 }
 
 function getServiceTierCacheRead(
@@ -1266,6 +1291,21 @@ export function getLastPromptSafetyRatings(
   }
 
   return safetyRatings;
+}
+
+/** Normalize Google's prompt and candidate ratings for guardrails assertions. */
+export function getGoogleGuardrails(
+  promptSafetyRatings: ReadonlyArray<{ probability: string }> | undefined,
+  candidateSafetyRatings: ReadonlyArray<{ probability: string }> | undefined,
+) {
+  if (!promptSafetyRatings && !candidateSafetyRatings) {
+    return undefined;
+  }
+  const flaggedInput = promptSafetyRatings?.some((rating) => rating.probability !== 'NEGLIGIBLE');
+  const flaggedOutput = candidateSafetyRatings?.some(
+    (rating) => rating.probability !== 'NEGLIGIBLE',
+  );
+  return { flaggedInput, flaggedOutput, flagged: flaggedInput || flaggedOutput };
 }
 
 export function collectThoughtSignatures(data: GeminiResponseData[]): string[] {

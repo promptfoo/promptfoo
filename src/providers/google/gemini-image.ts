@@ -3,19 +3,24 @@ import logger from '../../logger';
 import { toDataUri } from '../../util/dataUrl';
 import { resolveProviderApiKey } from '../credentials';
 import { resolveProviderEnv } from '../env';
-import { getRequestTimeoutMs, shouldBustProviderCache } from '../shared';
+import { getRequestTimeoutMs, shouldBustProviderCache, withResponseCacheMetadata } from '../shared';
 import { GoogleAuthManager } from './auth';
 import {
+  collectGroundingMetadata,
+  collectThoughtSignatures,
   createAuthCacheDiscriminator,
   determineGoogleVertexMode,
+  formatCandidateContents,
   geminiFormatAndSystemInstructions,
   getGoogleApiBaseUrl,
   getGoogleClient,
+  getGoogleGuardrails,
   loadCredentials,
+  loadGoogleTools,
   mergeGoogleCompletionOptions,
   mergeGoogleRequestTools,
+  mergeParts,
   normalizeSafetySettings,
-  normalizeTools,
   removeGoogleFunctionDeclarations,
   resolveGoogleToolConfig,
   resolveProjectId,
@@ -25,6 +30,7 @@ import type { EnvOverrides } from '../../types/env';
 import type {
   ApiProvider,
   CallApiContextParams,
+  CallApiOptionsParams,
   ImageOutput,
   ProviderResponse,
 } from '../../types/index';
@@ -128,6 +134,13 @@ export class GeminiImageProvider implements ApiProvider {
     this.config = options.config || {};
     this.env = options.env;
     this.providerId = options.id ?? `google:${modelName}`;
+    GoogleAuthManager.validateAndWarn(
+      {
+        ...this.config,
+        vertexai: determineGoogleVertexMode(this.config, this.env),
+      },
+      this.env,
+    );
   }
 
   id(): string {
@@ -172,7 +185,11 @@ export class GeminiImageProvider implements ApiProvider {
     return this.modelName.startsWith('gemini-3') || this.modelName === 'gemini-nano-banana-2.1';
   }
 
-  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+  async callApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
     if (!prompt) {
       return {
         error: 'Prompt is required for image generation',
@@ -221,6 +238,21 @@ export class GeminiImageProvider implements ApiProvider {
 
     // Explicit AI Studio mode must not be overridden by ambient Vertex project configuration.
     const isVertexMode = determineGoogleVertexMode(this.config, this.env);
+    if (!isVertexMode && !aiStudioApiKey && this.config.apiKeyRequired !== false) {
+      return {
+        error:
+          'Gemini image models require either:\n' +
+          '1. Google AI Studio: Set GOOGLE_API_KEY, GOOGLE_GENERATIVE_AI_API_KEY, GEMINI_API_KEY, or PALM_API_KEY environment variable\n' +
+          '2. Vertex AI: Set GOOGLE_CLOUD_PROJECT environment variable or provide projectId in config, and run "gcloud auth application-default login"',
+      };
+    }
+
+    const { toolsDisabled } = resolveGoogleToolConfig(config);
+    config.tools = await loadGoogleTools(promptConfig?.tools ?? this.config.tools, context?.vars, {
+      skipExecutableToolFiles: toolsDisabled,
+      abortSignal: options?.abortSignal,
+    });
+
     const projectId = isVertexMode
       ? this.config.projectId ||
         resolveProviderEnv(this.env, [
@@ -287,17 +319,7 @@ export class GeminiImageProvider implements ApiProvider {
       return this.callVertexApi(prompt, context, config);
     }
 
-    // Otherwise, try Google AI Studio with API key
-    if (aiStudioApiKey || this.config.apiKeyRequired === false) {
-      return this.callAIStudioApi(prompt, context, config);
-    }
-
-    return {
-      error:
-        'Gemini image models require either:\n' +
-        '1. Google AI Studio: Set GOOGLE_API_KEY, GOOGLE_GENERATIVE_AI_API_KEY, GEMINI_API_KEY, or PALM_API_KEY environment variable\n' +
-        '2. Vertex AI: Set GOOGLE_CLOUD_PROJECT environment variable or provide projectId in config, and run "gcloud auth application-default login"',
-    };
+    return this.callAIStudioApi(prompt, context, config);
   }
 
   private async callAIStudioApi(
@@ -544,7 +566,7 @@ export class GeminiImageProvider implements ApiProvider {
       body.toolConfig = toolConfig;
     }
 
-    const normalizedTools = Array.isArray(config.tools) ? normalizeTools(config.tools) : [];
+    const normalizedTools = Array.isArray(config.tools) ? config.tools : [];
     const requestTools = toolsDisabled
       ? removeGoogleFunctionDeclarations(normalizedTools)
       : normalizedTools;
@@ -653,21 +675,34 @@ export class GeminiImageProvider implements ApiProvider {
     }
 
     // Calculate token usage
-    const tokenUsage = cached
-      ? {
-          cached: data.usageMetadata?.totalTokenCount,
-          total: data.usageMetadata?.totalTokenCount,
-          numRequests: 1,
-        }
-      : {
-          prompt: data.usageMetadata?.promptTokenCount,
-          ...(data.usageMetadata?.cachedContentTokenCount !== undefined && {
-            cached: data.usageMetadata.cachedContentTokenCount,
-          }),
-          completion: data.usageMetadata?.candidatesTokenCount,
-          total: data.usageMetadata?.totalTokenCount,
-          numRequests: 1,
-        };
+    const tokenUsage = {
+      prompt:
+        data.usageMetadata?.promptTokenCount === undefined
+          ? undefined
+          : data.usageMetadata.promptTokenCount + (data.usageMetadata.toolUsePromptTokenCount ?? 0),
+      ...(data.usageMetadata?.cachedContentTokenCount !== undefined && {
+        cached: data.usageMetadata.cachedContentTokenCount,
+      }),
+      completion: data.usageMetadata?.candidatesTokenCount,
+      total: data.usageMetadata?.totalTokenCount,
+      numRequests: 1,
+      ...(data.usageMetadata?.thoughtsTokenCount !== undefined && {
+        completionDetails: {
+          reasoning: data.usageMetadata.thoughtsTokenCount,
+          acceptedPrediction: 0,
+          rejectedPrediction: 0,
+        },
+      }),
+    };
+    const guardrails = getGoogleGuardrails(
+      data.promptFeedback?.safetyRatings,
+      candidate.safetyRatings,
+    );
+    const thoughtSignatures = collectThoughtSignatures([data]);
+    const metadata = {
+      ...collectGroundingMetadata([data]),
+      ...(thoughtSignatures.length > 0 && { thoughtSignatures }),
+    };
 
     // Build structured images array (shared by image-only and text+image cases)
     const images: ImageOutput[] | undefined =
@@ -683,16 +718,22 @@ export class GeminiImageProvider implements ApiProvider {
     const output =
       imageParts.length > 0 && textParts.length === 0 ? images![0].data : textParts.join('\n\n');
 
-    return {
-      output,
-      images,
-      cached,
-      latencyMs,
-      // Cached responses were already paid for on the original request.
-      cost: cached || totalCost === 0 ? undefined : totalCost,
-      tokenUsage,
-      raw: data,
-    };
+    return withResponseCacheMetadata(
+      {
+        output,
+        images,
+        ...(this.modelName === 'gemini-nano-banana-2.1' && {
+          conversationOutput: mergeParts(undefined, formatCandidateContents(candidate)),
+        }),
+        latencyMs,
+        cost: totalCost === 0 ? undefined : totalCost,
+        tokenUsage,
+        raw: data,
+        ...(guardrails && { guardrails }),
+        metadata,
+      },
+      cached ?? false,
+    );
   }
 
   /**
@@ -751,7 +792,8 @@ export class GeminiImageProvider implements ApiProvider {
     if (!rates || !usageMetadata) {
       return 0;
     }
-    const promptTokens = usageMetadata.promptTokenCount ?? 0;
+    const promptTokens =
+      (usageMetadata.promptTokenCount ?? 0) + (usageMetadata.toolUsePromptTokenCount ?? 0);
     const textTokens = Array.isArray(usageMetadata.candidatesTokensDetails)
       ? usageMetadata.candidatesTokensDetails
           .filter((detail: any) => detail?.modality === 'TEXT')
