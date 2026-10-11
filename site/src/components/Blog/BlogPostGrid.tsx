@@ -7,36 +7,21 @@ import type { PropBlogPostContent } from '@docusaurus/plugin-content-blog';
 interface BlogPostGridProps {
   posts: PropBlogPostContent[];
   title?: string;
-  isPaginated?: boolean;
+  pageNumber?: number;
 }
 
 export default function BlogPostGrid({
   posts,
   title = 'Latest Posts',
-  isPaginated = false,
+  pageNumber,
 }: BlogPostGridProps): React.ReactElement {
-  // If it's a paginated page, split the title to style the page number separately
-  let mainTitle = title;
-  let pageNumber = null;
-
-  if (isPaginated) {
-    const titleParts = title.split('•');
-    mainTitle = titleParts[0].trim();
-
-    // Extract page number from the second part
-    if (titleParts.length > 1) {
-      const pageText = titleParts[1].trim();
-      const pageNum = pageText.replace('Page ', '');
-
-      pageNumber = <span className={styles.pageNumber}>{pageNum}</span>;
-    }
-  }
+  const isPaginated = pageNumber !== undefined;
 
   return (
     <div className={styles.blogPostGridContainer}>
       <h2 className={styles.blogPostGridTitle} data-is-paginated={isPaginated}>
-        {pageNumber ? `${mainTitle} ` : mainTitle}
-        {pageNumber}
+        {isPaginated ? `${title} ` : title}
+        {isPaginated && <span className={styles.pageNumber}>{pageNumber}</span>}
       </h2>
       <div className={styles.blogPostGrid}>
         {posts.map((post) => (

@@ -22,17 +22,12 @@ import { isInDenylist, MAX_BLOB_SIZE_BYTES, MAX_PATCH_SIZE_BYTES } from '../cons
 import { annotateDiffWithLineRanges } from './diffAnnotator';
 import { parseRawDiff } from './rawDiffParser';
 
-import type { FileRecord, LineRange } from '../../types/codeScan';
+import type { FileRecord } from '../../types/codeScan';
 
 interface NumstatEntry {
   linesAdded: number;
   linesRemoved: number;
 }
-
-type PatchResult =
-  | { success: true; patch: string; lineRanges: LineRange[] }
-  | { success: false; skipReason: 'patch too large' }
-  | { success: false; skipReason: 'diff error' };
 
 const PATCH_CONCURRENCY = 8;
 const TEXT_DETECTION_CONCURRENCY = 16;
@@ -185,22 +180,15 @@ function attachBlobSizesAndFilter(files: FileRecord[], sizeMap: Map<string, numb
     const afterSize = file.shaB ? sizeMap.get(file.shaB) : undefined;
 
     // Check if either side exceeds threshold
-    if (
+    const tooLarge =
       (beforeSize !== undefined && beforeSize > MAX_BLOB_SIZE_BYTES) ||
-      (afterSize !== undefined && afterSize > MAX_BLOB_SIZE_BYTES)
-    ) {
-      return {
-        ...file,
-        beforeSizeBytes: beforeSize,
-        afterSizeBytes: afterSize,
-        skipReason: 'too large',
-      };
-    }
+      (afterSize !== undefined && afterSize > MAX_BLOB_SIZE_BYTES);
 
     return {
       ...file,
       beforeSizeBytes: beforeSize,
       afterSizeBytes: afterSize,
+      ...(tooLarge && { skipReason: 'too large' }),
     };
   });
 }
@@ -212,12 +200,8 @@ async function isBlobText(repoPath: string, sha: string): Promise<boolean> {
       encoding: 'buffer',
     });
 
-    // Convert Uint8Array to Buffer and check if text
-    const buffer = Buffer.from(result.stdout);
-    const textCheck = isText(null, buffer);
-
     // isText can return boolean | null, treat null as false
-    return textCheck === true;
+    return isText(null, result.stdout) === true;
   } catch {
     return false;
   }
@@ -253,45 +237,19 @@ async function determineTextStatusForFile(repoPath: string, file: FileRecord): P
   // Step 1: Check against known text/binary extension lists
   const extensionType = getExtensionType(file.path);
 
-  if (extensionType === 'text') {
-    return {
-      ...file,
-      isText: true,
-    };
-  }
-
-  if (extensionType === 'binary') {
-    return {
-      ...file,
-      isText: false,
-      skipReason: 'binary',
-    };
-  }
+  let textStatus = extensionType === 'text';
 
   // Step 2: For unknown extensions, analyze blob content
-  const checkSha = file.shaB || file.shaA;
-  if (!checkSha) {
-    return {
-      ...file,
-      isText: false,
-      skipReason: 'binary',
-    };
+  if (extensionType === 'unknown') {
+    const checkSha = file.shaB || file.shaA;
+    textStatus = checkSha ? await isBlobText(repoPath, checkSha) : false;
   }
 
-  const textStatus = await isBlobText(repoPath, checkSha);
-
-  if (textStatus) {
-    return {
-      ...file,
-      isText: true,
-    };
-  } else {
-    return {
-      ...file,
-      isText: false,
-      skipReason: 'binary',
-    };
-  }
+  return {
+    ...file,
+    isText: textStatus,
+    ...(!textStatus && { skipReason: 'binary' }),
+  };
 }
 
 async function determineTextStatus(repoPath: string, files: FileRecord[]): Promise<FileRecord[]> {
@@ -304,8 +262,9 @@ async function generatePatchForFile(
   repoPath: string,
   base: string,
   compare: string,
-  filePath: string,
-): Promise<PatchResult> {
+  file: FileRecord,
+): Promise<FileRecord> {
+  const filePath = file.path;
   try {
     const result = await runCommand(
       'git',
@@ -330,13 +289,13 @@ async function generatePatchForFile(
     // Double check patch size
     const patchSize = Buffer.byteLength(patch, 'utf8');
     if (patchSize > MAX_PATCH_SIZE_BYTES) {
-      return { success: false, skipReason: 'patch too large' };
+      return { ...file, skipReason: 'patch too large' };
     }
 
     // Annotate the patch with line numbers and extract valid line ranges
     const { annotatedDiff, lineRanges } = annotateDiffWithLineRanges(patch);
 
-    return { success: true, patch: annotatedDiff, lineRanges };
+    return { ...file, patch: annotatedDiff, lineRanges };
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : String(err);
 
@@ -345,12 +304,12 @@ async function generatePatchForFile(
       logger.debug(
         `git diff --patch ${filePath} exceeded maxBuffer (${MAX_PATCH_SIZE_BYTES} bytes) - patch too large`,
       );
-      return { success: false, skipReason: 'patch too large' };
+      return { ...file, skipReason: 'patch too large' };
     }
 
     // Other git diff errors
     logger.debug(`git diff --patch ${filePath} failed: ${errorMessage} - skipping file`);
-    return { success: false, skipReason: 'diff error' };
+    return { ...file, skipReason: 'diff error' };
   }
 }
 
@@ -365,20 +324,7 @@ async function generatePatches(
       return file;
     }
 
-    const result = await generatePatchForFile(repoPath, base, compare, file.path);
-
-    if (!result.success) {
-      return {
-        ...file,
-        skipReason: result.skipReason,
-      };
-    }
-
-    return {
-      ...file,
-      patch: result.patch,
-      lineRanges: result.lineRanges,
-    };
+    return await generatePatchForFile(repoPath, base, compare, file);
   });
 }
 
@@ -398,9 +344,8 @@ export async function processDiff(
     // Step 2: Filter denylist (early exit)
     files = filterDenylist(files);
 
-    // Count remaining files
-    const remainingAfterDenylist = files.filter((f) => !f.skipReason).length;
-    if (remainingAfterDenylist === 0) {
+    // Check for remaining files
+    if (!files.some((file) => !file.skipReason)) {
       return files;
     }
 
@@ -408,31 +353,21 @@ export async function processDiff(
     const sizeMap = await collectBlobSizes(repoPath, files);
     files = attachBlobSizesAndFilter(files, sizeMap);
 
-    // Count remaining files
-    const remainingAfterSizeFilter = files.filter((f) => !f.skipReason).length;
-    if (remainingAfterSizeFilter === 0) {
+    // Check for remaining files
+    if (!files.some((file) => !file.skipReason)) {
       return files;
     }
 
     // Step 4: Determine text/binary status
     files = await determineTextStatus(repoPath, files);
 
-    // Count remaining files
-    const remainingAfterBinaryFilter = files.filter((f) => !f.skipReason).length;
-    if (remainingAfterBinaryFilter === 0) {
+    // Check for remaining files
+    if (!files.some((file) => !file.skipReason)) {
       return files;
     }
 
     // Step 5: Generate per-file patches
-    files = await generatePatches(repoPath, base, compare, files);
-
-    // Final count
-    const finalIncludedFiles = files.filter((f) => !f.skipReason && f.patch).length;
-    if (finalIncludedFiles === 0) {
-      return files;
-    }
-
-    return files;
+    return await generatePatches(repoPath, base, compare, files);
   } catch (error) {
     if (error instanceof DiffProcessorError) {
       throw error;
