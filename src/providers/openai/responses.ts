@@ -1391,8 +1391,8 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     }
 
     let data: OpenAIResponsesResponse;
-    let status: number;
-    let statusText: string;
+    let status = 0;
+    let statusText = 'Error';
     let cached = false;
     let deleteFromCache: (() => Promise<void>) | undefined;
     let updateCache:
@@ -1776,12 +1776,14 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       if (!pollingBackground) {
         await deleteFromCache?.();
       }
+      // A failed background poll must not reuse the creation response's status.
+      const foregroundStream = body.stream && !body.background;
       const result = {
         error: `API call error: ${String(err)}`,
         metadata: {
           http: {
-            status: 0,
-            statusText: 'Error',
+            status: foregroundStream ? status : 0,
+            statusText: foregroundStream ? statusText : 'Error',
             headers: responseHeaders ?? {},
           },
         },

@@ -12,6 +12,97 @@ import { getOpenAiMissingApiKeyMessage } from '../shared';
 
 describe('OpenAiResponsesProvider error handling', () => {
   it.each([
+    { event: 'response.in_progress', status: 'in_progress', usage: true },
+    { event: 'response.completed', status: 'in_progress', usage: true },
+    { event: 'response.in_progress', status: 'in_progress', usage: false },
+    { event: 'response.completed', status: 'completed', usage: true },
+  ])('retains foreground HTTP metadata for $event/$status (usage: $usage)', async (testCase) => {
+    class StrictStreamProvider extends OpenAiResponsesProvider {
+      protected requiresResponsesStreamTerminalEvent() {
+        return true;
+      }
+    }
+    const response = {
+      id: 'resp_stream',
+      status: testCase.status,
+      output: [
+        { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'READY' }] },
+      ],
+      ...(testCase.usage
+        ? { usage: { input_tokens: 100, output_tokens: 20, total_tokens: 120 } }
+        : {}),
+    };
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
+      ...createMockFetchResponse(
+        `data: ${JSON.stringify({ type: testCase.event, response })}\n\n`,
+        { status: 201, statusText: 'Created' },
+      ),
+      headers: { 'x-fixture-response': 'stream' },
+    });
+    const provider = new StrictStreamProvider('gpt-4.1', {
+      config: { apiKey: 'test-key', stream: true, inputCost: 0.01, outputCost: 0.02 },
+    });
+
+    const result = await provider.callApi('Test prompt');
+
+    expect(result.metadata?.http).toEqual({
+      status: 201,
+      statusText: 'Created',
+      headers: { 'x-fixture-response': 'stream' },
+    });
+    if (testCase.status === 'completed') {
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('READY');
+    } else {
+      expect(result.error).toContain('before a terminal response event');
+      expect(result.output).toBeUndefined();
+    }
+    if (testCase.usage) {
+      expect(result.tokenUsage).toMatchObject({ prompt: 100, completion: 20, total: 120 });
+      expect(result.cost).toBeCloseTo(1.4);
+    } else {
+      expect(result.tokenUsage).toBeUndefined();
+      expect(result.cost).toBeUndefined();
+    }
+  });
+
+  it('keeps foreground transport-error defaults before a response arrives', async () => {
+    vi.mocked(cache.fetchWithCache).mockRejectedValue(new Error('Transport fixture failed'));
+    const provider = new OpenAiResponsesProvider('gpt-4.1', {
+      config: { apiKey: 'test-key', stream: true },
+    });
+
+    const result = await provider.callApi('Test prompt');
+
+    expect(result.error).toContain('Transport fixture failed');
+    expect(result.metadata?.http).toEqual({ status: 0, statusText: 'Error', headers: {} });
+    expect(result.tokenUsage).toBeUndefined();
+    expect(result.cost).toBeUndefined();
+  });
+
+  it('does not reuse a creation status after a background poll transport failure', async () => {
+    vi.mocked(cache.fetchWithCache)
+      .mockResolvedValueOnce(
+        createMockFetchResponse(
+          { id: 'resp_poll_http_metadata', status: 'queued', output: [] },
+          { status: 201, statusText: 'Created' },
+        ),
+      )
+      .mockRejectedValueOnce(new Error('Poll fixture failed'));
+    const provider = new OpenAiResponsesProvider('gpt-4.1', {
+      config: { apiKey: 'test-key', background: true, maxRetries: 0 },
+    });
+
+    const result = await provider.callApi('Test prompt', { bustCache: true } as any);
+
+    expect(result.error).toContain('Poll fixture failed');
+    expect(result.metadata?.http).toMatchObject({ status: 0, statusText: 'Error' });
+    expect(cache.fetchWithCache).toHaveBeenCalledTimes(2);
+    expect(result.tokenUsage).toBeUndefined();
+    expect(result.cost).toBeUndefined();
+  });
+
+  it.each([
     { name: 'reported usage', tokens: 100, priced: true, cost: 1.4 },
     { name: 'zero usage', tokens: 0, priced: true, cost: 0 },
     { name: 'unknown model price', tokens: 100, priced: false, cost: undefined },
