@@ -426,6 +426,71 @@ describe('OpenAI Provider', () => {
       expect(result.guardrails).toEqual({ flagged: false });
     });
 
+    it.each([false, true])(
+      'preserves prepared HTTP metadata when stream parsing rejects: %s',
+      async (rejectStream) => {
+        class StreamFixtureProvider extends OpenAiChatCompletionProvider {
+          protected getChatResponseFormat() {
+            return 'text' as const;
+          }
+
+          protected parseChatResponse(data: string) {
+            if (rejectStream) {
+              throw new Error('Invalid stream fixture');
+            }
+            return JSON.parse(data);
+          }
+        }
+
+        const response = {
+          ...createMockFetchResponse(
+            JSON.stringify({
+              choices: [{ message: { content: 'READY' }, finish_reason: 'stop' }],
+              usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+            }),
+            { status: 201, statusText: 'Created' },
+          ),
+          headers: { 'x-fixture-response': 'prepared', 'cache-control': 'no-store' },
+        };
+        let fetchReturned = false;
+        mockFetchWithCache.mockImplementation(async (...args) => {
+          args[6]?.(response);
+          fetchReturned = true;
+          return response;
+        });
+
+        const provider = new StreamFixtureProvider('gpt-4o-mini');
+        const result = await provider.callApi('Test prompt');
+
+        expect(fetchReturned).toBe(!rejectStream);
+        expect(result.metadata?.http).toEqual({
+          status: 201,
+          statusText: 'Created',
+          headers: response.headers,
+        });
+        if (rejectStream) {
+          expect(result.error).toContain('Invalid stream fixture');
+          expect(result.output).toBeUndefined();
+        } else {
+          expect(result.error).toBeUndefined();
+          expect(result.output).toBe('READY');
+          expect(result.tokenUsage?.total).toBe(15);
+        }
+      },
+    );
+
+    it('keeps transport-error metadata when no HTTP response was received', async () => {
+      mockFetchWithCache.mockRejectedValue(new Error('Transport fixture failed'));
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+
+      const result = await provider.callApi('Test prompt');
+
+      expect(result.error).toContain('Transport fixture failed');
+      expect(result.output).toBeUndefined();
+      expect(result.tokenUsage).toBeUndefined();
+      expect(result.metadata?.http).toEqual({ status: 0, statusText: 'Error', headers: {} });
+    });
+
     it('should record GPT-5.6 cache writes in the chat span', async () => {
       const spanAttributes: Record<string, unknown> = {};
       const getTracerSpy = vi.spyOn(trace, 'getTracer').mockReturnValue({

@@ -874,8 +874,8 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     };
 
     let data: OpenAIChatCompletionResponse;
-    let status: number;
-    let statusText: string;
+    let status = 0;
+    let statusText = 'Error';
     let cached = false;
     let latencyMs: number | undefined;
     let deleteFromCache: (() => Promise<void>) | undefined;
@@ -956,6 +956,9 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           this.shouldBustCache(context),
           this.config.maxRetries,
           (response) => {
+            status = response.status;
+            statusText = response.statusText;
+            responseHeaders = response.headers;
             if (response.status >= 200 && response.status < 300) {
               if (response.headers && getOpenAiGatewayRateLimitKind(response.data) !== 'quota') {
                 callApiOptions?.onResponseHeaders?.(response.headers);
@@ -1126,8 +1129,8 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         ...this.getChatResponseErrorAccounting(err, config),
         metadata: {
           http: {
-            status: 0,
-            statusText: 'Error',
+            status,
+            statusText,
             headers: responseHeaders ?? {},
           },
         },
