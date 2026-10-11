@@ -154,7 +154,7 @@ providers:
 - `persistSession: true` - Keep the browser page open between `callApi()` invocations. Because this is a stateful workflow, Promptfoo runs it with concurrency `1`.
 - `runOnce: true` on steps - Execute only on the first turn (skip on subsequent turns). If the page closes or a turn fails, the next call starts a new session and reruns these steps.
 
-Promptfoo closes the pages, contexts, and launched browsers it owns when the eval ends. It leaves connected user-owned browsers and existing contexts open. When calling a provider directly, call `await provider.cleanup()` after the final turn.
+Promptfoo closes the pages, contexts, and launched browsers it owns when the eval ends. It disconnects its own client connection while leaving connected user-owned browsers and existing contexts open. When calling a provider directly, call `await provider.cleanup()` after the final turn.
 
 This is essential for testing multi-turn jailbreak strategies against chat interfaces where you need to maintain conversation context.
 
