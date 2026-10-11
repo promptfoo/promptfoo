@@ -182,7 +182,14 @@ export class BrowserProvider implements ApiProvider {
 
       const result = await this.executeSteps(session.page!, vars, isNewSession);
       if (!this.config.persistSession || result.error) {
-        await this.closeSession(session);
+        try {
+          await this.closeSession(session);
+        } catch (cleanupError) {
+          if (!result.error) {
+            throw cleanupError;
+          }
+          logger.warn('[Browser] Failed to close browser session', { error: cleanupError });
+        }
       }
       return result;
     } catch (error) {

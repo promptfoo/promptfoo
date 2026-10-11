@@ -1038,6 +1038,35 @@ describe('BrowserProvider lifecycle', () => {
     expect(mockPage.goto).toHaveBeenCalledOnce();
   });
 
+  it('preserves a transformed error response when connected context cleanup fails', async () => {
+    const { chromium } = await import('playwright-extra');
+    const context = await mockBrowser.newContext();
+    context.close.mockRejectedValueOnce(new Error('Browser closed during context cleanup'));
+    const connected = {
+      contexts: vi.fn(() => []),
+      newContext: vi.fn().mockResolvedValue(context),
+      close: vi.fn().mockResolvedValue(undefined),
+    };
+    vi.mocked(chromium.connect).mockResolvedValueOnce(connected as never);
+    const response = { error: 'Original target error', metadata: { target: 'evidence' } };
+    const provider = new BrowserProvider('test', {
+      config: {
+        persistSession: true,
+        connectOptions: { mode: 'websocket', wsEndpoint: 'ws://localhost:9222' },
+        steps: [],
+        transformResponse: () => response,
+      },
+    });
+    try {
+      expect(await provider.callApi('test')).toEqual(response);
+      expect(context.close).toHaveBeenCalled();
+      expect(connected.close).toHaveBeenCalled();
+    } finally {
+      await provider.cleanup();
+    }
+    expect(providerRegistry.has(provider)).toBe(false);
+  });
+
   it('includes a just-started call in immediate cleanup', async () => {
     const { chromium } = await import('playwright-extra');
     const provider = new BrowserProvider('test', { config: { persistSession: true, steps: [] } });
