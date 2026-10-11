@@ -792,8 +792,8 @@ export class GeminiImageProvider implements ApiProvider {
     if (!rates || !usageMetadata) {
       return 0;
     }
-    const promptTokens =
-      (usageMetadata.promptTokenCount ?? 0) + (usageMetadata.toolUsePromptTokenCount ?? 0);
+    // Retrieved Google Search context is reported in usage, but is not billed as input.
+    const promptTokens = usageMetadata.promptTokenCount ?? 0;
     const textTokens = Array.isArray(usageMetadata.candidatesTokensDetails)
       ? usageMetadata.candidatesTokensDetails
           .filter((detail: any) => detail?.modality === 'TEXT')

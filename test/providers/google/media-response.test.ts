@@ -95,7 +95,7 @@ describe('Nano Banana response contracts', () => {
         completion: 1120,
         completionDetails: { reasoning: 7 },
       });
-      expect(result.cost).toBeCloseTo(0.033675, 12);
+      expect(result.cost).toBeCloseTo(0.0336675, 12);
       expect(
         handleCost({
           cost: result.cost,
@@ -112,6 +112,48 @@ describe('Nano Banana response contracts', () => {
     expect(fresh.tokenUsage?.numRequests).toBe(1);
     expect(data).toEqual(original);
   });
+
+  it.each(
+    [
+      { model: 'gemini-3.1-flash-image', cost: 0.06705, threshold: 0.068 },
+      { model: 'gemini-nano-banana-2.1', cost: 0.03375, threshold: 0.034 },
+    ].flatMap((entry) => [false, true].map((vertexai) => ({ ...entry, vertexai }))),
+  )(
+    'excludes Search context from $model input charges (Vertex: $vertexai)',
+    async ({ model, cost, threshold, vertexai }) => {
+      const grounded = {
+        ...data,
+        usageMetadata: {
+          promptTokenCount: 100,
+          toolUsePromptTokenCount: 5000,
+          candidatesTokenCount: 1120,
+          totalTokenCount: 6220,
+        },
+      };
+      vi.mocked(fetchWithCache)
+        .mockResolvedValueOnce(createMockFetchResponse(grounded))
+        .mockResolvedValueOnce(createMockFetchResponse(grounded, { cached: true }));
+      const provider = await loadApiProvider(`google:${model}`, {
+        options: { config: { apiKey: 'key', vertexai, tools: [{ googleSearch: {} }] } },
+      });
+      const fresh = await provider.callApi('Draw with Google Search');
+      const cached = await provider.callApi('Draw with Google Search');
+      for (const result of [fresh, cached]) {
+        expect(result.error).toBeUndefined();
+        expect(result.tokenUsage?.prompt).toBe(5100);
+        expect(result.cost).toBeCloseTo(cost, 12);
+        expect(
+          handleCost({
+            cost: result.cost,
+            assertion: { type: 'cost', threshold },
+            inverse: false,
+          } as AssertionParams).pass,
+        ).toBe(true);
+      }
+      expect(fresh.tokenUsage?.numRequests).toBe(1);
+      expect(cached.tokenUsage?.numRequests).toBe(0);
+    },
+  );
 
   it('keeps unknown cached token counts unknown', async () => {
     vi.mocked(fetchWithCache).mockResolvedValue(
