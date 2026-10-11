@@ -872,7 +872,7 @@ describe('BrowserProvider lifecycle', () => {
     expect(providerRegistry.has(provider)).toBe(false);
   });
 
-  it('does not execute a call cancelled while waiting for manual cleanup', async () => {
+  it('rejects a cancelled call before manual cleanup finishes', async () => {
     const provider = new BrowserProvider('test', { config: { persistSession: true, steps: [] } });
     expect((await provider.callApi('seed')).error).toBeUndefined();
     const closing = createDeferred<void>();
@@ -881,14 +881,31 @@ describe('BrowserProvider lifecycle', () => {
       await closing.promise;
       await originalClose();
     });
-    const cleanup = provider.cleanup();
+    let cleanupFinished = false;
+    const cleanup = provider.cleanup().then(() => {
+      cleanupFinished = true;
+    });
     const controller = new AbortController();
     const reason = new Error('Cancelled while cleanup was pending');
     const pending = provider.callApi('cancelled', undefined, { abortSignal: controller.signal });
-    const rejected = expect(pending).rejects.toBe(reason);
-    controller.abort(reason);
-    closing.resolve();
-    await Promise.all([cleanup, rejected]);
+    const rejected = vi.fn();
+    void pending.catch(rejected);
+    try {
+      controller.abort(reason);
+      await vi.waitFor(() =>
+        expect(rejected).toHaveBeenCalledWith(
+          expect.objectContaining({ name: 'AbortError', message: reason.message, cause: reason }),
+        ),
+      );
+      expect(cleanupFinished).toBe(false);
+      expect(mockPage.isClosed()).toBe(false);
+      expect(mockBrowser.newContext).toHaveBeenCalledOnce();
+    } finally {
+      closing.resolve();
+      await Promise.allSettled([cleanup, pending]);
+      await provider.cleanup();
+    }
+    expect(cleanupFinished).toBe(true);
     expect(mockBrowser.newContext).toHaveBeenCalledOnce();
     expect(providerRegistry.has(provider)).toBe(false);
   });

@@ -9,6 +9,7 @@ import { safeJsonStringify } from '../util/json';
 import { getNunjucksEngine } from '../util/templates';
 import { CHROMIUM_INSTALL_HINT, loadBrowserProviderDependencies } from './browserDependencies';
 import { providerRegistry } from './providerRegistry';
+import { waitForPromiseWithAbort } from './shared';
 import { normalizeResponseTransformResult } from './transformResult';
 import type { Browser, BrowserContext, ElementHandle, Page } from 'playwright';
 
@@ -146,7 +147,7 @@ export class BrowserProvider implements ApiProvider {
     signal?: AbortSignal,
   ): Promise<ProviderResponse> {
     if (this.cleanupPromise) {
-      await this.cleanupPromise;
+      await waitForPromiseWithAbort(this.cleanupPromise, signal);
     }
     providerRegistry.throwIfResourceUseAborted(signal);
     const generation = this.cleanupGeneration;
