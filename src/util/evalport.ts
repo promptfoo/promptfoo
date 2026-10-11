@@ -268,6 +268,62 @@ function serializableAssertionValue(value: unknown): unknown {
   }
 }
 
+/** Derives the grader model from string, `{ id }`, or `ApiProvider` assertion providers. */
+function assertionProviderModel(provider: Assertion['provider']): string | undefined {
+  if (typeof provider === 'string') {
+    return provider;
+  }
+  if (isPlainRecord(provider) && typeof provider.id === 'string') {
+    return provider.id;
+  }
+  const idFn = (provider as { id?: unknown } | undefined)?.id;
+  if (typeof idFn === 'function') {
+    try {
+      const id = (idFn as () => unknown).call(provider);
+      return typeof id === 'string' ? id : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Persists the complete original assertion on a grader (not just `custom`)
+ * so the import path restores values losslessly instead of re-deriving them
+ * from native params. Function transforms cannot survive serialization, so
+ * only string transforms are retained.
+ */
+function buildStoredAssertion(
+  assertion: Assertion,
+  promptfooMeta: Record<string, unknown>,
+): Record<string, unknown> {
+  const stored: Record<string, unknown> = { ...promptfooMeta };
+  const storedValue = serializableAssertionValue(assertion.value);
+  if (storedValue !== undefined) {
+    stored.value = storedValue;
+  }
+  if (assertion.config !== undefined && isPlainRecord(assertion.config)) {
+    stored.config = assertion.config;
+  }
+  if (typeof assertion.provider === 'string' || isPlainRecord(assertion.provider)) {
+    stored.provider = assertion.provider;
+  }
+  if (typeof assertion.transform === 'string') {
+    stored.transform = assertion.transform;
+  }
+  if (typeof assertion.contextTransform === 'string') {
+    stored.contextTransform = assertion.contextTransform;
+  }
+  if (
+    typeof assertion.normalizeUnicode === 'string' ||
+    typeof assertion.normalizeUnicode === 'boolean'
+  ) {
+    stored.normalizeUnicode = assertion.normalizeUnicode;
+  }
+  return stored;
+}
+
 /**
  * Maps a single promptfoo assertion to an EvalPort grader definition.
  * `assert-set` entries must be expanded by the caller (see `flattenAssertions`).
@@ -284,17 +340,7 @@ export function assertionToEvalPortGrader(assertion: Assertion, id: string): Eva
     ...(assertion.threshold !== undefined && { threshold: assertion.threshold }),
     ...(assertion.weight !== undefined && { weight: assertion.weight }),
   };
-  // Persist the complete original assertion on every grader (not just
-  // `custom`) so the import path restores values losslessly instead of
-  // re-deriving them from native params.
-  const storedValue = serializableAssertionValue(assertion.value);
-  const storedAssertion: Record<string, unknown> = {
-    ...promptfooMeta,
-    ...(storedValue === undefined ? {} : { value: storedValue }),
-    ...(assertion.config !== undefined && isPlainRecord(assertion.config)
-      ? { config: assertion.config }
-      : {}),
-  };
+  const storedAssertion = buildStoredAssertion(assertion, promptfooMeta);
 
   if (EXACT_MATCH_TYPES.has(base)) {
     return {
@@ -344,8 +390,7 @@ export function assertionToEvalPortGrader(assertion: Assertion, id: string): Eva
     };
   }
   if (LLM_JUDGE_TYPES.has(base)) {
-    const providerModel =
-      typeof assertion.provider === 'string' ? assertion.provider : 'promptfoo-default';
+    const providerModel = assertionProviderModel(assertion.provider) ?? 'promptfoo-default';
     const rubric =
       typeof assertion.rubricPrompt === 'string' && assertion.rubricPrompt !== ''
         ? assertion.rubricPrompt
@@ -503,6 +548,10 @@ function convertTestToEvalPortTestCase(
     ...(context !== undefined && { context }),
     metadata: {
       promptfoo: {
+        // Source-test position: the evaluator expands vars-arrays and repeats
+        // into additional rows, so consumers can join expanded result rows
+        // back to the configured test that produced them.
+        testIndex: index,
         ...(varsRecord !== undefined && { vars: varsRecord }),
         ...(test.description !== undefined && { description: test.description }),
         ...(test.threshold !== undefined && { threshold: test.threshold }),
@@ -570,6 +619,10 @@ function graderToPromptfooAssertion(
       : undefined;
     const storedValue = params?.value;
     const storedConfig = params?.config;
+    const storedProvider = params?.provider;
+    const storedTransform = params?.transform;
+    const storedContextTransform = params?.contextTransform;
+    const storedNormalizeUnicode = params?.normalizeUnicode;
     return {
       type: promptfooMeta.assertionType as Assertion['type'],
       ...(storedValue !== undefined && storedValue !== '[function]'
@@ -577,6 +630,17 @@ function graderToPromptfooAssertion(
         : {}),
       ...(storedConfig !== undefined && isPlainRecord(storedConfig)
         ? { config: storedConfig as Assertion['config'] }
+        : {}),
+      ...(storedProvider !== undefined &&
+      (typeof storedProvider === 'string' || isPlainRecord(storedProvider))
+        ? { provider: storedProvider as Assertion['provider'] }
+        : {}),
+      ...(typeof storedTransform === 'string' ? { transform: storedTransform } : {}),
+      ...(typeof storedContextTransform === 'string'
+        ? { contextTransform: storedContextTransform }
+        : {}),
+      ...(typeof storedNormalizeUnicode === 'string' || typeof storedNormalizeUnicode === 'boolean'
+        ? { normalizeUnicode: storedNormalizeUnicode as Assertion['normalizeUnicode'] }
         : {}),
       ...(typeof promptfooMeta.threshold === 'number' && { threshold: promptfooMeta.threshold }),
       ...(typeof promptfooMeta.metric === 'string' && { metric: promptfooMeta.metric }),
@@ -637,6 +701,32 @@ function foreignGraderToAssertion(
  * Framework-native graders without a promptfoo equivalent are preserved under
  * `metadata.promptfoo.evalportGraders` rather than fabricated.
  */
+function resolveImportedVars(
+  testCase: EvalPortTestCase,
+  promptfooMeta: Record<string, unknown> | undefined,
+): TestCase['vars'] {
+  if (promptfooMeta !== undefined && isPlainRecord(promptfooMeta.vars)) {
+    return promptfooMeta.vars as TestCase['vars'];
+  }
+  const vars: Record<string, unknown> = {
+    input: typeof testCase.input === 'string' ? testCase.input : JSON.stringify(testCase.input),
+  };
+  // Carry foreign retrieval passages into vars, symmetrically with the
+  // exporter's vars-to-context mapping.
+  if (
+    Array.isArray(testCase.context) &&
+    testCase.context.every((entry) => typeof entry === 'string')
+  ) {
+    vars.context = testCase.context;
+  }
+  return vars as TestCase['vars'];
+}
+
+/**
+ * Converts an EvalPort suite to promptfoo test cases runnable via `eval`.
+ * Framework-native graders without a promptfoo equivalent are preserved under
+ * `metadata.promptfoo.evalportGraders` rather than fabricated.
+ */
 export function evalPortSuiteToPromptfooTests(suite: EvalPortSuite): TestCase[] {
   const gradersById = new Map<string, EvalPortGrader>();
   for (const grader of suite.graders ?? []) {
@@ -648,13 +738,7 @@ export function evalPortSuiteToPromptfooTests(suite: EvalPortSuite): TestCase[] 
     const promptfooMeta = isPlainRecord(testCase.metadata?.promptfoo)
       ? (testCase.metadata.promptfoo as Record<string, unknown>)
       : undefined;
-    const vars =
-      promptfooMeta !== undefined && isPlainRecord(promptfooMeta.vars)
-        ? (promptfooMeta.vars as TestCase['vars'])
-        : {
-            input:
-              typeof testCase.input === 'string' ? testCase.input : JSON.stringify(testCase.input),
-          };
+    const vars = resolveImportedVars(testCase, promptfooMeta);
     const assertions: Assertion[] = [];
     const unmapped: unknown[] = [];
     for (const ref of testCase.graders ?? []) {
@@ -842,6 +926,10 @@ export function evaluateResultsToEvalPortResultSet(
           testIdx: result.testIdx,
           providerId: result.provider?.id,
           ...(result.provider?.label !== undefined && { providerLabel: result.provider.label }),
+          // Original aggregate score and named metrics, so the import path
+          // restores promptfoo artifacts exactly instead of re-deriving them
+          // from grader IDs (which may be suite-joined or renamed).
+          score: result.score,
           namedScores: result.namedScores ?? {},
           failureReason: result.failureReason,
           ...(result.cost !== undefined && { cost: result.cost }),
@@ -907,28 +995,63 @@ export function evaluateResultsToEvalPortResultSet(
 
 /** Converts a full exported eval summary (`EvaluateSummaryV3`/`V2`) to an EvalPort result set. */
 export function evaluateSummaryToEvalPortResultSet(
-  summary: EvaluateSummaryV3 | EvaluateSummaryV2,
+  summary:
+    | EvaluateSummaryV3
+    | EvaluateSummaryV2
+    | { results: EvaluateSummaryV3 | EvaluateSummaryV2 },
   options: ToEvalPortResultSetOptions,
 ): EvalPortResultSet {
-  return evaluateResultsToEvalPortResultSet(summary.results, {
+  // CLI `--output` files nest the summary under `.results` (OutputFile);
+  // a bare summary already carries the results array itself.
+  const inner = Array.isArray((summary as { results?: unknown }).results)
+    ? (summary as EvaluateSummaryV3 | EvaluateSummaryV2)
+    : (summary as { results: EvaluateSummaryV3 | EvaluateSummaryV2 }).results;
+  return evaluateResultsToEvalPortResultSet(inner.results, {
     ...options,
-    startedAt: options.startedAt ?? summary.timestamp,
+    startedAt: options.startedAt ?? inner.timestamp,
   });
 }
 
 /**
- * Restores the exporter-recorded row identity when present; the array
- * position and defaults below are only fallbacks for foreign data.
+ * Restores the exporter-recorded row context when present; computed values
+ * and foreign-data defaults below are only fallbacks.
  */
-function resolveImportedRowIdentity(
+function resolveImportedRowContext(
   result: EvalPortResult,
   index: number,
   resultSet: EvalPortResultSet,
-  options?: FromEvalPortResultSetOptions,
-): { promptIdx: number; testIdx: number; providerId: string } {
+  options: FromEvalPortResultSetOptions | undefined,
+  fallbackScore: number,
+): {
+  promptIdx: number;
+  testIdx: number;
+  providerId: string;
+  namedScores: Record<string, number>;
+  score: number;
+} {
   const storedMeta = isPlainRecord(result.metadata?.promptfoo)
     ? (result.metadata.promptfoo as Record<string, unknown>)
     : undefined;
+  const storedScores = isPlainRecord(storedMeta?.namedScores)
+    ? (storedMeta.namedScores as Record<string, unknown>)
+    : undefined;
+  const namedScores: Record<string, number> = {};
+  if (storedScores === undefined) {
+    // Foreign data: derive names from grader IDs.
+    for (const graderResult of result.grader_results) {
+      if (typeof graderResult.score === 'number') {
+        namedScores[graderResult.grader_id] = graderResult.score;
+      }
+    }
+  } else {
+    // Promptfoo artifact: keep the original metric names.
+    for (const [name, value] of Object.entries(storedScores)) {
+      if (typeof value === 'number') {
+        namedScores[name] = value;
+      }
+    }
+  }
+  const storedScore = storedMeta?.score;
   return {
     promptIdx: typeof storedMeta?.promptIdx === 'number' ? storedMeta.promptIdx : 0,
     testIdx: typeof storedMeta?.testIdx === 'number' ? storedMeta.testIdx : index,
@@ -936,6 +1059,9 @@ function resolveImportedRowIdentity(
       options?.providerId ??
       (typeof storedMeta?.providerId === 'string' ? storedMeta.providerId : undefined) ??
       (typeof resultSet.provider?.model === 'string' ? resultSet.provider.model : 'evalport'),
+    namedScores,
+    score:
+      typeof storedScore === 'number' && Number.isFinite(storedScore) ? storedScore : fallbackScore,
   };
 }
 
@@ -959,25 +1085,20 @@ export function evalPortResultSetToEvaluateResults(
     const numericScores = result.grader_results
       .map((graderResult) => graderResult.score)
       .filter((score): score is number => typeof score === 'number');
-    const score =
+    const meanScore =
       numericScores.length > 0
         ? numericScores.reduce((sum, s) => sum + s, 0) / numericScores.length
         : result.passed
           ? 1
           : 0;
-    const namedScores: Record<string, number> = {};
-    for (const graderResult of result.grader_results) {
-      if (typeof graderResult.score === 'number') {
-        namedScores[graderResult.grader_id] = graderResult.score;
-      }
-    }
-    // Restore the exporter-recorded row identity when present; the array
-    // position and defaults below are only fallbacks for foreign data.
-    const { promptIdx, testIdx, providerId } = resolveImportedRowIdentity(
+    // Restore the exporter-recorded row context when present; computed
+    // values and foreign-data defaults are only fallbacks.
+    const { promptIdx, testIdx, providerId, namedScores, score } = resolveImportedRowContext(
       result,
       index,
       resultSet,
       options,
+      meanScore,
     );
     return {
       promptIdx,

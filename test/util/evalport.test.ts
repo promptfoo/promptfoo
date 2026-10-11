@@ -958,6 +958,204 @@ describe('evalport interchange', () => {
     });
   });
 
+  describe('second-round review findings', () => {
+    it('accepts CLI output files with the summary nested under results', () => {
+      const summary: EvaluateSummaryV3 = {
+        version: 3,
+        timestamp: '2026-01-15T10:30:00.000Z',
+        results: [makeResult(), makeResult({ testIdx: 1, success: false, score: 0 })],
+        prompts: [],
+        stats: { successes: 1, failures: 1, errors: 0, tokenUsage: {} as never },
+      };
+      const fromWrapper = evaluateSummaryToEvalPortResultSet(
+        { results: summary },
+        {
+          suiteId: 's',
+          runId: 'run-1',
+        },
+      );
+      expect(fromWrapper.started_at).toBe('2026-01-15T10:30:00.000Z');
+      expect(fromWrapper.summary).toMatchObject({ total: 2, passed: 1, failed: 1 });
+      expect(validateEvalPortResultSet(fromWrapper).valid).toBe(true);
+    });
+
+    it('records the source test index on suite cases', () => {
+      const suite = promptfooTestsToEvalPortSuite(
+        [
+          { vars: { q: 'a' }, assert: [{ type: 'equals', value: 'x' }] },
+          { vars: { q: 'b' }, assert: [{ type: 'equals', value: 'y' }] },
+        ],
+        { suiteId: 's' },
+      );
+      expect(suite.test_cases[0]?.metadata).toMatchObject({ promptfoo: { testIndex: 0 } });
+      expect(suite.test_cases[1]?.metadata).toMatchObject({ promptfoo: { testIndex: 1 } });
+    });
+
+    it('derives llm-judge models from structured assertion providers', () => {
+      const models = [
+        [{ type: 'llm-rubric', value: 'Rate {output}' }, 'promptfoo-default'],
+        [
+          { type: 'llm-rubric', value: 'Rate {output}', provider: { id: 'openai:gpt-4o' } },
+          'openai:gpt-4o',
+        ],
+        [
+          { type: 'llm-rubric', value: 'Rate {output}', provider: { id: () => 'api:model' } },
+          'api:model',
+        ],
+        [
+          {
+            type: 'llm-rubric',
+            value: 'Rate {output}',
+            provider: {
+              id: () => {
+                throw new Error('no id');
+              },
+            },
+          },
+          'promptfoo-default',
+        ],
+        [
+          { type: 'llm-rubric', value: 'Rate {output}', provider: { id: () => 42 } },
+          'promptfoo-default',
+        ],
+        [{ type: 'llm-rubric', value: 'Rate {output}', provider: 42 }, 'promptfoo-default'],
+      ] as Array<[never, string]>;
+      for (const [assertion, expected] of models) {
+        expect(assertionToEvalPortGrader(assertion, 'gr_1').params?.model).toBe(expected);
+      }
+    });
+
+    it('round-trips structured providers and execution fields', () => {
+      const tests: TestCase[] = [
+        {
+          vars: { q: 'a' },
+          assert: [
+            {
+              type: 'llm-rubric',
+              value: 'Rate {output}',
+              provider: { id: 'openai:gpt-4o', config: { temperature: 0 } },
+              transform: 'output.trim()',
+              contextTransform: 'output.slice(0, 10)',
+              normalizeUnicode: 'NFC',
+            } as never,
+            {
+              type: 'equals',
+              value: 'x',
+              normalizeUnicode: true,
+              transform: (() => true) as never,
+            },
+          ],
+        },
+      ];
+      const suite = promptfooTestsToEvalPortSuite(tests, { suiteId: 's' });
+      expect(suite.graders[0]?.params).toMatchObject({ model: 'openai:gpt-4o' });
+      const restored = evalPortSuiteToPromptfooTests(suite);
+      expect(restored[0]?.assert?.[0]).toMatchObject({
+        type: 'llm-rubric',
+        value: 'Rate {output}',
+        provider: { id: 'openai:gpt-4o', config: { temperature: 0 } },
+        transform: 'output.trim()',
+        contextTransform: 'output.slice(0, 10)',
+        normalizeUnicode: 'NFC',
+      });
+      // Function transforms cannot survive serialization, so they are dropped.
+      expect(restored[0]?.assert?.[1]).toEqual({
+        type: 'equals',
+        value: 'x',
+        normalizeUnicode: true,
+      });
+    });
+
+    it('restores exported named metrics instead of inventing grader-id names', () => {
+      const resultSet = evaluateResultsToEvalPortResultSet(
+        [makeResult({ namedScores: { accuracy: 0.75 } })],
+        { suiteId: 's', runId: 'run-1' },
+      );
+      const [row] = evalPortResultSetToEvaluateResults(resultSet);
+      expect(row?.namedScores).toEqual({ accuracy: 0.75 });
+      expect(row?.gradingResult?.namedScores).toEqual({ accuracy: 0.75 });
+    });
+
+    it('filters non-numeric stored metrics and restores stored aggregates', () => {
+      const exported = evaluateResultsToEvalPortResultSet([makeResult()], {
+        suiteId: 's',
+        runId: 'run-1',
+      });
+      const stored = exported.results[0]?.metadata as {
+        promptfoo: Record<string, unknown>;
+      };
+      const doctored: EvalPortResultSet = {
+        ...exported,
+        results: [
+          {
+            ...exported.results[0]!,
+            grader_results: [
+              { grader_id: 'gr_1', type: 'exact_match', score: 1, passed: true },
+              { grader_id: 'gr_2', type: 'contains', score: 0, passed: false },
+            ],
+            metadata: {
+              promptfoo: {
+                ...stored.promptfoo,
+                score: 0.75,
+                namedScores: { accuracy: 1, junk: 'x' },
+              },
+            },
+          },
+        ],
+      };
+      const [row] = evalPortResultSetToEvaluateResults(doctored);
+      // Weighted aggregate 0.75 survives instead of the unweighted mean 0.5.
+      expect(row?.score).toBe(0.75);
+      expect(row?.gradingResult?.score).toBe(0.75);
+      expect(row?.namedScores).toEqual({ accuracy: 1 });
+    });
+
+    it('falls back to the mean when no finite stored score exists', () => {
+      const nanScore: EvalPortResultSet = {
+        version: '1.0.0',
+        suite_id: 's',
+        run_id: 'r',
+        started_at: '2026-01-01T00:00:00.000Z',
+        results: [
+          {
+            test_case_id: 'tc_1',
+            grader_results: [
+              { grader_id: 'gr_1', type: 'exact_match', score: 1, passed: true },
+              { grader_id: 'gr_2', type: 'contains', score: 0, passed: false },
+            ],
+            passed: false,
+            metadata: { promptfoo: { score: Number.NaN } },
+          },
+        ],
+      };
+      const [nanRow] = evalPortResultSetToEvaluateResults(nanScore);
+      expect(nanRow?.score).toBe(0.5);
+
+      const foreign: EvalPortResultSet = {
+        ...nanScore,
+        results: [{ ...nanScore.results[0]!, metadata: undefined }],
+      };
+      const [foreignRow] = evalPortResultSetToEvaluateResults(foreign);
+      expect(foreignRow?.score).toBe(0.5);
+      expect(foreignRow?.namedScores).toEqual({ gr_1: 1, gr_2: 0 });
+    });
+
+    it('carries foreign context into vars', () => {
+      const suite: EvalPortSuite = {
+        version: '1.0.0',
+        id: 'foreign',
+        test_cases: [
+          { id: 'tc_1', input: 'question?', context: ['passage one'], graders: [] },
+          { id: 'tc_2', input: 'other?', context: [42] as never, graders: [] },
+        ],
+        graders: [],
+      };
+      const restored = evalPortSuiteToPromptfooTests(suite);
+      expect(restored[0]?.vars).toEqual({ input: 'question?', context: ['passage one'] });
+      expect(restored[1]?.vars).toEqual({ input: 'other?' });
+    });
+  });
+
   describe('validator edge cases', () => {
     it('rejects malformed suites', () => {
       expect(validateEvalPortSuite(null).valid).toBe(false);
