@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
@@ -39,24 +40,46 @@ let scoring: {
     statusMatches: number;
     cases: Array<{ silenceHallucination?: boolean }>;
     perDefect: Record<string, { falseNegative: number; unknown: number; truePositive: number }>;
+    signal: { calibrationPassed: boolean; cases: Array<{ state: string; findings: string[] }> };
+    signalWithoutReference: { cases: Array<{ state: string }> };
+    combined: { cases: Array<{ state: string }> };
   };
 };
 let calibration: {
   generateCalibration: (options: {
     source: string;
+    profile?: string;
     pauseSource: string;
     out: string;
   }) => Promise<{ directory: string; cases: number; labelsSha256: string }>;
   createControls: (
     samples: Int16Array,
     rate: number,
+    options?: { profile: string },
   ) => Array<{ kind: string; samples: Int16Array; expected: string }>;
+};
+type SignalReport = {
+  state: string;
+  referenceUsed: boolean;
+  findings: Array<{ type: string; evidence: string; start_seconds: number; end_seconds: number }>;
+  observations: Array<{ type: string }>;
+};
+let signal: {
+  analyzeAudioSignal: (
+    audio: { sampleRate: number; channels: number; samples: Int16Array },
+    reference?: { sampleRate: number; channels: number; samples: Int16Array },
+  ) => SignalReport;
+  default: (
+    output: unknown,
+    context: { vars: Record<string, unknown> },
+  ) => { pass: boolean; reason: string };
 };
 beforeAll(async () => {
   utils = await import(pathToFileURL(path.join(examplePath, 'audio-utils.js')).href);
   validate = (await import(pathToFileURL(path.join(examplePath, 'validate-audio-review.js')).href))
     .default;
   calibration = await import(pathToFileURL(path.join(examplePath, 'calibrate-audio.js')).href);
+  signal = await import(pathToFileURL(path.join(examplePath, 'grade-audio-signal.js')).href);
   scoring = await import(pathToFileURL(path.join(examplePath, 'score-audio-calibration.js')).href);
 });
 
@@ -280,7 +303,13 @@ describe('blinded acoustic control construction', () => {
     const tests = JSON.parse(readFileSync(path.join(out, 'audio-review-tests.json'), 'utf8'));
     for (const test of tests) {
       expect(Object.keys(test).sort()).toEqual(['description', 'vars']);
-      expect(Object.keys(test.vars).sort()).toEqual(['audio_file', 'audio_id', 'audio_view']);
+      expect(Object.keys(test.vars).sort()).toEqual([
+        'audio_file',
+        'audio_id',
+        'audio_reference',
+        'audio_reference_sha256',
+        'audio_view',
+      ]);
       expect(test.description).toBe(test.vars.audio_id);
       expect(test.vars.audio_id).toMatch(/^[0-9a-f-]{36}$/);
       const control = labels.cases.find((item: { id: string }) => item.id === test.vars.audio_id);
@@ -343,6 +372,8 @@ describe('frozen audio calibration scoring', () => {
     });
     const labels = {
       version: 1,
+      source: { sha256: createHash('sha256').update(audio).digest('hex') },
+      pauseSource: { sha256: createHash('sha256').update(audio).digest('hex') },
       cases: [
         {
           id: 'opaque',
@@ -354,7 +385,13 @@ describe('frozen audio calibration scoring', () => {
       ],
     };
     const row = {
-      testCase: { vars: { audio_id: 'opaque' } },
+      testCase: {
+        vars: {
+          audio_id: 'opaque',
+          audio_reference: audio.toString('base64'),
+          audio_reference_sha256: labels.source.sha256,
+        },
+      },
       prompt: {
         raw: JSON.stringify([
           {
@@ -372,6 +409,147 @@ describe('frozen audio calibration scoring', () => {
     };
     return { labels, row };
   }
+  it('keeps signal detections separate from model misses and preserves provider errors in combined results', () => {
+    const { labels, row } = fixture(
+      Int16Array.from({ length: 24000 }, (_, index) => (index % 2 ? -32768 : 32767)),
+    );
+    labels.cases[0] = {
+      ...labels.cases[0],
+      kind: 'severe_clipping',
+      requirement: 'severe_control',
+      expected: 'review_required',
+    };
+    const missed = scoring.scoreCalibration(labels, { results: { results: [row] } });
+    expect(missed.cases[0]).toMatchObject({
+      state: 'no_issue_flagged',
+      expectedDefectDetected: false,
+    });
+    expect(missed.signal.cases[0]).toMatchObject({
+      state: 'review_required',
+      findings: ['distortion'],
+    });
+    expect(missed.combined.cases[0].state).toBe('review_required');
+    const errored = scoring.scoreCalibration(labels, {
+      results: { results: [{ ...row, response: { error: 'model unavailable' } }] },
+    });
+    expect(errored.signal.cases[0].state).toBe('review_required');
+    expect(errored.combined.cases[0].state).toBe('error');
+  });
+  it('requires the frozen clean reference and rejects substituted or missing reference pairs', () => {
+    const source = utils.writePcm16Wav({
+      sampleRate: 24000,
+      channels: 1,
+      samples: new Int16Array(48000).fill(2000),
+    });
+    const { labels, row } = fixture(new Int16Array(24000).fill(2000));
+    labels.source.sha256 = createHash('sha256').update(source).digest('hex');
+    labels.cases[0] = {
+      ...labels.cases[0],
+      kind: 'truncation',
+      expected: 'review_required',
+      requirement: 'severe_control',
+    };
+    const originalVars = { ...row.testCase.vars };
+    row.testCase.vars.audio_reference = source.toString('base64');
+    row.testCase.vars.audio_reference_sha256 = labels.source.sha256;
+    const correct = scoring.scoreCalibration(labels, { results: { results: [row] } });
+    expect(correct.signal.cases[0]).toMatchObject({
+      state: 'review_required',
+      findings: ['cutoff'],
+      referenceHashVerified: true,
+      referenceSha256: labels.source.sha256,
+    });
+    for (const vars of [
+      originalVars,
+      { ...row.testCase.vars, audio_reference: originalVars.audio_reference },
+      { audio_id: 'opaque' },
+      { audio_id: 'opaque', audio_reference_sha256: labels.source.sha256 },
+    ]) {
+      const changed = scoring.scoreCalibration(labels, {
+        results: { results: [{ ...row, testCase: { vars } }] },
+      });
+      expect(changed.signal.cases[0]).toMatchObject({
+        state: 'error',
+        inputHashVerified: true,
+        error: expect.stringContaining('SHA-256'),
+      });
+      expect(changed.signalWithoutReference.cases[0].state).toBe('no_issue_flagged');
+      expect(changed.combined.cases[0].state).toBe('error');
+    }
+  });
+  it('scores native export redaction using frozen reference bytes and rejects a substituted reference file', () => {
+    const directory = mkdtempSync(path.join(os.tmpdir(), 'voice-native-redaction-'));
+    temporaryDirectories.push(directory);
+    const source = utils.writePcm16Wav({
+      sampleRate: 24000,
+      channels: 1,
+      samples: new Int16Array(48000).fill(2000),
+    });
+    const { labels, row } = fixture(new Int16Array(24000).fill(2000));
+    labels.source.sha256 = createHash('sha256').update(source).digest('hex');
+    labels.cases[0] = {
+      ...labels.cases[0],
+      kind: 'truncation',
+      expected: 'review_required',
+      requirement: 'severe_control',
+    };
+    const referencePath = path.join(directory, 'reference.wav');
+    const recordingPath = path.join(directory, 'recording.wav');
+    const messages = JSON.parse(row.prompt.raw);
+    writeFileSync(recordingPath, Buffer.from(messages[0].content[0].input_audio.data, 'base64'));
+    writeFileSync(referencePath, source);
+    messages[0].content[0].input_audio.data = '[REDACTED]';
+    const native = {
+      ...row,
+      prompt: { raw: JSON.stringify(messages) },
+      testCase: {
+        vars: {
+          audio_id: 'opaque',
+          audio_file: `file://${recordingPath}`,
+          audio_reference: `file://${referencePath}`,
+          audio_reference_sha256: '[REDACTED]',
+        },
+      },
+    };
+    const grade = scoring.scoreCalibration(labels, { results: { results: [native] } });
+    expect(grade.signal.cases[0]).toMatchObject({
+      state: 'review_required',
+      findings: ['cutoff'],
+      inputHashVerified: true,
+      inputHashScope: 'referenced_local_file',
+      referenceHashVerified: true,
+      referenceHashScope: 'referenced_local_file_after_export_redaction',
+      referenceSha256: labels.source.sha256,
+    });
+    native.testCase.vars.audio_reference = `file://${recordingPath}`;
+    expect(
+      scoring.scoreCalibration(labels, { results: { results: [native] } }).signal.cases[0],
+    ).toMatchObject({ state: 'error', error: expect.stringContaining('SHA-256 mismatch') });
+    native.testCase.vars.audio_reference = `file://${referencePath}`;
+    native.testCase.vars.audio_reference_sha256 = '[redacted]';
+    expect(
+      scoring.scoreCalibration(labels, { results: { results: [native] } }).signal.cases[0],
+    ).toMatchObject({ state: 'error', error: expect.stringContaining('frozen source SHA-256') });
+  });
+  it('binds natural-pause controls to the frozen pause source instead of the speech source', () => {
+    const { labels, row } = fixture(new Int16Array(24000).fill(2000));
+    labels.cases[0].kind = 'natural_pause_source';
+    labels.source.sha256 = '0'.repeat(64);
+    const legitimate = scoring.scoreCalibration(labels, { results: { results: [row] } });
+    expect(legitimate.signal.cases[0]).toMatchObject({
+      state: 'no_issue_flagged',
+      referenceHashVerified: true,
+      referenceSha256: labels.pauseSource.sha256,
+    });
+    const changed = scoring.scoreCalibration(
+      { ...labels, pauseSource: { sha256: '0'.repeat(64) } },
+      { results: { results: [row] } },
+    );
+    expect(changed.signal.cases[0]).toMatchObject({
+      state: 'error',
+      error: expect.stringContaining('frozen source SHA-256'),
+    });
+  });
   it('matches actual submitted bytes and fails missing, duplicate, malformed and substituted inputs', () => {
     const { labels, row } = fixture();
     expect(scoring.scoreCalibration(labels, { results: { results: [row] } })).toMatchObject({
@@ -586,5 +764,205 @@ describe('frozen audio calibration scoring', () => {
     expect(unknown.calibrationPassed).toBe(false);
     expect(unknown.perDefect.dropout.unknown).toBe(1);
     expect(unknown.perDefect.dropout.truePositive).toBe(0);
+  });
+});
+
+describe('independent PCM evidence', () => {
+  const rate = 24000;
+  function voice() {
+    return Int16Array.from({ length: rate * 3 }, (_, index) => {
+      const envelope = Math.min(1, index / 1000, (rate * 3 - index - 1) / 1000);
+      return Math.round(envelope * 9000 * Math.sin(index / 17 + index ** 2 / 1000000));
+    });
+  }
+  function parsed(samples: Int16Array) {
+    return { samples, sampleRate: rate, channels: 1 };
+  }
+  it('catches erasures and nonzero attenuation from PCM independently of a clear model verdict', () => {
+    const reference = parsed(voice());
+    for (const duration of [80, 140, 200, 360, 900]) {
+      for (const gain of [0, 0.01]) {
+        const received = Int16Array.from(reference.samples);
+        for (let index = rate; index < rate + Math.round((rate * duration) / 1000); index++) {
+          received[index] = Math.round(received[index] * gain);
+        }
+        const grade = signal.analyzeAudioSignal(parsed(received), reference);
+        expect(grade.state).toBe('review_required');
+        expect(grade.findings).toContainEqual(
+          expect.objectContaining({ type: 'dropout', evidence: 'reference_difference' }),
+        );
+        const input = utils.writePcm16Wav(parsed(received)).toString('base64');
+        expect(validate(JSON.stringify(clear), { vars: { audio_file: input } }).pass).toBe(true);
+      }
+    }
+  });
+  it('does not call a faded natural pause, boundary silence, or global gain reduction a dropout', () => {
+    const original = voice();
+    const paused = Int16Array.from(original);
+    const ramp = 480;
+    paused.fill(0, rate, rate * 2);
+    for (let index = 0; index < ramp; index++) {
+      paused[rate - ramp + index] = Math.round(
+        paused[rate - ramp + index] * (1 - index / (ramp - 1)),
+      );
+      paused[rate * 2 + index] = Math.round((paused[rate * 2 + index] * index) / (ramp - 1));
+    }
+    const padded = new Int16Array(original.length + rate);
+    padded.set(original, rate / 2);
+    for (const samples of [
+      original,
+      paused,
+      padded,
+      Int16Array.from(original, (value) => Math.round(value / 2)),
+    ]) {
+      const grade = signal.analyzeAudioSignal(parsed(samples));
+      expect(grade.state).toBe('no_issue_flagged');
+    }
+    expect(signal.analyzeAudioSignal(parsed(paused), parsed(paused)).state).toBe(
+      'no_issue_flagged',
+    );
+    expect(
+      signal.analyzeAudioSignal(
+        parsed(Int16Array.from(original, (value) => Math.round(value / 2))),
+        parsed(original),
+      ).state,
+    ).toBe('no_issue_flagged');
+  });
+  it('detects unaligned exact fragment loops and clipping without a reference', () => {
+    const original = voice();
+    const start = 24317;
+    const length = 3288; // 137 ms, deliberately not aligned to a 20 ms frame.
+    const repeated = new Int16Array(original.length + length * 2);
+    repeated.set(original.subarray(0, start), 0);
+    for (let copy = 0; copy < 3; copy++) {
+      repeated.set(original.subarray(start, start + length), start + copy * length);
+    }
+    repeated.set(original.subarray(start + length), start + length * 3);
+    expect(signal.analyzeAudioSignal(parsed(repeated)).findings).toContainEqual(
+      expect.objectContaining({ type: 'repetition' }),
+    );
+    const clipped = Int16Array.from(original, (value) =>
+      Math.max(-32768, Math.min(32767, value * 10)),
+    );
+    expect(signal.analyzeAudioSignal(parsed(clipped)).findings).toContainEqual(
+      expect.objectContaining({ type: 'distortion' }),
+    );
+  });
+  it('proves a missing reference tail even at a zero crossing without guessing from capture boundaries', () => {
+    const original = voice();
+    let cut = rate;
+    while (cut < rate + 1000 && Math.abs(original[cut - 1]) > 100) {
+      cut++;
+    }
+    const truncated = parsed(original.slice(0, cut));
+    expect(signal.analyzeAudioSignal(truncated).findings).not.toContainEqual(
+      expect.objectContaining({ type: 'cutoff' }),
+    );
+    expect(signal.analyzeAudioSignal(truncated, parsed(original)).findings).toContainEqual(
+      expect.objectContaining({ type: 'cutoff', evidence: 'reference_difference' }),
+    );
+  });
+  it('keeps silence in one stereo channel separate from an entirely silent recording', () => {
+    const original = voice();
+    const stereo = new Int16Array(original.length * 2);
+    for (let index = 0; index < original.length; index++) {
+      stereo[index * 2] = original[index];
+    }
+    expect(
+      signal.analyzeAudioSignal({ samples: stereo, channels: 2, sampleRate: rate }).state,
+    ).toBe('no_issue_flagged');
+    expect(signal.analyzeAudioSignal(parsed(new Int16Array(rate))).findings).toContainEqual(
+      expect.objectContaining({ type: 'silence' }),
+    );
+  });
+  it('rejects a substituted reference and never renders reference bytes or labels into the model prompt', () => {
+    const bytes = utils.writePcm16Wav(parsed(voice()));
+    const vars = {
+      audio_id: 'opaque',
+      audio_file: bytes.toString('base64'),
+      audio_reference: bytes.toString('base64'),
+      audio_reference_sha256: '0'.repeat(64),
+    };
+    expect(signal.default('', { vars })).toMatchObject({
+      pass: false,
+      reason: expect.stringContaining('SHA-256 mismatch'),
+    });
+    vars.audio_reference_sha256 = createHash('sha256').update(bytes).digest('hex');
+    expect(signal.default('', { vars }).pass).toBe(true);
+    const rendered = getNunjucksEngine().renderString(
+      readFileSync(path.join(examplePath, 'audio-review-prompt.json'), 'utf8'),
+      vars,
+    );
+    expect(rendered).not.toContain(vars.audio_reference_sha256);
+    expect(
+      JSON.parse(rendered)[1].content.filter(
+        (item: { type: string }) => item.type === 'input_audio',
+      ),
+    ).toHaveLength(1);
+  });
+  it('binds historical underflow counters to the WAV and keeps them separate from audio-only detection', () => {
+    const bytes = utils.writePcm16Wav(parsed(voice()));
+    const recordingSha256 = createHash('sha256').update(bytes).digest('hex');
+    const vars = {
+      audio_file: bytes.toString('base64'),
+      audio_view: 'isolated_caller',
+      audio_transport: {
+        version: 1,
+        recordingSha256,
+        participants: [{ role: 'caller', underflowAfterActiveAudioMs: 80, underflowEvents: 1 }],
+      },
+    };
+    expect(signal.analyzeAudioSignal(parsed(voice())).state).toBe('no_issue_flagged');
+    expect(signal.default('', { vars })).toMatchObject({
+      pass: false,
+      reason: expect.stringContaining('transport_counter'),
+    });
+    vars.audio_transport.participants[0].underflowAfterActiveAudioMs = 0;
+    expect(signal.default('', { vars }).pass).toBe(true);
+    vars.audio_transport.participants[0].role = 'target';
+    expect(signal.default('', { vars })).toMatchObject({
+      pass: false,
+      reason: expect.stringContaining('roles'),
+    });
+    vars.audio_transport.participants[0].role = 'caller';
+    vars.audio_transport.recordingSha256 = '0'.repeat(64);
+    expect(signal.default('', { vars })).toMatchObject({
+      pass: false,
+      reason: expect.stringContaining('SHA-256 mismatch'),
+    });
+    vars.audio_transport.recordingSha256 = recordingSha256;
+    vars.audio_transport.participants[0].underflowAfterActiveAudioMs = 4000;
+    expect(signal.default('', { vars })).toMatchObject({
+      pass: false,
+      reason: expect.stringContaining('counters'),
+    });
+  });
+  it('runs the standalone offline command on exported tests without API credentials', () => {
+    const directory = mkdtempSync(path.join(os.tmpdir(), 'voice-signal-cli-'));
+    temporaryDirectories.push(directory);
+    const wav = path.join(directory, 'speech.wav');
+    const tests = path.join(directory, 'tests.json');
+    const out = path.join(directory, 'result.json');
+    writeFileSync(wav, utils.writePcm16Wav(parsed(voice())));
+    writeFileSync(
+      tests,
+      JSON.stringify([{ vars: { audio_id: 'opaque', audio_file: `file://${wav}` } }]),
+    );
+    const result = spawnSync(
+      process.execPath,
+      [path.join(examplePath, 'grade-audio-signal.js'), '--tests', tests, '--out', out],
+      { encoding: 'utf8' },
+    );
+    expect(result.status).toBe(0);
+    expect(JSON.parse(readFileSync(out, 'utf8'))).toMatchObject({
+      dispositions: { no_issue_flagged: 1, error: 0 },
+    });
+    expect(
+      spawnSync(
+        process.execPath,
+        [path.join(examplePath, 'grade-audio-signal.js'), '--tests', tests, '--out', out],
+        { encoding: 'utf8' },
+      ).status,
+    ).toBe(1);
   });
 });

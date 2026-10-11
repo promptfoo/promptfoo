@@ -98,4 +98,13 @@ Run those commands from the repository root. Open the generated `index.html` to 
 
 The generated `new-review-directory/transcription-tests.json` works with `promptfooconfig.transcription.yaml`; `new-review-directory/audio-review-tests.json` works with `promptfooconfig.audio-review.yaml`. Pass either with `--tests` to a separate eval using `--no-cache`. Transcription receives no reference text. Audio review sends the actual WAV to `gpt-audio-1.5`, validates its response, and keeps `no_issue_flagged`, `review_required`, and `unratable` separate. No-issue results remain advisory: the model can miss gaps or invent speech on silence. The independent no-signal guard refuses an all-zero recording regardless of model text.
 
-`calibrate-audio.js` creates blinded, hashed mutation controls without API calls. `score-audio-calibration.js` compares their frozen labels with saved audio-review results, preserving misses, unknowns, and errors. See the guide for runnable commands and the distinction between known signal edits and human-rated audio quality.
+Run the deterministic signal checks without an API call:
+
+```bash
+node examples/simulated-voice-user/grade-audio-signal.js \
+  --tests new-review-directory/audio-review-tests.json --out new-signal-review.json
+```
+
+The same checks run as the separate `audio_signal_integrity` assertion during audio review. They inspect silence, clipping, exact PCM repetitions, suspicious zero gaps, and exported playout counters bound to the recording hash. A supplied clean reference can additionally establish erased or truncated source samples. These inputs stay out of the audio-model prompt; failed or ambiguous evidence remains visible.
+
+`calibrate-audio.js` creates blinded, hashed mutation controls without API calls. `score-audio-calibration.js` compares their frozen labels with saved audio-review results, preserving misses, unknowns, and errors. It separates model-only, reference-free signal, reference-aware signal, and combined performance. See the guide for runnable commands and the distinction between known signal edits and human-rated audio quality.

@@ -149,6 +149,53 @@ describe('voice example portable evidence export', () => {
     expect(review.status).toBe('not-reviewed');
   });
 
+  it('binds playout failures to the corresponding WAV without exposing counters to the audio model', async () => {
+    const input = fixture();
+    Object.assign(input.results.results[0].response.metadata.voice, {
+      participants: {
+        target: { playout: { underflowAfterActiveAudioMs: 0, underflowEvents: 0 } },
+        caller: { playout: { underflowAfterActiveAudioMs: 80, underflowEvents: 1 } },
+      },
+    });
+    await run(input);
+    const tests = JSON.parse(
+      await readFile(path.join(root, 'out/audio-review-tests.json'), 'utf8'),
+    );
+    expect(tests.map((test: any) => test.vars.audio_transport.participants)).toEqual([
+      [
+        { role: 'target', underflowAfterActiveAudioMs: 0, underflowEvents: 0 },
+        { role: 'caller', underflowAfterActiveAudioMs: 80, underflowEvents: 1 },
+      ],
+      [{ role: 'target', underflowAfterActiveAudioMs: 0, underflowEvents: 0 }],
+      [{ role: 'caller', underflowAfterActiveAudioMs: 80, underflowEvents: 1 }],
+    ]);
+    for (const test of tests) {
+      const bytes = await readFile(test.vars.audio_file.slice('file://'.length));
+      expect(test.vars.audio_transport.recordingSha256).toBe(
+        createHash('sha256').update(bytes).digest('hex'),
+      );
+    }
+    const prompt = {
+      raw: await readFile(path.join(path.dirname(script), 'audio-review-prompt.json'), 'utf8'),
+      label: 'Actual audio review template',
+    };
+    const rendered = await renderPrompt(prompt, { ...tests[0].vars });
+    expect(rendered).not.toContain('underflowAfterActiveAudioMs');
+    expect(rendered).not.toContain('recordingSha256');
+  });
+
+  it.each([-1, 501, null])('rejects invalid recorded underflow counters: %s', async (underflow) => {
+    const input = fixture();
+    Object.assign(input.results.results[0].response.metadata.voice, {
+      participants: {
+        caller: { playout: { underflowAfterActiveAudioMs: underflow, underflowEvents: 1 } },
+      },
+    });
+    const manifest = await run(input);
+    expect(manifest.errors).toBe(1);
+    expect(manifest.rows[0].error).toContain('Invalid caller playout counters');
+  });
+
   it.each([true, false])(
     'measures active-speech opportunity without requiring every phonetic frame to be voiced: %s',
     async (recentSpeech) => {
@@ -175,6 +222,64 @@ describe('voice example portable evidence export', () => {
       expect(measurement.targetActiveMsIn1000MsBeforeCallerOnset).toBe(recentSpeech ? 960 : 800);
       expect(measurement.targetActiveMsIn100MsBeforeCallerOnset).toBe(recentSpeech ? 60 : 0);
       expect(measurement.first200MsTargetQuietAtMs).toBe(recentSpeech ? 1560 : 1500);
+    },
+  );
+
+  it.each([true, false])(
+    'reports target speech resuming after a quiet window and clips its final frame to the caller clip: %s',
+    async (activeInsideFinalFrame) => {
+      const bytes = wav(2, 24000, 72000);
+      for (let frame = 0; frame < 72000; frame++) {
+        const ms = frame / 24;
+        const targetActive =
+          (ms >= 500 && ms < 1100) ||
+          (ms >= 1400 && ms < 1520) ||
+          (ms >= (activeInsideFinalFrame ? 1800 : 1810) && ms < 1900);
+        bytes.writeInt16LE(targetActive ? 2000 : 0, 44 + frame * 4);
+        bytes.writeInt16LE(ms >= 1000 && ms < 1810 ? -3000 : 0, 46 + frame * 4);
+      }
+      const input = fixture(bytes);
+      input.results.results[0].response.metadata.voice.interventions[0] = {
+        scheduledAtMs: 1000,
+        firstFrameAtMs: 1000,
+        completedAtMs: 1810,
+      };
+      const manifest = await run(input);
+      const measurement = manifest.rows[0].metrics.interventions[0];
+      expect(measurement.first200MsTargetQuietAtMs).toBe(1100);
+      expect(measurement.targetActivityAfterFirst200MsQuiet).toEqual({
+        intervalStartMs: 1300,
+        intervalEndMs: 1810,
+        activeMs: activeInsideFinalFrame ? 130 : 120,
+        lastActiveEndMs: activeInsideFinalFrame ? 1810 : 1520,
+      });
+      expect(measurement.interpretation).toContain('does not identify semantic intent');
+    },
+  );
+
+  it.each(['quiet-through-clip', 'quiet-after-clip', 'no-quiet'])(
+    'distinguishes zero later target activity from no measurable post-quiet interval: %s',
+    async (mode) => {
+      const bytes = wav(2, 24000, 72000);
+      for (let frame = 0; frame < 72000; frame++) {
+        const ms = frame / 24;
+        const targetActive =
+          mode === 'no-quiet' || ms < (mode === 'quiet-after-clip' ? 2000 : 1100);
+        bytes.writeInt16LE(targetActive ? 2000 : 0, 44 + frame * 4);
+        bytes.writeInt16LE(ms >= 1000 && ms < 1810 ? -3000 : 0, 46 + frame * 4);
+      }
+      const input = fixture(bytes);
+      input.results.results[0].response.metadata.voice.interventions[0] = {
+        scheduledAtMs: 1000,
+        firstFrameAtMs: 1000,
+        completedAtMs: 1810,
+      };
+      const manifest = await run(input);
+      expect(manifest.rows[0].metrics.interventions[0].targetActivityAfterFirst200MsQuiet).toEqual(
+        mode === 'quiet-through-clip'
+          ? { intervalStartMs: 1300, intervalEndMs: 1810, activeMs: 0, lastActiveEndMs: null }
+          : null,
+      );
     },
   );
 

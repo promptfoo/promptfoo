@@ -18,5 +18,8 @@ defaultTest:
     - type: javascript
       value: file://validate-audio-review.js
       metric: audio_no_issue_flagged
+    - type: javascript
+      value: file://grade-audio-signal.js
+      metric: audio_signal_integrity
 # Supply the exported or calibrated audio-review-tests.json with --tests.
 tests: []

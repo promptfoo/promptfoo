@@ -129,10 +129,57 @@ function frameActivity(samples, sampleRate) {
   return active;
 }
 
+/** Bind local playout counters to the exact review WAV; these never enter the model prompt. */
+function transportEvidence(voice, track, durationMs) {
+  const roles = track.role === 'stereo' ? ['target', 'caller'] : [track.role];
+  const participants = [];
+  for (const role of roles) {
+    const playout = voice.participants?.[role]?.playout;
+    if (playout === undefined || playout === null) continue;
+    const { underflowAfterActiveAudioMs, underflowEvents } = playout;
+    if (
+      !Number.isFinite(underflowAfterActiveAudioMs) ||
+      underflowAfterActiveAudioMs < 0 ||
+      underflowAfterActiveAudioMs > durationMs ||
+      !Number.isSafeInteger(underflowEvents) ||
+      underflowEvents < 0 ||
+      (underflowAfterActiveAudioMs > 0 && underflowEvents === 0)
+    ) {
+      throw new Error(`Invalid ${role} playout counters in the recording evidence.`);
+    }
+    participants.push({ role, underflowAfterActiveAudioMs, underflowEvents });
+  }
+  return participants.length
+    ? { version: 1, recordingSha256: sha256(track.bytes), participants }
+    : undefined;
+}
+
 /** Activity observations locate review regions; they do not prove semantic interruption success. */
 function interventionObservations(voice, target, caller, sampleRate) {
   const targetActive = frameActivity(target, sampleRate);
   const callerActive = frameActivity(caller, sampleRate);
+  const activityAfterQuiet = (quietAtMs, endMs) => {
+    if (quietAtMs === null || quietAtMs + 200 >= endMs) {
+      return null;
+    }
+    const intervalStartMs = quietAtMs + 200;
+    // Recompute the final partial frame using only samples inside the clip. Later
+    // target speech must not turn an otherwise quiet clip-ending frame active.
+    const samples = target.subarray(
+      Math.round((intervalStartMs * sampleRate) / 1000),
+      Math.round((endMs * sampleRate) / 1000),
+    );
+    let activeMs = 0;
+    let lastActiveEndMs = null;
+    for (const [frame, active] of frameActivity(samples, sampleRate).entries()) {
+      if (active) {
+        const frameStartMs = intervalStartMs + frame * 20;
+        lastActiveEndMs = Math.min(frameStartMs + 20, endMs);
+        activeMs += lastActiveEndMs - frameStartMs;
+      }
+    }
+    return { intervalStartMs, intervalEndMs: endMs, activeMs, lastActiveEndMs };
+  };
   return (Array.isArray(voice.interventions) ? voice.interventions : []).map((entry) => {
     const startMs = entry.firstFrameAtMs;
     const endMs = entry.completedAtMs;
@@ -182,6 +229,7 @@ function interventionObservations(voice, target, caller, sampleRate) {
     const recent1000Ms = activeBeforeOnset(50);
     const recent100Ms = activeBeforeOnset(5);
     const completeLookback = firstCallerFrame !== undefined && firstCallerFrame >= 50;
+    const first200MsTargetQuietAtMs = firstQuietAt(10);
     return {
       scheduledAtMs: entry.scheduledAtMs,
       firstFrameAtMs: startMs,
@@ -192,7 +240,8 @@ function interventionObservations(voice, target, caller, sampleRate) {
       callerActivityOnsetMs: firstCallerFrame === undefined ? null : firstCallerFrame * 20,
       overlapMs: overlapFrames * 20,
       first100MsTargetQuietAtMs: firstQuietAt(5),
-      first200MsTargetQuietAtMs: firstQuietAt(10),
+      first200MsTargetQuietAtMs,
+      targetActivityAfterFirst200MsQuiet: activityAfterQuiet(first200MsTargetQuietAtMs, endMs),
       targetActiveMsIn1000MsBeforeCallerOnset: recent1000Ms,
       targetActiveMsIn100MsBeforeCallerOnset: recent100Ms,
       activeSpeechOpportunity: completeLookback
@@ -212,7 +261,7 @@ function interventionObservations(voice, target, caller, sampleRate) {
         ? 'target-active-before-cue'
         : 'needs-listening-review',
       interpretation:
-        'Zero overlap can occur when the target stops at the cue. Quiet is not proof of yielding; inspect whether the obsolete answer stops and the new request is answered.',
+        'Zero overlap can occur when the target stops at the cue. Quiet is not proof of yielding; inspect whether the obsolete answer stops and the new request is answered. Later target activity is measured only until the prepared clip ends and may be speech, breathing, or other sound; it does not identify semantic intent.',
     };
   });
 }
@@ -383,6 +432,7 @@ export async function exportEvidence(inputPath, outputPath, { configDir } = {}) 
         },
       ];
       for (const track of tracks) {
+        const transport = transportEvidence(voice, track, (target.length / sampleRate) * 1000);
         const file = `${prefix}-${track.role}.wav`;
         await writeFile(path.join(destination, file), track.bytes);
         const id = randomUUID();
@@ -402,6 +452,7 @@ export async function exportEvidence(inputPath, outputPath, { configDir } = {}) 
             audio_file: `file://${path.join(destination, file)}`,
             audio_id: id,
             audio_view: track.role === 'stereo' ? 'stereo_conversation' : `isolated_${track.role}`,
+            ...(transport ? { audio_transport: transport } : {}),
           },
         });
         if (track.channels === 1) {

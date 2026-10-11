@@ -17,7 +17,12 @@ function energy(samples, start, count) {
 }
 
 /** Generate known edits, not human quality labels. Keep these labels out of model prompts. */
-export function createControls(samples, sampleRate) {
+export function createControls(samples, sampleRate, { profile = 'development' } = {}) {
+  if (!['development', 'held-out'].includes(profile))
+    throw new Error('Unknown calibration profile.');
+  const heldOut = profile === 'held-out';
+  const shortGapMs = heldOut ? 80 : 200;
+  const longGapMs = heldOut ? 350 : 600;
   if (!(samples instanceof Int16Array) || samples.length < sampleRate * 2) {
     throw new Error('Calibration needs at least two seconds of mono speech.');
   }
@@ -25,7 +30,7 @@ export function createControls(samples, sampleRate) {
     throw new Error('Expected a valid PCM sample rate.');
   }
   const frame = Math.round(sampleRate * 0.02);
-  const gapSize = Math.round(sampleRate * 0.6);
+  const gapSize = Math.round((sampleRate * longGapMs) / 1000);
   let start = -1;
   let bestEnergy = 0;
   for (let index = frame; index + gapSize + frame <= samples.length; index += frame) {
@@ -47,7 +52,7 @@ export function createControls(samples, sampleRate) {
     result.fill(0, start, start + Math.round((sampleRate * ms) / 1000));
     return result;
   };
-  const fragmentLength = Math.round(sampleRate * 0.2);
+  const fragmentLength = Math.round(sampleRate * (heldOut ? 0.137 : 0.2));
   const fragment = samples.slice(start, start + fragmentLength);
   const repeated = new Int16Array(samples.length + fragmentLength * 3);
   repeated.set(samples.subarray(0, start), 0);
@@ -58,7 +63,7 @@ export function createControls(samples, sampleRate) {
   const amplitudes = Array.from(samples, (sample) => Math.abs(sample)).sort(
     (left, right) => left - right,
   );
-  const threshold = amplitudes[Math.floor(amplitudes.length * 0.75)];
+  const threshold = amplitudes[Math.floor(amplitudes.length * (heldOut ? 0.9 : 0.75))];
   if (threshold < 100) {
     throw new Error('Source has too little active speech for severe clipping calibration.');
   }
@@ -74,7 +79,16 @@ export function createControls(samples, sampleRate) {
   if (cut >= samples.length - frame) {
     throw new Error('Could not place an active-speech truncation.');
   }
-  return [
+  if (heldOut) {
+    // Different boundary from development: cut near a zero crossing, while the
+    // reference still establishes omitted speech independently of endpoint energy.
+    let quietest = cut;
+    for (let index = cut; index < Math.min(cut + frame, samples.length - frame); index++) {
+      if (Math.abs(samples[index - 1]) < Math.abs(samples[quietest - 1])) quietest = index;
+    }
+    cut = quietest;
+  }
+  const controls = [
     {
       kind: 'unchanged',
       samples: Int16Array.from(samples),
@@ -90,15 +104,15 @@ export function createControls(samples, sampleRate) {
       edit: null,
     },
     {
-      kind: 'gap_200ms',
-      samples: gap(200),
+      kind: `gap_${shortGapMs}ms`,
+      samples: gap(shortGapMs),
       expected: 'review_required',
       requirement: 'sensitivity_probe',
-      edit: { startSample: start, zeroedSamples: Math.round(sampleRate * 0.2) },
+      edit: { startSample: start, zeroedSamples: Math.round((sampleRate * shortGapMs) / 1000) },
     },
     {
-      kind: 'gap_600ms',
-      samples: gap(600),
+      kind: `gap_${longGapMs}ms`,
+      samples: gap(longGapMs),
       expected: 'review_required',
       requirement: 'severe_control',
       edit: { startSample: start, zeroedSamples: gapSize },
@@ -132,16 +146,49 @@ export function createControls(samples, sampleRate) {
       edit: { zeroedSamples: samples.length },
     },
   ];
+  if (heldOut) {
+    const attenuated = Int16Array.from(samples);
+    const count = Math.round(sampleRate * 0.14);
+    for (let index = start; index < start + count; index++)
+      attenuated[index] = Math.round(samples[index] * 0.01);
+    const padding = Math.round(sampleRate * 0.317);
+    const padded = new Int16Array(samples.length + padding * 2);
+    padded.set(samples, padding);
+    controls.push(
+      {
+        kind: 'attenuation_140ms',
+        samples: attenuated,
+        expected: 'review_required',
+        requirement: 'sensitivity_probe',
+        edit: { startSample: start, attenuatedSamples: count, gain: 0.01 },
+      },
+      {
+        kind: 'gain_minus_6db',
+        samples: Int16Array.from(samples, (sample) => Math.round(sample * 10 ** (-6 / 20))),
+        expected: 'no_issue_flagged',
+        requirement: 'negative_control',
+        edit: { gainDb: -6 },
+      },
+      {
+        kind: 'boundary_silence',
+        samples: padded,
+        expected: 'no_issue_flagged',
+        requirement: 'negative_control',
+        edit: { paddingSamples: padding },
+      },
+    );
+  }
+  return controls;
 }
 
 /** Produce opaque WAV names and a separate frozen answer key; this command never calls an API. */
-export async function generateCalibration({ source, pauseSource, out }) {
+export async function generateCalibration({ source, pauseSource, out, profile = 'development' }) {
   const inputBytes = await readFile(source);
   const input = readPcm16Wav(inputBytes);
   if (input.channels !== 1) {
     throw new Error('Use an isolated mono utterance as --source.');
   }
-  const controls = createControls(input.samples, input.sampleRate).map((control) => ({
+  const controls = createControls(input.samples, input.sampleRate, { profile }).map((control) => ({
     ...control,
     sampleRate: input.sampleRate,
   }));
@@ -209,6 +256,11 @@ export async function generateCalibration({ source, pauseSource, out }) {
         audio_id: id,
         audio_file: `file://${path.join(directory, filename)}`,
         audio_view: control.kind === 'natural_pause_source' ? 'isolated_caller' : 'standalone_clip',
+        // Used only by the independent signal assertion, never rendered in the audio-model prompt.
+        audio_reference: `file://${path.resolve(control.kind === 'natural_pause_source' ? pauseSource : source)}`,
+        audio_reference_sha256: sha256(
+          control.kind === 'natural_pause_source' ? pauseBytes : inputBytes,
+        ),
       },
     });
   }
@@ -217,9 +269,12 @@ export async function generateCalibration({ source, pauseSource, out }) {
   const labels = {
     version: 1,
     createdAt: new Date().toISOString(),
+    profile,
     limitations: [
       'Labels describe deterministic edits, not a human listening panel.',
-      'The 200-ms gap is a sensitivity probe; an audio model may miss it.',
+      'Short gaps and local attenuation are sensitivity probes; an audio model may miss them.',
+      'References are separate assertion inputs and are not included in model prompts.',
+      'Use an unseen source and freeze policy before generating the held-out profile. Do not tune on its outcomes.',
       'Unchanged speech and natural pauses still require inspection; no human approval is implied.',
     ],
     source: {
@@ -254,6 +309,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
         source: { type: 'string' },
         'pause-source': { type: 'string' },
         out: { type: 'string' },
+        profile: { type: 'string', default: 'development' },
       },
       strict: true,
     });
@@ -268,6 +324,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
           source: values.source,
           pauseSource: values['pause-source'],
           out: values.out,
+          profile: values.profile,
         }),
       ),
     );

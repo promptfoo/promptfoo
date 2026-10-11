@@ -6,11 +6,20 @@ import { pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 
 import { readPcm16Wav } from './audio-utils.js';
+import {
+  analyzeAudioSignal,
+  readAudioReference,
+  readAudioTransport,
+  SIGNAL_POLICY,
+} from './grade-audio-signal.js';
 import { parseAudioReview, validateAudioReviewTimestamps } from './validate-audio-review.js';
 
 const categories = {
   gap_200ms: 'dropout',
   gap_600ms: 'dropout',
+  gap_80ms: 'dropout',
+  gap_350ms: 'dropout',
+  attenuation_140ms: 'dropout',
   repetition: 'repetition',
   severe_clipping: 'distortion',
   truncation: 'cutoff',
@@ -43,7 +52,7 @@ function inputHash(result) {
     bytes = Buffer.from(audio[0].input_audio.data, 'base64');
     scope = 'rendered_prompt';
   }
-  return { sha256: sha256(bytes), scope, audio: readPcm16Wav(bytes) };
+  return { sha256: sha256(bytes), scope, audio: readPcm16Wav(bytes), bytes };
 }
 
 function defectDisposition(control, category, expectedPositive) {
@@ -183,8 +192,16 @@ export function scoreCalibration(labels, exported) {
       (control) => control.statusMatches === true && control.expectedDefectDetected === true,
     ) &&
     negatives.every((control) => control.statusMatches === true);
+  const signalCases = scoreSignalCases(labels, results);
   return {
     version: 1,
+    signalPolicy: SIGNAL_POLICY,
+    signal: summarizeSignalCases(signalCases, extraRows),
+    signalWithoutReference: summarizeSignalCases(
+      scoreSignalCases(labels, results, false),
+      extraRows,
+    ),
+    combined: summarizeSignalCases(combineEvidence(cases, signalCases), extraRows),
     interpretation:
       'Labels describe known signal mutations, not human-rated acoustic truth. No-issue judgments are advisory. Unknowns and errors are not correct detections.',
     calibrationPassed,
@@ -200,6 +217,156 @@ export function scoreCalibration(labels, exported) {
         cases.filter((control) => control.state === state).length,
       ]),
     ),
+    perDefect: countDefects(cases),
+    cases,
+  };
+}
+
+/** Calibration references are part of the frozen answer key, not mutable result metadata. */
+function frozenReference(labels, control, vars) {
+  const expected = control.kind === 'natural_pause_source' ? labels.pauseSource : labels.source;
+  if (!/^[a-f0-9]{64}$/.test(expected?.sha256 ?? '')) {
+    throw new Error('Frozen calibration source SHA-256 is missing or invalid.');
+  }
+  const referenceDigestRedacted = vars?.audio_reference_sha256 === '[REDACTED]';
+  if (
+    typeof vars?.audio_reference !== 'string' ||
+    !vars.audio_reference ||
+    (!referenceDigestRedacted && vars.audio_reference_sha256 !== expected.sha256)
+  ) {
+    throw new Error(
+      'Reference-aware calibration requires the reference bound to the frozen source SHA-256.',
+    );
+  }
+  // Native exports redact hash-shaped strings. The frozen label digest still
+  // verifies the actual reference bytes; this does not trust a replacement hash.
+  return {
+    audio: readAudioReference({ ...vars, audio_reference_sha256: expected.sha256 }),
+    sha256: expected.sha256,
+    hashScope: referenceDigestRedacted
+      ? 'referenced_local_file_after_export_redaction'
+      : 'supplied_hash_and_reference_bytes',
+  };
+}
+
+/** Independent signal results survive model/provider errors, but never substituted input. */
+function scoreSignalCases(labels, results, useReference = true) {
+  return labels.cases.map((control) => {
+    const base = {
+      id: control.id,
+      kind: control.kind,
+      expected: control.expected,
+      requirement: control.requirement,
+      sourceSha256: control.sha256,
+    };
+    let provenance = { inputHashVerified: false, referenceHashVerified: false };
+    try {
+      const matches = results.filter((result) => result.testCase?.vars?.audio_id === control.id);
+      if (matches.length !== 1) throw new Error('Missing or duplicate result.');
+      const result = matches[0];
+      const input = inputHash(result);
+      provenance = {
+        inputHashVerified: input.sha256 === control.sha256,
+        inputSha256: input.sha256,
+        inputHashScope: input.scope,
+        referenceHashVerified: false,
+      };
+      if (!provenance.inputHashVerified)
+        throw new Error('Submitted WAV differs from frozen control.');
+      const reference = useReference
+        ? frozenReference(labels, control, result.testCase?.vars)
+        : undefined;
+      provenance = {
+        ...provenance,
+        referenceHashVerified: Boolean(reference),
+        ...(reference
+          ? { referenceSha256: reference.sha256, referenceHashScope: reference.hashScope }
+          : {}),
+      };
+      const evidence = analyzeAudioSignal(
+        input.audio,
+        reference?.audio,
+        readAudioTransport(result.testCase?.vars, input.bytes),
+      );
+      const category = categories[control.kind];
+      const findings = evidence.findings.map((finding) => finding.type);
+      return {
+        ...base,
+        ...provenance,
+        state: evidence.state,
+        findings,
+        evidence,
+        predictedSilence: findings.includes('silence'),
+        statusMatches: control.expected === null ? null : evidence.state === control.expected,
+        expectedDefectDetected: category ? findings.includes(category) : null,
+      };
+    } catch (error) {
+      return {
+        ...base,
+        ...provenance,
+        state: 'error',
+        error: error.message,
+        findings: [],
+        statusMatches: false,
+        expectedDefectDetected: false,
+      };
+    }
+  });
+}
+
+function combineEvidence(modelCases, signalCases) {
+  return modelCases.map((model, index) => {
+    const signal = signalCases[index];
+    const error = model.state === 'error' || signal.state === 'error';
+    const findings = [...new Set([...(model.findings ?? []), ...(signal.findings ?? [])])];
+    const state = error
+      ? 'error'
+      : signal.predictedSilence
+        ? 'unratable'
+        : signal.state === 'review_required' || model.state === 'review_required'
+          ? 'review_required'
+          : model.state;
+    const category = categories[model.kind];
+    return {
+      ...model,
+      state,
+      findings,
+      signalState: signal.state,
+      modelState: model.state,
+      interpretation:
+        'Union of model concerns and measured signal evidence; model errors are retained as errors.',
+      predictedSilence: signal.predictedSilence || model.predictedSilence,
+      statusMatches: model.expected === null ? null : !error && state === model.expected,
+      expectedDefectDetected:
+        !error &&
+        (category === 'silence'
+          ? signal.predictedSilence || model.predictedSilence
+          : category
+            ? findings.includes(category)
+            : null),
+    };
+  });
+}
+
+function summarizeSignalCases(cases, extraRows) {
+  const labeled = cases.filter((control) => control.expected !== null);
+  const positives = cases.filter((control) => categories[control.kind]);
+  const negatives = cases.filter((control) =>
+    ['negative_control', 'consistency_control'].includes(control.requirement),
+  );
+  return {
+    interpretation:
+      'Independent PCM evidence, separate from the audio model. Reference-based findings require the unmodified source; these results do not validate detection without a reference.',
+    calibrationPassed:
+      positives.length > 0 &&
+      negatives.length > 0 &&
+      extraRows === 0 &&
+      cases.every((control) => control.state !== 'error') &&
+      positives.every((control) => control.statusMatches && control.expectedDefectDetected) &&
+      negatives.every((control) => control.statusMatches),
+    statusMatches: labeled.filter((control) => control.statusMatches).length,
+    statusComparisons: labeled.length,
+    errors: cases.filter((control) => control.state === 'error').length,
     perDefect: countDefects(cases),
     cases,
   };
@@ -237,6 +404,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
         statusMatches: score.statusMatches,
         statusComparisons: score.statusComparisons,
         errors: score.errors,
+        signalCalibrationPassed: score.signal.calibrationPassed,
+        signalStatusMatches: score.signal.statusMatches,
       }),
     );
     if (!score.calibrationPassed) {
