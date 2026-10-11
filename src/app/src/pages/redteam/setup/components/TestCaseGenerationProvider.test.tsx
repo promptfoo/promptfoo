@@ -186,9 +186,14 @@ describe('TestCaseGenerationProvider', () => {
   describe.each(['basic', 'goat'] as const)(
     '%s generation request and failures',
     (testStrategy) => {
-      it.each(['deadline', 'unmount'] as const)(
-        'sends plugin configuration and propagates %s cancellation',
-        async (cancellation) => {
+      it.each([
+        ['deadline', 'harmful:hate'],
+        ['unmount', 'harmful:hate'],
+        ['deadline', 'policy'],
+        ['unmount', 'policy'],
+      ] as const)(
+        'sends plugin configuration and propagates %s cancellation for %s',
+        async (cancellation, testPlugin) => {
           const deadline = new AbortController();
           const timeout = vi.spyOn(AbortSignal, 'timeout').mockReturnValue(deadline.signal);
           callApiMock.mockImplementation(() => new Promise<Response>(() => {}));
@@ -196,6 +201,7 @@ describe('TestCaseGenerationProvider', () => {
             language: 'Japanese',
             applicationDefinition: { purpose: 'Plugin purpose' },
             additionalConfig: { key: 'value' },
+            ...(testPlugin === 'policy' ? { policy: 'Do not disclose account balances' } : {}),
           };
           const view = render(
             <ToastProvider>
@@ -203,7 +209,7 @@ describe('TestCaseGenerationProvider', () => {
                 redTeamConfig={{ ...MOCK_CONFIG, target: createHttpGenerationProvider() }}
               >
                 <TestConsumer
-                  testPlugin="harmful:hate"
+                  testPlugin={testPlugin}
                   pluginConfig={pluginConfig}
                   testStrategy={testStrategy}
                 />
@@ -225,7 +231,7 @@ describe('TestCaseGenerationProvider', () => {
           );
           const options = callApiMock.mock.calls[0][1]!;
           expect(JSON.parse(options.body as string)).toMatchObject({
-            plugin: { id: 'harmful:hate', config: pluginConfig },
+            plugin: { id: testPlugin, config: pluginConfig },
             strategy: { id: testStrategy, config: {} },
             config: { applicationDefinition: { purpose: 'Test purpose' } },
           });
@@ -1047,7 +1053,7 @@ describe('TestCaseGenerationProvider', () => {
       const testPlugin = 'harmful:hate';
       const testStrategy = 'basic';
 
-      // Track call count to make prefetch fail (simulating network failure)
+      // Number each response so cached and prefetched batches are distinguishable.
       let callCount = 0;
       callApiMock.mockImplementation((path, options) => {
         if (path === '/redteam/generate-test') {
@@ -1102,6 +1108,17 @@ describe('TestCaseGenerationProvider', () => {
       expect(within(testCaseDialogComponent).getByTestId('chat-message-0')).toHaveTextContent(
         'Batch 1 test prompt #5',
       );
+      await user.click(
+        within(testCaseDialogComponent).getByRole('button', { name: /regenerate/i }),
+      );
+      await waitFor(() =>
+        expect(within(testCaseDialogComponent).getByTestId('chat-message-0')).toHaveTextContent(
+          'Batch 2 test prompt #1',
+        ),
+      );
+      expect(
+        callApiMock.mock.calls.filter(([path]) => path === '/redteam/generate-test'),
+      ).toHaveLength(2);
     });
 
     it('should NOT use batch generation for multi-turn strategies', async () => {
