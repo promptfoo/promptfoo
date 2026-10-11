@@ -143,17 +143,6 @@ function readResult(snapshot: ResultSnapshot): Job['result'] {
   }
 }
 
-function createInitialJob(): StoredJob {
-  return {
-    evalId: null,
-    status: 'in-progress',
-    progress: 0,
-    total: 0,
-    resultSnapshot: null,
-    logs: [],
-  };
-}
-
 function serializeResult(result: NonNullable<Job['result']>): string {
   const ancestors: unknown[] = [];
   return JSON.stringify(result, function (_key, value) {
@@ -187,7 +176,14 @@ export class EvalJobService {
 
   create(id: string): Job {
     const previous = this.jobs.get(id);
-    const job = createInitialJob();
+    const job: StoredJob = {
+      evalId: null,
+      status: 'in-progress',
+      progress: 0,
+      total: 0,
+      resultSnapshot: null,
+      logs: [],
+    };
     this.jobs.set(id, job);
     removeResult(previous?.resultSnapshot);
     return cloneJob(job);

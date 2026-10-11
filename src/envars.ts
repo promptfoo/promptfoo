@@ -228,16 +228,17 @@ type EnvVars = {
   // Continuous Integration
   //=========================================================================
   APPVEYOR?: boolean;
-  BITBUCKET_COMMIT?: boolean;
+  BITBUCKET_COMMIT?: string;
   BUDDY?: boolean;
   BUILDKITE?: boolean;
   CI?: boolean;
   CIRCLECI?: boolean;
-  CODEBUILD_BUILD_ID?: boolean;
+  CODEBUILD_BUILD_ID?: string;
   GITHUB_ACTIONS?: boolean;
   GITLAB_CI?: boolean;
   JENKINS?: boolean;
-  TEAMCITY_VERSION?: boolean;
+  JENKINS_URL?: string;
+  TEAMCITY_VERSION?: string;
   TF_BUILD?: boolean;
   TRAVIS?: boolean;
 
@@ -490,6 +491,18 @@ type EnvVars = {
 // Allow string access to any key for environment variables not explicitly listed
 export type EnvVarKey = keyof EnvVars;
 
+/** Read only own provider overrides, without falling back to process.env. */
+export function getProviderEnvString(
+  env: EnvOverrides | undefined,
+  key: EnvVarKey,
+): string | undefined {
+  if (env && Object.prototype.hasOwnProperty.call(env, key)) {
+    const value = env[key as keyof EnvOverrides];
+    return value === undefined ? undefined : String(value);
+  }
+  return undefined;
+}
+
 /** Reads one config layer without mixing in process.env; a missing or failed provider is unset. */
 export function getEnvOverrides(layer: 'suite' | 'file' = 'suite'): EnvOverrides | undefined {
   try {
@@ -632,20 +645,26 @@ export function getMaxEvalTimeMs(defaultValue: number = 0): number {
  * @returns True if running in a CI environment, false otherwise.
  */
 export function isCI() {
+  const hasIdentifier = (key: EnvVarKey) => {
+    const value = getEnvString(key);
+    // Keep explicit false/0 opt-outs while accepting build IDs, versions and URLs.
+    return Boolean(value && !['false', '0'].includes(value.toLowerCase()));
+  };
   return (
     getEnvBool('CI') ||
     getEnvBool('GITHUB_ACTIONS') ||
     getEnvBool('TRAVIS') ||
     getEnvBool('CIRCLECI') ||
     getEnvBool('JENKINS') ||
+    hasIdentifier('JENKINS_URL') ||
     getEnvBool('GITLAB_CI') ||
     getEnvBool('APPVEYOR') ||
-    getEnvBool('CODEBUILD_BUILD_ID') ||
+    hasIdentifier('CODEBUILD_BUILD_ID') ||
     getEnvBool('TF_BUILD') ||
-    getEnvBool('BITBUCKET_COMMIT') ||
+    hasIdentifier('BITBUCKET_COMMIT') ||
     getEnvBool('BUDDY') ||
     getEnvBool('BUILDKITE') ||
-    getEnvBool('TEAMCITY_VERSION')
+    hasIdentifier('TEAMCITY_VERSION')
   );
 }
 
@@ -656,4 +675,12 @@ export function isCI() {
  */
 export function isNonInteractive() {
   return isCI() || !process.stdin.isTTY || !process.stdout.isTTY;
+}
+
+export function parseEnvFloat(value: string | undefined): number | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  const parsed = Number.parseFloat(value);
+  return Number.isNaN(parsed) ? undefined : parsed;
 }

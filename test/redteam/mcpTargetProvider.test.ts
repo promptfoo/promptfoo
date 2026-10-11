@@ -108,6 +108,36 @@ describe('maybeWrapMcpProviderForRedteam', () => {
     promptfooProviderMocks.materializeMcpToolCallRemote.mockReset();
   });
 
+  it('does not begin materialization or invoke the target after cancellation during tool discovery', async () => {
+    let finish!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    const target = new FakeMcpProvider([]);
+    const discovery = vi.spyOn(target, 'getAvailableTools').mockImplementation(async () => {
+      await gate;
+      return [];
+    });
+    const wrapped = maybeWrapMcpProviderForRedteam(target, redteamMetadata('custom'));
+    const abort = new AbortController();
+    const reason = new Error('tool discovery was cancelled');
+    const pending = wrapped.callApi('ping', undefined, { abortSignal: abort.signal });
+    void pending.catch(() => {});
+    try {
+      expect(discovery).toHaveBeenCalledOnce();
+      abort.abort(reason);
+      finish();
+      await expect(pending).rejects.toBe(reason);
+      expect(target.calls).toHaveLength(0);
+      expect(promptfooProviderMocks.materializeMcpToolCallRemote).not.toHaveBeenCalled();
+      expect(providerManagerMocks.getProvider).not.toHaveBeenCalled();
+    } finally {
+      finish();
+      await Promise.allSettled([pending]);
+      discovery.mockRestore();
+    }
+  });
+
   it('uses remote materialization for invalid redteam target calls before they reach MCP providers', async () => {
     promptfooProviderMocks.materializeMcpToolCallRemote.mockResolvedValueOnce(
       remoteMaterializedCall(),

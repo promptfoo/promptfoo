@@ -95,11 +95,7 @@ function parseBinary(
   defaultMimeType: string,
 ): { buffer: Buffer; mimeType: string } | null {
   if (isDataUrl(base64OrDataUrl)) {
-    const parsed = extractBase64(base64OrDataUrl);
-    if (!parsed) {
-      return null;
-    }
-    return parsed;
+    return extractBase64(base64OrDataUrl);
   }
 
   try {

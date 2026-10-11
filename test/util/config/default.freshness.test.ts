@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -145,4 +146,55 @@ describe.each(['cjs', 'mjs', 'js'])('executable .%s config lifecycle', (extensio
         : { defaultConfig: {}, defaultConfigPath: undefined },
     );
   });
+});
+
+it('preserves VM fallback singleton and retry behavior in native Node', async () => {
+  // Vitest transforms CommonJS .js files itself, so exercise the real fallback in a child process.
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'promptfoo-default-native-cjs-'));
+  try {
+    await fs.writeFile(path.join(directory, 'package.json'), '{"type":"module"}');
+    const configPath = path.join(directory, 'promptfooconfig.js');
+    const effectPath = path.join(directory, 'initializations.txt');
+    const retryPath = path.join(directory, 'retry.js');
+    const script = `
+      import assert from 'node:assert/strict';
+      import fs from 'node:fs/promises';
+      import { loadDefaultConfig } from './src/util/config/default.ts';
+      import { clearCjsModuleCache, importModule } from './src/esm.ts';
+      const configPath = ${JSON.stringify(configPath)};
+      const directory = ${JSON.stringify(directory)};
+      const effectPath = ${JSON.stringify(effectPath)};
+      const retryPath = ${JSON.stringify(retryPath)};
+      await fs.writeFile(configPath, 'const fs = require("node:fs"); fs.appendFileSync(' + JSON.stringify(effectPath) + ', "initialized"); module.exports = { description: "first", providers: ["echo"], prompts: ["Hello"], value: {} };');
+      assert.equal((await loadDefaultConfig(directory)).defaultConfig.description, 'first');
+      assert.equal((await loadDefaultConfig(directory)).defaultConfig.description, 'first');
+      const [first, second] = await Promise.all([importModule(configPath, undefined, { cacheCjsFallback: true }), importModule(configPath, undefined, { cacheCjsFallback: true })]);
+      assert.equal(first, second);
+      assert.equal(await importModule(configPath, 'value', { cacheCjsFallback: true }), first.value);
+      await fs.writeFile(configPath, 'module.exports = { description: "edited" };');
+      assert.equal((await loadDefaultConfig(directory)).defaultConfig.description, 'first');
+      assert.equal(await fs.readFile(effectPath, 'utf-8'), 'initialized');
+      // Explicit modules and providers retain their existing uncached fallback behavior.
+      assert.equal((await importModule(configPath)).description, 'edited');
+      assert.equal((await loadDefaultConfig(directory)).defaultConfig.description, 'first');
+      // Watch invalidation reloads the default config without changing native module caches.
+      clearCjsModuleCache();
+      assert.equal((await loadDefaultConfig(directory)).defaultConfig.description, 'edited');
+      await fs.writeFile(retryPath, 'require("node:fs"); module.exports = {}; throw new Error("initialization failed");');
+      await assert.rejects(importModule(retryPath, undefined, { cacheCjsFallback: true }), /initialization failed/);
+      await fs.writeFile(retryPath, 'module.exports = { value: "recovered" };');
+      assert.equal((await importModule(retryPath, undefined, { cacheCjsFallback: true })).value, 'recovered');
+    `;
+    execFileSync(process.execPath, ['--import', 'tsx', '--input-type=module', '--eval', script], {
+      cwd: path.resolve(__dirname, '../../..'),
+      env: {
+        ...process.env,
+        NODE_OPTIONS: '',
+        PROMPTFOO_CONFIG_DIR: path.join(directory, 'state'),
+      },
+      stdio: 'pipe',
+    });
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
+  }
 });

@@ -6,11 +6,11 @@
  *
  * @see docs/plans/smoke-tests.md for the full checklist
  */
-import { spawnSync } from 'child_process';
+import { spawn, spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { getOpenAiMissingApiKeyMessage } from '../providers/openai/shared';
 
 // Path to the built CLI binary
@@ -86,6 +86,72 @@ describe('Config Format Smoke Tests', () => {
       expect(exported.results.results[0].error).toBeFalsy();
     },
   );
+
+  it('reloads a CommonJS .js default configuration after a watch edit', async () => {
+    const directory = fs.mkdtempSync(path.join(OUTPUT_DIR, 'watch-cjs-'));
+    const configPath = path.join(directory, 'promptfooconfig.js');
+    const outputPath = path.join(directory, 'output.json');
+    fs.writeFileSync(path.join(directory, 'package.json'), '{"type":"module"}');
+    const writeConfig = (value: string) =>
+      fs.writeFileSync(
+        configPath,
+        `require('node:fs'); module.exports = ${JSON.stringify({
+          prompts: [value],
+          providers: ['echo'],
+          tests: [{ assert: [{ type: 'equals', value }] }],
+        })};`,
+      );
+    writeConfig('before watch edit');
+    // Default discovery depends on CWD; the child has an isolated fixture and database.
+    const child = spawn(
+      process.execPath,
+      [CLI_PATH, 'eval', '--watch', '--no-cache', '--no-share', '-o', outputPath],
+      {
+        cwd: directory,
+        env: {
+          ...process.env,
+          NODE_OPTIONS: '',
+          PROMPTFOO_CONFIG_DIR: path.join(directory, 'state'),
+          PROMPTFOO_DISABLE_UPDATE: 'true',
+          PROMPTFOO_DISABLE_TELEMETRY: 'true',
+          NO_COLOR: '1',
+        },
+      },
+    );
+    let output = '';
+    child.stdout.on('data', (chunk) => {
+      output += chunk;
+    });
+    child.stderr.on('data', (chunk) => {
+      output += chunk;
+    });
+    const closed = new Promise<void>((resolve) => child.once('close', () => resolve()));
+    try {
+      await vi.waitFor(() => expect(output).toContain('Watching for file changes'), {
+        timeout: 10000,
+      });
+      const initial = JSON.parse(fs.readFileSync(outputPath, 'utf-8'));
+      expect(initial.results.results[0].response.output).toBe('before watch edit');
+      writeConfig('after watch edit');
+      await vi.waitFor(
+        () => {
+          const exported = JSON.parse(fs.readFileSync(outputPath, 'utf-8'));
+          expect(exported.results.results[0]).toMatchObject({
+            success: true,
+            score: 1,
+            response: { output: 'after watch edit' },
+          });
+          expect(exported.results.results[0].error).toBeFalsy();
+        },
+        { timeout: 10000 },
+      );
+    } finally {
+      child.kill('SIGTERM');
+      const forcedExit = setTimeout(() => child.kill('SIGKILL'), 1000);
+      await closed;
+      clearTimeout(forcedExit);
+    }
+  });
 
   describe('2.2 JSON Configs', () => {
     it('2.2.1 - parses JSON config format', () => {
