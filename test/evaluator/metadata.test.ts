@@ -519,6 +519,8 @@ describeEvaluator('evaluator metadata', () => {
   ])('preserves metadata ownership after an in-place afterEach %s', async (mode) => {
     const outputPath = path.join(os.tmpdir(), `promptfoo-hook-metadata-${randomUUID()}.jsonl`);
     const outputMetadata = (text: string) => ({
+      content: [{ text }],
+      additionalModelResponseFields: { answer: text },
       citations: [{ generatedResponsePart: { textResponsePart: { text } } }],
       returnControl: [
         { invocationInputs: [{ functionInvocationInput: { parameters: [{ value: text }] } }] },
@@ -535,11 +537,13 @@ describeEvaluator('evaluator metadata', () => {
     });
     const nativeMetadata = outputMetadata('provider-output-secret');
     const ownedMetadata = {
+      content: 'owned content',
+      additionalModelResponseFields: { note: 'owned fields' },
       citations: 'owned citations',
       returnControl: 'owned control',
       files: 'owned files',
       retrievalResults: 'owned retrieval results',
-      trace: 'owned trace',
+      trace: { note: 'owned trace' },
     };
     const responseMetadata = mode === 'test-owned' ? ownedMetadata : nativeMetadata;
     const provider: ApiProvider = {
@@ -557,10 +561,10 @@ describeEvaluator('evaluator metadata', () => {
       ctx.result.metadata.annotation = 'keep separate annotation';
       if (mode.startsWith('annotate')) {
         for (const key of Object.keys(nativeMetadata)) {
-          ctx.result.metadata[key] = [
-            ...ctx.result.metadata[key],
-            { annotation: 'hook annotation' },
-          ];
+          const value = ctx.result.metadata[key];
+          ctx.result.metadata[key] = Array.isArray(value)
+            ? [...value, { annotation: 'hook annotation' }]
+            : { ...value, annotation: 'hook annotation' };
         }
       }
       if (
@@ -571,6 +575,7 @@ describeEvaluator('evaluator metadata', () => {
         delete ctx.result.response.metadata;
       } else if (mode === 'delete-key') {
         delete ctx.result.response.metadata.citations;
+        delete ctx.result.response.metadata.content;
       } else if (mode === 'update') {
         ctx.result.response.metadata = outputMetadata('updated-output-secret');
       } else if (mode !== 'hook-owned' && mode !== 'annotate' && mode !== 'test-owned-collision') {
@@ -624,9 +629,7 @@ describeEvaluator('evaluator metadata', () => {
       }
       const [saved] = await evalRecord.getResults();
       if (mode === 'update') {
-        expect(saved.metadata?.citations).toEqual(
-          outputMetadata('updated-output-secret').citations,
-        );
+        expect(saved.metadata).toMatchObject(outputMetadata('updated-output-secret'));
       } else if (mode === 'failure') {
         expect(saved.response?.metadata).toEqual(nativeMetadata);
       }
