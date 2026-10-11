@@ -397,6 +397,133 @@ describe('addRetryTestCases', () => {
     expect(result).toHaveLength(1);
   });
 
+  it('preserves each plugin grader while deduplicating identical cases across targets', async () => {
+    const pluginIds = ['bias:age', 'pii'];
+    const limit = vi.fn();
+    for (const target of ['first', 'second']) {
+      for (const pluginId of pluginIds) {
+        const testCase = {
+          vars: { prompt: 'same attack', sessionId: 'same-session' },
+          assert: [{ type: 'equals', value: pluginId, metric: pluginId }],
+          metadata: { pluginId },
+        };
+        limit.mockResolvedValueOnce([{ provider: { id: target } }]).mockResolvedValueOnce([
+          { testCase, response: {}, evalId: `${target}-${pluginId}` },
+          {
+            testCase: { ...testCase },
+            response: {},
+            evalId: `duplicate-${target}-${pluginId}`,
+          },
+        ]);
+      }
+    }
+    const getDb = await getMockDb();
+    getDb.mockResolvedValue({
+      select: vi.fn().mockReturnThis(),
+      from: vi.fn().mockReturnThis(),
+      where: vi.fn().mockReturnThis(),
+      orderBy: vi.fn().mockReturnThis(),
+      limit,
+    } as any);
+
+    const result = await addRetryTestCases(
+      pluginIds.map((pluginId) => ({ vars: { prompt: 'seed' }, metadata: { pluginId } })),
+      'prompt',
+      { targetIds: ['first', 'second'], numTests: 2 },
+    );
+
+    expect(result).toHaveLength(2);
+    expect(result.map((test) => test.metadata?.pluginId)).toEqual(pluginIds);
+    expect(result.map((test) => test.metadata?.originalEvalId)).toEqual([
+      'first-bias:age',
+      'first-pii',
+    ]);
+    expect(result.map((test) => test.assert)).toEqual(
+      pluginIds.map((pluginId) => [{ type: 'equals', value: pluginId, metric: pluginId }]),
+    );
+  });
+
+  it.each(['_query', '_context', '_conversation', 'sessionId'])(
+    'preserves distinct stored %s inputs when retrying',
+    async (variable) => {
+      const rows = ['first input', 'second input'].map((value) => ({
+        testCase: {
+          vars: { prompt: 'same attack', [variable]: value },
+          metadata: { pluginId: 'pii' },
+        },
+        response: {},
+        evalId: `eval-${value}`,
+      }));
+      const getDb = await getMockDb();
+      getDb.mockResolvedValue({
+        select: vi.fn().mockReturnThis(),
+        from: vi.fn().mockReturnThis(),
+        where: vi.fn().mockReturnThis(),
+        orderBy: vi.fn().mockReturnThis(),
+        limit: vi
+          .fn()
+          .mockResolvedValueOnce([{ provider: { id: 'target' } }])
+          .mockResolvedValueOnce(rows),
+      } as any);
+
+      const result = await addRetryTestCases(
+        [{ vars: { prompt: 'seed' }, metadata: { pluginId: 'pii' } }],
+        'prompt',
+        { targetIds: ['target'], numTests: 2 },
+      );
+
+      expect(result.map((test) => test.vars?.[variable])).toEqual(['first input', 'second input']);
+    },
+  );
+
+  it('retains the requested plugin identity when cloud history omits plugin metadata', async () => {
+    const { cloudConfig } = await import('../../../src/globalConfig/cloud');
+    const { makeRequest } = await import('../../../src/util/cloud');
+    vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+    vi.mocked(makeRequest).mockImplementation(async (path) => {
+      const pluginId = new URLSearchParams(path.split('?')[1]).get('pluginId');
+      return new Response(
+        JSON.stringify({
+          results: [
+            {
+              testCase: {
+                vars: { prompt: 'same attack' },
+                metadata: { strategyId: 'base64' },
+                assert: [{ type: 'equals', value: pluginId }],
+              },
+              response: {},
+              evalId: `cloud-${pluginId}`,
+            },
+          ],
+        }),
+      );
+    });
+    const getDb = await getMockDb();
+    getDb.mockResolvedValue({
+      select: vi.fn().mockReturnThis(),
+      from: vi.fn().mockReturnThis(),
+      where: vi.fn().mockReturnThis(),
+      orderBy: vi.fn().mockReturnThis(),
+      limit: vi
+        .fn()
+        .mockResolvedValueOnce([{ provider: { id: 'target' } }])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([{ provider: { id: 'target' } }])
+        .mockResolvedValueOnce([]),
+    } as any);
+    const pluginIds = ['bias:age', 'pii'];
+    const result = await addRetryTestCases(
+      pluginIds.map((pluginId) => ({ vars: { prompt: 'seed' }, metadata: { pluginId } })),
+      'prompt',
+      { targetIds: ['target'] },
+    );
+
+    expect(result.map((test) => test.metadata?.pluginId)).toEqual(pluginIds);
+    expect(result.map((test) => test.assert)).toMatchObject(
+      pluginIds.map((pluginId) => [{ type: 'equals', value: pluginId }]),
+    );
+  });
+
   it.each(['mixed', 'empty', 'http-error', 'network-error'])(
     'combines real SQLite history with %s cloud results',
     async (scenario) => {
@@ -494,6 +621,7 @@ describe('addRetryTestCases', () => {
           'GET',
         );
         expect(result.map((test) => [test.vars?.prompt, test.metadata?.strategyId])).toEqual([
+          ...(scenario === 'mixed' ? [['same attack', undefined]] : []),
           ['same attack', undefined],
           ['different attack', undefined],
           ['same attack', 'base64'],
