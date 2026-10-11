@@ -2047,8 +2047,12 @@ Set `retrievalConfiguration`, `generationConfiguration`, and
 This exposes metadata filters, implicit filtering, reranking, prompt templates,
 generation guardrails, query decomposition, and model-specific request fields.
 An explicit `generationConfiguration` replaces the convenience sampling options;
-`numberOfResults` overrides only the retrieval result count, preserving other
-retrieval settings.
+`numberOfResults` overrides the count in the top-level `retrievalConfiguration`,
+preserving its other settings. A complete `retrieveAndGenerateConfiguration`
+replaces these generated sections. For native `KNOWLEDGE_BASE` requests, set
+`vectorSearchConfiguration.numberOfResults` inside its
+`knowledgeBaseConfiguration.retrievalConfiguration` instead; convenience settings
+do not override the complete native object.
 
 `sessionId`, `sessionConfiguration` (including KMS encryption), and `userContext`
 are forwarded to AWS. The response exposes `metadata.sessionId`, `metadata.citations`,
