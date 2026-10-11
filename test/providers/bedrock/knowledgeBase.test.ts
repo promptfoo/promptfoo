@@ -257,7 +257,7 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
     const expectedCommand = createExpectedKnowledgeBaseCommand();
 
     expect(RetrieveAndGenerateCommand).toHaveBeenCalledWith(expectedCommand);
-    expect(mockSend).toHaveBeenCalledWith(expectedCommand);
+    expect(mockSend.mock.calls[0][0]).toEqual(expectedCommand);
     expect(result).toEqual({
       output: 'This is the response from the knowledge base',
       metadata: { citations: mockResponse.citations },
@@ -275,7 +275,7 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
 
     await provider.callApi('What is the capital of France?');
 
-    expect(mockSend).toHaveBeenCalledWith(
+    expect(mockSend.mock.calls[0][0]).toEqual(
       expect.objectContaining({
         retrieveAndGenerateConfiguration: expect.objectContaining({
           knowledgeBaseConfiguration: expect.objectContaining({ modelArn: modelName }),
