@@ -446,9 +446,14 @@ describe('HydraProvider', () => {
       });
     });
 
-    it.each([true, false])(
-      'uses the next valid verdict after a grader error (pass=%s)',
-      async (pass) => {
+    it.each(
+      [true, false].flatMap((pass) => [
+        { pass, freshGradingFails: false },
+        { pass, freshGradingFails: true },
+      ]),
+    )(
+      'preserves the next valid verdict or final grading error: %j',
+      async ({ pass, freshGradingFails }) => {
         mockAgentProvider.callApi.mockResolvedValue({
           output: 'Successful attack message',
           tokenUsage: { total: 100, prompt: 50, completion: 50 },
@@ -469,7 +474,8 @@ describe('HydraProvider', () => {
               metadata: { graderError: true },
             },
           })
-          .mockResolvedValue({ grade: { pass, score: pass ? 1 : 0, reason: 'Valid verdict' } });
+          .mockResolvedValueOnce({ grade: { pass, score: pass ? 1 : 0, reason: 'Valid verdict' } })
+          .mockRejectedValue(new Error('Final grading failed'));
         mockGetGraderById.mockReturnValue({ getResult } as any);
 
         const provider = new HydraProvider({
@@ -482,7 +488,12 @@ describe('HydraProvider', () => {
           vars: { input: 'test goal' },
           prompt: { raw: 'test prompt', label: 'test' },
           test: {
-            assert: [{ type: 'promptfoo:redteam:pii' }],
+            assert: [
+              {
+                type: 'promptfoo:redteam:pii',
+                ...(freshGradingFails && { transform: (output: unknown) => output }),
+              },
+            ],
             metadata: { goal: 'test goal', pluginId: 'pii', strategyId: 'jailbreak:hydra' },
             provider: 'promptfoo:redteam:hydra',
           } as any,
@@ -494,15 +505,19 @@ describe('HydraProvider', () => {
           graderPassed: undefined,
           graderError: 'Grading provider returned 503',
         });
-        const grading = await runAssertions({
+        const grading = runAssertions({
           prompt: 'test prompt',
           test: context.test!,
           providerResponse: result,
         });
-        expect(grading.componentResults?.[0].metadata?.gradingIncomplete).toBe(true);
+        if (freshGradingFails) {
+          await expect(grading).rejects.toThrow('Final grading failed');
+        } else {
+          expect((await grading).componentResults?.[0].metadata?.gradingIncomplete).toBe(true);
+        }
         expect(result.metadata?.hydraResult).toBe(!pass);
         expect(result.metadata?.successfulAttacks ?? []).toHaveLength(pass ? 0 : 1);
-        expect(getResult).toHaveBeenCalledTimes(2);
+        expect(getResult).toHaveBeenCalledTimes(freshGradingFails ? 3 : 2);
         expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(2);
         expect(JSON.parse(mockAgentProvider.callApi.mock.calls[1][0])).not.toHaveProperty(
           'lastGraderResult',

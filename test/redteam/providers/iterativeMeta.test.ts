@@ -497,9 +497,14 @@ describe('RedteamIterativeMetaProvider', () => {
       expect(result.metadata.stopReason).toBe('Grader failed');
     });
 
-    it.each([true, false])(
-      'uses the next valid verdict after a grader error (pass=%s)',
-      async (pass) => {
+    it.each(
+      [true, false].flatMap((pass) => [
+        { pass, freshGradingFails: false },
+        { pass, freshGradingFails: true },
+      ]),
+    )(
+      'preserves the next valid verdict or final grading error: %j',
+      async ({ pass, freshGradingFails }) => {
         const mockGrader = {
           getResult: vi
             .fn<any>()
@@ -513,14 +518,21 @@ describe('RedteamIterativeMetaProvider', () => {
             })
             .mockResolvedValueOnce({
               grade: { pass, score: pass ? 1 : 0, reason: 'Valid verdict' },
-            }),
+            })
+            .mockRejectedValue(new Error('Final grading failed')),
         };
 
         mockGetGraderById.mockReturnValue(mockGrader);
 
         const test: AtomicTestCase = {
           vars: { query: 'test' },
-          assert: [{ type: 'promptfoo:redteam:harmful', metric: 'Harmful' }],
+          assert: [
+            {
+              type: 'promptfoo:redteam:harmful',
+              metric: 'Harmful',
+              ...(freshGradingFails && { transform: (output: unknown) => output }),
+            },
+          ],
           metadata: { pluginId: 'harmful', strategyId: 'jailbreak:meta' },
           provider: 'promptfoo:redteam:iterative:meta',
         };
@@ -546,11 +558,15 @@ describe('RedteamIterativeMetaProvider', () => {
           graderPassed: undefined,
           graderError: 'Grading provider returned 503',
         });
-        const grading = await runAssertions({ prompt: 'test', test, providerResponse: result });
-        expect(grading.componentResults?.[0].metadata?.gradingIncomplete).toBe(true);
+        const grading = runAssertions({ prompt: 'test', test, providerResponse: result });
+        if (freshGradingFails) {
+          await expect(grading).rejects.toThrow('Final grading failed');
+        } else {
+          expect((await grading).componentResults?.[0].metadata?.gradingIncomplete).toBe(true);
+        }
         expect(result.metadata.vulnerabilityAchieved).toBe(!pass);
         expect(result.metadata.finalIteration).toBe(2);
-        expect(mockGrader.getResult).toHaveBeenCalledTimes(2);
+        expect(mockGrader.getResult).toHaveBeenCalledTimes(freshGradingFails ? 3 : 2);
         const nextRequest = JSON.parse(mockAgentProvider.callApi.mock.calls[1][0]);
         expect(nextRequest.lastAttempt).not.toHaveProperty('graderPassed');
         expect(nextRequest.lastAttempt.graderReason).toBe('Grading provider returned 503');

@@ -373,6 +373,13 @@ export const handleRedteam = async (
       },
     };
   } catch (error) {
+    // Required final grading must not turn a Meta/Hydra vulnerability into a pass.
+    if (
+      providerId === 'promptfoo:redteam:iterative:meta' ||
+      providerId === 'promptfoo:redteam:hydra'
+    ) {
+      throw error;
+    }
     // For iterative strategies, check if only SOME turns had grader errors (not all).
     // If only some failed, we can be lenient. If ALL failed, we should still ERROR.
     const redteamHistory = providerResponse.metadata?.redteamHistory as

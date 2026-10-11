@@ -60,7 +60,7 @@ Hydra manages attacker-side history and backtracking. Your target provider manag
 4. **Outcome grading** – Responses are graded with the configured plugin assertions and stored for later learning.
 5. **Adaptive branching** – On refusals, Hydra backtracks and explores alternate branches until it succeeds, exhausts `maxBacktracks`, or reaches `maxTurns`.
 
-A grader transport or parsing error is not recorded as a successful attack. Hydra continues within its configured turn limit to seek a valid verdict. Results retain an incomplete-grading marker when any attempt could not be graded.
+A grader transport or parsing error is not recorded as a successful attack. Hydra continues within its configured turn limit to seek a valid verdict. Results retain an incomplete-grading marker while attempts remain ungraded. An exception during required final grading remains an evaluation error.
 
 Hydra keeps a per-scan memory so later test cases can reuse successful tactics discovered earlier in the run.
 
