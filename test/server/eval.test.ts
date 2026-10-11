@@ -82,7 +82,10 @@ describe('eval routes', () => {
   function createManualRatingPayload(originalResult: any, pass: boolean) {
     const payload = { ...originalResult.gradingResult };
     const score = pass ? 1 : 0;
-    payload.componentResults ||= [];
+    payload.componentResults =
+      payload.componentResults?.filter(
+        (result: { assertion?: { type: string } }) => result.assertion?.type !== 'human',
+      ) ?? [];
     payload.componentResults.push({
       pass,
       score,
@@ -644,6 +647,115 @@ describe('eval routes', () => {
         } finally {
           cliState.resume = previousResume;
         }
+      },
+    );
+
+    it.each([false, true])(
+      'restores an empty underlying grade on clear (custom comparison score=%s)',
+      async (custom) => {
+        const { suite, grader, recover } = comparisonRecoverySuite();
+        suite.tests = [
+          custom
+            ? {
+                assert: [{ type: 'select-best', value: 'Choose best', provider: grader }],
+                assertScoringFunction: () => ({ pass: false, score: 0.25, reason: 'Custom grade' }),
+              }
+            : {},
+        ];
+        const original = custom ? { pass: false, score: 0.25 } : { pass: true, score: 1 };
+        const record = await Eval.create({}, suite.prompts);
+        testEvalIds.add(record.id);
+        const previousResume = cliState.resume;
+        try {
+          await evaluate(suite, record, { maxConcurrency: 1 });
+          let row = (await record.getResults()).find((result) => result.promptIdx === 0)!;
+          for (const pass of [false, true]) {
+            const payload = createManualRatingPayload(row, pass);
+            payload.componentResults[0].metadata = {
+              originalGrade: { pass: !original.pass, score: 99 },
+            };
+            const response = await api
+              .post(`/api/eval/${record.id}/results/${row.id}/rating`)
+              .send(payload);
+            expect(response.status).toBe(200);
+            row = (await record.getResults()).find((result) => result.promptIdx === 0)!;
+            expect(
+              row.gradingResult?.componentResults?.find(
+                (component) => component.assertion?.type === 'human',
+              )?.metadata?.originalGrade,
+            ).toEqual(original);
+          }
+          const cleared = await api.post(`/api/eval/${record.id}/results/${row.id}/rating`).send({
+            ...row.gradingResult,
+            pass: true,
+            score: 0,
+            componentResults: [],
+            action: 'clear',
+          });
+          expect(cleared.status).toBe(200);
+          expect(cleared.body).toMatchObject({
+            success: original.pass,
+            score: original.score,
+            failureReason: custom ? ResultFailureReason.ERROR : ResultFailureReason.NONE,
+            gradingResult: original,
+          });
+          const saved = await Eval.findById(record.id);
+          invariant(saved, 'Saved evaluation required');
+          expect(saved.prompts[0].metrics?.score).toBe(original.score);
+          if (custom) {
+            recover();
+            cliState.resume = true;
+            await evaluate(suite, saved, { maxConcurrency: 1 });
+            const winner = (await saved.getResults()).find((result) => result.promptIdx === 0)!;
+            expect(winner).toMatchObject({
+              success: false,
+              score: 0.25,
+              failureReason: ResultFailureReason.ASSERT,
+              gradingResult: original,
+            });
+          }
+        } finally {
+          cliState.resume = previousResume;
+        }
+      },
+    );
+
+    it.each([undefined, { pass: 'invalid', score: 1 }, { pass: true, score: 'invalid' }])(
+      'does not accept a supplied snapshot over missing or invalid saved metadata: %j',
+      async (originalGrade) => {
+        const record = await EvalFactory.create();
+        testEvalIds.add(record.id);
+        const row = (await record.getResults())[0];
+        invariant(row instanceof EvalResult, 'Persisted result required');
+        row.gradingResult = {
+          pass: true,
+          score: 1,
+          reason: 'Legacy approval',
+          componentResults: [
+            {
+              pass: true,
+              score: 1,
+              reason: 'Human',
+              assertion: { type: 'human' },
+              metadata: { originalGrade },
+            },
+          ],
+        };
+        await row.save();
+        const payload = createManualRatingPayload(row, false);
+        payload.componentResults[0].metadata = { originalGrade: { pass: true, score: 99 } };
+        const response = await api
+          .post(`/api/eval/${record.id}/results/${row.id}/rating`)
+          .send(payload);
+        expect(response.status).toBe(200);
+        expect(response.body.gradingResult.componentResults[0].metadata).not.toHaveProperty(
+          'originalGrade',
+        );
+        const cleared = await api
+          .post(`/api/eval/${record.id}/results/${row.id}/rating`)
+          .send({ ...response.body.gradingResult, componentResults: [], action: 'clear' });
+        expect(cleared.status).toBe(200);
+        expect(cleared.body.gradingResult).toMatchObject({ pass: true, score: 1 });
       },
     );
 

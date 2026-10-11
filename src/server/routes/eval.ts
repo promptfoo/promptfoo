@@ -761,7 +761,19 @@ evalRouter.post(
       const hasExistingManualOverride = Boolean(previousManualOverride);
       const originalFailureReason =
         previousManualOverride?.metadata?.originalFailureReason ?? result.failureReason;
-      const scoreChange = gradingResult.score - result.score;
+      const savedOriginalGrade = previousManualOverride?.metadata?.originalGrade;
+      const originalGrade = previousManualOverride
+        ? typeof savedOriginalGrade?.pass === 'boolean' &&
+          typeof savedOriginalGrade.score === 'number' &&
+          Number.isFinite(savedOriginalGrade.score)
+          ? savedOriginalGrade
+          : undefined
+        : result.gradingResult?.componentResults?.length
+          ? undefined
+          : {
+              pass: result.gradingResult?.pass ?? result.success,
+              score: result.gradingResult?.score ?? result.score,
+            };
       const manualOverride =
         gradingResult.componentResults?.find((r) => r.assertion?.type === HUMAN_ASSERTION_TYPE) ??
         (gradingResult.assertion?.type === HUMAN_ASSERTION_TYPE ? gradingResult : undefined);
@@ -770,12 +782,21 @@ evalRouter.post(
         return;
       }
       if (manualOverride) {
-        manualOverride.metadata = { ...manualOverride.metadata, originalFailureReason };
+        manualOverride.metadata = {
+          ...manualOverride.metadata,
+          originalFailureReason,
+          originalGrade,
+        };
       }
       const clearingError =
         action === 'clear' &&
         (originalFailureReason === ResultFailureReason.ERROR ||
           Boolean(result.metadata?.__promptfoo?.comparisonError));
+      if (action === 'clear' && !gradingResult.componentResults?.length) {
+        gradingResult.pass = originalGrade?.pass ?? true;
+        gradingResult.score = originalGrade?.score ?? (clearingError ? 0 : 1);
+      }
+      const scoreChange = gradingResult.score - result.score;
       const effectivePass = clearingError ? false : gradingResult.pass;
       const successChanged = result.success !== effectivePass;
       const failureReason = effectivePass

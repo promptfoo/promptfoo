@@ -869,15 +869,37 @@ function averageComponentResultScore(
   return scores.reduce((sum, resultScore) => sum + resultScore, 0) / scores.length;
 }
 
-function getOriginalFailureReason(output: EvaluateTableOutput) {
-  const manualOverride =
+function getManualGradingResult(output: EvaluateTableOutput) {
+  return (
     output.gradingResult?.componentResults?.find(
       (result) => result.assertion?.type === HUMAN_ASSERTION_TYPE,
     ) ??
     (output.gradingResult?.assertion?.type === HUMAN_ASSERTION_TYPE
       ? output.gradingResult
-      : undefined);
-  return manualOverride?.metadata?.originalFailureReason ?? output.failureReason;
+      : undefined)
+  );
+}
+
+function getOriginalFailureReason(output: EvaluateTableOutput) {
+  return getManualGradingResult(output)?.metadata?.originalFailureReason ?? output.failureReason;
+}
+
+function getOriginalGrade(output: EvaluateTableOutput) {
+  const manualOverride = getManualGradingResult(output);
+  if (manualOverride) {
+    const original = manualOverride.metadata?.originalGrade;
+    return typeof original?.pass === 'boolean' &&
+      typeof original.score === 'number' &&
+      Number.isFinite(original.score)
+      ? original
+      : undefined;
+  }
+  if (!output.gradingResult?.componentResults?.length) {
+    return {
+      pass: output.gradingResult?.pass ?? output.pass,
+      score: output.gradingResult?.score ?? output.score,
+    };
+  }
 }
 
 function getManualRatingUpdate({
@@ -918,17 +940,23 @@ function getManualRatingUpdate({
       componentResults.splice(humanResultIndex, 1);
     }
 
-    const gradingPass = componentResults.every((result) => result.pass);
+    const originalGrade = getOriginalGrade(existingOutput);
+    const gradingPass =
+      componentResults.length === 0 && originalGrade
+        ? originalGrade.pass
+        : componentResults.every((result) => result.pass);
     finalPass = gradingPass;
     if (componentResults.length > 0) {
       finalScore = averageComponentResultScore(componentResults, finalScore);
+    } else {
+      finalScore = originalGrade?.score ?? 1;
     }
     if (
       getOriginalFailureReason(existingOutput) === ResultFailureReason.ERROR ||
       existingOutput.metadata?.__promptfoo?.comparisonError
     ) {
       finalPass = false;
-      if (componentResults.length === 0) {
+      if (componentResults.length === 0 && !originalGrade) {
         finalScore = 0;
       }
     }
@@ -1025,11 +1053,13 @@ function buildManualGradingResult({
       (result) => result.assertion?.type === HUMAN_ASSERTION_TYPE,
     ) ?? (gradingResult.assertion?.type === HUMAN_ASSERTION_TYPE ? gradingResult : undefined);
   if (manualOverride) {
+    const originalGrade = getOriginalGrade(existingOutput);
     const preservedOverride = {
       ...manualOverride,
       metadata: {
         ...manualOverride.metadata,
         originalFailureReason: getOriginalFailureReason(existingOutput),
+        originalGrade,
       },
     };
     if (manualOverride === gradingResult) {

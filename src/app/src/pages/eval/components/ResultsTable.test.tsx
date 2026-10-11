@@ -3575,42 +3575,100 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
     },
   );
 
-  it.each([3, 4])('clears a manual-only failure consistently (version=%s)', async (version) => {
-    const user = userEvent.setup();
-    const table = createMockTableWithHumanAssertion();
-    const output = table.body[0].outputs[0];
-    Object.assign(output, { pass: false, score: 0, failureReason: 1 });
-    Object.assign(output.gradingResult, { pass: false, score: 0 });
-    output.gradingResult.componentResults.splice(0, 1);
-    Object.assign(output.gradingResult.componentResults[0], {
-      pass: false,
-      score: 0,
-      metadata: { originalFailureReason: 0 },
-    });
-    vi.mocked(useTableStore).mockImplementation(() =>
-      createTableStore({
-        version,
-        table,
-        setTable: mockSetTable,
-        isFetching: false,
-        filteredResultsCount: 1,
-      }),
-    );
-    renderWithProviders(<ResultsTable {...defaultProps} />);
-    await user.click(screen.getByRole('button', { name: 'Clear rating' }));
-    expect(
-      mockSetTable.mock.calls[mockSetTable.mock.calls.length - 1][0].body[0].outputs[0],
-    ).toMatchObject({
-      pass: true,
-      failureReason: 0,
-      gradingResult: { pass: true, componentResults: [] },
-    });
-    const request = mockCallApi.mock.calls.find(([url, options]: [string, RequestInit?]) =>
-      version >= 4 ? url.endsWith('/rating') : options?.method === 'PATCH',
-    );
-    const payload = JSON.parse(request[1].body);
-    expect(version >= 4 ? payload.pass : payload.table.body[0].outputs[0].pass).toBe(true);
-  });
+  it.each([
+    { version: 3, originalGrade: undefined },
+    { version: 4, originalGrade: undefined },
+    { version: 3, originalGrade: { pass: 'invalid', score: 'invalid' } },
+    { version: 4, originalGrade: { pass: 'invalid', score: 'invalid' } },
+  ])(
+    'restores the neutral legacy empty grade (version=$version, snapshot=$originalGrade)',
+    async ({ version, originalGrade }) => {
+      const user = userEvent.setup();
+      const table = createMockTableWithHumanAssertion();
+      const output = table.body[0].outputs[0];
+      Object.assign(output, { pass: false, score: 0, failureReason: 1 });
+      Object.assign(output.gradingResult, { pass: false, score: 0 });
+      output.gradingResult.componentResults.splice(0, 1);
+      Object.assign(output.gradingResult.componentResults[0], {
+        pass: false,
+        score: 0,
+        metadata: { originalFailureReason: 0, originalGrade },
+      });
+      vi.mocked(useTableStore).mockImplementation(() =>
+        createTableStore({
+          version,
+          table,
+          setTable: mockSetTable,
+          isFetching: false,
+          filteredResultsCount: 1,
+        }),
+      );
+      renderWithProviders(<ResultsTable {...defaultProps} />);
+      await user.click(screen.getByRole('button', { name: 'Clear rating' }));
+      expect(
+        mockSetTable.mock.calls[mockSetTable.mock.calls.length - 1][0].body[0].outputs[0],
+      ).toMatchObject({
+        pass: true,
+        score: 1,
+        failureReason: 0,
+        gradingResult: { pass: true, score: 1, componentResults: [] },
+      });
+      const request = mockCallApi.mock.calls.find(([url, options]: [string, RequestInit?]) =>
+        version >= 4 ? url.endsWith('/rating') : options?.method === 'PATCH',
+      );
+      const payload = JSON.parse(request[1].body);
+      expect(version >= 4 ? payload : payload.table.body[0].outputs[0]).toMatchObject({
+        pass: true,
+        score: 1,
+      });
+    },
+  );
+
+  it.each([3, 4])(
+    'restores original empty-component grades through rerating (version=%s)',
+    async (version) => {
+      for (const original of [
+        { pass: true, score: 1 },
+        { pass: false, score: 0.25 },
+      ]) {
+        let table = createMockTableWithHumanAssertion();
+        const output = table.body[0].outputs[0];
+        Object.assign(output, { ...original, failureReason: original.pass ? 0 : 1 });
+        Object.assign(output.gradingResult, { ...original, componentResults: [] });
+        mockSetTable.mockImplementation((next) => {
+          table = next;
+        });
+        vi.mocked(useTableStore).mockImplementation(() =>
+          createTableStore({
+            version,
+            table,
+            setTable: mockSetTable,
+            isFetching: false,
+            filteredResultsCount: 1,
+          }),
+        );
+        const { rerender, unmount } = renderWithProviders(<ResultsTable {...defaultProps} />);
+        const Cell = vi.mocked((await import('./EvalOutputCell')).default);
+        for (const rating of [false, true, null]) {
+          const onRating = Cell.mock.calls[Cell.mock.calls.length - 1][0].onRating;
+          await act(async () => onRating(rating));
+          rerender(<ResultsTable {...defaultProps} />);
+        }
+        expect(table.body[0].outputs[0]).toMatchObject({
+          ...original,
+          gradingResult: { ...original, componentResults: [] },
+        });
+        const request = mockCallApi.mock.calls
+          .filter(([url, options]: [string, RequestInit?]) =>
+            version >= 4 ? url.endsWith('/rating') : options?.method === 'PATCH',
+          )
+          .pop();
+        const payload = JSON.parse(request[1].body);
+        expect(version >= 4 ? payload : payload.table.body[0].outputs[0]).toMatchObject(original);
+        unmount();
+      }
+    },
+  );
 
   it.each([3, 4])(
     'restores a legacy approved error after an annotation (version=%s)',
