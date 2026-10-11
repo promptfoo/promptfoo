@@ -3,7 +3,7 @@ import logger from './logger';
 import { BaseAssertionTypesSchema } from './types/index';
 import { isJavascriptFile } from './util/fileExtensions';
 import invariant from './util/invariant';
-import { parseCommaSeparatedValues } from './util/parseCommaSeparatedValues';
+import { parseCommaSeparatedValues } from './validation/parseCommaSeparatedValues';
 
 import type { Assertion, AssertionType, BaseAssertionTypes, CsvRow, TestCase } from './types/index';
 
@@ -124,7 +124,9 @@ export function assertionFromString(expected: string): Assertion {
       type === 'levenshtein' ||
       type === 'perplexity-score' ||
       type === 'perplexity' ||
+      type === 'rouge-l' ||
       type === 'rouge-n' ||
+      type === 'rouge-s' ||
       type === 'similar' ||
       type === 'starts-with'
     ) {

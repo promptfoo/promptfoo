@@ -1,3 +1,4 @@
+import { resolveProviderCreatorInput } from './creator';
 import { resolveProviderApiKey } from './credentials';
 import { createNscaleImageProvider } from './nscale/image';
 import { OpenAiChatCompletionProvider } from './openai/chat';
@@ -5,8 +6,8 @@ import { OpenAiCompletionProvider } from './openai/completion';
 import { OpenAiEmbeddingProvider } from './openai/embedding';
 import { splitLocalOptions } from './openai/localOptions';
 
-import type { EnvOverrides } from '../types/env';
-import type { ApiProvider, ProviderOptions } from '../types/index';
+import type { ApiProvider } from '../types/index';
+import type { ProviderCreatorOptions } from './creator';
 import type { OpenAiSharedOptions } from './openai/types';
 
 function withNscaleCredentials(
@@ -35,19 +36,16 @@ function withNscaleCredentials(
  */
 export function createNscaleProvider(
   providerPath: string,
-  options: {
-    config?: ProviderOptions;
-    id?: string;
-    env?: EnvOverrides;
-  } = {},
+  options: ProviderCreatorOptions = {},
 ): ApiProvider {
+  const providerOptions = resolveProviderCreatorInput(options);
   const splits = providerPath.split(':');
 
-  const config = options.config?.config || {};
+  const config = providerOptions.config || {};
   const { localOptions, modelParameters } = splitLocalOptions(config);
 
   const nscaleConfig = {
-    ...options,
+    ...providerOptions,
     config: {
       ...localOptions,
       // Honor an explicit apiBaseUrl (private/regional Nscale endpoints) instead
@@ -69,8 +67,8 @@ export function createNscaleProvider(
   } else if (splits[1] === 'image') {
     return createNscaleImageProvider(providerPath, {
       config,
-      id: options.id,
-      env: options.env,
+      id: providerOptions.id,
+      env: providerOptions.env,
     });
   } else {
     // If no specific type is provided, default to chat

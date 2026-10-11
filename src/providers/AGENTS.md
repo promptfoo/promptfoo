@@ -74,6 +74,13 @@ strings persist to disk; if it stores hashed keys, the hash persists.
 
 ## Caching Best Practices
 
+Use `shouldBustProviderCache(context)` for the shared `bustCache`/legacy `debug`
+precedence, including both reads and writes for manually cached SDK responses.
+Use `withResponseCacheMetadata(response, cached)` after response normalization to
+retain replay provenance and mark cached requests without mutating stored usage.
+The helper preserves reported costs and unknown token counts; the evaluator
+derives incurred usage and cost from the cache marker.
+
 When implementing caching in your provider, **ALWAYS set the `cached: true` flag** when returning a cached response:
 
 ```typescript
@@ -147,3 +154,9 @@ ls examples/myprovider/promptfooconfig.yaml
 ```
 
 **Reference existing providers** - 50+ implementations to learn from.
+
+## Creator inputs
+
+The loader normalizes configuration and environment once. Factories receive those `ProviderOptions`; existing public creators accept them as `providerOptions`. `creator.ts` adapts the older nested `config` input at those public boundaries.
+
+`families/compatible.ts` loads the Cerebras, Envoy, LiteLLM, Novita, Nscale, and TogetherAI creators on demand, before the generic file fallback. Preserve each creator's aliases, default subtype, and colon-containing model names.

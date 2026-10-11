@@ -1,3 +1,4 @@
+import { clearEvalTables } from '../util/evalDb';
 /**
  * Unit tests for calculateFilteredMetrics utility.
  *
@@ -22,14 +23,7 @@ describe('calculateFilteredMetrics', () => {
     await runDbMigrations();
   });
 
-  beforeEach(async () => {
-    const db = await getDb();
-    await db.run('DELETE FROM eval_results');
-    await db.run('DELETE FROM evals_to_datasets');
-    await db.run('DELETE FROM evals_to_prompts');
-    await db.run('DELETE FROM evals_to_tags');
-    await db.run('DELETE FROM evals');
-  });
+  beforeEach(() => clearEvalTables());
 
   afterEach(() => {
     vi.resetAllMocks();

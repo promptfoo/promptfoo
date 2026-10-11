@@ -1,3 +1,5 @@
+import { createSingleAssertionTest } from '../factories/literalFixtures';
+
 import './setup';
 
 import { randomUUID } from 'crypto';
@@ -355,16 +357,7 @@ describeEvaluator('evaluator repeat cache isolation', () => {
     const testSuite: TestSuite = {
       providers: [provider],
       prompts: [toPrompt('Prompt A'), toPrompt('Prompt B')],
-      tests: [
-        {
-          assert: [
-            {
-              type: 'select-best',
-              value: 'choose the best one',
-            },
-          ],
-        },
-      ],
+      tests: [createSingleAssertionTest('select-best', 'choose the best one')],
     };
 
     try {
@@ -428,16 +421,7 @@ describeEvaluator('evaluator repeat cache isolation', () => {
     const testSuite: TestSuite = {
       providers: [provider],
       prompts: [toPrompt('Prompt A'), toPrompt('Prompt B')],
-      tests: [
-        {
-          assert: [
-            {
-              type: 'select-best',
-              value: 'choose the best one',
-            },
-          ],
-        },
-      ],
+      tests: [createSingleAssertionTest('select-best', 'choose the best one')],
     };
 
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });

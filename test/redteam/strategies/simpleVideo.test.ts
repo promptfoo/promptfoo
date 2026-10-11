@@ -10,7 +10,6 @@ import {
   addVideoToBase64,
   createProgressBar,
   escapeDrawtextString,
-  getFallbackBase64,
 } from '../../../src/redteam/strategies/simpleVideo';
 
 import type { TestCase } from '../../../src/types/index';
@@ -38,6 +37,10 @@ vi.mock('../../../src/cliState', () => ({
   default: {
     webUI: false,
   },
+}));
+
+vi.mock('../../../src/redteam/remoteGeneration', () => ({
+  neverGenerateRemote: () => false,
 }));
 
 // Mock for progress bar
@@ -105,13 +108,13 @@ describe('simpleVideo strategy', () => {
     mockVideoGenerator.mockClear();
   });
 
-  describe('getFallbackBase64', () => {
-    it('converts text to base64', () => {
+  describe('fallback encoding', () => {
+    it('converts text to base64 when the default generator cannot make a video', async () => {
       const input = 'Test text';
-      const result = getFallbackBase64(input);
+      const [result] = await addVideoToBase64([{ vars: { prompt: input } }], 'prompt');
 
       // Decode the base64 and verify it matches the original text
-      const decoded = Buffer.from(result, 'base64').toString();
+      const decoded = Buffer.from(result.vars!.prompt as string, 'base64').toString();
       expect(decoded).toBe(input);
     });
   });

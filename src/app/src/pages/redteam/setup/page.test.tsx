@@ -8,6 +8,7 @@ import userEvent from '@testing-library/user-event';
 import { load as loadYaml } from 'js-yaml';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
+import { getEstimatedDuration, getEstimatedProbes } from './components/strategies/utils';
 import { useRedTeamConfig } from './hooks/useRedTeamConfig';
 import { useRedTeamTargetConfigValidation } from './hooks/useRedTeamTargetConfigValidation';
 import { useSetupState } from './hooks/useSetupState';
@@ -56,8 +57,10 @@ const reviewRunGates = vi.hoisted(() => ({
 vi.mock('@app/hooks/useApiHealth', () => ({
   useApiHealth: () => ({ data: { status: 'connected' }, isLoading: false }),
 }));
-vi.mock('@app/hooks/useEmailVerification', () => ({
-  useEmailVerification: () => ({ checkEmailStatus: reviewRunGates.checkEmailStatus }),
+vi.mock('@app/utils/emailVerification', () => ({
+  checkEmailStatus: reviewRunGates.checkEmailStatus,
+  saveEmail: vi.fn(),
+  clearEmail: vi.fn(),
 }));
 vi.mock('@app/hooks/useEvalHistoryRefresh', () => ({
   useEvalHistoryRefresh: () => ({ signalEvalCompleted: reviewRunGates.signalEvalCompleted }),
@@ -72,7 +75,6 @@ vi.mock('@app/stores/redteamJobStore', () => ({
 }));
 
 // Mock child components to isolate the page component
-vi.mock('./components/Targets', () => ({ default: () => <div>Targets</div> }));
 vi.mock('./components/Targets/TargetTypeSelection', () => ({
   default: () => <div>TargetTypeSelection</div>,
 }));
@@ -304,6 +306,54 @@ describe('RedTeamSetupPage', () => {
   });
 
   describe('YAML file import', () => {
+    it('preserves plugin overrides through import, editing, and YAML export', async () => {
+      const user = userEvent.setup();
+      render(
+        <MemoryRouter initialEntries={['/redteam/setup']}>
+          <RedTeamSetupPage />
+        </MemoryRouter>,
+      );
+      await user.click(screen.getByRole('button', { name: /Load Config/i }));
+      const plugin = {
+        id: 'bola',
+        numTests: 17,
+        severity: 'critical',
+        config: { targetSystems: ['documents'] },
+      };
+      const file = new File(
+        [
+          JSON.stringify({
+            description: 'Plugin override round trip',
+            prompts: ['{{prompt}}'],
+            targets: [{ id: 'echo', config: {} }],
+            redteam: { numTests: 5, maxConcurrency: 10, plugins: [plugin], strategies: ['basic'] },
+          }),
+        ],
+        'config.yaml',
+        { type: 'text/yaml' },
+      );
+      await user.upload(document.querySelector('input[type="file"]') as HTMLInputElement, file);
+      await waitFor(() => expect(useRedTeamConfig.getState().config.plugins).toEqual([plugin]));
+      expect(getEstimatedProbes(useRedTeamConfig.getState().config)).toBe(17);
+      expect(getEstimatedDuration(useRedTeamConfig.getState().config)).toBe('~14s');
+
+      act(() =>
+        useRedTeamConfig
+          .getState()
+          .updatePlugins([{ id: 'bola', config: { targetSystems: ['edited'] } }]),
+      );
+      expect(getEstimatedProbes(useRedTeamConfig.getState().config)).toBe(17);
+      expect(getEstimatedDuration(useRedTeamConfig.getState().config)).toBe('~14s');
+      const exported = loadYaml(generateOrderedYaml(useRedTeamConfig.getState().config));
+      expect(exported).toMatchObject({
+        redteam: {
+          numTests: 5,
+          plugins: [{ ...plugin, config: { targetSystems: ['edited'] } }],
+          strategies: [{ id: 'basic' }],
+        },
+      });
+    });
+
     it('normalizes an object target with an omitted config while importing YAML', async () => {
       const user = userEvent.setup();
       const showToast = vi.fn();

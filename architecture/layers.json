@@ -68,6 +68,7 @@
         "src/util/fileExtensions.ts",
         "src/util/invariant.ts",
         "src/util/objectUtils.ts",
+        "src/util/providerResponse.ts",
         "src/util/sanitizer.ts",
         "src/util/text.ts",
         "src/util/yamlLoad.ts",
@@ -132,6 +133,7 @@
         "src/util"
       ],
       "allowedDependencies": [
+        "contracts",
         "core",
         "legacy-contracts",
         "legacy-runtime",
@@ -149,7 +151,8 @@
         "legacy-runtime",
         "node",
         "providers",
-        "redteam"
+        "redteam",
+        "validation"
       ]
     },
     {
@@ -213,7 +216,8 @@
         "legacy-contracts",
         "node",
         "providers",
-        "redteam"
+        "redteam",
+        "validation"
       ]
     },
     {
