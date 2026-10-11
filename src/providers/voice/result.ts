@@ -54,6 +54,25 @@ function totalCost(
     : undefined;
 }
 
+function totalTokenUsage(
+  responses: Array<ProviderResponse | undefined>,
+  preparationResponses: ProviderResponse[],
+  recognition: LiveTranscriptionSummary | undefined,
+) {
+  const tokenUsage = createEmptyTokenUsage();
+  for (const response of [...responses, ...preparationResponses]) {
+    if (response) {
+      accumulateResponseTokenUsage(tokenUsage, response);
+    }
+  }
+  // The independent recognizer reports duration receipts, not token usage. Add
+  // its attempted connection count once without inventing tokens or billing.
+  accumulateResponseTokenUsage(tokenUsage, {
+    tokenUsage: { numRequests: recognition?.numRequests ?? 0 },
+  });
+  return tokenUsage;
+}
+
 /** Preserve partial evidence and separate observed duration from final, billable usage. */
 export function formatVoiceResult({
   transcript,
@@ -72,12 +91,7 @@ export function formatVoiceResult({
   targetPlayback,
   targetSourcePcm,
 }: VoiceResultInput): ProviderResponse {
-  const tokenUsage = createEmptyTokenUsage();
-  for (const response of [...responses, ...preparationResponses]) {
-    if (response) {
-      accumulateResponseTokenUsage(tokenUsage, response);
-    }
-  }
+  const tokenUsage = totalTokenUsage(responses, preparationResponses, targetPlayback?.recognition);
   error ??= responses.find((response) => response?.error)?.error;
   if (
     !error &&

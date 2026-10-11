@@ -128,4 +128,21 @@ describe('result metadata audio persistence', () => {
     expect(() => JSON.stringify(result.toEvaluateResult())).not.toThrow();
     expect(unrelated.self).toBe(unrelated);
   });
+
+  it.each([123, true, { type: 'wav' }, ['wav'], null, false, undefined])(
+    'stores legacy metadata audio with non-string format %j using a safe MIME fallback',
+    async (format) => {
+      const evaluation = await Eval.create({}, [], { id: `eval-audio-${randomUUID()}` });
+      const input = createEvaluateResult({ metadata: { audio: { ...sourceAudio, format } } });
+      const saved = await EvalResult.createFromEvaluateResult(evaluation.id, input);
+      const result = await EvalResult.findById(saved.id);
+      expect(result?.metadata.audio.blobRef).toMatchObject({
+        hash: sha256(bytes),
+        mimeType: 'audio/wav',
+      });
+      expect(result?.metadata.audio.format).toEqual(format);
+      expect(result?.metadata.audio.data).toBeUndefined();
+      expect(input.metadata?.audio.data).toBe(bytes.toString('base64'));
+    },
+  );
 });

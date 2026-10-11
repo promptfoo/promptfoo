@@ -82,7 +82,7 @@ async function connect() {
   return sockets;
 }
 
-async function connectApplication() {
+async function connectApplication(readyParticipants: number[] = [0, 1]) {
   await vi.advanceTimersByTimeAsync(0);
   expect(sockets).toHaveLength(1);
   const recognizer = sockets[0];
@@ -109,10 +109,14 @@ async function connectApplication() {
   for (const [index, socket] of [target, caller].entries()) {
     socket.readyState = 1;
     socket.emit('open');
-    emit(socket, { type: 'session.started', session: { id: `live_${index}` } });
+    if (readyParticipants.includes(index)) {
+      emit(socket, { type: 'session.started', session: { id: `live_${index}` } });
+    }
   }
   await vi.advanceTimersByTimeAsync(0);
-  acknowledgeOpening();
+  if (readyParticipants.length === 2) {
+    acknowledgeOpening();
+  }
   return { recognizer, target, caller };
 }
 function transcript(socket: Socket, delta: string, start_ms: number, role = 'output') {
@@ -213,6 +217,7 @@ describe('SimulatedVoiceUser', () => {
     expect(response.metadata?.voice.targetPlayback).toBeUndefined();
     expect(response.metadata?.audio).toBeUndefined();
     expect(sockets).toHaveLength(2);
+    expect(response.tokenUsage?.numRequests).toBe(2);
   });
 
   it('stops application playback from recognized accepted PCM and retains separate source evidence', async () => {
@@ -262,6 +267,7 @@ describe('SimulatedVoiceUser', () => {
       metrics: { stops: 1, suppressed: false, transportRejectedSourceBytes: 0 },
       recognition: {
         status: 'completed',
+        numRequests: 1,
         requestedDelay: 'minimal',
         delayAcknowledged: false,
         usageConfirmed: false,
@@ -298,6 +304,7 @@ describe('SimulatedVoiceUser', () => {
     });
     expect(Buffer.from(response.metadata!.audio.data, 'base64').length - 44).toBe(m.sourceBytes);
     expect(response.cost).toBeUndefined();
+    expect(response.tokenUsage?.numRequests).toBe(3);
     expect(vi.getTimerCount()).toBe(0);
   });
 
@@ -311,9 +318,104 @@ describe('SimulatedVoiceUser', () => {
     const response = await result;
     expect(response.error).toContain('[REDACTED]');
     expect(response.error).not.toContain('target-key');
-    expect(response.metadata?.voice.targetPlayback.recognition.status).toBe('failed');
+    expect(response.metadata?.voice.targetPlayback.recognition).toMatchObject({
+      status: 'failed',
+      numRequests: 1,
+    });
+    expect(response.tokenUsage).toMatchObject({ numRequests: 1, total: 0 });
     expect(response.metadata?.voice.targetPlayback.clock).toBe('provider');
     expect(sockets).toHaveLength(1);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it.each([
+    { pending: 'both participants', ready: [] },
+    { pending: 'the caller', ready: [0] },
+    { pending: 'the target', ready: [1] },
+  ])(
+    'closes $pending promptly if recognition fails after its startup acknowledgment',
+    async ({ ready }) => {
+      const result = provider({ targetPlayback: { mode: 'app-barge-in' } }).callApi('Cafe');
+      const settled = vi.fn();
+      void result.then(settled);
+      const { recognizer, target, caller } = await connectApplication(ready);
+      emit(recognizer, {
+        type: 'error',
+        error: { message: 'Recognition failed after startup acknowledgment' },
+      });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(recognizer.terminate).toHaveBeenCalledOnce();
+      for (const [index, socket] of [target, caller].entries()) {
+        if (ready.includes(index)) {
+          expect(socket.sent).toContainEqual({ type: 'session.close' });
+          emit(socket, {
+            type: 'session.closed',
+            reason: 'close_requested',
+            usage: { seconds: 0 },
+          });
+        } else {
+          expect(socket.terminate).toHaveBeenCalledOnce();
+        }
+        expect(socket.sent.some((event) => event.type === 'session.instructions.append')).toBe(
+          false,
+        );
+        expect(socket.sent.some((event) => event.type === 'session.input_audio.append')).toBe(
+          false,
+        );
+      }
+      await vi.advanceTimersByTimeAsync(0);
+      expect(settled).toHaveBeenCalledOnce();
+      const response = await result;
+      expect(response.error).toBe(
+        'Live transcription API failed: Recognition failed after startup acknowledgment',
+      );
+      expect(response.metadata?.voice.stopReason).toBe('error');
+      expect(response.metadata?.voice.targetPlayback).toMatchObject({
+        clock: 'provider',
+        recognition: { status: 'failed', numRequests: 1, sentAudioBytes: 0 },
+      });
+      expect(response.tokenUsage).toMatchObject({
+        numRequests: 3,
+      });
+      expect(sockets.every((socket) => socket.terminate.mock.calls.length === 1)).toBe(true);
+      expect(vi.getTimerCount()).toBe(0);
+    },
+  );
+
+  it('preserves an active-media recognition error while closing both live participants', async () => {
+    const result = provider({ targetPlayback: { mode: 'app-barge-in' } }).callApi('Cafe');
+    const { recognizer, target, caller } = await connectApplication();
+    await vi.advanceTimersByTimeAsync(40);
+    emit(recognizer, { type: 'error', error: { message: 'Recognition failed during media' } });
+    await vi.advanceTimersByTimeAsync(0);
+    for (const socket of [target, caller]) {
+      expect(socket.sent).toContainEqual({ type: 'session.close' });
+    }
+    finalize();
+    const response = await result;
+    expect(response.error).toBe('Live transcription API failed: Recognition failed during media');
+    expect(response.metadata?.voice.stopReason).toBe('error');
+    expect(response.metadata?.voice.targetPlayback).toMatchObject({
+      clock: 'media',
+      recognition: { status: 'failed' },
+    });
+    expect(sockets.every((socket) => socket.terminate.mock.calls.length === 1)).toBe(true);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('preserves the caller abort reason after recognition is ready while a live peer starts', async () => {
+    const abort = new AbortController();
+    const reason = new Error('Caller cancelled while peer was starting');
+    const result = provider({ targetPlayback: { mode: 'app-barge-in' } }).callApi(
+      'Cafe',
+      undefined,
+      { abortSignal: abort.signal },
+    );
+    const rejected = expect(result).rejects.toBe(reason);
+    await connectApplication([0]);
+    abort.abort(reason);
+    await rejected;
+    expect(sockets.every((socket) => socket.terminate.mock.calls.length === 1)).toBe(true);
     expect(vi.getTimerCount()).toBe(0);
   });
 

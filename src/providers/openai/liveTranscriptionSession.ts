@@ -65,6 +65,8 @@ interface TranscriptEvent {
 
 export interface LiveTranscriptionSummary {
   model: string;
+  /** Attempted WebSocket connections, not billing receipts or audio/token usage. */
+  numRequests: 0 | 1;
   requestedDelay: 'minimal' | 'low';
   /** The API may accept delay without including it in session.updated. */
   delayAcknowledged: boolean;
@@ -101,6 +103,7 @@ export class LiveTranscriptionSession {
   private socket?: WebSocket;
   private proxyAgent?: ProxyAgent;
   private phase: 'new' | 'starting' | 'ready' | 'finishing' | 'closed' = 'new';
+  private connectionAttempted = false;
   private error?: string;
   private echoedDelay?: 'minimal' | 'low';
   private startupTimer?: ReturnType<typeof setTimeout>;
@@ -145,6 +148,9 @@ export class LiveTranscriptionSession {
         if (proxyUrl) {
           this.proxyAgent = new ProxyAgent({ getProxyForUrl: () => proxyUrl });
         }
+        // Count once at the connection invocation, including startup failures.
+        // Pre-aborted or never-started sessions must not add a request.
+        this.connectionAttempted = true;
         this.socket = new WebSocket(this.options.url, {
           headers: this.options.headers,
           agent: this.proxyAgent,
@@ -615,6 +621,7 @@ export class LiveTranscriptionSession {
       );
     return {
       model: MODEL,
+      numRequests: this.connectionAttempted ? 1 : 0,
       requestedDelay: this.options.delay ?? 'minimal',
       delayAcknowledged: this.echoedDelay !== undefined,
       ...(this.echoedDelay === undefined ? {} : { echoedDelay: this.echoedDelay }),

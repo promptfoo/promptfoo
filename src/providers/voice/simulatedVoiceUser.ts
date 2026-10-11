@@ -299,6 +299,7 @@ export class SimulatedVoiceUser implements ApiProvider {
     let targetRefused = false;
     let stopped = false;
     let endMedia: (() => void) | undefined;
+    let rejectSetup: ((reason: unknown) => void) | undefined;
     const startedAt = performance.now();
     let mediaStartedAt = startedAt;
     let mediaStarted = false;
@@ -333,6 +334,8 @@ export class SimulatedVoiceUser implements ApiProvider {
         error ??= cause instanceof Error ? cause.message : fallback;
       }
       stopReason = timedOut ? 'timeout' : 'error';
+      // Unblock startup even when the media resolver has not been installed yet.
+      rejectSetup?.(cause);
       stop();
     };
     controller.signal.addEventListener('abort', stop, { once: true });
@@ -386,11 +389,10 @@ export class SimulatedVoiceUser implements ApiProvider {
           durationMs,
         ),
       ];
-      let rejectSetup!: (reason: unknown) => void;
       const setupInterrupted = new Promise<never>((_resolve, reject) => {
         rejectSetup = reject;
       });
-      const onInterrupted = () => rejectSetup(controller.signal.reason);
+      const onInterrupted = () => rejectSetup?.(controller.signal.reason);
       controller.signal.addEventListener('abort', onInterrupted, { once: true });
       void setupInterrupted.catch(() => {});
       const readiness: Promise<void>[] = [];
@@ -421,7 +423,7 @@ export class SimulatedVoiceUser implements ApiProvider {
                 if (expectedTargetRefusal) {
                   targetRefused = true;
                 } else {
-                  rejectSetup(
+                  rejectSetup?.(
                     new Error(
                       failure ?? 'Voice participant ended before both sessions were ready.',
                     ),

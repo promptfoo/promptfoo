@@ -154,6 +154,26 @@ describe('independent Live transcription', () => {
     fixture.session.abort();
   });
 
+  it('counts no request when never started or aborted before startup', async () => {
+    const unstarted = setup();
+    expect((await unstarted.session.finish()).numRequests).toBe(0);
+    const aborted = setup();
+    aborted.controller.abort();
+    await expect(aborted.session.start()).rejects.toThrow('aborted before startup');
+    expect((await aborted.session.finish()).numRequests).toBe(0);
+    expect(sockets).toHaveLength(0);
+  });
+
+  it('counts a ready connection once across repeated finish and rejected restart', async () => {
+    const fixture = setup();
+    await fixture.start();
+    const summary = await fixture.session.finish();
+    expect(summary).toMatchObject({ numRequests: 1, sentAudioMs: 0, usageSeconds: 0 });
+    await expect(fixture.session.start()).rejects.toThrow('only start once');
+    expect((await fixture.session.finish()).numRequests).toBe(1);
+    expect(sockets).toHaveLength(1);
+  });
+
   it('makes a causal early decision from split deltas and preserves all accepted PCM', async () => {
     const fixture = setup();
     const socket = await fixture.start();
@@ -348,6 +368,12 @@ describe('independent Live transcription', () => {
     await vi.advanceTimersByTimeAsync(100);
     await rejection;
     expect(sockets[0].terminate).toHaveBeenCalledOnce();
+    expect(await fixture.session.finish()).toMatchObject({
+      numRequests: 1,
+      sentAudioMs: 0,
+      usageSeconds: 0,
+      usageConfirmed: false,
+    });
   });
 
   it('redacts API errors and malformed payloads', async () => {

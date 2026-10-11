@@ -998,15 +998,31 @@ export async function externalizeResultMetadata(
   result: Pick<EvaluateResult, 'metadata' | 'testIdx' | 'promptIdx'>,
   evalId: string,
 ): Promise<EvaluateResult['metadata']> {
-  if (typeof result.metadata?.audio?.data !== 'string') {
+  const audio = result.metadata?.audio;
+  if (
+    !result.metadata ||
+    typeof result.metadata !== 'object' ||
+    Array.isArray(result.metadata) ||
+    !audio ||
+    typeof audio !== 'object' ||
+    Array.isArray(audio) ||
+    typeof audio.data !== 'string'
+  ) {
     return result.metadata;
   }
+  // Metadata is untyped at this boundary. Match the response-metadata
+  // extractor's MIME fallback without changing legacy annotations or format.
   const processed = await extractAndStoreBinaryData(
-    { audio: result.metadata.audio },
+    {
+      audio: {
+        data: audio.data,
+        format: typeof audio.format === 'string' ? audio.format : undefined,
+      },
+    },
     { evalId, testIdx: result.testIdx, promptIdx: result.promptIdx },
   );
-  return processed?.audio && processed.audio !== result.metadata.audio
-    ? { ...result.metadata, audio: processed.audio }
+  return processed?.audio?.blobRef && processed.audio.data === undefined
+    ? { ...result.metadata, audio: { ...audio, data: undefined, blobRef: processed.audio.blobRef } }
     : result.metadata;
 }
 
