@@ -945,7 +945,6 @@ function getManualRatingUpdate({
     reason: 'Manual result (overrides all other grading results)',
     comment,
     assertion: { type: HUMAN_ASSERTION_TYPE },
-    metadata: { originalFailureReason: getOriginalFailureReason(existingOutput) },
   };
 
   if (humanResultIndex === -1) {
@@ -980,15 +979,13 @@ function buildManualGradingResult({
 
   const gradingResult: GradingResult = {
     ...existingGradingResultWithoutComponents,
-    pass: existingOutput.gradingResult?.pass ?? ratingUpdate.pass,
-    score: existingOutput.gradingResult?.score ?? ratingUpdate.score,
+    pass: ratingUpdate.pass,
+    score: ratingUpdate.score,
     reason: existingOutput.gradingResult?.reason ?? 'Manual result',
     comment,
   };
 
   if (isPass === null) {
-    gradingResult.pass = ratingUpdate.pass;
-    gradingResult.score = ratingUpdate.score;
     if (gradingResult.reason === 'Manual result (overrides all other grading results)') {
       gradingResult.reason = ratingUpdate.componentResults?.[0]?.reason || 'Manual rating cleared';
     }
@@ -996,8 +993,6 @@ function buildManualGradingResult({
       delete gradingResult.assertion;
     }
   } else if (typeof isPass !== 'undefined' || typeof score !== 'undefined') {
-    gradingResult.pass = ratingUpdate.pass;
-    gradingResult.score = ratingUpdate.score;
     gradingResult.reason = 'Manual result (overrides all other grading results)';
     if (existingOutput.gradingResult?.assertion) {
       gradingResult.assertion = existingOutput.gradingResult.assertion;
@@ -1008,6 +1003,26 @@ function buildManualGradingResult({
     gradingResult.componentResults = ratingUpdate.componentResults;
   } else if (existingOutput.gradingResult?.componentResults?.length) {
     gradingResult.componentResults = existingOutput.gradingResult.componentResults;
+  }
+
+  const manualOverride =
+    gradingResult.componentResults?.find(
+      (result) => result.assertion?.type === HUMAN_ASSERTION_TYPE,
+    ) ?? (gradingResult.assertion?.type === HUMAN_ASSERTION_TYPE ? gradingResult : undefined);
+  if (manualOverride) {
+    const preservedOverride = {
+      ...manualOverride,
+      metadata: {
+        ...manualOverride.metadata,
+        originalFailureReason: getOriginalFailureReason(existingOutput),
+      },
+    };
+    if (manualOverride === gradingResult) {
+      return preservedOverride;
+    }
+    gradingResult.componentResults = gradingResult.componentResults?.map((result) =>
+      result === manualOverride ? preservedOverride : result,
+    );
   }
 
   return gradingResult;

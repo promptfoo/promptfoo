@@ -3535,6 +3535,70 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
     },
   );
 
+  it('restores a legacy approved error after a comment without mutating the prior table', async () => {
+    const user = userEvent.setup();
+    // Main stored approvals with the original ERROR category but no human metadata.
+    const legacyTable = createMockTableWithHumanAssertion();
+    legacyTable.body[0].outputs[0].failureReason = 2;
+    legacyTable.body[0].outputs[0].gradingResult.componentResults.splice(0, 1);
+    const snapshot = structuredClone(legacyTable);
+    let table = legacyTable;
+    mockSetTable.mockImplementation((next) => {
+      table = next;
+    });
+    vi.mocked(useTableStore).mockImplementation(() =>
+      createTableStore({
+        table,
+        setTable: mockSetTable,
+        isFetching: false,
+        filteredResultsCount: 1,
+      }),
+    );
+    const { rerender } = renderWithProviders(<ResultsTable {...defaultProps} />);
+    const Cell = vi.mocked((await import('./EvalOutputCell')).default);
+    const onRating = Cell.mock.calls[Cell.mock.calls.length - 1][0].onRating;
+    await act(async () => onRating(undefined, undefined, 'Legacy comment'));
+    expect(table.body[0].outputs[0].failureReason).toBe(0);
+    expect(table.body[0].outputs[0].gradingResult.componentResults[0]).toMatchObject({
+      metadata: { originalFailureReason: 2 },
+    });
+    expect(legacyTable).toEqual(snapshot);
+    rerender(<ResultsTable {...defaultProps} />);
+    await user.click(screen.getByRole('button', { name: 'Clear rating' }));
+    expect(table.body[0].outputs[0]).toMatchObject({ pass: false, score: 0, failureReason: 2 });
+  });
+
+  it('keeps the effective comparison-error verdict when saving only a comment', async () => {
+    const table = createMockTableWithHumanAssertion();
+    const output = table.body[0].outputs[0];
+    Object.assign(output, { pass: false, score: 0, failureReason: 2 });
+    output.gradingResult.componentResults.splice(1, 1);
+    output.gradingResult.componentResults[0].pass = true;
+    vi.mocked(useTableStore).mockImplementation(() =>
+      createTableStore({
+        table,
+        setTable: mockSetTable,
+        isFetching: false,
+        filteredResultsCount: 1,
+      }),
+    );
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+    const Cell = vi.mocked((await import('./EvalOutputCell')).default);
+    const onRating = Cell.mock.calls[Cell.mock.calls.length - 1][0].onRating;
+    await act(async () => onRating(undefined, undefined, 'Comparison error comment'));
+    const request = mockCallApi.mock.calls.find(([url]: [string]) => url.endsWith('/rating'));
+    expect(JSON.parse(request[1].body)).toMatchObject({
+      pass: false,
+      score: 0,
+      comment: 'Comparison error comment',
+    });
+    expect(mockSetTable.mock.calls[0][0].body[0].outputs[0]).toMatchObject({
+      pass: false,
+      score: 0,
+      failureReason: 2,
+    });
+  });
+
   it('persists a cleared human rating without manual override fields', async () => {
     const user = userEvent.setup();
     const mockTable = createMockTableWithHumanAssertion();
