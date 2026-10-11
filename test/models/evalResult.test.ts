@@ -1375,6 +1375,34 @@ describe('EvalResult', () => {
   });
 
   describe('toEvaluateResult', () => {
+    it.each(['trace', 'citations', 'returnControl', 'files', 'retrievalResults'])(
+      'redacts credentials while restoring raw test-owned %s in JSONL',
+      (key) => {
+        const credential = 'fixture-raw-test-credential';
+        const configured = {
+          note: 'test-owned annotation',
+          apiKey: credential,
+          headers: { Authorization: `Bearer ${credential}` },
+        };
+        const providerValue = { note: 'provider output' };
+        const input = createEvaluateResult({
+          response: { output: 'provider output', metadata: { [key]: providerValue } },
+          metadata: { [key]: providerValue, annotation: 'keep separate annotation' },
+          testCase: createAtomicTestCase({ metadata: { [key]: configured } }),
+        });
+        const projected = sanitizeResultForJsonlArtifact(
+          input,
+          getStripFlags({ PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'true' }),
+        );
+        expect(JSON.stringify(projected)).not.toContain(credential);
+        expect(projected.metadata?.[key]).toEqual(projected.testCase.metadata?.[key]);
+        expect(projected.metadata?.[key]).toMatchObject({ note: 'test-owned annotation' });
+        expect(projected.metadata?.annotation).toBe('keep separate annotation');
+        expect(projected.response?.metadata).not.toHaveProperty(key);
+        expect(input.testCase.metadata?.[key]).toEqual(configured);
+      },
+    );
+
     it.each(
       ['present', 'removed', 'replaced'].flatMap((canonical) =>
         [false, true].map((testOwned) => ({ canonical, testOwned })),
