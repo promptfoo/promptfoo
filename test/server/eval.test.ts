@@ -239,6 +239,10 @@ describe('eval routes', () => {
 
       for (const [grade, reason] of [
         [
+          { ...originalGrade, metadata: undefined, comment: 'Preserve an existing error' },
+          ResultFailureReason.ERROR,
+        ],
+        [
           createManualRatingPayload({ gradingResult: structuredClone(originalGrade) }, true),
           ResultFailureReason.NONE,
         ],

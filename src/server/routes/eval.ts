@@ -756,7 +756,9 @@ evalRouter.post(
         gradingResult.componentResults?.some((r) => r.assertion?.type === HUMAN_ASSERTION_TYPE);
       const failureReason = gradingResult.pass
         ? ResultFailureReason.NONE
-        : !hasManualOverride && gradingResult.metadata?.graderError === true
+        : !hasManualOverride &&
+            (gradingResult.metadata?.graderError === true ||
+              result.failureReason === ResultFailureReason.ERROR)
           ? ResultFailureReason.ERROR
           : ResultFailureReason.ASSERT;
       const nextCount = gradingResult.pass
