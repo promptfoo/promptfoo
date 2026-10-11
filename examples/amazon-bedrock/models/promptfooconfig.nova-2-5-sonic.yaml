@@ -1,0 +1,39 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+# Requires ffmpeg on PATH to convert the bundled WAV to raw PCM.
+description: Nova 2.5 Sonic speech response
+
+prompts:
+  - file://nova_sonic_pcm_prompt.js
+
+providers:
+  - id: bedrock:amazon.nova-2-5-sonic
+    config:
+      region: us-east-1
+      inferenceConfiguration:
+        maxTokens: 1024
+      sessionTimeout: 60000
+      requestTimeout: 60000
+      audioInputConfiguration:
+        mediaType: audio/lpcm
+        sampleRateHertz: 16000
+        sampleSizeBits: 16
+        channelCount: 1
+        encoding: base64
+        audioType: SPEECH
+      audioOutputConfiguration:
+        mediaType: audio/lpcm
+        sampleRateHertz: 24000
+        sampleSizeBits: 16
+        channelCount: 1
+        voiceId: matthew
+        encoding: base64
+        audioType: SPEECH
+
+tests:
+  - vars:
+      audio_file: assets/hello.wav
+    metadata:
+      systemPrompt: You are a helpful voice assistant. Answer briefly.
+    assert:
+      - type: javascript
+        value: typeof output === 'string' && output.trim().length > 0 && !output.includes('[No response')

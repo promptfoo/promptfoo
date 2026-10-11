@@ -712,18 +712,19 @@ The same parameter constraints apply when using the Converse API.
 
 Amazon Nova Sonic models support real-time speech-to-speech conversations with text, audio, and tool use. Promptfoo routes them through Bedrock's `InvokeModelWithBidirectionalStream` API; they do not support the ordinary InvokeModel or Converse routes.
 
-| Model ID                   | Promptfoo shorthand    | Notes                                                                    |
-| -------------------------- | ---------------------- | ------------------------------------------------------------------------ |
-| `amazon.nova-2-sonic-v1:0` | `bedrock:nova-2-sonic` | Current Nova 2 Sonic model; 1M-token context and up to 64K output tokens |
-| `amazon.nova-sonic-v1:0`   | `bedrock:nova-sonic`   | Original Nova Sonic model                                                |
+| Model ID                   | Promptfoo shorthand      | Notes                                                       |
+| -------------------------- | ------------------------ | ----------------------------------------------------------- |
+| `amazon.nova-2-5-sonic`    | `bedrock:nova-2-5-sonic` | Nova 2.5 Sonic speech model                                 |
+| `amazon.nova-2-sonic-v1:0` | `bedrock:nova-2-sonic`   | Nova 2 Sonic; retained for existing configurations          |
+| `amazon.nova-sonic-v1:0`   | `bedrock:nova-sonic`     | Original Nova Sonic; reached end of life September 14, 2026 |
 
-Nova 2 Sonic supports only the Standard service tier and only the in-region endpoints `us-east-1`, `us-west-2`, `eu-north-1`, and `ap-northeast-1`. AWS does not publish geo or global inference IDs for this model, so use the bare model ID with `config.region`. See the [Nova 2 Sonic model card](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-amazon-nova-2-sonic.html) for current availability.
+Nova 2 and 2.5 Sonic use the in-region endpoints `us-east-1`, `us-west-2`, `eu-north-1`, and `ap-northeast-1`. AWS does not publish geo or global inference IDs for these models, so use the bare model ID with `config.region`. See the [Nova 2.5 Sonic announcement](https://aws.amazon.com/about-aws/whats-new/2026/10/amazon-nova-2.5-Sonic/) and [Nova 2 Sonic model card](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-amazon-nova-2-sonic.html) for current availability.
 
 The Sonic provider uses a different configuration structure from other Nova models:
 
 ```yaml
 providers:
-  - id: bedrock:amazon.nova-2-sonic-v1:0
+  - id: bedrock:amazon.nova-2-5-sonic
     config:
       region: us-east-1
       inferenceConfiguration:
@@ -759,7 +760,16 @@ providers:
 
 `inferenceConfiguration` takes precedence over the older `inferenceConfig` and `interfaceConfig` aliases, in that order. Omitted settings use provider defaults. Legacy `interfaceConfig.max_new_tokens` and `interfaceConfig.top_p` map to `maxTokens` and `topP`.
 
-Audio input must be base64-encoded. You can use either the exact Bedrock model ID shown above or its Promptfoo shorthand.
+Use either the exact Bedrock model ID shown above or its Promptfoo shorthand.
+
+Audio input must be base64-encoded raw PCM matching `audioInputConfiguration`, including
+sample rate, bit depth, and channel count. A WAV file includes a container header and
+must be decoded/resampled first. The [Nova 2.5 Sonic example](https://github.com/promptfoo/promptfoo/tree/main/examples/amazon-bedrock/models)
+uses FFmpeg to convert its WAV fixture to mono PCM16 at 16 kHz. Sonic responses include
+final spoken transcripts and audio, excluding speculative text and interruption notifications.
+Reported cumulative input, output, and total token counts are retained, including usage
+received before a stream error. The provider leaves counts unset when Bedrock sends no usage event.
+Cost estimates are not reported.
 
 `toolConfig` declares tools the model can request. Promptfoo does not execute Nova Sonic tools: when a tool is requested, the provider stops the response, closes the session, and returns an unsupported-execution error without sending a tool result. The requested tool ID, name, and original JSON arguments are retained in `metadata.toolCalls` as `toolUseId`, `toolName`, and `content`.
 

@@ -2019,6 +2019,10 @@ describe('Provider Registry', () => {
       ['bedrock:nova-sonic:', 'amazon.nova-sonic-v1:0'],
       ['bedrock:amazon.nova-sonic-v1:0', 'amazon.nova-sonic-v1:0'],
       ['bedrock:nova-sonic:amazon.nova-sonic-v1:0', 'amazon.nova-sonic-v1:0'],
+      ['bedrock:nova-2-5-sonic', 'amazon.nova-2-5-sonic'],
+      ['bedrock:nova-2-5-sonic:', 'amazon.nova-2-5-sonic'],
+      ['bedrock:amazon.nova-2-5-sonic', 'amazon.nova-2-5-sonic'],
+      ['bedrock:nova-2-5-sonic:amazon.nova-2-5-sonic', 'amazon.nova-2-5-sonic'],
       ['bedrock:nova-2-sonic', 'amazon.nova-2-sonic-v1:0'],
       ['bedrock:nova-2-sonic:', 'amazon.nova-2-sonic-v1:0'],
       ['bedrock:amazon.nova-2-sonic-v1:0', 'amazon.nova-2-sonic-v1:0'],
@@ -2034,6 +2038,10 @@ describe('Provider Registry', () => {
     });
 
     it.each([
+      ['bedrock:completion:amazon.nova-2-5-sonic', 'InvokeModelWithBidirectionalStream'],
+      ['bedrock:converse:amazon.nova-2-5-sonic', 'InvokeModelWithBidirectionalStream'],
+      ['bedrock:us.amazon.nova-2-5-sonic', 'does not support geo inference IDs'],
+      ['bedrock:nova-2-5-sonic:amazon.nova-2-sonic-v1:0', 'does not match provider subtype'],
       ['bedrock:completion:amazon.nova-2-sonic-v1:0', 'InvokeModelWithBidirectionalStream'],
       ['bedrock:converse:amazon.nova-2-sonic-v1:0', 'InvokeModelWithBidirectionalStream'],
       ['bedrock:us.amazon.nova-sonic-v1:0', 'does not support geo inference IDs'],
