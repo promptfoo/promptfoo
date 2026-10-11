@@ -1250,7 +1250,7 @@ async function generateSpecialPageOgImage(specialPage, outputPath) {
 }
 
 // Extract breadcrumbs from the doc path and sidebar structure
-function extractBreadcrumbs(docPath, sidebarItems) {
+function extractBreadcrumbs(docPath) {
   const breadcrumbs = [];
   const pathParts = docPath.split('/').filter((part) => part && part !== 'docs');
 
@@ -1269,7 +1269,7 @@ function extractBreadcrumbs(docPath, sidebarItems) {
 }
 
 // Try to read the actual markdown file and extract metadata
-async function extractMetadataFromMarkdown(routePath, outDir) {
+async function extractMetadataFromMarkdown(routePath) {
   try {
     // Try different possible paths for the markdown file
     const possiblePaths = [
@@ -1438,7 +1438,7 @@ async function injectOgImageMetaTags(outDir, routePath, imageUrl, siteConfig) {
   }
 }
 
-module.exports = function (context, options) {
+module.exports = function () {
   return {
     name: 'docusaurus-plugin-og-image',
 
@@ -1451,7 +1451,7 @@ module.exports = function (context, options) {
       });
     },
 
-    async postBuild({ siteConfig, routesPaths, outDir, plugins, content, routes }) {
+    async postBuild({ siteConfig, routesPaths, outDir }) {
       // Skip OG image generation if disabled via environment variable
       if (process.env.SKIP_OG_GENERATION === 'true') {
         console.log('⏭️  Skipping OG image generation (SKIP_OG_GENERATION=true)');
@@ -1463,76 +1463,6 @@ module.exports = function (context, options) {
       const generatedImages = new Map();
       let successCount = 0;
       let failureCount = 0;
-
-      // Create a map of routes to their metadata
-      const routeMetadata = new Map();
-
-      // Process routes to extract metadata
-      if (routes) {
-        for (const route of routes) {
-          if (route.path && route.modules && Array.isArray(route.modules)) {
-            // Look for metadata in route modules
-            const metadataModule = route.modules.find(
-              (m) => m && (m.metadata || m.__metadata || (typeof m === 'object' && m.title)),
-            );
-
-            if (metadataModule) {
-              const metadata =
-                metadataModule.metadata || metadataModule.__metadata || metadataModule;
-              routeMetadata.set(route.path, {
-                title: metadata.title || metadata.frontMatter?.title,
-                description: metadata.description || metadata.frontMatter?.description,
-                breadcrumbs: metadata.breadcrumbs || [],
-              });
-            }
-          }
-        }
-      }
-
-      // Also try to get metadata from docs plugin
-      const docsPlugin = plugins.find(
-        (plugin) => plugin.name === '@docusaurus/plugin-content-docs',
-      );
-      if (docsPlugin && docsPlugin.content) {
-        const { loadedVersions } = docsPlugin.content;
-        if (loadedVersions && loadedVersions.length > 0) {
-          const version = loadedVersions[0];
-          version.docs.forEach((doc) => {
-            routeMetadata.set(doc.permalink, {
-              title: doc.title || doc.frontMatter?.title || doc.label,
-              description: doc.description || doc.frontMatter?.description,
-              breadcrumbs: doc.sidebar?.breadcrumbs || [],
-            });
-          });
-        }
-      }
-
-      // Get blog plugin metadata
-      const blogPlugin = plugins.find(
-        (plugin) => plugin.name === '@docusaurus/plugin-content-blog',
-      );
-      if (blogPlugin && blogPlugin.content) {
-        const { blogPosts } = blogPlugin.content;
-        if (blogPosts) {
-          blogPosts.forEach((post) => {
-            // Extract author information
-            const authors = post.metadata.authors || [];
-            const authorNames = authors
-              .map((a) => (typeof a === 'object' ? a.name || a.key : a))
-              .filter(Boolean)
-              .join(' & ');
-
-            routeMetadata.set(post.metadata.permalink, {
-              title: post.metadata.title,
-              description: post.metadata.description,
-              author: authorNames || null,
-              date: post.metadata.date || post.metadata.formattedDate || null,
-              image: post.metadata.frontMatter?.image || post.metadata.image || null,
-              breadcrumbs: ['Blog'],
-            });
-          });
-        }
-      }
 
       // Process all documentation routes with improved parallel processing
       // Satori is faster and has no system font bottleneck, so we can increase batch size
@@ -1554,31 +1484,7 @@ module.exports = function (context, options) {
         await Promise.all(
           batch.map(async (routePath) => {
             try {
-              // Get metadata for this route
-              const metadata = routeMetadata.get(routePath) || {};
-
-              // Try to get metadata from multiple sources
-              let fileMetadata = { title: metadata.title };
-
-              // For blog posts, always try to read the markdown file to get the image
-              // Blog plugin doesn't expose custom frontmatter fields like image
-              if (routePath.startsWith('/blog/')) {
-                fileMetadata = await extractMetadataFromMarkdown(routePath, outDir);
-              } else if (!fileMetadata.title) {
-                // For docs, only read if we don't have a title
-                fileMetadata = await extractMetadataFromMarkdown(routePath, outDir);
-              }
-
-              // Merge route metadata with file metadata
-              const fullMetadata = {
-                ...fileMetadata,
-                ...metadata,
-                title: metadata.title || fileMetadata.title,
-                description: metadata.description || fileMetadata.description,
-                author: fileMetadata.author || metadata.author,
-                date: fileMetadata.date || metadata.date,
-                image: fileMetadata.image || metadata.image,
-              };
+              const fullMetadata = await extractMetadataFromMarkdown(routePath);
 
               // Only log if there are image processing issues
               if (
@@ -1604,15 +1510,9 @@ module.exports = function (context, options) {
                   .join(' ');
               }
 
-              // Extract breadcrumbs from metadata or path
-              const breadcrumbs =
-                metadata.breadcrumbs && metadata.breadcrumbs.length > 0
-                  ? metadata.breadcrumbs.map((b) => b.label || b)
-                  : extractBreadcrumbs(routePath, []);
-
-              // Add route path to metadata
+              // Add route path and breadcrumbs to metadata
               fullMetadata.routePath = routePath;
-              fullMetadata.breadcrumbs = breadcrumbs;
+              fullMetadata.breadcrumbs = extractBreadcrumbs(routePath);
 
               // Generate unique filename for this route
               const imageFileName =
