@@ -78,6 +78,39 @@ describe('evaluator', () => {
   });
 
   describe('repeat stability export', () => {
+    async function importRepeatRows(
+      imported: Eval,
+      rows: EvaluateResult[],
+      persistence: string,
+    ): Promise<Eval> {
+      if (persistence === 'bulk') {
+        await EvalResult.createManyFromEvaluateResult(rows, imported.id);
+      } else if (persistence === 'single') {
+        for (const row of rows) {
+          await EvalResult.createFromEvaluateResult(imported.id, row);
+        }
+      } else {
+        const models = await Promise.all(
+          rows.map((row) =>
+            EvalResult.createFromEvaluateResult(imported.id, row, { persist: false }),
+          ),
+        );
+        if (persistence === 'create') {
+          return Eval.create(imported.config, [], { results: models });
+        }
+        if (persistence === 'set-results') {
+          await imported.setResults(models);
+        } else {
+          for (const model of models) {
+            await model.save();
+            model.score = 0.5;
+            await model.save();
+          }
+        }
+      }
+      return imported;
+    }
+
     it('includes final comparison verdicts for a row that failed persistence', async () => {
       const evaluation = await Eval.create({}, [], { id: 'repeat-failed-persistence' });
       const row = createEvaluateResult({
@@ -115,6 +148,59 @@ describe('evaluator', () => {
       expect(summary.repeatStability?.cachedResults).toBe(1);
       expect(summary.repeatStability?.groups[0].passRateConfidenceInterval).toBeUndefined();
     });
+
+    it.each(['single', 'bulk', 'create', 'set-results', 'save'] as const)(
+      'preserves stripped repeat cache provenance through %s import and reconstruction',
+      async (persistence) => {
+        const config = {
+          env: { PROMPTFOO_STRIP_GRADING_RESULT: 'true', PROMPTFOO_STRIP_METADATA: 'true' },
+        };
+        const evaluation = new Eval(config);
+        for (const testIdx of [0, 1, 2, 3]) {
+          const cached = testIdx < 2;
+          await evaluation.addResult(
+            createEvaluateResult({
+              testIdx,
+              repeatGroupId: cached ? 'cached-grader' : 'fresh-grader',
+              repeatIndex: testIdx % 2,
+              success: true,
+              score: 1,
+              response: { output: 'fresh target output', cached: false },
+              metadata: { private: 'stripped metadata' },
+              gradingResult: {
+                pass: true,
+                score: 1,
+                reason: 'stripped grading details',
+                ...(cached && { metadata: { cachedResponse: true } }),
+              },
+            }),
+          );
+        }
+        const exported = (await evaluation.toEvaluateSummary()) as EvaluateSummaryV3;
+        const imported = await importRepeatRows(
+          await Eval.create(config, []),
+          exported.results,
+          persistence,
+        );
+        const reloaded = await Eval.findById(imported.id);
+        const reexported = (await reloaded!.toEvaluateSummary()) as EvaluateSummaryV3;
+
+        expect(reexported.repeatStability).toEqual(exported.repeatStability);
+        expect(reexported.repeatStability?.cachedResults).toBe(2);
+        expect(reexported.repeatStability?.groups[0].passRateConfidenceInterval).toBeUndefined();
+        expect(reexported.repeatStability?.groups[1].passRateConfidenceInterval).toBeDefined();
+        for (const row of reexported.results) {
+          expect(row.gradingResult).toBeNull();
+          expect(row.metadata).toEqual({});
+          expect(row.response?.cached).toBe(false);
+          if (row.repeatGroupId === 'cached-grader') {
+            expect(row.repeatCached).toBe(true);
+          } else {
+            expect(row).not.toHaveProperty('repeatCached');
+          }
+        }
+      },
+    );
   });
 
   describe('addPrompts', () => {

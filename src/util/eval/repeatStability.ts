@@ -65,6 +65,7 @@ interface RepeatStabilityResult {
   provider: { id?: string; label?: string };
   repeatGroupId?: string;
   repeatIndex?: number;
+  repeatCached?: true;
   response?: { cached?: boolean };
   success: boolean;
   testCase: { description?: string };
@@ -72,9 +73,13 @@ interface RepeatStabilityResult {
 
 type MutableRepeatStabilityGroup = RepeatStabilityGroup & { scored: number };
 
-function isCachedResult(result: RepeatStabilityResult): boolean {
+export function isCachedRepeatResult(
+  result: Pick<RepeatStabilityResult, 'repeatCached' | 'response' | 'gradingResult'>,
+): boolean {
   return (
-    result.response?.cached === true || result.gradingResult?.metadata?.cachedResponse === true
+    result.repeatCached === true ||
+    result.response?.cached === true ||
+    result.gradingResult?.metadata?.cachedResponse === true
   );
 }
 
@@ -118,7 +123,7 @@ export class RepeatStabilityCalculator {
     };
 
     group.repetitions++;
-    if (isCachedResult(result)) {
+    if (isCachedRepeatResult(result)) {
       group.cached++;
     }
     if (result.failureReason === ERROR_FAILURE_REASON) {

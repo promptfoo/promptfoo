@@ -421,6 +421,8 @@ export interface EvaluateResult {
   repeatIndex?: number;
   /** Stable identifier shared by repeated executions of the same expanded test case. */
   repeatGroupId?: string;
+  /** Cached target or grading evidence retained when repeat-result details are stripped. */
+  repeatCached?: true;
 }
 
 export interface EvaluateTableOutput {

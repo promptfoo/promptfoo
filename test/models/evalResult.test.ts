@@ -159,6 +159,46 @@ describe('EvalResult', () => {
     });
   });
 
+  it.each([
+    { cached: true, repeated: true },
+    { cached: false, repeated: true },
+    { cached: true, repeated: false },
+  ])('retains only repeat cache provenance in stripped JSONL: %j', async ({ cached, repeated }) => {
+    const row = createEvaluateResult({
+      ...(repeated && { repeatGroupId: 'repeated', repeatIndex: 0 }),
+      response: { output: 'fresh target output', cached: false },
+      gradingResult: {
+        pass: true,
+        score: 1,
+        reason: 'private grading details',
+        metadata: { cachedResponse: cached },
+      },
+      metadata: { private: 'private result metadata' },
+    });
+    const flags = getStripFlags({
+      PROMPTFOO_STRIP_GRADING_RESULT: 'true',
+      PROMPTFOO_STRIP_METADATA: 'true',
+    });
+    const artifact = sanitizeResultForJsonlArtifact(row, flags);
+    const persisted = await EvalResult.createFromEvaluateResult(
+      'jsonl-repeat-provenance',
+      artifact,
+    );
+    const reloaded = await EvalResult.findById(persisted.id);
+    for (const result of [artifact, reloaded!.toEvaluateResult(flags)]) {
+      expect(result.gradingResult).toBeNull();
+      expect(result.metadata).toEqual({});
+      expect(result.response?.cached).toBe(false);
+      if (cached && repeated) {
+        expect(result.repeatCached).toBe(true);
+      } else {
+        expect(result).not.toHaveProperty('repeatCached');
+      }
+    }
+    expect(row.gradingResult?.reason).toBe('private grading details');
+    expect(row).not.toHaveProperty('repeatCached');
+  });
+
   describe('createFromEvaluateResult', () => {
     it.each<Assertion>([
       {
