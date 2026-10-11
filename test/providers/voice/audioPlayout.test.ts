@@ -14,6 +14,46 @@ function frame(value: number): Buffer {
 }
 
 describe('PcmAudioPlayout', () => {
+  it('absorbs an unseen startup arrival spike without losing voiced samples or exceeding 200ms startup', () => {
+    // Synthetic cold-start schedule using the maximum excess delay observed in a
+    // real failing run. This is not a packet replay: that run retained no arrival trace.
+    const arrivals = [0, 274.617221, 374.617221, 474.617221, 574.617221, 674.617221];
+    const source = Buffer.alloc(arrivals.length * 4800);
+    for (let offset = 0; offset < source.length; offset += 2) {
+      source.writeInt16LE(1000 + offset / 2, offset);
+    }
+    const queue = new PcmAudioPlayout(3000 * BYTES_PER_MS);
+    const played: Buffer[] = [];
+    let nextArrival = 0;
+    let firstAudioAtMs: number | undefined;
+    for (let atMs = 0; atMs < 2000; atMs += 20) {
+      while (nextArrival < arrivals.length && arrivals[nextArrival] <= atMs) {
+        queue.append(
+          source.subarray(nextArrival * 4800, (nextArrival + 1) * 4800),
+          arrivals[nextArrival],
+        );
+        nextArrival++;
+      }
+      const output = queue.read(FRAME_BYTES);
+      if (output.audioBytes) {
+        firstAudioAtMs ??= atMs;
+        played.push(output.frame.subarray(0, output.audioBytes));
+      }
+      if (nextArrival === arrivals.length && queue.bytes === 0) {
+        break;
+      }
+    }
+    expect(queue.metrics).toMatchObject({
+      underflowMs: 0,
+      underflowAfterActiveAudioMs: 0,
+      silenceReplenishmentMs: 0,
+      maximumReserveMs: 400,
+    });
+    expect(firstAudioAtMs).toBe(200);
+    expect(Buffer.concat(played)).toEqual(source);
+    expect(queue.bytes).toBe(0);
+  });
+
   it('does not consume source audio while building its bounded startup reserve', () => {
     const queue = new PcmAudioPlayout(3000 * BYTES_PER_MS);
     expect(queue.read(FRAME_BYTES)).toEqual({ frame: Buffer.alloc(FRAME_BYTES), audioBytes: 0 });
@@ -21,22 +61,25 @@ describe('PcmAudioPlayout', () => {
     for (let tick = 0; tick < 5; tick++) {
       expect(queue.read(FRAME_BYTES).audioBytes).toBe(0);
     }
-    expect(queue.bytes).toBe(100 * BYTES_PER_MS);
     queue.append(Buffer.concat(Array.from({ length: 5 }, (_, index) => frame(index + 200))), 100);
+    for (let tick = 0; tick < 5; tick++) {
+      expect(queue.read(FRAME_BYTES).audioBytes).toBe(0);
+    }
+    expect(queue.bytes).toBe(200 * BYTES_PER_MS);
     expect(queue.read(FRAME_BYTES)).toEqual({ frame: frame(100), audioBytes: FRAME_BYTES });
     expect(queue.metrics).toMatchObject({
       waitingForSourceMs: 20,
-      startupBufferingMs: 100,
+      startupBufferingMs: 200,
       silenceReplenishmentMs: 0,
       underflowMs: 0,
-      reserveMs: 100,
+      reserveMs: 200,
     });
   });
 
   it('releases a short final source chunk after the startup wait instead of holding it forever', () => {
     const queue = new PcmAudioPlayout(3000 * BYTES_PER_MS);
     queue.append(frame(1234), 0);
-    for (let tick = 0; tick < 5; tick++) {
+    for (let tick = 0; tick < 10; tick++) {
       expect(queue.read(FRAME_BYTES).audioBytes).toBe(0);
     }
     expect(queue.read(FRAME_BYTES)).toEqual({ frame: frame(1234), audioBytes: FRAME_BYTES });
@@ -107,10 +150,10 @@ describe('PcmAudioPlayout', () => {
 
   it('reports an unbufferable stall honestly and never replenishes between active frames', () => {
     const queue = new PcmAudioPlayout(3000 * BYTES_PER_MS);
-    const source = Buffer.concat(Array.from({ length: 10 }, (_, index) => frame(1000 + index)));
+    const source = Buffer.concat(Array.from({ length: 20 }, (_, index) => frame(1000 + index)));
     queue.append(source, 0);
     const played: Buffer[] = [];
-    for (let tick = 0; tick < 15; tick++) {
+    for (let tick = 0; tick < 25; tick++) {
       const result = queue.read(FRAME_BYTES);
       played.push(result.frame.subarray(0, result.audioBytes));
     }
@@ -154,14 +197,14 @@ describe('PcmAudioPlayout', () => {
     queue.append(frame(100), 0);
     expect(queue.clear()).toBe(FRAME_BYTES);
     queue.append(frame(200), 10000);
-    for (let tick = 0; tick < 5; tick++) {
+    for (let tick = 0; tick < 10; tick++) {
       expect(queue.read(FRAME_BYTES).audioBytes).toBe(0);
     }
     expect(queue.read(FRAME_BYTES)).toEqual({ frame: frame(200), audioBytes: FRAME_BYTES });
     expect(queue.metrics).toMatchObject({
       discardedBytes: FRAME_BYTES,
       maximumExcessArrivalMs: 0,
-      reserveMs: 100,
+      reserveMs: 200,
     });
     expect(queue.clear()).toBe(0);
     expect(queue.metrics.discardedBytes).toBe(FRAME_BYTES);

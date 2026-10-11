@@ -4,7 +4,9 @@ const SAMPLE_RATE = 24000;
 const BYTES_PER_MS = (SAMPLE_RATE * 2) / 1000;
 const FRAME_MS = 20;
 const FRAME_BYTES = BYTES_PER_MS * FRAME_MS;
-const MINIMUM_RESERVE_MS = 100;
+// The first arrival spike can precede any jitter estimate. Reserve 200 ms up front
+// to cover that cold-start case; later growth remains bounded by the same 400 ms cap.
+const MINIMUM_RESERVE_MS = 200;
 const MAXIMUM_RESERVE_MS = 400;
 // At most -72 dBFS, including every individual sample. Ordinary quiet speech does not
 // qualify: growing the reserve must not insert silence into a word or change its PCM.

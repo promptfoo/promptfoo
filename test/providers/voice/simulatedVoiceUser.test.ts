@@ -163,12 +163,12 @@ describe('SimulatedVoiceUser', () => {
     // Both output streams are present during the same input clock tick.
     audio(target, 1000);
     audio(caller, -2000);
-    await vi.advanceTimersByTimeAsync(120);
-    const targetInput = target.sent.filter((e) => e.type === 'session.input_audio.append')[6];
-    const callerInput = caller.sent.filter((e) => e.type === 'session.input_audio.append')[6];
+    await vi.advanceTimersByTimeAsync(220);
+    const targetInput = target.sent.filter((e) => e.type === 'session.input_audio.append')[11];
+    const callerInput = caller.sent.filter((e) => e.type === 'session.input_audio.append')[11];
     expect(Buffer.from(targetInput.audio, 'base64').readInt16LE()).toBe(-2000);
     expect(Buffer.from(callerInput.audio, 'base64').readInt16LE()).toBe(1000);
-    await vi.advanceTimersByTimeAsync(880);
+    await vi.advanceTimersByTimeAsync(780);
     expect(sockets.every((s) => s.sent.at(-1)?.type === 'session.close')).toBe(true);
     finalize();
     const response = await result;
@@ -190,9 +190,9 @@ describe('SimulatedVoiceUser', () => {
     expect(response.cost).toBeCloseTo((2 * 0.05) / 60);
     const wav = Buffer.from(response.audio!.data!, 'base64');
     expect(wav.readUInt16LE(22)).toBe(2);
-    expect(wav.readInt16LE(44 + 6 * 1920)).toBe(1000);
-    expect(wav.readInt16LE(44 + 6 * 1920 + 2)).toBe(-2000);
-    expect(response.metadata?.voice.participants.caller.playout.startupBufferingMs).toBe(100);
+    expect(wav.readInt16LE(44 + 11 * 1920)).toBe(1000);
+    expect(wav.readInt16LE(44 + 11 * 1920 + 2)).toBe(-2000);
+    expect(response.metadata?.voice.participants.caller.playout.startupBufferingMs).toBe(200);
     expect(wav.length).toBe(44 + 24000 * 2 * 2);
     expect(sockets.every((s) => s.terminate.mock.calls.length === 1)).toBe(true);
     expect(vi.getTimerCount()).toBe(0);
