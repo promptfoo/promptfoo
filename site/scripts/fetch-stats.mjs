@@ -7,11 +7,9 @@
  */
 
 import { writeFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const OUTPUT_PATH = join(__dirname, '..', 'src', '.generated-stats.json');
+const OUTPUT_PATH = join(import.meta.dirname, '..', 'src', '.generated-stats.json');
 const TIMEOUT_MS = 10_000;
 const REPO = 'promptfoo/promptfoo';
 const NPM_PACKAGE = 'promptfoo';
@@ -22,14 +20,6 @@ function formatCompact(num) {
     return k % 1 === 0 ? `${k}k` : `${k.toFixed(1)}k`;
   }
   return String(num);
-}
-
-function formatWithCommas(num) {
-  return num.toLocaleString('en-US');
-}
-
-function roundToNearest(num, nearest) {
-  return Math.round(num / nearest) * nearest;
 }
 
 async function fetchWithTimeout(url, options = {}) {
@@ -81,8 +71,9 @@ async function fetchNpmDownloads() {
     `https://api.npmjs.org/downloads/point/last-week/${NPM_PACKAGE}`,
   );
   const data = await res.json();
-  const rounded = roundToNearest(data.downloads, 1000);
-  return { WEEKLY_DOWNLOADS_DISPLAY: formatWithCommas(rounded) };
+  const downloads = data.downloads;
+  const rounded = Math.round(downloads / 1000) * 1000;
+  return { WEEKLY_DOWNLOADS_DISPLAY: rounded.toLocaleString('en-US') };
 }
 
 async function main() {
