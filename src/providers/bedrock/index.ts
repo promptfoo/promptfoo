@@ -138,6 +138,7 @@ export interface BedrockClaudeMessagesCompletionOptions extends BedrockOptions {
   effort?: ClaudeEffort;
   temperature?: number;
   anthropic_version?: string;
+  anthropic_beta?: string[];
   tools?: {
     name: string;
     description: string;
@@ -1660,6 +1661,19 @@ export const BEDROCK_MODEL = {
         undefined,
         undefined,
       );
+      const betaFeatures = new Set(config?.anthropic_beta);
+      // Bedrock still gates Opus 4.5 effort behind a beta opt-in.
+      if (
+        config?.effort != null &&
+        modelName &&
+        !modelName.includes(':application-inference-profile/') &&
+        /(?:^|[./])anthropic\.claude-opus-4-5(?:-|:|$)/.test(modelName)
+      ) {
+        betaFeatures.add('effort-2025-11-24');
+      }
+      if (betaFeatures.size > 0) {
+        params.anthropic_beta = [...betaFeatures];
+      }
       // Bedrock relays Claude's 400s as ValidationExceptions, so apply the same sampling rules
       // as the Anthropic API: models that deprecate sampling take no temperature, and extended
       // thinking rejects anything but the default, including this handler's 0 default. (This

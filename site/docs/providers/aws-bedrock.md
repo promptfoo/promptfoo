@@ -1050,6 +1050,11 @@ config:
 Set `config.effort` on InvokeModel providers to send `output_config.effort`.
 Converse accepts `additionalModelRequestFields.output_config.effort`, and the
 [Anthropic provider](/docs/providers/anthropic) also takes a top-level `effort`.
+Opus 4.5 supports `low`, `medium`, and `high`; InvokeModel automatically includes
+its required `effort-2025-11-24` beta for identifiable model IDs. For an opaque
+application inference profile backed by Opus 4.5, set
+`anthropic_beta: ['effort-2025-11-24']` explicitly. Configured beta flags are preserved.
+
 Haiku 5.5 supports `low`, `medium`, `high`, `xhigh`, and `max`; its default is `medium`.
 At `xhigh` or `max`, promptfoo omits unsupported disabled thinking while retaining
 the requested effort. Manual Haiku thinking budgets become adaptive thinking.

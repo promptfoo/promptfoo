@@ -135,6 +135,54 @@ describe('Claude 5.5 on Bedrock', () => {
     );
   });
 
+  it.each([
+    'anthropic.claude-opus-4-5-20251101-v1:0',
+    'us.anthropic.claude-opus-4-5-20251101-v1:0',
+    'arn:aws:bedrock:us-east-1:123456789012:inference-profile/us.anthropic.claude-opus-4-5-20251101-v1:0',
+    'arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-opus-4-5-20251101-v1:0',
+  ])('opts known Opus 4.5 effort into the required Bedrock beta (%s)', async (model) => {
+    const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
+      { effort: 'medium' },
+      'hello',
+      [],
+      model,
+    );
+    expect(params.output_config).toEqual({ effort: 'medium' });
+    expect(params.anthropic_beta).toEqual(['effort-2025-11-24']);
+    const defaults = await BEDROCK_MODEL.CLAUDE_MESSAGES.params({}, 'hello', [], model);
+    expect(defaults).not.toHaveProperty('anthropic_beta');
+  });
+
+  it.each([
+    'us.anthropic.claude-opus-4-6-v1',
+    'us.anthropic.claude-haiku-5-5',
+    'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/claude-opus-4-5',
+  ])('does not guess the Opus 4.5 effort beta for %s', async (model) => {
+    const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
+      { effort: 'medium' },
+      'hello',
+      [],
+      model,
+    );
+    expect(params).not.toHaveProperty('anthropic_beta');
+  });
+
+  it('preserves explicit beta flags and allows opaque profile opt-in without mutating config', async () => {
+    const config: BedrockClaudeMessagesCompletionOptions = {
+      effort: 'low',
+      anthropic_beta: ['custom-beta', 'effort-2025-11-24'],
+    };
+    for (const model of [
+      'us.anthropic.claude-opus-4-5-20251101-v1:0',
+      'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/opaque',
+    ]) {
+      const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(config, 'hello', [], model);
+      expect(params.anthropic_beta).toEqual(config.anthropic_beta);
+      expect(params.anthropic_beta).not.toBe(config.anthropic_beta);
+    }
+    expect(config.anthropic_beta).toEqual(['custom-beta', 'effort-2025-11-24']);
+  });
+
   it.each(['low', 'medium', 'high', 'xhigh', 'max'] as const)(
     'forwards native Haiku effort %s and normalizes disabled thinking before token defaults',
     async (effort) => {
