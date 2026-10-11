@@ -1,13 +1,18 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import cliState from '../../src/cliState';
+import { evaluate } from '../../src/evaluator';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import EvalResult from '../../src/models/evalResult';
+import { EchoProvider } from '../../src/providers/echo';
 import { createApp } from '../../src/server/server';
 import { ResultFailureReason } from '../../src/types/results';
 import { STRIPPED_TABLE_CELL_PROMPT } from '../../src/util/eval/evalTableUtils';
 import invariant from '../../src/util/invariant';
 import EvalFactory from '../factories/evalFactory';
 import { setupTestServer } from '../util/testServer';
+
+import type { TestSuite } from '../../src/types/index';
 
 vi.mock('../../src/database/signal', async () => {
   const actual = await vi.importActual('../../src/database/signal');
@@ -277,6 +282,354 @@ describe('eval routes', () => {
             testErrorCount: metrics.testErrorCount - Number(reason !== ResultFailureReason.ERROR),
           });
         }
+      },
+    );
+
+    it.each(['Recovery comment', '!highlight Recovery comment', 'approve-clear recovery'])(
+      'recovers a comparison error after annotation: %s',
+      async (comment) => {
+        let recovered = false;
+        const suite: TestSuite = {
+          providers: [new EchoProvider()],
+          prompts: [
+            { raw: 'candidate one', label: 'first' },
+            { raw: 'candidate two', label: 'second' },
+          ],
+          tests: [
+            {
+              assert: [
+                { type: 'contains', value: 'candidate' },
+                {
+                  type: 'select-best',
+                  value: 'Choose the best',
+                  provider: {
+                    id: () => 'annotation-recovery-grader',
+                    callApi: async () => {
+                      if (!recovered) {
+                        throw new Error('Comparison unavailable');
+                      }
+                      return { output: '0' };
+                    },
+                  },
+                },
+              ],
+            },
+          ],
+        };
+        const record = await Eval.create({}, suite.prompts);
+        testEvalIds.add(record.id);
+        const previousResume = cliState.resume;
+        try {
+          await evaluate(suite, record, { maxConcurrency: 1 });
+          const rows = await record.getResults();
+          const metrics = structuredClone(record.prompts.map((prompt) => prompt.metrics));
+          for (const row of rows) {
+            expect(row).toMatchObject({ success: false, failureReason: ResultFailureReason.ERROR });
+            expect(row.gradingResult).toMatchObject({ pass: true, score: 1 });
+            if (comment === 'approve-clear recovery') {
+              const approved = await api
+                .post(`/api/eval/${record.id}/results/${row.id}/rating`)
+                .send(
+                  createManualRatingPayload(
+                    { gradingResult: structuredClone(row.gradingResult) },
+                    true,
+                  ),
+                );
+              expect(approved.status).toBe(200);
+            }
+            const response = await api
+              .post(`/api/eval/${record.id}/results/${row.id}/rating`)
+              .send({
+                ...row.gradingResult,
+                comment,
+                action: comment === 'approve-clear recovery' ? 'clear' : 'annotate',
+              });
+            expect(response.status).toBe(200);
+          }
+          const saved = await Eval.findById(record.id);
+          invariant(saved, 'Saved evaluation required');
+          if (comment === 'approve-clear recovery') {
+            for (const [index, prompt] of saved.prompts.entries()) {
+              expect(prompt.metrics).toMatchObject({
+                assertPassCount: metrics[index]?.assertPassCount,
+                assertFailCount: metrics[index]?.assertFailCount,
+                testPassCount: metrics[index]?.testPassCount,
+                testFailCount: metrics[index]?.testFailCount,
+                testErrorCount: metrics[index]?.testErrorCount,
+              });
+            }
+          } else {
+            expect(saved.prompts.map((prompt) => prompt.metrics)).toEqual(metrics);
+          }
+          for (const row of await saved.getResults()) {
+            expect(row).toMatchObject({
+              success: false,
+              score: comment === 'approve-clear recovery' ? 1 : 0,
+              failureReason: ResultFailureReason.ERROR,
+            });
+            if (comment !== 'approve-clear recovery') {
+              expect(row.gradingResult).toMatchObject({ pass: true, score: 1, comment });
+            }
+            expect(row.gradingResult).not.toHaveProperty('action');
+          }
+          // Successful retry must combine with the preserved ordinary assertion verdict.
+          recovered = true;
+          cliState.resume = true;
+          await evaluate(suite, saved, { maxConcurrency: 1 });
+          const resumed = (await saved.getResults()).sort((a, b) => a.promptIdx - b.promptIdx);
+          expect(resumed.map((row) => row.success)).toEqual([true, false]);
+          expect(resumed.map((row) => row.failureReason)).toEqual([
+            ResultFailureReason.NONE,
+            ResultFailureReason.ASSERT,
+          ]);
+          expect(resumed.every((row) => row.gradingResult?.comment === comment)).toBe(true);
+        } finally {
+          cliState.resume = previousResume;
+        }
+      },
+    );
+
+    it.each(['error', 'legacy approval', 'manual failure', 'no grade'])(
+      'updates only annotations on a saved %s',
+      async (state) => {
+        const record = await EvalFactory.create();
+        testEvalIds.add(record.id);
+        const result = (await record.getResults())[0];
+        invariant(result instanceof EvalResult, 'Persisted result required');
+        const metrics = record.prompts[result.promptIdx].metrics!;
+        if (state === 'error') {
+          result.success = false;
+          result.score = 0;
+          result.failureReason = ResultFailureReason.ERROR;
+          metrics.testPassCount--;
+          metrics.testErrorCount++;
+        } else if (state === 'legacy approval' || state === 'manual failure') {
+          result.success = state === 'legacy approval';
+          result.score = result.success ? 1 : 0;
+          result.failureReason = result.success
+            ? ResultFailureReason.ERROR
+            : ResultFailureReason.ASSERT;
+          result.gradingResult = createManualRatingPayload(result, result.success);
+          if (!result.success) {
+            metrics.testPassCount--;
+            metrics.testFailCount++;
+          }
+        } else {
+          result.gradingResult = null;
+        }
+        await result.save();
+        await record.save();
+        const originalGrade = structuredClone(result.gradingResult);
+        const originalMetrics = structuredClone(record.prompts.map((prompt) => prompt.metrics));
+        const resultSave = vi.spyOn(EvalResult.prototype, 'save');
+        const evalSave = vi.spyOn(Eval.prototype, 'save');
+        for (const comment of ['A note', '!highlight A note', '']) {
+          const response = await api
+            .post(`/api/eval/${record.id}/results/${result.id}/rating`)
+            .send({
+              pass: !result.success,
+              score: 999,
+              reason: 'Stale client grade',
+              componentResults: [],
+              comment,
+              action: 'annotate',
+            });
+          expect(response.status).toBe(200);
+          const updated = await EvalResult.findById(result.id);
+          expect(updated).toMatchObject({
+            success: result.success,
+            score: result.score,
+            failureReason: result.failureReason,
+          });
+          expect(updated?.gradingResult).toEqual({
+            ...(originalGrade ?? { pass: result.success, score: result.score, reason: '' }),
+            comment,
+          });
+          const saved = await Eval.findById(record.id);
+          expect(saved?.prompts.map((prompt) => prompt.metrics)).toEqual(originalMetrics);
+        }
+        expect(resultSave).toHaveBeenCalledTimes(3);
+        expect(evalSave).toHaveBeenCalledTimes(3);
+        expect(resultSave.mock.invocationCallOrder[0]).toBeLessThan(
+          evalSave.mock.invocationCallOrder[0],
+        );
+      },
+    );
+
+    it('preserves full programmatic rating behavior without an action', async () => {
+      const record = await EvalFactory.create();
+      testEvalIds.add(record.id);
+      const result = (await record.getResults())[0];
+      invariant(result instanceof EvalResult, 'Persisted result required');
+      const response = await api.post(`/api/eval/${record.id}/results/${result.id}/rating`).send({
+        pass: false,
+        score: 0.25,
+        reason: 'Programmatic grade',
+      });
+      expect(response.status).toBe(200);
+      expect(await EvalResult.findById(result.id)).toMatchObject({
+        success: false,
+        score: 0.25,
+        failureReason: ResultFailureReason.ASSERT,
+        gradingResult: { pass: false, score: 0.25, reason: 'Programmatic grade' },
+      });
+    });
+
+    it.each(
+      ['no grade', 'comparison', 'partial grader error'].flatMap((state) =>
+        [true, false].map((approved) => ({ state, approved })),
+      ),
+    )('clears only the human assertion contribution: %j', async ({ state, approved }) => {
+      const record = await EvalFactory.create();
+      testEvalIds.add(record.id);
+      const result = (await record.getResults())[0];
+      invariant(result instanceof EvalResult, 'Persisted result required');
+      const metrics = record.prompts[result.promptIdx].metrics!;
+      result.success = false;
+      result.score = state === 'partial grader error' ? 0.25 : 0;
+      result.failureReason = ResultFailureReason.ERROR;
+      metrics.testPassCount--;
+      metrics.testErrorCount++;
+      metrics.score += result.score - 1;
+      if (state === 'no grade') {
+        result.gradingResult = null;
+        metrics.assertPassCount--;
+      } else if (state === 'partial grader error') {
+        result.gradingResult = {
+          pass: false,
+          score: 0.25,
+          reason: 'Partial grader failure',
+          metadata: { graderError: true },
+          componentResults: [
+            {
+              pass: false,
+              score: 0.25,
+              reason: 'Partial grader failure',
+              metadata: { graderError: true },
+            },
+          ],
+        };
+        metrics.assertPassCount--;
+        metrics.assertFailCount++;
+      }
+      await result.save();
+      await record.save();
+      const originalMetrics = structuredClone(metrics);
+      const underlyingGrade = structuredClone(result.gradingResult) ?? {
+        pass: false,
+        score: 0,
+        reason: '',
+      };
+      const rating = await api.post(`/api/eval/${record.id}/results/${result.id}/rating`).send({
+        ...underlyingGrade,
+        pass: approved,
+        score: approved ? 1 : 0,
+        componentResults: [
+          ...(underlyingGrade.componentResults ?? []),
+          {
+            pass: approved,
+            score: approved ? 1 : 0,
+            reason: 'Human rating',
+            assertion: { type: 'human' },
+          },
+        ],
+      });
+      expect(rating.status).toBe(200);
+      const cleared = await api.post(`/api/eval/${record.id}/results/${result.id}/rating`).send({
+        ...underlyingGrade,
+        action: 'clear',
+      });
+      expect(cleared.status).toBe(200);
+      expect(await EvalResult.findById(result.id)).toMatchObject({
+        success: false,
+        score: underlyingGrade.score,
+        failureReason: ResultFailureReason.ERROR,
+        gradingResult: underlyingGrade,
+      });
+      expect((await Eval.findById(record.id))?.prompts[result.promptIdx].metrics).toMatchObject({
+        assertPassCount: originalMetrics.assertPassCount,
+        assertFailCount: originalMetrics.assertFailCount,
+        testPassCount: originalMetrics.testPassCount,
+        testFailCount: originalMetrics.testFailCount,
+        testErrorCount: originalMetrics.testErrorCount,
+        score: originalMetrics.score + underlyingGrade.score - result.score,
+      });
+    });
+
+    it('repairs main-era category counters when clearing a legacy approved error', async () => {
+      const record = await EvalFactory.create();
+      testEvalIds.add(record.id);
+      const result = (await record.getResults())[0];
+      invariant(result instanceof EvalResult, 'Persisted result required');
+      const underlyingGrade = structuredClone(result.gradingResult)!;
+      const metrics = record.prompts[result.promptIdx].metrics!;
+      // Main approved an ERROR by incrementing pass and decrementing fail,
+      // while retaining failureReason=ERROR and the error counter.
+      result.failureReason = ResultFailureReason.ERROR;
+      result.gradingResult = createManualRatingPayload(result, true);
+      metrics.testErrorCount = 1;
+      metrics.testFailCount = 0;
+      metrics.assertPassCount++;
+      await result.save();
+      await record.save();
+      const unrelated = {
+        tokenUsage: structuredClone(metrics.tokenUsage),
+        namedScores: structuredClone(metrics.namedScores),
+      };
+      const response = await api.post(`/api/eval/${record.id}/results/${result.id}/rating`).send({
+        ...underlyingGrade,
+        action: 'clear',
+      });
+      expect(response.status).toBe(200);
+      expect((await Eval.findById(record.id))?.prompts[result.promptIdx].metrics).toMatchObject({
+        ...unrelated,
+        testPassCount: 0,
+        testFailCount: 1,
+        testErrorCount: 1,
+        assertPassCount: 1,
+        assertFailCount: 1,
+      });
+    });
+
+    it('surfaces count-query failures without overwriting persisted metrics', async () => {
+      const record = await EvalFactory.create();
+      testEvalIds.add(record.id);
+      const result = (await record.getResults())[0];
+      const metrics = structuredClone(record.prompts[0].metrics);
+      vi.spyOn(Eval.prototype, 'getPromptGradingMetrics').mockRejectedValueOnce(
+        new Error('Synthetic query failure'),
+      );
+      const response = await api.post(`/api/eval/${record.id}/results/${result.id}/rating`).send({
+        pass: false,
+        score: 0,
+        reason: 'Changed rating',
+      });
+      expect(response.status).toBe(500);
+      expect(response.body).toEqual({ error: 'Failed to submit rating' });
+      expect((await Eval.findById(record.id))?.prompts[0].metrics).toEqual(metrics);
+    });
+
+    it('rejects a clear operation that retains a human override', async () => {
+      const record = await EvalFactory.create();
+      testEvalIds.add(record.id);
+      const result = (await record.getResults())[0];
+      const response = await api.post(`/api/eval/${record.id}/results/${result.id}/rating`).send({
+        ...createManualRatingPayload(result, true),
+        action: 'clear',
+      });
+      expect(response.status).toBe(400);
+    });
+
+    it.each([undefined, null, 4, {}])(
+      'rejects invalid annotation comments: %j',
+      async (comment) => {
+        const response = await api.post('/api/eval/example/results/result/rating').send({
+          pass: true,
+          score: 1,
+          action: 'annotate',
+          comment,
+        });
+        expect(response.status).toBe(400);
       },
     );
 

@@ -562,6 +562,7 @@ type PromptMetrics = ReturnType<ReturnType<typeof useMetricsGetter>>;
 type ManualRatingUpdate = {
   pass: EvaluateTableOutput['pass'];
   score: EvaluateTableOutput['score'];
+  gradingPass?: boolean;
   componentResults?: NonNullable<GradingResult['componentResults']>;
   modifiedComponentResults: boolean;
 };
@@ -922,6 +923,7 @@ function getManualRatingUpdate({
         componentResults.filter((result) => result.pass).length === componentResults.length;
       finalScore = averageComponentResultScore(componentResults, finalScore);
     }
+    const gradingPass = componentResults.length > 0 ? finalPass : undefined;
     if (getOriginalFailureReason(existingOutput) === ResultFailureReason.ERROR) {
       finalPass = false;
       if (componentResults.length === 0) {
@@ -933,6 +935,7 @@ function getManualRatingUpdate({
       pass: finalPass,
       score: finalScore,
       componentResults,
+      gradingPass,
       modifiedComponentResults: true,
     };
   }
@@ -974,12 +977,22 @@ function buildManualGradingResult({
   score?: number;
   comment?: string;
 }): GradingResult {
+  if (isPass === undefined && score === undefined) {
+    return {
+      ...(existingOutput.gradingResult ?? {
+        pass: existingOutput.pass,
+        score: existingOutput.score,
+        reason: '',
+      }),
+      comment,
+    };
+  }
   const { componentResults: _, ...existingGradingResultWithoutComponents } =
     existingOutput.gradingResult || {};
 
   const gradingResult: GradingResult = {
     ...existingGradingResultWithoutComponents,
-    pass: ratingUpdate.pass,
+    pass: ratingUpdate.gradingPass ?? ratingUpdate.pass,
     score: ratingUpdate.score,
     reason: existingOutput.gradingResult?.reason ?? 'Manual result',
     comment,
@@ -1035,6 +1048,7 @@ function buildRatingTableUpdate({
   promptIndex,
   ratingUpdate,
   gradingResult,
+  action,
 }: {
   head: EvaluateTable['head'];
   body: EvaluateTable['body'];
@@ -1042,6 +1056,7 @@ function buildRatingTableUpdate({
   promptIndex: number;
   ratingUpdate: ManualRatingUpdate;
   gradingResult: GradingResult;
+  action?: 'annotate' | 'clear';
 }): EvaluateTable {
   const updatedData = [...body];
   const updatedRow = { ...updatedData[rowIndex] };
@@ -1055,13 +1070,16 @@ function buildRatingTableUpdate({
 
   updatedOutputs[promptIndex] = {
     ...previousOutput,
-    failureReason: ratingUpdate.pass
-      ? ResultFailureReason.NONE
-      : !hasManualOverride &&
-          (gradingResult.metadata?.graderError === true ||
-            getOriginalFailureReason(previousOutput) === ResultFailureReason.ERROR)
-        ? ResultFailureReason.ERROR
-        : ResultFailureReason.ASSERT,
+    failureReason:
+      action === 'annotate'
+        ? previousOutput.failureReason
+        : ratingUpdate.pass
+          ? ResultFailureReason.NONE
+          : !hasManualOverride &&
+              (gradingResult.metadata?.graderError === true ||
+                getOriginalFailureReason(previousOutput) === ResultFailureReason.ERROR)
+            ? ResultFailureReason.ERROR
+            : ResultFailureReason.ASSERT,
     pass: ratingUpdate.pass,
     score: ratingUpdate.score,
     gradingResult,
@@ -1080,12 +1098,14 @@ async function saveManualRating({
   resultId,
   version,
   gradingResult,
+  action,
   table,
 }: {
   evalId: string | null;
   resultId: string;
   version: number | null | undefined;
   gradingResult: GradingResult;
+  action?: 'annotate' | 'clear';
   table: EvaluateTable;
 }): Promise<void> {
   invariant(evalId, 'Cannot save manual rating without an evaluation ID');
@@ -1097,7 +1117,7 @@ async function saveManualRating({
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ ...gradingResult }),
+          body: JSON.stringify({ ...gradingResult, ...(action && { action }) }),
         })
       : await callApi(EVAL_ROUTES.DETAIL(evalId), {
           method: 'PATCH',
@@ -1781,6 +1801,12 @@ function ResultsTable({
       comment?: string,
     ) => {
       const existingOutput = body[rowIndex].outputs[promptIndex];
+      const action =
+        isPass === undefined && score === undefined
+          ? 'annotate'
+          : isPass === null
+            ? 'clear'
+            : undefined;
       const ratingUpdate = getManualRatingUpdate({
         existingOutput,
         isPass,
@@ -1801,6 +1827,7 @@ function ResultsTable({
         promptIndex,
         ratingUpdate,
         gradingResult,
+        action,
       });
 
       setTable(newTable);
@@ -1813,6 +1840,7 @@ function ResultsTable({
             resultId,
             version,
             gradingResult,
+            action,
             table: newTable,
           });
         } catch (error) {

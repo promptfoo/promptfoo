@@ -725,7 +725,8 @@ evalRouter.post(
     try {
       const { evalId, id } = paramsResult.data;
       // Double-cast needed: Zod's .passthrough() adds index signature that doesn't overlap with GradingResult
-      const gradingResult = bodyResult.data as unknown as GradingResult;
+      const { action, ...submittedGrade } = bodyResult.data;
+      const gradingResult = submittedGrade as unknown as GradingResult;
       const result = await EvalResult.findById(id);
       if (!result || result.evalId !== evalId) {
         res.status(404).json({ error: 'Result not found' });
@@ -735,6 +736,17 @@ evalRouter.post(
       const eval_ = await Eval.findById(evalId);
       if (!eval_) {
         res.status(404).json({ error: 'Eval not found' });
+        return;
+      }
+
+      if (action === 'annotate') {
+        result.gradingResult = {
+          ...(result.gradingResult ?? { pass: result.success, score: result.score, reason: '' }),
+          comment: gradingResult.comment,
+        };
+        await result.save();
+        await eval_.save();
+        res.json(EvalSchemas.SubmitRating.Response.parse(result));
         return;
       }
 
@@ -749,35 +761,32 @@ evalRouter.post(
       const hasExistingManualOverride = Boolean(previousManualOverride);
       const originalFailureReason =
         previousManualOverride?.metadata?.originalFailureReason ?? result.failureReason;
-      const successChanged = result.success !== gradingResult.pass;
       const scoreChange = gradingResult.score - result.score;
-      const previousCount = result.success
-        ? 'testPassCount'
-        : result.failureReason === ResultFailureReason.ERROR
-          ? 'testErrorCount'
-          : 'testFailCount';
       const manualOverride =
         gradingResult.componentResults?.find((r) => r.assertion?.type === HUMAN_ASSERTION_TYPE) ??
         (gradingResult.assertion?.type === HUMAN_ASSERTION_TYPE ? gradingResult : undefined);
+      if (action === 'clear' && manualOverride) {
+        res.status(400).json({ error: 'Clear rating must remove the human override' });
+        return;
+      }
       if (manualOverride) {
         manualOverride.metadata = { ...manualOverride.metadata, originalFailureReason };
       }
-      const failureReason = gradingResult.pass
+      const effectivePass =
+        action === 'clear' && originalFailureReason === ResultFailureReason.ERROR
+          ? false
+          : gradingResult.pass;
+      const successChanged = result.success !== effectivePass;
+      const failureReason = effectivePass
         ? ResultFailureReason.NONE
         : !manualOverride &&
             (gradingResult.metadata?.graderError === true ||
               originalFailureReason === ResultFailureReason.ERROR)
           ? ResultFailureReason.ERROR
           : ResultFailureReason.ASSERT;
-      const nextCount = gradingResult.pass
-        ? 'testPassCount'
-        : failureReason === ResultFailureReason.ERROR
-          ? 'testErrorCount'
-          : 'testFailCount';
-
       // Update the result
       result.gradingResult = gradingResult;
-      result.success = gradingResult.pass;
+      result.success = effectivePass;
       result.score = gradingResult.score;
       result.failureReason = failureReason;
 
@@ -793,12 +802,11 @@ evalRouter.post(
         return;
       }
 
-      if (previousCount !== nextCount) {
-        prompt.metrics[previousCount] -= 1;
-        prompt.metrics[nextCount] += 1;
-      }
-
-      if (successChanged) {
+      if (action === 'clear') {
+        if (previousManualOverride) {
+          prompt.metrics[previousManualOverride.pass ? 'assertPassCount' : 'assertFailCount'] -= 1;
+        }
+      } else if (successChanged) {
         if (result.success) {
           prompt.metrics.assertPassCount += 1;
           prompt.metrics.score += scoreChange;
@@ -824,6 +832,13 @@ evalRouter.post(
       }
 
       await result.save();
+      const { score: persistedScore, ...counts } = await eval_.getPromptGradingMetrics(
+        result.promptIdx,
+      );
+      Object.assign(prompt.metrics, counts);
+      if (action === 'clear') {
+        prompt.metrics.score = persistedScore;
+      }
       await eval_.save();
 
       res.json(EvalSchemas.SubmitRating.Response.parse(result));
