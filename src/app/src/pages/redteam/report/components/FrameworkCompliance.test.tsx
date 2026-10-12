@@ -9,13 +9,6 @@ import { useReportStore } from './store';
 vi.mock('./store');
 vi.mock('./FrameworkCard');
 vi.mock('./FrameworkCsvExporter');
-vi.mock('../utils/color', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../utils/color')>();
-  return {
-    ...actual,
-    getProgressColor: vi.fn().mockReturnValue('mockedColor'),
-  };
-});
 
 const mockUseReportStore = vi.mocked(useReportStore);
 const mockFrameworkCard = vi.mocked(FrameworkCard);
