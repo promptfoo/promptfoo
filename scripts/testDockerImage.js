@@ -286,7 +286,7 @@ def call_api(prompt, options, context):
   assert.equal(malformed.status, 400);
   assert.doesNotMatch(
     await malformed.text(),
-    /node_modules|\n\s+at /,
+    /node_modules|\.[cm]?js:\d+:\d+/,
     'Error responses must not include a stack trace',
   );
   const modelAudit = await (await request('/api/model-audit/check-installed')).json();
