@@ -297,8 +297,10 @@ jobs:
         uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9 # v6
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          # The generated version label is the trigger's branch, even for a release build.
           labels: |
             org.opencontainers.image.revision=${{ steps.source.outputs.sha }}
+            org.opencontainers.image.version=${{ env.RELEASE_TAG || github.ref_name }}
 
       - &log-in-to-the-container-registry
         name: Log in to the Container registry
@@ -365,15 +367,20 @@ jobs:
         uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9 # v6
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          # Fallback release builds publish immutable version tags only so moving aliases stay on normal release paths.
+          # Every `latest` is listed below. Left on, the default flavor also adds one to any
+          # semver tag, which moved `latest` when an older release was published by hand.
+          flavor: |
+            latest=false
+          # Builds without a release tag publish the branch and commit only. Every release
+          # publishes its version. Only the release-please path also moves the `major.minor`
+          # and `latest` aliases, and a prerelease moves neither. The semver rules read the
+          # tag from `value`: release-please calls this workflow on `main`, not on a tag ref.
           tags: |
-            type=ref,event=branch,enable=${{ env.IS_RELEASE_FALLBACK != 'true' }}
-            type=ref,event=pr,enable=${{ env.IS_RELEASE_FALLBACK != 'true' }}
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}},enable=${{ env.IS_RELEASE_FALLBACK != 'true' }}
-            type=sha,enable=${{ env.IS_RELEASE_FALLBACK != 'true' }}
+            type=ref,event=branch,enable=${{ env.RELEASE_TAG == '' }}
+            type=sha,enable=${{ env.RELEASE_TAG == '' }}
             type=raw,value=${{ env.RELEASE_TAG }},enable=${{ env.RELEASE_TAG != '' }}
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' && env.IS_RELEASE_FALLBACK != 'true' }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ env.RELEASE_TAG }},enable=${{ env.RELEASE_TAG != '' && env.IS_RELEASE_FALLBACK != 'true' }}
+            type=raw,value=latest,enable=${{ env.RELEASE_TAG != '' && env.IS_RELEASE_FALLBACK != 'true' && !contains(env.RELEASE_TAG, '-') }}
 
       - name: Create manifest list and push
         working-directory: ${{ runner.temp }}/digests

@@ -269,3 +269,53 @@ describe('release-please automation', () => {
     }
   });
 });
+
+// release-please builds the image by calling docker.yml on `main`, so the git ref is never
+// the release tag there. A rule that reads the ref publishes nothing, and a rule that is
+// not tied to a release moves an alias to unreleased commits.
+describe('Docker image tags', () => {
+  function readTagRules(): { flavor: string; rules: string[] } {
+    const workflow = yaml.load(
+      readRepoFile('.github/workflows/docker.yml'),
+    ) as ReleasePleaseWorkflow;
+    const metaStep = workflow.jobs?.['merge-docker-digests']?.steps?.find(
+      (step) => typeof step.uses === 'string' && step.uses.startsWith('docker/metadata-action@'),
+    );
+    const flavor = metaStep?.with?.flavor;
+    const tags = metaStep?.with?.tags;
+    assert(
+      typeof flavor === 'string' && typeof tags === 'string',
+      'merge-docker-digests must set the metadata-action flavor and tags',
+    );
+    return {
+      flavor,
+      rules: tags
+        .trim()
+        .split('\n')
+        .map((rule) => rule.trim()),
+    };
+  }
+
+  it('moves latest only for a stable release cut by release-please', () => {
+    const { flavor, rules } = readTagRules();
+
+    // The default flavor adds `latest` to every semver tag, including hand-published ones.
+    expect(flavor.trim()).toBe('latest=false');
+    const latestRules = rules.filter((rule) => rule.includes('value=latest'));
+    expect(latestRules).toHaveLength(1);
+    expect(latestRules[0]).toContain("env.RELEASE_TAG != ''");
+    expect(latestRules[0]).toContain("env.IS_RELEASE_FALLBACK != 'true'");
+    expect(latestRules[0]).toContain("!contains(env.RELEASE_TAG, '-')");
+  });
+
+  it('reads release versions from the tag input instead of the git ref', () => {
+    const { rules } = readTagRules();
+    const semverRules = rules.filter((rule) => rule.startsWith('type=semver'));
+
+    expect(semverRules.length).toBeGreaterThan(0);
+    for (const rule of semverRules) {
+      expect(rule).toContain('value=${{ env.RELEASE_TAG }}');
+    }
+    expect(rules.some((rule) => rule.startsWith('type=ref,event=tag'))).toBe(false);
+  });
+});
