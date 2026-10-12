@@ -7,6 +7,30 @@ import { createMockProvider } from '../factories/provider';
 
 import type { AssertionParams, ProviderResponse } from '../../src/types/index';
 
+function createRecallParams(
+  prompt: string | undefined,
+  vars: Record<string, string>,
+  provider = createMockProvider({ response: {} }),
+): Omit<AssertionParams, 'assertion' | 'renderedValue' | 'inverse'> {
+  return {
+    prompt,
+    test: { vars: { ...vars }, options: {} },
+    baseType: 'context-recall',
+    assertionValueContext: {
+      prompt,
+      vars: { ...vars },
+      test: { vars: { ...vars }, options: {} },
+      logProbs: undefined,
+      provider,
+      providerResponse: undefined,
+    },
+    output: 'test output',
+    outputString: 'test output',
+    provider,
+    providerResponse: {} as ProviderResponse,
+  };
+}
+
 vi.mock('../../src/matchers/rag');
 vi.mock('../../src/assertions/contextUtils');
 
@@ -88,27 +112,11 @@ describe('handleContextRecall', () => {
     mockMatchesContextRecall.mockResolvedValue(mockResult);
     vi.mocked(contextUtils.resolveContext).mockResolvedValue('test context');
 
-    const mockProvider = createMockProvider({ response: {} });
-
     const params: AssertionParams = {
+      ...createRecallParams('test prompt', { context: 'incomplete context' }),
       assertion: { type: 'context-recall', threshold: 0.7 },
       renderedValue: 'Missing fact',
-      prompt: 'test prompt',
-      test: { vars: { context: 'incomplete context' }, options: {} },
-      baseType: 'context-recall',
-      assertionValueContext: {
-        prompt: 'test prompt',
-        vars: { context: 'incomplete context' },
-        test: { vars: { context: 'incomplete context' }, options: {} },
-        logProbs: undefined,
-        provider: mockProvider,
-        providerResponse: undefined,
-      },
       inverse: false,
-      output: 'test output',
-      outputString: 'test output',
-      provider: mockProvider,
-      providerResponse: {} as ProviderResponse,
     };
 
     const result = await handleContextRecall(params);
@@ -133,27 +141,11 @@ describe('handleContextRecall', () => {
     mockMatchesContextRecall.mockResolvedValue(mockResult);
     vi.mocked(contextUtils.resolveContext).mockResolvedValue('test context');
 
-    const mockProvider = createMockProvider({ response: {} });
-
     const params: AssertionParams = {
+      ...createRecallParams('test prompt', { context: 'test context' }),
       assertion: { type: 'context-recall' },
       renderedValue: 'test value',
-      prompt: 'test prompt',
-      test: { vars: { context: 'test context' }, options: {} },
-      baseType: 'context-recall',
-      assertionValueContext: {
-        prompt: 'test prompt',
-        vars: { context: 'test context' },
-        test: { vars: { context: 'test context' }, options: {} },
-        logProbs: undefined,
-        provider: mockProvider,
-        providerResponse: undefined,
-      },
       inverse: false,
-      output: 'test output',
-      outputString: 'test output',
-      provider: mockProvider,
-      providerResponse: {} as ProviderResponse,
     };
 
     const result = await handleContextRecall(params);
@@ -184,27 +176,11 @@ describe('handleContextRecall', () => {
     mockMatchesContextRecall.mockResolvedValue(mockResult);
     vi.mocked(contextUtils.resolveContext).mockResolvedValue('test context');
 
-    const mockProvider = createMockProvider({ response: {} });
-
     const params: AssertionParams = {
+      ...createRecallParams('test prompt', { context: 'test context' }),
       assertion: { type: 'not-context-recall' },
       renderedValue: 'test value',
-      prompt: 'test prompt',
-      test: { vars: { context: 'test context' }, options: {} },
-      baseType: 'context-recall',
-      assertionValueContext: {
-        prompt: 'test prompt',
-        vars: { context: 'test context' },
-        test: { vars: { context: 'test context' }, options: {} },
-        logProbs: undefined,
-        provider: mockProvider,
-        providerResponse: undefined,
-      },
       inverse: true,
-      output: 'test output',
-      outputString: 'test output',
-      provider: mockProvider,
-      providerResponse: {} as ProviderResponse,
     };
 
     const result = await handleContextRecall(params);
@@ -233,27 +209,11 @@ describe('handleContextRecall', () => {
     mockMatchesContextRecall.mockResolvedValue(mockResult);
     vi.mocked(contextUtils.resolveContext).mockResolvedValue('test prompt');
 
-    const mockProvider = createMockProvider({ response: {} });
-
     const params: AssertionParams = {
+      ...createRecallParams('test prompt', {}),
       assertion: { type: 'context-recall' },
       renderedValue: 'test output',
-      prompt: 'test prompt',
-      test: { vars: {}, options: {} },
-      baseType: 'context-recall',
-      assertionValueContext: {
-        prompt: 'test prompt',
-        vars: {},
-        test: { vars: {}, options: {} },
-        logProbs: undefined,
-        provider: mockProvider,
-        providerResponse: undefined,
-      },
       inverse: false,
-      output: 'test output',
-      outputString: 'test output',
-      provider: mockProvider,
-      providerResponse: {} as ProviderResponse,
     };
 
     const result = await handleContextRecall(params);
@@ -283,27 +243,13 @@ describe('handleContextRecall', () => {
     mockMatchesContextRecall.mockResolvedValue(mockResult);
     vi.mocked(contextUtils.resolveContext).mockResolvedValue('ctx');
 
-    const mockProvider = createMockProvider({ id: 'p', response: {} });
-
     const params: AssertionParams = {
+      ...createRecallParams('prompt', {}, createMockProvider({ id: 'p', response: {} })),
       assertion: { type: 'context-recall', contextTransform: 'expr' },
       renderedValue: 'val',
-      prompt: 'prompt',
-      test: { vars: {}, options: {} },
-      baseType: 'context-recall',
-      assertionValueContext: {
-        prompt: 'prompt',
-        vars: {},
-        test: { vars: {}, options: {} },
-        logProbs: undefined,
-        provider: mockProvider,
-        providerResponse: undefined,
-      },
       inverse: false,
       output: { context: 'hello' } as any,
       outputString: 'str',
-      provider: mockProvider,
-      providerResponse: {} as ProviderResponse,
     };
 
     const result = await handleContextRecall(params);
@@ -322,27 +268,11 @@ describe('handleContextRecall', () => {
   });
 
   it('should throw error when renderedValue is not a string', async () => {
-    const mockProvider = createMockProvider({ response: {} });
-
     const params: AssertionParams = {
+      ...createRecallParams('test prompt', { context: 'test context' }),
       assertion: { type: 'context-recall' },
       renderedValue: 123 as any,
-      prompt: 'test prompt',
-      test: { vars: { context: 'test context' }, options: {} },
-      baseType: 'context-recall',
-      assertionValueContext: {
-        prompt: 'test prompt',
-        vars: { context: 'test context' },
-        test: { vars: { context: 'test context' }, options: {} },
-        logProbs: undefined,
-        provider: mockProvider,
-        providerResponse: undefined,
-      },
       inverse: false,
-      output: 'test output',
-      outputString: 'test output',
-      provider: mockProvider,
-      providerResponse: {} as ProviderResponse,
     };
 
     await expect(handleContextRecall(params)).rejects.toThrow(
@@ -351,27 +281,11 @@ describe('handleContextRecall', () => {
   });
 
   it('should throw error when prompt is missing', async () => {
-    const mockProvider = createMockProvider({ response: {} });
-
     const params: AssertionParams = {
+      ...createRecallParams(undefined, { context: 'test context' }),
       assertion: { type: 'context-recall' },
       renderedValue: 'test value',
-      prompt: undefined,
-      test: { vars: { context: 'test context' }, options: {} },
-      baseType: 'context-recall',
-      assertionValueContext: {
-        prompt: undefined,
-        vars: { context: 'test context' },
-        test: { vars: { context: 'test context' }, options: {} },
-        logProbs: undefined,
-        provider: mockProvider,
-        providerResponse: undefined,
-      },
       inverse: false,
-      output: 'test output',
-      outputString: 'test output',
-      provider: mockProvider,
-      providerResponse: {} as ProviderResponse,
     };
 
     await expect(handleContextRecall(params)).rejects.toThrow(
@@ -387,27 +301,11 @@ describe('handleContextRecall', () => {
     mockMatchesContextRecall.mockResolvedValue(mockResult);
     vi.mocked(contextUtils.resolveContext).mockResolvedValue('test context');
 
-    const mockProvider = createMockProvider({ response: {} });
-
     const result = await handleContextRecall({
+      ...createRecallParams('test prompt', { context: 'test context' }),
       assertion: { type: 'not-context-recall' },
       renderedValue: 'Expected fact',
-      prompt: 'test prompt',
-      test: { vars: { context: 'test context' }, options: {} },
-      baseType: 'context-recall',
-      assertionValueContext: {
-        prompt: 'test prompt',
-        vars: { context: 'test context' },
-        test: { vars: { context: 'test context' }, options: {} },
-        logProbs: undefined,
-        provider: mockProvider,
-        providerResponse: undefined,
-      },
       inverse: true,
-      output: 'test output',
-      outputString: 'test output',
-      provider: mockProvider,
-      providerResponse: {} as ProviderResponse,
     } as AssertionParams);
 
     expect(result.pass).toBe(false);
@@ -435,27 +333,13 @@ describe('handleContextRecall', () => {
     mockMatchesContextRecall.mockResolvedValue(mockResult);
     vi.mocked(contextUtils.resolveContext).mockResolvedValue('test context');
 
-    const mockProvider = createMockProvider({ response: {} });
-
     const result = await handleContextRecall({
+      ...createRecallParams('p', { context: 'ctx' }),
       assertion: { type: 'not-context-recall' },
       renderedValue: 'val',
-      prompt: 'p',
-      test: { vars: { context: 'ctx' }, options: {} },
-      baseType: 'context-recall',
-      assertionValueContext: {
-        prompt: 'p',
-        vars: { context: 'ctx' },
-        test: { vars: { context: 'ctx' }, options: {} },
-        logProbs: undefined,
-        provider: mockProvider,
-        providerResponse: undefined,
-      },
       inverse: true,
       output: 'out',
       outputString: 'out',
-      provider: mockProvider,
-      providerResponse: {} as ProviderResponse,
     } as AssertionParams);
 
     expect(result.pass).toBe(false);

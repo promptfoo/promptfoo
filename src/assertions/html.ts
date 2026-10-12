@@ -77,23 +77,29 @@ function isUserProvidedElement(element: HtmlElement, inputLowercase: string): bo
   return VALID_HTML_ELEMENTS.has(tagName) || tagName.includes('-');
 }
 
-// Patterns that indicate HTML content
-const HTML_PATTERNS = {
+// Patterns that indicate HTML content, with their contribution to the score.
+const HTML_PATTERNS = [
+  // Opening and closing tags count independently, even when their names differ.
   // Opening tags with optional attributes - fixed to prevent ReDoS
-  openingTag: /<[a-zA-Z][a-zA-Z0-9-]*(?:\s[^>]*)?>/,
+  [/<[a-zA-Z][a-zA-Z0-9-]*(?:\s[^>]*)?>/, 1],
   // Closing tags
-  closingTag: /<\/[a-zA-Z][a-zA-Z0-9-]*\s*>/,
+  [/<\/[a-zA-Z][a-zA-Z0-9-]*\s*>/, 1],
   // Self-closing tags - fixed to prevent ReDoS
-  selfClosingTag: /<[a-zA-Z][a-zA-Z0-9-]*(?:\s[^>]*)?\/>/,
+  [/<[a-zA-Z][a-zA-Z0-9-]*(?:\s[^>]*)?\/>/, 1],
   // HTML entities
-  htmlEntity: /&(?:[a-zA-Z]+|#[0-9]+|#x[0-9a-fA-F]+);/,
-  // DOCTYPE declaration
-  doctype: /<!DOCTYPE\s+html/i,
+  [/&(?:[a-zA-Z]+|#[0-9]+|#x[0-9a-fA-F]+);/, 1],
+  // DOCTYPE is a strong indicator
+  [/<!DOCTYPE\s+html/i, 2],
   // HTML comments - using non-greedy quantifier to prevent ReDoS
-  htmlComment: /<!--[^-]*(?:-[^-]+)*-->/,
+  [/<!--[^-]*(?:-[^-]+)*-->/, 1],
   // Common attribute patterns - simplified to prevent ReDoS
-  htmlAttribute: /\s[a-zA-Z-]+=\s*["'][^"']*["']/,
-};
+  [/\s[a-zA-Z-]+=\s*["'][^"']*["']/, 1],
+  // Quick check for very common HTML tags to reduce false positives
+  [
+    /<(html|head|body|div|span|p|a|img|h[1-6]|ul|ol|li|table|tr|td|th|form|input|button|script|style|link|meta|br|hr)\b/i,
+    2,
+  ],
+] as const;
 
 // Maximum input size to prevent DoS attacks (10MB)
 const MAX_INPUT_SIZE = 10 * 1024 * 1024;
@@ -107,55 +113,16 @@ function containsHtml(text: string): boolean {
   // First try the pattern-based approach for performance
   let htmlIndicators = 0;
 
-  // Check for paired tags (opening and closing)
-  const hasOpening = HTML_PATTERNS.openingTag.test(text);
-  const hasClosing = HTML_PATTERNS.closingTag.test(text);
-  if (hasOpening && hasClosing) {
-    htmlIndicators += 2;
-  } else if (hasOpening || hasClosing) {
-    htmlIndicators += 1;
+  for (const [pattern, weight] of HTML_PATTERNS) {
+    if (pattern.test(text)) {
+      htmlIndicators += weight;
+    }
   }
 
-  // Check for self-closing tags
-  if (HTML_PATTERNS.selfClosingTag.test(text)) {
-    htmlIndicators += 1;
-  }
-
-  // Check for HTML entities
-  if (HTML_PATTERNS.htmlEntity.test(text)) {
-    htmlIndicators += 1;
-  }
-
-  // Check for DOCTYPE
-  if (HTML_PATTERNS.doctype.test(text)) {
-    htmlIndicators += 2; // DOCTYPE is a strong indicator
-  }
-
-  // Check for HTML comments
-  if (HTML_PATTERNS.htmlComment.test(text)) {
-    htmlIndicators += 1;
-  }
-
-  // Check for HTML attributes
-  if (HTML_PATTERNS.htmlAttribute.test(text)) {
-    htmlIndicators += 1;
-  }
-
-  // Quick check for very common HTML tags to reduce false positives
-  const commonTags =
-    /<(html|head|body|div|span|p|a|img|h[1-6]|ul|ol|li|table|tr|td|th|form|input|button|script|style|link|meta|br|hr)\b/i;
-  if (commonTags.test(text)) {
-    htmlIndicators += 2;
-  }
-
-  // Require at least 2 indicators to consider it HTML
-  if (htmlIndicators >= 2) {
-    return true;
-  }
-
+  // Require at least 2 indicators to consider it HTML.
   // The pattern-based approach is intentionally strict for contains-html to avoid
   // false positives on prose containing stray angle brackets.
-  return false;
+  return htmlIndicators >= 2;
 }
 
 // List of valid HTML5 elements (excluding obsolete elements)
