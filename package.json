@@ -161,7 +161,7 @@
     },
     "serialize-javascript": ">=7.1.2",
     "gaxios": "^8.0.0",
-    "ip-address": "10.7.2",
+    "ip-address": "10.7.3",
     "mongoose": {
       "gcp-metadata": "^9.0.2"
     },
@@ -273,7 +273,7 @@
     "@opencode-ai/sdk": "^1.18.34",
     "@smithy/node-http-handler": "^4.4.14",
     "google-auth-library": "^11.1.0",
-    "hono": "^4.13.9",
+    "hono": "^4.13.12",
     "jks-js": "^1.1.5",
     "natural": "^8.1.1",
     "node-sql-parser": "^5.4.0",
