@@ -34,7 +34,7 @@ This deployment key is separate from the provider credentials stored in team sec
 
 Team secrets store encrypted provider credentials that can be reused within a team. Open the team's settings, select **Team Secrets**, and click **Create Secret**. Enter a name, value, and optional description. Names must be unique within the team.
 
-In a provider's API Key field, use the key button to choose a team secret. This saves a reference such as `%__PF_SECRET.OPENAI_API_KEY__%` instead of copying the credential into the provider configuration. Team Red Team Provider overrides can also use these references.
+Select a team secret from the provider's API Key field. This saves a reference such as `%__PF_SECRET.OPENAI_API_KEY__%` instead of copying the credential into the provider configuration. Team Red Team Provider overrides can also use these references.
 
 Secret permissions are separate from provider permissions. Grant read access only to users who may receive the secret values: the list API returns decrypted values, and the UI lets them reveal or copy values. Editing a value requires update access. Creating and deleting secrets require their respective permissions.
 
