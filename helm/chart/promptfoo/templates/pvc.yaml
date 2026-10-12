@@ -18,7 +18,7 @@ spec:
   {{- $existing := lookup "v1" "PersistentVolumeClaim" $.Release.Namespace .name }}
   {{- $explicit := contains "f:storageClassName" (toJson (dig "metadata" "managedFields" (list) $existing)) }}
   {{- with .storageClassName | default (ternary (dig "spec" "storageClassName" "" $existing) "" $explicit) }}
-  storageClassName: {{ . }}
+  storageClassName: {{ . | quote }}
   {{- end }}
   resources:
     requests:

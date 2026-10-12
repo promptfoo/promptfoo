@@ -213,7 +213,8 @@ describe('Helm chart', () => {
           name: 'promptfoo',
           size: '10Gi',
           accessModes: ['ReadWriteOnce'],
-          storageClassName: 'fast',
+          // A class named like a number must stay a string.
+          storageClassName: '123',
         },
       ];
       const claim = only(
@@ -223,7 +224,7 @@ describe('Helm chart', () => {
 
       expect(claim.spec).toEqual({
         accessModes: ['ReadWriteOnce'],
-        storageClassName: 'fast',
+        storageClassName: '123',
         resources: { requests: { storage: '10Gi' } },
       });
     });
