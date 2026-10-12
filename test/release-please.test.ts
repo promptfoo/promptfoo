@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { runInNewContext } from 'node:vm';
 
 import * as yaml from 'js-yaml';
 import { describe, expect, it } from 'vitest';
@@ -21,6 +22,7 @@ type ReleasePleaseConfig = {
 };
 
 type WorkflowStep = {
+  if?: unknown;
   run?: string;
   name?: unknown;
   uses?: unknown;
@@ -34,6 +36,8 @@ type WorkflowJob = {
   steps?: WorkflowStep[];
 };
 type ReleasePleaseWorkflow = {
+  concurrency?: { group?: unknown };
+  env?: Record<string, unknown>;
   jobs?: Record<string, WorkflowJob>;
 };
 type ReleaseDriftWorkflow = {
@@ -123,19 +127,6 @@ describe('release-please automation', () => {
       .split('\n')
       .find((line) => line.includes(`uses: ${releaseStep.uses}`));
     expect(usesLine).toMatch(/#\s+v\d+(?:\.\d+){0,2}(?:[-+][\w.-]+)?\s*$/);
-  });
-
-  it('gives each Docker release build its own concurrency group', () => {
-    const workflow = yaml.load(readRepoFile('.github/workflows/docker.yml')) as {
-      concurrency?: { group?: unknown };
-    };
-    const group = workflow.concurrency?.group;
-    assert(typeof group === 'string', 'docker.yml must set a workflow concurrency group');
-
-    // GitHub keeps one pending run per group and cancels it when another queues. A release
-    // build that shares a group with pushes to main can be dropped while it waits.
-    expect(group).toContain('inputs.tag_name || github.event.release.tag_name || github.ref');
-    expect(group).not.toContain('github.repository');
   });
 
   it('gates code-scan mirror publication on isolated artifact attestation', () => {
@@ -287,6 +278,79 @@ describe('release-please automation', () => {
 // the release tag there. A rule that reads the ref publishes nothing, and a rule that is
 // not tied to a release moves an alias to unreleased commits.
 describe('Docker image tags', () => {
+  it.each([
+    ['workflow_dispatch', 'refs/tags/0.125.0', '', '0.125.0', true, 'docker-publish-0.125.0'],
+    [
+      'workflow_dispatch',
+      'refs/tags/0.125.0-beta.1',
+      '',
+      '0.125.0-beta.1',
+      true,
+      'docker-publish-0.125.0-beta.1',
+    ],
+    ['workflow_dispatch', 'refs/heads/main', '0.124.1', '0.124.1', true, 'docker-publish-0.124.1'],
+    [
+      'workflow_dispatch',
+      'refs/tags/0.125.0',
+      '0.124.1',
+      '0.124.1',
+      true,
+      'docker-publish-0.124.1',
+    ],
+    ['workflow_dispatch', 'refs/heads/main', '', '', false, 'docker-publish-refs/heads/main'],
+    ['workflow_dispatch', 'refs/heads/0.125.0', '', '', false, 'docker-publish-refs/heads/0.125.0'],
+    [
+      'workflow_dispatch',
+      'refs/tags/not-a-version',
+      '',
+      'not-a-version',
+      true,
+      'docker-publish-not-a-version',
+    ],
+    ['push', 'refs/heads/main', '', '', false, 'docker-publish-refs/heads/main'],
+    ['push', 'refs/heads/main', '0.125.0', '0.125.0', false, 'docker-publish-0.125.0'],
+    ['release', 'refs/tags/0.124.1', '', '0.124.1', true, 'docker-publish-0.124.1'],
+    ['pull_request', 'refs/pull/123/merge', '', '', false, 'docker-pr-refs/pull/123/merge'],
+  ] as const)(
+    'routes %s on %s with tag input "%s"',
+    (eventName, ref, inputTag, releaseTag, fallback, group) => {
+      const workflow = yaml.load(
+        readRepoFile('.github/workflows/docker.yml'),
+      ) as ReleasePleaseWorkflow;
+      const refName = ref.replace(/^refs\/(heads|tags)\//, '');
+      const context = {
+        github: {
+          event_name: eventName,
+          ref,
+          ref_type: ref.startsWith('refs/tags/') ? 'tag' : 'branch',
+          ref_name: refName,
+          event: { release: { tag_name: eventName === 'release' ? refName : '' } },
+        },
+        inputs: { tag_name: inputTag },
+        env: {} as Record<string, string>,
+        format: (template: string, value: string) => template.replace('{0}', value),
+      };
+      // These workflow expressions use only string/boolean operators shared with JavaScript.
+      const evaluate = (expression: unknown) => {
+        assert(typeof expression === 'string');
+        const source = expression.startsWith('${{') ? expression.slice(3, -2) : expression;
+        return runInNewContext(source, context);
+      };
+
+      context.env.RELEASE_TAG = String(evaluate(workflow.env?.RELEASE_TAG));
+      expect(context.env.RELEASE_TAG).toBe(releaseTag);
+      expect(evaluate(workflow.env?.IS_RELEASE_FALLBACK)).toBe(fallback);
+      expect(evaluate(workflow.concurrency?.group)).toBe(group);
+
+      const validate = workflow.jobs?.test?.steps?.find(
+        (step) => step.name === 'Validate release tag',
+      );
+      assert(validate, 'the Docker test job must validate release tags');
+      // Invalid tag refs must reach the existing validation step instead of publishing a SHA.
+      expect(evaluate(validate.if)).toBe(releaseTag !== '');
+    },
+  );
+
   function readTagRules(): { flavor: string; rules: string[] } {
     const workflow = yaml.load(
       readRepoFile('.github/workflows/docker.yml'),

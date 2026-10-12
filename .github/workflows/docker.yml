@@ -55,18 +55,18 @@ concurrency:
   # GitHub keeps one pending run per group and cancels it when another run queues, so
   # each release tag gets its own group and never waits behind pushes to main. That is
   # safe because a release and a push never publish the same tag (see the tag rules).
-  group: ${{ github.event_name == 'pull_request' && format('docker-pr-{0}', github.ref) || format('docker-publish-{0}', inputs.tag_name || github.event.release.tag_name || github.ref) }}
+  group: ${{ github.event_name == 'pull_request' && format('docker-pr-{0}', github.ref) || format('docker-publish-{0}', inputs.tag_name || github.event.release.tag_name || (github.event_name == 'workflow_dispatch' && github.ref_type == 'tag' && github.ref_name) || github.ref) }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
-  RELEASE_TAG: ${{ inputs.tag_name || github.event.release.tag_name || '' }}
+  RELEASE_TAG: ${{ inputs.tag_name || github.event.release.tag_name || (github.event_name == 'workflow_dispatch' && github.ref_type == 'tag' && github.ref_name) || '' }}
   SOURCE_REF: ${{ inputs.tag_name || github.event.release.tag_name || github.ref }}
   BUILD_VERSION: ${{ inputs.tag_name || github.event.release.tag_name || github.ref_name }}
   BUILD_DATE: ${{ github.event_name == 'pull_request' && github.event.pull_request.updated_at || github.event_name == 'release' && github.event.release.published_at || github.event.head_commit.timestamp || github.event.repository.updated_at }}
   # Fallback release paths build a specific tag outside release-please.yml.
-  IS_RELEASE_FALLBACK: ${{ (github.event_name == 'workflow_dispatch' && inputs.tag_name != '') || github.event_name == 'release' }}
+  IS_RELEASE_FALLBACK: ${{ (github.event_name == 'workflow_dispatch' && (inputs.tag_name != '' || github.ref_type == 'tag')) || github.event_name == 'release' }}
 
 permissions: &read-only-permissions
   contents: read
