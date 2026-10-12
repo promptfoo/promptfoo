@@ -139,7 +139,7 @@ The above command runs the LLM three times for each test case, helping you get a
 
 The completion summary flags repeated groups that contain both passing and failing results. JSON exports include the full summary under `results.repeatStability`, grouped by test case, expanded variables, provider, and prompt. Pass rates exclude errors; groups with no scored results have no pass rate.
 
-JSON and JSONL exports retain a `repeatCached: true` marker on affected result rows, even when grading details or metadata are stripped. Importing a JSON eval export preserves cache counts and confidence-interval eligibility without restoring the stripped content.
+When grading details are stripped, JSON and JSONL exports retain cache evidence in a `repeatCached: true` marker. Importing a JSON eval export preserves cache counts and confidence-interval eligibility without restoring the stripped content.
 
 For groups with scored results and no cached target or grader responses, the summary includes a Wilson 95% confidence interval. Interpreting it as a model pass-rate estimate assumes independent runs with the same success probability. Shared conversation history or changing external state can violate that assumption, even with `--no-cache`.
 
