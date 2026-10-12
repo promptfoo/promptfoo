@@ -467,19 +467,22 @@ export async function startServer(
       }
     };
 
-    const closeRunningServer = (onClose: (timedOut: boolean) => void) => {
+    const closeRunningServer = (
+      onClose: (timedOut: boolean, closeError?: NodeJS.ErrnoException) => void,
+    ) => {
       safeCloseWatcher();
 
       // Set a timeout in case connections don't close gracefully
       const SHUTDOWN_TIMEOUT_MS = 5000;
       let settled = false;
+      let closeError: NodeJS.ErrnoException | undefined;
       const settle = (timedOut: boolean) => {
         if (settled) {
           return;
         }
         settled = true;
         clearTimeout(forceCloseTimeout);
-        onClose(timedOut);
+        onClose(timedOut, closeError);
       };
       const forceCloseTimeout = setTimeout(() => {
         logger.warn('Server close timeout - forcing shutdown');
@@ -507,6 +510,11 @@ export async function startServer(
       // Close Socket.io connections (this also closes the underlying HTTP server).
       io.close(closeHttpServer).catch((error) => {
         logger.warn('Error closing Socket.IO server', { error });
+        // HTTP close does not guarantee that upgraded WebSocket connections closed.
+        // Preserve the failure so callers cannot mistake partial cleanup for success.
+        closeError = Object.assign(new Error('Socket.IO shutdown failed', { cause: error }), {
+          code: 'ESHUTDOWN',
+        });
         closeHttpServer();
       });
     };
@@ -517,19 +525,16 @@ export async function startServer(
       logger.info('Shutting down server...');
       removeShutdownHandlers();
       httpServer.removeListener('error', handleRuntimeError);
-      closeRunningServer((timedOut) => {
-        if (timedOut) {
-          // A force-close means open handles were left dangling. Reject so the
+      closeRunningServer((timedOut, closeError) => {
+        const shutdownError = timedOut
+          ? Object.assign(new Error('Shutdown timeout'), { code: 'ESHUTDOWN' })
+          : closeError;
+        if (shutdownError) {
+          // Failed cleanup can leave open handles dangling. Reject so the
           // caller (CLI or library) decides exit-code policy — startServer is
           // publicly importable, so silently poisoning process.exitCode would
           // hurt library embedders.
-          reject(
-            new ServerError(
-              Object.assign(new Error('Shutdown timeout'), { code: 'ESHUTDOWN' }),
-              port,
-              'runtime',
-            ),
-          );
+          reject(new ServerError(shutdownError, port, 'runtime'));
           return;
         }
         resolve();
