@@ -338,9 +338,11 @@ function isSelfDeclaredMutating(tool: AdvertisedTool): boolean {
  * Picks the part of the raw provider response the LLM grader must see next to
  * the visible output, or undefined when the visible output already shows it.
  *
- * - A response transform DISCARDED content (the visible output is not
- *   recoverable from the raw text, verbatim or JSON-escaped): the whole raw
- *   text, since the original content never reaches the rubric otherwise.
+ * - A response transform DISCARDED content (the visible output is empty, or
+ *   not recoverable from the raw text verbatim or JSON-escaped): the whole raw
+ *   text, since the original content never reaches the rubric otherwise. An
+ *   empty visible output matters most here, because the rubric passes a
+ *   wholly empty response.
  * - Otherwise, for an object-shaped raw result: only the top-level fields the
  *   visible output does not already carry. The MCP provider shows `content`,
  *   but its raw result can also hold `structuredContent` or `_meta`, which an
@@ -354,8 +356,13 @@ function selectRawEvidence(
   rawText: string | undefined,
   output: string,
 ): string | undefined {
-  if (rawText === undefined || rawText === output || output.length === 0) {
+  if (rawText === undefined || rawText === output) {
     return undefined;
+  }
+  // Checked explicitly: every string "includes" the empty string, so an empty
+  // output would otherwise look embedded in the raw text.
+  if (output.length === 0) {
+    return rawText;
   }
   const escapedOutput = JSON.stringify(output).slice(1, -1);
   if (!rawText.includes(output) && !rawText.includes(escapedOutput)) {
