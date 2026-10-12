@@ -90,13 +90,14 @@ docker run -d \
 - **`-e OPENAI_API_KEY=sk-abc123`**: Example of setting an environment variable. Add necessary API keys here so users can run evals directly from the web UI. Replace `sk-abc123` with your actual key.
 
 :::note
-The container runs as user `100:101`. On Linux, give that user the host directory before you mount it, or the server exits because it cannot create its database:
+The container runs as user `100:101`. On Linux, create the host directory and give it to that user before you mount it, or the server exits because it cannot create its database:
 
 ```bash
+mkdir -p /path/to/local_promptfoo
 sudo chown -R 100:101 /path/to/local_promptfoo
 ```
 
-Docker Desktop and named volumes need no change.
+Docker Desktop and named volumes need no change. With rootless Docker or user namespace remapping, the container user maps to a different host ID, so use a named volume instead.
 :::
 
 Access the UI at `http://localhost:3000`.
@@ -220,6 +221,8 @@ image:
 persistentVolumesClaims:
   - name: promptfoo
     size: 10Gi # Increase storage size
+    accessModes:
+      - ReadWriteOnce
     # Optional: Specify a StorageClass if the default is not suitable
     # storageClassName: my-ssd-storage
 
@@ -393,8 +396,10 @@ You can override the default internal configuration directory (`/home/promptfoo/
 **Example:** Store data in `/app/data` inside the container, mapped to `./my_custom_data` on the host.
 
 ```bash
-# Create host directory (on Linux, also run: sudo chown -R 100:101 ./my_custom_data)
+# Create host directory
 mkdir -p ./my_custom_data
+# Linux only: the container runs as user 100:101
+sudo chown -R 100:101 ./my_custom_data
 
 # Run container
 docker run -d --name promptfoo_container -p 3000:3000 \
