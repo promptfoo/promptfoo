@@ -110,16 +110,27 @@ function firstUnprotectedPlaceholder(
   value: string,
 ): { placeholder: string; varName: string; index: number } | null {
   const rawSpans = collectRawSpans(value);
+  let spanIdx = 0;
   for (const match of value.matchAll(SIMPLE_PLACEHOLDER_REGEX)) {
     const start = match.index;
-    if (rawSpans.some(([s, e]) => start >= s && start < e)) {
+    // Spans and matches are both ascending, so a moving index replaces the
+    // per-match rescan of the span array (quadratic on many raw blocks).
+    while (spanIdx < rawSpans.length && start >= rawSpans[spanIdx][1]) {
+      spanIdx++;
+    }
+    if (spanIdx < rawSpans.length && start >= rawSpans[spanIdx][0]) {
       continue;
     }
     const before = value.slice(0, start);
     // Depth, not lastIndexOf: in `{{ '{{x}}' ~ '{{y}}' }}` the first quoted
     // pair opens and closes before the second one starts, so comparing the
-    // last positions of '{{' and '}}' thinks the second is top-level.
-    if (before.split('{{').length - 1 > before.split('}}').length - 1) {
+    // last positions of '{{' and '}}' thinks the second is top-level. '{%'
+    // counts the same way: inside a {% set ... %} tag a '{{x}}' can only be
+    // a quoted literal, never a real placeholder.
+    if (
+      before.split('{{').length - 1 > before.split('}}').length - 1 ||
+      before.split('{%').length - 1 > before.split('%}').length - 1
+    ) {
       continue;
     }
     return { placeholder: match[0], varName: match[1]!, index: start };
@@ -180,10 +191,37 @@ function referencesUndefinedVariables(template: string, vars: Record<string, Var
   for (let i = spans.length - 1; i >= 0; i--) {
     scrubbed = scrubbed.slice(0, spans[i][0]) + scrubbed.slice(spans[i][1]);
   }
+  // A quoted placeholder inside a surrounding expression or block tag is
+  // literal text too: {{ '{{x}}' }} renders to the text {{x}}, so x is not a
+  // dependency. The extractor below is regex-based and would report it, so
+  // scrub those occurrences first (same nesting notion as
+  // firstUnprotectedPlaceholder).
+  const nested: Array<[number, number]> = [];
+  for (const match of scrubbed.matchAll(SIMPLE_PLACEHOLDER_REGEX)) {
+    const before = scrubbed.slice(0, match.index);
+    if (
+      before.split('{{').length - 1 > before.split('}}').length - 1 ||
+      before.split('{%').length - 1 > before.split('%}').length - 1
+    ) {
+      nested.push([match.index, match.index + match[0].length]);
+    }
+  }
+  for (let i = nested.length - 1; i >= 0; i--) {
+    scrubbed = scrubbed.slice(0, nested[i][0]) + scrubbed.slice(nested[i][1]);
+  }
+  // Names bound by {% set ... %} inside the template are local bindings, not
+  // external dependencies; the extractor has no notion of them.
+  const defined = new Set<string>();
+  for (const match of scrubbed.matchAll(/\{%\s*-?\s*set\s+([A-Za-z_]\w*)/g)) {
+    defined.add(match[1]!);
+  }
   return extractVariablesFromTemplate(scrubbed).some((variableName) => {
     const rootVariableName = /^([A-Za-z_]\w*)/.exec(variableName)?.[1];
     return Boolean(
-      rootVariableName && rootVariableName !== 'env' && vars[rootVariableName] === undefined,
+      rootVariableName &&
+        rootVariableName !== 'env' &&
+        !defined.has(rootVariableName) &&
+        vars[rootVariableName] === undefined,
     );
   });
 }
@@ -504,9 +542,43 @@ export async function renderPrompt(
   // Resolve variable mappings
   const varsResolvedFromSkipped = new Set<string>();
   resolveVariables(vars, skipRenderVars, varsResolvedFromSkipped);
+  // Render prompt
+  // Vars values can be template strings, so render them first. Every path
+  // below consumes the same pre-rendered values: a {% raw %} block inside a
+  // value comes out as literal text whether the prompt is plain, JSON,
+  // rendered with PROMPTFOO_DISABLE_JSON_AUTOESCAPE, or fetched from a
+  // third-party integration that returns before the local render.
+  const renderedVars = Object.fromEntries(
+    Object.entries(vars).map(([key, value]) => {
+      if (
+        typeof value !== 'string' ||
+        skipRenderVars?.includes(key) ||
+        varsResolvedFromSkipped.has(key)
+      ) {
+        return [key, value];
+      }
+
+      if (referencesUndefinedVariables(value, vars)) {
+        return [key, value];
+      }
+
+      // A value the prompt never references can still carry template-like
+      // payload (say {% unknown %}) that Nunjucks cannot parse. Leave it
+      // untouched instead of failing the eval; before values were pre-rendered
+      // such payloads passed through raw and only referenced strings rendered.
+      try {
+        return [key, nunjucks.renderString(autoWrapRawIfPartialNunjucks(value), vars)];
+      } catch {
+        return [key, value];
+      }
+    }),
+  );
   // Third party integrations
   if (prompt.raw.startsWith('portkey://')) {
-    const portKeyResult = await getPortkeyPrompt(prompt.raw.slice('portkey://'.length), vars);
+    const portKeyResult = await getPortkeyPrompt(
+      prompt.raw.slice('portkey://'.length),
+      renderedVars,
+    );
     return JSON.stringify(portKeyResult.messages);
   } else if (prompt.raw.startsWith('langfuse://')) {
     const langfusePrompt = prompt.raw.slice('langfuse://'.length);
@@ -560,7 +632,7 @@ export async function renderPrompt(
 
     const langfuseResult = await getLangfusePrompt(
       helper,
-      vars,
+      renderedVars,
       promptType,
       version === undefined || version === 'latest' ? undefined : Number(version),
       label,
@@ -572,34 +644,12 @@ export async function renderPrompt(
     const [majorVersion, minorVersion] = version ? version.split('.') : [undefined, undefined];
     const heliconeResult = await getHeliconePrompt(
       id,
-      vars,
+      renderedVars,
       majorVersion === undefined ? undefined : Number(majorVersion),
       minorVersion === undefined ? undefined : Number(minorVersion),
     );
     return heliconeResult;
   }
-  // Render prompt
-  // Vars values can be template strings, so render them first. Every path
-  // below consumes the same pre-rendered values: a {% raw %} block inside a
-  // value comes out as literal text whether the prompt is plain, JSON, or
-  // rendered with PROMPTFOO_DISABLE_JSON_AUTOESCAPE.
-  const renderedVars = Object.fromEntries(
-    Object.entries(vars).map(([key, value]) => {
-      if (
-        typeof value !== 'string' ||
-        skipRenderVars?.includes(key) ||
-        varsResolvedFromSkipped.has(key)
-      ) {
-        return [key, value];
-      }
-
-      if (referencesUndefinedVariables(value, vars)) {
-        return [key, value];
-      }
-
-      return [key, nunjucks.renderString(autoWrapRawIfPartialNunjucks(value), vars)];
-    }),
-  );
   try {
     if (getEnvBool('PROMPTFOO_DISABLE_JSON_AUTOESCAPE')) {
       // Pre-process: auto-wrap in {% raw %} if partial Nunjucks tags detected

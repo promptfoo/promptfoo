@@ -11,6 +11,9 @@ import {
   resolveVariables,
   runExtensionHook,
 } from '../src/evaluatorHelpers';
+import { getPrompt as getHeliconePrompt } from '../src/integrations/helicone';
+import { getPrompt as getLangfusePrompt } from '../src/integrations/langfuse';
+import { getPrompt as getPortkeyPrompt } from '../src/integrations/portkey';
 import logger from '../src/logger';
 import { AIStudioChatProvider } from '../src/providers/google/ai.studio';
 import { runPython } from '../src/python/pythonUtils';
@@ -125,6 +128,18 @@ vi.mock('../src/util/transform', () => ({
 
 vi.mock('../src/python/pythonUtils', () => ({
   runPython: vi.fn(),
+}));
+
+vi.mock('../src/integrations/helicone', () => ({
+  getPrompt: vi.fn(),
+}));
+
+vi.mock('../src/integrations/langfuse', () => ({
+  getPrompt: vi.fn(),
+}));
+
+vi.mock('../src/integrations/portkey', () => ({
+  getPrompt: vi.fn(),
 }));
 
 const mockApiProvider = createMockProvider();
@@ -821,6 +836,7 @@ describe('evaluatorHelpers', () => {
       ['unterminated nested', '{% raw %}{% raw %}{{x}}{% endraw %} {{y}}'],
       ['lone unclosed', '{% raw %}foo {{x}}'],
       ['balanced then unclosed', '{% raw %}{{x}}{% endraw %} {% raw %}{{y}}'],
+      ['quoted raw markers', "{{ '{% raw %}' }}{{x}}{{ '{% endraw %}' }}"],
     ])('should render %s raw blocks exactly like Nunjucks does', async (_name, template) => {
       const rendered = await renderPrompt(
         toPrompt('{{v}}'),
@@ -909,6 +925,84 @@ describe('evaluatorHelpers', () => {
       );
       expect(renderedPrompt).toBe(
         JSON.stringify({ text: '{% raw %}{{x}}{% endraw %} {{y}}' }, null, 2),
+      );
+    });
+
+    it('should render a quoted literal to text even when its inner variable is undefined', async () => {
+      // x sits inside a quoted string in the expression, so it is not a real
+      // reference; treating it as an undefined dependency would skip the
+      // pre-render and leak the raw expression into the prompt.
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{"text": "{{v}}"}'),
+        { v: "{{ '{{x}}' }}" },
+        {},
+      );
+      expect(renderedPrompt).toBe(JSON.stringify({ text: '{{x}}' }, null, 2));
+    });
+
+    it('should leave quoted placeholders inside block tags untouched', () => {
+      const variables = {
+        x: 'XVAL',
+        v: "{% set literal = '{{x}}' %}{{literal}}",
+      };
+      expect(resolveVariables(variables)).toEqual({
+        x: 'XVAL',
+        v: "{% set literal = '{{x}}' %}{{literal}}",
+      });
+    });
+
+    it('should render a block-tag quoted literal exactly like Nunjucks', async () => {
+      const template = "{% set literal = '{{x}}' %}{{literal}}";
+      const renderedPrompt = await renderPrompt(toPrompt('{{v}}'), { v: template, x: 'XVAL' }, {});
+      expect(renderedPrompt).toBe(getNunjucksEngine().renderString(template, { x: 'XVAL' }));
+    });
+
+    it('should not fail a JSON prompt over an unreferenced unparseable var', async () => {
+      // payload is never referenced by the prompt, so its invalid Nunjucks
+      // must not abort the eval; it simply stays unused.
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{"text": "{{v}}"}'),
+        { v: 'hello', payload: '{% unknown %}' },
+        {},
+      );
+      expect(renderedPrompt).toBe(JSON.stringify({ text: 'hello' }, null, 2));
+    });
+
+    it('should pass pre-rendered vars to third-party prompt integrations', async () => {
+      vi.mocked(getPortkeyPrompt).mockResolvedValue({
+        model: 'gpt-4o',
+        n: 1,
+        top_p: 1,
+        max_tokens: 128,
+        temperature: 0.7,
+        presence_penalty: 0,
+        frequency_penalty: 0,
+        messages: [{ role: 'user', content: 'hi' }],
+      });
+      vi.mocked(getLangfusePrompt).mockResolvedValue('langfuse result');
+      vi.mocked(getHeliconePrompt).mockResolvedValue('helicone result');
+
+      const vars = () => ({ v: '{% raw %}{{x}}{% endraw %}', x: 'ignored' });
+      await renderPrompt(toPrompt('portkey://my-prompt'), vars(), {});
+      await renderPrompt(toPrompt('langfuse://my-prompt'), vars(), {});
+      await renderPrompt(toPrompt('helicone://my-prompt'), vars(), {});
+
+      expect(getPortkeyPrompt).toHaveBeenCalledWith(
+        'my-prompt',
+        expect.objectContaining({ v: '{{x}}' }),
+      );
+      expect(getLangfusePrompt).toHaveBeenCalledWith(
+        'my-prompt',
+        expect.objectContaining({ v: '{{x}}' }),
+        'text',
+        undefined,
+        undefined,
+      );
+      expect(getHeliconePrompt).toHaveBeenCalledWith(
+        'my-prompt',
+        expect.objectContaining({ v: '{{x}}' }),
+        undefined,
+        undefined,
       );
     });
   });
