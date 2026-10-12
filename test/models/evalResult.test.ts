@@ -19,6 +19,7 @@ import {
   type ProviderOptions,
   ResultFailureReason,
 } from '../../src/types/index';
+import { calculateRepeatStability } from '../../src/util/eval/repeatStability';
 import {
   getCachedStandaloneEvals,
   getStandaloneEvalCacheKey,
@@ -198,6 +199,37 @@ describe('EvalResult', () => {
     expect(row.gradingResult?.reason).toBe('private grading details');
     expect(row).not.toHaveProperty('repeatCached');
   });
+
+  it.each(['json', 'jsonl'] as const)(
+    'uses current grading cache evidence after an unstripped %s round trip',
+    async (format) => {
+      const row = createEvaluateResult({
+        repeatGroupId: 'regraded',
+        repeatIndex: 0,
+        response: { output: 'fresh target', cached: false },
+        gradingResult: {
+          pass: true,
+          score: 1,
+          reason: 'cached grading',
+          metadata: { cachedResponse: true },
+        },
+      });
+      const original = await EvalResult.createFromEvaluateResult('original-regrade', row);
+      const exported =
+        format === 'json' ? original.toEvaluateResult() : sanitizeResultForJsonlArtifact(row);
+      const imported = await EvalResult.createFromEvaluateResult('imported-regrade', exported);
+      for (const result of [original, imported]) {
+        expect(calculateRepeatStability([result])?.cachedResults).toBe(1);
+        // Fresh comparison grading clears the aggregate all-grading-cached flag.
+        result.gradingResult = { pass: true, score: 1, reason: 'fresh comparison' };
+        await result.save();
+        const reloaded = await EvalResult.findById(result.id);
+        const summary = calculateRepeatStability([reloaded!]);
+        expect(summary?.cachedResults).toBe(0);
+        expect(summary?.groups[0].passRateConfidenceInterval).toBeDefined();
+      }
+    },
+  );
 
   describe('createFromEvaluateResult', () => {
     it.each<Assertion>([

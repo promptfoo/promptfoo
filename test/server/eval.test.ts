@@ -116,6 +116,40 @@ describe('eval routes', () => {
   });
 
   describe('post("/:evalId/results/:id/rating")', () => {
+    async function annotateRepeatedResults(
+      evaluation: Eval,
+      rows: EvalResult[],
+      isOriginal: boolean,
+    ) {
+      const beforeComments = await Eval.findById(evaluation.id);
+      const metricsBeforeComments = structuredClone(beforeComments!.prompts[0].metrics);
+      for (const row of rows) {
+        const response = await api
+          .post(`/api/eval/${evaluation.id}/results/${row.id}/rating`)
+          .send({
+            ...(row.gradingResult ?? {
+              pass: row.success,
+              score: row.score,
+              reason: 'Manual result',
+            }),
+            reason: 'Stale client grading',
+            metadata: { cachedResponse: false },
+            comment: '!highlight Review this result',
+            commentOnly: true,
+          });
+        expect(response.status).toBe(200);
+      }
+      const annotated = await Eval.findById(evaluation.id);
+      expect((await annotated!.getRepeatStability())?.cachedResults).toBe(2);
+      expect(annotated!.prompts[0].metrics).toEqual(metricsBeforeComments);
+      for (const row of await EvalResult.findManyByEvalId(evaluation.id)) {
+        expect(row.gradingResult?.comment).toBe('!highlight Review this result');
+        expect(row.gradingResult?.reason).toBe(isOriginal ? 'cached grader' : 'Manual result');
+        expect(row.gradingResult?.metadata?.cachedResponse).toBe(isOriginal ? true : undefined);
+        expect(row.gradingResult).not.toHaveProperty('commentOnly');
+      }
+    }
+
     it.each([false, true])(
       'replaces stripped repeat cache evidence while retaining target cached=%s',
       async (targetCached) => {
@@ -155,6 +189,7 @@ describe('eval routes', () => {
         for (const evaluation of [original, imported]) {
           expect((await evaluation.getRepeatStability())?.cachedResults).toBe(2);
           const rows = await EvalResult.findManyByEvalId(evaluation.id);
+          await annotateRepeatedResults(evaluation, rows, evaluation === original);
           for (const row of rows) {
             const response = await api
               .post(`/api/eval/${evaluation.id}/results/${row.id}/rating`)
@@ -177,6 +212,17 @@ describe('eval routes', () => {
         }
       },
     );
+
+    it('rejects grading changes marked as comment-only', async () => {
+      const evaluation = await EvalFactory.create();
+      testEvalIds.add(evaluation.id);
+      const [row] = await EvalResult.findManyByEvalId(evaluation.id);
+      const response = await api
+        .post(`/api/eval/${evaluation.id}/results/${row.id}/rating`)
+        .send({ pass: !row.success, score: row.score, comment: 'note', commentOnly: true });
+      expect(response.status).toBe(400);
+      expect((await EvalResult.findById(row.id))?.success).toBe(row.success);
+    });
 
     it('rejects result ratings when the URL eval does not own the result', async () => {
       const evalA = await EvalFactory.create();

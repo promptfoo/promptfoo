@@ -947,7 +947,8 @@ export function sanitizeResultForJsonlArtifact<T extends object>(
 
   return {
     ...result,
-    ...(typeof artifactResult.repeatGroupId === 'string' &&
+    ...(shouldStripGradingResult &&
+      typeof artifactResult.repeatGroupId === 'string' &&
       typeof artifactResult.repeatIndex === 'number' &&
       isCachedRepeatResult(artifactResult as Partial<EvaluateResult>) && { repeatCached: true }),
     ...(artifactResult.testCase
@@ -1450,7 +1451,9 @@ export default class EvalResult {
       ...(this.repeatGroupId !== undefined && {
         repeatGroupId: this.repeatGroupId,
         repeatIndex: this.repeatIndex,
-        ...(isCachedRepeatResult(this) && { repeatCached: true }),
+        ...((this.repeatCached || (shouldStripGradingResult && isCachedRepeatResult(this))) && {
+          repeatCached: true,
+        }),
       }),
       provider: { id: this.provider.id, label: this.provider.label },
       response,

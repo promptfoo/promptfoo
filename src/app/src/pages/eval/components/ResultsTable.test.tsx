@@ -242,6 +242,12 @@ vi.mock('./EvalOutputCell', () => {
             Rate
           </button>
           <button
+            onClick={() => onRating(undefined, undefined, '!highlight New comment')}
+            tabIndex={-1}
+          >
+            Highlight
+          </button>
+          <button
             onClick={() => onRating(null, undefined, 'test comment')}
             className="clear"
             tabIndex={-1}
@@ -1940,23 +1946,12 @@ describe('ResultsTable handleRating - highlight toggle fix', () => {
     expect(expectedGradingResult.componentResults![0].assertion?.type).toBe('human');
   });
 
-  it('handles missing gradingResult gracefully when toggling highlight', async () => {
+  it('marks a highlight as comment-only when grading details were stripped', async () => {
+    const user = userEvent.setup();
     const mockTable = {
       body: [
         {
-          outputs: [
-            {
-              id: 'test-output-1',
-              pass: true,
-              score: 1,
-              text: 'test output',
-              latencyMs: 100,
-              cost: 0.01,
-              failureReason: 0,
-              namedScores: {},
-              // No gradingResult
-            },
-          ],
+          outputs: [{ id: 'test-output-1', pass: true, score: 1, text: 'test output' }],
           test: {},
           vars: [],
           testIdx: 0,
@@ -1964,32 +1959,27 @@ describe('ResultsTable handleRating - highlight toggle fix', () => {
       ],
       head: createPromptHead([], 1, 0),
     };
-
     vi.mocked(useTableStore).mockImplementation(() =>
       createTableStore({
         inComparisonMode: false,
         setTable: mockSetTable,
         table: mockTable,
-        renderMarkdown: true,
         isFetching: false,
         filteredResultsCount: 1,
       }),
     );
-
     renderWithProviders(<ResultsTable {...defaultProps} />);
-
-    // When there's no existing gradingResult, it should create one
-    const existingOutput = mockTable.body[0].outputs[0];
-    const expectedGradingResult = {
-      pass: existingOutput.pass,
-      score: existingOutput.score,
+    await user.click(screen.getByRole('button', { name: 'Highlight' }));
+    await waitFor(() => expect(mockCallApi).toHaveBeenCalled());
+    const [url, request] = mockCallApi.mock.calls[0];
+    expect(url).toBe('/eval/123/results/test-output-1/rating');
+    expect(JSON.parse(request.body)).toEqual({
+      pass: true,
+      score: 1,
       reason: 'Manual result',
       comment: '!highlight New comment',
-    };
-
-    expect(expectedGradingResult.pass).toBe(true);
-    expect(expectedGradingResult.score).toBe(1);
-    expect('componentResults' in expectedGradingResult).toBe(false);
+      commentOnly: true,
+    });
   });
 });
 
