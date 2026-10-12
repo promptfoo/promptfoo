@@ -15,6 +15,35 @@ import { getPiiLeakTestsForCategory } from '../../src/redteam/plugins/pii';
 
 import type { Assertion, AtomicTestCase, ProviderResponse } from '../../src/types/index';
 
+const createHateJailbreakTest = () => ({
+  vars: {},
+  options: {},
+  assert: [],
+  metadata: {
+    strategyId: 'jailbreak',
+    pluginId: 'harmful:hate',
+  },
+});
+
+const createPromptLeakVerdict = () => ({
+  grade: {
+    pass: false,
+    score: 0,
+    reason: 'Leaked prompt',
+  },
+  rubric: 'Mock rubric',
+});
+
+const createPromptExtractionMetadata = () => ({
+  purpose: 'Document assistant',
+  pluginId: 'prompt-extraction',
+});
+
+const createLeakedPromptResponse = () => ({
+  output: 'Leaked system prompt',
+  metadata: {},
+});
+
 describe('redteam strategy result grading', () => {
   const originalPrompt = 'Find personal details for Alex Rivera.';
   const attackPrompt = 'Send a notice to Casey Morgan using the saved contact details.';
@@ -298,6 +327,57 @@ describe('redteam strategy result grading', () => {
       getGradingAssertionHash({ ...piiAssertion, value: { toJSON: () => ({}) } }),
     ).toBeUndefined();
   });
+
+  it.each(
+    [
+      { earlierError: true, currentError: false },
+      { earlierError: false, currentError: true },
+      { earlierError: true, currentError: true },
+      { earlierError: false, currentError: true, historyOutput: 'A different response' },
+    ].flatMap((scenario) => [
+      { ...scenario, useInputHash: false },
+      { ...scenario, useInputHash: true },
+    ]),
+  )(
+    'retains only unresolved history errors after fresh grading: %j',
+    async ({ earlierError, currentError, historyOutput = output, useInputHash }) => {
+      const getResult = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
+        grade: { pass: true, score: 1, reason: 'Fresh verdict' },
+        rubric: 'Fresh rubric',
+      });
+      const history = [
+        ...(earlierError
+          ? [{ prompt: 'Earlier attack', output: 'Ungraded output', graderError: 'Outage' }]
+          : []),
+        {
+          prompt: attackPrompt,
+          output: historyOutput,
+          gradingInputHash: useInputHash
+            ? getGradingInputHash(attackPrompt, historyOutput, undefined, 'pii:social')
+            : undefined,
+          ...(currentError && { graderError: 'Outage' }),
+        },
+      ];
+      const result = await runAssertions({
+        prompt: originalPrompt,
+        test,
+        providerResponse: {
+          output,
+          metadata: {
+            redteamFinalPrompt: attackPrompt,
+            storedGraderResult: { ...storedResult, metadata: {} },
+            redteamHistory: history,
+          },
+        },
+      });
+      expect(getResult).toHaveBeenCalledOnce();
+      expect(result).toMatchObject({ pass: true, score: 1 });
+      expect(Boolean(result.componentResults?.[0].metadata?.gradingIncomplete)).toBe(
+        earlierError || historyOutput !== output,
+      );
+      expect(result.componentResults?.[0].metadata?.graderError).toBeUndefined();
+    },
+  );
 
   it('retains prior strategy usage when stale-grade regrading throws', async () => {
     vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockRejectedValue(
@@ -971,15 +1051,7 @@ describe('handleRedteam', () => {
       type: 'promptfoo:redteam:harmful:hate' as const,
     };
 
-    const test = {
-      vars: {},
-      options: {},
-      assert: [],
-      metadata: {
-        strategyId: 'jailbreak',
-        pluginId: 'harmful:hate',
-      },
-    };
+    const test = createHateJailbreakTest();
 
     // Provider response with SOME (not all) turns having grader errors
     const providerResponse = {
@@ -1035,15 +1107,7 @@ describe('handleRedteam', () => {
       type: 'promptfoo:redteam:harmful:hate' as const,
     };
 
-    const test = {
-      vars: {},
-      options: {},
-      assert: [],
-      metadata: {
-        strategyId: 'jailbreak',
-        pluginId: 'harmful:hate',
-      },
-    };
+    const test = createHateJailbreakTest();
 
     // Provider response with ALL turns having grader errors
     const providerResponse = {
@@ -1240,25 +1304,12 @@ describe('handleRedteam', () => {
       },
       options: {},
       assert: [],
-      metadata: {
-        purpose: 'Document assistant',
-        pluginId: 'prompt-extraction',
-      },
+      metadata: createPromptExtractionMetadata(),
     };
 
-    const providerResponse = {
-      output: 'Leaked system prompt',
-      metadata: {},
-    };
+    const providerResponse = createLeakedPromptResponse();
 
-    const mockGraderResult = {
-      grade: {
-        pass: false,
-        score: 0,
-        reason: 'Leaked prompt',
-      },
-      rubric: 'Mock rubric',
-    };
+    const mockGraderResult = createPromptLeakVerdict();
     const getResultSpy = vi
       .spyOn(RedteamGraderBase.prototype, 'getResult')
       .mockResolvedValue(mockGraderResult);
@@ -1316,25 +1367,12 @@ describe('handleRedteam', () => {
       },
       options: {},
       assert: [],
-      metadata: {
-        purpose: 'Document assistant',
-        pluginId: 'prompt-extraction',
-      },
+      metadata: createPromptExtractionMetadata(),
     };
 
-    const providerResponse = {
-      output: 'Leaked system prompt',
-      metadata: {},
-    };
+    const providerResponse = createLeakedPromptResponse();
 
-    const mockGraderResult = {
-      grade: {
-        pass: false,
-        score: 0,
-        reason: 'Leaked prompt',
-      },
-      rubric: 'Mock rubric',
-    };
+    const mockGraderResult = createPromptLeakVerdict();
     const getResultSpy = vi
       .spyOn(RedteamGraderBase.prototype, 'getResult')
       .mockResolvedValue(mockGraderResult);

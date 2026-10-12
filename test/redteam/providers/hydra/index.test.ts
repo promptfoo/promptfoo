@@ -1,4 +1,5 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, Mock, vi } from 'vitest';
+import { runAssertions } from '../../../../src/assertions/index';
 import * as blobExtractor from '../../../../src/blobs/extractor';
 import * as evaluatorHelpers from '../../../../src/evaluatorHelpers';
 import { PromptfooChatCompletionProvider } from '../../../../src/providers/promptfoo';
@@ -18,10 +19,26 @@ import {
   createProviderResponse,
   type MockApiProvider,
 } from '../../../factories/provider';
+import { createMockTracingOptions } from '../../../factories/tracing';
 import { createSelectedObserverErrorResponse } from '../../../util/selectedObserverError';
 import { createSelectedToolErrorTarget } from '../../../util/selectedToolErrorTarget';
 
-import type { CallApiContextParams, GradingResult } from '../../../../src/types/index';
+import type {
+  AtomicTestCase,
+  CallApiContextParams,
+  GradingResult,
+} from '../../../../src/types/index';
+
+const createDocumentInputVars = (): ConstructorParameters<typeof HydraProvider>[0]['inputs'] => ({
+  document: {
+    description: 'Uploaded planning document',
+    type: 'docx',
+  },
+  question: {
+    description: 'Benign analyst question',
+    type: 'text',
+  },
+});
 
 // Import HydraProvider dynamically after mocks are set up
 let HydraProvider: typeof import('../../../../src/redteam/providers/hydra/index').HydraProvider;
@@ -32,19 +49,7 @@ const mockGetSessionId = vi.hoisted(() => vi.fn());
 const mockIsBasicRefusal = vi.hoisted(() => vi.fn());
 
 // Tracing mocks
-const mockResolveTracingOptions = vi.hoisted(() =>
-  vi.fn(() => ({
-    enabled: false,
-    includeInAttack: true,
-    includeInGrading: true,
-    includeInternalSpans: false,
-    maxSpans: 50,
-    maxDepth: 5,
-    maxRetries: 3,
-    retryDelayMs: 500,
-    sanitizeAttributes: true,
-  })),
-);
+const mockResolveTracingOptions = vi.hoisted(() => vi.fn(() => createMockTracingOptions(false)));
 const mockFetchTraceContext = vi.hoisted(() => vi.fn());
 const mockFormatTraceSummary = vi.hoisted(() => vi.fn(() => 'Trace summary'));
 const mockFormatTraceForMetadata = vi.hoisted(() => vi.fn(() => ({ traceId: 'test-trace-id' })));
@@ -162,9 +167,7 @@ describe('HydraProvider', () => {
     mockGetGraderById.mockImplementation(function () {
       return mockGrader;
     });
-    vi.mocked(shouldGenerateRemote).mockImplementation(function () {
-      return true;
-    });
+    vi.mocked(shouldGenerateRemote).mockReturnValue(true);
     vi.mocked(neverGenerateRemote).mockReset();
     vi.mocked(neverGenerateRemote).mockReturnValue(false);
     vi.mocked(evaluatorHelpers.renderPrompt).mockResolvedValue('rendered prompt');
@@ -221,9 +224,7 @@ describe('HydraProvider', () => {
     });
 
     it('should throw the implicit-disabled error when remote generation is unavailable for this config', () => {
-      vi.mocked(shouldGenerateRemote).mockImplementation(function () {
-        return false;
-      });
+      vi.mocked(shouldGenerateRemote).mockReturnValue(false);
       vi.mocked(neverGenerateRemote).mockReturnValue(false);
 
       expect(() => {
@@ -234,9 +235,7 @@ describe('HydraProvider', () => {
     });
 
     it('should throw the explicit-disabled error when a disable flag is set', () => {
-      vi.mocked(shouldGenerateRemote).mockImplementation(function () {
-        return false;
-      });
+      vi.mocked(shouldGenerateRemote).mockReturnValue(false);
       vi.mocked(neverGenerateRemote).mockReturnValue(true);
 
       expect(() => {
@@ -244,19 +243,6 @@ describe('HydraProvider', () => {
       }).toThrow(
         /jailbreak:hydra strategy requires remote generation, which has been explicitly disabled\. To enable it, unset (PROMPTFOO_DISABLE_REMOTE_GENERATION|PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION)/,
       );
-    });
-
-    it('should warn when backtracking is enabled in stateful mode', () => {
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-
-      new HydraProvider({
-        injectVar: 'input',
-        stateful: true,
-        maxBacktracks: 5,
-      });
-
-      // Logger.warn should have been called
-      warnSpy.mockRestore();
     });
 
     it('should create agent provider with correct config', () => {
@@ -445,6 +431,132 @@ describe('HydraProvider', () => {
         message: 'Successful attack message',
         response: 'Here is how to do harmful thing',
       });
+    });
+
+    it.each(
+      [true, false].flatMap((pass) =>
+        [false, true].flatMap((freshGradingFails) =>
+          ['hydra', 'goblin'].map((strategy) => ({ pass, freshGradingFails, strategy })),
+        ),
+      ),
+    )(
+      'preserves the next valid verdict or final grading error: %j',
+      async ({ pass, freshGradingFails, strategy }) => {
+        mockAgentProvider.callApi.mockResolvedValue({
+          output: 'Successful attack message',
+          tokenUsage: { total: 100, prompt: 50, completion: 50 },
+        });
+
+        mockTargetProvider.callApi.mockResolvedValue({
+          output: 'Here is how to do harmful thing',
+          tokenUsage: { total: 50, prompt: 25, completion: 25 },
+        });
+
+        const getResult = vi
+          .fn()
+          .mockResolvedValueOnce({
+            grade: {
+              pass: false,
+              score: 0,
+              reason: 'Grading provider returned 503',
+              metadata: { graderError: true },
+            },
+          })
+          .mockResolvedValueOnce({ grade: { pass, score: pass ? 1 : 0, reason: 'Valid verdict' } })
+          .mockRejectedValue(new Error('Final grading failed'));
+        mockGetGraderById.mockReturnValue({ getResult } as any);
+
+        const Provider =
+          strategy === 'goblin'
+            ? (await import('../../../../src/redteam/providers/goblin/index')).GoblinProvider
+            : HydraProvider;
+        const provider = new Provider({
+          injectVar: 'input',
+          maxTurns: 2,
+        });
+
+        const context: CallApiContextParams = {
+          originalProvider: mockTargetProvider,
+          vars: { input: 'test goal' },
+          prompt: { raw: 'test prompt', label: 'test' },
+          test: {
+            assert: [
+              {
+                type: 'promptfoo:redteam:pii',
+                ...(freshGradingFails && { transform: (output: unknown) => output }),
+              },
+            ],
+            metadata: { goal: 'test goal', pluginId: 'pii', strategyId: `jailbreak:${strategy}` },
+            provider: `promptfoo:redteam:${strategy}`,
+          } as any,
+        };
+
+        const result = await provider.callApi('', context);
+
+        expect(result.metadata?.redteamHistory[0]).toMatchObject({
+          graderPassed: undefined,
+          graderError: 'Grading provider returned 503',
+        });
+        const grading = runAssertions({
+          prompt: 'test prompt',
+          test: context.test!,
+          providerResponse: result,
+        });
+        if (freshGradingFails) {
+          await expect(grading).rejects.toThrow('Final grading failed');
+        } else {
+          expect((await grading).componentResults?.[0].metadata?.gradingIncomplete).toBe(true);
+        }
+        expect(result.metadata).toHaveProperty(`${strategy}Result`, !pass);
+        expect(result.metadata?.successfulAttacks ?? []).toHaveLength(pass ? 0 : 1);
+        expect(getResult).toHaveBeenCalledTimes(freshGradingFails ? 3 : 2);
+        expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(2);
+        expect(JSON.parse(mockAgentProvider.callApi.mock.calls[1][0])).not.toHaveProperty(
+          'lastGraderResult',
+        );
+      },
+    );
+
+    it.each(
+      [1, 2].flatMap((turns) => ['hydra', 'goblin'].map((strategy) => ({ turns, strategy }))),
+    )('resolves only the last tagged-prompt grading error: %j', async ({ turns, strategy }) => {
+      mockAgentProvider.callApi.mockResolvedValue({ output: '<Prompt>attack</Prompt>' });
+      mockTargetProvider.callApi.mockResolvedValue({ output: 'Target response' });
+      let calls = 0;
+      const getResult = vi.fn(async () => ({
+        grade:
+          ++calls <= turns
+            ? { pass: false, score: 0, reason: 'Outage', metadata: { graderError: true } }
+            : { pass: true, score: 1, reason: 'Recovered' },
+      }));
+      mockGetGraderById.mockReturnValue({ getResult });
+      const Provider =
+        strategy === 'goblin'
+          ? (await import('../../../../src/redteam/providers/goblin/index')).GoblinProvider
+          : HydraProvider;
+      const provider = new Provider({ injectVar: 'input', maxTurns: turns });
+      const test: AtomicTestCase = {
+        assert: [{ type: 'promptfoo:redteam:pii', transform: (output) => output }],
+        metadata: { pluginId: 'pii', strategyId: `jailbreak:${strategy}` },
+        provider: `promptfoo:redteam:${strategy}`,
+      };
+      const context: CallApiContextParams = {
+        originalProvider: mockTargetProvider,
+        vars: { input: 'test goal' },
+        prompt: { raw: '{{input}}', label: 'test' },
+        test,
+      };
+      const result = await provider.callApi('', context);
+      expect(result.metadata?.redteamHistory[0].prompt).toBe('<Prompt>attack</Prompt>');
+      expect(result.metadata?.redteamFinalPrompt).toBe('attack');
+      const grading = await runAssertions({
+        prompt: 'test',
+        test: context.test!,
+        providerResponse: result,
+      });
+      expect(getResult).toHaveBeenCalledTimes(turns + 1);
+      expect(grading).toMatchObject({ pass: true, score: 1 });
+      expect(Boolean(grading.componentResults?.[0].metadata?.gradingIncomplete)).toBe(turns > 1);
     });
 
     it('should handle multiple turns until max turns reached', async () => {
@@ -2169,16 +2281,7 @@ describe('HydraProvider', () => {
 
       const provider = new HydraProvider({
         injectVar: 'input',
-        inputs: {
-          document: {
-            description: 'Uploaded planning document',
-            type: 'docx',
-          },
-          question: {
-            description: 'Benign analyst question',
-            type: 'text',
-          },
-        },
+        inputs: createDocumentInputVars(),
         maxTurns: 1,
       });
 
@@ -2233,16 +2336,7 @@ describe('HydraProvider', () => {
 
       const provider = new HydraProvider({
         injectVar: 'input',
-        inputs: {
-          document: {
-            description: 'Uploaded planning document',
-            type: 'docx',
-          },
-          question: {
-            description: 'Benign analyst question',
-            type: 'text',
-          },
-        },
+        inputs: createDocumentInputVars(),
         maxTurns: 1,
         stateful: true,
       });
@@ -2296,16 +2390,7 @@ describe('HydraProvider', () => {
 
       const provider = new HydraProvider({
         injectVar: 'input',
-        inputs: {
-          document: {
-            description: 'Uploaded planning document',
-            type: 'docx',
-          },
-          question: {
-            description: 'Benign analyst question',
-            type: 'text',
-          },
-        },
+        inputs: createDocumentInputVars(),
         maxTurns: 1,
         stateful: true,
       });
@@ -2738,17 +2823,7 @@ describe('HydraProvider', () => {
 
     it('should fetch trace context when tracing is enabled', async () => {
       // Enable tracing
-      mockResolveTracingOptions.mockReturnValue({
-        enabled: true,
-        includeInAttack: true,
-        includeInGrading: true,
-        includeInternalSpans: false,
-        maxSpans: 50,
-        maxDepth: 5,
-        maxRetries: 3,
-        retryDelayMs: 500,
-        sanitizeAttributes: true,
-      });
+      mockResolveTracingOptions.mockReturnValue(createMockTracingOptions());
 
       // Mock trace context
       mockFetchTraceContext.mockResolvedValue({
@@ -2798,17 +2873,7 @@ describe('HydraProvider', () => {
     });
 
     it('skips trace retrieval when a Hydra target response came from cache', async () => {
-      mockResolveTracingOptions.mockReturnValue({
-        enabled: true,
-        includeInAttack: true,
-        includeInGrading: true,
-        includeInternalSpans: false,
-        maxSpans: 50,
-        maxDepth: 5,
-        maxRetries: 3,
-        retryDelayMs: 500,
-        sanitizeAttributes: true,
-      });
+      mockResolveTracingOptions.mockReturnValue(createMockTracingOptions());
       mockAgentProvider.callApi.mockResolvedValue({
         output: 'Attack message',
         tokenUsage: { total: 100, prompt: 50, completion: 50 },
@@ -2838,17 +2903,7 @@ describe('HydraProvider', () => {
 
     it('should NOT fetch trace context when traceparent is missing', async () => {
       // Enable tracing
-      mockResolveTracingOptions.mockReturnValue({
-        enabled: true,
-        includeInAttack: true,
-        includeInGrading: true,
-        includeInternalSpans: false,
-        maxSpans: 50,
-        maxDepth: 5,
-        maxRetries: 3,
-        retryDelayMs: 500,
-        sanitizeAttributes: true,
-      });
+      mockResolveTracingOptions.mockReturnValue(createMockTracingOptions());
 
       mockAgentProvider.callApi.mockResolvedValue({
         output: 'Attack message',
@@ -2886,17 +2941,7 @@ describe('HydraProvider', () => {
 
     it('should call formatTraceSummary when tracing is enabled and trace is fetched', async () => {
       // Enable tracing
-      mockResolveTracingOptions.mockReturnValue({
-        enabled: true,
-        includeInAttack: true,
-        includeInGrading: true,
-        includeInternalSpans: false,
-        maxSpans: 50,
-        maxDepth: 5,
-        maxRetries: 3,
-        retryDelayMs: 500,
-        sanitizeAttributes: true,
-      });
+      mockResolveTracingOptions.mockReturnValue(createMockTracingOptions());
 
       mockFetchTraceContext.mockResolvedValue({
         traceId: 'test-trace-id',
@@ -2938,17 +2983,7 @@ describe('HydraProvider', () => {
 
     it('should call formatTraceForMetadata when trace is stored in metadata', async () => {
       // Enable tracing
-      mockResolveTracingOptions.mockReturnValue({
-        enabled: true,
-        includeInAttack: true,
-        includeInGrading: true,
-        includeInternalSpans: false,
-        maxSpans: 50,
-        maxDepth: 5,
-        maxRetries: 3,
-        retryDelayMs: 500,
-        sanitizeAttributes: true,
-      });
+      mockResolveTracingOptions.mockReturnValue(createMockTracingOptions());
 
       mockFetchTraceContext.mockResolvedValue({
         traceId: 'test-trace-id',
@@ -2990,17 +3025,7 @@ describe('HydraProvider', () => {
 
     it('should handle fetchTraceContext returning null gracefully', async () => {
       // Enable tracing
-      mockResolveTracingOptions.mockReturnValue({
-        enabled: true,
-        includeInAttack: true,
-        includeInGrading: true,
-        includeInternalSpans: false,
-        maxSpans: 50,
-        maxDepth: 5,
-        maxRetries: 3,
-        retryDelayMs: 500,
-        sanitizeAttributes: true,
-      });
+      mockResolveTracingOptions.mockReturnValue(createMockTracingOptions());
 
       // Return null (no trace found)
       mockFetchTraceContext.mockResolvedValue(null);
@@ -3040,17 +3065,7 @@ describe('HydraProvider', () => {
 
     it('should include trace data in redteamHistory entries when tracing is enabled', async () => {
       // Enable tracing
-      mockResolveTracingOptions.mockReturnValue({
-        enabled: true,
-        includeInAttack: true,
-        includeInGrading: true,
-        includeInternalSpans: false,
-        maxSpans: 50,
-        maxDepth: 5,
-        maxRetries: 3,
-        retryDelayMs: 500,
-        sanitizeAttributes: true,
-      });
+      mockResolveTracingOptions.mockReturnValue(createMockTracingOptions());
 
       mockFetchTraceContext.mockResolvedValue({
         traceId: 'test-trace-id',
