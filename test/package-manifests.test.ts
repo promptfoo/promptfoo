@@ -687,8 +687,7 @@ describe('package manifests', () => {
   });
 
   it('builds the image and dev container one step at a time', () => {
-    // The build script's three jobs peak near 12 GB side by side, which is killed where
-    // Docker has 8 GB. The variable only has an effect while the script uses concurrently.
+    // The environment option only applies while the build script uses concurrently.
     const { scripts } = readPackageJson<{ scripts: Record<string, string> }>('package.json');
     expect(scripts.build).toMatch(/^concurrently /);
 
