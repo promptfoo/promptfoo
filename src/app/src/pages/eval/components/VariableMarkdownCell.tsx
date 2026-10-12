@@ -70,6 +70,7 @@ const VariableMarkdownCell = React.memo(function VariableMarkdownCell({
             <DataImagePreviewText
               text={value}
               images={dataImages}
+              maxTextLength={maxTextLength}
               imageClassName="max-h-48 max-w-full object-contain"
               onImageClick={onImageClick}
             />

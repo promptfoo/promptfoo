@@ -2,10 +2,12 @@ import type { ReactNode } from 'react';
 
 import MarkdownImage from './MarkdownImage';
 import { isInlineDataImage, type RenderableMarkdownImage } from './markdown-config';
+import TruncatedText from './TruncatedText';
 
 interface DataImagePreviewTextProps {
   images: RenderableMarkdownImage[];
   imageClassName?: string;
+  maxTextLength?: number;
   onImageClick?: (src: string) => void;
   text: string;
 }
@@ -14,6 +16,7 @@ interface DataImagePreviewTextProps {
 export default function DataImagePreviewText({
   images,
   imageClassName,
+  maxTextLength = 0,
   onImageClick,
   text,
 }: DataImagePreviewTextProps) {
@@ -44,5 +47,7 @@ export default function DataImagePreviewText({
   }
 
   content.push(text.slice(cursor));
-  return <span className="whitespace-pre-wrap">{content}</span>;
+  const preview = <span className="whitespace-pre-wrap">{content}</span>;
+  // Truncate the literal text after replacing image tokens, so image sources stay intact.
+  return maxTextLength > 0 ? <TruncatedText text={preview} maxLength={maxTextLength} /> : preview;
 }

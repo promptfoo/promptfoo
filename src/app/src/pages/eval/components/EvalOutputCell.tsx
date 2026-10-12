@@ -127,7 +127,7 @@ export function isVideoProvider(provider: string | undefined): boolean {
 
 function getImageDataUriComparisonKey(src: string): string | undefined {
   const trimmed = src.trim();
-  if (!trimmed.toLowerCase().startsWith('data:')) {
+  if (!/^data:/i.test(trimmed)) {
     return undefined;
   }
 
@@ -396,6 +396,7 @@ function renderMediaNode({
 function renderMarkdownOrJsonNode({
   text,
   normalizedText,
+  maxTextLength,
   renderMarkdown,
   dataImages,
   prettifyJson,
@@ -405,6 +406,7 @@ function renderMarkdownOrJsonNode({
 }: {
   text: string;
   normalizedText: string;
+  maxTextLength: number;
   renderMarkdown: boolean;
   dataImages: RenderableMarkdownImage[];
   prettifyJson: boolean;
@@ -470,6 +472,7 @@ function renderMarkdownOrJsonNode({
       <DataImagePreviewText
         text={normalizedText}
         images={dataImages}
+        maxTextLength={maxTextLength}
         onImageClick={(src) => onImageClick(src)}
       />
     ),
@@ -549,6 +552,7 @@ function renderOutputNode({
   shouldHighlightSearchText,
   text,
   normalizedText,
+  maxTextLength,
   renderMarkdown,
   dataImages,
   prettifyJson,
@@ -565,6 +569,7 @@ function renderOutputNode({
   shouldHighlightSearchText: boolean;
   text: string;
   normalizedText: string;
+  maxTextLength: number;
   renderMarkdown: boolean;
   dataImages: RenderableMarkdownImage[];
   prettifyJson: boolean;
@@ -606,6 +611,7 @@ function renderOutputNode({
     const formattedNode = renderMarkdownOrJsonNode({
       text,
       normalizedText,
+      maxTextLength,
       renderMarkdown,
       dataImages,
       prettifyJson,
@@ -1499,6 +1505,7 @@ function EvalOutputCell({
     shouldHighlightSearchText,
     text,
     normalizedText,
+    maxTextLength,
     renderMarkdown,
     dataImages,
     prettifyJson,

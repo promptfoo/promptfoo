@@ -46,7 +46,7 @@ describe('VariableMarkdownCell', () => {
       ].join('\n');
 
       const { container } = render(
-        <VariableMarkdownCell value={value} maxTextLength={100} dataImagesOnly />,
+        <VariableMarkdownCell value={value} maxTextLength={200} dataImagesOnly />,
       );
 
       expect(container).toHaveTextContent('**literal emphasis**');
@@ -55,6 +55,28 @@ describe('VariableMarkdownCell', () => {
       expect(container.querySelector('strong')).not.toBeInTheDocument();
       expect(container.querySelector('a')).not.toBeInTheDocument();
       expect(screen.getByRole('img', { name: 'Preview' })).toHaveAttribute('src', dataUri);
+    });
+
+    it('truncates literal reference definitions alongside an inline preview', async () => {
+      const user = userEvent.setup();
+      const dataUri = `data:image/png;base64,${'AaBb'.repeat(100)}`;
+      const definition = `[image]: data:image/png;base64,${'CcDd'.repeat(1000)}`;
+      const value = `![Inline](${dataUri})\n![Reference][image]\n\n${definition}`;
+      const { container } = render(
+        <VariableMarkdownCell value={value} maxTextLength={100} dataImagesOnly />,
+      );
+
+      expect(screen.getByRole('img', { name: 'Inline' })).toHaveAttribute('src', dataUri);
+      expect(screen.queryByRole('img', { name: 'Reference' })).not.toBeInTheDocument();
+      expect(container.textContent!.length).toBeLessThan(150);
+
+      await user.click(screen.getByText('...'));
+      expect(container).toHaveTextContent(definition);
+      expect(screen.getAllByRole('img')).toHaveLength(1);
+
+      await user.click(screen.getByText('Show less'));
+      expect(container.textContent!.length).toBeLessThan(150);
+      expect(screen.getByRole('img', { name: 'Inline' })).toHaveAttribute('src', dataUri);
     });
 
     it('does not force previews for reference-style data images', () => {

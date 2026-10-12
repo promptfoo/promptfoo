@@ -18,10 +18,12 @@ const renderWithProviders = (ui: React.ReactElement) => {
   return baseRender(<ShiftKeyProvider>{ui}</ShiftKeyProvider>);
 };
 
+const viewSettings = vi.hoisted(() => ({ renderMarkdown: false }));
+
 vi.mock('./store', () => ({
   useResultsViewSettingsStore: () => ({
     prettifyJson: false,
-    renderMarkdown: false,
+    renderMarkdown: viewSettings.renderMarkdown,
     showPassFail: false,
     showPassReasons: false,
     showMetricPills: true,
@@ -94,6 +96,7 @@ describe('EvalOutputCell duplicate image prevention', () => {
   beforeEach(() => {
     timers = useTestTimers({ shouldAdvanceTime: true });
     vi.clearAllMocks();
+    viewSettings.renderMarkdown = false;
   });
 
   afterEach(() => {
@@ -175,6 +178,54 @@ describe('EvalOutputCell duplicate image prevention', () => {
 
       const images = container.querySelectorAll('img');
       expect(images).toHaveLength(1);
+    });
+
+    it.each([false, true])(
+      'deduplicates large inline image payloads without lowercasing them with Markdown rendering %s',
+      (renderMarkdown) => {
+        viewSettings.renderMarkdown = renderMarkdown;
+        const base64 = 'AbCd'.repeat(64 * 1024);
+        const dataUri = `data:image/png;base64,${base64}`;
+        const props = createBaseProps({
+          text: `Generated image: ![generated](${dataUri})`,
+          images: [{ data: `data:application/octet-stream;base64,${base64}` }],
+        });
+        const toLowerCase = vi.spyOn(String.prototype, 'toLowerCase');
+
+        try {
+          const { container } = renderWithProviders(<EvalOutputCell {...props} />);
+
+          const images = container.querySelectorAll('img');
+          expect(images).toHaveLength(1);
+          expect(images[0].getAttribute('src')).toBe(dataUri);
+          expect(
+            toLowerCase.mock.contexts.some((value) => String(value).length >= base64.length),
+          ).toBe(false);
+        } finally {
+          toLowerCase.mockRestore();
+        }
+      },
+    );
+
+    it('deduplicates equivalent headers and whitespace without ignoring payload case', () => {
+      const base64 = 'AbCd'.repeat(20);
+      const dataUri = `DATA:APPLICATION/OCTET-STREAM;BASE64,${base64}`;
+      const distinctDataUri = `data:image/png;base64,${base64.toLowerCase()}`;
+      const props = createBaseProps({
+        text: dataUri,
+        images: [
+          { data: `data:IMAGE/PNG;BASE64,${'AbCd \n'.repeat(20)}` },
+          { data: distinctDataUri },
+        ],
+      });
+
+      const { container } = renderWithProviders(<EvalOutputCell {...props} />);
+
+      const images = container.querySelectorAll('img');
+      expect(Array.from(images, (image) => image.getAttribute('src'))).toEqual([
+        dataUri,
+        distinctDataUri,
+      ]);
     });
 
     it('should detect data URI with image/svg+xml as primary rendered image', () => {

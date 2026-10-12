@@ -3176,7 +3176,7 @@ describe('EvalOutputCell inline image lightbox', () => {
         text: 'First output',
         testCase: {},
       },
-      maxTextLength: 100,
+      maxTextLength: 200,
       onRating: mockOnRating,
       output: {
         cost: 0,
@@ -3228,6 +3228,30 @@ describe('EvalOutputCell inline image lightbox', () => {
       'src',
       `data:image/png;base64,${bareBase64}`,
     );
+  });
+
+  it('truncates literal reference definitions alongside an inline output preview', async () => {
+    const user = userEvent.setup();
+    const dataUri = `data:image/png;base64,${'AaBb'.repeat(100)}`;
+    const definition = `[image]: data:image/png;base64,${'CcDd'.repeat(1000)}`;
+    const text = `![Inline](${dataUri})\n![Reference][image]\n\n${definition}`;
+    mockResultsViewSettings.renderMarkdown = false;
+    const { container } = renderWithProviders(
+      <EvalOutputCell {...createMarkdownPreviewProps(text, 100)} />,
+    );
+
+    expect(screen.getByRole('img', { name: 'Inline' })).toHaveAttribute('src', dataUri);
+    expect(screen.queryByRole('img', { name: 'Reference' })).not.toBeInTheDocument();
+    expect(container).not.toHaveTextContent('CcDd'.repeat(100));
+
+    await user.click(screen.getByText('...'));
+    expect(container).toHaveTextContent(definition);
+    expect(screen.getAllByRole('img')).toHaveLength(1);
+
+    await user.click(screen.getByText('Show less'));
+    expect(container).not.toHaveTextContent('CcDd'.repeat(100));
+    await user.click(screen.getByRole('img', { name: 'Inline' }));
+    expect(container.querySelector('.lightbox')).toBeInTheDocument();
   });
 
   it('does not force previews for reference-style data images', () => {
