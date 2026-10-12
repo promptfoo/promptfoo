@@ -208,18 +208,20 @@ function isVariationSelector(cp: number): boolean {
 }
 
 /**
- * RGI emoji tag sequences: a black-flag base plus 2–6 lowercase-letter/digit
- * tags and the mandatory cancel tag. This is how subdivision flags such as
- * England, Scotland and Wales are encoded, and it is the only legitimate use
- * of the Unicode tag block in ordinary data.
+ * The RGI emoji tag sequences: a black-flag base, the tag-encoded subdivision
+ * code and the mandatory cancel tag. Unicode recommends exactly three —
+ * England (gbeng), Scotland (gbsct) and Wales (gbwls) — and they are the only
+ * legitimate use of the Unicode tag block in ordinary data.
  *
- * Deliberately tight. A loose "anything between 🏴 and U+E007F" exemption would
- * itself be a bypass: prefix the smuggled payload with 🏴 and terminate it.
- * Restricting the tag characters to [0-9a-z] and the length to 6 means the
- * exempted span cannot carry a sentence.
+ * Deliberately an exact list. Any shape-based exemption (e.g. "2–6 lowercase
+ * tags between 🏴 and U+E007F") is itself a bypass: a server splits the
+ * smuggled payload into chunks, wraps each as a well-formed "flag", and the
+ * exemption strips every chunk before the tag scan sees it. The cost is that
+ * valid but non-RGI subdivision flags (e.g. Texas, `ustx`), which platforms do
+ * not render as flags anyway, are reported as tag smuggling.
  */
 const EMOJI_TAG_SEQUENCE_PATTERN =
-  /\u{1F3F4}[\u{E0030}-\u{E0039}\u{E0061}-\u{E007A}]{2,6}\u{E007F}/gu;
+  /\u{1F3F4}\u{E0067}\u{E0062}(?:\u{E0065}\u{E006E}\u{E0067}|\u{E0073}\u{E0063}\u{E0074}|\u{E0077}\u{E006C}\u{E0073})\u{E007F}/gu;
 
 /**
  * Control/escape bytes except ordinary whitespace.
