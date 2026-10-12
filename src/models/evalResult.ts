@@ -24,6 +24,7 @@ import {
   type TraceData,
 } from '../types/index';
 import { isApiProvider, isProviderOptions } from '../types/providers';
+import { isCachedRepeatResult } from '../util/eval/repeatStability';
 import { GRADING_PROVIDER_TYPE_KEYS, isProviderTypeMap } from '../util/gradingProvider';
 import { safeJsonStringify } from '../util/json';
 import {
@@ -758,6 +759,7 @@ export function persistRepeatMetadata(
   metadata: EvaluateResult['metadata'],
   repeatIndex: EvaluateResult['repeatIndex'],
   repeatGroupId: EvaluateResult['repeatGroupId'],
+  repeatCached?: EvaluateResult['repeatCached'],
 ): EvaluateResult['metadata'] {
   if (repeatIndex === undefined || !repeatGroupId) {
     return stripRepeatLinkageFromMetadata(metadata);
@@ -780,7 +782,11 @@ export function persistRepeatMetadata(
     ...metadataRecord,
     [PROMPTFOO_METADATA_KEY]: {
       ...(promptfooMetadata ?? {}),
-      [REPEAT_LINKAGE_KEY]: { repeatIndex, repeatGroupId },
+      [REPEAT_LINKAGE_KEY]: {
+        repeatIndex,
+        repeatGroupId,
+        ...(repeatCached === true && { repeatCached }),
+      },
     },
   };
 }
@@ -807,6 +813,7 @@ export function stripRepeatLinkageFromMetadata<
 function surfaceRepeatMetadata(metadata: Record<string, unknown> | null | undefined): {
   repeatIndex?: number;
   repeatGroupId?: string;
+  repeatCached?: true;
   metadata: Record<string, unknown>;
 } {
   const metadataRecord = metadata ?? {};
@@ -828,6 +835,7 @@ function surfaceRepeatMetadata(metadata: Record<string, unknown> | null | undefi
   return {
     repeatIndex,
     repeatGroupId,
+    ...(repeatLinkage?.repeatCached === true && { repeatCached: true }),
     metadata: hasRepeatLinkage ? stripRepeatLinkageFromMetadata(metadataRecord) : metadataRecord,
   };
 }
@@ -939,6 +947,10 @@ export function sanitizeResultForJsonlArtifact<T extends object>(
 
   return {
     ...result,
+    ...(shouldStripGradingResult &&
+      typeof artifactResult.repeatGroupId === 'string' &&
+      typeof artifactResult.repeatIndex === 'number' &&
+      isCachedRepeatResult(artifactResult as Partial<EvaluateResult>) && { repeatCached: true }),
     ...(artifactResult.testCase
       ? {
           testCase: projectTestCase(
@@ -1012,12 +1024,13 @@ export default class EvalResult {
       evaluationId,
       repeatIndex,
       repeatGroupId,
+      repeatCached,
     } = serializeResultProviderRefs(result);
 
     // Persist trace and repeat linkage inside a private metadata namespace so they
     // survive EvalResult round-trips without a Drizzle schema migration.
     const persistedMetadata = persistTraceMetadata(
-      persistRepeatMetadata(metadata, repeatIndex, repeatGroupId),
+      persistRepeatMetadata(metadata, repeatIndex, repeatGroupId, repeatCached),
       traceId,
       evaluationId,
     );
@@ -1102,6 +1115,7 @@ export default class EvalResult {
           evaluationId: _evaluationId,
           repeatIndex: _repeatIndex,
           repeatGroupId: _repeatGroupId,
+          repeatCached: _repeatCached,
           ...rest
         } = result;
         const sanitizedResult = {
@@ -1113,7 +1127,12 @@ export default class EvalResult {
             gradingResult: sanitizeForDb(result.gradingResult),
             metadata: sanitizeForDb(
               persistTraceMetadata(
-                persistRepeatMetadata(result.metadata, result.repeatIndex, result.repeatGroupId),
+                persistRepeatMetadata(
+                  result.metadata,
+                  result.repeatIndex,
+                  result.repeatGroupId,
+                  result.repeatCached,
+                ),
                 result.traceId,
                 result.evaluationId,
               ),
@@ -1273,6 +1292,7 @@ export default class EvalResult {
   evaluationId?: string;
   repeatIndex?: number;
   repeatGroupId?: string;
+  repeatCached?: true;
   failureReason: ResultFailureReason;
   persisted: boolean;
   pluginId?: string;
@@ -1323,6 +1343,7 @@ export default class EvalResult {
     this.evaluationId = surfacedTrace.evaluationId;
     this.repeatIndex = surfacedRepeat.repeatIndex;
     this.repeatGroupId = surfacedRepeat.repeatGroupId;
+    this.repeatCached = surfacedRepeat.repeatCached;
     this.failureReason = isResultFailureReason(opts.failureReason)
       ? opts.failureReason
       : ResultFailureReason.NONE;
@@ -1340,6 +1361,7 @@ export default class EvalResult {
       evaluationId: _evaluationId,
       repeatIndex: _repeatIndex,
       repeatGroupId: _repeatGroupId,
+      repeatCached: _repeatCached,
       pluginId: _pluginId,
       ...rest
     } = serializeResultProviderRefs(this);
@@ -1348,7 +1370,12 @@ export default class EvalResult {
       error: this.error ?? null,
       gradingResult: sanitizeGradingResultForDb(rest.gradingResult),
       metadata: persistTraceMetadata(
-        persistRepeatMetadata(this.metadata, this.repeatIndex, this.repeatGroupId),
+        persistRepeatMetadata(
+          this.metadata,
+          this.repeatIndex,
+          this.repeatGroupId,
+          this.repeatCached,
+        ),
         this.traceId,
         this.evaluationId,
       ),
@@ -1424,6 +1451,9 @@ export default class EvalResult {
       ...(this.repeatGroupId !== undefined && {
         repeatGroupId: this.repeatGroupId,
         repeatIndex: this.repeatIndex,
+        ...((this.repeatCached || (shouldStripGradingResult && isCachedRepeatResult(this))) && {
+          repeatCached: true,
+        }),
       }),
       provider: { id: this.provider.id, label: this.provider.label },
       response,
