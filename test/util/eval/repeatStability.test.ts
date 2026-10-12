@@ -207,6 +207,45 @@ describe('calculateRepeatStability', () => {
     expect(summary?.groups[0].passRateConfidenceInterval).toMatchObject({ confidenceLevel: 0.95 });
   });
 
+  it.each([
+    ['null', [null]],
+    ['undefined', [undefined]],
+    ['sparse', Array<unknown>(1)],
+    ['non-object', [false, 0, 'historical value']],
+  ] as const)(
+    'ignores malformed %s components without suppressing the interval',
+    (_name, components) => {
+      const gradingResult = createGradingResult({
+        componentResults: components as unknown as GradingResult[],
+      });
+
+      const summary = calculateRepeatStability(createRepeatedResults(gradingResult));
+
+      expect(summary?.cachedResults).toBe(0);
+      expect(summary?.groups[0]).toMatchObject({ repetitions: 2, passed: 2, cached: 0 });
+      expect(summary?.groups[0].passRateConfidenceInterval).toMatchObject({
+        confidenceLevel: 0.95,
+      });
+      expect(gradingResult.componentResults).toBe(components);
+    },
+  );
+
+  it('finds cached descendants past malformed children and shared cycles', () => {
+    const cached = createGradingResult({ metadata: { cachedResponse: true } });
+    const cycle = createGradingResult({ metadata: { cachedResponse: false } });
+    const components = [null, cycle, undefined, cached];
+    cycle.componentResults = components as unknown as GradingResult[];
+    const gradingResult = createGradingResult({ componentResults: [cycle, cycle] });
+
+    const summary = calculateRepeatStability(createRepeatedResults(gradingResult));
+
+    expect(summary?.cachedResults).toBe(2);
+    expect(summary?.groups[0]).toMatchObject({ repetitions: 2, passed: 2, cached: 2 });
+    expect(summary?.groups[0].passRateConfidenceInterval).toBeUndefined();
+    expect(cycle.componentResults).toBe(components);
+    expect(gradingResult.metadata?.cachedResponse).toBeUndefined();
+  });
+
   it('keeps final verdicts when fresh comparison grading retains earlier cached components', () => {
     const retainedCached = createGradingResult({ metadata: { cachedResponse: true } });
     const results = [true, false].map((pass, repeatIndex) =>

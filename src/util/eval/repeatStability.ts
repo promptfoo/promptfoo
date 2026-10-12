@@ -90,7 +90,7 @@ function isCachedResult(result: RepeatStabilityResult): boolean {
   const visited = new Set<RepeatStabilityGradingResult>();
   for (let index = 0; index < pending.length; index++) {
     const gradingResult = pending[index];
-    if (visited.has(gradingResult)) {
+    if (!gradingResult || typeof gradingResult !== 'object' || visited.has(gradingResult)) {
       continue;
     }
     visited.add(gradingResult);
