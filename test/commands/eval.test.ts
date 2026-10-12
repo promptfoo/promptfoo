@@ -53,11 +53,13 @@ import {
 } from '../../src/util/cloud';
 import * as defaultConfigModule from '../../src/util/config/default';
 import { ConfigResolutionError, resolveConfigs } from '../../src/util/config/load';
+import { createDefaultPromptMetrics } from '../../src/util/eval/promptMetrics';
 import { writeMultipleOutputs } from '../../src/util/index';
 import { checkProviderApiKeys } from '../../src/util/provider';
 import { TokenUsageTracker } from '../../src/util/tokenUsage';
 import { mockProcessEnv } from '../util/utils';
 
+import type EvalResult from '../../src/models/evalResult';
 import type {
   ApiProvider,
   EnvOverrides,
@@ -561,6 +563,86 @@ describe('evalCommand', () => {
           'skill-version': '1.2.3',
         },
       }),
+    );
+  });
+
+  it.each([
+    ['evaluateOptions', { evaluateOptions: { cache: false } }],
+    ['commandLineOptions', { commandLineOptions: { cache: false } }],
+  ])('should honor %s.cache from a config passed with -c', async (_source, configCache) => {
+    evalCommand(program, defaultConfig, defaultConfigPath);
+    const config = { ...configCache } as UnifiedConfig;
+    vi.mocked(resolveConfigs).mockResolvedValue({
+      config,
+      testSuite: { prompts: [], providers: [] },
+      basePath: path.resolve('/'),
+      commandLineOptions: config.commandLineOptions,
+    });
+    vi.mocked(evaluate).mockImplementation(async (_testSuite, evalRecord) => evalRecord as Eval);
+
+    await program.parseAsync([
+      'node',
+      'test',
+      'eval',
+      '-c',
+      'other/promptfooconfig.yaml',
+      '--no-table',
+      '--no-write',
+    ]);
+
+    expect(evaluate).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({ cache: false }),
+    );
+  });
+
+  it('should keep the cache enabled when neither the CLI nor the config disables it', async () => {
+    evalCommand(program, defaultConfig, defaultConfigPath);
+    vi.mocked(evaluate).mockImplementation(async (_testSuite, evalRecord) => evalRecord as Eval);
+
+    await program.parseAsync([
+      'node',
+      'test',
+      'eval',
+      '-c',
+      'other/promptfooconfig.yaml',
+      '--no-table',
+      '--no-write',
+    ]);
+
+    expect(evaluate).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({ cache: true }),
+    );
+  });
+
+  it('should let --no-cache override a config that enables the cache', async () => {
+    evalCommand(program, defaultConfig, defaultConfigPath);
+    const config = { evaluateOptions: { cache: true } } as UnifiedConfig;
+    vi.mocked(resolveConfigs).mockResolvedValue({
+      config,
+      testSuite: { prompts: [], providers: [] },
+      basePath: path.resolve('/'),
+    });
+    vi.mocked(evaluate).mockImplementation(async (_testSuite, evalRecord) => evalRecord as Eval);
+
+    await program.parseAsync([
+      'node',
+      'test',
+      'eval',
+      '-c',
+      'other/promptfooconfig.yaml',
+      '--no-cache',
+      '--no-table',
+      '--no-write',
+    ]);
+
+    expect(evaluate).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({ cache: false }),
     );
   });
 
@@ -1918,6 +2000,131 @@ describe('evalCommand', () => {
     }
   });
 
+  describe('resumed cache-hit accounting', () => {
+    let record: Eval;
+
+    beforeEach(() => {
+      record = new Eval(defaultConfig);
+      vi.spyOn(Eval, 'findById').mockResolvedValue(record);
+      // Summary reconstruction also reads result batches; isolate the pre-resume scan.
+      vi.spyOn(record, 'getRepeatStability').mockResolvedValue(undefined);
+      vi.mocked(evaluate).mockReset();
+      vi.mocked(evaluate).mockImplementation(async (_suite, evalRecord) => evalRecord as Eval);
+    });
+
+    afterEach(() => {
+      vi.mocked(Eval.findById).mockRestore();
+      vi.mocked(evaluate).mockReset();
+    });
+
+    it('recovers only missing target cache counts across batches before resuming', async () => {
+      record.prompts = [undefined, undefined, 0, 5, undefined].map((count, index) => ({
+        raw: `prompt ${index}`,
+        label: `prompt ${index}`,
+        provider: 'echo',
+        metrics: {
+          ...createDefaultPromptMetrics(),
+          testCacheHitCount: count,
+          score: 7,
+          totalLatencyMs: 123,
+          cost: 0.5,
+          namedScores: { quality: 0.75 },
+        },
+      }));
+      record.prompts.push({ raw: 'empty prompt', label: 'Empty', provider: 'echo' });
+      const expected = structuredClone(record.prompts);
+      for (const [index, count] of [2, 1, 0, 5, 0].entries()) {
+        expected[index].metrics!.testCacheHitCount = count;
+      }
+      const fetch = vi.spyOn(record, 'fetchResultsBatched').mockImplementation(async function* () {
+        yield [
+          { promptIdx: 0, response: { cached: true } },
+          { promptIdx: 1, response: { cached: false, tokenUsage: { cached: 99 } } },
+          { promptIdx: 2, response: { cached: true } },
+          { promptIdx: 3, response: { cached: true } },
+          {
+            promptIdx: 4,
+            response: { cached: false },
+            gradingResult: { tokensUsed: { cached: 22 } },
+          },
+        ] as EvalResult[];
+        yield [
+          { promptIdx: 0, response: { cached: true } },
+          { promptIdx: 1, response: { cached: true }, success: false, failureReason: 2 },
+          { promptIdx: 4 },
+          { promptIdx: 5, response: { cached: true } },
+        ] as EvalResult[];
+      });
+      vi.mocked(evaluate).mockImplementationOnce(async (_suite, evalRecord) => {
+        expect(record.prompts).toEqual(expected);
+        expect(fetch).toHaveBeenCalledTimes(1);
+        return evalRecord as Eval;
+      });
+
+      await doEval(
+        { resume: 'eval-123' } as Parameters<typeof doEval>[0],
+        defaultConfig,
+        defaultConfigPath,
+        {},
+      );
+
+      expect(evaluate).toHaveBeenCalledTimes(1);
+      expect(recalculatePromptMetrics).not.toHaveBeenCalled();
+      expect(record.prompts).toEqual(expected);
+    });
+
+    it.each([
+      { format: 'modern counters', oldResults: false, counts: [0, 3] },
+      { format: 'legacy results format', oldResults: true, counts: [undefined] },
+    ])('does not scan completed rows with $format', async ({ oldResults, counts }) => {
+      record.prompts = counts.map((count) => ({
+        raw: 'saved prompt',
+        label: 'Saved',
+        provider: 'echo',
+        metrics: { ...createDefaultPromptMetrics(), testCacheHitCount: count },
+      }));
+      vi.spyOn(record, 'useOldResults').mockReturnValue(oldResults);
+      const fetch = vi.spyOn(record, 'fetchResultsBatched');
+
+      await doEval(
+        { resume: 'eval-123' } as Parameters<typeof doEval>[0],
+        defaultConfig,
+        defaultConfigPath,
+        {},
+      );
+
+      expect(evaluate).toHaveBeenCalledTimes(1);
+      expect(fetch).not.toHaveBeenCalled();
+      expect(record.prompts.map((prompt) => prompt.metrics?.testCacheHitCount)).toEqual(counts);
+    });
+
+    it('leaves every saved metric unchanged if reading a later batch fails', async () => {
+      record.prompts = [undefined, undefined, 3].map((count) => ({
+        raw: 'saved prompt',
+        label: 'Saved',
+        provider: 'echo',
+        metrics: { ...createDefaultPromptMetrics(), testCacheHitCount: count, score: 7 },
+      }));
+      const before = structuredClone(record.prompts);
+      vi.spyOn(record, 'fetchResultsBatched').mockImplementation(async function* () {
+        yield [{ promptIdx: 0, response: { cached: true } }] as EvalResult[];
+        throw new Error('Saved results unavailable');
+      });
+
+      await expect(
+        doEval(
+          { resume: 'eval-123' } as Parameters<typeof doEval>[0],
+          defaultConfig,
+          defaultConfigPath,
+          {},
+        ),
+      ).rejects.toThrow('Saved results unavailable');
+
+      expect(evaluate).not.toHaveBeenCalled();
+      expect(record.prompts).toEqual(before);
+    });
+  });
+
   it('should retry error results from the latest eval and clean up after success', async () => {
     const authored = { raw: 'retry prompt', label: 'Retry', config: { temperature: 1 } };
     const latestEval = new Eval({ prompts: [authored] } as UnifiedConfig);
@@ -2763,9 +2970,7 @@ describe('evalCommand', () => {
     });
 
     vi.mocked(evaluate).mockResolvedValue(evalRecord);
-    vi.mocked(isSharingEnabled).mockImplementation(function () {
-      return true;
-    });
+    vi.mocked(isSharingEnabled).mockReturnValue(true);
     vi.mocked(createShareableUrl).mockResolvedValue('http://share.url');
 
     await doEval(cmdObj, config, defaultConfigPath, {});
@@ -2788,9 +2993,7 @@ describe('evalCommand', () => {
     });
 
     vi.mocked(evaluate).mockResolvedValue(evalRecord);
-    vi.mocked(isSharingEnabled).mockImplementation(function () {
-      return true;
-    });
+    vi.mocked(isSharingEnabled).mockReturnValue(true);
 
     await doEval(cmdObj, config, defaultConfigPath, {});
 
@@ -2812,9 +3015,7 @@ describe('evalCommand', () => {
     });
 
     vi.mocked(evaluate).mockResolvedValue(evalRecord);
-    vi.mocked(isSharingEnabled).mockImplementation(function () {
-      return true;
-    });
+    vi.mocked(isSharingEnabled).mockReturnValue(true);
     vi.mocked(createShareableUrl).mockResolvedValue('http://share.url');
 
     await doEval(cmdObj, config, defaultConfigPath, {});
@@ -2837,9 +3038,7 @@ describe('evalCommand', () => {
     });
 
     vi.mocked(evaluate).mockResolvedValue(evalRecord);
-    vi.mocked(isSharingEnabled).mockImplementation(function () {
-      return true;
-    });
+    vi.mocked(isSharingEnabled).mockReturnValue(true);
     vi.mocked(createShareableUrl).mockResolvedValue('http://share.url');
 
     await doEval(cmdObj, config, defaultConfigPath, {});
@@ -2853,9 +3052,7 @@ describe('evalCommand', () => {
     const evalRecord = new Eval(config);
 
     // Mock cloud config as enabled
-    vi.mocked(cloudConfig.isEnabled).mockImplementation(function () {
-      return true;
-    });
+    vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
 
     vi.mocked(resolveConfigs).mockResolvedValue({
       config,
@@ -2867,9 +3064,7 @@ describe('evalCommand', () => {
     });
 
     vi.mocked(evaluate).mockResolvedValue(evalRecord);
-    vi.mocked(isSharingEnabled).mockImplementation(function () {
-      return true;
-    });
+    vi.mocked(isSharingEnabled).mockReturnValue(true);
     vi.mocked(createShareableUrl).mockResolvedValue('http://share.url');
 
     await doEval(cmdObj, config, defaultConfigPath, {});
@@ -2883,9 +3078,7 @@ describe('evalCommand', () => {
     const evalRecord = new Eval(config);
 
     // Mock cloud config as enabled
-    vi.mocked(cloudConfig.isEnabled).mockImplementationOnce(function () {
-      return true;
-    });
+    vi.mocked(cloudConfig.isEnabled).mockReturnValueOnce(true);
 
     vi.mocked(resolveConfigs).mockResolvedValue({
       config,
@@ -2897,9 +3090,7 @@ describe('evalCommand', () => {
     });
 
     vi.mocked(evaluate).mockResolvedValue(evalRecord);
-    vi.mocked(isSharingEnabled).mockImplementationOnce(function () {
-      return true;
-    });
+    vi.mocked(isSharingEnabled).mockReturnValueOnce(true);
 
     await doEval(cmdObj, config, defaultConfigPath, {});
 
@@ -3056,9 +3247,7 @@ describe('checkCloudPermissions', () => {
 
   it('should fail when checkCloudPermissions throws an error', async () => {
     // Mock cloudConfig to be enabled
-    vi.mocked(cloudConfig.isEnabled).mockImplementation(function () {
-      return true;
-    });
+    vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
 
     // Mock checkCloudPermissions to throw an error
     const permissionError = new ConfigPermissionError('Permission denied: insufficient access');
@@ -3094,9 +3283,7 @@ describe('checkCloudPermissions', () => {
 
   it('should call checkCloudPermissions and proceed when it succeeds', async () => {
     // Mock cloudConfig to be enabled
-    vi.mocked(cloudConfig.isEnabled).mockImplementation(function () {
-      return true;
-    });
+    vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
 
     // Mock checkCloudPermissions to succeed (resolve without throwing)
     vi.mocked(checkCloudPermissions).mockResolvedValueOnce(undefined);
@@ -3135,9 +3322,7 @@ describe('checkCloudPermissions', () => {
 
   it('should call checkCloudPermissions but skip permission check when cloudConfig is disabled', async () => {
     // Mock cloudConfig to be disabled
-    vi.mocked(cloudConfig.isEnabled).mockImplementation(function () {
-      return false;
-    });
+    vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
 
     // Mock checkCloudPermissions to succeed (it should return early due to disabled cloud)
     vi.mocked(checkCloudPermissions).mockResolvedValueOnce(undefined);
@@ -3219,73 +3404,6 @@ describe('showRedteamProviderLabelMissingWarning', () => {
 
     showRedteamProviderLabelMissingWarning(testSuite);
     expect(mockWarn).not.toHaveBeenCalled();
-  });
-});
-
-describe('Provider Token Tracking', () => {
-  let mockTokenUsageTracker: Mocked<TokenUsageTracker>;
-  const mockLogger = vi.spyOn(logger, 'info');
-
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mockLogger.mockClear();
-
-    mockTokenUsageTracker = {
-      getProviderIds: vi.fn(),
-      getProviderUsage: vi.fn(),
-      trackUsage: vi.fn(),
-      resetAllUsage: vi.fn(),
-      resetProviderUsage: vi.fn(),
-      getTotalUsage: vi.fn(),
-      cleanup: vi.fn(),
-    } as any;
-
-    vi.mocked(TokenUsageTracker.getInstance).mockImplementation(function () {
-      return mockTokenUsageTracker;
-    });
-  });
-
-  it('should create and configure TokenUsageTracker correctly', () => {
-    const tracker = TokenUsageTracker.getInstance();
-    expect(tracker).toBeDefined();
-    expect(tracker.getProviderIds).toBeDefined();
-    expect(tracker.getProviderUsage).toBeDefined();
-  });
-
-  it('should handle provider token tracking when mocked properly', () => {
-    const providerUsageData = {
-      'openai:gpt-4': {
-        total: 1500,
-        prompt: 600,
-        completion: 900,
-        cached: 100,
-        numRequests: 5,
-        completionDetails: { reasoning: 200, acceptedPrediction: 0, rejectedPrediction: 0 },
-      },
-      'anthropic:claude-3': {
-        total: 800,
-        prompt: 300,
-        completion: 500,
-        cached: 50,
-        numRequests: 3,
-        completionDetails: { reasoning: 100, acceptedPrediction: 0, rejectedPrediction: 0 },
-      },
-    };
-
-    mockTokenUsageTracker.getProviderIds.mockReturnValue(['openai:gpt-4', 'anthropic:claude-3']);
-    mockTokenUsageTracker.getProviderUsage.mockImplementation(function (id: string) {
-      return providerUsageData[id as keyof typeof providerUsageData];
-    });
-
-    const tracker = TokenUsageTracker.getInstance();
-    const providerIds = tracker.getProviderIds();
-    expect(providerIds).toEqual(['openai:gpt-4', 'anthropic:claude-3']);
-
-    const openaiUsage = tracker.getProviderUsage('openai:gpt-4');
-    expect(openaiUsage).toEqual(providerUsageData['openai:gpt-4']);
-
-    const claudeUsage = tracker.getProviderUsage('anthropic:claude-3');
-    expect(claudeUsage).toEqual(providerUsageData['anthropic:claude-3']);
   });
 });
 
@@ -3454,6 +3572,25 @@ describe('doEval with external defaultTest', () => {
 });
 
 describe('Sharing Precedence - Comprehensive Test Coverage', () => {
+  const createExplicitSharingCheck = () => async () => {
+    const cmdObj = { table: false, write: false };
+    const config = { sharing: false } as UnifiedConfig;
+    const evalRecord = new Eval(config);
+
+    vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
+    vi.mocked(resolveConfigs).mockResolvedValue({
+      config,
+      testSuite: { prompts: [], providers: [] },
+      basePath: path.resolve('/'),
+      commandLineOptions: { share: true },
+    });
+    vi.mocked(evaluate).mockResolvedValue(evalRecord);
+
+    await doEval(cmdObj, config, defaultConfigPath, {});
+
+    expect(createShareableUrl).toHaveBeenCalledWith(expect.any(Eval), { silent: true });
+  };
+
   const defaultConfigPath = '/path/to/config.yaml';
   const defaultConfig = {
     prompts: [],
@@ -3514,9 +3651,7 @@ describe('Sharing Precedence - Comprehensive Test Coverage', () => {
       const config = { sharing: true } as UnifiedConfig;
       const evalRecord = new Eval(config);
 
-      vi.mocked(cloudConfig.isEnabled).mockImplementation(function () {
-        return true;
-      });
+      vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
       vi.mocked(resolveConfigs).mockResolvedValue({
         config,
         testSuite: { prompts: [], providers: [] },
@@ -3535,9 +3670,7 @@ describe('Sharing Precedence - Comprehensive Test Coverage', () => {
       const config = { sharing: true } as UnifiedConfig;
       const evalRecord = new Eval(config);
 
-      vi.mocked(cloudConfig.isEnabled).mockImplementation(function () {
-        return true;
-      });
+      vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
       vi.mocked(resolveConfigs).mockResolvedValue({
         config,
         testSuite: { prompts: [], providers: [] },
@@ -3558,9 +3691,7 @@ describe('Sharing Precedence - Comprehensive Test Coverage', () => {
       const config = { sharing: false } as UnifiedConfig;
       const evalRecord = new Eval(config);
 
-      vi.mocked(cloudConfig.isEnabled).mockImplementation(function () {
-        return false;
-      });
+      vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
       vi.mocked(resolveConfigs).mockResolvedValue({
         config,
         testSuite: { prompts: [], providers: [] },
@@ -3578,9 +3709,7 @@ describe('Sharing Precedence - Comprehensive Test Coverage', () => {
       const config = {} as UnifiedConfig;
       const evalRecord = new Eval(config);
 
-      vi.mocked(cloudConfig.isEnabled).mockImplementation(function () {
-        return false;
-      });
+      vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
       vi.mocked(resolveConfigs).mockResolvedValue({
         config,
         testSuite: { prompts: [], providers: [] },
@@ -3596,35 +3725,17 @@ describe('Sharing Precedence - Comprehensive Test Coverage', () => {
   });
 
   describe('Priority 3: commandLineOptions.share from config file', () => {
-    it('should share when commandLineOptions.share = true, overriding config.sharing = false', async () => {
-      const cmdObj = { table: false, write: false };
-      const config = { sharing: false } as UnifiedConfig;
-      const evalRecord = new Eval(config);
-
-      vi.mocked(cloudConfig.isEnabled).mockImplementation(function () {
-        return false;
-      });
-      vi.mocked(resolveConfigs).mockResolvedValue({
-        config,
-        testSuite: { prompts: [], providers: [] },
-        basePath: path.resolve('/'),
-        commandLineOptions: { share: true },
-      });
-      vi.mocked(evaluate).mockResolvedValue(evalRecord);
-
-      await doEval(cmdObj, config, defaultConfigPath, {});
-
-      expect(createShareableUrl).toHaveBeenCalledWith(expect.any(Eval), { silent: true });
-    });
+    it(
+      'should share when commandLineOptions.share = true, overriding config.sharing = false',
+      createExplicitSharingCheck(),
+    );
 
     it('should not share when commandLineOptions.share = false, overriding cloud enabled', async () => {
       const cmdObj = { table: false, write: false };
       const config = {} as UnifiedConfig;
       const evalRecord = new Eval(config);
 
-      vi.mocked(cloudConfig.isEnabled).mockImplementation(function () {
-        return true;
-      });
+      vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
       vi.mocked(resolveConfigs).mockResolvedValue({
         config,
         testSuite: { prompts: [], providers: [] },
@@ -3645,9 +3756,7 @@ describe('Sharing Precedence - Comprehensive Test Coverage', () => {
       const config = { sharing: true } as UnifiedConfig;
       const evalRecord = new Eval(config);
 
-      vi.mocked(cloudConfig.isEnabled).mockImplementation(function () {
-        return false;
-      });
+      vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
       vi.mocked(resolveConfigs).mockResolvedValue({
         config,
         testSuite: { prompts: [], providers: [] },
@@ -3665,9 +3774,7 @@ describe('Sharing Precedence - Comprehensive Test Coverage', () => {
       const config = { sharing: false } as UnifiedConfig;
       const evalRecord = new Eval(config);
 
-      vi.mocked(cloudConfig.isEnabled).mockImplementation(function () {
-        return true;
-      });
+      vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
       vi.mocked(resolveConfigs).mockResolvedValue({
         config,
         testSuite: { prompts: [], providers: [] },
@@ -3685,9 +3792,7 @@ describe('Sharing Precedence - Comprehensive Test Coverage', () => {
       const config = { sharing: { apiBaseUrl: 'https://custom.api.url' } } as UnifiedConfig;
       const evalRecord = new Eval(config);
 
-      vi.mocked(cloudConfig.isEnabled).mockImplementation(function () {
-        return false;
-      });
+      vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
       vi.mocked(resolveConfigs).mockResolvedValue({
         config,
         testSuite: { prompts: [], providers: [] },
@@ -3707,9 +3812,7 @@ describe('Sharing Precedence - Comprehensive Test Coverage', () => {
       const config = {} as UnifiedConfig;
       const evalRecord = new Eval(config);
 
-      vi.mocked(cloudConfig.isEnabled).mockImplementation(function () {
-        return true;
-      });
+      vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
       vi.mocked(resolveConfigs).mockResolvedValue({
         config,
         testSuite: { prompts: [], providers: [] },
@@ -3727,9 +3830,7 @@ describe('Sharing Precedence - Comprehensive Test Coverage', () => {
       const config = {} as UnifiedConfig;
       const evalRecord = new Eval(config);
 
-      vi.mocked(cloudConfig.isEnabled).mockImplementation(function () {
-        return false;
-      });
+      vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
       vi.mocked(resolveConfigs).mockResolvedValue({
         config,
         testSuite: { prompts: [], providers: [] },
@@ -3749,9 +3850,7 @@ describe('Sharing Precedence - Comprehensive Test Coverage', () => {
       const config = { sharing: undefined } as UnifiedConfig;
       const evalRecord = new Eval(config);
 
-      vi.mocked(cloudConfig.isEnabled).mockImplementation(function () {
-        return true;
-      });
+      vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
       vi.mocked(resolveConfigs).mockResolvedValue({
         config,
         testSuite: { prompts: [], providers: [] },
@@ -3764,35 +3863,17 @@ describe('Sharing Precedence - Comprehensive Test Coverage', () => {
       expect(createShareableUrl).toHaveBeenCalledWith(expect.any(Eval), { silent: true });
     });
 
-    it('should respect commandLineOptions.share = true even when config.sharing = false and cloud disabled', async () => {
-      const cmdObj = { table: false, write: false };
-      const config = { sharing: false } as UnifiedConfig;
-      const evalRecord = new Eval(config);
-
-      vi.mocked(cloudConfig.isEnabled).mockImplementation(function () {
-        return false;
-      });
-      vi.mocked(resolveConfigs).mockResolvedValue({
-        config,
-        testSuite: { prompts: [], providers: [] },
-        basePath: path.resolve('/'),
-        commandLineOptions: { share: true },
-      });
-      vi.mocked(evaluate).mockResolvedValue(evalRecord);
-
-      await doEval(cmdObj, config, defaultConfigPath, {});
-
-      expect(createShareableUrl).toHaveBeenCalledWith(expect.any(Eval), { silent: true });
-    });
+    it(
+      'should respect commandLineOptions.share = true even when config.sharing = false and cloud disabled',
+      createExplicitSharingCheck(),
+    );
 
     it('should not call createShareableUrl when isSharingEnabled returns false', async () => {
       const cmdObj = { share: true, table: false, write: false };
       const config = {} as UnifiedConfig;
       const evalRecord = new Eval(config);
 
-      vi.mocked(isSharingEnabled).mockImplementation(function () {
-        return false;
-      });
+      vi.mocked(isSharingEnabled).mockReturnValue(false);
       vi.mocked(resolveConfigs).mockResolvedValue({
         config,
         testSuite: { prompts: [], providers: [] },
