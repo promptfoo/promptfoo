@@ -4,7 +4,9 @@ FROM node:24.21.0-alpine AS base
 # Update Alpine packages to get latest security patches
 RUN apk upgrade --no-cache
 
-RUN addgroup -S promptfoo && adduser -S promptfoo -G promptfoo
+# Every published image has used these IDs. Pin them so a base image change cannot
+# renumber the account and lock it out of existing data volumes.
+RUN addgroup -S -g 101 promptfoo && adduser -S -u 100 -G promptfoo promptfoo
 # Python version pin. Empty by default so `apk` installs whatever python3 the
 # Alpine base ships — py3-pip/py3-setuptools depend on that exact minor, so any
 # fixed minor goes stale and makes `apk add` unsatisfiable when the base advances
@@ -79,6 +81,8 @@ RUN ln -s /app /app/node_modules/promptfoo && \
 
 ENV API_PORT=3000
 ENV HOST=0.0.0.0
+# Express puts the stack trace in its error pages unless this is set.
+ENV NODE_ENV=production
 ENV PROMPTFOO_SELF_HOSTED=1
 ENV PROMPTFOO_RUNNING_IN_DOCKER=1
 ARG PROMPTFOO_OFFICIAL_DOCKER_IMAGE=0
@@ -86,11 +90,13 @@ ENV PROMPTFOO_OFFICIAL_DOCKER_IMAGE=${PROMPTFOO_OFFICIAL_DOCKER_IMAGE}
 # pip installs CLIs such as modelaudit into the non-root user's script directory.
 ENV PATH="${PATH}:/home/promptfoo/.local/bin"
 
-USER promptfoo
+# Numeric so Kubernetes can verify `runAsNonRoot` without a `runAsUser` override.
+USER 100:101
 
 EXPOSE 3000
 
-# Set up healthcheck using Node, which is present in every stage.
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s CMD node -e "const http = require('node:http'); const req = http.get('http://127.0.0.1:3000/health', (res) => process.exit(res.statusCode >= 200 && res.statusCode < 400 ? 0 : 1)); req.on('error', () => process.exit(1)); req.setTimeout(5000, () => { req.destroy(); process.exit(1); });"
+# Set up healthcheck using Node, which is present in every stage. The probe follows
+# API_PORT so the container stays healthy when the port is changed at run time.
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s CMD node -e "const http = require('node:http'); const req = http.get({ host: '127.0.0.1', port: process.env.API_PORT || 3000, path: '/health' }, (res) => process.exit(res.statusCode >= 200 && res.statusCode < 400 ? 0 : 1)); req.on('error', () => process.exit(1)); req.setTimeout(5000, () => { req.destroy(); process.exit(1); });"
 
 CMD ["node", "dist/src/server/index.js"]
