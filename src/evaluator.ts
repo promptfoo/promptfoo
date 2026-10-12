@@ -2314,6 +2314,10 @@ function mergeSelectBestGradingResult(
 ) {
   mergeComparisonTokenUsage(result, gradingResult, evalTokenUsage);
 
+  if (gradingResult.metadata?.cachedResponse !== true) {
+    delete result.repeatCached;
+  }
+
   if (result.gradingResult) {
     if (
       result.gradingResult.metadata?.cachedResponse === true &&

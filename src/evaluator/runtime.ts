@@ -12,6 +12,7 @@ export type EvaluationStoreResult = Pick<
   | 'prompt'
   | 'promptIdx'
   | 'provider'
+  | 'repeatCached'
   | 'response'
   | 'score'
   | 'success'

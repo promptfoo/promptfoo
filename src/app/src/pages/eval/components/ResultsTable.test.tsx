@@ -1946,41 +1946,52 @@ describe('ResultsTable handleRating - highlight toggle fix', () => {
     expect(expectedGradingResult.componentResults![0].assertion?.type).toBe('human');
   });
 
-  it('marks a highlight as comment-only when grading details were stripped', async () => {
-    const user = userEvent.setup();
-    const mockTable = {
-      body: [
-        {
-          outputs: [{ id: 'test-output-1', pass: true, score: 1, text: 'test output' }],
-          test: {},
-          vars: [],
-          testIdx: 0,
-        },
-      ],
-      head: createPromptHead([], 1, 0),
-    };
-    vi.mocked(useTableStore).mockImplementation(() =>
-      createTableStore({
-        inComparisonMode: false,
-        setTable: mockSetTable,
-        table: mockTable,
-        isFetching: false,
-        filteredResultsCount: 1,
-      }),
-    );
-    renderWithProviders(<ResultsTable {...defaultProps} />);
-    await user.click(screen.getByRole('button', { name: 'Highlight' }));
-    await waitFor(() => expect(mockCallApi).toHaveBeenCalled());
-    const [url, request] = mockCallApi.mock.calls[0];
-    expect(url).toBe('/eval/123/results/test-output-1/rating');
-    expect(JSON.parse(request.body)).toEqual({
-      pass: true,
-      score: 1,
-      reason: 'Manual result',
-      comment: '!highlight New comment',
-      commentOnly: true,
-    });
-  });
+  it.each([
+    { description: 'stripped grading details', pass: true, score: 1, gradingResult: undefined },
+    {
+      description: 'a comparison error with an earlier passing grade',
+      pass: false,
+      score: 0,
+      gradingResult: { pass: true, score: 1, reason: 'Earlier passing grade' },
+    },
+  ])(
+    'sends the row verdict for a highlight with $description',
+    async ({ pass, score, gradingResult }) => {
+      const user = userEvent.setup();
+      const mockTable = {
+        body: [
+          {
+            outputs: [{ id: 'test-output-1', pass, score, gradingResult, text: 'test output' }],
+            test: {},
+            vars: [],
+            testIdx: 0,
+          },
+        ],
+        head: createPromptHead([], 1, 0),
+      };
+      vi.mocked(useTableStore).mockImplementation(() =>
+        createTableStore({
+          inComparisonMode: false,
+          setTable: mockSetTable,
+          table: mockTable,
+          isFetching: false,
+          filteredResultsCount: 1,
+        }),
+      );
+      renderWithProviders(<ResultsTable {...defaultProps} />);
+      await user.click(screen.getByRole('button', { name: 'Highlight' }));
+      await waitFor(() => expect(mockCallApi).toHaveBeenCalled());
+      const [url, request] = mockCallApi.mock.calls[0];
+      expect(url).toBe('/eval/123/results/test-output-1/rating');
+      expect(JSON.parse(request.body)).toEqual({
+        pass,
+        score,
+        reason: gradingResult?.reason ?? 'Manual result',
+        comment: '!highlight New comment',
+        commentOnly: true,
+      });
+    },
+  );
 });
 
 describe('ResultsTable handleRating', () => {

@@ -1709,6 +1709,7 @@ function ResultsTable({
         score,
         comment,
       });
+      const commentOnly = isPass === undefined && score === undefined;
       const newTable = buildRatingTableUpdate({
         head,
         body,
@@ -1727,8 +1728,10 @@ function ResultsTable({
             evalId,
             resultId,
             version,
-            gradingResult,
-            commentOnly: isPass === undefined && score === undefined,
+            gradingResult: commentOnly
+              ? { ...gradingResult, pass: existingOutput.pass, score: existingOutput.score }
+              : gradingResult,
+            commentOnly,
             table: newTable,
           });
         } catch (error) {
