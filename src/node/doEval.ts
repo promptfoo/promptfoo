@@ -10,6 +10,7 @@ import { disableCache } from '../cache';
 import cliState from '../cliState';
 import { DEFAULT_MAX_CONCURRENCY } from '../constants';
 import { getEnvBool, getEnvFloat, getEnvInt, isCI } from '../envars';
+import { clearCjsModuleCache } from '../esm';
 import { evaluate, PromptSuggestionsRejectedError } from '../evaluator';
 import {
   checkEmailStatusAndMaybeExit,
@@ -30,7 +31,7 @@ import { EMAIL_OK_STATUS } from '../types/email';
 import { isCliEventSource } from '../types/eventSource';
 import { CommandLineOptionsSchema, MAX_SUGGESTIONS_COUNT, TestSuiteSchema } from '../types/index';
 import { checkCloudPermissions, getEvalConfigFromCloud, getOrgContext } from '../util/cloud';
-import { clearConfigCache, loadDefaultConfig } from '../util/config/default';
+import { loadDefaultConfig } from '../util/config/default';
 import { DEFAULT_CONFIG_EXTENSIONS } from '../util/config/extensions';
 import {
   ConfigResolutionError,
@@ -58,7 +59,6 @@ import { checkProviderApiKeys } from '../util/provider';
 import { shouldShareResults } from '../util/sharing';
 import { resolveTestsWatchPaths } from '../util/testCaseReader';
 import { TokenUsageTracker } from '../util/tokenUsage';
-import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import { isUuid } from '../util/uuid';
 import { deleteErrorResults, getErrorResultIds, recalculatePromptMetrics } from './retry';
 import { notCloudEnabledShareInstructions } from './shareInstructions';
@@ -593,12 +593,12 @@ async function doEvalWithEnv(
       };
     }
 
-    // Resolve runtime options. If resuming, prefer persisted options stored with the eval.
+    // Resume and error retries must preserve the original expansion and cache settings.
     let repeat: number;
     let cache: boolean | undefined;
     let maxConcurrency: number;
     let delay: number;
-    if (resumeRaw) {
+    if (resumeEval) {
       const persisted = (resumeEval?.runtimeOptions ||
         config.evaluateOptions ||
         {}) as InternalEvaluateOptions;
@@ -633,7 +633,7 @@ async function doEvalWithEnv(
     // Check if maxConcurrency was explicitly set (not using DEFAULT_MAX_CONCURRENCY)
     // For resume mode, include persisted value as "explicit", with fallback to config when
     // runtimeOptions are missing (e.g., older evals that didn't persist runtimeOptions)
-    const explicitMaxConcurrency = resumeRaw
+    const explicitMaxConcurrency = resumeEval
       ? ((resumeEval?.runtimeOptions as InternalEvaluateOptions | undefined)?.maxConcurrency ??
         cmdObj.maxConcurrency ??
         commandLineOptions?.maxConcurrency ??
@@ -932,6 +932,29 @@ async function doEvalWithEnv(
     // Run the evaluation!!!!!!
     let ret;
     try {
+      if (resumeRaw && !evalRecord.useOldResults()) {
+        // Older evals lack this counter. Recover it without recalculating other metrics.
+        const missingCacheCounts = evalRecord.prompts.map(({ metrics }) =>
+          metrics && metrics.testCacheHitCount === undefined ? { metrics, count: 0 } : undefined,
+        );
+        if (missingCacheCounts.some(Boolean)) {
+          for await (const batch of evalRecord.fetchResultsBatched()) {
+            for (const result of batch) {
+              const pending = missingCacheCounts[result.promptIdx];
+              if (pending && result.response?.cached) {
+                pending.count++;
+              }
+            }
+          }
+          // Publish only after every batch succeeds; a failed read must not leave partial counts.
+          for (const pending of missingCacheCounts) {
+            if (pending) {
+              pending.metrics.testCacheHitCount = pending.count;
+            }
+          }
+        }
+      }
+
       ret = await evaluate(testSuite, evalRecord, {
         ...options,
         restorePromptColumns: Boolean(resumeEval),
@@ -1009,28 +1032,7 @@ async function doEvalWithEnv(
       sharePromise = createShareableUrl(evalRecord, { silent: true });
     }
 
-    let successes = 0;
-    let failures = 0;
-    let errors = 0;
-    const tokenUsage = createEmptyTokenUsage();
-
-    // Calculate our total successes and failures
-    for (const prompt of evalRecord.prompts) {
-      if (prompt.metrics?.testPassCount) {
-        successes += prompt.metrics.testPassCount;
-      }
-      if (prompt.metrics?.testFailCount) {
-        failures += prompt.metrics.testFailCount;
-      }
-      if (prompt.metrics?.testErrorCount) {
-        errors += prompt.metrics.testErrorCount;
-      }
-      accumulateTokenUsage(tokenUsage, prompt.metrics?.tokenUsage);
-    }
-    const generationTokenUsage = evalRecord.getStats().tokenUsage.generation;
-    if (generationTokenUsage) {
-      tokenUsage.generation = generationTokenUsage;
-    }
+    const { successes, failures, errors, cacheHits, tokenUsage } = evalRecord.getStats();
     const totalTests = successes + failures + errors;
     const passRate = (successes / totalTests) * 100;
 
@@ -1075,6 +1077,9 @@ async function doEvalWithEnv(
 
     // Check if scan was aborted due to target error (efficient DB query, not loading all results)
     const targetErrorStatus = await evalRecord.findTargetErrorStatus();
+    const repeatStability = resumeEval
+      ? await evalRecord.getRepeatStability()
+      : await evalRecord.getObservedRepeatStability();
 
     // Generate and display summary immediately (before share completes)
     const summaryLines = generateEvalSummary({
@@ -1090,10 +1095,12 @@ async function doEvalWithEnv(
       successes,
       failures,
       errors,
+      cacheHits,
       duration,
       maxConcurrency,
       tracker,
       targetErrorStatus,
+      repeatStability,
     });
 
     // Special case: show cloud signup instructions when user wants to share but can't
@@ -1242,7 +1249,8 @@ async function doEvalWithEnv(
             printBorder();
             logger.info(`File change detected: ${path}`);
             printBorder();
-            clearConfigCache();
+            // Watch reruns have always reloaded CommonJS .js default configurations.
+            clearCjsModuleCache();
             try {
               await runEvaluation();
             } catch (error) {

@@ -6,6 +6,7 @@ import { runAssertion, runAssertions } from '../../src/assertions';
 import { disableCache, enableCache, fetchWithCache, isCacheEnabled } from '../../src/cache';
 import cliState from '../../src/cliState';
 import { renderPrompt } from '../../src/evaluatorHelpers';
+import { loadApiProvider } from '../../src/providers';
 import { resolveConfigs } from '../../src/util/config/load';
 import {
   buildConfiguredProviderMap,
@@ -118,6 +119,7 @@ describe('Google example provider contracts', () => {
     // it through a native import as well as Vitest's transformed module graph.
     vi.spyOn(GoogleAuth.prototype, 'getClient').mockResolvedValue({
       request: oauthRequest,
+      transporter: { defaults: {} },
     } as unknown as Awaited<ReturnType<GoogleAuth['getClient']>>);
     vi.spyOn(GoogleAuth.prototype, 'getProjectId').mockImplementation(
       async () => 'sdk-detected-project',
@@ -280,6 +282,23 @@ describe('Google example provider contracts', () => {
         }
       },
     );
+  });
+
+  it.each([
+    'google:image:imagen-3.0-generate-002',
+    'google:gemini-2.5-flash-image',
+    'google:live:gemini-2.0-flash-exp',
+  ])('preflights credentials for the real %s provider', async (id) => {
+    const provider = await loadApiProvider(id);
+    expect([...checkProviderApiKeys([provider])]).toEqual([]);
+    mockProcessEnv({ GOOGLE_API_KEY: undefined });
+    expect([...checkProviderApiKeys([provider])]).toEqual([['GOOGLE_API_KEY', [id]]]);
+    const configured = await loadApiProvider(id, {
+      options: { config: { apiKey: 'preflight-test-key' } },
+    });
+    expect([...checkProviderApiKeys([configured])]).toEqual([]);
+    expect(requests).toHaveLength(0);
+    expect(oauthRequest).not.toHaveBeenCalled();
   });
 
   it('rejects the native image example without credentials before any request', async () => {

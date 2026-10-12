@@ -1,4 +1,7 @@
+import { randomUUID } from 'node:crypto';
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { getCache } from '../../src/cache';
 import { matchesAnswerRelevance } from '../../src/matchers/rag';
 import { ANSWER_RELEVANCY_GENERATE } from '../../src/prompts/index';
 import {
@@ -9,6 +12,7 @@ import {
   withProviderCallExecutionContext,
   withProviderCallTracingContext,
 } from '../../src/scheduler/providerCallExecutionContext';
+import { createEmbeddingResult } from '../factories/literalFixtures';
 
 import type { OpenAiEmbeddingProvider } from '../../src/providers/openai/embedding';
 import type { ProviderCallTracingContext } from '../../src/scheduler/providerCallExecutionContext';
@@ -25,10 +29,9 @@ describe('matchesAnswerRelevance', () => {
       output: 'foobar',
       tokenUsage: { total: 10, prompt: 5, completion: 5 },
     });
-    vi.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi').mockResolvedValue({
-      embedding: [1, 0, 0],
-      tokenUsage: { total: 5, prompt: 2, completion: 3 },
-    });
+    vi.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi').mockResolvedValue(
+      createEmbeddingResult(1, 0),
+    );
   });
 
   afterEach(() => {
@@ -84,10 +87,7 @@ describe('matchesAnswerRelevance', () => {
 
     const mockCallEmbeddingApi = vi.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi');
     mockCallEmbeddingApi.mockImplementation(function (this: OpenAiEmbeddingProvider) {
-      return Promise.resolve({
-        embedding: [1, 0, 0],
-        tokenUsage: { total: 5, prompt: 2, completion: 3 },
-      });
+      return Promise.resolve(createEmbeddingResult(1, 0));
     });
 
     await expect(matchesAnswerRelevance(input, output, threshold)).resolves.toEqual({
@@ -167,10 +167,7 @@ describe('matchesAnswerRelevance', () => {
     const mockCallEmbeddingApi = vi.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi');
     mockCallEmbeddingApi.mockImplementation((text) => {
       if (text.includes('Input text')) {
-        return Promise.resolve({
-          embedding: [1, 0, 0],
-          tokenUsage: { total: 5, prompt: 2, completion: 3 },
-        });
+        return Promise.resolve(createEmbeddingResult(1, 0));
       } else if (text.includes('Different output')) {
         return Promise.resolve({
           embedding: [0, 1, 0],
@@ -283,10 +280,7 @@ describe('matchesAnswerRelevance', () => {
     // Mock embeddings with varying similarities
     vi.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi').mockImplementation((text) => {
       if (text === input) {
-        return Promise.resolve({
-          embedding: [1, 0, 0],
-          tokenUsage: { total: 5, prompt: 2, completion: 3 },
-        });
+        return Promise.resolve(createEmbeddingResult(1, 0));
       } else if (text.includes('capital') && text.includes('France')) {
         // Similar questions get high similarity
         return Promise.resolve({
@@ -312,4 +306,42 @@ describe('matchesAnswerRelevance', () => {
     expect(result.metadata?.threshold).toBe(0.7);
     expect(result.pass).toBe(true);
   });
+
+  it.each([false, true])(
+    'caches three independent samples (deterministic: %s)',
+    async (deterministic) => {
+      const cacheKey = randomUUID();
+      const questions = deterministic
+        ? Array.from({ length: 3 }, () => 'How long do refunds take?')
+        : [
+            'How long do refunds take?',
+            'What is the capital of France?',
+            'Which planet is the largest?',
+          ];
+      let generated = 0;
+      vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(async (prompt) => {
+        const cache = getCache();
+        const key = `${cacheKey}:${prompt}`;
+        const cached = await cache.get<string>(key);
+        if (cached) {
+          return { output: cached, cached: true };
+        }
+        const question = questions[generated++];
+        await cache.set(key, question);
+        return { output: question };
+      });
+
+      for (let run = 0; run < 2; run++) {
+        const result = await matchesAnswerRelevance(
+          'How long do refunds take?',
+          'Refunds are processed within 5 business days.',
+          0.5,
+        );
+        expect(generated).toBe(3);
+        expect(
+          result.metadata?.generatedQuestions.map(({ question }: { question: string }) => question),
+        ).toEqual(questions);
+      }
+    },
+  );
 });

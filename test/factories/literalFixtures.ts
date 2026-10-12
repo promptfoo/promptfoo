@@ -1,3 +1,25 @@
+export const createConfigItem = (id: string) => ({
+  id,
+  config: {},
+});
+
+export const createPassFailOptions = (numResults: number) => ({
+  numResults,
+  resultTypes: ['success' as const, 'failure' as const],
+});
+
+export const createMixedResultOptions = (numResults: number) => ({
+  numResults,
+  resultTypes: ['success' as const, 'error' as const, 'failure' as const],
+});
+
+export const createAccuracyFilter = () => ({
+  logicOperator: 'and',
+  type: 'metric',
+  operator: 'equals',
+  value: 'accuracy',
+});
+
 export const createApiKeyOptions = (apiKey = 'test-key') => ({
   config: { apiKey },
 });
@@ -27,6 +49,21 @@ export const createMcpServerOptions = (command = 'npm', args = 'start') => ({
   server: createMcpServerConfig(command, args),
 });
 
+export const createBasePathOptions = () => ({
+  id: 'testId',
+  config: { basePath: '/base' },
+});
+
+export const createTokenOutput = (
+  output = 'Test output',
+  total = 10,
+  prompt = 5,
+  completion = 5,
+) => ({
+  output,
+  tokenUsage: { total, prompt, completion, cached: 0, numRequests: 1 },
+});
+
 export const createChatCompletion = (
   content = 'Test output',
   total_tokens = 10,
@@ -48,6 +85,13 @@ export const createAzureApiOptions = () => ({
   },
 });
 
+export const createHttpResponse = (data = 'response', status = 200, statusText = 'OK') => ({
+  data,
+  status,
+  statusText,
+  cached: false,
+});
+
 export const createOtlpOptions = () => ({
   host: '127.0.0.1',
   port: 4318,
@@ -58,6 +102,12 @@ export const createChatUsage = (prompt_tokens = 10, completion_tokens = 20, tota
   prompt_tokens,
   completion_tokens,
   total_tokens,
+});
+
+export const createGetOptions = () => ({
+  config: {
+    method: 'GET',
+  },
 });
 
 export const createPassingGrade = (score = 0.8, reason = 'test reason') => ({
@@ -82,9 +132,18 @@ export const createLocationProperties = () => ({
   location: { type: 'string' },
 });
 
-const createStringAssertion = <TType extends string>(type: TType, value: string) => ({
+export const createTestOutput = (output = 'Test output') => ({
+  output,
+});
+
+export const createStringAssertion = <TType extends string>(type: TType, value: string) => ({
   type,
   value,
+});
+
+export const createThresholdAssertion = <TType extends string>(type: TType, threshold: number) => ({
+  type,
+  threshold,
 });
 
 export const createResponseMessage = (text: string) => ({
@@ -96,6 +155,14 @@ export const createResponseMessage = (text: string) => ({
       text,
     },
   ],
+});
+
+export const createQueryContext = (query: string, context: string) => ({
+  vars: {
+    query,
+    context,
+  },
+  options: {},
 });
 
 export const createCompletedResponse = (
@@ -153,9 +220,21 @@ export const createTypeConfig = <TType extends string>(type: TType) => ({
   type,
 });
 
+export const createEmbeddingResult = (embedding: number, embedding2: number) => ({
+  embedding: [embedding, embedding2, 0],
+  tokenUsage: { total: 5, prompt: 2, completion: 3 },
+});
+
 export const createStatusResponse = (status = 500, statusText = 'Internal Server Error') => ({
   status,
   statusText,
+});
+
+export const createScriptAssertionParams = <TType extends string>(type: TType) => ({
+  prompt: 'Test',
+  assertion: { type, value: 'unused' },
+  test: {},
+  providerResponse: { output: 'Test output' },
 });
 
 export const createImageUsageCounts = (candidatesTokenCount: number, totalTokenCount: number) => ({
@@ -164,9 +243,20 @@ export const createImageUsageCounts = (candidatesTokenCount: number, totalTokenC
   totalTokenCount,
 });
 
+export const createDebugContextFixture = (raw: string, label: string) => ({
+  debug: true,
+  prompt: { raw, label },
+  vars: {},
+});
+
 export const createContentTypeResponse = (Content_Type = 'application/json') => ({
   status: 200,
   headers: { 'Content-Type': Content_Type },
+});
+
+export const createOAuthToken = (access_token: string) => ({
+  access_token,
+  expires_in: 3600,
 });
 
 export const createTextParts = (text: string, role: string) => ({
@@ -191,6 +281,10 @@ export const createMcpServerConfig = (command = 'npm', arg = 'start') => ({
 
 export const createGoogleSearchTool = () => ({
   googleSearch: {},
+});
+
+export const createEnabledSetting = () => ({
+  enabled: true,
 });
 
 export const createUnsetOpenAiGenerationEnv = () => ({

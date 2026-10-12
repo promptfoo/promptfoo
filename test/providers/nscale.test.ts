@@ -8,6 +8,11 @@ import { OpenAiEmbeddingProvider } from '../../src/providers/openai/embedding';
 import type { EnvOverrides } from '../../src/types/env';
 import type { ProviderOptions } from '../../src/types/index';
 
+const createServiceTokenEnvironment = () => ({
+  NSCALE_SERVICE_TOKEN: 'service-token-123',
+  NSCALE_API_KEY: 'api-key-456',
+});
+
 vi.mock('../../src/providers/openai');
 vi.mock('../../src/envars', async (importOriginal) => {
   return {
@@ -102,10 +107,7 @@ describe('createNscaleProvider', () => {
           apiKey: 'explicit-key-789',
         },
       },
-      env: {
-        NSCALE_SERVICE_TOKEN: 'service-token-123',
-        NSCALE_API_KEY: 'api-key-456',
-      },
+      env: createServiceTokenEnvironment(),
     };
     createNscaleProvider('nscale:chat:openai/gpt-oss-120b', options);
 
