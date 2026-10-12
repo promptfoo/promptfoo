@@ -257,6 +257,8 @@ By default, when a `working_dir` is specified, Claude Agent SDK has access to th
 
 Control Claude Agent SDK's permissions for modifying files and running system commands:
 
+Promptfoo explicitly uses `default` (manual approvals) when `permission_mode` is omitted, including with SDK 0.3.286 and later. Set `permission_mode: auto` to opt into automatic permission classification.
+
 | Mode                | Description                                                           |
 | ------------------- | --------------------------------------------------------------------- |
 | `default`           | Standard permissions                                                  |

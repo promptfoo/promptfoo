@@ -1,4 +1,3 @@
-import { EvalHistoryProvider } from '@app/contexts/EvalHistoryContext';
 import { ToastProvider } from '@app/contexts/ToastContext';
 import {
   getProviderType,
@@ -100,9 +99,7 @@ describe('bare local chat import and Run', () => {
       render(
         <MemoryRouter>
           <ToastProvider>
-            <EvalHistoryProvider>
-              <RunTestSuiteButton />
-            </EvalHistoryProvider>
+            <RunTestSuiteButton />
           </ToastProvider>
         </MemoryRouter>,
       );
