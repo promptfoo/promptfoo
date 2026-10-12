@@ -1,8 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { z } from 'zod';
 import logger from '../../../src/logger';
-import { replyValidationError, sendError } from '../../../src/server/utils/errors';
-import type { Response } from 'express';
+import {
+  handleRequestError,
+  replyValidationError,
+  sendError,
+} from '../../../src/server/utils/errors';
+import type { Request, Response } from 'express';
 
 vi.mock('../../../src/logger', () => ({
   default: {
@@ -284,6 +288,85 @@ describe('server/utils/errors', () => {
       const paths = body.details.issues.map((issue) => issue.path.join('.'));
       expect(paths).toContain('name');
       expect(paths).toContain('age');
+    });
+  });
+  describe('handleRequestError', () => {
+    const req = {} as Request;
+
+    it('answers an unexpected error with a generic 500 and logs the cause', () => {
+      const { res, status, json } = createResponseMock();
+      const next = vi.fn();
+      const error = new Error('connect ECONNREFUSED 10.0.0.5:5432');
+
+      handleRequestError(error, req, res, next);
+
+      expect(status).toHaveBeenCalledWith(500);
+      expect(json).toHaveBeenCalledWith({ error: 'Internal server error' });
+      expect(next).not.toHaveBeenCalled();
+      expect(logger.error).toHaveBeenCalledWith('Internal server error', {
+        error: expect.objectContaining({ message: error.message, stack: error.stack }),
+      });
+    });
+
+    it.each([
+      [{ status: 400, message: 'Unexpected token b in JSON at position 1' }, 400, 'Bad Request'],
+      [{ statusCode: 413, message: 'request entity too large' }, 413, 'Payload Too Large'],
+      [
+        { status: 404, message: "ENOENT: no such file or directory, stat '/app/index.html'" },
+        404,
+        'Not Found',
+      ],
+    ])('answers a request error with its status text only: %j', (error, expectedStatus, text) => {
+      const { res, status, json } = createResponseMock();
+
+      handleRequestError(Object.assign(new Error(error.message), error), req, res, vi.fn());
+
+      expect(status).toHaveBeenCalledWith(expectedStatus);
+      expect(json).toHaveBeenCalledWith({ error: text });
+      // A malformed request is not a server fault.
+      expect(logger.error).not.toHaveBeenCalled();
+    });
+
+    it('keeps a 5xx status from the error but not its message', () => {
+      const { res, status, json } = createResponseMock();
+
+      handleRequestError(
+        Object.assign(new Error('upstream said no'), { status: 503 }),
+        req,
+        res,
+        vi.fn(),
+      );
+
+      expect(status).toHaveBeenCalledWith(503);
+      expect(json).toHaveBeenCalledWith({ error: 'Internal server error' });
+      expect(logger.error).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([
+      ['a string', 'boom'],
+      ['null', null],
+      ['an out-of-range status', { status: 200 }],
+      ['a non-numeric status', { status: '400' }],
+    ])('treats %s as a 500', (_label, error) => {
+      const { res, status, json } = createResponseMock();
+
+      handleRequestError(error, req, res, vi.fn());
+
+      expect(status).toHaveBeenCalledWith(500);
+      expect(json).toHaveBeenCalledWith({ error: 'Internal server error' });
+    });
+
+    it('hands the error back to Express once the response has started', () => {
+      const { res, status, json } = createResponseMock();
+      Object.assign(res, { headersSent: true });
+      const next = vi.fn();
+      const error = new Error('stream failed');
+
+      handleRequestError(error, req, res, next);
+
+      expect(next).toHaveBeenCalledWith(error);
+      expect(status).not.toHaveBeenCalled();
+      expect(json).not.toHaveBeenCalled();
     });
   });
 });

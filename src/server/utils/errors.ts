@@ -1,7 +1,9 @@
+import { STATUS_CODES } from 'node:http';
+
 import { z } from 'zod';
 import logger from '../../logger';
 import { ErrorResponseSchema } from '../../types/api/common';
-import type { Response } from 'express';
+import type { NextFunction, Request, Response } from 'express';
 
 const MAX_CAUSE_DEPTH = 4;
 
@@ -99,4 +101,47 @@ export function replyValidationError(res: Response, error: z.ZodError): void {
     error: z.prettifyError(error),
     details: { issues: error.issues },
   });
+}
+
+function getErrorStatus(error: unknown): number | undefined {
+  if (typeof error !== 'object' || error === null) {
+    return undefined;
+  }
+  const { status, statusCode } = error as { status?: unknown; statusCode?: unknown };
+  const candidate = typeof status === 'number' ? status : statusCode;
+  return typeof candidate === 'number' &&
+    Number.isInteger(candidate) &&
+    candidate >= 400 &&
+    candidate <= 599
+    ? candidate
+    : undefined;
+}
+
+/**
+ * Terminal Express error handler. Register it after every route.
+ *
+ * Without one, Express's own handler answers, and unless `NODE_ENV` is `production` it
+ * writes the stack trace into the response. Errors arrive here from body parsing
+ * (malformed or oversized JSON), from `res.sendFile`, and from any route that throws or
+ * rejects.
+ */
+export function handleRequestError(
+  error: unknown,
+  _req: Request,
+  res: Response,
+  next: NextFunction,
+): void {
+  if (res.headersSent) {
+    // The response has started, so only Express can end it, by closing the connection.
+    next(error);
+    return;
+  }
+  const status = getErrorStatus(error) ?? 500;
+  if (status >= 500) {
+    sendError(res, status, 'Internal server error', error);
+    return;
+  }
+  // The request was at fault. Its error message can quote the request body, so reply
+  // with the status text alone.
+  sendError(res, status, STATUS_CODES[status] ?? 'Bad Request');
 }
