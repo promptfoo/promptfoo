@@ -991,6 +991,79 @@ describe('ResultsTable Metrics Display', () => {
       );
     });
 
+    describe.each([false, true])('decoded media with renderMarkdown=%s', (renderMarkdown) => {
+      const renderDecodedVariable = (value: unknown, strategyId: string) => {
+        vi.mocked(useTableStore).mockImplementation(() =>
+          createTableStore({
+            config: createRedteamConfig(),
+            table: {
+              head: createPromptHead(['prompt']),
+              body: [
+                {
+                  outputs: [
+                    {
+                      pass: true,
+                      score: 1,
+                      text: 'test output',
+                      metadata:
+                        strategyId === 'image'
+                          ? {
+                              [FILE_METADATA_KEY]: {
+                                prompt: { path: 'file://input.txt', type: 'text', format: 'txt' },
+                              },
+                            }
+                          : undefined,
+                    },
+                  ],
+                  test: { metadata: { strategyId, originalText: 'decoded prompt' } },
+                  vars: [value],
+                },
+              ],
+            },
+          }),
+        );
+        vi.mocked(useResultsViewSettingsStore).mockImplementation(() => ({
+          inComparisonMode: false,
+          renderMarkdown,
+        }));
+        return renderWithProviders(<ResultsTable {...defaultProps} />);
+      };
+
+      it.each([
+        [0, '0'],
+        [false, 'false'],
+        [undefined, ''],
+      ])('keeps non-string audio variable %s as text', (value, expected) => {
+        const { container } = renderDecodedVariable(value, 'audio');
+
+        expect(container.querySelector('audio')).toBeNull();
+        const cell = container.querySelector('tbody td .cell');
+        expect(cell?.textContent?.trim()).toBe(`${expected}Original (decoded): decoded prompt`);
+      });
+
+      it('preserves string audio routing', async () => {
+        const { container } = renderDecodedVariable('raw-audio', 'audio');
+
+        await waitFor(() =>
+          expect(container.querySelector('audio source')).toHaveAttribute(
+            'src',
+            'data:audio/mp3;base64,raw-audio',
+          ),
+        );
+        expect(screen.getByText('decoded prompt')).toBeInTheDocument();
+      });
+
+      it('preserves string image storage-ref routing', () => {
+        const { container } = renderDecodedVariable('storageRef:image/test.png', 'image');
+
+        expect(
+          screen.getByText('Image preview not yet supported for storage refs'),
+        ).toBeInTheDocument();
+        expect(screen.getByText('decoded prompt')).toBeInTheDocument();
+        expect(container.querySelector('audio')).toBeNull();
+      });
+    });
+
     it.each([
       ['raw-audio', 'data:audio/mp3;base64,raw-audio'],
       ['data:audio/mp3;base64,abc', 'data:audio/mp3;base64,abc'],

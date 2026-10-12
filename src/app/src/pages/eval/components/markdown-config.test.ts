@@ -193,6 +193,12 @@ describe('markdown-config', () => {
   });
 
   describe('extractRenderableMarkdownImages', () => {
+    it('returns no previews when deeply nested Markdown exceeds parser limits', () => {
+      const markdown = `${'> '.repeat(8_000)}![Preview](data:image/png;base64,AA==)`;
+
+      expect(extractRenderableMarkdownImages(markdown)).toEqual([]);
+    });
+
     const remoteSource = 'https://example.com/image.png';
     it.each([
       [

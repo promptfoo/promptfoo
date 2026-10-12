@@ -87,6 +87,16 @@ export function extractRenderableMarkdownImages(markdown: string): RenderableMar
     return [];
   }
 
+  try {
+    return parseRenderableMarkdownImages(markdown);
+  } catch {
+    // Preview extraction is optional: parser or traversal failures must preserve
+    // the caller's literal-text fallback instead of crashing the result cell.
+    return [];
+  }
+}
+
+function parseRenderableMarkdownImages(markdown: string): RenderableMarkdownImage[] {
   const definitions = new Map<string, { url: string; title?: string | null }>();
   const footnotes = new Map<string, MarkdownAstNode>();
   const referencedFootnotes = new Set<string>();

@@ -8,6 +8,22 @@ import VariableMarkdownCell from './VariableMarkdownCell';
 
 describe('VariableMarkdownCell', () => {
   describe('rendering', () => {
+    it.each([true, false])(
+      'preserves literal content when image extraction fails (forced=%s)',
+      (dataImagesOnly) => {
+        const value = `${'> '.repeat(8000)}![Preview](data:image/png;base64,AA==)`;
+        const { container } = render(
+          <VariableMarkdownCell
+            value={value}
+            maxTextLength={100000}
+            dataImagesOnly={dataImagesOnly}
+          />,
+        );
+        expect(screen.queryByRole('img')).not.toBeInTheDocument();
+        expect(container).toHaveTextContent(value);
+      },
+    );
+
     it('renders plain text content', () => {
       render(<VariableMarkdownCell value="Hello, world!" maxTextLength={100} />);
 

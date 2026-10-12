@@ -84,6 +84,15 @@ describe('FailReasonCarousel', () => {
     expect(container).toHaveTextContent(diagnostic);
   });
 
+  it('preserves the literal failure reason when image extraction fails', () => {
+    const reason = `${'> '.repeat(8000)}![Preview](data:image/png;base64,AA==)`;
+    const { container } = render(
+      <FailReasonCarousel failReasons={[reason]} renderMarkdown={false} />,
+    );
+    expect(screen.queryByRole('img')).not.toBeInTheDocument();
+    expect(container).toHaveTextContent(reason);
+  });
+
   it('supports changing from an empty reason list to a populated one', () => {
     const { rerender } = render(<FailReasonCarousel failReasons={[]} renderMarkdown={false} />);
 

@@ -3312,6 +3312,154 @@ describe('EvalOutputCell inline image lightbox', () => {
     expect(container.querySelector('.search-highlight')).toHaveTextContent('Remote');
   });
 
+  it('preserves literal output when image extraction fails', () => {
+    mockResultsViewSettings.renderMarkdown = false;
+    const source = 'data:image/png;base64,AA==';
+    const text = `${'> '.repeat(8000)}![Preview](${source})`;
+    const props = createMarkdownPreviewProps(text, 100000);
+    const { container } = renderWithProviders(<EvalOutputCell {...props} />);
+    expect(container).toHaveTextContent(text);
+    expect(screen.queryByRole('img')).not.toBeInTheDocument();
+  });
+
+  it.each(['diff', 'JSON object', 'JSON array'])(
+    'skips image extraction when rendering %s and restores previews when toggled off',
+    (mode) => {
+      const extractSpy = vi.spyOn(markdownConfig, 'extractRenderableMarkdownImages');
+      const image = '![Preview](data:image/png;base64,AA==)';
+      const text =
+        mode === 'JSON object'
+          ? JSON.stringify({ image })
+          : mode === 'JSON array'
+            ? JSON.stringify([image])
+            : image;
+      const props = createMarkdownPreviewProps(text, 1000);
+      mockResultsViewSettings.renderMarkdown = false;
+      mockResultsViewSettings.prettifyJson = mode !== 'diff';
+
+      try {
+        const { container, rerender } = renderWithProviders(
+          <EvalOutputCell {...props} showDiffs={mode === 'diff'} />,
+        );
+        expect(extractSpy).not.toHaveBeenCalled();
+        expect(screen.queryByRole('img')).not.toBeInTheDocument();
+        if (mode !== 'diff') {
+          expect(container.querySelector('pre')).toHaveTextContent(image);
+        }
+
+        mockResultsViewSettings.prettifyJson = false;
+        rerender(
+          <ShiftKeyProvider>
+            <EvalOutputCell {...props} showDiffs={false} />
+          </ShiftKeyProvider>,
+        );
+        expect(extractSpy).toHaveBeenCalledTimes(1);
+        expect(screen.getByRole('img', { name: 'Preview' })).toBeInTheDocument();
+      } finally {
+        extractSpy.mockRestore();
+      }
+    },
+  );
+
+  it.each([
+    '![Preview](data:image/png;base64,AA==)',
+    JSON.stringify('![Preview](data:image/png;base64,AA==)'),
+  ])('keeps image fallback for non-object JSON output: %s', (text) => {
+    mockResultsViewSettings.renderMarkdown = false;
+    mockResultsViewSettings.prettifyJson = true;
+    const extractSpy = vi.spyOn(markdownConfig, 'extractRenderableMarkdownImages');
+    try {
+      renderWithProviders(<EvalOutputCell {...createMarkdownPreviewProps(text, 1000)} />);
+      expect(extractSpy).toHaveBeenCalledTimes(1);
+      expect(screen.getByRole('img', { name: 'Preview' })).toBeInTheDocument();
+    } finally {
+      extractSpy.mockRestore();
+    }
+  });
+
+  it.each(['null', '42', 'true'])('preserves plain-text fallback for JSON %s', (text) => {
+    mockResultsViewSettings.renderMarkdown = false;
+    mockResultsViewSettings.prettifyJson = true;
+    const { container } = renderWithProviders(
+      <EvalOutputCell {...createMarkdownPreviewProps(text, 1000)} />,
+    );
+    expect(container).toHaveTextContent(text);
+    expect(container.querySelector('pre')).not.toBeInTheDocument();
+  });
+
+  it('skips image extraction for diffs without a reference output', () => {
+    const extractSpy = vi.spyOn(markdownConfig, 'extractRenderableMarkdownImages');
+    mockResultsViewSettings.prettifyJson = true;
+    const text = '![Preview](data:image/png;base64,AA==)';
+    try {
+      const { container } = renderWithProviders(
+        <EvalOutputCell
+          {...createMarkdownPreviewProps(text, 1000)}
+          firstOutput={undefined}
+          showDiffs
+        />,
+      );
+      expect(extractSpy).not.toHaveBeenCalled();
+      expect(container).toHaveTextContent(text);
+      expect(screen.queryByRole('img')).not.toBeInTheDocument();
+    } finally {
+      extractSpy.mockRestore();
+    }
+  });
+
+  it('preserves image search precedence in diff mode without a reference output', () => {
+    mockResultsViewSettings.renderMarkdown = false;
+    mockTableStoreState.shouldHighlightSearchText = true;
+    const text = '![Preview](data:image/png;base64,AA==)';
+    const extractSpy = vi.spyOn(markdownConfig, 'extractRenderableMarkdownImages');
+    try {
+      const { container } = renderWithProviders(
+        <EvalOutputCell
+          {...createMarkdownPreviewProps(text, 1000)}
+          firstOutput={undefined}
+          showDiffs
+          searchText="Preview"
+        />,
+      );
+      expect(extractSpy).toHaveBeenCalledTimes(1);
+      expect(container.querySelector('.search-highlight')).not.toBeInTheDocument();
+      expect(container).toHaveTextContent(text);
+    } finally {
+      extractSpy.mockRestore();
+    }
+  });
+
+  it.each([true, false])(
+    'preserves JSON/search precedence with image syntax present: %s',
+    (hasImage) => {
+      mockResultsViewSettings.renderMarkdown = false;
+      mockResultsViewSettings.prettifyJson = true;
+      mockTableStoreState.shouldHighlightSearchText = true;
+      const text = JSON.stringify({
+        image: hasImage ? '![Preview](data:image/png;base64,AA==)' : 'Preview',
+      });
+      const extractSpy = vi.spyOn(markdownConfig, 'extractRenderableMarkdownImages');
+      const parseSpy = vi.spyOn(JSON, 'parse');
+      try {
+        const { container } = renderWithProviders(
+          <EvalOutputCell {...createMarkdownPreviewProps(text, 1000)} searchText="Preview" />,
+        );
+        expect(extractSpy).toHaveBeenCalledTimes(hasImage ? 1 : 0);
+        expect(parseSpy.mock.calls.filter(([input]) => input === text)).toHaveLength(1);
+        if (hasImage) {
+          expect(container.querySelector('pre')).toHaveTextContent('Preview');
+          expect(container.querySelector('.search-highlight')).not.toBeInTheDocument();
+        } else {
+          expect(container.querySelector('pre')).not.toBeInTheDocument();
+          expect(container.querySelector('.search-highlight')).toHaveTextContent('Preview');
+        }
+      } finally {
+        extractSpy.mockRestore();
+        parseSpy.mockRestore();
+      }
+    },
+  );
+
   it('parses image syntax once per render and skips large ordinary text', () => {
     const extractSpy = vi.spyOn(markdownConfig, 'extractRenderableMarkdownImages');
     mockResultsViewSettings.renderMarkdown = false;

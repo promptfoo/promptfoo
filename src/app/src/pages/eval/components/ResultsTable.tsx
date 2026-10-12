@@ -417,7 +417,7 @@ function renderDecodedVariableCell({
   maxTextLength,
   cellContent,
 }: {
-  value: string;
+  value: unknown;
   varName: string;
   row: EvaluateTableRow;
   injectVarName: string;
@@ -554,7 +554,8 @@ function renderVariableCell({
   );
 
   return renderDecodedVariableCell({
-    value: displayValue,
+    // Objects were already serialized before media routing; preserve primitive types.
+    value: isObjectValue ? displayValue : value,
     varName,
     row,
     injectVarName,

@@ -394,23 +394,21 @@ function renderMediaNode({
 }
 
 function renderMarkdownOrJsonNode({
-  text,
   normalizedText,
   maxTextLength,
   renderMarkdown,
   dataImages,
-  prettifyJson,
+  prettifiedJson,
   markdownComponents,
   onImageClick,
   hasRenderedMarkdownImage,
   renderAfterDataImages,
 }: {
-  text: string;
   normalizedText: string;
   maxTextLength: number;
   renderMarkdown: boolean;
   dataImages: RenderableMarkdownImage[];
-  prettifyJson: boolean;
+  prettifiedJson: string | undefined;
   markdownComponents: React.ComponentProps<typeof ReactMarkdown>['components'];
   onImageClick: (url?: string) => void;
   hasRenderedMarkdownImage: boolean;
@@ -421,29 +419,12 @@ function renderMarkdownOrJsonNode({
   renderedMarkdownOutput: boolean;
   renderedStructuredImages?: boolean;
 } {
-  const canRenderFormattedOutput = renderMarkdown || dataImages.length > 0;
-
-  if (!prettifyJson && !canRenderFormattedOutput) {
+  if (prettifiedJson !== undefined) {
     return {
-      node: undefined,
+      node: <pre>{prettifiedJson}</pre>,
       renderedImagePreview: false,
       renderedMarkdownOutput: false,
     };
-  }
-
-  if (prettifyJson) {
-    try {
-      const parsed = JSON.parse(text);
-      if (typeof parsed === 'object' && parsed !== null) {
-        return {
-          node: <pre>{JSON.stringify(parsed, null, 2)}</pre>,
-          renderedImagePreview: false,
-          renderedMarkdownOutput: false,
-        };
-      }
-    } catch {
-      // Not valid JSON, continue to Markdown if enabled.
-    }
   }
 
   if (renderMarkdown) {
@@ -560,7 +541,7 @@ function renderOutputNode({
   maxTextLength,
   renderMarkdown,
   dataImages,
-  prettifyJson,
+  prettifiedJson,
   markdownComponents,
   renderedMarkdownImageSources,
   toggleLightbox,
@@ -577,7 +558,7 @@ function renderOutputNode({
   maxTextLength: number;
   renderMarkdown: boolean;
   dataImages: RenderableMarkdownImage[];
-  prettifyJson: boolean;
+  prettifiedJson: string | undefined;
   markdownComponents: React.ComponentProps<typeof ReactMarkdown>['components'];
   renderedMarkdownImageSources: string[];
   toggleLightbox: (url?: string) => void;
@@ -615,12 +596,11 @@ function renderOutputNode({
 
   if (!node && !showDiffs) {
     const formattedNode = renderMarkdownOrJsonNode({
-      text,
       normalizedText,
       maxTextLength,
       renderMarkdown,
       dataImages,
-      prettifyJson,
+      prettifiedJson,
       markdownComponents,
       onImageClick: toggleLightbox,
       hasRenderedMarkdownImage: renderedMarkdownImageSources.length > 0,
@@ -1490,10 +1470,30 @@ function EvalOutputCell({
 
   const text = stringifyOutputText(output.text);
   const normalizedText = normalizeMediaText(text);
+  const prettifiedJson = useMemo(() => {
+    if (prettifyJson && !showDiffs) {
+      try {
+        const parsed = JSON.parse(text);
+        if (typeof parsed === 'object' && parsed !== null) {
+          return JSON.stringify(parsed, null, 2);
+        }
+      } catch {
+        // Invalid JSON, primitives, and null keep the normal text/image fallback.
+      }
+    }
+    return undefined;
+  }, [text, prettifyJson, showDiffs]);
+  // Search precedes JSON formatting and uses image presence to preserve previews.
+  // Without a reference output, diff mode can still reach search highlighting.
+  const hasActiveSearch = Boolean(searchText && shouldHighlightSearchText);
+  const needsImageExtraction =
+    (!showDiffs || (!firstOutput && hasActiveSearch)) &&
+    (prettifiedJson === undefined || hasActiveSearch);
   const { dataImages, renderedMarkdownImageSources } = useMemo(() => {
-    const images = normalizedText.includes('![')
-      ? extractRenderableMarkdownImages(normalizedText)
-      : [];
+    const images =
+      needsImageExtraction && normalizedText.includes('![')
+        ? extractRenderableMarkdownImages(normalizedText)
+        : [];
     const renderableDataImages = images.filter(isInlineDataImage);
     const renderedImages = renderMarkdown ? images : renderableDataImages;
 
@@ -1501,7 +1501,7 @@ function EvalOutputCell({
       dataImages: renderableDataImages,
       renderedMarkdownImageSources: [...new Set(renderedImages.map((image) => image.source))],
     };
-  }, [normalizedText, renderMarkdown]);
+  }, [normalizedText, renderMarkdown, needsImageExtraction]);
   const inlineImageSrc = resolveImageSource(text);
   const primaryRenderedImageSrc = getPrimaryRenderedImageSrc(text, inlineImageSrc);
   const outputAudioSource = resolveAudioSource(output.audio);
@@ -1526,7 +1526,7 @@ function EvalOutputCell({
     maxTextLength,
     renderMarkdown,
     dataImages,
-    prettifyJson,
+    prettifiedJson,
     markdownComponents,
     renderedMarkdownImageSources,
     toggleLightbox,
