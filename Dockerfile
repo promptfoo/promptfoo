@@ -50,7 +50,10 @@ RUN --mount=type=cache,target=/root/.npm \
 COPY . .
 
 WORKDIR /app
-RUN npm run build
+# The build script runs its type check, bundler and app build side by side, which peaks
+# near 12 GB of memory. One at a time peaks under 6 GB, so the image also builds where
+# Docker has 8 GB.
+RUN CONCURRENTLY_MAX_PROCESSES=1 npm run build
 
 # Install production dependencies separately so the runtime image excludes
 # the app and docs build tools. Keep optional native packages, peers, and tsx.
