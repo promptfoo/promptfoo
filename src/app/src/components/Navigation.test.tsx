@@ -246,15 +246,18 @@ describe('Navigation', () => {
     expect(topLevelNavLink).toHaveClass('text-foreground');
   });
 
-  it('does not activate Model Audit NavLink on /model-audit/history/:id path', () => {
-    renderNavigation({ initialEntries: [`${LEGACY_MODEL_AUDIT_HISTORY_ROUTE}/123`] });
-    const navBar = screen.getByRole('banner');
-    const topLevelNavLink = within(navBar).getByRole('link', { name: 'Model Audit' });
-    expect(topLevelNavLink).toBeDefined();
-    expect(topLevelNavLink).toHaveAttribute('href', MODEL_AUDIT_ROUTES.ROOT);
-    expect(topLevelNavLink).not.toHaveClass('bg-primary/10');
-    expect(topLevelNavLink).toHaveClass('text-foreground');
-  });
+  it.each(['123', 'details/123'])(
+    'does not activate Model Audit NavLink on /model-audit/history/%s',
+    (path) => {
+      renderNavigation({ initialEntries: [`${LEGACY_MODEL_AUDIT_HISTORY_ROUTE}/${path}`] });
+      const navBar = screen.getByRole('banner');
+      const topLevelNavLink = within(navBar).getByRole('link', { name: 'Model Audit' });
+      expect(topLevelNavLink).toBeDefined();
+      expect(topLevelNavLink).toHaveAttribute('href', MODEL_AUDIT_ROUTES.ROOT);
+      expect(topLevelNavLink).not.toHaveClass('bg-primary/10');
+      expect(topLevelNavLink).toHaveClass('text-foreground');
+    },
+  );
 
   describe('Create Dropdown', () => {
     it('opens dropdown on click and shows Model Audit option', async () => {

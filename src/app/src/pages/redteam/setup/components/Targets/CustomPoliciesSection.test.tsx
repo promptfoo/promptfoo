@@ -300,7 +300,6 @@ describe('CustomPoliciesSection', () => {
     });
   });
 
-  // Policy Test Generation Timeout Tests
   describe('Policy ID Stability', () => {
     it('should maintain stable IDs based on policy content', async () => {
       // Setup initial policies
