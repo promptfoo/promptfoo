@@ -117,6 +117,37 @@ function getErrorStatus(error: unknown): number | undefined {
     : undefined;
 }
 
+// Set by a static file handler for the file it meant to send.
+const REPRESENTATION_HEADERS = [
+  'Content-Type',
+  'Content-Encoding',
+  'Content-Language',
+  'Content-Range',
+  'ETag',
+  'Last-Modified',
+];
+
+/**
+ * Drop the headers of a response that will not be sent, then apply the ones the error
+ * asks for, such as `Content-Range` on a 416. `res.json` keeps an existing content type,
+ * so without this the JSON body could go out labelled as the file's type.
+ */
+function resetResponseHeaders(res: Response, error: unknown): void {
+  for (const header of REPRESENTATION_HEADERS) {
+    res.removeHeader(header);
+  }
+  const headers =
+    typeof error === 'object' && error !== null ? (error as { headers?: unknown }).headers : null;
+  if (typeof headers === 'object' && headers !== null) {
+    for (const [name, value] of Object.entries(headers)) {
+      if (typeof value === 'string' || typeof value === 'number') {
+        res.setHeader(name, value);
+      }
+    }
+  }
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+}
+
 /**
  * Terminal Express error handler. Register it after every route.
  *
@@ -137,6 +168,7 @@ export function handleRequestError(
     return;
   }
   const status = getErrorStatus(error) ?? 500;
+  resetResponseHeaders(res, error);
   if (status >= 500) {
     sendError(res, status, 'Internal server error', error);
     return;

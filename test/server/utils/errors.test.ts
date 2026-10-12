@@ -21,13 +21,19 @@ function createResponseMock(): {
   res: Response;
   status: Mock;
   json: Mock;
+  removeHeader: Mock;
+  setHeader: Mock;
 } {
   const json = vi.fn().mockReturnThis();
   const status = vi.fn(() => ({ json }));
+  const removeHeader = vi.fn();
+  const setHeader = vi.fn();
   return {
-    res: { status, json } as unknown as Response,
+    res: { status, json, removeHeader, setHeader } as unknown as Response,
     status: status as unknown as Mock,
     json,
+    removeHeader,
+    setHeader,
   };
 }
 
@@ -356,8 +362,25 @@ describe('server/utils/errors', () => {
       expect(json).toHaveBeenCalledWith({ error: 'Internal server error' });
     });
 
+    it('replaces the headers of the response that was not sent', () => {
+      const { res, removeHeader, setHeader } = createResponseMock();
+      const error = Object.assign(new Error('Range Not Satisfiable'), {
+        status: 416,
+        headers: { 'Content-Range': 'bytes */13' },
+      });
+
+      handleRequestError(error, req, res, vi.fn());
+
+      // `res.json` keeps an existing content type, so a file's type has to go first.
+      expect(removeHeader.mock.calls.map(([name]) => name)).toEqual(
+        expect.arrayContaining(['Content-Type', 'Content-Encoding', 'ETag']),
+      );
+      expect(setHeader).toHaveBeenCalledWith('Content-Range', 'bytes */13');
+      expect(setHeader).toHaveBeenCalledWith('X-Content-Type-Options', 'nosniff');
+    });
+
     it('hands the error back to Express once the response has started', () => {
-      const { res, status, json } = createResponseMock();
+      const { res, status, json, removeHeader } = createResponseMock();
       Object.assign(res, { headersSent: true });
       const next = vi.fn();
       const error = new Error('stream failed');
@@ -367,6 +390,7 @@ describe('server/utils/errors', () => {
       expect(next).toHaveBeenCalledWith(error);
       expect(status).not.toHaveBeenCalled();
       expect(json).not.toHaveBeenCalled();
+      expect(removeHeader).not.toHaveBeenCalled();
     });
   });
 });

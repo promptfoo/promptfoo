@@ -1,5 +1,10 @@
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
+import express from 'express';
 import request from 'supertest';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../../src/logger', () => ({
   default: {
@@ -20,6 +25,7 @@ vi.mock('../../src/server/services/promptCacheService', () => ({
 import logger from '../../src/logger';
 import { createApp } from '../../src/server/server';
 import { promptCacheService } from '../../src/server/services/promptCacheService';
+import { handleRequestError } from '../../src/server/utils/errors';
 
 // Express's own error handler writes the stack trace into the response unless NODE_ENV is
 // `production`, and the server is usually started without it.
@@ -68,5 +74,33 @@ describe('server error responses', () => {
     expect(response.status).toBe(400);
     expect(response.body).toEqual({ error: 'Bad Request' });
     expect(response.text).not.toMatch(STACK_FRAME);
+  });
+});
+
+describe('server error responses for static files', () => {
+  let staticDir: string;
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+    staticDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-static-'));
+    fs.writeFileSync(path.join(staticDir, 'index.html'), '<html></html>');
+  });
+
+  afterEach(() => {
+    fs.rmSync(staticDir, { recursive: true, force: true });
+  });
+
+  it('labels the error as JSON after a file handler has set its own content type', async () => {
+    const app = express();
+    app.use(express.static(staticDir));
+    app.use(handleRequestError);
+
+    // The file's headers are already set when the range turns out to be unsatisfiable.
+    const response = await request(app).get('/index.html').set('Range', 'bytes=999-');
+
+    expect(response.status).toBe(416);
+    expect(response.type).toBe('application/json');
+    expect(response.body).toEqual({ error: 'Range Not Satisfiable' });
+    expect(response.headers['content-range']).toBe('bytes */13');
   });
 });
