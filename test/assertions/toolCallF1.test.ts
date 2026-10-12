@@ -7,6 +7,25 @@ import { createMockProvider, createProviderResponse } from '../factories/provide
 
 import type { AssertionParams, AtomicTestCase } from '../../src/types/index';
 
+const createWeatherToolOutput = () => ({
+  tool_calls: [{ function: { name: 'get_weather', arguments: '{}' } }],
+});
+
+const createWeatherFunctionCall = () => ({
+  type: 'function_call',
+  id: 'fc_1',
+  call_id: 'call_1',
+  name: 'get_weather',
+  arguments: '{"city":"NYC"}',
+});
+
+const createWeatherAndNamedTool = (name: string) => ({
+  tool_calls: [
+    { function: { name: 'get_weather', arguments: '{}' } },
+    { function: { name, arguments: '{}' } },
+  ],
+});
+
 const mockProvider = createMockProvider({
   id: 'mock',
   response: createProviderResponse({ output: 'mock' }),
@@ -42,12 +61,7 @@ describe('handleToolCallF1', () => {
 
   describe('F1 score calculation', () => {
     it('should return F1=1.0 when actual tools exactly match expected tools', () => {
-      const output = {
-        tool_calls: [
-          { function: { name: 'get_weather', arguments: '{}' } },
-          { function: { name: 'book_flight', arguments: '{}' } },
-        ],
-      };
+      const output = createWeatherAndNamedTool('book_flight');
       const params = createParams(output, ['get_weather', 'book_flight']);
 
       const result = handleToolCallF1(params);
@@ -96,9 +110,7 @@ describe('handleToolCallF1', () => {
       // Agent calls 1 tool, but 2 were expected
       // Precision = 1/1 = 1, Recall = 1/2 = 0.5
       // F1 = 2 * (1 * 0.5) / (1 + 0.5) = 2 * 0.5 / 1.5 = 2/3 ≈ 0.667
-      const output = {
-        tool_calls: [{ function: { name: 'get_weather', arguments: '{}' } }],
-      };
+      const output = createWeatherToolOutput();
       const params = createParams(output, ['get_weather', 'book_flight']);
 
       const result = handleToolCallF1(params);
@@ -144,13 +156,7 @@ describe('handleToolCallF1', () => {
     });
 
     it('should handle JSON stringified OpenAI Responses function_call output', () => {
-      const output = JSON.stringify({
-        type: 'function_call',
-        id: 'fc_1',
-        call_id: 'call_1',
-        name: 'get_weather',
-        arguments: '{"city":"NYC"}',
-      });
+      const output = JSON.stringify(createWeatherFunctionCall());
       const params = createParams(output, ['get_weather']);
 
       const result = handleToolCallF1(params);
@@ -290,9 +296,7 @@ describe('handleToolCallF1', () => {
     });
 
     it('should handle JSON stringified OpenAI output', () => {
-      const output = JSON.stringify({
-        tool_calls: [{ function: { name: 'get_weather', arguments: '{}' } }],
-      });
+      const output = JSON.stringify(createWeatherToolOutput());
       const params = createParams(output, ['get_weather']);
 
       const result = handleToolCallF1(params);
@@ -720,12 +724,7 @@ describe('handleToolCallF1', () => {
     });
 
     it('should accept comma-separated string of tool names', () => {
-      const output = {
-        tool_calls: [
-          { function: { name: 'get_weather', arguments: '{}' } },
-          { function: { name: 'book_flight', arguments: '{}' } },
-        ],
-      };
+      const output = createWeatherAndNamedTool('book_flight');
       const params = createParams(output, 'get_weather, book_flight');
 
       const result = handleToolCallF1(params);
@@ -747,12 +746,7 @@ describe('handleToolCallF1', () => {
 
   describe('threshold handling', () => {
     it('should use default threshold of 1.0', () => {
-      const output = {
-        tool_calls: [
-          { function: { name: 'get_weather', arguments: '{}' } },
-          { function: { name: 'extra_tool', arguments: '{}' } },
-        ],
-      };
+      const output = createWeatherAndNamedTool('extra_tool');
       const params = createParams(output, ['get_weather']);
 
       const result = handleToolCallF1(params);
@@ -762,12 +756,7 @@ describe('handleToolCallF1', () => {
     });
 
     it('should respect custom threshold', () => {
-      const output = {
-        tool_calls: [
-          { function: { name: 'get_weather', arguments: '{}' } },
-          { function: { name: 'extra_tool', arguments: '{}' } },
-        ],
-      };
+      const output = createWeatherAndNamedTool('extra_tool');
       const params = createParams(output, ['get_weather'], { threshold: 0.5 });
 
       const result = handleToolCallF1(params);
@@ -779,9 +768,7 @@ describe('handleToolCallF1', () => {
 
   describe('inverse assertion (not-tool-call-f1)', () => {
     it('should invert pass result when inverse is true', () => {
-      const output = {
-        tool_calls: [{ function: { name: 'get_weather', arguments: '{}' } }],
-      };
+      const output = createWeatherToolOutput();
       const params = createParams(output, ['get_weather'], { inverse: true });
 
       const result = handleToolCallF1(params);
@@ -853,9 +840,7 @@ describe('handleToolCallF1', () => {
     });
 
     it('should treat duplicate expected tools as single tool', () => {
-      const output = {
-        tool_calls: [{ function: { name: 'get_weather', arguments: '{}' } }],
-      };
+      const output = createWeatherToolOutput();
       const params = createParams(output, ['get_weather', 'get_weather']);
 
       const result = handleToolCallF1(params);
@@ -866,13 +851,7 @@ describe('handleToolCallF1', () => {
   });
 
   describe('OpenAI Responses API function_call items', () => {
-    const singleCall = {
-      type: 'function_call',
-      id: 'fc_1',
-      call_id: 'call_1',
-      name: 'get_weather',
-      arguments: '{"city":"NYC"}',
-    };
+    const singleCall = createWeatherFunctionCall();
 
     it('recognizes a single function_call object', () => {
       const result = handleToolCallF1(createParams(singleCall, ['get_weather']));

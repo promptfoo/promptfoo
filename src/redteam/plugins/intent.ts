@@ -3,7 +3,7 @@ import { maybeLoadFromExternalFile } from '../../util/file';
 import invariant from '../../util/invariant';
 import { sleep } from '../../util/time';
 import { extractGoalFromPrompt } from '../util';
-import { RedteamGraderBase, RedteamPluginBase } from './base';
+import { createAssertion, RedteamGraderBase, RedteamPluginBase } from './base';
 
 import type {
   ApiProvider,
@@ -43,13 +43,7 @@ export class IntentPlugin extends RedteamPluginBase {
   }
 
   protected getAssertions(_prompt: string): Assertion[] {
-    const assertions: Assertion[] = [
-      {
-        type: PLUGIN_ID,
-        metric: 'Intent',
-      },
-    ];
-    return assertions;
+    return [createAssertion(PLUGIN_ID, 'Intent')];
   }
 
   async generateTests(_n: number, delayMs: number): Promise<TestCase[]> {
