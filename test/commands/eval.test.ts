@@ -53,11 +53,13 @@ import {
 } from '../../src/util/cloud';
 import * as defaultConfigModule from '../../src/util/config/default';
 import { ConfigResolutionError, resolveConfigs } from '../../src/util/config/load';
+import { createDefaultPromptMetrics } from '../../src/util/eval/promptMetrics';
 import { writeMultipleOutputs } from '../../src/util/index';
 import { checkProviderApiKeys } from '../../src/util/provider';
 import { TokenUsageTracker } from '../../src/util/tokenUsage';
 import { mockProcessEnv } from '../util/utils';
 
+import type EvalResult from '../../src/models/evalResult';
 import type {
   ApiProvider,
   EnvOverrides,
@@ -561,6 +563,86 @@ describe('evalCommand', () => {
           'skill-version': '1.2.3',
         },
       }),
+    );
+  });
+
+  it.each([
+    ['evaluateOptions', { evaluateOptions: { cache: false } }],
+    ['commandLineOptions', { commandLineOptions: { cache: false } }],
+  ])('should honor %s.cache from a config passed with -c', async (_source, configCache) => {
+    evalCommand(program, defaultConfig, defaultConfigPath);
+    const config = { ...configCache } as UnifiedConfig;
+    vi.mocked(resolveConfigs).mockResolvedValue({
+      config,
+      testSuite: { prompts: [], providers: [] },
+      basePath: path.resolve('/'),
+      commandLineOptions: config.commandLineOptions,
+    });
+    vi.mocked(evaluate).mockImplementation(async (_testSuite, evalRecord) => evalRecord as Eval);
+
+    await program.parseAsync([
+      'node',
+      'test',
+      'eval',
+      '-c',
+      'other/promptfooconfig.yaml',
+      '--no-table',
+      '--no-write',
+    ]);
+
+    expect(evaluate).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({ cache: false }),
+    );
+  });
+
+  it('should keep the cache enabled when neither the CLI nor the config disables it', async () => {
+    evalCommand(program, defaultConfig, defaultConfigPath);
+    vi.mocked(evaluate).mockImplementation(async (_testSuite, evalRecord) => evalRecord as Eval);
+
+    await program.parseAsync([
+      'node',
+      'test',
+      'eval',
+      '-c',
+      'other/promptfooconfig.yaml',
+      '--no-table',
+      '--no-write',
+    ]);
+
+    expect(evaluate).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({ cache: true }),
+    );
+  });
+
+  it('should let --no-cache override a config that enables the cache', async () => {
+    evalCommand(program, defaultConfig, defaultConfigPath);
+    const config = { evaluateOptions: { cache: true } } as UnifiedConfig;
+    vi.mocked(resolveConfigs).mockResolvedValue({
+      config,
+      testSuite: { prompts: [], providers: [] },
+      basePath: path.resolve('/'),
+    });
+    vi.mocked(evaluate).mockImplementation(async (_testSuite, evalRecord) => evalRecord as Eval);
+
+    await program.parseAsync([
+      'node',
+      'test',
+      'eval',
+      '-c',
+      'other/promptfooconfig.yaml',
+      '--no-cache',
+      '--no-table',
+      '--no-write',
+    ]);
+
+    expect(evaluate).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({ cache: false }),
     );
   });
 
@@ -1918,6 +2000,131 @@ describe('evalCommand', () => {
     }
   });
 
+  describe('resumed cache-hit accounting', () => {
+    let record: Eval;
+
+    beforeEach(() => {
+      record = new Eval(defaultConfig);
+      vi.spyOn(Eval, 'findById').mockResolvedValue(record);
+      // Summary reconstruction also reads result batches; isolate the pre-resume scan.
+      vi.spyOn(record, 'getRepeatStability').mockResolvedValue(undefined);
+      vi.mocked(evaluate).mockReset();
+      vi.mocked(evaluate).mockImplementation(async (_suite, evalRecord) => evalRecord as Eval);
+    });
+
+    afterEach(() => {
+      vi.mocked(Eval.findById).mockRestore();
+      vi.mocked(evaluate).mockReset();
+    });
+
+    it('recovers only missing target cache counts across batches before resuming', async () => {
+      record.prompts = [undefined, undefined, 0, 5, undefined].map((count, index) => ({
+        raw: `prompt ${index}`,
+        label: `prompt ${index}`,
+        provider: 'echo',
+        metrics: {
+          ...createDefaultPromptMetrics(),
+          testCacheHitCount: count,
+          score: 7,
+          totalLatencyMs: 123,
+          cost: 0.5,
+          namedScores: { quality: 0.75 },
+        },
+      }));
+      record.prompts.push({ raw: 'empty prompt', label: 'Empty', provider: 'echo' });
+      const expected = structuredClone(record.prompts);
+      for (const [index, count] of [2, 1, 0, 5, 0].entries()) {
+        expected[index].metrics!.testCacheHitCount = count;
+      }
+      const fetch = vi.spyOn(record, 'fetchResultsBatched').mockImplementation(async function* () {
+        yield [
+          { promptIdx: 0, response: { cached: true } },
+          { promptIdx: 1, response: { cached: false, tokenUsage: { cached: 99 } } },
+          { promptIdx: 2, response: { cached: true } },
+          { promptIdx: 3, response: { cached: true } },
+          {
+            promptIdx: 4,
+            response: { cached: false },
+            gradingResult: { tokensUsed: { cached: 22 } },
+          },
+        ] as EvalResult[];
+        yield [
+          { promptIdx: 0, response: { cached: true } },
+          { promptIdx: 1, response: { cached: true }, success: false, failureReason: 2 },
+          { promptIdx: 4 },
+          { promptIdx: 5, response: { cached: true } },
+        ] as EvalResult[];
+      });
+      vi.mocked(evaluate).mockImplementationOnce(async (_suite, evalRecord) => {
+        expect(record.prompts).toEqual(expected);
+        expect(fetch).toHaveBeenCalledTimes(1);
+        return evalRecord as Eval;
+      });
+
+      await doEval(
+        { resume: 'eval-123' } as Parameters<typeof doEval>[0],
+        defaultConfig,
+        defaultConfigPath,
+        {},
+      );
+
+      expect(evaluate).toHaveBeenCalledTimes(1);
+      expect(recalculatePromptMetrics).not.toHaveBeenCalled();
+      expect(record.prompts).toEqual(expected);
+    });
+
+    it.each([
+      { format: 'modern counters', oldResults: false, counts: [0, 3] },
+      { format: 'legacy results format', oldResults: true, counts: [undefined] },
+    ])('does not scan completed rows with $format', async ({ oldResults, counts }) => {
+      record.prompts = counts.map((count) => ({
+        raw: 'saved prompt',
+        label: 'Saved',
+        provider: 'echo',
+        metrics: { ...createDefaultPromptMetrics(), testCacheHitCount: count },
+      }));
+      vi.spyOn(record, 'useOldResults').mockReturnValue(oldResults);
+      const fetch = vi.spyOn(record, 'fetchResultsBatched');
+
+      await doEval(
+        { resume: 'eval-123' } as Parameters<typeof doEval>[0],
+        defaultConfig,
+        defaultConfigPath,
+        {},
+      );
+
+      expect(evaluate).toHaveBeenCalledTimes(1);
+      expect(fetch).not.toHaveBeenCalled();
+      expect(record.prompts.map((prompt) => prompt.metrics?.testCacheHitCount)).toEqual(counts);
+    });
+
+    it('leaves every saved metric unchanged if reading a later batch fails', async () => {
+      record.prompts = [undefined, undefined, 3].map((count) => ({
+        raw: 'saved prompt',
+        label: 'Saved',
+        provider: 'echo',
+        metrics: { ...createDefaultPromptMetrics(), testCacheHitCount: count, score: 7 },
+      }));
+      const before = structuredClone(record.prompts);
+      vi.spyOn(record, 'fetchResultsBatched').mockImplementation(async function* () {
+        yield [{ promptIdx: 0, response: { cached: true } }] as EvalResult[];
+        throw new Error('Saved results unavailable');
+      });
+
+      await expect(
+        doEval(
+          { resume: 'eval-123' } as Parameters<typeof doEval>[0],
+          defaultConfig,
+          defaultConfigPath,
+          {},
+        ),
+      ).rejects.toThrow('Saved results unavailable');
+
+      expect(evaluate).not.toHaveBeenCalled();
+      expect(record.prompts).toEqual(before);
+    });
+  });
+
   it('should retry error results from the latest eval and clean up after success', async () => {
     const authored = { raw: 'retry prompt', label: 'Retry', config: { temperature: 1 } };
     const latestEval = new Eval({ prompts: [authored] } as UnifiedConfig);
@@ -3197,73 +3404,6 @@ describe('showRedteamProviderLabelMissingWarning', () => {
 
     showRedteamProviderLabelMissingWarning(testSuite);
     expect(mockWarn).not.toHaveBeenCalled();
-  });
-});
-
-describe('Provider Token Tracking', () => {
-  let mockTokenUsageTracker: Mocked<TokenUsageTracker>;
-  const mockLogger = vi.spyOn(logger, 'info');
-
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mockLogger.mockClear();
-
-    mockTokenUsageTracker = {
-      getProviderIds: vi.fn(),
-      getProviderUsage: vi.fn(),
-      trackUsage: vi.fn(),
-      resetAllUsage: vi.fn(),
-      resetProviderUsage: vi.fn(),
-      getTotalUsage: vi.fn(),
-      cleanup: vi.fn(),
-    } as any;
-
-    vi.mocked(TokenUsageTracker.getInstance).mockImplementation(function () {
-      return mockTokenUsageTracker;
-    });
-  });
-
-  it('should create and configure TokenUsageTracker correctly', () => {
-    const tracker = TokenUsageTracker.getInstance();
-    expect(tracker).toBeDefined();
-    expect(tracker.getProviderIds).toBeDefined();
-    expect(tracker.getProviderUsage).toBeDefined();
-  });
-
-  it('should handle provider token tracking when mocked properly', () => {
-    const providerUsageData = {
-      'openai:gpt-4': {
-        total: 1500,
-        prompt: 600,
-        completion: 900,
-        cached: 100,
-        numRequests: 5,
-        completionDetails: { reasoning: 200, acceptedPrediction: 0, rejectedPrediction: 0 },
-      },
-      'anthropic:claude-3': {
-        total: 800,
-        prompt: 300,
-        completion: 500,
-        cached: 50,
-        numRequests: 3,
-        completionDetails: { reasoning: 100, acceptedPrediction: 0, rejectedPrediction: 0 },
-      },
-    };
-
-    mockTokenUsageTracker.getProviderIds.mockReturnValue(['openai:gpt-4', 'anthropic:claude-3']);
-    mockTokenUsageTracker.getProviderUsage.mockImplementation(function (id: string) {
-      return providerUsageData[id as keyof typeof providerUsageData];
-    });
-
-    const tracker = TokenUsageTracker.getInstance();
-    const providerIds = tracker.getProviderIds();
-    expect(providerIds).toEqual(['openai:gpt-4', 'anthropic:claude-3']);
-
-    const openaiUsage = tracker.getProviderUsage('openai:gpt-4');
-    expect(openaiUsage).toEqual(providerUsageData['openai:gpt-4']);
-
-    const claudeUsage = tracker.getProviderUsage('anthropic:claude-3');
-    expect(claudeUsage).toEqual(providerUsageData['anthropic:claude-3']);
   });
 });
 

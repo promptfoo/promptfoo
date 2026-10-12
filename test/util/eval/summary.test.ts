@@ -821,6 +821,34 @@ describe('generateEvalSummary', () => {
       expect(plainOutput).not.toContain('1 errors');
     });
 
+    it('should disclose cache hits only when present', () => {
+      const baseParams: EvalSummaryParams = {
+        evalId: 'eval-cache-hits',
+        isRedteam: false,
+        writeToDatabase: false,
+        shareableUrl: null,
+        wantsToShare: false,
+        hasExplicitDisable: false,
+        cloudEnabled: false,
+        tokenUsage: { total: 0 },
+        successes: 4,
+        failures: 0,
+        errors: 0,
+        duration: 5000,
+        maxConcurrency: 4,
+        tracker: mockTracker,
+      };
+
+      const withHits = stripAnsi(generateEvalSummary({ ...baseParams, cacheHits: 4 }).join('\n'));
+      expect(withHits).toContain('4 cache hits (100%)');
+
+      const withoutHits = stripAnsi(generateEvalSummary(baseParams).join('\n'));
+      expect(withoutHits).not.toContain('cache hits');
+
+      const zeroHits = stripAnsi(generateEvalSummary({ ...baseParams, cacheHits: 0 }).join('\n'));
+      expect(zeroHits).not.toContain('cache hits');
+    });
+
     it('should render colored icons with muted percentages', () => {
       const params: EvalSummaryParams = {
         evalId: 'eval-styling',
