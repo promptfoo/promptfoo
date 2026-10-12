@@ -108,7 +108,7 @@ The invitation dialog shows when the link expires. **Revoke share links** disabl
 
 This control appears only when the deployment enables public evals and your role has all four eval permissions: create, read, update, and delete (**Manage Evaluations**). On-prem deployments disable the control by default; administrators can configure `ENABLE_MAKE_PUBLIC=true`. **Make Private** restores the eval's authentication and access requirements.
 
-[![Eval actions showing Make Public for a Customer Support baseline eval](/img/enterprise-docs/sharing-access.png)](/img/enterprise-docs/sharing-access.png)
+[![Eval actions showing Make Public for a Customer Support baseline eval](/img/enterprise-docs/sharing-access.png)](pathname:///img/enterprise-docs/sharing-access.png)
 
 On-prem eval actions with public visibility enabled for the deployment. The example uses synthetic data.
 
