@@ -213,6 +213,7 @@ Some manipulations are outside this plugin's response-only, instruction-focused 
 - **Description / definition-side poisoning** — payload in a tool's name or description rather than its response. Out of scope (see the [response-only scope](#overview) note above).
 - **Non-instruction data falsification** — plausible-but-wrong values or biased steering that contain no directive-shaped language. The response carries nothing to flag as an instruction; add domain-specific assertions to catch corrupted data.
 - **Conditional / stochastic poisoning** — responses poisoned only on some calls (rug-pull after N calls, trigger-word gating, random or periodic poisoning). Only detectable on calls where the poisoned branch actually fires; raise `numTests` to improve the odds of triggering it.
+- **Tool names shared by several servers** — with multiple MCP servers configured, a generated call names only the tool, and the provider dispatches it to the first connected server that advertises that name. A same-named tool on a later server is never called, so its responses are not graded. Give each server its own scan (or narrow each server's catalog with `tools`/`exclude_tools`) when names collide.
 
 Oversized responses are never passed, but they are not always failed either:
 
