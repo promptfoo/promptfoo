@@ -218,10 +218,12 @@ describe.each(['google', 'palm'])('%s Nano Banana routing contracts', (prefix) =
       { policy: undefined, bypass: false },
       { policy: {}, bypass: false },
       { policy: { bustCache: true }, bypass: true },
+      { policy: { bustCache: false }, bypass: false },
       { policy: { bustCache: true, debug: false }, bypass: true },
       { policy: { bustCache: false, debug: true }, bypass: false },
       { policy: { debug: true }, bypass: true },
-    ])('honors per-call cache policy: %j', async ({ bypass, policy }) => {
+      { policy: { debug: false }, bypass: false },
+    ])('keeps Express uncached and honors native cache policy: %j', async ({ bypass, policy }) => {
       const provider = await loadApiProvider(id, {
         options: { config: { apiKey: 'key', vertexai } },
       });
@@ -230,7 +232,7 @@ describe.each(['google', 'palm'])('%s Nano Banana routing contracts', (prefix) =
         policy === undefined ? undefined : { ...context({}), ...policy },
       );
       expect(result.error).toBeUndefined();
-      expect(vi.mocked(fetchWithCache).mock.calls[0][4]).toBe(bypass);
+      expect(vi.mocked(fetchWithCache).mock.calls[0][4]).toBe(vertexai || bypass);
     });
   });
 });

@@ -562,7 +562,7 @@ describe('GeminiImageProvider', () => {
       }),
       expect.any(Number),
       'json',
-      false,
+      true,
     );
   });
 
@@ -595,7 +595,7 @@ describe('GeminiImageProvider', () => {
           }),
           expect.any(Number),
           'json',
-          false,
+          true,
         );
       } finally {
         restore();
@@ -620,7 +620,7 @@ describe('GeminiImageProvider', () => {
       expect.any(Object),
       expect.any(Number),
       'json',
-      false,
+      true,
     );
   });
 
@@ -651,7 +651,7 @@ describe('GeminiImageProvider', () => {
       expect.any(Object),
       expect.any(Number),
       'json',
-      false,
+      true,
     );
   });
 
@@ -672,7 +672,7 @@ describe('GeminiImageProvider', () => {
       }),
       expect.any(Number),
       'json',
-      false,
+      true,
     );
   });
 
@@ -697,7 +697,7 @@ describe('GeminiImageProvider', () => {
       }),
       expect.any(Number),
       'json',
-      false,
+      true,
     );
   });
 
@@ -721,7 +721,7 @@ describe('GeminiImageProvider', () => {
       }),
       expect.any(Number),
       'json',
-      false,
+      true,
     );
   });
 
