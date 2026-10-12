@@ -1,21 +1,19 @@
 ---
 title: Audit Logging
-description: Track administrative operations in promptfoo Enterprise with comprehensive audit logs for security, compliance, and forensic analysis.
+description: Investigate administrative changes in Promptfoo Enterprise with audit logs. Filter by actor, action, target, and date in the UI or API and page through results.
 sidebar_label: Audit Logging
 keywords: [audit, logging, security, compliance, enterprise, forensics, admin operations]
 ---
 
 # Audit Logging
 
-Audit Logging is a feature of [Promptfoo Enterprise](/docs/enterprise/) that provides forensic access information at the organization level, user level, team level, and service account level.
-
-Audit Logging answers "who, when, and what" questions about promptfoo resources. These answers can help you evaluate the security of your organization, and they can provide information that you need to satisfy audit and compliance requirements.
+[Promptfoo Enterprise](/docs/enterprise/) audit logs record who performed an administrative action, when it happened, and which resource was affected.
 
 ## Which events are supported by Audit Logging?
 
-Audit Logging captures administrative operations within the promptfoo platform. The system tracks changes to users, teams, roles, permissions, and service accounts within your organization.
+Audit logs track changes to users, teams, roles, permissions, and service accounts in your organization.
 
-Please note that Audit Logging captures operations in the promptfoo control plane and administrative actions. Evaluation runs, prompt testing, and other data plane operations are tracked separately.
+Eval runs, prompt tests, and other data plane operations are tracked separately.
 
 ## Admin Operation events
 
