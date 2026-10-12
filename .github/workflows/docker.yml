@@ -157,7 +157,8 @@ jobs:
       # The registry cache replays the base stage, so only the final-stage upgrade is fresh.
       - name: Verify OS packages are current
         run: |
-          plan="$(docker run --rm --user 0 local-test-image:official apk upgrade --no-cache --simulate)"
+          # Fetch the indexes first: a simulated upgrade does not refresh them itself.
+          plan="$(docker run --rm --user 0 local-test-image:official sh -c 'apk update --quiet && apk upgrade --simulate')"
           echo "$plan"
           if grep -q Upgrading <<< "$plan"; then
             echo "::error::The image is missing Alpine package upgrades"
