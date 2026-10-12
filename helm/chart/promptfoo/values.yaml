@@ -7,8 +7,7 @@ replicaCount: 1
 
 image:
   repository: ghcr.io/promptfoo/promptfoo
-  # Leave empty to let Kubernetes choose when the Deployment is created:
-  # Always for `latest`, IfNotPresent for other tags.
+  # Leave empty to follow the tag: Always for `latest`, IfNotPresent for any other tag.
   pullPolicy: ''
   # Set a release tag such as 0.124.1 (no `v` prefix) to pin a version.
   # Falls back to the chart appVersion when empty.
@@ -30,6 +29,7 @@ podAnnotations: {}
 podLabels: {}
 
 # The image runs as uid 100, gid 101. fsGroup lets that user write to the data volume.
+# These maps merge with your values, so set a key to null to remove it.
 podSecurityContext:
   fsGroup: 101
 
@@ -102,7 +102,7 @@ persistentVolumesClaims:
     size: 1Gi
     accessModes:
       - ReadWriteOnce
-    # Leave empty to use the cluster's default StorageClass.
+    # Leave empty to use the cluster's default StorageClass. An existing claim keeps its class.
     storageClassName: ''
 
 # Additional volumes on the output Deployment definition.

@@ -8,8 +8,16 @@ spec:
   {{- if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.replicaCount }}
   {{- end }}
+  {{- /*
+  The data volume is ReadWriteOnce, so the old pod must go before the new one is created.
+  Recreate is not used because switching the strategy type fails under server-side apply
+  for existing releases.
+  */}}
   strategy:
-    type: Recreate
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
   selector:
     matchLabels:
       {{- include "promptfoo.selectorLabels" . | nindent 6 }}
@@ -36,10 +44,9 @@ spec:
         - name: {{ .Chart.Name }}
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
-          {{- with .Values.image.pullPolicy }}
-          imagePullPolicy: {{ . }}
-          {{- end }}
+          {{- $tag := .Values.image.tag | default .Chart.AppVersion | toString }}
+          image: "{{ .Values.image.repository }}:{{ $tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy | default (eq $tag "latest" | ternary "Always" "IfNotPresent") }}
           ports:
             - name: http
               containerPort: 3000

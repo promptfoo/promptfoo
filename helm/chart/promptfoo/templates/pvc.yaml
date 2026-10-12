@@ -9,7 +9,13 @@ metadata:
 spec:
   accessModes:
     {{- toYaml .accessModes | nindent 4 }}
-  {{- with .storageClassName }}
+  {{- /*
+  The storage class of an existing claim cannot be changed or removed. Keep it when it was
+  set explicitly (a field manager owns it) rather than assigned by the cluster default.
+  */}}
+  {{- $existing := lookup "v1" "PersistentVolumeClaim" $.Release.Namespace .name }}
+  {{- $explicit := contains "f:storageClassName" (toJson (dig "metadata" "managedFields" (list) $existing)) }}
+  {{- with .storageClassName | default (ternary (dig "spec" "storageClassName" "" $existing) "" $explicit) }}
   storageClassName: {{ . }}
   {{- end }}
   resources:
