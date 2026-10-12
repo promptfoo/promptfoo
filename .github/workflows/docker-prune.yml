@@ -1,0 +1,93 @@
+# Removes old build-only tags from the container registry.
+#
+# docker.yml tags every build of `main` as `sha-<commit>`, and nothing removed them. This
+# deletes image versions that carry only such build tags once they are 30 days old.
+# Releases, `latest`, `main`, the `major.minor` aliases and the live build caches are
+# never candidates. A `sha-*` tag that shares its image with a release also stays,
+# because GitHub can only delete a whole image version.
+#
+# A pull request that touches this workflow or its script gets a dry run with a read-only
+# token. A manual run is a dry run unless `delete` is ticked.
+
+name: Prune Docker image tags
+
+on:
+  schedule:
+    # 09:00 UTC on the first day of each month.
+    - cron: '0 9 1 * *'
+  workflow_dispatch:
+    inputs:
+      delete:
+        description: 'Delete the listed versions (leave off for a dry run)'
+        type: boolean
+        default: false
+      tags:
+        description: 'Extra exact tags to treat as disposable, comma-separated'
+        type: string
+        default: ''
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/docker-prune.yml'
+      - 'scripts/pruneDockerImages.mjs'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docker-prune-${{ github.event_name == 'pull_request' && github.ref || 'registry' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  RETENTION_DAYS: '30'
+  EXTRA_TAGS: ${{ inputs.tags || '' }}
+
+jobs:
+  plan:
+    name: List prunable versions
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - &checkout
+        name: Checkout repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: List the versions that would be removed
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          node scripts/pruneDockerImages.mjs \
+            --org "$GITHUB_REPOSITORY_OWNER" \
+            --package "${GITHUB_REPOSITORY#*/}" \
+            --older-than-days "$RETENTION_DAYS" \
+            --tags "$EXTRA_TAGS"
+
+  prune:
+    name: Remove prunable versions
+    # Scheduled runs delete. A manual run deletes only when asked to.
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.delete)
+    needs: [plan]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - *checkout
+
+      - name: Remove the versions
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          node scripts/pruneDockerImages.mjs \
+            --org "$GITHUB_REPOSITORY_OWNER" \
+            --package "${GITHUB_REPOSITORY#*/}" \
+            --older-than-days "$RETENTION_DAYS" \
+            --tags "$EXTRA_TAGS" \
+            --delete
