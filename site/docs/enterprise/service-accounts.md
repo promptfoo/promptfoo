@@ -34,7 +34,7 @@ Make sure to copy your API key when it's first created. For security reasons, yo
 4. Leave global admin privileges disabled for ordinary CI jobs. Global admin access is only needed for organization-wide administration, such as managing teams, roles, users, and webhooks.
 5. Assign the service account to a team by navigating to the "Teams" tab, selecting the team, and opening "Service Accounts". A non-admin service account's access to team resources is controlled by its assigned role.
 
-[![The support-ci service account assigned to a Support CI role](/img/enterprise-docs/service-account-team-role.png)](/img/enterprise-docs/service-account-team-role.png)
+[![The support-ci service account assigned to a Support CI role](/img/enterprise-docs/service-account-team-role.png)](pathname:///img/enterprise-docs/service-account-team-role.png)
 
 The Customer Support team's service accounts, shown with synthetic data.
 
