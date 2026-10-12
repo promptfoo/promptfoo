@@ -105,6 +105,19 @@ describe('pruneDockerImages', () => {
     ]);
   });
 
+  it('does not let a named attestation tag outlive or outrun its image', () => {
+    const kept = attestationFor('b', '2');
+    const removed = attestationFor('a', '1');
+    const versions = [version('a', ['sha-0123abc']), removed, version('b', ['0.124.1']), kept];
+    const named = [
+      ...(kept.metadata?.container?.tags ?? []),
+      ...(removed.metadata?.container?.tags ?? []),
+    ];
+
+    // Naming them changes nothing: one goes once, with its image, and the other stays.
+    expect(removedTags(versions, named)).toEqual([['sha-0123abc'], [`sha256-${'a'.repeat(64)}`]]);
+  });
+
   it.each([
     [['--org', 'promptfoo'], /--org and --package are required/],
     [

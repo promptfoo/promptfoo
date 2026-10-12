@@ -59,7 +59,8 @@ export function planPrune(versions, { now, olderThanDays, extraTags = [] }) {
   const remove = [];
   for (const version of versions) {
     const tags = tagsOf(version);
-    if (tags.length === 0 || !isOld(version)) {
+    // An attestation is only ever removed with its image, in the second pass below.
+    if (tags.length === 0 || !isOld(version) || attestationSubjects(version).length > 0) {
       continue;
     }
     // Any other tag on the same image, such as a release or `main`, keeps it.
