@@ -66,6 +66,17 @@ docker pull ghcr.io/promptfoo/promptfoo:latest
 
 ### 2. Run the Container
 
+:::note Linux bind mounts
+The container runs as user `100:101`. With rootful Docker on Linux, without user namespace remapping, prepare the host directory before starting the container:
+
+```bash
+mkdir -p /path/to/local_promptfoo
+sudo chown -R 100:101 /path/to/local_promptfoo
+```
+
+Docker Desktop for Mac bind mounts and new named volumes mounted at `/home/promptfoo/.promptfoo` do not need this ownership change. With rootless Docker or user namespace remapping, use a new named volume at that path because the container user maps to different host IDs.
+:::
+
 Run the container, mapping a local directory for data persistence:
 
 ```bash
@@ -88,17 +99,6 @@ docker run -d \
 - **`-p 3000:3000`**: Map host port 3000 to container port 3000.
 - **`-v /path/to/local_promptfoo:/home/promptfoo/.promptfoo`**: **Crucial for persistence.** Maps the container's data directory (`/home/promptfoo/.promptfoo`, containing `promptfoo.db`) to your local filesystem. Replace `/path/to/local_promptfoo` with your preferred host path (e.g., `./promptfoo_data`). **Data will be lost if this volume mapping is omitted.**
 - **`-e OPENAI_API_KEY=sk-abc123`**: Example of setting an environment variable. Add necessary API keys here so users can run evals directly from the web UI. Replace `sk-abc123` with your actual key.
-
-:::note
-The container runs as user `100:101`. On Linux, create the host directory and give it to that user before you mount it, or the server exits because it cannot create its database:
-
-```bash
-mkdir -p /path/to/local_promptfoo
-sudo chown -R 100:101 /path/to/local_promptfoo
-```
-
-Docker Desktop and named volumes need no change. With rootless Docker or user namespace remapping, the container user maps to a different host ID, so use a named volume instead.
-:::
 
 Access the UI at `http://localhost:3000`.
 
@@ -146,7 +146,7 @@ If you used `./promptfoo_data` in the `volumes` mapping, create it:
 
 ```bash
 mkdir -p ./promptfoo_data
-# Linux only: the container runs as user 100:101
+# Rootful Linux Docker without user namespace remapping only
 sudo chown -R 100:101 ./promptfoo_data
 ```
 
@@ -217,6 +217,9 @@ Customize the installation using a `values.yaml` file or `--set` flags.
 ```yaml title="my-values.yaml"
 image:
   tag: 0.109.1 # Pin to a specific version
+
+podSecurityContext:
+  fsGroup: 101 # Allow the container user to write to the volume
 
 persistentVolumesClaims:
   - name: promptfoo
@@ -398,7 +401,7 @@ You can override the default internal configuration directory (`/home/promptfoo/
 ```bash
 # Create host directory
 mkdir -p ./my_custom_data
-# Linux only: the container runs as user 100:101
+# Rootful Linux Docker without user namespace remapping only
 sudo chown -R 100:101 ./my_custom_data
 
 # Run container
@@ -407,6 +410,8 @@ docker run -d --name promptfoo_container -p 3000:3000 \
   -e PROMPTFOO_CONFIG_DIR=/app/data \
   ghcr.io/promptfoo/promptfoo:latest
 ```
+
+Unlike the default data directory, a new custom mount path is not pre-owned by the container user. Named volumes mounted at custom paths also need writable ownership or permissions.
 
 ### Provider Customization
 
@@ -440,17 +445,20 @@ providers:
 
 **Docker deployment:**
 
+For the Linux bind mount prepared above, install the provider configuration before starting the container:
+
 ```bash
+sudo install -o 100 -g 101 -m 600 ui-providers.yaml ./promptfoo_data/ui-providers.yaml
+
 docker run -d \
   --name promptfoo_container \
   -p 3000:3000 \
   -v ./promptfoo_data:/home/promptfoo/.promptfoo \
   -e INTERNAL_API_KEY=your-key \
   ghcr.io/promptfoo/promptfoo:latest
-
-# Place ui-providers.yaml in ./promptfoo_data/
-cp ui-providers.yaml ./promptfoo_data/
 ```
+
+On Docker Desktop for Mac, use `cp ui-providers.yaml ./promptfoo_data/` instead of `sudo install`. If the container is already running, restart it after replacing the configuration file.
 
 **Kubernetes ConfigMap:**
 
@@ -651,7 +659,7 @@ The server component is optional; you can run evals locally or in CI/CD without 
 
 **Problem**: The container stops right after starting, and `docker logs` shows `Unable to open connection to local database /home/promptfoo/.promptfoo/promptfoo.db: 14`.
 
-**Solution**: The container user (`100:101`) cannot write to the mounted data directory. This happens on Linux when the host directory belongs to another user. Run `sudo chown -R 100:101` on the host directory, or use a named volume.
+**Solution**: This error can occur when the container user (`100:101`) cannot write to the mounted data directory. For rootful Docker on Linux without user namespace remapping, run `sudo chown -R 100:101` on the host directory, then restart the container. For a new installation, you can instead mount a new named volume at `/home/promptfoo/.promptfoo`.
 
 ### Results Not Appearing in Self-Hosted UI
 
