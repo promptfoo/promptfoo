@@ -1,3 +1,7 @@
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+
+import ReactMarkdown from 'react-markdown';
 import { describe, expect, it, vi } from 'vitest';
 import {
   DATA_IMAGE_ONLY_URL_TRANSFORM,
@@ -140,7 +144,165 @@ describe('markdown-config', () => {
     });
   });
 
+  describe('isImageDataUrl', () => {
+    it.each([
+      'data:application/octet-stream;base64,AA==',
+      'data:application/octet-stream,raw-image-data',
+      ' Data:Application/Octet-Stream;Base64,AA==',
+      'DATA:APPLICATION/OCTET-STREAM,raw-image-data',
+      'data:application/octet-stream;charset=utf-8;base64,AA==',
+      'data:image/png;base64,AA==',
+      'DATA:IMAGE/SVG+XML,svg-data',
+    ])('allows supported image MIME types with valid boundaries: %s', (source) => {
+      expect(isImageDataUrl(source)).toBe(true);
+      expect(IMAGE_DATA_URL_TRANSFORM(source, 'src', imageNode)).toBe(source);
+      expect(DATA_IMAGE_ONLY_URL_TRANSFORM(source, 'src', imageNode)).toBe(source);
+      expect(IMAGE_DATA_URL_TRANSFORM(source, 'href', linkNode)).toBe('');
+    });
+
+    it.each([
+      'data:application/octet-streaming;base64,AA==',
+      'DATA:APPLICATION/OCTET-STREAM+XML,AA==',
+      'data:application/octet-stream/extra;base64,AA==',
+      'data:application/octet-stream',
+      'data:application/octet-stream%3Bbase64,AA==',
+      'data:application/octet-stream ;base64,AA==',
+      'data:text/html;base64,AA==',
+      'data:application/pdf;base64,AA==',
+      'javascript:alert%281%29',
+    ])('rejects unsupported image sources and MIME lookalikes: %s', (source) => {
+      expect(isImageDataUrl(source)).toBe(false);
+      expect(IMAGE_DATA_URL_TRANSFORM(source, 'src', imageNode)).toBe('');
+      expect(DATA_IMAGE_ONLY_URL_TRANSFORM(source, 'src', imageNode)).toBe('');
+      expect(hasMarkdownDataImage(`![Preview](<${source}>)`)).toBe(false);
+    });
+  });
+
   describe('extractRenderableMarkdownImages', () => {
+    const remoteSource = 'https://example.com/image.png';
+    it.each([
+      [
+        'unused footnote',
+        'Normal output\n\n[^unused]: ![Preview][pic]\n\n[pic]: https://example.com/image.png',
+        [],
+      ],
+      [
+        'empty first definition',
+        '![Preview][pic]\n\n[pic]: <>\n[pic]: https://example.com/image.png',
+        [],
+      ],
+      [
+        'valid reference',
+        '![Preview][pic]\n\n[pic]: https://example.com/image.png',
+        [remoteSource],
+      ],
+      [
+        'duplicate reference definitions',
+        '![Preview][pic]\n\n[pic]: https://example.com/image.png\n[pic]: https://example.com/ignored.png',
+        [remoteSource],
+      ],
+      [
+        'referenced footnote',
+        'Normal output[^used]\n\n[^used]: ![Preview][pic]\n\n[pic]: https://example.com/image.png',
+        [remoteSource],
+      ],
+      [
+        'duplicate footnote definitions',
+        'Normal output[^used]\n\n[^used]: First definition\n\n[^used]: ![Preview][pic]\n\n[pic]: https://example.com/image.png',
+        [],
+      ],
+      [
+        'transitive footnotes',
+        'Normal output[^first]\n\n[^first]: See[^second]\n\n[^second]: ![Preview][pic]\n\n[pic]: https://example.com/image.png',
+        [remoteSource],
+      ],
+      [
+        'unreachable transitive footnotes',
+        'Normal output\n\n[^first]: See[^second]\n\n[^second]: ![Preview][pic]\n\n[pic]: https://example.com/image.png',
+        [],
+      ],
+      [
+        'repeated footnotes',
+        'Normal output[^used] and again[^used]\n\n[^used]: ![Preview][pic]\n\n[pic]: https://example.com/image.png',
+        [remoteSource],
+      ],
+      [
+        'self-referencing footnote',
+        'Normal output[^used]\n\n[^used]: ![Preview][pic] See[^used]\n\n[pic]: https://example.com/image.png',
+        [remoteSource],
+      ],
+      [
+        'cyclic footnotes',
+        'Normal output[^first]\n\n[^first]: See[^second]\n\n[^second]: ![Preview][pic] See[^first]\n\n[pic]: https://example.com/image.png',
+        [remoteSource],
+      ],
+      [
+        'case-insensitive reference identifiers',
+        '![Preview][PIC]\n\n[pic]: https://example.com/image.png',
+        [remoteSource],
+      ],
+      [
+        'case-insensitive footnote identifiers',
+        'Normal output[^USED]\n\n[^used]: ![Preview][pic]\n\n[pic]: https://example.com/image.png',
+        [remoteSource],
+      ],
+      [
+        'definition inside unused footnote',
+        '![Preview][pic]\n\n[^unused]: Hidden text\n\n    [pic]: https://example.com/image.png',
+        [remoteSource],
+      ],
+      [
+        'reference in ignored duplicate footnote',
+        'Normal output[^first]\n\n[^first]: First definition\n\n[^first]: See[^second]\n\n[^second]: ![Preview][pic]\n\n[pic]: https://example.com/image.png',
+        [],
+      ],
+      [
+        'unused footnote with inline data image',
+        'Normal output\n\n[^unused]: ![Preview](data:image/png;base64,AA==)',
+        [],
+      ],
+      [
+        'referenced footnote with inline data image',
+        'Normal output[^used]\n\n[^used]: ![Preview](data:image/png;base64,AA==)',
+        ['data:image/png;base64,AA=='],
+      ],
+    ] satisfies [string, string, string[]][])(
+      'matches ReactMarkdown image selection for %s',
+      (_label, markdown, expected) => {
+        const renderedSources: string[] = [];
+        renderToStaticMarkup(
+          createElement(ReactMarkdown, {
+            children: markdown,
+            remarkPlugins: REMARK_PLUGINS,
+            urlTransform: PRESERVE_IMAGE_URL_TRANSFORM,
+            components: {
+              img: ({ src }) => {
+                if (src) {
+                  renderedSources.push(src);
+                }
+                return null;
+              },
+            },
+          }),
+        );
+
+        expect(renderedSources).toEqual(expected);
+        expect(extractRenderableMarkdownImageSources(markdown)).toEqual(expected);
+      },
+    );
+
+    it('preserves source-range order when footnotes render in a different order', () => {
+      const markdown =
+        '[^second] then [^first]\n\n[^first]: ![First](data:image/png;base64,AA==)\n\n[^second]: ![Second](data:image/png;base64,BB==)\n\n![Last](data:image/png;base64,CC==)';
+      const images = extractRenderableMarkdownImages(markdown);
+      expect(images.map((image) => image.alt)).toEqual(['First', 'Second', 'Last']);
+      expect(images.map((image) => markdown.slice(image.start, image.end))).toEqual([
+        '![First](data:image/png;base64,AA==)',
+        '![Second](data:image/png;base64,BB==)',
+        '![Last](data:image/png;base64,CC==)',
+      ]);
+    });
+
     it('preserves inline and reference image titles', () => {
       const markdown = [
         '![Inline](data:image/png;base64,AA== "inline title")',

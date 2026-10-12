@@ -58,10 +58,10 @@ const FailReasonCarousel = ({
   );
   const dataImages = useMemo(
     () =>
-      currentReason.includes('![')
+      !renderMarkdown && currentReason.includes('![')
         ? extractRenderableMarkdownImages(currentReason).filter(isInlineDataImage)
         : [],
-    [currentReason],
+    [currentReason, renderMarkdown],
   );
 
   if (failReasons.length < 1) {

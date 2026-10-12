@@ -380,6 +380,50 @@ describe('EvalOutputCell duplicate image prevention', () => {
   });
 
   describe('image array deduplication behavior', () => {
+    it.each([
+      [
+        'unused footnote',
+        'Normal output\n\n[^unused]: ![Preview][pic]\n\n[pic]: https://example.com/image.png',
+      ],
+      [
+        'empty first reference definition',
+        '![Preview][pic]\n\n[pic]: <>\n[pic]: https://example.com/image.png',
+      ],
+      [
+        'duplicate footnote definition',
+        'Normal output[^used]\n\n[^used]: First definition\n\n[^used]: ![Preview][pic]\n\n[pic]: https://example.com/image.png',
+      ],
+    ])('retains a structured image hidden by an unrendered %s', (_label, text) => {
+      viewSettings.renderMarkdown = true;
+      const source = 'https://example.com/image.png';
+      const props = createBaseProps({ text, images: [{ data: source }] });
+      const { container } = renderWithProviders(<EvalOutputCell {...props} />);
+      const images = container.querySelectorAll('img');
+      expect(images).toHaveLength(1);
+      expect(images[0]).toHaveAttribute('src', source);
+    });
+
+    it.each([
+      ['reference image', '![Preview][pic]\n\n[pic]: https://example.com/image.png'],
+      [
+        'referenced footnote',
+        'Normal output[^used]\n\n[^used]: ![Preview][pic]\n\n[pic]: https://example.com/image.png',
+      ],
+      [
+        'transitive footnote',
+        'Normal output[^first]\n\n[^first]: See[^second]\n\n[^second]: ![Preview][pic]\n\n[pic]: https://example.com/image.png',
+      ],
+    ])('deduplicates a structured image rendered in a %s', (_label, text) => {
+      viewSettings.renderMarkdown = true;
+      const source = 'https://example.com/image.png';
+      const props = createBaseProps({ text, images: [{ data: source }] });
+      const { container } = renderWithProviders(<EvalOutputCell {...props} />);
+      const images = container.querySelectorAll('img');
+      expect(images).toHaveLength(1);
+      expect(images[0]).toHaveAttribute('src', source);
+      expect(images[0]).toHaveAttribute('alt', 'Preview');
+    });
+
     it('should skip matching structured images when primary is rendered as image', () => {
       const duplicateImageData =
         'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';

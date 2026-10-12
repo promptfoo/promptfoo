@@ -3337,6 +3337,7 @@ describe('EvalOutputCell inline image lightbox', () => {
   });
 
   it.each([
+    ['an octet-stream MIME lookalike', '![Preview](data:application/octet-streaming;base64,AA==)'],
     [
       'raw HTML',
       '<img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==">',

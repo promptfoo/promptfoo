@@ -2,8 +2,46 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import FailReasonCarousel from './FailReasonCarousel';
+import * as markdownConfig from './markdown-config';
 
 describe('FailReasonCarousel', () => {
+  it('only extracts forced previews when Markdown is disabled, including after toggling', () => {
+    const source = `data:image/png;base64,${'AaBb'.repeat(512 * 1024)}`;
+    const reason = `![Large preview](${source})`;
+    const extract = vi.spyOn(markdownConfig, 'extractRenderableMarkdownImages');
+
+    try {
+      const { rerender } = render(
+        <FailReasonCarousel failReasons={[reason]} renderMarkdown={true} />,
+      );
+      expect(extract.mock.calls.length).toBe(0);
+      expect(screen.getByRole('img', { name: 'Large preview' })).toHaveAttribute('src', source);
+
+      rerender(<FailReasonCarousel failReasons={[reason]} renderMarkdown={false} />);
+      expect(extract.mock.calls.length).toBe(1);
+      expect(screen.getByRole('img', { name: 'Large preview' })).toHaveAttribute('src', source);
+
+      rerender(<FailReasonCarousel failReasons={[reason]} renderMarkdown={true} />);
+      expect(extract.mock.calls.length).toBe(1);
+      expect(screen.getByRole('img', { name: 'Large preview' })).toHaveAttribute('src', source);
+    } finally {
+      extract.mockRestore();
+    }
+  });
+
+  it.each([true, false])(
+    'keeps octet-stream MIME lookalikes literal with Markdown enabled=%s',
+    (renderMarkdown) => {
+      const reason = '![Probe](data:application/octet-streaming;base64,AA== "diagnostic")';
+      const { container } = render(
+        <FailReasonCarousel failReasons={[reason]} renderMarkdown={renderMarkdown} />,
+      );
+
+      expect(screen.queryByRole('img')).not.toBeInTheDocument();
+      expect(container.textContent).toBe(reason);
+    },
+  );
+
   it('supports changing from an empty reason list to a populated one', () => {
     const { rerender } = render(<FailReasonCarousel failReasons={[]} renderMarkdown={false} />);
 

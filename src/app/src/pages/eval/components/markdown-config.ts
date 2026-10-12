@@ -14,7 +14,7 @@ import type { UrlTransform } from 'react-markdown';
 export const REMARK_PLUGINS = [remarkGfm];
 
 const MARKDOWN_PARSER = unified().use(remarkParse).use(remarkGfm);
-const IMAGE_DATA_URL_PREFIX = /^\s*data:(?:image\/|application\/octet-stream)/i;
+const IMAGE_DATA_URL_PREFIX = /^\s*data:(?:image\/|application\/octet-stream[;,])/i;
 
 interface MarkdownAstNode {
   type: string;
@@ -65,8 +65,13 @@ export function isInlineDataImage(image: RenderableMarkdownImage): boolean {
   return image.syntax === 'inline' && isImageDataUrl(image.source);
 }
 
-function visitMarkdownAst(node: MarkdownAstNode, visitor: (node: MarkdownAstNode) => void): void {
-  visitor(node);
+function visitMarkdownAst(
+  node: MarkdownAstNode,
+  visitor: (node: MarkdownAstNode) => undefined | false,
+): void {
+  if (visitor(node) === false) {
+    return;
+  }
   node.children?.forEach((child) => visitMarkdownAst(child, visitor));
 }
 
@@ -82,15 +87,34 @@ export function extractRenderableMarkdownImages(markdown: string): RenderableMar
   }
 
   const definitions = new Map<string, { url: string; title?: string | null }>();
+  const footnotes = new Map<string, MarkdownAstNode>();
+  const referencedFootnotes = new Set<string>();
   const images: MarkdownImageReference[] = [];
   const tree = MARKDOWN_PARSER.parse(markdown) as MarkdownAstNode;
 
+  // Match mdast-to-hast: definitions are global and the first definition wins,
+  // even when its destination is empty or it occurs inside an unused footnote.
   visitMarkdownAst(tree, (node) => {
-    if (node.type === 'definition' && node.identifier && node.url) {
-      if (!definitions.has(node.identifier)) {
-        definitions.set(node.identifier, { url: node.url, title: node.title });
-      }
+    if (!node.identifier) {
       return;
+    }
+    const identifier = node.identifier.toUpperCase();
+    if (node.type === 'definition' && typeof node.url === 'string') {
+      if (!definitions.has(identifier)) {
+        definitions.set(identifier, { url: node.url, title: node.title });
+      }
+    } else if (node.type === 'footnoteDefinition' && !footnotes.has(identifier)) {
+      footnotes.set(identifier, node);
+    }
+  });
+
+  const collectImages = (node: MarkdownAstNode): undefined | false => {
+    // Footnotes only render when reached from a reference, not at their source location.
+    if (node.type === 'footnoteDefinition') {
+      return false;
+    }
+    if (node.type === 'footnoteReference' && node.identifier) {
+      referencedFootnotes.add(node.identifier.toUpperCase());
     }
 
     const start = node.position?.start.offset;
@@ -110,14 +134,23 @@ export function extractRenderableMarkdownImages(markdown: string): RenderableMar
       });
     } else if (node.type === 'imageReference' && node.identifier) {
       images.push({
-        identifier: node.identifier,
+        identifier: node.identifier.toUpperCase(),
         alt: node.alt,
         start,
         end,
         syntax: 'reference',
       });
     }
-  });
+  };
+  visitMarkdownAst(tree, collectImages);
+  // Set iteration includes newly reached footnotes, but processes each key once,
+  // so transitive references render and repeated/self/cyclic references terminate.
+  for (const identifier of referencedFootnotes) {
+    footnotes.get(identifier)?.children?.forEach((child) => visitMarkdownAst(child, collectImages));
+  }
+  // Forced previews splice source ranges, which must retain document order even
+  // though the renderer moves referenced footnotes to the end of the document.
+  images.sort((left, right) => left.start - right.start);
 
   const renderableImages: RenderableMarkdownImage[] = [];
   for (const image of images) {

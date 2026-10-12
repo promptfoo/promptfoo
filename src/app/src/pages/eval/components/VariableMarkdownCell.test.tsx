@@ -95,6 +95,8 @@ describe('VariableMarkdownCell', () => {
     it.each([
       '![Blocked](javascript:alert%281%29)',
       '![Blocked](data:text/html;base64,PHNjcmlwdD4=)',
+      '![Blocked](data:application/octet-streaming;base64,AA==)',
+      '![Blocked](DATA:APPLICATION/OCTET-STREAM+XML,AA==)',
       '![Blocked][image]\n\n[image]: javascript:alert%281%29',
     ])('keeps truncation when Markdown rejects an image source: %s', async (markdown) => {
       const user = userEvent.setup();
