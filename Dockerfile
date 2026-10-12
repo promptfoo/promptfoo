@@ -95,8 +95,8 @@ USER 100:101
 
 EXPOSE 3000
 
-# Set up healthcheck using Node, which is present in every stage. The probe follows
-# API_PORT so the container stays healthy when the port is changed at run time.
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s CMD node -e "const http = require('node:http'); const req = http.get({ host: '127.0.0.1', port: process.env.API_PORT || 3000, path: '/health' }, (res) => process.exit(res.statusCode >= 200 && res.statusCode < 400 ? 0 : 1)); req.on('error', () => process.exit(1)); req.setTimeout(5000, () => { req.destroy(); process.exit(1); });"
+# Set up healthcheck using Node, which is present in every stage. The probe resolves
+# the port the way the server does: API_PORT, or 15500 when it is blank or not a number.
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s CMD node -e "const http = require('node:http'); const req = http.get({ host: '127.0.0.1', port: Number.parseInt(process.env.API_PORT, 10) || 15500, path: '/health' }, (res) => process.exit(res.statusCode >= 200 && res.statusCode < 400 ? 0 : 1)); req.on('error', () => process.exit(1)); req.setTimeout(5000, () => { req.destroy(); process.exit(1); });"
 
 CMD ["node", "dist/src/server/index.js"]
