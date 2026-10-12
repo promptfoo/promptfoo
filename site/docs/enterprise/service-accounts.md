@@ -67,7 +67,8 @@ For an on-prem deployment, use its API origin for `--host` and the assigned team
 set +x
 set -euo pipefail
 
-export PROMPTFOO_CONFIG_DIR="$(mktemp -d)"
+PROMPTFOO_CONFIG_DIR="$(mktemp -d)"
+export PROMPTFOO_CONFIG_DIR
 trap 'rm -rf "$PROMPTFOO_CONFIG_DIR"' EXIT
 
 promptfoo auth login \
