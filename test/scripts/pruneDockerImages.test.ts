@@ -169,13 +169,27 @@ describe('pruneDockerImages', () => {
       })),
     ];
 
-    async function run(args: string[], failingId?: number) {
+    async function run(args: string[], failingId?: number, retaggedId?: number) {
       const requests: string[] = [];
       server = http.createServer((request, response) => {
         requests.push(`${request.method} ${request.url}`);
         const url = new URL(request.url ?? '', 'http://localhost');
+        const single = url.pathname.match(/\/versions\/(\d+)$/);
         if (request.headers.authorization !== 'Bearer test-token') {
           response.writeHead(401).end('{}');
+        } else if (request.method === 'GET' && single) {
+          // The re-read before each delete. One version can have gained a release tag.
+          const found = listed.find((entry) => entry.id === Number(single[1]));
+          const tags = found?.metadata?.container?.tags ?? [];
+          response.setHeader('content-type', 'application/json');
+          response.end(
+            JSON.stringify({
+              ...found,
+              metadata: {
+                container: { tags: found?.id === retaggedId ? [...tags, '0.125.0'] : tags },
+              },
+            }),
+          );
         } else if (request.method === 'GET') {
           const page = Number(url.searchParams.get('page'));
           response.setHeader('content-type', 'application/json');
@@ -251,6 +265,20 @@ describe('pruneDockerImages', () => {
         `DELETE ${versionsPath}/21`,
       ]);
       expect(output).toContain(`kept sha256-${'b'.repeat(64)}`);
+    });
+
+    it('leaves a version alone when it was tagged after the listing', async () => {
+      const { status, output, deletes } = await run(['--delete'], undefined, 12);
+
+      // Version 12 gained a release tag, so it and its attestation stay.
+      expect(status).toBe(0);
+      expect(output).toContain('kept sha-4567def');
+      expect(output).toContain('its tags changed after it was listed');
+      expect(deletes).toEqual([
+        `DELETE ${versionsPath}/11`,
+        `DELETE ${versionsPath}/13`,
+        `DELETE ${versionsPath}/21`,
+      ]);
     });
   });
 });

@@ -179,6 +179,14 @@ async function main() {
       continue;
     }
     try {
+      // The Docker workflow can tag an image while this runs. Read the version again and
+      // leave it alone if its tags are no longer the ones the plan was made from.
+      const current = await github('GET', `${base}/versions/${version.id}`, token);
+      if (tagsOf(current).join('\n') !== tagsOf(version).join('\n')) {
+        keptDigests.add(version.name);
+        console.log(`kept ${label}: its tags changed after it was listed`);
+        continue;
+      }
       await github('DELETE', `${base}/versions/${version.id}`, token);
       console.log(`removed ${label}`);
     } catch (error) {
