@@ -1,4 +1,5 @@
 import { serializeContext } from '../assertions/contextUtils';
+import { withCacheNamespace } from '../cache';
 import {
   ANSWER_RELEVANCY_GENERATE,
   CITATION_FAITHFULNESS_PROMPT,
@@ -64,12 +65,18 @@ export async function matchesAnswerRelevance(
   const candidateQuestions: string[] = [];
   for (let i = 0; i < 3; i++) {
     // TODO(ian): Parallelize
-    const resp = await callProviderWithContext(
-      textProvider,
-      promptText,
-      'answer-relevance',
-      { answer: parsedOutput },
-      providerCallContext,
+    // Each sample uses its own cache namespace. Otherwise the identical prompt hits the
+    // cache and every question after the first is a copy of it.
+    const resp = await withCacheNamespace(
+      i === 0 ? undefined : `answer-relevance:sample:${i}`,
+      () =>
+        callProviderWithContext(
+          textProvider,
+          promptText,
+          'answer-relevance',
+          { answer: parsedOutput },
+          providerCallContext,
+        ),
     );
     accumulateTokenUsage(tokensUsed, resp.tokenUsage);
     if (resp.error || !resp.output) {
