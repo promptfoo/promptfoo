@@ -1,6 +1,6 @@
 import React from 'react';
 
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import * as markdownConfig from './markdown-config';
@@ -124,6 +124,37 @@ describe('VariableMarkdownCell', () => {
 
       expect(screen.getByRole('img', { name: 'Preview' })).toHaveAttribute('src', source);
       expect(container.querySelector('.truncation-toggler')).not.toBeInTheDocument();
+    });
+
+    it.each([
+      '[![Linked image](data:image/png;base64,AA==)](#details)',
+      '[![Linked image][image]][destination]\n\n[image]: data:image/png;base64,AA==\n[destination]: #details',
+    ])('preserves linked-image navigation without a nested preview button: %s', (value) => {
+      const onImageClick = vi.fn();
+      const { container } = render(
+        <VariableMarkdownCell value={value} maxTextLength={100} onImageClick={onImageClick} />,
+      );
+
+      const link = screen.getByRole('link', { name: 'Linked image' });
+      expect(link).toHaveAttribute('href', '#details');
+      expect(container.querySelector('a button')).not.toBeInTheDocument();
+      expect(fireEvent.click(screen.getByRole('img', { name: 'Linked image' }))).toBe(true);
+      expect(onImageClick).not.toHaveBeenCalled();
+    });
+
+    it('preserves footnote link targets and accessibility attributes', () => {
+      const { container } = render(
+        <VariableMarkdownCell value={'Text[^1]\n\n[^1]: Footnote'} maxTextLength={100} />,
+      );
+
+      const reference = screen.getByRole('link', { name: '1' });
+      expect(reference).toHaveAttribute('id', 'user-content-fnref-1');
+      expect(reference).toHaveAttribute('aria-describedby', 'footnote-label');
+      expect(reference).toHaveAttribute('data-footnote-ref');
+      const back = screen.getByRole('link', { name: 'Back to reference 1' });
+      expect(back).toHaveAttribute('href', '#user-content-fnref-1');
+      expect(back).toHaveClass('data-footnote-backref');
+      expect(container.querySelector('a[node]')).not.toBeInTheDocument();
     });
 
     it('renders markdown bold text', () => {

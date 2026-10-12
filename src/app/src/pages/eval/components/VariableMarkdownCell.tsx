@@ -3,7 +3,7 @@ import React from 'react';
 import ReactMarkdown from 'react-markdown';
 import DataImagePreviewText from './DataImagePreviewText';
 import MarkdownErrorBoundary from './MarkdownErrorBoundary';
-import MarkdownImage from './MarkdownImage';
+import MarkdownImage, { MarkdownImageLink } from './MarkdownImage';
 import {
   extractRenderableMarkdownImages,
   getMarkdownImageUrl,
@@ -39,10 +39,12 @@ const VariableMarkdownCell = React.memo(function VariableMarkdownCell({
 }: VariableMarkdownCellProps) {
   const markdownComponents = React.useMemo(
     () => ({
-      img: ({ src, alt }: { src?: string; alt?: string }) => (
+      a: MarkdownImageLink,
+      img: ({ src, alt, title }: { src?: string; alt?: string; title?: string }) => (
         <MarkdownImage
           src={src}
           alt={alt}
+          title={title}
           onImageClick={onImageClick}
           className="max-h-48 max-w-full object-contain"
         />

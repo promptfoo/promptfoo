@@ -34,7 +34,7 @@ import DataImagePreviewText from './DataImagePreviewText';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import { stringifyAssertionValue } from './EvaluationPanel';
 import FailReasonCarousel from './FailReasonCarousel';
-import MarkdownImage from './MarkdownImage';
+import MarkdownImage, { MarkdownImageLink } from './MarkdownImage';
 import {
   extractMarkdownImageSources as extractRawMarkdownImageSources,
   extractRenderableMarkdownImages,
@@ -1421,8 +1421,9 @@ function EvalOutputCell({
   // @see https://github.com/promptfoo/promptfoo/issues/969
   const markdownComponents = useMemo(
     () => ({
-      img: ({ src, alt }: { src?: string; alt?: string }) => (
-        <MarkdownImage src={src} alt={alt} onImageClick={toggleLightbox} />
+      a: MarkdownImageLink,
+      img: ({ src, alt, title }: { src?: string; alt?: string; title?: string }) => (
+        <MarkdownImage src={src} alt={alt} title={title} onImageClick={toggleLightbox} />
       ),
     }),
     [toggleLightbox],

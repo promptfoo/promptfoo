@@ -39,6 +39,7 @@ export default function DataImagePreviewText({
         key={`image-${image.start}-${image.end}`}
         src={image.source}
         alt={image.alt}
+        title={image.title}
         className={imageClassName}
         onImageClick={onImageClick}
       />,

@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import FailReasonCarousel from './FailReasonCarousel';
@@ -58,6 +58,53 @@ describe('FailReasonCarousel', () => {
     expect(container).toHaveTextContent(reason);
   });
 
+  it.each([
+    '![probe](https://attacker.example/collect "secret diagnostic")',
+    "![probe](./failure.png 'single quoted diagnostic')",
+    '![probe](javascript:alert%281%29 (parenthesized diagnostic))',
+    String.raw`![probe](./failure.png "diagnostic \"quoted\" text")`,
+  ])('preserves the complete blocked image token: %s', (reason) => {
+    const { container } = render(
+      <FailReasonCarousel failReasons={[`  ${reason}  `]} renderMarkdown={true} />,
+    );
+
+    expect(screen.queryByRole('img')).not.toBeInTheDocument();
+    expect(container.textContent).toBe(reason);
+  });
+
+  it.each([true, false])(
+    'preserves data-image titles with Markdown enabled=%s',
+    (renderMarkdown) => {
+      render(
+        <FailReasonCarousel
+          failReasons={['![Actual image](data:image/png;base64,AA== "diagnostic title")']}
+          renderMarkdown={renderMarkdown}
+        />,
+      );
+
+      expect(screen.getByRole('img', { name: 'Actual image' })).toHaveAttribute(
+        'title',
+        'diagnostic title',
+      );
+    },
+  );
+
+  it('preserves the resolved title of a blocked reference image', () => {
+    const reason = [
+      '![probe][image]',
+      '',
+      '[image]: https://attacker.example/collect "reference diagnostic"',
+    ].join('\n');
+    const { container } = render(
+      <FailReasonCarousel failReasons={[reason]} renderMarkdown={true} />,
+    );
+
+    expect(screen.queryByRole('img')).not.toBeInTheDocument();
+    expect(container).toHaveTextContent(
+      '![probe](https://attacker.example/collect "reference diagnostic")',
+    );
+  });
+
   it('renders data images and forwards clicks to the lightbox callback', async () => {
     const user = userEvent.setup();
     const onImageClick = vi.fn();
@@ -78,6 +125,25 @@ describe('FailReasonCarousel', () => {
     await user.click(image);
 
     expect(onImageClick).toHaveBeenCalledWith(dataUri);
+  });
+
+  it('leaves a linked image under the enclosing link’s control', () => {
+    const onImageClick = vi.fn();
+    const { container } = render(
+      <FailReasonCarousel
+        failReasons={['[![Linked image](data:image/png;base64,AA==)](#details)']}
+        renderMarkdown={true}
+        onImageClick={onImageClick}
+      />,
+    );
+
+    const image = screen.getByRole('img', { name: 'Linked image' });
+    expect(image.closest('a')).toHaveAttribute('href', '#details');
+    expect(container.querySelector('a button')).not.toBeInTheDocument();
+    const click = new MouseEvent('click', { bubbles: true, cancelable: true });
+    fireEvent(image, click);
+    expect(click.defaultPrevented).toBe(false);
+    expect(onImageClick).not.toHaveBeenCalled();
   });
 
   it('keeps surrounding diagnostics literal when forcing a data-image preview', () => {

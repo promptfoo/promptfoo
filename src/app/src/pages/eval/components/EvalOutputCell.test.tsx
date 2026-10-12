@@ -3,7 +3,7 @@ import { restoreTestTimers, type TestTimers, useTestTimers } from '@app/tests/ti
 import { renderWithProviders as baseRender } from '@app/utils/testutils';
 import { type AssertionType, type EvaluateTableOutput } from '@promptfoo/types';
 import { ResultFailureReason } from '@promptfoo/types/results';
-import { act, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ShiftKeyProvider } from '../../../contexts/ShiftKeyContext';
@@ -3252,6 +3252,20 @@ describe('EvalOutputCell inline image lightbox', () => {
     expect(container).not.toHaveTextContent('CcDd'.repeat(100));
     await user.click(screen.getByRole('img', { name: 'Inline' }));
     expect(container.querySelector('.lightbox')).toBeInTheDocument();
+  });
+
+  it('preserves navigation for linked output images without opening the lightbox', () => {
+    mockResultsViewSettings.renderMarkdown = true;
+    const { container } = renderWithProviders(
+      <EvalOutputCell
+        {...createMarkdownPreviewProps('[![Linked image](data:image/png;base64,AA==)](#details)')}
+      />,
+    );
+
+    expect(screen.getByRole('link', { name: 'Linked image' })).toHaveAttribute('href', '#details');
+    expect(container.querySelector('a button')).not.toBeInTheDocument();
+    expect(fireEvent.click(screen.getByRole('img', { name: 'Linked image' }))).toBe(true);
+    expect(container.querySelector('.lightbox')).not.toBeInTheDocument();
   });
 
   it('does not force previews for reference-style data images', () => {

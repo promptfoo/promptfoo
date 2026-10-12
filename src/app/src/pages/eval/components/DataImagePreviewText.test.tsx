@@ -24,6 +24,16 @@ describe('DataImagePreviewText', () => {
     expect(screen.getByRole('img', { name: 'Preview' })).toHaveAttribute('src', dataUri);
   });
 
+  it('preserves a parsed title when forcing a data-image preview', () => {
+    const text = String.raw`![Preview](data:image/png;base64,AA== "diagnostic \"quoted\" title")`;
+    render(<DataImagePreviewText text={text} images={extractRenderableMarkdownImages(text)} />);
+
+    expect(screen.getByRole('img', { name: 'Preview' })).toHaveAttribute(
+      'title',
+      'diagnostic "quoted" title',
+    );
+  });
+
   it.each(['before', 'after'])('truncates literal text %s inline previews', async (position) => {
     const user = userEvent.setup();
     const source = `data:image/png;base64,${'AaBb'.repeat(100)}`;

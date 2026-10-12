@@ -19,6 +19,7 @@ const IMAGE_DATA_URL_PREFIX = /^\s*data:(?:image\/|application\/octet-stream)/i;
 interface MarkdownAstNode {
   type: string;
   alt?: string;
+  title?: string | null;
   children?: MarkdownAstNode[];
   identifier?: string;
   position?: {
@@ -32,10 +33,14 @@ type MarkdownImageReference = {
   alt?: string;
   end: number;
   start: number;
-} & ({ identifier: string; syntax: 'reference' } | { url: string; syntax: 'inline' });
+} & (
+  | { identifier: string; syntax: 'reference' }
+  | { url: string; title?: string | null; syntax: 'inline' }
+);
 
 export interface RenderableMarkdownImage {
   alt?: string;
+  title?: string;
   end: number;
   source: string;
   start: number;
@@ -76,14 +81,14 @@ export function extractRenderableMarkdownImages(markdown: string): RenderableMar
     return [];
   }
 
-  const definitions = new Map<string, string>();
+  const definitions = new Map<string, { url: string; title?: string | null }>();
   const images: MarkdownImageReference[] = [];
   const tree = MARKDOWN_PARSER.parse(markdown) as MarkdownAstNode;
 
   visitMarkdownAst(tree, (node) => {
     if (node.type === 'definition' && node.identifier && node.url) {
       if (!definitions.has(node.identifier)) {
-        definitions.set(node.identifier, node.url);
+        definitions.set(node.identifier, { url: node.url, title: node.title });
       }
       return;
     }
@@ -95,7 +100,14 @@ export function extractRenderableMarkdownImages(markdown: string): RenderableMar
     }
 
     if (node.type === 'image' && node.url) {
-      images.push({ url: node.url, alt: node.alt, start, end, syntax: 'inline' });
+      images.push({
+        url: node.url,
+        alt: node.alt,
+        title: node.title,
+        start,
+        end,
+        syntax: 'inline',
+      });
     } else if (node.type === 'imageReference' && node.identifier) {
       images.push({
         identifier: node.identifier,
@@ -109,11 +121,13 @@ export function extractRenderableMarkdownImages(markdown: string): RenderableMar
 
   const renderableImages: RenderableMarkdownImage[] = [];
   for (const image of images) {
-    const source = 'url' in image ? image.url : definitions.get(image.identifier);
+    const definition = 'url' in image ? image : definitions.get(image.identifier);
+    const source = definition?.url;
     if (source) {
       renderableImages.push({
         source,
         alt: image.alt,
+        title: definition?.title ?? undefined,
         start: image.start,
         end: image.end,
         syntax: image.syntax,

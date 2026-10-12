@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   DATA_IMAGE_ONLY_URL_TRANSFORM,
   extractRenderableMarkdownImageSources,
+  extractRenderableMarkdownImages,
   hasMarkdownDataImage,
   IDENTITY_URL_TRANSFORM,
   IMAGE_DATA_URL_TRANSFORM,
@@ -136,6 +137,26 @@ describe('markdown-config', () => {
         'https://example.com',
       );
       expect(PRESERVE_IMAGE_URL_TRANSFORM('javascript:alert(1)', 'href', linkNode)).toBe('');
+    });
+  });
+
+  describe('extractRenderableMarkdownImages', () => {
+    it('preserves inline and reference image titles', () => {
+      const markdown = [
+        '![Inline](data:image/png;base64,AA== "inline title")',
+        '![Reference][image]',
+        '',
+        "[image]: data:image/png;base64,BB== 'reference title'",
+      ].join('\n');
+
+      expect(extractRenderableMarkdownImages(markdown)).toEqual([
+        expect.objectContaining({ alt: 'Inline', title: 'inline title', syntax: 'inline' }),
+        expect.objectContaining({
+          alt: 'Reference',
+          title: 'reference title',
+          syntax: 'reference',
+        }),
+      ]);
     });
   });
 

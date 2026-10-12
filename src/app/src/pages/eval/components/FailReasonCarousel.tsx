@@ -5,7 +5,7 @@ import ReactMarkdown from 'react-markdown';
 import './FailReasonCarousel.css';
 import DataImagePreviewText from './DataImagePreviewText';
 import MarkdownErrorBoundary from './MarkdownErrorBoundary';
-import MarkdownImage from './MarkdownImage';
+import MarkdownImage, { MarkdownImageLink } from './MarkdownImage';
 import {
   extractRenderableMarkdownImages,
   isImageDataUrl,
@@ -26,25 +26,36 @@ const FailReasonCarousel = ({
   onImageClick,
 }: FailReasonCarouselProps) => {
   const [currentIndex, setCurrentIndex] = useState(0);
+  const normalizedCurrentIndex = failReasons.length > 0 ? currentIndex % failReasons.length : 0;
+  const currentReason = failReasons[normalizedCurrentIndex] ?? '';
+  const markdownReason = currentReason.trim();
   const markdownComponents = useMemo<React.ComponentProps<typeof ReactMarkdown>['components']>(
     () => ({
-      img: ({ src, alt }) =>
+      a: MarkdownImageLink,
+      img: ({ src, alt, title, node }) =>
         src && isImageDataUrl(src) ? (
           <MarkdownImage
             src={src}
             alt={alt}
+            title={title}
             onImageClick={onImageClick}
             className="mt-2 block max-h-48 max-w-full object-contain"
           />
         ) : (
-          <span>{`![${alt ?? ''}](${src ?? ''})`}</span>
+          <span>
+            {/* Parsed inline image tokens end in ')'; references end in ']'. Keep inline
+                spelling verbatim, but expand references so their definition titles remain visible. */}
+            {typeof node?.position?.start.offset === 'number' &&
+            typeof node.position.end.offset === 'number' &&
+            markdownReason.slice(node.position.start.offset, node.position.end.offset).endsWith(')')
+              ? markdownReason.slice(node.position.start.offset, node.position.end.offset)
+              : `![${alt ?? ''}](${src ?? ''}${title == null ? '' : ` ${JSON.stringify(title)}`})`}
+          </span>
         ),
       p: ({ children }) => <p className="m-0">{children}</p>,
     }),
-    [onImageClick],
+    [onImageClick, markdownReason],
   );
-  const normalizedCurrentIndex = failReasons.length > 0 ? currentIndex % failReasons.length : 0;
-  const currentReason = failReasons[normalizedCurrentIndex] ?? '';
   const dataImages = useMemo(
     () =>
       currentReason.includes('![')
@@ -96,7 +107,7 @@ const FailReasonCarousel = ({
               remarkPlugins={REMARK_PLUGINS}
               urlTransform={PRESERVE_IMAGE_URL_TRANSFORM}
             >
-              {currentReason.trim()}
+              {markdownReason}
             </ReactMarkdown>
           </div>
         </MarkdownErrorBoundary>
