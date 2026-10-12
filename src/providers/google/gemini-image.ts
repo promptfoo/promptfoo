@@ -409,7 +409,7 @@ export class GeminiImageProvider implements ApiProvider {
         } as RequestInit,
         getRequestTimeoutMs(),
         'json',
-        true,
+        shouldBustProviderCache(context),
       )) as { data: any; cached: boolean };
       const latencyMs = Date.now() - startTime;
 

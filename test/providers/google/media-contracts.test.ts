@@ -213,16 +213,25 @@ describe.each(['google', 'palm'])('%s Nano Banana routing contracts', (prefix) =
     ]);
   });
 
-  it.each([
-    { bustCache: true, debug: false, bypass: true },
-    { bustCache: false, debug: true, bypass: false },
-    { debug: true, bypass: true },
-  ])('honors per-call cache policy: %j', async ({ bypass, ...policy }) => {
-    const provider = await loadApiProvider(id, {
-      options: { config: { apiKey: 'key', vertexai: false } },
+  describe.each([false, true])('image cache policy (vertexai: %s)', (vertexai) => {
+    it.each([
+      { policy: undefined, bypass: false },
+      { policy: {}, bypass: false },
+      { policy: { bustCache: true }, bypass: true },
+      { policy: { bustCache: true, debug: false }, bypass: true },
+      { policy: { bustCache: false, debug: true }, bypass: false },
+      { policy: { debug: true }, bypass: true },
+    ])('honors per-call cache policy: %j', async ({ bypass, policy }) => {
+      const provider = await loadApiProvider(id, {
+        options: { config: { apiKey: 'key', vertexai } },
+      });
+      const result = await provider.callApi(
+        'Draw',
+        policy === undefined ? undefined : { ...context({}), ...policy },
+      );
+      expect(result.error).toBeUndefined();
+      expect(vi.mocked(fetchWithCache).mock.calls[0][4]).toBe(bypass);
     });
-    await provider.callApi('Draw', { ...context({}), ...policy });
-    expect(vi.mocked(fetchWithCache).mock.calls[0][4]).toBe(bypass);
   });
 });
 
