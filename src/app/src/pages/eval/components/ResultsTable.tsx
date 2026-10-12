@@ -1387,7 +1387,7 @@ function renderResultsTableCell({
   lightboxImage: string | null;
   toggleLightbox: (url?: string) => void;
 }): React.ReactNode {
-  const columnId = String(cell.column.id);
+  const columnId = cell.column.id;
   const isMetadataCol = isMetadataColumn(columnId);
   const renderedCellContent = flexRender(cell.column.columnDef.cell, cell.getContext());
   const value = cell.getValue();
