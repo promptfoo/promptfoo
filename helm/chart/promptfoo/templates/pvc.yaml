@@ -9,7 +9,9 @@ metadata:
 spec:
   accessModes:
     {{- toYaml .accessModes | nindent 4 }}
-  storageClassName: {{ .storageClassName }}
+  {{- with .storageClassName }}
+  storageClassName: {{ . }}
+  {{- end }}
   resources:
     requests:
       storage: {{ .size }}

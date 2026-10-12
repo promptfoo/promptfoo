@@ -2,16 +2,19 @@
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
 
+# Keep at 1: the server uses a local SQLite database and an in-memory job queue.
 replicaCount: 1
 
 image:
   repository: ghcr.io/promptfoo/promptfoo
-  pullPolicy: IfNotPresent
-  # Overrides the image tag whose default is the chart appVersion.
-  tag: v1.0.0
+  # Leave empty to let Kubernetes choose when the Deployment is created:
+  # Always for `latest`, IfNotPresent for other tags.
+  pullPolicy: ''
+  # Set a release tag such as 0.124.1 (no `v` prefix) to pin a version.
+  # Falls back to the chart appVersion when empty.
+  tag: latest
 
-imagePullSecrets:
-  - name: <yourcred>
+imagePullSecrets: []
 nameOverride: ''
 fullnameOverride: ''
 
@@ -26,38 +29,65 @@ serviceAccount:
 podAnnotations: {}
 podLabels: {}
 
-podSecurityContext: {}
-# fsGroup: 2000
+# The image runs as uid 100, gid 101. fsGroup lets that user write to the data volume.
+podSecurityContext:
+  fsGroup: 101
 
-securityContext: {}
-# capabilities:
-#   drop:
-#   - ALL
-# readOnlyRootFilesystem: true
-# runAsNonRoot: true
-# runAsUser: 1000
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 100
+  runAsGroup: 101
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
 
 service:
   type: ClusterIP
   port: 3000
 
-domainName: 'promptfoo.example.com'
+ingress:
+  enabled: false
+  className: ''
+  annotations: {}
+  hosts:
+    - host: promptfoo.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+  # - secretName: promptfoo-tls
+  #   hosts:
+  #     - promptfoo.example.com
 
-resources:
-  limits:
-    cpu: 100m
-    memory: 128Mi
-  requests:
-    cpu: 100m
-    memory: 128Mi
+# Environment variables as name/value or name/valueFrom entries.
+# PROMPTFOO_REMOTE_API_BASE_URL and PROMPTFOO_REMOTE_APP_BASE_URL are set to
+# http://localhost:3000 unless an entry here uses the same name.
+env: []
+# - name: OPENAI_API_KEY
+#   valueFrom:
+#     secretKeyRef:
+#       name: promptfoo-secrets
+#       key: OPENAI_API_KEY
+
+# Sources of environment variables, as secretRef or configMapRef entries.
+envFrom: []
+# - secretRef:
+#     name: promptfoo-secrets
+
+# The server uses about 256Mi of memory when idle and more while starting or running evals.
+resources: {}
+# requests:
+#   cpu: 250m
+#   memory: 512Mi
 
 livenessProbe:
   httpGet:
-    path: /
+    path: /health
     port: http
 readinessProbe:
   httpGet:
-    path: /
+    path: /health
     port: http
 
 autoscaling:
@@ -72,7 +102,8 @@ persistentVolumesClaims:
     size: 1Gi
     accessModes:
       - ReadWriteOnce
-    storageClassName: default
+    # Leave empty to use the cluster's default StorageClass.
+    storageClassName: ''
 
 # Additional volumes on the output Deployment definition.
 volumes:
@@ -86,8 +117,7 @@ volumeMounts:
     mountPath: '/home/promptfoo/.promptfoo'
     readOnly: false
 
-nodeSelector:
-  kubernetes.io/arch: amd64
+nodeSelector: {}
 
 tolerations: []
 

@@ -8,6 +8,8 @@ spec:
   {{- if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.replicaCount }}
   {{- end }}
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       {{- include "promptfoo.selectorLabels" . | nindent 6 }}
@@ -35,10 +37,12 @@ spec:
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
-          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- with .Values.image.pullPolicy }}
+          imagePullPolicy: {{ . }}
+          {{- end }}
           ports:
             - name: http
-              containerPort: {{ .Values.service.port }}
+              containerPort: 3000
               protocol: TCP
           livenessProbe:
             {{- toYaml .Values.livenessProbe | nindent 12 }}
@@ -47,10 +51,23 @@ spec:
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           env:
-            - name: PROMPTFOO_REMOTE_API_BASE_URL
-              value: http://localhost:3000 
-            - name: PROMPTFOO_REMOTE_APP_BASE_URL
+            {{- $names := list }}
+            {{- range .Values.env }}
+            {{- $names = append $names .name }}
+            {{- end }}
+            {{- range list "PROMPTFOO_REMOTE_API_BASE_URL" "PROMPTFOO_REMOTE_APP_BASE_URL" }}
+            {{- if not (has . $names) }}
+            - name: {{ . }}
               value: http://localhost:3000
+            {{- end }}
+            {{- end }}
+            {{- with .Values.env }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with .Values.envFrom }}
+          envFrom:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           {{- with .Values.volumeMounts }}
           volumeMounts:
             {{- toYaml . | nindent 12 }}
