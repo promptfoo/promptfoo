@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+import * as fsPromises from 'fs/promises';
 import * as path from 'path';
 
 import { globSync } from 'glob';
@@ -92,6 +93,7 @@ vi.mock('../../../src/envars', async () => {
 });
 
 vi.mock('../../../src/esm', () => ({
+  ensureTypescriptLoader: vi.fn(),
   importModule: vi.fn(),
 }));
 
@@ -2504,6 +2506,7 @@ describe('readConfig', () => {
 
 describe('maybeReadConfig', () => {
   beforeEach(async () => {
+    vi.mocked(fsPromises.access).mockReset().mockResolvedValue(undefined);
     vi.clearAllMocks();
     vi.restoreAllMocks();
 
@@ -2512,6 +2515,26 @@ describe('maybeReadConfig', () => {
 
     mockDereference.mockReset();
     mockDereference.mockImplementation((config: object) => Promise.resolve(config));
+  });
+
+  it.each(['EACCES', 'EPERM'])(
+    'preserves %s while checking optional config presence',
+    async (code) => {
+      const error = Object.assign(new Error('Permission denied'), { code });
+      vi.mocked(fsPromises.access).mockRejectedValueOnce(error);
+
+      await expect(maybeReadConfig('config.js')).rejects.toBe(error);
+      expect(importModule).not.toHaveBeenCalled();
+    },
+  );
+
+  it('does not import a missing executable config', async () => {
+    vi.mocked(fsPromises.access).mockRejectedValueOnce(
+      Object.assign(new Error('Missing'), { code: 'ENOENT' }),
+    );
+
+    expect(await maybeReadConfig('missing.js')).toBeUndefined();
+    expect(importModule).not.toHaveBeenCalled();
   });
 
   it('should return undefined for ENOENT error', async () => {
