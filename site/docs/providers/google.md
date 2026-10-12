@@ -819,7 +819,7 @@ For models that support thinking capabilities, you can configure how the model r
 
 #### Gemini 3 Models (thinkingLevel)
 
-Gemini 3 models use `thinkingLevel` for more granular control. Supported levels and defaults are [model-specific](https://ai.google.dev/gemini-api/docs/generate-content/thinking#thinking-levels):
+Gemini 3 chat models use `thinkingLevel`. The examples and table below cover chat models; supported levels and defaults are [model-specific](https://ai.google.dev/gemini-api/docs/generate-content/thinking#thinking-levels):
 
 ```yaml
 providers:

@@ -32,7 +32,7 @@ Gemini 3.8 Flash, 3.6 Flash, and 3.5 Flash-Lite use `thinkingLevel` instead of
 deprecated `temperature`, `topP`, or `topK` controls. Gemini 3.8 Flash does not
 support `MINIMAL` thinking.
 
-The Gemini API now redirects 3.7 Flash to 3.8 Flash and 3.5 Flash to 3.6 Flash. The comparison uses distinct model IDs and uses 3.8 Flash for structured output, function calling, and system-instruction examples. Check the [Gemini API lifecycle](https://ai.google.dev/gemini-api/docs/deprecations) before adding legacy models.
+The Gemini API redirects 3.7 Flash to 3.8 Flash and 3.5 Flash to 3.6 Flash. This comparison uses the replacement IDs, with 3.8 Flash for structured output, function calling, and system instructions. Check the [Gemini API lifecycle](https://ai.google.dev/gemini-api/docs/deprecations) before adding legacy models.
 
 ## System Instructions from File
 

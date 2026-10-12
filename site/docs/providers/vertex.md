@@ -1422,7 +1422,7 @@ See the [Vertex Live example](https://github.com/promptfoo/promptfoo/tree/main/e
 
 ## Supported Features
 
-The table describes provider features, not a promise that every model supports every feature. Gemini uses `generateContent` / `streamGenerateContent`, Claude uses its Vertex Anthropic transport, and Llama uses its OpenAI-compatible chat endpoint:
+Feature support depends on the model. Gemini uses `generateContent` / `streamGenerateContent`, Claude uses its Vertex Anthropic transport, and Llama uses its OpenAI-compatible chat endpoint:
 
 | Feature                  | Supported | Notes                                                                                     |
 | ------------------------ | --------- | ----------------------------------------------------------------------------------------- |
