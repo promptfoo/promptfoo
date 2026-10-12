@@ -31,6 +31,7 @@ import {
 } from '../../src/util/standaloneEvalCache';
 import { createEvaluateResult } from '../factories/eval';
 import EvalFactory from '../factories/evalFactory';
+import { createAccuracyFilter, createPassFailOptions } from '../factories/literalFixtures';
 
 vi.mock('../../src/globalConfig/accounts', async () => {
   const actual = await vi.importActual('../../src/globalConfig/accounts');
@@ -1307,6 +1308,24 @@ describe('evaluator', () => {
   });
 
   describe('getStats', () => {
+    it('aggregates cache hits across prompts and omits the field when there are none', () => {
+      const eval1 = new Eval({});
+      eval1.prompts = [
+        { metrics: { testPassCount: 2, testCacheHitCount: 2 } },
+        { metrics: { testPassCount: 1, testFailCount: 1, testCacheHitCount: 1 } },
+      ] as any;
+
+      expect(eval1.getStats().cacheHits).toBe(3);
+
+      const noCacheEval = new Eval({});
+      noCacheEval.prompts = [
+        { metrics: { testPassCount: 2 } },
+        { metrics: { testPassCount: 1, testCacheHitCount: 0 } },
+      ] as any;
+
+      expect(noCacheEval.getStats().cacheHits).toBeUndefined();
+    });
+
     it('attributes generation metadata once without increasing target tokens or probes', () => {
       const eval1 = new Eval({
         metadata: {
@@ -1840,14 +1859,7 @@ describe('evaluator', () => {
     it('should filter by specific metrics', async () => {
       // This test requires setting up results with named scores in the eval factory
       const result = await evalWithResults.getTablePage({
-        filters: [
-          JSON.stringify({
-            logicOperator: 'and',
-            type: 'metric',
-            operator: 'equals',
-            value: 'accuracy',
-          }),
-        ],
+        filters: [JSON.stringify(createAccuracyFilter())],
       });
 
       // All results should have the specified metric
@@ -2156,14 +2168,7 @@ describe('evaluator', () => {
         withNamedScores: true,
       });
       const { testIndices, filteredCount } = await (eval_ as any).queryTestIndices({
-        filters: [
-          JSON.stringify({
-            logicOperator: 'and',
-            type: 'metric',
-            operator: 'equals',
-            value: 'accuracy',
-          }),
-        ],
+        filters: [JSON.stringify(createAccuracyFilter())],
       });
 
       expect(testIndices.length).toBeGreaterThan(0);
@@ -2173,10 +2178,7 @@ describe('evaluator', () => {
     });
 
     it('filters by metadata equals and contains', async () => {
-      const eval_ = await EvalFactory.create({
-        numResults: 6,
-        resultTypes: ['success', 'failure'],
-      });
+      const eval_ = await EvalFactory.create(createPassFailOptions(6));
 
       const db = await getDb();
       await db.run(
@@ -2218,10 +2220,7 @@ describe('evaluator', () => {
     });
 
     it('filters by metadata not_contains without dropping missing fields', async () => {
-      const eval_ = await EvalFactory.create({
-        numResults: 4,
-        resultTypes: ['success', 'failure'],
-      });
+      const eval_ = await EvalFactory.create(createPassFailOptions(4));
 
       const db = await getDb();
       await db.run(
@@ -2251,10 +2250,7 @@ describe('evaluator', () => {
     });
 
     it('filters by metadata exists operator (non-empty values only)', async () => {
-      const eval_ = await EvalFactory.create({
-        numResults: 10,
-        resultTypes: ['success', 'failure'],
-      });
+      const eval_ = await EvalFactory.create(createPassFailOptions(10));
 
       const db = await getDb();
       // Set up test data with various field states
@@ -2297,10 +2293,7 @@ describe('evaluator', () => {
     });
 
     it('filters by metadata exists operator with various data types', async () => {
-      const eval_ = await EvalFactory.create({
-        numResults: 10,
-        resultTypes: ['success', 'failure'],
-      });
+      const eval_ = await EvalFactory.create(createPassFailOptions(10));
 
       const db = await getDb();
       // Set up test data with different data types
@@ -2489,10 +2482,7 @@ describe('evaluator', () => {
     });
 
     it('filters by metadata exists operator with empty arrays and objects', async () => {
-      const eval_ = await EvalFactory.create({
-        numResults: 6,
-        resultTypes: ['success', 'failure'],
-      });
+      const eval_ = await EvalFactory.create(createPassFailOptions(6));
 
       const db = await getDb();
       // Test empty array - should match (not empty)
@@ -2567,10 +2557,7 @@ describe('evaluator', () => {
     });
 
     it('filters by plugin and strategy', async () => {
-      const eval_ = await EvalFactory.create({
-        numResults: 6,
-        resultTypes: ['success', 'failure'],
-      });
+      const eval_ = await EvalFactory.create(createPassFailOptions(6));
       const db = await getDb();
       // Set pluginId on one row and strategyId on another
       await db.run(
@@ -2650,10 +2637,7 @@ describe('evaluator', () => {
     });
 
     it('filters by explicit severity override', async () => {
-      const eval_ = await EvalFactory.create({
-        numResults: 4,
-        resultTypes: ['success', 'failure'],
-      });
+      const eval_ = await EvalFactory.create(createPassFailOptions(4));
       const db = await getDb();
       await db.run(
         `UPDATE eval_results SET metadata = json('{"severity":"high"}') WHERE eval_id = '${eval_.id}' AND test_idx = 0`,
@@ -2671,6 +2655,38 @@ describe('evaluator', () => {
       });
       expect(filteredCount).toBe(1);
       expect(testIndices).toEqual([0]);
+    });
+
+    it('searches user metadata with filters while the unfiltered path searches responses only', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 4, withNamedScores: true });
+      const metadataRows = [
+        { model: 'metadata-scalar-needle', temperature: 0.7 },
+        { nested: { property: 'metadata-nested-needle', array: [101, 202, 303] } },
+        { __promptfoo: { traceId: 'private-only-needle' } },
+        { model: 'unrelated-model' },
+      ];
+      const db = await getDb();
+      for (const [index, metadata] of metadataRows.entries()) {
+        await db.run(
+          sql`UPDATE eval_results SET metadata = ${JSON.stringify(metadata)} WHERE eval_id = ${eval_.id} AND test_idx = ${index}`,
+        );
+      }
+      for (const [searchQuery, expected] of [
+        ['metadata-scalar-needle', [0]],
+        ['metadata-nested-needle', [1]],
+        ['[101,202,303]', [1]],
+        ['absent-needle', []],
+        ['private-only-needle', []],
+      ] as const) {
+        const unfiltered = await eval_.getTablePage({ searchQuery });
+        expect(unfiltered.body).toEqual([]);
+        const page = await eval_.getTablePage({
+          searchQuery,
+          filters: [JSON.stringify(createAccuracyFilter())],
+        });
+        expect(page.body.map((row) => row.testIdx)).toEqual(expected);
+        expect(page.filteredCount).toBe(expected.length);
+      }
     });
 
     it('searches across response, grading, named scores, metadata, and vars', async () => {

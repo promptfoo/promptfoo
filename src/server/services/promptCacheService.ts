@@ -4,34 +4,30 @@ import type { PromptWithMetadata } from '../../types';
 
 /**
  * Process-local cache for the `/api/prompts` response. Relies on the single-threaded Node event
- * loop: `invalidate()` is atomic and the only yield point in `getAll()` is `await getPrompts()`,
- * so a load that started before an `invalidate()` is detected by the `generation` epoch check and
- * is never written into the cache. `getAll()` always resolves to a coherent snapshot (possibly
+ * loop: `invalidate()` replaces the cache cell, and `getAll()` only yields at `await getPrompts()`.
+ * A load that started before invalidation writes its detached cell and cannot refill the cache.
+ * `getAll()` always resolves to a coherent snapshot (possibly
  * stale by one request during a concurrent invalidation); the next request re-reads the DB.
  */
 export class PromptCacheService {
-  private allPrompts: PromptWithMetadata[] | null = null;
-  private generation = 0;
+  private cache: { prompts: PromptWithMetadata[] | null } = { prompts: null };
 
   async getAll(): Promise<PromptWithMetadata[]> {
-    if (this.allPrompts != null) {
-      return this.allPrompts;
+    const cache = this.cache;
+    if (cache.prompts != null) {
+      return cache.prompts;
     }
 
-    const generation = this.generation;
     const prompts = await getPrompts();
-    if (generation === this.generation) {
-      this.allPrompts = prompts;
-    }
-    // Return the value we just fetched, not `this.allPrompts`: a concurrent `invalidate()` may
-    // have reset the field to null (and the generation check above kept our result out of the
-    // cache), so re-reading it could hand back null.
+    cache.prompts = prompts;
+    // Return the value we just fetched, not the current cache: concurrent invalidation may
+    // have replaced the cell with an empty one. This load fills only its captured cell, so
+    // re-reading the current cache could hand back null.
     return prompts;
   }
 
   invalidate(): void {
-    this.generation += 1;
-    this.allPrompts = null;
+    this.cache = { prompts: null };
   }
 }
 
