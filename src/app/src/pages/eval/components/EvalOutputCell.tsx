@@ -1701,7 +1701,9 @@ function EvalOutputCell({
           maxLength={
             renderedImagePreview ||
             (renderMarkdown &&
-              (isImageProvider(output.provider) || isVideoProvider(output.provider)))
+              (output.images?.length ||
+                isImageProvider(output.provider) ||
+                isVideoProvider(output.provider)))
               ? 0
               : maxTextLength
           }
