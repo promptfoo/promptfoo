@@ -136,6 +136,42 @@ describe('MCPToolResponsePoisoningPlugin', () => {
       expect(warnings()).not.toContain('may be invoked against the live server');
     });
 
+    it.each([
+      [
+        'every allowed tool is excluded',
+        {
+          allowedTools: ['get_weather', 'send_email'],
+          excludedTools: ['get_weather', 'send_email'],
+        },
+      ],
+      [
+        'the only advertised allowed tool is excluded',
+        { allowedTools: ['get_wether', 'get_weather'], excludedTools: ['get_weather'] },
+      ],
+    ])('throws when %s', (_label, config) => {
+      // Previously an empty effective set: every envelope was dropped and a
+      // non-strict run completed without this security check.
+      expect(
+        () =>
+          new MCPToolResponsePoisoningPlugin(
+            createMockProvider(),
+            multiToolPurpose,
+            'prompt',
+            config,
+          ),
+      ).toThrow(/No advertised tool is left to test/);
+    });
+
+    it('throws when every allowed tool is excluded and no catalog is advertised', () => {
+      expect(
+        () =>
+          new MCPToolResponsePoisoningPlugin(createMockProvider(), purposeWithoutTools, 'prompt', {
+            allowedTools: ['get_weather'],
+            excludedTools: ['get_weather'],
+          }),
+      ).toThrow(/No advertised tool is left to test/);
+    });
+
     it('throws when no configured allowedTools are advertised', () => {
       // A typo must fail loudly rather than silently producing an empty or
       // unrestricted run.

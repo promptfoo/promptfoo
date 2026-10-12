@@ -477,7 +477,20 @@ export class MCPToolResponsePoisoningPlugin extends RedteamPluginBase {
       );
     }
 
-    return new Set(allowedTools.filter((name) => !this.excludedToolNames.has(name)));
+    const permitted = allowedTools.filter((name) => !this.excludedToolNames.has(name));
+    // Same rule as the default path: generating zero test cases reads as a
+    // clean run, so an allowlist that leaves nothing callable must fail loudly.
+    const reachable =
+      catalogNames.length > 0 ? permitted.filter((name) => catalogNames.includes(name)) : permitted;
+    if (reachable.length === 0) {
+      throw new Error(
+        `[mcp:tool-response-poisoning] No advertised tool is left to test after applying ` +
+          `excludedTools to allowedTools (allowedTools: ${allowedTools.join(', ')}; ` +
+          `excludedTools: ${[...this.excludedToolNames].join(', ')}).`,
+      );
+    }
+
+    return new Set(permitted);
   }
 
   /**
