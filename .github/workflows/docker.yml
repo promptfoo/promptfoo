@@ -130,6 +130,7 @@ jobs:
             BUILD_DATE=${{ env.BUILD_DATE }}
             GIT_SHA=${{ steps.source.outputs.sha }}
             PROMPTFOO_OFFICIAL_DOCKER_IMAGE=1
+            OS_PACKAGE_REFRESH=${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: Build custom Docker image for contract testing
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
@@ -145,12 +146,23 @@ jobs:
             BUILD_DATE=${{ env.BUILD_DATE }}
             GIT_SHA=${{ steps.source.outputs.sha }}
             PROMPTFOO_OFFICIAL_DOCKER_IMAGE=0
+            OS_PACKAGE_REFRESH=${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: Test final-image runtime dependencies
         run: |
           docker run --rm --network none -i \
             -e PROMPTFOO_TEST_PRODUCTION_DEPS=1 \
             local-test-image:official node --input-type=module < scripts/testDockerImage.js
+
+      # The registry cache replays the base stage, so only the final-stage upgrade is fresh.
+      - name: Verify OS packages are current
+        run: |
+          plan="$(docker run --rm --user 0 local-test-image:official apk upgrade --no-cache --simulate)"
+          echo "$plan"
+          if grep -q Upgrading <<< "$plan"; then
+            echo "::error::The image is missing Alpine package upgrades"
+            exit 1
+          fi
 
       - name: Run Docker containers for testing
         run: |
@@ -323,6 +335,7 @@ jobs:
             BUILD_DATE=${{ env.BUILD_DATE }}
             GIT_SHA=${{ steps.source.outputs.sha }}
             PROMPTFOO_OFFICIAL_DOCKER_IMAGE=${{ github.repository == 'promptfoo/promptfoo' && '1' || '0' }}
+            OS_PACKAGE_REFRESH=${{ github.run_id }}-${{ github.run_attempt }}
           outputs: |
             type=image,push-by-digest=true,name-canonical=true,push=true,annotation-index.org.opencontainers.image.description=promptfoo is a tool for testing evaluating and red-teaming LLM apps.
 
