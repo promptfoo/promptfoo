@@ -261,6 +261,7 @@ jobs:
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           ref: ${{ env.SOURCE_REF }}
+          persist-credentials: false
 
       # github.sha is the trigger SHA; SOURCE_REF can point checkout at a different tag.
       - name: Resolve source commit
