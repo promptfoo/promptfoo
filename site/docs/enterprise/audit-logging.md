@@ -173,7 +173,7 @@ Audit logs are available in the UI and API to organization administrators. Resul
 
 All supplied filters must match. **Target** selects a resource type, not a particular resource ID; inspect **Target ID** in the results to identify the affected resource. The API also returns event-specific `metadata`.
 
-[![Audit logs filtered by actor, User Login action, User target, and a bounded date window](/img/enterprise-docs/audit-log-filters.png)](/img/enterprise-docs/audit-log-filters.png)
+[![Audit logs filtered by actor, User Login action, User target, and a bounded date window](/img/enterprise-docs/audit-log-filters.png)](pathname:///img/enterprise-docs/audit-log-filters.png)
 
 An account sign-in investigation using synthetic users and audit events.
 
