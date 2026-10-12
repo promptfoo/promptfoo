@@ -107,12 +107,6 @@ The optional `eventData` field varies by event type. An `issue.updated` event fo
 }
 ```
 
-This structure allows you to:
-
-1. See the complete current state of the issue
-2. Understand what specific attributes changed
-3. Track who made the change (if applicable)
-
 For `remediation.created`, `data` contains `issueId` and `remediation`. Eval events include `jobId`: creation includes `config`, completion includes `evalId`, `partial`, and `progress`, and failure includes `error` and `progress` when available.
 
 ## Verifying Webhook Signatures
@@ -175,7 +169,7 @@ If signature verification fails, check the raw body and current signing secret. 
 
 ### SIEM Integration
 
-When integrating with a SIEM system, you might want to listen for `issue.created` and `issue.updated` events. This allows your security team to be notified of new security vulnerabilities detected by Promptfoo Enterprise and track their resolution. The complete vulnerability state provided with each webhook makes it easy to keep your SIEM system synchronized.
+Subscribe to `issue.created` and `issue.updated` to keep your SIEM synchronized with the current vulnerability state.
 
 ### Task Tracking Integration
 
