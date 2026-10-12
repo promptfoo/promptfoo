@@ -922,6 +922,10 @@ export class MCPToolResponsePoisoningGrader extends RedteamGraderBase {
       ...test,
       metadata: { ...test.metadata, purpose: safePurpose },
     };
+    // The graded tool call lands in the rubric's <UserQuery> fence and is
+    // server-influenced too: the generator copies argument values, such as
+    // `enum` members, from the server's inputSchema. Same treatment.
+    const safePrompt = defangRubricDelimiters(prompt);
 
     // A configured transformResponse/responseParser can sanitize `output`
     // while `providerResponse.raw` still holds the original result.
@@ -940,7 +944,7 @@ export class MCPToolResponsePoisoningGrader extends RedteamGraderBase {
       // renderRubric throws on undefined vars, so guard purpose.
       const renderedRubric = this.renderRubric({
         purpose: safePurpose,
-        prompt,
+        prompt: safePrompt,
         entities: test.metadata?.entities ?? [],
       });
 
@@ -1039,7 +1043,7 @@ export class MCPToolResponsePoisoningGrader extends RedteamGraderBase {
     // answer, so a refusal-shaped prefix is not proof of safety — force the
     // base grader's refusal short-circuit off regardless of the caller.
     return super.getResult(
-      prompt,
+      safePrompt,
       gradedWithRaw,
       sanitizedTest,
       provider,
