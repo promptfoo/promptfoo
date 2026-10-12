@@ -5,7 +5,7 @@ description: 'Execute LLM evaluations directly in browsers using WebGPU accelera
 
 # Browser Provider
 
-The Browser Provider uses [Playwright](https://playwright.dev/) to navigate pages, interact with elements, and extract data from web applications. It supports Chromium (Chrome and Edge), Firefox, and WebKit (the Safari engine).
+The Browser Provider uses [Playwright](https://playwright.dev/) to navigate pages, interact with elements, and extract data from web applications. It supports Chromium-based browsers, including Chrome and Edge.
 
 ## When to Use the Browser Provider
 
@@ -155,8 +155,6 @@ providers:
 - `runOnce: true` on steps - Execute only on the first turn (skip on subsequent turns). If the page closes or a turn fails, the next call starts a new session and reruns these steps.
 
 Promptfoo closes the pages, contexts, and launched browsers it owns when the eval ends. It disconnects its own client connection while leaving connected user-owned browsers and existing contexts open. When calling a provider directly, call `await provider.cleanup()` after the final turn.
-
-This is essential for testing multi-turn jailbreak strategies against chat interfaces where you need to maintain conversation context.
 
 ## Supported Actions
 
@@ -339,7 +337,7 @@ Supported config options:
 | persistSession    | `boolean`                                                                                      | Keep the browser page open across multiple `callApi()` invocations. Required for multi-turn strategies. Defaults to `false`. |
 | connectOptions    | `object`                                                                                       | Options for connecting to an existing browser (`debuggingPort`, `mode`, `wsEndpoint`)                                        |
 
-Note: All string values in the config support Nunjucks templating. This means you can use the `{{prompt}}` variable or any other variables passed in the test context.
+String-valued step arguments support Nunjucks templating with `{{prompt}}` and variables passed in the test context. Cookie values and connection options are not templated.
 
 String cookies (for example, `session=abc==; preference=compact`) use the host and directory of the first `navigate` step's rendered HTTP(S) URL. Without such a navigation URL, use cookie objects with an explicit `url` or `domain`/`path` scope; those scopes are preserved.
 

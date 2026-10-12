@@ -218,7 +218,7 @@ export class BrowserProvider implements ApiProvider {
     }
     chromium.use(stealth());
     session.browser = this.config.connectOptions
-      ? (await this.connectToExistingBrowser(chromium)).browser
+      ? await this.connectToExistingBrowser(chromium)
       : await chromium.launch({
           headless: this.headless,
           args: ['--ignore-certificate-errors'],
@@ -380,9 +380,7 @@ export class BrowserProvider implements ApiProvider {
     }
   }
 
-  private async connectToExistingBrowser(
-    chromium: any,
-  ): Promise<{ browser: any; shouldClose: boolean }> {
+  private async connectToExistingBrowser(chromium: any): Promise<Browser> {
     const connectOptions = this.config.connectOptions!;
 
     try {
@@ -422,7 +420,7 @@ export class BrowserProvider implements ApiProvider {
         browser = await chromium.connectOverCDP(cdpUrl);
       }
 
-      return { browser, shouldClose: false };
+      return browser;
     } catch (error) {
       logger.error(`Failed to connect to existing browser: ${error}`);
       throw error;
