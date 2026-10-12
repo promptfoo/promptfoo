@@ -125,6 +125,19 @@ describe('release-please automation', () => {
     expect(usesLine).toMatch(/#\s+v\d+(?:\.\d+){0,2}(?:[-+][\w.-]+)?\s*$/);
   });
 
+  it('gives each Docker release build its own concurrency group', () => {
+    const workflow = yaml.load(readRepoFile('.github/workflows/docker.yml')) as {
+      concurrency?: { group?: unknown };
+    };
+    const group = workflow.concurrency?.group;
+    assert(typeof group === 'string', 'docker.yml must set a workflow concurrency group');
+
+    // GitHub keeps one pending run per group and cancels it when another queues. A release
+    // build that shares a group with pushes to main can be dropped while it waits.
+    expect(group).toContain('inputs.tag_name || github.event.release.tag_name || github.ref');
+    expect(group).not.toContain('github.repository');
+  });
+
   it('gates code-scan mirror publication on isolated artifact attestation', () => {
     const workflow = yaml.load(
       readRepoFile('.github/workflows/release-please.yml'),
