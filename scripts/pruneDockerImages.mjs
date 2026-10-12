@@ -32,6 +32,16 @@ const BUILD_TAGS = [/^sha-[0-9a-f]{7,40}$/, /^buildcache-linux-(amd64|arm64)-\d+
 const ATTESTATION_TAG = /^sha256-([0-9a-f]{64})(\..+)?$/;
 
 const matchesAny = (patterns, tag) => patterns.some((pattern) => pattern.test(tag));
+const tagsOf = (version) => version.metadata?.container?.tags ?? [];
+
+/** The image digests an attestation version describes, or none for any other version. */
+export function attestationSubjects(version) {
+  const tags = tagsOf(version);
+  if (tags.length === 0 || !tags.every((tag) => ATTESTATION_TAG.test(tag))) {
+    return [];
+  }
+  return tags.map((tag) => `sha256:${tag.match(ATTESTATION_TAG)[1]}`);
+}
 
 /**
  * Decide which versions to remove. Pure, so it can be tested without the API.
@@ -44,7 +54,6 @@ const matchesAny = (patterns, tag) => patterns.some((pattern) => pattern.test(ta
 export function planPrune(versions, { now, olderThanDays, extraTags = [] }) {
   const cutoff = now - olderThanDays * 24 * 60 * 60 * 1000;
   const extra = new Set(extraTags);
-  const tagsOf = (version) => version.metadata?.container?.tags ?? [];
   const isOld = (version) => Date.parse(version.updated_at ?? version.created_at) < cutoff;
 
   const remove = [];
@@ -65,12 +74,8 @@ export function planPrune(versions, { now, olderThanDays, extraTags = [] }) {
     versions.map((version) => version.name).filter((digest) => !removedDigests.has(digest)),
   );
   for (const version of versions) {
-    const tags = tagsOf(version);
-    if (tags.length === 0 || !tags.every((tag) => ATTESTATION_TAG.test(tag))) {
-      continue;
-    }
-    const subjects = tags.map((tag) => `sha256:${tag.match(ATTESTATION_TAG)[1]}`);
-    if (subjects.every((digest) => !remainingDigests.has(digest))) {
+    const subjects = attestationSubjects(version);
+    if (subjects.length > 0 && subjects.every((digest) => !remainingDigests.has(digest))) {
       remove.push(version);
     }
   }
@@ -159,10 +164,17 @@ async function main() {
       `${remove.length} to remove (older than ${options.olderThanDays} days).`,
   );
   let failures = 0;
+  // Images come before their attestations in the plan. An image that could not be
+  // removed keeps its attestation.
+  const keptDigests = new Set();
   for (const version of remove) {
     const label = `${version.metadata.container.tags.join(', ')} (${version.name.slice(0, 19)}, updated ${version.updated_at.slice(0, 10)})`;
     if (!options.delete) {
       console.log(`would remove ${label}`);
+      continue;
+    }
+    if (attestationSubjects(version).some((digest) => keptDigests.has(digest))) {
+      console.log(`kept ${label}: its image could not be removed`);
       continue;
     }
     try {
@@ -172,6 +184,7 @@ async function main() {
       // GitHub refuses to delete a public version with more than 5,000 downloads.
       // Keep going so one such version does not block the rest.
       failures++;
+      keptDigests.add(version.name);
       console.log(`::warning::could not remove ${label}: ${error.message}`);
     }
   }

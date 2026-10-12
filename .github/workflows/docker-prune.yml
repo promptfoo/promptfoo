@@ -7,7 +7,8 @@
 # because GitHub can only delete a whole image version.
 #
 # A pull request that touches this workflow or its script gets a dry run with a read-only
-# token. A manual run is a dry run unless `delete` is ticked.
+# token. A manual run is a dry run unless `delete` is ticked, and it only deletes when it
+# is run from the default branch.
 
 name: Prune Docker image tags
 
@@ -70,8 +71,11 @@ jobs:
 
   prune:
     name: Remove prunable versions
-    # Scheduled runs delete. A manual run deletes only when asked to.
-    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.delete)
+    # Scheduled runs delete. A manual run deletes only when asked to, and only from the
+    # default branch, so the write-scoped token never runs a branch's copy of the script.
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.delete))
     needs: [plan]
     runs-on: ubuntu-latest
     timeout-minutes: 30

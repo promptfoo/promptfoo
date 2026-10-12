@@ -141,13 +141,16 @@ describe('pruneDockerImages', () => {
       server = undefined;
     });
 
-    // 101 versions, so the listing takes two pages. Three are old commit-only builds.
+    // 101 versions, so the listing takes two pages. Three are old commit-only builds,
+    // and two of those have an attestation.
     const listed: PackageVersion[] = [
       { ...version('a', ['sha-0123abc']), id: 11 },
       { ...version('b', ['sha-4567def']), id: 12 },
       { ...version('c', ['sha-89abcde']), id: 13 },
       { ...version('d', ['0.124.1', 'sha-fedcba9']), id: 14 },
-      ...Array.from({ length: 97 }, (_, index) => ({
+      { ...attestationFor('a', 'e'), id: 21 },
+      { ...attestationFor('b', 'f'), id: 22 },
+      ...Array.from({ length: 95 }, (_, index) => ({
         ...version(String(index % 10), []),
         id: 100 + index,
       })),
@@ -201,7 +204,7 @@ describe('pruneDockerImages', () => {
       const { status, output, deletes } = await run([]);
 
       expect(status).toBe(0);
-      expect(output).toContain('101 versions, 4 tagged. 3 to remove');
+      expect(output).toContain('101 versions, 6 tagged. 5 to remove');
       expect(output).toContain('would remove sha-0123abc');
       expect(output).toContain('Dry run: nothing was removed.');
       expect(deletes).toEqual([]);
@@ -215,17 +218,26 @@ describe('pruneDockerImages', () => {
         `DELETE ${versionsPath}/11`,
         `DELETE ${versionsPath}/12`,
         `DELETE ${versionsPath}/13`,
+        `DELETE ${versionsPath}/21`,
+        `DELETE ${versionsPath}/22`,
       ]);
     });
 
     it('keeps going past a version GitHub refuses to delete, then fails', async () => {
       const { status, output, deletes } = await run(['--delete'], 12);
 
-      expect(deletes).toHaveLength(3);
       expect(output).toContain('::warning::could not remove sha-4567def');
       expect(output).toContain('removed sha-89abcde');
-      expect(output).toContain('1 of 3 versions could not be removed');
+      expect(output).toContain('1 of 5 versions could not be removed');
       expect(status).toBe(1);
+      // The image that stayed keeps its attestation. The other attestation goes.
+      expect(deletes).toEqual([
+        `DELETE ${versionsPath}/11`,
+        `DELETE ${versionsPath}/12`,
+        `DELETE ${versionsPath}/13`,
+        `DELETE ${versionsPath}/21`,
+      ]);
+      expect(output).toContain(`kept sha256-${'b'.repeat(64)}`);
     });
   });
 });
