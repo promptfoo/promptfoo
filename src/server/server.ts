@@ -486,8 +486,7 @@ export async function startServer(
         settle(true);
       }, SHUTDOWN_TIMEOUT_MS);
 
-      // Close Socket.io connections (this also closes the underlying HTTP server)
-      io.close(() => {
+      const closeHttpServer = () => {
         // Socket.io's close() already closes the HTTP server, so check if it's still listening
         // before attempting to close it again to avoid "Server is not running" errors
         if (!httpServer.listening) {
@@ -503,6 +502,12 @@ export async function startServer(
           logger.info('Server closed');
           settle(false);
         });
+      };
+
+      // Close Socket.io connections (this also closes the underlying HTTP server).
+      io.close(closeHttpServer).catch((error) => {
+        logger.warn('Error closing Socket.IO server', { error });
+        closeHttpServer();
       });
     };
 
