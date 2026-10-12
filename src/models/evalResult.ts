@@ -113,6 +113,7 @@ function projectProviderResponse(
     projectedResponse.output = '[output stripped]';
     delete projectedResponse.raw;
     delete projectedResponse.providerTransformedOutput;
+    delete projectedResponse.conversationOutput;
     delete projectedResponse.audio;
     delete projectedResponse.video;
     delete projectedResponse.images;
