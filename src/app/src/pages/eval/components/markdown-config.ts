@@ -14,7 +14,8 @@ import type { UrlTransform } from 'react-markdown';
 export const REMARK_PLUGINS = [remarkGfm];
 
 const MARKDOWN_PARSER = unified().use(remarkParse).use(remarkGfm);
-const IMAGE_DATA_URL_PREFIX = /^\s*data:(?:image\/|application\/octet-stream[;,])/i;
+const IMAGE_DATA_URL_HEADER =
+  /^\s*data:(?:image\/[a-z0-9!#$%&'*+.^_`|~-]+|application\/octet-stream)(?:;[^,]*)?,/i;
 
 interface MarkdownAstNode {
   type: string;
@@ -57,8 +58,8 @@ export interface RenderableMarkdownImage {
 export const IDENTITY_URL_TRANSFORM = (url: string): string => url;
 
 export function isImageDataUrl(url: string): boolean {
-  // Inspect only the prefix without allocating a lowercase copy of the image payload.
-  return IMAGE_DATA_URL_PREFIX.test(url);
+  // Require a complete image MIME header, without validating or copying the payload.
+  return IMAGE_DATA_URL_HEADER.test(url);
 }
 
 export function isInlineDataImage(image: RenderableMarkdownImage): boolean {

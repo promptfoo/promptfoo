@@ -153,6 +153,9 @@ describe('markdown-config', () => {
       'data:application/octet-stream;charset=utf-8;base64,AA==',
       'data:image/png;base64,AA==',
       'DATA:IMAGE/SVG+XML,svg-data',
+      'data:image/svg+xml;charset=utf-8,%3Csvg%3E%3C/svg%3E',
+      'data:image/png,',
+      'data:application/octet-stream;base64,',
     ])('allows supported image MIME types with valid boundaries: %s', (source) => {
       expect(isImageDataUrl(source)).toBe(true);
       expect(IMAGE_DATA_URL_TRANSFORM(source, 'src', imageNode)).toBe(source);
@@ -161,6 +164,17 @@ describe('markdown-config', () => {
     });
 
     it.each([
+      'data:image/png',
+      'data:image/png;base64',
+      'data:image/png;charset=utf-8;base64',
+      'data:image/png;base64%2CAA==',
+      'data:image/',
+      'data:image/,AA==',
+      'data:image/;base64,AA==',
+      'data:image/ ;base64,AA==',
+      'data:image/png/extra;base64,AA==',
+      'data:application/octet-stream;base64',
+      'data:application/octet-stream;charset=utf-8;base64',
       'data:application/octet-streaming;base64,AA==',
       'DATA:APPLICATION/OCTET-STREAM+XML,AA==',
       'data:application/octet-stream/extra;base64,AA==',

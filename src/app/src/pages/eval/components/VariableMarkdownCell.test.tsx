@@ -114,6 +114,18 @@ describe('VariableMarkdownCell', () => {
       expect(screen.queryByRole('img')).not.toBeInTheDocument();
     });
 
+    it.each(['data:image/png;base64', 'data:image/', 'data:image/;base64,AA=='])(
+      'keeps incomplete data-image diagnostics literal in forced mode: %s',
+      (source) => {
+        const value = `![Preview](${source} "diagnostic title")`;
+        const { container } = render(
+          <VariableMarkdownCell value={value} maxTextLength={200} dataImagesOnly />,
+        );
+        expect(screen.queryByRole('img')).not.toBeInTheDocument();
+        expect(container.textContent).toBe(value);
+      },
+    );
+
     it.each([
       'data:image/png;base64,',
       'https://example.com/image.png?payload=',

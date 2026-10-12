@@ -43,6 +43,47 @@ describe('FailReasonCarousel', () => {
     },
   );
 
+  it.each([
+    [true, 'data:image/png;base64'],
+    [false, 'data:image/png;base64'],
+    [true, 'data:image/'],
+    [false, 'data:image/'],
+    [true, 'data:image/;base64,AA=='],
+    [false, 'data:image/;base64,AA=='],
+  ])(
+    'preserves incomplete data-image diagnostics with Markdown enabled=%s: %s',
+    (renderMarkdown, source) => {
+      const reason = `![Preview](${source} "diagnostic title")`;
+      const { container } = render(
+        <FailReasonCarousel failReasons={[reason]} renderMarkdown={renderMarkdown} />,
+      );
+      expect(screen.queryByRole('img')).not.toBeInTheDocument();
+      expect(container.textContent).toBe(reason);
+    },
+  );
+
+  it.each(['    ', '\t', '\n\n    '])(
+    'preserves image-shaped indented code in Markdown failure reasons: %j',
+    (prefix) => {
+      const diagnostic = '![Preview](data:image/png;base64,AA== "diagnostic title")';
+      const { container } = render(
+        <FailReasonCarousel failReasons={[`${prefix}${diagnostic}`]} renderMarkdown />,
+      );
+      expect(screen.queryByRole('img')).not.toBeInTheDocument();
+      expect(screen.queryByRole('button')).not.toBeInTheDocument();
+      expect(container.querySelector('pre code')).toHaveTextContent(diagnostic);
+    },
+  );
+
+  it('preserves blocked image spelling after leading whitespace with matching source offsets', () => {
+    const diagnostic = "![Probe](./failure.png 'diagnostic title')";
+    const { container } = render(
+      <FailReasonCarousel failReasons={[`\n  ${diagnostic}\n`]} renderMarkdown />,
+    );
+    expect(screen.queryByRole('img')).not.toBeInTheDocument();
+    expect(container).toHaveTextContent(diagnostic);
+  });
+
   it('supports changing from an empty reason list to a populated one', () => {
     const { rerender } = render(<FailReasonCarousel failReasons={[]} renderMarkdown={false} />);
 

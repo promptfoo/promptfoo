@@ -3337,6 +3337,9 @@ describe('EvalOutputCell inline image lightbox', () => {
   });
 
   it.each([
+    ['an incomplete data-image header', '![Preview](data:image/png;base64)'],
+    ['an empty image subtype', '![Preview](data:image/)'],
+    ['an empty image subtype with a payload', '![Preview](data:image/;base64,AA==)'],
     ['an octet-stream MIME lookalike', '![Preview](data:application/octet-streaming;base64,AA==)'],
     [
       'raw HTML',

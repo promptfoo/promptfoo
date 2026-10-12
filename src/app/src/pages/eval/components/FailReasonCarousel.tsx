@@ -28,7 +28,7 @@ const FailReasonCarousel = ({
   const [currentIndex, setCurrentIndex] = useState(0);
   const normalizedCurrentIndex = failReasons.length > 0 ? currentIndex % failReasons.length : 0;
   const currentReason = failReasons[normalizedCurrentIndex] ?? '';
-  const markdownReason = currentReason.trim();
+  const markdownReason = currentReason;
   const markdownComponents = useMemo<React.ComponentProps<typeof ReactMarkdown>['components']>(
     () => ({
       a: MarkdownImageLink,
