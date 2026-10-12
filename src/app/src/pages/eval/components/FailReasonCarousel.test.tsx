@@ -6,8 +6,9 @@ import * as markdownConfig from './markdown-config';
 
 describe('FailReasonCarousel', () => {
   it('only extracts forced previews when Markdown is disabled, including after toggling', () => {
-    const source = `data:image/png;base64,${'AaBb'.repeat(512 * 1024)}`;
-    const reason = `![Large preview](${source})`;
+    const source =
+      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+    const reason = `![Preview](${source})`;
     const extract = vi.spyOn(markdownConfig, 'extractRenderableMarkdownImages');
 
     try {
@@ -15,15 +16,15 @@ describe('FailReasonCarousel', () => {
         <FailReasonCarousel failReasons={[reason]} renderMarkdown={true} />,
       );
       expect(extract.mock.calls.length).toBe(0);
-      expect(screen.getByRole('img', { name: 'Large preview' })).toHaveAttribute('src', source);
+      expect(screen.getByRole('img', { name: 'Preview' })).toHaveAttribute('src', source);
 
       rerender(<FailReasonCarousel failReasons={[reason]} renderMarkdown={false} />);
       expect(extract.mock.calls.length).toBe(1);
-      expect(screen.getByRole('img', { name: 'Large preview' })).toHaveAttribute('src', source);
+      expect(screen.getByRole('img', { name: 'Preview' })).toHaveAttribute('src', source);
 
       rerender(<FailReasonCarousel failReasons={[reason]} renderMarkdown={true} />);
       expect(extract.mock.calls.length).toBe(1);
-      expect(screen.getByRole('img', { name: 'Large preview' })).toHaveAttribute('src', source);
+      expect(screen.getByRole('img', { name: 'Preview' })).toHaveAttribute('src', source);
     } finally {
       extract.mockRestore();
     }
