@@ -3,6 +3,7 @@ import { renderWithProviders as baseRender } from '@app/utils/testutils';
 import { type EvaluateTableOutput } from '@promptfoo/types';
 import { ResultFailureReason } from '@promptfoo/types/results';
 import { screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ShiftKeyProvider } from '../../../contexts/ShiftKeyContext';
 import EvalOutputCell from './EvalOutputCell';
@@ -380,6 +381,116 @@ describe('EvalOutputCell duplicate image prevention', () => {
   });
 
   describe('image array deduplication behavior', () => {
+    it('keeps exactly one image when a truncated inline preview is expanded and collapsed', async () => {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      const source = 'data:image/png;base64,aW1hZ2U=';
+      const props = createBaseProps({
+        text: `${'prefix '.repeat(20)}![Preview](${source}) trailing text`,
+        images: [{ data: source }],
+      });
+      props.maxTextLength = 20;
+      const { container } = renderWithProviders(<EvalOutputCell {...props} />);
+      expect(container.querySelectorAll('img')).toHaveLength(1);
+      expect(screen.getByRole('img')).toHaveAttribute('alt', 'Test prompt');
+
+      await user.click(screen.getByText('...'));
+      expect(container.querySelectorAll('img')).toHaveLength(1);
+      expect(screen.getByRole('img')).toHaveAttribute('alt', 'Preview');
+
+      await user.click(screen.getByText('Show less'));
+      expect(container.querySelectorAll('img')).toHaveLength(1);
+      expect(screen.getByRole('img')).toHaveAttribute('alt', 'Test prompt');
+    });
+
+    it('keeps previews at the exact cutoff and structured copies of previews beyond it', async () => {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      const first = 'data:image/png;base64,Zmlyc3Q=';
+      const second = 'data:image/png;base64,c2Vjb25k';
+      const props = createBaseProps({
+        text: `12345![First](${first}) more text ![Second](${second})`,
+        images: [{ data: first }, { data: second }, { data: second }],
+      });
+      const { container } = renderWithProviders(<EvalOutputCell {...props} maxTextLength={5} />);
+      expect(Array.from(container.querySelectorAll('img'), (image) => image.src)).toEqual([
+        first,
+        second,
+      ]);
+      expect(screen.getByAltText('First')).toBeInTheDocument();
+      expect(screen.queryByAltText('Second')).not.toBeInTheDocument();
+
+      await user.click(screen.getByText('...'));
+      expect(Array.from(container.querySelectorAll('img'), (image) => image.src)).toEqual([
+        first,
+        second,
+      ]);
+      expect(screen.getByAltText('Second')).toBeInTheDocument();
+    });
+
+    it('updates duplicate filtering when Markdown rendering is toggled', () => {
+      const source = 'data:image/png;base64,aW1hZ2U=';
+      const props = createBaseProps({
+        text: `${'prefix '.repeat(20)}![Preview](${source}) trailing text`,
+        images: [{ data: source }],
+      });
+      props.maxTextLength = 20;
+      const { container, rerender } = renderWithProviders(<EvalOutputCell {...props} />);
+      expect(screen.getByRole('img')).toHaveAttribute('alt', 'Test prompt');
+      viewSettings.renderMarkdown = true;
+      rerender(
+        <ShiftKeyProvider>
+          <EvalOutputCell {...props} />
+        </ShiftKeyProvider>,
+      );
+      expect(container.querySelectorAll('img')).toHaveLength(1);
+      expect(screen.getByRole('img')).toHaveAttribute('alt', 'Preview');
+      viewSettings.renderMarkdown = false;
+      rerender(
+        <ShiftKeyProvider>
+          <EvalOutputCell {...props} />
+        </ShiftKeyProvider>,
+      );
+      expect(container.querySelectorAll('img')).toHaveLength(1);
+      expect(screen.getByRole('img')).toHaveAttribute('alt', 'Test prompt');
+    });
+
+    it('updates duplicate filtering when the literal-text threshold changes', () => {
+      const source = 'data:image/png;base64,aW1hZ2U=';
+      const props = createBaseProps({
+        text: `${'prefix '.repeat(20)}![Preview](${source}) trailing text`,
+        images: [{ data: source }],
+      });
+      const { container, rerender } = renderWithProviders(
+        <EvalOutputCell {...props} maxTextLength={20} />,
+      );
+      expect(container.querySelectorAll('img')).toHaveLength(1);
+      expect(screen.getByRole('img')).toHaveAttribute('alt', 'Test prompt');
+
+      rerender(
+        <ShiftKeyProvider>
+          <EvalOutputCell {...props} maxTextLength={145} />
+        </ShiftKeyProvider>,
+      );
+      expect(container.querySelectorAll('img')).toHaveLength(1);
+      expect(screen.getByRole('img')).toHaveAttribute('alt', 'Preview');
+      expect(screen.getByText('...')).toBeInTheDocument();
+
+      rerender(
+        <ShiftKeyProvider>
+          <EvalOutputCell {...props} maxTextLength={1000} />
+        </ShiftKeyProvider>,
+      );
+      expect(container.querySelectorAll('img')).toHaveLength(1);
+      expect(screen.getByRole('img')).toHaveAttribute('alt', 'Preview');
+
+      rerender(
+        <ShiftKeyProvider>
+          <EvalOutputCell {...props} maxTextLength={20} />
+        </ShiftKeyProvider>,
+      );
+      expect(container.querySelectorAll('img')).toHaveLength(1);
+      expect(screen.getByRole('img')).toHaveAttribute('alt', 'Test prompt');
+    });
+
     it.each([
       [
         'unused footnote',

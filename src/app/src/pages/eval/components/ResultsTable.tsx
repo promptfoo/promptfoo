@@ -531,9 +531,11 @@ function renderVariableCell({
   }
 
   const isObjectValue = typeof value === 'object';
-  let displayValue = value === undefined ? '' : String(value);
+  let displayValue: string;
   if (isObjectValue) {
     displayValue = JSON.stringify(value, null, 2) ?? String(value);
+  } else {
+    displayValue = value === undefined ? '' : String(value);
   }
   if (renderMarkdown && isObjectValue) {
     displayValue = `\`\`\`json\n${displayValue}\n\`\`\``;

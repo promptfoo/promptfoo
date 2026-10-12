@@ -403,6 +403,7 @@ function renderMarkdownOrJsonNode({
   markdownComponents,
   onImageClick,
   hasRenderedMarkdownImage,
+  renderAfterDataImages,
 }: {
   text: string;
   normalizedText: string;
@@ -413,10 +414,12 @@ function renderMarkdownOrJsonNode({
   markdownComponents: React.ComponentProps<typeof ReactMarkdown>['components'];
   onImageClick: (url?: string) => void;
   hasRenderedMarkdownImage: boolean;
+  renderAfterDataImages: (visibleImageSources: string[]) => React.ReactNode;
 }): {
   node?: React.ReactNode;
   renderedImagePreview: boolean;
   renderedMarkdownOutput: boolean;
+  renderedStructuredImages?: boolean;
 } {
   const canRenderFormattedOutput = renderMarkdown || dataImages.length > 0;
 
@@ -474,10 +477,12 @@ function renderMarkdownOrJsonNode({
         images={dataImages}
         maxTextLength={maxTextLength}
         onImageClick={(src) => onImageClick(src)}
+        renderAfter={renderAfterDataImages}
       />
     ),
     renderedImagePreview: true,
     renderedMarkdownOutput: true,
+    renderedStructuredImages: true,
   };
 }
 
@@ -582,6 +587,7 @@ function renderOutputNode({
   let node: React.ReactNode | undefined;
   let renderedImagePreview = false;
   let renderedMarkdownOutput = false;
+  let renderedStructuredImages = false;
 
   if (showDiffs && firstOutput) {
     const firstOutputText = stringifyOutputText(firstOutput.text);
@@ -618,21 +624,32 @@ function renderOutputNode({
       markdownComponents,
       onImageClick: toggleLightbox,
       hasRenderedMarkdownImage: renderedMarkdownImageSources.length > 0,
+      renderAfterDataImages: (visibleImageSources) =>
+        renderStructuredImages({
+          output,
+          primaryRenderedImageSrc,
+          renderedMarkdownImageSources: visibleImageSources,
+          renderedMarkdownOutput: true,
+          toggleLightbox,
+        }),
     });
     node = formattedNode.node;
     renderedImagePreview = formattedNode.renderedImagePreview;
     renderedMarkdownOutput = formattedNode.renderedMarkdownOutput;
+    renderedStructuredImages = formattedNode.renderedStructuredImages ?? false;
   }
 
   return {
-    node: renderStructuredImages({
-      node,
-      output,
-      primaryRenderedImageSrc,
-      renderedMarkdownImageSources,
-      renderedMarkdownOutput,
-      toggleLightbox,
-    }),
+    node: renderedStructuredImages
+      ? node
+      : renderStructuredImages({
+          node,
+          output,
+          primaryRenderedImageSrc,
+          renderedMarkdownImageSources,
+          renderedMarkdownOutput,
+          toggleLightbox,
+        }),
     renderedImagePreview,
   };
 }

@@ -864,6 +864,62 @@ describe('ResultsTable Metrics Display', () => {
       expect(cellElement.closest('code')).toBeNull();
     });
 
+    describe.each([false, true])(
+      'object serialization with renderMarkdown=%s',
+      (renderMarkdown) => {
+        it.each([
+          [undefined, ''],
+          [null, 'null'],
+          [0, '0'],
+          [false, 'false'],
+          ['plain text', 'plain text'],
+        ])('preserves display formatting for %s', (value, expected) => {
+          vi.mocked(useTableStore).mockImplementation(() =>
+            createTableStore({ table: createMockTableWithVar(value) }),
+          );
+          vi.mocked(useResultsViewSettingsStore).mockImplementation(() => ({
+            inComparisonMode: false,
+            renderMarkdown,
+          }));
+
+          const { container } = renderWithProviders(<ResultsTable {...defaultProps} />);
+
+          const cell = container.querySelector('tbody td .cell');
+          expect(cell).not.toBeNull();
+          expect(cell?.textContent?.trim()).toBe(expected);
+          if (renderMarkdown && value === null) {
+            expect(cell?.querySelector('code')).toHaveClass('language-json');
+          } else {
+            expect(cell?.querySelector('code')).toBeNull();
+          }
+        });
+
+        it.each([
+          ['an own non-callable toString', { toString: 'diagnostic' }],
+          ['own non-callable coercion properties', { toString: 'diagnostic', valueOf: 'value' }],
+          ['a null prototype', Object.assign(Object.create(null), { diagnostic: 'value' })],
+        ])('renders JSON for an object with %s', (_description, value) => {
+          vi.mocked(useTableStore).mockImplementation(() =>
+            createTableStore({ table: createMockTableWithVar(value) }),
+          );
+          vi.mocked(useResultsViewSettingsStore).mockImplementation(() => ({
+            inComparisonMode: false,
+            renderMarkdown,
+          }));
+
+          renderWithProviders(<ResultsTable {...defaultProps} />);
+
+          const cell = screen.getByText(/diagnostic/);
+          expect(cell.textContent?.trim()).toBe(JSON.stringify(value, null, 2));
+          if (renderMarkdown) {
+            expect(cell.closest('code')).toHaveClass('language-json');
+          } else {
+            expect(cell.closest('code')).toBeNull();
+          }
+        });
+      },
+    );
+
     it('truncates long object representations', () => {
       const mockTableWithLongVar = createMockTableWithVar(longObject);
 
