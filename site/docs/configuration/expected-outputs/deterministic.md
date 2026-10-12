@@ -354,6 +354,23 @@ assert:
     value: 'file://path/to/expected.json'
 ```
 
+#### Unicode normalization
+
+String `equals` and `contains` assertions compare without Unicode normalization by default. To treat composed and decomposed characters such as `é` and `e` + a combining acute accent as equivalent, set `normalizeUnicode: true`:
+
+```yaml
+assert:
+  - type: equals
+    value: 'café'
+    normalizeUnicode: true
+```
+
+`true` selects NFC. You can also specify `NFC`, `NFD`, `NFKC`, or `NFKD`; `false` or omission preserves the original comparison. Both the expected string and the full output are normalized before comparison. For `contains`, this can also remove a substring match: `e` no longer matches `e` + a combining acute accent after NFC composes it into `é`.
+
+NFKC and NFKD additionally fold compatibility characters, including ligatures, non-breaking spaces, and superscripts. For example, `normalizeUnicode: NFKC` makes `x²` equal to `x2`. Choose these forms only when those distinctions should not affect the result. See [Unicode normalization forms](https://unicode.org/reports/tr15/) for the differences.
+
+The option also applies to `not-equals` and `not-contains`. It does not change case sensitivity, normalize nested values in object equality, or apply to other assertion types.
+
 ### Is-JSON
 
 The `is-json` assertion checks if the LLM output is a valid JSON string.
