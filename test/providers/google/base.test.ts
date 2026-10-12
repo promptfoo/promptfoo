@@ -21,12 +21,6 @@ vi.mock('../../../src/envars', () => ({
 
 vi.mock('../../../src/logger', () => createWarningLoggerModule());
 
-vi.mock('../../../src/cliState', () => ({
-  default: {
-    basePath: '/test/base/path',
-  },
-}));
-
 vi.mock('../../../src/esm', () => ({
   importModule: vi.fn(),
 }));
@@ -114,7 +108,11 @@ class TestGoogleProvider extends GoogleGenericProvider {
 }
 
 describe('GoogleGenericProvider', () => {
+  let originalBasePath: string | undefined;
+
   beforeEach(() => {
+    originalBasePath = cliState.basePath;
+    cliState.basePath = '/test/base/path';
     vi.clearAllMocks();
     // Reset hoisted mock instance methods to ensure test isolation
     mockMcpInstance.initialize.mockReset().mockResolvedValue(undefined);
@@ -131,6 +129,7 @@ describe('GoogleGenericProvider', () => {
   });
 
   afterEach(() => {
+    cliState.basePath = originalBasePath;
     vi.clearAllMocks();
     vi.restoreAllMocks();
   });
