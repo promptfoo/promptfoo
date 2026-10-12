@@ -1627,6 +1627,7 @@ function ResultsTable({
   const {
     evalId,
     table,
+    tablePageOffset,
     setTable,
     config,
     version,
@@ -1734,24 +1735,22 @@ function ResultsTable({
     [body, head, setTable, evalId, inComparisonMode, showToast],
   );
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: row positions should stay paired with the loaded body until the next page payload arrives.
   const tableBody = React.useMemo(() => {
-    const rowPositionOffset = pagination.pageIndex * pagination.pageSize;
     return body.map((row, rowIndex) => ({
       ...row,
-      originalRowPositionIndex: rowPositionOffset + rowIndex,
+      originalRowPositionIndex: tablePageOffset + rowIndex,
       outputs: row.outputs.map((output, promptIndex) =>
         output == null
           ? null
           : {
               ...output,
               originalRowIndex: rowIndex,
-              originalRowPositionIndex: rowPositionOffset + rowIndex,
+              originalRowPositionIndex: tablePageOffset + rowIndex,
               originalPromptIndex: promptIndex,
             },
       ),
     })) as ExtendedEvaluateTableRow[];
-  }, [body]);
+  }, [body, tablePageOffset]);
 
   const transformDisplayVarKeys = React.useMemo(() => {
     const transformVarKeys = new Set<string>();

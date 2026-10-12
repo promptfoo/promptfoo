@@ -935,6 +935,19 @@ describe('ClaudeCodeSDKProvider', () => {
         expectedKey: 'config-env-key',
       },
       {
+        name: 'provider config.env when the prompt supplies unrelated environment values',
+        config: { env: { ANTHROPIC_API_KEY: 'config-env-key' } },
+        promptConfig: { env: { NO_COLOR: '1' } },
+        expectedKey: 'config-env-key',
+      },
+      {
+        name: 'provider config.env ahead of ambient credentials with unrelated prompt environment values',
+        processKey: 'process-key',
+        config: { env: { ANTHROPIC_API_KEY: 'config-env-key' } },
+        promptConfig: { env: { NO_COLOR: '1' } },
+        expectedKey: 'config-env-key',
+      },
+      {
         name: 'prompt config.env ahead of provider config.env',
         config: { env: { ANTHROPIC_API_KEY: 'config-env-key' } },
         promptConfig: { env: { ANTHROPIC_API_KEY: 'prompt-env-key' } },
@@ -970,6 +983,14 @@ describe('ClaudeCodeSDKProvider', () => {
         promptConfig: { apiKey: '', env: { ANTHROPIC_API_KEY: 'prompt-env-key' } },
         expectedKey: 'provider-key',
       },
+      {
+        name: 'explicit provider key ahead of empty environment overrides',
+        processKey: 'process-key',
+        config: { apiKey: 'provider-key', env: { ANTHROPIC_API_KEY: '' } },
+        env: { ANTHROPIC_API_KEY: '' },
+        promptConfig: { env: { ANTHROPIC_API_KEY: '' } },
+        expectedKey: 'provider-key',
+      },
     ])('uses $name', async ({ processKey, config, env, promptConfig, expectedKey }) => {
       mockProcessEnv({ ANTHROPIC_API_KEY: processKey });
       mockQuery.mockReturnValue(createMockResponse('Authenticated response'));
@@ -986,6 +1007,57 @@ describe('ClaudeCodeSDKProvider', () => {
       expect(mockQuery.mock.calls[0][0].options.env.ANTHROPIC_API_KEY).toBe(expectedKey);
     });
 
+    it('layers prompt environment values over provider values without removing undefined entries', async () => {
+      mockQuery.mockReturnValue(createMockResponse('Authenticated response'));
+      const provider = new ClaudeCodeSDKProvider({
+        config: {
+          env: {
+            ANTHROPIC_API_KEY: 'config-env-key',
+            PROVIDER_ONLY: 'preserved',
+            PROMPT_OVERRIDE: 'provider-value',
+            EMPTY_OVERRIDE: 'provider-value',
+            UNDEFINED_OVERRIDE: 'provider-value',
+            ANTHROPIC_BASE_URL: 'https://provider.example',
+          },
+        },
+        env: { ANTHROPIC_BASE_URL: 'https://override.example' },
+      });
+
+      const result = await provider.callApi('Prompt', {
+        vars: {},
+        prompt: {
+          raw: 'Prompt',
+          label: 'test',
+          config: {
+            env: {
+              ANTHROPIC_API_KEY: undefined,
+              PROMPT_ONLY: 'added',
+              PROMPT_OVERRIDE: 'prompt-value',
+              EMPTY_OVERRIDE: '',
+              UNDEFINED_OVERRIDE: undefined,
+              ANTHROPIC_BASE_URL: 'https://prompt.example',
+            },
+          },
+        },
+      });
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('Authenticated response');
+      expect(mockQuery).toHaveBeenCalledOnce();
+      const env = mockQuery.mock.calls[0][0].options.env;
+      for (const [key, expected] of Object.entries({
+        ANTHROPIC_API_KEY: 'config-env-key',
+        PROVIDER_ONLY: 'preserved',
+        PROMPT_ONLY: 'added',
+        PROMPT_OVERRIDE: 'prompt-value',
+        EMPTY_OVERRIDE: '',
+        UNDEFINED_OVERRIDE: 'provider-value',
+        ANTHROPIC_BASE_URL: 'https://override.example',
+      })) {
+        expect(env[key], key).toBe(expected);
+      }
+    });
+
     it('rejects an empty config.env API key before SDK dispatch', async () => {
       const provider = new ClaudeCodeSDKProvider({
         config: { env: { ANTHROPIC_API_KEY: '' } },
@@ -994,6 +1066,42 @@ describe('ClaudeCodeSDKProvider', () => {
       await expect(provider.callApi('Prompt')).rejects.toThrow('Anthropic API key is not set');
       expect(mockQuery).not.toHaveBeenCalled();
     });
+
+    it.each<{
+      name: string;
+      config?: ClaudeCodeOptions;
+      env?: EnvOverrides;
+      promptConfig?: ClaudeCodeOptions;
+    }>([
+      {
+        name: 'provider config.env',
+        config: { env: { ANTHROPIC_API_KEY: '' } },
+      },
+      {
+        name: 'provider env',
+        config: { env: { ANTHROPIC_API_KEY: 'config-env-key' } },
+        env: { ANTHROPIC_API_KEY: '' },
+      },
+      {
+        name: 'prompt config.env',
+        config: { env: { ANTHROPIC_API_KEY: 'config-env-key' } },
+        promptConfig: { env: { ANTHROPIC_API_KEY: '' } },
+      },
+    ])(
+      'rejects an empty $name key instead of reviving ambient credentials',
+      async ({ config, env, promptConfig }) => {
+        mockProcessEnv({ ANTHROPIC_API_KEY: 'process-key' });
+        const provider = new ClaudeCodeSDKProvider({ config, env });
+
+        await expect(
+          provider.callApi('Prompt', {
+            vars: {},
+            prompt: { raw: 'Prompt', label: 'test', config: promptConfig },
+          }),
+        ).rejects.toThrow('Anthropic API key is not set');
+        expect(mockQuery).not.toHaveBeenCalled();
+      },
+    );
   });
 
   describe('scheduler composition', () => {

@@ -178,6 +178,7 @@ vi.mock('./store', () => ({
     setTable: vi.fn(),
     table: null,
     version: 4,
+    tablePageOffset: 0,
     fetchEvalData: vi.fn(),
     filters: {
       values: {},
@@ -264,6 +265,7 @@ function createTableStore(overrides: { table: unknown } & Record<string, unknown
     evalId: '123',
     setTable: vi.fn(),
     version: 4,
+    tablePageOffset: 0,
     fetchEvalData: vi.fn(),
     filters: {
       values: {},
@@ -1577,10 +1579,12 @@ describe('ResultsTable Row Navigation', () => {
       head: createPromptHead(),
     };
     let isFetching = true;
+    let tablePageOffset = 0;
     const fetchEvalData = vi.fn();
     vi.mocked(useTableStore).mockImplementation(() =>
       createTableStore({
         table,
+        tablePageOffset,
         isFetching,
         fetchEvalData,
         filteredResultsCount: 120,
@@ -1598,6 +1602,7 @@ describe('ResultsTable Row Navigation', () => {
     expect(scrollSpy).not.toHaveBeenCalled();
 
     isFetching = false;
+    tablePageOffset = 50;
     table = {
       body: [{ outputs: [createDeepLinkedOutput()], test: {}, testIdx: 50, vars: [] }],
       head: createPromptHead(),
@@ -1652,6 +1657,48 @@ describe('ResultsTable Row Navigation', () => {
     rerender(<ResultsTable {...defaultProps} zoom={1.1} />);
 
     expect(screen.getByTestId('eval-output-cell')).toHaveAttribute('data-rowindex', '0');
+    expect(scrollSpy).not.toHaveBeenCalled();
+  });
+
+  it('keeps stale rows on their loaded page when a manual rating clones the body after a failed fetch', async () => {
+    const user = userEvent.setup();
+    window.history.replaceState({}, '', '/?rowId=51');
+    let isFetching = true;
+    let table = {
+      body: [{ outputs: [createDeepLinkedOutput()], test: {}, testIdx: 0, vars: [] }],
+      head: createPromptHead(),
+    };
+    const fetchEvalData = vi.fn();
+    const setTable = vi.fn((updatedTable) => {
+      table = updatedTable;
+    });
+    vi.mocked(useTableStore).mockImplementation(() =>
+      createTableStore({
+        table,
+        isFetching,
+        fetchEvalData,
+        setTable,
+        filteredResultsCount: 120,
+        totalResultsCount: 120,
+      }),
+    );
+    const scrollSpy = vi.spyOn(Element.prototype, 'scrollIntoView');
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
+      callback(0);
+      return 1;
+    });
+    const { rerender } = renderWithProviders(<ResultsTable {...defaultProps} />);
+    isFetching = false;
+    rerender(<ResultsTable {...defaultProps} zoom={1.1} />);
+    expect(scrollSpy).not.toHaveBeenCalled();
+
+    const originalBody = table.body;
+    await user.click(screen.getByRole('button', { name: /^Rate$/ }));
+    expect(setTable).toHaveBeenCalledTimes(1);
+    expect(table.body).not.toBe(originalBody);
+    rerender(<ResultsTable {...defaultProps} zoom={1.2} />);
+
+    expect(screen.getByTestId('eval-output-cell')).toHaveAttribute('data-rowpositionindex', '0');
     expect(scrollSpy).not.toHaveBeenCalled();
   });
 

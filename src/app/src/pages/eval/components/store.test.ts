@@ -1137,6 +1137,54 @@ describe('useTableStore', () => {
   });
 
   describe('fetchEvalData', () => {
+    it.each(['http', 'network', 'abort'])(
+      'preserves the loaded page offset through a %s failure and a local rating update',
+      async (failure) => {
+        const table: EvaluateTable = {
+          head: { prompts: [], vars: [] },
+          body: [{ outputs: [createMockOutput(false)], test: {}, testIdx: 0, vars: [] }],
+        };
+        vi.mocked(callApi).mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ table, totalCount: 500, filteredCount: 500 }),
+        } as Response);
+        await useTableStore.getState().fetchEvalData('fixture', { pageIndex: 2, pageSize: 50 });
+        expect(useTableStore.getState().tablePageOffset).toBe(100);
+
+        if (failure === 'http') {
+          vi.mocked(callApi).mockResolvedValueOnce({ ok: false } as Response);
+        } else {
+          vi.mocked(callApi).mockRejectedValueOnce(
+            failure === 'abort'
+              ? new DOMException('Request aborted', 'AbortError')
+              : new Error('Request failed'),
+          );
+        }
+        await useTableStore.getState().fetchEvalData('fixture', { pageIndex: 3, pageSize: 50 });
+        expect(useTableStore.getState().table).toBe(table);
+        expect(useTableStore.getState().tablePageOffset).toBe(100);
+        expect(useTableStore.getState().isFetching).toBe(false);
+
+        const ratedTable = {
+          ...table,
+          body: [{ ...table.body[0], outputs: [createMockOutput(true)] }],
+        };
+        useTableStore.getState().setTable(ratedTable);
+        expect(useTableStore.getState().table).toBe(ratedTable);
+        expect(useTableStore.getState().tablePageOffset).toBe(100);
+
+        vi.mocked(callApi).mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ table, totalCount: 500, filteredCount: 500 }),
+        } as Response);
+        await useTableStore.getState().fetchEvalData('fixture', { pageIndex: 3, pageSize: 100 });
+        expect(useTableStore.getState().tablePageOffset).toBe(300);
+
+        useTableStore.getState().setTable(null);
+        expect(useTableStore.getState().tablePageOffset).toBe(0);
+      },
+    );
+
     it('should properly handle filters with special characters in their values when building the API request URL', async () => {
       const evalId = 'test-eval-id';
       const filterValue = 'test value with !@#$%^&*()_+=-`~[]\{}|;\':",./<>? special characters';
