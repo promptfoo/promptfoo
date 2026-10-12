@@ -1,19 +1,12 @@
-import { mockBrowserProperty } from '@app/tests/browserMocks';
+import { mockObjectUrl } from '@app/tests/browserMocks';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { downloadBlob } from './useDownloadEval';
 
 describe('downloadBlob', () => {
-  const createObjectURLMock = vi.fn();
-  const revokeObjectURLMock = vi.fn();
   const clickMock = vi.fn();
 
   beforeEach(() => {
-    createObjectURLMock.mockClear();
-    revokeObjectURLMock.mockClear();
     clickMock.mockClear();
-
-    mockBrowserProperty(URL, 'createObjectURL', createObjectURLMock as typeof URL.createObjectURL);
-    mockBrowserProperty(URL, 'revokeObjectURL', revokeObjectURLMock as typeof URL.revokeObjectURL);
 
     vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(clickMock);
 
@@ -64,7 +57,7 @@ describe('downloadBlob', () => {
       mockUrl: 'blob:http://localhost/mock-pdf-uuid',
     },
   ])('should trigger a file download $description', ({ blob, fileName, mockUrl }) => {
-    createObjectURLMock.mockReturnValue(mockUrl);
+    mockObjectUrl(mockUrl);
 
     downloadBlob(blob, fileName);
 
@@ -75,7 +68,7 @@ describe('downloadBlob', () => {
     const blob = new Blob(['file content'], { type: 'text/plain' });
     const fileName = 'file/with\\special:characters*.txt';
     const mockUrl = 'blob:http://localhost/mock-uuid';
-    createObjectURLMock.mockReturnValue(mockUrl);
+    mockObjectUrl(mockUrl);
 
     downloadBlob(blob, fileName);
 
@@ -88,7 +81,7 @@ describe('downloadBlob', () => {
     const blob = new Blob(['file content'], { type: 'text/plain' });
     const fileName = 'results.txt';
     const errorMessage = 'Failed to create object URL';
-    createObjectURLMock.mockImplementation(() => {
+    mockObjectUrl().createObjectURL.mockImplementation(() => {
       throw new Error(errorMessage);
     });
 
