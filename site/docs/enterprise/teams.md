@@ -46,7 +46,7 @@ To rotate a value without changing its references, use **Edit** in the Team Secr
 
 Start a new scan to verify the replacement before revoking the old key with your model provider.
 
-Before deleting a secret, check its **References** column. Promptfoo lists references from saved targets and enabled team inference-provider overrides, and blocks deletion while those references remain. Remove or replace them first. Disabled overrides are not included; update their references before re-enabling them.
+Before deleting a secret, check its **References** column. Promptfoo lists references from saved targets and enabled team inference-provider overrides, and blocks deletion while those references remain. Remove or replace them first. Disabled overrides are not included. Remove or replace their references while the overrides are enabled, before disabling them or deleting the secret.
 
 ## Team Probe Limits (On-Prem)
 
