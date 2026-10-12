@@ -80,11 +80,10 @@ export class Telemetry {
   }
 
   private getPersonProperties(ciFlag: boolean) {
-    const personProperties = {
+    return {
       ...getUserAuthInfo(),
       isRunningInCi: ciFlag,
     };
-    return personProperties;
   }
 
   async identify() {

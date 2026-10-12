@@ -35,6 +35,8 @@ export interface EvalSummaryParams {
   failures: number;
   /** Number of test cases with errors */
   errors: number;
+  /** Number of test cases served from the response cache (shown only when > 0) */
+  cacheHits?: number;
   /** Duration of the evaluation in seconds */
   duration: number;
   /** Maximum concurrent API calls during evaluation */
@@ -201,23 +203,10 @@ function getTokenUsageLines(
     return [];
   }
 
-  const evalTokens = {
-    prompt: tokenUsage.prompt || 0,
-    completion: tokenUsage.completion || 0,
-    total: primaryTokens,
-    cached: tokenUsage.cached || 0,
-    numRequests: tokenUsage.numRequests || 0,
-    completionDetails: tokenUsage.completionDetails || {
-      reasoning: 0,
-      acceptedPrediction: 0,
-      rejectedPrediction: 0,
-    },
-  };
-
   const lines = [
     `${chalk.bold('Total Tokens:')} ${chalk.white.bold(
       (
-        evalTokens.total +
+        primaryTokens +
         attackerTokens +
         getTokenUsageTotal(tokenUsage.assertions) +
         generationTokens
@@ -231,12 +220,12 @@ function getTokenUsageLines(
     );
   }
 
-  if (evalTokens.total > 0) {
-    const evalParts = buildUsageDetails(evalTokens, evalTokens.total);
+  if (primaryTokens > 0) {
+    const evalParts = buildUsageDetails(tokenUsage, primaryTokens);
     const primaryUsageLabel = isRedteam ? 'Target' : 'Provider';
     lines.push(
       `  ${chalk.gray(`${primaryUsageLabel}:`)} ${chalk.white(
-        evalTokens.total.toLocaleString(),
+        primaryTokens.toLocaleString(),
       )} (${evalParts.join(', ')})`,
     );
   }
@@ -272,10 +261,7 @@ function getTokenUsageLines(
       getTokenUsageTotal(incurredUsage.assertions) +
       getTokenUsageTotal(incurredUsage.generation);
     const evaluationTokens =
-      evalTokens.total +
-      attackerTokens +
-      getTokenUsageTotal(tokenUsage.assertions) +
-      generationTokens;
+      primaryTokens + attackerTokens + getTokenUsageTotal(tokenUsage.assertions) + generationTokens;
     const cachedSavings = Math.max(evaluationTokens - incurredTokens, 0);
 
     if (cachedSavings > 0) {
@@ -349,9 +335,13 @@ function getResultsLines({
   successes,
   failures,
   errors,
+  cacheHits,
   duration,
   maxConcurrency,
-}: Pick<EvalSummaryParams, 'successes' | 'failures' | 'errors' | 'duration' | 'maxConcurrency'>) {
+}: Pick<
+  EvalSummaryParams,
+  'successes' | 'failures' | 'errors' | 'cacheHits' | 'duration' | 'maxConcurrency'
+>) {
   const totalTests = successes + failures + errors;
   const errorLabel = errors === 1 ? 'error' : 'errors';
 
@@ -361,6 +351,9 @@ function getResultsLines({
     formatResultLine(successes, 'passed', successes > 0 ? '✓' : undefined, chalk.green, totalTests),
     formatResultLine(failures, 'failed', failures > 0 ? '✗' : undefined, chalk.red, totalTests),
     formatResultLine(errors, errorLabel, errors > 0 ? '✗' : undefined, chalk.red, totalTests),
+    ...(cacheHits
+      ? [formatResultLine(cacheHits, 'cache hits', undefined, chalk.gray, totalTests)]
+      : []),
     chalk.gray(`Duration: ${formatDuration(duration)} (concurrency: ${maxConcurrency})`),
     '',
   ];

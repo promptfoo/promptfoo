@@ -6,11 +6,11 @@
  *
  * @see docs/plans/smoke-tests.md for the full checklist
  */
-import { spawnSync } from 'child_process';
+import { spawn, spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { getOpenAiMissingApiKeyMessage } from '../providers/openai/shared';
 
 // Path to the built CLI binary
@@ -54,6 +54,105 @@ describe('Config Format Smoke Tests', () => {
     }
   });
 
+  it.each(['js', 'mjs'])(
+    'loads .%s configs with extensionless helper imports in a fresh CLI',
+    (ext) => {
+      const configPath = path.join(OUTPUT_DIR, `promptfooconfig.${ext}`);
+      const outputPath = path.join(OUTPUT_DIR, `extensionless-${ext}.json`);
+      fs.writeFileSync(
+        path.join(OUTPUT_DIR, 'helper.js'),
+        "export default 'extensionless helper';",
+      );
+      fs.writeFileSync(
+        configPath,
+        "import prompt from './helper'; export default { prompts: [prompt], providers: ['echo'], tests: [{ assert: [{ type: 'equals', value: prompt }] }] };",
+      );
+
+      const result = runCli(
+        ['eval', '-c', configPath, '-o', outputPath, '--no-cache', '--no-share'],
+        {
+          env: { NODE_OPTIONS: '', PROMPTFOO_CONFIG_DIR: path.join(OUTPUT_DIR, `config-${ext}`) },
+        },
+      );
+
+      expect(result.exitCode, result.stdout + result.stderr).toBe(0);
+      const exported = JSON.parse(fs.readFileSync(outputPath, 'utf-8'));
+      expect(exported.results.results).toHaveLength(1);
+      expect(exported.results.results[0]).toMatchObject({
+        success: true,
+        score: 1,
+        response: { output: 'extensionless helper' },
+      });
+      expect(exported.results.results[0].error).toBeFalsy();
+    },
+  );
+
+  it('reloads a CommonJS .js default configuration after a watch edit', async () => {
+    const directory = fs.mkdtempSync(path.join(OUTPUT_DIR, 'watch-cjs-'));
+    const configPath = path.join(directory, 'promptfooconfig.js');
+    const outputPath = path.join(directory, 'output.json');
+    fs.writeFileSync(path.join(directory, 'package.json'), '{"type":"module"}');
+    const writeConfig = (value: string) =>
+      fs.writeFileSync(
+        configPath,
+        `require('node:fs'); module.exports = ${JSON.stringify({
+          prompts: [value],
+          providers: ['echo'],
+          tests: [{ assert: [{ type: 'equals', value }] }],
+        })};`,
+      );
+    writeConfig('before watch edit');
+    // Default discovery depends on CWD; the child has an isolated fixture and database.
+    const child = spawn(
+      process.execPath,
+      [CLI_PATH, 'eval', '--watch', '--no-cache', '--no-share', '-o', outputPath],
+      {
+        cwd: directory,
+        env: {
+          ...process.env,
+          NODE_OPTIONS: '',
+          PROMPTFOO_CONFIG_DIR: path.join(directory, 'state'),
+          PROMPTFOO_DISABLE_UPDATE: 'true',
+          PROMPTFOO_DISABLE_TELEMETRY: 'true',
+          NO_COLOR: '1',
+        },
+      },
+    );
+    let output = '';
+    child.stdout.on('data', (chunk) => {
+      output += chunk;
+    });
+    child.stderr.on('data', (chunk) => {
+      output += chunk;
+    });
+    const closed = new Promise<void>((resolve) => child.once('close', () => resolve()));
+    try {
+      await vi.waitFor(() => expect(output).toContain('Watching for file changes'), {
+        timeout: 10000,
+      });
+      const initial = JSON.parse(fs.readFileSync(outputPath, 'utf-8'));
+      expect(initial.results.results[0].response.output).toBe('before watch edit');
+      writeConfig('after watch edit');
+      await vi.waitFor(
+        () => {
+          const exported = JSON.parse(fs.readFileSync(outputPath, 'utf-8'));
+          expect(exported.results.results[0]).toMatchObject({
+            success: true,
+            score: 1,
+            response: { output: 'after watch edit' },
+          });
+          expect(exported.results.results[0].error).toBeFalsy();
+        },
+        { timeout: 10000 },
+      );
+    } finally {
+      child.kill('SIGTERM');
+      const forcedExit = setTimeout(() => child.kill('SIGKILL'), 1000);
+      await closed;
+      clearTimeout(forcedExit);
+    }
+  });
+
   describe('2.2 JSON Configs', () => {
     it('2.2.1 - parses JSON config format', () => {
       const configPath = path.join(FIXTURES_DIR, 'configs/basic.json');
@@ -80,6 +179,41 @@ describe('Provider Smoke Tests', () => {
     if (fs.existsSync(OUTPUT_DIR)) {
       fs.rmSync(OUTPUT_DIR, { recursive: true, force: true });
     }
+  });
+
+  it('resolves a JavaScript provider entry to its TypeScript implementation', () => {
+    const providerPath = path.join(OUTPUT_DIR, 'alias-provider.ts');
+    const configPath = path.join(OUTPUT_DIR, 'alias-config.json');
+    const outputPath = path.join(OUTPUT_DIR, 'alias-output.json');
+    fs.writeFileSync(
+      providerPath,
+      "export default class Provider { id() { return 'alias-provider'; } async callApi(prompt: string) { return { output: prompt }; } }",
+    );
+    fs.writeFileSync(
+      configPath,
+      JSON.stringify({
+        prompts: ['entry alias'],
+        providers: ['file://' + providerPath.replace(/\.ts$/, '.js')],
+        tests: [{ assert: [{ type: 'equals', value: 'entry alias' }] }],
+      }),
+    );
+
+    const result = runCli(
+      ['eval', '-c', configPath, '-o', outputPath, '--no-cache', '--no-share'],
+      {
+        env: { NODE_OPTIONS: '', PROMPTFOO_CONFIG_DIR: path.join(OUTPUT_DIR, 'alias-config') },
+      },
+    );
+
+    expect(result.exitCode, result.stdout + result.stderr).toBe(0);
+    const exported = JSON.parse(fs.readFileSync(outputPath, 'utf-8'));
+    expect(exported.results.results).toHaveLength(1);
+    expect(exported.results.results[0]).toMatchObject({
+      success: true,
+      score: 1,
+      response: { output: 'entry alias' },
+    });
+    expect(exported.results.results[0].error).toBeFalsy();
   });
 
   describe('3.1 Built-in Providers', () => {

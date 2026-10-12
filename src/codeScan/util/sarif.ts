@@ -114,8 +114,7 @@ function isSarifReportableFinding(comment: Comment): boolean {
   // findings). CommentSchema marks `severity` optional and toSarifLevel falls back to
   // 'note' for undefined, so we let undefined flow through rather than silently dropping
   // a finding the scanner couldn't grade. Explicit NONE means "no issue" and is filtered.
-  const hasFile = comment.file != null && comment.file !== '';
-  return hasFile && comment.severity !== CodeScanSeverity.NONE;
+  return comment.file != null && comment.file !== '' && comment.severity !== CodeScanSeverity.NONE;
 }
 
 function toSarifLevel(severity: CodeScanSeverity | undefined): SarifResult['level'] {
@@ -142,17 +141,6 @@ function toSarifLevel(severity: CodeScanSeverity | undefined): SarifResult['leve
 
 function normalizeFindingForFingerprint(finding: string): string {
   return finding.toLowerCase().replace(/\s+/g, ' ').trim().slice(0, FINGERPRINT_FINDING_MAX_CHARS);
-}
-
-function createFingerprint(comment: Comment): string {
-  return sha256(
-    [
-      comment.file ?? '',
-      GENERIC_RULE_ID,
-      comment.severity ?? '',
-      normalizeFindingForFingerprint(comment.finding),
-    ].join(' '),
-  );
 }
 
 function toArtifactUri(filePath: string): string {
@@ -196,7 +184,14 @@ function toSarifResult(comment: Comment): SarifResult {
     },
     locations: toSarifLocation(comment),
     partialFingerprints: {
-      promptfooFindingHash: createFingerprint(comment),
+      promptfooFindingHash: sha256(
+        [
+          comment.file ?? '',
+          GENERIC_RULE_ID,
+          comment.severity ?? '',
+          normalizeFindingForFingerprint(comment.finding),
+        ].join(' '),
+      ),
     },
     properties: {
       severity: comment.severity,

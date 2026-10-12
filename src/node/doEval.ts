@@ -10,6 +10,7 @@ import { disableCache } from '../cache';
 import cliState from '../cliState';
 import { DEFAULT_MAX_CONCURRENCY } from '../constants';
 import { getEnvBool, getEnvFloat, getEnvInt, isCI } from '../envars';
+import { clearCjsModuleCache } from '../esm';
 import { evaluate, PromptSuggestionsRejectedError } from '../evaluator';
 import {
   checkEmailStatusAndMaybeExit,
@@ -30,7 +31,7 @@ import { EMAIL_OK_STATUS } from '../types/email';
 import { isCliEventSource } from '../types/eventSource';
 import { CommandLineOptionsSchema, MAX_SUGGESTIONS_COUNT, TestSuiteSchema } from '../types/index';
 import { checkCloudPermissions, getEvalConfigFromCloud, getOrgContext } from '../util/cloud';
-import { clearConfigCache, loadDefaultConfig } from '../util/config/default';
+import { loadDefaultConfig } from '../util/config/default';
 import { DEFAULT_CONFIG_EXTENSIONS } from '../util/config/extensions';
 import {
   ConfigResolutionError,
@@ -58,7 +59,6 @@ import { checkProviderApiKeys } from '../util/provider';
 import { shouldShareResults } from '../util/sharing';
 import { resolveTestsWatchPaths } from '../util/testCaseReader';
 import { TokenUsageTracker } from '../util/tokenUsage';
-import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import { isUuid } from '../util/uuid';
 import { deleteErrorResults, getErrorResultIds, recalculatePromptMetrics } from './retry';
 import { notCloudEnabledShareInstructions } from './shareInstructions';
@@ -932,6 +932,29 @@ async function doEvalWithEnv(
     // Run the evaluation!!!!!!
     let ret;
     try {
+      if (resumeRaw && !evalRecord.useOldResults()) {
+        // Older evals lack this counter. Recover it without recalculating other metrics.
+        const missingCacheCounts = evalRecord.prompts.map(({ metrics }) =>
+          metrics && metrics.testCacheHitCount === undefined ? { metrics, count: 0 } : undefined,
+        );
+        if (missingCacheCounts.some(Boolean)) {
+          for await (const batch of evalRecord.fetchResultsBatched()) {
+            for (const result of batch) {
+              const pending = missingCacheCounts[result.promptIdx];
+              if (pending && result.response?.cached) {
+                pending.count++;
+              }
+            }
+          }
+          // Publish only after every batch succeeds; a failed read must not leave partial counts.
+          for (const pending of missingCacheCounts) {
+            if (pending) {
+              pending.metrics.testCacheHitCount = pending.count;
+            }
+          }
+        }
+      }
+
       ret = await evaluate(testSuite, evalRecord, {
         ...options,
         restorePromptColumns: Boolean(resumeEval),
@@ -1009,28 +1032,7 @@ async function doEvalWithEnv(
       sharePromise = createShareableUrl(evalRecord, { silent: true });
     }
 
-    let successes = 0;
-    let failures = 0;
-    let errors = 0;
-    const tokenUsage = createEmptyTokenUsage();
-
-    // Calculate our total successes and failures
-    for (const prompt of evalRecord.prompts) {
-      if (prompt.metrics?.testPassCount) {
-        successes += prompt.metrics.testPassCount;
-      }
-      if (prompt.metrics?.testFailCount) {
-        failures += prompt.metrics.testFailCount;
-      }
-      if (prompt.metrics?.testErrorCount) {
-        errors += prompt.metrics.testErrorCount;
-      }
-      accumulateTokenUsage(tokenUsage, prompt.metrics?.tokenUsage);
-    }
-    const generationTokenUsage = evalRecord.getStats().tokenUsage.generation;
-    if (generationTokenUsage) {
-      tokenUsage.generation = generationTokenUsage;
-    }
+    const { successes, failures, errors, cacheHits, tokenUsage } = evalRecord.getStats();
     const totalTests = successes + failures + errors;
     const passRate = (successes / totalTests) * 100;
 
@@ -1093,6 +1095,7 @@ async function doEvalWithEnv(
       successes,
       failures,
       errors,
+      cacheHits,
       duration,
       maxConcurrency,
       tracker,
@@ -1246,7 +1249,8 @@ async function doEvalWithEnv(
             printBorder();
             logger.info(`File change detected: ${path}`);
             printBorder();
-            clearConfigCache();
+            // Watch reruns have always reloaded CommonJS .js default configurations.
+            clearCjsModuleCache();
             try {
               await runEvaluation();
             } catch (error) {
