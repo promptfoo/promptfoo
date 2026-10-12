@@ -52,7 +52,9 @@ on:
 concurrency:
   # Reusable workflow calls inherit the caller's github.workflow value. Keep this
   # group Docker-specific so release-please callers are not cancelled mid-release.
-  group: ${{ github.event_name == 'pull_request' && format('docker-pr-{0}', github.ref) || format('docker-publish-{0}', github.repository) }}
+  # GitHub keeps one pending run per group and cancels it when another run queues, so
+  # each release tag gets its own group and never waits behind pushes to main.
+  group: ${{ github.event_name == 'pull_request' && format('docker-pr-{0}', github.ref) || format('docker-publish-{0}', inputs.tag_name || github.event.release.tag_name || github.ref) }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
