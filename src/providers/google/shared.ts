@@ -44,7 +44,10 @@ export interface GoogleModel {
 // global-only availability or global as the broadly available endpoint:
 // https://docs.cloud.google.com/vertex-ai/generative-ai/docs/learn/locations#generative_ai_models
 const VERTEX_GLOBAL_DEFAULT_MODELS = new Set([
+  'gemini-3.8-flash-tts',
+  'gemini-3.8-flash-lite-tts',
   'gemini-3.8-flash',
+  'gemini-3.8-flash-cyber',
   'gemini-3.7-flash',
   'gemini-3.6-flash',
   'gemini-3.5-flash',
@@ -127,6 +130,19 @@ const GEMINI_3_5_FLASH_LITE_COST = {
  * @see https://cloud.google.com/vertex-ai/generative-ai/pricing
  */
 export const GOOGLE_MODELS: GoogleModel[] = [
+  // Fairwind allowlisted Vertex model; the Flash introductory discount does not apply.
+  {
+    id: 'gemini-3.8-flash-cyber',
+    vertexCost: {
+      input: 1.5 / 1e6,
+      output: 7.5 / 1e6,
+      cacheRead: 0.15 / 1e6,
+      priorityMultiplier: 1.8,
+      flexMultiplier: 0.5,
+    },
+    vertexRegionalPremium: 1.1,
+  },
+
   // Gemini 3.8, 3.7, and 3.6 Flash receive a 50% discount through 2026-12-31.
   ...['gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-flash-latest'].map(
     (id) => ({
@@ -142,6 +158,23 @@ export const GOOGLE_MODELS: GoogleModel[] = [
       vertexRegionalPremium: 1.1,
     }),
   ),
+
+  ...[
+    { id: 'gemini-3.8-flash-tts', audioOutput: 18 / 1e6 },
+    { id: 'gemini-3.8-flash-lite-tts', audioOutput: 12 / 1e6 },
+  ].map(({ id, audioOutput }) => ({
+    id,
+    cost: {
+      input: 1 / 1e6,
+      output: audioOutput,
+      audioOutput,
+      priorityMultiplier: 1.8,
+      flexMultiplier: 0.5,
+    },
+    // Vertex publishes standard-tier TTS rates, with introductory credits applied below.
+    vertexCost: { input: 1 / 1e6, output: audioOutput, audioOutput },
+    introductoryPricing: GEMINI_FLASH_INTRODUCTORY_PRICING,
+  })),
 
   // Gemini 3.5 models.
   {

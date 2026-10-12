@@ -1169,6 +1169,67 @@ describe('file utilities', () => {
       expect(await maybeLoadToolsFromExternalFile(tools, vars)).toEqual(expected);
     });
 
+    it.each([
+      '{{ second }}',
+      '{{ env.PROMPTFOO_TEST_TOOL_CANARY }}',
+      '{% if true %}tool-marker{% endif %}',
+      '{{ range.constructor("return \'tool-marker\'")() }}',
+    ])('keeps substituted tool descriptions literal: %s', async (description) => {
+      const restoreEnv = mockProcessEnv({ PROMPTFOO_TEST_TOOL_CANARY: 'synthetic-tool-canary' });
+      try {
+        const tool = {
+          type: 'function',
+          function: { name: '{{ name }}', description: '{{ description }}' },
+        };
+        const vars = { name: 'calculator', description, second: 'tool-marker' };
+        const expected = {
+          type: 'function',
+          function: { name: 'calculator', description },
+        };
+        expect(await maybeLoadToolsFromExternalFile(tool, vars)).toEqual(expected);
+        expect(await maybeLoadToolsFromExternalFile([tool], vars)).toEqual([expected]);
+        expect(tool.function.description).toBe('{{ description }}');
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it.each(['json', 'yaml'])(
+      'loads templated %s references in arrays without rendering file contents',
+      async (extension) => {
+        const definitions = [
+          { type: 'function', function: { name: 'test', description: '{{ name }}' } },
+        ];
+        vi.mocked(fs.readFileSync).mockReturnValue(
+          extension === 'json' ? JSON.stringify(definitions) : yaml.dump(definitions),
+        );
+        const result = await maybeLoadToolsFromExternalFile(['file://{{ file }}'], {
+          file: `tools.${extension}`,
+          name: 'runtime name',
+        });
+        expect(result).toEqual(definitions);
+        expect(fs.readFileSync).toHaveBeenCalledExactlyOnceWith(
+          expect.stringContaining(`tools.${extension}`),
+          'utf8',
+        );
+      },
+    );
+
+    it('loads templated function references in arrays without arguments or rendering returned definitions', async () => {
+      const definitions = [
+        { type: 'function', function: { name: 'test', description: '{{ name }}' } },
+      ];
+      const getTools = vi.fn(async () => definitions);
+      vi.mocked(importModule).mockResolvedValue({ getTools });
+      const result = await maybeLoadToolsFromExternalFile(['file://{{ file }}:getTools'], {
+        file: 'tools.mjs',
+        name: 'runtime name',
+      });
+      expect(result).toEqual(definitions);
+      expect(getTools).toHaveBeenCalledExactlyOnceWith();
+      expect(importModule).toHaveBeenCalledExactlyOnceWith(expect.stringContaining('tools.mjs'));
+    });
+
     it('should render variables and load from external file', async () => {
       const tools = 'file://{{ file_path }}.json';
       const vars = { file_path: 'tools' };
