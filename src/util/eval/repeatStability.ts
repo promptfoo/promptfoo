@@ -98,7 +98,7 @@ function isCachedResult(result: RepeatStabilityResult): boolean {
       return true;
     }
     const components = gradingResult.componentResults;
-    if (components) {
+    if (Array.isArray(components)) {
       for (let childIndex = 0; childIndex < components.length; childIndex++) {
         pending.push(components[childIndex]);
       }

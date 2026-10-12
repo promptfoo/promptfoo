@@ -212,6 +212,11 @@ describe('calculateRepeatStability', () => {
     ['undefined', [undefined]],
     ['sparse', Array<unknown>(1)],
     ['non-object', [false, 0, 'historical value']],
+    ['array-like container', { 0: { metadata: { cachedResponse: true } }, length: 1 }],
+    [
+      'nested array-like container',
+      [{ componentResults: { 0: { metadata: { cachedResponse: true } }, length: 1 } }],
+    ],
   ] as const)(
     'ignores malformed %s components without suppressing the interval',
     (_name, components) => {
