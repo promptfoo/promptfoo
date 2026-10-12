@@ -1703,7 +1703,9 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       model: config.model,
       fallbackModel: config.fallback_model,
       strictMcpConfig: config.strict_mcp_config ?? true, // only allow MCP servers that are explicitly configured - true by default
-      permissionMode: config.permission_mode === 'manual' ? 'default' : config.permission_mode,
+      // SDK 0.3.286 can select auto mode when omitted. Preserve manual approvals by default.
+      permissionMode:
+        config.permission_mode === 'manual' ? 'default' : (config.permission_mode ?? 'default'),
       planModeInstructions: config.plan_mode_instructions,
       systemPrompt:
         config.custom_system_prompt == null
