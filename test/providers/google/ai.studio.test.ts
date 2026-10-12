@@ -133,14 +133,6 @@ vi.mock('../../../src/util/file', async (importOriginal) => {
   };
 });
 
-// Also mock the barrel file since the provider imports from util/index
-vi.mock('../../../src/util/index', async (importOriginal) => {
-  return {
-    ...(await importOriginal()),
-    maybeLoadToolsFromExternalFile: mockMaybeLoadToolsFromExternalFile,
-  };
-});
-
 vi.mock('glob', async (importOriginal) => {
   return {
     ...(await importOriginal()),
@@ -2031,9 +2023,13 @@ describe('AIStudioChatProvider', () => {
       });
 
       // Verify maybeLoadToolsFromExternalFile was called with the tools file path
-      expect(mockMaybeLoadToolsFromExternalFile).toHaveBeenCalledWith('file://tools.json', {
-        location: 'San Francisco',
-      });
+      expect(mockMaybeLoadToolsFromExternalFile).toHaveBeenCalledWith(
+        'file://tools.json',
+        {
+          location: 'San Francisco',
+        },
+        undefined,
+      );
       expect(cache.fetchWithCache).toHaveBeenCalledWith(
         'https://rendered-generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent',
         {
@@ -2198,6 +2194,7 @@ describe('AIStudioChatProvider', () => {
       expect(mockMaybeLoadToolsFromExternalFile).toHaveBeenCalledWith(
         [{ googleSearch: {} }],
         undefined,
+        undefined,
       );
       const callArgs = vi.mocked(cache.fetchWithCache).mock.calls.at(-1);
       const body = JSON.parse(callArgs![1]!.body as string);
@@ -2238,6 +2235,7 @@ describe('AIStudioChatProvider', () => {
 
       expect(mockMaybeLoadToolsFromExternalFile).toHaveBeenCalledWith(
         'file://tools.json',
+        undefined,
         undefined,
       );
       const callArgs = vi.mocked(cache.fetchWithCache).mock.calls.at(-1);
