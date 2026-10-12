@@ -1,5 +1,5 @@
 import { getMissingAssertionVariables } from './assertionPrerequisites';
-import { getFirstRunnableAssertionValueError } from './assertionValueValidation';
+import { getFirstRunnableAssertionValueError, isRecord } from './assertionValueValidation';
 import type { AssertionOrSet, ProviderOptions, UnifiedConfig } from '@promptfoo/types';
 
 export type SetupStepId = 1 | 2 | 3 | 4;
@@ -48,10 +48,6 @@ const PROVIDER_OPTION_KEYS = new Set([
   'env',
   'inputs',
 ]);
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
-}
 
 function getVars(testCase: Record<string, unknown>): Record<string, unknown> {
   return isRecord(testCase.vars) ? testCase.vars : {};
@@ -518,25 +514,7 @@ export function normalizeProviders(
       return [];
     }
 
-    if (isProviderMapShape(provider)) {
-      return Object.entries(provider).flatMap(([id, providerOptions]) => {
-        if (!isRecord(providerOptions)) {
-          return [];
-        }
-
-        const normalizedProvider = {
-          ...(providerOptions as ProviderOptions),
-          id:
-            typeof providerOptions.id === 'string' && providerOptions.id.trim() !== ''
-              ? providerOptions.id
-              : id,
-        };
-
-        return hasRunnableProviderId(normalizedProvider) ? [normalizedProvider] : [];
-      });
-    }
-
-    if (isProviderOptionsShape(provider)) {
+    if (!isProviderMapShape(provider) && isProviderOptionsShape(provider)) {
       const providerOptions = provider as ProviderOptions;
       return hasRunnableProviderId(providerOptions) ? [providerOptions] : [];
     }
