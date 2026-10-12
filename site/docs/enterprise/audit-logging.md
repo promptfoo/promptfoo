@@ -169,9 +169,9 @@ Audit logs are available in the UI and API to organization administrators. Resul
 1. Open the profile menu, select **Organization Settings**, then **Audit Logs**.
 2. Set **Start Date** and **End Date** around the event you are investigating. These fields use your browser's local time.
 3. Optionally enter an **Actor ID** and select **Action** and **Target**, then click **Apply Filters**. For example, choose **User Login** and **User** to investigate an account's sign-ins. Actor ID is the user's ID, not their email address.
-4. Review **Date**, **Actor**, **Actor Email**, **Description**, and **Target ID**. Use pagination for more results; **Clear Filters** resets the investigation.
+4. Review **Date**, **Action**, **Actor**, **Actor Email**, and **Description**. Use pagination for more results; **Clear Filters** resets the investigation.
 
-All supplied filters must match. **Target** selects a resource type, not a particular resource ID; inspect **Target ID** in the results to identify the affected resource. The API also returns event-specific `metadata`.
+All supplied filters must match. **Target** selects a resource type, not a particular resource ID. Use the API response's `targetId` to identify the affected resource and `metadata` for event-specific details.
 
 [![Audit logs filtered by actor, User Login action, User target, and a bounded date window](/img/enterprise-docs/audit-log-filters.png)](pathname:///img/enterprise-docs/audit-log-filters.png)
 
