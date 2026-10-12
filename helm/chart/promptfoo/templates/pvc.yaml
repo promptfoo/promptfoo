@@ -6,6 +6,8 @@ metadata:
   name: {{ .name }}
   labels:
     app: {{ $.Release.Name | quote }}
+  annotations:
+    "helm.sh/resource-policy": keep
 spec:
   accessModes:
     {{- toYaml .accessModes | nindent 4 }}

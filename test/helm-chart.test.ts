@@ -123,6 +123,10 @@ describe('Helm chart', () => {
         accessModes: ['ReadWriteOnce'],
         resources: { requests: { storage: '1Gi' } },
       });
+      // Uninstalling the release must not delete the data volume.
+      expect(only(resources, 'PersistentVolumeClaim').metadata.annotations).toEqual({
+        'helm.sh/resource-policy': 'keep',
+      });
     });
 
     it('pulls a pinned tag only when it is missing', () => {
@@ -222,6 +226,19 @@ describe('Helm chart', () => {
         storageClassName: 'fast',
         resources: { requests: { storage: '10Gi' } },
       });
+    });
+
+    it('renders no autoscaler when values still enable one', () => {
+      const resources = render(
+        '--set',
+        'autoscaling.enabled=true',
+        '--set',
+        'autoscaling.targetCPUUtilizationPercentage=80',
+      );
+
+      // The server cannot run more than one replica.
+      expect(resources.map((resource) => resource.kind)).not.toContain('HorizontalPodAutoscaler');
+      expect(only(resources, 'Deployment').spec.replicas).toBe(1);
     });
   });
 });

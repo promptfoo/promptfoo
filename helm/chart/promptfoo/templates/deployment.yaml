@@ -5,9 +5,7 @@ metadata:
   labels:
     {{- include "promptfoo.labels" . | nindent 4 }}
 spec:
-  {{- if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.replicaCount }}
-  {{- end }}
   {{- /*
   The data volume is ReadWriteOnce, so the old pod must go before the new one is created.
   Recreate is not used because switching the strategy type fails under server-side apply

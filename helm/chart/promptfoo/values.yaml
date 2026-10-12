@@ -90,13 +90,8 @@ readinessProbe:
     path: /health
     port: http
 
-autoscaling:
-  enabled: false
-  minReplicas: 1
-  maxReplicas: 100
-  targetCPUUtilizationPercentage: 80
-  # targetMemoryUtilizationPercentage: 80
-
+# The claim and its data are kept when the release is uninstalled.
+# `kubectl delete pvc <name>` removes them.
 persistentVolumesClaims:
   - name: promptfoo
     size: 1Gi
