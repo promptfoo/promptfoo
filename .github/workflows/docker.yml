@@ -70,7 +70,13 @@ jobs:
   test:
     # Bot-authored releases are already handled by release-please.yml after npm publish.
     # The release event path is for human-published fallback releases and backfills.
-    if: github.event_name != 'release' || github.event.release.author.type != 'Bot'
+    # release-please.yml also builds the image for a release commit, so the push of that
+    # commit is skipped. The call from release-please.yml has the same push event; it is
+    # told apart by its tag input and must always run.
+    if: >-
+      (github.event_name != 'release' || github.event.release.author.type != 'Bot') &&
+      !(github.event_name == 'push' && !inputs.tag_name &&
+      startsWith(github.event.head_commit.message, 'chore(main): release '))
     name: test (${{ matrix.platforms.platform }})
     strategy:
       fail-fast: false
