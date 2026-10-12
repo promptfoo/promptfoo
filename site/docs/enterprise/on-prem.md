@@ -82,9 +82,9 @@ For restricted networks, account for the registry, database, identity provider, 
 
 Example configuration in release 125 using synthetic customer-support data:
 
-[![New Red Team Scan with a customer-support target and baseline scan template selected](/img/enterprise-docs/on-prem-scan-target.png)](/img/enterprise-docs/on-prem-scan-target.png)
+[![New Red Team Scan with a customer-support target and baseline scan template selected](/img/enterprise-docs/on-prem-scan-target.png)](pathname:///img/enterprise-docs/on-prem-scan-target.png)
 
-[![Run on Server tab with the Run Red Team Scan button enabled](/img/enterprise-docs/on-prem-run-server.png)](/img/enterprise-docs/on-prem-run-server.png)
+[![Run on Server tab with the Run Red Team Scan button enabled](/img/enterprise-docs/on-prem-run-server.png)](pathname:///img/enterprise-docs/on-prem-run-server.png)
 
 ## Kubernetes and secrets
 
