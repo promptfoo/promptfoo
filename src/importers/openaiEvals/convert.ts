@@ -8,20 +8,19 @@ import {
   type ProviderResponse,
   ResultFailureReason,
   type TokenUsage,
-  type Vars,
 } from '../../types/index';
 import { sha256 } from '../../util/createHash';
-import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
+import {
+  createDefaultPromptMetrics,
+  updatePromptResultCounts,
+} from '../../util/eval/promptMetrics';
+import { accumulateResponseTokenUsage } from '../../util/tokenUsageUtils';
 import { isRecord } from './validation';
 
 import type { OpenAIEvalsImportResult, OpenAIEvalsJsonlRow, OpenAISample } from './types';
 
 const OPENAI_EVALS_PROVIDER_PREFIX = 'openai-evals';
 const OPENAI_EVALS_IMPORT_FORMAT = 'dashboard-output-items-jsonl';
-
-function createOpenAIItemVars(item: Record<string, unknown>): Vars {
-  return { item };
-}
 
 function createOpenAIEvalsPrompt(runId: string, rows: OpenAIEvalsJsonlRow[]): CompletedPrompt {
   const hasStringInput = rows.every((row) => typeof row.item['input'] === 'string');
@@ -40,7 +39,7 @@ function createOpenAIEvalsPrompt(runId: string, rows: OpenAIEvalsJsonlRow[]): Co
 function createOpenAITestCase(row: OpenAIEvalsJsonlRow): AtomicTestCase {
   return {
     description: `Imported OpenAI eval item ${row.data_source_idx}`,
-    vars: createOpenAIItemVars(row.item),
+    vars: { item: row.item },
     metadata: {
       openaiRunId: row.run_id,
       openaiDataSourceIdx: row.data_source_idx,
@@ -215,7 +214,7 @@ function createOpenAIResult(
   promptIdx: number,
   importedPrompt: CompletedPrompt,
 ): EvaluateResult {
-  const vars = createOpenAIItemVars(row.item);
+  const vars = { item: row.item };
   const gradingResult = createOpenAIGradingResult(row);
   const response = createOpenAIResponse(row.sample);
   const error = getOpenAISampleError(row.sample);
@@ -288,30 +287,11 @@ function sanitizeOpenAIEvalsIdPart(value: string): string {
 }
 
 function createOpenAIPromptMetrics(results: EvaluateResult[]): CompletedPrompt['metrics'] {
-  const metrics: NonNullable<CompletedPrompt['metrics']> = {
-    score: 0,
-    testPassCount: 0,
-    testFailCount: 0,
-    testErrorCount: 0,
-    assertPassCount: 0,
-    assertFailCount: 0,
-    totalLatencyMs: 0,
-    tokenUsage: createEmptyTokenUsage(),
-    namedScores: {},
-    namedScoresCount: {},
-    namedScoreWeights: {},
-    cost: 0,
-  };
+  const metrics = createDefaultPromptMetrics();
 
   for (const result of results) {
     metrics.score += result.score;
-    if (result.success) {
-      metrics.testPassCount += 1;
-    } else if (result.failureReason === ResultFailureReason.ERROR) {
-      metrics.testErrorCount += 1;
-    } else {
-      metrics.testFailCount += 1;
-    }
+    updatePromptResultCounts(metrics, result);
     for (const component of result.gradingResult?.componentResults ?? []) {
       if (component.pass) {
         metrics.assertPassCount += 1;
@@ -327,6 +307,8 @@ function createOpenAIPromptMetrics(results: EvaluateResult[]): CompletedPrompt['
     }
   }
 
+  // Preserve the imported metrics shape without cache-hit counts.
+  delete metrics.testCacheHitCount;
   return metrics;
 }
 

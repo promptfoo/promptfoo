@@ -7,20 +7,11 @@ import {
 } from './types';
 
 function tryConvertOpenAIEvals(parsedJson: unknown): ParsedImportFile | undefined {
-  if (isOpenAIEvalsJsonlRow(parsedJson)) {
+  const rows = Array.isArray(parsedJson) ? parsedJson : [parsedJson];
+  if (rows.length > 0 && rows.every(isOpenAIEvalsJsonlRow)) {
     return {
       source: IMPORT_SOURCE_OPENAI_EVALS,
-      evalData: convertOpenAIEvalsJsonl([parsedJson]),
-    };
-  }
-  if (
-    Array.isArray(parsedJson) &&
-    parsedJson.length > 0 &&
-    parsedJson.every(isOpenAIEvalsJsonlRow)
-  ) {
-    return {
-      source: IMPORT_SOURCE_OPENAI_EVALS,
-      evalData: convertOpenAIEvalsJsonl(parsedJson),
+      evalData: convertOpenAIEvalsJsonl(rows),
     };
   }
   return undefined;
