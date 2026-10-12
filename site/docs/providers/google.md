@@ -289,7 +289,6 @@ Lyria music generation is not currently supported by promptfoo's Google provider
 - `google:gemini-3.8-flash` - Latest Gemini Flash model for coding and agentic workflows ($0.75/1M input, $3.75/1M output through December 31, 2026)
 - `google:gemini-3.7-flash` - Previous-generation Gemini Flash model for coding, multimodal reasoning, and agentic workflows ($0.75/1M input, $3.75/1M output through December 31, 2026)
 - `google:gemini-3.6-flash` - Previous-generation Gemini Flash model for coding and agentic tasks ($0.75/1M input, $3.75/1M output through December 31, 2026)
-- `google:gemini-3.5-flash` - Gemini 3.5 Flash for agentic and coding tasks ($1.50/1M input, $9/1M output)
 - `google:gemini-3.5-flash-lite` - Fast, cost-efficient Gemini 3.5 model for high-volume agentic workflows ($0.30/1M input, $2.50/1M output)
 - `google:live:gemini-3.5-live-translate-preview` - Gemini 3.5 Live Translate for real-time audio-to-audio translation with text transcripts ($3.50/1M audio input, $21/1M audio output)
 - `google:gemini-omni-1.1-flash` - Stable Gemini Omni Flash for conversational video generation/editing via the Interactions API ($1.50/1M input, $9/1M text/thinking output, $17.50/1M video output); `google:gemini-omni-flash-preview` remains available
@@ -341,7 +340,7 @@ setting; promptfoo rejects those settings before sending a request.
 
 :::note Gemini 3.8 Flash Cyber
 
-Google provides [Gemini 3.8 Flash Cyber through the Fairwind Program](https://deepmind.google/fairwind-program/). Its public model catalog does not list a Cyber API model ID or pricing. Use the model ID, endpoint, and access instructions supplied by Google; the regular Flash model does not grant Cyber access.
+Google documents [`gemini-3.8-flash-cyber` on Vertex](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/gemini/3-8-flash-cyber) for allowlisted Fairwind customers. Use `vertex:gemini-3.8-flash-cyber` with an authorized project; it defaults to `global` and also supports `region: us`. The public Flash introductory discount does not apply. This model supports structured output and thinking, but not function calling, grounding, code execution, Interactions, or Live. Availability on Vertex does not imply access through the Gemini API. See [Vertex pricing](https://cloud.google.com/gemini-enterprise-agent-platform/generative-ai/pricing).
 
 :::
 
@@ -1017,11 +1016,11 @@ providers:
 
 ### Gemini 3.5 Flash
 
-Gemini 3.5 Flash remains available for agentic and coding workloads:
+The Gemini API redirects `gemini-3.5-flash` to `gemini-3.6-flash`. Use the replacement ID directly:
 
 ```yaml
 providers:
-  - id: google:gemini-3.5-flash
+  - id: google:gemini-3.6-flash
     config:
       maxOutputTokens: 4096
       generationConfig:

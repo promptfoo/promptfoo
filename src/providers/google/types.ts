@@ -494,6 +494,15 @@ export interface CompletionOptions {
  * { vertexai: true, apiKey: 'your-key' }
  */
 export interface GoogleProviderConfig extends CompletionOptions {
+  /** Text embedding task for models that support task-specific vectors. */
+  taskType?: string;
+  /** Document title for RETRIEVAL_DOCUMENT embeddings. */
+  title?: string;
+  /** Requested embedding vector size. */
+  outputDimensionality?: number;
+  /** Allow server-side truncation on Vertex text prediction models. */
+  autoTruncate?: boolean;
+
   /** Base directory for resolving relative file references in provider configuration. */
   basePath?: string;
 
