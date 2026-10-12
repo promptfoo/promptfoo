@@ -36,8 +36,8 @@ function findKnownBadRanges(
   knownBadReleases: ReadonlyMap<string, string>,
 ): string[] {
   const { dependencies, devDependencies, optionalDependencies, peerDependencies } = manifest;
-  const ranges = [dependencies, devDependencies, optionalDependencies].flatMap((declared) =>
-    Object.entries(declared ?? {}),
+  const ranges = [dependencies, devDependencies, optionalDependencies, peerDependencies].flatMap(
+    (declared) => Object.entries(declared ?? {}),
   );
 
   const resolveOverrideRange = (value: string): string => {
@@ -433,7 +433,27 @@ describe('package manifests', () => {
     expect(violations).toEqual([]);
   });
 
-  it.each(['dependencies', 'devDependencies', 'optionalDependencies'] as const)(
+  it.each(['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies'] as const)(
+    'checks declared release ranges in %s',
+    (dependencyType) => {
+      expect(
+        findKnownBadRanges(
+          {
+            [dependencyType]: {
+              'fixture-bad': '^1.0.0',
+              'fixture-safe': '^2.0.0',
+            },
+          },
+          new Map([
+            ['fixture-bad', '<2.0.0'],
+            ['fixture-safe', '<2.0.0'],
+          ]),
+        ),
+      ).toEqual(['fixture-bad@^1.0.0']);
+    },
+  );
+
+  it.each(['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies'] as const)(
     'checks npm alias targets in %s',
     (dependencyType) => {
       expect(
@@ -606,7 +626,7 @@ describe('package manifests', () => {
         },
         new Map([['@fixture/leaf', '<2.0.0']]),
       ),
-    ).toEqual(['@fixture/leaf@^1.0.0']);
+    ).toEqual(['@fixture/leaf@^1.0.0', '@fixture/leaf@^1.0.0']);
   });
 
   it('reports unresolved override references instead of skipping their ranges', () => {

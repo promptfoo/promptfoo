@@ -895,6 +895,107 @@ describe('ClaudeCodeSDKProvider', () => {
     );
   });
 
+  describe('API key environment precedence', () => {
+    let restoreEnv: () => void;
+
+    beforeEach(() => {
+      restoreEnv = mockProcessEnv({
+        ANTHROPIC_API_KEY: undefined,
+        CLAUDE_CODE_USE_BEDROCK: undefined,
+        CLAUDE_CODE_USE_VERTEX: undefined,
+      });
+    });
+
+    afterEach(() => {
+      restoreEnv();
+    });
+
+    it.each<{
+      name: string;
+      processKey?: string;
+      config?: ClaudeCodeOptions;
+      env?: EnvOverrides;
+      promptConfig?: ClaudeCodeOptions;
+      expectedKey: string;
+    }>([
+      {
+        name: 'provider config.env without an ambient key',
+        config: { env: { ANTHROPIC_API_KEY: 'config-env-key' } },
+        expectedKey: 'config-env-key',
+      },
+      {
+        name: 'prompt config.env without an ambient key',
+        promptConfig: { env: { ANTHROPIC_API_KEY: 'prompt-env-key' } },
+        expectedKey: 'prompt-env-key',
+      },
+      {
+        name: 'config.env ahead of the ambient key',
+        processKey: 'process-key',
+        config: { env: { ANTHROPIC_API_KEY: 'config-env-key' } },
+        expectedKey: 'config-env-key',
+      },
+      {
+        name: 'prompt config.env ahead of provider config.env',
+        config: { env: { ANTHROPIC_API_KEY: 'config-env-key' } },
+        promptConfig: { env: { ANTHROPIC_API_KEY: 'prompt-env-key' } },
+        expectedKey: 'prompt-env-key',
+      },
+      {
+        name: 'provider env ahead of config.env and the ambient key',
+        processKey: 'process-key',
+        config: { env: { ANTHROPIC_API_KEY: 'config-env-key' } },
+        env: { ANTHROPIC_API_KEY: 'provider-env-key' },
+        promptConfig: { env: { ANTHROPIC_API_KEY: 'prompt-env-key' } },
+        expectedKey: 'provider-env-key',
+      },
+      {
+        name: 'explicit provider key ahead of all environment keys',
+        processKey: 'process-key',
+        config: { apiKey: 'provider-key', env: { ANTHROPIC_API_KEY: 'config-env-key' } },
+        env: { ANTHROPIC_API_KEY: 'provider-env-key' },
+        promptConfig: { env: { ANTHROPIC_API_KEY: 'prompt-env-key' } },
+        expectedKey: 'provider-key',
+      },
+      {
+        name: 'explicit prompt key ahead of the provider key and environment keys',
+        processKey: 'process-key',
+        config: { apiKey: 'provider-key', env: { ANTHROPIC_API_KEY: 'config-env-key' } },
+        env: { ANTHROPIC_API_KEY: 'provider-env-key' },
+        promptConfig: { apiKey: 'prompt-key', env: { ANTHROPIC_API_KEY: 'prompt-env-key' } },
+        expectedKey: 'prompt-key',
+      },
+      {
+        name: 'explicit provider key when the prompt key is empty',
+        config: { apiKey: 'provider-key' },
+        promptConfig: { apiKey: '', env: { ANTHROPIC_API_KEY: 'prompt-env-key' } },
+        expectedKey: 'provider-key',
+      },
+    ])('uses $name', async ({ processKey, config, env, promptConfig, expectedKey }) => {
+      mockProcessEnv({ ANTHROPIC_API_KEY: processKey });
+      mockQuery.mockReturnValue(createMockResponse('Authenticated response'));
+      const provider = new ClaudeCodeSDKProvider({ config, env });
+
+      const result = await provider.callApi('Prompt', {
+        vars: {},
+        prompt: { raw: 'Prompt', label: 'test', config: promptConfig },
+      });
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('Authenticated response');
+      expect(mockQuery).toHaveBeenCalledOnce();
+      expect(mockQuery.mock.calls[0][0].options.env.ANTHROPIC_API_KEY).toBe(expectedKey);
+    });
+
+    it('rejects an empty config.env API key before SDK dispatch', async () => {
+      const provider = new ClaudeCodeSDKProvider({
+        config: { env: { ANTHROPIC_API_KEY: '' } },
+      });
+
+      await expect(provider.callApi('Prompt')).rejects.toThrow('Anthropic API key is not set');
+      expect(mockQuery).not.toHaveBeenCalled();
+    });
+  });
+
   describe('scheduler composition', () => {
     let registry: RateLimitRegistry;
 

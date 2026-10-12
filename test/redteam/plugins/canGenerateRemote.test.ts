@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, assert, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import { BeavertailsPlugin } from '../../../src/redteam/plugins/beavertails';
 import { CustomPlugin } from '../../../src/redteam/plugins/custom';
@@ -87,7 +87,9 @@ describe('canGenerateRemote property and behavior', () => {
 
       const unsafeBenchPlugin = Plugins.find((p) => p.key === 'unsafebench');
 
-      await unsafeBenchPlugin?.action({
+      assert(unsafeBenchPlugin, 'UnsafeBench plugin must be registered');
+
+      await unsafeBenchPlugin.action({
         provider: mockProvider,
         purpose: 'test',
         injectVar: 'testVar',

@@ -992,7 +992,7 @@ describe('ResultsTable Metrics Display', () => {
 
       const imageElement = screen.getByRole('img', { name: 'Base64 encoded image' });
       expect(imageElement).toBeInTheDocument();
-      expect(imageElement).toHaveStyle({ maxHeight: '200px', objectFit: 'contain' });
+      expect(imageElement).toHaveClass('max-h-[200px]', 'object-contain');
       expect(imageElement.closest('div')).not.toHaveTextContent('TruncatedText');
     });
 
@@ -1228,6 +1228,47 @@ describe('ResultsTable Metrics Display', () => {
 
       expect(container.querySelector('audio source')).toBeNull();
       expect(screen.getByText('file://assets/Armstrong_Small_Step.mp3')).toBeInTheDocument();
+    });
+
+    it.each([
+      ['raw', '{Enter}'],
+      ['raw', ' '],
+      ['file metadata', '{Enter}'],
+      ['file metadata', ' '],
+    ])('opens %s image previews with the %j key', async (source, key) => {
+      const user = userEvent.setup();
+      const imageSrc = 'data:image/png;base64,encodedImage';
+      vi.mocked(useTableStore).mockImplementation(() =>
+        createTableStore({
+          table: {
+            body: [
+              {
+                ...createPassingRow(),
+                outputs: [
+                  {
+                    ...createPassingRow().outputs[0],
+                    metadata:
+                      source === 'file metadata'
+                        ? { [FILE_METADATA_KEY]: createImageVariable() }
+                        : undefined,
+                  },
+                ],
+                vars: [imageSrc],
+              },
+            ],
+            head: createPromptHead(['imageVar']),
+          },
+        }),
+      );
+
+      renderWithProviders(<ResultsTable {...defaultProps} />);
+
+      const trigger = screen.getByRole('button', { name: /open image preview/i });
+      trigger.focus();
+      expect(trigger).toHaveFocus();
+      await user.keyboard(key);
+
+      expect(screen.getByRole('img', { name: 'Lightbox' })).toHaveAttribute('src', imageSrc);
     });
 
     it('renders variable images from file metadata with lightbox support', async () => {
@@ -1489,6 +1530,131 @@ describe('ResultsTable Row Navigation', () => {
     observeSpy.mockRestore();
   });
 
+  it('scrolls to an already rendered deep-linked row without waiting for a mutation', () => {
+    setupDeepLinkedTable('/?rowId=1');
+    vi.spyOn(MutationObserver.prototype, 'observe').mockImplementation(() => {});
+    const scrollSpy = vi.spyOn(Element.prototype, 'scrollIntoView');
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
+      callback(0);
+      return 1;
+    });
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    expect(scrollSpy).toHaveBeenCalledWith({ behavior: 'smooth', block: 'nearest' });
+    expect(scrollSpy.mock.contexts[0]).toBe(document.getElementById('row-0'));
+  });
+
+  it('still scrolls when a deep-linked row becomes available after a mutation', async () => {
+    setupDeepLinkedTable('/?rowId=1');
+    let rowAvailable = false;
+    const querySelector = document.querySelector.bind(document);
+    vi.spyOn(document, 'querySelector').mockImplementation((selector) =>
+      selector === '#row-0' && !rowAvailable ? null : querySelector(selector),
+    );
+    const scrollSpy = vi.spyOn(Element.prototype, 'scrollIntoView');
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
+      callback(0);
+      return 1;
+    });
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+    expect(scrollSpy).not.toHaveBeenCalled();
+
+    rowAvailable = true;
+    const row = document.getElementById('row-0');
+    document.getElementById('results-table-container')!.append(document.createElement('span'));
+
+    await waitFor(() => {
+      expect(scrollSpy).toHaveBeenCalledWith({ behavior: 'smooth', block: 'nearest' });
+    });
+    expect(scrollSpy.mock.contexts[0]).toBe(row);
+  });
+
+  it('waits for the requested page instead of scrolling a stale row with the same local id', () => {
+    window.history.replaceState({}, '', '/?rowId=51');
+    let table = {
+      body: [{ outputs: [createDeepLinkedOutput()], test: {}, testIdx: 0, vars: [] }],
+      head: createPromptHead(),
+    };
+    let isFetching = true;
+    const fetchEvalData = vi.fn();
+    vi.mocked(useTableStore).mockImplementation(() =>
+      createTableStore({
+        table,
+        isFetching,
+        fetchEvalData,
+        filteredResultsCount: 120,
+        totalResultsCount: 120,
+      }),
+    );
+    const scrollSpy = vi.spyOn(Element.prototype, 'scrollIntoView');
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
+      callback(0);
+      return 1;
+    });
+
+    const { rerender } = renderWithProviders(<ResultsTable {...defaultProps} />);
+    expect(document.getElementById('row-0')).toBeInTheDocument();
+    expect(scrollSpy).not.toHaveBeenCalled();
+
+    isFetching = false;
+    table = {
+      body: [{ outputs: [createDeepLinkedOutput()], test: {}, testIdx: 50, vars: [] }],
+      head: createPromptHead(),
+    };
+    // The mocked store does not publish subscriptions; change a prop to rerender the memoized table.
+    rerender(<ResultsTable {...defaultProps} zoom={1.1} />);
+
+    expect(scrollSpy).toHaveBeenCalledWith({ behavior: 'smooth', block: 'nearest' });
+    const scrolledRow = scrollSpy.mock.contexts[0] as HTMLElement;
+    expect(within(scrolledRow).getByTestId('eval-output-cell')).toHaveAttribute(
+      'data-rowindex',
+      '50',
+    );
+  });
+
+  it('cancels a queued row scroll when the table unmounts', () => {
+    setupDeepLinkedTable('/?rowId=1');
+    vi.spyOn(window, 'requestAnimationFrame').mockReturnValue(42);
+    const cancelSpy = vi.spyOn(window, 'cancelAnimationFrame');
+    const { unmount } = renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    unmount();
+
+    expect(cancelSpy).toHaveBeenCalledWith(42);
+  });
+
+  it('does not scroll the old page when fetching the deep-linked page fails', () => {
+    window.history.replaceState({}, '', '/?rowId=51');
+    let isFetching = true;
+    const table = {
+      body: [{ outputs: [createDeepLinkedOutput()], test: {}, testIdx: 0, vars: [] }],
+      head: createPromptHead(),
+    };
+    const fetchEvalData = vi.fn();
+    vi.mocked(useTableStore).mockImplementation(() =>
+      createTableStore({
+        table,
+        isFetching,
+        fetchEvalData,
+        filteredResultsCount: 120,
+        totalResultsCount: 120,
+      }),
+    );
+    const scrollSpy = vi.spyOn(Element.prototype, 'scrollIntoView');
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
+      callback(0);
+      return 1;
+    });
+    const { rerender } = renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    isFetching = false;
+    rerender(<ResultsTable {...defaultProps} zoom={1.1} />);
+
+    expect(screen.getByTestId('eval-output-cell')).toHaveAttribute('data-rowindex', '0');
+    expect(scrollSpy).not.toHaveBeenCalled();
+  });
+
   it('preserves the details hash on initial mount', async () => {
     const mockFetchEvalData = setupDeepLinkedTable('/#details-row-51-prompt-1');
 
@@ -1726,6 +1892,30 @@ describe('ResultsTable Row Navigation', () => {
 
     // The deep-link hash should be cleared so the next paginate click is also unimpeded.
     expect(window.location.hash).toBe('');
+  });
+
+  it('clears the row deep link when changing page size without dropping unrelated params', async () => {
+    const user = userEvent.setup();
+    const mockFetchEvalData = setupDeepLinkedTable(
+      '/?rowId=51&search=keep#details-row-51-prompt-1',
+    );
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+    await waitFor(createNextPageExpectation(mockFetchEvalData));
+    mockFetchEvalData.mockClear();
+
+    await user.click(screen.getByRole('combobox', { name: 'Results per page' }));
+    await user.click(screen.getByRole('option', { name: /^100$/ }));
+
+    expect(mockFetchEvalData).toHaveBeenLastCalledWith(
+      '123',
+      expect.objectContaining({ pageIndex: 0, pageSize: 100 }),
+    );
+    expect(window.location.search).toBe('?search=keep');
+    expect(window.location.hash).toBe('');
+    expect(mockNavigate).toHaveBeenLastCalledWith(
+      expect.objectContaining({ search: '?search=keep', hash: '' }),
+      { replace: true },
+    );
   });
 
   it('clears the legacy rowId query param when paginating', async () => {
@@ -2528,6 +2718,35 @@ describe('ResultsTable fetchEvalData pagination filters', () => {
 
 describe('ResultsTable Pagination', () => {
   const defaultProps = createDefaultProps();
+
+  it('resets to the first page when increasing the page size from the last page', async () => {
+    const user = userEvent.setup();
+    const fetchEvalData = vi.fn();
+    vi.mocked(useTableStore).mockImplementation(() =>
+      createTableStore({
+        table: createEmptyTable(),
+        fetchEvalData,
+        filteredResultsCount: 120,
+        totalResultsCount: 120,
+      }),
+    );
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+    await user.click(screen.getByRole('button', { name: 'Next page' }));
+    await user.click(screen.getByRole('button', { name: 'Next page' }));
+    expect(screen.getByRole('button', { name: 'Next page' })).toBeDisabled();
+    fetchEvalData.mockClear();
+
+    await user.click(screen.getByRole('combobox', { name: 'Results per page' }));
+    await user.click(screen.getByRole('option', { name: /^100$/ }));
+
+    expect(fetchEvalData).toHaveBeenLastCalledWith(
+      '123',
+      expect.objectContaining({ pageIndex: 0, pageSize: 100 }),
+    );
+    expect(screen.getByRole('button', { name: 'Previous page' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Next page' })).toBeEnabled();
+    expect(screen.getByText(/showing/i)).toHaveTextContent('Showing 1 to 100 of 120 results');
+  });
 
   it('should render pagination controls when totalResultsCount is greater than 10', () => {
     vi.mocked(useTableStore).mockImplementation(() =>
