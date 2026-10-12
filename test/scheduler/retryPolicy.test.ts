@@ -87,6 +87,16 @@ describe('shouldRetry', () => {
     expect(result).toBe(true);
   });
 
+  it('should retry errors that describe requests as timed out', () => {
+    const error = new Error('WebSocket request timed out after 30000ms');
+    expect(shouldRetry(0, error, false, DEFAULT_RETRY_POLICY)).toBe(true);
+  });
+
+  it('does not retry an agent turn merely because it timed out', () => {
+    const error = new Error('codex app-server turn timed out after 30000ms');
+    expect(shouldRetry(0, error, false, DEFAULT_RETRY_POLICY)).toBe(false);
+  });
+
   it('should retry on network error', () => {
     const error = new Error('ECONNRESET');
     const result = shouldRetry(0, error, false, DEFAULT_RETRY_POLICY);

@@ -517,6 +517,40 @@ describe('init command', () => {
         );
       });
 
+      it('downloads the maintained Python assertions example for the removed Hermeneutic name', async () => {
+        const filename = 'promptfooconfig-external.yaml';
+        const fileUrl = `https://example.com/${filename}`;
+        const config = 'description: Python assertions';
+        mockFetchWithProxy
+          .mockResolvedValueOnce(
+            createMockResponse({
+              json: () =>
+                Promise.resolve([{ type: 'file', name: filename, download_url: fileUrl }]),
+            }),
+          )
+          .mockResolvedValueOnce(createMockResponse({ text: () => Promise.resolve(config) }));
+        vi.mocked(fs.readdir).mockResolvedValue([]);
+
+        expect(await init.handleExampleDownload('.', 'integration-hermeneutic')).toBe(
+          'eval-python-assert',
+        );
+        expect(mockFetchWithProxy).toHaveBeenCalledTimes(2);
+        expect(new URL(mockFetchWithProxy.mock.calls[0][0].toString()).pathname).toBe(
+          '/repos/promptfoo/promptfoo/contents/examples/eval-python-assert',
+        );
+        expect(mockFetchWithProxy).toHaveBeenNthCalledWith(2, fileUrl);
+        expect(fs.writeFile).toHaveBeenCalledWith(
+          path.join('eval-python-assert', filename),
+          config,
+        );
+        expect(logger.info).toHaveBeenCalledWith(
+          expect.stringContaining(
+            "The Hermeneutic integration was removed. Use the maintained Python assertion example for custom output checks. Downloading 'eval-python-assert' instead.",
+          ),
+        );
+        expect(confirm).not.toHaveBeenCalled();
+      });
+
       it('should download using the resolved alias name', async () => {
         mockFetchWithProxy.mockRejectedValue(new Error('404 Not Found'));
         vi.mocked(confirm).mockResolvedValue(false);

@@ -1,5 +1,6 @@
 import invariant from '../util/invariant';
 import { parseCommaSeparatedValues as parseValues } from '../validation/parseCommaSeparatedValues';
+import { normalizeForComparison } from './normalize';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
@@ -21,10 +22,12 @@ function handleContainsValue(
 ): GradingResult {
   const type = `${ignoreCase ? 'i' : ''}contains${mode === 'single' ? '' : `-${mode}`}`;
   let value = valueFromScript ?? renderedValue;
+  const normalization = mode === 'single' && !ignoreCase ? assertion.normalizeUnicode : undefined;
+  const normalizedOutput = normalizeForComparison(outputString, normalization);
   const includes = (item: unknown) =>
     ignoreCase
       ? outputString.toLowerCase().includes(String(item).toLowerCase())
-      : outputString.includes(String(item));
+      : normalizedOutput.includes(normalizeForComparison(String(item), normalization));
   let matches: boolean;
   let expectation: () => string;
   if (mode === 'single') {
