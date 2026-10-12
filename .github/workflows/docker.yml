@@ -35,6 +35,7 @@ on:
     # Include stacked PRs so their final images receive the same runtime checks.
     paths: &runtime-paths
       - '.github/workflows/docker.yml'
+      - '.dockerignore'
       - 'Dockerfile'
       - 'package.json'
       - 'package-lock.json'
