@@ -321,6 +321,20 @@ describe('Docker image tags', () => {
     expect(latestRules[0]).toContain("!contains(env.RELEASE_TAG, '-')");
   });
 
+  it('publishes branch and commit tags only for builds without a release tag', () => {
+    const { rules } = readTagRules();
+    const branchRules = rules.filter(
+      (rule) => rule.startsWith('type=ref,') || rule.startsWith('type=sha'),
+    );
+
+    // Releases and pushes build in separate concurrency groups. That is only safe while
+    // they never publish the same tag.
+    expect(branchRules.length).toBeGreaterThan(0);
+    for (const rule of branchRules) {
+      expect(rule).toContain("enable=${{ env.RELEASE_TAG == '' }}");
+    }
+  });
+
   it('reads release versions from the tag input instead of the git ref', () => {
     const { rules } = readTagRules();
     const semverRules = rules.filter((rule) => rule.startsWith('type=semver'));
