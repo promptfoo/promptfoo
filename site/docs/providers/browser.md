@@ -1,6 +1,6 @@
 ---
 sidebar_label: Web Browser
-description: 'Execute LLM evaluations directly in browsers using WebGPU acceleration and local models for privacy-preserving testing'
+description: 'Evaluate web applications in Chromium with automated page interactions, scoped cookies, reusable browser sessions, and cleanup after evals and diagnostics.'
 ---
 
 # Browser Provider
