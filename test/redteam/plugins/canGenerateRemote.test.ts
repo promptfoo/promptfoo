@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import { BeavertailsPlugin } from '../../../src/redteam/plugins/beavertails';
 import { CustomPlugin } from '../../../src/redteam/plugins/custom';
@@ -47,14 +47,6 @@ vi.mock('../../../src/integrations/huggingfaceDatasets', async (importOriginal) 
   };
 });
 
-// Mock contracts plugin to ensure it has canGenerateRemote = true
-vi.mock('../../../src/redteam/plugins/contracts', async () => {
-  const original = await vi.importActual('../../../src/redteam/plugins/contracts');
-  return {
-    ...original,
-  };
-});
-
 describe('canGenerateRemote property and behavior', () => {
   let mockProvider: MockApiProvider;
 
@@ -69,6 +61,11 @@ describe('canGenerateRemote property and behavior', () => {
     // Reset all mocks
     vi.clearAllMocks();
     vi.mocked(fetchWithCache).mockReset();
+    vi.mocked(shouldGenerateRemote).mockReset();
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
   });
 
   describe('Plugin canGenerateRemote property', () => {
@@ -100,46 +97,6 @@ describe('canGenerateRemote property and behavior', () => {
       });
 
       expect(fetchWithCache).not.toHaveBeenCalled();
-    });
-
-    it('should use remote generation for LLM-based plugins when shouldGenerateRemote is true', async () => {
-      vi.mocked(shouldGenerateRemote).mockReturnValue(true);
-
-      // Force the canGenerateRemote property to be true for this test
-      const originalContractPlugin = Plugins.find((p) => p.key === 'contracts');
-      if (!originalContractPlugin) {
-        throw new Error('Contract plugin not found');
-      }
-
-      // Create a mock plugin with canGenerateRemote=true
-      const mockContractPlugin = {
-        ...originalContractPlugin,
-        action: vi.fn().mockImplementation(async function () {
-          await fetchWithCache('http://test-url/api/generate', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ test: true }),
-          });
-          return [];
-        }),
-      };
-
-      // Call the mocked action
-      await mockContractPlugin.action({
-        provider: mockProvider,
-        purpose: 'test',
-        injectVar: 'testVar',
-        n: 1,
-        config: {},
-        delayMs: 0,
-      });
-
-      // Verify fetchWithCache was called
-      expect(fetchWithCache).toHaveBeenCalledWith('http://test-url/api/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: expect.any(String),
-      });
     });
 
     it('should use local generation for all plugins when shouldGenerateRemote is false', async () => {
