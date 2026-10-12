@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
+import type { Socket } from 'node:net';
 
 import compression from 'compression';
 import cors from 'cors';
@@ -372,6 +373,11 @@ export async function startServer(
   const app = createApp();
 
   const httpServer = http.createServer(app);
+  const connections = new Set<Socket>();
+  httpServer.on('connection', (socket) => {
+    connections.add(socket);
+    socket.once('close', () => connections.delete(socket));
+  });
   const io = new SocketIOServer(httpServer, {
     cors: {
       origin: '*',
@@ -515,6 +521,9 @@ export async function startServer(
         closeError = Object.assign(new Error('Socket.IO shutdown failed', { cause: error }), {
           code: 'ESHUTDOWN',
         });
+        for (const socket of connections) {
+          socket.destroy();
+        }
         closeHttpServer();
       });
     };
