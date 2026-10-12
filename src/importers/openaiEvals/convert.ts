@@ -10,11 +10,7 @@ import {
   type TokenUsage,
 } from '../../types/index';
 import { sha256 } from '../../util/createHash';
-import {
-  createDefaultPromptMetrics,
-  updatePromptResultCounts,
-} from '../../util/eval/promptMetrics';
-import { accumulateResponseTokenUsage } from '../../util/tokenUsageUtils';
+import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { isRecord } from './validation';
 
 import type { OpenAIEvalsImportResult, OpenAIEvalsJsonlRow, OpenAISample } from './types';
@@ -287,11 +283,30 @@ function sanitizeOpenAIEvalsIdPart(value: string): string {
 }
 
 function createOpenAIPromptMetrics(results: EvaluateResult[]): CompletedPrompt['metrics'] {
-  const metrics = createDefaultPromptMetrics();
+  const metrics: NonNullable<CompletedPrompt['metrics']> = {
+    score: 0,
+    testPassCount: 0,
+    testFailCount: 0,
+    testErrorCount: 0,
+    assertPassCount: 0,
+    assertFailCount: 0,
+    totalLatencyMs: 0,
+    tokenUsage: createEmptyTokenUsage(),
+    namedScores: {},
+    namedScoresCount: {},
+    namedScoreWeights: {},
+    cost: 0,
+  };
 
   for (const result of results) {
     metrics.score += result.score;
-    updatePromptResultCounts(metrics, result);
+    if (result.success) {
+      metrics.testPassCount += 1;
+    } else if (result.failureReason === ResultFailureReason.ERROR) {
+      metrics.testErrorCount += 1;
+    } else {
+      metrics.testFailCount += 1;
+    }
     for (const component of result.gradingResult?.componentResults ?? []) {
       if (component.pass) {
         metrics.assertPassCount += 1;
@@ -307,8 +322,6 @@ function createOpenAIPromptMetrics(results: EvaluateResult[]): CompletedPrompt['
     }
   }
 
-  // Preserve the imported metrics shape without cache-hit counts.
-  delete metrics.testCacheHitCount;
   return metrics;
 }
 
