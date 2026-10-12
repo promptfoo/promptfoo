@@ -114,8 +114,14 @@ const GRADER_DELIMITER_FINDING = 'grader-delimiter-injection';
  * pad past MAX_INSPECTED_LENGTH and place the delimiter beyond it. A delimiter is
  * a definite finding wherever it sits, so it must FAIL rather than merely
  * surface as an incomplete inspection.
- * The whitespace runs are bounded (`\s{0,8}` rather than `\s*`) and the pattern
- * is anchored on `<`, so a full-length scan stays linear.
+ *
+ * Whitespace inside the tag is unbounded: a grading model reads
+ * `</Output         >` as a closing tag however many spaces it holds, so any
+ * fixed cap is a bypass. Linearity comes from the shape instead. Every match
+ * starts at `<`, and the optional slash sits in its own group, so no run of
+ * whitespace can be split between two adjacent `\s*` quantifiers. Each `<`
+ * therefore costs time proportional to the whitespace that follows it, and
+ * those runs never overlap.
  *
  * `purpose` is included because the rubric fences a <purpose> block too, so a
  * response emitting </purpose> can escape it the same way. Likewise
@@ -123,7 +129,7 @@ const GRADER_DELIMITER_FINDING = 'grader-delimiter-injection';
  * response must not be able to close it, nor visible output to forge one.
  */
 const GRADER_DELIMITER_PATTERN =
-  /<\s{0,8}\/?\s{0,8}(Output|Rubric|UserQuery|AllowedEntities|purpose|raw-provider-response)\s{0,8}>/i;
+  /<(?:\s*\/)?\s*(Output|Rubric|UserQuery|AllowedEntities|purpose|raw-provider-response)\s*>/i;
 
 /**
  * Replaces grading delimiters with an inert marker.
