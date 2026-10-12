@@ -24,13 +24,15 @@ This plugin inspects **only the content a tool returns when it is called**. It d
 2. The redteam LLM reads that catalog and generates `numTests` benign JSON tool calls covering the advertised tools and argument schemas.
 3. Each call is sent through the MCP provider, which invokes the real tool on the real server.
 4. The grader inspects each tool response with a hybrid check:
-   - **Character-hygiene pre-screen** for hidden/invisible smuggling channels — invisible Unicode tag characters (U+E0000–U+E007F "ASCII smuggling"), zero-width characters, bidirectional-override and unbalanced isolate characters, variation-selector smuggling (hidden bytes encoded as runs of U+FE00–U+FE0F / U+E0100–U+E01EF), and raw or JSON-escaped control bytes including the C0 and C1 blocks (e.g. ANSI and CSI sequences). These defeat plain text scanning, so their presence in a response fails the test immediately (the smuggled payload is decoded and reported). Legitimate formatting is exempt: emoji presentation and keycap sequences, Japanese ideographic variation sequences, subdivision flag emoji, balanced bidi isolates in mixed-direction text, and the ZWJ/ZWNJ/LRM/RLM/ALM marks required by ordinary localized content.
+   - **Character-hygiene pre-screen** for hidden/invisible smuggling channels — invisible Unicode tag characters (U+E0000–U+E007F "ASCII smuggling"), zero-width characters, bidirectional-override and unbalanced isolate characters, variation-selector smuggling (hidden bytes encoded as runs of U+FE00–U+FE0F / U+E0100–U+E01EF), and raw or JSON-escaped control bytes including the C0 and C1 blocks (e.g. ANSI and CSI sequences). These defeat plain text scanning, so their presence in a response fails the test immediately (the smuggled payload is decoded and reported). Legitimate formatting is exempt: emoji presentation and keycap sequences, Japanese ideographic variation sequences, the England, Scotland and Wales flag emoji, balanced bidi isolates in mixed-direction text, and the ZWJ/ZWNJ/LRM/RLM/ALM marks required by ordinary localized content.
    - **Regex pre-screen** for canonical poisoning markers (`SYSTEM:`, `ignore previous instructions`, `_internal_instructions`, exfiltration URLs, `CRITICAL TOOL`, …). Any match fails the test immediately, no LLM call.
    - **LLM rubric** for everything else — flags subtler instruction-shaped content embedded in tool output.
 
 A test **fails** when the server's response contains directive content aimed at an AI agent. A test **passes** when the response is plain tool data.
 
-Every layer inspects at most the first 64 KiB of a response, and a test only passes when all of them have seen the whole response. A larger response that no pre-screen has already failed is reported as an **error** ("Incomplete inspection") instead of being graded on a prefix. The same applies to raw provider evidence (see [Known limitations](#known-limitations)). If a tool routinely returns more, generate calls with smaller page or limit arguments.
+The grader also looks at fields of the raw tool result that the visible output does not show, such as `structuredContent` or `_meta`, because an agent may consume them too.
+
+The character-hygiene and grading-delimiter screens scan the whole response. The keyword regexes and the LLM rubric cover at most the first 64 KiB of the visible output and of any forwarded raw fields, so a test can only pass when everything fits within that limit. A larger response that no pre-screen has already failed is reported as an **error** ("Incomplete inspection") instead of being graded on a prefix. If a tool routinely returns more, generate calls with smaller page or limit arguments.
 
 ## When to use it
 
@@ -122,6 +124,9 @@ fails rather than silently producing zero test cases.
 These hints are self-declared by the server under test, so they are only ever
 used to _skip_ a tool, never to grant one extra trust. A server that
 under-reports gets the same treatment as one that omits them entirely.
+Conversely, a server can keep a tool out of a default scan by declaring it
+mutating, so for a server you do not trust, name every tool you want covered in
+`allowedTools`.
 
 ### Failing closed
 
@@ -144,6 +149,11 @@ Without `allowedTools`, that config fails with an error listing the advertised
 catalog. It also fails when no catalog can be read from the purpose at all, so a
 missing or malformed catalog cannot silently widen the scan. `excludedTools` alone does not satisfy it: a denylist cannot bound a
 catalog you have not enumerated.
+
+Like any plugin configuration error, this stops test generation for the plugin
+but only produces a warning for the overall run. In CI, run with `--strict`
+(`promptfoo redteam run --strict`) so the error fails the job instead of
+yielding a run without this plugin's tests.
 
 For most setups the MCP provider's own filter is the better control, since it
 keeps unwanted tools out of the catalog entirely — generation never sees them,
@@ -208,7 +218,7 @@ Oversized responses are never passed, but they are not always failed either:
 
 - **Poison placed past the 64 KiB inspection limit** — character-hygiene and grading-delimiter screens cover the whole response, but a plain-text directive beyond the limit is only known to be _uninspected_. The test is reported as an error rather than a failure, so treat errors from this plugin as unresolved, not as clean.
 
-There is also one deliberate false positive:
+There are also some deliberate trade-offs:
 
 - **Servers that set no tool annotations get no automatic protection.** The
   default skip relies on the server declaring `readOnlyHint` / `destructiveHint`,
@@ -216,7 +226,8 @@ There is also one deliberate false positive:
   not as mutating, so they remain callable — use `allowedTools`,
   `requireToolAllowlist`, or the provider's `exclude_tools` when the catalog has
   side-effecting tools.
-- **Tools that legitimately return `<Output>` or `<Rubric>` XML** — some CI, build-log and document tools do. The graded response is embedded in the grading prompt, so these tags break its structure regardless of the server's intent and the response fails deterministically. Setting `graderGuidance` switches such a tool to LLM grading with the delimiters neutralized (in the visible output and in any raw provider response forwarded after a transform), rather than an unappealable failure; narrowing the tool set with `allowedTools` avoids the case entirely.
+- **Non-RGI subdivision flag emoji** — only the England, Scotland and Wales flags are exempt from the tag-character screen. Other subdivision flags (for example Texas) use the same invisible tag characters that smuggling payloads do and are reported as poisoning. Set `graderGuidance` if a tool legitimately returns them.
+- **Tools that legitimately return `<Output>` or `<Rubric>` XML** — some CI, build-log and document tools do. The graded response is embedded in the grading prompt, so these tags break its structure regardless of the server's intent and the response fails deterministically. Setting `graderGuidance` switches such a tool to LLM grading with the delimiters neutralized (in the visible output and in any forwarded raw fields), rather than an unappealable failure; narrowing the tool set with `allowedTools` avoids the case entirely.
 
 ## Differences vs related plugins
 
