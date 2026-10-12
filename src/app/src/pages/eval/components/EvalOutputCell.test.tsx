@@ -3,7 +3,7 @@ import { restoreTestTimers, type TestTimers, useTestTimers } from '@app/tests/ti
 import { renderWithProviders as baseRender } from '@app/utils/testutils';
 import { type AssertionType, type EvaluateTableOutput } from '@promptfoo/types';
 import { ResultFailureReason } from '@promptfoo/types/results';
-import { act, fireEvent, screen, waitFor } from '@testing-library/react';
+import { act, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ShiftKeyProvider } from '../../../contexts/ShiftKeyContext';
@@ -3254,7 +3254,8 @@ describe('EvalOutputCell inline image lightbox', () => {
     expect(container.querySelector('.lightbox')).toBeInTheDocument();
   });
 
-  it('preserves navigation for linked output images without opening the lightbox', () => {
+  it('preserves navigation for linked output images without opening the lightbox', async () => {
+    const user = userEvent.setup();
     mockResultsViewSettings.renderMarkdown = true;
     const { container } = renderWithProviders(
       <EvalOutputCell
@@ -3264,7 +3265,11 @@ describe('EvalOutputCell inline image lightbox', () => {
 
     expect(screen.getByRole('link', { name: 'Linked image' })).toHaveAttribute('href', '#details');
     expect(container.querySelector('a button')).not.toBeInTheDocument();
-    expect(fireEvent.click(screen.getByRole('img', { name: 'Linked image' }))).toBe(true);
+    const onLinkClick = vi.fn();
+    screen.getByRole('link', { name: 'Linked image' }).addEventListener('click', onLinkClick);
+    await user.click(screen.getByRole('img', { name: 'Linked image' }));
+    expect(onLinkClick).toHaveBeenCalledOnce();
+    expect(onLinkClick.mock.calls[0][0].defaultPrevented).toBe(false);
     expect(container.querySelector('.lightbox')).not.toBeInTheDocument();
   });
 

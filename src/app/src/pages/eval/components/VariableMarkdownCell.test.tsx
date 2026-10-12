@@ -1,6 +1,6 @@
 import React from 'react';
 
-import { fireEvent, render, screen } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import * as markdownConfig from './markdown-config';
@@ -129,7 +129,8 @@ describe('VariableMarkdownCell', () => {
     it.each([
       '[![Linked image](data:image/png;base64,AA==)](#details)',
       '[![Linked image][image]][destination]\n\n[image]: data:image/png;base64,AA==\n[destination]: #details',
-    ])('preserves linked-image navigation without a nested preview button: %s', (value) => {
+    ])('preserves linked-image navigation without a nested preview button: %s', async (value) => {
+      const user = userEvent.setup();
       const onImageClick = vi.fn();
       const { container } = render(
         <VariableMarkdownCell value={value} maxTextLength={100} onImageClick={onImageClick} />,
@@ -138,7 +139,11 @@ describe('VariableMarkdownCell', () => {
       const link = screen.getByRole('link', { name: 'Linked image' });
       expect(link).toHaveAttribute('href', '#details');
       expect(container.querySelector('a button')).not.toBeInTheDocument();
-      expect(fireEvent.click(screen.getByRole('img', { name: 'Linked image' }))).toBe(true);
+      const onLinkClick = vi.fn();
+      link.addEventListener('click', onLinkClick);
+      await user.click(screen.getByRole('img', { name: 'Linked image' }));
+      expect(onLinkClick).toHaveBeenCalledOnce();
+      expect(onLinkClick.mock.calls[0][0].defaultPrevented).toBe(false);
       expect(onImageClick).not.toHaveBeenCalled();
     });
 

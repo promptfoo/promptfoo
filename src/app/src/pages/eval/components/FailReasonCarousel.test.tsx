@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import FailReasonCarousel from './FailReasonCarousel';
@@ -127,7 +127,8 @@ describe('FailReasonCarousel', () => {
     expect(onImageClick).toHaveBeenCalledWith(dataUri);
   });
 
-  it('leaves a linked image under the enclosing link’s control', () => {
+  it('leaves a linked image under the enclosing link’s control', async () => {
+    const user = userEvent.setup();
     const onImageClick = vi.fn();
     const { container } = render(
       <FailReasonCarousel
@@ -140,9 +141,11 @@ describe('FailReasonCarousel', () => {
     const image = screen.getByRole('img', { name: 'Linked image' });
     expect(image.closest('a')).toHaveAttribute('href', '#details');
     expect(container.querySelector('a button')).not.toBeInTheDocument();
-    const click = new MouseEvent('click', { bubbles: true, cancelable: true });
-    fireEvent(image, click);
-    expect(click.defaultPrevented).toBe(false);
+    const onLinkClick = vi.fn();
+    image.closest('a')!.addEventListener('click', onLinkClick);
+    await user.click(image);
+    expect(onLinkClick).toHaveBeenCalledOnce();
+    expect(onLinkClick.mock.calls[0][0].defaultPrevented).toBe(false);
     expect(onImageClick).not.toHaveBeenCalled();
   });
 
