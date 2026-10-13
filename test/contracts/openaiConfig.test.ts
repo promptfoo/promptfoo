@@ -58,6 +58,8 @@ const baseValid = [
   },
 ];
 const chatValid = [
+  { useLegacyTokenCap: true },
+  { useLegacyTokenCap: false },
   {
     tools: [{ type: 'custom', custom: { name: 'grammar', format: { type: 'text' } } }],
     tool_choice: { type: 'custom', custom: { name: 'grammar' } },
@@ -314,6 +316,7 @@ const invalidCommon = [
 ];
 
 const invalidChat = [
+  { useLegacyTokenCap: 'true' },
   ...invalidCommon,
   { tools: [{ type: 'function', name: 'lookup' }] },
   { tool_choice: { type: 'function', name: 'lookup' } },
@@ -349,6 +352,7 @@ describe('OpenAI portable configuration contracts', () => {
         { access_programs: { cyber: 'unknown' } },
         { max_tokens: 32 },
         { max_completion_tokens: 32 },
+        { useLegacyTokenCap: true },
         { response_format: { type: 'json_schema', schema: true } },
         {
           response_format: {
