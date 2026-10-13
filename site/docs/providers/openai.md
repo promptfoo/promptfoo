@@ -255,11 +255,13 @@ Promptfoo omits `temperature` for models it recognizes as reasoning models, incl
 <details>
 <summary>Defaults and additional request options</summary>
 
-Known older families such as GPT-4.1, GPT-4o, GPT-3.5, and GPT Audio keep `temperature: 0` and an output limit of 1,024 tokens. Reasoning models and unknown OpenAI Chat aliases use `max_completion_tokens`, with no built-in output limit. Unknown aliases also omit the built-in temperature default and forward explicitly configured `reasoning_effort`, so internal names do not need a recognized model slug. Explicit sampling config and environment values still apply.
+GPT-4.1, GPT-4o, GPT-3.5, and GPT Audio default to `temperature: 0` and an output limit of 1,024 tokens. For o-series and GPT-5/GPT-6 models, promptfoo uses `max_completion_tokens` with Chat Completions and does not set an output limit by default.
 
-For these modern Chat requests, `max_tokens` is accepted as an alias for `max_completion_tokens`. A prompt-level cap overrides a provider-level cap; within the same config, `max_completion_tokens` wins over `max_tokens`. Passthrough caps retain their request override precedence, including OpenRouter's legacy `max_tokens` override. Responses continues to use `max_output_tokens`.
+If you connect to a model using a custom name such as `my-model`, promptfoo uses `max_completion_tokens` and sends `reasoning_effort` when you set it. It leaves the token limit and temperature unset unless you configure them. To set the token limit through an environment variable, use `OPENAI_MAX_COMPLETION_TOKENS`.
 
-For an unknown alias served by an older OpenAI-compatible endpoint, set `useLegacyTokenCap: true` to retain `max_tokens` and the legacy defaults. Dedicated provider adapters retain their own capability rules.
+For o-series, GPT-5/GPT-6, and custom model names such as `my-model`, you can also use `max_tokens`; promptfoo sends the value as `max_completion_tokens`. A limit set for an individual prompt overrides the provider's limit. If both fields appear in the same config, `max_completion_tokens` takes precedence. Values set in `passthrough` can override these settings; see the table below. For Responses, use `max_output_tokens`.
+
+If your custom endpoint requires `max_tokens`, set `useLegacyTokenCap: true`. This also sets the default temperature to 0 and the default output limit to 1,024 tokens. You can override those values in your config.
 
 `omitDefaults: true` omits Promptfoo's default temperature and output limit. Explicit configuration and environment values still apply.
 
