@@ -1,240 +1,198 @@
-import { renderHook } from '@testing-library/react';
+import { createElement } from 'react';
+
+import { cleanup, render, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { usePageMeta } from './usePageMeta';
 
-// Mock meta tag elements
-const createMockMetaElement = (content = '') => ({
-  getAttribute: vi.fn().mockReturnValue(content),
-  setAttribute: vi.fn(),
-});
+const originals = [
+  'Original description',
+  'Original OG title',
+  'Original OG description',
+  'Original OG image',
+];
+const contents = () =>
+  Array.from(document.querySelectorAll('meta'), (tag) => tag.getAttribute('content'));
+const longString = 'This is a very long string. '.repeat(100);
 
 describe('usePageMeta', () => {
-  const mockDescriptionTag = createMockMetaElement('Original description');
-  const mockOgTitleTag = createMockMetaElement('Original OG title');
-  const mockOgDescriptionTag = createMockMetaElement('Original OG description');
-  const mockOgImageTag = createMockMetaElement('Original OG image');
+  let originalHead: string;
+  let tags: HTMLMetaElement[];
 
   beforeEach(() => {
-    // Reset document.title
-    Object.defineProperty(document, 'title', {
-      value: 'Original Title',
-      writable: true,
-    });
-
-    // Mock querySelector to return our mock elements
-    vi.spyOn(document, 'querySelector').mockImplementation((selector) => {
-      switch (selector) {
-        case 'meta[name="description"]':
-          return mockDescriptionTag as any;
-        case 'meta[property="og:title"]':
-          return mockOgTitleTag as any;
-        case 'meta[property="og:description"]':
-          return mockOgDescriptionTag as any;
-        case 'meta[property="og:image"]':
-          return mockOgImageTag as any;
-        default:
-          return null;
-      }
-    });
-
-    // Reset all mocks
-    vi.clearAllMocks();
+    originalHead = document.head.innerHTML;
+    document.head.innerHTML = `
+      <title>Original Title</title>
+      <meta name="description" content="Original description">
+      <meta property="og:title" content="Original OG title">
+      <meta property="og:description" content="Original OG description">
+      <meta property="og:image" content="Original OG image">
+    `;
+    tags = Array.from(document.querySelectorAll('meta'));
   });
 
   afterEach(() => {
+    cleanup();
     vi.restoreAllMocks();
+    document.head.innerHTML = originalHead;
   });
 
-  it('should set document title with promptfoo suffix', () => {
-    renderHook(() => usePageMeta({ title: 'Test Page' }));
+  it.each([
+    { title: 'Test Page', description: 'Test description', image: 'https://example.com/image.jpg' },
+    { title: longString, description: longString, image: 'invalid-image-url' },
+    { title: '', description: ' ', image: ' ' },
+  ])('sets and restores all fields for $title', ({ title, description, image }) => {
+    const { unmount } = renderHook(() => usePageMeta({ title, description, image }));
+
+    // The native title getter normalizes whitespace; the assigned text and OG content do not.
+    expect(document.querySelector('title')?.textContent).toBe(`${title} | promptfoo`);
+    expect(contents()).toEqual([description, `${title} | promptfoo`, description, image]);
+    unmount();
+    expect(document.title).toBe('Original Title');
+    expect(contents()).toEqual(originals);
+  });
+
+  it.each([
+    {},
+    { description: undefined, image: undefined },
+    { description: null, image: null },
+    { description: '', image: '' },
+  ])('does not write falsey optional fields: %j', (optional) => {
+    const spies = [tags[0], tags[2], tags[3]].map((tag) => vi.spyOn(tag, 'setAttribute'));
+    const { rerender, unmount } = renderHook(() =>
+      usePageMeta({ title: 'Test Page', ...optional } as Parameters<typeof usePageMeta>[0]),
+    );
 
     expect(document.title).toBe('Test Page | promptfoo');
+    expect(contents()).toEqual([originals[0], 'Test Page | promptfoo', originals[2], originals[3]]);
+    spies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+    tags[0].setAttribute('content', 'External update');
+    rerender();
+    expect(tags[0].getAttribute('content')).toBe('External update');
+    unmount();
+    expect(contents()).toEqual(originals);
   });
 
-  it('should set meta description when provided', () => {
-    renderHook(() =>
-      usePageMeta({
-        title: 'Test Page',
-        description: 'Test description',
-      }),
+  it('updates changed fields and restores optional fields when removed', () => {
+    const initialProps: Parameters<typeof usePageMeta>[0] = {
+      title: 'Initial',
+      description: 'First description',
+      image: 'first.png',
+    };
+    const { rerender, unmount } = renderHook(
+      (options: Parameters<typeof usePageMeta>[0]) => usePageMeta(options),
+      { initialProps },
     );
 
-    expect(mockDescriptionTag.setAttribute).toHaveBeenCalledWith('content', 'Test description');
+    rerender({ ...initialProps, image: 'second.png' });
+    expect(contents()).toEqual([
+      'First description',
+      'Initial | promptfoo',
+      'First description',
+      'second.png',
+    ]);
+    rerender({ title: 'Updated', description: 'New description', image: 'third.png' });
+    expect(document.title).toBe('Updated | promptfoo');
+    expect(contents()).toEqual([
+      'New description',
+      'Updated | promptfoo',
+      'New description',
+      'third.png',
+    ]);
+    rerender({ title: 'Final' });
+    expect(contents()).toEqual([originals[0], 'Final | promptfoo', originals[2], originals[3]]);
+    unmount();
+    expect(document.title).toBe('Original Title');
+    expect(contents()).toEqual(originals);
   });
 
-  it('should set Open Graph title', () => {
-    renderHook(() => usePageMeta({ title: 'Test Page' }));
-
-    expect(mockOgTitleTag.setAttribute).toHaveBeenCalledWith('content', 'Test Page | promptfoo');
-  });
-
-  it('should set Open Graph description when provided', () => {
-    renderHook(() =>
-      usePageMeta({
-        title: 'Test Page',
-        description: 'Test description',
-      }),
-    );
-
-    expect(mockOgDescriptionTag.setAttribute).toHaveBeenCalledWith('content', 'Test description');
-  });
-
-  it('should set Open Graph image when provided', () => {
-    renderHook(() =>
-      usePageMeta({
-        title: 'Test Page',
-        image: 'https://example.com/image.jpg',
-      }),
-    );
-
-    expect(mockOgImageTag.setAttribute).toHaveBeenCalledWith(
-      'content',
-      'https://example.com/image.jpg',
-    );
-  });
-
-  it('should handle missing meta tags gracefully', () => {
-    // Mock querySelector to return null for all selectors
-    vi.spyOn(document, 'querySelector').mockReturnValue(null);
-
-    expect(() => {
-      renderHook(() => usePageMeta({ title: 'Test Page' }));
-    }).not.toThrow();
-
-    expect(document.title).toBe('Test Page | promptfoo');
-  });
-
-  it('should restore original values on cleanup', () => {
+  it.each([false, true])('ignores missing tags without creating them (all missing: %s)', (all) => {
+    (all ? tags : [tags[0], tags[2]]).forEach((tag) => tag.remove());
     const { unmount } = renderHook(() =>
-      usePageMeta({
-        title: 'Test Page',
-        description: 'Test description',
-      }),
+      usePageMeta({ title: 'Test Page', description: 'Description', image: 'image.png' }),
     );
 
-    // Verify values were set
     expect(document.title).toBe('Test Page | promptfoo');
-    expect(mockDescriptionTag.setAttribute).toHaveBeenCalledWith('content', 'Test description');
+    expect(contents()).toEqual(all ? [] : ['Test Page | promptfoo', 'image.png']);
+    unmount();
+    expect(contents()).toEqual(all ? [] : [originals[1], originals[3]]);
+    expect(document.title).toBe('Original Title');
+  });
 
-    // Clear mocks to track cleanup calls
-    vi.clearAllMocks();
+  it('restores missing and empty content attributes as empty strings', () => {
+    tags[0].removeAttribute('content');
+    tags[2].setAttribute('content', '');
+    const { unmount } = renderHook(() => usePageMeta({ title: 'Page' }));
 
-    // Unmount to trigger cleanup
+    expect(tags[0].hasAttribute('content')).toBe(false);
+    unmount();
+    expect(tags[0].hasAttribute('content')).toBe(true);
+    expect(contents()).toEqual(['', originals[1], '', originals[3]]);
+  });
+
+  it('snapshots aliased selectors before writing and leaves later matches untouched', () => {
+    tags[0].setAttribute('property', 'og:title');
+    const duplicate = tags[0].cloneNode(true) as HTMLMetaElement;
+    document.head.appendChild(duplicate);
+    const { unmount } = renderHook(() =>
+      usePageMeta({ title: 'Page', description: 'Description' }),
+    );
+
+    expect(tags[0].getAttribute('content')).toBe('Page | promptfoo');
+    expect(tags[1].getAttribute('content')).toBe(originals[1]);
+    expect(duplicate.getAttribute('content')).toBe(originals[0]);
+    unmount();
+    expect(tags[0].getAttribute('content')).toBe(originals[0]);
+    expect(duplicate.getAttribute('content')).toBe(originals[0]);
+  });
+
+  it('restores captured nodes after they are detached or replaced', () => {
+    const { unmount } = renderHook(() =>
+      usePageMeta({ title: 'Page', description: 'Description' }),
+    );
+    const replacement = tags[0].cloneNode(true) as HTMLMetaElement;
+    replacement.setAttribute('content', 'Replacement');
+    tags[0].replaceWith(replacement);
+    tags[2].remove();
     unmount();
 
-    // Verify cleanup was called (the hook restores the original values it captured during mount)
+    expect(tags.map((tag) => tag.getAttribute('content'))).toEqual(originals);
+    expect(replacement.getAttribute('content')).toBe('Replacement');
+  });
+
+  it('restores original metadata after StrictMode effect replay', () => {
+    const { unmount } = renderHook(
+      () => usePageMeta({ title: 'Strict', description: 'Description', image: 'image.png' }),
+      { reactStrictMode: true },
+    );
+
+    expect(contents()).toEqual(['Description', 'Strict | promptfoo', 'Description', 'image.png']);
+    unmount();
+    expect(contents()).toEqual(originals);
     expect(document.title).toBe('Original Title');
-    expect(mockDescriptionTag.setAttribute).toHaveBeenCalled();
-    expect(mockOgTitleTag.setAttribute).toHaveBeenCalled();
-    expect(mockOgDescriptionTag.setAttribute).toHaveBeenCalled();
-    expect(mockOgImageTag.setAttribute).toHaveBeenCalled();
   });
 
-  it('should update meta tags when props change', () => {
-    const { rerender } = renderHook(
-      ({ title, description }) => usePageMeta({ title, description }),
-      {
-        initialProps: { title: 'Initial Title', description: 'Initial description' },
-      },
-    );
+  it('restores a parent hook after a nested child mounts and unmounts', () => {
+    function Child() {
+      usePageMeta({ title: 'Child', description: 'Child description' });
+      return null;
+    }
+    function Parent({ children }: { children?: React.ReactNode }) {
+      usePageMeta({ title: 'Parent', description: 'Parent description' });
+      return children;
+    }
+    const { rerender, unmount } = render(createElement(Parent));
 
-    expect(document.title).toBe('Initial Title | promptfoo');
-    expect(mockDescriptionTag.setAttribute).toHaveBeenCalledWith('content', 'Initial description');
-
-    // Update props
-    rerender({ title: 'Updated Title', description: 'Updated description' });
-
-    expect(document.title).toBe('Updated Title | promptfoo');
-    expect(mockDescriptionTag.setAttribute).toHaveBeenCalledWith('content', 'Updated description');
-  });
-
-  it('should not set optional meta tags when not provided', () => {
-    renderHook(() => usePageMeta({ title: 'Test Page' }));
-
-    // Should set title and og:title
-    expect(document.title).toBe('Test Page | promptfoo');
-    expect(mockOgTitleTag.setAttribute).toHaveBeenCalledWith('content', 'Test Page | promptfoo');
-
-    // Should not set description, og:description, or og:image
-    expect(mockDescriptionTag.setAttribute).not.toHaveBeenCalled();
-    expect(mockOgDescriptionTag.setAttribute).not.toHaveBeenCalled();
-    expect(mockOgImageTag.setAttribute).not.toHaveBeenCalled();
-  });
-
-  it('should set document title, meta description, Open Graph title, Open Graph description, and Open Graph image when all fields are provided', () => {
-    renderHook(() =>
-      usePageMeta({
-        title: 'Test Page',
-        description: 'Test description',
-        image: 'https://example.com/image.jpg',
-      }),
-    );
-
-    expect(document.title).toBe('Test Page | promptfoo');
-    expect(mockDescriptionTag.setAttribute).toHaveBeenCalledWith('content', 'Test description');
-    expect(mockOgTitleTag.setAttribute).toHaveBeenCalledWith('content', 'Test Page | promptfoo');
-    expect(mockOgDescriptionTag.setAttribute).toHaveBeenCalledWith('content', 'Test description');
-    expect(mockOgImageTag.setAttribute).toHaveBeenCalledWith(
-      'content',
-      'https://example.com/image.jpg',
-    );
-  });
-
-  it('should handle missing meta tags during cleanup gracefully', () => {
-    const { unmount } = renderHook(() =>
-      usePageMeta({ title: 'Test Page', description: 'Test description' }),
-    );
-
-    vi.spyOn(document, 'querySelector').mockReturnValue(null);
-
-    expect(() => {
-      unmount();
-    }).not.toThrow();
-  });
-
-  it('should handle extremely long title and description strings', () => {
-    const longString = 'This is a very long string. '.repeat(100);
-    renderHook(() =>
-      usePageMeta({
-        title: longString,
-        description: longString,
-      }),
-    );
-
-    expect(document.title).toBe(`${longString} | promptfoo`);
-    expect(mockDescriptionTag.setAttribute).toHaveBeenCalledWith('content', longString);
-    expect(mockOgTitleTag.setAttribute).toHaveBeenCalledWith(
-      'content',
-      `${longString} | promptfoo`,
-    );
-    expect(mockOgDescriptionTag.setAttribute).toHaveBeenCalledWith('content', longString);
-  });
-
-  it('should handle undefined description gracefully', () => {
-    renderHook(() => usePageMeta({ title: 'Test Page', description: undefined }));
-
-    expect(document.title).toBe('Test Page | promptfoo');
-    expect(mockDescriptionTag.setAttribute).not.toHaveBeenCalled();
-    expect(mockOgDescriptionTag.setAttribute).not.toHaveBeenCalled();
-  });
-
-  it('should handle null description gracefully', () => {
-    renderHook(() => usePageMeta({ title: 'Test Page', description: null as any }));
-
-    expect(document.title).toBe('Test Page | promptfoo');
-    expect(mockDescriptionTag.setAttribute).not.toHaveBeenCalled();
-    expect(mockOgDescriptionTag.setAttribute).not.toHaveBeenCalled();
-  });
-
-  it('should set Open Graph image when provided an invalid URL', () => {
-    const invalidImageUrl = 'invalid-image-url';
-    renderHook(() =>
-      usePageMeta({
-        title: 'Test Page',
-        image: invalidImageUrl,
-      }),
-    );
-
-    expect(mockOgImageTag.setAttribute).toHaveBeenCalledWith('content', invalidImageUrl);
+    rerender(createElement(Parent, null, createElement(Child)));
+    expect(document.title).toBe('Child | promptfoo');
+    rerender(createElement(Parent));
+    expect(contents()).toEqual([
+      'Parent description',
+      'Parent | promptfoo',
+      'Parent description',
+      originals[3],
+    ]);
+    unmount();
+    expect(document.title).toBe('Original Title');
+    expect(contents()).toEqual(originals);
   });
 });
