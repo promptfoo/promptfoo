@@ -36,11 +36,16 @@ function readDollarQuoteDelimiter(sql: string, start: number): string | undefine
   return DOLLAR_QUOTE_DELIMITER_PATTERN.exec(sql.slice(start))?.[0];
 }
 
-function findQuotedTextEnd(sql: string, start: number, quote: string): number {
+function findQuotedTextEnd(
+  sql: string,
+  start: number,
+  quote: string,
+  backslashEscapes = true,
+): number {
   const closingQuote = quote === '[' ? ']' : quote;
   let cursor = start + 1;
   while (cursor < sql.length) {
-    if (closingQuote !== ']' && sql[cursor] === '\\') {
+    if (backslashEscapes && closingQuote !== ']' && sql[cursor] === '\\') {
       cursor += 2;
       continue;
     }
@@ -56,8 +61,13 @@ function findQuotedTextEnd(sql: string, start: number, quote: string): number {
   return sql.length;
 }
 
-function stripIgnoredSqlText(sql: string, databaseType: string): string {
+function stripIgnoredSqlText(
+  sql: string,
+  databaseType: string,
+  mode: 'select' | 'mysql-functions' = 'select',
+): string {
   const chunks: string[] = [];
+  const isMySql = databaseType === 'MySQL' && mode === 'mysql-functions';
   const supportsBracketIdentifiers = BRACKET_IDENTIFIER_DATABASES.has(databaseType);
   let plainTextStart = 0;
   let cursor = 0;
@@ -73,9 +83,14 @@ function stripIgnoredSqlText(sql: string, databaseType: string): string {
       character === '`' ||
       (character === '[' && supportsBracketIdentifiers)
     ) {
-      ignoredTextEnd = findQuotedTextEnd(sql, cursor, character);
+      ignoredTextEnd = findQuotedTextEnd(sql, cursor, character, !isMySql || character !== '`');
       replacement = SQL_EXPRESSION_PLACEHOLDER;
-    } else if ((character === '-' && sql[cursor + 1] === '-') || character === '#') {
+    } else if (
+      (character === '-' &&
+        sql[cursor + 1] === '-' &&
+        (!isMySql || sql.charCodeAt(cursor + 2) <= 32 || sql.charCodeAt(cursor + 2) === 127)) ||
+      character === '#'
+    ) {
       ignoredTextEnd = cursor + 1;
       while (
         ignoredTextEnd < sql.length &&
@@ -87,7 +102,11 @@ function stripIgnoredSqlText(sql: string, databaseType: string): string {
     } else if (character === '/' && sql[cursor + 1] === '*') {
       const commentEnd = sql.indexOf('*/', cursor + 2);
       ignoredTextEnd = commentEnd === -1 ? sql.length : commentEnd + 2;
-    } else if (character === '$') {
+      // MySQL executes /*! ... */ comments. Preserve their existing validation.
+      if (isMySql && sql[cursor + 2] === '!') {
+        replacement = sql.slice(cursor, ignoredTextEnd);
+      }
+    } else if (character === '$' && !isMySql) {
       const delimiter = readDollarQuoteDelimiter(sql, cursor);
       if (delimiter) {
         const quoteEnd = sql.indexOf(delimiter, cursor + delimiter.length);
@@ -185,7 +204,12 @@ export const handleIsSql = async ({
       `SQL statement does not conform to the provided ${databaseType} database syntax.`,
     );
   }
-  if (databaseType === 'MySQL' && /\bgenerate_series\s*\(/i.test(normalizedSql)) {
+  if (
+    databaseType === 'MySQL' &&
+    /\bgenerate_series\s*\(/i.test(
+      stripIgnoredSqlText(normalizedSql, databaseType, 'mysql-functions'),
+    )
+  ) {
     failureReasons.push(
       `SQL statement does not conform to the provided ${databaseType} database syntax.`,
     );
