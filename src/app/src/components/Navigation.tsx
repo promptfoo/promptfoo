@@ -44,10 +44,6 @@ function NavLink({ href, label }: NavLinkProps) {
     isActive = isModelAuditResultPath(location.pathname);
   } else if (href === EVAL_ROUTES.LIST) {
     isActive = location.pathname.startsWith(EVAL_ROUTES.ROOT);
-  } else if (href === REDTEAM_ROUTES.REPORTS) {
-    isActive =
-      location.pathname.startsWith(REDTEAM_ROUTES.REPORTS) ||
-      location.pathname.startsWith(REDTEAM_ROUTES.ROOT);
   } else {
     isActive = location.pathname.startsWith(href);
   }

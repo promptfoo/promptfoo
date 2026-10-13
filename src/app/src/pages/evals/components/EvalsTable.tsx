@@ -191,9 +191,7 @@ export default function EvalsTable({
               onClick={(event) => {
                 event.preventDefault();
                 event.stopPropagation();
-                if (row.original.evalId !== focusedEvalId) {
-                  onEvalSelected(row.original.evalId);
-                }
+                onEvalSelected(row.original.evalId);
               }}
               title={text || row.original.evalId}
               className="line-clamp-2 text-sm font-medium text-foreground hover:text-primary hover:underline"

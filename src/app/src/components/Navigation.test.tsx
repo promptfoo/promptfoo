@@ -98,6 +98,17 @@ describe('Navigation', () => {
     expect(screen.getByRole('link', { name: 'Red team' })).not.toHaveAttribute('aria-current');
   });
 
+  it('marks red team reports as current', () => {
+    renderNavigation({ initialEntries: [REDTEAM_ROUTES.REPORTS] });
+    expect(screen.getByRole('link', { name: 'Red team' })).toHaveAttribute('aria-current', 'page');
+  });
+
+  it('keeps the reports link inactive during red team setup', () => {
+    renderNavigation({ initialEntries: [REDTEAM_ROUTES.SETUP] });
+    expect(screen.getByRole('link', { name: 'Red team' })).not.toHaveAttribute('aria-current');
+    expect(screen.getByRole('button', { name: 'New' })).toHaveClass('bg-primary/10');
+  });
+
   it('hides the logo below the extra-narrow breakpoint', () => {
     renderNavigation();
 

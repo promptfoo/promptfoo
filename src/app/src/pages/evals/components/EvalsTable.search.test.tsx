@@ -13,7 +13,7 @@ describe('EvalsTable search', () => {
     vi.clearAllMocks();
   });
 
-  it('searches displayed descriptions when the first row has no description', async () => {
+  it('searches names and hidden IDs and can select the current evaluation', async () => {
     mockCallApiResponse({
       data: [
         {
@@ -44,7 +44,11 @@ describe('EvalsTable search', () => {
     render(
       <TooltipProvider delayDuration={0}>
         <MemoryRouter>
-          <EvalsTable onEvalSelected={onEvalSelected} showUtilityButtons />
+          <EvalsTable
+            onEvalSelected={onEvalSelected}
+            focusedEvalId="eval-target"
+            showUtilityButtons
+          />
         </MemoryRouter>
       </TooltipProvider>,
     );

@@ -21,7 +21,7 @@ export function PageContainer({ children, className, ...props }: PageContainerPr
   return (
     <div
       className={cn(
-        'min-h-[calc(100dvh-var(--nav-height))] bg-background text-foreground',
+        'min-h-[calc(100dvh-var(--nav-height)-var(--update-banner-height,0px))] bg-background text-foreground',
         className,
       )}
       {...props}
