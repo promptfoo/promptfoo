@@ -26,5 +26,3 @@ export class ReactCrescendoProvider extends CrescendoProvider {
     });
   }
 }
-
-export default ReactCrescendoProvider;
