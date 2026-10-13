@@ -62,11 +62,15 @@ function breakCyclesAgainstRoot<T>(value: T, root: object | null): T {
     }
     if (Array.isArray(v)) {
       for (const item of v) {
-        if (collectAncestors(item, target)) return true;
+        if (collectAncestors(item, target)) {
+          return true;
+        }
       }
     } else {
       for (const child of Object.values(v as Record<string, unknown>)) {
-        if (collectAncestors(child, target)) return true;
+        if (collectAncestors(child, target)) {
+          return true;
+        }
       }
     }
     ancestors.pop();
@@ -77,13 +81,21 @@ function breakCyclesAgainstRoot<T>(value: T, root: object | null): T {
   const ancestorSet = new WeakSet<object>(ancestors);
 
   function clone(v: unknown): unknown {
-    if (v === null || v === undefined) return v;
-    if (typeof v !== 'object') return v;
+    if (v === null || v === undefined) {
+      return v;
+    }
+    if (typeof v !== 'object') {
+      return v;
+    }
     // Any back-reference to a path ancestor is elided — this covers both direct
     // references back to `root` and references to intermediate ancestors that
     // would otherwise leak unselected siblings.
-    if (ancestorSet.has(v as object)) return '[Back-reference to metadata ancestor omitted]';
-    if (visited.has(v as object)) return '[Cycle omitted]';
+    if (ancestorSet.has(v as object)) {
+      return '[Back-reference to metadata ancestor omitted]';
+    }
+    if (visited.has(v as object)) {
+      return '[Cycle omitted]';
+    }
     visited.add(v as object);
     if (Array.isArray(v)) {
       return v.map((item) => clone(item));
@@ -177,10 +189,7 @@ function truncateToMaxBytes(value: string, maxBytes: number) {
  * might otherwise terminate a Markdown code fence unexpectedly.
  */
 function escapeEvidenceContent(raw: string): string {
-  return raw
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
+  return raw.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 export function renderEvidenceBlock(
@@ -281,7 +290,8 @@ export const handleLlmRubric = async ({
       // is set, the `outputString` passed above is the transformed text, so the
       // original provider images/audio no longer correspond — the matcher would
       // end up grading transformed text against stale media.
-      ...(evidenceBlock || (!assertion.transform && (providerResponse?.images?.length || providerResponse?.audio))
+      ...(evidenceBlock ||
+      (!assertion.transform && (providerResponse?.images?.length || providerResponse?.audio))
         ? { providerResponse }
         : {}),
     },
