@@ -39,10 +39,12 @@ describe('EvalsTable search', () => {
       ],
     });
 
+    const onEvalSelected = vi.fn();
+
     render(
       <TooltipProvider delayDuration={0}>
         <MemoryRouter>
-          <EvalsTable onEvalSelected={vi.fn()} showUtilityButtons />
+          <EvalsTable onEvalSelected={onEvalSelected} showUtilityButtons />
         </MemoryRouter>
       </TooltipProvider>,
     );
@@ -58,5 +60,20 @@ describe('EvalsTable search', () => {
       expect(screen.getByText('Persistent Python worker smoke test')).toBeInTheDocument();
       expect(screen.queryByText('eval-newest')).not.toBeInTheDocument();
     });
+
+    expect(screen.queryByRole('columnheader', { name: /^ID/ })).not.toBeInTheDocument();
+    const search = screen.getByRole('searchbox', { name: 'Search evaluations' });
+    await userEvent.clear(search);
+    await userEvent.type(search, 'eval-target');
+    await waitFor(() => {
+      expect(
+        screen.getByRole('link', { name: 'Persistent Python worker smoke test' }),
+      ).toBeInTheDocument();
+      expect(screen.queryByText('eval-newest')).not.toBeInTheDocument();
+    });
+    await userEvent.click(
+      screen.getByRole('link', { name: 'Persistent Python worker smoke test' }),
+    );
+    expect(onEvalSelected).toHaveBeenCalledExactlyOnceWith('eval-target');
   });
 });

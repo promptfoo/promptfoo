@@ -86,19 +86,16 @@ describe('Navigation', () => {
   it('renders the navigation bar', () => {
     renderNavigation();
     expect(screen.getByText('New')).toBeInTheDocument();
-    expect(screen.getByText('View Results')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Evals' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Red team' })).toBeInTheDocument();
     expect(screen.getByText('Browse')).toBeInTheDocument();
     expect(screen.getByText('Model Audit')).toBeInTheDocument();
-    expect(screen.getByText('Prompts')).toBeInTheDocument();
-    expect(screen.getByText('Datasets')).toBeInTheDocument();
-    expect(screen.getByText('History')).toBeInTheDocument();
   });
 
-  it('keeps a compact results label available for very narrow screens', () => {
-    renderNavigation();
-
-    expect(screen.getByRole('button', { name: 'View Results' })).toBeInTheDocument();
-    expect(screen.getByText('Results')).toHaveClass('min-[390px]:hidden');
+  it('marks the current primary destination', () => {
+    renderNavigation({ initialEntries: ['/eval/example'] });
+    expect(screen.getByRole('link', { name: 'Evals' })).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByRole('link', { name: 'Red team' })).not.toHaveAttribute('aria-current');
   });
 
   it('hides the logo below the extra-narrow breakpoint', () => {
@@ -169,9 +166,9 @@ describe('Navigation', () => {
 
     const fullNav = screen
       .getAllByRole('navigation')
-      .find((navigation) => navigation.classList.contains('lg:flex'));
+      .find((navigation) => navigation.classList.contains('md:flex'));
 
-    expect(fullNav).toHaveClass('hidden', 'lg:flex');
+    expect(fullNav).toHaveClass('hidden', 'md:flex');
   });
 
   it('keeps primary routes available in the compact browse menu', async () => {
@@ -179,7 +176,7 @@ describe('Navigation', () => {
     renderNavigation();
 
     const browseButton = screen.getByRole('button', { name: 'Browse' });
-    expect(browseButton.closest('li')).toHaveClass('hidden', 'md:block', 'lg:hidden');
+    expect(browseButton.closest('li')).not.toHaveClass('hidden');
 
     await user.click(browseButton);
 
@@ -203,11 +200,9 @@ describe('Navigation', () => {
     renderNavigation();
 
     expect(screen.getByText('New')).toBeInTheDocument();
-    expect(screen.getByText('View Results')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Evals' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Red team' })).toBeInTheDocument();
     expect(screen.getByText('Model Audit')).toBeInTheDocument();
-    expect(screen.getByText('Prompts')).toBeInTheDocument();
-    expect(screen.getByText('Datasets')).toBeInTheDocument();
-    expect(screen.getByText('History')).toBeInTheDocument();
   });
 
   it('activates the Model Audit NavLink on /model-audit path', () => {
@@ -233,7 +228,7 @@ describe('Navigation', () => {
     expect(topLevelNavLink).toBeDefined();
     expect(topLevelNavLink).toHaveAttribute('href', MODEL_AUDIT_ROUTES.ROOT);
     expect(topLevelNavLink).not.toHaveClass('bg-primary/10');
-    expect(topLevelNavLink).toHaveClass('text-foreground');
+    expect(topLevelNavLink).toHaveClass('text-muted-foreground');
   });
 
   it('does not activate Model Audit NavLink on /model-audit/history path', () => {
@@ -243,7 +238,7 @@ describe('Navigation', () => {
     expect(topLevelNavLink).toBeDefined();
     expect(topLevelNavLink).toHaveAttribute('href', MODEL_AUDIT_ROUTES.ROOT);
     expect(topLevelNavLink).not.toHaveClass('bg-primary/10');
-    expect(topLevelNavLink).toHaveClass('text-foreground');
+    expect(topLevelNavLink).toHaveClass('text-muted-foreground');
   });
 
   it('does not activate Model Audit NavLink on /model-audit/history/:id path', () => {
@@ -253,7 +248,7 @@ describe('Navigation', () => {
     expect(topLevelNavLink).toBeDefined();
     expect(topLevelNavLink).toHaveAttribute('href', MODEL_AUDIT_ROUTES.ROOT);
     expect(topLevelNavLink).not.toHaveClass('bg-primary/10');
-    expect(topLevelNavLink).toHaveClass('text-foreground');
+    expect(topLevelNavLink).toHaveClass('text-muted-foreground');
   });
 
   describe('Create Dropdown', () => {
@@ -382,7 +377,7 @@ describe('Navigation', () => {
       );
       expect(topLevelModelAuditLink).toBeDefined();
       expect(topLevelModelAuditLink).not.toHaveClass('bg-primary/10');
-      expect(topLevelModelAuditLink).toHaveClass('text-foreground');
+      expect(topLevelModelAuditLink).toHaveClass('text-muted-foreground');
     });
 
     it('does not activate Model Audit NavLink on /model-audit/history path', () => {
@@ -394,7 +389,7 @@ describe('Navigation', () => {
       );
       expect(topLevelModelAuditLink).toBeDefined();
       expect(topLevelModelAuditLink).not.toHaveClass('bg-primary/10');
-      expect(topLevelModelAuditLink).toHaveClass('text-foreground');
+      expect(topLevelModelAuditLink).toHaveClass('text-muted-foreground');
     });
 
     it('does not activate Model Audit NavLink on deeply nested paths under excluded routes like /model-audit/history/details/123', () => {
@@ -406,7 +401,7 @@ describe('Navigation', () => {
       );
       expect(topLevelModelAuditLink).toBeDefined();
       expect(topLevelModelAuditLink).not.toHaveClass('bg-primary/10');
-      expect(topLevelModelAuditLink).toHaveClass('text-foreground');
+      expect(topLevelModelAuditLink).toHaveClass('text-muted-foreground');
     });
   });
 
@@ -453,11 +448,11 @@ describe('Navigation', () => {
     });
   });
 
-  it("should display the 'Red Team Vulnerability Reports' menu item with the correct description when the Results dropdown is open", async () => {
+  it("should display the 'Red Team Vulnerability Reports' menu item with the correct description when the Browse dropdown is open", async () => {
     const user = userEvent.setup();
     renderNavigation();
 
-    const evalsButton = screen.getByRole('button', { name: /View Results/i });
+    const evalsButton = screen.getByRole('button', { name: /Browse/i });
     await user.click(evalsButton);
 
     expect(screen.getByText('Red Team Vulnerability Reports')).toBeInTheDocument();

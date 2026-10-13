@@ -42,6 +42,12 @@ function NavLink({ href, label }: NavLinkProps) {
   let isActive: boolean;
   if (href === MODEL_AUDIT_ROUTES.ROOT) {
     isActive = isModelAuditResultPath(location.pathname);
+  } else if (href === EVAL_ROUTES.LIST) {
+    isActive = location.pathname.startsWith(EVAL_ROUTES.ROOT);
+  } else if (href === REDTEAM_ROUTES.REPORTS) {
+    isActive =
+      location.pathname.startsWith(REDTEAM_ROUTES.REPORTS) ||
+      location.pathname.startsWith(REDTEAM_ROUTES.ROOT);
   } else {
     isActive = location.pathname.startsWith(href);
   }
@@ -49,12 +55,13 @@ function NavLink({ href, label }: NavLinkProps) {
   return (
     <Link
       to={href}
+      aria-current={isActive ? 'page' : undefined}
       className={cn(
         'inline-flex h-11 items-center justify-center rounded-md px-3 text-sm font-medium transition-colors sm:h-8',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
         isActive
           ? 'bg-primary/10 text-foreground hover:bg-primary/15 focus-visible:bg-primary/15'
-          : 'text-foreground hover:bg-accent focus-visible:bg-accent',
+          : 'text-muted-foreground hover:text-foreground hover:bg-accent focus-visible:bg-accent',
       )}
     >
       {label}
@@ -70,40 +77,31 @@ interface MenuItem {
 
 interface NavDropdownProps {
   label: string;
-  compactLabel?: string;
   items: MenuItem[];
   isActiveCheck: (pathname: string) => boolean;
-  className?: string;
 }
 
-function NavDropdown({ label, compactLabel, items, isActiveCheck, className }: NavDropdownProps) {
+function NavDropdown({ label, items, isActiveCheck }: NavDropdownProps) {
   const location = useLocation();
   const isActive = isActiveCheck(location.pathname);
 
   return (
-    <NavigationMenuItem className={className}>
+    <NavigationMenuItem>
       <NavigationMenuTrigger
         aria-label={label}
         className={cn(
-          'h-11 bg-transparent px-3 text-sm font-medium sm:h-8',
+          'h-11 bg-transparent px-2 text-sm font-medium sm:h-8 sm:px-3',
           'data-[state=open]:bg-accent',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
           isActive
             ? 'bg-primary/10 text-foreground hover:bg-primary/15 focus-visible:bg-primary/15'
-            : 'text-foreground hover:bg-accent focus-visible:bg-accent',
+            : 'text-muted-foreground hover:text-foreground hover:bg-accent focus-visible:bg-accent',
         )}
       >
-        {compactLabel ? (
-          <>
-            <span className="hidden min-[390px]:inline">{label}</span>
-            <span className="min-[390px]:hidden">{compactLabel}</span>
-          </>
-        ) : (
-          label
-        )}
+        {label}
       </NavigationMenuTrigger>
-      <NavigationMenuContent>
-        <ul className="w-[300px] p-1.5">
+      <NavigationMenuContent className="fixed left-3 right-3 top-14 max-h-[calc(100dvh-5rem)] overflow-y-auto sm:absolute sm:left-0 sm:right-auto sm:top-full">
+        <ul className="w-full p-1.5 sm:w-[300px]">
           {items.map((item, index) => (
             <li key={item.href}>
               <NavigationMenuLink asChild>
@@ -203,11 +201,16 @@ export default function Navigation() {
 
   return (
     <>
-      <header className="sticky top-0 z-(--z-appbar) w-full border-b border-border bg-card shadow-sm">
+      <header className="sticky top-0 z-(--z-appbar) w-full border-b border-border bg-card">
         <div className="flex h-14 min-w-0 items-center justify-between gap-2 px-3 sm:px-4">
           {/* Left section: Logo and Navigation */}
-          <div className="flex min-w-0 items-center gap-2 sm:gap-6">
+          <div className="flex min-w-0 items-center gap-1 sm:gap-4">
             <Logo />
+            <nav aria-label="Primary" className="hidden items-center gap-1 md:flex">
+              <NavLink href={EVAL_ROUTES.LIST} label="Evals" />
+              <NavLink href={REDTEAM_ROUTES.REPORTS} label="Red team" />
+              <NavLink href={MODEL_AUDIT_ROUTES.ROOT} label="Model Audit" />
+            </nav>
             <NavigationMenu>
               <NavigationMenuList className="gap-1">
                 <NavDropdown
@@ -220,33 +223,16 @@ export default function Navigation() {
                   }
                 />
                 <NavDropdown
-                  label="View Results"
-                  compactLabel="Results"
-                  items={resultsMenuItems}
-                  isActiveCheck={(pathname) =>
-                    [EVAL_ROUTES.ROOT, EVAL_ROUTES.LIST, REDTEAM_ROUTES.REPORTS, ROUTES.MEDIA].some(
-                      (route) => pathname.startsWith(route),
-                    )
-                  }
-                />
-                <NavDropdown
                   label="Browse"
-                  items={browseMenuItems}
-                  className="hidden md:block lg:hidden"
+                  items={[...resultsMenuItems, ...browseMenuItems]}
                   isActiveCheck={(pathname) =>
-                    [ROUTES.PROMPTS, ROUTES.DATASETS, ROUTES.HISTORY].some((route) =>
+                    [ROUTES.PROMPTS, ROUTES.DATASETS, ROUTES.HISTORY, ROUTES.MEDIA].some((route) =>
                       pathname.startsWith(route),
-                    ) || isModelAuditResultPath(pathname)
+                    )
                   }
                 />
               </NavigationMenuList>
             </NavigationMenu>
-            <nav className="hidden items-center gap-1 lg:flex">
-              <NavLink href={MODEL_AUDIT_ROUTES.ROOT} label="Model Audit" />
-              <NavLink href={ROUTES.PROMPTS} label="Prompts" />
-              <NavLink href={ROUTES.DATASETS} label="Datasets" />
-              <NavLink href={ROUTES.HISTORY} label="History" />
-            </nav>
           </div>
 
           {/* Right section: Actions */}

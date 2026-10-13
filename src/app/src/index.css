@@ -228,8 +228,8 @@
   --nav-height: 3.5rem; /* Navigation bar height (h-14 = 56px) */
 
   /* Design tokens - Light mode (aligned with MUI theme) */
-  --background: 210 40% 98%; /* #f8fafc - slate-50 */
-  --foreground: 222.2 47.4% 11.2%; /* #0f172a - slate-900 */
+  --background: 220 14% 97%;
+  --foreground: 220 20% 14%;
   --card: 0 0% 100%; /* #ffffff */
   --card-foreground: 222.2 47.4% 11.2%;
   --popover: 0 0% 100%; /* #ffffff */
@@ -239,12 +239,12 @@
   --secondary: 210 40% 96.1%; /* #f1f5f9 - slate-100 */
   --secondary-foreground: 222.2 47.4% 11.2%; /* slate-900 */
   --muted: 210 40% 96.1%; /* #f1f5f9 - slate-100 */
-  --muted-foreground: 215.4 16.3% 34.9%; /* #475569 - slate-600 */
+  --muted-foreground: 220 9% 42%;
   --accent: 210 40% 96.1%;
   --accent-foreground: 222.2 47.4% 11.2%;
   --destructive: 0 84.2% 60.2%;
   --destructive-foreground: 0 0% 100%;
-  --border: 214.3 31.8% 91.4%; /* #e2e8f0 - slate-200 */
+  --border: 220 13% 89%;
   --input: 214.3 31.8% 91.4%;
   --ring: 217.2 91.2% 52.9%;
   --radius: 0.5rem;
@@ -265,18 +265,18 @@
   -webkit-text-size-adjust: 100%;
 
   /* Light mode colors */
-  --background-color: #f5f5f5;
-  --text-color: #404040;
-  --link-color: #2e6585;
-  --border-color: lightgray;
-  --table-border-color: lightgray;
-  --pass-color: green;
-  --fail-color: #ad0000;
-  --success-background-color: #d1ffd7;
-  --fail-background-color: #ffd1d1;
-  --neutral-background-color: #eee;
-  --variable-background-color: #f7f7f7;
-  --header-background-color: #fffdf7;
+  --background-color: hsl(var(--background));
+  --text-color: hsl(var(--foreground));
+  --link-color: hsl(var(--primary));
+  --border-color: hsl(var(--border));
+  --table-border-color: hsl(var(--border));
+  --pass-color: #157347;
+  --fail-color: #b42332;
+  --success-background-color: #e8f5ed;
+  --fail-background-color: #fcecee;
+  --neutral-background-color: hsl(var(--muted));
+  --variable-background-color: hsl(var(--muted) / 0.4);
+  --header-background-color: hsl(var(--card));
   --insert-highlight-color: #d4fcbc;
   --delete-highlight-color: #fbb6c2;
   --prompt-highlight-color: linen;
@@ -292,23 +292,23 @@
 :root[data-theme='dark'],
 [data-theme='dark'] {
   /* Design tokens - Dark mode (aligned with MUI theme) */
-  --background: 222.2 20% 7.1%; /* Slightly blue-tinted dark */
+  --background: 220 14% 8%;
   --foreground: 210 40% 98%; /* Off-white, easier on eyes */
-  --card: 222.2 20% 10%; /* Slightly elevated from background */
+  --card: 220 12% 11%;
   --card-foreground: 210 40% 98%;
-  --popover: 222.2 20% 10%;
+  --popover: 220 12% 11%;
   --popover-foreground: 210 40% 98%;
   --primary: 217.2 91.2% 59.8%; /* #3b82f6 - blue-500 */
   --primary-foreground: 0 0% 100%;
   --secondary: 217.2 20% 20%; /* slate-800 equivalent */
   --secondary-foreground: 210 40% 98%; /* off-white */
   --muted: 217.2 20% 14%; /* Subtle blue-gray tint */
-  --muted-foreground: 215 20% 55%; /* Lighter, more readable */
+  --muted-foreground: 220 10% 66%;
   --accent: 217.2 20% 14%;
   --accent-foreground: 210 40% 98%;
   --destructive: 0 62.8% 50%;
   --destructive-foreground: 0 0% 100%;
-  --border: 217.2 15% 22%; /* Softer, blue-tinted border - NOT pure black */
+  --border: 220 10% 21%;
   --input: 217.2 15% 22%;
   --ring: 217.2 91.2% 59.8%;
 
@@ -316,18 +316,18 @@
   --severity-informational: 217 91% 60%;
 
   /* Keep synced with prefers-color-scheme above */
-  --background-color: #1a1a1a;
-  --text-color: #f0f0f0;
-  --link-color: #6fcaff;
-  --border-color: #444444;
-  --table-border-color: #444444;
-  --pass-color: #b1e9b3;
-  --fail-color: #ee726a;
-  --success-background-color: #216d2b;
-  --fail-background-color: #6d2121;
-  --neutral-background-color: #424242;
-  --variable-background-color: #333;
-  --header-background-color: #333;
+  --background-color: hsl(var(--background));
+  --text-color: hsl(var(--foreground));
+  --link-color: #93bbff;
+  --border-color: hsl(var(--border));
+  --table-border-color: hsl(var(--border));
+  --pass-color: #8cddb0;
+  --fail-color: #f6a0a8;
+  --success-background-color: hsl(150 50% 40% / 0.15);
+  --fail-background-color: hsl(350 70% 55% / 0.15);
+  --neutral-background-color: hsl(var(--muted));
+  --variable-background-color: hsl(var(--muted) / 0.4);
+  --header-background-color: hsl(var(--card));
   --insert-highlight-color: #4f8a34;
   --delete-highlight-color: #8a3434;
   --prompt-highlight-color: #67605a;
@@ -466,18 +466,18 @@ input[type='search']::-webkit-search-decoration {
     --ring: 217.2 91.2% 52.9%;
     --severity-informational: 217 91% 46%;
 
-    --background-color: #f5f5f5;
-    --text-color: #404040;
-    --link-color: #2e6585;
-    --border-color: lightgray;
-    --table-border-color: lightgray;
-    --pass-color: green;
-    --fail-color: #ad0000;
-    --success-background-color: #d1ffd7;
-    --fail-background-color: #ffd1d1;
-    --neutral-background-color: #eee;
-    --variable-background-color: #f7f7f7;
-    --header-background-color: #fffdf7;
+    --background-color: hsl(var(--background));
+    --text-color: hsl(var(--foreground));
+    --link-color: hsl(var(--primary));
+    --border-color: hsl(var(--border));
+    --table-border-color: hsl(var(--border));
+    --pass-color: #157347;
+    --fail-color: #b42332;
+    --success-background-color: #e8f5ed;
+    --fail-background-color: #fcecee;
+    --neutral-background-color: hsl(var(--muted));
+    --variable-background-color: hsl(var(--muted) / 0.4);
+    --header-background-color: hsl(var(--card));
     --insert-highlight-color: #d4fcbc;
     --delete-highlight-color: #fbb6c2;
     --prompt-highlight-color: linen;

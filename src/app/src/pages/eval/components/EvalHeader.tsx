@@ -6,8 +6,6 @@ import {
   BreadcrumbItem,
   BreadcrumbLink,
   BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
 } from '@app/components/ui/breadcrumb';
 import { Button } from '@app/components/ui/button';
 import { Chip } from '@app/components/ui/chip';
@@ -127,34 +125,34 @@ export default function EvalHeader({
 
   return (
     <>
-      <div className="border-b border-border bg-white/80 dark:bg-zinc-900/80 backdrop-blur-sm shrink-0 print:bg-transparent print:border-none">
-        <div className={cn('px-4 py-4 print:px-0 print:max-w-none', contentClassName)}>
-          {/* Print: eval name as header */}
-          <h1 className="hidden print:block text-2xl font-bold">
-            {config?.description || evalId || 'Evaluation'}
-          </h1>
+      <div className="border-b border-border bg-card shrink-0 print:bg-transparent print:border-none">
+        <div className={cn('px-4 py-5 sm:px-6 print:px-0 print:max-w-none', contentClassName)}>
           <div className="flex flex-wrap items-center gap-3 eval-header print:hidden">
-            <Breadcrumb>
-              <BreadcrumbList>
-                <BreadcrumbItem>
-                  <BreadcrumbLink asChild>
-                    <Link to={EVAL_ROUTES.LIST}>Evals</Link>
-                  </BreadcrumbLink>
-                </BreadcrumbItem>
-                <BreadcrumbSeparator />
-                <BreadcrumbItem>
-                  <BreadcrumbPage
-                    onClick={() => setEvalSelectorDialogOpen(true)}
-                    className="cursor-pointer hover:text-muted-foreground transition-colors"
-                  >
-                    <span className="inline-flex items-center gap-1">
-                      {config?.description || evalId || 'Select...'}
-                      <ChevronDown className="size-3.5 text-muted-foreground" />
-                    </span>
-                  </BreadcrumbPage>
-                </BreadcrumbItem>
-              </BreadcrumbList>
-            </Breadcrumb>
+            <div className="min-w-0 flex-1">
+              <Breadcrumb className="mb-1.5">
+                <BreadcrumbList>
+                  <BreadcrumbItem>
+                    <BreadcrumbLink asChild>
+                      <Link to={EVAL_ROUTES.LIST}>Evals</Link>
+                    </BreadcrumbLink>
+                  </BreadcrumbItem>
+                </BreadcrumbList>
+              </Breadcrumb>
+              <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">
+                <button
+                  type="button"
+                  aria-haspopup="dialog"
+                  aria-expanded={evalSelectorDialogOpen}
+                  onClick={() => setEvalSelectorDialogOpen(true)}
+                  className="inline-flex max-w-full items-center gap-2 rounded-md text-left transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <span className="break-words min-w-0">
+                    {config?.description || evalId || 'Select eval'}
+                  </span>
+                  <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
+                </button>
+              </h1>
+            </div>
             <EvalSelectorDialog
               open={evalSelectorDialogOpen}
               onClose={() => setEvalSelectorDialogOpen(false)}
@@ -186,8 +184,11 @@ export default function EvalHeader({
               )}
             </div>
           </div>
+          <h1 className="hidden print:block text-2xl font-bold">
+            {config?.description || evalId || 'Evaluation'}
+          </h1>
           {/* Screen: interactive chips */}
-          <div className="flex flex-wrap gap-2 items-center mt-2 print:hidden">
+          <div className="flex flex-wrap gap-x-3 gap-y-1 items-center mt-3 print:hidden">
             {evalId && <EvalIdChip evalId={evalId} onCopy={handleEvalIdCopyClick} />}
             <AuthorChip
               author={author}

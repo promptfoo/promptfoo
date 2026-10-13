@@ -319,7 +319,7 @@ describe('DataTable', () => {
     expect(screen.getByText('Banana')).toBeInTheDocument();
 
     // Type a search term that matches nothing
-    const searchInput = screen.getByPlaceholderText('Search...');
+    const searchInput = screen.getByRole('searchbox', { name: 'Search table' });
     await user.click(searchInput);
     await user.keyboard('{Control>}a{/Control}');
     await user.paste('xyz-no-match');
@@ -329,7 +329,7 @@ describe('DataTable', () => {
     expect(screen.queryByText('Banana')).not.toBeInTheDocument();
 
     // But toolbar should still be visible so user can clear/modify the filter
-    expect(screen.getByPlaceholderText('Search...')).toBeInTheDocument();
+    expect(screen.getByRole('searchbox', { name: 'Search table' })).toBeInTheDocument();
     expect(screen.getByTestId('custom-action')).toBeInTheDocument();
     expect(screen.getByText('No results match your search')).toBeInTheDocument();
   });
@@ -377,7 +377,7 @@ describe('DataTable', () => {
 
     expect(screen.queryByText('No data found')).not.toBeInTheDocument();
     expect(screen.getByText('No results match your search')).toBeInTheDocument();
-    expect(screen.getByPlaceholderText('Search...')).toBeInTheDocument();
+    expect(screen.getByRole('searchbox', { name: 'Search table' })).toBeInTheDocument();
   });
 
   it('should preserve column visibility state when reopening the column menu', async () => {
