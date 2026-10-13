@@ -655,18 +655,20 @@ export class HuggingfaceTokenExtractionProvider implements ApiProvider {
     interface HuggingfaceTokenClassificationResponse {
       error?: string;
     }
+    type TokenClassificationItem = { score: number } & (
+      | { entity_group: string }
+      | { entity: string }
+    );
 
     let response:
-      | FetchWithCacheResult<
-          HuggingfaceTokenClassificationResponse | Array<{ entity_group: string; score: number }>
-        >
+      | FetchWithCacheResult<HuggingfaceTokenClassificationResponse | TokenClassificationItem[]>
       | undefined;
     try {
       const url = this.config.apiEndpoint
         ? this.config.apiEndpoint
         : `${HF_INFERENCE_API_URL}/models/${this.modelName}`;
       response = await fetchWithCache<
-        HuggingfaceTokenClassificationResponse | Array<{ entity_group: string; score: number }>
+        HuggingfaceTokenClassificationResponse | TokenClassificationItem[]
       >(
         url,
         {
@@ -694,8 +696,10 @@ export class HuggingfaceTokenExtractionProvider implements ApiProvider {
       // Take the highest score of each entity group
       const classification: Record<string, number> = {};
       for (const item of response.data) {
-        if (!classification[item.entity_group] || classification[item.entity_group] < item.score) {
-          classification[item.entity_group] = item.score;
+        // Unaggregated tokens use entity rather than entity_group.
+        const label = 'entity_group' in item ? item.entity_group : item.entity;
+        if (!classification[label] || classification[label] < item.score) {
+          classification[label] = item.score;
         }
       }
       return { classification };

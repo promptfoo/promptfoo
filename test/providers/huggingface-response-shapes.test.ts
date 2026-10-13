@@ -3,6 +3,7 @@ import { fetchWithCache } from '../../src/cache';
 import {
   HuggingfaceFeatureExtractionProvider,
   HuggingfaceTextClassificationProvider,
+  HuggingfaceTokenExtractionProvider,
 } from '../../src/providers/huggingface';
 
 vi.mock('../../src/cache', async (importOriginal) => ({
@@ -81,5 +82,53 @@ describe('Hugging Face task response compatibility', () => {
     expect((await embedding.callEmbeddingApi('Hello')).error).toContain(
       'Fixture model unavailable',
     );
+  });
+});
+
+describe('Hugging Face token classification labels', () => {
+  it.each([
+    { strategy: 'none', field: 'entity', label: 'B-PER', otherLabel: 'B-LOC' },
+    { strategy: 'simple', field: 'entity_group', label: 'PER', otherLabel: 'LOC' },
+  ])(
+    'keeps the highest score per label with $strategy aggregation',
+    async ({ strategy, field, label, otherLabel }) => {
+      const provider = new HuggingfaceTokenExtractionProvider('fixture/ner', {
+        config: { aggregation_strategy: strategy },
+      });
+      reply([
+        { [field]: label, score: 0.6 },
+        { [field]: otherLabel, score: 0 },
+        { [field]: label, score: 0.9 },
+        { [field]: label, score: 0.7 },
+      ]);
+
+      expect(await provider.callClassificationApi('Alice visits Paris')).toEqual({
+        classification: { [label]: 0.9, [otherLabel]: 0 },
+      });
+      expect(JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string)).toMatchObject({
+        parameters: { aggregation_strategy: strategy },
+      });
+    },
+  );
+
+  it('preserves token labels in text output', async () => {
+    const provider = new HuggingfaceTokenExtractionProvider('fixture/ner', {
+      config: { aggregation_strategy: 'none' },
+    });
+    reply([{ entity: 'B-PER', score: 0.9 }]);
+
+    expect(await provider.callApi('Alice')).toEqual({
+      output: JSON.stringify({ 'B-PER': 0.9 }),
+      error: undefined,
+    });
+  });
+
+  it('preserves vendor errors instead of treating them as token labels', async () => {
+    const provider = new HuggingfaceTokenExtractionProvider('fixture/ner');
+    reply({ error: 'Fixture model unavailable' });
+
+    expect(await provider.callClassificationApi('Alice')).toEqual({
+      error: 'API call error: Fixture model unavailable',
+    });
   });
 });

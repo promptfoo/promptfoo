@@ -2,7 +2,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AssertionsResult } from '../../src/assertions/assertionsResult';
 import { withCacheEnabled } from '../../src/cache';
 import { matchesClassification } from '../../src/matchers/classification';
-import { HuggingfaceTextClassificationProvider } from '../../src/providers/huggingface';
+import {
+  HuggingfaceTextClassificationProvider,
+  HuggingfaceTokenExtractionProvider,
+} from '../../src/providers/huggingface';
 import { OpenAiDecisionsProvider } from '../../src/providers/openai/decisions';
 import {
   withProviderCallExecutionContext,
@@ -26,6 +29,35 @@ vi.mock('../../src/util/fetch/index', async (importOriginal) => ({
 }));
 
 describe('matchesClassification', () => {
+  it('grades unaggregated Hugging Face tokens by their entity label', async () => {
+    const provider = new HuggingfaceTokenExtractionProvider('fixture/ner', {
+      config: { aggregation_strategy: 'none' },
+    });
+    vi.mocked(fetchWithRetries).mockImplementation(async () =>
+      Response.json([
+        { entity: 'B-PER', score: 0.95 },
+        { entity: 'B-LOC', score: 0.8 },
+      ]),
+    );
+
+    await withCacheEnabled(false, async () => {
+      expect(await matchesClassification('B-PER', 'Alice visits Paris', 0.9, { provider })).toEqual(
+        {
+          pass: true,
+          score: 0.95,
+          reason: 'Classification B-PER has score 0.95 >= 0.9',
+        },
+      );
+      expect(await matchesClassification('B-LOC', 'Alice visits Paris', 0.9, { provider })).toEqual(
+        {
+          pass: false,
+          score: 0.8,
+          reason: 'Classification B-LOC has score 0.80 < 0.9',
+        },
+      );
+    });
+  });
+
   function decisionsProvider() {
     return new OpenAiDecisionsProvider('classification-fixture', {
       config: {
