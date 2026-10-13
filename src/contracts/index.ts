@@ -5,12 +5,46 @@ export * from './blobs.js';
 export * from './env.js';
 export * from './prompts.js';
 export {
+  type AnthropicCompletionConfigInput,
+  AnthropicCompletionConfigInputJsonSchema,
+  AnthropicCompletionConfigInputSchema,
+  type AnthropicMessagesConfigInput,
+  AnthropicMessagesConfigInputJsonSchema,
+  AnthropicMessagesConfigInputSchema,
+  type AnthropicProviderOptionsInput,
+  AnthropicProviderOptionsInputJsonSchema,
+  AnthropicProviderOptionsInputSchema,
+  type AnthropicSharedConfigInput,
+  AnthropicSharedConfigInputJsonSchema,
+  AnthropicSharedConfigInputSchema,
+} from './providerConfig/anthropic.js';
+export {
   type McpAuthInput,
   McpAuthInputJsonSchema,
   McpAuthInputSchema,
   type McpAuthParsed,
   McpAuthSchema,
 } from './providerConfig/auth.js';
+export {
+  type AzureChatConfigInput,
+  AzureChatConfigInputJsonSchema,
+  AzureChatConfigInputSchema,
+  type AzureCompletionConfigInput,
+  AzureCompletionConfigInputJsonSchema,
+  AzureCompletionConfigInputSchema,
+  type AzureEmbeddingConfigInput,
+  AzureEmbeddingConfigInputJsonSchema,
+  AzureEmbeddingConfigInputSchema,
+  type AzureProviderOptionsInput,
+  AzureProviderOptionsInputJsonSchema,
+  AzureProviderOptionsInputSchema,
+  type AzureResponsesConfigInput,
+  AzureResponsesConfigInputJsonSchema,
+  AzureResponsesConfigInputSchema,
+  type AzureSharedConfigInput,
+  AzureSharedConfigInputJsonSchema,
+  AzureSharedConfigInputSchema,
+} from './providerConfig/azure.js';
 export {
   type HttpProviderConfigInput,
   HttpProviderConfigInputJsonSchema,
@@ -33,6 +67,26 @@ export {
   type McpServerParsed,
   McpServerSchema,
 } from './providerConfig/mcp.js';
+export {
+  type OpenAiChatConfigInput,
+  OpenAiChatConfigInputJsonSchema,
+  OpenAiChatConfigInputSchema,
+  type OpenAiCompletionConfigInput,
+  OpenAiCompletionConfigInputJsonSchema,
+  OpenAiCompletionConfigInputSchema,
+  type OpenAiEmbeddingConfigInput,
+  OpenAiEmbeddingConfigInputJsonSchema,
+  OpenAiEmbeddingConfigInputSchema,
+  type OpenAiProviderOptionsInput,
+  OpenAiProviderOptionsInputJsonSchema,
+  OpenAiProviderOptionsInputSchema,
+  type OpenAiResponsesConfigInput,
+  OpenAiResponsesConfigInputJsonSchema,
+  OpenAiResponsesConfigInputSchema,
+  type OpenAiSharedConfigInput,
+  OpenAiSharedConfigInputJsonSchema,
+  OpenAiSharedConfigInputSchema,
+} from './providerConfig/openai.js';
 export * from './providers.js';
 export * from './shared.js';
 export * from './transform.js';

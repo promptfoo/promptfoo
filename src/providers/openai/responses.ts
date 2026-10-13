@@ -66,12 +66,12 @@ import {
   RETIRED_OPENAI_MODEL_IDS,
 } from './util';
 
-import type { EnvOverrides } from '../../types/env';
 import type {
   CallApiContextParams,
   CallApiOptionsParams,
   ProviderResponse,
 } from '../../types/index';
+import type { ProviderOptions } from '../../types/providers';
 import type { FetchOptions } from '../../util/fetch/types';
 import type { OpenAiCompletionOptions, ReasoningEffort } from './types';
 
@@ -804,7 +804,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
 
   constructor(
     modelName: string,
-    options: { config?: OpenAiCompletionOptions; id?: string; env?: EnvOverrides } = {},
+    options: Pick<ProviderOptions<OpenAiCompletionOptions>, 'config' | 'id' | 'env'> = {},
   ) {
     super(modelName, options);
     this.config = options.config ? { ...options.config } : {};

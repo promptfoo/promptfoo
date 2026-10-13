@@ -9,6 +9,8 @@ keywords: [azure, openai, gpt-4, vision, reasoning models, assistants, azure ai 
 
 The `azure` provider enables you to use Azure OpenAI Service models with Promptfoo. It shares configuration settings with the [OpenAI provider](/docs/providers/openai).
 
+For TypeScript or API authoring, `promptfoo/contracts` exports `AzureProviderOptionsInputSchema` and `AzureProviderOptionsInput` for explicit Chat Completions, Responses, Completions, and embedding routes under both `azure:` and `azureopenai:`. Each config schema also exports a matching `*InputJsonSchema`. These portable contracts check serializable input without resolving credentials, loading files, or applying execution defaults; runtime and YAML editor validation remain unchanged. Chat, Responses, and Completions require deployment names in the provider ID; embedding routes retain their legacy default deployment.
+
 ## Setup
 
 There are three ways to authenticate with Azure OpenAI:
