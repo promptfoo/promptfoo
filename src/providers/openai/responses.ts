@@ -1068,17 +1068,6 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       supportsVerbosity,
       supportsTemperature,
     } = this.getDeploymentCapabilities(config);
-    const maxOutputTokensDefault = config.omitDefaults
-      ? getEnvString('OPENAI_MAX_TOKENS') === undefined
-        ? undefined
-        : getEnvInt('OPENAI_MAX_TOKENS')
-      : getEnvInt('OPENAI_MAX_TOKENS', 1024);
-    const reasoningMaxOutputTokensDefault =
-      getEnvInt('OPENAI_MAX_COMPLETION_TOKENS') ?? getEnvInt('OPENAI_MAX_TOKENS');
-    const maxOutputTokens =
-      config.max_output_tokens ??
-      (isReasoningModel ? reasoningMaxOutputTokensDefault : maxOutputTokensDefault);
-
     const supportsReasoningConfig =
       isReasoningModel || !isLegacyOpenAiChatModel(this.getEffectiveModelName(config));
     const renderedReasoning = supportsReasoningConfig
@@ -1091,9 +1080,28 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       isAzureResponsesDeploymentWithReasoningConfig &&
       effectiveReasoningEffort !== undefined &&
       effectiveReasoningEffort !== 'none';
+    // Explicit clears also defer to the model's defaults rather than restoring client defaults.
+    const hasExplicitReasoning =
+      supportsReasoningConfig &&
+      (renderedReasoning !== undefined ||
+        config.reasoning !== undefined ||
+        config.reasoning_effort !== undefined ||
+        config.passthrough?.reasoning !== undefined);
+    const maxOutputTokensDefault = config.omitDefaults
+      ? getEnvString('OPENAI_MAX_TOKENS') === undefined
+        ? undefined
+        : getEnvInt('OPENAI_MAX_TOKENS')
+      : getEnvInt('OPENAI_MAX_TOKENS', 1024);
+    const reasoningMaxOutputTokensDefault =
+      getEnvInt('OPENAI_MAX_COMPLETION_TOKENS') ?? getEnvInt('OPENAI_MAX_TOKENS');
+    const maxOutputTokens =
+      config.max_output_tokens ??
+      (isReasoningModel || hasExplicitReasoning
+        ? reasoningMaxOutputTokensDefault
+        : maxOutputTokensDefault);
 
     const temperatureDefault =
-      config.omitDefaults || isGPT6Model
+      config.omitDefaults || isGPT6Model || hasExplicitReasoning
         ? getEnvString('OPENAI_TEMPERATURE') === undefined
           ? undefined
           : getEnvFloat('OPENAI_TEMPERATURE')

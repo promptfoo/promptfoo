@@ -148,27 +148,6 @@ export class AzureResponsesProvider extends AzureGenericProvider<AzureResponsesO
     const isReasoningModel = this.isReasoningModel(capabilityModelName);
     const isFixedReasoningModel = /^gpt-chat-latest(?:-|$)/.test(capabilityModelName);
     const isGPT6Model = isGpt6Model(capabilityModelName);
-    const maxOutputTokensDefault = config.omitDefaults
-      ? getEnvString('OPENAI_MAX_TOKENS') === undefined
-        ? undefined
-        : getEnvInt('OPENAI_MAX_TOKENS')
-      : getEnvInt('OPENAI_MAX_TOKENS', 1024);
-    const reasoningMaxOutputTokensDefault =
-      getEnvInt('OPENAI_MAX_COMPLETION_TOKENS') ?? getEnvInt('OPENAI_MAX_TOKENS');
-    const maxOutputTokens =
-      config.max_output_tokens ??
-      (isReasoningModel ? reasoningMaxOutputTokensDefault : maxOutputTokensDefault);
-
-    const temperatureDefault =
-      config.omitDefaults || isGPT6Model
-        ? getEnvString('OPENAI_TEMPERATURE') === undefined
-          ? undefined
-          : getEnvFloat('OPENAI_TEMPERATURE')
-        : getEnvFloat('OPENAI_TEMPERATURE', 0);
-    const temperature =
-      isGPT6Model || this.supportsTemperature(capabilityModelName)
-        ? (config.temperature ?? temperatureDefault)
-        : undefined;
     const supportsReasoningConfig =
       isReasoningModel ||
       (config.isReasoningModel !== false && !isLegacyOpenAiChatModel(capabilityModelName));
@@ -180,6 +159,36 @@ export class AzureResponsesProvider extends AzureGenericProvider<AzureResponsesO
           { includeEffort: !isFixedReasoningModel },
         )
       : undefined;
+    // Explicit clears also defer to the model's defaults rather than restoring client defaults.
+    const hasExplicitReasoning =
+      supportsReasoningConfig &&
+      (renderedReasoning !== undefined ||
+        config.reasoning !== undefined ||
+        config.reasoning_effort !== undefined ||
+        config.passthrough?.reasoning !== undefined);
+    const maxOutputTokensDefault = config.omitDefaults
+      ? getEnvString('OPENAI_MAX_TOKENS') === undefined
+        ? undefined
+        : getEnvInt('OPENAI_MAX_TOKENS')
+      : getEnvInt('OPENAI_MAX_TOKENS', 1024);
+    const reasoningMaxOutputTokensDefault =
+      getEnvInt('OPENAI_MAX_COMPLETION_TOKENS') ?? getEnvInt('OPENAI_MAX_TOKENS');
+    const maxOutputTokens =
+      config.max_output_tokens ??
+      (isReasoningModel || hasExplicitReasoning
+        ? reasoningMaxOutputTokensDefault
+        : maxOutputTokensDefault);
+
+    const temperatureDefault =
+      config.omitDefaults || isGPT6Model || hasExplicitReasoning
+        ? getEnvString('OPENAI_TEMPERATURE') === undefined
+          ? undefined
+          : getEnvFloat('OPENAI_TEMPERATURE')
+        : getEnvFloat('OPENAI_TEMPERATURE', 0);
+    const temperature =
+      isGPT6Model || this.supportsTemperature(capabilityModelName)
+        ? (config.temperature ?? temperatureDefault)
+        : undefined;
 
     const instructions = config.instructions;
 

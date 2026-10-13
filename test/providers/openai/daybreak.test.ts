@@ -75,14 +75,16 @@ describe.each([
         expect(body).not.toHaveProperty('reasoning');
         return;
       }
-      expect(body.temperature).toBe(0);
-      expect(
-        body[Provider === OpenAiChatCompletionProvider ? 'max_tokens' : 'max_output_tokens'],
-      ).toBe(1024);
       expect(body).not.toHaveProperty('reasoning_effort');
       if (model === 'gpt-4.1') {
+        expect(body.temperature).toBe(0);
+        expect(
+          body[Provider === OpenAiChatCompletionProvider ? 'max_tokens' : 'max_output_tokens'],
+        ).toBe(1024);
         expect(body).not.toHaveProperty('reasoning');
       } else {
+        expect(body).not.toHaveProperty('temperature');
+        expect(body).not.toHaveProperty('max_output_tokens');
         expect(body.reasoning).toEqual({ effort: 'high' });
       }
     },

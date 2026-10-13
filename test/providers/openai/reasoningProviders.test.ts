@@ -146,13 +146,41 @@ describe('shared reasoning request configuration', () => {
       expect(body).not.toHaveProperty('reasoning');
     });
 
+    it('leaves automatic temperature and token limits unset when an internal alias uses reasoning', async () => {
+      const body = await getBody('internal-model', {}, { reasoning_effort: 'low' });
+      expect(body.reasoning).toEqual({ effort: 'low' });
+      expect(body).not.toHaveProperty('temperature');
+      expect(body).not.toHaveProperty('max_output_tokens');
+    });
+
+    it.each([
+      { reasoning: null },
+      { reasoning_effort: null },
+      { passthrough: { reasoning: null } },
+    ])(
+      'does not restore automatic limits or temperature after clearing %j',
+      async (promptConfig) => {
+        for (const providerConfig of [{}, { reasoning: { effort: 'high' as const } }]) {
+          const body = await getBody('internal-model', providerConfig, promptConfig);
+          expect(body).not.toHaveProperty('reasoning');
+          expect(body).not.toHaveProperty('temperature');
+          expect(body).not.toHaveProperty('max_output_tokens');
+        }
+      },
+    );
+
     it('preserves explicit temperature and top_p for an internal alias', async () => {
       const body = await getBody(
         'internal-model',
         {},
-        { reasoning_effort: 'low', temperature: 0.4, top_p: 0.8 },
+        { reasoning_effort: 'low', temperature: 0.4, top_p: 0.8, max_output_tokens: 2000 },
       );
-      expect(body).toMatchObject({ reasoning: { effort: 'low' }, temperature: 0.4, top_p: 0.8 });
+      expect(body).toMatchObject({
+        reasoning: { effort: 'low' },
+        temperature: 0.4,
+        top_p: 0.8,
+        max_output_tokens: 2000,
+      });
     });
 
     it('forwards a custom effort value for an internal alias', async () => {
