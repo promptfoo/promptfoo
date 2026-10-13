@@ -38,24 +38,11 @@ describe('useTelemetry', () => {
       expect(mockPostHog.capture).toHaveBeenCalledWith(TEST_EVENT, TEST_PROPS);
     });
 
-    it('does not call posthog.capture when PostHog is not initialized', () => {
-      vi.mocked(usePostHog).mockReturnValue({
-        posthog: mockPostHog,
-        isInitialized: false,
-      });
-
-      const { result } = renderHook(() => useTelemetry());
-
-      result.current.recordEvent(TEST_EVENT, TEST_PROPS);
-
-      expect(mockPostHog.capture).not.toHaveBeenCalled();
-    });
-
-    it('does not call posthog.capture when posthog is null', () => {
-      vi.mocked(usePostHog).mockReturnValue({
-        posthog: null,
-        isInitialized: true,
-      });
+    it.each([
+      { description: 'not initialized', posthog: mockPostHog, isInitialized: false },
+      { description: 'missing', posthog: null, isInitialized: true },
+    ])('does not capture when PostHog is $description', ({ posthog, isInitialized }) => {
+      vi.mocked(usePostHog).mockReturnValue({ posthog, isInitialized });
 
       const { result } = renderHook(() => useTelemetry());
 
