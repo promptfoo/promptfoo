@@ -826,6 +826,21 @@ export function validateEvidencePath(path: string): string | undefined {
     const start = i;
     const first = path.charCodeAt(i);
     const isIndex = first >= 48 && first <= 57; // '0'..'9'
+    if (!isIndex) {
+      // For identifier segments, the first character must be valid as an
+      // identifier start (letter, _, $, or -). Reject malformed paths like
+      // `metadata.!` or `metadata..foo` where the segment begins with a
+      // character that cannot open a valid identifier.
+      const firstOk =
+        (first >= 65 && first <= 90) || // A-Z
+        (first >= 97 && first <= 122) || // a-z
+        first === 95 || // _
+        first === 36 || // $
+        first === 45; // -
+      if (!firstOk) {
+        return 'evidence.from must select a provider metadata path like metadata.fileChanges';
+      }
+    }
     i++;
     while (i < path.length) {
       const c = path.charCodeAt(i);

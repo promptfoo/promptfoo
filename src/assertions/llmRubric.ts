@@ -31,25 +31,58 @@ export function getMetadataPathValue(metadata: unknown, path: string): unknown {
 
 /**
  * Return a deep-cloned copy of `value` with all back-references to any object
- * in `ancestors` replaced by a sentinel string.
+ * in the path ancestor chain replaced by a sentinel string.
  *
  * We use this to isolate a selected metadata subtree from its parent `metadata`
  * root before serialising it for the grader — otherwise a selected child that
- * holds a reference back to the containing `metadata` object would cause the
- * whole metadata tree (and its unselected siblings, including credentials) to
- * leak into the evidence block.
+ * holds a reference back to an intermediate ancestor (e.g. `metadata.run.files.parent = metadata.run`
+ * while projecting `metadata.run.files`) would leak sibling fields from that
+ * ancestor into the evidence block.
+ *
+ * The `ancestors` array tracks every object in the path from `root` down to
+ * and including the selected `value` itself. Any back-reference to one of
+ * those ancestors is elided, but references to unrelated objects elsewhere in
+ * the tree (that happen to be reachable through a cycle) are preserved.
  */
 function breakCyclesAgainstRoot<T>(value: T, root: object | null): T {
   if (root === null || value === null || (typeof value !== 'object' && !Array.isArray(value))) {
     return value;
   }
-  const rootObj: object = root;
   const visited = new WeakSet<object>();
+
+  // Collect every ancestor from root down through value.
+  const ancestors: object[] = [];
+  function collectAncestors(v: unknown, target: unknown): boolean {
+    if (v === null || v === undefined || typeof v !== 'object') {
+      return false;
+    }
+    ancestors.push(v as object);
+    if (v === target) {
+      return true;
+    }
+    if (Array.isArray(v)) {
+      for (const item of v) {
+        if (collectAncestors(item, target)) return true;
+      }
+    } else {
+      for (const child of Object.values(v as Record<string, unknown>)) {
+        if (collectAncestors(child, target)) return true;
+      }
+    }
+    ancestors.pop();
+    return false;
+  }
+  collectAncestors(root, value);
+
+  const ancestorSet = new WeakSet<object>(ancestors);
 
   function clone(v: unknown): unknown {
     if (v === null || v === undefined) return v;
     if (typeof v !== 'object') return v;
-    if (v === rootObj) return '[Back-reference to metadata root omitted]';
+    // Any back-reference to a path ancestor is elided — this covers both direct
+    // references back to `root` and references to intermediate ancestors that
+    // would otherwise leak unselected siblings.
+    if (ancestorSet.has(v as object)) return '[Back-reference to metadata ancestor omitted]';
     if (visited.has(v as object)) return '[Cycle omitted]';
     visited.add(v as object);
     if (Array.isArray(v)) {
@@ -173,7 +206,12 @@ export function renderEvidenceBlock(
     );
 
     const serialized = stringifyEvidenceValue(isolated) ?? String(isolated);
-    const truncated = truncateToMaxBytes(serialized, item.maxBytes);
+    // Escape before truncation so the displayed `maxBytes` limit bounds the
+    // final grader-facing content. Escaping `<`/`>`/`&` into 4-5 byte entities
+    // after truncation would otherwise let an HTML-rich payload exceed the
+    // requested limit (e.g. 65536 bytes of raw `<div>` would become ~256 KiB).
+    const escaped = escapeEvidenceContent(serialized);
+    const truncated = truncateToMaxBytes(escaped, item.maxBytes);
     const label = item.label || item.from;
 
     return [
@@ -182,7 +220,7 @@ export function renderEvidenceBlock(
         `Source: ${item.from}`,
         `Limit: ${item.maxBytes} bytes${truncated.truncated ? ` (truncated to ${item.maxBytes} bytes)` : ''}`,
         '<evidence>',
-        escapeEvidenceContent(truncated.value),
+        truncated.value,
         '</evidence>',
       ].join('\n'),
     ];
@@ -238,7 +276,12 @@ export const handleLlmRubric = async ({
     assertion,
     {
       evidenceBlock,
-      ...(providerResponse?.images?.length || providerResponse?.audio
+      // Only forward provider media to the matcher when (a) we have evidence
+      // to inject or (b) there is no assertion transform. When `assertion.transform`
+      // is set, the `outputString` passed above is the transformed text, so the
+      // original provider images/audio no longer correspond — the matcher would
+      // end up grading transformed text against stale media.
+      ...(evidenceBlock || (!assertion.transform && (providerResponse?.images?.length || providerResponse?.audio))
         ? { providerResponse }
         : {}),
     },
