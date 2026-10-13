@@ -59,27 +59,11 @@ describe('handleContextRecall', () => {
     mockMatchesContextRecall.mockResolvedValue(mockResult);
     vi.mocked(contextUtils.resolveContext).mockResolvedValue('test context');
 
-    const mockProvider = createMockProvider({ response: {} });
-
     const params: AssertionParams = {
+      ...createRecallParams('test prompt', { context: 'test context' }),
       assertion: { type: 'context-recall', threshold: 0.8 },
       renderedValue: 'Expected fact',
-      prompt: 'test prompt',
-      test: { vars: { context: 'test context' }, options: {} },
-      baseType: 'context-recall',
-      assertionValueContext: {
-        prompt: 'test prompt',
-        vars: { context: 'test context' },
-        test: { vars: { context: 'test context' }, options: {} },
-        logProbs: undefined,
-        provider: mockProvider,
-        providerResponse: undefined,
-      },
       inverse: false,
-      output: 'test output',
-      outputString: 'test output',
-      provider: mockProvider,
-      providerResponse: {} as ProviderResponse,
     };
 
     const result = await handleContextRecall(params);
