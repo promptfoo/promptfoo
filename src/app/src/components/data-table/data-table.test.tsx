@@ -572,7 +572,7 @@ describe('DataTable', () => {
 
       expect(screen.queryByRole('button', { name: /^Filters/ })).not.toBeInTheDocument();
       expect(screen.queryByRole('button', { name: 'Filter Name' })).not.toBeInTheDocument();
-      expect(screen.queryByPlaceholderText('Search...')).not.toBeInTheDocument();
+      expect(screen.queryByRole('searchbox', { name: 'Search table' })).not.toBeInTheDocument();
     });
 
     it('should allow explicit manual column filters for server-side rows', async () => {
@@ -598,7 +598,7 @@ describe('DataTable', () => {
       );
 
       expect(screen.getByRole('button', { name: /^Filters/ })).toBeInTheDocument();
-      expect(screen.queryByPlaceholderText('Search...')).not.toBeInTheDocument();
+      expect(screen.queryByRole('searchbox', { name: 'Search table' })).not.toBeInTheDocument();
 
       await user.click(screen.getByRole('button', { name: 'Filter Name' }));
       const filterInput = await screen.findByPlaceholderText('Value...');
