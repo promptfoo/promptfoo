@@ -39,6 +39,7 @@ const commonInvalid: unknown[] = [
   { unknown: true },
 ];
 const validMessages = [
+  { tools: ['file://tools.json', 'file://other-tools.yaml'] },
   {},
   shared,
   {
@@ -90,7 +91,6 @@ const validMessages = [
     tools: [
       { type: 'web_fetch_20260318', name: 'web_fetch', future: { keep: true } },
       { type: 'memory_20250818', name: 'memory' },
-      'file://tools.json',
     ],
     tool_choice: { type: 'any', disable_parallel_tool_use: false },
   },
@@ -113,6 +113,7 @@ const validMessages = [
   { tool_choice: { type: 'none' } },
 ];
 const invalidMessages: unknown[] = [
+  { tools: [{ name: 'lookup', input_schema: {} }, 'file://tools.json'] },
   ...commonInvalid,
   { temperature: 'warm' },
   { max_tokens: '10' },

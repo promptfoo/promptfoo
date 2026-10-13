@@ -71,6 +71,8 @@ export const AzureResponsesConfigInputSchema = ChatFields.omit({
 })
   .extend(
     OpenAiResponsesConfigInputSchema.pick({
+      tools: true,
+      tool_choice: true,
       model: true,
       response_format: true,
       instructions: true,

@@ -57,7 +57,8 @@ const OpenAiFunctionTool = z.strictObject({
 });
 const Tools = z.union([
   FileReferenceInputSchema,
-  z.array(z.union([CustomTool, BuiltInTool, OpenAiFunctionTool, FileReferenceInputSchema])),
+  z.array(FileReferenceInputSchema),
+  z.array(z.union([CustomTool, BuiltInTool, OpenAiFunctionTool])),
 ]);
 const Thinking = z.union([
   z.strictObject({
