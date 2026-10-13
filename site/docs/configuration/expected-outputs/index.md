@@ -186,7 +186,7 @@ These metrics are model-assisted, and rely on LLMs or other machine learning mod
 
 See [Model-graded evals](/docs/configuration/expected-outputs/model-graded), [classification](/docs/configuration/expected-outputs/classifier), and [similarity](/docs/configuration/expected-outputs/similar) docs for more information.
 
-When a failed model-graded assertion reports a grader execution error, the test is recorded as `ERROR` rather than an assertion failure. See [grader errors](/docs/configuration/expected-outputs/model-graded/#common-patterns-and-troubleshooting) for reporting and retry behavior.
+Failed assertions caused by [grader errors](/docs/configuration/expected-outputs/model-graded/#common-patterns-and-troubleshooting) are recorded as `ERROR`.
 
 | Assertion Type                                                                                       | Method                                                                           |
 | ---------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |

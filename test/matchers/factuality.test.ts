@@ -210,6 +210,24 @@ describe('matchesFactuality', () => {
     });
   });
 
+  it.each([1, {}])(
+    'falls back to legacy grading for a malformed JSON reason: %j',
+    async (reason) => {
+      const malformed = JSON.stringify({ category: 'A', reason });
+      vi.spyOn(DefaultGradingProvider, 'callApi')
+        .mockResolvedValueOnce({ output: malformed })
+        .mockResolvedValueOnce({ output: `${malformed}\n(A) Valid legacy verdict` });
+      expect(await matchesFactuality('Input', 'Expected', 'Answer', {})).toMatchObject({
+        pass: false,
+        reason: 'Factuality checker output did not match expected format',
+        metadata: { graderError: true },
+      });
+      const fallback = await matchesFactuality('Input', 'Expected', 'Answer', {});
+      expect(fallback).toMatchObject({ pass: true, score: 1, reason: 'Valid legacy verdict' });
+      expect(fallback.metadata?.graderError).toBeUndefined();
+    },
+  );
+
   it('should fail when JSON has invalid category', async () => {
     const input = 'Input text';
     const expected = 'Expected output';

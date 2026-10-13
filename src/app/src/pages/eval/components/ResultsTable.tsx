@@ -29,18 +29,13 @@ import {
   getPrimaryTokenUsageLabel,
   getTokenUsageTotal,
 } from '@app/utils/tokenUsage';
-import {
-  applyManualRating,
-  type ManualRating,
-  updateManualRatingMetrics,
-} from '@promptfoo/presentation/manualRating';
+import { applyManualRating, updateManualRatingMetrics } from '@promptfoo/presentation/manualRating';
 import { FILE_METADATA_KEY } from '@promptfoo/providers/constants';
 import {
   type EvalResultsFilterMode,
   type EvaluateTable,
   type EvaluateTableOutput,
   type EvaluateTableRow,
-  type GradingResult,
   type ProviderOptions,
   type Vars,
 } from '@promptfoo/types';
@@ -810,45 +805,6 @@ function renderTokensPerSecondMetric(metrics: PromptMetrics['total']): React.Rea
   );
 }
 
-async function saveManualRating({
-  evalId,
-  resultId,
-  version,
-  gradingResult,
-  action,
-  table,
-}: {
-  evalId: string | null;
-  resultId: string;
-  version: number | null | undefined;
-  gradingResult: GradingResult;
-  action: ManualRating['action'];
-  table: EvaluateTable;
-}): Promise<void> {
-  invariant(evalId, 'Cannot save manual rating without an evaluation ID');
-
-  const response =
-    version && version >= 4
-      ? await callApi(EVAL_ROUTES.RESULT_RATING(evalId, resultId), {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ ...gradingResult, action }),
-        })
-      : await callApi(EVAL_ROUTES.DETAIL(evalId), {
-          method: 'PATCH',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ table }),
-        });
-
-  if (!response.ok) {
-    throw new Error('Network response was not ok');
-  }
-}
-
 function renderPromptMetricDetails({
   metrics,
   filteredMetrics,
@@ -1530,7 +1486,6 @@ function ResultsTable({
         score,
         comment,
       });
-      const gradingResult = ratedOutput.gradingResult;
       const newTable = {
         head: {
           ...head,
@@ -1560,14 +1515,23 @@ function ResultsTable({
         showToast('Ratings are not saved in comparison mode', 'warning');
       } else {
         try {
-          await saveManualRating({
-            evalId,
-            resultId,
-            version,
-            gradingResult,
-            action,
-            table: newTable,
-          });
+          invariant(evalId, 'Cannot save manual rating without an evaluation ID');
+          const usesResultApi = version && version >= 4;
+          const response = await callApi(
+            usesResultApi
+              ? EVAL_ROUTES.RESULT_RATING(evalId, resultId)
+              : EVAL_ROUTES.DETAIL(evalId),
+            {
+              method: usesResultApi ? 'POST' : 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(
+                usesResultApi ? { ...ratedOutput.gradingResult, action } : { table: newTable },
+              ),
+            },
+          );
+          if (!response.ok) {
+            throw new Error('Network response was not ok');
+          }
         } catch (error) {
           console.error('Failed to update table:', error);
         }

@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
+import { beforeAll, beforeEach, expect, it } from 'vitest';
 import { evaluate } from '../../src/index';
 import { runDbMigrations } from '../../src/migrate';
 import { getErrorResultIds } from '../../src/node/retry';
@@ -11,7 +11,6 @@ import type { ApiProvider, EvaluateSummaryV3 } from '../../src/types/index';
 
 beforeAll(() => runDbMigrations());
 beforeEach(() => clearEvalTables());
-afterEach(() => vi.restoreAllMocks());
 
 it.each([false, true])(
   'keeps grader outages out of quality metrics with persistence %s',

@@ -488,7 +488,7 @@ async function doEvalWithEnv(
         });
       }
 
-      // Get all ERROR result IDs - capture BEFORE retry so we know what to delete on success
+      // Keep originals until the selected errors and comparison siblings are replaced.
       retryErrorResultIds = await getRetryResultIds(latestEval.id);
       if (retryErrorResultIds.length === 0) {
         logger.info('✅ No ERROR results found in the latest evaluation');
@@ -497,9 +497,6 @@ async function doEvalWithEnv(
 
       logger.info(`Found ${retryErrorResultIds.length} results to retry`);
 
-      // NOTE (v0.121.0): ERROR results are deleted AFTER successful retry, not before.
-      // Previously, deletion happened before evaluate(), causing data loss if retry failed.
-      // Now we delete AFTER successful retry to preserve ERROR results for re-retry on failure.
       logger.info(
         `🔄 Running evaluation with resume mode to retry ${retryErrorResultIds.length} test cases...`,
       );
@@ -969,9 +966,7 @@ async function doEvalWithEnv(
         isRedteam: Boolean(config.redteam),
       });
 
-      // Post-evaluation cleanup for retry-errors mode
       // Delete original results only after their replacements are saved.
-      // Skip if evaluation was paused - no point cleaning up incomplete retry
       if (retryErrors && cliState._retryErrorResultIds && !paused) {
         const errorResultIds = cliState._retryErrorResultIds;
         if (ret.resultPersistenceFailed) {

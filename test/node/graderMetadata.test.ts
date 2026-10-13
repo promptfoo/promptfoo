@@ -1,13 +1,11 @@
-import { afterEach, beforeAll, expect, it, vi } from 'vitest';
+import { beforeAll, expect, it } from 'vitest';
 import { assertions, evaluate, ResultFailureReason } from '../../src/index';
-import { isGraderFailure } from '../../src/matchers/llmGrading';
 import { runDbMigrations } from '../../src/migrate';
 import { getErrorResultIds } from '../../src/node/retry';
 
-import type { ApiProvider, AtomicTestCase, ProviderResponse } from '../../src/types/index';
+import type { ApiProvider, AtomicTestCase } from '../../src/types/index';
 
 beforeAll(() => runDbMigrations());
-afterEach(() => vi.restoreAllMocks());
 
 it.each([
   { method: 'callEmbeddingApi', response: { error: 'Embedding unavailable' } },
@@ -18,10 +16,11 @@ it.each([
 ])(
   'marks unavailable similarity verdicts as retryable errors: %j',
   async ({ method, response }) => {
-    const grader: ApiProvider = Object.assign(
-      { id: () => 'similarity-grader', callApi: async () => ({ output: 'unused' }) },
-      { [method]: async () => response },
-    );
+    const grader: ApiProvider = {
+      id: () => 'similarity-grader',
+      callApi: async () => ({ output: 'unused' }),
+      [method]: async () => response,
+    };
     const tests: AtomicTestCase[] = (['similar', 'not-similar'] as const).flatMap((type) =>
       ['reference', ['reference', 'another reference']].map((value) => ({
         assert: [{ type, value, metric: 'quality' }],
@@ -55,35 +54,17 @@ it.each([
   },
 );
 
-it.each<{
-  name: string;
-  response: ProviderResponse;
-  pass: boolean;
-  graderError: boolean;
-}>([
-  {
-    name: 'provider error',
-    response: { error: 'Grader unavailable' },
-    pass: false,
-    graderError: true,
-  },
-  { name: 'no output', response: {}, pass: false, graderError: true },
-  { name: 'malformed verdict', response: { output: 'Uncertain' }, pass: false, graderError: true },
-  {
-    name: 'valid negative',
-    response: { output: 'Criterion not met. N' },
-    pass: false,
-    graderError: false,
-  },
-  {
-    name: 'valid positive',
-    response: { output: 'Criterion met. Y' },
-    pass: true,
-    graderError: false,
-  },
-])(
-  'preserves $name metadata through public APIs and JSON export',
-  async ({ response, pass, graderError }) => {
+it.each([
+  [{ error: 'Grader unavailable' }, ResultFailureReason.ERROR],
+  [{}, ResultFailureReason.ERROR],
+  [{ output: 'Uncertain' }, ResultFailureReason.ERROR],
+  [{ output: 'Criterion not met. N' }, ResultFailureReason.ASSERT],
+  [{ output: 'Criterion met. Y' }, ResultFailureReason.NONE],
+] as const)(
+  'preserves grader response %j through public APIs and JSON export',
+  async (response, failureReason) => {
+    const pass = failureReason === ResultFailureReason.NONE;
+    const graderError = failureReason === ResultFailureReason.ERROR;
     const test: AtomicTestCase = {
       assert: [{ type: 'model-graded-closedqa', value: 'Reference answer' }],
       options: { provider: { id: () => 'metadata-grader', callApi: async () => response } },
@@ -94,7 +75,7 @@ it.each<{
       prompt: 'ok',
     });
     expect(grade.pass).toBe(pass);
-    expect(isGraderFailure(grade)).toBe(graderError);
+    expect(grade.metadata?.graderError).toBe(graderError || undefined);
     expect(grade.componentResults?.[0].metadata?.graderError).toBe(graderError || undefined);
 
     const record = await evaluate(
@@ -106,11 +87,7 @@ it.each<{
     expect(row).toMatchObject({
       success: pass,
       score: Number(pass),
-      failureReason: pass
-        ? ResultFailureReason.NONE
-        : graderError
-          ? ResultFailureReason.ERROR
-          : ResultFailureReason.ASSERT,
+      failureReason,
     });
     expect(row.gradingResult.metadata?.graderError).toBe(graderError || undefined);
     expect(row.gradingResult.reason).toBe(grade.reason);

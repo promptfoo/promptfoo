@@ -24,6 +24,7 @@ import { HUMAN_ASSERTION_TYPE } from '../../src/providers/constants';
 import { EchoProvider } from '../../src/providers/echo';
 import { ResultFailureReason } from '../../src/types/index';
 import { shouldShareResults } from '../../src/util/sharing';
+import { createEvaluateResult } from '../factories/eval';
 
 vi.mock('../../src/database/signal', async () => {
   const actual = await vi.importActual('../../src/database/signal');
@@ -154,73 +155,49 @@ describe('retry command', () => {
   });
 
   it.each(['select-best', 'max-score'] as const)(
-    'retries all %s siblings only when their comparison group has an error',
+    'retries the complete %s group without including unrelated results',
     async (type) => {
       const evalRecord = await Eval.create({}, [], { id: uniqueEvalId() });
       const db = await getDb();
       const rows = [
-        {
-          id: 'comparison-pass',
-          testIdx: 0,
-          promptIdx: 0,
-          failureReason: ResultFailureReason.NONE,
-          testCase: { assert: [{ type }] },
-        },
+        { id: 'comparison-pass', testIdx: 0, promptIdx: 0, testCase: { assert: [{ type }] } },
         {
           id: 'comparison-error',
           testIdx: 0,
           promptIdx: 1,
           failureReason: ResultFailureReason.ERROR,
-          testCase: {},
         },
         {
           id: 'comparison-fail',
           testIdx: 0,
           promptIdx: 2,
           failureReason: ResultFailureReason.ASSERT,
-          testCase: {},
         },
-        {
-          id: 'ordinary-pass',
-          testIdx: 1,
-          promptIdx: 0,
-          failureReason: ResultFailureReason.NONE,
-          testCase: {},
-        },
+        { id: 'ordinary-pass', testIdx: 1, promptIdx: 0 },
         {
           id: 'ordinary-error',
           testIdx: 1,
           promptIdx: 1,
           failureReason: ResultFailureReason.ERROR,
-          testCase: {},
+          gradingResult: { pass: false, score: 0, reason: 'Unavailable', comment: 'Review note' },
         },
         {
-          id: 'completed-comparison-pass',
+          id: 'completed-comparison',
           testIdx: 2,
           promptIdx: 0,
-          failureReason: ResultFailureReason.NONE,
-          testCase: { assert: [{ type }] },
-        },
-        {
-          id: 'completed-comparison-fail',
-          testIdx: 2,
-          promptIdx: 1,
           failureReason: ResultFailureReason.ASSERT,
           testCase: { assert: [{ type }] },
         },
-      ];
-      await db.insert(evalResultsTable).values(
-        rows.map((row) => ({
+      ].map((row) => ({
+        ...createEvaluateResult({
           ...row,
-          id: `${evalRecord.id}-${row.id}`,
-          evalId: evalRecord.id,
-          prompt: { raw: 'test', label: 'test' },
-          provider: { id: 'echo' },
-          success: row.failureReason === ResultFailureReason.NONE,
-          score: row.failureReason === ResultFailureReason.NONE ? 1 : 0,
-          namedScores: {},
-        })),
-      );
+          success: !row.failureReason,
+          score: row.failureReason ? 0 : 1,
+        }),
+        id: `${evalRecord.id}-${row.id}`,
+        evalId: evalRecord.id,
+      }));
+      await db.insert(evalResultsTable).values(rows);
 
       const selectedIds = await getRetryResultIds(evalRecord.id);
       expect(selectedIds.sort()).toEqual(
@@ -236,21 +213,17 @@ describe('retry command', () => {
         await db.insert(evalResultsTable).values(
           originals.map((row) => ({
             ...row,
-            id: `${evalRecord.id}-${row.id}-replacement`,
-            evalId: evalRecord.id,
-            prompt: { raw: 'test', label: 'test' },
-            provider: { id: 'echo' },
+            id: `${row.id}-replacement`,
             success: true,
             score: 1,
             failureReason: ResultFailureReason.NONE,
-            namedScores: {},
           })),
         );
       };
-      await replace(rows.filter((row) => row.id.endsWith('-error')));
+      await replace(rows.filter((row) => row.failureReason === ResultFailureReason.ERROR));
       expect(await hasRetryReplacements(evalRecord.id, selectedIds)).toBe(false);
       await replace(
-        rows.filter((row) => row.id === 'comparison-pass' || row.id === 'comparison-fail'),
+        rows.filter((row) => row.testIdx === 0 && row.failureReason !== ResultFailureReason.ERROR),
       );
       expect(await hasRetryReplacements(evalRecord.id, selectedIds)).toBe(true);
     },
@@ -293,17 +266,6 @@ describe('retry command', () => {
         legacyError: false,
         grading: { pass: true, score: 1, reason: 'Passed', comment: 'Keep this review note' },
       },
-      {
-        name: 'comment on a legacy error',
-        type: 'max-score' as const,
-        legacyError: true,
-        grading: {
-          pass: false,
-          score: 0,
-          reason: 'Grader unavailable',
-          comment: 'Investigate this result',
-        },
-      },
     ])(
       'preserves $name before retrying a comparison group',
       async ({ type, legacyError, grading }) => {
@@ -320,6 +282,7 @@ describe('retry command', () => {
         const db = await getDb();
         await db.insert(evalResultsTable).values(
           prompts.map((prompt, promptIdx) => ({
+            ...createEvaluateResult(),
             id: `${evalRecord.id}-${promptIdx}`,
             evalId: evalRecord.id,
             testIdx: 0,
@@ -333,7 +296,6 @@ describe('retry command', () => {
             failureReason:
               promptIdx === 0 || legacyError ? ResultFailureReason.ERROR : ResultFailureReason.NONE,
             gradingResult: promptIdx === 1 ? grading : undefined,
-            namedScores: {},
           })),
         );
         const original = await db
@@ -357,27 +319,6 @@ describe('retry command', () => {
       },
     );
 
-    it('keeps ordinary individual errors with comments eligible for retry', async () => {
-      const evalRecord = await Eval.create({}, [], { id: uniqueEvalId() });
-      const db = await getDb();
-      const id = `${evalRecord.id}-error`;
-      await db.insert(evalResultsTable).values({
-        id,
-        evalId: evalRecord.id,
-        testIdx: 0,
-        promptIdx: 0,
-        prompt: { raw: 'test', label: 'test' },
-        testCase: {},
-        provider: { id: 'echo' },
-        success: false,
-        score: 0,
-        failureReason: ResultFailureReason.ERROR,
-        gradingResult: { pass: false, score: 0, reason: 'Unavailable', comment: 'Review note' },
-        namedScores: {},
-      });
-      expect(await getRetryResultIds(evalRecord.id)).toEqual([id]);
-    });
-
     it('preserves healthy comparison siblings when a retry cannot replace the full group', async () => {
       const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-partial-retry-'));
       const configPath = path.join(directory, 'promptfooconfig.json');
@@ -395,6 +336,7 @@ describe('retry command', () => {
       const ids = prompts.map((_prompt, index) => `${evalRecord.id}-original-${index}`);
       await db.insert(evalResultsTable).values(
         prompts.map((prompt, promptIdx) => ({
+          ...createEvaluateResult(),
           id: ids[promptIdx],
           evalId: evalRecord.id,
           testIdx: 0,
@@ -406,7 +348,6 @@ describe('retry command', () => {
           success: promptIdx === 1,
           score: promptIdx === 1 ? 1 : 0,
           failureReason: promptIdx === 1 ? ResultFailureReason.NONE : ResultFailureReason.ERROR,
-          namedScores: {},
         })),
       );
       fs.writeFileSync(

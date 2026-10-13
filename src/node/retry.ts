@@ -139,11 +139,6 @@ export async function getErrorResultIds(evalId: string): Promise<string[]> {
 }
 
 export async function getRetryResultIds(evalId: string): Promise<string[]> {
-  const resultIds = new Set(await getErrorResultIds(evalId));
-  if (resultIds.size === 0) {
-    return [];
-  }
-
   const db = await getDb();
   const errorTestIndices = db
     .select({ testIdx: evalResultsTable.testIdx })
@@ -158,6 +153,7 @@ export async function getRetryResultIds(evalId: string): Promise<string[]> {
     .select({
       id: evalResultsTable.id,
       testIdx: evalResultsTable.testIdx,
+      failureReason: evalResultsTable.failureReason,
       testCase: evalResultsTable.testCase,
       gradingResult: evalResultsTable.gradingResult,
     })
@@ -175,8 +171,11 @@ export async function getRetryResultIds(evalId: string): Promise<string[]> {
       )
       .map((row) => row.testIdx),
   );
-  for (const row of siblings) {
-    if (comparisonTests.has(row.testIdx)) {
+  return siblings
+    .filter((row) => {
+      if (!comparisonTests.has(row.testIdx)) {
+        return row.failureReason === ResultFailureReason.ERROR;
+      }
       const grading = row.gradingResult;
       if (
         grading?.comment ||
@@ -189,10 +188,9 @@ export async function getRetryResultIds(evalId: string): Promise<string[]> {
           'This comparison group has manual ratings or comments. Run a new eval to preserve them.',
         );
       }
-      resultIds.add(row.id);
-    }
-  }
-  return [...resultIds];
+      return true;
+    })
+    .map((row) => row.id);
 }
 
 export async function hasRetryReplacements(evalId: string, resultIds: string[]): Promise<boolean> {
@@ -388,7 +386,7 @@ export async function retryCommand(evalId: string, cmdObj: RetryCommandOptions) 
     throw new Error(`Evaluation with ID ${evalId} not found`);
   }
 
-  // Get all ERROR result IDs - capture these BEFORE retry so we know what to delete on success
+  // Keep originals until the selected errors and comparison siblings are replaced.
   const errorResultIds = await getRetryResultIds(evalId);
   if (errorResultIds.length === 0) {
     logger.info('✅ No ERROR results found in this evaluation');
@@ -417,19 +415,10 @@ async function retryWithConfig(
 ) {
   const evalId = originalEval.id;
 
-  // CRITICAL: We do NOT delete ERROR results here anymore!
-  // Previously (before this fix), deletion happened before evaluate(), which caused data loss:
-  // - If retry failed (network error, API timeout, etc.), the ERROR results were already gone
-  // - User could not re-retry because the original ERROR results were permanently deleted
-  // Now we delete AFTER successful retry, so if retry fails, ERROR results are preserved
-  // and the user can simply run the retry command again.
-
   logger.info(
     `🔄 Running evaluation with resume mode to retry ${errorResultIds.length} test cases...`,
   );
 
-  // Enable resume mode so only the missing results will be evaluated
-  // Retry mode excludes the selected errors and their comparison siblings.
   cliState.resume = true;
   cliState.retryMode = true;
   cliState._retryErrorResultIds = errorResultIds;

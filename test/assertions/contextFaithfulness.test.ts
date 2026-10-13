@@ -311,9 +311,6 @@ describe('handleContextFaithfulness', () => {
   });
 
   it.each([false, true])('preserves grader errors with inverse=%s', async (inverse) => {
-    // A grading provider that errored produced no verdict to negate. Without
-    // the `graderError` guard the inversion would turn an outage into a
-    // spurious pass, so the failure has to propagate verbatim.
     const mockResult = {
       pass: false,
       score: 0,

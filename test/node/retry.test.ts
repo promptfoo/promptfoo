@@ -28,7 +28,7 @@ const dbMocks = vi.hoisted(() => {
   const errorRows: Array<{ id: string }> = [];
   const affectedEvalRows: Array<{ evalId: string }> = [];
   const errorRowsAll = vi.fn(async () =>
-    errorRows.map((row) => ({ ...row, testIdx: 0, promptIdx: 0, testCase: {} })),
+    errorRows.map((row) => ({ ...row, testIdx: 0, promptIdx: 0, testCase: {}, failureReason: 2 })),
   );
   const affectedEvalRowsAll = vi.fn(async () => affectedEvalRows);
   const deleteRun = vi.fn(async () => undefined);

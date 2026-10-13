@@ -200,39 +200,31 @@ describe('AssertionsResult', () => {
     };
     const ordinaryFailure: GradingResult = { pass: false, score: 0, reason: 'Criterion not met' };
 
-    it.each([
-      { name: 'grader failure', component: graderFailure, graderError: true },
-      { name: 'ordinary failure', component: ordinaryFailure, graderError: undefined },
-      {
-        name: 'zero-weight assertion',
-        component: {
+    it.each<[string, GradingResult, boolean | undefined]>([
+      ['grader failure', graderFailure, true],
+      ['ordinary failure', ordinaryFailure, undefined],
+      [
+        'zero-weight assertion',
+        {
           ...graderFailure,
-          assertion: { type: 'equals' as const, value: 'x', weight: 0 },
+          assertion: { type: 'equals', value: 'x', weight: 0 },
         },
-        graderError: undefined,
-      },
-      {
-        name: 'zero-weight set',
-        component: {
+        undefined,
+      ],
+      [
+        'zero-weight set',
+        {
           ...graderFailure,
           metadata: {
-            graderError: true as const,
-            assertionSet: { type: 'assert-set' as const, assertionCount: 1, weight: 0 },
+            graderError: true,
+            assertionSet: { type: 'assert-set', assertionCount: 1, weight: 0 },
           },
         },
-        graderError: undefined,
-      },
-      {
-        name: 'passing assertion',
-        component: { pass: true, score: 1, reason: 'Criterion met' },
-        graderError: undefined,
-      },
-      {
-        name: 'empty grader reason',
-        component: { ...graderFailure, reason: '' },
-        graderError: true,
-      },
-    ])('propagates only grader failures: $name', async ({ component, graderError }) => {
+        undefined,
+      ],
+      ['passing assertion', { pass: true, score: 1, reason: 'Criterion met' }, undefined],
+      ['empty grader reason', { ...graderFailure, reason: '' }, true],
+    ])('propagates only grader failures: %s', async (_name, component, graderError) => {
       const result = new AssertionsResult({});
       // Comparison assertions skip addResult and can leave sparse positions.
       result.addResult({ index: 1, result: component });
@@ -1253,15 +1245,7 @@ describe('AssertionsResult', () => {
       async (field, graderError) => {
         const assertionsResult = new AssertionsResult({});
         if (graderError) {
-          assertionsResult.addResult({
-            index: 0,
-            result: {
-              pass: false,
-              score: 0,
-              reason: 'Grader unavailable',
-              metadata: { graderError: true },
-            },
-          });
+          assertionsResult.addResult({ index: 0, result: graderFailure });
         }
         let reads = 0;
         const metrics = {

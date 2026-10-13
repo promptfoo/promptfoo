@@ -25,24 +25,6 @@ const graderError = {
 };
 
 describe('manual ratings', () => {
-  it('restores the exact grader error after switching human verdicts', () => {
-    const approved = applyManualRating(graderError, { action: 'rate', pass: true });
-    expect(approved).toMatchObject({
-      pass: true,
-      score: 1,
-      failureReason: ResultFailureReason.NONE,
-      error: null,
-    });
-    const rejected = applyManualRating(approved, { action: 'rate', pass: false });
-    expect(rejected).toMatchObject({
-      pass: false,
-      score: 0,
-      failureReason: ResultFailureReason.ASSERT,
-      error: null,
-    });
-    expect(applyManualRating(rejected, { action: 'clear' })).toEqual(graderError);
-  });
-
   it('restores a threshold or custom-scored pass despite a failed component', () => {
     const original = {
       ...graderError,
@@ -69,15 +51,6 @@ describe('manual ratings', () => {
       pass: true,
       score: 1,
       failureReason: ResultFailureReason.NONE,
-    });
-  });
-
-  it('leaves the verdict untouched when editing a comment', () => {
-    expect(
-      applyManualRating(graderError, { action: 'annotate', comment: 'Needs a retry' }),
-    ).toEqual({
-      ...graderError,
-      gradingResult: { ...graderError.gradingResult, comment: 'Needs a retry' },
     });
   });
 

@@ -19,16 +19,13 @@ function getContributingAssertionCount(
   metricName: string,
   testVars: Vars,
 ): number {
-  const contributingAssertions =
-    gradingResult?.componentResults?.reduce((count, componentResult) => {
-      if (componentResult.metadata?.graderError === true) {
-        return count;
-      }
-      const renderedMetric = renderMetricName(componentResult.assertion?.metric, testVars);
-      return renderedMetric === metricName ? count + 1 : count;
-    }, 0) ?? 0;
-
-  return contributingAssertions > 0 ? contributingAssertions : 1;
+  return (
+    gradingResult?.componentResults?.filter(
+      (result) =>
+        result.metadata?.graderError !== true &&
+        renderMetricName(result.assertion?.metric, testVars) === metricName,
+    ).length || 1
+  );
 }
 
 function getNamedMetricContribution({

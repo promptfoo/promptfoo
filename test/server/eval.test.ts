@@ -255,6 +255,7 @@ describe('eval routes', () => {
         success: false,
         score: 0.35,
         failureReason: ResultFailureReason.ERROR,
+        gradingResult: { comment: 'Retry the judge', metadata: { graderError: true } },
       });
       const before = await api.get(`/api/eval/${eval_.id}/table`).query({ filterMode: 'errors' });
       expect(before.body.filteredCount).toBe(1);

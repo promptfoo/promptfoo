@@ -374,9 +374,7 @@ export class AssertionsResult {
       this.componentResults.length > 0 &&
       this.componentResults.every((result) => result.metadata?.cachedResponse === true);
 
-    // Only failed direct components propagate grader errors; passed nested sets and
-    // metric-only assertions must not mark an unrelated failure. Comparison
-    // assertions can leave sparse slots, so use optional access.
+    // Ignore passed sets and zero-weight measurements. Comparison slots can be sparse.
     const failedGrader = this.componentResults.find(
       (result) =>
         result?.pass === false &&
