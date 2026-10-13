@@ -92,6 +92,7 @@ describe('GoogleInteractionsProvider', () => {
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     vi.unstubAllEnvs();
     restoreGoogleEnv();
     vi.useRealTimers();
@@ -2111,6 +2112,8 @@ describe('GoogleInteractionsProvider', () => {
   });
 
   it('lets prompt service_tier override a provider passthrough default', async () => {
+    // Exercise the original 3.5 rates before the Gemini API redirected this ID.
+    vi.spyOn(Date, 'now').mockReturnValue(Date.UTC(2026, 8, 1));
     mockFetchWithCache.mockResolvedValue({
       data: {
         status: 'completed',
