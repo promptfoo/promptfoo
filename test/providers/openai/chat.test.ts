@@ -159,6 +159,34 @@ describe('OpenAI Provider', () => {
   });
 
   describe('OpenAiChatCompletionProvider', () => {
+    it.each([
+      ['https://proxy.example.test/v1', 'https://openrouter.ai/api/v1', 50],
+      ['https://openrouter.ai/api/v1', 'https://proxy.example.test/v1', 60],
+    ] as const)(
+      'aligns token precedence with the requested provider URL %s',
+      async (providerUrl, promptUrl, expected) => {
+        mockFetchWithCache.mockResolvedValue(createUncachedChatResponse());
+        const provider = new OpenAiChatCompletionProvider('o3', {
+          config: {
+            apiKey: 'fixture-key',
+            apiBaseUrl: providerUrl,
+            max_completion_tokens: 50,
+            passthrough: { max_tokens: 60 },
+          },
+        });
+        const result = await provider.callApi('Hello', {
+          vars: {},
+          prompt: { raw: 'Hello', label: 'Hello', config: { apiBaseUrl: promptUrl } },
+        });
+        expect(result.error).toBeUndefined();
+        const [url, options] = mockFetchWithCache.mock.calls[0];
+        expect(url).toBe(`${providerUrl}/chat/completions`);
+        const body = JSON.parse(options?.body as string);
+        expect(body.max_completion_tokens).toBe(expected);
+        expect(body).not.toHaveProperty('max_tokens');
+      },
+    );
+
     const createAttributeRecorder =
       (attributes: Record<string, unknown>[]) =>
       (

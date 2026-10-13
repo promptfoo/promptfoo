@@ -303,11 +303,10 @@ function reconcileOpenRouterReasoning(
 }
 
 export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
-  private usesOpenRouter(config = this.config): boolean {
+  private usesOpenRouter(): boolean {
     const system = this.getGenAISystem();
     return (
-      system === 'openrouter' ||
-      (system === 'openai' && isOpenRouterEndpoint(this.getApiUrl(config)))
+      system === 'openrouter' || (system === 'openai' && isOpenRouterEndpoint(this.getApiUrl()))
     );
   }
 
@@ -481,7 +480,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       capabilityModelName.includes('/o3') ||
       capabilityModelName.includes('/o4');
     const isGPT6Model = isGpt6Model(capabilityModelName);
-    const isOpenRouter = this.usesOpenRouter(config);
+    const isOpenRouter = this.usesOpenRouter();
     const isOpenRouterGpt6 = isGPT6Model && isOpenRouter;
     const isReasoningModel = usesConfiguredCapabilities
       ? this.isReasoningModel()

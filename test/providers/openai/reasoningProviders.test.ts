@@ -111,6 +111,28 @@ describe('shared reasoning request configuration', () => {
     });
   });
 
+  it.each([
+    [{ modelName: 'grok-4' }, {}],
+    [{ modelName: 'gpt-4.1' }, { modelName: 'grok-4' }],
+    [{ modelName: 'gpt-4.1' }, { passthrough: { model: 'grok-4' } }],
+  ])(
+    'uses the effective Azure model for Grok reasoning and sampling restrictions',
+    async (providerConfig, promptConfig) => {
+      const { body } = await new AzureChatCompletionProvider('my-assistant', {
+        config: { ...providerConfig, max_tokens: 128, reasoning_effort: 'low', stop: ['END'] },
+      }).getOpenAiBody('Hello', context(promptConfig));
+      expect(body).toMatchObject({ max_tokens: 128, reasoning_effort: 'low' });
+      for (const field of [
+        'presence_penalty',
+        'frequency_penalty',
+        'stop',
+        'max_completion_tokens',
+      ]) {
+        expect(body).not.toHaveProperty(field);
+      }
+    },
+  );
+
   it('does not evaluate effort for an Azure model with fixed reasoning', async () => {
     const effort = vi.fn(() => {
       throw new Error('unsupported');

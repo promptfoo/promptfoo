@@ -217,10 +217,10 @@ describe('Chat output cap compatibility', () => {
   });
 
   it.each([
-    ['https://proxy.example.test/v1', 'https://openrouter.ai/api/v1', 60],
-    ['https://openrouter.ai/api/v1', 'https://proxy.example.test/v1', 50],
+    ['https://proxy.example.test/v1', 'https://openrouter.ai/api/v1', 50],
+    ['https://openrouter.ai/api/v1', 'https://proxy.example.test/v1', 60],
   ] as const)(
-    'uses the effective prompt endpoint for cap precedence: %s to %s',
+    'uses the provider endpoint for cap precedence despite prompt URL %s to %s',
     async (providerUrl, promptUrl, expected) => {
       const { body } = await new OpenAiChatCompletionProvider('o3', {
         config: {
